@@ -16,7 +16,7 @@
 #include <stdio.h>
 
 static int digits[10];
-static long wide[8];
+static long long wide[8];
 static volatile int counter;
 static volatile int gate;
 
@@ -34,7 +34,7 @@ static void setup(void)
         digits[i] = i * i;
     }
     for (i = 0; i < 8; ++i) {
-        wide[i] = (long)i * 1000000007L;
+        wide[i] = (long long)i * 1000000007LL;
     }
     for (i = 0; i < 24; ++i) {
         chain[i].value = i + 1;
@@ -57,17 +57,17 @@ static int digit_sum(int n)
 
 /* Nested loops: the inner body's invariants belong outside both, and
    the inner trip count is a bound wider than one immediate field. */
-static long nested(int rows)
+static long long nested(int rows)
 {
-    long total = 0;
+    long long total = 0;
     int r;
     for (r = 0; r < rows; ++r) {
-        long i;
-        for (i = 0; i < 3000000L; ++i) {
+        long long i;
+        for (i = 0; i < 3000000LL; ++i) {
             if (i > 4) {
                 break;
             }
-            total += wide[(int)(i & 7)] / 1000000007L;
+            total += wide[(int)(i & 7)] / 1000000007LL;
         }
     }
     return total;
@@ -75,9 +75,9 @@ static long nested(int rows)
 
 /* Loop-varying address: each iteration's pointer comes from the last,
    so there is nothing to lift. */
-static long chase(void)
+static long long chase(void)
 {
-    long total = 0;
+    long long total = 0;
     struct node *p = &chain[0];
     while (p) {
         total += p->value;
@@ -119,9 +119,9 @@ static int bump(int n)
 /* A volatile read whose value the loop cannot cache: `gate` is written
    between the reads, so a loop that read it once would sum the wrong
    total. */
-static long sample(int n)
+static long long sample(int n)
 {
-    long total = 0;
+    long long total = 0;
     int i;
     for (i = 0; i < n; ++i) {
         total += gate;
@@ -132,7 +132,7 @@ static long sample(int n)
 
 int main(void)
 {
-    long total = 0;
+    long long total = 0;
     int i;
 
     setup();
@@ -140,17 +140,17 @@ int main(void)
         total += digit_sum(i);
     }
     if (total != 31500) {
-        printf("digit_sum: %ld\n", total);
+        printf("digit_sum: %lld\n", total);
         return 1;
     }
 
-    if (nested(3) != 30L) {
-        printf("nested: %ld\n", nested(3));
+    if (nested(3) != 30LL) {
+        printf("nested: %lld\n", nested(3));
         return 2;
     }
 
-    if (chase() != 300L) {
-        printf("chase: %ld\n", chase());
+    if (chase() != 300LL) {
+        printf("chase: %lld\n", chase());
         return 3;
     }
 

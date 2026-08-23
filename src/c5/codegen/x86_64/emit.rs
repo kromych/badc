@@ -229,10 +229,7 @@ fn asm_scratch_bytes(func: &FunctionSsa) -> u32 {
         };
         // A no-op statement emits no staging (`emit_inline_asm`), so it
         // needs no scratch.
-        if super::ssa::emit_common::asm_statement_is_noop(
-            asm,
-            super::ssa::emit_common::AsmComments::X86,
-        ) {
+        if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::X86) {
             continue;
         }
         let Ok(op_reg) =
@@ -7185,7 +7182,8 @@ fn e3_branch_prefix(
 /// section and `.set` maps; an expression over them (`jmp sym + 4`) is valued
 /// where the section materializes.
 fn branch_section_target(text: &str) -> super::ssa::emit_common::AsmSectionTarget {
-    use super::ssa::emit_common::{AsmSectionTarget, is_asm_symbol_name};
+    use super::ssa::emit_common::AsmSectionTarget;
+    use crate::c5::asm::is_asm_symbol_name;
     if is_asm_symbol_name(text) {
         AsmSectionTarget::Symbol(alloc::string::String::from(text))
     } else {
@@ -8213,7 +8211,7 @@ fn template_expr_value(
         }
         measure
             .offset(name)
-            .or_else(|| super::ssa::emit_common::template_label_offset(name, at, label_defs, names))
+            .or_else(|| crate::c5::asm::template_label_offset(name, at, label_defs, names))
     };
     crate::c5::asm::eval_asm_expr_with_labels(expr, &resolve)
 }
@@ -8399,10 +8397,7 @@ fn emit_inline_asm_once(
     // A statement that lowers to nothing keeps only its IR-level ordering
     // effect; the operand staging around zero bytes of code is dead, and
     // `asm_scratch_bytes` reserved no region for it.
-    if super::ssa::emit_common::asm_statement_is_noop(
-        asm,
-        super::ssa::emit_common::AsmComments::X86,
-    ) {
+    if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::X86) {
         return true;
     }
     // Expand `%=` once so the code text and any `.pushsection` content
@@ -8411,17 +8406,14 @@ fn emit_inline_asm_once(
     let Ok(raw_text) = core::str::from_utf8(&asm.template) else {
         return fail("inline asm: non-UTF8 template");
     };
-    let stripped = super::ssa::emit_common::strip_asm_comments(
-        raw_text,
-        super::ssa::emit_common::AsmComments::X86,
-    );
+    let stripped = crate::c5::asm::strip_asm_comments(raw_text, crate::c5::asm::AsmComments::X86);
     let raw_text = stripped.as_deref().unwrap_or(raw_text);
     let expanded = super::ssa::emit_common::expand_template_uniq(raw_text);
     let text = expanded.as_deref().unwrap_or(raw_text);
     // Rename any numeric label defined more than once in one asm instance to
     // per-definition unique names, so the code and section resolvers below see
     // single-definition labels.
-    let multidef = super::ssa::emit_common::rewrite_multidef_local_labels(text);
+    let multidef = crate::c5::asm::rewrite_multidef_local_labels(text);
     let text = multidef.as_deref().unwrap_or(text);
     // The operand register assignment is needed both for the code stream and,
     // ahead of it, for the GNU-as macro pass and a replacement instruction that
@@ -8759,13 +8751,8 @@ fn emit_inline_asm_once(
         {
             let at = code.len();
             let n = match spec.bytes(&|name| {
-                super::ssa::emit_common::template_label_offset(
-                    name,
-                    at,
-                    &label_defs,
-                    &code_label_names,
-                )
-                .filter(|&off| off <= at as i64)
+                crate::c5::asm::template_label_offset(name, at, &label_defs, &code_label_names)
+                    .filter(|&off| off <= at as i64)
             }) {
                 Ok(n) => n,
                 Err(e) => return fail(&e),
@@ -9070,7 +9057,7 @@ fn emit_inline_asm_once(
             };
             // The code stream's branch channels name a symbol with no addend.
             // TODO carry an addend on the call site and the fixup.
-            if !super::super::ssa::emit_common::is_asm_symbol_name(&name) {
+            if !crate::c5::asm::is_asm_symbol_name(&name) {
                 return fail(
                     "inline asm: a branch to a symbol expression is only supported in a section",
                 );
@@ -9441,7 +9428,7 @@ fn emit_inline_asm_once(
                     let Some(text) = insn.sym_exprs.get(expr as usize) else {
                         return fail(sym_only);
                     };
-                    if !super::ssa::emit_common::is_template_label_expr(text, &code_label_names) {
+                    if !crate::c5::asm::is_template_label_expr(text, &code_label_names) {
                         return fail(sym_only);
                     }
                     let disp = match template_expr_value(
@@ -9518,11 +9505,7 @@ fn emit_inline_asm_once(
                         &section_measure,
                     ) {
                         Some(v) => Concrete::Imm(v),
-                        None if super::ssa::emit_common::is_template_label_expr(
-                            text,
-                            &code_label_names,
-                        ) =>
-                        {
+                        None if crate::c5::asm::is_template_label_expr(text, &code_label_names) => {
                             imm_expr = Some(text.clone());
                             Concrete::Imm(ABS_LABEL_PLACEHOLDER)
                         }
@@ -12135,9 +12118,9 @@ mod code_mode_tests {
     /// concatenated sections, in section order.
     fn assemble_relocs(text: &str) -> (Vec<u8>, Vec<Reloc>) {
         use super::super::ssa::emit_common::{
-            AsmComments, AsmSectionSink, AsmSectionTarget, materialize_file_asm,
-            prepare_file_asm_text,
+            AsmSectionSink, AsmSectionTarget, materialize_file_asm, prepare_file_asm_text,
         };
+        use crate::c5::asm::AsmComments;
         // The driver prepares the template (comment stripping, GNU as macro
         // and equate expansion) before the section parse reads it.
         let text = prepare_file_asm_text(text, AsmComments::X86).expect("prepares");
@@ -12174,8 +12157,9 @@ mod code_mode_tests {
     /// or from the layout the sections materialize against.
     fn assemble_err(text: &str) -> alloc::string::String {
         use super::super::ssa::emit_common::{
-            AsmComments, AsmSectionSink, materialize_file_asm, prepare_file_asm_text,
+            AsmSectionSink, materialize_file_asm, prepare_file_asm_text,
         };
+        use crate::c5::asm::AsmComments;
         let text = prepare_file_asm_text(text, AsmComments::X86).expect("prepares");
         let mut sink = AsmSectionSink::default();
         materialize_file_asm(

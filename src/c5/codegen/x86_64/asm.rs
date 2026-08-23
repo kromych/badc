@@ -2533,7 +2533,7 @@ fn parse_raw_bytes(piece: &str) -> Option<Vec<u8>> {
     None
 }
 
-pub(crate) use super::ssa::emit_common::{NAMED_LABEL_BASE, scan_label_names, split_label_def};
+pub(crate) use crate::c5::asm::{NAMED_LABEL_BASE, scan_label_names, split_label_def};
 
 /// Parse an AT&T extended-asm template into its instruction sequence.
 /// Instructions are separated by `;` or newlines; operands by commas.
@@ -2552,10 +2552,7 @@ fn parse_template_in(tmpl: &[u8], file_scope: bool) -> Result<Vec<AsmInsn>, Stri
     let text =
         core::str::from_utf8(tmpl).map_err(|_| String::from("inline asm: non-UTF8 template"))?;
     let stripped;
-    let text = match super::super::ssa::emit_common::strip_asm_comments(
-        text,
-        super::super::ssa::emit_common::AsmComments::X86,
-    ) {
+    let text = match crate::c5::asm::strip_asm_comments(text, crate::c5::asm::AsmComments::X86) {
         Some(t) => {
             stripped = t;
             stripped.as_str()
@@ -2573,11 +2570,11 @@ fn parse_template_in(tmpl: &[u8], file_scope: bool) -> Result<Vec<AsmInsn>, Stri
     // Pre-scan the label definitions so operand parsing can tell a local
     // label from a symbol; named labels intern in definition order.
     let names = scan_label_names(text);
-    if let Some(dup) = super::super::ssa::emit_common::duplicate_label_name(text) {
+    if let Some(dup) = crate::c5::asm::duplicate_label_name(text) {
         return Err(format!("inline asm: symbol `{dup}` is already defined"));
     }
     let mut insns = Vec::new();
-    for piece in super::ssa::emit_common::split_asm_statements(text) {
+    for piece in crate::c5::asm::split_asm_statements(text) {
         let mut piece = piece.trim();
         if piece.is_empty() {
             continue;

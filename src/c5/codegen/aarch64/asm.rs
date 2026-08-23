@@ -1083,7 +1083,7 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
     // GNU as makes the `#` optional, so an immediate written as an expression
     // over labels also reaches here without one. A lone name is not one of
     // these: the symbol form above already took it, or it is a bad operand.
-    if !emit_common::is_asm_symbol_name(tok) && is_layout_expr(tok) {
+    if !crate::c5::asm::is_asm_symbol_name(tok) && is_layout_expr(tok) {
         return Ok(AsmOpndA64::ImmExpr(String::from(tok)));
     }
     Err(format!("inline asm: unsupported operand `{tok}`"))
@@ -1176,7 +1176,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
     let text =
         core::str::from_utf8(tmpl).map_err(|_| String::from("inline asm: non-UTF8 template"))?;
     let stripped;
-    let text = match emit_common::strip_asm_comments(text, emit_common::AsmComments::A64) {
+    let text = match crate::c5::asm::strip_asm_comments(text, crate::c5::asm::AsmComments::A64) {
         Some(t) => {
             stripped = t;
             stripped.as_str()
@@ -1195,29 +1195,29 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
     // Pre-scan the label definitions so an operand naming one resolves to a
     // template label rather than a symbol; named labels intern in definition
     // order.
-    let names = emit_common::scan_label_names(text);
-    if let Some(dup) = emit_common::duplicate_label_name(text) {
+    let names = crate::c5::asm::scan_label_names(text);
+    if let Some(dup) = crate::c5::asm::duplicate_label_name(text) {
         return Err(format!("inline asm: symbol `{dup}` is already defined"));
     }
     let label_num = |name: &str| -> Option<u32> {
         names
             .iter()
             .position(|&n| n == name)
-            .map(|i| emit_common::NAMED_LABEL_BASE + i as u32)
+            .map(|i| crate::c5::asm::NAMED_LABEL_BASE + i as u32)
     };
     let mut insns = Vec::new();
-    for piece in emit_common::split_asm_statements(text) {
+    for piece in crate::c5::asm::split_asm_statements(text) {
         let mut piece = piece.trim();
         if piece.is_empty() {
             continue;
         }
         // Leading `name:` / `N:` definitions mark this point; the rest of the
         // statement (possibly empty) follows on the same line.
-        while let Some((name, rest)) = emit_common::split_label_def(piece) {
+        while let Some((name, rest)) = crate::c5::asm::split_label_def(piece) {
             let num = if name.as_bytes()[0].is_ascii_digit() {
                 name.parse::<u32>()
                     .ok()
-                    .filter(|&n| n < emit_common::NAMED_LABEL_BASE)
+                    .filter(|&n| n < crate::c5::asm::NAMED_LABEL_BASE)
                     .ok_or_else(|| format!("inline asm: bad label `{piece}`"))?
             } else {
                 label_num(name).expect("the pre-scan interned every named definition")
@@ -2745,7 +2745,7 @@ mod tests {
 
     #[test]
     fn parse_named_labels() {
-        use super::super::super::ssa::emit_common::NAMED_LABEL_BASE;
+        use crate::c5::asm::NAMED_LABEL_BASE;
         // A name interns in definition order; a branch to one resolves to the
         // template label, not to a symbol. Two definitions may share a line,
         // and a spelling that collides with a mnemonic is still a label.

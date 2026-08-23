@@ -208,9 +208,9 @@ impl Compiler {
         // statements the validation below does.
         let aarch64 = self.target.is_aarch64();
         let comments = if aarch64 {
-            engine::AsmComments::A64
+            crate::c5::asm::AsmComments::A64
         } else {
-            engine::AsmComments::X86
+            crate::c5::asm::AsmComments::X86
         };
         let prepared = engine::prepare_file_asm_text(text, comments)?;
         let text = prepared.as_str();
@@ -277,7 +277,7 @@ impl Compiler {
                     // a label of the owning section instead; the object
                     // writer drops the alias record there.
                     engine::AsmSectionItem::SetExpr { name, expr } => {
-                        if let Some((target, addend)) = engine::asm_sym_offset_expr(expr) {
+                        if let Some((target, addend)) = crate::c5::asm::asm_sym_offset_expr(expr) {
                             Self::set_alias(&mut self.asm_sym_sets, name, target, addend);
                         }
                     }

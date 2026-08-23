@@ -3,11 +3,10 @@
 //! into, the GNU as operator grouping over it, and the constant-only
 //! entry points the template parsers use.
 
+use super::*;
 // Assembler code still held by the SSA emit substrate; folds in as the
 // remaining groups move over.
-use crate::c5::codegen::ssa::emit_common::{
-    AsmBindingNames, AsmSectionTarget, AsmSpace, numeric_label_digits,
-};
+use crate::c5::codegen::ssa::emit_common::{AsmBindingNames, AsmSectionTarget, AsmSpace};
 
 /// One symbolic term of an expression value: where the location lives when
 /// it is laid out in this unit (`None` for an undefined symbol), and the

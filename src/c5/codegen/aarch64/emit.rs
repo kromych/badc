@@ -246,10 +246,7 @@ fn asm_scratch_bytes(func: &FunctionSsa) -> u32 {
         };
         // A no-op statement emits no staging (`emit_inline_asm_aarch64`),
         // so it needs no scratch.
-        if super::ssa::emit_common::asm_statement_is_noop(
-            asm,
-            super::ssa::emit_common::AsmComments::A64,
-        ) {
+        if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::A64) {
             continue;
         }
         let Ok(op_reg) =
@@ -3271,7 +3268,7 @@ fn template_expr_value(
     names: &[&str],
 ) -> Option<i64> {
     crate::c5::asm::eval_asm_expr_with_labels(expr, &|name| {
-        super::super::ssa::emit_common::template_label_offset(name, at, label_defs, names)
+        crate::c5::asm::template_label_offset(name, at, label_defs, names)
     })
 }
 
@@ -3336,10 +3333,7 @@ fn emit_inline_asm_aarch64(
     // A statement that lowers to nothing keeps only its IR-level ordering
     // effect; the operand staging around zero bytes of code is dead, and
     // `asm_scratch_bytes` reserved no region for it.
-    if super::ssa::emit_common::asm_statement_is_noop(
-        asm,
-        super::ssa::emit_common::AsmComments::A64,
-    ) {
+    if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::A64) {
         return true;
     }
     // Expand `%=` once so the code text and any `.pushsection` content
@@ -3349,10 +3343,7 @@ fn emit_inline_asm_aarch64(
         bail_msg("aarch64 inline asm: non-UTF8 template");
         return false;
     };
-    let stripped = super::ssa::emit_common::strip_asm_comments(
-        raw_text,
-        super::ssa::emit_common::AsmComments::A64,
-    );
+    let stripped = crate::c5::asm::strip_asm_comments(raw_text, crate::c5::asm::AsmComments::A64);
     let raw_text = stripped.as_deref().unwrap_or(raw_text);
     let expanded = super::ssa::emit_common::expand_template_uniq(raw_text);
     let text = expanded.as_deref().unwrap_or(raw_text);
@@ -3866,7 +3857,7 @@ fn emit_inline_asm_aarch64(
     let mut label_fixups: Vec<(usize, LabelBranch, u32, bool)> = Vec::new();
     // The template's intern table, telling an expression leaf apart from a
     // symbol the stream cannot relocate.
-    let label_names = super::super::ssa::emit_common::scan_label_names(code_text);
+    let label_names = crate::c5::asm::scan_label_names(code_text);
     // Forward-referencing fields over template labels, settled below: a data
     // field as `(reference_site, field, width, expression)`, an instruction
     // operand by re-encoding its word.
@@ -3884,7 +3875,7 @@ fn emit_inline_asm_aarch64(
 
     // Code-stream label names, so a layout directive's expression can read a
     // named label's offset as it reads a numeric one.
-    let stream_label_names = super::ssa::emit_common::scan_label_names(code_text);
+    let stream_label_names = crate::c5::asm::scan_label_names(code_text);
     // Encode each template instruction; raw-byte pieces emit verbatim.
     for insn in &insns {
         if let Some(num) = insn.label_def {
@@ -3897,7 +3888,7 @@ fn emit_inline_asm_aarch64(
         if let Some(item) = &insn.layout {
             let resolve = |name: &str| -> Option<i64> {
                 let num = match stream_label_names.iter().position(|&n| n == name) {
-                    Some(i) => super::ssa::emit_common::NAMED_LABEL_BASE + i as u32,
+                    Some(i) => crate::c5::asm::NAMED_LABEL_BASE + i as u32,
                     None => name.strip_suffix(['b', 'f'])?.parse().ok()?,
                 };
                 label_defs
@@ -3971,11 +3962,7 @@ fn emit_inline_asm_aarch64(
                     AsmOpndA64::ImmExpr(ref e) => {
                         match template_expr_value(e, code.len(), &label_defs, &label_names) {
                             Some(v) => v,
-                            None if super::super::ssa::emit_common::is_template_label_expr(
-                                e,
-                                &label_names,
-                            ) =>
-                            {
+                            None if crate::c5::asm::is_template_label_expr(e, &label_names) => {
                                 expr_fixups.push((code.len(), code.len(), w, e.clone()));
                                 0
                             }
@@ -4189,7 +4176,7 @@ fn emit_inline_asm_aarch64(
         let mut pending: Option<(usize, String)> = None;
         for o in &insn.operands {
             if let AsmOpndA64::ImmExpr(e) = o
-                && super::super::ssa::emit_common::is_template_label_expr(e, &label_names)
+                && crate::c5::asm::is_template_label_expr(e, &label_names)
             {
                 let v = template_expr_value(e, code.len(), &label_defs, &label_names);
                 if v.is_none() {
@@ -4254,7 +4241,7 @@ fn emit_inline_asm_aarch64(
     // one, as the sections follow the code textually.
     let mut pending_xsec: Vec<(usize, LabelBranch, u32)> = Vec::new();
     for &(site, ref kind, num, forward) in &label_fixups {
-        let target = if num >= super::super::ssa::emit_common::NAMED_LABEL_BASE {
+        let target = if num >= crate::c5::asm::NAMED_LABEL_BASE {
             label_defs.iter().find(|&&(n, _)| n == num).map(|&(_, o)| o)
         } else if forward {
             label_defs
@@ -4269,10 +4256,7 @@ fn emit_inline_asm_aarch64(
                 .map(|&(_, off)| off)
         };
         let Some(target) = target else {
-            if num < super::super::ssa::emit_common::NAMED_LABEL_BASE
-                && forward
-                && !section_blocks.is_empty()
-            {
+            if num < crate::c5::asm::NAMED_LABEL_BASE && forward && !section_blocks.is_empty() {
                 pending_xsec.push((site, *kind, num));
                 continue;
             }
@@ -4304,10 +4288,9 @@ fn emit_inline_asm_aarch64(
     // bind a same-name C reference to it. `.L`-prefixed names are
     // assembler-local, so no C reference spells one.
     {
-        let names = super::super::ssa::emit_common::scan_label_names(code_text);
+        let names = crate::c5::asm::scan_label_names(code_text);
         for &(num, off) in &label_defs {
-            let Some(idx) = num.checked_sub(super::super::ssa::emit_common::NAMED_LABEL_BASE)
-            else {
+            let Some(idx) = num.checked_sub(crate::c5::asm::NAMED_LABEL_BASE) else {
                 continue;
             };
             let Some(&name) = names.get(idx as usize) else {
@@ -12377,9 +12360,9 @@ mod tests {
     #[test]
     fn file_scope_a64_subsection_org_rept_match_gnu_as() {
         use super::super::ssa::emit_common::{
-            AsmComments, extract_file_scope_asm_sections, materialize_asm_sections,
-            prepare_file_asm_text,
+            extract_file_scope_asm_sections, materialize_asm_sections, prepare_file_asm_text,
         };
+        use crate::c5::asm::AsmComments;
         let text = ".text\nf:\n661:\nnop\nnop\n662:\n.subsection 1\n663:\nmov x1, #2\nmov x2, #3\n\
                     664:\n.previous\n.org . - (664b-663b) + (662b-661b)\n\
                     .org . - (662b-661b) + (664b-663b)\n\
@@ -12428,9 +12411,9 @@ mod tests {
     /// Expand, extract, encode and materialize one file-scope asm text.
     fn a64_file_asm_sink_result(text: &str) -> Result<AsmSectionSink, alloc::string::String> {
         use super::super::ssa::emit_common::{
-            AsmComments, extract_file_scope_asm_sections, materialize_asm_sections,
-            prepare_file_asm_text,
+            extract_file_scope_asm_sections, materialize_asm_sections, prepare_file_asm_text,
         };
+        use crate::c5::asm::AsmComments;
         let text = prepare_file_asm_text(text, AsmComments::A64)?;
         let mut blocks = extract_file_scope_asm_sections(&text, true)?;
         encode_a64_file_asm_section_code(&mut blocks)?;

@@ -1751,7 +1751,7 @@ pub(crate) fn lower(
     super::ssa::emit_common::materialize_file_asm(
         &program.file_asm,
         true,
-        super::ssa::emit_common::AsmComments::A64,
+        crate::c5::asm::AsmComments::A64,
         &|blocks| {
             crate::c5::codegen::encode_file_asm_section_code(blocks, target, native.elf_class)
         },

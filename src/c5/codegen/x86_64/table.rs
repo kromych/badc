@@ -689,6 +689,11 @@ pub(crate) fn encode_into(
 /// distinguish "no such form" from "form matched but not encodable"). The
 /// catalogue is sorted by mnemonic and `Mnem`'s Ord matches that order, so this
 /// binary-searches on the integer discriminant to the mnemonic's run of forms.
+///
+/// Forms of equal length are ranked by immediate field width, which is how
+/// GNU as orders its own templates: a 16-bit operand against the accumulator
+/// encodes `add $1, %ax` as either `05 iw` or `83 /0 ib`, both three bytes,
+/// and the sign-extended byte form is the one it picks.
 fn encode_best(
     mnem: Mnem,
     opw: u8,
@@ -699,7 +704,7 @@ fn encode_best(
 ) -> (Option<InsnBuf>, bool) {
     let forms = super::isa_x86_table::FORMS;
     let start = forms.partition_point(|f| f.mnem < mnem);
-    let mut best: Option<InsnBuf> = None;
+    let mut best: Option<(InsnBuf, u8)> = None;
     let mut matched = false;
     let generated = forms[start..].iter().take_while(|f| f.mnem == mnem);
     let supplemental = FORMS_SUPPLEMENT.iter().filter(|f| f.mnem == mnem);
@@ -708,13 +713,14 @@ fn encode_best(
             continue;
         }
         matched = true;
+        let imm = f.imm.and_then(|c| imm_field_bytes(c, opw)).unwrap_or(0);
         if let Ok(buf) = encode_form(f, ops, opw, opw_known, mode, addr)
-            && best.is_none_or(|b| buf.len < b.len)
+            && best.is_none_or(|(b, bi)| (buf.len, imm) < (b.len, bi))
         {
-            best = Some(buf);
+            best = Some((buf, imm));
         }
     }
-    (best, matched)
+    (best.map(|(b, _)| b), matched)
 }
 
 /// Forms the external instruction database omits, encoded by the same

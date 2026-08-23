@@ -459,6 +459,63 @@ fn enc_in(mode: Mode, addr: u8, mnem: &str, w: Option<u8>, ops: &[Opnd]) -> Vec<
     encode_in(mode, addr, m, w, ops).unwrap_or_else(|e| panic!("{mnem}: {e}"))
 }
 
+/// A 16-bit operand against the accumulator is the one width where the
+/// `05 iw` accumulator form and the `83 /n ib` sign-extended form are the
+/// same length. GNU as picks the sign-extended one, and does so in every
+/// mode; an immediate outside the signed-byte range has no such form and
+/// takes the accumulator one in both assemblers.
+#[test]
+fn word_accumulator_alu_immediate_matches_gnu_as() {
+    // Mnemonic, its `83 /n` ModRM byte for `%ax`, and its accumulator opcode.
+    let group: &[(&str, u8, u8)] = &[
+        ("add", 0xc0, 0x05),
+        ("or", 0xc8, 0x0d),
+        ("adc", 0xd0, 0x15),
+        ("sbb", 0xd8, 0x1d),
+        ("and", 0xe0, 0x25),
+        ("sub", 0xe8, 0x2d),
+        ("xor", 0xf0, 0x35),
+        ("cmp", 0xf8, 0x3d),
+    ];
+    for &(mnem, modrm, acc) in group {
+        for (mode, addr, prefix) in [
+            (Mode::Bits16, 2u8, &[][..]),
+            (Mode::Bits32, 4, &[0x66][..]),
+            (Mode::Bits64, 8, &[0x66][..]),
+        ] {
+            let e = |imm: i64| enc_in(mode, addr, mnem, None, &[r(0, 2), Opnd::Imm(imm)]);
+            let want = |tail: &[u8]| [prefix, tail].concat();
+            for imm in [0i64, 1, 127, -1, -128] {
+                assert_eq!(
+                    e(imm),
+                    want(&[0x83, modrm, imm as u8]),
+                    "{mnem} ${imm} ({mode:?})"
+                );
+            }
+            // Past the signed-byte range only the accumulator form matches.
+            assert_eq!(e(128), want(&[acc, 0x80, 0x00]), "{mnem} $128 ({mode:?})");
+        }
+    }
+    // A non-accumulator destination has only the ModRM forms, and the 8-bit
+    // and wider operand sizes are not ties: the accumulator form is shorter
+    // at 8 bits and the sign-extended one is shorter above 16.
+    assert_eq!(
+        enc("add", &[r(3, 2), Opnd::Imm(1)]),
+        [0x66, 0x83, 0xc3, 0x01]
+    );
+    assert_eq!(enc("add", &[r(0, 1), Opnd::Imm(1)]), [0x04, 0x01]);
+    assert_eq!(enc("add", &[r(0, 4), Opnd::Imm(1)]), [0x83, 0xc0, 0x01]);
+    assert_eq!(
+        enc("add", &[r(0, 8), Opnd::Imm(1)]),
+        [0x48, 0x83, 0xc0, 0x01]
+    );
+    // `test` has no sign-extended form, so the accumulator one stands.
+    assert_eq!(
+        enc("test", &[r(0, 2), Opnd::Imm(1)]),
+        [0x66, 0xa9, 0x01, 0x00]
+    );
+}
+
 #[test]
 fn code16_operand_size_prefix_matches_gnu_as() {
     let e = |mnem: &str, w: Option<u8>, ops: &[Opnd]| enc_in(Mode::Bits16, 2, mnem, w, ops);

@@ -639,7 +639,7 @@ fn parse_int(s: &str) -> Option<i64> {
     };
     match v {
         Some(v) => Some(if neg { -v } else { v }),
-        None => super::super::ssa::emit_common::eval_const_expr_ops(s, &|_| None),
+        None => crate::c5::asm::eval_const_expr_ops(s, &|_| None),
     }
 }
 
@@ -739,7 +739,7 @@ fn parse_mem(inner: &str, pre: bool) -> Result<AsmOpndA64, String> {
         // (`[xN, #4 * 0]` folds to 0), with the `#` optional. Operand
         // references do not appear in an offset, so the resolver yields None.
         let expr = parts[1].strip_prefix('#').unwrap_or(parts[1]).trim();
-        match super::super::ssa::emit_common::eval_const_expr_ops(expr, &|_| None) {
+        match crate::c5::asm::eval_const_expr_ops(expr, &|_| None) {
             Some(v) => v,
             // An expression over labels: the value is the section layout's.
             None if is_layout_expr(expr) => {
@@ -1093,7 +1093,7 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
 /// section layout knows. Leaves stand in as zero, so this checks the syntax
 /// alone; the constant folder has already run.
 fn is_layout_expr(tok: &str) -> bool {
-    emit_common::is_asm_layout_expr(tok)
+    crate::c5::asm::is_asm_layout_expr(tok)
 }
 
 /// The group part of an `:abs_gN[_s|_nc]:` specifier. GNU as defines the
@@ -1159,12 +1159,12 @@ pub(super) fn split_sym_addend(s: &str) -> Option<&str> {
     if !rest.starts_with(['+', '-']) {
         return None;
     }
-    let ctx = emit_common::AsmExprCtx {
-        resolve: &|_| Some(emit_common::AsmExprLeaf::Abs(0)),
+    let ctx = crate::c5::asm::AsmExprCtx {
+        resolve: &|_| Some(crate::c5::asm::AsmExprLeaf::Abs(0)),
         const_of: &|_| None,
         lax_div: true,
     };
-    emit_common::eval_asm_value(s, &ctx).ok()?;
+    crate::c5::asm::eval_asm_value(s, &ctx).ok()?;
     Some(s)
 }
 

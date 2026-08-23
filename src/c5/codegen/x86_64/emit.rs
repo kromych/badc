@@ -8215,7 +8215,7 @@ fn template_expr_value(
             .offset(name)
             .or_else(|| super::ssa::emit_common::template_label_offset(name, at, label_defs, names))
     };
-    super::ssa::emit_common::eval_asm_expr_with_labels(expr, &resolve)
+    crate::c5::asm::eval_asm_expr_with_labels(expr, &resolve)
 }
 
 /// A local label's name as the section materializer resolves it: the number
@@ -9495,7 +9495,7 @@ fn emit_inline_asm_once(
                     let Some((name, addend)) = insn
                         .sym_exprs
                         .get(expr as usize)
-                        .and_then(|e| super::super::ssa::emit_common::asm_expr_sym_addend(e))
+                        .and_then(|e| crate::c5::asm::asm_expr_sym_addend(e))
                     else {
                         return fail(
                             "inline asm: a memory displacement over a label difference is only \

@@ -2388,7 +2388,7 @@ fn strip_outer_parens(s: &str) -> &str {
 
 /// Parse a decimal or `0x`-hex integer, optionally signed.
 fn parse_int(s: &str) -> Option<i64> {
-    crate::c5::codegen::ssa::emit_common::eval_const_expr(s.trim())
+    crate::c5::asm::eval_const_expr(s.trim())
 }
 
 /// The location expression of an operand, or `None` when the text holds no
@@ -2418,14 +2418,14 @@ fn sym_disp_expr<'a>(prefix: &'a str, labels: &[&str]) -> Option<&'a str> {
                 || super::super::ssa::emit_common::is_asm_symbol_template(t)
                 || parse_label_ref(t, labels).is_some(),
         );
-        Some(super::super::ssa::emit_common::AsmExprLeaf::Abs(0))
+        Some(crate::c5::asm::AsmExprLeaf::Abs(0))
     };
-    let ctx = super::super::ssa::emit_common::AsmExprCtx {
+    let ctx = crate::c5::asm::AsmExprCtx {
         resolve: &resolve,
         const_of: &|_| None,
         lax_div: true,
     };
-    super::super::ssa::emit_common::eval_asm_value(prefix, &ctx).ok()?;
+    crate::c5::asm::eval_asm_value(prefix, &ctx).ok()?;
     named.get().then_some(prefix)
 }
 

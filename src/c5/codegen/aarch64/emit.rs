@@ -3116,8 +3116,8 @@ fn encode_deferred_asm_region(
                 }
                 main_label(name).map(|o| o as i64)
             };
-            let target = super::ssa::emit_common::eval_asm_expr_with_labels(expr, &resolve)
-                .ok_or_else(|| {
+            let target =
+                crate::c5::asm::eval_asm_expr_with_labels(expr, &resolve).ok_or_else(|| {
                     alloc::format!("inline asm: unsupported `.org` expression `{expr}`")
                 })?;
             if target < cur {
@@ -3270,7 +3270,7 @@ fn template_expr_value(
     label_defs: &[(u32, usize)],
     names: &[&str],
 ) -> Option<i64> {
-    super::super::ssa::emit_common::eval_asm_expr_with_labels(expr, &|name| {
+    crate::c5::asm::eval_asm_expr_with_labels(expr, &|name| {
         super::super::ssa::emit_common::template_label_offset(name, at, label_defs, names)
     })
 }
@@ -4111,7 +4111,7 @@ fn emit_inline_asm_aarch64(
                 },
         }) = insn.operands.last()
             && matches!(insn.mnemonic.as_str(), "movz" | "movk")
-            && let Some(v) = super::super::ssa::emit_common::eval_const_expr_ops(expr, &|_| None)
+            && let Some(v) = crate::c5::asm::eval_const_expr_ops(expr, &|_| None)
         {
             let (rd, is64) = match conv(&insn.operands[0]) {
                 Ok(Opnd::Reg { num, is64, .. }) => (num, is64),
@@ -4163,7 +4163,7 @@ fn emit_inline_asm_aarch64(
             };
             // A function body has no section layout, so only `sym + constant`
             // resolves here; a label-difference expression does not.
-            let Some((name, addend)) = super::ssa::emit_common::asm_expr_sym_addend(&expr) else {
+            let Some((name, addend)) = crate::c5::asm::asm_expr_sym_addend(&expr) else {
                 bail_msg(&alloc::format!(
                     "aarch64 inline asm: operand expression `{expr}` needs a section layout"
                 ));
@@ -11345,13 +11345,13 @@ fn a64_pool_value(
     size: u8,
 ) -> Result<super::ssa::emit_common::AsmPoolValue, alloc::string::String> {
     use super::ssa::emit_common::AsmPoolValue;
-    if let Some(v) = super::ssa::emit_common::eval_const_expr_wide(expr) {
+    if let Some(v) = crate::c5::asm::eval_const_expr_wide(expr) {
         return Ok(AsmPoolValue::Const(v));
     }
     // The pool is assigned before layout, so a value here reduces to one
     // symbol and a constant; a label difference has nothing to fold against.
     let (name, addend) = super::asm::split_sym_addend(expr)
-        .and_then(super::ssa::emit_common::asm_expr_sym_addend)
+        .and_then(crate::c5::asm::asm_expr_sym_addend)
         .ok_or_else(|| alloc::format!("inline asm: bad literal-pool value `{expr}`"))?;
     if size == 16 {
         return Err(alloc::format!(

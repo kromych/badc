@@ -1,3 +1,4 @@
+mod asm;
 mod ast;
 mod codegen;
 mod compiler;

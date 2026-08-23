@@ -19,11 +19,11 @@ Disassembly of section .text:
                	mov	x1, x0
                	mov	x3, x0
                	b	<addr>
-               	add	x1, x2, #0x1
+               	sxtw	x1, w1
+               	add	x1, x1, #0x1
                	mov	x2, x0
                	mov	x3, x0
-               	sxtw	x2, w1
-               	cmp	x2, #0x5
+               	cmp	w1, #0x5
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
                	mov	x1, x0

@@ -33,7 +33,7 @@ Disassembly of section .text:
                	movb	%al, -0x18(%rbp)
                	leaq	-0x18(%rbp), %rax
                	movsbq	(%rax), %rax
-               	cmpq	$-0x1d, %rax
+               	cmpl	$-0x1d, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	addq	$0x20, %rsp

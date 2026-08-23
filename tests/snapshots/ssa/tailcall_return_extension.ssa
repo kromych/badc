@@ -115,11 +115,11 @@ fn ent_pc=4 n_params=0 variadic=false locals=2
     v29  LocalAddr(-1)                                    -> x7
     v30  Imm(0)                                           -> x6
     v31  Call { target_pc=0, args=[v29, v30], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v32  Extend { value=v31, kind=I32 }                   -> x0
+    v32  Extend { value=v31, kind=I32 }                   -> x1
     v33  Imm(4273934336)                                  -> x1
     v34  Imm(-90335875338076160)                          -> x1
     v35  Imm(-21032960)                                   -> x1
-    v36  BinopI { op=ne, lhs=v32, rhs_imm=-21032960 }     -> x0
+    v36  BinopI { op=ne, lhs=v31, rhs_imm=-21032960 }     -> x0
     terminator Bz { cond=v36, target=b4, fall=b3 }   (exit_acc=v36)
   block 3  start_pc=0
     v37  Imm(2)                                           -> x0

@@ -137,7 +137,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=1
     v26  Phi { incoming=[b0:v3, b2:v27], kind=I64 }       -> [spill 3]
     v27  Phi { incoming=[b0:v1, b2:v69], kind=I64 }       -> x13
     v28  Extend { value=v19, kind=I32 }                   -> x0
-    v29  BinopI { op=lt, lhs=v28, rhs_imm=4 }             -> x0
+    v29  BinopI { op=lt, lhs=v19, rhs_imm=4 }             -> x0
     terminator Bnz { cond=v29, target=b1, fall=b4 }   (exit_acc=v29)
   block 4  start_pc=0
     v71  LoadLocal { off=-1, kind=I64 }                   -> x0

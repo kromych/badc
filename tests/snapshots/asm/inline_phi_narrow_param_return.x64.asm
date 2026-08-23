@@ -33,9 +33,9 @@ Disassembly of section .text:
                	addq	%rax, %rcx
                	movslq	%ecx, %rcx
                	incq	%rcx
-               	leaq	0x1(%rdx), %rax
-               	movslq	%eax, %rdx
-               	cmpq	$0x32, %rdx
+               	movslq	%eax, %rax
+               	incq	%rax
+               	cmpl	$0x32, %eax
                	jl	<addr>
                	cmpq	$-0x4728dfba, %rcx      # imm = 0xB8D72046
                	jne	<addr>

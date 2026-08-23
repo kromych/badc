@@ -190,19 +190,19 @@ fn ent_pc=9 n_params=0 variadic=false locals=65
     v120 Imm(0)                                           -> x1
     terminator Jmp(b29)   (exit_acc=v81)
   block 27  start_pc=0
-    v126 LocalAddr(-64)                                   -> x6
-    v127 Extend { value=v121, kind=I32 }                  -> x6
-    v128 Binop { op=add, lhs=v117, rhs=v122 }             -> x6
+    v126 LocalAddr(-64)                                   -> x1
+    v127 Extend { value=v121, kind=I32 }                  -> x1
+    v128 Binop { op=add, lhs=v117, rhs=v127 }             -> x6
     v129 Load { addr=v128, disp=0, kind=I8 }              -> x6
     terminator Bnz { cond=v129, target=b53, fall=b28 }   (exit_acc=v129)
   block 28  start_pc=0
     v124 Extend { value=v121, kind=I32 }                  -> x0
-    v125 BinopI { op=add, lhs=v122, rhs_imm=1 }           -> x0
+    v125 BinopI { op=add, lhs=v127, rhs_imm=1 }           -> x0
     terminator Jmp(b29)   (exit_acc=v125)
   block 29  start_pc=0
     v121 Phi { incoming=[b26:v81, b28:v125], kind=I64 }   -> x0
     v122 Extend { value=v121, kind=I32 }                  -> x1
-    v123 BinopI { op=lt, lhs=v122, rhs_imm=512 }          -> x6
+    v123 BinopI { op=lt, lhs=v121, rhs_imm=512 }          -> x1
     terminator Bnz { cond=v123, target=b27, fall=b30 }   (exit_acc=v123)
   block 30  start_pc=0
     v130 Imm(1)                                           -> x0
@@ -281,8 +281,8 @@ fn ent_pc=9 n_params=0 variadic=false locals=65
     v177 LocalAddr(-2)                                    -> x0
     v178 Load { addr=v177, disp=0, kind=I64 }             -> x0
     v179 Call { target_pc=6, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v180 Extend { value=v179, kind=I32 }                  -> x0
-    v181 BinopI { op=eq, lhs=v180, rhs_imm=7 }            -> x0
+    v180 Extend { value=v179, kind=I32 }                  -> x1
+    v181 BinopI { op=eq, lhs=v179, rhs_imm=7 }            -> x0
     terminator Bz { cond=v181, target=b52, fall=b43 }   (exit_acc=v181)
   block 43  start_pc=0
     v182 LocalAddr(-2)                                    -> x0

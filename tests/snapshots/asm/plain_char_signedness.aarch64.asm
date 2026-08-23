@@ -21,7 +21,7 @@ Disassembly of section .text:
                	sturb	w0, [x29, #-0x18]
                	sub	x0, x29, #0x18
                	ldrb	w0, [x0]
-               	cmp	x0, #0xe3
+               	cmp	w0, #0xe3
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x20

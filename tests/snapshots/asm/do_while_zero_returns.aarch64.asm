@@ -15,7 +15,7 @@ Disassembly of section .text:
 
 <from_value>:
                	sxtw	x0, w0
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	b.ge	<addr>
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
@@ -33,7 +33,7 @@ Disassembly of section .text:
                	cbnz	x0, <addr>
                	mov	x0, #0x0                // =0
                	ret
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	b.le	<addr>
                	mov	x0, #0x1                // =1
                	sxtw	x0, w0

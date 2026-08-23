@@ -40,32 +40,32 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
-               	cmpq	$0x5, %rcx
+               	cmpl	$0x5, %ecx
                	sete	%dl
                	movzbq	%dl, %rdx
                	xorq	%rcx, %rcx
                	testq	%rdx, %rdx
                	je	<addr>
                	movslq	0x4(%rax), %rdx
-               	cmpq	$0x68, %rdx
+               	cmpl	$0x68, %edx
                	sete	%dl
                	movzbq	%dl, %rdx
                	testq	%rdx, %rdx
                	je	<addr>
                	movslq	0x8(%rax), %rdx
-               	cmpq	$0x69, %rdx
+               	cmpl	$0x69, %edx
                	sete	%dl
                	movzbq	%dl, %rdx
                	testq	%rdx, %rdx
                	je	<addr>
                	movslq	0xc(%rax), %rdx
-               	testq	%rdx, %rdx
+               	testl	%edx, %edx
                	sete	%dl
                	movzbq	%dl, %rdx
                	testq	%rdx, %rdx
                	je	<addr>
                	movslq	0x10(%rax), %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	sete	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx

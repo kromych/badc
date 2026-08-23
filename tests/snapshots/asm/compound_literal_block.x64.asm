@@ -52,25 +52,25 @@ Disassembly of section .text:
                	xorq	%rcx, %rcx
                	movq	(%rax), %rdx
                	movsbq	(%rdx), %rdx
-               	cmpq	$0x73, %rdx
+               	cmpl	$0x73, %edx
                	jne	<addr>
                	movq	(%rax), %rdx
                	movsbq	0x1(%rdx), %rdx
-               	cmpq	$0x68, %rdx
+               	cmpl	$0x68, %edx
                	sete	%dl
                	movzbq	%dl, %rdx
                	testq	%rdx, %rdx
                	je	<addr>
                	movq	(%rax), %rdx
                	movsbq	0x2(%rdx), %rdx
-               	testq	%rdx, %rdx
+               	testl	%edx, %edx
                	sete	%dl
                	movzbq	%dl, %rdx
                	testq	%rdx, %rdx
                	je	<addr>
                	movq	0x8(%rax), %rcx
                	movsbq	(%rcx), %rcx
-               	cmpq	$0x2d, %rcx
+               	cmpl	$0x2d, %ecx
                	sete	%cl
                	movzbq	%cl, %rcx
                	movslq	%ecx, %rcx

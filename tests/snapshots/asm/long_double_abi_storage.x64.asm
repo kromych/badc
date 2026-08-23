@@ -62,7 +62,7 @@ Disassembly of section .text:
                	movl	%ebx, %eax
                	leaq	0x1(%rax), %rbx
                	movl	%ebx, %eax
-               	cmpq	$0xc, %rax
+               	cmpl	$0xc, %eax
                	jb	<addr>
                	movabsq	$0x7ff8000000000000, %rax # imm = 0x7FF8000000000000
                	movq	%rax, -0x20(%rbp)
@@ -149,7 +149,7 @@ Disassembly of section .text:
                	movzbq	0x8(%rax), %rax
                	xorq	$0xff, %rax
                	movl	%eax, %eax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -158,7 +158,7 @@ Disassembly of section .text:
                	movzbq	0x9(%rax), %rax
                	xorq	$0x3f, %rax
                	movl	%eax, %eax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

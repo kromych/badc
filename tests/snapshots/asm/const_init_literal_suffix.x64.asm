@@ -156,10 +156,9 @@ Disassembly of section .text:
                	cmpq	%r11, %rcx
                	je	<addr>
                	movl	$0x1e, %eax
-               	movslq	%eax, %rcx
-               	testq	%rcx, %rcx
+               	testq	%rax, %rax
                	je	<addr>
-               	movq	%rcx, %rax
+               	movslq	%eax, %rax
                	retq
                	xorq	%rax, %rax
                	retq

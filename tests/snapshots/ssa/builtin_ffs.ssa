@@ -427,12 +427,12 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v408 BinopI { op=ne, lhs=v387, rhs_imm=0 }            -> x0
     v409 Binop { op=mul, lhs=v407, rhs=v408 }             -> x0
     v410 Imm(17)                                          -> x1
-    v411 Extend { value=v409, kind=I32 }                  -> x0
+    v411 Extend { value=v409, kind=I32 }                  -> x1
     v412 Imm(17)                                          -> x1
-    v413 BinopI { op=eq, lhs=v411, rhs_imm=17 }           -> x0
-    v414 Extend { value=v413, kind=I32 }                  -> x0
-    v415 BinopI { op=eq, lhs=v414, rhs_imm=0 }            -> x1
-    terminator Bnz { cond=v414, target=b15, fall=b14 }   (exit_acc=v415)
+    v413 BinopI { op=eq, lhs=v409, rhs_imm=17 }           -> x0
+    v414 Extend { value=v413, kind=I32 }                  -> x1
+    v415 BinopI { op=eq, lhs=v413, rhs_imm=0 }            -> x1
+    terminator Bnz { cond=v413, target=b15, fall=b14 }   (exit_acc=v415)
   block 14  start_pc=0
     v416 Imm(14)                                          -> x0
     terminator Return(v416)   (exit_acc=v416)
@@ -463,12 +463,12 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v440 BinopI { op=add, lhs=v439, rhs_imm=1 }           -> x2
     v441 BinopI { op=ne, lhs=v420, rhs_imm=0 }            -> x0
     v442 Binop { op=mul, lhs=v440, rhs=v441 }             -> x0
-    v443 Extend { value=v442, kind=I32 }                  -> x0
+    v443 Extend { value=v442, kind=I32 }                  -> x2
     v444 Imm(0)                                           -> x2
-    v445 BinopI { op=eq, lhs=v443, rhs_imm=0 }            -> x0
-    v446 Extend { value=v445, kind=I32 }                  -> x0
-    v447 BinopI { op=eq, lhs=v446, rhs_imm=0 }            -> x2
-    terminator Bnz { cond=v446, target=b17, fall=b16 }   (exit_acc=v447)
+    v445 BinopI { op=eq, lhs=v442, rhs_imm=0 }            -> x2
+    v446 Extend { value=v445, kind=I32 }                  -> x6
+    v447 BinopI { op=eq, lhs=v445, rhs_imm=0 }            -> x2
+    terminator Bz { cond=v442, target=b17, fall=b16 }   (exit_acc=v447)
   block 16  start_pc=0
     v448 Imm(15)                                          -> x0
     terminator Return(v448)   (exit_acc=v448)

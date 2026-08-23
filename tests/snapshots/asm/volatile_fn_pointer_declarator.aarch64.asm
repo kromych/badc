@@ -41,8 +41,7 @@ Disassembly of section .text:
                	ldr	x0, [x20]
                	mov	x9, x0
                	blr	x9
-               	sxtw	x0, w0
-               	cmp	x0, #0x2a
+               	cmp	w0, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x20]
@@ -52,8 +51,7 @@ Disassembly of section .text:
                	ldr	x0, [x20]
                	mov	x9, x0
                	blr	x9
-               	sxtw	x0, w0
-               	cmp	x0, #0x2a
+               	cmp	w0, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x20]
@@ -66,7 +64,7 @@ Disassembly of section .text:
                	mov	x9, x0
                	blr	x9
                	ldrsw	x0, [x0]
-               	cmp	x0, #0x29
+               	cmp	w0, #0x29
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp, #0x20]
@@ -79,7 +77,7 @@ Disassembly of section .text:
                	mov	x9, x0
                	blr	x9
                	ldrsw	x0, [x0]
-               	cmp	x0, #0x29
+               	cmp	w0, #0x29
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp, #0x20]
@@ -92,7 +90,7 @@ Disassembly of section .text:
                	mov	x9, x0
                	blr	x9
                	ldrsw	x0, [x0]
-               	cmp	x0, #0x29
+               	cmp	w0, #0x29
                	cset	x0, ne
                	cbnz	x0, <addr>
                	adrp	x0, <page>
@@ -102,7 +100,7 @@ Disassembly of section .text:
                	mov	x9, x0
                	blr	x9
                	ldrsw	x0, [x0]
-               	cmp	x0, #0x2a
+               	cmp	w0, #0x2a
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x5                // =5
@@ -116,8 +114,7 @@ Disassembly of section .text:
                	ldr	x0, [x20]
                	mov	x9, x0
                	blr	x9
-               	sxtw	x0, w0
-               	cmp	x0, #0x29
+               	cmp	w0, #0x29
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	ldp	x29, x30, [sp, #0x20]

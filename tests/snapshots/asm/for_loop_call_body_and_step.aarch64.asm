@@ -21,8 +21,7 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	add	x0, x0, #0x1
                	sxtw	x0, w0
-               	sxtw	x2, w0
-               	cmp	x2, #0x7
+               	cmp	w0, #0x7
                	b.lt	<addr>
                	mov	x17, #0x6               // =6
                	mul	x0, x1, x17
@@ -37,8 +36,7 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	add	x0, x0, #0x1
                	sxtw	x0, w0
-               	sxtw	x2, w0
-               	cmp	x2, #0x7
+               	cmp	w0, #0x7
                	b.lt	<addr>
                	mov	x17, #0x6               // =6
                	mul	x0, x1, x17

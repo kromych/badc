@@ -98,28 +98,28 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x1, [x0]
-               	cmp	x1, #0xb
+               	cmp	w1, #0xb
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret
                	ldrsw	x1, [x0, #0x4]
-               	cmp	x1, #0x16
+               	cmp	w1, #0x16
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret
                	ldrsw	x1, [x0, #0x8]
-               	cmp	x1, #0x21
+               	cmp	w1, #0x21
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret
                	ldrsw	x0, [x0, #0xc]
-               	cmp	x0, #0x2c
+               	cmp	w0, #0x2c
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp, #0x10]

@@ -60,11 +60,11 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	cbnz	x1, <addr>
                	ldrb	w0, [x20, #0x1]
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	cset	x0, ne
                	cbnz	x0, <addr>
                	ldrb	w0, [x20, #0x2]
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, x21

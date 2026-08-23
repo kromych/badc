@@ -79,12 +79,12 @@ Disassembly of section .text:
                	mov	x2, #0xff               // =255
                	b	<addr>
                	sub	x3, x29, #0x20
+               	sxtw	x1, w0
                	add	x3, x3, x1
                	and	x4, x1, x2
                	strb	w4, [x3]
                	add	x0, x1, #0x1
-               	sxtw	x1, w0
-               	cmp	x1, #0x20
+               	cmp	w0, #0x20
                	b.lt	<addr>
                	sub	x20, x29, #0x38
                	sub	x1, x29, #0x30

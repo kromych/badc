@@ -41,7 +41,7 @@ Disassembly of section .text:
                	str	w2, [x1]
                	sub	x16, x29, #0x118
                	ldr	w2, [x16]
-               	cmp	x2, #0x7b
+               	cmp	w2, #0x7b
                	b.eq	<addr>
                	mov	x0, #0x38               // =56
                	cbz	x0, <addr>
@@ -64,7 +64,7 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	cmp	x2, x17
+               	cmp	w2, w17
                	b.eq	<addr>
                	mov	x2, #0x3e               // =62
                	cbz	x2, <addr>

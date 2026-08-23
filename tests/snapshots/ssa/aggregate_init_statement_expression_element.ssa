@@ -103,8 +103,8 @@ fn ent_pc=3 n_params=1 variadic=false locals=5
     v77  Extend { value=v75, kind=I32 }                   -> x2
     v78  BinopI { op=add, lhs=v75, rhs_imm=6 }            -> x0
     v79  BinopI { op=shl, lhs=v78, rhs_imm=32 }           -> x2
-    v80  Extend { value=v78, kind=I32 }                   -> x0
-    v81  BinopI { op=and, lhs=v80, rhs_imm=4294967295 }   -> x0
+    v80  Extend { value=v78, kind=I32 }                   -> x2
+    v81  BinopI { op=and, lhs=v78, rhs_imm=4294967295 }   -> x0
     v82  Binop { op=ne, lhs=v72, rhs=v81 }                -> x0
     terminator Bz { cond=v82, target=b6, fall=b5 }   (exit_acc=v82)
   block 5  start_pc=0

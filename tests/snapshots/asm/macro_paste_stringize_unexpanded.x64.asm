@@ -35,8 +35,7 @@ Disassembly of section .text:
                	movslq	(%rax), %rax
                	movslq	%edx, %rdx
                	addq	%rdx, %rax
-               	movslq	%eax, %rax
-               	cmpq	$0x3, %rax
+               	cmpl	$0x3, %eax
                	je	<addr>
                	movq	%rcx, %rax
                	retq

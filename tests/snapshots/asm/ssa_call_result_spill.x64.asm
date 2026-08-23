@@ -108,8 +108,7 @@ Disassembly of section .text:
                	movq	%r11, 0x48(%rsp)
                	movq	%r13, 0x40(%rsp)
                	movq	%rcx, %r13
-               	movslq	%ebx, %rax
-               	cmpq	$0x4, %rax
+               	cmpl	$0x4, %ebx
                	jl	<addr>
                	movabsq	$0x30a55d88de61bb19, %r11 # imm = 0x30A55D88DE61BB19
                	movq	%r13, %rax

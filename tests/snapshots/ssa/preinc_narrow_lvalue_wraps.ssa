@@ -164,8 +164,8 @@ fn ent_pc=7 n_params=0 variadic=false locals=2
     terminator Jmp(b43)   (exit_acc=v58)
   block 43  start_pc=0
     v82  Phi { incoming=[b51:v60, b42:v58], kind=I64 }    -> x2
-    v83  Extend { value=v82, kind=I32 }                   -> x2
-    v84  BinopI { op=eq, lhs=v83, rhs_imm=1 }             -> x2
+    v83  Extend { value=v82, kind=I32 }                   -> x6
+    v84  BinopI { op=eq, lhs=v82, rhs_imm=1 }             -> x2
     terminator Bz { cond=v84, target=b50, fall=b44 }   (exit_acc=v84)
   block 44  start_pc=0
     v85  LoadLocal { off=-1, kind=U8 }                    -> x2

@@ -70,33 +70,29 @@ Disassembly of section .text:
                	mul	x5, x5, x2
                	mul	x3, x3, x1
                	add	x3, x3, x0
-               	sxtw	x3, w3
                	mov	w3, w3
-               	add	x8, x5, x3
+               	add	x7, x5, x3
                	add	x3, x0, #0x1
                	sub	x5, x0, #0x1
                	sub	x6, x3, x5
                	sxtw	x6, w6
-               	mul	x8, x8, x2
+               	mul	x7, x7, x2
                	mul	x6, x6, x1
                	add	x6, x6, x3
-               	sxtw	x6, w6
                	mov	w6, w6
-               	add	x8, x8, x6
+               	add	x7, x7, x6
                	sub	x6, x4, x0
                	sxtw	x6, w6
-               	mul	x8, x8, x2
+               	mul	x7, x7, x2
                	mul	x6, x6, x1
                	add	x4, x6, x4
-               	sxtw	x4, w4
                	mov	w4, w4
-               	add	x6, x8, x4
+               	add	x6, x7, x4
                	sub	x4, x5, x3
                	sxtw	x4, w4
                	mul	x6, x6, x2
                	mul	x4, x4, x1
                	add	x4, x4, x5
-               	sxtw	x4, w4
                	mov	w4, w4
                	add	x5, x6, x4
                	add	x4, x0, x3
@@ -104,7 +100,6 @@ Disassembly of section .text:
                	mul	x5, x5, x2
                	mul	x4, x4, x1
                	add	x4, x4, x0
-               	sxtw	x4, w4
                	mov	w4, w4
                	add	x6, x5, x4
                	lsl	x4, x0, #1
@@ -113,7 +108,6 @@ Disassembly of section .text:
                	mul	x6, x6, x2
                	mul	x5, x5, x1
                	add	x3, x5, x3
-               	sxtw	x3, w3
                	mov	w3, w3
                	add	x6, x6, x3
                	sub	x3, x0, #0x1
@@ -122,7 +116,6 @@ Disassembly of section .text:
                	mul	x6, x6, x2
                	mul	x5, x5, x1
                	add	x5, x5, x4
-               	sxtw	x5, w5
                	mov	w5, w5
                	add	x6, x6, x5
                	add	x5, x3, x0
@@ -130,14 +123,12 @@ Disassembly of section .text:
                	mul	x6, x6, x2
                	mul	x5, x5, x1
                	add	x3, x5, x3
-               	sxtw	x3, w3
                	mov	w3, w3
                	add	x5, x6, x3
                	sxtw	x3, w4
                	mul	x5, x5, x2
                	mul	x3, x3, x1
                	add	x3, x3, x0
-               	sxtw	x3, w3
                	mov	w3, w3
                	add	x6, x5, x3
                	add	x5, x0, #0x1
@@ -146,7 +137,6 @@ Disassembly of section .text:
                	mul	x6, x6, x2
                	mul	x3, x3, x1
                	add	x3, x3, x5
-               	sxtw	x3, w3
                	mov	w3, w3
                	add	x5, x6, x3
                	lsl	x3, x4, #1
@@ -154,7 +144,6 @@ Disassembly of section .text:
                	mul	x5, x5, x2
                	mul	x3, x3, x1
                	add	x3, x3, x4
-               	sxtw	x3, w3
                	mov	w3, w3
                	add	x5, x5, x3
                	sub	x4, x0, #0x1
@@ -163,17 +152,16 @@ Disassembly of section .text:
                	mul	x5, x5, x2
                	mul	x3, x3, x1
                	add	x3, x3, x4
-               	sxtw	x3, w3
                	mov	w3, w3
                	add	x5, x5, x3
-               	add	x0, x7, #0x1
-               	sxtw	x7, w0
-               	cmp	x7, #0x4
+               	sxtw	x0, w0
+               	add	x0, x0, #0x1
+               	cmp	w0, #0x4
                	b.le	<addr>
                	mov	w0, w5
                	mov	x17, #0xf8d8            // =63704
                	movk	x17, #0x33f7, lsl #16
-               	cmp	x0, x17
+               	cmp	w0, w17
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	ret

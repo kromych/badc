@@ -71,8 +71,7 @@ Disassembly of section .text:
                	fcvt	d2, s16
                	fadd	d1, d1, d2
                	fcvtzs	x4, d1
-               	sxtw	x4, w4
-               	cmp	x4, #0x9
+               	cmp	w4, #0x9
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x10
@@ -116,7 +115,7 @@ Disassembly of section .text:
                	fadd	d1, d0, d17
                	fcvtzs	x3, d1
                	sxth	x3, w3
-               	cmp	x3, #0x96
+               	cmp	w3, #0x96
                	b.eq	<addr>
                	mov	x0, #0x8                // =8
                	add	sp, sp, #0x10

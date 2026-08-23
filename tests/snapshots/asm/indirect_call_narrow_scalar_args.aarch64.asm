@@ -26,15 +26,14 @@ Disassembly of section .text:
                	mov	x17, #0xa               // =10
                	mul	x3, x7, x17
                	add	x4, x2, x3
-               	add	x8, x4, x1
-               	sxtw	x0, w8
-               	cmp	x0, x0
+               	add	x0, x4, x1
+               	cmp	w0, w0
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
                	mov	x17, #0xcd17            // =52503
                	movk	x17, #0x6b, lsl #16
-               	cmp	x0, x17
+               	cmp	w0, w17
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret

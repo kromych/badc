@@ -34,9 +34,9 @@ Disassembly of section .text:
                	sub	x6, x1, x5
                	mov	w5, w4
                	mov	w6, w6
-               	cmp	x6, #0x1
+               	cmp	w6, #0x1
                	b.lo	<addr>
-               	cmp	x6, #0x1
+               	cmp	w6, #0x1
                	b.eq	<addr>
                	mov	w6, w1
                	mov	w11, w5
@@ -70,7 +70,7 @@ Disassembly of section .text:
                	add	x2, x1, #0x1
                	mov	w1, w2
                	mov	w5, w7
-               	cmp	x1, x5
+               	cmp	w1, w5
                	b.lo	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

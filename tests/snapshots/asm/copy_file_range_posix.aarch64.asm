@@ -88,12 +88,10 @@ Disassembly of section .text:
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x20, x0
-               	sxtw	x24, w21
-               	cmp	x24, #0x0
+               	cmp	w21, #0x0
                	cset	x0, lt
                	cbnz	x0, <addr>
-               	sxtw	x0, w20
-               	cmp	x0, #0x0
+               	cmp	w20, #0x0
                	cset	x0, lt
                	cbz	x0, <addr>
                	mov	x0, #0x2                // =2
@@ -107,6 +105,7 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x10]
                	mov	x5, #0x0                // =0
                	stur	x5, [x29, #-0x8]
+               	sxtw	x24, w21
                	sub	x1, x29, #0x10
                	sxtw	x25, w20
                	sub	x3, x29, #0x8

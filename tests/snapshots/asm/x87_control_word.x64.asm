@@ -44,7 +44,7 @@ Disassembly of section .text:
                	movzwq	-0x8(%rbp), %rsi
                	movq	%rsi, %rdx
                	andq	$0xffff, %rdx           # imm = 0xFFFF
-               	cmpq	%rcx, %rdx
+               	cmpl	%ecx, %edx
                	je	<addr>
                	leaq	<rip>, %rdi
                	andq	$0xffff, %rax           # imm = 0xFFFF
@@ -60,7 +60,7 @@ Disassembly of section .text:
                	andq	$0xffff, %rsi           # imm = 0xFFFF
                	movq	%rsi, %rcx
                	andq	$0xfff, %rcx            # imm = 0xFFF
-               	cmpq	$0x37f, %rcx            # imm = 0x37F
+               	cmpl	$0x37f, %ecx            # imm = 0x37F
                	je	<addr>
                	leaq	<rip>, %rdi
                	movb	$0x0, %al

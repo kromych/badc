@@ -372,7 +372,7 @@ Disassembly of section .text:
                	movss	%xmm0, (%rax,%riz)
                	movl	(%rax), %edi
                	movl	%r15d, %esi
-               	cmpq	%rsi, %rdi
+               	cmpl	%esi, %edi
                	je	<addr>
                	movslq	0x70(%rbp), %rax
                	incq	%rax
@@ -740,7 +740,7 @@ Disassembly of section .text:
                	movl	(%rax), %ecx
                	movq	0x40(%rsp), %rax
                	movl	%eax, %eax
-               	cmpq	%rax, %rcx
+               	cmpl	%eax, %ecx
                	je	<addr>
                	movslq	0x70(%rbp), %rax
                	addq	$0x3, %rax

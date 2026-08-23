@@ -5099,6 +5099,15 @@ fn fnptr_array_call() {
 }
 
 #[test]
+fn int_compare_narrow_width() {
+    // Comparisons over `int` operands are decided by the low words, so
+    // they are emitted at 32 bits; the widening conversions, unsigned
+    // wraparound and `int`-indexed subscripts around them keep their
+    // C99 results.
+    assert_eq!(run_fixture("int_compare_narrow_width.c"), 0);
+}
+
+#[test]
 fn call_arg_extend_drop() {
     // The caller-side re-extension of a direct-call argument drops
     // only when the callee re-derives the parameter from the low bits.

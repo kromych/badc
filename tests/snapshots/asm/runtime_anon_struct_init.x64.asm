@@ -76,7 +76,7 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rdi
                	callq	<addr>
                	movslq	(%rbx), %rcx
-               	cmpq	$0x1, %rcx
+               	cmpl	$0x1, %ecx
                	jne	<addr>
                	movq	0x8(%rbx), %rcx
                	cmpq	%r13, %rcx
@@ -92,7 +92,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	jne	<addr>
                	movslq	0x18(%rbx), %rcx
-               	cmpq	$0x7, %rcx
+               	cmpl	$0x7, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
@@ -106,7 +106,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movslq	(%rax), %rcx
-               	cmpq	$0x2, %rcx
+               	cmpl	$0x2, %ecx
                	jne	<addr>
                	movq	0x8(%rax), %rcx
                	cmpq	%r13, %rcx
@@ -122,7 +122,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	jne	<addr>
                	movslq	0x18(%rax), %rax
-               	cmpq	$0x8, %rax
+               	cmpl	$0x8, %eax
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
@@ -178,10 +178,10 @@ Disassembly of section .text:
                	movl	%eax, 0x20(%rdi)
                	callq	<addr>
                	movslq	(%rax), %rcx
-               	cmpq	$0x9, %rcx
+               	cmpl	$0x9, %ecx
                	jne	<addr>
                	movslq	0x8(%rax), %rcx
-               	cmpq	$0x4, %rcx
+               	cmpl	$0x4, %ecx
                	sete	%bl
                	movzbq	%bl, %rbx
                	xorq	%rdx, %rdx
@@ -200,7 +200,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	movslq	0x20(%rax), %rax
-               	cmpq	$0x5, %rax
+               	cmpl	$0x5, %eax
                	sete	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
@@ -253,7 +253,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %rcx
                	movslq	(%rcx), %rax
-               	cmpq	$0x3, %rax
+               	cmpl	$0x3, %eax
                	sete	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

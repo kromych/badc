@@ -32,7 +32,7 @@ Disassembly of section .text:
                	mov	x1, #0xa                // =10
                	str	w1, [x0]
                	ldrsw	x0, [x0]
-               	cmp	x0, #0xa
+               	cmp	w0, #0xa
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x2                // =2

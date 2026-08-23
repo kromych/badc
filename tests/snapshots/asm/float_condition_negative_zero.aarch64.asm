@@ -37,13 +37,11 @@ Disassembly of section .text:
                	mov	x0, x2
                	b	<addr>
                	add	x0, x0, #0x1
-               	sxtw	x3, w0
-               	cmp	x3, #0x2
+               	cmp	w0, #0x2
                	b.gt	<addr>
                	fmov	d17, x2
                	fcmp	d0, d17
                	b.ne	<addr>
-               	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x17, #0x4               // =4
                	orr	x1, x1, x17

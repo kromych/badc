@@ -47,7 +47,7 @@ Disassembly of section .text:
                	ldr	x0, [sp, #0x10]
                	ldr	d0, [sp, #0x18]
                	ldursw	x0, [x29, #-0x8]
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	cset	x0, eq
                	cbz	x0, <addr>
                	mov	x0, #0x2a               // =42

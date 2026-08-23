@@ -38,7 +38,7 @@ Disassembly of section .text:
                	ldr	x4, [sp, #0x28]
                	ldursw	x0, [x29, #-0x10]
                	mov	x17, #0x1234            // =4660
-               	cmp	x0, x17
+               	cmp	w0, w17
                	b.ne	<addr>
                	mov	x0, #0x2a               // =42
                	sxtw	x0, w0

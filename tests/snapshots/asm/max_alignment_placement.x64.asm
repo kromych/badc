@@ -72,14 +72,12 @@ Disassembly of section .text:
                	retq
                	leaq	0x1(%rax), %rcx
                	andq	$0xffff, %rcx           # imm = 0xFFFF
-               	movslq	%ecx, %rcx
                	testq	%rcx, %rcx
                	jne	<addr>
                	movl	$0x14, %eax
                	retq
                	addq	$0x8000, %rax           # imm = 0x8000
                	andq	$0xffff, %rax           # imm = 0xFFFF
-               	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x15, %eax

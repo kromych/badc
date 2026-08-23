@@ -53,7 +53,7 @@ Disassembly of section .text:
                	movl	$0x3, %ecx
                	movl	%ecx, 0xc(%rax)
                	movslq	0xc(%rax), %rax
-               	cmpq	$0x3, %rax
+               	cmpl	$0x3, %eax
                	sete	%al
                	movzbq	%al, %rax
                	movslq	%eax, %rax
@@ -82,7 +82,7 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
-               	cmpq	$0x3e8, %rax            # imm = 0x3E8
+               	cmpl	$0x3e8, %eax            # imm = 0x3E8
                	sete	%cl
                	movzbq	%cl, %rcx
                	xorq	%rax, %rax
@@ -90,7 +90,7 @@ Disassembly of section .text:
                	je	<addr>
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
-               	cmpq	$0x9, %rax
+               	cmpl	$0x9, %eax
                	sete	%al
                	movzbq	%al, %rax
                	movslq	%eax, %rax

@@ -54,7 +54,7 @@ Disassembly of section .text:
                	movslq	0x4(%rax), %rsi
                	addq	%rsi, %rcx
                	movslq	%ecx, %rcx
-               	cmpq	$0x8, %rcx
+               	cmpl	$0x8, %ecx
                	je	<addr>
                	movl	$0x1, %eax
                	addq	$0x50, %rsp
@@ -68,7 +68,7 @@ Disassembly of section .text:
                	addq	%rsi, %rcx
                	addq	$0x7d0, %rcx            # imm = 0x7D0
                	movslq	%ecx, %rcx
-               	cmpq	$0x9eb, %rcx            # imm = 0x9EB
+               	cmpl	$0x9eb, %ecx            # imm = 0x9EB
                	je	<addr>
                	movq	%rdx, %rax
                	addq	$0x50, %rsp
@@ -81,7 +81,7 @@ Disassembly of section .text:
                	addq	$0x3, %rcx
                	addq	$0x4, %rcx
                	movslq	%ecx, %rcx
-               	cmpq	$0x14, %rcx
+               	cmpl	$0x14, %ecx
                	je	<addr>
                	movl	$0x6, %eax
                	addq	$0x50, %rsp
@@ -98,13 +98,13 @@ Disassembly of section .text:
                	retq
                	leaq	-0x40(%rbp), %rcx
                	movslq	(%rcx), %rax
-               	cmpq	$0x3, %rax
+               	cmpl	$0x3, %eax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movslq	0x4(%rcx), %rax
-               	cmpq	$0x5, %rax
+               	cmpl	$0x5, %eax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

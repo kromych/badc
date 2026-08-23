@@ -58,14 +58,13 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	jne	<addr>
                	movq	%rax, %rdx
-               	movslq	%edx, %rdx
-               	cmpq	$0x1, %rdx
+               	cmpl	$0x1, %edx
                	sete	%dl
                	movzbq	%dl, %rdx
                	testq	%rdx, %rdx
                	je	<addr>
                	movzbq	-0x8(%rbp), %rdx
-               	testq	%rdx, %rdx
+               	testl	%edx, %edx
                	sete	%dl
                	movzbq	%dl, %rdx
                	testq	%rdx, %rdx

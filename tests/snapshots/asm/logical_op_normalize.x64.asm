@@ -47,8 +47,7 @@ Disassembly of section .text:
                	retq
 
 <and_rr>:
-               	movslq	%esi, %rsi
-               	testq	%rsi, %rsi
+               	testl	%esi, %esi
                	setne	%al
                	movzbq	%al, %rax
                	movslq	%eax, %rax
@@ -128,7 +127,7 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	callq	<addr>
                	movslq	(%r12,%rax,4), %rax
-               	cmpq	$0x14, %rax
+               	cmpl	$0x14, %eax
                	je	<addr>
                	movl	$0x6, %eax
                	movq	(%rsp), %rbx
@@ -141,7 +140,7 @@ Disassembly of section .text:
                	movl	$0x9, %esi
                	callq	<addr>
                	movslq	(%r12,%rax,4), %rax
-               	cmpq	$0xa, %rax
+               	cmpl	$0xa, %eax
                	je	<addr>
                	movl	$0x7, %eax
                	movq	(%rsp), %rbx

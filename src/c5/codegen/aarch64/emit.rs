@@ -9372,7 +9372,7 @@ fn emit_binop(
         None => return false,
     };
     if let Some(cond) = compare_cond(op) {
-        emit(code, enc_cmp_reg(rn, rm));
+        emit(code, cmp_reg_word(alloc, v, rn, rm));
         if alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
             return true;
         }
@@ -9561,6 +9561,22 @@ pub(crate) fn binop_imm_materializes(op: BinOp, imm: i64) -> bool {
     !(compare_cond(op).is_some() && cmp_imm12(imm).is_some())
 }
 
+/// Whether comparison `v` reads its operands at 32 bits
+/// (`passes::narrow`).
+fn narrow_cmp(alloc: &Allocation, v: super::super::ir::ValueId) -> bool {
+    crate::c5::codegen::passes::narrow::is_cmp32(&alloc.cmp32, v)
+}
+
+/// Encoding for the `cmp` of comparison `v`, in the operand width the
+/// narrowing analysis settled.
+fn cmp_reg_word(alloc: &Allocation, v: super::super::ir::ValueId, rn: Reg, rm: Reg) -> u32 {
+    if narrow_cmp(alloc, v) {
+        super::encode::enc_cmp_reg_w(rn, rm)
+    } else {
+        enc_cmp_reg(rn, rm)
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn emit_binop_imm(
     code: &mut Vec<u8>,
@@ -9635,7 +9651,14 @@ fn emit_binop_imm(
     if compare_cond(op).is_some()
         && let Some(imm) = cmp_imm12(rhs_imm)
     {
-        emit(code, enc_subs_imm(Reg::SP, rn, imm));
+        emit(
+            code,
+            if narrow_cmp(alloc, v) {
+                super::encode::enc_subs_imm_w(Reg::SP, rn, imm)
+            } else {
+                enc_subs_imm(Reg::SP, rn, imm)
+            },
+        );
         if alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
             return true;
         }
@@ -9650,7 +9673,7 @@ fn emit_binop_imm(
     load_imm64(code, scratch.secondary, rhs_imm as u64);
     let rm = scratch.secondary;
     if compare_cond(op).is_some() {
-        emit(code, enc_cmp_reg(rn, rm));
+        emit(code, cmp_reg_word(alloc, v, rn, rm));
         // When the terminator's b.cond will consume the flags
         // directly, drop the cset materialisation -- the
         // comparison value is dead.

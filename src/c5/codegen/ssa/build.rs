@@ -183,6 +183,7 @@ impl SsaBuilder {
             extern_imm_data_refs: Vec::new(),
             extern_tls_refs: Vec::new(),
             f32_values: Vec::new(),
+            cmp32: Vec::new(),
             param_fp_mask: 0,
             agg_descs: alloc::vec::Vec::new(),
             param_aggs: alloc::vec::Vec::new(),

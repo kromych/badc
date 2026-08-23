@@ -32,8 +32,7 @@ Disassembly of section .text:
                	movq	%rcx, %xmm0
                	mulss	%xmm15, %xmm0
                	cvttss2si	%xmm0, %rax
-               	movslq	%eax, %rax
-               	cmpq	$0x5, %rax
+               	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	retq
@@ -41,16 +40,14 @@ Disassembly of section .text:
                	movq	%rax, %xmm14
                	cvttss2si	%xmm14, %rax
                	addq	$0x3, %rax
-               	movslq	%eax, %rax
-               	cmpq	$0x7, %rax
+               	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	retq
                	movq	%rcx, %xmm14
                	cvttss2si	%xmm14, %rax
                	addq	$0xa, %rax
-               	movslq	%eax, %rax
-               	cmpq	$0xc, %rax
+               	cmpl	$0xc, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	retq
@@ -59,8 +56,7 @@ Disassembly of section .text:
                	movq	%rax, %xmm0
                	mulss	%xmm15, %xmm0
                	cvttss2si	%xmm0, %rax
-               	movslq	%eax, %rax
-               	cmpq	$0x7, %rax
+               	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	retq

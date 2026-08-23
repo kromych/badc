@@ -34,7 +34,7 @@ Disassembly of section .text:
                	add	x6, x6, #0x1
                	str	w6, [x3]
                	ldrsw	x6, [x5]
-               	cmp	x4, #0x2
+               	cmp	w4, #0x2
                	b.lo	<addr>
                	ldr	w1, [x2]
                	and	x4, x1, x8
@@ -42,7 +42,7 @@ Disassembly of section .text:
                	cbnz	x4, <addr>
                	ldr	w1, [x2]
                	mov	w4, w7
-               	cmp	x1, x4
+               	cmp	w1, w4
                	cset	x1, ne
                	sxtw	x1, w1
                	cbnz	x1, <addr>
@@ -59,12 +59,12 @@ Disassembly of section .text:
                	mov	w4, w1
                	cbnz	x4, <addr>
                	sxtw	x0, w6
-               	cmp	x0, #0x7
+               	cmp	w0, #0x7
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
                	ldrsw	x0, [x3]
-               	cmp	x0, #0x1
+               	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
@@ -83,7 +83,7 @@ Disassembly of section .text:
                	add	x6, x6, #0x1
                	str	w6, [x3]
                	ldrsw	x6, [x5]
-               	cmp	x4, #0x2
+               	cmp	w4, #0x2
                	b.lo	<addr>
                	ldr	w1, [x2]
                	and	x4, x1, x8
@@ -91,7 +91,7 @@ Disassembly of section .text:
                	cbnz	x4, <addr>
                	ldr	w1, [x2]
                	mov	w4, w7
-               	cmp	x1, x4
+               	cmp	w1, w4
                	cset	x1, ne
                	sxtw	x1, w1
                	cbnz	x1, <addr>
@@ -108,12 +108,12 @@ Disassembly of section .text:
                	mov	w4, w1
                	cbnz	x4, <addr>
                	sxtw	x0, w6
-               	cmp	x0, #0x9
+               	cmp	w0, #0x9
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
                	ldrsw	x0, [x3]
-               	cmp	x0, #0x2
+               	cmp	w0, #0x2
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret

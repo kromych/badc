@@ -104,8 +104,7 @@ Disassembly of section .text:
                	b.lt	<addr>
                	sxtw	x1, w21
                	add	x21, x1, #0x1
-               	sxtw	x1, w21
-               	cmp	x1, #0xe
+               	cmp	w21, #0xe
                	b.lt	<addr>
                	mov	x17, #0x2760            // =10080
                	movk	x17, #0x4634, lsl #16

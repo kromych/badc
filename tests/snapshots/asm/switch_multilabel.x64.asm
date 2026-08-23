@@ -26,16 +26,15 @@ Disassembly of section .text:
                	int3
 
 <classify>:
-               	movslq	%edi, %rdi
-               	cmpq	$0x42, %rdi
+               	cmpl	$0x42, %edi
                	jl	<addr>
-               	cmpq	$0x62, %rdi
+               	cmpl	$0x62, %edi
                	jl	<addr>
-               	cmpq	$0x63, %rdi
+               	cmpl	$0x63, %edi
                	jl	<addr>
-               	cmpq	$0x64, %rdi
+               	cmpl	$0x64, %edi
                	jl	<addr>
-               	cmpq	$0x64, %rdi
+               	cmpl	$0x64, %edi
                	je	<addr>
                	xorq	%rax, %rax
                	retq
@@ -43,29 +42,29 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	jmp	<addr>
-               	cmpq	$0x61, %rdi
+               	cmpl	$0x61, %edi
                	jl	<addr>
                	jmp	<addr>
-               	cmpq	$0x42, %rdi
+               	cmpl	$0x42, %edi
                	jne	<addr>
                	movl	$0x2, %eax
                	retq
-               	cmpq	$0x32, %rdi
+               	cmpl	$0x32, %edi
                	jl	<addr>
-               	cmpq	$0x33, %rdi
+               	cmpl	$0x33, %edi
                	jl	<addr>
-               	cmpq	$0x41, %rdi
+               	cmpl	$0x41, %edi
                	jl	<addr>
                	jmp	<addr>
-               	cmpq	$0x33, %rdi
+               	cmpl	$0x33, %edi
                	jne	<addr>
                	movl	$0x3, %eax
                	retq
                	jmp	<addr>
-               	cmpq	$0x31, %rdi
+               	cmpl	$0x31, %edi
                	jl	<addr>
                	jmp	<addr>
-               	cmpq	$0x30, %rdi
+               	cmpl	$0x30, %edi
                	je	<addr>
                	jmp	<addr>
 

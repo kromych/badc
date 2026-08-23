@@ -36,7 +36,7 @@ Disassembly of section .text:
                	mov	x2, x3
                	blr	x9
                	sxtw	x20, w0
-               	cmp	x20, #0x0
+               	cmp	w20, #0x0
                	b.ge	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0xd0]
@@ -49,7 +49,6 @@ Disassembly of section .text:
                	mov	x9, x24
                	mov	x0, x20
                	blr	x9
-               	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0xd0]
@@ -62,7 +61,6 @@ Disassembly of section .text:
                	mov	x9, x23
                	mov	x0, x20
                	blr	x9
-               	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp, #0xd0]
@@ -76,7 +74,6 @@ Disassembly of section .text:
                	mov	x9, x22
                	mov	x0, x20
                	blr	x9
-               	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp, #0xd0]

@@ -43,7 +43,7 @@ Disassembly of section .text:
                	cset	x2, eq
                	cbz	x2, <addr>
                	mov	w2, w5
-               	cmp	x2, #0x0
+               	cmp	w2, #0x0
                	cset	x2, eq
                	cbz	x2, <addr>
                	mov	x2, #0x1                // =1

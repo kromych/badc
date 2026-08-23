@@ -183,7 +183,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	add	x20, x21, #0x1
                	mov	w21, w20
-               	cmp	x21, #0xc
+               	cmp	w21, #0xc
                	b.lo	<addr>
                	mov	x0, #0x7ff8000000000000 // =9221120237041090560
                	stur	x0, [x29, #-0x20]
@@ -577,14 +577,14 @@ Disassembly of section .text:
                	mov	x17, #0x3f              // =63
                	eor	x0, x0, x17
                	mov	w1, w0
-               	cmp	x1, #0x0
+               	cmp	w1, #0x0
                	cset	x0, ne
                	cbnz	x1, <addr>
                	ldrb	w0, [x20, #0xe]
                	mov	x17, #0xff              // =255
                	eor	x0, x0, x17
                	mov	w0, w0
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x5                // =5
@@ -600,7 +600,7 @@ Disassembly of section .text:
                	cbnz	x2, <addr>
                	add	x0, x1, #0x1
                	mov	w1, w0
-               	cmp	x1, #0xe
+               	cmp	w1, #0xe
                	b.lo	<addr>
                	mov	x0, #0x1                // =1
                	stur	x0, [x29, #-0x20]
@@ -669,14 +669,14 @@ Disassembly of section .text:
                	mov	x17, #0x3b              // =59
                	eor	x0, x0, x17
                	mov	w1, w0
-               	cmp	x1, #0x0
+               	cmp	w1, #0x0
                	cset	x0, ne
                	cbnz	x1, <addr>
                	ldrb	w0, [x20, #0xe]
                	mov	x17, #0xcd              // =205
                	eor	x0, x0, x17
                	mov	w0, w0
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x7                // =7
@@ -692,7 +692,7 @@ Disassembly of section .text:
                	cbnz	x2, <addr>
                	add	x0, x1, #0x1
                	mov	w1, w0
-               	cmp	x1, #0xe
+               	cmp	w1, #0xe
                	b.lo	<addr>
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x90]

@@ -14,9 +14,6 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	str	x20, [sp, #-0x20]!
-               	stp	x29, x30, [sp, #0x10]
-               	add	x29, sp, #0x10
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
@@ -44,21 +41,14 @@ Disassembly of section .text:
                	fmul	s3, s16, s17
                	fcvtzs	x14, s3
                	add	x6, x5, x14
-               	add	x15, x6, #0x7
-               	sxtw	x2, w15
-               	cmp	x2, #0x40
+               	add	x2, x6, #0x7
+               	cmp	w2, #0x40
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x20, [sp], #0x20
                	ret
-               	cmp	x2, x2
+               	cmp	w2, w2
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x20, [sp], #0x20
                	ret
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x20, [sp], #0x20
                	ret

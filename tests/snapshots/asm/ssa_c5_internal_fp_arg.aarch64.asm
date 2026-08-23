@@ -31,8 +31,7 @@ Disassembly of section .text:
                	scvtf	d0, x0
                	fcmp	d1, d0
                	cset	x1, mi
-               	sxtw	x1, w1
-               	cmp	x1, #0x1
+               	cmp	w1, #0x1
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x10]
@@ -51,8 +50,7 @@ Disassembly of section .text:
                	ret
                	fcmp	d0, d0
                	cset	x1, ls
-               	sxtw	x1, w1
-               	cmp	x1, #0x1
+               	cmp	w1, #0x1
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp, #0x10]

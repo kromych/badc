@@ -64,7 +64,7 @@ Disassembly of section .text:
                	movslq	(%rcx), %rax
                	movl	%eax, (%rdx)
                	movslq	-0x8(%rbp), %rax
-               	cmpq	$0x2a, %rax
+               	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	addq	$0x10, %rsp
@@ -79,7 +79,7 @@ Disassembly of section .text:
                	movslq	(%rdx), %rsi
                	movl	%esi, (%rcx)
                	movslq	-0x10(%rbp), %rsi
-               	cmpq	$-0x7, %rsi
+               	cmpl	$-0x7, %esi
                	je	<addr>
                	movl	$0x4, %eax
                	addq	$0x10, %rsp

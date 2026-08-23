@@ -50,14 +50,12 @@ Disassembly of section .text:
                	movq	%rdx, %rax
                	jmp	<addr>
                	incq	%rax
-               	movslq	%eax, %rsi
-               	cmpq	$0x2, %rsi
+               	cmpl	$0x2, %eax
                	jg	<addr>
                	movq	%rdx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	orq	$0x4, %rcx

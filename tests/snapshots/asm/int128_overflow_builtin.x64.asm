@@ -52,7 +52,7 @@ Disassembly of section .text:
                	movl	$0x7b, %edx
                	movl	%edx, (%rcx)
                	movl	-0x118(%rbp), %edx
-               	cmpq	$0x7b, %rdx
+               	cmpl	$0x7b, %edx
                	je	<addr>
                	movl	$0x38, %eax
                	testq	%rax, %rax
@@ -69,7 +69,7 @@ Disassembly of section .text:
                	movslq	-0x118(%rbp), %rdx
                	movq	%rdx, %rdi
                	sarq	$0x3f, %rdi
-               	cmpq	$-0x2, %rdx
+               	cmpl	$-0x2, %edx
                	je	<addr>
                	movl	$0x3e, %edx
                	testq	%rdx, %rdx

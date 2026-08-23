@@ -209,8 +209,8 @@ fn ent_pc=14 n_params=0 variadic=false locals=2
     v12  Imm(0)                                           -> x0
     v13  ImmData(16)                                      -> x0
     v14  SegLoad { addr=v13, kind=I32, seg=Gs }           -> x0
-    v15  Extend { value=v14, kind=I32 }                   -> x0
-    v16  BinopI { op=ne, lhs=v15, rhs_imm=42 }            -> x0
+    v15  Extend { value=v14, kind=I32 }                   -> x1
+    v16  BinopI { op=ne, lhs=v14, rhs_imm=42 }            -> x0
     terminator Bz { cond=v16, target=b2, fall=b1 }   (exit_acc=v16)
   block 1  start_pc=0
     v17  Imm(1)                                           -> x0

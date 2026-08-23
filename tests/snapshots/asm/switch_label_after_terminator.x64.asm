@@ -26,12 +26,11 @@ Disassembly of section .text:
                	int3
 
 <outer>:
-               	movslq	%edi, %rdi
-               	cmpq	$0x2, %rdi
+               	cmpl	$0x2, %edi
                	jl	<addr>
-               	cmpq	$0x3, %rdi
+               	cmpl	$0x3, %edi
                	jl	<addr>
-               	cmpq	$0x3, %rdi
+               	cmpl	$0x3, %edi
                	je	<addr>
                	movabsq	$-0x1, %rax
                	retq
@@ -41,7 +40,7 @@ Disassembly of section .text:
                	retq
                	movl	$0x2, %eax
                	jmp	<addr>
-               	cmpq	$0x1, %rdi
+               	cmpl	$0x1, %edi
                	jne	<addr>
                	movl	$0x1, %eax
                	jmp	<addr>

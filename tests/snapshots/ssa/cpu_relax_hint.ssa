@@ -8,20 +8,20 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v2   Imm(0)                                           -> x1
     terminator Jmp(b3)   (exit_acc=v1)
   block 1  start_pc=0
-    v9   Intrinsic { kind=31, args=[] }                   -> x2
-    v10  Intrinsic { kind=31, args=[] }                   -> x2
-    v11  Intrinsic { kind=31, args=[] }                   -> x2
-    v12  Intrinsic { kind=31, args=[] }                   -> x2
+    v9   Intrinsic { kind=31, args=[] }                   -> x1
+    v10  Intrinsic { kind=31, args=[] }                   -> x1
+    v11  Intrinsic { kind=31, args=[] }                   -> x1
+    v12  Intrinsic { kind=31, args=[] }                   -> x1
     terminator Jmp(b2)   (exit_acc=v12)
   block 2  start_pc=0
     v6   Extend { value=v3, kind=I32 }                    -> x0
-    v7   BinopI { op=add, lhs=v4, rhs_imm=1 }             -> x0
+    v7   BinopI { op=add, lhs=v6, rhs_imm=1 }             -> x0
     v8   Imm(0)                                           -> x1
     terminator Jmp(b3)   (exit_acc=v7)
   block 3  start_pc=0
     v3   Phi { incoming=[b0:v1, b2:v7], kind=I64 }        -> x0
     v4   Extend { value=v3, kind=I32 }                    -> x1
-    v5   BinopI { op=lt, lhs=v4, rhs_imm=4 }              -> x2
+    v5   BinopI { op=lt, lhs=v3, rhs_imm=4 }              -> x1
     terminator Bnz { cond=v5, target=b1, fall=b4 }   (exit_acc=v5)
   block 4  start_pc=0
     v13  Imm(0)                                           -> x0

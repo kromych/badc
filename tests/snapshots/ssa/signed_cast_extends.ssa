@@ -223,9 +223,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v157 BinopI { op=and, lhs=v128, rhs_imm=255 }         -> x1
     v158 Binop { op=or, lhs=v151, rhs=v157 }              -> x0
     v159 Imm(0)                                           -> x1
-    v160 Extend { value=v158, kind=I32 }                  -> x0
+    v160 Extend { value=v158, kind=I32 }                  -> x1
     v161 Imm(-190)                                        -> x1
-    v162 BinopI { op=ne, lhs=v160, rhs_imm=-190 }         -> x0
+    v162 BinopI { op=ne, lhs=v158, rhs_imm=-190 }         -> x0
     terminator Bz { cond=v162, target=b26, fall=b25 }   (exit_acc=v162)
   block 25  start_pc=0
     v163 Imm(13)                                          -> x0

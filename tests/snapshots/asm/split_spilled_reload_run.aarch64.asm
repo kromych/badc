@@ -120,7 +120,7 @@ Disassembly of section .text:
                	sub	x8, x8, x9
                	add	x1, x0, #0x1
                	mov	w0, w1
-               	cmp	x0, #0x64
+               	cmp	w0, #0x64
                	b.lo	<addr>
                	eor	x0, x2, x3
                	eor	x0, x0, x4

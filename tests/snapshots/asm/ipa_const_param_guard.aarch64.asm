@@ -753,30 +753,30 @@ Disassembly of section .text:
                	str	x22, [sp, #0x10]
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
-               	mov	x2, #0x0                // =0
+               	mov	x1, #0x0                // =0
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
-               	mov	x1, x2
+               	mov	x0, x1
                	b	<addr>
-               	str	x0, [x3, x0, lsl #3]
-               	add	x1, x0, #0x1
-               	sxtw	x0, w1
-               	cmp	x0, #0xb4
+               	sxtw	x2, w0
+               	str	x2, [x3, x2, lsl #3]
+               	add	x0, x2, #0x1
+               	cmp	w0, #0xb4
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	b	<addr>
-               	ldr	x5, [x3, x1, lsl #3]
-               	add	x4, x1, #0x1
+               	sxtw	x2, w0
+               	ldr	x5, [x3, x2, lsl #3]
+               	add	x4, x2, #0x1
                	sxtw	x4, w4
                	mul	x4, x5, x4
-               	add	x2, x2, x4
-               	add	x0, x1, #0x1
-               	sxtw	x1, w0
-               	cmp	x1, #0xb4
+               	add	x1, x1, x4
+               	add	x0, x2, #0x1
+               	cmp	w0, #0xb4
                	b.lt	<addr>
-               	add	x20, x2, #0xa
+               	add	x20, x1, #0xa
                	mov	x21, #0x7               // =7
                	mov	x22, #0x3               // =3
                	mov	x0, x21

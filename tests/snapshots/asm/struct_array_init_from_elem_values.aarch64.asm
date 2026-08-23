@@ -43,10 +43,10 @@ Disassembly of section .text:
                	mov	x3, #0x2                // =2
                	str	w3, [x0, #0xc]
                	ldrsw	x3, [x0]
-               	cmp	x3, #0x7
+               	cmp	w3, #0x7
                	b.ne	<addr>
                	ldrsw	x3, [x0, #0x4]
-               	cmp	x3, #0x8
+               	cmp	w3, #0x8
                	cset	x3, ne
                	cbnz	x3, <addr>
                	mov	x2, x1

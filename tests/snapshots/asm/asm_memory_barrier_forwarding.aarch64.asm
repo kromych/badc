@@ -22,7 +22,7 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	str	w1, [x0]
                	ldrsw	x0, [x0]
-               	cmp	x0, #0x8
+               	cmp	w0, #0x8
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
                	sxtw	x0, w0

@@ -86,7 +86,7 @@ Disassembly of section .text:
                	je	<addr>
                	movq	0x30(%rax), %rcx
                	movsbq	(%rcx), %rcx
-               	cmpq	$0x2e, %rcx
+               	cmpl	$0x2e, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
@@ -103,7 +103,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
-               	cmpq	%rax, %r12
+               	cmpl	%eax, %r12d
                	je	<addr>
                	movl	$0x5, %eax
                	movq	(%rsp), %rbx

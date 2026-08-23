@@ -27,7 +27,7 @@ Disassembly of section .text:
 
 <check>:
                	movsbq	%dil, %rax
-               	cmpq	$0x2c, %rax
+               	cmpl	$0x2c, %eax
                	jne	<addr>
                	xorq	%rax, %rax
                	movslq	%eax, %rax

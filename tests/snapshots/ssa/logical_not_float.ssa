@@ -7,8 +7,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v1   Imm(0)                                           -> x0
     v2   Imm(0)                                           -> x1
     v3   Binop { op=feq, lhs=v1, rhs=v1 }                 -> x1
-    v4   Extend { value=v3, kind=I32 }                    -> x1
-    v5   BinopI { op=ne, lhs=v4, rhs_imm=1 }              -> x1
+    v4   Extend { value=v3, kind=I32 }                    -> x2
+    v5   BinopI { op=ne, lhs=v3, rhs_imm=1 }              -> x1
     terminator Bz { cond=v5, target=b2, fall=b1 }   (exit_acc=v5)
   block 1  start_pc=0
     v6   Imm(1)                                           -> x0
@@ -28,8 +28,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v14  Fneg(v1)                                         -> d0
     v15  Imm(0)                                           -> x1
     v16  Binop { op=feq, lhs=v14, rhs=v1 }                -> x1
-    v17  Extend { value=v16, kind=I32 }                   -> x1
-    v18  BinopI { op=ne, lhs=v17, rhs_imm=1 }             -> x1
+    v17  Extend { value=v16, kind=I32 }                   -> x2
+    v18  BinopI { op=ne, lhs=v16, rhs_imm=1 }             -> x1
     terminator Bz { cond=v18, target=b6, fall=b5 }   (exit_acc=v18)
   block 5  start_pc=0
     v19  Imm(3)                                           -> x0
@@ -49,8 +49,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v27  Imm(0)                                           -> x2
     v28  FpCast { kind=F32ToF64, value=v26 }              -> d0
     v29  Binop { op=feq, lhs=v28, rhs=v1 }                -> x0
-    v30  Extend { value=v29, kind=I32 }                   -> x0
-    v31  BinopI { op=ne, lhs=v30, rhs_imm=1 }             -> x0
+    v30  Extend { value=v29, kind=I32 }                   -> x1
+    v31  BinopI { op=ne, lhs=v29, rhs_imm=1 }             -> x0
     terminator Bz { cond=v31, target=b10, fall=b9 }   (exit_acc=v31)
   block 9  start_pc=0
     v32  Imm(5)                                           -> x0

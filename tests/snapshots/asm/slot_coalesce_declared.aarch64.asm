@@ -160,8 +160,7 @@ Disassembly of section .text:
                	add	x0, x0, x1
                	cmp	x0, #0x65
                	cset	x20, eq
-               	sxtw	x0, w20
-               	cbnz	x0, <addr>
+               	cbnz	x20, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>

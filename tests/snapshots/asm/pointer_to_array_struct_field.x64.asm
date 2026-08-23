@@ -45,6 +45,7 @@ Disassembly of section .text:
                	retq
                	xorq	%rcx, %rcx
                	jmp	<addr>
+               	movslq	%ecx, %rax
                	movq	%rax, %rsi
                	shlq	$0x4, %rsi
                	leaq	(%rdi,%rsi), %r8
@@ -85,35 +86,35 @@ Disassembly of section .text:
                	movslq	%edx, %r8
                	movw	%r8w, 0xe(%rsi)
                	leaq	0x1(%rax), %rcx
-               	movslq	%ecx, %rax
-               	cmpq	$0x4, %rax
+               	cmpl	$0x4, %ecx
                	jl	<addr>
                	xorq	%r8, %r8
                	jmp	<addr>
                	xorq	%rax, %rax
                	jmp	<addr>
-               	movq	%rsi, %rdx
-               	shlq	$0x4, %rdx
-               	addq	%rdi, %rdx
-               	movswq	(%rdx,%rcx,2), %r9
-               	imulq	$0x64, %rsi, %rdx
+               	movslq	%r8d, %rdx
+               	movq	%rdx, %rcx
+               	shlq	$0x4, %rcx
+               	leaq	(%rdi,%rcx), %rsi
+               	movslq	%eax, %rcx
+               	movswq	(%rsi,%rcx,2), %rsi
+               	imulq	$0x64, %rdx, %rdx
                	addq	%rcx, %rdx
-               	movslq	%edx, %rbx
-               	movswq	%bx, %rdx
-               	cmpq	%rdx, %r9
+               	movslq	%edx, %r9
+               	movswq	%r9w, %rdx
+               	cmpl	%edx, %esi
                	jne	<addr>
                	leaq	0x1(%rcx), %rax
-               	movslq	%eax, %rcx
-               	cmpq	$0x8, %rcx
+               	cmpl	$0x8, %eax
                	jl	<addr>
-               	leaq	0x1(%rsi), %r8
-               	movslq	%r8d, %rsi
-               	cmpq	$0x4, %rsi
+               	movslq	%r8d, %rax
+               	leaq	0x1(%rax), %r8
+               	cmpl	$0x4, %r8d
                	jl	<addr>
                	movabsq	$-0x1, %rax
                	movw	%ax, (%rdi)
                	movswq	%ax, %rax
-               	cmpq	$-0x1, %rax
+               	cmpl	$-0x1, %eax
                	je	<addr>
                	movl	$0x63, %eax
                	movq	(%rsp), %rbx

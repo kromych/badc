@@ -214,7 +214,7 @@ Disassembly of section .text:
                	str	s0, [x0]
                	ldr	w4, [x0]
                	mov	w1, w14
-               	cmp	x4, x1
+               	cmp	w4, w1
                	b.eq	<addr>
                	add	x0, x6, #0x1
                	sxtw	x0, w0
@@ -418,7 +418,7 @@ Disassembly of section .text:
                	str	s0, [x0]
                	ldr	w1, [x0]
                	mov	w0, w20
-               	cmp	x1, x0
+               	cmp	w1, w0
                	b.eq	<addr>
                	add	x0, x6, #0x3
                	sxtw	x0, w0

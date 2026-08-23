@@ -50,14 +50,11 @@ Disassembly of section .text:
                	mov	x17, #0x7f              // =127
                	and	x1, x1, x17
                	add	x1, x1, #0x1
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	cset	x0, ne
                	mul	x0, x1, x0
-               	sxtw	x0, w0
-               	cmp	x0, #0x11
-               	cset	x0, eq
-               	sxtw	x0, w0
-               	cbnz	x0, <addr>
+               	cmp	w0, #0x11
+               	b.eq	<addr>
                	mov	x0, #0xe                // =14
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -95,14 +92,10 @@ Disassembly of section .text:
                	mov	x17, #0x7f              // =127
                	and	x2, x2, x17
                	add	x2, x2, #0x1
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	cset	x0, ne
                	mul	x0, x2, x0
-               	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	cset	x0, eq
-               	sxtw	x0, w0
-               	cbnz	x0, <addr>
+               	cbz	x0, <addr>
                	mov	x0, #0xf                // =15
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

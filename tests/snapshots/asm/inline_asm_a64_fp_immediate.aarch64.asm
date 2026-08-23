@@ -46,7 +46,7 @@ Disassembly of section .text:
                	ldr	d0, [sp, #0x10]
                	ldursw	x0, [x29, #-0x8]
                	mov	x17, #0x3f800000        // =1065353216
-               	cmp	x0, x17
+               	cmp	w0, w17
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x30

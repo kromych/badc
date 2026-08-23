@@ -42,7 +42,7 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	movb	%al, 0x4(%rbx)
                	movsbq	(%rbx), %rcx
-               	cmpq	$0x41, %rcx
+               	cmpl	$0x41, %ecx
                	jne	<addr>
                	movl	$0x2a, %eax
                	movq	(%rsp), %rbx

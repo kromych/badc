@@ -15,11 +15,10 @@ Disassembly of section .text:
 
 <classify>:
                	mov	x1, x0
-               	sxtw	x1, w1
                	mov	x0, #0x0                // =0
-               	cmp	x1, #0x2
+               	cmp	w1, #0x2
                	b.lt	<addr>
-               	cmp	x1, #0x2
+               	cmp	w1, #0x2
                	b.eq	<addr>
                	mov	x0, #0xffff             // =65535
                	movk	x0, #0xffff, lsl #16
@@ -29,7 +28,7 @@ Disassembly of section .text:
                	ret
                	add	x0, x0, #0x1
                	b	<addr>
-               	cmp	x1, #0x1
+               	cmp	w1, #0x1
                	b.ne	<addr>
                	mov	x0, #0xa                // =10
                	b	<addr>

@@ -45,7 +45,7 @@ Disassembly of section .text:
                	cmpq	%rsi, %rax
                	jb	<addr>
                	movslq	%ecx, %rax
-               	cmpq	$0x7, %rax
+               	cmpl	$0x7, %eax
                	je	<addr>
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rax

@@ -44,11 +44,11 @@ Disassembly of section .text:
                	addq	%rsi, %rdx
                	leaq	0x6(%rcx), %rsi
                	addq	%rsi, %rdx
-               	addq	$0x7, %rcx
+               	leaq	0x7(%rcx), %rsi
+               	addq	%rsi, %rdx
+               	addq	$0x8, %rcx
                	addq	%rcx, %rdx
                	imulq	$0x64, %rax, %rcx
-               	leaq	0x8(%rcx), %rsi
-               	addq	%rsi, %rdx
                	leaq	0x9(%rcx), %rsi
                	addq	%rsi, %rdx
                	leaq	0xa(%rcx), %rsi
@@ -63,9 +63,9 @@ Disassembly of section .text:
                	addq	%rsi, %rdx
                	addq	$0xf, %rcx
                	addq	%rcx, %rdx
-               	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rdi
-               	cmpq	$0x5, %rdi
+               	movslq	%eax, %rax
+               	incq	%rax
+               	cmpl	$0x5, %eax
                	jl	<addr>
                	movslq	%edx, %rax
                	retq

@@ -14,8 +14,7 @@ Disassembly of section .text:
                	brk	#0x1
 
 <hop_return_n>:
-               	sxtw	x0, w0
-               	cmp	x0, #0x2
+               	cmp	w0, #0x2
                	b.ge	<addr>
                	sxtw	x0, w0
                	ret

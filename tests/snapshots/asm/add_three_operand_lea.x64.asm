@@ -73,8 +73,7 @@ Disassembly of section .text:
                	movslq	-0x20(%rbp), %rax
                	movslq	-0x28(%rbp), %rsi
                	addq	%rsi, %rax
-               	movslq	%eax, %rax
-               	cmpq	$-0x1194d800, %rax      # imm = 0xEE6B2800
+               	cmpl	$0xee6b2800, %eax       # imm = 0xEE6B2800
                	je	<addr>
                	movq	%rcx, %rax
                	addq	$0x30, %rsp

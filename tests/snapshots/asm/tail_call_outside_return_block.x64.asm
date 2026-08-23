@@ -34,7 +34,7 @@ Disassembly of section .text:
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
-               	cmpq	$0x3e8, %r8             # imm = 0x3E8
+               	cmpl	$0x3e8, %r8d            # imm = 0x3E8
                	jle	<addr>
                	movl	%edi, %edi
                	movl	%esi, %esi
@@ -43,11 +43,11 @@ Disassembly of section .text:
                	popq	%rbp
                	jmp	<addr>
                	movl	%edi, %eax
-               	cmpq	$0x40001, %rax          # imm = 0x40001
+               	cmpl	$0x40001, %eax          # imm = 0x40001
                	movl	$0x1, %eax
                	jne	<addr>
                	movl	%esi, %ecx
-               	cmpq	$0x2, %rcx
+               	cmpl	$0x2, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
@@ -62,7 +62,7 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	cmpq	$0x3, %r8
+               	cmpl	$0x3, %r8d
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -119,7 +119,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	(%rax), %rcx
                	andq	$0x40, %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx
                	movslq	%ecx, %rcx
@@ -140,7 +140,7 @@ Disassembly of section .text:
                	callq	*%rax
                	leaq	<rip>, %rcx
                	movslq	(%rcx), %rcx
-               	cmpq	$0x1, %rcx
+               	cmpl	$0x1, %ecx
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp

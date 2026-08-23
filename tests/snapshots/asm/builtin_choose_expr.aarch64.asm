@@ -26,12 +26,12 @@ Disassembly of section .text:
                	movk	x2, #0xffff, lsl #48
                	b	<addr>
                	sub	x3, x29, #0x80
+               	sxtw	x1, w0
                	lsl	x4, x1, #3
                	add	x3, x3, x4
                	str	x2, [x3]
                	add	x0, x1, #0x1
-               	sxtw	x1, w0
-               	cmp	x1, #0x10
+               	cmp	w0, #0x10
                	b.lt	<addr>
                	mov	x1, #0x0                // =0
                	sub	x0, x29, #0x10
@@ -39,7 +39,7 @@ Disassembly of section .text:
                	mov	x1, #0x1                // =1
                	strb	w1, [x0]
                	ldurb	w0, [x29, #-0x10]
-               	cmp	x0, #0x1
+               	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x8                // =8
                	add	sp, sp, #0xd0

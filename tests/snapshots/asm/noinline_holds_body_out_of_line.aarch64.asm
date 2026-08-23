@@ -38,9 +38,7 @@ Disassembly of section .text:
                	xpaclri
                	mov	x1, x30
                	cmp	x0, x1
-               	cset	x0, ne
-               	sxtw	x0, w0
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp, #0x10]
@@ -65,9 +63,7 @@ Disassembly of section .text:
                	xpaclri
                	mov	x1, x30
                	cmp	x0, x1
-               	cset	x0, eq
-               	sxtw	x0, w0
-               	cbnz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, x21
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp, #0x10]

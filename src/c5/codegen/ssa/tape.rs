@@ -35,6 +35,7 @@ pub(super) struct Undo {
     insts: Vec<Inst>,
     inst_src: Vec<(u32, u32)>,
     f32_values: Vec<bool>,
+    cmp32: Vec<bool>,
     blocks: Vec<Block>,
     extern_call_refs: Vec<(u32, u32)>,
     extern_imm_code_refs: Vec<(u32, u32)>,
@@ -47,6 +48,7 @@ impl Undo {
         func.insts = self.insts;
         func.inst_src = self.inst_src;
         func.f32_values = self.f32_values;
+        func.cmp32 = self.cmp32;
         func.blocks = self.blocks;
         func.extern_call_refs = self.extern_call_refs;
         func.extern_imm_code_refs = self.extern_imm_code_refs;
@@ -84,6 +86,7 @@ pub(super) fn insert(func: &mut FunctionSsa, ins: &[Insertion]) -> (Rewrite, Und
         extern_imm_data_refs,
         extern_tls_refs,
         f32_values,
+        cmp32,
         param_fp_mask: _,
         agg_descs: _,
         param_aggs: _,
@@ -111,6 +114,7 @@ pub(super) fn insert(func: &mut FunctionSsa, ins: &[Insertion]) -> (Rewrite, Und
         insts: Vec::new(),
         inst_src: Vec::new(),
         f32_values: Vec::new(),
+        cmp32: Vec::new(),
         blocks: blocks.clone(),
         extern_call_refs: extern_call_refs.clone(),
         extern_imm_code_refs: extern_imm_code_refs.clone(),
@@ -132,6 +136,9 @@ pub(super) fn insert(func: &mut FunctionSsa, ins: &[Insertion]) -> (Rewrite, Und
     let mut new_insts: Vec<Inst> = Vec::with_capacity(n_old + ins.len());
     let mut new_src: Vec<(u32, u32)> = Vec::with_capacity(n_old + ins.len());
     let mut new_f32: Vec<bool> = Vec::with_capacity(n_old + ins.len());
+    // An inserted value is a copy or a materialization, never a
+    // comparison, so it carries no narrow-compare mark.
+    let mut new_cmp: Vec<bool> = Vec::with_capacity(n_old + ins.len());
     let mut remap: Vec<ValueId> = vec![NO_VALUE; n_old];
     let mut ids: Vec<ValueId> = vec![NO_VALUE; ins.len()];
     let mut cur = 0usize;
@@ -142,12 +149,14 @@ pub(super) fn insert(func: &mut FunctionSsa, ins: &[Insertion]) -> (Rewrite, Und
             new_insts.push(ins[cur].inst.clone());
             new_src.push(src);
             new_f32.push(ins[cur].is_f32);
+            new_cmp.push(false);
             cur += 1;
         }
         *slot = new_insts.len() as ValueId;
         new_insts.push(insts[old].clone());
         new_src.push(src);
         new_f32.push(f32_values.get(old).copied().unwrap_or(false));
+        new_cmp.push(cmp32.get(old).copied().unwrap_or(false));
     }
     for block in blocks.iter_mut() {
         let (s, e) = (block.inst_range.start, block.inst_range.end);
@@ -181,6 +190,7 @@ pub(super) fn insert(func: &mut FunctionSsa, ins: &[Insertion]) -> (Rewrite, Und
         insts: core::mem::replace(insts, new_insts),
         inst_src: core::mem::replace(inst_src, new_src),
         f32_values: core::mem::replace(f32_values, new_f32),
+        cmp32: core::mem::replace(cmp32, new_cmp),
         ..undo
     };
     (Rewrite { remap, ids }, undo)

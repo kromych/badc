@@ -76,7 +76,7 @@ Disassembly of section .text:
                	movq	-0x70(%rbp), %rdx
                	movq	-0x68(%rbp), %rbx
                	movl	-0x10(%rbp), %eax
-               	cmpq	%rax, %rdx
+               	cmpl	%eax, %edx
                	jne	<addr>
                	xorq	%rax, %rax
                	movslq	%eax, %rax

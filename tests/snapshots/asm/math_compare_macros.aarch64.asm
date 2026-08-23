@@ -283,7 +283,7 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x3                // =3
                	b	<addr>
-               	cmp	x3, #0x7ff
+               	cmp	w3, #0x7ff
                	b.ne	<addr>
                	cbnz	x2, <addr>
                	sxtw	x0, w0
@@ -295,7 +295,7 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0x3                // =3
                	b	<addr>
-               	cmp	x2, #0x7ff
+               	cmp	w2, #0x7ff
                	b.ne	<addr>
                	cbnz	x0, <addr>
                	mov	x0, #0x1                // =1
@@ -308,7 +308,7 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0x3                // =3
                	b	<addr>
-               	cmp	x2, #0x7ff
+               	cmp	w2, #0x7ff
                	b.ne	<addr>
                	cbnz	x1, <addr>
                	sxtw	x0, w3
@@ -321,7 +321,7 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x1, #0x3                // =3
                	b	<addr>
-               	cmp	x3, #0x7ff
+               	cmp	w3, #0x7ff
                	b.ne	<addr>
                	cbnz	x1, <addr>
                	sxtw	x1, w2
@@ -333,7 +333,7 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0x3                // =3
                	b	<addr>
-               	cmp	x1, #0x7ff
+               	cmp	w1, #0x7ff
                	b.ne	<addr>
                	cbnz	x0, <addr>
                	mov	x0, x2
@@ -347,7 +347,7 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0x3                // =3
                	b	<addr>
-               	cmp	x3, #0x7ff
+               	cmp	w3, #0x7ff
                	b.ne	<addr>
                	cbnz	x0, <addr>
                	sxtw	x0, w1

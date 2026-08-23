@@ -19,11 +19,11 @@ Disassembly of section .text:
                	add	x3, x3, <lo12>
                	b	<addr>
                	add	x2, x3, #0x8
+               	sxtw	x1, w0
                	ldr	x2, [x2, x1, lsl #3]
                	cbnz	x2, <addr>
                	add	x0, x1, #0x1
-               	sxtw	x1, w0
-               	cmp	x1, #0x4
+               	cmp	w0, #0x4
                	b.lt	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -43,35 +43,35 @@ Disassembly of section .text:
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	b	<addr>
-               	add	x2, x3, #0x4
-               	lsl	x4, x1, #3
-               	add	x2, x2, x4
-               	ldrsw	x2, [x2]
-               	cmp	x2, #0x7
-               	cset	x2, ne
-               	cbnz	x2, <addr>
-               	add	x2, x3, #0x4
-               	add	x2, x2, x4
-               	ldrsw	x2, [x2, #0x4]
-               	cmp	x2, #0x8
-               	cset	x2, ne
-               	cbz	x2, <addr>
+               	add	x1, x3, #0x4
+               	sxtw	x2, w0
+               	lsl	x4, x2, #3
+               	add	x1, x1, x4
+               	ldrsw	x1, [x1]
+               	cmp	w1, #0x7
+               	cset	x1, ne
+               	cbnz	x1, <addr>
+               	add	x1, x3, #0x4
+               	add	x1, x1, x4
+               	ldrsw	x1, [x1, #0x4]
+               	cmp	w1, #0x8
+               	cset	x1, ne
+               	cbz	x1, <addr>
                	b	<addr>
                	b	<addr>
-               	add	x0, x1, #0x1
-               	sxtw	x1, w0
-               	cmp	x1, #0x3
+               	add	x0, x2, #0x1
+               	cmp	w0, #0x3
                	b.lt	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
-               	cmp	x0, #0x1
+               	cmp	w0, #0x1
                	cset	x0, ne
                	cbnz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0, #0x1c]
-               	cmp	x0, #0x9
+               	cmp	w0, #0x9
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x4                // =4

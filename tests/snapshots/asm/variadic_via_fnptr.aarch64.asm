@@ -153,9 +153,8 @@ Disassembly of section .text:
                	mov	x2, x22
                	mov	x1, x21
                	bl	<addr>
-               	sxtw	x0, w0
                	mov	x17, #0x23a3            // =9123
-               	cmp	x0, x17
+               	cmp	w0, w17
                	b.eq	<addr>
                	mov	x0, #0xc                // =12
                	ldp	x29, x30, [sp, #0x20]
@@ -167,9 +166,8 @@ Disassembly of section .text:
                	mov	x2, #0x2                // =2
                	mov	x3, #0x3                // =3
                	bl	<addr>
-               	sxtw	x0, w0
                	mov	x17, #0x23a3            // =9123
-               	cmp	x0, x17
+               	cmp	w0, w17
                	b.eq	<addr>
                	mov	x0, #0xd                // =13
                	ldp	x29, x30, [sp, #0x20]

@@ -74,7 +74,7 @@ Disassembly of section .text:
                	movl	$0x2000, %esi           # imm = 0x2000
                	movq	%rsi, 0x40(%rax)
                	movslq	(%rcx), %rsi
-               	cmpq	$0xa, %rsi
+               	cmpl	$0xa, %esi
                	je	<addr>
                	movq	%rdi, %rax
                	addq	$0xb0, %rsp
@@ -89,7 +89,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movslq	(%rdx), %rcx
-               	cmpq	$0x1e, %rcx
+               	cmpl	$0x1e, %ecx
                	je	<addr>
                	movl	$0x6, %eax
                	addq	$0xb0, %rsp

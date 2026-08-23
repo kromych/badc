@@ -58,7 +58,7 @@ Disassembly of section .text:
                	addq	%rdx, %rsi
                	leaq	0x1(%rcx), %rax
                	movl	%eax, %ecx
-               	cmpq	$0x3, %rcx
+               	cmpl	$0x3, %ecx
                	jb	<addr>
                	cmpq	$0x45, %rsi
                	je	<addr>
@@ -107,7 +107,7 @@ Disassembly of section .text:
                	addq	%rdx, %rsi
                	leaq	0x1(%rcx), %rax
                	movl	%eax, %ecx
-               	cmpq	$0x3, %rcx
+               	cmpl	$0x3, %ecx
                	jb	<addr>
                	cmpq	$0x2e, %rsi
                	je	<addr>

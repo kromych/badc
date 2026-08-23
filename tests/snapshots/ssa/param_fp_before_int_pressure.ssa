@@ -38,9 +38,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v32  BinopI { op=add, lhs=v28, rhs_imm=40 }           -> x0
     v33  Extend { value=v32, kind=I32 }                   -> x1
     v34  BinopI { op=add, lhs=v32, rhs_imm=5 }            -> x0
-    v35  Extend { value=v34, kind=I32 }                   -> x0
+    v35  Extend { value=v34, kind=I32 }                   -> x1
     v36  Extend { value=v35, kind=I32 }                   -> x1
-    v37  BinopI { op=ne, lhs=v35, rhs_imm=123745 }        -> x0
+    v37  BinopI { op=ne, lhs=v34, rhs_imm=123745 }        -> x0
     terminator Bz { cond=v37, target=b2, fall=b1 }   (exit_acc=v37)
   block 1  start_pc=0
     v38  Imm(1)                                           -> x0

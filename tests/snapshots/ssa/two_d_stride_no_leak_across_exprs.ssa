@@ -26,23 +26,23 @@ fn ent_pc=2 n_params=0 variadic=false locals=160
     terminator Jmp(b4)   (exit_acc=v17)
   block 2  start_pc=0
     v25  LocalAddr(-160)                                  -> x2
-    v26  Extend { value=v19, kind=I32 }                   -> x6
-    v27  BinopI { op=shl, lhs=v20, rhs_imm=2 }            -> x6
+    v26  Extend { value=v19, kind=I32 }                   -> x1
+    v27  BinopI { op=shl, lhs=v26, rhs_imm=2 }            -> x6
     v28  Binop { op=add, lhs=v25, rhs=v27 }               -> x2
-    v29  FpCast { kind=IntToFp, value=v20 }               -> d0 [f32]
+    v29  FpCast { kind=IntToFp, value=v26 }               -> d0 [f32]
     v30  Imm(1048576000)                                  -> x6 [f32]
     v31  Binop { op=fmul, lhs=v29, rhs=v30 }              -> d0 [f32]
     v32  Store { addr=v28, disp=0, value=v31, kind=F32 }  -> -
     terminator Jmp(b3)   (exit_acc=v32)
   block 3  start_pc=0
     v22  Extend { value=v19, kind=I32 }                   -> x0
-    v23  BinopI { op=add, lhs=v20, rhs_imm=1 }            -> x0
+    v23  BinopI { op=add, lhs=v26, rhs_imm=1 }            -> x0
     v24  Imm(0)                                           -> x1
     terminator Jmp(b4)   (exit_acc=v23)
   block 4  start_pc=0
     v19  Phi { incoming=[b1:v17, b3:v23], kind=I64 }      -> x0
     v20  Extend { value=v19, kind=I32 }                   -> x1
-    v21  BinopI { op=lt, lhs=v20, rhs_imm=64 }            -> x2
+    v21  BinopI { op=lt, lhs=v19, rhs_imm=64 }            -> x1
     terminator Bnz { cond=v21, target=b2, fall=b5 }   (exit_acc=v21)
   block 5  start_pc=0
     v33  LocalAddr(-160)                                  -> x0

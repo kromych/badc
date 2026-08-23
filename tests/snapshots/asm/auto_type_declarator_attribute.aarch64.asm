@@ -17,25 +17,25 @@ Disassembly of section .text:
                	str	x19, [sp, #-0x30]!
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	ldrsw	x0, [x3]
-               	cmp	x0, #0x2a
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	ldrsw	x0, [x2]
+               	cmp	w0, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp], #0x30
                	ret
-               	ldrsw	x0, [x3]
-               	cmp	x0, #0x2a
+               	ldrsw	x0, [x2]
+               	cmp	w0, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp], #0x30
                	ret
-               	stur	x3, [x29, #-0x8]
-               	ldrsw	x0, [x3]
-               	cmp	x0, #0x2a
+               	stur	x2, [x29, #-0x8]
+               	ldrsw	x0, [x2]
+               	cmp	w0, #0x2a
                	b.eq	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -67,15 +67,15 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
-               	cmp	x0, #0x1
+               	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp], #0x30
                	ret
-               	stur	x3, [x29, #-0x8]
-               	ldrsw	x0, [x3]
-               	cmp	x0, #0x2a
+               	stur	x2, [x29, #-0x8]
+               	ldrsw	x0, [x2]
+               	cmp	w0, #0x2a
                	b.eq	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -94,7 +94,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
-               	cmp	x0, #0x2
+               	cmp	w0, #0x2
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	ldp	x29, x30, [sp, #0x20]
@@ -105,28 +105,25 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	b	<addr>
                	b	<addr>
-               	stur	x3, [x29, #-0x8]
+               	stur	x2, [x29, #-0x8]
                	b	<addr>
                	ldur	x0, [x29, #-0x8]
                	ldrsw	x0, [x0]
-               	cmp	x0, #0x2a
+               	cmp	w0, #0x2a
                	b.ne	<addr>
                	mov	x0, #0x1                // =1
-               	sxtw	x0, w0
                	cbz	x0, <addr>
                	ldrsw	x0, [x1]
                	add	x0, x0, #0x1
                	str	w0, [x1]
                	mov	x0, #0x1                // =1
-               	sxtw	x2, w0
-               	cbz	x2, <addr>
+               	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
-               	sxtw	x2, w0
-               	cbz	x2, <addr>
+               	cbz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
-               	cmp	x0, #0x3
+               	cmp	w0, #0x3
                	b.eq	<addr>
                	mov	x0, #0x9                // =9
                	ldp	x29, x30, [sp, #0x20]
@@ -135,7 +132,7 @@ Disassembly of section .text:
                	mov	x0, #0x15               // =21
                	stur	w0, [x29, #-0x8]
                	sxtw	x0, w0
-               	cmp	x0, #0x15
+               	cmp	w0, #0x15
                	b.eq	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -154,7 +151,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
-               	cmp	x0, #0x4
+               	cmp	w0, #0x4
                	b.eq	<addr>
                	mov	x0, #0xb                // =11
                	ldp	x29, x30, [sp, #0x20]

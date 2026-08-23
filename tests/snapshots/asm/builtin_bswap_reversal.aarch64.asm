@@ -44,7 +44,7 @@ Disassembly of section .text:
                	rev	w0, w0
                	lsr	w0, w0, #16
                	mov	x17, #0xcdab            // =52651
-               	cmp	x0, x17
+               	cmp	w0, w17
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x20
@@ -54,7 +54,7 @@ Disassembly of section .text:
                	rev	w0, w0
                	mov	x17, #0x2211            // =8721
                	movk	x17, #0x4433, lsl #16
-               	cmp	x0, x17
+               	cmp	w0, w17
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x20
@@ -87,7 +87,7 @@ Disassembly of section .text:
                	rev	w0, w0
                	mov	x17, #0x605             // =1541
                	movk	x17, #0x807, lsl #16
-               	cmp	x0, x17
+               	cmp	w0, w17
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x20

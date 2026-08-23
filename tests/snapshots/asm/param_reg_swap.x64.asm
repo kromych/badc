@@ -100,13 +100,13 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	jmp	<addr>
                	leaq	-0x20(%rbp), %rdx
+               	movslq	%eax, %rcx
                	addq	%rcx, %rdx
                	movq	%rcx, %rsi
                	andq	$0xff, %rsi
                	movb	%sil, (%rdx)
                	leaq	0x1(%rcx), %rax
-               	movslq	%eax, %rcx
-               	cmpq	$0x20, %rcx
+               	cmpl	$0x20, %eax
                	jl	<addr>
                	leaq	-0x38(%rbp), %rbx
                	leaq	-0x30(%rbp), %rsi

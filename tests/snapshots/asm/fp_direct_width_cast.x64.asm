@@ -59,8 +59,7 @@ Disassembly of section .text:
                	movl	$0x4079999a, %eax       # imm = 0x4079999A
                	movq	%rax, %xmm14
                	cvttss2si	%xmm14, %rax
-               	movslq	%eax, %rax
-               	cmpq	$0x3, %rax
+               	cmpl	$0x3, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	addq	$0x10, %rsp
@@ -72,8 +71,7 @@ Disassembly of section .text:
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
                	cvttss2si	%xmm0, %rax
-               	movslq	%eax, %rax
-               	cmpq	$-0x2, %rax
+               	cmpl	$-0x2, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	addq	$0x10, %rsp

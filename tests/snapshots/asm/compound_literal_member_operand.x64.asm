@@ -47,7 +47,7 @@ Disassembly of section .text:
                	movzbq	0x3(%rdx), %rax
                	movb	%al, 0x3(%rcx)
                	popq	%rax
-               	cmpq	$-0x1, %rax
+               	cmpl	$-0x1, %eax
                	setne	%al
                	movzbq	%al, %rax
                	movslq	%eax, %rax
@@ -80,7 +80,7 @@ Disassembly of section .text:
                	movzbq	0x3(%rdx), %rax
                	movb	%al, 0x3(%rcx)
                	popq	%rax
-               	cmpq	$-0x1, %rax
+               	cmpl	$-0x1, %eax
                	sete	%al
                	movzbq	%al, %rax
                	movslq	%eax, %rax
@@ -144,7 +144,7 @@ Disassembly of section .text:
                	popq	%rdx
                	leaq	-0x8(%rbp), %rax
                	movslq	(%rax), %rax
-               	cmpq	$-0x1, %rax
+               	cmpl	$-0x1, %eax
                	setne	%al
                	movzbq	%al, %rax
                	movslq	%eax, %rax

@@ -25,7 +25,7 @@ Disassembly of section .text:
                	add	x5, x5, x2
                	str	x5, [x4]
                	add	x3, x3, #0x1
-               	cmp	x2, #0x1
+               	cmp	w2, #0x1
                	b.lo	<addr>
                	mov	x0, #0x2                // =2
                	mov	x2, x1
@@ -56,7 +56,7 @@ Disassembly of section .text:
                	mov	w1, w1
                	mov	x17, #0x1               // =1
                	and	x1, x1, x17
-               	cmp	x1, #0x1
+               	cmp	w1, #0x1
                	b.lo	<addr>
                	mov	x1, #0x14               // =20
                	cmp	x1, #0x14
@@ -71,7 +71,7 @@ Disassembly of section .text:
                	mov	w1, w1
                	mov	x17, #0x1               // =1
                	and	x1, x1, x17
-               	cmp	x1, #0x1
+               	cmp	w1, #0x1
                	b.lo	<addr>
                	mov	x1, #0x14               // =20
                	cmp	x1, #0xa
@@ -101,7 +101,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x2, x0
                	sxtw	x0, w2
-               	cmp	x0, #0x1
+               	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	ret

@@ -26,18 +26,17 @@ Disassembly of section .text:
                	int3
 
 <classify>:
-               	movslq	%edi, %rdi
                	xorq	%rax, %rax
-               	cmpq	$0x2, %rdi
+               	cmpl	$0x2, %edi
                	jl	<addr>
-               	cmpq	$0x2, %rdi
+               	cmpl	$0x2, %edi
                	je	<addr>
                	movabsq	$-0x1, %rax
                	movslq	%eax, %rax
                	retq
                	incq	%rax
                	jmp	<addr>
-               	cmpq	$0x1, %rdi
+               	cmpl	$0x1, %edi
                	jne	<addr>
                	movl	$0xa, %eax
                	jmp	<addr>

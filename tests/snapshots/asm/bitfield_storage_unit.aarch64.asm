@@ -65,7 +65,7 @@ Disassembly of section .text:
                	mov	w2, w1
                	mov	x17, #0xff              // =255
                	and	x3, x2, x17
-               	cmp	x3, #0xab
+               	cmp	w3, #0xab
                	b.eq	<addr>
                	mov	x0, #0x11               // =17
                	add	sp, sp, #0x20
@@ -74,7 +74,7 @@ Disassembly of section .text:
                	asr	x3, x2, #8
                	mov	x17, #0x1               // =1
                	and	x3, x3, x17
-               	cmp	x3, #0x1
+               	cmp	w3, #0x1
                	b.eq	<addr>
                	mov	x0, #0x12               // =18
                	add	sp, sp, #0x20
@@ -86,7 +86,7 @@ Disassembly of section .text:
                	and	x3, x3, x17
                	mov	x17, #0x2345            // =9029
                	movk	x17, #0x1, lsl #16
-               	cmp	x3, x17
+               	cmp	w3, w17
                	b.eq	<addr>
                	mov	x0, #0x13               // =19
                	add	sp, sp, #0x20
@@ -103,7 +103,7 @@ Disassembly of section .text:
                	mov	w2, w1
                	mov	x17, #0xff              // =255
                	and	x3, x2, x17
-               	cmp	x3, #0x55
+               	cmp	w3, #0x55
                	b.eq	<addr>
                	mov	x0, #0x14               // =20
                	add	sp, sp, #0x20
@@ -112,7 +112,7 @@ Disassembly of section .text:
                	asr	x3, x2, #8
                	mov	x17, #0x1               // =1
                	and	x3, x3, x17
-               	cmp	x3, #0x1
+               	cmp	w3, #0x1
                	b.eq	<addr>
                	mov	x0, #0x15               // =21
                	add	sp, sp, #0x20
@@ -124,7 +124,7 @@ Disassembly of section .text:
                	and	x1, x1, x17
                	mov	x17, #0x2345            // =9029
                	movk	x17, #0x1, lsl #16
-               	cmp	x1, x17
+               	cmp	w1, w17
                	b.eq	<addr>
                	mov	x0, #0x16               // =22
                	add	sp, sp, #0x20

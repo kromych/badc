@@ -20,7 +20,7 @@ Disassembly of section .text:
                	add	x1, x1, #0x33
                	str	w1, [x0]
                	ldrsw	x0, [x0]
-               	cmp	x0, #0x33
+               	cmp	w0, #0x33
                	cset	x0, eq
                	cbz	x0, <addr>
                	mov	x0, #0x0                // =0

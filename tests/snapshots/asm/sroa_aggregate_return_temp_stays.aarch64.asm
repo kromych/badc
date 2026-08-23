@@ -50,7 +50,7 @@ Disassembly of section .text:
                	mov	w0, w3
                	mov	w3, w4
                	mov	w4, w3
-               	cmp	x4, x2
+               	cmp	w4, w2
                	b.hs	<addr>
                	mov	w0, w0
                	add	x0, x0, #0x1
@@ -104,7 +104,7 @@ Disassembly of section .text:
                	mov	w0, w3
                	mov	w3, w4
                	mov	w4, w3
-               	cmp	x4, x2
+               	cmp	w4, w2
                	b.hs	<addr>
                	mov	w0, w0
                	add	x0, x0, #0x1

@@ -68,17 +68,15 @@ Disassembly of section .text:
                	addq	0x78(%rsp), %rax
                	addq	0x68(%rsp), %rax
                	addq	0x60(%rsp), %rax
-               	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movabsq	$-0x1, %rbx
                	leaq	<rip>, %rdi
-               	movslq	%ebx, %r12
-               	movq	%r12, %rsi
+               	movslq	%ebx, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
-               	cmpq	$0xbf, %r12
+               	cmpl	$0xbf, %ebx
                	jne	<addr>
                	xorq	%rax, %rax
                	movslq	%eax, %rax

@@ -389,7 +389,6 @@ Disassembly of section .text:
                	cmpq	$0x65, %rax
                	sete	%al
                	movzbq	%al, %rax
-               	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rdi

@@ -324,8 +324,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v121 Load { addr=v120, disp=0, kind=I32 }             -> x1
     v122 Binop { op=add, lhs=v117, rhs=v121 }             -> x0
     v123 BinopI { op=shl, lhs=v122, rhs_imm=32 }          -> x1
-    v124 Extend { value=v122, kind=I32 }                  -> x0
-    v125 BinopI { op=ne, lhs=v124, rhs_imm=18 }           -> x0
+    v124 Extend { value=v122, kind=I32 }                  -> x1
+    v125 BinopI { op=ne, lhs=v122, rhs_imm=18 }           -> x0
     terminator Bz { cond=v125, target=b25, fall=b24 }   (exit_acc=v125)
   block 24  start_pc=0
     v126 Imm(7)                                           -> x0

@@ -230,14 +230,14 @@ fn ent_pc=7 n_params=0 variadic=false locals=12
     v130 Imm(0)                                           -> x0
     v131 Imm(0)                                           -> x0
     v132 Extend { value=v127, kind=I32 }                  -> x0
-    v133 BinopI { op=ne, lhs=v132, rhs_imm=7 }            -> x0
+    v133 BinopI { op=ne, lhs=v127, rhs_imm=7 }            -> x0
     v134 Imm(0)                                           -> x1
     terminator Bnz { cond=v133, target=b28, fall=b24 }   (exit_acc=v133)
   block 24  start_pc=0
     v135 Imm(0)                                           -> x0
     v136 Imm(0)                                           -> x0
     v137 Extend { value=v129, kind=I32 }                  -> x0
-    v138 BinopI { op=ne, lhs=v137, rhs_imm=8 }            -> x0
+    v138 BinopI { op=ne, lhs=v129, rhs_imm=8 }            -> x0
     v139 Imm(0)                                           -> x1
     terminator Jmp(b25)   (exit_acc=v138)
   block 25  start_pc=0

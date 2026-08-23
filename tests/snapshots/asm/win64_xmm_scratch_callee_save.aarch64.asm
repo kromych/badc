@@ -62,8 +62,7 @@ Disassembly of section .text:
                	fmov	d17, x20
                	fmadd	d0, d0, d17, d8
                	fcvtzs	x1, d0
-               	sxtw	x0, w0
-               	cmp	x0, #0x2c
+               	cmp	w0, #0x2c
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x40]
@@ -72,8 +71,7 @@ Disassembly of section .text:
                	ldp	d10, d11, [sp, #0x10]
                	ldp	d8, d9, [sp], #0x50
                	ret
-               	sxtw	x0, w1
-               	cmp	x0, #0x59
+               	cmp	w1, #0x59
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x40]
@@ -108,8 +106,7 @@ Disassembly of section .text:
                	fmov	d17, x20
                	fmadd	d0, d0, d17, d8
                	fcvtzs	x1, d0
-               	sxtw	x0, w0
-               	cmp	x0, #0xa
+               	cmp	w0, #0xa
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp, #0x40]
@@ -118,8 +115,7 @@ Disassembly of section .text:
                	ldp	d10, d11, [sp, #0x10]
                	ldp	d8, d9, [sp], #0x50
                	ret
-               	sxtw	x0, w1
-               	cmp	x0, #0x1e
+               	cmp	w1, #0x1e
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp, #0x40]

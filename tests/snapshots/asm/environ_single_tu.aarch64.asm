@@ -34,8 +34,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x8
                	ldr	x2, [x0]
                	cbnz	x2, <addr>
-               	sxtw	x0, w1
-               	cmp	x0, #0x0
+               	cmp	w1, #0x0
                	b.le	<addr>
                	mov	x0, #0x0                // =0
                	sxtw	x0, w0

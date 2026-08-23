@@ -66,7 +66,7 @@ Disassembly of section .text:
                	lsr	x4, x20, #12
                	add	x4, x4, #0x1
                	and	x4, x4, x1
-               	cmp	x3, x4
+               	cmp	w3, w4
                	b.ne	<addr>
                	add	x20, x20, x2
                	cmp	x20, x21

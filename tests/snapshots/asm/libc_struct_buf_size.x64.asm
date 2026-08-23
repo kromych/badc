@@ -34,10 +34,10 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	movslq	%eax, %rsi
-               	testq	%rsi, %rsi
+               	testq	%rax, %rax
                	je	<addr>
                	leaq	<rip>, %rdi
+               	movslq	%eax, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax

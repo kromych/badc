@@ -28,37 +28,35 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x50, %rsp
+               	subq	$0x40, %rsp
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
-               	movq	%r13, 0x10(%rsp)
-               	xorq	%r13, %r13
-               	movl	%r13d, -0x28(%rbp)
+               	xorq	%r12, %r12
+               	movl	%r12d, -0x28(%rbp)
                	leaq	-0x28(%rbp), %rcx
                	leaq	<rip>, %rax
                	movslq	(%rax), %rdx
-               	cmpq	$0x2a, %rdx
+               	cmpl	$0x2a, %edx
                	je	<addr>
-               	movl	$0x1e, %r12d
-               	movslq	%r12d, %rbx
+               	movl	$0x1e, %ebx
                	testq	%rbx, %rbx
                	je	<addr>
                	leaq	<rip>, %rdi
+               	movslq	%ebx, %r12
                	movslq	-0x28(%rbp), %rdx
                	movslq	(%rax), %rcx
-               	movq	%rbx, %rsi
+               	movq	%r12, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
-               	movq	%rbx, %rax
+               	movq	%r12, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r13
-               	addq	$0x50, %rsp
+               	addq	$0x40, %rsp
                	popq	%rbp
                	retq
                	movslq	-0x28(%rbp), %rax
-               	cmpq	$0x1, %rax
+               	cmpl	$0x1, %eax
                	je	<addr>
                	leaq	<rip>, %rdi
                	movslq	-0x28(%rbp), %rsi
@@ -68,22 +66,20 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r13
-               	addq	$0x50, %rsp
+               	addq	$0x40, %rsp
                	popq	%rbp
                	retq
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
-               	movq	%r13, %rax
+               	movq	%r12, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r13
-               	addq	$0x50, %rsp
+               	addq	$0x40, %rsp
                	popq	%rbp
                	retq
                	movl	$0x1, %edx
                	movl	%edx, (%rcx)
-               	movq	%r13, %r12
+               	movq	%r12, %rbx
                	jmp	<addr>

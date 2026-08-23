@@ -18,8 +18,7 @@ Disassembly of section .text:
                	ret
 
 <early_return_void>:
-               	sxtw	x0, w0
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	b.ge	<addr>
                	mov	x0, #0x0                // =0
                	ret

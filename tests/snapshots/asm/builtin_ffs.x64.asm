@@ -59,17 +59,12 @@ Disassembly of section .text:
                	addq	%rdx, %rcx
                	andq	$0x7f, %rcx
                	incq	%rcx
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	setne	%al
                	movzbq	%al, %rax
                	imulq	%rcx, %rax
-               	movslq	%eax, %rax
-               	cmpq	$0x11, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
+               	cmpl	$0x11, %eax
+               	je	<addr>
                	movl	$0xe, %eax
                	addq	$0x10, %rsp
                	popq	%rbp
@@ -104,17 +99,12 @@ Disassembly of section .text:
                	addq	%rsi, %rdx
                	andq	$0x7f, %rdx
                	incq	%rdx
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	setne	%al
                	movzbq	%al, %rax
                	imulq	%rdx, %rax
-               	movslq	%eax, %rax
                	testq	%rax, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
+               	je	<addr>
                	movl	$0xf, %eax
                	addq	$0x10, %rsp
                	popq	%rbp

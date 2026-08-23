@@ -72,9 +72,9 @@ fn ent_pc=5 n_params=0 variadic=false locals=8
     v54  ImmData(8)                                       -> x2
     v55  Load { addr=v54, disp=0, kind=I64 }              -> x2
     v56  Binop { op=ne, lhs=v27, rhs=v55 }                -> x2
-    v57  Extend { value=v56, kind=I32 }                   -> x2
-    v58  BinopI { op=eq, lhs=v57, rhs_imm=0 }             -> x6
-    terminator Bnz { cond=v57, target=b10, fall=b8 }   (exit_acc=v58)
+    v57  Extend { value=v56, kind=I32 }                   -> x6
+    v58  BinopI { op=eq, lhs=v56, rhs_imm=0 }             -> x6
+    terminator Bnz { cond=v56, target=b10, fall=b8 }   (exit_acc=v58)
   block 8  start_pc=0
     v65  Imm(0)                                           -> x2
     v66  Imm(0)                                           -> x2

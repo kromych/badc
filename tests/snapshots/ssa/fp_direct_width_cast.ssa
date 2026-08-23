@@ -27,8 +27,8 @@ fn ent_pc=3 n_params=0 variadic=false locals=1
   block 4  start_pc=0
     v14  Imm(1081711002)                                  -> x0 [f32]
     v15  FpCast { kind=FpToInt, value=v14 }               -> x0
-    v16  Extend { value=v15, kind=I32 }                   -> x0
-    v17  BinopI { op=ne, lhs=v16, rhs_imm=3 }             -> x0
+    v16  Extend { value=v15, kind=I32 }                   -> x1
+    v17  BinopI { op=ne, lhs=v15, rhs_imm=3 }             -> x0
     terminator Bz { cond=v17, target=b6, fall=b5 }   (exit_acc=v17)
   block 5  start_pc=0
     v18  Imm(3)                                           -> x0
@@ -37,8 +37,8 @@ fn ent_pc=3 n_params=0 variadic=false locals=1
     v19  Imm(1075838976)                                  -> x0 [f32]
     v20  Fneg(v19)                                        -> d0 [f32]
     v21  FpCast { kind=FpToInt, value=v20 }               -> x0
-    v22  Extend { value=v21, kind=I32 }                   -> x0
-    v23  BinopI { op=ne, lhs=v22, rhs_imm=-2 }            -> x0
+    v22  Extend { value=v21, kind=I32 }                   -> x1
+    v23  BinopI { op=ne, lhs=v21, rhs_imm=-2 }            -> x0
     terminator Bz { cond=v23, target=b8, fall=b7 }   (exit_acc=v23)
   block 7  start_pc=0
     v24  Imm(4)                                           -> x0

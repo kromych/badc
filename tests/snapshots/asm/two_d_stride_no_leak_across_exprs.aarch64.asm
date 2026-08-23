@@ -20,6 +20,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	b	<addr>
                	sub	x2, x29, #0x500
+               	sxtw	x1, w0
                	lsl	x3, x1, #2
                	add	x2, x2, x3
                	scvtf	s0, x1
@@ -28,8 +29,7 @@ Disassembly of section .text:
                	fmul	s0, s0, s17
                	str	s0, [x2]
                	add	x0, x1, #0x1
-               	sxtw	x1, w0
-               	cmp	x1, #0x40
+               	cmp	w0, #0x40
                	b.lt	<addr>
                	sub	x0, x29, #0x500
                	ldr	s0, [x0, #0x20]

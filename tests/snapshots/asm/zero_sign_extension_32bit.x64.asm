@@ -70,8 +70,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	movq	%rax, %rbx
-               	movslq	%ebx, %rax
-               	cmpq	$-0x7fffffff, %rax      # imm = 0x80000001
+               	cmpl	$0x80000001, %ebx       # imm = 0x80000001
                	je	<addr>
                	leaq	<rip>, %rax
                	movl	$0x28, %r12d
@@ -85,8 +84,7 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
-               	movslq	%ebx, %rax
-               	cmpq	$-0x7fffffff, %rax      # imm = 0x80000001
+               	cmpl	$0x80000001, %ebx       # imm = 0x80000001
                	je	<addr>
                	leaq	<rip>, %rax
                	movl	$0x29, %ebx

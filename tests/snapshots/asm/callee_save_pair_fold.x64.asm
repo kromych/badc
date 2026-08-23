@@ -32,7 +32,7 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	movq	%rdi, %rbx
                	movslq	%ebx, %rbx
-               	testq	%rbx, %rbx
+               	testl	%ebx, %ebx
                	jg	<addr>
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx

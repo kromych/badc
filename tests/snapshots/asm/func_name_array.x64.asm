@@ -30,15 +30,15 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	leaq	<rip>, %rsi
                	jmp	<addr>
+               	movslq	%eax, %rcx
                	leaq	(%rdx,%rcx), %rdi
                	movsbq	(%rdi), %rdi
                	leaq	(%rsi,%rcx), %r8
                	movsbq	(%r8), %r8
-               	cmpq	%r8, %rdi
+               	cmpl	%r8d, %edi
                	jne	<addr>
                	leaq	0x1(%rcx), %rax
-               	movslq	%eax, %rcx
-               	cmpq	$0x5, %rcx
+               	cmpl	$0x5, %eax
                	jl	<addr>
                	xorq	%rax, %rax
                	retq

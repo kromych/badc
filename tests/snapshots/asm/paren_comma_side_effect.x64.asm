@@ -72,7 +72,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rsi
                	movl	%edx, (%rsi)
                	movslq	(%rax), %rbx
-               	cmpq	$0x7, %rbx
+               	cmpl	$0x7, %ebx
                	je	<addr>
                	movl	$0x2, %edi
                	callq	<addr>
@@ -95,7 +95,7 @@ Disassembly of section .text:
                	movl	$0xd, %edx
                	movl	%edx, (%rax)
                	movslq	%edx, %rbx
-               	cmpq	$0xd, %rbx
+               	cmpl	$0xd, %ebx
                	je	<addr>
                	movl	$0x2, %r12d
                	movq	%r12, %rdi

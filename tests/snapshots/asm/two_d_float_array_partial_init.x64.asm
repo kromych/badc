@@ -66,31 +66,31 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	xorq	%r12, %r12
+               	leaq	<rip>, %rsi
                	leaq	<rip>, %rdi
-               	leaq	<rip>, %r8
                	jmp	<addr>
                	xorq	%rbx, %rbx
                	jmp	<addr>
-               	movq	%rsi, %rcx
-               	shlq	$0x4, %rcx
-               	leaq	(%r8,%rcx), %r9
-               	movq	%rax, %rdx
+               	movslq	%r12d, %rax
+               	shlq	$0x4, %rax
+               	leaq	(%rdi,%rax), %r8
+               	movslq	%ebx, %rcx
+               	movq	%rcx, %rdx
                	shlq	$0x2, %rdx
-               	addq	%rdx, %r9
-               	movss	(%r9,%riz), %xmm0
-               	addq	%rdi, %rcx
-               	addq	%rdx, %rcx
-               	movss	(%rcx,%riz), %xmm1
+               	addq	%rdx, %r8
+               	movss	(%r8,%riz), %xmm0
+               	addq	%rsi, %rax
+               	addq	%rdx, %rax
+               	movss	(%rax,%riz), %xmm1
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	leaq	0x1(%rax), %rbx
-               	movslq	%ebx, %rax
-               	cmpq	$0x4, %rax
+               	leaq	0x1(%rcx), %rbx
+               	cmpl	$0x4, %ebx
                	jl	<addr>
-               	leaq	0x1(%rsi), %r12
-               	movslq	%r12d, %rsi
-               	cmpq	$0xc, %rsi
+               	movslq	%r12d, %rax
+               	leaq	0x1(%rax), %r12
+               	cmpl	$0xc, %r12d
                	jl	<addr>
                	xorq	%rcx, %rcx
                	movq	%rcx, %xmm14

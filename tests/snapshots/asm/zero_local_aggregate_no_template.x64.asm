@@ -239,13 +239,13 @@ Disassembly of section .text:
                	popq	%rax
                	movq	%rdx, %rcx
                	jmp	<addr>
+               	movslq	%eax, %rcx
                	leaq	(%rdx,%rcx), %rsi
                	movsbq	(%rsi), %rsi
                	testq	%rsi, %rsi
                	jne	<addr>
                	leaq	0x1(%rcx), %rax
-               	movslq	%eax, %rcx
-               	cmpq	$0x200, %rcx            # imm = 0x200
+               	cmpl	$0x200, %eax            # imm = 0x200
                	jl	<addr>
                	movl	$0x1, %eax
                	testq	%rax, %rax
@@ -274,8 +274,7 @@ Disassembly of section .text:
                	movq	%rcx, (%rax)
                	movl	%ebx, 0x8(%rax)
                	callq	<addr>
-               	movslq	%eax, %rax
-               	cmpq	$0x7, %rax
+               	cmpl	$0x7, %eax
                	jne	<addr>
                	movl	$0x1, %ebx
                	movslq	%ebx, %rax

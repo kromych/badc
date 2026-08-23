@@ -40,7 +40,7 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	mov	x17, #0x7198            // =29080
                	movk	x17, #0x47, lsl #16
-               	cmp	x1, x17
+               	cmp	w1, w17
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x20
@@ -65,7 +65,7 @@ Disassembly of section .text:
                	ldrb	w0, [x0, #0x3]
                	add	x0, x1, x0
                	sxtw	x0, w0
-               	cmp	x0, #0x12c
+               	cmp	w0, #0x12c
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x20

@@ -328,7 +328,7 @@ Disassembly of section .text:
                	testq	%rsi, %rsi
                	sete	%sil
                	movzbq	%sil, %rsi
-               	testq	%rsi, %rsi
+               	testl	%esi, %esi
                	sete	%sil
                	movzbq	%sil, %rsi
                	testq	%rsi, %rsi

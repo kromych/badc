@@ -265,17 +265,17 @@ fn ent_pc=6 n_params=0 variadic=false locals=2
     terminator Jmp(b10)   (exit_acc=v462)
   block 10  start_pc=0
     v9   Extend { value=v462, kind=I32 }                  -> x1
-    v10  BinopI { op=ne, lhs=v9, rhs_imm=0 }              -> x0
+    v10  BinopI { op=ne, lhs=v462, rhs_imm=0 }            -> x1
     v11  Imm(0)                                           -> x2
-    terminator Bnz { cond=v9, target=b223, fall=b11 }   (exit_acc=v10)
+    terminator Bnz { cond=v462, target=b223, fall=b11 }   (exit_acc=v10)
   block 11  start_pc=0
     v12  LoadLocal { off=-1, kind=I64 }                   -> x0
-    v13  BinopI { op=ne, lhs=v12, rhs_imm=15 }            -> x0
-    v14  Imm(0)                                           -> x1
+    v13  BinopI { op=ne, lhs=v12, rhs_imm=15 }            -> x1
+    v14  Imm(0)                                           -> x0
     terminator Jmp(b12)   (exit_acc=v13)
   block 12  start_pc=0
-    v15  Phi { incoming=[b223:v10, b11:v13], kind=I64 }   -> x0
-    v16  LoadLocal { off=-2, kind=I64 }                   -> x1
+    v15  Phi { incoming=[b223:v10, b11:v13], kind=I64 }   -> x1
+    v16  LoadLocal { off=-2, kind=I64 }                   -> x0
     terminator Bz { cond=v15, target=b14, fall=b13 }   (exit_acc=v15)
   block 13  start_pc=0
     v17  Imm(1)                                           -> x0

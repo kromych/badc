@@ -21,7 +21,7 @@ Disassembly of section .text:
                	stur	w1, [x29, #-0x8]
                	sub	x0, x29, #0x8
                	ldrsw	x2, [x0]
-               	cmp	x2, #0x5
+               	cmp	w2, #0x5
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x20
@@ -30,7 +30,7 @@ Disassembly of section .text:
                	mov	x2, #0xa                // =10
                	str	w2, [x0]
                	sxtw	x2, w2
-               	cmp	x2, #0xa
+               	cmp	w2, #0xa
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x20
@@ -39,7 +39,7 @@ Disassembly of section .text:
                	mov	x2, #0x9                // =9
                	stur	w2, [x29, #-0x8]
                	ldrsw	x2, [x0]
-               	cmp	x2, #0x9
+               	cmp	w2, #0x9
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x20
@@ -71,7 +71,7 @@ Disassembly of section .text:
                	mov	x1, #0x7                // =7
                	stur	w1, [x29, #-0x8]
                	ldrsw	x2, [x0]
-               	cmp	x2, #0x7
+               	cmp	w2, #0x7
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x20
@@ -80,7 +80,7 @@ Disassembly of section .text:
                	mov	x2, #0x2a               // =42
                	stur	w2, [x29, #-0x8]
                	ldrsw	x0, [x0]
-               	cmp	x0, #0x2a
+               	cmp	w0, #0x2a
                	b.eq	<addr>
                	mov	x0, x1
                	add	sp, sp, #0x20

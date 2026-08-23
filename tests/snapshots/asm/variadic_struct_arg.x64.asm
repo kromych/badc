@@ -66,21 +66,21 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	0x8(%r11), %r10
                	addq	$0x8, 0x8(%r11)
-               	movq	%r10, %rdi
+               	movq	%r10, %rsi
                	leaq	-0x20(%rbp), %rdx
                	pushq	%rax
-               	movq	(%rdi), %rax
+               	movq	(%rsi), %rax
                	movq	%rax, (%rdx)
                	popq	%rax
-               	movq	%rdx, %rdi
-               	movslq	(%rdx), %rdi
+               	movq	%rdx, %rsi
+               	movslq	(%rdx), %rsi
                	movslq	0x4(%rdx), %rdx
-               	addq	%rdi, %rdx
+               	addq	%rsi, %rdx
                	addq	%rdx, %rcx
-               	leaq	0x1(%rsi), %rax
-               	movslq	%eax, %rsi
+               	movslq	%eax, %rax
+               	incq	%rax
                	movslq	-0xd0(%rbp), %rdx
-               	cmpq	%rdx, %rsi
+               	cmpl	%edx, %eax
                	jl	<addr>
                	leaq	-0x18(%rbp), %rax
                	movslq	%ecx, %rax

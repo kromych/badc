@@ -9,7 +9,7 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use super::emit_common::{AsmRelocKind, AsmSection, AsmSectionReloc, AsmSectionTarget};
+use crate::c5::asm::{AsmRelocKind, AsmSection, AsmSectionReloc, AsmSectionTarget};
 use crate::c5::codegen::map_syms::{MapClass, MapMarks};
 
 // Call-frame instruction opcodes. The low-opcode forms pack an operand into
@@ -231,7 +231,7 @@ pub(crate) enum CfiOp {
 /// written in and the byte offset the location counter held there.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CfiRecord {
-    /// Section identity key, as [`super::emit_common::section_key_of`] spells it.
+    /// Section identity key, as [`crate::c5::asm::section_key_of`] spells it.
     pub key: String,
     pub offset: u32,
     pub op: CfiOp,

@@ -4156,8 +4156,8 @@ fn emit_inline_asm_aarch64(
                 return false;
             };
             let target = match data_sym_offsets.get(name.as_str()) {
-                Some(&off) => super::ssa::emit_common::AsmSectionTarget::Data(off as u64),
-                None => super::ssa::emit_common::AsmSectionTarget::Symbol(name),
+                Some(&off) => crate::c5::asm::AsmSectionTarget::Data(off as u64),
+                None => crate::c5::asm::AsmSectionTarget::Symbol(name),
             };
             asm_sym_fixups.push(super::AsmSymFixup {
                 instr_offset: code.len(),
@@ -4372,8 +4372,8 @@ fn emit_inline_asm_aarch64(
     // offset is known. A reference that names a numeric template label
     // resolves to its offset; any other name is a symbol relocation.
     if !section_blocks.is_empty() {
-        let label_off = |name: &str| -> Option<super::ssa::emit_common::LabelLoc> {
-            use super::ssa::emit_common::LabelLoc;
+        let label_off = |name: &str| -> Option<crate::c5::asm::LabelLoc> {
+            use crate::c5::asm::LabelLoc;
             // A replacement-region label (`663f` / `664f`) resolves into the
             // deferred region, rewritten to a text offset once it is placed.
             if let Some(region) = deferred_idx {
@@ -4403,7 +4403,7 @@ fn emit_inline_asm_aarch64(
         // An `i`-class operand naming a link-time data address (`.quad %c0 - .`
         // where `%c0` is `&sym`) relocates against the data image, resolved
         // like the operand's own `ImmData` lowering.
-        let operand_sym = |idx: u8| -> Option<(super::ssa::emit_common::AsmSectionTarget, i64)> {
+        let operand_sym = |idx: u8| -> Option<(crate::c5::asm::AsmSectionTarget, i64)> {
             super::ssa::emit_common::asm_operand_data_target(
                 &func.insts,
                 *args.get(idx as usize)?,
@@ -4601,7 +4601,7 @@ fn emit_inline_asm_aarch64(
         // pending; frameless fields keep the block and resolve with the
         // function's layout (`resolve_asm_goto_relocs`).
         if size > 0 && !data_goto_ks.borrow().is_empty() {
-            use super::ssa::emit_common::AsmSectionTarget;
+            use crate::c5::asm::AsmSectionTarget;
             let ks = data_goto_ks.borrow();
             let target_of = |bid: u32| -> Option<usize> {
                 ks.iter()
@@ -10688,7 +10688,7 @@ fn int_reg(p: Place) -> Option<Reg> {
 /// (`.pushsection .text,"ax"`) to machine bytes. A file-scope block has no
 /// operands, so every instruction must be register-concrete.
 pub(crate) fn encode_a64_file_asm_section_code(
-    blocks: &mut [super::ssa::emit_common::AsmSectionBlock],
+    blocks: &mut [crate::c5::asm::AsmSectionBlock],
 ) -> Result<(), alloc::string::String> {
     use super::asm::AsmOpndA64;
     use super::table::Opnd;
@@ -10766,12 +10766,12 @@ pub(crate) fn encode_a64_file_asm_section_code(
 /// layout the operand expressions fold against, the symbol relocations -- is
 /// the same in both positions.
 pub(crate) fn encode_a64_asm_section_code(
-    blocks: &mut [super::ssa::emit_common::AsmSectionBlock],
+    blocks: &mut [crate::c5::asm::AsmSectionBlock],
     conv: &dyn Fn(&super::asm::AsmOpndA64) -> Result<super::table::Opnd, alloc::string::String>,
     goto_block: &dyn Fn(u8) -> Option<u32>,
 ) -> Result<(), alloc::string::String> {
-    use super::ssa::emit_common::AsmSectionItem;
     use super::table::{self, Opnd};
+    use crate::c5::asm::AsmSectionItem;
     assign_a64_literal_pools(blocks)?;
     // An operand expression over labels is folded before its instruction is
     // encoded: on A64 the value selects the form -- a scaled or unscaled
@@ -10794,7 +10794,7 @@ pub(crate) fn encode_a64_asm_section_code(
                 }
             }
             let mut bytes: Vec<u8> = Vec::new();
-            let mut relocs: Vec<super::ssa::emit_common::AsmSectionReloc> = Vec::new();
+            let mut relocs: Vec<crate::c5::asm::AsmSectionReloc> = Vec::new();
             for insn in &insns {
                 if !insn.bytes.is_empty() {
                     bytes.extend_from_slice(&insn.bytes);
@@ -10819,14 +10819,14 @@ pub(crate) fn encode_a64_asm_section_code(
                         .map_err(|m| alloc::format!("{m} (section `{text}`)"))?;
                     let (word, kind) = a64_label_branch_reloc(&branch)
                         .map_err(|m| alloc::format!("{m} (section `{text}`)"))?;
-                    relocs.push(super::ssa::emit_common::AsmSectionReloc {
+                    relocs.push(crate::c5::asm::AsmSectionReloc {
                         offset: bytes.len() as u32,
                         width: 4,
                         kind,
                         pcrel: false,
                         branch: false,
                         signed: false,
-                        target: super::ssa::emit_common::AsmSectionTarget::TextBlock(bid),
+                        target: crate::c5::asm::AsmSectionTarget::TextBlock(bid),
                         addend: 0,
                     });
                     bytes.extend_from_slice(&word.to_le_bytes());
@@ -10838,14 +10838,14 @@ pub(crate) fn encode_a64_asm_section_code(
                     // An empty expression marks a `.`-relative form resolved
                     // in place: the word is final, no relocation.
                     if !expr.is_empty() {
-                        relocs.push(super::ssa::emit_common::AsmSectionReloc {
+                        relocs.push(crate::c5::asm::AsmSectionReloc {
                             offset: bytes.len() as u32,
                             width: 4,
                             kind,
                             pcrel: false,
                             branch: false,
                             signed: false,
-                            target: super::ssa::emit_common::AsmSectionTarget::Expr(expr),
+                            target: crate::c5::asm::AsmSectionTarget::Expr(expr),
                             addend: 0,
                         });
                     }
@@ -10875,7 +10875,7 @@ pub(crate) fn encode_a64_asm_section_code(
 type A64SectionItemFn<'a> = dyn FnMut(
         &str,
         Option<(usize, usize)>,
-        &mut super::ssa::emit_common::AsmSectionItem,
+        &mut crate::c5::asm::AsmSectionItem,
     ) -> Result<(), alloc::string::String>
     + 'a;
 
@@ -10885,18 +10885,18 @@ type A64SectionItemFn<'a> = dyn FnMut(
 /// item's `(block, item)` index, `None` inside a `.rept` body, whose items
 /// the measurement walk does not place individually.
 fn a64_for_each_section_item_mut(
-    blocks: &mut [super::ssa::emit_common::AsmSectionBlock],
+    blocks: &mut [crate::c5::asm::AsmSectionBlock],
     f: &mut A64SectionItemFn<'_>,
 ) -> Result<(), alloc::string::String> {
     fn walk(
         key: &str,
         bi: usize,
         top: bool,
-        items: &mut [super::ssa::emit_common::AsmSectionItem],
+        items: &mut [crate::c5::asm::AsmSectionItem],
         f: &mut A64SectionItemFn<'_>,
     ) -> Result<(), alloc::string::String> {
         for (ii, it) in items.iter_mut().enumerate() {
-            if let super::ssa::emit_common::AsmSectionItem::Rept { items, .. } = it {
+            if let crate::c5::asm::AsmSectionItem::Rept { items, .. } = it {
                 walk(key, bi, false, items, f)?;
             } else {
                 f(key, top.then_some((bi, ii)), it)?;
@@ -10905,7 +10905,7 @@ fn a64_for_each_section_item_mut(
         Ok(())
     }
     for (bi, b) in blocks.iter_mut().enumerate() {
-        let key = super::ssa::emit_common::section_key(b);
+        let key = crate::c5::asm::section_key(b);
         walk(&key, bi, true, &mut b.items, f)?;
     }
     Ok(())
@@ -10918,10 +10918,10 @@ fn a64_for_each_section_item_mut(
 /// rather than at the sink's current length, which the values this serves do
 /// not depend on.
 fn a64_section_operand_layout(
-    blocks: &[super::ssa::emit_common::AsmSectionBlock],
+    blocks: &[crate::c5::asm::AsmSectionBlock],
 ) -> Result<Option<super::ssa::emit_common::SectionLabelOffsets>, alloc::string::String> {
     use super::asm::AsmOpndA64;
-    use super::ssa::emit_common::AsmSectionItem;
+    use crate::c5::asm::AsmSectionItem;
     let mut sized = blocks.to_vec();
     let mut needs = false;
     a64_for_each_section_item_mut(&mut sized, &mut |_, _, item| {
@@ -11045,17 +11045,11 @@ fn concrete_reg_shape(
 fn encode_a64_sym_insn(
     insn: &super::asm::AsmInsnA64,
     conv: &dyn Fn(&super::asm::AsmOpndA64) -> Result<super::table::Opnd, alloc::string::String>,
-) -> Result<
-    Option<(
-        u32,
-        super::ssa::emit_common::AsmRelocKind,
-        alloc::string::String,
-    )>,
-    alloc::string::String,
-> {
+) -> Result<Option<(u32, crate::c5::asm::AsmRelocKind, alloc::string::String)>, alloc::string::String>
+{
     use super::asm::AsmOpndA64;
-    use super::ssa::emit_common::AsmRelocKind as K;
     use super::table::Opnd;
+    use crate::c5::asm::AsmRelocKind as K;
     // `b sym` / `bl sym` carry the name on the instruction, not an operand.
     if let Some(name) = &insn.sym_target {
         if name.contains('%') {
@@ -11214,8 +11208,8 @@ fn encode_a64_sym_insn(
 /// displacement field.
 fn a64_label_branch_reloc(
     kind: &LabelBranch,
-) -> Result<(u32, super::ssa::emit_common::AsmRelocKind), alloc::string::String> {
-    use super::ssa::emit_common::AsmRelocKind as K;
+) -> Result<(u32, crate::c5::asm::AsmRelocKind), alloc::string::String> {
+    use crate::c5::asm::AsmRelocKind as K;
     Ok(match *kind {
         LabelBranch::B => (label_branch_word(kind, 0)?, K::A64Branch26 { link: false }),
         LabelBranch::Bl => (label_branch_word(kind, 0)?, K::A64Branch26 { link: true }),
@@ -11233,9 +11227,9 @@ fn a64_label_branch_reloc(
 /// load of the entry's synthetic label. `.ltorg` and the end of the section
 /// deposit what has accumulated, which is where GNU as flushes.
 fn assign_a64_literal_pools(
-    blocks: &mut [super::ssa::emit_common::AsmSectionBlock],
+    blocks: &mut [crate::c5::asm::AsmSectionBlock],
 ) -> Result<(), alloc::string::String> {
-    use super::ssa::emit_common::{AsmPoolEntry, AsmSectionItem, section_key, subsection_order};
+    use crate::c5::asm::{AsmPoolEntry, AsmSectionItem, section_key, subsection_order};
     if !blocks
         .iter()
         .flat_map(|b| &b.items)
@@ -11325,8 +11319,8 @@ fn assign_a64_literal_pools(
 fn a64_pool_value(
     expr: &str,
     size: u8,
-) -> Result<super::ssa::emit_common::AsmPoolValue, alloc::string::String> {
-    use super::ssa::emit_common::AsmPoolValue;
+) -> Result<crate::c5::asm::AsmPoolValue, alloc::string::String> {
+    use crate::c5::asm::AsmPoolValue;
     if let Some(v) = crate::c5::asm::eval_const_expr_wide(expr) {
         return Ok(AsmPoolValue::Const(v));
     }
@@ -11470,9 +11464,9 @@ mod tests {
     #[test]
     fn file_scope_a64_symbol_relocs_match_gnu_as() {
         use super::super::ssa::emit_common::{
-            AsmRelocKind, AsmSectionTarget, extract_file_scope_asm_sections,
-            materialize_asm_sections,
+            extract_file_scope_asm_sections, materialize_asm_sections,
         };
+        use crate::c5::asm::{AsmRelocKind, AsmSectionTarget};
         let text = ".pushsection .t,\"ax\"\nf1:\n1:\ncbz x0, 2f\nb 1b\n2:\nb.eq 1b\n\
                     tbz x0, #3, 1b\nadr x1, 2b\nldr x2, 2b\nadrp x3, ext_obj\n\
                     add x3, x3, :lo12:ext_obj\nldr x4, [x3, :lo12:ext_obj]\n\
@@ -11734,9 +11728,9 @@ mod tests {
     #[test]
     fn file_scope_a64_hash_lo12_matches_gnu_as() {
         use super::super::ssa::emit_common::{
-            AsmRelocKind, AsmSectionTarget, extract_file_scope_asm_sections,
-            materialize_asm_sections,
+            extract_file_scope_asm_sections, materialize_asm_sections,
         };
+        use crate::c5::asm::{AsmRelocKind, AsmSectionTarget};
         let text = ".pushsection .t,\"ax\"\n\
                     add x1, x2, #:lo12:sym\n\
                     add x1, x2, :lo12:sym\n\
@@ -11866,7 +11860,7 @@ mod tests {
                     movz x6, :abs_g3:ext_sym\n\
                     movz x7, :abs_g0:ext_sym\n\
                     .popsection\n";
-        use super::super::ssa::emit_common::AsmRelocKind;
+        use crate::c5::asm::AsmRelocKind;
         let sink = materialize_one_section(text).unwrap();
         let want_words: [u32; 5] = [
             0xd2c00005, // movz x5, #0x0, lsl #32
@@ -12398,7 +12392,7 @@ mod tests {
     }
 
     /// Materialize one file-scope asm text and return the named section.
-    fn a64_file_asm_section(text: &str, name: &str) -> super::super::ssa::emit_common::AsmSection {
+    fn a64_file_asm_section(text: &str, name: &str) -> crate::c5::asm::AsmSection {
         a64_file_asm_sink(text)
             .sections()
             .iter()
@@ -12574,7 +12568,7 @@ mod tests {
     /// at the end of the section.
     #[test]
     fn file_scope_a64_literal_pool_matches_gnu_as() {
-        use super::super::ssa::emit_common::{AsmRelocKind, AsmSectionTarget};
+        use crate::c5::asm::{AsmRelocKind, AsmSectionTarget};
         let text = ".text\n.globl f\nf:\n\
                     ldr x0, =some_sym\n\
                     ldr w1, =0x12345678\n\

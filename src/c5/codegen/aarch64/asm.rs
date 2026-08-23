@@ -343,7 +343,7 @@ pub(crate) struct AsmInsnA64 {
     /// A layout directive (`.balign`, `.skip`, `.org`, ...), which moves the
     /// location counter rather than depositing an encoding. Carried in the
     /// section engine's form so both paths lay it down the same way.
-    pub layout: Option<emit_common::AsmSectionItem>,
+    pub layout: Option<crate::c5::asm::AsmSectionItem>,
 }
 
 /// A condition-code mnemonic to its 4-bit encoding.
@@ -1963,7 +1963,8 @@ mod tests {
 
     #[test]
     fn parse_layout_directives_in_stream() {
-        use emit_common::{AlignFill, AlignSpec, AsmSectionItem as I};
+        use crate::c5::asm::AsmSectionItem as I;
+        use emit_common::{AlignFill, AlignSpec};
         // `.align` takes a power-of-two exponent on AArch64, and the `w` / `l`
         // spellings widen the fill unit without changing that convention; the
         // fill family and `.org` carry their operands to the emitter

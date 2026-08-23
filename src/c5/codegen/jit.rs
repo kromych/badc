@@ -1727,7 +1727,7 @@ mod jit_impl {
     /// binding; the JIT has no link step to interpose it, so the local
     /// definition is the resolution.
     fn resolve_jit_asm_sym_targets(program: &Program, build: &mut Build) {
-        use super::super::ssa::emit_common::AsmSectionTarget;
+        use crate::c5::asm::AsmSectionTarget;
         use crate::c5::symbol::Linkage;
         use crate::c5::token::Token;
         if build.asm_sym_fixups.is_empty() {
@@ -1766,9 +1766,7 @@ mod jit_impl {
         build: &Build,
     ) -> Result<(), C5Error> {
         use super::super::aarch64::patch as a64patch;
-        use super::super::ssa::emit_common::{
-            AsmRelocKind, AsmSectionTarget, patch_asm_insn_field,
-        };
+        use crate::c5::asm::{AsmRelocKind, AsmSectionTarget, patch_asm_insn_field};
         let internal = |m: String| C5Error::Compile(crate::c5::error::fmt_internal_err(&m));
         for r in &build.asm_sym_fixups {
             let target_vmaddr = match &r.target {

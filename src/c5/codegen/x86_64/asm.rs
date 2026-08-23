@@ -25,7 +25,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use super::super::super::ir::AsmRegSize;
-use super::super::ssa::emit_common::AsmSectionItem;
+use crate::c5::asm::AsmSectionItem;
 use crate::c5::asm::data_directive_width;
 
 /// Base mnemonic of a template instruction (AT&T size suffix folded
@@ -5837,7 +5837,8 @@ mod tests {
         // exponent. Fill and max-skip operands carry through, and the `w` /
         // `l` spellings widen the fill unit without changing the alignment
         // operand's convention.
-        use crate::c5::codegen::ssa::emit_common::{AlignFill, AlignSpec, AsmSectionItem};
+        use crate::c5::asm::AsmSectionItem;
+        use crate::c5::codegen::ssa::emit_common::{AlignFill, AlignSpec};
         let align = |n: u32, fill, max| {
             Some(AsmSectionItem::Align {
                 spec: AlignSpec::Bytes(n),

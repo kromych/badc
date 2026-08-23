@@ -6941,7 +6941,7 @@ fn asm_riprel_target(
     if let Some((target, addend)) =
         asm_operand_data_target(&func.insts, arg, &|v| extern_data_names.get(&v).cloned())
     {
-        use super::ssa::emit_common::AsmSectionTarget;
+        use crate::c5::asm::AsmSectionTarget;
         return Some(match target {
             AsmSectionTarget::Symbol(name) => AsmRipSym::Extern {
                 name,
@@ -6980,7 +6980,7 @@ fn asm_riprel_target(
 /// a replacement referencing a register operand or a memory location is
 /// rejected rather than mis-encoded.
 fn encode_x86_asm_section_code(
-    blocks: &mut [super::ssa::emit_common::AsmSectionBlock],
+    blocks: &mut [crate::c5::asm::AsmSectionBlock],
     func: &FunctionSsa,
     args: &[u32],
     name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
@@ -6991,7 +6991,7 @@ fn encode_x86_asm_section_code(
     operands: &[super::super::ir::AsmOperand],
 ) -> Result<(), alloc::string::String> {
     use super::super::ir::Inst;
-    use super::ssa::emit_common::{AsmSectionItem, AsmSectionTarget};
+    use crate::c5::asm::{AsmSectionItem, AsmSectionTarget};
     // A same-TU function operand is an `ImmCode` whose ent_pc reverses to its
     // name here; a cross-TU one carries its name in `extern_code_names`.
     let mut entpc2name: alloc::collections::BTreeMap<usize, &str> =
@@ -7068,10 +7068,10 @@ fn encode_x86_asm_section_code(
 /// input stream, so it carries across the walk in section order rather than
 /// resetting per section.
 pub(crate) fn encode_x86_file_asm_section_code(
-    blocks: &mut [super::ssa::emit_common::AsmSectionBlock],
+    blocks: &mut [crate::c5::asm::AsmSectionBlock],
     class: crate::c5::ElfClass,
 ) -> Result<(), alloc::string::String> {
-    use super::ssa::emit_common::{AsmSectionItem, AsmSectionTarget};
+    use crate::c5::asm::{AsmSectionItem, AsmSectionTarget};
     let operand_target = |_: u8| -> Option<AsmSectionTarget> { None };
     let goto_block = |_: u8| -> Option<u32> { None };
     let imm_of = |_: u8| -> Option<i64> { None };
@@ -7084,13 +7084,13 @@ pub(crate) fn encode_x86_file_asm_section_code(
     // Inside a deferred `.rept` nothing folds: the count, and with it every
     // offset the body's copies take, is settled by the layout.
     fn encode_rept(
-        items: &mut [super::ssa::emit_common::AsmSectionItem],
+        items: &mut [crate::c5::asm::AsmSectionItem],
         mode: &mut super::table::Mode,
-        operand_target: &dyn Fn(u8) -> Option<super::ssa::emit_common::AsmSectionTarget>,
+        operand_target: &dyn Fn(u8) -> Option<crate::c5::asm::AsmSectionTarget>,
         goto_block: &dyn Fn(u8) -> Option<u32>,
         refs: &SectionOperandRefs<'_>,
     ) -> Result<(), alloc::string::String> {
-        use super::ssa::emit_common::AsmSectionItem;
+        use crate::c5::asm::AsmSectionItem;
         for it in items {
             if let AsmSectionItem::Rept { items, .. } = it {
                 encode_rept(items, mode, operand_target, goto_block, refs)?;
@@ -7181,8 +7181,8 @@ fn e3_branch_prefix(
 /// A branch target's section target: a bare name resolves through the label,
 /// section and `.set` maps; an expression over them (`jmp sym + 4`) is valued
 /// where the section materializes.
-fn branch_section_target(text: &str) -> super::ssa::emit_common::AsmSectionTarget {
-    use super::ssa::emit_common::AsmSectionTarget;
+fn branch_section_target(text: &str) -> crate::c5::asm::AsmSectionTarget {
+    use crate::c5::asm::AsmSectionTarget;
     use crate::c5::asm::is_asm_symbol_name;
     if is_asm_symbol_name(text) {
         AsmSectionTarget::Symbol(alloc::string::String::from(text))
@@ -7198,9 +7198,9 @@ fn branch_section_target(text: &str) -> super::ssa::emit_common::AsmSectionTarge
 /// short form.
 fn short_branch_form(
     opcode: u8,
-    target: &super::ssa::emit_common::AsmSectionTarget,
-) -> super::ssa::emit_common::AsmShortBranch {
-    use super::ssa::emit_common::{AsmRelocKind, AsmSectionReloc, AsmShortBranch};
+    target: &crate::c5::asm::AsmSectionTarget,
+) -> crate::c5::asm::AsmShortBranch {
+    use crate::c5::asm::{AsmRelocKind, AsmSectionReloc, AsmShortBranch};
     AsmShortBranch {
         bytes: alloc::vec![opcode, 0],
         reloc: AsmSectionReloc {
@@ -7264,7 +7264,7 @@ struct SectionOperandRefs<'a> {
     op_reg: &'a [Option<u8>],
     operands: &'a [super::super::ir::AsmOperand],
     imm_of: &'a dyn Fn(u8) -> Option<i64>,
-    addr_of: &'a dyn Fn(u8) -> Option<(super::ssa::emit_common::AsmSectionTarget, i64)>,
+    addr_of: &'a dyn Fn(u8) -> Option<(crate::c5::asm::AsmSectionTarget, i64)>,
     /// The value an operand expression already has at this point of the
     /// stream, when the walk's [`AsmParseFold`] can prove it is a constant.
     /// A folded immediate or displacement encodes as a literal, taking the
@@ -7290,15 +7290,13 @@ struct SectionOperandRefs<'a> {
 fn encode_one_x86_section_insn(
     text: &str,
     mode: &mut super::table::Mode,
-    operand_target: &dyn Fn(u8) -> Option<super::ssa::emit_common::AsmSectionTarget>,
+    operand_target: &dyn Fn(u8) -> Option<crate::c5::asm::AsmSectionTarget>,
     goto_block: &dyn Fn(u8) -> Option<u32>,
     refs: &SectionOperandRefs<'_>,
-) -> Result<super::ssa::emit_common::AsmSectionItem, alloc::string::String> {
+) -> Result<crate::c5::asm::AsmSectionItem, alloc::string::String> {
     use super::super::ir::{AsmConstraint, AsmRegSize, AsmSeg};
     use super::asm::{AsmMemBase, AsmOpnd, Concrete, Mnemonic};
-    use super::ssa::emit_common::{
-        AsmRelocKind, AsmSectionItem, AsmSectionReloc, AsmSectionTarget,
-    };
+    use crate::c5::asm::{AsmRelocKind, AsmSectionItem, AsmSectionReloc, AsmSectionTarget};
     // An encoding-mode directive sets the state the rest of the stream
     // assembles under and deposits no bytes.
     if let Some(m) = match text {
@@ -8746,9 +8744,7 @@ fn emit_inline_asm_once(
         //
         // An operand over template labels resolves against the definitions
         // already emitted, as GNU as resolves one where the directive stands.
-        if let Some(super::ssa::emit_common::AsmSectionItem::Align { spec, fill, max }) =
-            &insn.layout
-        {
+        if let Some(crate::c5::asm::AsmSectionItem::Align { spec, fill, max }) = &insn.layout {
             let at = code.len();
             let n = match spec.bytes(&|name| {
                 crate::c5::asm::template_label_offset(name, at, &label_defs, &code_label_names)
@@ -8920,8 +8916,8 @@ fn emit_inline_asm_once(
                 }
                 asm_sym_fixups.push(super::AsmSymFixup {
                     instr_offset: code.len() - 4,
-                    kind: super::ssa::emit_common::AsmRelocKind::JumpRel,
-                    target: super::ssa::emit_common::AsmSectionTarget::Symbol(n),
+                    kind: crate::c5::asm::AsmRelocKind::JumpRel,
+                    target: crate::c5::asm::AsmSectionTarget::Symbol(n),
                     addend: -4,
                 });
                 after_insn = true;
@@ -9753,7 +9749,7 @@ fn emit_inline_asm_once(
     // to its offset; any other name is a symbol relocation.
     if !section_blocks.is_empty() {
         let names = super::asm::scan_label_names(code_text);
-        use super::ssa::emit_common::LabelLoc;
+        use crate::c5::asm::LabelLoc;
         let label_off = |name: &str| -> Option<LabelLoc> {
             let num = if let Some(i) = names.iter().position(|&n| n == name) {
                 super::asm::NAMED_LABEL_BASE + i as u32
@@ -9778,7 +9774,7 @@ fn emit_inline_asm_once(
         // An `i`-class operand naming a link-time data address (`.long %c0 - .`
         // where `%c0` is `&sym` or a string literal) relocates against the
         // data image, resolved like the operand's own `ImmData` lowering.
-        let operand_sym = |idx: u8| -> Option<(super::ssa::emit_common::AsmSectionTarget, i64)> {
+        let operand_sym = |idx: u8| -> Option<(crate::c5::asm::AsmSectionTarget, i64)> {
             super::ssa::emit_common::asm_operand_data_target(
                 &func.insts,
                 *args.get(idx as usize)?,
@@ -9833,7 +9829,7 @@ fn emit_inline_asm_once(
                     section_offset: d.offset,
                     addend: -4,
                     absolute: false,
-                    kind: super::ssa::emit_common::AsmRelocKind::Data,
+                    kind: crate::c5::asm::AsmRelocKind::Data,
                 }),
                 None => return fail("inline asm: undefined local label"),
             }
@@ -9859,7 +9855,7 @@ fn emit_inline_asm_once(
                     section_offset: d.offset,
                     addend: 0,
                     absolute: true,
-                    kind: super::ssa::emit_common::AsmRelocKind::Data,
+                    kind: crate::c5::asm::AsmRelocKind::Data,
                 }),
                 None => {
                     return fail("inline asm: `$LABEL` address immediate names no local label");
@@ -12118,9 +12114,10 @@ mod code_mode_tests {
     /// concatenated sections, in section order.
     fn assemble_relocs(text: &str) -> (Vec<u8>, Vec<Reloc>) {
         use super::super::ssa::emit_common::{
-            AsmSectionSink, AsmSectionTarget, materialize_file_asm, prepare_file_asm_text,
+            AsmSectionSink, materialize_file_asm, prepare_file_asm_text,
         };
         use crate::c5::asm::AsmComments;
+        use crate::c5::asm::AsmSectionTarget;
         // The driver prepares the template (comment stripping, GNU as macro
         // and equate expansion) before the section parse reads it.
         let text = prepare_file_asm_text(text, AsmComments::X86).expect("prepares");

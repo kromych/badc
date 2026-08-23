@@ -283,7 +283,8 @@ fn fold_asm_sections(
     build: &mut Build,
     target: Target,
 ) -> Result<alloc::collections::BTreeMap<String, AsmLabelPlacement>, C5Error> {
-    use crate::c5::codegen::ssa::emit_common::{AsmSectionTarget, align_fill_pattern};
+    use crate::c5::asm::AsmSectionTarget;
+    use crate::c5::codegen::ssa::emit_common::align_fill_pattern;
     if build.output_kind == OutputKind::Relocatable {
         return Ok(alloc::collections::BTreeMap::new());
     }
@@ -445,7 +446,7 @@ fn fold_asm_sections(
             // absolute field, a page / lo12 form) needs a load-time
             // relocation this image cannot carry.
             let disp = target_off as i64 + r.addend - at as i64;
-            let patched = crate::c5::codegen::ssa::emit_common::patch_asm_insn_field(
+            let patched = crate::c5::asm::patch_asm_insn_field(
                 &mut build.text,
                 at,
                 r.kind,
@@ -484,15 +485,9 @@ fn fold_asm_sections(
         // The shared patcher covers the rel32 data field and the aarch64
         // PC-relative instruction kinds; both sides landed in the text
         // stream, so the displacement is final.
-        let patched = crate::c5::codegen::ssa::emit_common::patch_asm_insn_field(
-            &mut build.text,
-            at,
-            r.kind,
-            true,
-            4,
-            val,
-        )
-        .map_err(|m| err(alloc::format!("inline-asm section `{}`: {m}", s.name)))?;
+        let patched =
+            crate::c5::asm::patch_asm_insn_field(&mut build.text, at, r.kind, true, 4, val)
+                .map_err(|m| err(alloc::format!("inline-asm section `{}`: {m}", s.name)))?;
         if !patched {
             return Err(err(alloc::format!(
                 "inline-asm section `{}`: this reference to a section label is not \
@@ -523,10 +518,8 @@ fn resolve_single_image_asm_sym_fixups(
     build: &mut Build,
     asm_labels: &alloc::collections::BTreeMap<String, AsmLabelPlacement>,
 ) -> Result<(), C5Error> {
+    use crate::c5::asm::{AsmRelocKind, AsmSectionTarget, patch_asm_insn_field};
     use crate::c5::codegen::AddrPart;
-    use crate::c5::codegen::ssa::emit_common::{
-        AsmRelocKind, AsmSectionTarget, patch_asm_insn_field,
-    };
     if build.output_kind == OutputKind::Relocatable || build.asm_sym_fixups.is_empty() {
         return Ok(());
     }

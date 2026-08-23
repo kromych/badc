@@ -2000,7 +2000,7 @@ pub(crate) struct Build {
     /// directives. The relocatable ELF writer appends one section per
     /// entry; the executable writers do not map them (TODO: alloc
     /// sections in direct executables).
-    pub asm_sections: Vec<ssa::emit_common::AsmSection>,
+    pub asm_sections: Vec<crate::c5::asm::AsmSection>,
     /// Per-function map from a declared local's original frame slot to the
     /// new slot it was coalesced onto, keyed by `ent_pc`. The slot-coalescing
     /// pass compacts the frame regardless of debug info; the debug-info
@@ -2039,7 +2039,7 @@ pub(crate) struct Build {
     /// (`.globl` / `.local` / `.weak` / `.type` / `.size`). GNU as scopes
     /// them to the unit; the writers apply each to the definition the unit
     /// holds, or emit an undefined symbol when it holds none.
-    pub asm_sym_decls: Vec<ssa::emit_common::AsmSymDecl>,
+    pub asm_sym_decls: Vec<crate::c5::asm::AsmSymDecl>,
     /// `(offset, len)` of every run of data placed in `text`, ascending: an
     /// aarch64 jump table, a function-body inline-asm data directive. The
     /// rest of the stream is instructions, so the AArch64 mapping symbols
@@ -2230,7 +2230,7 @@ pub(crate) struct AsmSectionTextRef {
     /// Field flavor: `Data` is the x86_64 rel32 / abs32 field; an aarch64
     /// branch or `adr` carries the instruction-field kind, which selects
     /// the `R_AARCH64_*` type and the in-place patch.
-    pub kind: ssa::emit_common::AsmRelocKind,
+    pub kind: crate::c5::asm::AsmRelocKind,
 }
 
 /// Relocation for a function-body inline-asm instruction whose operand
@@ -2246,9 +2246,9 @@ pub(crate) struct AsmSectionTextRef {
 pub(crate) struct AsmSymFixup {
     /// Byte offset within `Build::text` of the instruction word.
     pub instr_offset: usize,
-    pub kind: ssa::emit_common::AsmRelocKind,
+    pub kind: crate::c5::asm::AsmRelocKind,
     /// Only the `Data` and `Symbol` arms are produced.
-    pub target: ssa::emit_common::AsmSectionTarget,
+    pub target: crate::c5::asm::AsmSectionTarget,
     pub addend: i64,
 }
 
@@ -3157,7 +3157,7 @@ pub(crate) fn lower_for_with_prebuilt(
 /// validation and the object emission both run this so an instruction is
 /// diagnosed and encoded the same way.
 pub(crate) fn encode_file_asm_section_code(
-    blocks: &mut [ssa::emit_common::AsmSectionBlock],
+    blocks: &mut [crate::c5::asm::AsmSectionBlock],
     target: Target,
     class: ElfClass,
 ) -> Result<(), alloc::string::String> {

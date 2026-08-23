@@ -233,10 +233,10 @@ impl Compiler {
         for b in &blocks {
             for item in &b.items {
                 match item {
-                    engine::AsmSectionItem::Data { values, .. }
-                        if values
-                            .iter()
-                            .any(|v| matches!(v, engine::AsmSectionValue::OperandConst(_))) =>
+                    crate::c5::asm::AsmSectionItem::Data { values, .. }
+                        if values.iter().any(|v| {
+                            matches!(v, crate::c5::asm::AsmSectionValue::OperandConst(_))
+                        }) =>
                     {
                         return Err(
                             "operand reference in file-scope asm (no operands at file scope)"
@@ -247,36 +247,36 @@ impl Compiler {
                     // symbol weak wherever it is defined; `.set name, target`
                     // is an object-level alias emitted at the target's
                     // definition.
-                    engine::AsmSectionItem::Weak(name) => {
+                    crate::c5::asm::AsmSectionItem::Weak(name) => {
                         if !self.asm_weak_names.contains(name) {
                             self.asm_weak_names.push(name.clone());
                         }
                     }
-                    engine::AsmSectionItem::Global(name) => {
+                    crate::c5::asm::AsmSectionItem::Global(name) => {
                         if !self.asm_global_names.contains(name) {
                             self.asm_global_names.push(name.clone());
                         }
                     }
-                    engine::AsmSectionItem::Visibility { name, vis } => {
+                    crate::c5::asm::AsmSectionItem::Visibility { name, vis } => {
                         match self.asm_visibility.iter_mut().find(|(n, _)| n == name) {
                             Some(e) => e.1 = *vis,
                             None => self.asm_visibility.push((name.clone(), *vis)),
                         }
                     }
-                    engine::AsmSectionItem::File(name) => {
+                    crate::c5::asm::AsmSectionItem::File(name) => {
                         self.asm_file_names.push(name.clone());
                     }
-                    engine::AsmSectionItem::Ident(s) => {
+                    crate::c5::asm::AsmSectionItem::Ident(s) => {
                         self.asm_idents.push(s.clone());
                     }
-                    engine::AsmSectionItem::SymSet { name, target } => {
+                    crate::c5::asm::AsmSectionItem::SymSet { name, target } => {
                         Self::set_alias(&mut self.asm_sym_sets, name, target, 0);
                     }
                     // `.set name, sym + k` names the same alias at an offset.
                     // A target this unit's layout places defines the name as
                     // a label of the owning section instead; the object
                     // writer drops the alias record there.
-                    engine::AsmSectionItem::SetExpr { name, expr } => {
+                    crate::c5::asm::AsmSectionItem::SetExpr { name, expr } => {
                         if let Some((target, addend)) = crate::c5::asm::asm_sym_offset_expr(expr) {
                             Self::set_alias(&mut self.asm_sym_sets, name, target, addend);
                         }

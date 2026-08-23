@@ -1940,10 +1940,7 @@ fn aarch64_alignment_fill_max_skip_and_zero_match_gnu_as() {
 
 /// The alignment item a template parser makes of `tmpl`, or `None` when the
 /// parse rejects it or reads it as something other than a layout directive.
-fn stream_align_item(
-    tmpl: &str,
-    aarch64: bool,
-) -> Option<crate::c5::codegen::ssa::emit_common::AsmSectionItem> {
+fn stream_align_item(tmpl: &str, aarch64: bool) -> Option<crate::c5::asm::AsmSectionItem> {
     let b = tmpl.as_bytes();
     if aarch64 {
         crate::c5::codegen::aarch64::asm::parse_template(b)

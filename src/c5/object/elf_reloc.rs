@@ -1551,7 +1551,7 @@ pub(super) fn write_relocatable(
     // STB_WEAK wherever the name surfaces: as a definition or as an UNDEF
     // reference.
     let weak_names: alloc::collections::BTreeSet<&str> = {
-        use crate::c5::codegen::ssa::emit_common::AsmSymBind;
+        use crate::c5::asm::AsmSymBind;
         use crate::c5::token::Token;
         program
             .symbols
@@ -1697,7 +1697,7 @@ pub(super) fn write_relocatable(
     // of assignments to its end. An assignment to a name nothing in the unit
     // defines is not a definition and emits no symbol, as in GNU as.
     let asm_set_defs = {
-        use crate::c5::codegen::ssa::emit_common::AsmSymValue;
+        use crate::c5::asm::AsmSymValue;
         let value_of = |n: &str| {
             build
                 .asm_sym_decls
@@ -1947,7 +1947,7 @@ pub(super) fn write_relocatable(
     // their own undefined symbols.
     let mut asm_extern_names: Vec<&str> = Vec::new();
     {
-        use crate::c5::codegen::ssa::emit_common::AsmSectionTarget;
+        use crate::c5::asm::AsmSectionTarget;
         let section_syms = build
             .asm_sections
             .iter()
@@ -2112,7 +2112,7 @@ pub(super) fn write_relocatable(
     // Labels defined inside inline-asm named sections. The value is the
     // label's offset within the section, rebased by the block's placement;
     // `.type` / `.size` directives set `st_type` / `st_size`.
-    use crate::c5::codegen::ssa::emit_common::{AsmSymBind, AsmSymDecl, AsmSymType, AsmSymValue};
+    use crate::c5::asm::{AsmSymBind, AsmSymDecl, AsmSymType, AsmSymValue};
     // A unit-level symbol directive an asm template carried outside any
     // section. It reaches whichever definition the unit holds for the name --
     // a section label, a main-stream label, or none at all.
@@ -3303,7 +3303,7 @@ pub(super) fn write_relocatable(
         let sym = carve.sym_idx[e];
         let addend = base as i64 + r.section_offset as i64 + r.addend;
         let rtype = match r.kind {
-            crate::c5::codegen::ssa::emit_common::AsmRelocKind::Data => match machine_for_rela {
+            crate::c5::asm::AsmRelocKind::Data => match machine_for_rela {
                 Machine::X86_64 if r.absolute => R_X86_64_32S,
                 Machine::X86_64 => R_X86_64_PC32,
                 Machine::Aarch64 => R_AARCH64_PREL32,
@@ -3355,7 +3355,7 @@ pub(super) fn write_relocatable(
     // like an inline-asm section reloc's: a resolved data offset, an asm
     // label, a defined function or data object, or an undefined symbol.
     for r in &build.asm_sym_fixups {
-        use crate::c5::codegen::ssa::emit_common::AsmSectionTarget;
+        use crate::c5::asm::AsmSectionTarget;
         let (sym_idx, addend) = match &r.target {
             AsmSectionTarget::Data(off) => {
                 home_sym(plan.map_ref(off.wrapping_add_signed(r.addend), *off))
@@ -3400,10 +3400,8 @@ pub(super) fn write_relocatable(
         // `instr_offset` is the field itself, and a target keeping its own
         // symbol binds through the PLT slot as the section path types it; a
         // target reduced to a section symbol names no entry point.
-        let x86_jump = matches!(
-            r.kind,
-            crate::c5::codegen::ssa::emit_common::AsmRelocKind::JumpRel
-        ) && machine_for_rela == Machine::X86_64;
+        let x86_jump = matches!(r.kind, crate::c5::asm::AsmRelocKind::JumpRel)
+            && machine_for_rela == Machine::X86_64;
         let rtype = match a64_insn_reloc_type(r.kind) {
             Some(t) => t,
             None if x86_jump
@@ -3444,7 +3442,7 @@ pub(super) fn write_relocatable(
     // resolves to a defined function, a defined data object, or an
     // undefined symbol.
     {
-        use crate::c5::codegen::ssa::emit_common::AsmSectionTarget;
+        use crate::c5::asm::AsmSectionTarget;
         // The STT_SECTION symbols a reduction can land on. A branch against
         // one names no function, so no PLT slot can carry it.
         let section_syms: alloc::collections::BTreeSet<u64> = fixed_section_syms
@@ -3473,9 +3471,7 @@ pub(super) fn write_relocatable(
                         let at = build
                             .asm_sections
                             .iter()
-                            .position(|s| {
-                                crate::c5::codegen::ssa::emit_common::section_key_of(s) == *key
-                            })
+                            .position(|s| crate::c5::asm::section_key_of(s) == *key)
                             .ok_or_else(|| {
                                 C5Error::Compile(crate::c5::error::fmt_internal_err(
                                     &alloc::format!(
@@ -3542,7 +3538,7 @@ pub(super) fn write_relocatable(
                         }
                     }
                 };
-                use crate::c5::codegen::ssa::emit_common::AsmRelocKind as RK;
+                use crate::c5::asm::AsmRelocKind as RK;
                 let rtype = match r.kind {
                     RK::Data | RK::JumpRel => match (abi, r.pcrel, r.width) {
                         // A replacement instruction's direct `call` / `jmp` to a
@@ -5195,8 +5191,8 @@ fn dwarf_reloc_to_elf_rela(
 /// ELF relocation type of an AArch64 instruction-field kind. `None` for the
 /// data-field kinds (`Data` / `JumpRel`), whose type depends on the field's
 /// width and flags.
-fn a64_insn_reloc_type(kind: crate::c5::codegen::ssa::emit_common::AsmRelocKind) -> Option<u32> {
-    use crate::c5::codegen::ssa::emit_common::AsmRelocKind as RK;
+fn a64_insn_reloc_type(kind: crate::c5::asm::AsmRelocKind) -> Option<u32> {
+    use crate::c5::asm::AsmRelocKind as RK;
     Some(match kind {
         RK::Data | RK::JumpRel => return None,
         RK::A64Branch26 { link: true } => R_AARCH64_CALL26,

@@ -84,7 +84,31 @@ the **Summary** of the latest
 ## Pre-push validation
 
 `./scripts/install_hooks.py` configures the git hooks.
-`./scripts/validate_local_boxes.py` runs the pre-push set on the local boxes:
-`cargo test`, `cargo test --release --lib`, and the sqlite3, lua, miniz,
-monocypher, stb and tweetnacl demo smokes, with varying register pressure and
-`--features codegen_test` as CI does.
+`./scripts/validate_local_boxes.py` runs the pre-push set across the local
+boxes, one lane per box plus the macOS host itself, which is a lane rather
+than a driver only -- it is the matrix's only Mach-O and only SDK-libc
+target. Per lane:
+
+* `cargo test`, then `cargo test --release` over all test targets. Release
+  exercises the JIT and native fixture-parity paths a debug build skips.
+* the same run again under the register-pressure caps (`BADC_MAX_GPR=2
+  BADC_MAX_FPR=2`, `--features "codegen_test full"`), as CI's pressure
+  matrix does -- Linux lanes only, which is all CI covers.
+* the gating demos for that lane kind, run concurrently. The roster is
+  `GATING_DEMOS` in the script, which records why each demo earns its
+  place; `--demo-jobs` bounds how many run at a time, never which ones.
+* the snapshot-drift check on every Linux lane: regenerate
+  `tests/snapshots/` and fail on drift, as CI's `snapshots clean` job
+  does. It needs `llvm-objdump`, since the committed snapshots were
+  disassembled with it and GNU objdump's text does not match.
+* the kernel step on every Linux lane: `demos/linux/verify.py --linker
+  badc` over the pinned `defconfig` release -- compile, link **and** boot.
+  A build that links clean and then prints nothing on the console has
+  reached CI before, so the boots are part of the gate rather than an
+  extra. A box with no emulator for its own architecture keeps the
+  compile and link cover and says so in the summary.
+
+The macOS lane skips the kernel step (that corpus is Linux-only), the
+pressure rerun and the clippy step. `--no-kernel` and `--no-snapshots`
+drop those steps; a push whose local run skipped them has no cover from
+them. The script is the contract -- this description follows it.

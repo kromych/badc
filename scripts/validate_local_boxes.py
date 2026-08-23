@@ -541,6 +541,10 @@ def sync_windows(box: Box, github_token: str) -> int:
     # swept instead -- AppleDouble `._*` members, which the tar no longer packs
     # but which a box synced before that exclusion still carries. A demo that
     # globs `src/*.c` compiles one and fails on invalid UTF-8.
+    #
+    # The sweep and the extraction are parenthesised so `&&` binds the whole
+    # group to the `cd`: an unmapped drive otherwise leaves `del /s /q /f ._*`
+    # running from the home directory and unpacks the tree into it.
     return stream(
         box.short,
         [
@@ -548,9 +552,9 @@ def sync_windows(box: Box, github_token: str) -> int:
             box.host,
             f'cmd /c "mkdir {remote_path} 2>NUL & '
             f"cd /d {remote_path} && "
-            f"rmdir /s /q src 2>NUL & rmdir /s /q tests 2>NUL & "
+            f"(rmdir /s /q src 2>NUL & rmdir /s /q tests 2>NUL & "
             f"del /s /q /f ._* 2>NUL & "
-            f'tar xzf C:\\tmp\\badc-tree.tar.gz"',
+            f'tar xzf C:\\tmp\\badc-tree.tar.gz)"',
         ],
     )
 

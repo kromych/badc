@@ -21,6 +21,10 @@ Named as the kernel's CC. Per invocation:
   recorded as `fallback`. That list is the bisect tool for a suspected
   miscompile: naming a unit is explicit and shows up in the manifest, so
   a build that used it cannot be mistaken for a pure one.
+- A kernel unit whose source is not in the tree when the shim runs: no
+  compiler runs and the unit is recorded as `missing`. Nothing about badc
+  is decided by a source that is not there, and the caller separates a
+  tree that changed under the build from a unit badc cannot compile.
 - ``--version``: answered with badc's identification when ``$BADC`` is set.
   The kernel captures ``$(CC) --version | head -n1`` as
   ``CONFIG_CC_VERSION_TEXT``, which reaches the boot banner and
@@ -54,14 +58,15 @@ summarize; without it, it goes to stderr.
 Environment: BADC (badc binary, required once a kernel unit appears),
 BADC_REAL_CC (default gcc), BADC_TARGET (default linux-x64),
 BADC_FALLBACK (file of kernel-relative source paths to leave to the real
-compiler), BADC_MANIFEST (append
-`badc|fallback|fail|badc-asm|gas<TAB>source[<TAB>detail]` per kernel unit),
-BADC_WARN_LOG (append `cc<TAB>source<TAB>diagnostic` per line badc wrote
-on a successful compile), BADC_TIMEOUT (seconds per badc run, default 300).
+compiler), BADC_MANIFEST (append `badc|fallback|fail|missing|badc-asm|gas
+<TAB>source[<TAB>detail]` per kernel unit), BADC_WARN_LOG (append
+`cc<TAB>source<TAB>diagnostic` per line badc wrote on a successful compile),
+BADC_TIMEOUT (seconds per badc run, default 300).
 """
 
 from __future__ import annotations
 
+import io
 import os
 import subprocess
 import sys
@@ -490,6 +495,14 @@ def main(argv: list[str]) -> int:
         # list says so in the manifest.
         manifest("gas" if is_asm else "fallback", src, "listed")
         os.execvp(real, [real, *argv])
+    if not os.path.exists(src):
+        # The build named a source the tree does not have, so no compiler ran
+        # and there is no verdict on badc. Kept apart from `fail`: what a
+        # compiler cannot read is not what it cannot compile.
+        manifest("missing", src)
+        sys.stderr.write(f"buildcc: error: {src}: source does not exist; "
+                         f"nothing was compiled\n")
+        return 1
 
     if not badc:
         sys.exit("buildcc: $BADC is not set")
@@ -623,6 +636,27 @@ def _self_test() -> int:
         os.environ.pop("BADC_WARN_LOG", None)
         if saved is not None:
             os.environ["BADC_WARN_LOG"] = saved
+
+    # A kernel unit whose source the tree does not have: no compiler runs and
+    # the unit is recorded apart from a compile failure.
+    saved = os.environ.pop("BADC_MANIFEST", None)
+    err, sys.stderr = sys.stderr, io.StringIO()
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "manifest.txt")
+            os.environ["BADC_MANIFEST"] = path
+            gone = os.path.join(d, "generated.c")
+            rc = main(["-c", "-D__KERNEL__", "-o",
+                       os.path.join(d, "generated.o"), gone])
+            assert rc == 1, rc
+            assert "source does not exist" in sys.stderr.getvalue()
+            with open(path) as f:
+                assert f.read() == f"missing\t{gone}\n"
+    finally:
+        sys.stderr = err
+        os.environ.pop("BADC_MANIFEST", None)
+        if saved is not None:
+            os.environ["BADC_MANIFEST"] = saved
     print("linux buildcc: self-test ok", flush=True)
     return 0
 

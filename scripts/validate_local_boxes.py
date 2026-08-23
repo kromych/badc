@@ -164,7 +164,9 @@ GATING_DEMOS = (
 # which is the tree CI's `kernel` job builds. The vendored minimal configs
 # compile a third to a half of defconfig's units and are not a substitute: they
 # have passed while defconfig-only defects reached the branch. Its own cache
-# dir, so the tree glob below cannot pick up a minimal-config tree.
+# dir, so the tree glob below cannot pick up a minimal-config tree. One tree
+# per box, so setup.py and verify.py hold it exclusively (demos/linux/ktree.py)
+# and a second run on the box is refused rather than cleaning under the first.
 KERNEL_CACHE = "~/.cache/badc-kernel-gate"
 
 # Per-architecture unit floors, the same values as the `kernel` job's matrix in

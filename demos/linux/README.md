@@ -69,6 +69,14 @@ architecture is not the one asked for fails at the configure step rather than
 at the missing image target later. Measuring a target on a box of its own
 architecture is still preferred: it is what CI and the pre-push gate do.
 
+One tree at a time is written. `setup.py` and a building `verify.py` hold the
+tree exclusively (`ktree.py`), and a second run is refused naming the first
+rather than queued. Two runs sharing a tree delete each other's inputs -- a
+second run's `make clean` removes the generated sources the first is
+compiling, and the first reports a compiler that cannot read a source, at
+whichever unit the two overlapped on. The gate names one cached tree per box,
+so two runs meet there by default; `--kernel-dir` points a run at its own.
+
 Requirements for the reference build: gcc, make, flex, bison, bc, and the
 libelf + openssl development headers; for a cross target also the matching
 `aarch64-linux-gnu-*` / `x86_64-linux-gnu-*` toolchain.

@@ -42,7 +42,9 @@ it used on its first line and in its verdict, so no result is ambiguous about
 which of the two produced the image it booted.
 
 The tree must already be configured (setup.py) and must be writable: the build
-runs in it. It is rebuilt from clean by default, because make skips units whose
+runs in it, and a run that builds holds it exclusively (ktree.py) because a
+second run's `make clean` removes this one's generated sources mid-compile. It
+is rebuilt from clean by default, because make skips units whose
 objects are already current and a gate that compiles nothing passes vacuously.
 Its configured architecture must be `--arch`, which is checked before the
 build starts; kbuild is then given `ARCH`, and `CROSS_COMPILE` and prefixed
@@ -75,6 +77,7 @@ import buildcc
 import diags
 import karch
 import kaslr
+import ktree
 
 LINUX_DIR = Path(__file__).resolve().parent
 REPO_ROOT = LINUX_DIR.parents[1]
@@ -127,7 +130,7 @@ def die(m: str) -> "None":
 
 def read_manifest(path: Path,
                   verdicts: tuple[str, ...] = ("badc", "fallback", "fail",
-                                               "badc-asm", "gas")
+                                               "missing", "badc-asm", "gas")
                   ) -> dict[str, list[str]]:
     """Group a shim's per-invocation lines by verdict."""
     out: dict[str, list[str]] = {v: [] for v in verdicts}
@@ -390,6 +393,7 @@ def _self_test() -> int:
     assert excerpt("\x1b[2JSeaBIOS\x1b[0m\n", 1) == ["[2JSeaBIOS[0m"]
 
     diags.self_test()
+    ktree.self_test()
     # The compile shim's flag classification, which decides what reaches
     # badc; nothing else runs it, and a kernel unit is an hour into a run.
     buildcc._self_test()
@@ -492,6 +496,11 @@ def main() -> int:
             die(gap)
     if args.build and not os.access(tree, os.W_OK):
         die(f"{tree} is not writable; build a copy, not the reference corpus")
+    if args.build:
+        # Held to the end of the run: `make clean` and the build both write
+        # the tree, and a second run's clean removes this one's generated
+        # sources mid-compile.
+        ktree.exclusive(tree, f"verify.py --arch {args.arch}")
     if args.kaslr_seed and not arch["kaslr_seed_dtb"]:
         die(f"--kaslr-seed does not apply to {args.arch}: its boot path draws "
             f"the displacement from RDRAND / the TSC / the i8254 counter and "
@@ -505,7 +514,8 @@ def main() -> int:
         args.initramfs = Path(args.initramfs).resolve()
 
     failures = []
-    units = {"badc": [], "fallback": [], "fail": [], "badc-asm": [], "gas": []}
+    units = {"badc": [], "fallback": [], "fail": [], "missing": [],
+             "badc-asm": [], "gas": []}
     links = {"badc": [], "ld": [], "fallback": [], "fail": []}
     diagnostics: collections.Counter = collections.Counter()
     rc, secs, undef = 0, 0.0, 0
@@ -526,7 +536,7 @@ def main() -> int:
 
         log(f"make rc={rc} in {secs:.0f}s: badc={len(units['badc'])} "
             f"fallback={len(units['fallback'])} fail={len(units['fail'])} "
-            f"undefined-refs={undef}")
+            f"missing={len(units['missing'])} undefined-refs={undef}")
         # Assembly is measured, not gated: gas assembling what badc's
         # assembler does not yet take is the expected state, so no `gas`
         # line joins `failures`. The counts and the reasons are the point.
@@ -567,6 +577,11 @@ def main() -> int:
             named = ", ".join(u.split("\t")[0] for u in units["fail"][:5])
             failures.append(f"units badc could not compile: {len(units['fail'])} "
                             f"({named})")
+        if units["missing"]:
+            named = ", ".join(u.split("\t")[0] for u in units["missing"][:5])
+            failures.append(f"sources not in the tree when their compile ran: "
+                            f"{len(units['missing'])} ({named}); no compiler "
+                            f"saw them")
         if units["fallback"]:
             failures.append(f"units that fell back to {args.real_cc}: "
                             f"{len(units['fallback'])}")

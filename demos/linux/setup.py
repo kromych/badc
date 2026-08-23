@@ -6,7 +6,9 @@ extracts it under ``demos/linux/.cache``, installs a build config, and runs
 ``make olddefconfig``. With ``--build`` it then runs the gcc reference build;
 that build validates the config and writes the per-object ``.<name>.o.cmd``
 files Kbuild leaves next to each object, which are the replay corpus
-``sweep.py`` consumes.
+``sweep.py`` consumes. The tree is held exclusively while it is written
+(ktree.py): reconfiguring under a build in progress rewrites what that build
+is reading.
 
 Two configurations, selected by ``--config``:
 
@@ -51,6 +53,7 @@ import urllib.request
 from pathlib import Path
 
 import karch
+import ktree
 
 LINUX_DIR = Path(__file__).resolve().parent
 
@@ -177,6 +180,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     tree = cache / f"linux-{version}"
+    # Held for the rest of the run: extraction and the configuration steps
+    # write the tree, and a build running in it reads what they write.
+    tree.mkdir(parents=True, exist_ok=True)
+    ktree.exclusive(tree, "setup.py")
     if not (tree / "Makefile").is_file():
         log(f"extracting {tar_path.name}")
         extract(tar_path, cache)

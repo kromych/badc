@@ -1320,3 +1320,114 @@ fn jobs_object_bytes_match_sequential_and_are_stable() {
     }
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// The host's own target triple, for the tests that execute what they
+/// build. Unlike [`host_smoke_target`] this covers macOS, whose Mach-O
+/// output is the only coverage that format's link path gets here.
+fn host_native_target() -> Option<&'static str> {
+    match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("linux", "x86_64") => Some("linux-x64"),
+        ("linux", "aarch64") => Some("linux-aarch64"),
+        ("macos", "aarch64") => Some("macos-aarch64"),
+        _ => None,
+    }
+}
+
+/// A protected image has to behave two ways: unchanged when nothing
+/// overflows, and stopped at `__stack_chk_fail` when a frame is smashed.
+/// The first is the fixture, run under every mode at both optimization
+/// levels; the second overruns a local array by enough to reach past the
+/// canary and asserts the process dies by signal rather than returning
+/// through the overwritten address.
+#[test]
+fn stack_protector_canary_holds_and_catches_a_smashed_frame() {
+    let Some(target) = host_native_target() else {
+        return;
+    };
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let root = std::env::temp_dir().join(format!("badc-ssp-run-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&root);
+
+    // `strong` is the mode the kernel selects, so it is the one run at
+    // both optimization levels; the rest cover their own selection at one.
+    for (mode, opt) in [
+        ("-fno-stack-protector", &[][..]),
+        ("-fstack-protector", &[][..]),
+        ("-fstack-protector-strong", &[][..]),
+        ("-fstack-protector-strong", &["-O"][..]),
+        ("-fstack-protector-all", &["-O"][..]),
+    ] {
+        {
+            let out = root.join("canary");
+            let built = Command::new(badc)
+                .arg(format!("--target={target}"))
+                .arg(mode)
+                .args(opt)
+                .arg("-o")
+                .arg(&out)
+                .arg(fixtures_dir().join("stack_protector_canary.c"))
+                .output()
+                .expect("run badc");
+            assert!(
+                built.status.success(),
+                "{mode} {opt:?}: build failed -- {}",
+                String::from_utf8_lossy(&built.stderr)
+            );
+            let run = Command::new(&out).output().expect("run the image");
+            assert_eq!(
+                run.status.code(),
+                Some(0),
+                "{mode} {opt:?}: the protected image must behave as the plain one"
+            );
+        }
+    }
+
+    // The overflow is passed at run time so no constant-folding path can
+    // see it; `smash` overruns `b` by 48 bytes, past the canary region and
+    // into the saved frame pointer and return address.
+    let src = root.join("smash.c");
+    std::fs::write(
+        &src,
+        "#include <stdio.h>\n\
+         #include <string.h>\n\
+         static void smash(const char *s) { char b[16]; strcpy(b, s); printf(\"%s\", b); }\n\
+         int main(int argc, char **argv) {\n\
+         \tchar big[64];\n\
+         \tmemset(big, 'A', sizeof big);\n\
+         \tbig[sizeof big - 1] = 0;\n\
+         \tsmash(argc > 1 ? big : \"ok\");\n\
+         \treturn 0;\n\
+         }\n",
+    )
+    .expect("write the smashing source");
+    let out = root.join("smash");
+    let built = Command::new(badc)
+        .arg(format!("--target={target}"))
+        .arg("-fstack-protector-strong")
+        .arg("-o")
+        .arg(&out)
+        .arg(&src)
+        .output()
+        .expect("run badc");
+    assert!(
+        built.status.success(),
+        "smash build failed -- {}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+    let clean = Command::new(&out).output().expect("run the image");
+    assert_eq!(
+        clean.status.code(),
+        Some(0),
+        "no overflow, no check failure"
+    );
+    let smashed = Command::new(&out)
+        .arg("overflow")
+        .output()
+        .expect("run the image");
+    assert_eq!(
+        smashed.status.code(),
+        None,
+        "a smashed frame must reach __stack_chk_fail, which does not return"
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}

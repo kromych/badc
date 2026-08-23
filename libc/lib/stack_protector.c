@@ -29,4 +29,18 @@ void __stack_chk_fail(void) {
 // the handler without a PLT hop; forward it to the same place.
 void __stack_chk_fail_local(void) { __stack_chk_fail(); }
 
-#endif // __linux__
+#elif defined(__APPLE__)
+
+// libSystem exports both, spelled with the Mach-O leading underscore.
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::__c5_stack_chk_fail, "___stack_chk_fail")
+extern void __c5_stack_chk_fail(void);
+#pragma binding(data libc::__stack_chk_guard, "___stack_chk_guard")
+extern unsigned long __stack_chk_guard;
+
+void __stack_chk_fail(void) {
+    (void)__stack_chk_guard;
+    __c5_stack_chk_fail();
+}
+
+#endif // __linux__ / __APPLE__

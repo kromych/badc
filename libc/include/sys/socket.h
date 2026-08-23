@@ -211,6 +211,8 @@ int sendfile(int fd, int s, long offset, long *len, struct sf_hdtr *hdtr,
 #pragma binding(libc::socketpair, "socketpair")
 #pragma binding(libc::sendmsg,    "sendmsg")
 #pragma binding(libc::recvmsg,    "recvmsg")
+#pragma binding(libc::sendmmsg,   "sendmmsg")
+#pragma binding(libc::recvmmsg,   "recvmmsg")
 #pragma binding(libc::accept4,    "accept4")
 
 #define SOL_SOCKET    1

@@ -195,6 +195,32 @@ mod tests {
         assert!(macos.lib.exports.contains("atexit"));
     }
 
+    /// A declaration without a binding is unresolvable at link time, so
+    /// the socket family's entry points have to be bound one for one.
+    #[test]
+    fn the_linux_socket_entry_points_are_bound() {
+        let mut linux = TargetCLibrary::new(Target::LinuxX64).expect("a target with a C library");
+        for name in [
+            "socket",
+            "bind",
+            "connect",
+            "accept",
+            "accept4",
+            "send",
+            "recv",
+            "sendto",
+            "recvfrom",
+            "sendmsg",
+            "recvmsg",
+            "sendmmsg",
+            "recvmmsg",
+            "socketpair",
+            "shutdown",
+        ] {
+            assert!(linux.admit(name), "linux libc exports {name}");
+        }
+    }
+
     /// PE reads no library at link time.
     #[test]
     fn a_pe_target_has_no_link_time_c_library() {

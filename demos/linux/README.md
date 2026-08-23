@@ -91,7 +91,7 @@ level is honored (`-O1` and above become badc `-O`; `-O0` units -- e.g. ones
 that `#error` under `__OPTIMIZE__` -- stay plain), and everything else is
 dropped -- warnings, `-g`/`-std`, and the gcc code-model/hardening set
 (`-mcmodel=kernel`, `-mno-red-zone`, `-fno-strict-aliasing`,
-`-fstack-protector*`, ...) have no badc spelling. Each unit runs as
+`-ftrivial-auto-var-init=`, ...) have no badc spelling. Each unit runs as
 `badc --gnu -q -c --target=<triple>` from the kernel tree (Kbuild paths are
 relative). Assembly units (`.S`) are out of scope and counted separately, as
 are `.cmd` files that hold no kernel C compile (host tools, linker steps).
@@ -200,7 +200,7 @@ totals, so the columns still add up.
 
 `--reference cc` compiles each unit with a second compiler as well, on the
 command kbuild recorded. That line carries work badc's rewritten flag set
-does not do (warnings, stack protector, patchable function entries), so the
+does not do (warnings, patchable function entries), so the
 ratio is build cost against build cost rather than pass for pass; a
 per-unit distribution and the units badc is furthest behind on come with it.
 
@@ -337,8 +337,7 @@ what the shim does not recognize is what let `-fno-jump-tables` reach no
 compiler while every `.o.cmd` recorded it: the probe behind it is
 delegated to the reference compiler, so nothing in the build's own
 artifacts disagreed. On the pinned `defconfig` the unsupported set is
-`-fstack-protector-strong` with its
-`-mstack-protector-guard*` operands, `-ftrivial-auto-var-init=zero`,
+`-ftrivial-auto-var-init=zero`,
 `-fzero-init-padding-bits=all`, `-fstrict-flex-arrays=3`,
 `-fpatchable-function-entry=` (x86_64) and
 `-fasynchronous-unwind-tables`:

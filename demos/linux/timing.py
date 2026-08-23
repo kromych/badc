@@ -216,7 +216,7 @@ def main(argv: list[str] | None = None) -> int:
                          "on the command kbuild recorded, for an absolute "
                          "wall-clock standing. The recorded line carries work "
                          "badc's reduced flag set does not do (warnings, "
-                         "stack protector, patchable entries), so the ratio "
+                         "patchable entries), so the ratio "
                          "is build cost against build cost, not pass for pass.")
     args = ap.parse_args(argv)
 

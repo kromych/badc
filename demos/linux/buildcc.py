@@ -112,9 +112,17 @@ DEBUG_PREFIX = ("-gdwarf", "-ggdb")
 # unsigned under a configuration that says otherwise, and
 # `arch/arm64/kernel/pi/map_kernel.c` drops the shadow call stack on the
 # strength of that configuration.
-HARDENING_EXACT = {"-mindirect-branch-register", "-mindirect-branch-cs-prefix"}
+# `-fno-stack-protector` belongs here rather than among the ignored flags:
+# the kernel adds it per unit after the global `-fstack-protector-strong`,
+# so dropping it would leave the unit protected against the build's wish.
+HARDENING_EXACT = {"-mindirect-branch-register", "-mindirect-branch-cs-prefix",
+                   "-fstack-protector", "-fstack-protector-all",
+                   "-fstack-protector-strong", "-fno-stack-protector"}
 HARDENING_PREFIX = ("-mindirect-branch=", "-mfunction-return=", "-mharden-sls=",
-                    "-fcf-protection=", "-mbranch-protection=")
+                    "-fcf-protection=", "-mbranch-protection=",
+                    "-mstack-protector-guard=", "-mstack-protector-guard-reg=",
+                    "-mstack-protector-guard-offset=",
+                    "-mstack-protector-guard-symbol=")
 
 
 FORWARD_EXACT = {
@@ -196,17 +204,12 @@ FORWARD_PREFIX = (
 # reaches the build's diagnostic summary rather than only the reader of this
 # file.
 UNSUPPORTED_EXACT = {
-    # badc emits no stack-protector prologue, guard load or __stack_chk_fail
-    # call, so a CONFIG_STACKPROTECTOR_STRONG kernel has no canary.
-    "-fstack-protector", "-fstack-protector-all", "-fstack-protector-strong",
     # badc emits no .eh_frame, so the 64-bit vDSO units that ask for unwind
     # tables get none. The negative spelling is already what badc does.
     "-fasynchronous-unwind-tables", "-funwind-tables",
 }
 
 UNSUPPORTED_PREFIX = (
-    # Where the stack-protector guard lives; part of the same gap.
-    "-mstack-protector-guard",
     # badc leaves automatic storage uninitialized, so
     # CONFIG_INIT_STACK_ALL_ZERO is not in effect.
     "-ftrivial-auto-var-init=",
@@ -234,12 +237,11 @@ IGNORE_EXACT = {
     "-fno-strict-aliasing", "-fno-delete-null-pointer-checks",
     "-fno-strict-overflow",
     # What badc already emits: a tentative definition placed in .data rather
-    # than left common, no stack probe, no .eh_frame, no stack-protector
-    # prologue, one .text and one .data per object, and a frame pointer in
-    # every function.
+    # than left common, no stack probe, no .eh_frame, one .text and one
+    # .data per object, and a frame pointer in every function.
     "-fno-common", "-fno-stack-check", "-fno-stack-clash-protection",
     "-fno-asynchronous-unwind-tables", "-fno-unwind-tables",
-    "-fno-function-sections", "-fno-data-sections", "-fno-stack-protector",
+    "-fno-function-sections", "-fno-data-sections",
     "-fno-omit-frame-pointer", "-fomit-frame-pointer",
     # Anonymous members of a named struct type are accepted unconditionally,
     # which is what the kernel asks -fms-extensions for.
@@ -587,10 +589,18 @@ def _self_test() -> int:
         ["-fmin-function-alignment=16"]
     for flag in ("-fno-builtin", "-ffreestanding", "-fno-builtin-wcslen"):
         assert rewrite([flag]).argv == [flag], flag
-    for flag in ("-fstack-protector-strong",
-                 "-ftrivial-auto-var-init=zero",
-                 "-fpatchable-function-entry=16,16",
+    # The stack protector and its guard placement reach badc verbatim; the
+    # canary the configuration states is the one the object carries.
+    for flag in ("-fstack-protector", "-fstack-protector-strong",
+                 "-fstack-protector-all", "-fno-stack-protector",
+                 "-mstack-protector-guard=tls",
+                 "-mstack-protector-guard-reg=gs",
+                 "-mstack-protector-guard-symbol=__ref_stack_chk_guard",
                  "-mstack-protector-guard=sysreg",
+                 "-mstack-protector-guard-offset=1360"):
+        assert rewrite([flag]).argv == [flag], flag
+    for flag in ("-ftrivial-auto-var-init=zero",
+                 "-fpatchable-function-entry=16,16",
                  "-fstrict-flex-arrays=3", "-fasynchronous-unwind-tables"):
         r = rewrite([flag])
         assert r.dropped == [flag] and r.unknown == [], (flag, r)

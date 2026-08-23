@@ -596,13 +596,12 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("memory.h", include_str!("../../libc/include/memory.h")),
 ];
 
-// Build-time-generated `&[(name, header)]` sorted by name. Produced
+// Build-time-generated `&[(name, headers)]` sorted by name. Produced
 // by `build.rs`'s `emit_binding_to_header_index`, which walks
 // `libc/include/*.h` once per build and harvests every
 // `#pragma binding(<dylib>::<name>, ...)` local symbol plus every
-// file-scope function-prototype identifier. First-occurrence-wins
-// per name in lexicographic header order; a duplicate declaration
-// in a second header is silently dropped.
+// file-scope function-prototype identifier. Each name's headers are
+// in priority-then-lexicographic scan order.
 include!(concat!(env!("OUT_DIR"), "/binding_to_header.rs"));
 
 /// Look up a function name in the build-time-generated index and
@@ -613,10 +612,19 @@ include!(concat!(env!("OUT_DIR"), "/binding_to_header.rs"));
 /// the auto-include retry (force-include the header naming the
 /// missing symbol, then re-compile).
 pub(super) fn header_declaring(name: &str) -> Option<&'static str> {
+    headers_declaring(name).first().copied()
+}
+
+/// Every header declaring `name`, in scan order -- the conventional
+/// home first. A name can be bound to different libraries in
+/// different headers (`_exit` to msvcrt in `<stdlib.h>`, to the C
+/// library in `<unistd.h>`), so a caller resolving a binding for one
+/// target has to see them all.
+pub(super) fn headers_declaring(name: &str) -> &'static [&'static str] {
     BINDING_TO_HEADER
         .binary_search_by_key(&name, |&(n, _)| n)
         .ok()
-        .map(|i| BINDING_TO_HEADER[i].1)
+        .map_or(&[], |i| BINDING_TO_HEADER[i].1)
 }
 
 #[cfg(test)]

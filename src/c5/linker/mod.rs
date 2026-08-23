@@ -66,6 +66,8 @@ pub(crate) mod object;
 pub(crate) mod relocatable;
 #[cfg(feature = "std")]
 mod synth_build;
+#[cfg(feature = "std")]
+pub(crate) mod target_libc;
 
 #[cfg(feature = "std")]
 pub use archive::read_archive_at;
@@ -113,3 +115,6 @@ pub use relocatable::{
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use synth_build::{write_native_image_from_merged, write_native_image_from_merged_ex};
+#[cfg(feature = "std")]
+#[allow(unused_imports)]
+pub use target_libc::TargetCLibrary;

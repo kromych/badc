@@ -1837,43 +1837,17 @@ fn run() {
 
     // A hosted executable link resolves undefined references against the
     // C library implicitly, the way a compiler driver's implicit `-lc`
-    // (or ld64's `-lSystem`) does. libc is already a load-time
-    // dependency; parsing its exports lets a reference from a foreign
-    // object -- or a compiler-emitted `memset` / `memcpy` -- resolve as
-    // a load-time import rather than a link error. On ELF only the real
-    // shared object is read (not the `libc.so` linker script), so no
-    // extra DT_NEEDED entry is introduced; on Mach-O the SDK's
-    // `libSystem.tbd` stands in for the dylib the shared cache holds.
-    // The library read here is the host's, so this stands in for the
-    // target's C library on a native link only: a cross link resolves
-    // the same references from the bundled sources instead.
-    if mode == Mode::NativeExecutable && !freestanding && native_link {
-        // A PE image reaches its C library through the import table the
-        // `#pragma binding` set names, so no library file is read for it.
-        let libc_names: &[&str] = match target.binary_format() {
-            badc::BinaryFormat::MachO => &["libSystem.tbd", "libSystem.B.dylib", "libSystem.dylib"],
-            badc::BinaryFormat::Elf => &["libc.so.6", "libc.so"],
-            badc::BinaryFormat::Pe => &[],
-        };
-        for cand in libc_names {
-            if let Some(p) = search_paths
-                .iter()
-                .map(|d| std::path::Path::new(d).join(cand))
-                .find(|p| p.exists())
-            {
-                let p = p.to_string_lossy().into_owned();
-                let _ = ingest_linker_input(
-                    &p,
-                    &search_paths,
-                    target,
-                    &mut shared_libs,
-                    &mut archives,
-                    0,
-                );
-                break;
-            }
-        }
-    }
+    // (or ld64's `-lSystem`) does: a reference from a foreign object, or
+    // one C99 7.1.4p2 let the source declare without its header, becomes
+    // a load-time import rather than a link error. The library is the
+    // target's, described by the bundled headers' binding set rather
+    // than read off the link host (see `TargetCLibrary`), so the image
+    // is a function of the sources, the flags and the target alone. The
+    // set is materialized during symbol selection below, once the
+    // undefined names are known.
+    let mut target_libc = (mode == Mode::NativeExecutable && !freestanding)
+        .then(|| badc::TargetCLibrary::new(target))
+        .flatten();
 
     // Fall back to stdin when no positional source was given
     // and stdin isn't a terminal -- the `cat foo.c | badc`
@@ -2759,11 +2733,11 @@ fn run() {
             }
         }
         let mut archive_inclusions: Vec<badc::ArchiveInclusion> = Vec::new();
-        if !pending.is_empty() || !on_demand_loaded {
-            let mut defined = hashbrown::HashSet::<String>::new();
-            // Unresolved strong references, each keyed to the first
-            // input that made it (the link map's "referenced by" file).
-            let mut undefined = hashbrown::HashMap::<String, String>::new();
+        let mut defined = hashbrown::HashSet::<String>::new();
+        // Unresolved strong references, each keyed to the first
+        // input that made it (the link map's "referenced by" file).
+        let mut undefined = hashbrown::HashMap::<String, String>::new();
+        {
             // A global or weak definition satisfies references; only a
             // strong (STB_GLOBAL) undefined reference pulls a member,
             // matching ELF archive practice (a weak reference left
@@ -2836,14 +2810,15 @@ fn run() {
                 }
                 // The real archives stalled; offer the on-demand
                 // sources once and resume. A name a `-l` shared
-                // library exports resolves as a load-time import, so
-                // it does not call for the pool -- matching a system
-                // linker, where the implicit C library sits after the
-                // archives on the line.
+                // library or the target's C library exports resolves as
+                // a load-time import, so it does not call for the pool
+                // -- matching a system linker, where the implicit C
+                // library sits after the archives on the line.
                 if on_demand_loaded
                     || undefined.keys().all(|n| {
                         badc::link_synthesized_symbol(n)
                             || shared_libs.iter().any(|l| l.exports.contains(n))
+                            || target_libc.as_mut().is_some_and(|l| l.admit(n))
                     })
                 {
                     break;
@@ -2851,6 +2826,25 @@ fn run() {
                 on_demand_loaded = true;
                 load_on_demand(&mut pending, &mut stats);
                 progress = true;
+            }
+        }
+        // Whatever the selection left undefined is what the target's C
+        // library has to cover for the link to resolve it as an import.
+        // Weak references count: a system linker binds one the implicit
+        // C library defines rather than resolving it to zero.
+        if let Some(lib) = &mut target_libc {
+            for o in &native_objs {
+                for s in &o.symbols {
+                    if s.binding != 0
+                        && s.section == badc::NativeSymSection::Undef
+                        && !defined.contains(&s.name)
+                    {
+                        lib.admit(&s.name);
+                    }
+                }
+            }
+            if !lib.library().exports.is_empty() {
+                shared_libs.push(lib.library().clone());
             }
         }
         stats.mark("select");

@@ -3628,6 +3628,101 @@ fn dump_ssa_names_the_same_functions_on_every_target() {
     }
 }
 
+// C99 7.1.4p2: a program may declare a library function itself instead
+// of including its header. The call then reaches the link as a plain
+// external reference carrying no `#pragma binding`, and the C library
+// the link resolves it against has to be the target's -- the same one
+// on every host. The names below are bound by the bundled headers for
+// each of these targets, so each link must produce an image; only one
+// of the targets is ever the host's.
+const HEADER_LESS_LIBC_SRC: &str = "\
+extern void *memmem(const void *, unsigned long, const void *, unsigned long);\n\
+extern char *strdup(const char *);\n\
+int main(void) {\n\
+    return memmem(\"abc\", 3, \"b\", 1) && strdup(\"abc\") ? 0 : 1;\n\
+}\n";
+
+#[test]
+fn header_less_libc_names_resolve_for_every_target() {
+    let dir = tempdir("header-less-libc");
+    let src = write_source(&dir, "m.c", HEADER_LESS_LIBC_SRC);
+    for target in ["linux-x64", "linux-aarch64", "macos-aarch64"] {
+        let exe = dir.join(format!("m-{target}"));
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .arg("-o")
+                .arg(&exe)
+                .arg(&src)
+                .current_dir(&dir),
+            &format!("link header-less libc names for {target}"),
+        );
+        assert!(exe.exists(), "{target}: linked executable should exist");
+    }
+}
+
+// The other half of the same rule: a name no C library exports stays a
+// link error. Resolving an undefined reference against the target's C
+// library must not become a blanket admission of every undefined name.
+#[test]
+fn an_undeclared_non_libc_name_is_a_link_error_for_every_target() {
+    let dir = tempdir("header-less-unknown");
+    let src = write_source(
+        &dir,
+        "m.c",
+        "extern int badc_no_such_libc_entry_point(void);\n\
+         int main(void) { return badc_no_such_libc_entry_point(); }\n",
+    );
+    for target in ["linux-x64", "linux-aarch64", "macos-aarch64"] {
+        let out = Command::new(badc())
+            .arg(format!("--target={target}"))
+            .arg("-o")
+            .arg(dir.join(format!("m-{target}")))
+            .arg(&src)
+            .current_dir(&dir)
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr).into_owned();
+        assert!(
+            !out.status.success() && err.contains("badc_no_such_libc_entry_point"),
+            "{target}: an unknown name must not resolve: status={} stderr={err}",
+            out.status
+        );
+    }
+}
+
+// A hosted link must read no C library the command line did not name.
+// The driver used to open the host's own `libc.so.6` / `libSystem.tbd`
+// off the search path, so the image turned on which shared object the
+// machine running the link happened to have -- and on anything ahead of
+// it on that path. Both invocations below must write the same bytes.
+#[test]
+fn a_c_library_on_the_search_path_does_not_change_the_image() {
+    let dir = tempdir("implicit-libc-path");
+    let src = write_source(&dir, "m.c", HEADER_LESS_LIBC_SRC);
+    let decoy = dir.join("decoy");
+    std::fs::create_dir_all(&decoy).expect("create decoy dir");
+    // The names the implicit read probed, in both target formats.
+    for name in ["libc.so.6", "libc.so", "libSystem.tbd", "libSystem.B.dylib"] {
+        std::fs::write(decoy.join(name), b"").expect("write decoy library");
+    }
+    let search = format!("-L{}", decoy.display());
+    let mut images: Vec<Vec<u8>> = Vec::new();
+    for (tag, extra) in [("plain", None), ("decoy", Some(search.as_str()))] {
+        let out_dir = dir.join(tag);
+        std::fs::create_dir_all(&out_dir).expect("create output dir");
+        let exe = out_dir.join("m");
+        let mut cmd = Command::new(badc());
+        cmd.args(extra).arg("-o").arg(&exe).arg(&src);
+        run(&mut cmd, &format!("link with the {tag} search path"));
+        images.push(std::fs::read(&exe).expect("read image"));
+    }
+    assert_eq!(
+        images[0], images[1],
+        "a C library on the search path must not change the image"
+    );
+}
+
 // A load through an extern data symbol must not fold against this unit's
 // own const image. The address instruction badc emits for an extern
 // object is an `ImmData` whose payload is a link-time placeholder, so a

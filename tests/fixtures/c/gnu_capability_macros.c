@@ -101,7 +101,7 @@ int main(void) {
         return 12;
     }
     // UTF-16 / UTF-32 code units, per the macros above.
-    const __CHAR16_TYPE__ *u16 = u"Aé";
+    const __CHAR16_TYPE__ *u16 = u"A\u00e9";
     const __CHAR32_TYPE__ *u32 = U"A\U0001F600";
     if (u16[0] != 0x41 || u16[1] != 0xe9 || u16[2] != 0) {
         return 13;

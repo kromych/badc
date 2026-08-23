@@ -733,7 +733,7 @@ fn dll_export_load_unload_reload_cycle() {
     // export-directory Name pointer at load and rejects a DLL emitted
     // without one (ERROR_INVALID_PARAMETER); wine tolerates it.
     let dll_bytes = super::super::object::emit_native_with_options_named(
-        &dll_prog,
+        dll_prog,
         Target::WindowsAarch64,
         NativeOptions::new().with_shared_library(),
         Some(&dll_name),

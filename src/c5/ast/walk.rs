@@ -11,13 +11,17 @@
 use alloc::string::String;
 
 use super::super::codegen::Target;
+use super::super::codegen::offset_align;
 use super::super::codegen::ssa::build::SsaBuilder;
 use super::super::compiler::types::{
-    STRUCT_BASE, STRUCT_STRIDE, Segment, UNSIGNED_BIT, is_pointer_ty, is_struct_ty,
-    is_struct_value_ty, is_vector_ty, is_volatile_object_ty, is_volatile_ty, load_kind,
-    segment_of_ty, strip_unsigned, struct_ptr_depth,
+    STRUCT_BASE, STRUCT_STRIDE, Segment, UNSIGNED_BIT, is_long_double_scalar, is_pointer_ty,
+    is_struct_ty, is_struct_value_ty, is_unsigned_ty, is_vector_ty, is_volatile_object_ty,
+    is_volatile_ty, load_kind, segment_of_object_ty, strip_unsigned, struct_id_of,
+    struct_ptr_depth,
 };
-use super::super::ir::{AsmSeg, AtomicRmwOp, BinOp, FunctionSsa, LoadKind, StoreKind, ValueId};
+use super::super::ir::{
+    AsmSeg, AtomicRmwOp, BinOp, FpCastKind, FunctionSsa, LoadKind, StoreKind, ValueId,
+};
 use super::super::symbol::Symbol;
 use super::super::token::{Token, Ty};
 use super::{AtomicKind, Expr, ExprId, FinishedFunction, SLOT_ALIGN, Stmt, StmtId, UnOp};
@@ -25,44 +29,53 @@ use super::{AtomicKind, Expr, ExprId, FinishedFunction, SLOT_ALIGN, Stmt, StmtId
 /// The low and high 64-bit halves of a 128-bit value, in that order.
 type Halves = (ValueId, ValueId);
 
-/// Alignment of storage that is `base` aligned and then advanced by
-/// `off` bytes -- the largest power of two dividing both.
-fn offset_align(base: u32, off: i64) -> u32 {
-    if off == 0 {
-        return base.max(1);
-    }
-    let step = 1u32 << off.unsigned_abs().trailing_zeros().min(31);
-    base.min(step).max(1)
-}
-
-/// Diagnostic for a shape the walker can't lower yet. Carries
-/// enough context to point at the offending AST node so the
-/// caller can route the gap back to a parser site.
+/// A shape the walker does not lower. The `Unsupported` variants are
+/// deliberate rejections of constructs the target or the backend does not
+/// provide, reachable from valid input; the `Invalid` variants mean an
+/// invariant the front end establishes did not hold, and carry the AST
+/// node so the gap can be routed back to a parser site.
 #[derive(Debug)]
 pub(crate) enum WalkError {
     UnsupportedExpr { id: ExprId, kind: &'static str },
-    UnsupportedStmt { id: StmtId, kind: &'static str },
-    UnknownSymbolClass { sym: u32, class: i64 },
-    UnsupportedSymbolShape { sym: u32, reason: &'static str },
     Unsupported(&'static str),
+    InvalidExpr { id: ExprId, kind: &'static str },
+    InvalidStmt { id: StmtId, kind: &'static str },
+    UnknownSymbolClass { sym: u32, class: i64 },
 }
 
 impl core::fmt::Display for WalkError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            WalkError::UnsupportedExpr { id, kind } => {
-                write!(f, "ast::walk: expression #{id} ({kind}) not yet supported")
+            WalkError::UnsupportedExpr { kind, .. } => write!(f, "{kind}"),
+            WalkError::Unsupported(reason) => write!(f, "{reason}"),
+            WalkError::InvalidExpr { id, kind } => {
+                write!(f, "ast::walk: expression #{id} ({kind}) not handled")
             }
-            WalkError::UnsupportedStmt { id, kind } => {
-                write!(f, "ast::walk: statement #{id} ({kind}) not yet supported")
+            WalkError::InvalidStmt { id, kind } => {
+                write!(f, "ast::walk: statement #{id} ({kind}) not handled")
             }
             WalkError::UnknownSymbolClass { sym, class } => {
-                write!(f, "ast::walk: symbol #{sym} class {class} not recognised",)
+                let named = [
+                    (Token::Loc, "Loc"),
+                    (Token::Glo, "Glo"),
+                    (Token::Fun, "Fun"),
+                    (Token::Sys, "Sys"),
+                ]
+                .iter()
+                .find(|(t, _)| *t as i64 == *class)
+                .map(|(_, n)| *n);
+                match named {
+                    Some(n) => write!(
+                        f,
+                        "ast::walk: symbol #{sym} has class {n}, which takes no address here"
+                    ),
+                    None => write!(
+                        f,
+                        "ast::walk: symbol #{sym} class {class} not recognised \
+                         (expected one of Loc, Glo, Fun, Sys)"
+                    ),
+                }
             }
-            WalkError::UnsupportedSymbolShape { sym, reason } => {
-                write!(f, "ast::walk: symbol #{sym}: {reason}")
-            }
-            WalkError::Unsupported(reason) => write!(f, "ast::walk: {reason}"),
         }
     }
 }
@@ -70,6 +83,18 @@ impl core::fmt::Display for WalkError {
 impl WalkError {
     pub(crate) fn into_string(self) -> String {
         alloc::format!("{self}")
+    }
+
+    /// `true` when the error reports a broken compiler invariant rather
+    /// than a construct the target does not provide. Only these carry the
+    /// `internal compiler error` marker.
+    pub(crate) fn is_internal(&self) -> bool {
+        matches!(
+            self,
+            WalkError::InvalidExpr { .. }
+                | WalkError::InvalidStmt { .. }
+                | WalkError::UnknownSymbolClass { .. }
+        )
     }
 }
 
@@ -86,6 +111,7 @@ pub(crate) fn walk_function(
     structs: &[crate::c5::compiler::StructDef],
     target: Target,
     optimize: bool,
+    jump_tables: bool,
 ) -> Result<FunctionSsa, WalkError> {
     let FinishedFunction {
         ast,
@@ -101,6 +127,7 @@ pub(crate) fn walk_function(
         return_ty,
         alloca_top_slot,
         over_aligned_slots,
+        ssp,
         ..
     } = fun;
     let (ent_pc, end_pc, n_params) = (*ent_pc, *end_pc, *n_params);
@@ -109,17 +136,16 @@ pub(crate) fn walk_function(
     let (return_ty, alloca_top_slot) = (*return_ty, *alloca_top_slot);
     let mut b = super::super::codegen::ssa::build::SsaBuilder::new(ent_pc, n_params, is_variadic);
     b.set_end_pc(end_pc);
+    b.set_ssp(*ssp);
+    // Only at -O, where `passes::divmod_pair` folds the split back when
+    // the quotient stays unshared.
+    b.set_split_modulo(optimize);
     // C11 6.7.5: automatic objects whose alignment exceeds the 8-byte frame
-    // slot live in a prologue-realigned region. Pack them (widest
-    // alignment first) into that region; every backend addresses these slots
-    // as `region_base + region_off`. The region and `alloca` both move sp, so
-    // the combination is rejected.
+    // slot live in the over-aligned region. Pack them (widest alignment
+    // first); every backend addresses these slots as `region_base +
+    // region_off`. At `frame_align` 16 the region sits at a static frame
+    // offset; above 16 the prologue realigns sp, which `alloca` precludes.
     if !over_aligned_slots.is_empty() {
-        if alloca_top_slot != 0 {
-            return Err(WalkError::Unsupported(
-                "an over-aligned automatic object cannot share a function with alloca/VLA",
-            ));
-        }
         let mut items: alloc::vec::Vec<(i64, i64, i64)> = over_aligned_slots.to_vec();
         items.sort_by_key(|&(_, align, _)| core::cmp::Reverse(align));
         let mut frame_align: i64 = 16;
@@ -130,6 +156,11 @@ pub(crate) fn walk_function(
             cursor = (cursor + align - 1) & -align;
             placed.push((slot, cursor));
             cursor += size;
+        }
+        if frame_align > 16 && alloca_top_slot != 0 {
+            return Err(WalkError::Unsupported(
+                "an automatic object aligned above 16 cannot share a function with alloca/VLA",
+            ));
         }
         let region_bytes = (cursor + frame_align - 1) & -frame_align;
         b.set_realign(placed, frame_align, region_bytes);
@@ -211,6 +242,7 @@ pub(crate) fn walk_function(
                         false,
                     ),
                     size: desc.size,
+                    align: desc.align,
                 });
                 let idx = b.intern_agg_desc(desc);
                 param_aggs[i] = Some(idx);
@@ -466,7 +498,7 @@ pub(crate) fn walk_function(
         structs,
         target,
         loop_ctx: alloc::vec::Vec::new(),
-        label_blocks: alloc::vec::Vec::new(),
+        label_blocks: alloc::vec![None; ast.goto_targets.len()],
         switch_dispatch: alloc::vec::Vec::new(),
         returns_struct,
         return_struct_size,
@@ -475,6 +507,7 @@ pub(crate) fn walk_function(
         indirect_result_slot,
         scalar_return_ty: return_ty,
         optimize,
+        jump_tables,
     };
     // Walk the function body's root statement (a Compound built
     // at function-end by the parser's `parse_block_stmt` /
@@ -543,11 +576,11 @@ struct Walker<'a> {
     /// frame per enclosing loop / switch. Break/Continue stmts
     /// jump to the top-of-stack entries.
     loop_ctx: alloc::vec::Vec<(super::super::ir::BlockId, super::super::ir::BlockId)>,
-    /// Interned mapping from AST `LabelId` to the SSA `BlockId`
-    /// reserved for that label's body. Allocated lazily by either
-    /// a Goto's forward reference or the matching Labeled stmt --
-    /// both sides see the same block.
-    label_blocks: alloc::vec::Vec<(super::super::ast::LabelId, super::super::ir::BlockId)>,
+    /// SSA `BlockId` reserved for each AST label's body, indexed by
+    /// `LabelId` (dense over the function's `Ast::goto_targets`).
+    /// Filled lazily by either a Goto's forward reference or the
+    /// matching Labeled stmt -- both sides see the same block.
+    label_blocks: alloc::vec::Vec<Option<super::super::ir::BlockId>>,
     /// Per enclosing `switch` (innermost last): the block reserved for
     /// each `case` value and for `default`. A `case` / `default` marker
     /// reached while walking the switch body jumps to its block, so the
@@ -592,36 +625,52 @@ struct Walker<'a> {
     /// resolves to 0 here, keeping the front-end constant-condition
     /// fold (and the emitted code) identical to the early answer.
     optimize: bool,
+    /// A dense switch may lower to `Terminator::JumpTable`. Clear under
+    /// `-fno-jump-tables`, which leaves every switch on the compare
+    /// tree so the dispatch takes no indirect branch.
+    jump_tables: bool,
 }
 
 impl<'a> Walker<'a> {
-    /// Live `ent_pc` for a `Token::Fun` symbol. Reading the
+    /// The symbol's live function entity, if it holds one: a
+    /// `Token::Fun` binding, or a scoped function declaration whose
+    /// name binding was unwound at scope exit (class back to 0) while
+    /// the entity -- `val`, prototype, linkage -- stayed on the slot.
+    fn live_fun_sym(&self, sym: u32) -> Option<&crate::c5::symbol::Symbol> {
+        self.symbols.get(sym as usize).filter(|s| s.is_fun_entity())
+    }
+
+    /// Live `ent_pc` for a function symbol. Reading the
     /// symbol's current `val` lets every `Expr::Call` resolve to
     /// the matching `pc_to_native` slot the codegen will
     /// populate. Sys trampolines have their `val` patched late
     /// by `emit_sys_trampolines`; the same live-read fits both
     /// cases.
     fn live_fun_val(&self, sym: u32, fallback_val: i64) -> i64 {
-        let idx = sym as usize;
-        if idx < self.symbols.len() && self.symbols[idx].class == Token::Fun as i64 {
-            self.symbols[idx].val
-        } else {
-            fallback_val
+        self.live_fun_sym(sym).map_or(fallback_val, |s| s.val)
+    }
+
+    /// Live `ent_pc` for a function symbol whose *address* is being
+    /// taken. An inline definition provides no external definition, so
+    /// its identifier resolves through the import placeholder and the
+    /// address denotes the program's one definition (C99 6.2.2p2); every
+    /// other function addresses its own `val`, as a call does.
+    fn live_fun_addr_val(&self, sym: u32, fallback_val: i64) -> i64 {
+        match self.live_fun_sym(sym).and_then(|s| s.inline_addr_pc) {
+            Some(pc) => pc,
+            None => self.live_fun_val(sym, fallback_val),
         }
     }
 
-    /// True when the `Token::Fun` symbol is a variadic function. A
+    /// True when the function symbol is a variadic function. A
     /// variadic c5 callee keeps the c5 cdecl stack-push argument
     /// shape, so its floating-point arguments ride the integer
     /// register class as widened doubles rather than the FP bank.
     fn fun_is_variadic(&self, sym: u32) -> bool {
-        let idx = sym as usize;
-        idx < self.symbols.len()
-            && self.symbols[idx].class == Token::Fun as i64
-            && self.symbols[idx].is_variadic
+        self.live_fun_sym(sym).is_some_and(|s| s.is_variadic)
     }
 
-    /// Count of named (pre-ellipsis) parameters the `Token::Fun`
+    /// Count of named (pre-ellipsis) parameters the function
     /// symbol declares. The parser records the prototype's fixed
     /// parameter types in `Symbol::params`; a variadic callee's
     /// arguments past this count are the variadic tail. Used to
@@ -629,12 +678,7 @@ impl<'a> Walker<'a> {
     /// prefix and the variadic (host-stack) tail for the macOS
     /// arm64 variadic ABI.
     fn fun_fixed_args(&self, sym: u32) -> usize {
-        let idx = sym as usize;
-        if idx < self.symbols.len() && self.symbols[idx].class == Token::Fun as i64 {
-            self.symbols[idx].params.len()
-        } else {
-            0
-        }
+        self.live_fun_sym(sym).map_or(0, |s| s.params.len())
     }
 
     /// Resolve an indirect call's callee expression to the pointed-to
@@ -800,14 +844,42 @@ impl<'a> Walker<'a> {
     /// not been finished, so a lookup miss cannot claim more than the
     /// C99 6.2.8 minimum.
     fn struct_align(&self, ty: i64) -> u32 {
+        self.struct_align_opt(ty).unwrap_or(1)
+    }
+
+    /// [`Self::struct_align`] without the fallback: `None` when `ty`
+    /// names no struct or its layout is unfinished. Resolves a pointer
+    /// to a struct to the same id, so `p->f` and `s.f` agree.
+    fn struct_align_opt(&self, ty: i64) -> Option<u32> {
         let stripped = strip_unsigned(ty);
         if stripped < STRUCT_BASE {
-            return 1;
+            return None;
         }
         let id = ((stripped - STRUCT_BASE) / STRUCT_STRIDE) as usize;
         match self.structs.get(id) {
-            Some(s) if s.align > 0 => s.align as u32,
-            _ => 1,
+            Some(s) if s.align > 0 => Some(s.align as u32),
+            _ => None,
+        }
+    }
+
+    /// Alignment the address of the member at `field_off` in the
+    /// aggregate `obj` names is proven to satisfy, as [`Inst::Load`]
+    /// records it: zero when it already covers `width`. C99 6.3.2.3p7
+    /// lets the aggregate's own alignment stand for the base address,
+    /// and an unresolved layout keeps the natural assumption.
+    fn member_align(&self, obj: ExprId, field_off: i64, width: u32) -> u8 {
+        let Some(base) = expr_ty(self.ast.expr(obj)).and_then(|t| self.struct_align_opt(t)) else {
+            return 0;
+        };
+        access_align(offset_align(base, field_off), width)
+    }
+
+    /// [`Self::member_align`] for an lvalue expression: only a member
+    /// access lowers the bound.
+    fn lvalue_align(&self, id: ExprId, width: u32) -> u8 {
+        match self.ast.expr(id) {
+            Expr::Member { obj, field_off, .. } => self.member_align(*obj, *field_off, width),
+            _ => 0,
         }
     }
     /// True when `ty` is the GCC 128-bit `__int128` as a value (not a
@@ -824,8 +896,139 @@ impl<'a> Walker<'a> {
     }
     /// True when the expression's type tag carries the volatile
     /// qualifier (C99 6.7.3); `false` for node shapes without a type.
+    /// A member access inherits the qualifiers of the object it is
+    /// reached through (C99 6.5.2.3p3-4), and qualifying an array type
+    /// qualifies its elements (C99 6.7.3p8), so descend through the
+    /// member / subscript chain to the base whose tag carries the
+    /// qualifier.
     fn expr_is_volatile(&self, id: ExprId) -> bool {
-        expr_ty(self.ast.expr(id)).is_some_and(is_volatile_ty)
+        let e = self.ast.expr(id);
+        if expr_ty(e).is_some_and(is_volatile_ty) {
+            return true;
+        }
+        match e {
+            Expr::Member { obj: base, .. } | Expr::Index { array: base, .. } => {
+                self.expr_is_volatile(*base)
+            }
+            _ => false,
+        }
+    }
+
+    /// Segment override for an access to an lvalue of type `ty`.
+    /// `AsmSeg::None` for the generic space. Only the x86 encoder emits
+    /// segment prefixes; elsewhere a qualified access is an error rather
+    /// than a silently generic one.
+    fn access_seg(&self, id: ExprId, ty: i64) -> Result<AsmSeg, WalkError> {
+        match segment_of_object_ty(ty) {
+            None => Ok(AsmSeg::None),
+            Some(_) if !self.target.is_x86_64() => Err(WalkError::UnsupportedExpr {
+                id,
+                kind: "__seg_gs/__seg_fs access (x86 only)",
+            }),
+            Some(seg) => Ok(asm_seg_of(seg)),
+        }
+    }
+
+    /// The type of `id` when it is an aggregate rvalue whose bytes sit
+    /// in a named address space. The address-as-value production is
+    /// segment-neutral; the copy consumers (assignment, initialization,
+    /// argument and return passing, 128-bit half loads) read the bytes
+    /// and are not.
+    fn seg_aggregate_ty(&self, id: ExprId) -> Option<i64> {
+        expr_ty(self.ast.expr(id))
+            .filter(|t| is_struct_value_ty(*t) && segment_of_object_ty(*t).is_some())
+    }
+
+    /// Copy `size` bytes from `src` to `dst` in the widest chunks the
+    /// endpoint alignment allows, each endpoint riding its own segment
+    /// override. `Inst::Mcpy` carries no segment, so a copy with a
+    /// qualified endpoint takes this cover instead; both may be
+    /// qualified, and independently.
+    /// TODO: the cover is one chunk per unit at any size; gcc switches
+    /// to an indexed loop for a large aggregate.
+    #[allow(clippy::too_many_arguments)]
+    fn seg_copy_bytes(
+        &self,
+        b: &mut SsaBuilder,
+        dst: ValueId,
+        dst_seg: AsmSeg,
+        src: ValueId,
+        src_seg: AsmSeg,
+        size: i64,
+        align: u32,
+        vol: bool,
+    ) {
+        for (off, width) in super::mem_transfer_chunks(size, align) {
+            let at = |b: &mut SsaBuilder, base: ValueId| {
+                if off == 0 {
+                    base
+                } else {
+                    b.binop_imm(BinOp::Add, base, off)
+                }
+            };
+            let chunk_align = offset_align(align, off).min(u32::from(u8::MAX)) as u8;
+            let sp = at(b, src);
+            let v = load_place(b, sp, load_kind_for_width(width), src_seg, vol, chunk_align);
+            let dp = at(b, dst);
+            store_place(
+                b,
+                dp,
+                v,
+                store_kind_for_width(width),
+                dst_seg,
+                vol,
+                chunk_align,
+            );
+        }
+    }
+
+    /// Walk `id` as an rvalue a copy consumer will read the bytes of.
+    /// An aggregate in a named address space is copied into a frame slot
+    /// through that segment first and the slot's address stands in;
+    /// every other expression walks unchanged.
+    fn walk_copy_operand(&mut self, b: &mut SsaBuilder, id: ExprId) -> Result<ValueId, WalkError> {
+        let v = self.walk_expr_rvalue(b, id)?;
+        self.flatten_copy_operand(b, id, v)
+    }
+
+    /// [`Self::walk_copy_operand`] for a site that has already walked
+    /// the operand and holds its address.
+    fn flatten_copy_operand(
+        &mut self,
+        b: &mut SsaBuilder,
+        id: ExprId,
+        v: ValueId,
+    ) -> Result<ValueId, WalkError> {
+        let Some(ty) = self.seg_aggregate_ty(id) else {
+            return Ok(v);
+        };
+        let seg = self.access_seg(id, ty)?;
+        let size = self.struct_size(ty);
+        let align = self.struct_align(ty);
+        let slot = b.alloc_synthetic_struct(size);
+        let dst = b.local_addr(slot);
+        let vol = is_volatile_ty(ty) || self.expr_is_volatile(id);
+        self.seg_copy_bytes(b, dst, AsmSeg::None, v, seg, size, align, vol);
+        Ok(dst)
+    }
+
+    /// [`Self::access_seg`] for a bitfield's storage unit. A 16-byte
+    /// unit is accessed as two 64-bit halves through the generic-space
+    /// 128-bit helpers, which carry no segment; reject that combination.
+    fn bitfield_access_seg(
+        &self,
+        id: ExprId,
+        ty: i64,
+        bf: super::super::ast::BitfieldDesc,
+    ) -> Result<AsmSeg, WalkError> {
+        let seg = self.access_seg(id, ty)?;
+        if seg != AsmSeg::None && bf.unit_size == 16 {
+            return Err(WalkError::UnsupportedExpr {
+                id,
+                kind: "16-byte bitfield unit in a named address space",
+            });
+        }
+        Ok(seg)
     }
 
     /// Volatility of a read-modify-write access. A slot is the object's
@@ -839,6 +1042,162 @@ impl<'a> Walker<'a> {
         }
     }
 
+    /// Element type and lane count of the GCC vector type `ty`.
+    fn vector_lanes(&self, ty: i64) -> (i64, i64) {
+        let f = &self.structs[struct_id_of(ty)].fields[0];
+        (f.ty, f.array_size.max(1))
+    }
+
+    /// True when the node's own type is a GCC vector type; the broadcast
+    /// scalar of a mixed operand pair is the one for which this is false.
+    fn expr_is_vector(&self, id: ExprId) -> bool {
+        expr_ty(self.ast.expr(id)).is_some_and(|t| is_vector_ty(self.structs, t))
+    }
+
+    /// Convert a broadcast scalar to the lane type (C99 6.3.1.4 / 6.3.1.5),
+    /// once rather than per lane, so `/ % >>` see the converted value and
+    /// not the operand's own width.
+    fn vector_broadcast_operand(
+        &mut self,
+        b: &mut SsaBuilder,
+        id: ExprId,
+        elem_ty: i64,
+    ) -> Result<ValueId, WalkError> {
+        let v = self.walk_expr_rvalue(b, id)?;
+        let src_ty = expr_ty(self.ast.expr(id)).unwrap_or(Ty::Int as i64);
+        if is_floating_scalar(elem_ty) {
+            let to_f32 = is_float_ty(elem_ty);
+            let conv = if is_floating_scalar(src_ty) {
+                v
+            } else {
+                let kind = if is_unsigned_ty(src_ty) {
+                    FpCastKind::UIntToFp
+                } else {
+                    FpCastKind::IntToFp
+                };
+                if to_f32 {
+                    b.fp_cast_to_f32(kind, v)
+                } else {
+                    b.fp_cast(kind, v)
+                }
+            };
+            return Ok(if to_f32 {
+                b.fp_narrow_to_f32(conv)
+            } else {
+                b.fp_widen_to_f64(conv)
+            });
+        }
+        Ok(match load_kind_for(elem_ty, self.target) {
+            LoadKind::U8 => b.binop_imm(BinOp::And, v, 0xff),
+            LoadKind::U16 => b.binop_imm(BinOp::And, v, 0xffff),
+            LoadKind::U32 => b.binop_imm(BinOp::And, v, 0xffff_ffff),
+            k @ (LoadKind::I8 | LoadKind::I16 | LoadKind::I32) => b.extend(v, k),
+            _ => v,
+        })
+    }
+
+    /// GCC vector extension: element-wise `op` over two vectors, or over a
+    /// vector and a scalar broadcast to every lane. The result is a fresh
+    /// synthetic aggregate whose address is returned, matching how a struct
+    /// rvalue is produced.
+    ///
+    /// One scalar operation per lane at the element width: the SSA value
+    /// model has no vector class, so each lane emits the load / binop / store
+    /// the equivalent scalar C expression emits for the element type.
+    /// `^`/`&`/`|` on two vectors carry no value between lanes and take the
+    /// wider chunk cover instead.
+    fn walk_vector_binop(
+        &mut self,
+        b: &mut SsaBuilder,
+        op: BinOp,
+        lhs: ExprId,
+        rhs: ExprId,
+        ty: i64,
+    ) -> Result<ValueId, WalkError> {
+        let lhs_vec = self.expr_is_vector(lhs);
+        let rhs_vec = self.expr_is_vector(rhs);
+        if lhs_vec && rhs_vec && matches!(op, BinOp::And | BinOp::Or | BinOp::Xor) {
+            return self.walk_vector_chunked(b, op, lhs, rhs, ty);
+        }
+        let (elem_ty, lanes) = self.vector_lanes(ty);
+        let size = self.struct_size(ty);
+        let elem_size = size / lanes;
+        let lane_op = vector_lane_binop(op, elem_ty);
+        let lk = load_kind_for(elem_ty, self.target);
+        let sk = store_kind_for(elem_ty, self.target);
+        let lv = if lhs_vec {
+            self.walk_copy_operand(b, lhs)?
+        } else {
+            self.vector_broadcast_operand(b, lhs, elem_ty)?
+        };
+        let rv = if rhs_vec {
+            self.walk_copy_operand(b, rhs)?
+        } else {
+            self.vector_broadcast_operand(b, rhs, elem_ty)?
+        };
+        let slot = b.alloc_synthetic_struct(size);
+        let dst = b.local_addr(slot);
+        for i in 0..lanes {
+            let off = i * elem_size;
+            let a = if lhs_vec {
+                let addr = lane_addr(b, lv, off);
+                b.load(addr, lk)
+            } else {
+                lv
+            };
+            let c = if rhs_vec {
+                let addr = lane_addr(b, rv, off);
+                b.load(addr, lk)
+            } else {
+                rv
+            };
+            let mut r = b.binop(lane_op, a, c);
+            if b.is_f32(a) && b.is_f32(c) {
+                r = b.mark_f32(r);
+            }
+            let da = lane_addr(b, dst, off);
+            b.store(da, r, sk);
+        }
+        Ok(dst)
+    }
+
+    /// GCC vector extension: element-wise unary `-` / `~` over a vector,
+    /// lowered per lane like [`Self::walk_vector_binop`].
+    fn walk_vector_unary(
+        &mut self,
+        b: &mut SsaBuilder,
+        op: UnOp,
+        child: ExprId,
+        ty: i64,
+    ) -> Result<ValueId, WalkError> {
+        let (elem_ty, lanes) = self.vector_lanes(ty);
+        let size = self.struct_size(ty);
+        let elem_size = size / lanes;
+        let lk = load_kind_for(elem_ty, self.target);
+        let sk = store_kind_for(elem_ty, self.target);
+        let src = self.walk_copy_operand(b, child)?;
+        let slot = b.alloc_synthetic_struct(size);
+        let dst = b.local_addr(slot);
+        for i in 0..lanes {
+            let off = i * elem_size;
+            let sa = lane_addr(b, src, off);
+            let v = b.load(sa, lk);
+            let r = if matches!(op, UnOp::BitNot) {
+                b.binop_imm(BinOp::Xor, v, -1)
+            } else if is_floating_scalar(elem_ty) {
+                // A sign-bit flip, not `0 - x`: the latter turns -0.0 into 0.0.
+                let n = b.fneg(v);
+                if b.is_f32(v) { b.mark_f32(n) } else { n }
+            } else {
+                let zero = b.imm(0);
+                b.binop(BinOp::Sub, zero, v)
+            };
+            let da = lane_addr(b, dst, off);
+            b.store(da, r, sk);
+        }
+        Ok(dst)
+    }
+
     /// Lower a bitwise operator (`^`/`&`/`|`) on two same-width GCC vector
     /// values into a result temporary. Bitwise ops carry no value between
     /// lanes, so the byte block is combined in the widest chunks that fit
@@ -846,7 +1205,45 @@ impl<'a> Walker<'a> {
     /// rvalues (their address lands on the accumulator); the result is a fresh
     /// synthetic aggregate whose address is returned, matching how a struct
     /// rvalue is produced.
-    fn walk_vector_bitwise(
+    /// Lower an x86 SIMD builtin to its instruction. A 128-bit operand is
+    /// passed by address; the result lands in a synthetic slot whose
+    /// address the expression yields, which is the protocol every other
+    /// vector-valued expression uses.
+    fn walk_x86_simd(
+        &mut self,
+        b: &mut SsaBuilder,
+        op: u32,
+        args: &[ExprId],
+        imm: Option<u8>,
+    ) -> Result<ValueId, WalkError> {
+        use crate::c5::x86_simd::{self, Form};
+        let form = x86_simd::get(op).form;
+        let mut ops: alloc::vec::Vec<ValueId> = alloc::vec::Vec::with_capacity(args.len() + 1);
+        for &a in args {
+            let v = if self.expr_is_vector(a) {
+                self.walk_copy_operand(b, a)?
+            } else {
+                self.walk_expr_rvalue(b, a)?
+            };
+            ops.push(v);
+        }
+        if form == Form::Store {
+            b.x86_simd(op, imm, ops);
+            return Ok(b.imm(0));
+        }
+        let result_bytes = if form.returns_vector() { 16 } else { 8 };
+        let slot = b.alloc_synthetic_struct(result_bytes);
+        let dst = b.local_addr(slot);
+        ops.insert(0, dst);
+        b.x86_simd(op, imm, ops);
+        if form.returns_vector() {
+            Ok(dst)
+        } else {
+            Ok(b.load(dst, LoadKind::I32))
+        }
+    }
+
+    fn walk_vector_chunked(
         &mut self,
         b: &mut super::super::codegen::ssa::build::SsaBuilder,
         op: BinOp,
@@ -854,8 +1251,8 @@ impl<'a> Walker<'a> {
         rhs: ExprId,
         ty: i64,
     ) -> Result<super::super::ir::ValueId, WalkError> {
-        let lhs_addr = self.walk_expr_rvalue(b, lhs)?;
-        let rhs_addr = self.walk_expr_rvalue(b, rhs)?;
+        let lhs_addr = self.walk_copy_operand(b, lhs)?;
+        let rhs_addr = self.walk_copy_operand(b, rhs)?;
         let size = self.struct_size(ty);
         let slot = b.alloc_synthetic_struct(size);
         let dst = b.local_addr(slot);
@@ -942,7 +1339,7 @@ impl<'a> Walker<'a> {
     fn int128_operand(&mut self, b: &mut SsaBuilder, id: ExprId) -> Result<Halves, WalkError> {
         let ty = expr_ty(self.ast.expr(id)).unwrap_or(Ty::Int as i64);
         let is128 = self.expr_is_int128_value(id);
-        let v = self.walk_expr_rvalue(b, id)?;
+        let v = self.walk_copy_operand(b, id)?;
         if is128 {
             return Ok(self.int128_load(b, v));
         }
@@ -1603,7 +2000,7 @@ impl<'a> Walker<'a> {
                     r
                 })
             }
-            _ => Err(WalkError::UnsupportedExpr {
+            _ => Err(WalkError::InvalidExpr {
                 id: lhs,
                 kind: "128-bit operator",
             }),
@@ -1622,6 +2019,14 @@ impl<'a> Walker<'a> {
         by: i64,
         postfix: bool,
     ) -> Result<ValueId, WalkError> {
+        // The 128-bit halves are accessed through the generic space,
+        // which carries no segment.
+        if expr_ty(self.ast.expr(lvalue)).is_some_and(|t| segment_of_object_ty(t).is_some()) {
+            return Err(WalkError::UnsupportedExpr {
+                id: lvalue,
+                kind: "128-bit access in a named address space",
+            });
+        }
         // A bitfield target reads and writes its slice of the storage
         // unit rather than the whole 16 bytes.
         if let Some((unit, bf)) = self.wide_bitfield_place(b, lvalue)? {
@@ -1662,6 +2067,14 @@ impl<'a> Walker<'a> {
         lhs: ExprId,
         rhs: ExprId,
     ) -> Result<ValueId, WalkError> {
+        // The 128-bit halves are accessed through the generic space,
+        // which carries no segment.
+        if expr_ty(self.ast.expr(lhs)).is_some_and(|t| segment_of_object_ty(t).is_some()) {
+            return Err(WalkError::UnsupportedExpr {
+                id: lhs,
+                kind: "128-bit access in a named address space",
+            });
+        }
         // A bitfield target reads and writes its slice of the storage
         // unit rather than the whole 16 bytes.
         if let Some((unit, bf)) = self.wide_bitfield_place(b, lhs)? {
@@ -1684,7 +2097,7 @@ impl<'a> Walker<'a> {
     /// half of an int128-typed count.
     fn int128_shift_count(&mut self, b: &mut SsaBuilder, id: ExprId) -> Result<ValueId, WalkError> {
         let is128 = self.expr_is_int128_value(id);
-        let v = self.walk_expr_rvalue(b, id)?;
+        let v = self.walk_copy_operand(b, id)?;
         if is128 {
             return Ok(b.load(v, LoadKind::I64));
         }
@@ -1725,7 +2138,7 @@ impl<'a> Walker<'a> {
                     // caller's result temp.
                     let v = match widened {
                         Some(addr) => addr,
-                        None => self.walk_expr_rvalue(b, *e)?,
+                        None => self.walk_copy_operand(b, *e)?,
                     };
                     b.return_(v);
                     return Ok(true);
@@ -1741,7 +2154,7 @@ impl<'a> Walker<'a> {
                     let out_ptr = b.load_local(2, super::super::ir::LoadKind::I64);
                     let src = match widened {
                         Some(addr) => addr,
-                        None => self.walk_expr_rvalue(b, *e)?,
+                        None => self.walk_copy_operand(b, *e)?,
                     };
                     if self.return_struct_size > 0 {
                         // The out-pointer is the caller's result temp, so
@@ -1757,7 +2170,7 @@ impl<'a> Walker<'a> {
                     b.return_(out_ptr);
                     return Ok(true);
                 }
-                let mut v = self.walk_expr_rvalue(b, *e)?;
+                let mut v = self.walk_copy_operand(b, *e)?;
                 // C99 6.8.6.4 / 6.3.1.1: the return value is converted to the
                 // function's return type. A body evaluated in 64-bit registers
                 // can leave bits above the type width set -- a signed constant
@@ -2034,14 +2447,14 @@ impl<'a> Walker<'a> {
             }
             Stmt::Break => {
                 let Some(&(brk, _)) = self.loop_ctx.last() else {
-                    return Err(WalkError::UnsupportedStmt { id, kind: "Break" });
+                    return Err(WalkError::InvalidStmt { id, kind: "Break" });
                 };
                 b.jmp(brk);
                 Ok(true)
             }
             Stmt::Continue => {
                 let Some(&(_, cont)) = self.loop_ctx.last() else {
-                    return Err(WalkError::UnsupportedStmt {
+                    return Err(WalkError::InvalidStmt {
                         id,
                         kind: "Continue",
                     });
@@ -2193,7 +2606,7 @@ impl<'a> Walker<'a> {
                     b.switch_to(next);
                 }
                 let lt_op = if disc_unsigned { BinOp::Ult } else { BinOp::Lt };
-                if !self.emit_switch_table(b, disc_val, &sorted, deflt) {
+                if !self.jump_tables || !self.emit_switch_table(b, disc_val, &sorted, deflt) {
                     self.emit_switch_search(b, disc_val, &sorted, lt_op, deflt);
                 }
 
@@ -2250,7 +2663,7 @@ impl<'a> Walker<'a> {
                 }
                 self.walk_stmt(b, body_id)
             }
-            Stmt::Asm { .. } => Err(WalkError::UnsupportedStmt { id, kind: "Asm" }),
+            Stmt::Asm { .. } => Err(WalkError::InvalidStmt { id, kind: "Asm" }),
             Stmt::Decl(d) => {
                 let decl_id = *d;
                 self.walk_decl(b, decl_id)?;
@@ -2433,7 +2846,7 @@ impl<'a> Walker<'a> {
         match init {
             super::super::ast::LocalInit::None => Ok(()),
             super::super::ast::LocalInit::Scalar(init_id) => {
-                let v = self.walk_expr_rvalue(b, *init_id)?;
+                let v = self.walk_copy_operand(b, *init_id)?;
                 // C99 6.7.8p13 struct-value initializer: copy the source's
                 // bytes into the slot via Mcpy. `v` is the source address
                 // (the walker's address-as-value routing for struct
@@ -2535,7 +2948,7 @@ impl<'a> Walker<'a> {
                     };
                     let v = match elem.bitfield {
                         Some(bf) => self.bitfield_store_value(b, bf, value)?,
-                        None => self.walk_expr_rvalue(b, value)?,
+                        None => self.walk_copy_operand(b, value)?,
                     };
                     let base = b.local_addr(slot);
                     let addr = if elem.offset == 0 {
@@ -2548,7 +2961,19 @@ impl<'a> Walker<'a> {
                     // in the same unit are preserved (the slot was
                     // zero-seeded, so the field's own bits start clear).
                     if let Some(bf) = elem.bitfield {
-                        self.store_into_bitfield(b, addr, bf, v, is_volatile_ty(elem.ty));
+                        // Frame storage is always in the generic space.
+                        self.store_into_bitfield(
+                            b,
+                            addr,
+                            bf,
+                            v,
+                            AsmSeg::None,
+                            is_volatile_ty(elem.ty),
+                            access_align(
+                                offset_align(SLOT_ALIGN, elem.offset),
+                                bf.unit_size as u32,
+                            ),
+                        );
                         continue;
                     }
                     // C99 6.7.8p13: a struct/union member initialized by a
@@ -2578,14 +3003,16 @@ impl<'a> Walker<'a> {
         b: &mut SsaBuilder,
         addr: ValueId,
         bf: super::super::ast::BitfieldDesc,
+        seg: AsmSeg,
         vol: bool,
+        align: u8,
     ) -> ValueId {
         let w = bf.bit_width as i64;
         if bf.unit_size == 16 {
             let v = self.bitfield_extract_128(b, addr, bf, vol);
             return self.bitfield_value_form(b, bf, v);
         }
-        let mut v = b.load_vol(addr, bitfield_load_kind(bf), vol);
+        let mut v = load_place(b, addr, bitfield_load_kind(bf), seg, vol, align);
         if bf.bit_offset > 0 {
             v = b.binop_imm(BinOp::Shr, v, bf.bit_offset as i64);
         }
@@ -2603,13 +3030,16 @@ impl<'a> Walker<'a> {
     /// Returns the assignment's value per C99 6.5.16p3 -- the stored
     /// field converted to its declared type, not the storage word. A
     /// 16-byte unit takes and returns a 128-bit object's address.
+    #[allow(clippy::too_many_arguments)]
     fn store_into_bitfield(
         &mut self,
         b: &mut SsaBuilder,
         addr: ValueId,
         bf: super::super::ast::BitfieldDesc,
         value: ValueId,
+        seg: AsmSeg,
         vol: bool,
+        align: u8,
     ) -> ValueId {
         let w = bf.bit_width as i64;
         let (mask_lo, mask_hi) = bitfield_mask_halves(bf.bit_width, 0);
@@ -2626,7 +3056,7 @@ impl<'a> Walker<'a> {
         }
         let (load_kind, store_kind) = (bitfield_load_kind(bf), bitfield_store_kind(bf));
         let masked = b.binop_imm(BinOp::And, value, mask_lo);
-        let old = b.load_vol(addr, load_kind, vol);
+        let old = load_place(b, addr, load_kind, seg, vol, align);
         let cleared = b.binop_imm(
             BinOp::And,
             old,
@@ -2638,7 +3068,7 @@ impl<'a> Walker<'a> {
             masked
         };
         let combined = b.binop(BinOp::Or, cleared, shifted);
-        b.store_vol(addr, combined, store_kind, vol);
+        store_place(b, addr, combined, store_kind, seg, vol, align);
         if bf.signed && w < 64 {
             let up = b.binop_imm(BinOp::Shl, masked, 64 - w);
             b.binop_imm(BinOp::Shr, up, 64 - w)
@@ -2662,7 +3092,7 @@ impl<'a> Walker<'a> {
             return Ok(self.int128_materialize(b, pair));
         }
         let is128 = self.expr_is_int128_value(rhs);
-        let v = self.walk_expr_rvalue(b, rhs)?;
+        let v = self.walk_copy_operand(b, rhs)?;
         // C99 6.3.1.3: a 128-bit source narrows to the field's type,
         // which is its low half -- not the address the value is carried as.
         Ok(if is128 { b.load(v, LoadKind::I64) } else { v })
@@ -2797,11 +3227,11 @@ impl<'a> Walker<'a> {
         b: &mut super::super::codegen::ssa::build::SsaBuilder,
         label: super::super::ast::LabelId,
     ) -> super::super::ir::BlockId {
-        if let Some(&(_, blk)) = self.label_blocks.iter().find(|(l, _)| *l == label) {
+        if let Some(blk) = self.label_blocks[label as usize] {
             return blk;
         }
         let blk = b.new_block();
-        self.label_blocks.push((label, blk));
+        self.label_blocks[label as usize] = Some(blk);
         blk
     }
 
@@ -3070,6 +3500,7 @@ impl<'a> Walker<'a> {
             1 => BinOp::Sub,
             _ => BinOp::Mul,
         };
+        let seg = self.access_seg(dst_expr, elem_ty)?;
         let va = self.walk_expr_rvalue(b, a_expr)?;
         let vb = self.walk_expr_rvalue(b, b_expr)?;
         let addr = self.walk_expr_rvalue(b, dst_expr)?;
@@ -3077,12 +3508,12 @@ impl<'a> Walker<'a> {
         if w < 8 {
             let raw = b.binop(bin, va, vb);
             let wrapped = self.extend_atomic_result(b, raw, elem_ty);
-            b.store(addr, wrapped, store_kind);
+            store_place(b, addr, wrapped, store_kind, seg, false, 0);
             return Ok(b.binop(BinOp::Ne, raw, wrapped));
         }
 
         let wrapped = b.binop(bin, va, vb);
-        b.store(addr, wrapped, store_kind);
+        store_place(b, addr, wrapped, store_kind, seg, false, 0);
         let flag = match (op, unsigned) {
             // Unsigned add carries out iff the sum is below an addend.
             (0, true) => b.binop(BinOp::Ult, wrapped, va),
@@ -3216,6 +3647,14 @@ impl<'a> Walker<'a> {
             return Err(WalkError::UnsupportedExpr {
                 id: dst_expr,
                 kind: "__builtin_*_overflow requires a 1/2/4/8-byte scalar type",
+            });
+        }
+        // The 128-bit result store runs through generic-space half
+        // stores, which carry no segment.
+        if segment_of_object_ty(elem_ty).is_some() {
+            return Err(WalkError::UnsupportedExpr {
+                id: dst_expr,
+                kind: "128-bit access in a named address space",
             });
         }
         let unsigned = (elem_ty & UNSIGNED_BIT) != 0;
@@ -3418,12 +3857,11 @@ impl<'a> Walker<'a> {
             ),
             Expr::Unary { op, child, ty } => self.walk_unary(b, *op, *child, *ty),
             Expr::Binary { op, lhs, rhs, ty } => {
-                // GCC vector extension: a bitwise operator on same-width vector
-                // values is element-wise. The parser only tags a Binary node
-                // with a vector type for `^`/`&`/`|`; lower it as wide chunks
-                // into a result temporary (no inter-lane carry for bitwise ops).
+                // GCC vector extension: the parser tags a Binary node with a
+                // vector type for the element-wise operators, including a
+                // vector / scalar pair the scalar broadcasts across.
                 if is_vector_ty(self.structs, *ty) {
-                    return self.walk_vector_bitwise(b, *op, *lhs, *rhs, *ty);
+                    return self.walk_vector_binop(b, *op, *lhs, *rhs, *ty);
                 }
                 // A 128-bit operand makes the node a 128-bit operation,
                 // whatever the node's own type: a comparison's result is
@@ -3659,12 +4097,15 @@ impl<'a> Walker<'a> {
                     lv = b.binop_imm(BinOp::And, lv, m);
                     rv = b.binop_imm(BinOp::And, rv, m);
                 }
-                // Strength-reduce divide / modulo by a constant power of
-                // two to shifts / masks. This is the only constant-
-                // divisor fast path: the per-arch `BinopI` emit does not
-                // lower Div / Mod, so they are otherwise excluded from
-                // `imm_safe_op` and divide through the register path.
-                if let Some(reduced) = b.divmod_pow2(*op, lv, rv) {
+                // Strength-reduce divide / modulo by a constant divisor
+                // to shifts, masks and reciprocal multiplies. This is
+                // the only constant-divisor fast path: the per-arch
+                // `BinopI` emit does not lower Div / Mod, so they are
+                // otherwise excluded from `imm_safe_op` and divide
+                // through the register path.
+                if let Some(w) = self.divmod_operand_width(*op, *ty, *lhs, *rhs)
+                    && let Some(reduced) = b.divmod_const(*op, lv, rv, w)
+                {
                     return Ok(reduced);
                 }
                 // The parser's `maybe_mask_to_unsigned_width`
@@ -3692,6 +4133,7 @@ impl<'a> Walker<'a> {
                 // assignment's own value (for an enclosing expression)
                 // is the masked field value, not the storage word.
                 let bf = *bitfield;
+                let seg = self.bitfield_access_seg(id, *ty, bf)?;
                 let base = self.walk_expr_rvalue(b, *obj)?;
                 let addr = if *field_off != 0 {
                     b.binop_imm(BinOp::Add, base, *field_off)
@@ -3703,7 +4145,8 @@ impl<'a> Walker<'a> {
                 // (adjacent bitfields, `a.x = a.y = v`) must be observed by
                 // this read-modify-write, else its store is clobbered.
                 let rhs_v = self.bitfield_store_value(b, bf, *rhs)?;
-                Ok(self.store_into_bitfield(b, addr, bf, rhs_v, vol))
+                let align = self.member_align(*obj, *field_off, bf.unit_size as u32);
+                Ok(self.store_into_bitfield(b, addr, bf, rhs_v, seg, vol, align))
             }
             Expr::Assign { lhs, rhs, ty } => {
                 // C99 6.5.16.1p1 + the c5 address-as-value rule:
@@ -3716,10 +4159,23 @@ impl<'a> Walker<'a> {
                 // dst address as the expression's value
                 // (mirroring libc `memcpy`).
                 if is_struct_ty(*ty) && struct_ptr_depth(*ty) == 0 {
+                    let dst_seg = self.access_seg(*lhs, *ty)?;
+                    let src_seg = match self.seg_aggregate_ty(*rhs) {
+                        Some(t) => self.access_seg(*rhs, t)?,
+                        None => AsmSeg::None,
+                    };
                     let dst = self.walk_expr_lvalue(b, *lhs)?;
                     let src = self.walk_expr_rvalue(b, *rhs)?;
                     let size = self.struct_size(*ty);
-                    b.mcpy(dst, src, size, self.struct_align(*ty));
+                    let align = self.struct_align(*ty);
+                    if dst_seg == AsmSeg::None && src_seg == AsmSeg::None {
+                        b.mcpy(dst, src, size, align);
+                    } else {
+                        let vol = is_volatile_ty(*ty)
+                            || self.expr_is_volatile(*lhs)
+                            || self.expr_is_volatile(*rhs);
+                        self.seg_copy_bytes(b, dst, dst_seg, src, src_seg, size, align, vol);
+                    }
                     return Ok(dst);
                 }
                 // Local-target shortcut: a Token::Loc-class Ident
@@ -3729,26 +4185,6 @@ impl<'a> Walker<'a> {
                 // the store so the assignment yields the f32 value.
                 let kind = store_kind_for(*ty, self.target);
                 let vol = is_volatile_ty(*ty) || self.expr_is_volatile(*lhs);
-                // A write through a `__seg_gs` / `__seg_fs` pointer rides a
-                // segment-override prefix (GCC named address spaces), mirroring
-                // the load guard in `walk_unary`; x86 only. The lvalue of the
-                // qualified deref yields the pointer's address value.
-                if let Some(seg) = segment_of_ty(*ty) {
-                    if !self.target.is_x86_64() {
-                        return Err(WalkError::UnsupportedExpr {
-                            id: *lhs,
-                            kind: "direct __seg_gs/__seg_fs write (x86 only)",
-                        });
-                    }
-                    let addr = self.walk_expr_lvalue(b, *lhs)?;
-                    let mut value = self.walk_expr_rvalue(b, *rhs)?;
-                    if matches!(kind, StoreKind::F32) {
-                        value = b.fp_narrow_to_f32(value);
-                    }
-                    b.seg_store(addr, value, kind, asm_seg_of(seg), vol);
-                    let rhs_ty = expr_ty(self.ast.expr(*rhs)).unwrap_or(*ty);
-                    return Ok(self.narrow_int_to_ty(b, value, rhs_ty, *ty));
-                }
                 if let Expr::Ident {
                     class,
                     val,
@@ -3757,6 +4193,15 @@ impl<'a> Walker<'a> {
                 } = self.ast.expr(*lhs)
                     && *class == Token::Loc as i64
                 {
+                    // A frame slot has no named address space; the parser
+                    // rejects such declarations, so a tag reaching here is
+                    // an error, not a generic-space store.
+                    if segment_of_object_ty(*ty).is_some() {
+                        return Err(WalkError::InvalidExpr {
+                            id: *lhs,
+                            kind: "named address space on automatic storage",
+                        });
+                    }
                     let slot = *val;
                     // The destination is the object's own storage, so its
                     // top-level qualifier governs, not one that sits on a
@@ -3779,6 +4224,7 @@ impl<'a> Walker<'a> {
                     let rhs_ty = expr_ty(self.ast.expr(*rhs)).unwrap_or(*ty);
                     return Ok(self.narrow_int_to_ty(b, value, rhs_ty, *ty));
                 }
+                let seg = self.access_seg(*lhs, *ty)?;
                 let addr = self.walk_expr_lvalue(b, *lhs)?;
                 let mut value = self.walk_expr_rvalue(b, *rhs)?;
                 // C99 6.5.16.1 + 6.3.1.5: a `double` value assigned to a
@@ -3790,7 +4236,8 @@ impl<'a> Walker<'a> {
                 if matches!(kind, StoreKind::F32) {
                     value = b.fp_narrow_to_f32(value);
                 }
-                b.store_vol(addr, value, kind, vol);
+                let align = self.lvalue_align(*lhs, store_kind_width(kind));
+                store_place(b, addr, value, kind, seg, vol, align);
                 // C99 6.5.16p3: the assignment expression's value has the
                 // converted type of the left operand. The store truncated
                 // the stored bytes; the value carried forward to an
@@ -4020,7 +4467,9 @@ impl<'a> Walker<'a> {
                 // call site.
                 let mut fp_arg_mask: u32 = 0;
                 for (i, a) in args.iter().enumerate() {
-                    arg_vals.push(self.walk_expr_rvalue(b, *a)?);
+                    // A by-value aggregate argument is copied by the
+                    // callee through the generic space.
+                    arg_vals.push(self.walk_copy_operand(b, *a)?);
                     if expr_ty(self.ast.expr(*a))
                         .map(is_floating_scalar)
                         .unwrap_or(false)
@@ -4779,14 +5228,17 @@ impl<'a> Walker<'a> {
                     // the field's storage unit (parser already
                     // included `field_off`).
                     let bf = *bf;
-                    let vol = is_volatile_ty(*ty) || self.expr_is_volatile(*obj);
+                    let ty = *ty;
+                    let vol = self.expr_is_volatile(id);
+                    let seg = self.bitfield_access_seg(id, ty, bf)?;
                     let base = self.walk_expr_rvalue(b, *obj)?;
                     let addr = if *field_off != 0 {
                         b.binop_imm(BinOp::Add, base, *field_off)
                     } else {
                         base
                     };
-                    return Ok(self.load_from_bitfield(b, addr, bf, vol));
+                    let align = self.member_align(*obj, *field_off, bf.unit_size as u32);
+                    return Ok(self.load_from_bitfield(b, addr, bf, seg, vol, align));
                 }
                 let base = self.walk_expr_rvalue(b, *obj)?;
                 let addr = if *field_off != 0 {
@@ -4803,8 +5255,10 @@ impl<'a> Walker<'a> {
                     return Ok(addr);
                 }
                 let kind = load_kind_for(*ty, self.target);
-                let vol = is_volatile_ty(*ty) || self.expr_is_volatile(*obj);
-                Ok(b.load_vol(addr, kind, vol))
+                let vol = self.expr_is_volatile(id);
+                let seg = self.access_seg(id, *ty)?;
+                let align = self.member_align(*obj, *field_off, load_kind_width(kind));
+                Ok(load_place(b, addr, kind, seg, vol, align))
             }
             Expr::Index { array, idx, ty } => {
                 let arr = self.walk_expr_rvalue(b, *array)?;
@@ -4832,7 +5286,8 @@ impl<'a> Walker<'a> {
                     return Ok(addr);
                 }
                 let kind = load_kind_for(*ty, self.target);
-                Ok(b.load_vol(addr, kind, is_volatile_ty(*ty)))
+                let seg = self.access_seg(id, *ty)?;
+                Ok(load_place(b, addr, kind, seg, self.expr_is_volatile(id), 0))
             }
             Expr::Cast { child, to_ty } => {
                 let v = self.walk_expr_rvalue(b, *child)?;
@@ -4871,6 +5326,7 @@ impl<'a> Walker<'a> {
                     Expr::VlaSizeof { .. } => Ty::Int as i64,
                     Expr::StmtExpr { ty, .. } => *ty,
                     Expr::CheckedArith { ty, .. } => *ty,
+                    Expr::X86Simd { ty, .. } => *ty,
                     Expr::MemTransfer { ty, .. } => *ty,
                     // `&&label` is a `void *` (char-pointer encoding).
                     Expr::LabelAddr(_) => {
@@ -4888,6 +5344,7 @@ impl<'a> Walker<'a> {
                 // floating target instead converts the whole 128-bit
                 // value (C99 6.3.1.4) through `int128_to_fp`.
                 if self.is_int128_value_ty(src_ty) && !is_struct_ty(*to_ty) {
+                    let v = self.flatten_copy_operand(b, *child, v)?;
                     if is_floating_scalar(*to_ty) {
                         let pair = self.int128_load(b, v);
                         let signed = (src_ty & UNSIGNED_BIT) == 0;
@@ -5153,6 +5610,11 @@ impl<'a> Walker<'a> {
                 let (op, a, rhs, dst, elem_ty) = (*op, *a, *rhs, *dst, *elem_ty);
                 self.walk_checked_arith(b, op, a, rhs, dst, elem_ty)
             }
+            Expr::X86Simd { op, args, imm, .. } => {
+                let (op, imm) = (*op, *imm);
+                let args = args.clone();
+                self.walk_x86_simd(b, op, &args, imm)
+            }
             // A short-circuit in value position: the result is used, so
             // normalize it to 0/1.
             Expr::ShortCircuit { .. } => self.walk_short_circuit(b, id, true),
@@ -5236,16 +5698,19 @@ impl<'a> Walker<'a> {
                         _ => lower_popcount(b, x, w64),
                     });
                 }
+                // Byte reversal is a single instruction on every
+                // supported target, so it lowers to a dedicated inst
+                // rather than a portable shift / mask sequence.
                 if let Some(i) = super::super::op::Intrinsic::from_i64(intr_kind)
                     && i.is_bswap()
                 {
                     use super::super::op::Intrinsic as I;
-                    let bytes = match i {
+                    let width = match i {
                         I::Bswap16 => 2,
                         I::Bswap64 => 8,
                         _ => 4,
                     };
-                    return Ok(lower_bswap(b, arg_vals[0], bytes));
+                    return Ok(b.bswap(arg_vals[0], width));
                 }
                 // The unary FP math intrinsics produce an FP value; tag the
                 // single-precision forms so the codegen picks the f32
@@ -5327,6 +5792,15 @@ impl<'a> Walker<'a> {
                 } else {
                     "atomic operation requires a 1/2/4/8-byte scalar object"
                 },
+            });
+        }
+        // The atomic instructions carry no segment operand; an atomic
+        // object in a named address space is rejected rather than
+        // accessed through the generic space.
+        if segment_of_object_ty(elem_ty).is_some() {
+            return Err(WalkError::UnsupportedExpr {
+                id: args[0],
+                kind: "atomic access in a named address space",
             });
         }
         let addr = self.walk_expr_rvalue(b, args[0])?;
@@ -5548,21 +6022,6 @@ impl<'a> Walker<'a> {
         lvalue: ExprId,
         ty: i64,
     ) -> Result<RmwPlace, WalkError> {
-        // A named-address-space lvalue: both halves of the
-        // read-modify-write ride the segment override, as the plain read
-        // and write of the same lvalue do. Non-x86 targets have no
-        // segment register, so reject rather than drop the qualifier,
-        // mirroring the load and store paths.
-        if let Some(seg) = segment_of_ty(ty) {
-            if !self.target.is_x86_64() {
-                return Err(WalkError::UnsupportedExpr {
-                    id: lvalue,
-                    kind: "__seg_gs/__seg_fs read-modify-write (x86 only)",
-                });
-            }
-            let addr = self.walk_expr_lvalue(b, lvalue)?;
-            return Ok(RmwPlace::SegAddr { addr, seg });
-        }
         // A bitfield member: compute the storage unit's address once so
         // the read and the write target the same unit (the object is
         // evaluated a single time per C99 6.5.2.4 / 6.5.16.2).
@@ -5570,10 +6029,12 @@ impl<'a> Walker<'a> {
             obj,
             field_off,
             bitfield: Some(bf),
+            ty: member_ty,
             ..
         } = self.ast.expr(lvalue)
         {
             let bf = *bf;
+            let seg = self.bitfield_access_seg(lvalue, *member_ty, bf)?;
             let obj = *obj;
             let field_off = *field_off;
             let base = self.walk_expr_rvalue(b, obj)?;
@@ -5582,8 +6043,15 @@ impl<'a> Walker<'a> {
             } else {
                 base
             };
-            return Ok(RmwPlace::Bitfield { addr, bf });
+            let align = self.member_align(obj, field_off, bf.unit_size as u32);
+            return Ok(RmwPlace::Bitfield {
+                addr,
+                bf,
+                seg,
+                align,
+            });
         }
+        let seg = self.access_seg(lvalue, ty)?;
         if let Expr::Ident {
             class,
             val,
@@ -5592,9 +6060,19 @@ impl<'a> Walker<'a> {
         } = self.ast.expr(lvalue)
             && *class == Token::Loc as i64
         {
+            // A frame slot has no named address space; the parser
+            // rejects such declarations.
+            if seg != AsmSeg::None {
+                return Err(WalkError::InvalidExpr {
+                    id: lvalue,
+                    kind: "named address space on automatic storage",
+                });
+            }
             return Ok(RmwPlace::Slot(*val));
         }
-        Ok(RmwPlace::Addr(self.walk_expr_lvalue(b, lvalue)?))
+        let addr = self.walk_expr_lvalue(b, lvalue)?;
+        let align = self.lvalue_align(lvalue, store_kind_width(store_kind_for(ty, self.target)));
+        Ok(RmwPlace::Addr { addr, seg, align })
     }
 
     fn walk_expr_lvalue(
@@ -5655,7 +6133,7 @@ impl<'a> Walker<'a> {
                 self.emit_local_init(b, slot, ty, &init)?;
                 Ok(b.local_addr(slot))
             }
-            other => Err(WalkError::UnsupportedExpr {
+            other => Err(WalkError::InvalidExpr {
                 id,
                 kind: lvalue_shape_label(other),
             }),
@@ -6171,6 +6649,24 @@ impl<'a> Walker<'a> {
         Ok(self.cond_truthy(b, v, cond))
     }
 
+    /// Operand width in bits for the constant-divisor lowering of
+    /// `op`: the widest of the common type and the two operand types,
+    /// so a sequence specialised to 32 bits is only chosen when no
+    /// operand can carry a wider value. `None` for a non-divide op or
+    /// a type wider than a register, both of which keep the divide.
+    fn divmod_operand_width(&self, op: BinOp, ty: i64, lhs: ExprId, rhs: ExprId) -> Option<u32> {
+        if !matches!(op, BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu) {
+            return None;
+        }
+        let sz =
+            |id: ExprId| expr_ty(self.ast.expr(id)).map_or(8, |t| type_size_bytes(t, self.target));
+        match type_size_bytes(ty, self.target).max(sz(lhs)).max(sz(rhs)) {
+            0..=4 => Some(32),
+            5..=8 => Some(64),
+            _ => None,
+        }
+    }
+
     /// Neg / BitNot / LogNot lower to a binop against an
     /// immediate.
     fn walk_unary(
@@ -6180,6 +6676,10 @@ impl<'a> Walker<'a> {
         child: ExprId,
         ty: i64,
     ) -> Result<super::super::ir::ValueId, WalkError> {
+        // GCC vector extension: `-v` / `~v` are element-wise.
+        if matches!(op, UnOp::Neg | UnOp::BitNot) && is_vector_ty(self.structs, ty) {
+            return self.walk_vector_unary(b, op, child, ty);
+        }
         match op {
             UnOp::Neg => {
                 let v = self.walk_expr_rvalue(b, child)?;
@@ -6217,22 +6717,9 @@ impl<'a> Walker<'a> {
                 if is_struct_value_ty(ty) {
                     return Ok(addr);
                 }
-                // A read through a `__seg_gs` / `__seg_fs` pointer rides a
-                // segment-override prefix (GCC named address spaces). Only the
-                // x86 encoder emits it; on a target without segment registers
-                // reject rather than drop the qualifier (a silent wrong-address
-                // access).
                 let kind = load_kind_for(ty, self.target);
-                if let Some(seg) = segment_of_ty(ty) {
-                    if !self.target.is_x86_64() {
-                        return Err(WalkError::UnsupportedExpr {
-                            id: child,
-                            kind: "direct __seg_gs/__seg_fs read (x86 only)",
-                        });
-                    }
-                    return Ok(b.seg_load(addr, kind, asm_seg_of(seg), is_volatile_ty(ty)));
-                }
-                Ok(b.load_vol(addr, kind, is_volatile_ty(ty)))
+                let seg = self.access_seg(child, ty)?;
+                Ok(load_place(b, addr, kind, seg, is_volatile_ty(ty), 0))
             }
         }
     }
@@ -6256,7 +6743,7 @@ impl<'a> Walker<'a> {
             ..
         } = self.ast.expr(id)
         else {
-            return Err(WalkError::UnsupportedExpr {
+            return Err(WalkError::InvalidExpr {
                 id,
                 kind: lvalue_shape_label(self.ast.expr(id)),
             });
@@ -6284,18 +6771,12 @@ impl<'a> Walker<'a> {
             // Sys-trampoline symbols are added late and have
             // their `val` filled in by `emit_sys_trampolines`
             // -- AFTER `ast_emit_ident` snapshotted 0. Read
-            // the live value off the symbol table (Token::Fun
-            // is not shadowable so this is safe). The walker
-            // sym is the same index the parser stored, so the
-            // lookup hits the same entry the trampoline emit
-            // updated.
-            let live_val = if (*sym as usize) < self.symbols.len()
-                && self.symbols[*sym as usize].class == Token::Fun as i64
-            {
-                self.symbols[*sym as usize].val
-            } else {
-                *val
-            };
+            // the live value off the symbol table; a scoped
+            // function declaration's entity also keeps its
+            // post-parse `val` there. The walker sym is the
+            // same index the parser stored, so the lookup hits
+            // the same entry the trampoline emit updated.
+            let live_val = self.live_fun_addr_val(*sym, *val);
             if live_val == 0 {
                 Ok(b.imm_code_extern(*sym))
             } else {
@@ -6353,7 +6834,9 @@ impl<'a> Walker<'a> {
             None
         };
         let val: i64 = if class == Token::Fun as i64 {
-            self.live_fun_val(_sym, val)
+            // The only `Token::Fun` rvalue is the function-pointer decay
+            // of C99 6.3.2.1p4, so this is an address site.
+            self.live_fun_addr_val(_sym, val)
         } else {
             val
         };
@@ -6384,8 +6867,17 @@ impl<'a> Walker<'a> {
                 });
             }
         }
+        let seg = self.access_seg(id, ty)?;
         let vol = is_volatile_object_ty(ty);
         if class == Token::Loc as i64 {
+            // A frame slot has no named address space; the parser
+            // rejects such declarations.
+            if seg != AsmSeg::None {
+                return Err(WalkError::InvalidExpr {
+                    id,
+                    kind: "named address space on automatic storage",
+                });
+            }
             let kind = load_kind_for(ty, self.target);
             Ok(b.load_local_vol(val, kind, vol))
         } else if let Some(addr) = glo_addr {
@@ -6394,8 +6886,16 @@ impl<'a> Walker<'a> {
                 GloAddr::Resolved(off) => b.imm_data(off),
             };
             let kind = load_kind_for(ty, self.target);
-            Ok(b.load_vol(addr_v, kind, vol))
+            Ok(load_place(b, addr_v, kind, seg, vol, 0))
         } else if class == Token::Glo as i64 && is_thread_local {
+            // Thread-local addressing already names its own segment on
+            // x86; a further named address space cannot combine with it.
+            if seg != AsmSeg::None {
+                return Err(WalkError::UnsupportedExpr {
+                    id,
+                    kind: "named address space on thread-local storage",
+                });
+            }
             let addr = match self.live_tls_addr(_sym, val) {
                 GloAddr::Extern => b.tls_addr_extern(_sym),
                 GloAddr::Resolved(off) => b.tls_addr(off),
@@ -6434,13 +6934,12 @@ impl<'a> Walker<'a> {
 /// address-taken and pins it to memory.
 enum RmwPlace {
     Slot(i64),
-    Addr(super::super::ir::ValueId),
-    /// A read-modify-write target in an x86 named address space
-    /// (`__seg_gs` / `__seg_fs`): both halves ride a segment-override
-    /// prefix, as the plain read and write of the same lvalue do.
-    SegAddr {
+    /// A materialized address, with the segment override every access
+    /// to the lvalue rides (`AsmSeg::None` for the generic space).
+    Addr {
         addr: super::super::ir::ValueId,
-        seg: Segment,
+        seg: AsmSeg,
+        align: u8,
     },
     /// A bitfield read-modify-write target: the storage unit's address
     /// and the field descriptor. `load` extracts the field value;
@@ -6450,6 +6949,8 @@ enum RmwPlace {
     Bitfield {
         addr: super::super::ir::ValueId,
         bf: super::super::ast::BitfieldDesc,
+        seg: AsmSeg,
+        align: u8,
     },
 }
 
@@ -6462,15 +6963,19 @@ impl RmwPlace {
     ) -> super::super::ir::ValueId {
         match *self {
             RmwPlace::Slot(off) => b.load_local_vol(off, kind, vol),
-            RmwPlace::Addr(addr) => b.load_vol(addr, kind, vol),
-            RmwPlace::SegAddr { addr, seg } => b.seg_load(addr, kind, asm_seg_of(seg), vol),
-            RmwPlace::Bitfield { addr, bf } => {
+            RmwPlace::Addr { addr, seg, align } => load_place(b, addr, kind, seg, vol, align),
+            RmwPlace::Bitfield {
+                addr,
+                bf,
+                seg,
+                align,
+            } => {
                 // C99 6.7.2.1: load the unit, shift the slice to bit 0,
                 // mask, and sign-extend when the field type is signed.
                 // A 128-bit field never reaches here: its operators route
                 // through the walker's 128-bit read-modify-write.
                 debug_assert!(bf.unit_size <= 8);
-                let mut v = b.load_vol(addr, bitfield_load_kind(bf), vol);
+                let mut v = load_place(b, addr, bitfield_load_kind(bf), seg, vol, align);
                 if bf.bit_offset > 0 {
                     v = b.binop_imm(BinOp::Shr, v, bf.bit_offset as i64);
                 }
@@ -6496,20 +7001,22 @@ impl RmwPlace {
             RmwPlace::Slot(off) => {
                 b.store_local_vol(off, value, kind, vol);
             }
-            RmwPlace::Addr(addr) => {
-                b.store_vol(addr, value, kind, vol);
+            RmwPlace::Addr { addr, seg, align } => {
+                store_place(b, addr, value, kind, seg, vol, align);
             }
-            RmwPlace::SegAddr { addr, seg } => {
-                b.seg_store(addr, value, kind, asm_seg_of(seg), vol);
-            }
-            RmwPlace::Bitfield { addr, bf } => {
+            RmwPlace::Bitfield {
+                addr,
+                bf,
+                seg,
+                align,
+            } => {
                 // C99 6.7.2.1: load the unit, clear the slice, mask + shift
                 // the new value into place, OR back, store.
                 debug_assert!(bf.unit_size <= 8);
                 let (load_kind, store_kind) = (bitfield_load_kind(bf), bitfield_store_kind(bf));
                 let mask = bitfield_mask_halves(bf.bit_width, 0).0;
                 let clear_mask = !bitfield_mask_halves(bf.bit_width, bf.bit_offset).0;
-                let old = b.load_vol(addr, load_kind, vol);
+                let old = load_place(b, addr, load_kind, seg, vol, align);
                 let cleared = b.binop_imm(BinOp::And, old, clear_mask);
                 let masked = b.binop_imm(BinOp::And, value, mask);
                 let shifted = if bf.bit_offset > 0 {
@@ -6518,7 +7025,7 @@ impl RmwPlace {
                     masked
                 };
                 let combined = b.binop(BinOp::Or, cleared, shifted);
-                b.store_vol(addr, combined, store_kind, vol);
+                store_place(b, addr, combined, store_kind, seg, vol, align);
             }
         }
     }
@@ -6543,6 +7050,34 @@ fn bitfield_store_kind(bf: super::BitfieldDesc) -> StoreKind {
     store_kind_for_width(bf.unit_size as u32)
 }
 
+/// Alignment `at` as [`Inst::Load`] records it for a `width`-byte
+/// access: zero once it already covers the width.
+fn access_align(at: u32, width: u32) -> u8 {
+    if at >= width { 0 } else { at as u8 }
+}
+
+/// Byte width of a scalar load kind.
+fn load_kind_width(kind: LoadKind) -> u32 {
+    match kind {
+        LoadKind::I8 | LoadKind::U8 => 1,
+        LoadKind::I16 | LoadKind::U16 => 2,
+        LoadKind::I32 | LoadKind::U32 | LoadKind::F32 => 4,
+        LoadKind::I64 | LoadKind::F64 => 8,
+        LoadKind::F80 | LoadKind::F128 => 16,
+    }
+}
+
+/// Byte width of a scalar store kind.
+fn store_kind_width(kind: StoreKind) -> u32 {
+    match kind {
+        StoreKind::I8 => 1,
+        StoreKind::I16 => 2,
+        StoreKind::I32 | StoreKind::F32 => 4,
+        StoreKind::I64 | StoreKind::F64 => 8,
+        StoreKind::F80 | StoreKind::F128 => 16,
+    }
+}
+
 /// Integer load kind for a `width`-byte access. Unsigned below eight
 /// bytes: a bit transfer must not sign-extend from the unit's top bit.
 fn load_kind_for_width(width: u32) -> LoadKind {
@@ -6551,6 +7086,46 @@ fn load_kind_for_width(width: u32) -> LoadKind {
         2 => LoadKind::U16,
         4 => LoadKind::U32,
         _ => LoadKind::I64,
+    }
+}
+
+/// Address of lane byte `off` within the vector object at `base`.
+fn lane_addr(b: &mut SsaBuilder, base: ValueId, off: i64) -> ValueId {
+    if off == 0 {
+        base
+    } else {
+        b.binop_imm(BinOp::Add, base, off)
+    }
+}
+
+/// Concrete lane opcode for a GCC vector operator. The parser tags the node
+/// with the nominal opcode; the element type picks the floating flavour and
+/// the signedness of divide / modulo / right shift.
+fn vector_lane_binop(op: BinOp, elem_ty: i64) -> BinOp {
+    use BinOp as B;
+    if is_floating_scalar(elem_ty) {
+        return match op {
+            B::Add | B::Fadd => B::Fadd,
+            B::Sub | B::Fsub => B::Fsub,
+            B::Mul | B::Fmul => B::Fmul,
+            B::Div | B::Divu | B::Fdiv => B::Fdiv,
+            other => other,
+        };
+    }
+    if elem_ty & UNSIGNED_BIT != 0 {
+        match op {
+            B::Div => B::Divu,
+            B::Mod => B::Modu,
+            B::Shr => B::Shru,
+            other => other,
+        }
+    } else {
+        match op {
+            B::Divu => B::Div,
+            B::Modu => B::Mod,
+            B::Shru => B::Shr,
+            other => other,
+        }
     }
 }
 
@@ -6567,6 +7142,15 @@ fn store_kind_for_width(width: u32) -> StoreKind {
 /// Map a c5 type tag to the matching `LoadKind`. Mirrors
 /// `compiler::types::load_op_for`.
 fn load_kind_for(ty: i64, target: Target) -> LoadKind {
+    // A wide-format `long double` object narrows to the f64 the
+    // compute path carries as it loads.
+    if is_long_double_scalar(ty) {
+        match target.long_double() {
+            super::super::codegen::LongDoubleKind::X87 => return LoadKind::F80,
+            super::super::codegen::LongDoubleKind::Binary128 => return LoadKind::F128,
+            super::super::codegen::LongDoubleKind::F64 => {}
+        }
+    }
     // The SSA backend loads a `double` into an FP register.
     load_kind(ty, target, LoadKind::F64)
 }
@@ -6579,8 +7163,55 @@ fn asm_seg_of(seg: Segment) -> AsmSeg {
     }
 }
 
+/// Scalar load from `addr`, riding `seg`'s override when the lvalue's
+/// type named an address space. Every scalar lvalue read routes here.
+fn load_place(
+    b: &mut SsaBuilder,
+    addr: ValueId,
+    kind: LoadKind,
+    seg: AsmSeg,
+    vol: bool,
+    align: u8,
+) -> ValueId {
+    match seg {
+        AsmSeg::None => b.load_at(addr, kind, vol, align),
+        // A named address space names per-CPU / per-thread storage the
+        // ABI keeps naturally aligned, and only x86 targets have one.
+        seg => b.seg_load(addr, kind, seg, vol),
+    }
+}
+
+/// Store companion to [`load_place`].
+fn store_place(
+    b: &mut SsaBuilder,
+    addr: ValueId,
+    value: ValueId,
+    kind: StoreKind,
+    seg: AsmSeg,
+    vol: bool,
+    align: u8,
+) {
+    match seg {
+        AsmSeg::None => {
+            b.store_at(addr, value, kind, vol, align);
+        }
+        seg => {
+            b.seg_store(addr, value, kind, seg, vol);
+        }
+    }
+}
+
 /// Mirror of [`load_kind_for`] for stores.
 fn store_kind_for(ty: i64, target: Target) -> StoreKind {
+    // A wide-format `long double` store widens the f64 exactly into
+    // the storage format.
+    if is_long_double_scalar(ty) {
+        match target.long_double() {
+            super::super::codegen::LongDoubleKind::X87 => return StoreKind::F80,
+            super::super::codegen::LongDoubleKind::Binary128 => return StoreKind::F128,
+            super::super::codegen::LongDoubleKind::F64 => {}
+        }
+    }
     // A store width carries no signedness, so the bare band type is enough;
     // `strip_unsigned` also clears the segment bits so a `__seg_gs` /
     // `__seg_fs`-qualified type classifies by its underlying width.
@@ -6803,33 +7434,6 @@ fn lower_ffs(b: &mut Bld, x: Val, w64: bool) -> Val {
     b.binop(BinOp::Mul, cp1, nz)
 }
 
-/// Reverse the low `n` bytes of `x`: extract each byte with a logical
-/// shift and mask, shift it to the mirrored position, and or the bytes
-/// together. `n` is 2, 4, or 8.
-fn lower_bswap(b: &mut Bld, x: Val, n: i64) -> Val {
-    let mut acc: Option<Val> = None;
-    for i in 0..n {
-        let src_shift = i * 8;
-        let dst_shift = (n - 1 - i) * 8;
-        let shifted = if src_shift == 0 {
-            x
-        } else {
-            b.binop_imm(BinOp::Shru, x, src_shift)
-        };
-        let byte = b.binop_imm(BinOp::And, shifted, 0xff);
-        let placed = if dst_shift == 0 {
-            byte
-        } else {
-            b.binop_imm(BinOp::Shl, byte, dst_shift)
-        };
-        acc = Some(match acc {
-            None => placed,
-            Some(a) => b.binop(BinOp::Or, a, placed),
-        });
-    }
-    acc.unwrap_or(x)
-}
-
 /// Read the type tag off an expression node. Returns `None` for
 /// shapes that don't carry one (`Sizeof` is constant-evaluated
 /// and the walker doesn't peek into the result; intrinsics carry
@@ -6858,6 +7462,7 @@ pub(crate) fn expr_ty(e: &Expr) -> Option<i64> {
         | Expr::VlaBase { ty, .. }
         | Expr::StmtExpr { ty, .. }
         | Expr::CheckedArith { ty, .. }
+        | Expr::X86Simd { ty, .. }
         | Expr::MemTransfer { ty, .. } => Some(*ty),
         Expr::Cast { to_ty, .. } => Some(*to_ty),
         Expr::Sizeof(s) => Some(s.result_ty),
@@ -7061,6 +7666,7 @@ fn lvalue_shape_label(expr: &Expr) -> &'static str {
         Expr::VlaSizeof { .. } => "VlaSizeof",
         Expr::StmtExpr { .. } => "StmtExpr",
         Expr::CheckedArith { .. } => "CheckedArith",
+        Expr::X86Simd { .. } => "X86Simd",
         Expr::MemTransfer { .. } => "MemTransfer",
         Expr::InlineAsm(_) => "InlineAsm",
     }
@@ -7112,6 +7718,7 @@ mod tests {
             &[],
             Target::LinuxAarch64,
             false,
+            true,
         )
         .expect("walk");
         let immediates: alloc::vec::Vec<i64> = func
@@ -7171,6 +7778,7 @@ mod tests {
             &[],
             Target::LinuxAarch64,
             false,
+            true,
         )
         .expect("walk");
         let loads: alloc::vec::Vec<_> = func
@@ -7238,6 +7846,7 @@ mod tests {
             &[],
             Target::LinuxAarch64,
             false,
+            true,
         )
         .expect("walk");
         let store_kinds: alloc::vec::Vec<_> = func
@@ -7297,6 +7906,7 @@ mod tests {
             &[],
             Target::LinuxAarch64,
             false,
+            true,
         )
         .expect("walk");
         let binops: alloc::vec::Vec<BinOp> = func
@@ -7310,9 +7920,9 @@ mod tests {
         assert_eq!(binops, alloc::vec![BinOp::Sub]);
     }
 
-    /// An unsupported statement (`Asm`) surfaces as a
-    /// `WalkError::UnsupportedStmt` so the validator can route
-    /// the gap back to a parser site.
+    /// A statement shape the parser never produces (`Asm`) surfaces as a
+    /// `WalkError::InvalidStmt` so the validator can route the gap back to
+    /// a parser site, and it is reported as an internal error.
     #[test]
     fn unsupported_stmt_returns_error() {
         let mut ast = Ast::new();
@@ -7336,11 +7946,10 @@ mod tests {
             &[],
             Target::LinuxAarch64,
             false,
+            true,
         )
         .expect_err("Asm must surface as unsupported");
-        assert!(matches!(
-            err,
-            WalkError::UnsupportedStmt { kind: "Asm", .. }
-        ));
+        assert!(matches!(err, WalkError::InvalidStmt { kind: "Asm", .. }));
+        assert!(err.is_internal());
     }
 }

@@ -9,6 +9,21 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <wsum>:
                	popq	%r10
@@ -98,14 +113,12 @@ Disassembly of section .text:
                	movsd	0x18(%rsp), %xmm7
                	callq	<addr>
                	addq	$0x10, %rsp
-               	movslq	%eax, %rax
-               	cmpq	$0x3ff, %rax            # imm = 0x3FF
+               	cmpl	$0x3ff, %eax            # imm = 0x3FF
                	je	<addr>
                	movl	$0x1, %eax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	leaq	-<rip>, %rax      # <addr>
                	movl	$0x3fc00000, %edi       # imm = 0x3FC00000
                	movl	$0x3f000000, %esi       # imm = 0x3F000000
                	subq	$0x10, %rsp
@@ -119,10 +132,9 @@ Disassembly of section .text:
                	movsd	0x18(%rsp), %xmm5
                	movsd	0x18(%rsp), %xmm6
                	movsd	0x18(%rsp), %xmm7
-               	callq	*%rax
+               	callq	<addr>
                	addq	$0x10, %rsp
-               	movslq	%eax, %rax
-               	cmpq	$0x37f, %rax            # imm = 0x37F
+               	cmpl	$0x37f, %eax            # imm = 0x37F
                	je	<addr>
                	movl	$0x2, %eax
                	addq	$0x10, %rsp

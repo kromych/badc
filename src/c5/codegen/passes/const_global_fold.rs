@@ -173,6 +173,7 @@ pub(crate) fn fold_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) -> bool {
             disp,
             kind,
             volatile: false,
+            ..
         } = func.insts[i]
         else {
             continue;
@@ -184,7 +185,7 @@ pub(crate) fn fold_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) -> bool {
             LoadKind::I64 => 8,
             // The FP kinds keep their register class through the load;
             // an integer immediate would misclassify them.
-            LoadKind::F32 | LoadKind::F64 => continue,
+            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => continue,
         };
         let Some(off) = data_addr(func, &ext, addr, disp as i64) else {
             continue;
@@ -241,6 +242,7 @@ fn access_width(kind: LoadKind) -> i64 {
         LoadKind::I16 | LoadKind::U16 => 2,
         LoadKind::I32 | LoadKind::U32 | LoadKind::F32 => 4,
         LoadKind::I64 | LoadKind::F64 => 8,
+        LoadKind::F80 | LoadKind::F128 => 16,
     }
 }
 
@@ -251,6 +253,7 @@ fn store_width(kind: crate::c5::ir::StoreKind) -> i64 {
         StoreKind::I16 => 2,
         StoreKind::I32 | StoreKind::F32 => 4,
         StoreKind::I64 | StoreKind::F64 => 8,
+        StoreKind::F80 | StoreKind::F128 => 16,
     }
 }
 
@@ -395,6 +398,7 @@ pub(crate) fn fold_template_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) ->
                     value,
                     kind,
                     volatile,
+                    ..
                 } => {
                     let (zero, w) = (
                         !*volatile && matches!(func.insts.get(*value as usize), Some(Inst::Imm(0))),
@@ -421,6 +425,7 @@ pub(crate) fn fold_template_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) ->
                     disp,
                     kind,
                     volatile: false,
+                    ..
                 } if !matches!(kind, LoadKind::F32 | LoadKind::F64) => {
                     let (kind, w) = (*kind, access_width(*kind));
                     let Some(a) = frame_addr(func, *addr, *disp as i64) else {
@@ -488,7 +493,9 @@ pub(crate) fn fold_template_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) ->
                 | Inst::BinopI { .. }
                 | Inst::Fneg(_)
                 | Inst::Fma { .. }
+                | Inst::MulAdd { .. }
                 | Inst::Extend { .. }
+                | Inst::Bswap { .. }
                 | Inst::FpCast { .. }
                 | Inst::ParamRef { .. }
                 | Inst::Phi { .. } => {}
@@ -557,6 +564,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], program: &Program) {
                     disp,
                     kind: LoadKind::I64,
                     volatile: false,
+                    ..
                 }) => (*addr, *disp),
                 _ => continue,
             };

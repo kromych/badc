@@ -10,19 +10,20 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#0x1
+               	brk	#0x1
+               	brk	#0x1
 
 <classify>:
-               	sxtw	x0, w0
-               	cmp	x0, #0x3
+               	cmp	w0, #0x3
                	b.lt	<addr>
-               	cmp	x0, #0x4
+               	cmp	w0, #0x4
                	b.lt	<addr>
-               	cmp	x0, #0x4
+               	cmp	w0, #0x4
                	b.eq	<addr>
-               	cmp	x0, #0x5
+               	cmp	w0, #0x5
                	cset	x1, ge
                	cbz	x1, <addr>
-               	cmp	x0, #0x8
+               	cmp	w0, #0x8
                	cset	x1, le
                	cbz	x1, <addr>
                	mov	x0, #0x1e               // =30
@@ -31,11 +32,11 @@ Disassembly of section .text:
                	ret
                	b	<addr>
                	b	<addr>
-               	cmp	x0, #0x2
+               	cmp	w0, #0x2
                	b.lt	<addr>
                	mov	x0, #0x14               // =20
                	ret
-               	cmp	x0, #0x1
+               	cmp	w0, #0x1
                	b.ne	<addr>
                	mov	x0, #0xa                // =10
                	ret
@@ -44,16 +45,16 @@ Disassembly of section .text:
                	mov	x0, #0xa                // =10
                	mov	x0, #0x14               // =20
                	mov	x0, #0x1e               // =30
+               	mov	x1, x0
+               	mov	x1, x0
+               	mov	x1, #0x1                // =1
+               	mov	x2, x1
                	mov	x0, #0x1e               // =30
-               	mov	x0, #0x1                // =1
-               	mov	x0, #0x1e               // =30
-               	mov	x0, #0x1                // =1
-               	mov	x0, #0x1e               // =30
-               	mov	x0, #0x1                // =1
-               	mov	x0, #0x1e               // =30
+               	mov	x1, x0
+               	mov	x1, #0x1                // =1
                	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
+               	mov	x1, x0
+               	mov	x1, x0
+               	mov	x1, x0
                	mov	x0, #0x0                // =0
                	ret

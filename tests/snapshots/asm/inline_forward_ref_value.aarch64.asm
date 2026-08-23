@@ -10,27 +10,27 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#0x1
+               	brk	#0x1
+               	brk	#0x1
 
 <compute>:
-               	add	x1, x0, #0x1
-               	sxtw	x2, w1
+               	add	x2, x0, #0x1
+               	sxtw	x3, w2
                	cbz	x0, <addr>
                	add	x1, x0, #0x64
-               	add	x4, x0, #0x1
-               	cmp	x1, #0x0
-               	b.ne	<addr>
+               	cbnz	x1, <addr>
                	mov	x0, #0xffff             // =65535
                	movk	x0, #0xffff, lsl #16
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
                	ret
-               	lsl	x1, x1, #1
+               	lsl	x0, x1, #1
                	adrp	x5, <page>
                	add	x5, x5, <lo12>
-               	add	x0, x1, #0x1
-               	str	w0, [x5]
-               	add	x0, x1, x4
+               	add	x1, x0, #0x1
+               	str	w1, [x5]
                	add	x0, x0, x2
+               	add	x0, x0, x3
                	ret
                	mov	x0, #0xfffe             // =65534
                	movk	x0, #0xffff, lsl #16

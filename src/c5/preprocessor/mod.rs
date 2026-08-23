@@ -48,6 +48,7 @@
 //! * `#pragma intrinsic("name")` -- mark a name (e.g. `alloca`) as a
 //!   compiler intrinsic.
 
+use alloc::boxed::Box;
 use alloc::collections::BTreeSet;
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -56,7 +57,7 @@ use alloc::vec::Vec;
 use core::cell::{Cell, RefCell};
 use hashbrown::HashMap;
 
-use super::codegen::{ElfClass, Target};
+use super::codegen::{CodeModel, ElfClass, Target};
 use super::error::C5Error;
 
 /// One declared dylib plus the bindings that target it. Created
@@ -153,7 +154,7 @@ pub struct Binding {
 
 /// One function-like macro entry: parameter list + body. Object-like
 /// macros are stored separately in `macros` as plain strings.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 struct FnMacro {
     /// Named parameters in source order, *not* including the `...` of
     /// a variadic macro -- variadics are flagged by `is_variadic` and
@@ -181,6 +182,15 @@ pub(crate) struct Preprocessor {
     /// Compilation target; Windows include resolution is
     /// case-insensitive, matching its filesystems.
     target: Target,
+    /// The `wchar_t` in force for this unit, tracking `-fshort-wchar`
+    /// through [`Self::set_unit_model`]. `#if` types an `L'...'`
+    /// constant by it, and the `__WCHAR_*__` predefines report it.
+    pub(super) wchar: crate::c5::codegen::WcharType,
+    /// Whether plain `char` is signed in this unit, tracking
+    /// `-fsigned-char` / `-funsigned-char` through
+    /// [`Self::set_plain_char_signed`]. `#if` sign-extends a character
+    /// constant by it, and `__CHAR_UNSIGNED__` reports it.
+    pub(super) char_signed: bool,
     fn_macros: HashMap<String, FnMacro>,
     /// One entry per `#pragma dylib(name, "path")`, in the order
     /// declared. Each entry collects the bindings whose
@@ -242,6 +252,17 @@ pub(crate) struct Preprocessor {
     /// as a compiler driver adds `/usr/include`); a cross build or a
     /// `--freestanding` / `--nostdinc` build leaves it empty.
     system_fallback_paths: Vec<String>,
+    /// `-nostdinc`: withdraw the standard library headers from
+    /// `#include` resolution. The bundled set and `system_fallback_paths`
+    /// leave the search, so a name no `-I` / `-iquote` path carries is an
+    /// error instead of resolving to badc's own libc. The compiler-owned
+    /// headers ([`crate::c5::headers::COMPILER_OWNED_HEADERS`]) stay, as
+    /// gcc's builtins do.
+    nostdinc: bool,
+    /// `-fno-builtin`: `#pragma intrinsic(name)` registers nothing, so a
+    /// call spelled with the library name lowers as a call rather than as
+    /// the instruction badc has for it.
+    no_builtin: bool,
     /// Headers to splice in front of the user's translation unit,
     /// before any source line is preprocessed. Mirrors gcc /
     /// clang's `-include FILE` flag: each name resolves through
@@ -275,6 +296,11 @@ pub(crate) struct Preprocessor {
     /// costs one push to `include_records` per `#include` resolve
     /// attempt and nothing else.
     track_includes: bool,
+    /// `true` for assembler-with-cpp input (a `.S` unit). A `#` line
+    /// whose name is no directive then passes through with its tail
+    /// macro-expanded, as GNU cpp does for assembler input; in C such
+    /// a line is diagnosed and dropped.
+    asm_source: bool,
     /// Source-declared entry-point name (`#pragma entrypoint(<id>)`).
     /// `None` means the default `main` is used; set via
     /// the pragma to opt the translation unit into a non-`main`
@@ -336,6 +362,118 @@ pub(crate) struct Preprocessor {
     /// variant in `op.rs` and a one-line entry in
     /// [`Self::parse_pragma_intrinsic`].
     pub intrinsics: alloc::collections::BTreeMap<String, i64>,
+    /// Recording state for the source pass of a compile that may retry
+    /// with an extended force-include list; see [`Self::process_recording`].
+    /// `None` outside that pass.
+    reuse: Option<Box<ReuseRecorder>>,
+}
+
+/// Identifier-membership filter for the pass-reuse check. A bit set
+/// keyed on a fixed hash, safe in one direction: a hit may be a false
+/// positive (the retry then falls back to a full run), a miss is exact.
+/// `Cell` bits, since the expansion sites record through `&Preprocessor`.
+pub(crate) struct ObsFilter {
+    mask: usize,
+    bits: alloc::boxed::Box<[Cell<u64>]>,
+}
+
+impl ObsFilter {
+    /// One bit per source byte keeps distinct identifiers sparse;
+    /// clamped so tiny units stay accurate and huge ones stay cheap.
+    fn sized_for(source_len: usize) -> Self {
+        let bits = source_len.next_power_of_two().clamp(1 << 17, 1 << 24);
+        ObsFilter {
+            mask: bits - 1,
+            bits: alloc::vec![Cell::new(0u64); bits / 64].into_boxed_slice(),
+        }
+    }
+
+    #[inline]
+    fn probes(&self, h: u64) -> [usize; 2] {
+        [h as usize & self.mask, (h >> 32) as usize & self.mask]
+    }
+
+    #[inline]
+    fn set(&self, h: u64) {
+        for i in self.probes(h) {
+            let w = &self.bits[i / 64];
+            w.set(w.get() | 1u64 << (i % 64));
+        }
+    }
+
+    #[inline]
+    fn hit(&self, h: u64) -> bool {
+        self.probes(h)
+            .into_iter()
+            .all(|i| self.bits[i / 64].get() & (1u64 << (i % 64)) != 0)
+    }
+}
+
+/// Eight-bytes-at-a-time multiplicative hash with a mixing finalizer,
+/// so both probe indices draw on well-spread bits. The filter must
+/// hash identically in the recording run and the retry run, so the
+/// macro map's per-instance-seeded hasher cannot key it; this runs
+/// once per identifier occurrence, hence the chunked walk.
+#[inline]
+fn obs_hash(name: &str) -> u64 {
+    const K: u64 = 0x517c_c1b7_2722_0a95;
+    let bytes = name.as_bytes();
+    let mut h = bytes.len() as u64;
+    let (chunks, remainder) = bytes.as_chunks::<8>();
+    for c in chunks {
+        h = (h.rotate_left(5) ^ u64::from_le_bytes(*c)).wrapping_mul(K);
+    }
+    let mut tail = 0u64;
+    for &b in remainder {
+        tail = tail << 8 | b as u64;
+    }
+    h = (h.rotate_left(5) ^ tail).wrapping_mul(K);
+    h ^= h >> 33;
+    h = h.wrapping_mul(0xff51_afd7_ed55_8ccd);
+    h ^ (h >> 33)
+}
+
+/// Live recording for the source pass; drained into [`PpReuse`].
+struct ReuseRecorder {
+    /// Names the pass looked up, tested in a conditional, or
+    /// defined / undefined.
+    filter: ObsFilter,
+    /// The pass expanded `__COUNTER__`.
+    counter_used: Cell<bool>,
+    /// Resolution keys the pass checked against the `#pragma once` /
+    /// include-guard registries.
+    consulted_includes: BTreeSet<String>,
+    /// `#pragma` directives feeding the side outputs the compile
+    /// consumes, in source order: (args, line, filename).
+    pragma_events: Vec<(String, usize, String)>,
+}
+
+/// One completed run's source pass, reusable by a re-run whose
+/// force-include list extends this run's: the state at source entry,
+/// what the pass observed of it, and what the pass produced.
+pub(crate) struct PpReuse {
+    source_text: String,
+    macros: HashMap<String, String>,
+    fn_macros: HashMap<String, FnMacro>,
+    once_files: BTreeSet<String>,
+    include_guards: HashMap<String, String>,
+    counter: i64,
+    warning_disabled: BTreeSet<u32>,
+    warning_stack: Vec<BTreeSet<u32>>,
+    warn_disabled: BTreeSet<String>,
+    filter: ObsFilter,
+    counter_used: bool,
+    consulted_includes: BTreeSet<String>,
+    pragma_events: Vec<(String, usize, String)>,
+    warnings: Vec<String>,
+    include_records: Vec<IncludeRecord>,
+}
+
+// Test hook: how many times the source (as opposed to the preamble or
+// a reused pass) has been fully preprocessed on this thread.
+#[cfg(any(test, feature = "codegen_test"))]
+std::thread_local! {
+    pub(crate) static FULL_SOURCE_PASSES: Cell<usize> = const { Cell::new(0) };
 }
 
 /// Windows PE subsystem selector; mirrors the `IMAGE_SUBSYSTEM_*`
@@ -381,18 +519,176 @@ pub enum Subsystem {
     EfiRom,
 }
 
-/// Install every predefine whose spelling or value follows the data
+/// C99 5.2.4.2.2 floating-point characteristics, in the `__FLT_*` /
+/// `__DBL_*` / `__LDBL_*` spellings gcc and clang predefine and that
+/// third-party headers test directly. badc's `float` is IEEE binary32
+/// and `double` is IEEE binary64 on every target; the `__LDBL_*` row
+/// describes the target ABI's `long double` storage format (x87
+/// 80-bit on System V x86-64, binary128 on AAPCS64 ELF, binary64
+/// elsewhere), values matching gcc's per target. `<float.h>` derives
+/// its `FLT_*` / `DBL_*` / `LDBL_*` names from these, which keeps one
+/// source of truth.
+fn install_float_characteristics(macros: &mut HashMap<String, String>, target: Target) {
+    const COMMON: &[(&str, &str)] = &[
+        ("__FLT_RADIX__", "2"),
+        ("__FLT_MANT_DIG__", "24"),
+        ("__FLT_DIG__", "6"),
+        ("__FLT_MIN_EXP__", "(-125)"),
+        ("__FLT_MIN_10_EXP__", "(-37)"),
+        ("__FLT_MAX_EXP__", "128"),
+        ("__FLT_MAX_10_EXP__", "38"),
+        ("__FLT_DECIMAL_DIG__", "9"),
+        ("__FLT_EPSILON__", "1.19209290e-7F"),
+        ("__FLT_MIN__", "1.17549435e-38F"),
+        ("__FLT_MAX__", "3.40282347e+38F"),
+        ("__FLT_NORM_MAX__", "3.40282347e+38F"),
+        ("__FLT_DENORM_MIN__", "1.40129846e-45F"),
+        ("__DBL_MANT_DIG__", "53"),
+        ("__DBL_DIG__", "15"),
+        ("__DBL_MIN_EXP__", "(-1021)"),
+        ("__DBL_MIN_10_EXP__", "(-307)"),
+        ("__DBL_MAX_EXP__", "1024"),
+        ("__DBL_MAX_10_EXP__", "308"),
+        ("__DBL_DECIMAL_DIG__", "17"),
+        ("__DBL_EPSILON__", "2.2204460492503131e-16"),
+        ("__DBL_MIN__", "2.2250738585072014e-308"),
+        ("__DBL_MAX__", "1.7976931348623157e+308"),
+        ("__DBL_NORM_MAX__", "1.7976931348623157e+308"),
+        ("__DBL_DENORM_MIN__", "4.9406564584124654e-324"),
+    ];
+    // (MANT_DIG, DIG, MIN_EXP, MIN_10_EXP, MAX_EXP, MAX_10_EXP,
+    //  DECIMAL_DIG, EPSILON, MIN, MAX, DENORM_MIN); MAX doubles as
+    //  NORM_MAX and DECIMAL_DIG as the C99 5.2.4.2.2 __DECIMAL_DIG__.
+    const LDBL_F64: (
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+    ) = (
+        "53",
+        "15",
+        "(-1021)",
+        "(-307)",
+        "1024",
+        "308",
+        "17",
+        "2.2204460492503131e-16L",
+        "2.2250738585072014e-308L",
+        "1.7976931348623157e+308L",
+        "4.9406564584124654e-324L",
+    );
+    const LDBL_X87: (
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+    ) = (
+        "64",
+        "18",
+        "(-16381)",
+        "(-4931)",
+        "16384",
+        "4932",
+        "21",
+        "1.08420217248550443400745280086994171e-19L",
+        "3.36210314311209350626267781732175260e-4932L",
+        "1.18973149535723176502126385303097021e+4932L",
+        "3.64519953188247460252840593361941982e-4951L",
+    );
+    const LDBL_BIN128: (
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+    ) = (
+        "113",
+        "33",
+        "(-16381)",
+        "(-4931)",
+        "16384",
+        "4932",
+        "36",
+        "1.92592994438723585305597794258492732e-34L",
+        "3.36210314311209350626267781732175260e-4932L",
+        "1.18973149535723176508575932662800702e+4932L",
+        "6.47517511943802511092443895822764655e-4966L",
+    );
+    let (mant, dig, min_exp, min_10, max_exp, max_10, dec_dig, eps, min, max, denorm) =
+        match target.long_double() {
+            crate::c5::codegen::LongDoubleKind::F64 => LDBL_F64,
+            crate::c5::codegen::LongDoubleKind::X87 => LDBL_X87,
+            crate::c5::codegen::LongDoubleKind::Binary128 => LDBL_BIN128,
+        };
+    let ldbl: &[(&str, &str)] = &[
+        ("__LDBL_MANT_DIG__", mant),
+        ("__LDBL_DIG__", dig),
+        ("__LDBL_MIN_EXP__", min_exp),
+        ("__LDBL_MIN_10_EXP__", min_10),
+        ("__LDBL_MAX_EXP__", max_exp),
+        ("__LDBL_MAX_10_EXP__", max_10),
+        ("__LDBL_DECIMAL_DIG__", dec_dig),
+        ("__LDBL_EPSILON__", eps),
+        ("__LDBL_MIN__", min),
+        ("__LDBL_MAX__", max),
+        ("__LDBL_NORM_MAX__", max),
+        ("__LDBL_DENORM_MIN__", denorm),
+        // C99 5.2.4.2.2p11: decimal digits for the widest supported
+        // format, i.e. the long double row's.
+        ("__DECIMAL_DIG__", dec_dig),
+    ];
+    for (name, value) in COMMON.iter().chain(ldbl) {
+        macros.insert((*name).to_string(), (*value).to_string());
+    }
+    for prefix in ["__FLT", "__DBL", "__LDBL"] {
+        for trait_name in ["HAS_DENORM", "HAS_INFINITY", "HAS_QUIET_NAN"] {
+            macros.insert(format!("{prefix}_{trait_name}__"), "1".to_string());
+        }
+    }
+}
+
+/// Install every predefine whose spelling or value follows the unit's
 /// model, replacing whatever a previous call left; sole owner of these
 /// names, so re-selecting leaves nothing from the other model behind.
 ///
 /// `Elf32` on an x86 target is `-m16` / `-m32`, which gcc preprocesses
 /// as i386: `__i386__` for `__x86_64__`, ILP32 for LP64, 32-bit pointer
-/// / `long` / `size_t`, no `__int128`. `-m16` is `-m32` code generation
-/// with a 16-bit default operand size and shares its predefines. An
-/// `Elf32` AArch64 object would be AArch32, which badc neither encodes
-/// nor describes; the driver refuses the flag there and the target's own
-/// model stands.
-fn install_data_model(macros: &mut HashMap<String, String>, target: Target, class: ElfClass) {
+/// / `long` / `size_t` / `wchar_t` spelling, no `__int128`, and the
+/// `__code_model_32__` name for whichever `-mcmodel` names otherwise.
+/// `-m16` is `-m32` code generation with a 16-bit default operand size
+/// and shares its predefines. An `Elf32` AArch64 object would be
+/// AArch32, which badc neither encodes nor describes; the driver
+/// refuses the flag there and the target's own model stands.
+///
+/// `short_wchar` is `-fshort-wchar`, which narrows `wchar_t` to an
+/// unsigned 16-bit type on any target; see [`Target::wchar_type`].
+fn install_data_model(
+    macros: &mut HashMap<String, String>,
+    target: Target,
+    class: ElfClass,
+    code_model: CodeModel,
+    short_wchar: bool,
+) {
     let ilp32 = class.is32() && target.is_x86_64();
     // Both reserved spellings, as gcc has them; the unreserved `i386`
     // stays out, as bare `linux` / `unix` do.
@@ -404,6 +700,10 @@ fn install_data_model(macros: &mut HashMap<String, String>, target: Target, clas
         "__ILP32__",
         "_ILP32",
         "__SIZEOF_INT128__",
+        "__WCHAR_TYPE__",
+        "__code_model_32__",
+        "__code_model_small__",
+        "__code_model_kernel__",
     ]) {
         macros.remove(*name);
     }
@@ -448,6 +748,29 @@ fn install_data_model(macros: &mut HashMap<String, String>, target: Target, clas
     // gcc leaves this undefined on i386, which has no `__int128`.
     if !ilp32 {
         macros.insert("__SIZEOF_INT128__".to_string(), "16".to_string());
+    }
+    // `wchar_t`'s width, underlying type and range, all from the one
+    // `WcharType` the target defines, so the four predefines and the
+    // `<stddef.h>` typedef that keys on `__WCHAR_TYPE__` cannot disagree.
+    let wchar = target.wchar_type(short_wchar);
+    macros.insert("__SIZEOF_WCHAR_T__".to_string(), wchar.bytes.to_string());
+    macros.insert(
+        "__WCHAR_TYPE__".to_string(),
+        wchar.spelling(ilp32).to_string(),
+    );
+    let (wchar_max, wchar_min) = wchar.bound_macros();
+    macros.insert("__WCHAR_MAX__".to_string(), wchar_max);
+    macros.insert("__WCHAR_MIN__".to_string(), wchar_min);
+    // gcc's x86 back end names the selected code model; the aarch64 one
+    // defines no such macro. An ELFCLASS32 object is the 32-bit model
+    // whatever `-mcmodel` says.
+    if target.is_x86_64() {
+        let model = match (ilp32, code_model) {
+            (true, _) => "__code_model_32__",
+            (false, CodeModel::Small) => "__code_model_small__",
+            (false, CodeModel::Kernel) => "__code_model_kernel__",
+        };
+        macros.insert(model.to_string(), "1".to_string());
     }
 }
 
@@ -529,10 +852,9 @@ impl Preprocessor {
         // `__GNUC__` and the rest of the GCC identity are opt-in
         // (`--gnu`, [`Self::enable_gnu`]). badc implements the GNU C
         // extensions real code gates on `__GNUC__`, but not all of them
-        // (`<x86intrin.h>` and the x86 intrinsics are absent), so it
-        // does not claim the macro by default; code that gates an
-        // intrinsic path on `__GNUC__` plus an x86 target would
-        // otherwise fail to compile.
+        // (the x86 SIMD intrinsics are absent), so it does not claim the
+        // macro by default; code that gates an intrinsic path on
+        // `__GNUC__` plus an x86 target would otherwise fail to compile.
         // Byte-order predefines (GCC/clang form). Every supported target
         // is little-endian.
         macros.insert("__ORDER_LITTLE_ENDIAN__".to_string(), "1234".to_string());
@@ -594,6 +916,11 @@ impl Preprocessor {
         // `__STDC_NO_VLA__` stays undefined: c5 supports C99 6.7.6.2
         // variable-length arrays (single dimension, block scope).
         macros.insert("__STDC_NO_COMPLEX__".to_string(), "1".to_string());
+        // C11 6.10.8.2: `char16_t` / `char32_t` values are the UTF-16 /
+        // UTF-32 code units of the character, which is what `u"..."` and
+        // `U"..."` encode here.
+        macros.insert("__STDC_UTF_16__".to_string(), "1".to_string());
+        macros.insert("__STDC_UTF_32__".to_string(), "1".to_string());
         macros.insert(
             "__DATE__".to_string(),
             format!("\"{}\"", env!("BADC_BUILD_DATE")),
@@ -611,6 +938,14 @@ impl Preprocessor {
                 macros.insert("__AARCH64EL__".to_string(), "1".to_string());
             }
             Target::LinuxX64 | Target::WindowsX64 => {}
+        }
+        // x86 named address spaces (`int __seg_gs *p`): gcc predefines
+        // these where the qualifiers are available, and an access through
+        // one rides a segment-override prefix. x86-only, as the
+        // qualifiers themselves are.
+        if target.is_x86_64() {
+            macros.insert("__SEG_FS".to_string(), "1".to_string());
+            macros.insert("__SEG_GS".to_string(), "1".to_string());
         }
         // GCC/Clang define `__CHAR_UNSIGNED__` exactly when plain
         // `char` is unsigned (C99 6.2.5p15 leaves it
@@ -630,12 +965,34 @@ impl Preprocessor {
         macros.insert("__SIZEOF_LONG_LONG__".to_string(), "8".to_string());
         macros.insert("__SIZEOF_FLOAT__".to_string(), "4".to_string());
         macros.insert("__SIZEOF_DOUBLE__".to_string(), "8".to_string());
-        let wchar_bytes = match target {
-            Target::WindowsX64 | Target::WindowsAarch64 => "2",
-            _ => "4",
-        };
-        macros.insert("__SIZEOF_WCHAR_T__".to_string(), wchar_bytes.to_string());
-        install_data_model(&mut macros, target, ElfClass::Elf64);
+        // `long double` takes the target ABI's storage size: 16 on
+        // both Linux targets, 8 elsewhere. `__SIZEOF_FLOAT80__` and
+        // `__SIZEOF_FLOAT128__` stay undefined with the types absent.
+        macros.insert(
+            "__SIZEOF_LONG_DOUBLE__".to_string(),
+            target.long_double().size().to_string(),
+        );
+        install_float_characteristics(&mut macros, target);
+        // `wint_t` is the bundled <wchar.h>'s `int` on every target.
+        macros.insert("__WINT_TYPE__".to_string(), "int".to_string());
+        macros.insert("__SIZEOF_WINT_T__".to_string(), "4".to_string());
+        // C11 6.4.4.4p2-p4 / 7.28: `char16_t` is `uint_least16_t` and
+        // `char32_t` is `uint_least32_t`. Neither tracks `wchar_t`, so
+        // both hold on every target, and they name the types `u'c'` and
+        // `U'c'` take.
+        macros.insert("__CHAR16_TYPE__".to_string(), "unsigned short".to_string());
+        macros.insert("__CHAR32_TYPE__".to_string(), "unsigned int".to_string());
+        // The largest fundamental alignment: what a bare
+        // `__attribute__((aligned))` resolves to and what `__int128` /
+        // 16-aligned automatics are placed at.
+        macros.insert("__BIGGEST_ALIGNMENT__".to_string(), "16".to_string());
+        install_data_model(
+            &mut macros,
+            target,
+            ElfClass::Elf64,
+            CodeModel::Small,
+            false,
+        );
         match target {
             Target::MacOSAarch64 => {
                 macros.insert("__APPLE__".to_string(), "1".to_string());
@@ -690,6 +1047,8 @@ impl Preprocessor {
         Self {
             macros,
             target,
+            wchar: target.wchar_type(false),
+            char_signed: target.plain_char_signed(),
             fn_macros,
             dylibs: Vec::new(),
             exports: Vec::new(),
@@ -700,11 +1059,14 @@ impl Preprocessor {
             own_header_roots: Vec::new(),
             quote_search_paths: Vec::new(),
             system_fallback_paths: Vec::new(),
+            nostdinc: false,
+            no_builtin: false,
             force_includes: Vec::new(),
             source_label: "<source>".to_string(),
             warnings: Vec::new(),
             include_records: Vec::new(),
             track_includes: false,
+            asm_source: false,
             entrypoint: None,
             subsystem: None,
             counter: Cell::new(0),
@@ -716,20 +1078,36 @@ impl Preprocessor {
             warning_stack: Vec::new(),
             warn_disabled: BTreeSet::new(),
             intrinsics,
+            reuse: None,
         }
     }
 
-    /// Re-select the data-model predefines for an object of `class`.
-    /// The driver calls this for `-m16` / `-m32`, which gcc preprocesses
-    /// with the i386 set; see [`install_data_model`].
-    pub fn set_elf_class(&mut self, class: ElfClass) {
-        install_data_model(&mut self.macros, self.target, class);
+    /// Re-select the predefines that follow the unit's model: `-m16` /
+    /// `-m32` select the i386 set through `class`, `-mcmodel` names the
+    /// x86-64 model, and `-fshort-wchar` narrows `wchar_t`; see
+    /// [`install_data_model`].
+    pub fn set_unit_model(&mut self, class: ElfClass, model: CodeModel, short_wchar: bool) {
+        self.wchar = self.target.wchar_type(short_wchar);
+        install_data_model(&mut self.macros, self.target, class, model, short_wchar);
+    }
+
+    /// Select plain `char`'s signedness for this unit (`-fsigned-char` /
+    /// `-funsigned-char`), moving `__CHAR_UNSIGNED__` with it so a
+    /// header cannot read one answer while the front end uses another.
+    pub fn set_plain_char_signed(&mut self, signed: bool) {
+        self.char_signed = signed;
+        if signed {
+            self.macros.remove("__CHAR_UNSIGNED__");
+        } else {
+            self.macros
+                .insert("__CHAR_UNSIGNED__".to_string(), "1".to_string());
+        }
     }
 
     /// Define the GCC identity macros (`--gnu`). badc claims `__GNUC__`
     /// only on request because it implements most, but not all, of the
-    /// GNU C surface (`<x86intrin.h>` and the x86 intrinsics are
-    /// absent). Exactly one of `__GNUC_STDC_INLINE__` /
+    /// GNU C surface (the x86 SIMD intrinsics are absent). Exactly one
+    /// of `__GNUC_STDC_INLINE__` /
     /// `__GNUC_GNU_INLINE__` reports which inline linkage model is in
     /// force, per `gnu89_inline`; headers key the spelling of their
     /// inline declarations off it.
@@ -739,19 +1117,21 @@ impl Preprocessor {
     /// `gcc`/`clang -std=c11` does, so portable code uses the standard
     /// path for the GNU-only features badc lacks.
     pub fn enable_gnu(&mut self, gnu89_inline: bool, strict_ansi: bool) {
-        // The claimed version (`crate::GNU_COMPAT_VERSION`) stays at
-        // 4.2.1. The language features a 5.1 claim implies are backed --
-        // `__atomic_*` (4.7), `asm goto`
-        // (4.5), `__builtin_types_compatible_p` including array type
-        // names, designated-initializer ranges, `__builtin_*_overflow`
-        // (5.1) -- but the version also gates the x86 intrinsic surface.
-        // Real code keys `<x86intrin.h>` and the SSE2 / SSSE3 / SSE4.1 /
-        // AES-NI / PCLMUL / RDRAND intrinsic families off `__GNUC__ >=
-        // 4.4`, along with per-function `__attribute__((target(...)))`.
-        // badc lowers none of those, so 4.2.1 is the highest version it
-        // can claim without selecting paths it cannot compile. Raise it
-        // once the intrinsics are lowered, not merely once a header
-        // named `<x86intrin.h>` exists.
+        // The claimed version (`crate::GNU_COMPAT_VERSION`) is 4.3.0:
+        // every feature GCC 4.3 documents is backed -- `__builtin_bswap32`
+        // / `__builtin_bswap64`, the `hot` / `cold` / `alloc_size` /
+        // `error` / `warning` attributes, `__COUNTER__` -- and later
+        // features that real code gates on their own capability macros
+        // rather than on the version (`__atomic_*`, `asm goto`,
+        // `_Static_assert`, `_Generic`, `__has_attribute`,
+        // `__builtin_*_overflow`) are backed too.
+        // The two things 4.4 adds that real code selects on the version
+        // are now backed: per-function `__attribute__((target(...)))` and
+        // the x86 intrinsic header family, over the SSE2 / SSSE3 /
+        // SSE4.1 / AES-NI / PCLMUL / RDRAND subset the headers carry.
+        // TODO: raise the claim, which needs the forced-claim measurement
+        // over a corpus at each rung between 4.4 and the chosen version,
+        // not just at the intrinsic surface.
         let mut compat = crate::GNU_COMPAT_VERSION.split('.');
         for name in ["__GNUC__", "__GNUC_MINOR__", "__GNUC_PATCHLEVEL__"] {
             let component = compat.next().expect("GNU_COMPAT_VERSION is x.y.z");
@@ -777,13 +1157,33 @@ impl Preprocessor {
             ),
         );
         // The `__sync_*` builtins lower for these widths, so the
-        // capability macros a lock-free path tests are honest.
+        // capability macros a lock-free path tests are honest. 16 stays
+        // undefined: a 16-byte compare-exchange has no lowering.
         for w in [1u32, 2, 4, 8] {
             self.macros.insert(
                 alloc::format!("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_{w}"),
                 "1".to_string(),
             );
         }
+        // C11 7.17.5 lock-free property, in the GCC spelling
+        // `<stdatomic.h>` and lock-free paths test. Every type named
+        // here is at most 8 bytes wide on every supported target and
+        // the `__atomic_*` builtins lower to a lock-free instruction at
+        // those widths, so all are 2 (always lock-free).
+        for name in [
+            "BOOL", "CHAR", "CHAR16_T", "CHAR32_T", "WCHAR_T", "SHORT", "INT", "LONG", "LLONG",
+            "POINTER",
+        ] {
+            self.macros.insert(
+                alloc::format!("__GCC_ATOMIC_{name}_LOCK_FREE"),
+                "2".to_string(),
+            );
+        }
+        // `__atomic_test_and_set` sets the byte to 1.
+        self.macros.insert(
+            "__GCC_ATOMIC_TEST_AND_SET_TRUEVAL".to_string(),
+            "1".to_string(),
+        );
         // Report strict ISO conformance alongside `__GNUC__`, exactly as
         // `gcc`/`clang -std=c11` does, so a header takes its standard-C
         // path rather than a GNU-dialect path for any extension badc
@@ -811,6 +1211,11 @@ impl Preprocessor {
     /// the `-M` family's dependency output.
     pub fn set_track_includes(&mut self, enabled: bool) {
         self.track_includes = enabled;
+    }
+
+    /// Mark the input as assembler-with-cpp (a `.S` unit).
+    pub fn set_asm_source(&mut self, on: bool) {
+        self.asm_source = on;
     }
 
     /// Override the filename label used for the top-level translation
@@ -868,6 +1273,18 @@ impl Preprocessor {
         }
     }
 
+    /// gcc / clang `-nostdinc`: take the standard library headers off the
+    /// `#include` search. See [`Preprocessor::nostdinc`].
+    pub fn set_nostdinc(&mut self, on: bool) {
+        self.nostdinc = on;
+    }
+
+    /// gcc / clang `-fno-builtin` / `-ffreestanding`, the preprocessor's
+    /// half. See [`Preprocessor::no_builtin`].
+    pub fn set_no_builtin(&mut self, on: bool) {
+        self.no_builtin = on;
+    }
+
     /// Add a header to splice in front of the user's translation
     /// unit, before any source line is preprocessed. Mirrors gcc /
     /// clang's `-include FILE` flag. The name is resolved through
@@ -910,29 +1327,205 @@ impl Preprocessor {
     /// lines, which shifts user-source line numbers downstream of
     /// the include but keeps lines *within* a file aligned.
     pub fn process(&mut self, source: &str) -> Result<String, C5Error> {
-        // -include FILE plumbing: synthesize an `#include "name"`
-        // line per registered force-include and process them as a
-        // preamble before the user's source. Each force-include
-        // header runs with the same line-counter / `__FILE__` /
-        // search-path machinery as a regular `#include`, so a
-        // failure inside the header (say a typo'd `#pragma`) gets
-        // a diagnostic naming that header rather than the user's
-        // source. The synthesized preamble itself uses
-        // `<force-include>` as its filename label so any
-        // diagnostic targeting one of the synthesized lines
-        // points at that label and the line in the original
-        // source isn't shifted from the user's perspective.
         let mut out = String::with_capacity(source.len());
-        if !self.force_includes.is_empty() {
-            let mut preamble = String::new();
-            for name in &self.force_includes.clone() {
-                preamble.push_str(&format!("#include \"{name}\"\n"));
-            }
-            self.process_named(&preamble, "<force-include>", &mut out)?;
-        }
-        let label = self.source_label.clone();
-        self.process_named(source, &label, &mut out)?;
+        self.process_preamble(&mut out)?;
+        self.process_source(source, &mut out)?;
         Ok(out)
+    }
+
+    /// -include FILE plumbing: synthesize an `#include "name"`
+    /// line per registered force-include and process them as a
+    /// preamble before the user's source. Each force-include
+    /// header runs with the same line-counter / `__FILE__` /
+    /// search-path machinery as a regular `#include`, so a
+    /// failure inside the header (say a typo'd `#pragma`) gets
+    /// a diagnostic naming that header rather than the user's
+    /// source. The synthesized preamble itself uses
+    /// `<force-include>` as its filename label so any
+    /// diagnostic targeting one of the synthesized lines
+    /// points at that label and the line in the original
+    /// source isn't shifted from the user's perspective.
+    fn process_preamble(&mut self, out: &mut String) -> Result<(), C5Error> {
+        if self.force_includes.is_empty() {
+            return Ok(());
+        }
+        let mut preamble = String::new();
+        for name in &self.force_includes.clone() {
+            preamble.push_str(&format!("#include \"{name}\"\n"));
+        }
+        self.process_named(&preamble, "<force-include>", out)
+    }
+
+    fn process_source(&mut self, source: &str, out: &mut String) -> Result<(), C5Error> {
+        #[cfg(any(test, feature = "codegen_test"))]
+        FULL_SOURCE_PASSES.with(|c| c.set(c.get() + 1));
+        let label = self.source_label.clone();
+        self.process_named(source, &label, out)
+    }
+
+    /// As [`Self::process`], additionally recording what the source pass
+    /// read of the state the preamble left, so a later run whose
+    /// force-include list extends this one can prove the pass reusable
+    /// ([`Self::process_reusing`]).
+    pub(crate) fn process_recording(&mut self, source: &str) -> Result<(String, PpReuse), C5Error> {
+        let mut out = String::with_capacity(source.len());
+        self.process_preamble(&mut out)?;
+        let source_start = out.len();
+        let n_warnings = self.warnings.len();
+        let n_records = self.include_records.len();
+        let entry_macros = self.macros.clone();
+        let entry_fn_macros = self.fn_macros.clone();
+        let entry_once = self.pragma_once_files.clone();
+        let entry_guards = self.include_guards.clone();
+        let entry_counter = self.counter.get();
+        let entry_warning_disabled = self.warning_disabled.clone();
+        let entry_warning_stack = self.warning_stack.clone();
+        let entry_warn_disabled = self.warn_disabled.clone();
+        self.reuse = Some(Box::new(ReuseRecorder {
+            filter: ObsFilter::sized_for(source.len()),
+            counter_used: Cell::new(false),
+            consulted_includes: BTreeSet::new(),
+            pragma_events: Vec::new(),
+        }));
+        let result = self.process_source(source, &mut out);
+        let rec = *self.reuse.take().expect("recorder installed above");
+        result?;
+        let cache = PpReuse {
+            source_text: out[source_start..].to_string(),
+            macros: entry_macros,
+            fn_macros: entry_fn_macros,
+            once_files: entry_once,
+            include_guards: entry_guards,
+            counter: entry_counter,
+            warning_disabled: entry_warning_disabled,
+            warning_stack: entry_warning_stack,
+            warn_disabled: entry_warn_disabled,
+            filter: rec.filter,
+            counter_used: rec.counter_used.get(),
+            consulted_includes: rec.consulted_includes,
+            pragma_events: rec.pragma_events,
+            warnings: self.warnings[n_warnings..].to_vec(),
+            include_records: self.include_records[n_records..].to_vec(),
+        };
+        Ok((out, cache))
+    }
+
+    /// Run `process` for a force-include list extending the one `prior`
+    /// was recorded under, reusing `prior`'s source pass when the
+    /// extension provably cannot change it. `None` when reuse cannot be
+    /// shown sound; the caller then runs a full pass on a fresh
+    /// preprocessor. On `Some`, this preprocessor's side outputs are
+    /// what the full run would leave.
+    ///
+    /// Beyond its own text and the filesystem (stable across a retry by
+    /// the same assumption the full re-run makes), the source pass reads
+    /// the macro tables, the once / include-guard registries, the
+    /// `__COUNTER__` position and the pragma-warning state, and appends
+    /// to the side outputs. Each read is checked below against what the
+    /// recorded pass observed; the appends are replayed.
+    pub(crate) fn process_reusing(&mut self, prior: &PpReuse) -> Option<String> {
+        let mut out = String::new();
+        self.process_preamble(&mut out).ok()?;
+        if self.counter.get() != prior.counter && prior.counter_used {
+            return None;
+        }
+        if self.warning_disabled != prior.warning_disabled
+            || self.warning_stack != prior.warning_stack
+            || self.warn_disabled != prior.warn_disabled
+        {
+            return None;
+        }
+        // Names the extension defines, redefines or undefines must be
+        // ones the recorded pass never looked up, tested or (un)defined:
+        // an identifier that was no macro then and is one now (or the
+        // reverse, or a changed body) expands differently.
+        if self.macro_delta_observed(prior) {
+            return None;
+        }
+        // A once / guard registration for a file the pass resolved flips
+        // that resolution between open and skip.
+        if self
+            .pragma_once_files
+            .symmetric_difference(&prior.once_files)
+            .any(|f| prior.consulted_includes.contains(f))
+        {
+            return None;
+        }
+        let guards_changed = self
+            .include_guards
+            .iter()
+            .filter(|(k, v)| prior.include_guards.get(*k) != Some(*v))
+            .map(|(k, _)| k)
+            .chain(
+                prior
+                    .include_guards
+                    .keys()
+                    .filter(|k| !self.include_guards.contains_key(*k)),
+            );
+        if guards_changed
+            .into_iter()
+            .any(|f| prior.consulted_includes.contains(f))
+        {
+            return None;
+        }
+        // Replay the pass's side-output contributions onto this run's
+        // state through the regular appliers, so ordering and conflict
+        // rules hold as in a full run; a conflict the full run would
+        // diagnose falls back to it.
+        for (args, line, file) in &prior.pragma_events {
+            self.parse_pragma(args, *line, file).ok()?;
+        }
+        self.warnings.extend(prior.warnings.iter().cloned());
+        self.include_records
+            .extend(prior.include_records.iter().cloned());
+        out.push_str(&prior.source_text);
+        Some(out)
+    }
+
+    /// Whether any macro-table difference against `prior`'s source-entry
+    /// snapshot touches a name the recorded pass observed.
+    fn macro_delta_observed(&self, prior: &PpReuse) -> bool {
+        let obj = self
+            .macros
+            .iter()
+            .filter(|(k, v)| prior.macros.get(*k) != Some(*v))
+            .map(|(k, _)| k)
+            .chain(
+                prior
+                    .macros
+                    .keys()
+                    .filter(|k| !self.macros.contains_key(*k)),
+            );
+        let func = self
+            .fn_macros
+            .iter()
+            .filter(|(k, v)| prior.fn_macros.get(*k) != Some(*v))
+            .map(|(k, _)| k)
+            .chain(
+                prior
+                    .fn_macros
+                    .keys()
+                    .filter(|k| !self.fn_macros.contains_key(*k)),
+            );
+        obj.chain(func).any(|name| prior.filter.hit(obs_hash(name)))
+    }
+
+    /// Record `name` as observed by the source pass. Called wherever
+    /// expansion, a conditional, a guard probe or a define / undef
+    /// consults the macro tables.
+    #[inline]
+    pub(super) fn obs_note(&self, name: &str) {
+        if let Some(r) = self.reuse.as_deref() {
+            r.filter.set(obs_hash(name));
+        }
+    }
+
+    /// Record that the source pass consumed a `__COUNTER__` value.
+    #[inline]
+    pub(super) fn obs_note_counter(&self) {
+        if let Some(r) = self.reuse.as_deref() {
+            r.counter_used.set(true);
+        }
     }
 
     /// Recursive entry point. `filename` labels the buffer so error
@@ -948,21 +1541,16 @@ impl Preprocessor {
         // A UTF-8 byte-order mark opening the file is accepted and
         // skipped, following gcc and clang.
         let source = source.strip_prefix('\u{feff}').unwrap_or(source);
-        // c99 sec 5.1.1.2 phase 2: every `\\\n` joins lines. We do this
-        // up-front so the line-by-line preprocessor never sees a
-        // continuation. Line counts are preserved by emitting blank
-        // lines for each continuation consumed, so error messages
-        // (and `__LINE__`) stay grounded in the original source.
-        let unfolded = unfold_line_continuations(source);
-        // c99 sec 5.1.1.2 phase 3: remove comments. Done before macro
+        // c99 sec 5.1.1.2 phases 2 and 3, fused into one scan: every
+        // `\\\n` joins lines so the line-by-line preprocessor never
+        // sees a continuation, and comments are removed before macro
         // substitution so a `#define X 0 /* note */` body doesn't
         // emit a stray `*/` into a surrounding source comment when
-        // X is referenced from inside that comment. Inline-commented
-        // numeric `#define`s referenced from doc-comment blocks are
-        // a common pattern; without this pass the macro expansion's
-        // `*/` closes the surrounding `/* ... */` early and the
-        // lexer sees comment tail text as code.
-        let stripped = strip_c_comments(&unfolded);
+        // X is referenced from inside that comment. Line counts are
+        // preserved by emitting blank lines for each continuation
+        // consumed, so error messages (and `__LINE__`) stay grounded
+        // in the original source.
+        let stripped = unfold_and_strip(source);
         let source = stripped.as_str();
         out.reserve(source.len());
 
@@ -1029,9 +1617,19 @@ impl Preprocessor {
             let line_no = idx + 1;
             let trimmed = line.trim_start();
 
-            if let Some(rest) = trimmed.strip_prefix('#') {
+            // Assembler-with-cpp: a `#` line naming no directive is text,
+            // not a directive; it falls through to the content path and
+            // passes with its tail macro-expanded, as GNU cpp emits it
+            // for assembler input.
+            let parsed_hash = trimmed
+                .strip_prefix('#')
+                .map(|rest| (rest, parse_directive(rest.trim_start(), self.asm_source)));
+            let asm_text = self.asm_source
+                && matches!(&parsed_hash, Some((r, Directive::Other)) if !r.trim_start().is_empty());
+            if let Some((rest, parsed)) = parsed_hash
+                && !asm_text
+            {
                 let directive = rest.trim_start();
-                let parsed = parse_directive(directive);
                 guard.line(line, Some(&parsed), cond_stack.len());
                 if let Some(next) = self.apply_cond_or_macro_directive(
                     &parsed,
@@ -1230,7 +1828,9 @@ impl Preprocessor {
                         // body so the warning names what was
                         // dropped, and let the empty-line emit
                         // below pad the line counter.
-                        if active {
+                        // A bare `#` is the C99 6.10p9 null directive:
+                        // consumed without effect and without diagnostic.
+                        if active && !directive.is_empty() {
                             let kw = directive
                                 .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
                                 .next()
@@ -1294,7 +1894,7 @@ impl Preprocessor {
                 // re-scanning the grown buffer per joined line is
                 // quadratic in the invocation length.
                 let mut join = JoinScan::new();
-                join.feed(&buffer, &self.fn_macros, &self.macros);
+                join.feed(&buffer, self);
                 while idx + consumed < lines.len()
                     && (join.unclosed()
                         // A function-like macro name at the end of a line with
@@ -1310,7 +1910,7 @@ impl Preprocessor {
                     let dline = source_line + consumed - 1;
                     let cont_trimmed = cont.trim_start();
                     if let Some(rest) = cont_trimmed.strip_prefix('#') {
-                        let parsed = parse_directive(rest.trim_start());
+                        let parsed = parse_directive(rest.trim_start(), self.asm_source);
                         // TODO: `#include`, `#line` and `#pragma` inside an
                         // argument list are consumed without effect; their
                         // output would have to interleave with the joined
@@ -1329,7 +1929,7 @@ impl Preprocessor {
                         let appended = buffer.len();
                         buffer.push('\n');
                         buffer.push_str(cont);
-                        join.feed(&buffer[appended..], &self.fn_macros, &self.macros);
+                        join.feed(&buffer[appended..], self);
                     }
                 }
                 // `__LINE__` reflects the presumed line (`source_line`),
@@ -1377,6 +1977,7 @@ impl Preprocessor {
 
     /// Install an object-like macro definition.
     fn apply_define(&mut self, name: &str, body: &str) {
+        self.obs_note(name);
         self.macros.insert(name.to_string(), body.to_string());
         self.fn_macros.remove(name);
     }
@@ -1478,6 +2079,7 @@ impl Preprocessor {
     /// `#ifdef __FILE__` and the `#ifdef __COUNTER__` feature probe
     /// must see them.
     pub(super) fn is_defined_name(&self, name: &str) -> bool {
+        self.obs_note(name);
         self.macros.contains_key(name)
             || self.fn_macros.contains_key(name)
             || is_operator_name(name)
@@ -1489,6 +2091,7 @@ impl Preprocessor {
     /// macro variadic; the named form additionally binds the trailing
     /// arguments to `name`.
     fn apply_define_fn(&mut self, name: &str, params: &[&str], body: &str) {
+        self.obs_note(name);
         let mut is_variadic = false;
         let mut va_name = None;
         let mut params = params;
@@ -1519,6 +2122,7 @@ impl Preprocessor {
 
     /// Remove a macro definition of either kind.
     fn apply_undef(&mut self, name: &str) {
+        self.obs_note(name);
         self.macros.remove(name);
         self.fn_macros.remove(name);
     }
@@ -1560,4 +2164,4 @@ use directive::{
 use expand::JoinScan;
 pub use include::{IncludeOrigin, IncludeRecord, IncludeStatus};
 use pragma::{PragmaDirective, parse_pragma_directive, pragma_is_pack, pragma_is_visibility};
-use text::{is_ident, strip_c_comments, unfold_line_continuations};
+use text::{is_ident, unfold_and_strip};

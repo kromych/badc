@@ -9,6 +9,21 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <main>:
                	xorq	%rdx, %rdx
@@ -16,32 +31,30 @@ Disassembly of section .text:
                	jmp	<addr>
                	xorq	%rax, %rax
                	jmp	<addr>
-               	leaq	(%rdx,%rax), %rdi
-               	movslq	%edi, %rdi
-               	movl	$0x3, %r9d
-               	pushq	%rax
-               	pushq	%rdx
-               	movq	%rdi, %rax
-               	cqto
-               	idivq	%r9
-               	movq	%rdx, %rdi
-               	popq	%rdx
-               	popq	%rax
-               	testq	%rdi, %rdi
+               	leaq	(%rdx,%rax), %rsi
+               	movslq	%esi, %rsi
+               	imulq	$0x55555556, %rsi, %rdi # imm = 0x55555556
+               	sarq	$0x20, %rdi
+               	movq	%rdi, %r8
+               	shrq	$0x3f, %r8
+               	addq	%r8, %rdi
+               	leaq	(%rdi,%rdi,2), %rdi
+               	subq	%rdi, %rsi
+               	testq	%rsi, %rsi
                	jne	<addr>
                	jmp	<addr>
-               	cmpq	$0x4, %rsi
+               	cmpl	$0x4, %eax
                	jne	<addr>
                	jmp	<addr>
                	addq	%rax, %rcx
-               	leaq	0x1(%rsi), %rax
-               	movslq	%eax, %rsi
-               	cmpq	%r8, %rsi
+               	movslq	%eax, %rax
+               	incq	%rax
+               	cmpl	%edx, %eax
                	jl	<addr>
                	addq	%rdx, %rcx
-               	leaq	0x1(%r8), %rdx
-               	movslq	%edx, %r8
-               	cmpq	$0x6, %r8
+               	movslq	%edx, %rax
+               	leaq	0x1(%rax), %rdx
+               	cmpl	$0x6, %edx
                	jl	<addr>
                	movslq	%ecx, %rax
                	retq

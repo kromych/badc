@@ -14,6 +14,9 @@ int main() {
     if (O_RDONLY   != 0) return 5;
     if (O_WRONLY   != 1) return 6;
     if (O_RDWR     != 2) return 7;
+    // Every target has 64-bit offsets natively, so the flag selecting
+    // them is a no-op and is defined on all of them.
+    if (O_LARGEFILE != 0) return 14;
     if (STDIN_FILENO  != 0) return 8;
     if (STDOUT_FILENO != 1) return 9;
     if (STDERR_FILENO != 2) return 10;

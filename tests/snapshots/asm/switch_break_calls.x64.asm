@@ -9,6 +9,21 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <f1>:
                	movl	$0x64, %eax
@@ -28,11 +43,11 @@ Disassembly of section .text:
 
 <driver>:
                	movslq	%edi, %rdi
-               	cmpq	$0x1, %rdi
+               	cmpl	$0x1, %edi
                	jl	<addr>
-               	cmpq	$0x2, %rdi
+               	cmpl	$0x2, %edi
                	jl	<addr>
-               	cmpq	$0x2, %rdi
+               	cmpl	$0x2, %edi
                	je	<addr>
                	movl	$0x190, %eax            # imm = 0x190
                	movslq	%eax, %rax

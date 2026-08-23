@@ -33,6 +33,13 @@ use super::Compiler;
 use super::types::{add_ptr_level, apply_qual_bits, is_decl_modifier, strip_unsigned};
 
 impl Compiler {
+    /// Record the array shape `idx` holds before this declarator
+    /// overwrites it, for the scope save that runs after the declarator.
+    fn record_prior_shape(&mut self, idx: usize) {
+        let s = &self.symbols[idx];
+        self.pending.declarator_prior_shape = Some((idx, s.inner_array_size, s.array_dims.clone()));
+    }
+
     /// Speculatively parse a block-scope function prototype
     /// `[*]name(params);`. C99 6.7p1 / 6.2.2p5: with no storage-class
     /// specifier or `extern`, such a name has external linkage
@@ -74,8 +81,13 @@ impl Compiler {
                 || c == Token::Glo as i64
                 || c == Token::Loc as i64;
             if !known {
+                // The name has block scope (C99 6.2.1p4): save it for
+                // the scope-exit restore. The declared entity survives
+                // on the slot past the unbind for call resolution.
+                self.rebind_scoped(id_idx)?;
                 let sym = &mut self.symbols[id_idx];
                 sym.class = Token::Fun as i64;
+                sym.scoped_fn_decl = true;
                 sym.type_ = lbt + ret_ptr_levels * Ty::Ptr as i64;
                 sym.params = params.types;
                 sym.is_variadic = params.is_variadic;
@@ -269,11 +281,13 @@ impl Compiler {
         // A `const` after the outermost `*` qualifies the declared object,
         // so only the last derivation's qualifiers count.
         let mut outer_const = false;
+        let mut outer_restrict = false;
         while self.lex.tk == Token::MulOp {
             self.next()?;
             ty = add_ptr_level(ty);
             leading_ptr_count += 1;
             outer_const = false;
+            outer_restrict = false;
             // Pointer-level qualifiers: `int *const p`, `int *volatile p`,
             // `char *restrict s`. A `volatile` here qualifies the pointer
             // object, which is what `apply_qual_bits` records by clearing
@@ -283,6 +297,7 @@ impl Compiler {
             loop {
                 if self.lex.tk == Token::TypeQual {
                     outer_const |= self.lex_is_const_qual();
+                    outer_restrict |= self.lex_is_restrict_qual();
                     ty = apply_qual_bits(ty, self.lex_qualifier_bits());
                     self.next()?;
                 } else if self.at_attribute_specifier() {
@@ -293,6 +308,7 @@ impl Compiler {
             }
         }
         self.pending.declarator_outer_const = outer_const;
+        self.pending.declarator_outer_restrict = outer_restrict;
         // Record the leading `*` count so a use of an array typedef can
         // tell `A x` (fold the dimension onto `x`) from `A *p` (pointer to
         // the array) even when the typedef's element type is itself a
@@ -327,13 +343,26 @@ impl Compiler {
         // adds normally. Consumed here so it does not leak to the next
         // declarator.
         let absorb_fn_type_ptr = self.pending.base_is_function_type && leading_ptr_count > 0;
+        // With no `*` of its own, a following `( declarator )` is pure
+        // grouping (`F (*p)` is `F *p`): the function-type marker flows
+        // into the recursion, whose epilogue absorbs the pointer level.
+        let fn_type_flows_into_group = self.pending.base_is_function_type
+            && !absorb_fn_type_ptr
+            && self.lex.tk == '('
+            && !self.paren_opens_param_type_list()
+            && (self.lex.peek_after_whitespace(b'*')
+                || self.lex.peek_after_whitespace(b'(')
+                || self.lex.peek_after_whitespace_starts_ident());
         // A function-TYPE typedef used with no pointer level declares the
         // identifier with function type, i.e. a function declaration (C99
         // 6.9.1), not a function-pointer object. Flag it for the file-scope
         // declaration path; `F *p` (a pointer) takes the absorb path above.
-        self.pending.bare_function_type_declarator =
-            self.pending.base_is_function_type && leading_ptr_count == 0;
-        self.pending.base_is_function_type = false;
+        self.pending.bare_function_type_declarator = self.pending.base_is_function_type
+            && leading_ptr_count == 0
+            && !fn_type_flows_into_group;
+        if !fn_type_flows_into_group {
+            self.pending.base_is_function_type = false;
+        }
         if absorb_fn_type_ptr {
             ty -= Ty::Ptr as i64;
         }
@@ -377,7 +406,18 @@ impl Compiler {
         {
             self.next()?; // consume the outer `(`
             let outer_ty_before_inner = ty;
+            // Discard any stale marker, then read what this recursion's
+            // subtree produced: true when an inner group already fixed
+            // the identifier's fn-pointer lineage, so this frame's
+            // pointer levels describe the return type instead.
+            core::mem::take(&mut self.pending.fn_ptr_group_resolved);
             let (idx, mut inner_ty, inner_array_size) = self.parse_declarator(ty)?;
+            let inner_resolved = core::mem::take(&mut self.pending.fn_ptr_group_resolved);
+            // Pending count right after the inner declarator: a fn-pointer
+            // typedef base seeded it and the inner leading `*`s added to
+            // it. Captured here because the signature parses below drain
+            // the pending carriers per parameter.
+            let prior_pending_fpi = self.pending.fn_ptr_indirection.unwrap_or(0);
             // Function-pointer lineage trace: the inner
             // declarator's leading `*`s plus the fn-pointer's own
             // pointer level give the indirection count from the
@@ -464,8 +504,11 @@ impl Compiler {
                     // first function-signature paren so a fn-pointer
                     // declarator records its callee's variadic-ness and
                     // named-parameter count. Subsequent signatures
-                    // (function-returning-fp shapes) keep skipping.
-                    if !saw_fn_signature {
+                    // (function-returning-fp shapes) keep skipping, as
+                    // does an enclosing frame when an inner group
+                    // already captured the innermost signature -- the
+                    // prototype a call through the variable uses.
+                    if !saw_fn_signature && !inner_resolved {
                         // Capture the pointee signature's parameter types (not
                         // just the count) so an indirect call through the
                         // pointer narrows each argument to its declared
@@ -533,18 +576,33 @@ impl Compiler {
             // handler treats `*p` on `T (*p)[N]` as the fn-ptr
             // decay no-op and the row deref never fires).
             if saw_fn_signature && inner_ptr_levels > 0 {
-                // Only set the side-channel for the OUTERMOST
-                // fn-ptr declarator: the inner recursive call may
-                // itself have set it for a nested fn-ptr declarator
-                // (function-returning-fp shape), and the outer
-                // call's value is the right one to expose.
-                self.pending.fn_ptr_indirection = Some(inner_ptr_levels);
+                if inner_resolved {
+                    // An inner group already fixed the identifier's
+                    // lineage; the levels above it belong to the return
+                    // type. The outermost signature frame writes last,
+                    // recording the whole return-side chain.
+                    self.pending.fn_ptr_ret_indirection = inner_ptr_levels - prior_pending_fpi;
+                } else {
+                    // The innermost signature frame fixes the lineage:
+                    // the levels between the identifier and this
+                    // signature are the derefs from the variable's
+                    // value down to the fn-pointer rvalue, plus 1. A
+                    // pending count above that came from a fn-pointer
+                    // typedef base (`fn_t (*tp)(int)`), whose lineage
+                    // is the return type's.
+                    if prior_pending_fpi > inner_ptr_levels {
+                        self.pending.fn_ptr_ret_indirection = prior_pending_fpi - inner_ptr_levels;
+                    }
+                    self.pending.fn_ptr_indirection = Some(inner_ptr_levels);
+                }
+                self.pending.fn_ptr_group_resolved = true;
             } else if saw_fn_signature && inner_ptr_levels == 0 && param_ctx {
                 // `RET (name)(args)` parameter: the function type decays
                 // to a pointer to function, the same encoding as
                 // `RET (*name)(args)` (one indirection level).
                 inner_ty += Ty::Ptr as i64;
                 self.pending.fn_ptr_indirection = Some(1);
+                self.pending.fn_ptr_group_resolved = true;
             }
             if !pointee_dims.is_empty() {
                 if !saw_fn_signature && inner_ptr_levels > 0 {
@@ -825,6 +883,7 @@ impl Compiler {
                 // scopes: each new binding starts fresh, so any
                 // per-symbol shape metadata must be cleared when the
                 // binding's scope begins.
+                self.record_prior_shape(idx);
                 self.symbols[idx].inner_array_size = inner_dim;
                 self.symbols[idx].array_dims = if full_dims.len() >= 2 {
                     full_dims
@@ -839,6 +898,7 @@ impl Compiler {
             // binding of the same name. A pointer over an array
             // typedef needs no symbol-side shape: the leading-`*`
             // epilogue already folded the array layer into the type.
+            self.record_prior_shape(idx);
             self.symbols[idx].inner_array_size = 0;
             self.symbols[idx].array_dims = alloc::vec::Vec::new();
         }

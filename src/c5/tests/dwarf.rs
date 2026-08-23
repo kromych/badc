@@ -42,7 +42,7 @@ fn build_signed_mach_o_opt(src: &str, stem: &str, optimize: bool) -> PathBuf {
     let bytes = crate::emit_native_with_options(&program, Target::MacOSAarch64, options)
         .unwrap_or_else(|e| panic!("emit_native_with_options failed for {stem}: {e}"));
 
-    let path = std::env::temp_dir().join(format!("badc-dwarf-{stem}.bin"));
+    let path = super::unique_temp_path("badc-dwarf", stem, ".bin");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");
@@ -408,13 +408,21 @@ fn lldb_resolves_bitfield_widths() {
         let _ = std::fs::remove_file(&path);
         return;
     };
-    // lldb prints bitfield widths as `<name> : <bits>`. The
-    // emitter converts c5's LSB-relative `bit_offset` to DWARF
-    // v3-style MSB-relative `DW_AT_bit_offset` so a wrong sign on
-    // that math would yield negative widths or swap field
-    // positions.
+    // lldb prints bitfield widths as `<name> : <bits>`.
     for needle in ["width : 5", "height : 6", "rest : 21"] {
         assert!(out.contains(needle), "expected `{needle}` in:\n{out}");
+    }
+    // Widths alone leave the field positions unchecked. DWARF 4
+    // 5.6.6 puts each field at DW_AT_data_bit_offset bits from the
+    // start of the aggregate, so the three run 0 / 5 / 11.
+    if let Some(info) = dwarfdump_debug_info(&path) {
+        for needle in [
+            "DW_AT_data_bit_offset\t(0)",
+            "DW_AT_data_bit_offset\t(5)",
+            "DW_AT_data_bit_offset\t(11)",
+        ] {
+            assert!(info.contains(needle), "expected `{needle}` in:\n{info}");
+        }
     }
     let _ = std::fs::remove_file(&path);
 }
@@ -473,7 +481,7 @@ fn build_signed_mach_o_two_units(
     )
     .unwrap_or_else(|e| panic!("write_native_image_from_merged failed for {stem}: {e}"));
 
-    let path = std::env::temp_dir().join(format!("badc-dwarf-{stem}.bin"));
+    let path = super::unique_temp_path("badc-dwarf", stem, ".bin");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");

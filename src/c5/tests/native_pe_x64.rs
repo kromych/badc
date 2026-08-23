@@ -156,7 +156,7 @@ fn build_and_run_with_options(
         Err(e) => return RunOutcome::BuildError(format!("emit_native: {e}")),
     };
 
-    let path = unique_temp_path("badc-pe64-test", stem);
+    let path = super::unique_temp_path("badc-pe64-test", stem, ".exe");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");
@@ -191,14 +191,6 @@ fn build_and_run_with_options(
     }
 }
 
-fn unique_temp_path(prefix: &str, stem: &str) -> PathBuf {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let pid = std::process::id();
-    std::env::temp_dir().join(format!("{prefix}-{pid}-{n}-{stem}.exe"))
-}
-
 /// Runs the build-and-run path, asserting on the expected exit
 /// code. Skips silently when the host can't execute PE binaries
 /// (macOS without WINE).
@@ -218,6 +210,34 @@ fn assert_exit(src: &str, stem: &str, args: &[&str], expected: i32) {
 #[test]
 fn return_zero() {
     assert_exit("int main() { return 0; }", "ret0", &[], 0);
+}
+
+#[test]
+fn string_literal_store_faults() {
+    // The literal lives in `.rdata`; the store hits a page mapped
+    // without write access and dies with STATUS_ACCESS_VIOLATION.
+    // Windows-native only: WINE's crash handling blocks in winedbg
+    // instead of terminating the process, hanging the runner.
+    #[cfg(target_os = "windows")]
+    {
+        let src = "int main(void) { char *p = \"immutable\"; p[0] = 'X'; return 0; }";
+        match build_and_run(src, "lit_store", &[]) {
+            RunOutcome::Exit(0) => panic!("store through a string literal must not exit 0"),
+            RunOutcome::Exit(_) | RunOutcome::Signal(_) => {}
+            RunOutcome::BuildError(e) => panic!("lit_store: {e}"),
+            RunOutcome::HostCannotRun => eprintln!("skip lit_store: no PE runner on this host"),
+        }
+    }
+    // The pointer read crosses from the writable `.data` slot into
+    // `.rdata`; the loader's base relocation of the slot must land on
+    // the literal.
+    assert_exit(
+        "const char *const cp = \"readback\"; \
+         int main(void) { return cp[0] == 'r' ? 0 : 1; }",
+        "lit_readback",
+        &[],
+        0,
+    );
 }
 
 #[test]
@@ -465,7 +485,7 @@ int main(void) {\n\
         "expected a TEB-indexed `lea rd, [r10 + disp32]` with disp32 >= 16 (definer rebased past the pad)"
     );
 
-    let path = unique_temp_path("badc-pe-x64-test", "cross_unit_tls_rebased");
+    let path = super::unique_temp_path("badc-pe-x64-test", "cross_unit_tls_rebased", ".exe");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");
@@ -636,13 +656,11 @@ fn fixture_parity() {
         eprintln!("skip fixture_parity: no PE runner on this host");
         return;
     }
-    let mut failures: Vec<String> = Vec::new();
-    for (name, expected) in NATIVE_PE_X64_FIXTURES {
+    let failures = super::parity_failures(NATIVE_PE_X64_FIXTURES, |name, expected| {
         let outcome = build_and_run_fixture(name);
-        if !outcome.matches(*expected) {
-            failures.push(format!("{name}: expected {expected}, got {outcome:?}"));
-        }
-    }
+        (!outcome.matches(*expected))
+            .then(|| format!("{name}: expected {expected}, got {outcome:?}"))
+    });
     assert!(
         failures.is_empty(),
         "{} of {} PE/x86_64 fixtures regressed:\n  {}",
@@ -679,13 +697,11 @@ fn fixture_parity_native_optimized() {
         return;
     }
     let opts = NativeOptions::new().with_optimize();
-    let mut failures: Vec<String> = Vec::new();
-    for (name, expected) in NATIVE_PE_X64_FIXTURES {
+    let failures = super::parity_failures(NATIVE_PE_X64_FIXTURES, |name, expected| {
         let outcome = build_and_run_fixture_with_options(name, opts, "-O");
-        if !outcome.matches(*expected) {
-            failures.push(format!("{name} (-O): expected {expected}, got {outcome:?}"));
-        }
-    }
+        (!outcome.matches(*expected))
+            .then(|| format!("{name} (-O): expected {expected}, got {outcome:?}"))
+    });
     assert!(
         failures.is_empty(),
         "{} of {} PE/x86_64 fixtures regressed under -O:\n  {}",
@@ -753,7 +769,7 @@ fn dll_export_load_unload_reload_cycle() {
     // Record the DLL's own name in its export directory, as the CLI
     // does from the `-o` basename.
     let dll_bytes = super::super::object::emit_native_with_options_named(
-        &dll_prog,
+        dll_prog.clone(),
         Target::WindowsX64,
         NativeOptions::new().with_shared_library(),
         Some(&dll_name),

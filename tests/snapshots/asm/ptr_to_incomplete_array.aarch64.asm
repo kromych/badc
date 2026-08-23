@@ -10,6 +10,8 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#0x1
+               	brk	#0x1
+               	brk	#0x1
 
 <main>:
                	adrp	x7, <page>
@@ -21,6 +23,7 @@ Disassembly of section .text:
                	add	x3, x3, <lo12>
                	mov	x5, #0x0                // =0
                	b	<addr>
+               	sxtw	x6, w5
                	lsl	x0, x6, #4
                	add	x0, x8, x0
                	ldr	x0, [x0, #0x8]
@@ -29,7 +32,7 @@ Disassembly of section .text:
                	cbz	x1, <addr>
                	ldrb	w1, [x0]
                	ldrb	w4, [x2]
-               	cmp	x1, x4
+               	cmp	w1, w4
                	cset	x1, eq
                	cbz	x1, <addr>
                	add	x0, x0, #0x1
@@ -38,11 +41,10 @@ Disassembly of section .text:
                	b	<addr>
                	ldrb	w0, [x0]
                	ldrb	w1, [x2]
-               	cmp	x0, x1
+               	cmp	w0, w1
                	b.eq	<addr>
                	add	x5, x6, #0x1
-               	sxtw	x6, w5
-               	cmp	x6, #0x2
+               	cmp	w5, #0x2
                	b.lt	<addr>
                	mov	x0, #0xffff             // =65535
                	movk	x0, #0xffff, lsl #16
@@ -56,6 +58,7 @@ Disassembly of section .text:
                	add	x3, x3, <lo12>
                	mov	x5, #0x0                // =0
                	b	<addr>
+               	sxtw	x6, w5
                	lsl	x0, x6, #4
                	add	x0, x7, x0
                	ldr	x0, [x0, #0x8]
@@ -64,7 +67,7 @@ Disassembly of section .text:
                	cbz	x1, <addr>
                	ldrb	w1, [x0]
                	ldrb	w4, [x2]
-               	cmp	x1, x4
+               	cmp	w1, w4
                	cset	x1, eq
                	cbz	x1, <addr>
                	add	x0, x0, #0x1
@@ -73,11 +76,10 @@ Disassembly of section .text:
                	b	<addr>
                	ldrb	w0, [x0]
                	ldrb	w1, [x2]
-               	cmp	x0, x1
+               	cmp	w0, w1
                	b.eq	<addr>
                	add	x5, x6, #0x1
-               	sxtw	x6, w5
-               	cmp	x6, #0x2
+               	cmp	w5, #0x2
                	b.lt	<addr>
                	mov	x0, #0xffff             // =65535
                	movk	x0, #0xffff, lsl #16

@@ -9,6 +9,21 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <__c5_lazy_stream>:
                	pushq	%rbp
@@ -17,10 +32,9 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	leaq	<rip>, %rbx
                	leaq	(%rbx), %rax
-               	movq	(%rax), %rax
-               	testq	%rax, %rax
+               	movq	(%rax), %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
-               	leaq	(%rbx), %rax
                	movq	(%rax), %rax
                	movq	(%rsp), %rbx
                	addq	$0x30, %rsp
@@ -30,13 +44,10 @@ Disassembly of section .text:
                	xorq	%rdi, %rdi
                	leaq	<rip>, %rcx
                	movq	%rcx, (%rax)
-               	leaq	-0x18(%rbp), %rax
                	leaq	<rip>, %rcx
                	movq	%rcx, 0x8(%rax)
-               	leaq	-0x18(%rbp), %rax
                	leaq	<rip>, %rcx
                	movq	%rcx, 0x10(%rax)
-               	leaq	-0x18(%rbp), %rax
                	addq	$0x0, %rax
                	movq	(%rax), %rsi
                	xorl	%eax, %eax
@@ -56,19 +67,19 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movslq	%edi, %rdi
-               	xorq	%rax, %rax
-               	movl	%eax, -0x10(%rbp)
-               	movl	%eax, -0x8(%rbp)
-               	cmpq	$0x1869f, %rdi          # imm = 0x1869F
+               	subq	$0x20, %rsp
+               	movq	%rbx, (%rsp)
+               	xorq	%rbx, %rbx
+               	movl	%ebx, -0x10(%rbp)
+               	movl	%ebx, -0x8(%rbp)
+               	cmpl	$0x1869f, %edi          # imm = 0x1869F
                	jle	<addr>
                	leaq	<rip>, %rdi
                	leaq	-0x10(%rbp), %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
-               	xorq	%rdi, %rdi
+               	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rax, %rdi
                	leaq	<rip>, %rsi
@@ -80,6 +91,7 @@ Disassembly of section .text:
                	movslq	-0x8(%rbp), %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
-               	addq	$0x10, %rsp
+               	movq	(%rsp), %rbx
+               	addq	$0x20, %rsp
                	popq	%rbp
                	retq

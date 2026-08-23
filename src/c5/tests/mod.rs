@@ -11,6 +11,8 @@
 //! and tightly coupled to the assertion.
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Condvar, Mutex, OnceLock};
 
 use super::lexer::{self as lex_helpers, Lexer};
 use super::symbol::Symbol;
@@ -35,6 +37,7 @@ mod jit;
 mod lexer;
 #[cfg(feature = "full")]
 mod linker;
+mod loop_idiom;
 #[cfg(feature = "full")]
 mod native;
 #[cfg(feature = "full")]
@@ -56,6 +59,7 @@ mod relocatable;
 mod stack_guard;
 mod types;
 mod vla;
+mod x86_simd;
 
 /// Absolute path of `tests/fixtures/c/<name>` relative to the crate root.
 fn fixture_path(name: &str) -> PathBuf {
@@ -72,6 +76,175 @@ pub fn load_fixture(name: &str) -> String {
     let path = fixture_path(name);
     std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("failed to load fixture {}: {}", path.display(), e))
+}
+
+/// `<tmp>/<prefix>-<pid>-<n>-<stem><ext>`: unique per process and call.
+/// Concurrent `cargo test` processes share the temp directory, so a fixed
+/// name lets one run clobber the other's file. Callers remove what they
+/// create.
+pub fn unique_temp_path(prefix: &str, stem: &str, ext: &str) -> PathBuf {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let pid = std::process::id();
+    std::env::temp_dir().join(format!("{prefix}-{pid}-{n}-{stem}{ext}"))
+}
+
+/// Run a just-written image, retrying while the kernel reports it busy.
+///
+/// `exec` fails with `ETXTBSY` while any process holds the file open for
+/// writing. The writer here closes it first, so the holder is another
+/// test's `fork`: a child inherits every descriptor, and `O_CLOEXEC`
+/// drops the inherited copy at its `exec`, not at the `fork`. A loaded
+/// machine widens that window, which is why it surfaces on a shared
+/// runner and not on an idle box. `sh` reports the condition as 126.
+/// Reached only where a shell mediates the exec (the aarch64 ELF tests)
+/// and on Mach-O; the x86-64 ELF tests carry their own errno-26 retry.
+#[allow(dead_code)]
+pub fn output_when_not_busy(build: impl Fn() -> std::process::Command) -> std::process::Output {
+    let mut waited = std::time::Duration::ZERO;
+    let mut delay = std::time::Duration::from_millis(5);
+    loop {
+        let spent = waited >= std::time::Duration::from_secs(5);
+        // Direct exec reports the condition as errno 26; a shell in
+        // between reports it as 126 with the message on stderr.
+        let busy = match build().output() {
+            Ok(out) => {
+                let busy = out.status.code() == Some(126)
+                    && String::from_utf8_lossy(&out.stderr).contains("Text file busy");
+                if !busy || spent {
+                    return out;
+                }
+                true
+            }
+            Err(e) if e.raw_os_error() == Some(26) && !spent => true,
+            Err(e) => panic!("run the produced image: {e}"),
+        };
+        debug_assert!(busy);
+        std::thread::sleep(delay);
+        waited += delay;
+        delay = (delay * 2).min(std::time::Duration::from_millis(250));
+    }
+}
+
+/// Fixtures built and run at once, summed over every whole-corpus parity
+/// test -- `cargo test` schedules those in parallel, so a per-test width
+/// would multiply by the number live. The floor is what the serial loops
+/// already reached, one fixture per live parity test; the ceiling bounds
+/// memory on hosts whose RAM does not track their core count.
+/// `BADC_TEST_JOBS` overrides both.
+fn fixture_jobs() -> usize {
+    static JOBS: OnceLock<usize> = OnceLock::new();
+    *JOBS.get_or_init(|| {
+        if let Some(n) = std::env::var("BADC_TEST_JOBS")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+        {
+            return n.max(1);
+        }
+        let cpus = std::thread::available_parallelism().map_or(2, |n| n.get());
+        (cpus / 2).clamp(cpus.min(4), 8)
+    })
+}
+
+struct FixturePermits {
+    free: Mutex<usize>,
+    released: Condvar,
+}
+
+struct FixturePermit(&'static FixturePermits);
+
+impl Drop for FixturePermit {
+    fn drop(&mut self) {
+        let mut free = self.0.free.lock().unwrap_or_else(|e| e.into_inner());
+        *free += 1;
+        self.0.released.notify_one();
+    }
+}
+
+fn acquire_fixture_permit() -> FixturePermit {
+    static POOL: OnceLock<FixturePermits> = OnceLock::new();
+    let pool = POOL.get_or_init(|| FixturePermits {
+        free: Mutex::new(fixture_jobs()),
+        released: Condvar::new(),
+    });
+    let mut free = pool.free.lock().unwrap_or_else(|e| e.into_inner());
+    while *free == 0 {
+        free = pool.released.wait(free).unwrap_or_else(|e| e.into_inner());
+    }
+    *free -= 1;
+    drop(free);
+    FixturePermit(pool)
+}
+
+/// Check every entry of `corpus` on up to [`fixture_jobs`] threads and
+/// return the messages `check` produced, ordered by corpus index so the
+/// same regression reports the same text whatever order threads finish in.
+pub fn parity_failures<T, F>(corpus: &[(&str, T)], check: F) -> Vec<String>
+where
+    T: Sync,
+    F: Fn(&str, &T) -> Option<String> + Sync,
+{
+    let next = AtomicUsize::new(0);
+    let failures: Mutex<Vec<(usize, String)>> = Mutex::new(Vec::new());
+    let width = fixture_jobs().min(corpus.len().max(1));
+    std::thread::scope(|scope| {
+        for _ in 0..width {
+            scope.spawn(|| {
+                loop {
+                    let i = next.fetch_add(1, Ordering::Relaxed);
+                    let Some((name, expected)) = corpus.get(i) else {
+                        break;
+                    };
+                    let _permit = acquire_fixture_permit();
+                    if let Some(msg) = check(name, expected) {
+                        failures
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .push((i, msg));
+                    }
+                }
+            });
+        }
+    });
+    let mut failures = failures.into_inner().unwrap_or_else(|e| e.into_inner());
+    failures.sort_by_key(|(i, _)| *i);
+    failures.into_iter().map(|(_, msg)| msg).collect()
+}
+
+/// Completion order is the reverse of corpus order here, so an unsorted
+/// collection would report the same regression differently per run.
+#[test]
+fn parity_failures_report_in_corpus_order() {
+    let corpus: Vec<(&str, u64)> = (0..32).map(|i| ("fixture", i)).collect();
+    let got = parity_failures(&corpus, |name, i| {
+        std::thread::sleep(std::time::Duration::from_millis(32 - *i));
+        Some(format!("{name} {i}"))
+    });
+    let want: Vec<String> = (0..32).map(|i| format!("fixture {i}")).collect();
+    assert_eq!(got, want);
+}
+
+/// The permit pool is process-wide, so no run of the corpus exceeds
+/// [`fixture_jobs`] however many parity tests the harness has in flight.
+#[test]
+fn parity_failures_hold_the_concurrency_bound() {
+    let live = AtomicUsize::new(0);
+    let peak = AtomicUsize::new(0);
+    let corpus: Vec<(&str, u64)> = (0..64).map(|i| ("fixture", i)).collect();
+    let got = parity_failures(&corpus, |_, _| {
+        peak.fetch_max(live.fetch_add(1, Ordering::SeqCst) + 1, Ordering::SeqCst);
+        std::thread::sleep(std::time::Duration::from_millis(1));
+        live.fetch_sub(1, Ordering::SeqCst);
+        None
+    });
+    assert!(got.is_empty());
+    let peak = peak.load(Ordering::SeqCst);
+    assert!(
+        (1..=fixture_jobs()).contains(&peak),
+        "peak {peak} outside 1..={}",
+        fixture_jobs()
+    );
 }
 
 /// Standard-library prelude prepended to every inline-source test.

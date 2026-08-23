@@ -126,23 +126,48 @@ pub(crate) fn add_ptr_level(ty: i64) -> i64 {
 
 /// Fold type-qualifier bits into a tag. A `volatile` among them
 /// qualifies the outermost derivation built so far, which is what
-/// [`VOLATILE_INNER_BIT`] denies.
+/// [`VOLATILE_INNER_BIT`] denies. A segment qualifier records the
+/// derivation it applies to by stamping the tag's current pointer
+/// depth into [`SEG_LVL_MASK`].
 pub(crate) fn apply_qual_bits(ty: i64, bits: i64) -> i64 {
-    if bits & VOLATILE_BIT != 0 {
+    let mut ty = if bits & VOLATILE_BIT != 0 {
         (ty | bits) & !VOLATILE_INNER_BIT
     } else {
         ty | bits
+    };
+    if bits & SEG_MASK != 0 {
+        ty = (ty & !SEG_LVL_MASK) | (ptr_depth_of(ty) << SEG_LVL_SHIFT);
     }
+    ty
 }
 
 /// High-bit flags marking a type tag qualified by an x86 named address
-/// space (GCC `__seg_gs` / `__seg_fs`). An access through such a tag
-/// rides a segment-override prefix (`%gs:` / `%fs:`). Orthogonal to the
-/// band scheme like [`UNSIGNED_BIT`] and stripped by [`strip_unsigned`].
-/// x86-only; the two spellings never both appear on one tag.
+/// space (GCC `__seg_gs` / `__seg_fs`). An access to an object so
+/// qualified rides a segment-override prefix (`%gs:` / `%fs:`).
+/// Orthogonal to the band scheme like [`UNSIGNED_BIT`] and stripped by
+/// [`strip_unsigned`]. x86-only; the two spellings never both appear on
+/// one tag.
+///
+/// [`SEG_LVL_MASK`] records the pointer depth at which the qualifier
+/// applies, as an absolute level: `int __seg_gs g` stores level 0,
+/// `int __seg_gs *p` still stores level 0 while the tag's own depth is
+/// 1, and `int * __seg_gs p` stores level 1. Band arithmetic
+/// (`ty +/- Ty::Ptr`) leaves the field untouched, so a dereference or
+/// an address-of moves the tag's depth relative to the fixed level and
+/// [`segment_of_object_ty`] answers per derivation with no per-site
+/// bookkeeping: the qualifier governs an access exactly when the tag's
+/// depth equals the recorded level.
 pub(crate) const SEG_GS_BIT: i64 = 1 << 31;
 pub(crate) const SEG_FS_BIT: i64 = 1 << 32;
-const SEG_MASK: i64 = SEG_GS_BIT | SEG_FS_BIT;
+pub(crate) const SEG_MASK: i64 = SEG_GS_BIT | SEG_FS_BIT;
+
+/// Pointer level the segment qualifier applies at (9 bits, covering
+/// the deepest derivation any band encodes). Zero, and meaningless,
+/// when no segment bit is set.
+/// TODO: one level field per tag, so qualifying two derivations
+/// (`int __seg_gs * __seg_gs p`) keeps only the outermost.
+const SEG_LVL_SHIFT: i64 = 34;
+const SEG_LVL_MASK: i64 = 0x1FF << SEG_LVL_SHIFT;
 
 /// High-bit flag marking a type tag whose base type was spelled `void`.
 /// `void` keeps `unsigned char`'s representation (1-byte `sizeof` under
@@ -155,6 +180,29 @@ const SEG_MASK: i64 = SEG_GS_BIT | SEG_FS_BIT;
 /// rule, `_Generic` matching) test the bit.
 pub(crate) const VOID_BIT: i64 = 1 << 28;
 
+/// High-bit flag marking a type tag whose base type was spelled `long
+/// double`. c5 gives `long double` the `double` band's binary64
+/// representation on every target (see doc/std-conformance.md), so the
+/// bit carries only the spelling. Stripped by [`strip_unsigned`] like
+/// the other orthogonal markers, which keeps every band classifier,
+/// layout query, and codegen path reading a plain `double`;
+/// identity-sensitive sites ([`is_long_double_ty`], the libc-argument
+/// ABI diagnostic) test the bit.
+///
+/// Sits above [`SEG_LVL_MASK`]'s 9-bit field (bits 34..43).
+pub(crate) const LONG_DOUBLE_BIT: i64 = 1 << 43;
+
+/// True when `ty`'s base type was spelled `long double`, at any
+/// qualification or pointer depth.
+pub(crate) fn is_long_double_ty(ty: i64) -> bool {
+    (ty & LONG_DOUBLE_BIT) != 0
+}
+
+/// True for a scalar `long double` -- not a pointer to one.
+pub(crate) fn is_long_double_scalar(ty: i64) -> bool {
+    is_long_double_ty(ty) && strip_unsigned(ty) == Ty::Double as i64
+}
+
 /// The x86 named address space a type tag carries.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum Segment {
@@ -162,7 +210,8 @@ pub(crate) enum Segment {
     Fs,
 }
 
-/// The named address space qualifying `ty`, or `None`.
+/// The named address space qualifying `ty` at any derivation level,
+/// or `None`.
 pub(crate) fn segment_of_ty(ty: i64) -> Option<Segment> {
     if ty & SEG_GS_BIT != 0 {
         Some(Segment::Gs)
@@ -170,6 +219,66 @@ pub(crate) fn segment_of_ty(ty: i64) -> Option<Segment> {
         Some(Segment::Fs)
     } else {
         None
+    }
+}
+
+/// The named address space an access to an object of type `ty` rides,
+/// or `None` when the tag is unqualified or the qualifier sits on a
+/// pointee below the outermost derivation (`int __seg_gs *p`: `p`
+/// itself is a generic-space object; `*p` is not).
+pub(crate) fn segment_of_object_ty(ty: i64) -> Option<Segment> {
+    let seg = segment_of_ty(ty)?;
+    if (ty & SEG_LVL_MASK) >> SEG_LVL_SHIFT == ptr_depth_of(ty) {
+        Some(seg)
+    } else {
+        None
+    }
+}
+
+/// Drop the qualifiers an assignment does not carry. C99 6.3.2.1p2
+/// gives the value of an lvalue the unqualified version of the
+/// lvalue's type, and 6.5.16.1p1 constrains only the pointed-to
+/// types, so a qualifier on the object itself never takes part in
+/// compatibility. `volatile` goes at every level because the single
+/// bit does not record one; a named address space records its level
+/// and is dropped only when it qualifies the object.
+pub(crate) fn unqualified_object_ty(ty: i64) -> i64 {
+    let ty = ty & !VOLATILE_MASK;
+    if segment_of_object_ty(ty).is_some() {
+        ty & !(SEG_MASK | SEG_LVL_MASK)
+    } else {
+        ty
+    }
+}
+
+/// The segment-qualifier bit pattern of `ty` when the qualifier
+/// applies to the object itself, else 0. For re-application onto a
+/// derived tag through [`apply_qual_bits`].
+pub(crate) fn object_segment_bits(ty: i64) -> i64 {
+    if segment_of_object_ty(ty).is_some() {
+        ty & SEG_MASK
+    } else {
+        0
+    }
+}
+
+/// Pointer-derivation depth of a tag, across every band.
+fn ptr_depth_of(ty: i64) -> i64 {
+    let ty = strip_unsigned(ty);
+    if is_struct_ty(ty) {
+        struct_ptr_depth(ty)
+    } else if is_floating_ty(ty) {
+        fp_ptr_depth(ty)
+    } else if is_long_long_ty(ty) {
+        long_long_ptr_depth(ty)
+    } else if is_long_ty(ty) {
+        long_ptr_depth(ty)
+    } else if is_short_ty(ty) {
+        short_ptr_depth(ty)
+    } else if is_bool_ty(ty) {
+        bool_ptr_depth(ty)
+    } else {
+        ty / Ty::Ptr as i64
     }
 }
 
@@ -206,7 +315,13 @@ pub(crate) fn narrow_const_int(bytes: usize, unsigned: bool, is_bool: bool, v: i
 /// when storing a type tag where a non-bit-flagged tag is expected
 /// (e.g., switch-table comparisons against `Ty::Int as i64`).
 pub(crate) fn strip_unsigned(ty: i64) -> i64 {
-    ty & !(UNSIGNED_BIT | VOLATILE_BIT | VOLATILE_INNER_BIT | SEG_MASK | VOID_BIT)
+    ty & !(UNSIGNED_BIT
+        | VOLATILE_BIT
+        | VOLATILE_INNER_BIT
+        | SEG_MASK
+        | SEG_LVL_MASK
+        | VOID_BIT
+        | LONG_DOUBLE_BIT)
 }
 
 /// The scalar `void` type tag.
@@ -225,6 +340,28 @@ pub(crate) fn is_void_ptr_ty(ty: i64) -> bool {
     (ty & VOID_BIT) != 0 && strip_unsigned(ty) == Ty::Char as i64 + Ty::Ptr as i64
 }
 
+/// Render the derivation suffix of a tag with `depth` pointer levels:
+/// one `*` per level, with any named-address-space keyword written at
+/// the derivation [`SEG_LVL_MASK`] records. Two tags that differ only
+/// in that qualifier must not render alike.
+fn ptr_suffix(ty: i64, depth: usize) -> alloc::string::String {
+    let stars = "*".repeat(depth);
+    let Some(seg) = segment_of_ty(ty) else {
+        return stars;
+    };
+    let kw = match seg {
+        Segment::Gs => " __seg_gs",
+        Segment::Fs => " __seg_fs",
+    };
+    let lvl = (((ty & SEG_LVL_MASK) >> SEG_LVL_SHIFT) as usize).min(depth);
+    let (below, above) = stars.split_at(lvl);
+    if above.is_empty() {
+        alloc::format!("{below}{kw}")
+    } else {
+        alloc::format!("{below}{kw} {above}")
+    }
+}
+
 /// Render a c5 type tag back into a C-like spelling: `int`, `char *`,
 /// `unsigned long **`, `struct ShellText *`, etc. Used by the
 /// redeclaration-mismatch warning so the user can see the prior and
@@ -239,7 +376,7 @@ pub(super) fn format_type(ty: i64, structs: &[super::StructDef]) -> alloc::strin
     let bare = strip_unsigned(ty);
     let prefix = if unsigned { "unsigned " } else { "" };
     if (ty & VOID_BIT) != 0 && (0..100).contains(&bare) {
-        return format!("void{}", "*".repeat((bare / 2) as usize));
+        return format!("void{}", ptr_suffix(ty, (bare / 2) as usize));
     }
     if bare >= STRUCT_BASE {
         let id = struct_id_of(bare);
@@ -250,7 +387,7 @@ pub(super) fn format_type(ty: i64, structs: &[super::StructDef]) -> alloc::strin
             .filter(|n| !n.is_empty())
             .map(alloc::string::ToString::to_string)
             .unwrap_or_else(|| format!("@{id}"));
-        return format!("{prefix}struct {name}{}", "*".repeat(depth));
+        return format!("{prefix}struct {name}{}", ptr_suffix(ty, depth));
     }
     let (base, leaf) = if in_band(bare, Ty::Float as i64) {
         (Ty::Float as i64, "float")
@@ -269,12 +406,12 @@ pub(super) fn format_type(ty: i64, structs: &[super::StructDef]) -> alloc::strin
         let depth = (bare / 2) as usize;
         let leaf_char = bare % 2 == 0;
         let name = if leaf_char { "char" } else { "int" };
-        return format!("{prefix}{name}{}", "*".repeat(depth));
+        return format!("{prefix}{name}{}", ptr_suffix(ty, depth));
     } else {
         return format!("{prefix}ty@{bare}");
     };
     let depth = ((bare - base) / 2) as usize;
-    format!("{prefix}{leaf}{}", "*".repeat(depth))
+    format!("{prefix}{leaf}{}", ptr_suffix(ty, depth))
 }
 
 /// Render a function signature: `<return> (<params>[, ...])`. Used by
@@ -328,6 +465,76 @@ pub(crate) fn struct_ptr_depth(ty: i64) -> i64 {
 /// access and the initializer traversal.
 pub(crate) fn is_struct_value_ty(ty: i64) -> bool {
     is_struct_ty(ty) && struct_ptr_depth(ty) == 0
+}
+
+/// True when `ty` is a character type (C99 6.2.5p3: `char`, `signed
+/// char`, `unsigned char`) rather than a pointer to one. The `-fstack-
+/// protector` buffer-size rule applies to arrays of these only.
+pub(crate) fn is_char_value_ty(ty: i64) -> bool {
+    strip_unsigned(ty) == Ty::Char as i64
+}
+
+/// What an automatic object of type `ty` -- an array of `array_size`
+/// elements when that is non-zero, `multi_dim` when the declaration had
+/// more than one dimension -- contributes to the function's stack-protector
+/// classification. `elem_size` gives the byte size of `ty`; the caller owns
+/// the target-dependent sizing. Mirrors gcc's `stack_protect_classify_type`:
+/// an array whose element type is a character type counts by its byte
+/// extent, an array of anything else counts as an array, and an aggregate
+/// contributes whatever its members do. A multidimensional array's element
+/// type is the inner array, not the character type, so it counts as an
+/// array only -- gcc classifies it the same way.
+pub(crate) fn ssp_classify(
+    structs: &[super::StructDef],
+    ty: i64,
+    array_size: i64,
+    multi_dim: bool,
+    elem_size: &dyn Fn(i64) -> usize,
+) -> crate::c5::ir::SspFacts {
+    // A struct cannot contain itself by value, so the walk terminates; the
+    // bound only keeps a malformed table from recursing without end.
+    fn walk(
+        structs: &[super::StructDef],
+        ty: i64,
+        array_size: i64,
+        multi_dim: bool,
+        elem_size: &dyn Fn(i64) -> usize,
+        depth: u32,
+        out: &mut crate::c5::ir::SspFacts,
+    ) {
+        if depth > 16 {
+            return;
+        }
+        if array_size > 0 {
+            out.has_array = true;
+            if is_char_value_ty(ty) && !multi_dim {
+                let bytes = (elem_size(ty) as i64).saturating_mul(array_size);
+                out.char_array_bytes = out
+                    .char_array_bytes
+                    .max(bytes.clamp(0, u32::MAX as i64) as u32);
+            }
+        }
+        if !is_struct_value_ty(ty) {
+            return;
+        }
+        let Some(def) = structs.get(struct_id_of(ty)) else {
+            return;
+        };
+        for f in &def.fields {
+            walk(
+                structs,
+                f.ty,
+                f.array_size,
+                f.array_dims.len() > 1,
+                elem_size,
+                depth + 1,
+                out,
+            );
+        }
+    }
+    let mut out = crate::c5::ir::SspFacts::default();
+    walk(structs, ty, array_size, multi_dim, elem_size, 0, &mut out);
+    out
 }
 
 pub(super) fn struct_ty_for(id: usize) -> i64 {
@@ -884,6 +1091,43 @@ mod ty_tag {
         // Band classifiers see through both markers.
         assert!(is_pointer_ty(pointee_vol));
         assert!(is_pointer_ty(obj_vol));
+    }
+
+    /// The segment qualifier records the derivation level it applies
+    /// at, so plain band arithmetic (dereference, address-of, decay)
+    /// keeps [`segment_of_object_ty`] exact with no per-site updates.
+    #[test]
+    fn segment_object_tracks_the_qualified_derivation() {
+        let int = Ty::Int as i64;
+        let ptr = Ty::Ptr as i64;
+        // `int __seg_gs g` -- the object is in the named space.
+        let gs_int = apply_qual_bits(int, SEG_GS_BIT);
+        assert_eq!(segment_of_object_ty(gs_int), Some(Segment::Gs));
+        // `int __seg_gs *p` -- `p` is generic, `*p` is not; `&*p`
+        // (plain `+ Ty::Ptr`) restores the pointer reading.
+        let p = add_ptr_level(gs_int);
+        assert_eq!(segment_of_object_ty(p), None);
+        assert_eq!(segment_of_ty(p), Some(Segment::Gs));
+        assert_eq!(segment_of_object_ty(p - ptr), Some(Segment::Gs));
+        assert_eq!(segment_of_object_ty(p - ptr + ptr), None);
+        // `int __seg_gs **pp` -- only the second dereference is
+        // qualified.
+        let pp = add_ptr_level(p);
+        assert_eq!(segment_of_object_ty(pp), None);
+        assert_eq!(segment_of_object_ty(pp - ptr), None);
+        assert_eq!(segment_of_object_ty(pp - 2 * ptr), Some(Segment::Gs));
+        // `int * __seg_fs q` -- the pointer object is qualified, its
+        // pointee is not.
+        let q = apply_qual_bits(add_ptr_level(int), SEG_FS_BIT);
+        assert_eq!(segment_of_object_ty(q), Some(Segment::Fs));
+        assert_eq!(segment_of_object_ty(q - ptr), None);
+        // A struct-band tag records its own depth the same way.
+        let gs_struct = apply_qual_bits(STRUCT_BASE, SEG_GS_BIT);
+        assert_eq!(segment_of_object_ty(gs_struct), Some(Segment::Gs));
+        assert_eq!(segment_of_object_ty(gs_struct + ptr), None);
+        // Band classifiers see through the qualifier and its level.
+        assert!(is_pointer_ty(p));
+        assert_eq!(strip_unsigned(p), int + ptr);
     }
 
     #[test]

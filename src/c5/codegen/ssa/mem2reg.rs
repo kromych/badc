@@ -42,6 +42,23 @@ pub(crate) fn promotable_slots(func: &FunctionSsa) -> BTreeSet<i64> {
             {
                 address_taken.insert(*off);
             }
+            // A wide `long double` access spans two cells and converts
+            // between the 16-byte storage format and the f64 register
+            // value; the slot stays in memory.
+            // TODO: extended-precision long double -- forward the f64
+            // through matching-kind pairs (the round trip is identity).
+            Inst::LoadLocal {
+                off,
+                kind: LoadKind::F80 | LoadKind::F128,
+                ..
+            }
+            | Inst::StoreLocal {
+                off,
+                kind: StoreKind::F80 | StoreKind::F128,
+                ..
+            } => {
+                address_taken.insert(*off);
+            }
             Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } => {
                 touched.insert(*off);
             }
@@ -755,7 +772,7 @@ fn load_byte_width(kind: LoadKind) -> Option<u8> {
         LoadKind::I16 | LoadKind::U16 => Some(2),
         LoadKind::I32 | LoadKind::U32 => Some(4),
         LoadKind::I64 | LoadKind::F64 => Some(8),
-        LoadKind::F32 => None,
+        LoadKind::F32 | LoadKind::F80 | LoadKind::F128 => None,
     }
 }
 
@@ -765,7 +782,7 @@ fn store_byte_width(kind: StoreKind) -> Option<u8> {
         StoreKind::I16 => Some(2),
         StoreKind::I32 => Some(4),
         StoreKind::I64 | StoreKind::F64 => Some(8),
-        StoreKind::F32 => None,
+        StoreKind::F32 | StoreKind::F80 | StoreKind::F128 => None,
     }
 }
 
@@ -787,7 +804,7 @@ fn imm_fits_load_kind(k: i64, kind: LoadKind) -> bool {
         LoadKind::U8 => (0..=0xff).contains(&k),
         LoadKind::U16 => (0..=0xffff).contains(&k),
         LoadKind::U32 => (0..=0xffff_ffff).contains(&k),
-        LoadKind::I64 | LoadKind::F32 | LoadKind::F64 => false,
+        LoadKind::I64 | LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => false,
     }
 }
 
@@ -809,7 +826,9 @@ fn narrow_load_replacement(kind: LoadKind, value: ValueId) -> Inst {
             rhs_imm: 0xffff_ffff,
         },
         LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => Inst::Extend { value, kind },
-        LoadKind::I64 | LoadKind::F32 | LoadKind::F64 => unreachable!("not a narrow load kind"),
+        LoadKind::I64 | LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => {
+            unreachable!("not a narrow load kind")
+        }
     }
 }
 
@@ -1413,10 +1432,12 @@ mod tests {
             ent_pc: 0,
             end_pc: 0,
             locals: 0,
+            ssp: crate::c5::ir::SspFacts::default(),
             n_params: 0,
             is_variadic: false,
             is_inline: false,
             is_always_inline: false,
+            is_noinline: false,
             is_naked: false,
             section: None,
             is_weak: false,
@@ -1424,6 +1445,7 @@ mod tests {
             const_params: 0,
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
+            cmp32: Vec::new(),
             param_fp_mask: 0,
             agg_descs: alloc::vec::Vec::new(),
             param_aggs: alloc::vec::Vec::new(),

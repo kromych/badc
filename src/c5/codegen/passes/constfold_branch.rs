@@ -125,6 +125,92 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
     changed
 }
 
+/// Rewrite a branch testing `x == 0` / `x != 0` into the branch on `x`
+/// itself: `Bz(x != 0)` -> `Bz(x)`, `Bz(x == 0)` -> `Bnz(x)`, and the
+/// `Bnz` duals. The compare computes exactly the zero test the
+/// terminator performs, so this holds for every integer `x` and lets
+/// the per-arch emit branch on `x`'s register directly (`cbz` / `cbnz`,
+/// `test` + `jcc`). An FP-classed `x` keeps its compare: the
+/// terminator tests the raw bit pattern, which differs from an FP
+/// compare at -0.0. The compare stays for its other consumers and goes
+/// dead otherwise.
+///
+/// Runs once per function immediately before register allocation: the
+/// compare shape is what the mid-end folds key on (a null test of a
+/// symbol address, a range-settled comparison), so stripping it any
+/// earlier starves them.
+pub(crate) fn strip_zero_test_conds(func: &mut FunctionSsa) -> bool {
+    use crate::c5::ir::BinOp;
+    // `(lhs, negate)` when `v` is an integer zero test of `lhs`;
+    // `negate` for the `==` form, which inverts the branch sense.
+    let zero_test = |func: &FunctionSsa, v: crate::c5::ir::ValueId| {
+        let (op, lhs) = match func.insts.get(v as usize)? {
+            Inst::BinopI {
+                op,
+                lhs,
+                rhs_imm: 0,
+            } => (*op, *lhs),
+            Inst::Binop { op, lhs, rhs }
+                if matches!(func.insts.get(*rhs as usize), Some(Inst::Imm(0))) =>
+            {
+                (*op, *lhs)
+            }
+            _ => return None,
+        };
+        let negate = match op {
+            BinOp::Eq => true,
+            BinOp::Ne => false,
+            _ => return None,
+        };
+        let producer = func.insts.get(lhs as usize)?;
+        if crate::c5::codegen::ssa::reg_alloc::produces_fp_result(producer)
+            || matches!(func.f32_values.get(lhs as usize), Some(true))
+        {
+            return None;
+        }
+        Some((lhs, negate))
+    };
+    let mut changed = false;
+    for bidx in 0..func.blocks.len() {
+        // Chains (`(x != 0) != 0`) resolve one link per round; the
+        // bound covers any tape.
+        for _ in 0..func.insts.len() {
+            let term = func.blocks[bidx].terminator;
+            let (cond, target, fall_through, on_zero) = match term {
+                Terminator::Bz {
+                    cond,
+                    target,
+                    fall_through,
+                } => (cond, target, fall_through, true),
+                Terminator::Bnz {
+                    cond,
+                    target,
+                    fall_through,
+                } => (cond, target, fall_through, false),
+                _ => break,
+            };
+            let Some((lhs, negate)) = zero_test(func, cond) else {
+                break;
+            };
+            func.blocks[bidx].terminator = if on_zero != negate {
+                Terminator::Bz {
+                    cond: lhs,
+                    target,
+                    fall_through,
+                }
+            } else {
+                Terminator::Bnz {
+                    cond: lhs,
+                    target,
+                    fall_through,
+                }
+            };
+            changed = true;
+        }
+    }
+    changed
+}
+
 /// Resolve `v` to a constant: an `Inst::Imm`, or one reached through
 /// phis -- a single-incoming phi always takes that value, and a merge
 /// whose predecessors all supply the same constant is that constant.
@@ -235,7 +321,7 @@ fn block_index(func: &FunctionSsa) -> alloc::vec::Vec<BlockId> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::c5::ir::{Block, FunctionSsa, NO_VALUE, ValueId};
+    use crate::c5::ir::{BinOp, Block, FunctionSsa, NO_VALUE, ValueId};
     use alloc::vec;
 
     fn fresh(insts: Vec<Inst>, blocks: Vec<Block>) -> FunctionSsa {
@@ -244,10 +330,12 @@ mod tests {
             ent_pc: 0,
             end_pc: 0,
             locals: 0,
+            ssp: crate::c5::ir::SspFacts::default(),
             n_params: 0,
             is_variadic: false,
             is_inline: false,
             is_always_inline: false,
+            is_noinline: false,
             is_naked: false,
             section: None,
             is_weak: false,
@@ -255,6 +343,7 @@ mod tests {
             const_params: 0,
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
+            cmp32: Vec::new(),
             param_fp_mask: 0,
             agg_descs: alloc::vec::Vec::new(),
             param_aggs: alloc::vec::Vec::new(),
@@ -523,5 +612,108 @@ mod tests {
         );
         run_one(&mut f);
         assert!(matches!(f.blocks[0].terminator, Terminator::Bz { .. }));
+    }
+
+    fn zero_test_blocks(term: Terminator) -> Vec<Block> {
+        vec![
+            Block {
+                start_pc: 0,
+                inst_range: 0..2,
+                terminator: term,
+                exit_acc: 1,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 2..2,
+                terminator: Terminator::Return(NO_VALUE as ValueId),
+                exit_acc: NO_VALUE as ValueId,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 2..2,
+                terminator: Terminator::Return(NO_VALUE as ValueId),
+                exit_acc: NO_VALUE as ValueId,
+            },
+        ]
+    }
+
+    /// `Bz(x != 0)` branches on `x`; `Bz(x == 0)` becomes `Bnz(x)`.
+    #[test]
+    fn branch_on_a_zero_test_takes_the_operand() {
+        let load = Inst::LoadLocal {
+            off: 2,
+            kind: crate::c5::ir::LoadKind::I64,
+            volatile: false,
+        };
+        let mut f = fresh(
+            vec![
+                load.clone(),
+                Inst::BinopI {
+                    op: BinOp::Ne,
+                    lhs: 0,
+                    rhs_imm: 0,
+                },
+            ],
+            zero_test_blocks(Terminator::Bz {
+                cond: 1,
+                target: 1,
+                fall_through: 2,
+            }),
+        );
+        assert!(strip_zero_test_conds(&mut f));
+        assert!(matches!(
+            f.blocks[0].terminator,
+            Terminator::Bz { cond: 0, .. }
+        ));
+        let mut g = fresh(
+            vec![
+                load,
+                Inst::BinopI {
+                    op: BinOp::Eq,
+                    lhs: 0,
+                    rhs_imm: 0,
+                },
+            ],
+            zero_test_blocks(Terminator::Bz {
+                cond: 1,
+                target: 1,
+                fall_through: 2,
+            }),
+        );
+        assert!(strip_zero_test_conds(&mut g));
+        assert!(matches!(
+            g.blocks[0].terminator,
+            Terminator::Bnz { cond: 0, .. }
+        ));
+    }
+
+    /// A zero test of an FP-classed value is not a bit-pattern test
+    /// (-0.0 compares equal to 0), so the branch keeps the compare.
+    #[test]
+    fn zero_test_of_an_fp_value_keeps_its_compare() {
+        let mut f = fresh(
+            vec![
+                Inst::LoadLocal {
+                    off: 2,
+                    kind: crate::c5::ir::LoadKind::F64,
+                    volatile: false,
+                },
+                Inst::BinopI {
+                    op: BinOp::Eq,
+                    lhs: 0,
+                    rhs_imm: 0,
+                },
+            ],
+            zero_test_blocks(Terminator::Bz {
+                cond: 1,
+                target: 1,
+                fall_through: 2,
+            }),
+        );
+        assert!(!strip_zero_test_conds(&mut f));
+        assert!(matches!(
+            f.blocks[0].terminator,
+            Terminator::Bz { cond: 1, .. }
+        ));
     }
 }

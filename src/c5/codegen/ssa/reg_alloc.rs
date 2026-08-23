@@ -97,10 +97,12 @@ pub(crate) struct Allocation {
     /// pass adds `vstack_slots * 8 + 8 * spill_count` bytes to
     /// the function's `locals_bytes` reservation.
     pub spill_count: u32,
-    /// GPRs the allocator actually used. The emit pass saves
-    /// only this subset's callee-saved entries in the prologue.
+    /// Callee-saved GPRs the emitted code writes: the places of the
+    /// values the emit pass lowers (dead-pure values are skipped and
+    /// write nothing). The prologue saves exactly this list.
     pub gpr_used: Vec<u8>,
-    /// FP regs the allocator actually used.
+    /// FP counterpart of `gpr_used` (plus, on Win64, the fixed xmm
+    /// scratch the body touches).
     pub fp_used: Vec<u8>,
     /// Number of consumers of each value. Used by the emit pass to
     /// skip pure-with-no-uses insts (dead-code elimination). A value
@@ -126,13 +128,16 @@ pub(crate) struct Allocation {
     /// can pick the right sign-extend width without re-walking the
     /// inst's operands.
     pub sxtw_k: Vec<i64>,
-    /// True for `Binop` / `BinopI` comparison insts that the
-    /// allocator recognised as the source of a `Bz` / `Bnz`
-    /// terminator's cond, with cond consumed only by that
-    /// terminator and the inst sitting in the last slot of its
-    /// block. The emit pass skips the `cset` materialisation and
-    /// the terminator emits `b.cond` (aarch64) or `j.cond`
-    /// (x86_64) directly off the flags set by `cmp`.
+    /// True for `Binop` / `BinopI` comparison insts (integer and FP)
+    /// that the allocator recognised as the source of a `Bz` / `Bnz`
+    /// terminator's cond, with cond consumed only by that terminator
+    /// and every instruction between the compare and the block's end
+    /// leaving the host flags untouched. The emit pass skips the
+    /// `cset` / `setcc` materialisation and the terminator emits
+    /// `b.cond` (aarch64) or `j.cond` (x86_64) directly off the flags
+    /// the compare set. The compare's value keeps its place: on
+    /// x86_64 the destination register doubles as the operand-staging
+    /// scratch, so its color stays in the used sets.
     pub branch_fused: Vec<bool>,
     /// Per-value coalescing hint: the physical register the
     /// allocator should prefer when one is set and free at the
@@ -156,6 +161,11 @@ pub(crate) struct Allocation {
     /// consumer reads the parameter's bits above bit 31. Empty or
     /// out-of-range entries default to observed, keeping the extension.
     pub high_observed: Vec<bool>,
+    /// Per-value comparison operand width (see
+    /// `passes::narrow`). True marks an integer comparison the emit
+    /// issues in the 32-bit register form. Empty or out-of-range
+    /// entries default to the 64-bit form.
+    pub cmp32: Vec<bool>,
 }
 
 impl Allocation {
@@ -276,6 +286,32 @@ pub(crate) fn usable_gpr_count(target: Target) -> usize {
     (banks.caller_gprs.len() + banks.callee_gprs.len()).min(max_gpr)
 }
 
+/// Registers `color_graph` may hand out, indexed `[integer, FP]`, after
+/// the bank size caps. `callee` is the subset a value whose live range
+/// spans a call must come from. `passes::cse` compares the live-value
+/// counts a merge would raise against these.
+#[derive(Clone, Copy)]
+pub(crate) struct BankCapacity {
+    pub total: [u32; 2],
+    pub callee: [u32; 2],
+}
+
+pub(crate) fn bank_capacity(target: Target) -> BankCapacity {
+    let banks = RegBanks::for_target(target);
+    let (max_gpr, max_fpr) = pool_size_limits();
+    let cap = |bank: &[u8], max: usize| bank.len().min(max) as u32;
+    BankCapacity {
+        total: [
+            cap(banks.callee_gprs, max_gpr) + cap(banks.caller_gprs, max_gpr),
+            cap(banks.callee_fprs, max_fpr) + cap(banks.caller_fprs, max_fpr),
+        ],
+        callee: [
+            cap(banks.callee_gprs, max_gpr),
+            cap(banks.callee_fprs, max_fpr),
+        ],
+    }
+}
+
 /// Allocate physical placements for every value in `func`. See
 /// the module docs for the algorithm.
 /// Callee-saved registers the emit pass reserves as fixed scratch and
@@ -353,7 +389,8 @@ fn function_clobbers_xmm_scratch(func: &FunctionSsa) -> Vec<u8> {
     {
         return Vec::new();
     }
-    if !func.insts.iter().any(produces_fp_result) {
+    let simd = func.insts.iter().any(|i| matches!(i, Inst::X86Simd { .. }));
+    if !simd && !func.insts.iter().any(produces_fp_result) {
         return Vec::new();
     }
     let mut regs = alloc::vec![14u8, 15u8];
@@ -384,6 +421,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             hints,
             f32_values: Vec::new(),
             high_observed: Vec::new(),
+            cmp32: Vec::new(),
         };
     }
 
@@ -396,7 +434,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     // collapses to today's per-value behaviour. Class-level
     // last-use is the max over all members so a value stays live
     // until every member of its class is dead.
-    let liveness = super::liveness::Liveness::compute(func);
+    let liveness = super::emit_common::time_pass("ssa::liveness::Liveness::compute", || {
+        super::liveness::Liveness::compute(func)
+    });
     // Reads the block-level live-out sets the analysis above solved.
     let last_use = compute_last_use(func, liveness.block_liveness());
     // Interference over individual values, the relation the coalescer
@@ -406,7 +446,10 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     let value_of: Vec<ValueId> = (0..func.insts.len() as ValueId).collect();
     let value_interference = liveness.interference(func, &value_of);
     let mut classes = super::phi_class::PhiClasses::build(func, &value_interference);
-    let mut calls_after_def = compute_calls_after_def(func, &liveness, target);
+    let mut calls_after_def =
+        super::emit_common::time_pass("ssa::liveness::values_live_across_calls", || {
+            compute_calls_after_def(func, &liveness, target)
+        });
     // Promote per-value `calls_after_def` to the class: members share
     // one register, so a member whose own range does not cross a call
     // still needs a callee-saved home when another member's does.
@@ -466,48 +509,6 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     );
     places = coloring.places;
     let spill_count = coloring.spill_count;
-    let gpr_used = coloring.gpr_used;
-    let fp_used = coloring.fp_used;
-
-    // Only callee-saved registers need prologue / epilogue
-    // save and restore. Caller-saved registers are preserved
-    // by the caller across the function's call sites (via the
-    // `must_be_callee` filter above the allocator only places
-    // live-across-call values into callee-saved registers, so a
-    // caller-saved register's value never needs to survive past
-    // the function's own emit). Filtering here keeps the
-    // prologue's `str xN, [sp, ...]` sequence to exactly the
-    // registers AAPCS64 / SysV / Win64 require the callee to
-    // preserve.
-    let gpr_used_callee: Vec<u8> = gpr_used
-        .into_iter()
-        .filter(|r| banks.callee_gprs.contains(r))
-        .collect();
-    // The x86_64 writer's fixed scratch (r10 / r11) is caller-saved, so
-    // it needs no save: `function_clobbers_scratch` returns empty for
-    // x86_64 and r13 -- now an ordinary callee-saved allocation target --
-    // is already captured by the `callee_gprs` filter above when colored.
-    // The aarch64 writer reserves the callee-saved x19; it consumes
-    // `function_clobbers_scratch` through its own `Frame::uses_x19` path,
-    // not this list, so adding it here would double-count the save.
-    let mut fp_used_callee: Vec<u8> = fp_used
-        .into_iter()
-        .filter(|r| banks.callee_fprs.contains(r))
-        .collect();
-    // The x86_64 writer borrows xmm13/14/15 as fixed FP scratch. They are
-    // volatile under System V but callee-saved under Win64, so a Win64
-    // function that performs FP work must preserve the caller's value.
-    // They sit outside `callee_fprs` (never allocator values), so the
-    // filter above drops them; list the ones the body touches here so the
-    // prologue / epilogue's FP-save loop preserves them, mirroring the
-    // r13 GPR handling above.
-    if matches!(target, Target::WindowsX64) {
-        for r in function_clobbers_xmm_scratch(func) {
-            if !fp_used_callee.contains(&r) {
-                fp_used_callee.push(r);
-            }
-        }
-    }
     let mut use_counts = compute_use_counts(func);
     // Recognise the c5 sign-narrow shape:
     //   Shl(X, K) ; Shr(_, K)   with K in {32, 48, 56}
@@ -555,6 +556,8 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             | Inst::BlockAddr(_)
             | Inst::LocalAddr(_)
             | Inst::Extend { .. }
+            | Inst::Bswap { .. }
+            | Inst::Copy { .. }
             | Inst::FpCast { .. }
             | Inst::Fneg(_)
             | Inst::Fma { .. }
@@ -569,12 +572,16 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             Inst::BinopI { op, .. } => {
                 !matches!(op, BinOp::Div | BinOp::Divu | BinOp::Mod | BinOp::Modu)
             }
+            // Mulh / Mulhu join the divides: on x86_64 all six hijack
+            // rdx:rax and push / pop around the sequence.
             Inst::Binop { op, .. } => !matches!(
                 op,
                 BinOp::Div
                     | BinOp::Divu
                     | BinOp::Mod
                     | BinOp::Modu
+                    | BinOp::Mulh
+                    | BinOp::Mulhu
                     | BinOp::Shl
                     | BinOp::Shr
                     | BinOp::Shru
@@ -640,22 +647,118 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             *slot = slot.saturating_sub(1);
         }
     }
-    // Recognise comparison-feeding-branch sites. The terminator's
-    // cond must be the immediately-preceding inst in its block,
-    // be a Binop / BinopI with a comparison op, and have a single
-    // consumer (the terminator). Mark it; the emit pass drops the
-    // `cset` and the terminator picks `b.cond` instead of `cbz`.
+    // Recognise comparison-feeding-branch sites. The terminator's cond
+    // must be a Binop / BinopI comparison defined in the same block
+    // with the terminator as its single consumer, and every following
+    // instruction the emit produces code for must leave the host flags
+    // untouched, so the branch reads the flags the comparison set. The
+    // emit drops the `cset` / `setcc` materialisation and the
+    // terminator branches on the condition directly (`b.cond` / `jcc`,
+    // with the per-arch FP forms covering the unordered cases). The
+    // phi predecessor moves emitted between the body and the
+    // terminator use only flag-transparent instructions (mov / xchg /
+    // spill load / store / movz / fmov) except the case guarded below.
+    let is_compare_op = |op: BinOp| {
+        matches!(
+            op,
+            BinOp::Eq
+                | BinOp::Ne
+                | BinOp::Lt
+                | BinOp::Gt
+                | BinOp::Le
+                | BinOp::Ge
+                | BinOp::Ult
+                | BinOp::Ugt
+                | BinOp::Ule
+                | BinOp::Uge
+                | BinOp::Feq
+                | BinOp::Fne
+                | BinOp::Flt
+                | BinOp::Fgt
+                | BinOp::Fle
+                | BinOp::Fge
+        )
+    };
+    let is_x86 = target.is_x86_64();
+    // Whether the inst's lowering writes the host flags. On x86_64
+    // every integer ALU op does, a zero immediate materialises as
+    // `xor r, r`, and the unsigned FP converts test the sign bit with
+    // flag-setting arithmetic; scalar SSE and the mov / lea / movzx
+    // families do not. On aarch64 only the comparisons reach a
+    // flag-setting form (`subs` / `fcmp`).
+    let flags_survive = |inst: &Inst| -> bool {
+        match inst {
+            Inst::Imm(k) => !(is_x86 && *k == 0),
+            Inst::ImmData(_)
+            | Inst::ImmCode(_)
+            | Inst::ImmExtCode(_)
+            | Inst::BlockAddr(_)
+            | Inst::LocalAddr(_)
+            | Inst::ParamRef { .. }
+            | Inst::Phi { .. }
+            | Inst::Load { .. }
+            | Inst::LoadLocal { .. }
+            | Inst::LoadIndexed { .. }
+            | Inst::Store { .. }
+            | Inst::StoreLocal { .. }
+            | Inst::StoreIndexed { .. }
+            | Inst::Extend { .. }
+            | Inst::Copy { .. }
+            | Inst::Fneg(_)
+            | Inst::Fma { .. } => true,
+            Inst::FpCast { kind, .. } => {
+                !(is_x86 && matches!(kind, FpCastKind::UFpToInt | FpCastKind::UIntToFp))
+            }
+            Inst::Binop { op, .. } | Inst::BinopI { op, .. } => {
+                if is_x86 {
+                    matches!(op, BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv)
+                } else {
+                    !is_compare_op(*op)
+                }
+            }
+            _ => false,
+        }
+    };
+    // Whether the edge `pred -> succ` carries an FP-classed phi income
+    // that is the integer constant zero: its predecessor-exit move
+    // re-materialises the bits through the integer scratch, which on
+    // x86_64 is a flag-writing `xor`.
+    let fp_zero_phi_income =
+        |succ: super::super::ir::BlockId, pred: super::super::ir::BlockId| -> bool {
+            let Some(block) = func.blocks.get(succ as usize) else {
+                return false;
+            };
+            for i in block.inst_range.clone() {
+                let Some(Inst::Phi { incoming, kind }) = func.insts.get(i as usize) else {
+                    break;
+                };
+                if !matches!(kind, LoadKind::F32 | LoadKind::F64) {
+                    continue;
+                }
+                if incoming.iter().any(|&(p, s)| {
+                    p == pred && matches!(func.insts.get(s as usize), Some(Inst::Imm(0)))
+                }) {
+                    return true;
+                }
+            }
+            false
+        };
     let mut branch_fused: Vec<bool> = vec![false; func.insts.len()];
-    for block in &func.blocks {
-        let cond = match block.terminator {
-            super::super::ir::Terminator::Bz { cond, .. }
-            | super::super::ir::Terminator::Bnz { cond, .. } => cond,
+    for (bidx, block) in func.blocks.iter().enumerate() {
+        let (cond, target_blk, fall_through) = match block.terminator {
+            super::super::ir::Terminator::Bz {
+                cond,
+                target,
+                fall_through,
+            }
+            | super::super::ir::Terminator::Bnz {
+                cond,
+                target,
+                fall_through,
+            } => (cond, target, fall_through),
             _ => continue,
         };
-        if cond == NO_VALUE {
-            continue;
-        }
-        if cond + 1 != block.inst_range.end {
+        if cond == NO_VALUE || !block.inst_range.contains(&cond) {
             continue;
         }
         if use_counts.get(cond as usize).copied().unwrap_or(0) != 1 {
@@ -664,16 +767,26 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         let is_compare = matches!(
             func.insts.get(cond as usize),
             Some(Inst::Binop { op, .. }) | Some(Inst::BinopI { op, .. })
-                if matches!(
-                    op,
-                    BinOp::Eq | BinOp::Ne
-                        | BinOp::Lt | BinOp::Gt | BinOp::Le | BinOp::Ge
-                        | BinOp::Ult | BinOp::Ugt | BinOp::Ule | BinOp::Uge
-                )
+                if is_compare_op(*op)
         );
-        if is_compare {
-            branch_fused[cond as usize] = true;
+        if !is_compare {
+            continue;
         }
+        let window_ok = ((cond + 1)..block.inst_range.end).all(|p| {
+            let inst = &func.insts[p as usize];
+            // A dead pure inst emits no code (`is_dead_pure`).
+            (inst.is_pure() && use_counts[p as usize] == 0) || flags_survive(inst)
+        });
+        if !window_ok {
+            continue;
+        }
+        if is_x86
+            && (fp_zero_phi_income(target_blk, bidx as super::super::ir::BlockId)
+                || fp_zero_phi_income(fall_through, bidx as super::super::ir::BlockId))
+        {
+            continue;
+        }
+        branch_fused[cond as usize] = true;
     }
     // Drop the "value-also-in-acc" propagate slot for stores whose
     // defined value is unread. c5 store ops leave the stored value
@@ -691,6 +804,72 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             )
         {
             places[v] = Place::None;
+        }
+    }
+    // The used-register sets are collected per value from the final
+    // places and use counts, skipping the values the emit skips
+    // (`is_dead_pure`): a skipped value writes no register, so its
+    // color alone must not force a prologue save. A node shared by a
+    // live and a dead value still contributes through the live one.
+    // Runs after the folds above, which zero the counts of values they
+    // make dead. Registers written outside a value's place -- the
+    // writer's fixed scratch -- are covered by
+    // `function_clobbers_scratch` / the Win64 xmm listing below, and
+    // phi-predecessor moves write the phi's own place, which is
+    // reached through the phi (never dead-pure).
+    let mut gpr_used: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
+    let mut fp_used: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
+    for (v, inst) in func.insts.iter().enumerate() {
+        if super::emit_common::is_dead_pure_counts(inst, v as ValueId, &use_counts) {
+            continue;
+        }
+        match places[v] {
+            Place::IntReg(r) => {
+                gpr_used.insert(r);
+            }
+            Place::FpReg(r) => {
+                fp_used.insert(r);
+            }
+            _ => {}
+        }
+    }
+    // Only callee-saved registers need prologue / epilogue
+    // save and restore. Caller-saved registers are preserved
+    // by the caller across the function's call sites (via the
+    // `must_be_callee` filter above the allocator only places
+    // live-across-call values into callee-saved registers, so a
+    // caller-saved register's value never needs to survive past
+    // the function's own emit). Filtering here keeps the
+    // prologue's `str xN, [sp, ...]` sequence to exactly the
+    // registers AAPCS64 / SysV / Win64 require the callee to
+    // preserve.
+    let gpr_used_callee: Vec<u8> = gpr_used
+        .into_iter()
+        .filter(|r| banks.callee_gprs.contains(r))
+        .collect();
+    // The x86_64 writer's fixed scratch (r10 / r11) is caller-saved, so
+    // it needs no save: `function_clobbers_scratch` returns empty for
+    // x86_64 and r13 -- now an ordinary callee-saved allocation target --
+    // is already captured by the `callee_gprs` filter above when colored.
+    // The aarch64 writer reserves the callee-saved x19; it consumes
+    // `function_clobbers_scratch` through its own `Frame::uses_x19` path,
+    // not this list, so adding it here would double-count the save.
+    let mut fp_used_callee: Vec<u8> = fp_used
+        .into_iter()
+        .filter(|r| banks.callee_fprs.contains(r))
+        .collect();
+    // The x86_64 writer borrows xmm13/14/15 as fixed FP scratch. They are
+    // volatile under System V but callee-saved under Win64, so a Win64
+    // function that performs FP work must preserve the caller's value.
+    // They sit outside `callee_fprs` (never allocator values), so the
+    // filter above drops them; list the ones the body touches here so the
+    // prologue / epilogue's FP-save loop preserves them, mirroring the
+    // r13 GPR handling above.
+    if matches!(target, Target::WindowsX64) {
+        for r in function_clobbers_xmm_scratch(func) {
+            if !fp_used_callee.contains(&r) {
+                fp_used_callee.push(r);
+            }
         }
     }
     #[cfg(feature = "codegen_test")]
@@ -711,6 +890,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         high_observed: crate::c5::codegen::passes::drop_redundant_extend::compute_high_observed(
             func,
         ),
+        cmp32: func.cmp32.clone(),
     }
 }
 
@@ -733,7 +913,16 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
 /// * Register class: a value's place must match its register class (FP
 ///   value in an FP register, integer value in an integer register or
 ///   slot).
-/// * FP phi class: a phi's register class must match every operand's.
+/// * FP phi class: a phi's register class must match every operand's,
+///   apart from the float constant the phi lowering re-materialises.
+/// * Block coverage: no instruction or terminator inside a block reads a
+///   value covered by no block's `inst_range`.
+///
+/// The placement invariants are checked over the covered values only --
+/// the tape the emit walks. `prune_unreachable` leaves a deleted block's
+/// instructions in `insts` as inert immediates; nothing emits them, so
+/// their place names no register any code writes. The coverage check is
+/// what establishes that per function rather than assuming it.
 #[cfg(feature = "codegen_test")]
 fn verify_allocation(
     func: &FunctionSsa,
@@ -751,19 +940,49 @@ fn verify_allocation(
             func.name, func.ent_pc
         );
     };
+    let covered = |v: usize| liveness.in_cfg(v as ValueId);
+
+    // Block coverage: a value no block's `inst_range` covers must have no
+    // reader inside one.
+    for (b, blk) in func.blocks.iter().enumerate() {
+        let read = |user: &str, v: ValueId| {
+            if v != NO_VALUE && (v as usize) < func.insts.len() && !covered(v as usize) {
+                report(alloc::format!(
+                    "block coverage: {user} reads v{v}, which no block's inst_range covers"
+                ));
+            }
+        };
+        for idx in blk.inst_range.clone() {
+            for_each_operand(&func.insts[idx as usize], |op| {
+                read(&alloc::format!("v{idx}"), op)
+            });
+        }
+        let term = alloc::format!("b{b}'s terminator");
+        read(&alloc::format!("b{b}'s exit accumulator"), blk.exit_acc);
+        match &blk.terminator {
+            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => read(&term, *cond),
+            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
+                read(&term, *target)
+            }
+            Terminator::Return(v) => read(&term, *v),
+            _ => {}
+        }
+    }
 
     // Cross-call discipline: caller-saved registers do not survive a call.
     for (c, inst) in func.insts.iter().enumerate() {
-        if !matches!(
-            inst,
-            Inst::Call { .. } | Inst::CallExt { .. } | Inst::CallIndirect { .. }
-        ) {
+        if !covered(c)
+            || !matches!(
+                inst,
+                Inst::Call { .. } | Inst::CallExt { .. } | Inst::CallIndirect { .. }
+            )
+        {
             continue;
         }
         let cid = c as ValueId;
         for v in 0..func.insts.len() {
             let vid = v as ValueId;
-            if vid == cid || !liveness.live_after(func, vid, cid) {
+            if vid == cid || !covered(v) || !liveness.live_after(func, vid, cid) {
                 continue;
             }
             match places.get(v).copied().unwrap_or(Place::None) {
@@ -780,7 +999,7 @@ fn verify_allocation(
 
     // Register class: a value's place must match its register file.
     for (v, inst) in func.insts.iter().enumerate() {
-        if !produces_value(inst) {
+        if !covered(v) || !produces_value(inst) {
             continue;
         }
         let is_fp = produces_fp_result(inst);
@@ -805,9 +1024,19 @@ fn verify_allocation(
         let Inst::Phi { incoming, .. } = inst else {
             continue;
         };
+        if !covered(v) {
+            continue;
+        }
         let phi_fp = produces_fp_result(inst);
         for &(_, src) in incoming {
             if (src as usize) >= func.insts.len() {
+                continue;
+            }
+            // `result_kind` classes every `Imm` in the integer file, so a
+            // float constant reaches an FP phi integer-classed;
+            // `emit_phi_predecessor_moves` re-materialises it into the FP
+            // destination rather than copying within a file.
+            if matches!(func.insts[src as usize], Inst::Imm(_)) && phi_fp {
                 continue;
             }
             let op_fp = produces_fp_result(&func.insts[src as usize]);
@@ -832,7 +1061,7 @@ fn verify_allocation(
     let mut by_place: alloc::collections::BTreeMap<(u8, u32), Vec<usize>> =
         alloc::collections::BTreeMap::new();
     for (v, p) in places.iter().enumerate() {
-        if let Some(k) = key(*p) {
+        if let (true, Some(k)) = (covered(v), key(*p)) {
             by_place.entry(k).or_default().push(v);
         }
     }
@@ -863,7 +1092,10 @@ fn verify_allocation(
     // `param_incoming_reg_clobber.c` shape).
     if !func.is_variadic {
         let mut used = alloc::vec![false; func.insts.len()];
-        for inst in &func.insts {
+        for (v, inst) in func.insts.iter().enumerate() {
+            if !covered(v) {
+                continue;
+            }
             for_each_operand(inst, |op| {
                 if (op as usize) < used.len() {
                     used[op as usize] = true;
@@ -903,7 +1135,7 @@ fn verify_allocation(
                 continue;
             };
             let pi = *idx as usize;
-            if (func.param_fp_mask & (1u32 << pi)) != 0 || !used[vid] {
+            if (func.param_fp_mask & (1u32 << pi)) != 0 || !used[vid] || !covered(vid) {
                 continue;
             }
             let int_rank = (0..pi)
@@ -959,14 +1191,14 @@ pub(crate) struct NodeConstraints {
     pub forbid: u64,
 }
 
-/// Result of coloring the interference graph.
+/// Result of coloring the interference graph. Which of the colored
+/// registers the emitted code actually writes is decided by `allocate`,
+/// which reads the final use counts the coloring cannot know.
 pub(crate) struct Coloring {
     /// Placement per value. Non-root values inherit their root's
     /// placement; nodes with no constraint stay `Place::None`.
     pub places: Vec<Place>,
     pub spill_count: u32,
-    pub gpr_used: Vec<u8>,
-    pub fp_used: Vec<u8>,
 }
 
 #[cfg(feature = "std")]
@@ -1202,24 +1434,9 @@ pub(crate) fn color_graph(
             places[v] = color[root];
         }
     }
-    let mut gpr_used: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
-    let mut fp_used: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
-    for c in &color {
-        match c {
-            Place::IntReg(r) => {
-                gpr_used.insert(*r);
-            }
-            Place::FpReg(r) => {
-                fp_used.insert(*r);
-            }
-            _ => {}
-        }
-    }
     Coloring {
         places,
         spill_count,
-        gpr_used: gpr_used.into_iter().collect(),
-        fp_used: fp_used.into_iter().collect(),
     }
 }
 
@@ -1232,6 +1449,17 @@ const LOOP_WEIGHT: u64 = 10;
 /// weight; the relative order of hot vs cold values is unaffected.
 const LOOP_DEPTH_CAP: u32 = 6;
 
+/// Per-block execution-frequency estimate: `LOOP_WEIGHT` raised to the
+/// block's natural-loop nesting depth, capped at `LOOP_DEPTH_CAP`.
+/// Shared by the spill-cost ordering and the split's traffic metric so
+/// both rank blocks the same way.
+pub(crate) fn block_weights(func: &FunctionSsa) -> Vec<u64> {
+    crate::c5::codegen::passes::layout::loop_depths(func)
+        .iter()
+        .map(|&d| LOOP_WEIGHT.saturating_pow(d.min(LOOP_DEPTH_CAP)))
+        .collect()
+}
+
 /// Loop-depth-weighted use count per interference node, keyed by node
 /// id (the phi-congruence-class root). Each use site of any class
 /// member contributes `LOOP_WEIGHT^min(depth, cap)` for the depth of
@@ -1241,11 +1469,7 @@ const LOOP_DEPTH_CAP: u32 = 6;
 /// the order degrades to raw use count.
 fn compute_spill_weights(func: &FunctionSsa, node_of: &[ValueId]) -> Vec<u64> {
     let n = func.insts.len();
-    let depths = crate::c5::codegen::passes::layout::loop_depths(func);
-    let block_weight: Vec<u64> = depths
-        .iter()
-        .map(|&d| LOOP_WEIGHT.saturating_pow(d.min(LOOP_DEPTH_CAP)))
-        .collect();
+    let block_weight = block_weights(func);
     let mut w: Vec<u64> = vec![0u64; n];
     for (b, block) in func.blocks.iter().enumerate() {
         let wb = block_weight[b];
@@ -1412,32 +1636,40 @@ fn result_kind(inst: &Inst) -> ResultKind {
         // argument register; classify it accordingly so the seed and
         // its consumers share the FP register file.
         ParamRef { kind, .. } => match kind {
-            LoadKind::F32 | LoadKind::F64 => ResultKind::Fp,
+            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => ResultKind::Fp,
             _ => ResultKind::Int,
         },
         Phi { kind, .. } => match kind {
-            LoadKind::F32 | LoadKind::F64 => ResultKind::Fp,
+            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => ResultKind::Fp,
             _ => ResultKind::Int,
         },
+        Copy { is_fp, .. } => {
+            if *is_fp {
+                ResultKind::Fp
+            } else {
+                ResultKind::Int
+            }
+        }
         Load { kind, .. } | LoadLocal { kind, .. } | SegLoad { kind, .. } => match kind {
-            LoadKind::F32 | LoadKind::F64 => ResultKind::Fp,
+            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => ResultKind::Fp,
             _ => ResultKind::Int,
         },
         Store {
-            kind: StoreKind::F32 | StoreKind::F64,
+            kind: StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128,
             ..
         }
         | StoreLocal {
-            kind: StoreKind::F32 | StoreKind::F64,
+            kind: StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128,
             ..
         }
         | SegStore {
-            kind: StoreKind::F32 | StoreKind::F64,
+            kind: StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128,
             ..
         } => ResultKind::Fp,
+        X86Simd { .. } => ResultKind::None,
         Store { .. } | StoreLocal { .. } | StoreIndexed { .. } | SegStore { .. } => ResultKind::Int,
         LoadIndexed { kind, .. } => match kind {
-            LoadKind::F32 | LoadKind::F64 => ResultKind::Fp,
+            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => ResultKind::Fp,
             _ => ResultKind::Int,
         },
         Binop { op, .. } | BinopI { op, .. } => match op {
@@ -1447,7 +1679,9 @@ fn result_kind(inst: &Inst) -> ResultKind {
         },
         Fneg(_) => ResultKind::Fp,
         Fma { .. } => ResultKind::Fp,
+        MulAdd { .. } => ResultKind::Int,
         Extend { .. } => ResultKind::Int,
+        Bswap { .. } => ResultKind::Int,
         FpCast { kind, .. } => match kind {
             FpCastKind::FpToInt | FpCastKind::UFpToInt => ResultKind::Int,
             FpCastKind::IntToFp
@@ -2214,7 +2448,7 @@ mod tests {
         let src =
             std::fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(path)).unwrap();
         let program = Compiler::new(src).compile().expect("compile");
-        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::host(), false)
+        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::host(), false, true)
             .expect("produce_ssa_funcs")
     }
 
@@ -2290,9 +2524,13 @@ double f(double a, double b, double c, double d, double e, double h) {
 int main(void) { return 0; }
 "#;
         let program = Compiler::new(src.to_string()).compile().expect("compile");
-        let funcs =
-            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::WindowsX64, false)
-                .expect("produce_ssa_funcs");
+        let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(
+            &program,
+            Target::WindowsX64,
+            false,
+            true,
+        )
+        .expect("produce_ssa_funcs");
         for func in &funcs {
             let alloc = allocate(func, Target::WindowsX64);
             for place in &alloc.places {
@@ -2338,8 +2576,9 @@ int main(void) { return 0; }
             .compile()
             .expect("compile");
         for (target, want_scratch) in [(Target::WindowsX64, true), (Target::LinuxX64, false)] {
-            let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false)
-                .expect("ssa");
+            let funcs =
+                crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                    .expect("ssa");
             let f = funcs.iter().find(|f| f.name == "f").expect("f");
             let alloc = allocate(f, target);
             let saves_14_15 = alloc.fp_used.contains(&14) && alloc.fp_used.contains(&15);
@@ -2355,9 +2594,13 @@ int main(void) { return 0; }
         let program = Compiler::new(int_src.to_string())
             .compile()
             .expect("compile");
-        let funcs =
-            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::WindowsX64, false)
-                .expect("ssa");
+        let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(
+            &program,
+            Target::WindowsX64,
+            false,
+            true,
+        )
+        .expect("ssa");
         let g = funcs.iter().find(|f| f.name == "g").expect("g");
         assert!(
             allocate(g, Target::WindowsX64).fp_used.is_empty(),
@@ -2790,6 +3033,76 @@ int main(void) { return 0; }
         );
     }
 
+    /// A value the emit skips writes no register, so its color must not
+    /// reach the prologue's save list. Ten simultaneously-live
+    /// immediates exhaust the seven-entry x86_64 caller bank; the dead
+    /// shift among them colors last (zero weight) and lands on a
+    /// callee-saved register that nothing ever writes.
+    #[test]
+    fn dead_pure_color_stays_out_of_used_sets() {
+        use crate::c5::ir::Block;
+        let mut insts: Vec<Inst> = (0..10).map(Inst::Imm).collect();
+        let dead = insts.len() as ValueId;
+        insts.push(Inst::BinopI {
+            op: BinOp::Shl,
+            lhs: 0,
+            rhs_imm: 8,
+        });
+        let mut acc: ValueId = 0;
+        for k in 1..10 {
+            insts.push(Inst::Binop {
+                op: BinOp::Add,
+                lhs: acc,
+                rhs: k,
+            });
+            acc = insts.len() as ValueId - 1;
+        }
+        let n = insts.len() as u32;
+        let f = FunctionSsa {
+            insts,
+            blocks: vec![Block {
+                start_pc: 0,
+                inst_range: 0..n,
+                terminator: Terminator::Return(acc),
+                exit_acc: acc,
+            }],
+            ..Default::default()
+        };
+        // Pin uncapped banks so the pressure-matrix env cannot spill
+        // the dead value instead of coloring it.
+        let alloc =
+            with_pool_size_override(usize::MAX, usize::MAX, || allocate(&f, Target::LinuxX64));
+        assert!(
+            super::super::emit_common::is_dead_pure(&f.insts[dead as usize], dead, &alloc),
+            "the unread shift must be dead-pure"
+        );
+        let Place::IntReg(r) = alloc.places[dead as usize] else {
+            panic!(
+                "the dead value must be colored, got {:?}",
+                alloc.places[dead as usize]
+            );
+        };
+        assert!(
+            RegBanks::for_target(Target::LinuxX64)
+                .callee_gprs
+                .contains(&r),
+            "with the caller bank exhausted the dead value takes a callee-saved register, got {r}"
+        );
+        assert!(
+            !alloc.gpr_used.contains(&r),
+            "gpr {r} is written by nothing, so it must not be saved"
+        );
+        for &r in &alloc.gpr_used {
+            assert!(
+                f.insts.iter().enumerate().any(|(v, inst)| {
+                    alloc.places[v] == Place::IntReg(r)
+                        && !super::super::emit_common::is_dead_pure(inst, v as ValueId, &alloc)
+                }),
+                "gpr {r} in the save list with no emitted writer"
+            );
+        }
+    }
+
     #[test]
     fn allocate_quicksort_no_spill() {
         let funcs = lift("tests/fixtures/c/quicksort.c");
@@ -3155,10 +3468,12 @@ int main(void) { return 0; }
             ent_pc: 0,
             end_pc: 0,
             locals: 0,
+            ssp: crate::c5::ir::SspFacts::default(),
             n_params: 0,
             is_variadic: false,
             is_inline: false,
             is_always_inline: false,
+            is_noinline: false,
             is_naked: false,
             section: None,
             is_weak: false,
@@ -3166,6 +3481,7 @@ int main(void) { return 0; }
             const_params: 0,
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
+            cmp32: Vec::new(),
             param_fp_mask: 0,
             agg_descs: alloc::vec::Vec::new(),
             param_aggs: alloc::vec::Vec::new(),
@@ -3290,6 +3606,7 @@ int main(void) { return 0; }
         FunctionSsa {
             inst_src: alloc::vec![(0, 0); n],
             f32_values: alloc::vec![false; n],
+            cmp32: Vec::new(),
             insts,
             blocks: alloc::vec![crate::c5::ir::Block {
                 start_pc: 0,
@@ -3374,5 +3691,242 @@ int main(void) { return 0; }
              ({small_rescan} -> {large_rescan} visits); the bound above \
              no longer proves anything",
         );
+    }
+
+    fn func_with(insts: Vec<Inst>, blocks: Vec<super::super::super::ir::Block>) -> FunctionSsa {
+        let n = insts.len();
+        FunctionSsa {
+            name: alloc::string::String::new(),
+            ent_pc: 0,
+            end_pc: 0,
+            locals: 0,
+            ssp: crate::c5::ir::SspFacts::default(),
+            n_params: 0,
+            is_variadic: false,
+            is_inline: false,
+            is_always_inline: false,
+            is_noinline: false,
+            is_naked: false,
+            section: None,
+            is_weak: false,
+            is_internal: false,
+            const_params: 0,
+            inst_src: vec![(0, 0); n],
+            f32_values: vec![false; n],
+            cmp32: Vec::new(),
+            param_fp_mask: 0,
+            agg_descs: Vec::new(),
+            param_aggs: Vec::new(),
+            param_local_slots: Vec::new(),
+            ret_agg: None,
+            ret_is_fp: false,
+            ret_type_tag: 0,
+            indirect_result_slot: 0,
+            computed_goto_targets: Vec::new(),
+            label_data_relocs: Vec::new(),
+            jump_tables: Vec::new(),
+            synthetic_base: 0,
+            multi_cell_slots: Vec::new(),
+            over_aligned: Default::default(),
+            frame_align: 0,
+            realign_region_bytes: 0,
+            has_returns_twice_call: false,
+            did_unroll: false,
+            did_inline: false,
+            insts,
+            blocks,
+            extern_call_refs: Vec::new(),
+            extern_imm_code_refs: Vec::new(),
+            extern_imm_data_refs: Vec::new(),
+            extern_tls_refs: Vec::new(),
+        }
+    }
+
+    /// One block holding `insts` and branching on `cond`, plus the two
+    /// empty successors.
+    fn branch_func(insts: Vec<Inst>, cond: ValueId) -> FunctionSsa {
+        use super::super::super::ir::Block;
+        let n = insts.len() as u32;
+        func_with(
+            insts,
+            vec![
+                Block {
+                    start_pc: 0,
+                    inst_range: 0..n,
+                    terminator: Terminator::Bz {
+                        cond,
+                        target: 1,
+                        fall_through: 2,
+                    },
+                    exit_acc: cond,
+                },
+                Block {
+                    start_pc: 0,
+                    inst_range: n..n,
+                    terminator: Terminator::Return(NO_VALUE),
+                    exit_acc: NO_VALUE,
+                },
+                Block {
+                    start_pc: 0,
+                    inst_range: n..n,
+                    terminator: Terminator::Return(NO_VALUE),
+                    exit_acc: NO_VALUE,
+                },
+            ],
+        )
+    }
+
+    fn load_i64() -> Inst {
+        Inst::LoadLocal {
+            off: 2,
+            kind: LoadKind::I64,
+            volatile: false,
+        }
+    }
+
+    fn store_of(value: ValueId) -> Inst {
+        Inst::StoreLocal {
+            off: -1,
+            value,
+            kind: StoreKind::I64,
+            volatile: false,
+        }
+    }
+
+    /// An immediate between the compare and the branch: on aarch64 the
+    /// materialisation (`movz`) leaves the flags alone and the compare
+    /// fuses; on x86_64 a zero immediate lowers to a flag-writing
+    /// `xor r, r` and the compare must stay materialised.
+    #[test]
+    fn branch_fusion_window_is_target_flag_aware() {
+        let build = || {
+            branch_func(
+                vec![
+                    load_i64(),
+                    Inst::BinopI {
+                        op: BinOp::Lt,
+                        lhs: 0,
+                        rhs_imm: 5,
+                    },
+                    Inst::Imm(0),
+                    store_of(2),
+                ],
+                1,
+            )
+        };
+        let a64 = allocate(&build(), Target::LinuxAarch64);
+        assert!(a64.branch_fused[1]);
+        let x64 = allocate(&build(), Target::LinuxX64);
+        assert!(!x64.branch_fused[1]);
+    }
+
+    /// Integer ALU work between the compare and the branch writes
+    /// RFLAGS on x86_64 but not NZCV on aarch64.
+    #[test]
+    fn alu_in_the_window_blocks_fusion_on_x86_64_only() {
+        let build = || {
+            branch_func(
+                vec![
+                    load_i64(),
+                    Inst::BinopI {
+                        op: BinOp::Lt,
+                        lhs: 0,
+                        rhs_imm: 5,
+                    },
+                    Inst::BinopI {
+                        op: BinOp::Add,
+                        lhs: 0,
+                        rhs_imm: 7,
+                    },
+                    store_of(2),
+                ],
+                1,
+            )
+        };
+        assert!(allocate(&build(), Target::LinuxAarch64).branch_fused[1]);
+        assert!(!allocate(&build(), Target::LinuxX64).branch_fused[1]);
+    }
+
+    /// A compare with a second consumer keeps its materialisation on
+    /// both targets.
+    #[test]
+    fn multi_use_compare_stays_materialized() {
+        let build = || {
+            branch_func(
+                vec![
+                    load_i64(),
+                    Inst::BinopI {
+                        op: BinOp::Lt,
+                        lhs: 0,
+                        rhs_imm: 5,
+                    },
+                    store_of(1),
+                ],
+                1,
+            )
+        };
+        assert!(!allocate(&build(), Target::LinuxAarch64).branch_fused[1]);
+        assert!(!allocate(&build(), Target::LinuxX64).branch_fused[1]);
+    }
+
+    /// FP comparisons fuse like the integer ones; the per-arch
+    /// terminators cover the unordered cases.
+    #[test]
+    fn fp_compare_feeding_a_branch_fuses() {
+        let build = || {
+            branch_func(
+                vec![
+                    Inst::LoadLocal {
+                        off: 2,
+                        kind: LoadKind::F64,
+                        volatile: false,
+                    },
+                    Inst::LoadLocal {
+                        off: 3,
+                        kind: LoadKind::F64,
+                        volatile: false,
+                    },
+                    Inst::Binop {
+                        op: BinOp::Flt,
+                        lhs: 0,
+                        rhs: 1,
+                    },
+                ],
+                2,
+            )
+        };
+        assert!(allocate(&build(), Target::LinuxAarch64).branch_fused[2]);
+        assert!(allocate(&build(), Target::LinuxX64).branch_fused[2]);
+    }
+
+    /// A dead pure inst in the window emits no code, so it cannot
+    /// clobber flags; the fused compare keeps its single terminator
+    /// use and its place, so its color stays in the used sets the
+    /// prologue saves from.
+    #[test]
+    fn dead_window_insts_do_not_block_fusion() {
+        let f = branch_func(
+            vec![
+                load_i64(),
+                Inst::BinopI {
+                    op: BinOp::Lt,
+                    lhs: 0,
+                    rhs_imm: 5,
+                },
+                // Dead renormalize left by the branch-cond fold.
+                Inst::BinopI {
+                    op: BinOp::Ne,
+                    lhs: 1,
+                    rhs_imm: 0,
+                },
+            ],
+            1,
+        );
+        for target in [Target::LinuxAarch64, Target::LinuxX64] {
+            let alloc = allocate(&f, target);
+            assert!(alloc.branch_fused[1]);
+            assert_eq!(alloc.use_counts[1], 1);
+            assert!(matches!(alloc.places[1], Place::IntReg(_)));
+        }
     }
 }

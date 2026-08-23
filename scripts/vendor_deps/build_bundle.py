@@ -231,6 +231,17 @@ SOURCES = [
         sha_kind="git",
     ),
     Source(
+        # Linux kernel source, the defconfig sweep corpus pinned in
+        # demos/linux/setup.py. Published as a standalone tarball on
+        # cdn.kernel.org, so pinned by the tarball sha256.
+        name="linux",
+        version="7.1.6",
+        url="https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.1.6.tar.xz",
+        ext=".tar.xz",
+        upstream_sha="995dd7188d924662b94b48fd6fb783587267590e5b8bb33dade2c771e7d855c1",
+        sha_kind="tarball-sha256",
+    ),
+    Source(
         # libmill -- Go-style CSP coroutines in C. No release since
         # 2017; pin to the master head. Version embeds the commit's
         # author date. The demo currently fetches this archive from

@@ -9,69 +9,83 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <main>:
                	xorq	%rcx, %rcx
                	jmp	<addr>
                	imulq	$0xa, %rcx, %rax
-               	movslq	%eax, %rax
-               	cmpq	$0x32, %rax
+               	cmpl	$0x32, %eax
                	jl	<addr>
-               	cmpq	$0x46, %rax
+               	cmpl	$0x46, %eax
                	jl	<addr>
-               	cmpq	$0x50, %rax
+               	cmpl	$0x50, %eax
                	jl	<addr>
-               	cmpq	$0x5a, %rax
+               	cmpl	$0x5a, %eax
                	jl	<addr>
-               	cmpq	$0x5a, %rax
+               	cmpl	$0x5a, %eax
                	je	<addr>
                	movabsq	$-0x1, %rax
-               	leaq	0x1(%rcx), %rsi
-               	movslq	%esi, %rsi
-               	cmpq	%rsi, %rax
+               	leaq	0x1(%rcx), %rdx
+               	movslq	%edx, %rdx
+               	cmpq	%rdx, %rax
                	je	<addr>
                	jmp	<addr>
                	movl	$0xa, %eax
                	jmp	<addr>
-               	cmpq	$0x50, %rax
+               	cmpl	$0x50, %eax
                	jne	<addr>
                	movl	$0x9, %eax
                	jmp	<addr>
-               	cmpq	$0x46, %rax
+               	cmpl	$0x46, %eax
                	jne	<addr>
                	movl	$0x8, %eax
                	jmp	<addr>
-               	cmpq	$0x3c, %rax
+               	cmpl	$0x3c, %eax
                	jl	<addr>
-               	cmpq	$0x3c, %rax
+               	cmpl	$0x3c, %eax
                	jne	<addr>
                	movl	$0x7, %eax
                	jmp	<addr>
-               	cmpq	$0x32, %rax
+               	cmpl	$0x32, %eax
                	jne	<addr>
                	movl	$0x6, %eax
                	jmp	<addr>
-               	cmpq	$0x14, %rax
+               	cmpl	$0x14, %eax
                	jl	<addr>
-               	cmpq	$0x1e, %rax
+               	cmpl	$0x1e, %eax
                	jl	<addr>
-               	cmpq	$0x28, %rax
+               	cmpl	$0x28, %eax
                	jl	<addr>
-               	cmpq	$0x28, %rax
+               	cmpl	$0x28, %eax
                	jne	<addr>
                	movl	$0x5, %eax
                	jmp	<addr>
-               	cmpq	$0x1e, %rax
+               	cmpl	$0x1e, %eax
                	jne	<addr>
                	movl	$0x4, %eax
                	jmp	<addr>
-               	cmpq	$0x14, %rax
+               	cmpl	$0x14, %eax
                	jne	<addr>
                	movl	$0x3, %eax
                	jmp	<addr>
-               	cmpq	$0xa, %rax
+               	cmpl	$0xa, %eax
                	jl	<addr>
-               	cmpq	$0xa, %rax
+               	cmpl	$0xa, %eax
                	jne	<addr>
                	movl	$0x2, %eax
                	jmp	<addr>
@@ -79,13 +93,13 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x1, %eax
                	jmp	<addr>
-               	leaq	0x1(%rdx), %rcx
-               	movslq	%ecx, %rdx
-               	cmpq	$0xa, %rdx
+               	movslq	%ecx, %rax
+               	leaq	0x1(%rax), %rcx
+               	cmpl	$0xa, %ecx
                	jl	<addr>
                	movabsq	$-0x1, %rax
-               	movabsq	$-0x1, %rax
-               	movabsq	$-0x1, %rax
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
                	xorq	%rax, %rax
                	retq
                	movl	$0x1, %eax

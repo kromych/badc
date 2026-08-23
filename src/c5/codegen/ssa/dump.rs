@@ -92,6 +92,7 @@ fn fmt_inst(inst: &Inst) -> String {
     use Inst::*;
     match inst {
         Imm(v) => format!("Imm({v})"),
+
         ImmData(v) => format!("ImmData({v})"),
         ImmCode(pc) => format!("ImmCode(ent_pc={pc})"),
         ImmExtCode(binding) => format!("ImmExtCode(binding={binding})"),
@@ -103,10 +104,12 @@ fn fmt_inst(inst: &Inst) -> String {
             disp,
             kind,
             volatile,
+            align,
         } => format!(
-            "Load {{ addr=v{addr}, disp={disp}, kind={}{} }}",
+            "Load {{ addr=v{addr}, disp={disp}, kind={}{}{} }}",
             fmt_load_kind(*kind),
             fmt_volatile(*volatile),
+            fmt_align(*align),
         ),
         Store {
             addr,
@@ -114,10 +117,12 @@ fn fmt_inst(inst: &Inst) -> String {
             value,
             kind,
             volatile,
+            align,
         } => format!(
-            "Store {{ addr=v{addr}, disp={disp}, value=v{value}, kind={}{} }}",
+            "Store {{ addr=v{addr}, disp={disp}, value=v{value}, kind={}{}{} }}",
             fmt_store_kind(*kind),
             fmt_volatile(*volatile),
+            fmt_align(*align),
         ),
         SegLoad {
             addr,
@@ -195,9 +200,17 @@ fn fmt_inst(inst: &Inst) -> String {
         } => format!(
             "Fma {{ a=v{a}, b=v{b}, c=v{c}, neg_product={neg_product}, neg_addend={neg_addend} }}"
         ),
+        MulAdd {
+            a,
+            b,
+            c,
+            neg_product,
+        } => format!("MulAdd {{ a=v{a}, b=v{b}, c=v{c}, neg_product={neg_product} }}"),
         Extend { value, kind } => {
             format!("Extend {{ value=v{value}, kind={} }}", fmt_load_kind(*kind))
         }
+        Bswap { value, width } => format!("Bswap {{ value=v{value}, width={width} }}"),
+        Copy { value, is_fp } => format!("Copy {{ value=v{value}, fp={is_fp} }}"),
         FpCast { kind, value } => {
             format!("FpCast {{ kind={}, value=v{value} }}", fmt_fp_cast(*kind),)
         }
@@ -260,8 +273,15 @@ fn fmt_inst(inst: &Inst) -> String {
         } => format!(
             "AtomicCas {{ addr=v{addr}, expected_addr=v{expected_addr}, desired=v{desired}, width={width} }}"
         ),
+        X86Simd { op, imm, args } => format!(
+            "X86Simd {{ op={}, imm={imm:?}, args=[{}] }}",
+            crate::c5::x86_simd::get(*op).name,
+            fmt_value_list(args),
+        ),
         Intrinsic { kind, args } => format!(
-            "Intrinsic {{ kind={kind}, args=[{}] }}",
+            "Intrinsic {{ kind={}, args=[{}] }}",
+            super::super::op::Intrinsic::from_i64(*kind)
+                .map_or_else(|| format!("{kind}"), |i| format!("{i:?}")),
             fmt_value_list(args),
         ),
         InlineAsm { asm, args } => format!(
@@ -342,6 +362,17 @@ fn fmt_volatile(v: bool) -> &'static str {
     if v { ", volatile" } else { "" }
 }
 
+/// Proven alignment of a memory access, shown only when it is below
+/// the natural one for the width -- the naturally aligned case is the
+/// norm and printing it everywhere would bury the exceptions.
+fn fmt_align(align: u8) -> alloc::string::String {
+    if align == 0 {
+        alloc::string::String::new()
+    } else {
+        alloc::format!(", align={align}")
+    }
+}
+
 fn fmt_load_kind(k: LoadKind) -> &'static str {
     match k {
         LoadKind::I64 => "I64",
@@ -353,6 +384,8 @@ fn fmt_load_kind(k: LoadKind) -> &'static str {
         LoadKind::U16 => "U16",
         LoadKind::F32 => "F32",
         LoadKind::F64 => "F64",
+        LoadKind::F80 => "F80",
+        LoadKind::F128 => "F128",
     }
 }
 
@@ -364,6 +397,8 @@ fn fmt_store_kind(k: StoreKind) -> &'static str {
         StoreKind::I16 => "I16",
         StoreKind::F32 => "F32",
         StoreKind::F64 => "F64",
+        StoreKind::F80 => "F80",
+        StoreKind::F128 => "F128",
     }
 }
 
@@ -389,6 +424,8 @@ fn fmt_binop(op: BinOp) -> &'static str {
         BinOp::Add => "add",
         BinOp::Sub => "sub",
         BinOp::Mul => "mul",
+        BinOp::Mulh => "mulh",
+        BinOp::Mulhu => "mulhu",
         BinOp::Div => "div",
         BinOp::Mod => "mod",
         BinOp::Divu => "divu",

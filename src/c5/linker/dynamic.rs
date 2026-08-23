@@ -24,7 +24,10 @@ pub const SHT_GNU_VERSYM: u32 = 0x6fff_ffff;
 pub const SHT_GNU_HASH: u32 = 0x6fff_fff6;
 
 pub const DT_NULL: u64 = 0;
+pub const DT_NEEDED: u64 = 1;
 pub const DT_HASH: u64 = 4;
+pub const DT_RPATH: u64 = 15;
+pub const DT_RUNPATH: u64 = 29;
 pub const DT_STRTAB: u64 = 5;
 pub const DT_SYMTAB: u64 = 6;
 pub const DT_RELA: u64 = 7;
@@ -251,17 +254,19 @@ pub fn build_tables(
     exports: &[DynSym],
     soname: Option<&str>,
     versions: &[VerDef],
+    extra: &[&str],
     style: HashStyle,
     class: ElfClass,
 ) -> DynTables {
     // Symbols a loader can find go in bucket order after the ones it
     // cannot (the null entry and any undefined). bfd records the first
     // hashed index as `symndx` and hashes nothing below it.
-    let nbuckets = bucket_count(exports.len());
-    let mut hashed: Vec<(usize, u32)> = exports
+    let (imports, defined): (Vec<usize>, Vec<usize>) =
+        (0..exports.len()).partition(|&i| exports[i].shndx == 0);
+    let nbuckets = bucket_count(defined.len());
+    let mut hashed: Vec<(usize, u32)> = defined
         .iter()
-        .enumerate()
-        .map(|(i, s)| (i, gnu_hash(&s.name)))
+        .map(|&i| (i, gnu_hash(&exports[i].name)))
         .collect();
     hashed.sort_by_key(|&(i, h)| (h as usize % nbuckets, i));
 
@@ -275,6 +280,9 @@ pub fn build_tables(
         size: 0,
         version: VER_NDX_LOCAL,
     });
+    for &i in &imports {
+        symbols.push(exports[i].clone());
+    }
     for &(i, _) in &hashed {
         symbols.push(exports[i].clone());
     }
@@ -283,6 +291,7 @@ pub fn build_tables(
     if let Some(s) = soname {
         str_names.push(s);
     }
+    str_names.extend_from_slice(extra);
     for v in versions {
         str_names.push(v.name.as_str());
     }
@@ -313,7 +322,7 @@ pub fn build_tables(
         Vec::new()
     };
     let gnu = if style.gnu() {
-        build_gnu_hash(&hashed, nbuckets, class)
+        build_gnu_hash(&hashed, nbuckets, 1 + imports.len() as u32, class)
     } else {
         Vec::new()
     };
@@ -362,10 +371,14 @@ fn build_sysv_hash(symbols: &[DynSym]) -> Vec<u8> {
     out
 }
 
-fn build_gnu_hash(hashed: &[(usize, u32)], nbuckets: usize, class: ElfClass) -> Vec<u8> {
-    // The null entry at index 0 is never hashed, so hashing starts at
-    // index 1 and the chain array runs one per hashed symbol.
-    let symndx: u32 = 1;
+fn build_gnu_hash(
+    hashed: &[(usize, u32)],
+    nbuckets: usize,
+    symndx: u32,
+    class: ElfClass,
+) -> Vec<u8> {
+    // The null entry and the imports are never hashed; the chain array
+    // runs one per hashed symbol from `symndx` on.
     let (maskwords, shift2) = bloom_params(hashed.len(), class);
     let bloom_bits = class.addr_size() as u32 * 8;
     let mut bloom = alloc::vec![0u64; maskwords];
@@ -447,6 +460,12 @@ pub struct DynAddrs {
     pub verdef: Option<(u64, u16)>,
     pub versym: Option<u64>,
     pub soname: Option<u32>,
+    /// `.dynstr` offsets of the sonames this image depends on, in link
+    /// order. bfd emits them ahead of every other tag.
+    pub needed: Vec<u32>,
+    /// `.dynstr` offset of the `-rpath` search path, and whether it
+    /// takes `DT_RUNPATH` rather than `DT_RPATH`.
+    pub rpath: Option<(u32, bool)>,
     pub symbolic: bool,
     pub textrel: bool,
     /// `(address, size)` of `.preinit_array`, `.init_array` and
@@ -460,8 +479,14 @@ pub struct DynAddrs {
 pub fn build_dynamic(a: &DynAddrs, class: ElfClass) -> Vec<u8> {
     let mut tags: Vec<(u64, u64)> = Vec::new();
     let mut flags: u64 = 0;
+    for &off in &a.needed {
+        tags.push((DT_NEEDED, off as u64));
+    }
     if let Some(off) = a.soname {
         tags.push((DT_SONAME, off as u64));
+    }
+    if let Some((off, runpath)) = a.rpath {
+        tags.push((if runpath { DT_RUNPATH } else { DT_RPATH }, off as u64));
     }
     if a.symbolic {
         tags.push((DT_SYMBOLIC, 0));

@@ -9,6 +9,21 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <main>:
                	pushq	%rbp
@@ -18,15 +33,9 @@ Disassembly of section .text:
                	movq	%rax, %xmm14
                	movsd	%xmm14, -0x10(%rbp,%riz)
                	movsd	-0x10(%rbp,%riz), %xmm0
-               	movabsq	$0x407f900000000000, %rax # imm = 0x407F900000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	setne	%al
-               	movzbq	%al, %rax
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rax
-               	testq	%rax, %rax
+               	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
                	addq	$0x20, %rsp
@@ -63,27 +72,16 @@ Disassembly of section .text:
                	xorpd	%xmm15, %xmm0
                	movq	%rax, %xmm14
                	ucomisd	%xmm0, %xmm14
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rcx
-               	testq	%rcx, %rcx
+               	jp	<addr>
                	je	<addr>
                	movl	$0x3, %eax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movabsq	$-0x4010000000000000, %rcx # imm = 0xBFF0000000000000
                	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
+               	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm14
-               	setne	%al
-               	movzbq	%al, %rax
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rax
-               	testq	%rax, %rax
+               	jp	<addr>
                	je	<addr>
                	movl	$0x4, %eax
                	addq	$0x20, %rsp

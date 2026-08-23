@@ -9,6 +9,21 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <main>:
                	leaq	<rip>, %rax
@@ -57,14 +72,12 @@ Disassembly of section .text:
                	retq
                	leaq	0x1(%rax), %rcx
                	andq	$0xffff, %rcx           # imm = 0xFFFF
-               	movslq	%ecx, %rcx
                	testq	%rcx, %rcx
                	jne	<addr>
                	movl	$0x14, %eax
                	retq
                	addq	$0x8000, %rax           # imm = 0x8000
                	andq	$0xffff, %rax           # imm = 0xFFFF
-               	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x15, %eax
@@ -81,17 +94,11 @@ Disassembly of section .text:
                	movq	%rdx, (%rcx)
                	movq	(%rax), %rax
                	cmpq	$0xb, %rax
-               	setne	%cl
-               	movzbq	%cl, %rcx
                	movl	$0x1, %eax
-               	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	cmpq	$0x16, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

@@ -83,23 +83,35 @@ pub(crate) enum Inst {
     /// access to a volatile-qualified object (C99 6.7.3p6): the load
     /// must be performed strictly per the abstract machine, so no pass
     /// may delete, duplicate, or forward it (5.1.2.3p2).
+    ///
+    /// `align` is the alignment the address is proven to satisfy, in
+    /// bytes. Zero means the access is naturally aligned for its width,
+    /// which C99 6.3.2.3p7 guarantees for every well-formed object; a
+    /// packed member or a packed bitfield storage unit records the lower
+    /// bound it actually has. Under [`NativeOptions::strict_align`] the
+    /// lowering then composes the value from accesses no wider than
+    /// that. A pass that rebuilds the access at the same address must
+    /// carry the field across; one that retargets it to a different
+    /// address must recompute it.
     Load {
         addr: ValueId,
         disp: i32,
         kind: LoadKind,
         volatile: bool,
+        align: u8,
     },
     /// Store to `addr + disp`. The c5 semantics leave the stored value
     /// in the accumulator afterward; downstream uses of this
     /// instruction's id read that value. `disp` is a byte offset folded
     /// from a constant pointer addition, zero for a plain dereference.
-    /// `volatile` as for [`Self::Load`].
+    /// `volatile` and `align` as for [`Self::Load`].
     Store {
         addr: ValueId,
         disp: i32,
         value: ValueId,
         kind: StoreKind,
         volatile: bool,
+        align: u8,
     },
     /// Load from a local / parameter slot. Equivalent to a
     /// `LocalAddr(off)` followed by `Load { kind }`, but
@@ -201,6 +213,18 @@ pub(crate) enum Inst {
         neg_product: bool,
         neg_addend: bool,
     },
+    /// Integer multiply-accumulate: `c + (neg_product ? -(a*b) : a*b)`,
+    /// computed in 64 bits. Produced by `mul_add` from an `Add` / `Sub`
+    /// whose single-use operand is a `Mul`; two's-complement multiply
+    /// and add are exact modulo 2^64, so the fused form equals the
+    /// pair bit for bit. Lowers to one `madd` / `msub` on AArch64 and
+    /// to `imul` plus `add` / `sub` on x86-64.
+    MulAdd {
+        a: ValueId,
+        b: ValueId,
+        c: ValueId,
+        neg_product: bool,
+    },
     /// Sign-extend the low bytes of `value` to 64 bits: discard the
     /// bits above `kind`'s width and replicate the sign bit, the fused
     /// `trunc; sext` that lowers to one `sxtb`/`sxth`/`sxtw` (AArch64)
@@ -214,6 +238,20 @@ pub(crate) enum Inst {
     ///     width after a 64-bit computation (C99 6.5p5) -- equivalent
     ///     to the `Shl K; Shr K` pair the builder folds here.
     Extend { value: ValueId, kind: LoadKind },
+    /// Reverse the low `width` bytes of `value` (`__builtin_bswap16/32/64`,
+    /// C99 has no operator; the builtin is the existing practice). `width`
+    /// is 2, 4, or 8. Operand bits above `width * 8` do not affect the
+    /// result; the reversed bytes are zero-extended to 64 bits. Lowers to
+    /// the byte-reversal instruction (`bswap` / `rev`); the 16-bit form
+    /// needs one extra instruction to zero the upper bits.
+    Bswap { value: ValueId, width: u8 },
+    /// Register-to-register copy of `value`, with `is_fp` naming the
+    /// bank the copy runs in (the operand's own bank, which the
+    /// instruction cannot otherwise be asked for). Emitted by the
+    /// live-range split to give a value a second, shorter range the
+    /// allocator can place independently; the copy is bit-exact, so a
+    /// single-precision operand keeps its pattern.
+    Copy { value: ValueId, is_fp: bool },
     /// Floating-point <-> integer cast.
     FpCast { kind: FpCastKind, value: ValueId },
     /// Direct call to a c5 user function at ent_pc `target_pc`.
@@ -365,6 +403,18 @@ pub(crate) enum Inst {
     /// setjmp's 0-on-initial-call); longjmp does not return at
     /// all.
     Intrinsic { kind: i64, args: Vec<ValueId> },
+    /// One x86 SIMD instruction. `op` indexes
+    /// [`crate::c5::x86_simd::OPS`]; `imm` is the encoded immediate, or
+    /// `None` for a shift whose count is not a constant. `args` start with
+    /// the destination address (the pointer operand for a store) and
+    /// continue with the sources: an address for a 128-bit operand, the
+    /// value itself for a pointer or integer one. Defines no SSA value --
+    /// the result is written through the destination address.
+    X86Simd {
+        op: u32,
+        imm: Option<u8>,
+        args: Vec<ValueId>,
+    },
     /// GCC extended inline asm with operands (`asm(template : outputs :
     /// inputs : clobbers)`). `asm` carries the template, per-operand
     /// constraints, and clobbers; `args` is parallel to `asm.operands`
@@ -459,8 +509,11 @@ impl Inst {
                 | Inst::BinopI { .. }
                 | Inst::Fneg(_)
                 | Inst::Fma { .. }
+                | Inst::MulAdd { .. }
                 | Inst::FpCast { .. }
                 | Inst::Extend { .. }
+                | Inst::Bswap { .. }
+                | Inst::Copy { .. }
         )
     }
 
@@ -487,7 +540,10 @@ impl Inst {
             Inst::BinopI { .. } => "BinopI",
             Inst::Fneg(_) => "Fneg",
             Inst::Fma { .. } => "Fma",
+            Inst::MulAdd { .. } => "MulAdd",
             Inst::Extend { .. } => "Extend",
+            Inst::Bswap { .. } => "Bswap",
+            Inst::Copy { .. } => "Copy",
             Inst::FpCast { .. } => "FpCast",
             Inst::Call { .. } => "Call",
             Inst::CallIndirect { .. } => "CallIndirect",
@@ -497,6 +553,7 @@ impl Inst {
             Inst::AtomicRmw { .. } => "AtomicRmw",
             Inst::AtomicCas { .. } => "AtomicCas",
             Inst::Intrinsic { .. } => "Intrinsic",
+            Inst::X86Simd { .. } => "X86Simd",
             Inst::InlineAsm { .. } => "InlineAsm",
             Inst::AllocaInit(_) => "AllocaInit",
             Inst::ParamRef { .. } => "ParamRef",
@@ -552,16 +609,19 @@ impl Inst {
             }
             Inst::BinopI { lhs, .. } => f(*lhs),
             Inst::Fneg(v) => f(*v),
-            Inst::Fma { a, b, c, .. } => {
+            Inst::Fma { a, b, c, .. } | Inst::MulAdd { a, b, c, .. } => {
                 f(*a);
                 f(*b);
                 f(*c);
             }
             Inst::Extend { value, .. } => f(*value),
+            Inst::Bswap { value, .. } => f(*value),
+            Inst::Copy { value, .. } => f(*value),
             Inst::FpCast { value, .. } => f(*value),
             Inst::Call { args, .. }
             | Inst::CallExt { args, .. }
             | Inst::Intrinsic { args, .. }
+            | Inst::X86Simd { args, .. }
             | Inst::InlineAsm { args, .. } => {
                 for &a in args {
                     f(a);
@@ -643,16 +703,19 @@ impl Inst {
             }
             Inst::BinopI { lhs, .. } => f(lhs),
             Inst::Fneg(v) => f(v),
-            Inst::Fma { a, b, c, .. } => {
+            Inst::Fma { a, b, c, .. } | Inst::MulAdd { a, b, c, .. } => {
                 f(a);
                 f(b);
                 f(c);
             }
             Inst::Extend { value, .. } => f(value),
+            Inst::Bswap { value, .. } => f(value),
+            Inst::Copy { value, .. } => f(value),
             Inst::FpCast { value, .. } => f(value),
             Inst::Call { args, .. }
             | Inst::CallExt { args, .. }
             | Inst::Intrinsic { args, .. }
+            | Inst::X86Simd { args, .. }
             | Inst::InlineAsm { args, .. } => {
                 for a in args {
                     f(a);
@@ -712,6 +775,13 @@ pub(crate) enum LoadKind {
     /// 8-byte double held in an FP register; loaded with a single
     /// FP move (no widen/narrow).
     F64,
+    /// x87 80-bit `long double` read from a 16-byte object and
+    /// narrowed to the f64 the compute path carries (round to
+    /// nearest, ties to even). Bytes 10..16 are padding.
+    F80,
+    /// IEEE binary128 `long double` read from a 16-byte object and
+    /// narrowed to f64 like [`Self::F80`].
+    F128,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -729,6 +799,12 @@ pub(crate) enum StoreKind {
     /// 8-byte double held in an FP register; stored with a single
     /// FP move (no widen/narrow).
     F64,
+    /// f64 widened exactly to the x87 80-bit format and stored as 10
+    /// bytes; the 6 padding bytes of the 16-byte object are left
+    /// untouched, as gcc's stores do.
+    F80,
+    /// f64 widened exactly to IEEE binary128 and stored as 16 bytes.
+    F128,
 }
 
 /// Integer / FP binary opcode. The planner's choice between
@@ -760,6 +836,13 @@ pub(crate) enum BinOp {
     Add,
     Sub,
     Mul,
+    /// High half of the signed 64x64 -> 128 product (x86_64 one-operand
+    /// `imul`, aarch64 `smulh`). Emitted by the constant-divide
+    /// lowering; no C operator produces it directly.
+    Mulh,
+    /// High half of the unsigned 64x64 -> 128 product (x86_64
+    /// one-operand `mul`, aarch64 `umulh`).
+    Mulhu,
     Div,
     Mod,
     Divu,
@@ -774,6 +857,25 @@ pub(crate) enum BinOp {
     Fgt,
     Fle,
     Fge,
+}
+
+/// The divide sharing a modulo's quotient, and its inverse. The two
+/// halves of `n = (n / d) * d + n % d` (C99 6.5.5p6) pair by
+/// signedness.
+pub(crate) fn quotient_op(op: BinOp) -> Option<BinOp> {
+    match op {
+        BinOp::Mod => Some(BinOp::Div),
+        BinOp::Modu => Some(BinOp::Divu),
+        _ => None,
+    }
+}
+
+pub(crate) fn remainder_op(op: BinOp) -> Option<BinOp> {
+    match op {
+        BinOp::Div => Some(BinOp::Mod),
+        BinOp::Divu => Some(BinOp::Modu),
+        _ => None,
+    }
 }
 
 /// Operator for an atomic read-modify-write (C11 7.17.7.2-7.17.7.5).
@@ -1050,6 +1152,26 @@ impl Terminator {
     ///
     /// `Return` may carry `NO_VALUE` for a void return, which is passed
     /// through unchanged.
+    pub(crate) fn for_each_operand(&self, mut f: impl FnMut(ValueId)) {
+        match self {
+            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => f(*cond),
+            Terminator::GotoIndirect { target } => f(*target),
+            Terminator::JumpTable { idx, .. } => f(*idx),
+            Terminator::Return(v) => {
+                if *v != NO_VALUE {
+                    f(*v);
+                }
+            }
+            Terminator::Jmp(_)
+            | Terminator::FallThrough(_)
+            | Terminator::TailExt(_)
+            | Terminator::AsmGoto { .. }
+            | Terminator::Unreachable => {}
+        }
+    }
+
+    /// Mutable counterpart of [`Self::for_each_operand`], for the passes
+    /// that renumber values.
     pub(crate) fn for_each_operand_mut(&mut self, mut f: impl FnMut(&mut ValueId)) {
         match self {
             Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => f(cond),
@@ -1161,6 +1283,12 @@ pub(crate) struct FunctionSsa {
     /// coverage gap. A plain `inline` that stays out of line is silent
     /// (it is only a hint).
     pub is_always_inline: bool,
+    /// True if the function carried `__attribute__((noinline))`. gcc's
+    /// documented way to hold a body out of line, and what its
+    /// `__builtin_return_address` wording directs a caller to when the
+    /// inlined result is not the wanted one. Suppresses every inline
+    /// request, mandatory or size-driven.
+    pub is_noinline: bool,
     /// True if the function carried `__attribute__((naked))`: emit no
     /// prologue/epilogue and no implicit return; the body (inline asm) is the
     /// function's entire machine code. Used for interrupt service routines.
@@ -1236,6 +1364,12 @@ pub(crate) struct FunctionSsa {
     /// f32-typed `Imm` constant through a 32-bit `fmov` / `movd`.
     /// Empty (treated as all-false) for SSA built outside the walker.
     pub f32_values: Vec<bool>,
+    /// Per-value table, parallel to `insts`: the instruction is an
+    /// integer comparison whose operands are read at 32 bits
+    /// (`super::codegen::passes::narrow`). Set once, after every pass
+    /// that adds, removes or rewrites instructions; a shorter table is
+    /// read as all-false, which is the 64-bit form.
+    pub cmp32: Vec<bool>,
     /// Per-parameter floating-point mask: bit `i` set when declared
     /// parameter `i` is a floating-point scalar passed in an FP
     /// argument register (C99 6.2.5p10). The callee resolves each
@@ -1322,27 +1456,30 @@ pub(crate) struct FunctionSsa {
     /// locations); without debug info it coalesces the declared range
     /// too. 0 for SSA built outside the walker, which disables coalescing.
     pub synthetic_base: i64,
-    /// `(base_offset, cells)` for each multi-cell slot group -- a declared
-    /// aggregate / multi-cell scalar (seeded from the parser) or a synthetic
-    /// aggregate (`alloc_synthetic_struct`). The group occupies `base_offset
-    /// ..= base_offset + cells - 1` (base is the lowest address). Declared
-    /// groups may overlap a reused slot across disjoint scopes.
-    /// `ssa_slot_coalesce` reserves these so a coalesced scalar never lands on
-    /// an interior cell, which is referenced by no instruction. Empty for SSA
-    /// built outside the walker.
+    /// `(base_offset, cells)` for each slot group -- a declared aggregate of
+    /// any cell count / a multi-cell scalar (seeded from the parser) or a
+    /// synthetic aggregate (`alloc_synthetic_struct`). The group occupies
+    /// `base_offset ..= base_offset + cells - 1` (base is the lowest
+    /// address). Declared groups may overlap a reused slot across disjoint
+    /// scopes. `ssa_slot_coalesce` reserves these so a coalesced scalar never
+    /// lands on an interior cell, which is referenced by no instruction, and
+    /// `passes::sroa` reads them as its candidate set. Empty for SSA built
+    /// outside the walker.
     pub multi_cell_slots: Vec<(i64, i64)>,
     /// Automatic objects whose required alignment exceeds the 8-byte frame
-    /// slot (C11 6.7.5 `_Alignas` / GNU `aligned`), as `(slot_off,
-    /// region_off)`. The prologue reserves a `frame_align`-aligned region
-    /// below the static frame; every backend resolves these slots to
-    /// `region_base + region_off` rather than the fp-relative slot. Empty for
-    /// the common case.
+    /// slot (C11 6.7.5 `_Alignas` / GNU `aligned`, or a type whose natural
+    /// alignment is 16), as `(slot_off, region_off)`. The prologue reserves a
+    /// `frame_align`-aligned region below the static frame; every backend
+    /// resolves these slots to `region_base + region_off` rather than the
+    /// fp-relative slot. Empty for the common case.
     pub over_aligned: Vec<(i64, i64)>,
-    /// Alignment of the realigned region (max over `over_aligned`, a power of
-    /// two >= 16), or 0 when no automatic object needs realignment. Non-zero
-    /// forces the dynamic-sp frame model.
+    /// Alignment of the over-aligned region (max over `over_aligned`, a power
+    /// of two >= 16), or 0 when no automatic object needs it. Exactly 16 keeps
+    /// a static frame: the frame base is 16-aligned and every frame region a
+    /// 16-byte multiple, so the region sits at a fixed frame offset. Above 16
+    /// the prologue realigns sp, which forces the dynamic-sp frame model.
     pub frame_align: i64,
-    /// Byte size of the realigned region, a multiple of `frame_align`; 0 when
+    /// Byte size of the over-aligned region, a multiple of 16; 0 when
     /// `over_aligned` is empty.
     pub realign_region_bytes: i64,
     /// True when the body calls a function that may return twice into
@@ -1360,6 +1497,10 @@ pub(crate) struct FunctionSsa {
     /// whose constant-trip loops turned array subscripts into constant
     /// offsets. False for every function the unroll pass left unchanged.
     pub did_unroll: bool,
+    /// Stack-protector classification of the declared automatic objects;
+    /// see [`SspFacts`]. Recorded by the front end, applied against the
+    /// selected `-fstack-protector*` mode by the per-arch lowering.
+    pub ssp: SspFacts,
     /// True once `passes::inline` spliced a callee into this function.
     /// Set by the inliner; read post-inline to gate a mem2reg re-run to
     /// callers that received an inline. A relocated callee local can land
@@ -1367,6 +1508,37 @@ pub(crate) struct FunctionSsa {
     /// saw (the slot did not exist then), so the re-run promotes it. False
     /// for every function the inliner left unchanged.
     pub did_inline: bool,
+}
+
+/// What a function's declared automatic objects say about its exposure to
+/// a stack buffer overflow. Mirrors gcc's `stack_protect_classify_type` /
+/// `stack_protect_decl_p`: the facts are source-level, so a function keeps
+/// the protection its declarations ask for whatever the optimizer later
+/// does with the storage.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SspFacts {
+    /// Bytes in the largest character array reachable from a declared
+    /// automatic object, directly or through an aggregate member.
+    pub char_array_bytes: u32,
+    /// A declared automatic object is an array of any element type, or an
+    /// aggregate with an array member at any depth.
+    pub has_array: bool,
+    /// The body takes the address of a declared automatic object.
+    pub addr_taken: bool,
+    /// The body calls `alloca` or declares a variable-length array, so its
+    /// frame holds storage no declaration bounds.
+    pub dynamic_alloca: bool,
+}
+
+impl SspFacts {
+    /// Fold `other`'s facts in, for a body that absorbed another's locals
+    /// (function inlining).
+    pub fn merge(&mut self, other: SspFacts) {
+        self.char_array_bytes = self.char_array_bytes.max(other.char_array_bytes);
+        self.has_array |= other.has_array;
+        self.addr_taken |= other.addr_taken;
+        self.dynamic_alloca |= other.dynamic_alloca;
+    }
 }
 
 impl FunctionSsa {
@@ -1458,7 +1630,10 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::BinopI { .. }
             | Inst::Fneg { .. }
             | Inst::Fma { .. }
+            | Inst::MulAdd { .. }
             | Inst::Extend { .. }
+            | Inst::Bswap { .. }
+            | Inst::Copy { .. }
             | Inst::FpCast { .. }
             | Inst::Call { .. }
             | Inst::CallIndirect { .. }
@@ -1468,6 +1643,7 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::AtomicRmw { .. }
             | Inst::AtomicCas { .. }
             | Inst::Intrinsic { .. }
+            | Inst::X86Simd { .. }
             | Inst::InlineAsm { .. }
             | Inst::AllocaInit { .. }
             | Inst::ParamRef { .. }
@@ -1483,10 +1659,12 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             ent_pc: _,
             end_pc: _,
             locals: _,
+            ssp: _,
             n_params: _,
             is_variadic: _,
             is_inline: _,
             is_always_inline: _,
+            is_noinline: _,
             is_naked: _,
             is_weak: _,
             is_internal: _,
@@ -1500,6 +1678,7 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             extern_imm_data_refs: _,
             extern_tls_refs: _,
             f32_values: _,
+            cmp32: _,
             param_fp_mask: _,
             agg_descs: _,
             param_aggs: _,
@@ -1542,7 +1721,8 @@ mod tests {
                     addr: 1,
                     disp: 0,
                     kind: LoadKind::I64,
-                    volatile: false
+                    volatile: false,
+                    align: 0,
                 },
                 alloc::vec![1]
             ),
@@ -1552,7 +1732,8 @@ mod tests {
                     disp: 0,
                     value: 2,
                     kind: StoreKind::I64,
-                    volatile: false
+                    volatile: false,
+                    align: 0,
                 },
                 alloc::vec![1, 2]
             ),

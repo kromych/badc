@@ -5,6 +5,7 @@ use super::text::{
     is_ident_byte, literal_prefix_len, pp_number_len, skip_literal, strip_c_comments,
 };
 use crate::c5::error::C5Error;
+use crate::c5::lexer::{Ucn, decode_utf8, encode_utf8, scan_ucn};
 use alloc::format;
 use alloc::string::{String, ToString};
 
@@ -656,10 +657,10 @@ impl<'a> IfExprParser<'a> {
             return Ok(v);
         }
         // C99 6.4.4.4 / 6.4.5: a character constant or string literal may
-        // carry an encoding prefix. In a `#if` controlling expression the
-        // value is the character code either way, so the prefix is
-        // consumed and the literal read as below.
-        if let Some(plen) = literal_prefix_len(self.src.as_bytes(), self.pos) {
+        // carry an encoding prefix. It selects how a character constant
+        // reads; a string operand compares by text either way.
+        let prefix = literal_prefix_len(self.src.as_bytes(), self.pos);
+        if let Some(plen) = prefix {
             self.pos += plen;
         }
         if self.eat_byte(b'"') {
@@ -680,28 +681,65 @@ impl<'a> IfExprParser<'a> {
             ));
         }
         if self.eat_byte(b'\'') {
-            // Character literal. Multi-char (`'AB'`) is
-            // implementation-defined; each byte shifts into the
-            // accumulator, matching gcc.
+            // Character constant. A prefixed one holds code points and
+            // keeps the last (C99 6.4.4.4p11); an unprefixed one packs
+            // execution bytes, first character most significant, which
+            // is the implementation-defined value of 6.4.4.4p10 that gcc
+            // and clang also produce. Both readings mirror the lexer's,
+            // so a constant means the same inside and outside `#if`.
+            let wide = prefix.is_some();
             let bytes = self.src.as_bytes();
-            let mut acc: i64 = 0;
+            let mut packed: i64 = 0;
+            let mut last: i64 = 0;
             let mut count = 0usize;
             while let Some(b) = self.peek_byte() {
                 if b == b'\'' {
                     self.pos += 1;
-                    // C99 6.4.4.4p10: a single-character constant has
-                    // the char's value as int -- sign-extended on
-                    // signed-plain-char targets, matching the lexer.
-                    if count == 1 && self.pp.target.plain_char_signed() && (0..=0xFF).contains(&acc)
-                    {
-                        acc = acc as u8 as i8 as i64;
+                    if wide {
+                        // `L'...'` has type `wchar_t` (C11 6.4.4.4p2),
+                        // whose signedness the target ABI fixes.
+                        return Ok(IfValue::with_sign(last, !self.pp.wchar.signed));
                     }
-                    return Ok(IfValue::signed(acc));
+                    // A single-character constant keeps its char's own
+                    // value, sign-extended on signed-plain-char targets.
+                    let v = if count == 1 {
+                        if self.pp.char_signed && (0..=0xFF).contains(&last) {
+                            last as u8 as i8 as i64
+                        } else {
+                            last
+                        }
+                    } else {
+                        packed
+                    };
+                    // The constant has type `int`, so it narrows to that
+                    // width before the 6.10.1p4 intmax_t evaluation.
+                    return Ok(IfValue::signed(v as i32 as i64));
                 }
-                count += 1;
                 if b == b'\\' && self.pos + 1 < bytes.len() {
                     self.pos += 2;
                     let esc = bytes[self.pos - 1];
+                    if matches!(esc, b'u' | b'U') {
+                        let Ucn::Ok(cp) = scan_ucn(bytes, &mut self.pos, esc) else {
+                            return Err(C5Error::Compile(format!(
+                                "preprocessor: invalid universal character name \\{} in `#if`",
+                                esc as char
+                            )));
+                        };
+                        if wide {
+                            last = cp as i64;
+                            continue;
+                        }
+                        // Unprefixed, the code point contributes the
+                        // bytes of its UTF-8 encoding, one character each.
+                        let mut enc = [0u8; 4];
+                        let n = encode_utf8(cp, &mut enc);
+                        for &byte in &enc[..n] {
+                            count += 1;
+                            packed = (packed << 8) | byte as i64;
+                            last = byte as i64;
+                        }
+                        continue;
+                    }
                     // C99 6.4.4.4: simple, octal (`\N` up to three
                     // digits), and hexadecimal (`\xN...`) escapes.
                     let ch: i64 = match esc {
@@ -727,7 +765,7 @@ impl<'a> IfExprParser<'a> {
                                 v = (v << 4) | d as i64;
                                 self.pos += 1;
                             }
-                            v & 0xFF
+                            v
                         }
                         b'0'..=b'7' => {
                             let mut v = (esc - b'0') as i64;
@@ -746,11 +784,28 @@ impl<'a> IfExprParser<'a> {
                         }
                         other => other as i64,
                     };
-                    acc = (acc << 8) | ch;
-                } else {
-                    acc = (acc << 8) | (b as i64);
-                    self.pos += 1;
+                    if wide {
+                        last = ch;
+                    } else {
+                        count += 1;
+                        packed = (packed << 8) | (ch & 0xFF);
+                        last = ch;
+                    }
+                    continue;
                 }
+                if wide {
+                    // A prefixed constant's element is a code point, so
+                    // the source's UTF-8 is decoded rather than taken byte
+                    // by byte.
+                    let (cp, len) = decode_utf8(&bytes[self.pos..]);
+                    self.pos += len;
+                    last = cp as i64;
+                    continue;
+                }
+                count += 1;
+                packed = (packed << 8) | b as i64;
+                last = b as i64;
+                self.pos += 1;
             }
             return Err(C5Error::Compile(
                 "preprocessor: unterminated char literal in `#if`".to_string(),
@@ -940,6 +995,7 @@ impl<'a> IfExprParser<'a> {
         // macros are skipped (they need an argument list which the
         // preprocessor evaluator doesn't simulate). Undefined names
         // are 0 per c99 sec 6.10.1p4.
+        self.pp.obs_note(name);
         if let Some(value) = self.pp.macros.get(name) {
             // Strip a leading/trailing quote pair to detect strings.
             if value.starts_with('"') && value.ends_with('"') {
@@ -1196,5 +1252,9 @@ pub(super) fn is_known_attribute(name: &str) -> bool {
             | "error"
             | "warning"
             | "unavailable"
+            // Accepted and validated for its feature names; badc emits
+            // every instruction its intrinsic surface carries on x86-64,
+            // so the attribute selects nothing further.
+            | "target"
     )
 }

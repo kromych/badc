@@ -6,7 +6,9 @@ extracts it under ``demos/linux/.cache``, installs a build config, and runs
 ``make olddefconfig``. With ``--build`` it then runs the gcc reference build;
 that build validates the config and writes the per-object ``.<name>.o.cmd``
 files Kbuild leaves next to each object, which are the replay corpus
-``sweep.py`` consumes.
+``sweep.py`` consumes. The tree is held exclusively while it is written
+(ktree.py): reconfiguring under a build in progress rewrites what that build
+is reading.
 
 Two configurations, selected by ``--config``:
 
@@ -26,9 +28,15 @@ Config options the reference toolchain forces or drops during
 ``olddefconfig`` are recorded in ``config-deviations-<arch>.txt`` next to the
 tree.
 
+``--arch`` names the target: kbuild is given ``ARCH``, and ``CROSS_COMPILE``
+when the target is not the host. A cross target whose toolchain is not on
+PATH is refused before anything is downloaded, and the configured tree is
+checked against ``--arch`` before it is reported ready.
+
 Requirements for ``--build``: gcc, make, flex, bison, bc, libelf and openssl
-development headers. Idempotent: a verified tarball and an extracted tree are
-reused.
+development headers, and for a cross target the matching prefixed toolchain
+(``aarch64-linux-gnu-*`` / ``x86_64-linux-gnu-*``). Idempotent: a verified
+tarball and an extracted tree are reused.
 """
 
 from __future__ import annotations
@@ -36,13 +44,16 @@ from __future__ import annotations
 import argparse
 import hashlib
 import os
-import platform
 import re
 import subprocess
 import sys
 import tarfile
+import urllib.error
 import urllib.request
 from pathlib import Path
+
+import karch
+import ktree
 
 LINUX_DIR = Path(__file__).resolve().parent
 
@@ -61,23 +72,21 @@ ARCHES = sorted(MINIMAL_KERNELS)
 CONFIGS = ("defconfig", "minimal")
 
 CDN = "https://cdn.kernel.org/pub/linux/kernel"
+MIRROR = "https://github.com/kromych/badc/releases/download/vendor-deps-v1"
 
 
 def log(m: str) -> None:
     print(f"linux setup: {m}", flush=True)
 
 
-def host_arch() -> str:
-    m = platform.machine().lower()
-    if m in ("arm64", "aarch64"):
-        return "aarch64"
-    if m in ("x86_64", "amd64"):
-        return "x86_64"
-    return m
-
-
-def tarball_url(version: str) -> str:
-    return f"{CDN}/v{version.split('.', 1)[0]}.x/linux-{version}.tar.xz"
+def tarball_urls(version: str, sha: str) -> list[str]:
+    """Vendor-deps mirror first (the asset name embeds the sha256 prefix,
+    scripts/vendor_deps convention), cdn.kernel.org as the fallback for
+    versions the release does not carry."""
+    return [
+        f"{MIRROR}/linux-{version}-{sha[:8]}.tar.xz",
+        f"{CDN}/v{version.split('.', 1)[0]}.x/linux-{version}.tar.xz",
+    ]
 
 
 def sha256_of(path: Path) -> str:
@@ -88,23 +97,33 @@ def sha256_of(path: Path) -> str:
     return h.hexdigest()
 
 
-def fetch(url: str, dst: Path, want_sha: str) -> None:
+def fetch(urls: list[str], dst: Path, want_sha: str) -> None:
+    """Download dst from the first reachable URL. An unreachable source
+    falls through to the next one; a sha256 mismatch is fatal on any."""
     if dst.is_file() and sha256_of(dst) == want_sha:
         log(f"cached: {dst.name}")
         return
-    log(f"fetching {url}")
-    tmp = dst.with_suffix(dst.suffix + ".part")
-    with urllib.request.urlopen(url) as r, open(tmp, "wb") as f:
-        while True:
-            chunk = r.read(1 << 20)
-            if not chunk:
-                break
-            f.write(chunk)
-    got = sha256_of(tmp)
-    if got != want_sha:
-        tmp.unlink()
-        sys.exit(f"linux setup: sha256 mismatch for {dst.name}: got {got}, want {want_sha}")
-    tmp.rename(dst)
+    for url in urls:
+        log(f"fetching {url}")
+        tmp = dst.with_suffix(dst.suffix + ".part")
+        try:
+            with urllib.request.urlopen(url) as r, open(tmp, "wb") as f:
+                while True:
+                    chunk = r.read(1 << 20)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+        except urllib.error.URLError as e:
+            tmp.unlink(missing_ok=True)
+            log(f"unavailable ({e}), trying next source")
+            continue
+        got = sha256_of(tmp)
+        if got != want_sha:
+            tmp.unlink()
+            sys.exit(f"linux setup: sha256 mismatch for {dst.name}: got {got}, want {want_sha}")
+        tmp.rename(dst)
+        return
+    sys.exit(f"linux setup: no source could provide {dst.name}")
 
 
 def extract(tar_path: Path, dst: Path) -> None:
@@ -119,7 +138,7 @@ def extract(tar_path: Path, dst: Path) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--arch", choices=ARCHES, default=host_arch(),
+    ap.add_argument("--arch", choices=ARCHES, default=karch.host_arch(),
                     help="kernel architecture (default: host)")
     ap.add_argument("--config", choices=CONFIGS, default="defconfig",
                     help="configuration to build: the tree's own defconfig "
@@ -138,6 +157,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.arch not in MINIMAL_KERNELS:
         sys.exit(f"linux setup: no pinned kernel for arch {args.arch!r}")
+    # Before anything is downloaded: a cross build that cannot be run here
+    # must say so rather than produce a host-architecture tree.
+    gap = karch.cross_gap(args.arch)
+    if gap and not args.fetch_only:
+        sys.exit(f"linux setup: {gap}")
     if args.config == "defconfig":
         version, sha = DEFCONFIG_KERNEL
         config = None
@@ -150,20 +174,25 @@ def main(argv: list[str] | None = None) -> int:
     cache = args.cache
     cache.mkdir(parents=True, exist_ok=True)
     tar_path = cache / f"linux-{version}.tar.xz"
-    fetch(tarball_url(version), tar_path, sha)
+    fetch(tarball_urls(version, sha), tar_path, sha)
     if args.fetch_only:
         log(f"tarball ready at {tar_path}")
         return 0
 
     tree = cache / f"linux-{version}"
+    # Held for the rest of the run: extraction and the configuration steps
+    # write the tree, and a build running in it reads what they write.
+    tree.mkdir(parents=True, exist_ok=True)
+    ktree.exclusive(tree, "setup.py")
     if not (tree / "Makefile").is_file():
         log(f"extracting {tar_path.name}")
         extract(tar_path, cache)
 
+    env = karch.make_env(args.arch)
     if config is None:
-        log("make defconfig")
+        log(f"make defconfig (ARCH={env['ARCH']})")
         subprocess.run(["make", "defconfig"], cwd=tree, check=True,
-                       stdout=subprocess.DEVNULL)
+                       env=env, stdout=subprocess.DEVNULL)
         base = (tree / ".config").read_bytes()
     else:
         base = config.read_bytes()
@@ -177,13 +206,20 @@ def main(argv: list[str] | None = None) -> int:
     (tree / ".config.orig").write_bytes(base)
     log("make olddefconfig")
     subprocess.run(["make", "olddefconfig"], cwd=tree, check=True,
-                   stdout=subprocess.DEVNULL)
+                   env=env, stdout=subprocess.DEVNULL)
+    # The tree is only ready if it configured the architecture that was asked
+    # for; kbuild falls back to the host silently, and the mismatch would
+    # otherwise surface as a missing make target at build time.
+    mismatch = karch.config_mismatch(tree / ".config", args.arch)
+    if mismatch:
+        sys.exit(f"linux setup: {mismatch}")
     # Record every option olddefconfig changed relative to the vendored config.
     dev = subprocess.run(["./scripts/diffconfig", ".config.orig", ".config"],
                          cwd=tree, capture_output=True, text=True)
     (cache / f"config-deviations-{args.arch}.txt").write_text(dev.stdout)
     n = len([ln for ln in dev.stdout.splitlines() if ln.strip()])
-    log(f"config ready ({n} olddefconfig deviations recorded)")
+    log(f"config ready for {args.arch} "
+        f"({n} olddefconfig deviations recorded)")
 
     if args.build:
         jobs = args.jobs or (os.cpu_count() or 4)
@@ -194,7 +230,7 @@ def main(argv: list[str] | None = None) -> int:
         # kernel promotes to errors. -k keeps going, and the corpus size below
         # is what says whether the build was usable.
         r = subprocess.run(["make", f"-j{jobs}", "-k", "KCFLAGS=-Wno-error"],
-                           cwd=tree)
+                           cwd=tree, env=env)
         n_cmd = sum(1 for _, _, fs in os.walk(tree)
                     for f in fs if f.startswith(".") and f.endswith(".o.cmd"))
         if n_cmd == 0:

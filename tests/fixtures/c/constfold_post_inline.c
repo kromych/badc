@@ -3,8 +3,9 @@
 // mid-end folder must evaluate exactly as the interpreter and the
 // unoptimized build do. Every folded arm is exercised: wrapping
 // unsigned add/mul (C99 6.2.5p9), signed/unsigned shifts including
-// counts 64 and 65 (6.5.7p3 leaves those undefined; the
-// implementation pins the masked native semantics), the full
+// counts 64 and 65 (6.5.7p3 leaves those undefined, so the folder
+// declines them and the run reaches the shift; the masked native
+// semantics the interpreter and both builds agree on), the full
 // comparison set, unsigned division/modulo extremes, C99 6.5.5p6
 // truncated signed division, callee-narrows extends (6.3.1.3), and
 // the rotate idiom. Exit 0 when every computed value matches its

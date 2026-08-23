@@ -17,7 +17,7 @@ typedef unsigned char u8;
 
 #if defined(__x86_64__) && defined(__linux__)
 
-static volatile u64 area[8];
+static volatile u64 area[12];
 
 /* Runtime operands: the offsets must not fold into the accessor bodies,
  * so a dropped remap cannot be masked by constant propagation. */
@@ -67,6 +67,18 @@ static ALWAYS u64 pcpu_read64_off(unsigned long off) {
     return pcpu_read64(v_zero, off);
 }
 
+/* An `"=rm"` output block, the shape the kernel's interrupt-flag save
+ * takes. Its operand handling assigns a register per constraint and saves
+ * and restores every register the block writes, so an accessor address the
+ * allocator parked in one of them names the same slot on both sides. The
+ * block also takes the address of a local for the store-back, which is
+ * what an address read back through the segment base must not resolve to. */
+static ALWAYS unsigned long save_flags(void) {
+    unsigned long f;
+    __asm__ volatile("pushf ; pop %0" : "=rm"(f) : : "memory");
+    return f;
+}
+
 #endif
 
 int main(void) {
@@ -102,6 +114,25 @@ int main(void) {
     if (pcpu_read64(v_zero, v_eight) != 0x1122334455667788ULL)
         return 13;
 
+    /* One address, accessed on both sides of an `"=rm"` block: a register
+     * the block writes and restores must carry it across unchanged, and
+     * the block's own operand address must not become the segment base.
+     * EFLAGS bit 1 reads as 1, so a saved word is never zero. */
+    unsigned long addr = v_zero + v_eight;
+    u64 before = pcpu_read64(addr, 0);
+    unsigned long fl = save_flags();
+    u64 after = pcpu_read64(addr, 0);
+    if (before != 0x1122334455667788ULL || after != before)
+        return 14;
+    if (fl == 0)
+        return 15;
+    /* The same across a store and a read-modify-write: offset 56 from
+     * `addr` is area[8]. */
+    pcpu_write64(addr, 56, 0xa5a5a5a5a5a5a5a5ULL);
+    if (save_flags() == 0)
+        return 16;
+    pcpu_add64(addr, 56, 1);
+
     pcpu_write64(v_eight, 32, 0x0f1e2d3c4b5a6978ULL);
     pcpu_write64(v_zero, v_eight * 2, 0xfeedfacecafebeefULL);
     pcpu_add64(v_eight, 40, 0x1111111111111111ULL);
@@ -121,6 +152,10 @@ int main(void) {
         return 11;
     if (area[0] != 0 || area[4] != 0 || area[7] != 3)
         return 12;
+    if (area[8] != 0xa5a5a5a5a5a5a5a6ULL)
+        return 17;
+    if (area[9] != 0 || area[10] != 0 || area[11] != 0)
+        return 18;
 #endif
     return 42;
 }

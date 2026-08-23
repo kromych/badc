@@ -29,14 +29,26 @@ fn empty_source_has_no_main() {
 
 #[test]
 fn overaligned_automatic_beside_a_vla_is_diagnosed() {
-    // The realigned region and a variable-length array (C99 6.7.6.2) both move
-    // sp, so they cannot share a frame. The rejection is a source-level
-    // diagnostic, not the walker's internal error.
+    // The realigned region (alignment above 16) and a variable-length array
+    // (C99 6.7.6.2) both move sp, so they cannot share a frame. The rejection
+    // is a source-level diagnostic, not the walker's internal error.
     expect_compile_error(
         "int use(void *, void *);\n\
-         int f(int n) { int v[n]; _Alignas(16) char c[16]; return use(v, c); }",
+         int f(int n) { int v[n]; _Alignas(32) char c[32]; return use(v, c); }",
         "cannot share a function with `alloca` or a variable-length array",
     );
+    // An alignment of exactly 16 is met at a static frame offset, so it
+    // coexists with a VLA; a VLA whose own element needs 16 is met by the
+    // 16-byte-rounded sp carve.
+    Compiler::new(
+        "int use(void *, void *);\n\
+         int f(int n) { int v[n]; _Alignas(16) char c[16]; return use(v, c); }\n\
+         int g(int n) { __int128 w[n]; w[0] = n; return (int)(long)w[0]; }\n\
+         int main(void) { return g(1) - 1; }"
+            .to_string(),
+    )
+    .compile()
+    .expect("16-aligned automatic and VLA share a frame");
     // An over-aligned VLA itself has no fixed extent to place in the region.
     expect_compile_error(
         "int use(void *);\n\
@@ -128,6 +140,109 @@ fn block_scope_array_and_vector_typedef_keep_dimension() {
     )
     .compile()
     .expect("block-scope array / vector typedefs must keep their dimension across decls");
+}
+
+/// Prefix declaring the vector typedefs the operand-rule tests operate on.
+const VEC_DECLS: &str = "typedef __attribute__((vector_size(16))) unsigned char u8x16; \
+     typedef __attribute__((vector_size(8))) unsigned char u8x8; \
+     typedef __attribute__((vector_size(16))) unsigned int u32x4; \
+     typedef __attribute__((vector_size(16))) int i32x4; \
+     typedef __attribute__((vector_size(16))) float f32x4; \
+     u8x16 a; u8x8 h; u32x4 u4; i32x4 i4; f32x4 e; int n;";
+
+fn expect_vector_error(body: &str, needle: &str) {
+    expect_compile_error(&alloc::format!("{VEC_DECLS} {body}"), needle);
+}
+
+#[test]
+fn vector_relational_operators_are_rejected() {
+    // The GCC vector extension defines the relational and equality operators
+    // over vectors, yielding an integer vector of 0 / -1 per lane. That result
+    // type is not lowered, so both spellings reject rather than operating on
+    // the operand's address.
+    expect_vector_error(
+        "int main(void) { i32x4 r = i4 < i4; return r[0]; }",
+        "invalid operands to binary operator (aggregate type)",
+    );
+    expect_vector_error(
+        "int main(void) { i32x4 r = i4 == i4; return r[0]; }",
+        "invalid operands to binary operator (aggregate type)",
+    );
+}
+
+#[test]
+fn vector_logical_operators_are_rejected() {
+    // C99 6.5.3.3p1 / 6.5.13: `!`, `&&` and `||` need a scalar operand, and
+    // the extension does not extend them to a vector. `!v` used to compare
+    // the vector's address against zero.
+    expect_vector_error(
+        "int main(void) { return !a; }",
+        "invalid operand to unary `!` (aggregate type)",
+    );
+    expect_vector_error(
+        "int main(void) { return a && n; }",
+        "invalid operands to binary operator (aggregate type)",
+    );
+}
+
+#[test]
+fn vector_operand_shape_mismatches_are_rejected() {
+    // Two vector operands must agree on byte width and on element width and
+    // kind; a pointer is not a broadcast scalar, and an integer-element
+    // vector does not take a floating scalar.
+    expect_vector_error(
+        "int main(void) { u8x8 q = h; u8x16 r = a + q; return r[0]; }",
+        "invalid operands to binary `+`",
+    );
+    expect_vector_error(
+        "int main(void) { i32x4 r = i4 + e; return r[0]; }",
+        "invalid operands to binary `+`",
+    );
+    expect_vector_error(
+        "int main(void) { i32x4 r = i4 * 2.5; return r[0]; }",
+        "invalid operands to binary `*`",
+    );
+    expect_vector_error(
+        "int main(void) { char *p = 0; u8x16 r = a + p; return r[0]; }",
+        "invalid operands to binary `+`",
+    );
+    expect_vector_error(
+        "int main(void) { u8x16 v = a; v += h; return v[0]; }",
+        "invalid operands to vector compound `+=`",
+    );
+    // Same byte width, different element width: the bitwise operators used
+    // to admit this pair because the chunked lowering only needed the byte
+    // count, but it is not a legal operand pair.
+    expect_vector_error(
+        "int main(void) { u8x16 r = a ^ u4; return r[0]; }",
+        "invalid operands to binary `^`",
+    );
+}
+
+#[test]
+fn vector_of_float_rejects_the_integer_only_operators() {
+    // `%`, the bitwise operators and the shifts are not defined on a
+    // floating-element vector.
+    expect_vector_error(
+        "int main(void) { f32x4 r = e % e; return (int) r[0]; }",
+        "invalid operands to binary `%`",
+    );
+    expect_vector_error(
+        "int main(void) { f32x4 r = e & e; return (int) r[0]; }",
+        "invalid operands to binary `&`",
+    );
+    expect_vector_error(
+        "int main(void) { f32x4 r = e << 1; return (int) r[0]; }",
+        "invalid operands to binary `<<`",
+    );
+    expect_vector_error(
+        "int main(void) { f32x4 r = ~e; return (int) r[0]; }",
+        "invalid operand to unary `~` (vector of float)",
+    );
+    expect_vector_error(
+        "int main(void) { f32x4 v = e; v %= e; return (int) v[0]; }",
+        "invalid operands to vector compound `%=`",
+    );
 }
 
 #[test]
@@ -298,6 +413,42 @@ fn redeclaration_with_different_signature_warns() {
                 .iter()
                 .any(|w| w.contains(prev_needle) && w.contains(now_needle)),
             "no warning containing `{prev_needle}` + `{now_needle}` for {src:?}; got {:?}",
+            prog.warnings,
+        );
+    }
+}
+
+#[test]
+fn fn_type_typedef_ptr_redeclaration_is_silent() {
+    // C99 6.2.7 + 6.7.5.1p1: `F *` for a function-TYPE typedef `F` is
+    // the same type as the spelled-out fn-pointer declarator. Mixed-
+    // spelling prototype pairs -- both orders, unnamed, `F **`, the
+    // `F (*p)` grouping, a pointer typedef of `F`, and the bare `F`
+    // parameter (6.7.5.3p8) -- must merge silently.
+    for src in &[
+        "typedef int F(int); void f(int (*p)(int)); void f(F *p) { (void)p; } \
+         int main() { return 0; }",
+        "typedef int F(int); void f(F *p); void f(int (*p)(int)) { (void)p; } \
+         int main() { return 0; }",
+        "typedef int F(int); void f(int (*)(int)); void f(F *p) { (void)p; } \
+         int main() { return 0; }",
+        "typedef int F(int); void f(F *); void f(int (*p)(int)) { (void)p; } \
+         int main() { return 0; }",
+        "typedef int F(int); void f(int (**pp)(int)); void f(F **pp) { (void)pp; } \
+         int main() { return 0; }",
+        "typedef int F(int); void f(int (*p)(int)); void f(F (*p)) { (void)p; } \
+         int main() { return 0; }",
+        "typedef int F(int); typedef F *P; void f(int (*p)(int)); void f(P p) { (void)p; } \
+         int main() { return 0; }",
+        "typedef int F(int); void f(int (*p)(int)); void f(F p) { (void)p; } \
+         int main() { return 0; }",
+    ] {
+        let prog = crate::c5::Compiler::new((*src).to_string())
+            .compile()
+            .unwrap();
+        assert!(
+            prog.warnings.is_empty(),
+            "expected silence for {src:?}, got {:?}",
             prog.warnings,
         );
     }
@@ -540,6 +691,41 @@ fn duplicate_local_label_declaration() {
 }
 
 #[test]
+fn duplicate_local_label_declaration_far_apart_in_one_block() {
+    // The duplicate is against the whole declaring block, not a recent
+    // window of it: the two `l`s are separated by 400 other names.
+    let n = 200;
+    let mut src = alloc::string::String::from("int main() { __label__ l");
+    for i in 0..n {
+        src.push_str(&alloc::format!(", a{i}, b{i}"));
+    }
+    src.push_str("; __label__ l; goto l; l: return 0; }");
+    expect_compile_error(&src, "duplicate local label declaration `l`");
+}
+
+#[test]
+fn local_label_and_function_scoped_label_share_a_name() {
+    // The two name spaces are disjoint: the block's `l` is its own
+    // label, and the function-scoped `l` defined outside it is another.
+    expect_compiles(
+        "int main() { { __label__ l; goto l; l: ; } goto l; l: return 0; }",
+        "a `__label__` and a function-scoped label of the same name",
+    );
+}
+
+#[test]
+fn local_label_declaration_reopens_an_outer_name_on_block_exit() {
+    // The inner block's binding is undone at its `}`, so the second
+    // sibling block redeclares the name rather than colliding with the
+    // first, and the trailing `goto` reaches the outer declaration.
+    expect_compiles(
+        "int main() { __label__ l; { __label__ l; goto l; l: ; } \
+         { __label__ l; goto l; l: ; } goto l; l: return 0; }",
+        "a `__label__` name rebound by each of two sibling blocks",
+    );
+}
+
+#[test]
 fn local_label_declaration_after_a_statement() {
     expect_compile_error(
         "int main() { int x = 0; __label__ l; goto l; l: return x; }",
@@ -562,6 +748,87 @@ fn address_of_undefined_label() {
     expect_compile_error(
         "int main() { void *p = &&nowhere; return p != 0; }",
         "unresolved label: nowhere",
+    );
+}
+
+// The label table is keyed by name, so its size does not change what a
+// label diagnostic names or where it points. The two diagnostic cases
+// below run wide enough that a table-order dependency would show.
+
+#[test]
+fn duplicate_label_is_reported_at_its_second_definition() {
+    let n = 200;
+    let mut src = alloc::string::String::from("int f(void) {\n");
+    for i in 0..n {
+        src.push_str(&alloc::format!("L{i}: ;\n"));
+    }
+    src.push_str("L37: return 0;\n}\n");
+    // Line 1 is the function head and label `Li` sits on line i + 2, so
+    // the second `L37` is on line n + 2 -- not the first one's line.
+    expect_compile_error(
+        &src,
+        &alloc::format!(":{}: error: redefinition of label `L37`", n + 2),
+    );
+}
+
+#[test]
+fn the_first_undefined_goto_target_is_the_one_reported() {
+    let n = 200;
+    let mut src = alloc::string::String::from("int f(void) {\n");
+    for i in 0..n {
+        src.push_str(&alloc::format!("goto M{i};\ngoto N{i};\nN{i}: ;\n"));
+    }
+    src.push_str("return 0;\n}\n");
+    // Every `M` is undefined and every `N` resolves; the check runs at
+    // the closing brace and names the first undefined target in source
+    // order.
+    expect_compile_error(
+        &src,
+        &alloc::format!(":{}: error: unresolved label: M0", 3 * n + 3),
+    );
+}
+
+#[test]
+fn local_label_lookup_cost_is_independent_of_declaration_count() {
+    // A block's `__label__` declarations are keyed by the name's
+    // symbol-table index, so a declaration and a reference each examine
+    // one binding whatever the block declares. Measured in bindings
+    // examined, so the claim holds exactly rather than to within timer
+    // noise; the control below is what the per-block scan this replaced
+    // would have examined at the same lookups.
+    fn unit(decls: usize) -> alloc::string::String {
+        let mut src = alloc::string::String::from("int main(void) {\n__label__ L0");
+        for i in 1..decls {
+            src.push_str(&alloc::format!(", L{i}"));
+        }
+        src.push_str(";\ngoto L0;\n");
+        for i in 0..decls - 1 {
+            src.push_str(&alloc::format!("L{i}: goto L{};\n", i + 1));
+        }
+        src.push_str(&alloc::format!("L{}: return 0;\n}}\n", decls - 1));
+        src
+    }
+    let once = |decls: usize| -> (usize, usize, usize) {
+        let src = unit(decls);
+        crate::c5::compiler::LOCAL_LABEL_LOOKUP.with(|c| c.set((0, 0, 0)));
+        assert!(Compiler::new(src).compile().is_ok());
+        crate::c5::compiler::LOCAL_LABEL_LOOKUP.with(|c| c.get())
+    };
+    let (small_n, small_examined, small_scope) = once(50);
+    let (large_n, large_examined, large_scope) = once(1600);
+    assert!(small_n > 0 && large_n > 0, "no label lookups to compare");
+    assert!(
+        small_examined <= small_n && large_examined <= large_n,
+        "a label lookup examined more than one binding \
+         ({small_examined}/{small_n}, {large_examined}/{large_n}); \
+         resolution is scanning the declaring block again",
+    );
+    assert!(
+        large_scope / large_n >= (small_scope / small_n) * 8,
+        "32x the declarations no longer grow what a per-block scan would \
+         examine per lookup ({} -> {}); the bound above proves nothing",
+        small_scope / small_n,
+        large_scope / large_n,
     );
 }
 
@@ -1161,6 +1428,46 @@ fn constructor_attribute_is_recorded() {
 }
 
 #[test]
+fn constructor_attribute_on_prototype_reaches_definition() {
+    // The attribute on a separate declaration merges onto the later
+    // definition, as gcc's composite type does, for the bare, priority
+    // and destructor forms. A repeat on both declarations registers
+    // once, and a static prototype-form constructor is not unused.
+    let src = "
+        void a(void) __attribute__((constructor));
+        void a(void) {}
+        void b(void) __attribute__((constructor(101)));
+        void b(void) {}
+        void c(void) __attribute__((destructor));
+        void c(void) {}
+        void d(void) __attribute__((constructor));
+        __attribute__((constructor)) void d(void) {}
+        static void e(void) __attribute__((constructor));
+        static void e(void) {}
+        int main(void) { return 0; }
+    ";
+    let prog = super::compile_str_bare(src);
+    let by_name = |n: &str| prog.init_funcs.iter().find(|f| f.name == n);
+    let a = by_name("a").expect("a is a constructor");
+    assert!(!a.is_destructor && a.priority.is_none());
+    let b = by_name("b").expect("b is a constructor");
+    assert!(!b.is_destructor && b.priority == Some(101));
+    let c = by_name("c").expect("c is a destructor");
+    assert!(c.is_destructor && c.priority.is_none());
+    assert_eq!(
+        prog.init_funcs.iter().filter(|f| f.name == "d").count(),
+        1,
+        "attribute on both declarations registers once"
+    );
+    assert!(by_name("e").is_some(), "e is a constructor");
+    let warns = prog.warnings.join("\n");
+    assert!(
+        !warns.contains("unused function `e`"),
+        "prototype-declared constructor must not be flagged unused; got:\n{warns}"
+    );
+}
+
+#[test]
 fn constructor_is_not_reported_unused() {
     // A `static` constructor / destructor has no in-source call site but
     // runs at startup / exit, so it must not draw the unused-function
@@ -1547,6 +1854,27 @@ fn seg_address_space_qualifiers_parse_as_qualifiers() {
     }
 }
 
+#[test]
+fn seg_qualified_automatic_storage_is_rejected() {
+    // TR 18037 5.1.2: an object in a named address space needs static
+    // storage. A local or parameter object in `__seg_gs` is rejected; a
+    // pointer *into* the space carries the qualifier on the pointee and
+    // stays valid automatic storage (asserted by the accept cases above).
+    for src in [
+        "int f(void){ int __seg_gs x; x = 1; return x; } int main(void){ return 0; }",
+        "int f(int __seg_gs x){ return x; } int main(void){ return 0; }",
+    ] {
+        let err = Compiler::new(src.to_string())
+            .compile()
+            .expect_err("seg-qualified automatic storage must be rejected")
+            .to_string();
+        assert!(
+            err.contains("a named address space requires static storage"),
+            "unexpected diagnostic for `{src}`: {err}"
+        );
+    }
+}
+
 // Reaches the SSA walk (via native emit), so it needs `native-emit`.
 #[cfg(feature = "native-emit")]
 #[test]
@@ -1578,8 +1906,8 @@ fn direct_seg_access_lowers_on_x86_and_is_rejected_elsewhere() {
     let write_err = emit(write, Target::LinuxAarch64)
         .expect_err("aarch64 rejects a direct seg write")
         .to_string();
-    assert!(read_err.contains("__seg_gs/__seg_fs read (x86 only)"));
-    assert!(write_err.contains("__seg_gs/__seg_fs write (x86 only)"));
+    assert!(read_err.contains("__seg_gs/__seg_fs access (x86 only)"));
+    assert!(write_err.contains("__seg_gs/__seg_fs access (x86 only)"));
 }
 
 #[test]
@@ -2029,4 +2357,498 @@ fn nested_block_declaration_diagnostics_match_the_function_body() {
         Compiler::new(shadowing.to_string()).compile().is_ok(),
         "an inner-scope redeclaration must stay accepted"
     );
+}
+
+#[test]
+fn enum_redeclaration_in_same_scope_is_diagnosed() {
+    // C99 6.2.1p4: parameters share the function body's outermost scope,
+    // and 6.7p3 allows one no-linkage declaration per scope, so an
+    // enumerator there redeclares the parameter.
+    expect_compile_error(
+        "int f(int x) { enum { x = 3 }; return 0; } int main(void) { return f(1); }",
+        "redeclaration of `x` in the same scope",
+    );
+    // Same constraint between two function-body declarations, in either
+    // order, and inside one nested block.
+    expect_compile_error(
+        "int main(void) { int y = 1; enum { y }; return y; }",
+        "redeclaration of `y` in the same scope",
+    );
+    expect_compile_error(
+        "int main(void) { enum { y }; int y = 1; return y; }",
+        "duplicate local definition",
+    );
+    expect_compile_error(
+        "int main(void) { { int z = 1; enum { z }; return z; } }",
+        "redeclaration of `z` in the same scope",
+    );
+}
+
+#[test]
+fn enum_constant_unbinds_at_scope_exit() {
+    // C99 6.2.1p4: the enumerator shadows the file-scope object inside
+    // its block and the object returns at block exit.
+    let block = "int x = 7;\n\
+                 int f(void) { { enum { x = 3 }; if (x != 3) return 1; } return x == 7 ? 0 : 2; }\n\
+                 int main(void) { return f(); }";
+    let prog = Compiler::new(block.to_string()).compile().unwrap();
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+    // Function-body scope: restored at function exit, so the next
+    // function reads the file-scope object again.
+    let body = "int x = 7;\n\
+                int f(void) { enum { x = 3 }; return x; }\n\
+                int g(void) { return x; }\n\
+                int main(void) { return f() == 3 && g() == 7 ? 0 : 1; }";
+    let prog = Compiler::new(body.to_string()).compile().unwrap();
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+}
+
+#[test]
+fn block_fn_declaration_unbinds_at_scope_exit() {
+    // In scope, the declaration resolves the call against the later
+    // definition (C99 6.2.2p4: one entity with external linkage).
+    let ok = "int f(void) { int one8(void); return one8(); }\n\
+              int one8(void) { return 8; }\n\
+              int main(void) { return f() == 8 ? 0 : 1; }";
+    let prog = Compiler::new(ok.to_string()).compile().unwrap();
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+    // Out of scope the name is undeclared again (C99 6.2.1p4).
+    expect_compile_error(
+        "void f(void) { { int q8(void); } } int main(void) { return q8 != 0; }",
+        "undefined variable q8",
+    );
+    // A later declarator of the same name in the same scope is a
+    // no-linkage redeclaration (C99 6.7p3).
+    expect_compile_error(
+        "int main(void) { int q9(void); int q9 = 1; return q9; }",
+        "duplicate local definition",
+    );
+    // A bare-function-type declarator (`F g;`) binds the same way and
+    // unbinds with its block.
+    let td = "typedef int F(void);\n\
+              int f(void) { F one9; return one9(); }\n\
+              int one9(void) { return 9; }\n\
+              int main(void) { return f() == 9 ? 0 : 1; }";
+    let prog = Compiler::new(td.to_string()).compile().unwrap();
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+    expect_compile_error(
+        "typedef int F(void); void f(void) { { F q10; } } int main(void) { return q10 != 0; }",
+        "undefined variable q10",
+    );
+}
+
+#[test]
+fn block_typedef_redeclaration_rules() {
+    // C11 6.7p3 admits a same-scope typedef redeclared as a typedef;
+    // only the first save is kept, so the scope exit still restores
+    // the outer binding once.
+    let ok = "typedef char T;\n\
+              int f(void) { typedef int T; typedef int T; T v = 3; return v; }\n\
+              int main(void) { T w = 4; return f() == 3 && sizeof(w) == 1 ? 0 : 1; }";
+    let prog = Compiler::new(ok.to_string()).compile().unwrap();
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+    // Any other same-scope binding is a redeclaration.
+    expect_compile_error(
+        "int main(void) { int T = 1; typedef int T; return T; }",
+        "redeclaration of `T` in the same scope",
+    );
+}
+
+#[test]
+fn implicit_extern_fn_binding_unbinds_at_scope_exit() {
+    let opts = || {
+        crate::c5::compiler::CompileOptions::default()
+            .with_implicit_extern_fns(alloc::vec!["impfn".to_string()])
+    };
+    let target = super::super::codegen::Target::default_target();
+    // C89 6.3.2.2 puts the implicit declaration in the innermost block
+    // containing the call. Each caller re-binds; the calls resolve to
+    // the definition later in the unit.
+    let ok = "int f(void) { return impfn(4); }\n\
+              int h(void) { { return impfn(10); } }\n\
+              int impfn(int x) { return x + 1; }\n\
+              int main(void) { return f() + h() == 16 ? 0 : 1; }";
+    let prog = Compiler::with_options(ok.to_string(), target, opts())
+        .compile()
+        .unwrap();
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+    // After the declaring function exits, the name is out of scope; a
+    // non-call use in the next function does not see it.
+    match Compiler::with_options(
+        "int f(void) { return impfn(4); } int g(void) { return impfn; } \
+         int impfn(int x) { return x + 1; } int main(void) { return 0; }"
+            .to_string(),
+        target,
+        opts(),
+    )
+    .compile()
+    {
+        Err(e) => assert!(
+            e.to_string().contains("undefined variable impfn"),
+            "unexpected error: {e}"
+        ),
+        Ok(_) => panic!("an out-of-scope implicit binding must not resolve"),
+    }
+}
+
+#[test]
+fn object_of_incomplete_type_is_diagnosed() {
+    // C99 6.7p7: an object with no linkage must have a complete type by
+    // the end of its declarator.
+    expect_compile_error(
+        "struct never_defined;\n\
+         int main(void) { struct never_defined local_obj; return (int)(long)&local_obj; }",
+        "object `local_obj` has incomplete type",
+    );
+    // A block-scope `static` has no linkage either.
+    expect_compile_error(
+        "struct never_defined;\n\
+         int main(void) { static struct never_defined s; return (int)(long)&s; }",
+        "object `s` has incomplete type",
+    );
+    // C99 6.9.2p3: a file-scope definition the unit never completes.
+    expect_compile_error(
+        "struct never_defined;\n\
+         static struct never_defined file_scope_obj;\n\
+         int main(void) { return (int)(long)&file_scope_obj; }",
+        "object `file_scope_obj` has incomplete type",
+    );
+    // An array of an incomplete element type is incomplete too.
+    expect_compile_error(
+        "struct never_defined;\n\
+         struct never_defined arr[4];\n\
+         int main(void) { return (int)(long)&arr; }",
+        "object `arr` has incomplete type",
+    );
+    // A tentative definition the unit completes later stands, as do a
+    // block-scope `extern` (it has linkage and defines nothing) and a
+    // pointer to an incomplete tag.
+    Compiler::new(
+        "struct later;\n\
+         struct later tentative;\n\
+         struct later { int x; };\n\
+         struct undef;\n\
+         struct undef *p;\n\
+         int main(void) { extern struct undef e; tentative.x = 1;\n\
+         return tentative.x - 1 + (int)(long)(&p == 0) + (int)(long)(&e == 0); }"
+            .to_string(),
+    )
+    .compile()
+    .expect("a completed tentative definition, a block extern, and a pointer stay legal");
+}
+
+#[test]
+fn sizeof_of_an_incomplete_type_is_diagnosed() {
+    // C99 6.5.3.4p1 / C11 6.5.3.4p1: neither operator applies to an
+    // incomplete type, whether the operand is a type name, an identifier,
+    // or an expression.
+    expect_compile_error(
+        "struct Undef;\n\
+         int a[sizeof(struct Undef)];\n\
+         int main(void) { return a[0]; }",
+        "`sizeof` applied to an incomplete type",
+    );
+    expect_compile_error(
+        "union Undef;\n\
+         int main(void) { return (int)sizeof(union Undef); }",
+        "`sizeof` applied to an incomplete type",
+    );
+    // An array declared with an unspecified bound (C99 6.7.5.2p4).
+    expect_compile_error(
+        "extern int x[];\n\
+         int main(void) { return (int)sizeof(x); }",
+        "`sizeof` applied to an incomplete type",
+    );
+    // Through an expression operand.
+    expect_compile_error(
+        "struct Undef;\n\
+         struct Undef *p;\n\
+         int main(void) { return (int)sizeof(*p); }",
+        "`sizeof` applied to an incomplete type",
+    );
+    expect_compile_error(
+        "struct Undef;\n\
+         int main(void) { return (int)_Alignof(struct Undef); }",
+        "`_Alignof` applied to an incomplete type",
+    );
+    // A pointer to an incomplete type is complete, as is an array of a
+    // complete tag and a tag completed before the operator is applied.
+    Compiler::new(
+        "struct Undef;\n\
+         struct Later;\n\
+         struct Later { int a; int b; };\n\
+         extern int x[];\n\
+         int main(void) { return (int)(sizeof(struct Undef *) + sizeof(x[0])\n\
+         + sizeof(struct Later) + _Alignof(struct Undef *) + _Alignof(struct Later)) - 25; }"
+            .to_string(),
+    )
+    .compile()
+    .expect("pointers to an incomplete tag and completed tags stay legal");
+}
+
+#[test]
+fn address_of_a_block_scope_compound_literal_is_not_constant() {
+    // C99 6.5.2.5p5: a compound literal inside a function body has
+    // automatic storage duration, so its address is not an address
+    // constant (6.6p9) and cannot initialize a static-duration object.
+    expect_compile_error(
+        "struct s { int a; int b; };\n\
+         int main(void) { static struct s *p = &(struct s){ 77, 88 }; return p->a - 77; }",
+        "address of a compound literal with automatic storage duration",
+    );
+    // The array form decays to the same address.
+    expect_compile_error(
+        "int main(void) { static int *q = (int[]){ 3, 4 }; return *q - 3; }",
+        "address of a compound literal with automatic storage duration",
+    );
+    // A member of the literal is part of the same automatic object.
+    expect_compile_error(
+        "struct s { int a; int b; };\n\
+         int main(void) { static int *p = &((struct s){ 77, 88 }).b; return *p - 88; }",
+        "address of a compound literal with automatic storage duration",
+    );
+    // A file-scope literal has static storage duration; an automatic
+    // object's initializer need not be constant at all; and reading a
+    // staged element back is a value, not an address.
+    let prog = Compiler::new(
+        "struct s { int a; int b; };\n\
+         static struct s *fp = &(struct s){ 1, 2 };\n\
+         int main(void) {\n\
+             struct s *ap = &(struct s){ 3, 4 };\n\
+             struct s arr[1] = { { .a = (int)(long)&(struct s){ 5, 6 }, .b = 7 } };\n\
+             static int v = (int[]){ 8, 9 }[1];\n\
+             return fp->a + ap->b + (arr[0].b - 7) + v - 14;\n\
+         }"
+        .to_string(),
+    )
+    .compile()
+    .expect("static-duration and automatic-object compound literals stay legal");
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+}
+
+#[test]
+fn multi_dim_compound_literal_dimension_constraints() {
+    // C99 6.7.5.2: only the outermost dimension of an array type may be
+    // omitted; an inner `[]` leaves the element type incomplete. Both the
+    // block-scope and the static-initializer literal paths reject it.
+    expect_compile_error(
+        "int main(void) { int (*p)[3] = (int[2][]){ { 1, 2, 3 } }; return p[0][0]; }",
+        "array type has an incomplete inner dimension",
+    );
+    expect_compile_error(
+        "static int (*p)[3] = (int[2][]){ { 1, 2, 3 } };\n\
+         int main(void) { return p[0][0]; }",
+        "array type has an incomplete inner dimension",
+    );
+    // A const-qualified object is not an integer constant expression
+    // (C99 6.6p6), so the dimension makes the literal variably sized;
+    // gcc rejects that, and the static-initializer path masks its
+    // const-object fold to match.
+    expect_compile_error(
+        "int main(void) { const int h = 2; int *p = (int[h]){ 1, 2 }; return p[0]; }",
+        "constant integer expected",
+    );
+    expect_compile_error(
+        "int main(void) { const int h = 2; static int *p = (int[h]){ 1, 2 }; return p[0]; }",
+        "constant integer expected",
+    );
+}
+
+#[test]
+fn address_of_a_thread_local_is_not_a_constant_expression() {
+    // C11 6.7.9p4: an object with static storage duration is initialized
+    // by constant expressions, and a thread-local object's address is not
+    // one -- it has no value until a thread's block is materialized, which
+    // is after image relocation. gcc rejects each of these with
+    // "initializer element is not constant".
+    for src in [
+        "__thread int tv = 7;\nint *p = &tv;",
+        "__thread int tv = 7;\nint *p = &tv + 1;",
+        "__thread int a_tls[4];\nint *p = &a_tls[2];",
+        // The array name decays to the address of its first element.
+        "__thread int a_tls[4];\nint *p = a_tls;",
+        "struct s { int a; int b; };\n__thread struct s s_tls;\nint *p = &s_tls.b;",
+        "extern __thread int tv;\nint *p = &tv;",
+        "__thread int tv = 7;\nint *arr[2] = { &tv, 0 };",
+        "struct s { int *q; };\n__thread int tv = 7;\nstruct s v = { .q = &tv };",
+        // A compound literal at file scope has static storage duration.
+        "struct s { int *q; };\n__thread int tv = 7;\nstruct s v = (struct s){ &tv };",
+        "__thread int tv = 7;\nvoid f(void) { static int *p = &tv; (void)p; }",
+        // The rule keys on the object whose address is taken, so a
+        // thread-local slot is no exemption.
+        "__thread int tv;\n__thread int *tp = &tv;",
+    ] {
+        expect_compile_error(src, "address of thread-local");
+    }
+    // The opposite direction is an address constant and stays accepted:
+    // the thread-local is the object being initialized and the object
+    // whose address is taken has static storage duration. An automatic
+    // object's initializer need not be constant at all.
+    let prog = Compiler::new(
+        "int g = 3;\n\
+         static int arr[4] = { 1, 2, 3, 4 };\n\
+         __thread int *tp = &g;\n\
+         __thread int *tq = &arr[2];\n\
+         int main(void) {\n\
+             int *ap = &g;\n\
+             return (tp == &g ? 0 : 1) + (tq == &arr[2] ? 0 : 2) + (ap == &g ? 0 : 4);\n\
+         }"
+        .to_string(),
+    )
+    .compile()
+    .expect("a thread-local initialized with an ordinary object's address stays legal");
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+}
+
+#[test]
+fn static_local_array_initializer_over_bound_rejected() {
+    // C99 6.7.8p2: an initializer may not provide a value for an object
+    // outside the entity being initialized. The static-local allocator
+    // reserves storage from the declared bound, so a longer list was written
+    // past it, over whatever the initializer's own parse had staged above the
+    // reservation -- and off the end of `.data` when nothing had been, which
+    // panicked on the write index. The file-scope, automatic and
+    // compound-literal paths already rejected the same shapes.
+    expect_compile_error(
+        "int main(void) { static int a[1] = {1, 2, 3, 4}; return a[0]; }",
+        "too many initializers for array `a` (4 > 1)",
+    );
+    expect_compile_error(
+        "int main(void) { static char c[2] = \"abcdef\"; return c[0]; }",
+        "too many initializers for array `c` (6 > 2)",
+    );
+    expect_compile_error(
+        "int main(void) { static int a[1] = {1, 2}; static int b[2] = {3, 4};\n\
+         return a[0] + b[0]; }",
+        "too many initializers for array `a` (2 > 1)",
+    );
+    // The exactly-filling and short forms stay legal: 6.7.8p14 drops the
+    // terminator on an exact fit, 6.7.8p21 zero-fills the tail.
+    let prog = Compiler::new(
+        "int main(void) { static int a[2] = {1, 2}; static char c[3] = \"abc\";\n\
+         static char d[4] = \"ab\";\n\
+         return a[1] + c[2] + d[2] + d[3] - 101; }"
+            .to_string(),
+    )
+    .compile()
+    .expect("an exactly-filling or short static-local initializer stays legal");
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+}
+
+#[test]
+fn wide_string_array_initializer_requires_matching_element_width() {
+    // C99 6.7.8p15: a wide string literal initializes an array whose element
+    // type is compatible with the literal's. A wider element stored one
+    // decoded code point per element at the element's own width and ran past
+    // the array; the struct-member sinks already applied the rule.
+    for src in [
+        "int main(void) { static long long a[1] = L\"abc\"; return (int)a[0]; }",
+        "int main(void) { static long long a[] = L\"abc\"; return (int)a[0]; }",
+        "int main(void) { static char a[] = L\"abc\"; return a[0]; }",
+        "int main(void) { static char a[] = { L\"abc\" }; return a[0]; }",
+        "int main(void) { static int a[4] = u\"abc\"; return a[0]; }",
+    ] {
+        expect_compile_error(
+            src,
+            "wide string initializer requires a wchar_t-width array",
+        );
+    }
+    // The matching-width forms stay legal, bounded and unbounded alike.
+    let prog = Compiler::new(
+        "#include <stddef.h>\n\
+         int main(void) { static wchar_t a[] = L\"ab\"; static wchar_t b[4] = L\"cd\";\n\
+         static wchar_t c[2] = L\"ef\";\n\
+         return (int)(a[2] + b[2] + b[3] + (c[0] - L'e')); }"
+            .to_string(),
+    )
+    .compile()
+    .expect("a wchar_t-width array takes a wide string literal");
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+}
+
+#[test]
+fn mixed_prefix_string_concatenation_is_rejected() {
+    // C99 6.4.5p5 leaves a run carrying two encoding prefixes undefined.
+    // The initializer sees one staged literal by then, so the width the
+    // first part happens to match cannot hide the mismatch: the lexer
+    // rejects the run while both prefixes are visible.
+    expect_compile_error(
+        "#include <stddef.h>\n\
+         int main(void) { static wchar_t a[] = L\"ab\" u\"cd\"; return (int)a[0]; }",
+        "different encoding prefixes",
+    );
+    expect_compile_error(
+        "int main(void) { return sizeof(u\"a\" U\"b\"); }",
+        "different encoding prefixes",
+    );
+    // An unprefixed part is defined and folds at the run's width.
+    let prog = Compiler::new(
+        "#include <stddef.h>\n\
+         int main(void) { static wchar_t a[] = L\"ab\" \"cd\";\n\
+         static wchar_t b[] = \"ab\" L\"cd\";\n\
+         return (int)(a[2] - 'c') + (int)(b[3] - 'd')\n\
+         + (int)(sizeof a - sizeof b); }"
+            .to_string(),
+    )
+    .compile()
+    .expect("an unprefixed part joins the run");
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+}
+
+#[test]
+fn utf8_prefix_concatenation_is_diagnosed() {
+    // C11 6.4.5p5: `u8` is narrow, so it pairs only with itself and with
+    // an unprefixed part; every wider pairing has no defined result.
+    for src in [
+        r#"int main(void) { return sizeof(u8"a" L"b"); }"#,
+        r#"int main(void) { return sizeof(u8"a" u"b"); }"#,
+        r#"int main(void) { return sizeof(u8"a" U"b"); }"#,
+        r#"int main(void) { return sizeof(L"a" u8"b"); }"#,
+        r#"int main(void) { return sizeof(u"a" u8"b"); }"#,
+        r#"int main(void) { return sizeof(U"a" u8"b"); }"#,
+    ] {
+        expect_compile_error(src, "different encoding prefixes");
+    }
+    // The three cells 6.4.5p5 defines compile and run.
+    let prog = Compiler::new(
+        r#"int main(void) { static char a[] = u8"ab" u8"cd";
+         static char b[] = u8"ab" "cd";
+         static char c[] = "ab" u8"cd";
+         return (int)(sizeof a - 5) + (int)(sizeof b - 5) + (int)(sizeof c - 5)
+         + (a[3] - 'd') + (b[3] - 'd') + (c[3] - 'd'); }"#
+            .to_string(),
+    )
+    .compile()
+    .expect("u8 pairs with itself and with an unprefixed part");
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+}
+
+#[test]
+fn invalid_universal_character_names_are_diagnosed() {
+    // C11 6.4.3p2 constrains the code points a universal character name
+    // may denote, in a narrow, `u8` and wide literal alike.
+    for src in [
+        r#"char *s = "\uD800";"#,
+        r#"char *s = u8"\uD800";"#,
+        r#"char *s = (char *)L"\uDFFF";"#,
+        r#"char *s = "\u0041";"#,
+        r#"char *s = "\U00110000";"#,
+        r#"char c = '\u009F';"#,
+    ] {
+        expect_compile_error(src, "not a valid universal character name");
+    }
+    // 6.4.3p1 fixes the digit count at four for `\u` and eight for `\U`.
+    for src in [r#"char *s = "\u12";"#, r#"char *s = (char *)U"\U0001F60";"#] {
+        expect_compile_error(src, "incomplete universal character name");
+    }
+    // A name inside the permitted set encodes as UTF-8 and runs.
+    let prog = Compiler::new(
+        r#"int main(void) { static char a[] = u8"\u00E9\U0001F600";
+         return (int)(sizeof a - 7) + ((unsigned char)a[0] - 0xC3)
+         + ((unsigned char)a[2] - 0xF0) + ((unsigned char)a[5] - 0x80); }"#
+            .to_string(),
+    )
+    .compile()
+    .expect("a permitted universal character name encodes as UTF-8");
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
 }

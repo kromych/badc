@@ -157,6 +157,15 @@ impl Compiler {
             sym.has_initializer = false;
             sym.is_compound_literal = false;
         }
+        // The retired `__func__` storage is gone, so a later reference
+        // must materialise it again rather than resolve to the offset.
+        while self
+            .func_name_objects
+            .last()
+            .is_some_and(|&(.., o)| o >= end)
+        {
+            self.func_name_objects.pop();
+        }
         debug_assert!(self.data_object_starts.iter().all(|&s| s < end));
         debug_assert!(self.data_pad_ranges.iter().all(|r| r.0 < r.1 && r.1 <= end));
         debug_assert!(
@@ -166,6 +175,7 @@ impl Compiler {
         );
         debug_assert!(self.data_align_marks.iter().all(|&(off, _)| off < end));
         debug_assert!(self.staged_literal_syms.iter().all(|&(off, _)| off < end));
+        debug_assert!(self.func_name_objects.iter().all(|&(.., o)| o < end));
     }
 
     /// Skip tokens until the matching close paren. Caller has
@@ -742,23 +752,46 @@ impl Compiler {
     /// scope when a parameter or local declaration shadows an
     /// outer name; the function-exit cleanup pass restores the
     /// outer binding by reading the shadow fields back.
+    /// The array shape `idx` held before its own declarator overwrote it,
+    /// consumed so it applies to one save only.
+    pub(super) fn take_prior_shape(&mut self, idx: usize) -> Option<(i64, alloc::vec::Vec<i64>)> {
+        match self.pending.declarator_prior_shape {
+            Some((i, _, _)) if i == idx => self
+                .pending
+                .declarator_prior_shape
+                .take()
+                .map(|(_, inner, dims)| (inner, dims)),
+            _ => None,
+        }
+    }
+
     pub(super) fn shadow_symbol(&mut self, idx: usize) {
         self.scope_bound.push(idx as u32);
+        let prior = self.take_prior_shape(idx);
         let s = &mut self.symbols[idx];
         s.h_class = s.class;
         s.h_type = s.type_;
         s.h_val = s.val;
         s.h_fn_ptr_indirection = s.fn_ptr_indirection;
+        s.h_fn_ptr_ret_indirection = s.fn_ptr_ret_indirection;
         s.h_params = s.params.clone();
         s.h_is_variadic = s.is_variadic;
         s.h_array_size = s.array_size;
         s.h_type_align = s.type_align;
-        s.h_inner_array_size = s.inner_array_size;
         // Clone rather than `mem::take`: the inner-scope binding
         // (parameter or block local) keeps using the live
         // `array_dims` for the duration of its scope. Restore
         // copies the shadow back on scope exit.
-        s.h_array_dims = s.array_dims.clone();
+        match prior {
+            Some((inner, dims)) => {
+                s.h_inner_array_size = inner;
+                s.h_array_dims = dims;
+            }
+            None => {
+                s.h_inner_array_size = s.inner_array_size;
+                s.h_array_dims = s.array_dims.clone();
+            }
+        }
         s.h_is_vla = s.is_vla;
         s.h_vla_ptr_slot = s.vla_ptr_slot;
         s.h_vla_size_slot = s.vla_size_slot;
@@ -784,10 +817,21 @@ impl Compiler {
     /// and already holds a `&mut Symbol`; passing the symbol
     /// reference avoids re-borrowing the symbol table.
     pub(super) fn restore_shadowed_symbol(sym: &mut Symbol) {
+        // A scoped function declaration over a previously unbound name:
+        // the name unbinds, but the entity -- prototype, linkage, asm
+        // rename -- stays on the slot for call lowering and the
+        // extern-import scan (C99 6.2.2p4: one function, TU-wide).
+        if sym.scoped_fn_decl && sym.class == Token::Fun as i64 && sym.h_class == 0 {
+            sym.class = 0;
+            sym.is_scope_bound = false;
+            sym.block_extern_active = false;
+            return;
+        }
         sym.class = sym.h_class;
         sym.type_ = sym.h_type;
         sym.val = sym.h_val;
         sym.fn_ptr_indirection = sym.h_fn_ptr_indirection;
+        sym.fn_ptr_ret_indirection = sym.h_fn_ptr_ret_indirection;
         sym.params = core::mem::take(&mut sym.h_params);
         sym.is_variadic = sym.h_is_variadic;
         sym.array_size = sym.h_array_size;
@@ -802,8 +846,7 @@ impl Compiler {
         sym.is_global_register = sym.h_is_global_register;
         sym.asm_name = sym.h_asm_name.take();
         sym.const_object_value = sym.h_const_object_value;
-        sym.is_scope_static = false;
-        sym.is_scope_typedef = false;
+        sym.is_scope_bound = false;
         sym.block_extern_active = false;
         // The register-asm binding belongs to the block-scope local
         // being unbound, never to the restored outer symbol.
@@ -820,6 +863,7 @@ impl Compiler {
             && sym.type_ == sym.h_type
             && sym.val == sym.h_val
             && sym.fn_ptr_indirection == sym.h_fn_ptr_indirection
+            && sym.fn_ptr_ret_indirection == sym.h_fn_ptr_ret_indirection
             && sym.params == sym.h_params
             && sym.is_variadic == sym.h_is_variadic
             && sym.array_size == sym.h_array_size
@@ -834,8 +878,7 @@ impl Compiler {
             && sym.is_global_register == sym.h_is_global_register
             && sym.asm_name == sym.h_asm_name
             && sym.const_object_value == sym.h_const_object_value
-            && !sym.is_scope_static
-            && !sym.is_scope_typedef
+            && !sym.is_scope_bound
             && !sym.block_extern_active
     }
 
@@ -865,14 +908,12 @@ impl Compiler {
     }
 
     /// Whether `sym` currently holds a binding an enclosing scope must
-    /// get back at scope exit: a local or parameter, a block-scope
-    /// `static` or `typedef` (which no longer read as `Loc`), or a
+    /// get back at scope exit: a local or parameter, a function-body
+    /// binding that no longer reads as `Loc` (a block-scope `static`,
+    /// typedef, enumerator, or scoped function declaration), or a
     /// block-scope `extern` that converted a bound file-scope name.
     pub(super) fn scope_binding_active(sym: &Symbol) -> bool {
-        sym.class == Token::Loc as i64
-            || sym.is_scope_static
-            || sym.is_scope_typedef
-            || sym.block_extern_active
+        sym.class == Token::Loc as i64 || sym.is_scope_bound || sym.block_extern_active
     }
 
     /// Restore the outer binding of every symbol in `bound` that still
@@ -893,6 +934,58 @@ impl Compiler {
         self.scope_bound = bound;
     }
 
+    /// Whether the innermost open scope already declared `idx`: the
+    /// enclosing block's shadow list inside a block, the live binding at
+    /// function-body scope (which C99 6.2.1p4 shares with the
+    /// parameters). Drives the C99 6.7p3 one-declaration-per-scope
+    /// diagnostic; the per-scope single shadow slot also depends on it
+    /// -- a second same-scope save would overwrite the outer binding.
+    pub(super) fn binds_in_current_scope(&self, idx: usize) -> bool {
+        match self.block_scopes.last() {
+            Some(level) => level.iter().any(|b| b.idx == idx),
+            None => {
+                let s = &self.symbols[idx];
+                (s.class == Token::Loc as i64 && !s.is_global_register)
+                    || s.is_scope_bound
+                    || s.block_extern_active
+            }
+        }
+    }
+
+    /// Save the current binding of `idx` for restore when the innermost
+    /// open scope exits: onto the enclosing block's shadow list inside a
+    /// block, into the per-symbol `h_*` slot at function-body scope.
+    pub(super) fn save_scope_binding(&mut self, idx: usize) {
+        if self.block_scopes.is_empty() {
+            self.shadow_symbol(idx);
+        } else {
+            let snap = self.capture_block_shadow(idx);
+            self.block_scopes.last_mut().unwrap().push(snap);
+        }
+    }
+
+    /// Rebind `idx` as a non-`Loc` scoped declaration (an enumerator, a
+    /// block-scope or C89-implicit function declaration): diagnose a
+    /// same-scope redeclaration, save the outer binding for the scope's
+    /// exit, and mark a function-body binding for the function-exit
+    /// restore. No-op at file scope, where the binding is permanent.
+    pub(super) fn rebind_scoped(&mut self, idx: usize) -> Result<(), C5Error> {
+        if !self.in_function_body() {
+            return Ok(());
+        }
+        if self.binds_in_current_scope(idx) {
+            return Err(self.compile_err(alloc::format!(
+                "redeclaration of `{}` in the same scope",
+                self.symbols[idx].name
+            )));
+        }
+        self.save_scope_binding(idx);
+        if self.block_scopes.is_empty() {
+            self.symbols[idx].is_scope_bound = true;
+        }
+        Ok(())
+    }
+
     // ---- AST helpers ----
     //
     // The parser's `ast_*` calls and the `mark_emit_*` tag
@@ -908,7 +1001,6 @@ impl Compiler {
         self.ast = super::super::ast::Ast::new();
         self.ast_acc = None;
         self.ast_vstack.clear();
-        self.ast_labels.clear();
         self.pending_label_relocs.clear();
         self.in_function_body = true;
     }
@@ -946,6 +1038,7 @@ impl Compiler {
         // without this reservation the linker / DWARF range
         // invariant would fail.
         self.next_ent_pc += 1;
+        self.rewrite_loop_idioms();
         let finished = super::super::ast::FinishedFunction {
             ast: core::mem::take(&mut self.ast),
             ent_pc,
@@ -954,6 +1047,7 @@ impl Compiler {
             is_variadic,
             is_inline: self.pending_is_inline,
             is_always_inline: self.pending_is_always_inline,
+            is_noinline: self.pending_is_noinline,
             is_naked: self.pending_is_naked,
             n_locals: self.max_loc_offs,
             name: self.current_function_name.clone(),
@@ -968,11 +1062,13 @@ impl Compiler {
             // not yet collected at this point).
             multi_cell_slots: alloc::vec::Vec::new(),
             over_aligned_slots: alloc::vec::Vec::new(),
+            ssp: crate::c5::ir::SspFacts::default(),
             label_data_slots: core::mem::take(&mut self.pending_label_relocs),
         };
         self.in_function_body = false;
         self.pending_is_inline = false;
         self.pending_is_always_inline = false;
+        self.pending_is_noinline = false;
         self.pending_is_naked = false;
         self.finished_functions.push(finished);
     }
@@ -1619,37 +1715,46 @@ impl Compiler {
             .push_stmt(super::super::ast::Stmt::Default { body }, pos)
     }
 
-    /// Map a label name as written to the key it interns under. A name
-    /// declared `__label__` by an open block resolves to that block's
-    /// unique key, innermost first; any other name is function-scoped
-    /// and keys under itself. Every label consumer (`label:`, `goto`,
-    /// `&&label`, the `asm goto` label list) resolves through here, so
-    /// the block-scoped and function-scoped name spaces stay disjoint.
-    pub(super) fn resolve_label_name(&self, name: &str) -> alloc::string::String {
-        for scope in self.local_label_scopes.iter().rev() {
-            for (declared, key) in scope.iter().rev() {
-                if declared == name {
-                    return key.clone();
-                }
-            }
+    /// Map the label name at symbol index `idx` to the key it interns
+    /// under. A name declared `__label__` by an open block resolves to
+    /// that block's unique key, innermost first; any other name is
+    /// function-scoped and keys under itself. Every label consumer
+    /// (`label:`, `goto`, `&&label`, the `asm goto` label list)
+    /// resolves through here, so the block-scoped and function-scoped
+    /// name spaces stay disjoint.
+    pub(super) fn resolve_label_name(&self, idx: usize) -> alloc::string::String {
+        match self.local_label_scopes.resolve(idx) {
+            Some(key) => alloc::string::String::from(key),
+            None => self.symbols[idx].name.clone(),
         }
-        alloc::string::String::from(name)
     }
 
-    /// Allocate a fresh AST label slot. `self.labels` /
-    /// `self.unresolved_gotos` track names for the goto-vs-label
-    /// diagnostics; the AST mirror keeps a flat per-function id
-    /// space tied back through `Compiler::ast_label_by_name` so
-    /// `goto` resolves to the labelled statement.
+    /// AST label slot for `name`, allocating one on first mention.
     pub(super) fn ast_label_by_name(&mut self, name: &str) -> super::super::ast::LabelId {
-        for (lname, lid) in &self.ast_labels {
-            if lname == name {
-                return *lid;
-            }
+        if let Some(st) = self.labels.get(name) {
+            return st.id;
         }
         let id = self.ast.alloc_label();
-        self.ast_labels
-            .push((alloc::string::String::from(name), id));
+        self.labels.insert(
+            alloc::string::String::from(name),
+            super::LabelState { id, defined: false },
+        );
+        id
+    }
+
+    /// Whether `name`'s labelled statement has been parsed. False for
+    /// a name so far only mentioned by a forward reference.
+    pub(super) fn label_is_defined(&self, name: &str) -> bool {
+        self.labels.get(name).is_some_and(|st| st.defined)
+    }
+
+    /// Bind `name` to its labelled statement, returning the AST slot.
+    /// The caller rejects a redefinition through `label_is_defined`.
+    pub(super) fn define_label(&mut self, name: &str) -> super::super::ast::LabelId {
+        let id = self.ast_label_by_name(name);
+        if let Some(st) = self.labels.get_mut(name) {
+            st.defined = true;
+        }
         id
     }
 
@@ -1664,9 +1769,9 @@ impl Compiler {
         if self.lex.tk != Token::Id {
             return Err(self.compile_err("label name expected after `&&`"));
         }
-        let name = self.resolve_label_name(&self.symbols[self.lex.curr_id_idx].name.clone());
+        let name = self.resolve_label_name(self.lex.curr_id_idx);
         self.next()?;
-        if !self.labels.iter().any(|n| n == &name) {
+        if !self.label_is_defined(&name) {
             self.unresolved_gotos.push(name.clone());
         }
         Ok(self.ast_label_by_name(&name))
@@ -1737,12 +1842,31 @@ impl Compiler {
         let Some(child) = self.ast_acc.take() else {
             return;
         };
+        if op == super::super::ast::UnOp::AddrOf && self.expr_roots_at_local(child) {
+            self.func_local_addr_taken = true;
+        }
         let pos = self.ast_src_pos();
         let ty = self.ty;
         let id = self
             .ast
             .push_expr(super::super::ast::Expr::Unary { op, child, ty }, pos);
         self.ast_acc = Some(id);
+    }
+
+    /// True when `id` designates one of this function's automatic objects:
+    /// an identifier bound to a negative frame slot, or a member, element
+    /// or cast of one. `&expr` over such a chain materializes a frame
+    /// address, which is what `-fstack-protector-strong` selects on. A
+    /// dereference roots elsewhere and does not count.
+    fn expr_roots_at_local(&self, id: super::super::ast::ExprId) -> bool {
+        use super::super::ast::Expr;
+        match self.ast.expr(id) {
+            Expr::Ident { class, val, .. } => *class == Token::Loc as i64 && *val < 0,
+            Expr::Member { obj, .. } => self.expr_roots_at_local(*obj),
+            Expr::Index { array, .. } => self.expr_roots_at_local(*array),
+            Expr::Cast { child, .. } => self.expr_roots_at_local(*child),
+            _ => false,
+        }
     }
 
     /// Helper for the scalar-store arms: pops the lvalue
@@ -1802,8 +1926,7 @@ pub(super) fn bitfield_value_ty(bit_width: u32, field_ty: i64) -> i64 {
     }
     // The promotion changes the type but not the member's qualifiers,
     // which drive the access's volatility and address space.
-    let quals = field_ty
-        & (super::types::VOLATILE_MASK | super::types::SEG_GS_BIT | super::types::SEG_FS_BIT);
+    let quals = field_ty & (super::types::VOLATILE_MASK | super::types::SEG_MASK);
     let unsigned = is_unsigned_ty(field_ty) && !is_bool_ty(field_ty);
     if bit_width == 32 && unsigned {
         return Ty::Int as i64 | super::types::UNSIGNED_BIT | quals;

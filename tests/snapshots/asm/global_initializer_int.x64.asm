@@ -9,17 +9,32 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <main>:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
-               	cmpq	$0x2a, %rcx
+               	cmpl	$0x2a, %ecx
                	je	<addr>
                	movl	$0x1, %eax
                	retq
                	leaq	<rip>, %rcx
                	movslq	(%rcx), %rcx
-               	cmpq	$0x63, %rcx
+               	cmpl	$0x63, %ecx
                	je	<addr>
                	movl	$0x2, %eax
                	retq

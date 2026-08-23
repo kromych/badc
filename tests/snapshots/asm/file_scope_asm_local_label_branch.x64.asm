@@ -9,6 +9,21 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <slowpath_handler>:
                	leaq	<rip>, %rax
@@ -29,15 +44,15 @@ Disassembly of section .text:
                	movl	%eax, (%rbx)
                	movq	%rbx, %rdi
                	callq	<addr>
-               	movl	(%rbx), %eax
-               	testq	%rax, %rax
+               	movl	(%rbx), %ecx
+               	testl	%ecx, %ecx
                	setne	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	<rip>, %rax
                	movl	(%rax), %eax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -51,17 +66,17 @@ Disassembly of section .text:
                	movl	%eax, (%rbx)
                	movq	%rbx, %rdi
                	callq	<addr>
-               	movl	(%rbx), %eax
-               	testq	%rax, %rax
+               	movl	(%rbx), %ecx
+               	testl	%ecx, %ecx
                	setne	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	<rip>, %rax
                	movl	(%rax), %eax
                	xorq	$0x1, %rax
                	movl	%eax, %eax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

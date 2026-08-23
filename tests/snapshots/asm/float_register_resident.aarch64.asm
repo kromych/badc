@@ -10,6 +10,8 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#0x1
+               	brk	#0x1
+               	brk	#0x1
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
@@ -21,8 +23,8 @@ Disassembly of section .text:
                	str	s16, [x17]
                	mov	x0, #0x0                // =0
                	scvtf	s0, x0
-               	mov	x0, #0x3f000000         // =1056964608
-               	fmov	s17, w0
+               	mov	x1, #0x3f000000         // =1056964608
+               	fmov	s17, w1
                	fmul	s0, s0, s17
                	mov	x0, #0x40000000         // =1073741824
                	sub	x16, x29, #0x10
@@ -31,108 +33,90 @@ Disassembly of section .text:
                	fmadd	s0, s0, s17, s1
                	sub	x17, x29, #0x10
                	str	s0, [x17]
-               	mov	x0, #0x1                // =1
-               	scvtf	s0, x0
-               	mov	x0, #0x3f000000         // =1056964608
-               	fmov	s17, w0
+               	mov	x2, #0x1                // =1
+               	scvtf	s0, x2
+               	fmov	s17, w1
                	fmul	s0, s0, s17
-               	mov	x0, #0x40000000         // =1073741824
                	sub	x16, x29, #0x10
                	ldr	s1, [x16]
                	fmov	s17, w0
                	fmadd	s0, s0, s17, s1
                	sub	x17, x29, #0x10
                	str	s0, [x17]
-               	mov	x0, #0x2                // =2
-               	scvtf	s0, x0
-               	mov	x0, #0x3f000000         // =1056964608
-               	fmov	s17, w0
+               	mov	x2, #0x2                // =2
+               	scvtf	s0, x2
+               	fmov	s17, w1
                	fmul	s0, s0, s17
-               	mov	x0, #0x40000000         // =1073741824
                	sub	x16, x29, #0x10
                	ldr	s1, [x16]
                	fmov	s17, w0
                	fmadd	s0, s0, s17, s1
                	sub	x17, x29, #0x10
                	str	s0, [x17]
-               	mov	x0, #0x3                // =3
-               	scvtf	s0, x0
-               	mov	x0, #0x3f000000         // =1056964608
-               	fmov	s17, w0
+               	mov	x2, #0x3                // =3
+               	scvtf	s0, x2
+               	fmov	s17, w1
                	fmul	s0, s0, s17
-               	mov	x0, #0x40000000         // =1073741824
                	sub	x16, x29, #0x10
                	ldr	s1, [x16]
                	fmov	s17, w0
                	fmadd	s0, s0, s17, s1
                	sub	x17, x29, #0x10
                	str	s0, [x17]
-               	mov	x0, #0x4                // =4
-               	scvtf	s0, x0
-               	mov	x0, #0x3f000000         // =1056964608
-               	fmov	s17, w0
+               	mov	x2, #0x4                // =4
+               	scvtf	s0, x2
+               	fmov	s17, w1
                	fmul	s0, s0, s17
-               	mov	x0, #0x40000000         // =1073741824
                	sub	x16, x29, #0x10
                	ldr	s1, [x16]
                	fmov	s17, w0
                	fmadd	s0, s0, s17, s1
                	sub	x17, x29, #0x10
                	str	s0, [x17]
-               	mov	x0, #0x5                // =5
-               	scvtf	s0, x0
-               	mov	x0, #0x3f000000         // =1056964608
-               	fmov	s17, w0
+               	mov	x2, #0x5                // =5
+               	scvtf	s0, x2
+               	fmov	s17, w1
                	fmul	s0, s0, s17
-               	mov	x0, #0x40000000         // =1073741824
                	sub	x16, x29, #0x10
                	ldr	s1, [x16]
                	fmov	s17, w0
                	fmadd	s0, s0, s17, s1
                	sub	x17, x29, #0x10
                	str	s0, [x17]
-               	mov	x0, #0x6                // =6
-               	scvtf	s0, x0
-               	mov	x0, #0x3f000000         // =1056964608
-               	fmov	s17, w0
+               	mov	x2, #0x6                // =6
+               	scvtf	s0, x2
+               	fmov	s17, w1
                	fmul	s0, s0, s17
-               	mov	x0, #0x40000000         // =1073741824
                	sub	x16, x29, #0x10
                	ldr	s1, [x16]
                	fmov	s17, w0
                	fmadd	s0, s0, s17, s1
                	sub	x17, x29, #0x10
                	str	s0, [x17]
-               	mov	x0, #0x7                // =7
-               	scvtf	s0, x0
-               	mov	x0, #0x3f000000         // =1056964608
-               	fmov	s17, w0
+               	mov	x2, #0x7                // =7
+               	scvtf	s0, x2
+               	fmov	s17, w1
                	fmul	s0, s0, s17
-               	mov	x0, #0x40000000         // =1073741824
                	sub	x16, x29, #0x10
                	ldr	s1, [x16]
                	fmov	s17, w0
                	fmadd	s0, s0, s17, s1
                	sub	x17, x29, #0x10
                	str	s0, [x17]
-               	mov	x0, #0x8                // =8
-               	scvtf	s0, x0
-               	mov	x0, #0x3f000000         // =1056964608
-               	fmov	s17, w0
+               	mov	x2, #0x8                // =8
+               	scvtf	s0, x2
+               	fmov	s17, w1
                	fmul	s0, s0, s17
-               	mov	x0, #0x40000000         // =1073741824
                	sub	x16, x29, #0x10
                	ldr	s1, [x16]
                	fmov	s17, w0
                	fmadd	s0, s0, s17, s1
                	sub	x17, x29, #0x10
                	str	s0, [x17]
-               	mov	x0, #0x9                // =9
-               	scvtf	s0, x0
-               	mov	x0, #0x3f000000         // =1056964608
-               	fmov	s17, w0
+               	mov	x2, #0x9                // =9
+               	scvtf	s0, x2
+               	fmov	s17, w1
                	fmul	s0, s0, s17
-               	mov	x0, #0x40000000         // =1073741824
                	sub	x16, x29, #0x10
                	ldr	s1, [x16]
                	fmov	s17, w0

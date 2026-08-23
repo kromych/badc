@@ -9,10 +9,24 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <main>:
-               	movslq	%edi, %rdi
-               	cmpq	$0x2, %rdi
+               	cmpl	$0x2, %edi
                	jge	<addr>
                	xorq	%rax, %rax
                	retq

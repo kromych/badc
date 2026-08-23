@@ -19,8 +19,6 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use super::super::ssa::emit_common;
-
 /// One symbolic operand of a template instruction.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum AsmOpndA64 {
@@ -125,12 +123,14 @@ pub(crate) enum AsmOpndA64 {
     GotoLabel(u8),
     /// A symbol expression operand (`sym`, `sym + 24`, `sym + (2f - 1f)`):
     /// a branch / `adr` / `adrp` target, or the part of the value `spec`
-    /// names. Only file-scope section code encodes these (to a relocation);
-    /// the in-function emitters reject them.
+    /// names. Section code and function bodies both encode these to a
+    /// relocation; a function body admits only the `sym + constant` form,
+    /// having no layout to fold a label difference against.
     Sym { expr: String, spec: SymSpec },
     /// `[base, :lo12:sym]`: a load/store whose scaled immediate is the low
-    /// 12 bits of a symbol expression.
-    MemSymLo12 { base: u8, expr: String },
+    /// 12 bits of a symbol expression. The base is an operand reference or
+    /// an explicit register, as for [`AsmOpndA64::Mem`].
+    MemSymLo12 { base: MemBase, expr: String },
     /// An immediate written as an expression over labels (`#(1b - vs + 4)`):
     /// absolute, but only the section layout knows the value, and on A64 the
     /// value selects the encoding, so the section path folds it before
@@ -180,7 +180,7 @@ pub(crate) enum MemBase {
 /// `s<op0>_<op1>_c<CRn>_c<CRm>_<op2>` spelling that names any register.
 /// `field = op0<<14 | op1<<11 | CRn<<7 | CRm<<3 | op2` (op0 is the full two
 /// bits; the generic spelling reaches op0 0/1, named registers use 2/3).
-pub(super) fn sysreg_field(name: &str) -> Option<u16> {
+pub(crate) fn sysreg_field(name: &str) -> Option<u16> {
     // Register names are case-insensitive in the architecture; normalize before
     // matching either the named table or the generic spelling.
     let lower = name.to_ascii_lowercase();
@@ -338,6 +338,10 @@ pub(crate) struct AsmInsnA64 {
     /// symbol name; the emitter resolves it to a rel26 through the same fixup
     /// pass as a compiler-emitted call. `None` for every other instruction.
     pub sym_target: Option<String>,
+    /// A layout directive (`.balign`, `.skip`, `.org`, ...), which moves the
+    /// location counter rather than depositing an encoding. Carried in the
+    /// section engine's form so both paths lay it down the same way.
+    pub layout: Option<crate::c5::asm::AsmSectionItem>,
 }
 
 /// A condition-code mnemonic to its 4-bit encoding.
@@ -618,23 +622,7 @@ fn parse_vec_list(tok: &str) -> Option<(u8, u8, u8, bool)> {
 /// (`(1 << 16)`, `4 * 0`). Operand references do not appear here, so the
 /// expression resolver yields None for them.
 fn parse_int(s: &str) -> Option<i64> {
-    let s = s.trim();
-    let (neg, digits) = match s.strip_prefix('-') {
-        Some(r) => (true, r.trim_start()),
-        None => (false, s),
-    };
-    let v = if let Some(h) = digits
-        .strip_prefix("0x")
-        .or_else(|| digits.strip_prefix("0X"))
-    {
-        i64::from_str_radix(h, 16).ok()
-    } else {
-        digits.parse::<i64>().ok()
-    };
-    match v {
-        Some(v) => Some(if neg { -v } else { v }),
-        None => super::super::ssa::emit_common::eval_const_expr_ops(s, &|_| None),
-    }
+    crate::c5::asm::eval_const_expr(s.trim())
 }
 
 /// Split an operand list on commas, but not commas inside `[...]` (a memory
@@ -680,16 +668,13 @@ fn parse_mem(inner: &str, pre: bool) -> Result<AsmOpndA64, String> {
             .unwrap_or(parts[1])
             .strip_prefix(":lo12:")
     {
-        let MemBase::Reg(rn) = base else {
-            return Err(format!("inline asm: bad `:lo12:` base `[{inner}]`"));
-        };
         if pre {
             return Err(format!("inline asm: `:lo12:` has no writeback `[{inner}]`"));
         }
         let expr = split_sym_addend(spec)
             .ok_or_else(|| format!("inline asm: bad `:lo12:` symbol `[{inner}]`"))?;
         return Ok(AsmOpndA64::MemSymLo12 {
-            base: rn,
+            base,
             expr: String::from(expr),
         });
     }
@@ -736,7 +721,7 @@ fn parse_mem(inner: &str, pre: bool) -> Result<AsmOpndA64, String> {
         // (`[xN, #4 * 0]` folds to 0), with the `#` optional. Operand
         // references do not appear in an offset, so the resolver yields None.
         let expr = parts[1].strip_prefix('#').unwrap_or(parts[1]).trim();
-        match super::super::ssa::emit_common::eval_const_expr_ops(expr, &|_| None) {
+        match crate::c5::asm::eval_const_expr_ops(expr, &|_| None) {
             Some(v) => v,
             // An expression over labels: the value is the section layout's.
             None if is_layout_expr(expr) => {
@@ -1080,7 +1065,7 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
     // GNU as makes the `#` optional, so an immediate written as an expression
     // over labels also reaches here without one. A lone name is not one of
     // these: the symbol form above already took it, or it is a bad operand.
-    if !emit_common::is_asm_symbol_name(tok) && is_layout_expr(tok) {
+    if !crate::c5::asm::is_asm_symbol_name(tok) && is_layout_expr(tok) {
         return Ok(AsmOpndA64::ImmExpr(String::from(tok)));
     }
     Err(format!("inline asm: unsupported operand `{tok}`"))
@@ -1090,12 +1075,7 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
 /// section layout knows. Leaves stand in as zero, so this checks the syntax
 /// alone; the constant folder has already run.
 fn is_layout_expr(tok: &str) -> bool {
-    let ctx = emit_common::AsmExprCtx {
-        resolve: &|_| Some(emit_common::AsmExprLeaf::Abs(0)),
-        const_of: &|_| None,
-        lax_div: true,
-    };
-    !tok.is_empty() && emit_common::eval_asm_value(tok, &ctx).is_ok()
+    crate::c5::asm::is_asm_layout_expr(tok)
 }
 
 /// The group part of an `:abs_gN[_s|_nc]:` specifier. GNU as defines the
@@ -1161,12 +1141,12 @@ pub(super) fn split_sym_addend(s: &str) -> Option<&str> {
     if !rest.starts_with(['+', '-']) {
         return None;
     }
-    let ctx = emit_common::AsmExprCtx {
-        resolve: &|_| Some(emit_common::AsmExprLeaf::Abs(0)),
+    let ctx = crate::c5::asm::AsmExprCtx {
+        resolve: &|_| Some(crate::c5::asm::AsmExprLeaf::Abs(0)),
         const_of: &|_| None,
         lax_div: true,
     };
-    emit_common::eval_asm_value(s, &ctx).ok()?;
+    crate::c5::asm::eval_asm_value(s, &ctx).ok()?;
     Some(s)
 }
 
@@ -1178,49 +1158,64 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
     let text =
         core::str::from_utf8(tmpl).map_err(|_| String::from("inline asm: non-UTF8 template"))?;
     let stripped;
-    let text = match emit_common::strip_asm_comments(text, emit_common::AsmComments::A64) {
+    let text = match crate::c5::asm::strip_asm_comments(text, crate::c5::asm::AsmComments::A64) {
         Some(t) => {
             stripped = t;
             stripped.as_str()
         }
         None => text,
     };
-    // `%=` expands to a per-instance number (shared helper). TODO: named
-    // local-label definitions / references (the x86-64 parser has them).
+    // `%=` expands to a per-instance number (shared helper).
     let expanded;
-    let text = match emit_common::expand_template_uniq(text) {
+    let text = match crate::c5::asm::expand_template_uniq(text) {
         Some(t) => {
             expanded = t;
             expanded.as_str()
         }
         None => text,
     };
+    // Pre-scan the label definitions so an operand naming one resolves to a
+    // template label rather than a symbol; named labels intern in definition
+    // order.
+    let names = crate::c5::asm::scan_label_names(text);
+    if let Some(dup) = crate::c5::asm::duplicate_label_name(text) {
+        return Err(format!("inline asm: symbol `{dup}` is already defined"));
+    }
+    let label_num = |name: &str| -> Option<u32> {
+        names
+            .iter()
+            .position(|&n| n == name)
+            .map(|i| crate::c5::asm::NAMED_LABEL_BASE + i as u32)
+    };
     let mut insns = Vec::new();
-    for piece in emit_common::split_asm_statements(text) {
+    for piece in crate::c5::asm::split_asm_statements(text) {
         let mut piece = piece.trim();
         if piece.is_empty() {
             continue;
         }
-        // A leading `N:` defines a local label at this point; the rest of the
+        // Leading `name:` / `N:` definitions mark this point; the rest of the
         // statement (possibly empty) follows on the same line.
-        if let Some(colon) = piece.find(':')
-            && colon > 0
-            && piece.as_bytes()[..colon].iter().all(u8::is_ascii_digit)
-        {
-            let num: u32 = piece[..colon]
-                .parse()
-                .map_err(|_| format!("inline asm: bad label `{piece}`"))?;
+        while let Some((name, rest)) = crate::c5::asm::split_label_def(piece) {
+            let num = if name.as_bytes()[0].is_ascii_digit() {
+                name.parse::<u32>()
+                    .ok()
+                    .filter(|&n| n < crate::c5::asm::NAMED_LABEL_BASE)
+                    .ok_or_else(|| format!("inline asm: bad label `{piece}`"))?
+            } else {
+                label_num(name).expect("the pre-scan interned every named definition")
+            };
             insns.push(AsmInsnA64 {
                 mnemonic: String::new(),
                 operands: Vec::new(),
                 bytes: Vec::new(),
                 label_def: Some(num),
                 sym_target: None,
+                layout: None,
             });
-            piece = piece[colon + 1..].trim();
-            if piece.is_empty() {
-                continue;
-            }
+            piece = rest.trim();
+        }
+        if piece.is_empty() {
+            continue;
         }
         // `.arch` / `.arch_extension` / `.cpu` select the assembler's target
         // architecture or an ISA extension. The encoder admits every form its
@@ -1230,13 +1225,33 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
         {
             continue;
         }
-        // A `.byte`-family directive whose arguments reference operands
-        // (`.long %c0`) resolves its values at emit time; the directive
-        // keyword rides the mnemonic field.
-        if let Some((tok, rest)) = piece
-            .split_once(char::is_whitespace)
-            .filter(|(_, r)| r.contains('%'))
-            && emit_common::data_directive_width(tok).is_some()
+        // An alignment, space-and-fill or `.org` directive moves the location
+        // counter; the section engine's parse gives the form the emitter lays
+        // down.
+        let (dir_tok, dir_rest) = match piece.split_once(char::is_whitespace) {
+            Some((t, r)) => (t, r.trim()),
+            None => (piece, ""),
+        };
+        if let Some(item) = crate::c5::asm::parse_stream_layout_item(dir_tok, dir_rest, true) {
+            insns.push(AsmInsnA64 {
+                mnemonic: String::from(dir_tok),
+                operands: Vec::new(),
+                bytes: Vec::new(),
+                label_def: None,
+                sym_target: None,
+                layout: Some(item?),
+            });
+            continue;
+        }
+        // A `.byte`-family directive whose arguments are not all constant: an
+        // operand reference (`.long %c0`) or an expression over template
+        // labels (`.byte 662b-661b`) resolves its value at emit time; the
+        // directive keyword rides the mnemonic field.
+        // `.word` always takes this path: its element is 4 bytes on AArch64,
+        // where the shared raw-byte reader lays down the 2-byte default.
+        if let Some((tok, rest)) = piece.split_once(char::is_whitespace)
+            && crate::c5::asm::data_directive_width(tok).is_some()
+            && (tok == ".word" || crate::c5::asm::parse_raw_template(piece.as_bytes()).is_none())
         {
             let mut operands = Vec::new();
             for a in split_operands(rest) {
@@ -1252,17 +1267,26 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                 bytes: Vec::new(),
                 label_def: None,
                 sym_target: None,
+                layout: None,
             });
             continue;
         }
-        // Reuse the shared raw-byte recognizer for a single piece.
-        if let Some(bytes) = emit_common::parse_raw_template(piece.as_bytes()) {
+        // Reuse the shared raw-byte recognizer for a single piece. A data
+        // directive of constants keeps its keyword in the mnemonic field so
+        // the emitter classifies its bytes as it does the operand-referencing
+        // form; a bare machine-byte run carries no keyword.
+        if let Some(bytes) = crate::c5::asm::parse_raw_template(piece.as_bytes()) {
+            let tok = piece.split_whitespace().next().unwrap_or_default();
             insns.push(AsmInsnA64 {
-                mnemonic: String::new(),
+                mnemonic: match crate::c5::asm::data_directive_width(tok) {
+                    Some(_) => String::from(tok),
+                    None => String::new(),
+                },
                 operands: Vec::new(),
                 bytes,
                 label_def: None,
                 sym_target: None,
+                layout: None,
             });
             continue;
         }
@@ -1287,6 +1311,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                     bytes: Vec::new(),
                     label_def: None,
                     sym_target: None,
+                    layout: None,
                 });
                 continue;
             }
@@ -1316,6 +1341,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                     bytes: Vec::new(),
                     label_def: None,
                     sym_target: None,
+                    layout: None,
                 });
                 continue;
             }
@@ -1347,6 +1373,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                     bytes: word.to_le_bytes().to_vec(),
                     label_def: None,
                     sym_target: None,
+                    layout: None,
                 });
                 continue;
             }
@@ -1383,6 +1410,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                 bytes: word.to_le_bytes().to_vec(),
                 label_def: None,
                 sym_target: None,
+                layout: None,
             });
             continue;
         }
@@ -1412,6 +1440,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                 bytes: Vec::new(),
                 label_def: None,
                 sym_target: None,
+                layout: None,
             });
             continue;
         }
@@ -1431,6 +1460,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                 bytes: Vec::new(),
                 label_def: None,
                 sym_target: None,
+                layout: None,
             });
             continue;
         }
@@ -1457,6 +1487,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                 bytes: Vec::new(),
                 label_def: None,
                 sym_target: None,
+                layout: None,
             });
             continue;
         }
@@ -1498,6 +1529,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                 bytes: Vec::new(),
                 label_def: None,
                 sym_target: None,
+                layout: None,
             });
             continue;
         }
@@ -1509,7 +1541,8 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
         // so the text is kept verbatim here.
         if matches!(mnem, "bl" | "b") {
             let is_symbol_target = !rest.is_empty()
-                && super::super::ssa::emit_common::is_asm_symbol_template(rest)
+                && label_num(rest).is_none()
+                && crate::c5::asm::is_asm_symbol_template(rest)
                 && parse_reg(rest).is_none();
             if is_symbol_target {
                 insns.push(AsmInsnA64 {
@@ -1518,6 +1551,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                     bytes: Vec::new(),
                     label_def: None,
                     sym_target: Some(String::from(rest)),
+                    layout: None,
                 });
                 continue;
             }
@@ -1531,7 +1565,17 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
         let mut operands = Vec::new();
         if !rest.is_empty() {
             for op in split_operands(rest) {
-                operands.push(parse_operand(op)?);
+                // A template label named as an operand is a branch / `adr`
+                // target this stream resolves; direction does not apply, a
+                // name has one definition. Register names stay registers.
+                let tok = op.trim();
+                match label_num(tok).filter(|_| parse_reg(tok).is_none()) {
+                    Some(num) => operands.push(AsmOpndA64::Label {
+                        num,
+                        forward: false,
+                    }),
+                    None => operands.push(parse_operand(op)?),
+                }
             }
         }
         insns.push(AsmInsnA64 {
@@ -1540,6 +1584,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
             bytes: Vec::new(),
             label_def: None,
             sym_target: None,
+            layout: None,
         });
     }
     Ok(insns)
@@ -1864,6 +1909,25 @@ mod tests {
     }
 
     #[test]
+    fn immediate_literal_radices() {
+        // GNU as radix rules: a leading `0` with more digits is octal, `0x`
+        // hex, `0b` binary, and a `u`/`l` suffix is dropped.
+        let insns =
+            parse_template(b"brk #010; brk #10; brk #0x10; brk #0b101; brk #0; brk #10L").unwrap();
+        let imm = |i: usize| insns[i].operands[0].clone();
+        assert_eq!(imm(0), AsmOpndA64::Imm(8));
+        assert_eq!(imm(1), AsmOpndA64::Imm(10));
+        assert_eq!(imm(2), AsmOpndA64::Imm(16));
+        assert_eq!(imm(3), AsmOpndA64::Imm(5));
+        assert_eq!(imm(4), AsmOpndA64::Imm(0));
+        assert_eq!(imm(5), AsmOpndA64::Imm(10));
+        // Signs and constant expressions still fold.
+        let insns = parse_template(b"movz x0, #(1 << 4); brk #-010 + 010").unwrap();
+        assert_eq!(insns[0].operands[1], AsmOpndA64::Imm(16));
+        assert_eq!(insns[1].operands[0], AsmOpndA64::Imm(0));
+    }
+
+    #[test]
     fn barrier_encodings() {
         // Every dmb/dsb domain option, isb, and clrex encode to their
         // constant words. Expected words from
@@ -1899,12 +1963,103 @@ mod tests {
     }
 
     #[test]
+    fn parse_layout_directives_in_stream() {
+        use crate::c5::asm::AsmSectionItem as I;
+        use crate::c5::asm::{AlignFill, AlignSpec};
+        // `.align` takes a power-of-two exponent on AArch64, and the `w` / `l`
+        // spellings widen the fill unit without changing that convention; the
+        // fill family and `.org` carry their operands to the emitter
+        // unevaluated.
+        let align = |n: u32, fill, max| I::Align {
+            spec: AlignSpec::Bytes(n),
+            fill,
+            max,
+            nops: crate::c5::asm::AlignNops::A64,
+        };
+        let fill = |value: u32, width: u8| Some(AlignFill { value, width });
+        let cases: &[(&[u8], I)] = &[
+            (b".balign 16", align(16, None, None)),
+            (b".balign 16, 0xff, 3", align(16, fill(0xff, 1), Some(3))),
+            (b".align 4", align(16, None, None)),
+            (b".p2align 3", align(8, None, None)),
+            (
+                b".p2alignl 3, 0x12345678",
+                align(8, fill(0x12345678, 4), None),
+            ),
+            (
+                b".balignw 16, 0x1234, 3",
+                align(16, fill(0x1234, 2), Some(3)),
+            ),
+            // A zero alignment is an alignment of one, as GNU as reads it.
+            (b".align 0", align(1, None, None)),
+            (b".balign 0", align(1, None, None)),
+            (
+                b".skip 8",
+                I::Fill {
+                    count: String::from("8"),
+                    unit: 1,
+                    value: 0,
+                },
+            ),
+            (
+                b".fill 3, 4, 9",
+                I::Fill {
+                    count: String::from("3"),
+                    unit: 4,
+                    value: 9,
+                },
+            ),
+            (b".org 16", I::Org(16, 0)),
+            (
+                b".org 1b + 4, 0xcc",
+                I::OrgLabel {
+                    label: String::from("1b"),
+                    addend: String::from("4"),
+                    fill: 0xcc,
+                },
+            ),
+        ];
+        for (tmpl, want) in cases {
+            let insns = parse_template(tmpl).unwrap();
+            assert_eq!(insns.len(), 1);
+            assert_eq!(
+                insns[0].layout.as_ref(),
+                Some(want),
+                "template {}",
+                core::str::from_utf8(tmpl).unwrap()
+            );
+        }
+        // An operand over labels is kept for the emitter to settle where the
+        // directive stands.
+        let insns = parse_template(b"nop\n\t1:\n\t.align 1b-.").unwrap();
+        assert!(matches!(
+            insns.last().unwrap().layout,
+            Some(I::Align {
+                spec: AlignSpec::Expr { pow2: true, .. },
+                ..
+            })
+        ));
+        assert!(parse_template(b".balign 3").is_err());
+        // GNU as has no `.alignw` / `.alignl`, so neither is a layout
+        // directive and the encoder rejects the mnemonic.
+        for tmpl in [b".alignl 8".as_slice(), b".alignw 8".as_slice()] {
+            assert!(parse_template(tmpl).unwrap()[0].layout.is_none());
+        }
+    }
+
+    #[test]
     fn parse_raw_piece_in_stream() {
+        // A data directive of constants keeps its keyword, which classifies
+        // its bytes as data; a bare machine-byte run carries none and stays
+        // code.
         let insns = parse_template(b".byte 0x1f, 0x20, 0x03, 0xd5; add %0, %0, %1").unwrap();
         assert_eq!(insns.len(), 2);
         assert_eq!(insns[0].bytes, [0x1f, 0x20, 0x03, 0xd5]);
-        assert!(insns[0].mnemonic.is_empty());
+        assert_eq!(insns[0].mnemonic, ".byte");
         assert_eq!(insns[1].mnemonic, "add");
+        let raw = parse_template(b"1f 20 03 d5").unwrap();
+        assert_eq!(raw.len(), 1);
+        assert!(raw[0].mnemonic.is_empty());
     }
 
     #[test]
@@ -2589,6 +2744,47 @@ mod tests {
                 forward: true
             }
         );
+    }
+
+    #[test]
+    fn parse_named_labels() {
+        use crate::c5::asm::NAMED_LABEL_BASE;
+        // A name interns in definition order; a branch to one resolves to the
+        // template label, not to a symbol. Two definitions may share a line,
+        // and a spelling that collides with a mnemonic is still a label.
+        let insns = parse_template(b"lp: nop\n\tb lp\n\ta: nop: nop\n\tcbz %0, nop").unwrap();
+        assert_eq!(insns[0].label_def, Some(NAMED_LABEL_BASE));
+        assert_eq!(insns[1].mnemonic, "nop");
+        assert_eq!(insns[2].mnemonic, "b");
+        assert_eq!(insns[2].sym_target, None);
+        assert_eq!(
+            insns[2].operands[0],
+            AsmOpndA64::Label {
+                num: NAMED_LABEL_BASE,
+                forward: false
+            }
+        );
+        assert_eq!(insns[3].label_def, Some(NAMED_LABEL_BASE + 1));
+        assert_eq!(insns[4].label_def, Some(NAMED_LABEL_BASE + 2));
+        assert_eq!(
+            insns[6].operands[1],
+            AsmOpndA64::Label {
+                num: NAMED_LABEL_BASE + 2,
+                forward: false
+            }
+        );
+        // A name the template does not define stays a symbol branch.
+        let insns = parse_template(b"b schedule").unwrap();
+        assert_eq!(insns[0].sym_target.as_deref(), Some("schedule"));
+    }
+
+    #[test]
+    fn parse_rejects_a_duplicate_named_label() {
+        // GNU as rejects a second definition of a name; a numeric local may
+        // repeat, and each reference binds by direction.
+        let err = parse_template(b"dup:\n\tnop\n\tdup:\n\tnop").unwrap_err();
+        assert!(err.contains("`dup` is already defined"), "{err}");
+        parse_template(b"1:\n\tnop\n\t1:\n\tb 1b").unwrap();
     }
 
     #[test]

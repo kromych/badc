@@ -5,10 +5,9 @@
 // size (208 vs the real 144/128). This checks the per-target size and a
 // functional readback of the fields fstat fills.
 #include <stddef.h>
-#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <fcntl.h>
 #include <unistd.h>
 
 int main(void) {
@@ -31,9 +30,10 @@ int main(void) {
         return 2;
     }
 
-    char path[64];
-    sprintf(path, "badc_stat_%d.bin", (int)getpid());
-    int fd = open(path, O_RDWR | O_CREAT | O_TRUNC, 0644);
+    // mkstemp, not a pid-derived name: the JIT lane runs this in the test
+    // harness process, where every concurrent instance shares one pid.
+    char path[] = "/tmp/badc_statXXXXXX";
+    int fd = mkstemp(path);
     if (fd < 0) {
         return 3;
     }

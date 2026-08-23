@@ -51,6 +51,7 @@ struct AttrFlags {
     constructor: bool,
     destructor: bool,
     always_inline: bool,
+    noinline: bool,
     gnu_inline: bool,
     naked: bool,
     weak: bool,
@@ -68,6 +69,7 @@ impl AttrFlags {
         self.noreturn |= other.noreturn;
         self.dllexport |= other.dllexport;
         self.always_inline |= other.always_inline;
+        self.noinline |= other.noinline;
         self.gnu_inline |= other.gnu_inline;
         self.naked |= other.naked;
         self.weak |= other.weak;
@@ -300,6 +302,7 @@ impl Compiler {
             if class == Token::Fun as i64 || class == Token::Sys as i64 {
                 let fty = self.symbols[idx].type_ + Ty::Ptr as i64;
                 self.pending.fn_ptr_indirection = Some(1);
+                self.pending.fn_ptr_ret_indirection = 0;
                 self.pending.base_is_function_type = true;
                 self.pending.typedef_fn_proto = Some((
                     self.symbols[idx].params.len(),
@@ -547,6 +550,7 @@ impl Compiler {
         let saved_callee_params = self.pending.indirect_callee_params.take();
         let saved_callee_variadic = core::mem::take(&mut self.pending.indirect_callee_is_variadic);
         let saved_callee_depth = core::mem::take(&mut self.pending.indirect_callee_fn_ptr_depth);
+        let saved_callee_ret = core::mem::take(&mut self.pending.indirect_callee_ret_fn_ptr);
         // Parse at assignment precedence so binary, conditional, and
         // assignment operators are consumed.
         self.expr(Token::Assign as i64)?;
@@ -559,6 +563,7 @@ impl Compiler {
                 self.pending.indirect_callee_params = None;
                 self.pending.indirect_callee_is_variadic = false;
                 self.pending.indirect_callee_fn_ptr_depth = 0;
+                self.pending.indirect_callee_ret_fn_ptr = 0;
                 self.expr(Token::Assign as i64)?;
             }
         }
@@ -570,6 +575,7 @@ impl Compiler {
         let expr_ty = match self.addressed_function_symbol() {
             Some(idx) => {
                 self.pending.fn_ptr_indirection = Some(1);
+                self.pending.fn_ptr_ret_indirection = 0;
                 self.pending.base_is_function_type = false;
                 self.pending.typedef_fn_proto = Some((
                     self.symbols[idx].params.len(),
@@ -591,6 +597,7 @@ impl Compiler {
                     )
                 {
                     self.pending.fn_ptr_indirection = Some(depth);
+                    self.pending.fn_ptr_ret_indirection = 0;
                     self.pending.base_is_function_type = false;
                     self.pending.typedef_fn_proto = Some((params.len(), variadic));
                     self.pending.fn_ptr_param_types = Some(params);
@@ -606,6 +613,7 @@ impl Compiler {
                     // signature, which the flat tag (return type only)
                     // cannot spell.
                     self.pending.fn_ptr_indirection = Some(depth);
+                    self.pending.fn_ptr_ret_indirection = 0;
                     self.pending.base_is_function_type = false;
                     self.pending.typedef_fn_proto = Some((params.len(), variadic));
                     self.pending.fn_ptr_param_types = Some(params);
@@ -639,6 +647,7 @@ impl Compiler {
         self.pending.indirect_callee_params = saved_callee_params;
         self.pending.indirect_callee_is_variadic = saved_callee_variadic;
         self.pending.indirect_callee_fn_ptr_depth = saved_callee_depth;
+        self.pending.indirect_callee_ret_fn_ptr = saved_callee_ret;
         self.next_ent_pc = saved_text_len;
         self.clear_recent_emits();
         self.code_reloc_sym_idx.truncate(saved_code_reloc_sym_idx);
@@ -996,6 +1005,9 @@ impl Compiler {
                 // GNU `always_inline`: a mandatory inline request. Recorded so
                 // the inliner can warn when it cannot honor it.
                 f.always_inline = true;
+            } else if n == "noinline" || n == "__noinline__" {
+                // GNU `noinline`: suppress every inline request for this body.
+                f.noinline = true;
             } else if n == "gnu_inline" || n == "__gnu_inline__" {
                 // GNU `gnu_inline`: the function follows the GNU89 inline
                 // linkage model whatever the unit's default model is.
@@ -1054,6 +1066,7 @@ impl Compiler {
     fn skip_attribute_specifiers_inner(&mut self) -> Result<bool, C5Error> {
         let mut attrs = AttrFlags::default();
         let mut align: i64 = 0;
+        let mut alignas_align: i64 = 0;
         let mut vector_size: i64 = 0;
         let mut init_priority: Option<u32> = None;
         loop {
@@ -1080,7 +1093,8 @@ impl Compiler {
                                 self.next()?;
                             }
                         }
-                        align = align.max(self.align_of_type(ty) as i64);
+                        alignas_align = alignas_align.max(self.align_of_type(ty) as i64);
+                        align = align.max(alignas_align);
                         if self.lex.tk != ')' {
                             return Err(self.compile_err("`)` expected after `_Alignas` type"));
                         }
@@ -1089,6 +1103,7 @@ impl Compiler {
                         // C11 6.7.5: any constant expression, not only a
                         // literal (`_Alignas(sizeof(long))`).
                         let n = self.parse_constant_int()?;
+                        alignas_align = alignas_align.max(n);
                         align = align.max(n);
                         if self.lex.tk != ')' {
                             return Err(self.compile_err("`)` expected after `_Alignas` operand"));
@@ -1318,6 +1333,9 @@ impl Compiler {
         if align > 0 {
             self.pending.attr_align = self.pending.attr_align.max(align);
         }
+        if alignas_align > 0 {
+            self.pending.attr_alignas = self.pending.attr_alignas.max(alignas_align);
+        }
         if attrs.packed {
             self.pending.attr_packed = true;
         }
@@ -1336,6 +1354,9 @@ impl Compiler {
             // model does not see it.
             self.pending_is_inline = true;
             self.pending_is_always_inline = true;
+        }
+        if attrs.noinline {
+            self.pending_is_noinline = true;
         }
         if attrs.gnu_inline {
             self.pending_is_gnu_inline = true;
@@ -1447,7 +1468,7 @@ impl Compiler {
             m.int_base()
         } else if self.lex.tk == Token::Char {
             self.next()?;
-            m.char_tag(self.target.plain_char_signed())
+            m.char_tag(self.lex.char_signed)
         } else if self.lex.tk == Token::Void {
             self.next()?;
             // `void` rides the `unsigned char` representation plus
@@ -1460,14 +1481,17 @@ impl Compiler {
             Ty::Float as i64
         } else if self.lex.tk == Token::Double {
             self.next()?;
-            // `long double` collapses to the f64 `double` encoding; the
-            // marker carries the spelling so the prototype path can stamp
-            // a libc binding's return convention (SysV x86_64 returns
-            // long double in x87 st(0), not XMM0).
+            // `long double` collapses to the f64 `double` encoding.
+            // `base_was_long_double` lets the prototype path stamp a libc
+            // binding's return convention (SysV x86_64 returns long double
+            // in x87 st(0), not XMM0); `LONG_DOUBLE_BIT` keeps the spelling
+            // on the tag itself, which the libc-argument ABI diagnostic reads.
             if m.saw_long() {
                 self.pending.base_was_long_double = true;
+                Ty::Double as i64 | super::types::LONG_DOUBLE_BIT
+            } else {
+                Ty::Double as i64
             }
-            Ty::Double as i64
         } else {
             return Ok(None);
         };
@@ -1503,6 +1527,47 @@ impl Compiler {
             && matches!(
                 self.symbols[self.lex.curr_id_idx].name.as_str(),
                 "const" | "__const" | "__const__"
+            )
+    }
+
+    /// Snapshot the base type's spelling and clear the carriers. A
+    /// declaration context calls this twice: once before its leading
+    /// specifiers, discarding whatever a nested parse left behind, and
+    /// once the moment the base type is complete. The second call has
+    /// to precede the declarator, which can nest a parse of its own
+    /// (an inner parameter list, a `sizeof` in an array bound).
+    pub(super) fn take_base_spelling(&mut self) -> crate::c5::symbol::DeclSpelling {
+        crate::c5::symbol::DeclSpelling {
+            typedef: self.pending.spell_base_typedef.take(),
+            base_const: core::mem::take(&mut self.pending.spell_base_const),
+            base_restrict: core::mem::take(&mut self.pending.spell_base_restrict),
+            outer_const: false,
+            outer_restrict: false,
+        }
+    }
+
+    /// Complete a [`Self::take_base_spelling`] snapshot with the
+    /// qualifiers the declarator just parsed onto its outermost
+    /// derivation.
+    pub(super) fn decl_spelling(
+        &self,
+        base: crate::c5::symbol::DeclSpelling,
+    ) -> crate::c5::symbol::DeclSpelling {
+        crate::c5::symbol::DeclSpelling {
+            outer_const: self.pending.declarator_outer_const,
+            outer_restrict: self.pending.declarator_outer_restrict,
+            ..base
+        }
+    }
+
+    /// True when the current token is the `restrict` type qualifier
+    /// (C99 6.7.3). It constrains aliasing, which badc does not act
+    /// on; the spelling is recorded for debug info.
+    pub(super) fn lex_is_restrict_qual(&self) -> bool {
+        self.lex.tk == Token::TypeQual
+            && matches!(
+                self.symbols[self.lex.curr_id_idx].name.as_str(),
+                "restrict" | "__restrict" | "__restrict__"
             )
     }
 
@@ -1590,6 +1655,8 @@ impl Compiler {
                 // restrict / _Atomic / etc. are no-ops.
                 qual_bits |= self.lex_qualifier_bits();
                 self.pending.base_is_const |= self.lex_is_const_qual();
+                self.pending.spell_base_restrict |= self.lex_is_restrict_qual();
+                self.pending.spell_base_const |= self.lex_is_const_qual();
                 self.next()?;
             }
         }
@@ -1643,12 +1710,18 @@ impl Compiler {
             // typedef-name is the declarator identifier (a redeclared
             // name), not a second type-specifier.
             let aliased = self.symbols[self.lex.curr_id_idx].type_;
+            // The alias resolves to its underlying type here, so the
+            // spelling would otherwise be lost; record it for debug
+            // info (DWARF 4 5.3 names it with a DW_TAG_typedef DIE).
+            self.pending.spell_base_typedef = Some(self.lex.curr_id_idx as u32);
             // Carry the typedef's fn-pointer lineage forward (gh
             // #19) so a later `fn_t fp` declaration ends up with
             // the right indirection count.
             let typedef_fpi = self.symbols[self.lex.curr_id_idx].fn_ptr_indirection;
             if typedef_fpi > 0 {
                 self.pending.fn_ptr_indirection = Some(typedef_fpi);
+                self.pending.fn_ptr_ret_indirection =
+                    self.symbols[self.lex.curr_id_idx].fn_ptr_ret_indirection;
                 self.pending.base_is_function_type =
                     self.symbols[self.lex.curr_id_idx].is_function_type;
                 // A function-pointer typedef records the pointed-to
@@ -1714,9 +1787,10 @@ impl Compiler {
             if base_tok == Token::Int {
                 bt = m.int_base();
             } else if base_tok == Token::Char {
-                bt = m.char_tag(self.target.plain_char_signed());
+                bt = m.char_tag(self.lex.char_signed);
             } else if base_tok == Token::Double && m.saw_long() {
                 self.pending.base_was_long_double = true;
+                bt |= super::types::LONG_DOUBLE_BIT;
             } else if m.saw_unsigned && self.is_int128_ty(bt) {
                 // Trailing modifier form `__int128 unsigned`.
                 bt |= UNSIGNED_BIT;
@@ -1772,6 +1846,8 @@ impl Compiler {
             }
             qual_bits |= self.lex_qualifier_bits();
             self.pending.base_is_const |= self.lex_is_const_qual();
+            self.pending.spell_base_restrict |= self.lex_is_restrict_qual();
+            self.pending.spell_base_const |= self.lex_is_const_qual();
             self.next()?;
         }
         Ok((saw_int_mod, qual_bits))

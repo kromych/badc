@@ -84,11 +84,56 @@ pub(crate) fn data_image_align(declared: usize) -> usize {
 }
 
 /// Alignment the `.bss` image is placed at, given a unit's declared
-/// requirement. Also the granularity the compaction pass preserves
-/// alignment residues modulo, so a packed object keeps the absolute
-/// alignment it had.
+/// requirement. Also the granularity of a compacted image's region
+/// boundaries, and the ceiling on a packed object's own alignment.
 pub(crate) fn bss_image_align(declared: usize) -> usize {
     declared.max(BSS_ALIGN_MIN).next_power_of_two()
+}
+
+/// Placement alignment of each `.data` object interval named by the
+/// sorted `starts`, capped at `cap`, the section's own alignment.
+///
+/// C99 6.2.8: an object sits on a boundary suitable for its type. The
+/// layout pads every allocation to `DATA_ALIGN_MIN` and records anything
+/// stricter in the defining symbol's `data_align` and in
+/// `Program::data_align_marks`, which also covers objects no symbol
+/// surfaces at that point (a block-scope static). An interval runs to
+/// the next recorded start, so every constraint recorded inside it binds
+/// it: a base congruent to the interval's start modulo the value here
+/// keeps each object in it on its boundary.
+pub(crate) fn data_object_aligns(
+    program: &crate::c5::program::Program,
+    starts: &[i64],
+    cap: usize,
+) -> alloc::vec::Vec<i64> {
+    let data_len = program.data.len() as i64;
+    let cap = bss_image_align(cap) as i64;
+    let mut aligns = alloc::vec![DATA_ALIGN_MIN as i64; starts.len()];
+    let mut note = |off: i64, a: i64| {
+        if a <= DATA_ALIGN_MIN as i64 || !(0..data_len).contains(&off) {
+            return;
+        }
+        let i = match starts.binary_search(&off) {
+            Ok(i) => i,
+            Err(i) => i.saturating_sub(1),
+        };
+        let a = ((a as usize).next_power_of_two() as i64).min(cap);
+        if let Some(slot) = aligns.get_mut(i) {
+            *slot = (*slot).max(a);
+        }
+    };
+    for sym in &program.symbols {
+        if sym.class == crate::c5::token::Token::Glo as i64
+            && sym.defined_here
+            && !sym.is_thread_local
+        {
+            note(sym.val, sym.data_align);
+        }
+    }
+    for &(off, a) in &program.data_align_marks {
+        note(off, a);
+    }
+    aligns
 }
 
 // ------------------------------------------------------------------

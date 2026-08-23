@@ -84,6 +84,7 @@ pub enum IncludeStatus {
 /// renders the gcc `-H` trace and supplies the `-M` family's
 /// prerequisite list, so both read one list rather than each keeping
 /// its own.
+#[derive(Clone)]
 pub struct IncludeRecord {
     /// Nesting depth: 1 for a directive in the primary source.
     pub depth: usize,
@@ -229,6 +230,9 @@ impl Preprocessor {
                 ),
             )));
         };
+        if let Some(r) = self.reuse.as_deref_mut() {
+            r.consulted_includes.insert(found.key.clone());
+        }
         // Both drops key on the resolved path (file identity), not the
         // include spelling, so two spellings of the same file are still
         // included once; `process_named` records the same path.
@@ -415,6 +419,13 @@ impl Preprocessor {
             }
         }
         let _ = source_dir;
+        // `-nostdinc` withdraws the standard library headers and the system
+        // directories below, leaving only what the command line named. A
+        // name none of those paths carries is then the "not found" error
+        // gcc raises, not a silent bind to badc's own libc.
+        if self.nostdinc {
+            return None;
+        }
         if let Some(found) = self.own_header(name) {
             return Some(found);
         }

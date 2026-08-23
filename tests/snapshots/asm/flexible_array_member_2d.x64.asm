@@ -9,26 +9,41 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <main>:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
-               	cmpq	$0x3, %rcx
+               	cmpl	$0x3, %ecx
                	je	<addr>
                	movl	$0x1, %eax
                	retq
                	movzbq	0x5(%rax), %rcx
                	xorq	$0x7, %rcx
-               	movl	%ecx, %ecx
-               	testq	%rcx, %rcx
+               	movl	%ecx, %edx
+               	testl	%edx, %edx
                	setne	%cl
                	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	testq	%rdx, %rdx
                	jne	<addr>
                	movzbq	0x7(%rax), %rcx
                	xorq	$0xc, %rcx
                	movl	%ecx, %ecx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
@@ -37,16 +52,16 @@ Disassembly of section .text:
                	retq
                	movzbq	0xa(%rax), %rcx
                	xorq	$0x1, %rcx
-               	movl	%ecx, %ecx
-               	testq	%rcx, %rcx
+               	movl	%ecx, %edx
+               	testl	%edx, %edx
                	setne	%cl
                	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	testq	%rdx, %rdx
                	jne	<addr>
                	movzbq	0xb(%rax), %rcx
                	xorq	$0x16, %rcx
                	movl	%ecx, %ecx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
@@ -55,16 +70,16 @@ Disassembly of section .text:
                	retq
                	movzbq	0xc(%rax), %rcx
                	xorq	$0x1, %rcx
-               	movl	%ecx, %ecx
-               	testq	%rcx, %rcx
+               	movl	%ecx, %edx
+               	testl	%edx, %edx
                	setne	%cl
                	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	testq	%rdx, %rdx
                	jne	<addr>
                	movzbq	0xd(%rax), %rcx
                	xorq	$0x5, %rcx
                	movl	%ecx, %ecx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx

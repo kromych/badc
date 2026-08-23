@@ -17,17 +17,20 @@
 //!            <pad to page>                               /
 //!   0x1000   .dynamic (DT_* entries terminated DT_NULL)  \
 //!            .got (8 bytes per import, zero-filled)      | rw  PT_LOAD
+//!            .data.rel.ro (relro data, pad to max page)  |
 //!            build.data (program's static data segment)  |
 //!            <pad to page>                               /
 //! ```
 //!
-//! Six program headers describe the above:
+//! Seven program headers describe the above:
 //!   * PT_PHDR       -- the phdr table self-locating itself
 //!   * PT_INTERP     -- "/lib/ld-linux-aarch64.so.1"
 //!   * PT_LOAD r-x   -- header through code
-//!   * PT_LOAD rw    -- .dynamic, .got, .data
+//!   * PT_LOAD rw    -- .dynamic, .got, .data.rel.ro, .data
 //!   * PT_DYNAMIC    -- mirrors the .dynamic location
 //!   * PT_GNU_STACK  -- non-exec stack marker
+//!   * PT_GNU_RELRO  -- .dynamic through the relro region's padded
+//!                      end; re-protected read-only after relocation
 //!
 //! ## Dynamic linking
 //!
@@ -86,6 +89,7 @@ const PT_INTERP: u32 = 3;
 const PT_PHDR: u32 = 6;
 const PT_TLS: u32 = 7;
 const PT_GNU_STACK: u32 = 0x6474_E551;
+const PT_GNU_RELRO: u32 = 0x6474_E552;
 // PT_TLS alignment. The thread-pointer-relative offsets the codegen
 // bakes / the linker patches assume an 8-byte-aligned TLS block, which
 // also satisfies the ELF gABI `p_vaddr % p_align == 0` rule.
@@ -179,10 +183,19 @@ const TEXT_VMADDR_BASE: u64 = 0x40_0000;
 
 const ELF_HEADER_SIZE: u64 = 64;
 const PROGRAM_HEADER_SIZE: u64 = 56;
-/// Without TLS in the program. Programs that declare a
-/// `_Thread_local` global add one more PT_TLS header (so a total of
-/// 7).
-const N_BASE_PROGRAM_HEADERS: u64 = 6;
+/// PHDR, INTERP, the R+X load, the RW load, DYNAMIC, GNU_STACK and
+/// GNU_RELRO. A read-only data prefix adds one more PF_R load, a
+/// `_Thread_local` global one more PT_TLS header.
+const N_BASE_PROGRAM_HEADERS: u64 = 7;
+
+/// `PT_GNU_RELRO` end alignment for an image with no relro data. The
+/// loader re-protects the span with page granularity after applying
+/// relocations, aligning its end down to the runtime page size; a
+/// common-page end protects `.dynamic` / `.got` on 4K kernels at a
+/// bounded pad. An image carrying relro data instead anchors the end
+/// on [`seg_align`] -- the maximum page the psABI allows, ld's
+/// choice -- so the protection holds under every runtime page size.
+const RELRO_EMPTY_END_ALIGN: u64 = 0x1000;
 
 const ELF64_SYM_SIZE: u64 = 24;
 const ELF64_RELA_SIZE: u64 = 24;
@@ -210,6 +223,8 @@ const SHT_GNU_VERSYM: u32 = 0x6fff_ffff;
 const SHF_WRITE: u64 = 0x1;
 const SHF_ALLOC: u64 = 0x2;
 const SHF_EXECINSTR: u64 = 0x4;
+const SHF_MERGE: u64 = 0x10;
+const SHF_STRINGS: u64 = 0x20;
 
 // ------------------------------------------------------------------
 // On-disk shapes. `#[repr(C)]` with explicit fields plus a
@@ -341,19 +356,21 @@ enum Sec {
     Tdata,
     Dynamic,
     Got,
+    RelRo,
     Data,
     Tbss,
     Bss,
     Debug,
     RelaText,
     RelaData,
+    Comment,
     Symtab,
     Strtab,
     Shstrtab,
 }
 
 /// Emission order. `Sec::Debug` stands for the whole `.debug_*` run.
-const SECTION_ORDER: [Sec; 22] = [
+const SECTION_ORDER: [Sec; 24] = [
     Sec::Null,
     Sec::Interp,
     Sec::Dynsym,
@@ -367,12 +384,14 @@ const SECTION_ORDER: [Sec; 22] = [
     Sec::Tdata,
     Sec::Dynamic,
     Sec::Got,
+    Sec::RelRo,
     Sec::Data,
     Sec::Tbss,
     Sec::Bss,
     Sec::Debug,
     Sec::RelaText,
     Sec::RelaData,
+    Sec::Comment,
     Sec::Symtab,
     Sec::Strtab,
     Sec::Shstrtab,
@@ -380,7 +399,21 @@ const SECTION_ORDER: [Sec; 22] = [
 
 struct SectionPlan {
     /// Headers each slot of [`SECTION_ORDER`] contributes.
-    counts: [usize; 22],
+    counts: [usize; 24],
+}
+
+/// A named section placed in the image: the merge grouped its bytes
+/// contiguously at the end of `slot`'s region, so it takes a header of
+/// its own and the family header stops where the first one begins.
+struct NamedOut<'a> {
+    name: &'a str,
+    slot: Sec,
+    addr: u64,
+    off: u64,
+    size: u64,
+    align: u64,
+    bss: bool,
+    write: bool,
 }
 
 /// Which optional sections an image carries. `dwarf` is a count because
@@ -390,6 +423,7 @@ struct SectionsPresent {
     versions: bool,
     rodata: bool,
     tdata: bool,
+    relro: bool,
     data: bool,
     tbss: bool,
     bss: bool,
@@ -397,20 +431,26 @@ struct SectionsPresent {
     rela_text: bool,
     rela_data: bool,
     plt_symtab: bool,
+    /// Named sections carried inside each family's slot.
+    named_rodata: usize,
+    named_relro: usize,
+    named_data: usize,
+    named_bss: usize,
 }
 
 impl SectionPlan {
     fn new(p: SectionsPresent) -> Self {
-        let mut counts = [1usize; 22];
+        let mut counts = [1usize; 24];
         let mut set =
             |s: Sec, n: usize| counts[SECTION_ORDER.iter().position(|&x| x == s).unwrap()] = n;
         set(Sec::GnuVersion, p.versions as usize);
         set(Sec::GnuVersionR, p.versions as usize);
-        set(Sec::RoData, p.rodata as usize);
+        set(Sec::RoData, p.rodata as usize + p.named_rodata);
         set(Sec::Tdata, p.tdata as usize);
-        set(Sec::Data, p.data as usize);
+        set(Sec::RelRo, p.relro as usize + p.named_relro);
+        set(Sec::Data, p.data as usize + p.named_data);
         set(Sec::Tbss, p.tbss as usize);
-        set(Sec::Bss, p.bss as usize);
+        set(Sec::Bss, p.bss as usize + p.named_bss);
         set(Sec::Debug, p.dwarf);
         set(Sec::RelaText, p.rela_text as usize);
         set(Sec::RelaData, p.rela_data as usize);
@@ -473,6 +513,39 @@ fn emit_shdr(
     write_struct(out, shdr);
 }
 
+/// Emit the headers of `slot`'s named sections, which follow its
+/// family header. Their bytes already sit inside the family's segment;
+/// only the header set changes.
+fn emit_named_shdrs(
+    out: &mut Vec<u8>,
+    plan: &SectionPlan,
+    cursor: &mut usize,
+    slot: Sec,
+    named: &[NamedOut],
+    name_off: &dyn Fn(&str) -> u32,
+) {
+    for n in named.iter().filter(|n| n.slot == slot) {
+        emit_shdr(
+            out,
+            plan,
+            cursor,
+            slot,
+            &Elf64Shdr {
+                sh_name: name_off(n.name),
+                sh_type: if n.bss { 8 } else { SHT_PROGBITS }, // 8: SHT_NOBITS
+                sh_flags: SHF_ALLOC | if n.write { SHF_WRITE } else { 0 },
+                sh_addr: n.addr,
+                sh_offset: n.off,
+                sh_size: n.size,
+                sh_link: 0,
+                sh_info: 0,
+                sh_addralign: n.align,
+                sh_entsize: 0,
+            },
+        );
+    }
+}
+
 /// Dynamic linker path. Selected per machine: `aarch64` lives at
 /// `/lib/`, x86_64 at `/lib64/`. Mirrors what the host distro
 /// expects.
@@ -509,6 +582,47 @@ fn r_relative(machine: Machine) -> u64 {
         Machine::Aarch64 => R_AARCH64_RELATIVE.into(),
         Machine::X86_64 => R_X86_64_RELATIVE.into(),
     }
+}
+
+/// Address-constant initializers of `_Thread_local` objects, as
+/// `(offset within the TLS template, link-time absolute target VA)`.
+/// Both the baked template bytes and the `.rela.dyn` addends read this,
+/// so the two cannot disagree.
+fn tls_reloc_sites(
+    build: &Build,
+    data_off_to_vaddr: &dyn Fn(u64) -> u64,
+    code_vmaddr: u64,
+    stub_len: u64,
+) -> Result<Vec<(usize, u64)>, C5Error> {
+    if let Some(r) = build.tls_extern_data_relocs.first() {
+        return Err(C5Error::Compile(crate::c5::error::fmt_link_err(&format!(
+            "undefined reference to `{}` in a `_Thread_local` initializer: \
+             the template's address constant must resolve within the image",
+            r.symbol_name,
+        ))));
+    }
+    let mut sites = Vec::with_capacity(build.tls_data_relocs.len() + build.tls_code_relocs.len());
+    for r in &build.tls_data_relocs {
+        // Same anchored mapping the `.data` slots take: the anchor picks
+        // the runtime region, the signed displacement rides on the address.
+        let absolute = data_off_to_vaddr(r.target_anchor)
+            .wrapping_add(r.target_offset.wrapping_sub(r.target_anchor));
+        sites.push((r.data_offset as usize, absolute));
+    }
+    for r in &build.tls_code_relocs {
+        let ent_pc = r.target_ent_pc as usize;
+        let Some(&native_off) = build.pc_to_native.get(ent_pc) else {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("ELF: TLS code reloc references missing ent_pc {ent_pc}"),
+            )));
+        };
+        sites.push((
+            r.data_offset as usize,
+            code_vmaddr + stub_len + native_off as u64,
+        ));
+    }
+    sites.sort_unstable();
+    Ok(sites)
 }
 
 // `DT_NEEDED` entries come from `build.imports.dylibs` -- whatever
@@ -640,6 +754,23 @@ fn symbol_text_offset(build: &Build, name: &str) -> Option<u64> {
     let idx = build.func_names.iter().position(|n| n == name)?;
     let ent_pc = build.func_ent_pcs[idx];
     Some(build.pc_to_native[ent_pc] as u64)
+}
+
+/// Extend `code` to `len` with `int3` / `brk #1`. The pad follows a
+/// stub that transfers control away, so it is never executed.
+fn pad_with_traps(machine: Machine, code: &mut Vec<u8>, len: usize) {
+    if code.len() >= len {
+        return;
+    }
+    match machine {
+        Machine::X86_64 => code.resize(len, 0xCC),
+        Machine::Aarch64 => {
+            while code.len() + 4 <= len {
+                aarch64::emit(code, 0xd420_0020);
+            }
+            code.resize(len, 0);
+        }
+    }
 }
 
 /// Byte length of the entry adapter -- the minimal shim that loads the
@@ -1492,20 +1623,9 @@ fn resolve_import_version_reqs(
     alloc::vec![None; imports.imports.len()]
 }
 
-/// Index of a relocated 8-byte slot within the writable data payload.
-/// A slot below the read-only prefix would need a load-time write to a
-/// page the loader maps without write permission, so the producer's
-/// segregation is checked rather than assumed.
+/// [`super::reloc_slot_in_data`] with this writer's format tag.
 fn reloc_slot_in_data(data_offset: u64, ro_len: u64, kind: &str) -> Result<usize, C5Error> {
-    if data_offset < ro_len {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-            &format!(
-                "ELF: {kind} reloc slot {data_offset:#x} lies in the read-only data prefix \
-                 (len {ro_len:#x})"
-            ),
-        )));
-    }
-    Ok((data_offset - ro_len) as usize)
+    super::reloc_slot_in_data("ELF", data_offset, ro_len, kind)
 }
 
 pub(super) fn write(
@@ -1553,13 +1673,20 @@ pub(super) fn write(
     // Shared libraries don't have a `_start` stub -- dyld
     // never jumps into them, callers reach exports via
     // `dlsym`.
-    let stub_len = if is_shared {
+    let stub_body_len = if is_shared {
         0
     } else if c5_entry_offset.is_some() {
         entry_adapter_len(machine)
     } else {
         start_stub_len(machine, use_libc_exit)
     };
+    // The stub is the first input section of `.text` and `build.text`
+    // the second, so the stub spans a whole multiple of the alignment
+    // `build.text`'s own input sections claim: a shorter span shifts
+    // every symbol in `build.text` off that alignment.
+    let text_align = build.text_align.max(16) as u64;
+    let stub_len = round_up(stub_body_len, text_align);
+    let text_gap = stub_len - stub_body_len;
     // Defined `.dynsym` export entries. A shared library always exports;
     // an executable exports under `--export-all` (functions, via
     // `Build::exports`) and `--export-data` (every global, function and
@@ -1795,7 +1922,14 @@ pub(super) fn write(
     // read-only layout pass); an empty prefix emits no header. The
     // emit-produced read-only blob (switch dispatch tables) rides in
     // the same load at an 8-aligned tail past the prefix.
+    // `build.data[data_ro_len..data_relro_len]` is the relro region:
+    // read-only content with loader-written slots, placed at the head
+    // of the RW segment and covered by PT_GNU_RELRO.
     let ro_len = build.data_ro_len.min(build.data.len()) as u64;
+    let relro_total = build
+        .data_relro_len
+        .clamp(build.data_ro_len, build.data.len()) as u64;
+    let relro_size = relro_total - ro_len;
     let jt_len = build.rodata.bytes.len() as u64;
     let jt_off = if jt_len > 0 {
         round_up(ro_len, 8)
@@ -1833,29 +1967,27 @@ pub(super) fn write(
     // relocation so it tracks the runtime load base; an executable maps at
     // its link-time vmaddr, so the baked bytes are final and need none.
     let n_relative = if emit_dyn {
-        build.data_relocs.len() + build.code_relocs.len() + build.label_relocs.len()
+        build.data_relocs.len()
+            + build.code_relocs.len()
+            + build.label_relocs.len()
+            + build.tls_data_relocs.len()
+            + build.tls_code_relocs.len()
     } else {
         0
     };
     let rela_size = (n_imports as u64 + n_relative as u64 + n_copy as u64) * ELF64_RELA_SIZE;
-    // An asm alignment request above the section default places
-    // `build.text[0]` (which follows the entry stub) at that alignment,
-    // so the section-relative padding holds absolutely; p_offset ==
-    // p_vaddr modulo the page size. Without such a request the code
-    // blob keeps its established 16-aligned placement.
-    let text_align = build.text_align.max(16) as u64;
-    let code_off = if text_align > 16 {
-        round_up(rela_off + rela_size + stub_len, text_align) - stub_len
-    } else {
-        round_up(rela_off + rela_size, 16)
-    };
+    // `.text` starts at the alignment its input sections claim;
+    // p_offset == p_vaddr modulo the page size, so it holds absolutely.
+    let code_off = round_up(rela_off + rela_size, text_align);
 
-    // Build the code blob: _start stub + build.text (with shifted
-    // fixup offsets at write time). For shared-library output
-    // we skip the stub entirely; dyld won't run it (no entry
-    // point), and emitting one would force a libc-exit
-    // import that isn't otherwise needed.
+    // Build the code blob: _start stub + alignment pad + build.text
+    // (with shifted fixup offsets at write time). For shared-library
+    // output we skip the stub entirely; dyld won't run it (no entry
+    // point), and emitting one would force a libc-exit import that
+    // isn't otherwise needed.
     let mut code: Vec<u8> = Vec::with_capacity(stub_len as usize + build.text.len());
+    // Both stub emitters measure their branch to `build.text` from
+    // their own first byte, so `text_gap` rides on the target offset.
     // `Some(byte_offset)` for the libc-exit GOT placeholder, or
     // `None` when the stub direct-syscalls / for shared
     // libraries that emit no stub at all. `None` short-circuits
@@ -1866,17 +1998,24 @@ pub(super) fn write(
         // The adapter reaches `__c5_entry` (in `build.text`, past the
         // adapter) with a relative call and exits through it, so there
         // is no libc-exit GOT slot to patch here.
-        emit_entry_adapter(machine, build.abi, &mut code, entry_off, code_off);
+        emit_entry_adapter(
+            machine,
+            build.abi,
+            &mut code,
+            entry_off + text_gap,
+            code_off,
+        );
         None
     } else {
         emit_start_stub(
             machine,
             build.abi,
             &mut code,
-            build.entry_offset as u64,
+            build.entry_offset as u64 + text_gap,
             use_libc_exit,
         )
     };
+    pad_with_traps(machine, &mut code, stub_len as usize);
     code.extend_from_slice(&build.text);
     let code_size = code.len() as u64;
 
@@ -1919,8 +2058,23 @@ pub(super) fn write(
     // `.data`'s base alignment: p_vaddr == p_offset within the RW
     // segment, so aligning the file offset aligns the vaddr.
     let data_align = crate::c5::layout::data_image_align(build.data_align) as u64;
-    let data_off = round_up(got_off + got_size, data_align);
-    let data_size = build.data.len() as u64 - ro_len;
+    // The relro region follows `.got`; PT_GNU_RELRO covers
+    // `.dynamic`, `.got` and the region, ending on an aligned
+    // boundary ahead of the writable data (see RELRO_EMPTY_END_ALIGN
+    // for the end-alignment rule).
+    let relro_off = if relro_size > 0 {
+        round_up(got_off + got_size, data_align)
+    } else {
+        got_off + got_size
+    };
+    let relro_end_align = if relro_size > 0 {
+        seg
+    } else {
+        RELRO_EMPTY_END_ALIGN
+    };
+    let relro_end = round_up(relro_off + relro_size, relro_end_align);
+    let data_off = round_up(relro_end, data_align);
+    let data_size = build.data.len() as u64 - relro_total;
     // An object wider than the arch page size needs the RW segment's
     // p_align raised to it: the image is a PIE, and the loader aligns the
     // load bias down to the maximum PT_LOAD p_align, so a page-only value
@@ -1972,16 +2126,20 @@ pub(super) fn write(
     let code_vmaddr = TEXT_VMADDR_BASE + code_off;
     let dynamic_vmaddr = TEXT_VMADDR_BASE + dynamic_off;
     let got_vmaddr = TEXT_VMADDR_BASE + got_off;
+    let relro_vmaddr = TEXT_VMADDR_BASE + relro_off;
     let data_vmaddr = TEXT_VMADDR_BASE + data_off;
     let tdata_vmaddr = TEXT_VMADDR_BASE + tdata_off;
 
-    // Runtime VA of a data-segment byte: `.data` for an offset within the
-    // file image, otherwise the zero-fill `.bss` tail past it.
+    // Runtime VA of a data-segment byte: the read-only prefix, the
+    // relro region, `.data`, or the zero-fill `.bss` tail past the
+    // file image.
     let data_off_to_vaddr = |off: u64| -> u64 {
         if off < ro_len {
             rodata_vmaddr + off
+        } else if off < relro_total {
+            relro_vmaddr + (off - ro_len)
         } else if off < file_data_len {
-            data_vmaddr + (off - ro_len)
+            data_vmaddr + (off - relro_total)
         } else {
             bss_vmaddr + (off - file_data_len)
         }
@@ -2118,14 +2276,58 @@ pub(super) fn write(
     let has_rela_text = !er_text.is_empty();
     let has_rela_data = !er_data.is_empty();
     let emit_symtab = emit_plt_symtab || has_rela_text || has_rela_data;
+    let has_relro = relro_size > 0;
     let has_data = data_size > 0;
     let has_tdata = has_tls && tdata_size > 0;
     let has_tbss = has_tls && tbss_size > 0;
     let has_bss = build.bss_size > 0;
+    // Place each named section in the family whose region holds its
+    // bytes. A bss name's offset is already relative to the zero-fill
+    // region; the rest index the data stream the family bases split.
+    let mut named_out: Vec<NamedOut> = build
+        .named_sections
+        .iter()
+        .map(|n| {
+            let (slot, addr, off) = if n.bss {
+                let a = bss_vmaddr + n.offset;
+                (Sec::Bss, a, a - TEXT_VMADDR_BASE)
+            } else if n.offset < ro_len {
+                (Sec::RoData, rodata_vmaddr + n.offset, rodata_off + n.offset)
+            } else if n.offset < relro_total {
+                let d = n.offset - ro_len;
+                (Sec::RelRo, relro_vmaddr + d, relro_off + d)
+            } else {
+                let d = n.offset - relro_total;
+                (Sec::Data, data_vmaddr + d, data_off + d)
+            };
+            NamedOut {
+                name: &n.name,
+                slot,
+                addr,
+                off,
+                size: n.size,
+                align: n.align.max(1),
+                bss: n.bss,
+                write: n.write,
+            }
+        })
+        .collect();
+    named_out.sort_by_key(|n| n.addr);
+    let named_in = |slot: Sec| named_out.iter().filter(move |n| n.slot == slot);
+    // The family header stops where its first named section begins;
+    // the alignment padding behind the last one is a gap, as it is
+    // between any two sections.
+    let family_size = |slot: Sec, full: u64, base: u64| -> u64 {
+        match named_in(slot).map(|n| n.addr).min() {
+            Some(first) => first - base,
+            None => full,
+        }
+    };
     let plan = SectionPlan::new(SectionsPresent {
         versions: has_versions,
         rodata: has_rodata,
         tdata: has_tdata,
+        relro: has_relro,
         data: has_data,
         tbss: has_tbss,
         bss: has_bss,
@@ -2133,6 +2335,10 @@ pub(super) fn write(
         rela_text: has_rela_text,
         rela_data: has_rela_data,
         plt_symtab: emit_symtab,
+        named_rodata: named_in(Sec::RoData).count(),
+        named_relro: named_in(Sec::RelRo).count(),
+        named_data: named_in(Sec::Data).count(),
+        named_bss: named_in(Sec::Bss).count(),
     });
     // Section symbols the emitted relocations reference: (plan index,
     // vaddr), in symtab order right after the sentinel.
@@ -2140,6 +2346,9 @@ pub(super) fn write(
         let mut v = alloc::vec![(Sec::Text, code_vmaddr)];
         if has_rodata {
             v.push((Sec::RoData, rodata_vmaddr));
+        }
+        if has_relro {
+            v.push((Sec::RelRo, relro_vmaddr));
         }
         if has_data {
             v.push((Sec::Data, data_vmaddr));
@@ -2159,8 +2368,10 @@ pub(super) fn write(
     let map_data_off = |d: u64| -> (Sec, u64) {
         if d < ro_len {
             (Sec::RoData, d)
+        } else if d < relro_total {
+            (Sec::RelRo, d - ro_len)
         } else if d < file_data_len {
-            (Sec::Data, d - ro_len)
+            (Sec::Data, d - relro_total)
         } else {
             (Sec::Bss, d - file_data_len)
         }
@@ -2203,7 +2414,7 @@ pub(super) fn write(
         super::Machine::Aarch64 => 12, // adrp + ldr + br
         super::Machine::X86_64 => 6,   // jmp qword ptr [rip+disp32]
     };
-    let (mut plt_symtab_bytes, plt_strtab_bytes) = if emit_plt_symtab {
+    let (mut plt_symtab_bytes, mut plt_strtab_bytes) = if emit_plt_symtab {
         build_plt_symtab(build, dwarf_text_vmaddr, trampoline_size, text_shndx)
     } else if emit_symtab {
         let mut st = Vec::with_capacity(ELF64_SYM_SIZE as usize);
@@ -2242,6 +2453,24 @@ pub(super) fn write(
         let at = ELF64_SYM_SIZE as usize;
         plt_symtab_bytes.splice(at..at, prefix);
     }
+    // bfd defines `_GLOBAL_OFFSET_TABLE_` on the section holding the
+    // GOT, a sizeless local OBJECT, wherever the link built one. All
+    // entries here are local, so it appends without moving an index.
+    if !plt_symtab_bytes.is_empty() && got_size > 0 {
+        let st_name = plt_strtab_bytes.len() as u32;
+        plt_strtab_bytes.extend_from_slice(b"_GLOBAL_OFFSET_TABLE_\0");
+        write_struct(
+            &mut plt_symtab_bytes,
+            &Elf64Sym {
+                st_name,
+                st_info: STT_OBJECT,
+                st_other: 0,
+                st_shndx: plan.index_of(Sec::Got),
+                st_value: got_vmaddr,
+                st_size: 0,
+            },
+        );
+    }
     let post_dwarf_off = dwarf_frame_off + dwarf_sections.debug_frame.len() as u64;
     let (rela_text_off, rela_data_off, post_rela_off) = if has_rela_text || has_rela_data {
         let t = round_up(post_dwarf_off, 8);
@@ -2250,19 +2479,24 @@ pub(super) fn write(
     } else {
         (post_dwarf_off, post_dwarf_off, post_dwarf_off)
     };
+    // `.comment`: the NUL-terminated producer fingerprint, in gcc's
+    // ident form -- non-alloc file bytes past the loaded image, so
+    // `.text` stays instruction-pure and no load segment grows.
+    let comment_bytes = super::provenance_comment();
+    let comment_off = post_rela_off;
+    let post_comment_off = comment_off + comment_bytes.len() as u64;
     let (symtab_off, strtab_off, shstrtab_off) = if emit_symtab {
         // .symtab requires 8-byte alignment (each Elf64_Sym is 24
         // bytes). The file body pads to `symtab_off` before
         // emitting the bytes; .strtab and .shstrtab sit immediately
         // after with no further padding.
-        let s = round_up(post_rela_off, 8);
+        let s = round_up(post_comment_off, 8);
         let st = s + plt_symtab_bytes.len() as u64;
         let sh = st + plt_strtab_bytes.len() as u64;
         (s, st, sh)
     } else {
-        // No static symtab -> .shstrtab abuts DWARF directly,
-        // matching the pre-#61 layout.
-        (post_rela_off, post_rela_off, post_rela_off)
+        // No static symtab -> .shstrtab abuts `.comment` directly.
+        (post_comment_off, post_comment_off, post_comment_off)
     };
     // .shstrtab content: NUL + section names. The empty name at the
     // front backs the SHT_NULL sentinel (sh_name=0). The catalog lists
@@ -2286,10 +2520,15 @@ pub(super) fn write(
         ".tdata",
         ".dynamic",
         ".got",
+        ".data.rel.ro",
         ".data",
         ".tbss",
         ".bss",
+        ".comment",
     ]);
+    for n in &named_out {
+        shstrtab_names.push(n.name);
+    }
     if emit_dwarf {
         shstrtab_names.extend_from_slice(&[
             ".debug_info",
@@ -2340,9 +2579,27 @@ pub(super) fn write(
     // .hash + .rela.dyn + .text + (optional .tdata) +
     // .dynamic + .got + (optional .data) + (optional .tbss) +
     // (optional .bss) + 5 .debug_* + .shstrtab. Counted dynamically.
-    let rodata_shndx: u16 = plan.index_of(Sec::RoData);
     let data_shndx: u16 = plan.index_of(Sec::Data);
     let bss_shndx: u16 = plan.index_of(Sec::Bss);
+    // Header index for a data-stream byte: the named section holding
+    // it, else the family whose region it falls in. A named section's
+    // headers follow its family's, in address order.
+    let data_addr_shndx = |addr: u64, off: u64| -> u16 {
+        let slot = if off < ro_len {
+            Sec::RoData
+        } else if off < relro_total {
+            Sec::RelRo
+        } else if off < file_data_len {
+            Sec::Data
+        } else {
+            Sec::Bss
+        };
+        let base = plan.index_of(slot);
+        match named_in(slot).position(|n| addr >= n.addr && addr < n.addr + n.size) {
+            Some(k) => base + 1 + k as u16,
+            None => base,
+        }
+    };
     let n_section_headers: u64 = plan.len() as u64;
     let total_filesize = shdr_off + n_section_headers * ELF64_SHDR_SIZE;
     let shstrtab_idx: u16 = plan.index_of(Sec::Shstrtab);
@@ -2487,6 +2744,20 @@ pub(super) fn write(
     // PT_GNU_STACK rw- (no x).
     write_phdr(&mut out, PT_GNU_STACK, PF_R | PF_W, 0, 0, 0, 0, 16);
 
+    // PT_GNU_RELRO -- .dynamic, .got and the relro data region. The
+    // loader applies the relocations, then re-protects the span
+    // read-only (glibc `_dl_protect_relro`).
+    write_phdr(
+        &mut out,
+        PT_GNU_RELRO,
+        PF_R,
+        segment2_off,
+        TEXT_VMADDR_BASE + segment2_off,
+        relro_end - segment2_off,
+        relro_end - segment2_off,
+        1,
+    );
+
     debug_assert_eq!(out.len() as u64, phoff + phsize);
 
     // .interp
@@ -2511,16 +2782,10 @@ pub(super) fn write(
                 super::DynamicExportSection::Text => {
                     (code_vmaddr + stub_len + e.offset, text_shndx)
                 }
-                super::DynamicExportSection::Data => (
-                    data_off_to_vaddr(e.offset),
-                    if e.offset < ro_len {
-                        rodata_shndx
-                    } else if e.offset < file_data_len {
-                        data_shndx
-                    } else {
-                        bss_shndx
-                    },
-                ),
+                super::DynamicExportSection::Data => {
+                    let addr = data_off_to_vaddr(e.offset);
+                    (addr, data_addr_shndx(addr, e.offset))
+                }
             };
             let binding = if e.weak { STB_WEAK } else { STB_GLOBAL };
             let st_type = if e.is_object { STT_OBJECT } else { STT_FUNC };
@@ -2595,7 +2860,11 @@ pub(super) fn write(
     if emit_dyn {
         let r_type = r_relative(machine);
         for r in &build.data_relocs {
-            let addend = data_off_to_vaddr(r.target_offset);
+            // `.rodata` / `.data` / `.bss` occupy separate runtime
+            // regions; the anchor picks the region, the signed
+            // displacement rides on the address.
+            let addend = data_off_to_vaddr(r.target_anchor)
+                .wrapping_add(r.target_offset.wrapping_sub(r.target_anchor));
             write_struct(
                 &mut rela,
                 &Elf64Rela {
@@ -2630,6 +2899,19 @@ pub(super) fn write(
                     r_offset: data_off_to_vaddr(r.data_offset),
                     r_info: r_type,
                     r_addend: (code_vmaddr + stub_len + r.text_offset) as i64,
+                },
+            );
+        }
+        // The `_Thread_local` initialization template. `r_offset` is the
+        // template's own address, so the loader relocates the image bytes
+        // the per-thread copies are made from.
+        for (off, absolute) in tls_reloc_sites(build, &data_off_to_vaddr, code_vmaddr, stub_len)? {
+            write_struct(
+                &mut rela,
+                &Elf64Rela {
+                    r_offset: tdata_vmaddr + off as u64,
+                    r_info: r_type,
+                    r_addend: absolute as i64,
                 },
             );
         }
@@ -2750,11 +3032,6 @@ pub(super) fn write(
     // .got -- one zero-filled u64 per import. Loader fills these in
     // via .rela.dyn / R_AARCH64_GLOB_DAT before _start runs.
     out.extend(vec![0u8; got_size as usize]);
-    // Pad to the aligned `data_off` (see the layout).
-    while (out.len() as u64) < data_off {
-        out.push(0);
-    }
-    debug_assert_eq!(out.len() as u64, data_off);
 
     // build.data -- the program's static data segment, with
     // pointer-to-global initializers resolved to their link-time absolute
@@ -2764,7 +3041,9 @@ pub(super) fn write(
     // baked value is the pre-slide initializer.
     let mut data_with_relocs = build.data[ro_len as usize..].to_vec();
     for r in &build.data_relocs {
-        let absolute = data_off_to_vaddr(r.target_offset);
+        // Same anchored mapping as the `.rela.dyn` addend above.
+        let absolute = data_off_to_vaddr(r.target_anchor)
+            .wrapping_add(r.target_offset.wrapping_sub(r.target_anchor));
         let off = reloc_slot_in_data(r.data_offset, ro_len, "data")?;
         if off + 8 > data_with_relocs.len() {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
@@ -2825,9 +3104,9 @@ pub(super) fn write(
     // Object-linked pc-relative slots (switch tables, assembler
     // `label - .` records): each holds `target - slot` as link-time
     // vaddrs at the recorded width. A pure difference slides with the
-    // image, so no `.rela.dyn` entry is needed. The reader demotes a
-    // reloc-bearing read-only section into the writable stream, so
-    // the slots sit past `ro_len`.
+    // image, so no `.rela.dyn` entry is needed. The reader routes a
+    // reloc-bearing read-only section to the relro stream, so the
+    // slots sit past `ro_len`.
     for r in &build.data_pcrel_relocs {
         let target = if r.target_in_data {
             // `.rodata` / `.data` / `.bss` occupy separate runtime
@@ -2861,7 +3140,20 @@ pub(super) fn write(
         };
         data_with_relocs[off..off + 4].copy_from_slice(&v.to_le_bytes());
     }
-    out.extend_from_slice(&data_with_relocs);
+    // The patched tail splits at `relro_size`: the relro slice lands
+    // after `.got`, padded to `relro_end` so PT_GNU_RELRO's span ends
+    // on its page boundary; the writable remainder starts at the
+    // aligned `data_off`.
+    while (out.len() as u64) < relro_off {
+        out.push(0);
+    }
+    debug_assert_eq!(out.len() as u64, relro_off);
+    out.extend_from_slice(&data_with_relocs[..relro_size as usize]);
+    while (out.len() as u64) < data_off {
+        out.push(0);
+    }
+    debug_assert_eq!(out.len() as u64, data_off);
+    out.extend_from_slice(&data_with_relocs[relro_size as usize..]);
 
     // .tdata -- initialised TLS image. The first `tls_init_size`
     // bytes of `build.tls_data`. The loader copies these into each
@@ -2873,7 +3165,24 @@ pub(super) fn write(
         out.push(0);
     }
     debug_assert_eq!(out.len() as u64, tdata_off);
-    out.extend_from_slice(&build.tls_data[..build.tls_init_size]);
+    // The initialization template, with address-constant initializers
+    // resolved to their link-time VAs. Each also carries a `.rela.dyn`
+    // R_*_RELATIVE entry (built above) sited at the template's own address,
+    // so the loader relocates the template before any thread's block is
+    // allocated and every per-thread copy inherits the relocated value.
+    let mut tdata_with_relocs = build.tls_data[..build.tls_init_size].to_vec();
+    for (off, absolute) in tls_reloc_sites(build, &data_off_to_vaddr, code_vmaddr, stub_len)? {
+        if off + 8 > tdata_with_relocs.len() {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "ELF: TLS reloc offset {off:#x} past end of .tdata ({})",
+                    tdata_with_relocs.len()
+                ),
+            )));
+        }
+        tdata_with_relocs[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
+    }
+    out.extend_from_slice(&tdata_with_relocs);
 
     // Pad to end of segment 2 (page-aligned).
     while (out.len() as u64) < segment2_end {
@@ -2898,6 +3207,8 @@ pub(super) fn write(
         out.extend_from_slice(&rela_data_bytes);
         debug_assert_eq!(out.len() as u64, post_rela_off);
     }
+    debug_assert_eq!(out.len() as u64, comment_off);
+    out.extend_from_slice(&comment_bytes);
     if emit_symtab {
         // Pad to 8 so each Elf64_Sym lands aligned.
         while (out.len() as u64) < symtab_off {
@@ -3129,7 +3440,7 @@ pub(super) fn write(
             sh_size: code_size,
             sh_link: 0,
             sh_info: 0,
-            sh_addralign: 16,
+            sh_addralign: text_align,
             sh_entsize: 0,
         },
     );
@@ -3148,12 +3459,20 @@ pub(super) fn write(
                 sh_flags: SHF_ALLOC,
                 sh_addr: rodata_vmaddr,
                 sh_offset: rodata_off,
-                sh_size: ro_total,
+                sh_size: family_size(Sec::RoData, ro_total, rodata_vmaddr),
                 sh_link: 0,
                 sh_info: 0,
                 sh_addralign: build.data_align.max(8) as u64,
                 sh_entsize: 0,
             },
+        );
+        emit_named_shdrs(
+            &mut out,
+            &plan,
+            &mut shdr_cursor,
+            Sec::RoData,
+            &named_out,
+            &name_off,
         );
     }
 
@@ -3219,6 +3538,38 @@ pub(super) fn write(
         },
     );
 
+    // [optional] .data.rel.ro -- read-only data with loader-written
+    // slots, inside the PT_GNU_RELRO span. SHF_WRITE like ld's: the
+    // page is writable until the loader re-protects it.
+    if has_relro {
+        emit_shdr(
+            &mut out,
+            &plan,
+            &mut shdr_cursor,
+            Sec::RelRo,
+            &Elf64Shdr {
+                sh_name: name_off(".data.rel.ro"),
+                sh_type: SHT_PROGBITS,
+                sh_flags: SHF_ALLOC | SHF_WRITE,
+                sh_addr: relro_vmaddr,
+                sh_offset: relro_off,
+                sh_size: family_size(Sec::RelRo, relro_size, relro_vmaddr),
+                sh_link: 0,
+                sh_info: 0,
+                sh_addralign: data_align,
+                sh_entsize: 0,
+            },
+        );
+        emit_named_shdrs(
+            &mut out,
+            &plan,
+            &mut shdr_cursor,
+            Sec::RelRo,
+            &named_out,
+            &name_off,
+        );
+    }
+
     // [optional] .data -- the initialised data segment.
     if has_data {
         emit_shdr(
@@ -3232,12 +3583,20 @@ pub(super) fn write(
                 sh_flags: SHF_ALLOC | SHF_WRITE,
                 sh_addr: data_vmaddr,
                 sh_offset: data_off,
-                sh_size: data_size,
+                sh_size: family_size(Sec::Data, data_size, data_vmaddr),
                 sh_link: 0,
                 sh_info: 0,
                 sh_addralign: data_align,
                 sh_entsize: 0,
             },
+        );
+        emit_named_shdrs(
+            &mut out,
+            &plan,
+            &mut shdr_cursor,
+            Sec::Data,
+            &named_out,
+            &name_off,
         );
     }
 
@@ -3281,7 +3640,7 @@ pub(super) fn write(
                 sh_flags: SHF_ALLOC | SHF_WRITE,
                 sh_addr: bss_vmaddr,
                 sh_offset: bss_vmaddr - TEXT_VMADDR_BASE,
-                sh_size: build.bss_size as u64,
+                sh_size: family_size(Sec::Bss, build.bss_size as u64, bss_vmaddr),
                 sh_link: 0,
                 sh_info: 0,
                 // Report bss_vmaddr's own 2-adic alignment (<=16) so
@@ -3289,6 +3648,14 @@ pub(super) fn write(
                 sh_addralign: 1u64 << bss_vmaddr.trailing_zeros().min(4),
                 sh_entsize: 0,
             },
+        );
+        emit_named_shdrs(
+            &mut out,
+            &plan,
+            &mut shdr_cursor,
+            Sec::Bss,
+            &named_out,
+            &name_off,
         );
     }
 
@@ -3391,6 +3758,27 @@ pub(super) fn write(
             Sec::Data,
         );
     }
+
+    // `.comment` -- the producer fingerprint (SHF_MERGE | SHF_STRINGS
+    // over byte strings, as gcc emits it).
+    emit_shdr(
+        &mut out,
+        &plan,
+        &mut shdr_cursor,
+        Sec::Comment,
+        &Elf64Shdr {
+            sh_name: name_off(".comment"),
+            sh_type: SHT_PROGBITS,
+            sh_flags: SHF_MERGE | SHF_STRINGS,
+            sh_addr: 0,
+            sh_offset: comment_off,
+            sh_size: comment_bytes.len() as u64,
+            sh_link: 0,
+            sh_info: 0,
+            sh_addralign: 1,
+            sh_entsize: 1,
+        },
+    );
 
     // PLT-trampoline static symbol table. `.symtab`'s
     // `sh_info` field must point one past the last LOCAL symbol;
@@ -3554,6 +3942,19 @@ pub(super) fn write(
         )?;
     }
 
+    // `_GLOBAL_OFFSET_TABLE_` references: the GOT's own address.
+    for fx in &build.got_base_fixups {
+        patch_addr_load(
+            machine,
+            &mut out,
+            code_place,
+            stub_len + fx.instr_offset as u64,
+            got_vmaddr.wrapping_add(fx.got_offset as u64),
+            fx.part,
+            "GOT base fixup",
+        )?;
+    }
+
     // Function-pointer literals.
     for fx in &build.func_fixups {
         // Targets are byte offsets within build.text -- shift by
@@ -3567,6 +3968,47 @@ pub(super) fn write(
             fx.part,
             "func fixup",
         )?;
+    }
+
+    // Assembler pc-relative data words in executable sections
+    // (`.long x - .` / `.quad x - .`) targeting the data-byte space:
+    // the field receives `S + A - P` at the recorded width. A pure
+    // difference slides with the image, so no `.rela.dyn` entry.
+    for r in &build.text_pcrel_relocs {
+        let site_vmaddr = code_vmaddr + stub_len + r.site_text_offset;
+        let value = data_off_to_vaddr(r.target_data_offset) as i64 - site_vmaddr as i64;
+        let file_off = code_place.file_at(stub_len + r.site_text_offset);
+        let width = r.width as usize;
+        if file_off + width > out.len() {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "ELF: text pcrel field {file_off:#x} past end of image ({})",
+                    out.len()
+                ),
+            )));
+        }
+        if width == 8 {
+            out[file_off..file_off + 8].copy_from_slice(&value.to_le_bytes());
+            continue;
+        }
+        let Ok(v) = i32::try_from(value) else {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "ELF: text pcrel field {file_off:#x}: displacement {value:#x} exceeds 32 bits"
+                ),
+            )));
+        };
+        out[file_off..file_off + 4].copy_from_slice(&v.to_le_bytes());
+    }
+
+    // This writer sets ET_DYN, where an absolute field in an
+    // executable section has no value: the loader picks the base and
+    // ELF admits no relocation against such a section. The synthesizer
+    // declines the reference before it reaches here.
+    if !build.text_abs_relocs.is_empty() {
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            "ELF: an absolute text field cannot be written into a position-independent image",
+        )));
     }
 
     // Switch-table base materializations (the lea feeding the
@@ -3669,11 +4111,12 @@ mod tests {
     /// used to be hand-summed against a separate emission list.
     #[test]
     fn section_indices_resolve_to_their_own_section() {
-        for bits in 0u8..128 {
+        for bits in 0u16..256 {
             let plan = SectionPlan::new(SectionsPresent {
                 versions: bits & 1 != 0,
                 rodata: bits & 64 != 0,
                 tdata: bits & 2 != 0,
+                relro: bits & 128 != 0,
                 data: bits & 4 != 0,
                 tbss: bits & 8 != 0,
                 bss: bits & 16 != 0,
@@ -3681,17 +4124,24 @@ mod tests {
                 rela_text: bits & 64 != 0,
                 rela_data: bits & 2 != 0,
                 plt_symtab: bits & 1 != 0,
+                // Named sections ride in their family's slot, so the
+                // indices past it have to move by their count.
+                named_rodata: (bits & 64 != 0) as usize * 2,
+                named_relro: (bits & 128 != 0) as usize,
+                named_data: (bits & 4 != 0) as usize * 3,
+                named_bss: (bits & 16 != 0) as usize,
             });
             // Independent restatement of the unconditional set: NULL,
             // .interp, .dynsym, .dynstr, .hash, .rela.dyn, .text, .dynamic,
-            // .got, .shstrtab.
-            let mut expected = 10;
+            // .got, .comment, .shstrtab.
+            let mut expected = 11;
             expected += 2 * (bits & 1 != 0) as usize; // .gnu.version{,_r}
-            expected += (bits & 64 != 0) as usize; // .rodata
+            expected += (bits & 64 != 0) as usize * 3; // .rodata + 2 named
             expected += (bits & 2 != 0) as usize; // .tdata
-            expected += (bits & 4 != 0) as usize; // .data
+            expected += (bits & 128 != 0) as usize * 2; // .data.rel.ro + 1
+            expected += (bits & 4 != 0) as usize * 4; // .data + 3 named
             expected += (bits & 8 != 0) as usize; // .tbss
-            expected += (bits & 16 != 0) as usize; // .bss
+            expected += (bits & 16 != 0) as usize * 2; // .bss + 1 named
             expected += if bits & 32 != 0 { 5 } else { 0 }; // .debug_*
             expected += (bits & 64 != 0) as usize; // .rela.text
             expected += (bits & 2 != 0) as usize; // .rela.data
@@ -3707,10 +4157,17 @@ mod tests {
 
     fn tiny_program() -> Program {
         Program {
+            target: crate::c5::codegen::Target::host(),
             data: Vec::new(),
             file_asm: Vec::new(),
             asm_weak_names: Vec::new(),
-            asm_hidden_names: Vec::new(),
+            asm_global_names: Vec::new(),
+            asm_visibility: Vec::new(),
+            asm_unit: false,
+            asm_file_names: Vec::new(),
+            asm_idents: Vec::new(),
+            data_ro_len: 0,
+            data_relro_len: 0,
             data_object_starts: Vec::new(),
             const_data_ranges: Vec::new(),
             data_pad_ranges: Vec::new(),
@@ -3722,6 +4179,9 @@ mod tests {
             data_relocs: Vec::new(),
             extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
+            tls_data_relocs: Vec::new(),
+            tls_extern_data_relocs: Vec::new(),
+            tls_code_relocs: Vec::new(),
             exports: Vec::new(),
             dylibs: Vec::new(),
             dllmain_pc: None,
@@ -3749,7 +4209,10 @@ mod tests {
         use super::super::{ResolvedImport, ResolvedImports};
         use crate::c5::codegen::ResolvedDylib;
         Build {
+            text_data_ranges: alloc::vec::Vec::new(),
             emitted_relocs: Vec::new(),
+            named_sections: Vec::new(),
+            got_base_fixups: Vec::new(),
             text_align: 16,
             orphaned_data: None,
             stopped_at_data_liveness: false,
@@ -3757,17 +4220,21 @@ mod tests {
             asm_sections: Vec::new(),
             asm_section_text_refs: Vec::new(),
             asm_text_abs_refs: Vec::new(),
+            asm_sym_fixups: Vec::new(),
             asm_text_labels: Vec::new(),
             asm_sym_decls: Vec::new(),
             copy_relocs: Default::default(),
             text: vec![0x40, 0x05, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6],
             data: Vec::new(),
             data_ro_len: 0,
-            pic: false,
+            data_relro_len: 0,
+            pic_link: false,
             code_model: Default::default(),
             elf_class: Default::default(),
             rodata: Default::default(),
             data_pcrel_relocs: Vec::new(),
+            text_pcrel_relocs: Vec::new(),
+            text_abs_relocs: Vec::new(),
             data_align: 8,
             bss_size: 0,
             init_fini_arrays: Default::default(),
@@ -3777,10 +4244,12 @@ mod tests {
             func_fixups: Vec::new(),
             pc_to_native: Vec::new(),
             func_ent_pcs: Vec::new(),
+            func_ends: Vec::new(),
             func_names: Vec::new(),
             func_prologue_native: alloc::collections::BTreeMap::new(),
             promoted_local_slots: alloc::collections::BTreeMap::new(),
             coalesced_slot_remap: alloc::collections::BTreeMap::new(),
+            canary_frame_bytes: alloc::collections::BTreeMap::new(),
             fn_unwind: Vec::new(),
             reloc_call_sites: Vec::new(),
             user_extern_call_sites: Vec::new(),
@@ -3814,6 +4283,9 @@ mod tests {
             data_relocs: Vec::new(),
             extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
+            tls_data_relocs: Vec::new(),
+            tls_extern_data_relocs: Vec::new(),
+            tls_code_relocs: Vec::new(),
             label_relocs: Vec::new(),
             exports: Vec::new(),
             dynamic_exports: Vec::new(),

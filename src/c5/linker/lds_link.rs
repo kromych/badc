@@ -31,8 +31,10 @@ type PoolMemberMaps = HashMap<usize, (Vec<u64>, Vec<u64>)>;
 
 use crate::c5::error::C5Error;
 
+use super::comdat::{self, SecId};
 use super::dynamic::{self, DynSym, DynTables, HashStyle, VerDef};
 use super::eh_frame;
+use super::erratum;
 use super::gnu_property;
 use super::lds::{
     AssignOp, Assignment, BinOp, Command, DataWidth, Expr, InputSpec, LinkerScript, OutputSection,
@@ -40,9 +42,11 @@ use super::lds::{
 };
 use super::object::{
     Elf32Ehdr, Elf32Rel, Elf32Rela, Elf32Shdr, Elf32Sym, Elf64Ehdr, Elf64Rel, Elf64Shdr, ElfClass,
-    read_struct,
+    SharedLibrary, absolute_in_pie_body, elf_reloc_desc, elf_reloc_field_width, implicit_addend,
+    is_c_identifier, locate_reloc, read_struct,
 };
 use crate::c5::object::elf_reloc_types as rt;
+use crate::c5::object::elf_reloc_types::GOT_BASE_SYMBOL as GOT_SYMBOL;
 
 fn err(msg: &str) -> C5Error {
     C5Error::Compile(format!("error: {msg}"))
@@ -65,6 +69,14 @@ const SHT_GROUP: u32 = 17;
 const SHT_SYMTAB_SHNDX: u32 = 18;
 const SHT_RELR: u32 = 19;
 const SHT_LLVM_ADDRSIG: u32 = 0x6fff4c03;
+const SHT_X86_64_UNWIND: u32 = 0x7000_0001;
+
+/// Whether `shtype` is one `.eh_frame` arrives with on `machine`:
+/// SHT_PROGBITS everywhere, and the psABI's SHT_X86_64_UNWIND on
+/// x86-64, which gcc and clang both emit.
+fn eh_frame_shtype(machine: u16, shtype: u32) -> bool {
+    shtype == SHT_PROGBITS || (machine == EM_X86_64 && shtype == SHT_X86_64_UNWIND)
+}
 
 const SHF_WRITE: u64 = 0x1;
 const SHF_ALLOC: u64 = 0x2;
@@ -96,9 +108,12 @@ const STT_FILE: u8 = 4;
 const STT_COMMON: u8 = 5;
 const STV_DEFAULT: u8 = 0;
 const STV_HIDDEN: u8 = 2;
+const STV_PROTECTED: u8 = 3;
 
 const PT_LOAD: u32 = 1;
 const PT_DYNAMIC: u32 = 2;
+const PT_INTERP: u32 = 3;
+const PT_PHDR: u32 = 6;
 const PT_NOTE: u32 = 4;
 const PT_GNU_EH_FRAME: u32 = 0x6474e550;
 const PT_GNU_STACK: u32 = 0x6474e551;
@@ -238,6 +253,19 @@ pub struct RawSection {
     pub size: u64,
     pub relocs: Vec<RawReloc>,
     pub orig_shndx: u32,
+    /// `sh_link`: for an `SHF_LINK_ORDER` section, the section whose
+    /// output placement orders this one.
+    pub link: u32,
+}
+
+/// One `SHT_GROUP` section: the flag word, the signature symbol's
+/// name, and the members that survived the section filter.
+#[derive(Debug, Clone)]
+pub struct RawGroup {
+    pub flags: u32,
+    pub signature: String,
+    /// Members as indices into [`LdsObject::sections`].
+    pub members: Vec<usize>,
 }
 
 /// One ET_REL input at full fidelity.
@@ -248,6 +276,7 @@ pub struct LdsObject {
     pub class: ElfClass,
     pub sections: Vec<RawSection>,
     pub symbols: Vec<RawSym>,
+    pub groups: Vec<RawGroup>,
     /// Original section header index -> `sections` index.
     pub shndx_map: HashMap<u32, usize>,
 }
@@ -262,8 +291,8 @@ impl LdsObject {
 }
 
 /// Parse a little-endian ET_REL object of either ELF class preserving
-/// every section. Symbol/string/reloc tables are consumed into
-/// structured form; group and addrsig metadata is dropped.
+/// every section. Symbol/string/reloc/group tables are consumed into
+/// structured form; addrsig metadata is dropped.
 pub fn parse_lds_object(source: &str, bytes: Vec<u8>) -> Result<LdsObject, C5Error> {
     if bytes.len() < 52 || &bytes[0..4] != b"\x7fELF" {
         return Err(err(&format!("{source}: not an ELF object")));
@@ -314,7 +343,9 @@ pub fn parse_lds_object(source: &str, bytes: Vec<u8>) -> Result<LdsObject, C5Err
         if sh.sh_type == SHT_SYMTAB_SHNDX {
             let raw = section_bytes(&bytes, Some(sh), source)?;
             shndx_ext = raw
-                .chunks_exact(4)
+                .as_chunks::<4>()
+                .0
+                .iter()
                 .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
                 .collect();
         }
@@ -373,7 +404,11 @@ pub fn parse_lds_object(source: &str, bytes: Vec<u8>) -> Result<LdsObject, C5Err
             | SHT_LLVM_ADDRSIG => continue,
             _ => {}
         }
-        if sh.sh_flags & SHF_EXCLUDE != 0 && sh.sh_flags & SHF_ALLOC == 0 {
+        // SHF_EXCLUDE keeps a section out of a final link whatever its
+        // other flags say, and a script naming the section does not
+        // bring it back. Relocatable output reads inputs through
+        // `parse_et_rel`, which keeps them.
+        if sh.sh_flags & SHF_EXCLUDE != 0 {
             continue;
         }
         let data_off = if sh.sh_type == SHT_NOBITS {
@@ -401,6 +436,7 @@ pub fn parse_lds_object(source: &str, bytes: Vec<u8>) -> Result<LdsObject, C5Err
             size: sh.sh_size,
             relocs: Vec::new(),
             orig_shndx: i as u32,
+            link: sh.sh_link,
         });
     }
     // Attach relocation tables to their sections via sh_info. SHT_REL
@@ -443,7 +479,7 @@ pub fn parse_lds_object(source: &str, bytes: Vec<u8>) -> Result<LdsObject, C5Err
             };
             let rtype = class.reloc_type(r_info);
             let addend = if rel {
-                implicit_addend(
+                rel_addend(
                     &bytes,
                     &sections[target],
                     ehdr.e_machine,
@@ -463,6 +499,32 @@ pub fn parse_lds_object(source: &str, bytes: Vec<u8>) -> Result<LdsObject, C5Err
         }
         sections[target].relocs.extend(list);
     }
+    // Section groups. The body is a flag word followed by member
+    // section indices; entries naming a section the filter above
+    // dropped (a group's own relocation table) have no member.
+    let mut groups: Vec<RawGroup> = Vec::new();
+    for sh in &shdrs {
+        if sh.sh_type != SHT_GROUP {
+            continue;
+        }
+        let raw = section_bytes(&bytes, Some(sh), source)?;
+        if raw.len() < 4 || raw.len() % 4 != 0 {
+            return Err(err(&format!("{source}: malformed SHT_GROUP body")));
+        }
+        let word = |i: usize| u32::from_le_bytes(raw[i..i + 4].try_into().unwrap());
+        let signature = symbols
+            .get(sh.sh_info as usize)
+            .map(|s| s.name.clone())
+            .unwrap_or_default();
+        let members: Vec<usize> = (1..raw.len() / 4)
+            .filter_map(|i| shndx_map.get(&word(i * 4)).copied())
+            .collect();
+        groups.push(RawGroup {
+            flags: word(0),
+            signature,
+            members,
+        });
+    }
     Ok(LdsObject {
         source: source.to_string(),
         bytes,
@@ -470,14 +532,14 @@ pub fn parse_lds_object(source: &str, bytes: Vec<u8>) -> Result<LdsObject, C5Err
         class,
         sections,
         symbols,
+        groups,
         shndx_map,
     })
 }
 
-/// The addend an `SHT_REL` entry keeps in the field it relocates,
-/// sign-extended from the field's width. A type that touches no field
-/// (`R_*_NONE`) has none.
-fn implicit_addend(
+/// Locate and decode the field an `SHT_REL` entry keeps its addend
+/// in. A type that touches no field (`R_*_NONE`) has none.
+fn rel_addend(
     bytes: &[u8],
     sec: &RawSection,
     machine: u16,
@@ -488,14 +550,10 @@ fn implicit_addend(
     if rtype == R_NONE {
         return Ok(0);
     }
-    let width = match machine {
-        EM_386 => rt::i386_field_width(rtype),
-        _ => None,
-    };
-    let Some(width) = width else {
+    let Some(width) = elf_reloc_field_width(machine, rtype) else {
         return Err(err(&format!(
             "{source}: {} in `{}' has no implicit-addend field",
-            reloc_desc(machine, rtype),
+            elf_reloc_desc(machine, rtype),
             sec.name
         )));
     };
@@ -507,20 +565,25 @@ fn implicit_addend(
         )));
     }
     let at = sec.data_off + offset as usize;
-    let raw = &bytes[at..at + width as usize];
-    Ok(match width {
-        1 => raw[0] as i8 as i64,
-        2 => i16::from_le_bytes([raw[0], raw[1]]) as i64,
-        _ => i32::from_le_bytes([raw[0], raw[1], raw[2], raw[3]]) as i64,
-    })
+    Ok(implicit_addend(&bytes[at..at + width as usize]))
 }
 
-/// A relocation type named the way `readelf -r` prints it.
-fn reloc_desc(machine: u16, rtype: u32) -> String {
+/// A relocation writing a whole load address into a field narrower
+/// than an address. `size_dynamic_sections` rewrites the address-width
+/// form to `R_*_RELATIVE`; no dynamic form writes a narrower field.
+/// The `*_ABS_LO12_NC` group is excluded: it takes only the target's
+/// page offset, which a page-aligned load base leaves alone.
+fn narrow_absolute(machine: u16, rtype: u32) -> bool {
     match machine {
-        EM_386 => rt::i386_reloc_desc(rtype),
-        EM_AARCH64 => rt::aarch64_reloc_desc(rtype),
-        _ => rt::x86_64_reloc_desc(rtype),
+        EM_386 => matches!(rtype, rt::R_386_16 | rt::R_386_8),
+        EM_AARCH64 => {
+            matches!(rtype, rt::R_AARCH64_ABS32 | rt::R_AARCH64_ABS16)
+                || rt::aarch64_movw_field(rtype).is_some()
+        }
+        _ => matches!(
+            rtype,
+            rt::R_X86_64_32 | rt::R_X86_64_32S | rt::R_X86_64_16 | rt::R_X86_64_8
+        ),
     }
 }
 
@@ -569,9 +632,21 @@ pub enum LdsEmit {
     Dyn,
 }
 
+/// A shared library input and how the link named it.
+#[derive(Debug, Clone)]
+pub struct SharedInput {
+    pub lib: SharedLibrary,
+    /// Named under a linker script's `AS_NEEDED`: it takes a dependency
+    /// record only where the link binds to it.
+    pub as_needed: bool,
+}
+
 #[derive(Debug, Clone)]
 pub struct LdsOptions {
     pub emit: LdsEmit,
+    /// `-shared` rather than `-pie`. Both emit `ET_DYN`; the two
+    /// differ in the output kind a diagnostic names.
+    pub shared: bool,
     pub entry_override: Option<String>,
     pub max_page_size: u64,
     pub orphan_handling: OrphanHandling,
@@ -605,12 +680,31 @@ pub struct LdsOptions {
     pub nmagic: bool,
     /// `--eh-frame-hdr`: build the unwinder's FDE search table.
     pub eh_frame_hdr: bool,
+    /// `--gc-sections`: drop every allocatable input section no kept
+    /// section reaches.
+    pub gc_sections: bool,
+    /// `-u` / `--undefined`: names the link must resolve. Each is a
+    /// garbage-collection root.
+    pub undefined: Vec<String>,
+    /// `--dynamic-linker`: the `PT_INTERP` program interpreter.
+    pub interp: Option<String>,
+    /// Shared libraries named on the command line, in order. Each takes
+    /// a `DT_NEEDED` and satisfies references its exports name.
+    pub shared_libs: Vec<SharedInput>,
+    /// `-rpath`: the library search path recorded in the image.
+    pub rpath: Vec<String>,
+    /// `--enable-new-dtags`: record the search path as `DT_RUNPATH`.
+    pub new_dtags: bool,
+    /// `--fix-cortex-a53-843419`: rewrite the erratum sequences, as
+    /// ADR where the page is in range and through a veneer otherwise.
+    pub fix_cortex_a53_843419: bool,
 }
 
 impl Default for LdsOptions {
     fn default() -> Self {
         LdsOptions {
             emit: LdsEmit::Exec,
+            shared: false,
             entry_override: None,
             max_page_size: 0x1000,
             orphan_handling: OrphanHandling::Place,
@@ -628,6 +722,13 @@ impl Default for LdsOptions {
             symbolic: false,
             nmagic: false,
             eh_frame_hdr: false,
+            gc_sections: false,
+            undefined: Vec::new(),
+            interp: None,
+            shared_libs: Vec::new(),
+            rpath: Vec::new(),
+            new_dtags: false,
+            fix_cortex_a53_843419: false,
         }
     }
 }
@@ -698,6 +799,9 @@ enum ChunkSrc {
     Bytes(Vec<u8>),
     /// Fill pattern applied over the range.
     Pad(Vec<u8>),
+    /// Zero-initialized area reserved for erratum workaround veneers,
+    /// written after relocations settle the instruction bytes.
+    Veneers,
 }
 
 /// Attachment of an expression value / symbol. A plain number and an
@@ -721,17 +825,34 @@ impl Val {
     fn abs(v: u64) -> Val {
         Val { v, att: Att::Abs }
     }
+
+    /// Value an expression naming the symbol that holds it sees. Only
+    /// the definition taken from the location counter picks up a
+    /// section for its own symtab entry, so what it hands on is a
+    /// number (bfd's rel_from_abs).
+    fn as_reference(self) -> Val {
+        match self.att {
+            Att::DotAbs => Val::abs(self.v),
+            _ => self,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
 struct ScriptSym {
     val: Val,
     hidden: bool,
+    /// Symbol type the definition took from its expression.
+    kind: u8,
     /// Output section carrying the symbol in the symtab when the
     /// value came from the location counter outside any output
     /// section (ld's section_for_dot fixup); the value itself stays
     /// absolute for expression purposes.
     final_out: Option<usize>,
+    /// Visibility that does not localize the binding, used by the
+    /// synthesized `__start_` / `__stop_` pair. `hidden` stays the
+    /// `PROVIDE_HIDDEN` path, which does localize.
+    vis: Option<u8>,
 }
 
 /// One input section's per-pass placement.
@@ -756,10 +877,124 @@ struct MergePool {
     align: u64,
 }
 
+/// One PLT stub, on both targets.
+const PLT_ENTRY_SIZE: u64 = 16;
+
+/// The relaxable GOT forms, which `elf_reloc_types` does not name.
+const R_X86_64_GOTPCRELX: u32 = 41;
+const R_386_GOT32X: u32 = 43;
+
+/// Name -> position, for a list whose order is its index space.
+fn index_map(names: &[String]) -> HashMap<String, usize> {
+    names
+        .iter()
+        .enumerate()
+        .map(|(i, n)| (n.clone(), i))
+        .collect()
+}
+
+/// A relocation holding a branch displacement: reaching an imported
+/// symbol from one means going through a stub.
+fn reloc_needs_plt(machine: u16, rtype: u32) -> bool {
+    match machine {
+        EM_AARCH64 => matches!(rtype, rt::R_AARCH64_CALL26 | rt::R_AARCH64_JUMP26),
+        EM_386 => matches!(rtype, rt::R_386_PC32 | rt::R_386_PLT32),
+        _ => matches!(rtype, rt::R_X86_64_PC32 | rt::R_X86_64_PLT32),
+    }
+}
+
+/// A relocation naming a GOT slot rather than the symbol's own address.
+fn reloc_uses_got(machine: u16, rtype: u32) -> bool {
+    match machine {
+        EM_AARCH64 => matches!(
+            rtype,
+            rt::R_AARCH64_ADR_GOT_PAGE | rt::R_AARCH64_LD64_GOT_LO12_NC
+        ),
+        EM_386 => matches!(rtype, rt::R_386_GOT32 | R_386_GOT32X),
+        _ => matches!(
+            rtype,
+            rt::R_X86_64_GOTPCREL | R_X86_64_GOTPCRELX | rt::R_X86_64_REX_GOTPCRELX
+        ),
+    }
+}
+
+/// A stub at `at` jumping through the GOT slot at `slot`.
+fn plt_entry(machine: u16, at: u64, slot: u64) -> [u8; PLT_ENTRY_SIZE as usize] {
+    let mut e = [0u8; PLT_ENTRY_SIZE as usize];
+    if machine == EM_AARCH64 {
+        let page = (slot & !0xfff).wrapping_sub(at & !0xfff) as i64 >> 12;
+        let imm = page as u32 & 0x1f_ffff;
+        let adrp = 0x9000_0010 | (imm & 3) << 29 | (imm >> 2) << 5;
+        let ldr = 0xf940_0211 | ((slot & 0xfff) as u32 / 8) << 10;
+        for (k, w) in [adrp, ldr, 0xd61f_0220, 0xd503_201f].iter().enumerate() {
+            e[k * 4..k * 4 + 4].copy_from_slice(&w.to_le_bytes());
+        }
+        return e;
+    }
+    // jmp *disp32(%rip), then a one-byte pad to the entry size.
+    e[0] = 0xff;
+    e[1] = 0x25;
+    e[2..6].copy_from_slice(&(slot.wrapping_sub(at + 6) as u32).to_le_bytes());
+    e[6..].fill(0xcc);
+    e
+}
+
+/// A `.eh_frame` input rewritten with its duplicate CIEs dropped.
+struct EhFrame {
+    bytes: Vec<u8>,
+    /// Size before the rewrite, for end-of-section references.
+    orig_size: u64,
+    /// Surviving ranges as (input offset, length, new offset), sorted.
+    kept: Vec<(u64, u64, u64)>,
+    /// Per FDE: its new offset, and the input section and new offset of
+    /// the CIE it names.
+    fdes: Vec<(u64, usize, u64)>,
+}
+
+impl EhFrame {
+    /// New offset of `off`, or `None` when the entry holding it went
+    /// away.
+    fn remap(&self, off: u64) -> Option<u64> {
+        if off >= self.orig_size {
+            return Some(self.bytes.len() as u64);
+        }
+        match self.kept.binary_search_by_key(&off, |k| k.0) {
+            Ok(k) => Some(self.kept[k].2),
+            Err(0) => None,
+            Err(k) => {
+                let (o, len, new) = self.kept[k - 1];
+                (off - o < len).then_some(new + (off - o))
+            }
+        }
+    }
+}
+
+/// Identity of a CIE for deduplication: the bytes after its length
+/// field, and the relocations covering it.
+#[derive(PartialEq, Eq, Hash)]
+struct CieKey {
+    bytes: Vec<u8>,
+    relocs: Vec<(u64, u32, String, i64)>,
+}
+
+/// One CIE copy, by the input section holding it and its offset there.
+type CieId = (usize, usize);
+
+/// A `.eh_frame` input's entries and the fate of each: for a CIE the
+/// copy that represents it, for an FDE the CIE it will name, and
+/// `None` for an FDE whose code left the link.
+struct EhSurvey {
+    ents: Vec<eh_frame::Entry>,
+    owner: Vec<Option<CieId>>,
+}
+
 struct DynReloc {
     offset: u64,
     rtype: u32,
     addend: i64,
+    /// `.dynsym` index the entry names; 0 where the fixup needs no
+    /// symbol.
+    sym: u32,
 }
 
 pub struct LdsLinker<'a> {
@@ -774,11 +1009,30 @@ pub struct LdsLinker<'a> {
     /// First `insecs` index of each object.
     obj_base: Vec<usize>,
     fates: Vec<SecFate>,
+    /// Sections a losing COMDAT group or `.gnu.linkonce` duplicate
+    /// owns. They contribute nothing: no bytes, no symbols, no
+    /// garbage-collection roots or edges.
+    comdat_dropped: HashSet<SecId>,
     /// insec index -> merge pool key, for merged sections.
     merge_of: HashMap<usize, usize>,
     /// Orphan class -> the output section later orphans stack after.
     orphan_anchor: HashMap<u32, usize>,
     pools: Vec<MergePool>,
+    /// insec index -> `.eh_frame` rewrite, for the inputs that lost a
+    /// CIE to deduplication.
+    eh_of: HashMap<usize, usize>,
+    eh_frames: Vec<EhFrame>,
+    /// Undefined references bound to an input shared library, sorted.
+    /// Their `.dynsym` indices are `1 + position`, which is what the
+    /// symbol-named dynamic relocations carry.
+    imports: Vec<String>,
+    import_of: HashMap<String, usize>,
+    /// The subset reached by a call, in the order of their PLT stubs.
+    plt_syms: Vec<String>,
+    plt_of: HashMap<String, usize>,
+    /// Program headers `SIZEOF_HEADERS` accounts for where the script
+    /// declares none, measured from the previous round's layout.
+    phdrs: usize,
 
     outs: Vec<OutSec>,
     /// Statement stream of the SECTIONS block with input claims
@@ -790,6 +1044,10 @@ pub struct LdsLinker<'a> {
     /// Common symbols coalesced into a synthetic bss chunk:
     /// name -> (insec index, offset, size, align).
     commons: HashMap<String, (usize, u64)>,
+    /// Every symbol the script assigns anywhere. A script assignment
+    /// outranks a synthesized section bound whatever order the two
+    /// reach the symbol table in.
+    script_assigned: HashSet<String>,
 
     // Per-pass state.
     placements: Vec<Placement>,
@@ -839,6 +1097,16 @@ pub struct LdsLinker<'a> {
     /// Merged `.note.gnu.property` body, empty when no input carries a
     /// property that survives the merge.
     gnu_property: Vec<u8>,
+    /// Per output section, bytes reserved after its last input piece
+    /// for erratum veneers; multiples of the page size so the insertion
+    /// preserves every following page offset and the site set with it.
+    veneer_reserve: BTreeMap<usize, u64>,
+    /// Veneer symbols the fix pass placed: (name, output section,
+    /// address).
+    veneer_syms: Vec<(String, usize, u64)>,
+    /// Per input section, its code ranges from `$x`/`$d` mapping
+    /// symbols; a section absent here is scanned whole.
+    code_spans: HashMap<usize, Vec<(u64, u64)>>,
 }
 
 /// Where each symbol landed in `build_symtab`'s output, for resolving
@@ -890,6 +1158,8 @@ const SYNTH_VERSYM: &str = ".gnu.version";
 const SYNTH_VERDEF: &str = ".gnu.version_d";
 const SYNTH_DYNAMIC: &str = ".dynamic";
 const SYNTH_EH_FRAME_HDR: &str = ".eh_frame_hdr";
+const SYNTH_INTERP: &str = ".interp";
+const SYNTH_PLT: &str = ".plt";
 const SYNTH_GNU_PROPERTY: &str = ".note.gnu.property";
 const OUT_EH_FRAME: &str = ".eh_frame";
 
@@ -930,8 +1200,9 @@ impl<'a> LdsLinker<'a> {
         for o in &objects {
             if o.class != class_for_machine(machine) {
                 return Err(err(&format!(
-                    "{}: ELF class does not match machine {machine}",
-                    o.source
+                    "{}: ELF class does not match machine {}",
+                    o.source,
+                    super::relocatable::elf_machine_desc(machine)
                 )));
             }
         }
@@ -967,6 +1238,7 @@ impl<'a> LdsLinker<'a> {
             if !o.sections.iter().any(drop_input) {
                 continue;
             }
+            let orig: Vec<u32> = o.sections.iter().map(|s| s.orig_shndx).collect();
             o.sections.retain(|s| !drop_input(s));
             o.shndx_map = o
                 .sections
@@ -974,6 +1246,16 @@ impl<'a> LdsLinker<'a> {
                 .enumerate()
                 .map(|(i, s)| (s.orig_shndx, i))
                 .collect();
+            for g in &mut o.groups {
+                g.members
+                    .retain_mut(|m| match o.shndx_map.get(&orig[*m]).copied() {
+                        Some(i) => {
+                            *m = i;
+                            true
+                        }
+                        None => false,
+                    });
+            }
         }
         // Pseudo-object for linker-synthesized sections.
         let synth_obj = objects.len();
@@ -984,6 +1266,7 @@ impl<'a> LdsLinker<'a> {
             class: class_for_machine(machine),
             sections: Vec::new(),
             symbols: Vec::new(),
+            groups: Vec::new(),
             shndx_map: HashMap::new(),
         });
 
@@ -997,13 +1280,22 @@ impl<'a> LdsLinker<'a> {
             insecs: Vec::new(),
             obj_base: Vec::new(),
             fates: Vec::new(),
+            comdat_dropped: HashSet::new(),
             merge_of: HashMap::new(),
             orphan_anchor: HashMap::new(),
             pools: Vec::new(),
+            eh_of: HashMap::new(),
+            eh_frames: Vec::new(),
+            imports: Vec::new(),
+            import_of: HashMap::new(),
+            plt_syms: Vec::new(),
+            plt_of: HashMap::new(),
+            phdrs: 4,
             outs: Vec::new(),
             stmts: Vec::new(),
             globals: HashMap::new(),
             commons: HashMap::new(),
+            script_assigned: HashSet::new(),
             placements: Vec::new(),
             script_now: HashMap::new(),
             script_prev: HashMap::new(),
@@ -1031,17 +1323,61 @@ impl<'a> LdsLinker<'a> {
             emitted: Vec::new(),
             sym_index: SymIndex::default(),
             gnu_property,
+            veneer_reserve: BTreeMap::new(),
+            veneer_syms: Vec::new(),
+            code_spans: HashMap::new(),
         };
+        linker.dedup_groups();
         linker.resolve_globals()?;
         linker.synthesize_sections();
         linker.flatten_inputs();
         linker.build_statements()?;
+        linker.collect_script_assigned();
+        linker.gc_sections();
         linker.claim_inputs()?;
         linker.build_merge_pools();
+        linker.build_eh_frame_dedup();
+        linker.build_imports();
+        linker.build_code_spans();
         Ok(linker)
     }
 
     // ---------------------------------------------------- symbol prep
+
+    /// Keep one copy of each COMDAT group and of each `.gnu.linkonce`
+    /// section. Runs before symbol resolution so a losing copy's
+    /// definitions never collide with the surviving one's.
+    fn dedup_groups(&mut self) {
+        let dropped = {
+            let views: Vec<comdat::ObjView<'_>> = self
+                .objects
+                .iter()
+                .map(|o| comdat::ObjView {
+                    groups: o
+                        .groups
+                        .iter()
+                        .map(|g| comdat::GroupView {
+                            flags: g.flags,
+                            signature: &g.signature,
+                            members: &g.members,
+                        })
+                        .collect(),
+                    section_names: o.sections.iter().map(|s| s.name.as_str()).collect(),
+                })
+                .collect();
+            comdat::dedup(&views).dropped
+        };
+        self.comdat_dropped = dropped;
+    }
+
+    /// The name of the section defining `sym` of object `oi`, if the
+    /// dedup dropped it.
+    fn dropped_home(&self, oi: usize, sym: &RawSym) -> Option<&str> {
+        let sec = *self.objects[oi].shndx_map.get(&sym.shndx)?;
+        self.comdat_dropped
+            .contains(&(oi, sec))
+            .then(|| self.objects[oi].sections[sec].name.as_str())
+    }
 
     fn resolve_globals(&mut self) -> Result<(), C5Error> {
         // Strong definitions win over weak; two strongs collide.
@@ -1052,6 +1388,12 @@ impl<'a> LdsLinker<'a> {
             for (si, s) in o.symbols.iter().enumerate() {
                 if s.name.is_empty() || s.binding() == STB_LOCAL {
                     continue;
+                }
+                if o.shndx_map
+                    .get(&s.shndx)
+                    .is_some_and(|&sec| self.comdat_dropped.contains(&(oi, sec)))
+                {
+                    continue; // the surviving copy owns the definition
                 }
                 match s.shndx as u16 {
                     SHN_UNDEF => {
@@ -1136,12 +1478,20 @@ impl<'a> LdsLinker<'a> {
             size: 0,
             relocs: Vec::new(),
             orig_shndx,
+            link: 0,
         });
         obj.shndx_map.insert(orig_shndx, idx);
         idx
     }
 
     fn synthesize_sections(&mut self) {
+        if let Some(path) = self.opts.interp.clone() {
+            let idx = self.push_synth_section(SYNTH_INTERP, SHT_PROGBITS, SHF_ALLOC);
+            let synth = self.synth_obj;
+            let sec = &mut self.objects[synth].sections[idx];
+            sec.addralign = 1;
+            sec.size = path.len() as u64 + 1;
+        }
         if !self.gnu_property.is_empty() {
             let idx = self.push_synth_section(SYNTH_GNU_PROPERTY, SHT_NOTE, SHF_ALLOC);
             let synth = self.synth_obj;
@@ -1161,6 +1511,11 @@ impl<'a> LdsLinker<'a> {
             sec.addralign = 4;
             sec.size = 36; // 12-byte header + "GNU\0" + 20-byte sha1
         }
+        if !self.opts.shared_libs.is_empty() {
+            let idx = self.push_synth_section(SYNTH_PLT, SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR);
+            let synth = self.synth_obj;
+            self.objects[synth].sections[idx].addralign = PLT_ENTRY_SIZE;
+        }
         if self.opts.emit == LdsEmit::Dyn {
             let (rela_name, rela_type, rela_ent) = self.dyn_reloc_kind();
             let rela = self.push_synth_section(rela_name, rela_type, SHF_ALLOC);
@@ -1171,20 +1526,31 @@ impl<'a> LdsLinker<'a> {
                 .opts
                 .pack_relative_relocs
                 .then(|| self.push_synth_section(SYNTH_RELR, SHT_RELR, SHF_ALLOC));
-            let got = self.push_synth_section(SYNTH_GOT, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE);
-            let gotplt = self.push_synth_section(SYNTH_GOTPLT, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE);
             let synth = self.synth_obj;
             let slot = self.class.addr_size();
             self.objects[synth].sections[rela].entsize = rela_ent;
             if let Some(relr) = relr {
                 self.objects[synth].sections[relr].entsize = slot;
             }
+        }
+        // bfd builds the GOT for every dynamic image, and on demand
+        // wherever an input names its base, so a static link reading
+        // `_GLOBAL_OFFSET_TABLE_` still has an address to give it.
+        if self.opts.emit == LdsEmit::Dyn || self.referenced.contains(GOT_SYMBOL) {
+            let got = self.push_synth_section(SYNTH_GOT, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE);
+            let gotplt = self.push_synth_section(SYNTH_GOTPLT, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE);
+            let synth = self.synth_obj;
+            let slot = self.class.addr_size();
+            let reserved = self.got_reserved();
             self.objects[synth].sections[got].entsize = slot;
-            // .got: one reserved header slot; GOT slots append per use.
-            self.objects[synth].sections[got].size = slot;
+            // .got: the reserved header, where this target keeps it;
+            // GOT slots append per use.
+            self.objects[synth].sections[got].size = reserved * slot;
             // .got.plt: three reserved slots, no PLT entries.
             self.objects[synth].sections[gotplt].entsize = slot;
             self.objects[synth].sections[gotplt].size = 3 * slot;
+        }
+        if self.opts.emit == LdsEmit::Dyn {
             self.synthesize_dynamic_sections();
         }
     }
@@ -1265,7 +1631,11 @@ impl<'a> LdsLinker<'a> {
             self.obj_base.push(self.insecs.len());
             for si in 0..o.sections.len() {
                 self.insecs.push(InSecId { obj: oi, sec: si });
-                self.fates.push(SecFate::Unclaimed);
+                self.fates.push(if self.comdat_dropped.contains(&(oi, si)) {
+                    SecFate::Discarded
+                } else {
+                    SecFate::Unclaimed
+                });
             }
         }
         self.placements = alloc::vec![Placement::default(); self.insecs.len()];
@@ -1377,6 +1747,160 @@ impl<'a> LdsLinker<'a> {
             }
         }
         self.handle_orphans()
+    }
+
+    /// `--gc-sections`: discard every allocatable input section no
+    /// root reaches through a relocation, before the specs claim
+    /// anything. bfd's rule set -- a section carrying none of
+    /// `SEC_ALLOC` / `SEC_LOAD` / `SEC_RELOC` is kept, as is a debug
+    /// section, `SHF_GNU_RETAIN`, and anything a `KEEP()` names.
+    fn gc_sections(&mut self) {
+        if !self.opts.gc_sections {
+            return;
+        }
+        let mut live = alloc::vec![false; self.insecs.len()];
+        let mut work: Vec<usize> = Vec::new();
+        // A section the group dedup dropped is not part of the link:
+        // it is neither a root nor a path to one, whatever names it.
+        let gone: Vec<bool> = self
+            .insecs
+            .iter()
+            .map(|id| self.comdat_dropped.contains(&(id.obj, id.sec)))
+            .collect();
+        let mark = |live: &mut [bool], work: &mut Vec<usize>, i: usize| {
+            if !live[i] && !gone[i] {
+                live[i] = true;
+                work.push(i);
+            }
+        };
+        // Sections GC never collects. Kept is not the same as
+        // reaching: a debug or unwind section names every function it
+        // describes, so following its relocations would keep the whole
+        // input. bfd keeps those sections and prunes their contents
+        // instead, and their references to a dropped section resolve
+        // to nothing rather than to a diagnostic.
+        for (i, keep) in live.iter_mut().enumerate() {
+            let id = self.insecs[i];
+            let s = &self.objects[id.obj].sections[id.sec];
+            let collectable = s.flags & SHF_ALLOC != 0;
+            *keep = !gone[i]
+                && (!collectable
+                    || s.flags & SHF_GNU_RETAIN != 0
+                    || is_debug_section(&s.name)
+                    || is_unwind_section(&s.name)
+                    || id.obj == self.synth_obj);
+        }
+        // `KEEP()` roots, matched the way the claim would match them.
+        let specs = self.keep_specs();
+        for spec in &specs {
+            for i in 0..self.insecs.len() {
+                if self.spec_matches(spec, i, None) && !is_unwind_section(&self.insec(i).name) {
+                    mark(&mut live, &mut work, i);
+                }
+            }
+        }
+        // Named roots: the entry point, `-u`, and every symbol the
+        // dynamic table exports.
+        let mut roots: Vec<String> = self.opts.undefined.clone();
+        if let Some(e) = self
+            .opts
+            .entry_override
+            .clone()
+            .or_else(|| self.script.entry().map(String::from))
+        {
+            roots.push(e);
+        }
+        if self.opts.emit == LdsEmit::Dyn {
+            roots.extend(self.globals.keys().cloned());
+        }
+        for name in &roots {
+            for i in self.sections_defining(name) {
+                mark(&mut live, &mut work, i);
+            }
+        }
+        // Reachability. A reference to `__start_X` / `__stop_X` keeps
+        // every section named `X`, the bound being meaningless without
+        // the content it brackets.
+        while let Some(i) = work.pop() {
+            let id = self.insecs[i];
+            for r in self.objects[id.obj].sections[id.sec].relocs.clone() {
+                for t in self.reloc_targets(id.obj, r.sym as usize) {
+                    mark(&mut live, &mut work, t);
+                }
+            }
+        }
+        for (i, keep) in live.iter().enumerate() {
+            if !keep {
+                self.fates[i] = SecFate::Discarded;
+            }
+        }
+    }
+
+    /// Every `KEEP()`-marked input spec in the script.
+    fn keep_specs(&self) -> Vec<InputSpec> {
+        let mut out: Vec<InputSpec> = Vec::new();
+        for cmd in &self.script.commands {
+            let Command::Sections(list) = cmd else {
+                continue;
+            };
+            for item in list {
+                let SectionsItem::Output(o) = item else {
+                    continue;
+                };
+                for c in &o.contents {
+                    if let SectionContent::Input(spec) = c
+                        && spec.keep
+                    {
+                        out.push(spec.clone());
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    /// Input sections defining `name`, plus every section the name
+    /// brackets when it is a `__start_` / `__stop_` bound.
+    fn sections_defining(&self, name: &str) -> Vec<usize> {
+        let mut out: Vec<usize> = Vec::new();
+        if let Some(&(oi, si)) = self.globals.get(name) {
+            let sym = &self.objects[oi].symbols[si];
+            if let Some(&sec) = self.objects[oi].shndx_map.get(&sym.shndx) {
+                out.push(self.insec_index(oi, sec));
+            }
+        }
+        let bracketed = name
+            .strip_prefix("__start_")
+            .or_else(|| name.strip_prefix("__stop_"));
+        if let Some(sec_name) = bracketed {
+            for i in 0..self.insecs.len() {
+                if self.insec(i).name == sec_name {
+                    out.push(i);
+                }
+            }
+        }
+        out
+    }
+
+    /// Input sections a relocation against symbol `si` of object `oi`
+    /// reaches: the defining section, resolved by name for a global.
+    fn reloc_targets(&self, oi: usize, si: usize) -> Vec<usize> {
+        let Some(sym) = self.objects[oi].symbols.get(si) else {
+            return Vec::new();
+        };
+        if sym.binding() != STB_LOCAL && !sym.name.is_empty() {
+            let by_name = self.sections_defining(&sym.name);
+            if !by_name.is_empty() {
+                return by_name;
+            }
+        }
+        match sym.shndx as u16 {
+            SHN_UNDEF | SHN_ABS | SHN_COMMON => Vec::new(),
+            _ => match self.objects[oi].shndx_map.get(&sym.shndx) {
+                Some(&sec) => alloc::vec![self.insec_index(oi, sec)],
+                None => Vec::new(),
+            },
+        }
     }
 
     /// Sections matched by one input spec, in ld order: for a spec
@@ -1843,22 +2367,429 @@ impl<'a> LdsLinker<'a> {
             }
             return 0;
         }
+        if let Some(&e) = self.eh_of.get(&i) {
+            return self.eh_frames[e].bytes.len() as u64;
+        }
         self.insec(i).size
+    }
+
+    /// Offset `off` into input section `i` after the content transforms
+    /// that move bytes within it. `None` when the byte is gone.
+    fn placed_off(&self, i: usize, off: u64) -> Option<u64> {
+        if self.merge_of.contains_key(&i) {
+            return Some(self.merge_remap(i, off));
+        }
+        match self.eh_of.get(&i) {
+            Some(&e) => self.eh_frames[e].remap(off),
+            None => Some(off),
+        }
+    }
+
+    // ---------------------------------------------- shared imports
+
+    /// Bind the references no input defines against the shared
+    /// libraries named on the command line. Each binding takes a
+    /// `.dynsym` entry and a GOT slot; one a call reaches also takes a
+    /// PLT stub, since a call site holds a displacement rather than a
+    /// slot to load through.
+    fn build_imports(&mut self) {
+        if self.opts.shared_libs.is_empty() {
+            return;
+        }
+        // The script's own definitions satisfy a reference on their
+        // own, whether or not a library exports the same name.
+        let assigned = self
+            .stmts
+            .iter()
+            .filter_map(|st| match st {
+                Stmt::Assign(a) => Some(a),
+                _ => None,
+            })
+            .chain(self.outs.iter().flat_map(|o| {
+                o.pieces.iter().filter_map(|p| match p {
+                    Piece::Assign(a) => Some(a),
+                    _ => None,
+                })
+            }));
+        let script_defined: HashSet<&str> = assigned
+            .map(|a| a.symbol.as_str())
+            .filter(|s| *s != ".")
+            .collect();
+        let mut names: BTreeSet<&str> = BTreeSet::new();
+        for o in &self.objects {
+            for s in &o.symbols {
+                if s.binding() != STB_LOCAL
+                    && s.shndx as u16 == SHN_UNDEF
+                    && !s.name.is_empty()
+                    && !self.globals.contains_key(&s.name)
+                    && !script_defined.contains(s.name.as_str())
+                    && self
+                        .opts
+                        .shared_libs
+                        .iter()
+                        .any(|l| l.lib.exports.contains(&s.name))
+                {
+                    names.insert(&s.name);
+                }
+            }
+        }
+        let mut called: BTreeSet<&str> = BTreeSet::new();
+        for o in &self.objects {
+            for sec in &o.sections {
+                for r in &sec.relocs {
+                    let Some(sym) = o.symbols.get(r.sym as usize) else {
+                        continue;
+                    };
+                    if reloc_needs_plt(self.machine, r.rtype)
+                        && names.contains(sym.name.as_str())
+                        && !self.is_data_export(&sym.name)
+                    {
+                        called.insert(&sym.name);
+                    }
+                }
+            }
+        }
+        self.imports = names.iter().map(|s| String::from(*s)).collect();
+        self.plt_syms = called.iter().map(|s| String::from(*s)).collect();
+        self.import_of = index_map(&self.imports);
+        self.plt_of = index_map(&self.plt_syms);
+    }
+
+    /// `.dynsym` index of an imported symbol. Imports sit right after
+    /// the null entry, in their own order.
+    fn dynsym_index(&self, name: &str) -> u32 {
+        self.import_of.get(name).map_or(0, |&k| 1 + k as u32)
+    }
+
+    /// True when a shared library exports `name` as a data object, so a
+    /// reference must reach the object itself rather than a PLT stub.
+    fn is_data_export(&self, name: &str) -> bool {
+        self.opts
+            .shared_libs
+            .iter()
+            .any(|l| l.lib.data_exports.contains(name))
+    }
+
+    /// Address a reference to an imported symbol resolves to: its PLT
+    /// stub for a call, its GOT slot for a load through one.
+    fn import_target(&self, name: &str, rtype: u32) -> Option<u64> {
+        if !self.import_of.contains_key(name) {
+            return None;
+        }
+        if reloc_needs_plt(self.machine, rtype) {
+            let k = *self.plt_of.get(name)?;
+            return Some(self.synth_addr(SYNTH_PLT)? + k as u64 * PLT_ENTRY_SIZE);
+        }
+        if reloc_uses_got(self.machine, rtype) {
+            let k = *self.got_map.get(name)?;
+            return Some(self.got_slot_base()? + k as u64 * self.class.addr_size());
+        }
+        None
+    }
+
+    /// PLT stub bytes: each jumps through its symbol's GOT slot, which
+    /// the loader fills from the `GLOB_DAT` entry naming the symbol.
+    /// Lazy binding would need a `.rela.plt` the loader walks on
+    /// demand; these bind at load time.
+    fn plt_bytes(&self) -> Vec<u8> {
+        let (Some(plt), Some(got)) = (self.synth_addr(SYNTH_PLT), self.got_slot_base()) else {
+            return Vec::new();
+        };
+        let slot_size = self.class.addr_size();
+        let mut out = Vec::with_capacity(self.plt_syms.len() * PLT_ENTRY_SIZE as usize);
+        for (k, name) in self.plt_syms.iter().enumerate() {
+            let at = plt + k as u64 * PLT_ENTRY_SIZE;
+            let slot = got + *self.got_map.get(name).unwrap_or(&0) as u64 * slot_size;
+            out.extend_from_slice(&plt_entry(self.machine, at, slot));
+        }
+        out
+    }
+
+    // ----------------------------------------------- .eh_frame CIEs
+
+    /// Rewrite the `.eh_frame` inputs of one output section the way
+    /// bfd's `elf-eh-frame.c` does: identical CIEs fold into the first
+    /// copy in output order, an FDE describing code that left the link
+    /// goes, and a CIE no surviving FDE names goes with it. Two CIEs
+    /// are one when the bytes after their length field and the
+    /// relocations covering them agree; bfd compares a CIE's parsed
+    /// fields and the symbol its personality resolves to, and those
+    /// follow from byte and relocation equality.
+    ///
+    /// Which CIEs survive is settled over the whole output section
+    /// before any input is rewritten: an FDE in a later input keeps a
+    /// CIE in an earlier one alive, so a single pass could not decide
+    /// it.
+    fn build_eh_frame_dedup(&mut self) {
+        let mut order: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+        for oi in 0..self.outs.len() {
+            for p in &self.outs[oi].pieces {
+                let Piece::Inputs(v) = p else { continue };
+                for &i in v {
+                    let s = self.insec(i);
+                    if s.name == OUT_EH_FRAME
+                        && eh_frame_shtype(self.machine, s.shtype)
+                        && s.size != 0
+                    {
+                        order.entry(oi).or_default().push(i);
+                    }
+                }
+            }
+        }
+        let mut built: Vec<(usize, EhFrame)> = Vec::new();
+        for inputs in order.values() {
+            let mut canon: HashMap<CieKey, CieId> = HashMap::new();
+            let mut used: HashSet<CieId> = HashSet::new();
+            let surveys: Vec<Option<EhSurvey>> = inputs
+                .iter()
+                .map(|&i| self.survey_eh_frame(i, &mut canon, &mut used))
+                .collect();
+            // Offset a surviving CIE landed at, for the FDEs naming it.
+            let mut placed: HashMap<CieId, (usize, u64)> = HashMap::new();
+            for (&i, survey) in inputs.iter().zip(&surveys) {
+                let Some(s) = survey else { continue };
+                if let Some(f) = self.rewrite_eh_frame(i, s, &used, &mut placed) {
+                    built.push((i, f));
+                }
+            }
+        }
+        for (i, f) in built {
+            self.eh_of.insert(i, self.eh_frames.len());
+            self.eh_frames.push(f);
+        }
+    }
+
+    /// Whether the first relocated field in `[off, off + len)` of
+    /// input section `i` names a definition that leaves the link. In
+    /// an FDE that field is the initial location, which is what
+    /// decides whether the entry still describes anything.
+    fn covers_discarded(&self, i: usize, off: usize, len: usize) -> bool {
+        let id = self.insecs[i];
+        let o = &self.objects[id.obj];
+        o.sections[id.sec]
+            .relocs
+            .iter()
+            .filter(|r| (r.offset as usize) >= off && (r.offset as usize) < off + len)
+            .min_by_key(|r| r.offset)
+            .is_some_and(|r| self.defines_discarded(id.obj, r.sym as usize))
+    }
+
+    fn defines_discarded(&self, oi: usize, si: usize) -> bool {
+        let Some(sym) = self.objects[oi].symbols.get(si) else {
+            return false;
+        };
+        let (doi, dsi) = if sym.binding() != STB_LOCAL && !sym.name.is_empty() {
+            match self.globals.get(&sym.name) {
+                Some(&d) => d,
+                None => return self.dropped_home(oi, sym).is_some(),
+            }
+        } else {
+            (oi, si)
+        };
+        let home = &self.objects[doi].symbols[dsi].shndx;
+        match self.objects[doi].shndx_map.get(home) {
+            Some(&sec) => self.fates[self.insec_index(doi, sec)] == SecFate::Discarded,
+            None => false,
+        }
+    }
+
+    /// Decide the fate of one `.eh_frame` input's entries, registering
+    /// its CIEs in its output section's table and marking the ones a
+    /// surviving FDE needs. `None` leaves the input untouched.
+    fn survey_eh_frame(
+        &self,
+        i: usize,
+        canon: &mut HashMap<CieKey, CieId>,
+        used: &mut HashSet<CieId>,
+    ) -> Option<EhSurvey> {
+        let id = self.insecs[i];
+        let o = &self.objects[id.obj];
+        let data = o.section_data(&o.sections[id.sec]);
+        let ents = eh_frame::entries(data).ok()?;
+        // An FDE names its CIE by a distance back from its own pointer
+        // field, so a well-formed input has that CIE among the entries
+        // ahead of it. Reject the rest before any of it is registered.
+        let cie_offs: HashSet<usize> = ents
+            .iter()
+            .filter(|e| e.cie.is_none())
+            .map(|e| e.off)
+            .collect();
+        if ents
+            .iter()
+            .any(|e| e.cie.is_some_and(|at| !cie_offs.contains(&at)))
+        {
+            return None;
+        }
+        let mut local: HashMap<usize, CieId> = HashMap::new();
+        let mut owner: Vec<Option<CieId>> = Vec::with_capacity(ents.len());
+        for e in &ents {
+            match e.cie {
+                None => {
+                    let c = *canon.entry(self.cie_key(i, data, e)).or_insert((i, e.off));
+                    local.insert(e.off, c);
+                    owner.push(Some(c));
+                }
+                // An FDE describing code that left the link describes
+                // nothing; bfd drops the entry rather than relocate it.
+                Some(_) if self.covers_discarded(i, e.off, e.len) => owner.push(None),
+                Some(at) => {
+                    let c = *local.get(&at)?;
+                    used.insert(c);
+                    owner.push(Some(c));
+                }
+            }
+        }
+        Some(EhSurvey { ents, owner })
+    }
+
+    /// Emit one `.eh_frame` input under the fates the survey settled.
+    /// `None` when every entry stays where it is, which leaves the
+    /// input's bytes and offsets untouched.
+    fn rewrite_eh_frame(
+        &self,
+        i: usize,
+        survey: &EhSurvey,
+        used: &HashSet<CieId>,
+        placed: &mut HashMap<CieId, (usize, u64)>,
+    ) -> Option<EhFrame> {
+        let id = self.insecs[i];
+        let o = &self.objects[id.obj];
+        let data = o.section_data(&o.sections[id.sec]);
+        let ents = &survey.ents;
+        let mut bytes: Vec<u8> = Vec::with_capacity(data.len());
+        let mut kept: Vec<(u64, u64, u64)> = Vec::new();
+        let mut fdes: Vec<(u64, usize, u64)> = Vec::new();
+        let mut dropped = false;
+        for (e, owner) in ents.iter().zip(&survey.owner) {
+            match (e.cie, owner) {
+                (_, None) => {
+                    dropped = true;
+                    continue;
+                }
+                (None, Some(c)) => {
+                    // A duplicate copy, or one no surviving FDE names.
+                    if *c != (i, e.off) || !used.contains(c) {
+                        dropped = true;
+                        continue;
+                    }
+                    placed.insert(*c, (i, bytes.len() as u64));
+                }
+                (Some(_), Some(c)) => {
+                    let (sec, off) = *placed.get(c)?;
+                    fdes.push((bytes.len() as u64, sec, off));
+                }
+            }
+            kept.push((e.off as u64, e.len as u64, bytes.len() as u64));
+            bytes.extend_from_slice(&data[e.off..e.off + e.len]);
+        }
+        // Whatever follows the last entry (a terminator, padding) is
+        // not addressed by any of them and carries over verbatim.
+        let tail = ents.last().map_or(0, |e| e.off + e.len);
+        kept.push((tail as u64, (data.len() - tail) as u64, bytes.len() as u64));
+        bytes.extend_from_slice(&data[tail..]);
+        // An entry stream stopping short of the section's alignment
+        // would leave the padding before the next input inside the
+        // linked stream, where a zero length ends it. bfd gives the
+        // padding to the last entry instead; so does this.
+        let align = self.insec(i).addralign.max(1) as usize;
+        let padded = tail == data.len() && kept.len() > 1 && !bytes.len().is_multiple_of(align);
+        if padded {
+            let at = kept[kept.len() - 2].2 as usize;
+            let pad = align - bytes.len() % align;
+            let len = u32::from_le_bytes(bytes[at..at + 4].try_into().ok()?) + pad as u32;
+            bytes[at..at + 4].copy_from_slice(&len.to_le_bytes());
+            bytes.resize(bytes.len() + pad, 0);
+        }
+        if !dropped && !padded {
+            return None;
+        }
+        Some(EhFrame {
+            orig_size: data.len() as u64,
+            bytes,
+            kept,
+            fdes,
+        })
+    }
+
+    fn cie_key(&self, i: usize, data: &[u8], e: &eh_frame::Entry) -> CieKey {
+        let id = self.insecs[i];
+        let s = &self.objects[id.obj].sections[id.sec];
+        let (start, end) = (e.off as u64, (e.off + e.len) as u64);
+        let relocs = s
+            .relocs
+            .iter()
+            .filter(|r| r.offset >= start && r.offset < end)
+            .map(|r| {
+                // A local symbol is named by nothing an object outside
+                // its own can match, so it keeps the CIE to itself.
+                let sym = &self.objects[id.obj].symbols[r.sym as usize];
+                let name = match sym.binding() {
+                    STB_LOCAL => format!("{}:{}", id.obj, r.sym),
+                    _ => sym.name.clone(),
+                };
+                (r.offset - start, r.rtype, name, r.addend)
+            })
+            .collect();
+        CieKey {
+            bytes: data[e.off + 4..e.off + e.len].to_vec(),
+            relocs,
+        }
+    }
+
+    /// Point every FDE of a rewritten input at the CIE that survived.
+    /// The field holds the distance back from itself to the CIE, so it
+    /// settles only once both have been placed.
+    fn patch_eh_frame(&self, contents: &mut HashMap<usize, Vec<u8>>) {
+        for (&i, &e) in &self.eh_of {
+            let SecFate::Placed { out } = self.fates[i] else {
+                continue;
+            };
+            let Some(buf) = contents.get_mut(&out) else {
+                continue;
+            };
+            let base = self.placements[i].off;
+            for &(fde, cie_sec, cie_off) in &self.eh_frames[e].fdes {
+                let field = base + fde + eh_frame::CIE_POINTER as u64;
+                let cie = self.placements[cie_sec].off + cie_off;
+                let (Some(v), true) = (
+                    field.checked_sub(cie).and_then(|d| u32::try_from(d).ok()),
+                    field + 4 <= buf.len() as u64,
+                ) else {
+                    continue;
+                };
+                buf[field as usize..field as usize + 4].copy_from_slice(&v.to_le_bytes());
+            }
+        }
     }
 
     // --------------------------------------------------------- layout
 
     fn run(&mut self) -> Result<LdsResult, C5Error> {
-        let mut prev_fingerprint: Option<Vec<u64>> = None;
         let mut converged = false;
-        for _pass in 0..48 {
-            self.layout_pass(false)?;
-            let fp = self.fingerprint();
-            if prev_fingerprint.as_ref() == Some(&fp) {
-                converged = true;
+        // Each round settles the layout for the current header count,
+        // then measures the count that layout produces.
+        for _round in 0..4 {
+            let mut prev_fingerprint: Option<Vec<u64>> = None;
+            converged = false;
+            for _pass in 0..48 {
+                self.layout_pass(false)?;
+                self.a53_size_reserve();
+                let fp = self.fingerprint();
+                if prev_fingerprint.as_ref() == Some(&fp) {
+                    converged = true;
+                    break;
+                }
+                prev_fingerprint = Some(fp);
+            }
+            if !converged {
                 break;
             }
-            prev_fingerprint = Some(fp);
+            let order = self.kept_order();
+            let n = self.build_phdrs(&order)?.len();
+            if n == self.phdr_count_estimate() {
+                break;
+            }
+            self.phdrs = n;
         }
         if !converged {
             return Err(err("script layout did not converge"));
@@ -1907,7 +2838,214 @@ impl<'a> LdsLinker<'a> {
         fp.push(self.dyn_relas.len() as u64);
         fp.push(self.relr_addrs.len() as u64);
         fp.push(self.got_slots.len() as u64);
+        for (&oi, &v) in &self.veneer_reserve {
+            fp.push(oi as u64);
+            fp.push(v);
+        }
         fp
+    }
+
+    // -------------------------------------- erratum 843419 workaround
+
+    fn a53_active(&self) -> bool {
+        self.machine == EM_AARCH64 && self.opts.fix_cortex_a53_843419
+    }
+
+    /// Code ranges from `$x`/`$d` mapping symbols. Bytes before the
+    /// first mapping symbol count as code, as does a section carrying
+    /// none (LLD's reading; ld skips unmapped sections entirely).
+    fn build_code_spans(&mut self) {
+        if !self.a53_active() {
+            return;
+        }
+        let mapping = |name: &str, tag: &str| {
+            name == tag || (name.starts_with(tag) && name[tag.len()..].starts_with('.'))
+        };
+        for obj_i in 0..self.objects.len() {
+            let o = &self.objects[obj_i];
+            let mut per_sec: HashMap<usize, Vec<(u64, bool)>> = HashMap::new();
+            for sym in &o.symbols {
+                if sym.binding() != STB_LOCAL {
+                    continue;
+                }
+                let code = mapping(&sym.name, "$x");
+                if !code && !mapping(&sym.name, "$d") {
+                    continue;
+                }
+                if let Some(&sec) = o.shndx_map.get(&sym.shndx) {
+                    per_sec.entry(sec).or_default().push((sym.value, code));
+                }
+            }
+            for (sec, mut marks) in per_sec {
+                let size = o.sections[sec].size;
+                marks.sort_unstable();
+                let mut spans: Vec<(u64, u64)> = Vec::new();
+                let (mut code, mut start) = (true, 0u64);
+                for (off, c) in marks {
+                    if c == code {
+                        continue;
+                    }
+                    if code && off > start {
+                        spans.push((start, off));
+                    }
+                    (code, start) = (c, off);
+                }
+                if code && size > start {
+                    spans.push((start, size));
+                }
+                let i = self.insec_index(obj_i, sec);
+                self.code_spans.insert(i, spans);
+            }
+        }
+    }
+
+    /// Erratum sites of one placed input chunk, as offsets into the
+    /// input section. The scan reads the input bytes: relocations only
+    /// rewrite immediate fields, so sizing and the fix pass, before
+    /// and after they apply, see one site set.
+    fn a53_sites(&self, i: usize, vaddr: u64, len: u64) -> Vec<erratum::Site> {
+        let id = self.insecs[i];
+        if id.obj == self.synth_obj {
+            return Vec::new();
+        }
+        let s = &self.objects[id.obj].sections[id.sec];
+        if s.shtype != SHT_PROGBITS || s.flags & SHF_EXECINSTR == 0 {
+            return Vec::new();
+        }
+        let bytes = self.chunk_input_bytes(i);
+        let limit = (len as usize).min(bytes.len()) as u64;
+        let whole = [(0u64, limit)];
+        let spans = match self.code_spans.get(&i) {
+            Some(v) => &v[..],
+            None => &whole[..],
+        };
+        let mut sites = Vec::new();
+        for &(s, e) in spans {
+            let (s, e) = (s.min(limit), e.min(limit));
+            if e <= s {
+                continue;
+            }
+            for site in erratum::scan(&bytes[s as usize..e as usize], vaddr + s) {
+                sites.push(erratum::Site {
+                    adrp_off: site.adrp_off + s,
+                    ldst_off: site.ldst_off + s,
+                });
+            }
+        }
+        sites
+    }
+
+    /// Between passes: size each executable output section's veneer
+    /// area from the sites its current addresses expose. Every site
+    /// takes a slot, as under ld, since whether ADR reach spares the
+    /// veneer is known only once relocations are applied.
+    fn a53_size_reserve(&mut self) {
+        if !self.a53_active() {
+            return;
+        }
+        let mut reserve: BTreeMap<usize, u64> = BTreeMap::new();
+        for oi in 0..self.outs.len() {
+            let o = &self.outs[oi];
+            if !o.alloc || o.flags & SHF_EXECINSTR == 0 || o.shtype == SHT_NOBITS {
+                continue;
+            }
+            let mut n = 0u64;
+            for (off, len, src) in &o.chunks {
+                if let ChunkSrc::Input(i) = src {
+                    n += self.a53_sites(*i, o.addr + off, *len).len() as u64;
+                }
+            }
+            if n > 0 {
+                reserve.insert(oi, align_up(8 * n, 0x1000));
+            }
+        }
+        self.veneer_reserve = reserve;
+    }
+
+    /// Final pass over the relocated bytes: rewrite each site's ADRP as
+    /// ADR when its page is in ADR range, otherwise move the dependent
+    /// load/store into a veneer slot ending in a branch back and put a
+    /// branch to the slot in its place, as ld's workaround does.
+    fn a53_apply_fix(&mut self, contents: &mut HashMap<usize, Vec<u8>>) {
+        if !self.a53_active() {
+            return;
+        }
+        let rd32 = |b: &[u8], o: usize| u32::from_le_bytes([b[o], b[o + 1], b[o + 2], b[o + 3]]);
+        let wr32 = |b: &mut [u8], o: usize, v: u32| b[o..o + 4].copy_from_slice(&v.to_le_bytes());
+        let branch = |from: u64, to: u64| {
+            let d = to.wrapping_sub(from) as i64;
+            (-(1i64 << 27)..(1i64 << 27))
+                .contains(&d)
+                .then_some(0x1400_0000u32 | (((d >> 2) as u32) & 0x03ff_ffff))
+        };
+        for oi in 0..self.outs.len() {
+            let area = self.outs[oi]
+                .chunks
+                .iter()
+                .find_map(|(o, l, s)| matches!(s, ChunkSrc::Veneers).then_some((*o, *l)));
+            let Some((area_off, area_len)) = area else {
+                continue;
+            };
+            let sec_addr = self.outs[oi].addr;
+            let mut fixes: Vec<(u64, u64, String)> = Vec::new();
+            for (off, len, src) in &self.outs[oi].chunks {
+                let ChunkSrc::Input(i) = src else { continue };
+                let id = self.insecs[*i];
+                for s in self.a53_sites(*i, sec_addr + off, *len) {
+                    // ld names each veneer after the input section
+                    // identity and the dependent load/store's offset.
+                    let name = format!("e843419@{:04x}_{:08x}_{:x}", id.obj, id.sec, s.ldst_off);
+                    fixes.push((off + s.adrp_off, off + s.ldst_off, name));
+                }
+            }
+            let Some(buf) = contents.get_mut(&oi) else {
+                continue;
+            };
+            let mut slot = 0u64;
+            for (adrp_off, ldst_off, name) in fixes {
+                let insn = rd32(buf, adrp_off as usize);
+                if !erratum::is_adrp(insn) {
+                    self.errors.push(format!(
+                        "erratum 843419 site at {:#x} lost its ADRP",
+                        sec_addr + adrp_off
+                    ));
+                    continue;
+                }
+                let place = sec_addr + adrp_off;
+                let imm = erratum::adrp_page_delta(insn) - (place & 0xfff) as i64;
+                if (erratum::ADR_MIN..=erratum::ADR_MAX).contains(&imm) {
+                    wr32(
+                        buf,
+                        adrp_off as usize,
+                        erratum::encode_adr(insn & 0x1f, imm),
+                    );
+                    continue;
+                }
+                if (slot + 1) * 8 > area_len {
+                    self.errors
+                        .push("erratum 843419 veneer area smaller than its site count".to_string());
+                    break;
+                }
+                let slot_off = area_off + 8 * slot;
+                slot += 1;
+                let ldst_addr = sec_addr + ldst_off;
+                let slot_addr = sec_addr + slot_off;
+                let (Some(to), Some(back)) = (
+                    branch(ldst_addr, slot_addr),
+                    branch(slot_addr + 4, ldst_addr + 4),
+                ) else {
+                    self.errors.push(format!(
+                        "erratum 843419 veneer out of branch range at {ldst_addr:#x}"
+                    ));
+                    continue;
+                };
+                let ldst = rd32(buf, ldst_off as usize);
+                wr32(buf, slot_off as usize, ldst);
+                wr32(buf, slot_off as usize + 4, back);
+                wr32(buf, ldst_off as usize, to);
+                self.veneer_syms.push((name, oi, slot_addr));
+            }
+        }
     }
 
     fn layout_pass(&mut self, final_pass: bool) -> Result<(), C5Error> {
@@ -2072,6 +3210,13 @@ impl<'a> LdsLinker<'a> {
         let code = self.section_input_flags(oi) & SHF_EXECINSTR != 0;
         let machine = self.machine;
         let mut file_bytes = false;
+        // The veneer area sits after the section's last input piece, as
+        // ld attaches its stub section, so closing statements still
+        // bound it.
+        let veneer_len = self.veneer_reserve.get(&oi).copied().unwrap_or(0);
+        let last_inputs_pi = (0..pieces_len)
+            .rev()
+            .find(|&pi| matches!(self.outs[oi].pieces[pi], Piece::Inputs(_)));
         for pi in 0..pieces_len {
             match self.outs[oi].pieces[pi].clone() {
                 Piece::Inputs(v) => {
@@ -2117,6 +3262,21 @@ impl<'a> LdsLinker<'a> {
                             file_bytes = true;
                         }
                         off += sz;
+                        end = end.max(off);
+                        if alloc {
+                            self.dot = start + off;
+                        }
+                    }
+                    if veneer_len > 0 && Some(pi) == last_inputs_pi {
+                        let aligned = align_up(off, 4);
+                        if aligned > off && !all_nobits {
+                            let len = aligned - off;
+                            let pad = pad_bytes(&fill_bytes, machine, code, len);
+                            chunks.push((off, len, ChunkSrc::Pad(pad)));
+                        }
+                        chunks.push((aligned, veneer_len, ChunkSrc::Veneers));
+                        file_bytes = true;
+                        off = aligned + veneer_len;
                         end = end.max(off);
                         if alloc {
                             self.dot = start + off;
@@ -2176,9 +3336,18 @@ impl<'a> LdsLinker<'a> {
         } else {
             SHT_PROGBITS
         };
-        // Merge-related flags survive only when every input agrees.
-        let mut flags =
-            in_flags & !(SHF_GROUP | SHF_LINK_ORDER | SHF_INFO_LINK | SHF_GNU_RETAIN | SHF_EXCLUDE);
+        // A group is an input-side construct and its member index does
+        // not survive the link, so bfd clears SHF_GROUP; the retain
+        // flag describes the content and does survive. Link order is
+        // a property of the whole output section, so bfd takes it from
+        // the section opening the output and from no other.
+        let mut flags = in_flags & !(SHF_GROUP | SHF_INFO_LINK | SHF_EXCLUDE | SHF_LINK_ORDER);
+        if self
+            .first_input(oi)
+            .is_some_and(|i| self.insec(i).flags & SHF_LINK_ORDER != 0)
+        {
+            flags |= SHF_LINK_ORDER;
+        }
         let uniform = !in_flag_set.is_empty()
             && in_flag_set.iter().all(|&f| f == in_flag_set[0])
             && entsizes.iter().all(|&e| e == entsizes[0]);
@@ -2232,7 +3401,71 @@ impl<'a> LdsLinker<'a> {
             self.outs[oi].lma = self.outs[oi].addr;
             self.dot = saved_dot;
         }
+        self.define_start_stop(oi);
         self.cur_out = None;
+    }
+
+    /// Every symbol the script assigns, at file scope, in the
+    /// statement stream, or inside an output section.
+    fn collect_script_assigned(&mut self) {
+        let mut out: HashSet<String> = HashSet::new();
+        for c in &self.script.commands {
+            if let Command::Assign(a) = c {
+                out.insert(a.symbol.clone());
+            }
+        }
+        for st in &self.stmts {
+            if let Stmt::Assign(a) = st {
+                out.insert(a.symbol.clone());
+            }
+        }
+        for o in &self.outs {
+            for p in &o.pieces {
+                if let Piece::Assign(a) = p {
+                    out.insert(a.symbol.clone());
+                }
+            }
+        }
+        self.script_assigned = out;
+    }
+
+    /// Bound an output section whose name is a C identifier with
+    /// `__start_<name>` / `__stop_<name>`, as bfd's
+    /// `lang_init_start_stop` does. Both follow PROVIDE's rule -- a
+    /// referenced, otherwise-undefined name only -- and take the
+    /// section's binding and visibility, not the script-symbol
+    /// defaults: GLOBAL PROTECTED, matching `-z
+    /// start-stop-visibility`'s default.
+    fn define_start_stop(&mut self, oi: usize) {
+        let (name, addr, size, alloc) = {
+            let o = &self.outs[oi];
+            (o.name.clone(), o.addr, o.size, o.alloc)
+        };
+        if !alloc || !is_c_identifier(&name) {
+            return;
+        }
+        for (prefix, value) in [("__start_", addr), ("__stop_", addr + size)] {
+            let sym = alloc::format!("{prefix}{name}");
+            if self.globals.contains_key(&sym)
+                || self.script_assigned.contains(&sym)
+                || !self.referenced.contains(&sym)
+            {
+                continue;
+            }
+            self.script_now.insert(
+                sym,
+                ScriptSym {
+                    val: Val {
+                        v: value,
+                        att: Att::Out(oi),
+                    },
+                    hidden: false,
+                    kind: STT_NOTYPE,
+                    final_out: Some(oi),
+                    vis: Some(STV_PROTECTED),
+                },
+            );
+        }
     }
 
     fn synth_out_type(&self, oi: usize) -> Option<u32> {
@@ -2307,14 +3540,41 @@ impl<'a> LdsLinker<'a> {
         } else {
             None
         };
+        let kind = self.assigned_sym_type(a);
         self.script_now.insert(
             a.symbol.clone(),
             ScriptSym {
                 val: value,
                 hidden: a.hidden,
+                kind,
                 final_out,
+                vis: None,
             },
         );
+    }
+
+    /// Type a script-defined symbol takes from its expression. bfd
+    /// copies the source symbol's type when the expression names one
+    /// symbol and nothing else (ldexp.c's `expld.assign_src`, applied
+    /// through `bfd_copy_link_hash_symbol_type`); a compound
+    /// expression leaves the symbol untyped. An operator assignment
+    /// reads the destination, so it names that symbol too.
+    fn assigned_sym_type(&self, a: &Assignment) -> u8 {
+        let mut names: HashSet<String> = HashSet::new();
+        collect_symbols(&a.value, &mut names);
+        if a.op != AssignOp::Set {
+            names.insert(a.symbol.clone());
+        }
+        if names.len() != 1 {
+            return STT_NOTYPE;
+        }
+        let Some(name) = names.iter().next() else {
+            return STT_NOTYPE;
+        };
+        match self.globals.get(name) {
+            Some(&(oi, si)) => self.objects[oi].symbols[si].kind(),
+            None => STT_NOTYPE,
+        }
     }
 
     /// ld's section_for_dot: the symtab section for a symbol assigned
@@ -2416,7 +3676,7 @@ impl<'a> LdsLinker<'a> {
             return Some(Val { v: self.dot, att });
         }
         if let Some(s) = self.script_now.get(name) {
-            return Some(s.val);
+            return Some(s.val.as_reference());
         }
         if let Some(&(oi, si)) = self.globals.get(name)
             && let Some(v) = self.object_sym_val(oi, si)
@@ -2424,7 +3684,7 @@ impl<'a> LdsLinker<'a> {
             return Some(v);
         }
         if let Some(s) = self.script_prev.get(name) {
-            return Some(s.val);
+            return Some(s.val.as_reference());
         }
         None
     }
@@ -2446,11 +3706,7 @@ impl<'a> LdsLinker<'a> {
                         // exact values; later ones fall back to the
                         // previous pass's placement, which matches at
                         // convergence.
-                        let off = if self.merge_of.contains_key(&i) {
-                            self.merge_remap(i, sym.value)
-                        } else {
-                            sym.value
-                        };
+                        let off = self.placed_off(i, sym.value)?;
                         let base = if let Some(&pl) = self.merge_of.get(&i) {
                             self.placements[self.pools[pl].rep].off
                         } else {
@@ -2692,8 +3948,25 @@ impl<'a> LdsLinker<'a> {
         }
     }
 
+    /// Output sections the writer will emit, in statement order. The
+    /// same selection `finish` makes, without settling anything.
+    fn kept_order(&self) -> Vec<usize> {
+        self.stmts
+            .iter()
+            .filter_map(|st| match st {
+                Stmt::Open(oi) => Some(*oi),
+                _ => None,
+            })
+            .filter(|&oi| self.outs[oi].name != "/DISCARD/" && self.outs[oi].size != 0)
+            .collect()
+    }
+
+    /// What `SIZEOF_HEADERS` counts. A `PHDRS` command states it; the
+    /// default segment set is measured from a settled layout and fed
+    /// back, since a script places its first section past the headers
+    /// and a count short of the truth leaves that section below them.
     fn phdr_count_estimate(&self) -> usize {
-        self.script.phdrs().map(|p| p.len()).unwrap_or(4)
+        self.script.phdrs().map(|p| p.len()).unwrap_or(self.phdrs)
     }
 
     // -------------------------------------------- dynamic reloc sizing
@@ -2710,8 +3983,10 @@ impl<'a> LdsLinker<'a> {
         // GOT slot set stays stable across passes (driven by reloc
         // types alone), so compute it once.
         if self.got_slots.is_empty() && self.got_map.is_empty() {
-            let mut slots: Vec<String> = Vec::new();
-            let mut map: HashMap<String, usize> = HashMap::new();
+            // Every import loads through a slot the loader fills, so
+            // each takes one whether or not an input names the GOT.
+            let mut slots: Vec<String> = self.imports.clone();
+            let mut map: HashMap<String, usize> = index_map(&slots);
             for i in 0..self.insecs.len() {
                 let SecFate::Placed { .. } = self.fates[i] else {
                     continue;
@@ -2769,10 +4044,12 @@ impl<'a> LdsLinker<'a> {
                 // resolution to load time.
                 if !self.reloc_is_relative(id.obj, r.sym as usize) {
                     if self.undefweak_dynamic(id.obj, r.sym as usize) {
+                        let name = &self.objects[id.obj].symbols[r.sym as usize].name;
                         sym_relas.push(DynReloc {
                             offset: base + r.offset,
                             rtype: abs_addr,
                             addend: r.addend,
+                            sym: self.dynsym_index(name),
                         });
                     }
                     continue;
@@ -2788,10 +4065,10 @@ impl<'a> LdsLinker<'a> {
         }
         // GOT slots are RELATIVE targets too; a slot for an unresolved
         // weak reference gets GLOB_DAT instead.
-        let got_base = self.got_addr_prevpass();
-        if let Some(got_base) = got_base {
+        let slot_size = self.class.addr_size();
+        if let Some(got_base) = self.got_slot_base() {
             for (k, name) in self.got_slots.clone().iter().enumerate() {
-                let slot = got_base + 8 + k as u64 * 8;
+                let slot = got_base + k as u64 * slot_size;
                 if let Some(v) = self.resolve_name(name) {
                     rel_addrs.push((slot, v as i64, true));
                 } else {
@@ -2799,6 +4076,7 @@ impl<'a> LdsLinker<'a> {
                         offset: slot,
                         rtype: glob_dat,
                         addend: 0,
+                        sym: self.dynsym_index(name),
                     });
                 }
             }
@@ -2814,6 +4092,7 @@ impl<'a> LdsLinker<'a> {
                     offset: addr,
                     rtype: relative,
                     addend,
+                    sym: 0,
                 });
             }
         }
@@ -2836,8 +4115,10 @@ impl<'a> LdsLinker<'a> {
         // bfd reserves `_GLOBAL_OFFSET_TABLE_[0]` once the link either
         // needs a GOT slot or creates a `.dynamic` for the header to
         // point at; a link with neither leaves `.got` empty, which
-        // scripts assert on.
-        let got_header = !self.got_slots.is_empty() || self.kept_synth(SYNTH_DYNAMIC).is_some();
+        // scripts assert on. Where the header sits on `.got.plt`,
+        // `.got` reserves nothing.
+        let got_header = self.got_reserved() != 0
+            && (!self.got_slots.is_empty() || self.kept_synth(SYNTH_DYNAMIC).is_some());
         let (rela_name, _, rela_ent) = self.dyn_reloc_kind();
         let slot = self.class.addr_size();
         let synth = self.synth_obj;
@@ -2853,12 +4134,10 @@ impl<'a> LdsLinker<'a> {
             match sec.name.as_str() {
                 SYNTH_RELR => sec.size = relr_words.len() as u64 * slot,
                 SYNTH_GOT => {
-                    sec.size = if got_header {
-                        slot + self.got_slots.len() as u64 * slot
-                    } else {
-                        0
-                    }
+                    let header = if got_header { slot } else { 0 };
+                    sec.size = header + self.got_slots.len() as u64 * slot;
                 }
+                SYNTH_PLT => sec.size = self.plt_syms.len() as u64 * PLT_ENTRY_SIZE,
                 _ => {}
             }
         }
@@ -2967,7 +4246,21 @@ impl<'a> LdsLinker<'a> {
     /// script. Each version definition also contributes a symbol
     /// naming itself.
     fn collect_dyn_exports(&self, out_shndx: &dyn Fn(usize) -> u16) -> Vec<DynSym> {
-        let mut out: Vec<DynSym> = Vec::new();
+        // Imports come first and in their own order: a dynamic
+        // relocation names one by the index that ordering fixes.
+        let mut out: Vec<DynSym> = self
+            .imports
+            .iter()
+            .map(|name| DynSym {
+                name: name.clone(),
+                info: (STB_GLOBAL << 4) | STT_NOTYPE,
+                other: STV_DEFAULT,
+                shndx: SHN_UNDEF,
+                value: 0,
+                size: 0,
+                version: dynamic::VER_NDX_GLOBAL,
+            })
+            .collect();
         let mut names: Vec<&String> = self.globals.keys().collect();
         names.sort();
         for name in names {
@@ -3009,7 +4302,7 @@ impl<'a> LdsLinker<'a> {
             };
             out.push(DynSym {
                 name: name.clone(),
-                info: (STB_GLOBAL << 4) | STT_NOTYPE,
+                info: (STB_GLOBAL << 4) | s.kind,
                 other: STV_DEFAULT,
                 shndx,
                 value: s.val.v,
@@ -3043,13 +4336,38 @@ impl<'a> LdsLinker<'a> {
         } else {
             Vec::new()
         };
+        let rpath = self.rpath_string();
+        let mut extra: Vec<&str> = self.needed_sonames().collect();
+        if let Some(p) = &rpath {
+            extra.push(p);
+        }
         self.dyn_tables = Some(dynamic::build_tables(
             &exports,
             self.opts.soname.as_deref(),
             &verdefs,
+            &extra,
             self.opts.hash_style,
             self.class,
         ));
+    }
+
+    /// Sonames this image depends on, in link order and once each. A
+    /// library the link took nothing from is recorded anyway, as bfd
+    /// does without `--as-needed`; one named only under `AS_NEEDED` is
+    /// recorded only where an import bound to it.
+    fn needed_sonames(&self) -> impl Iterator<Item = &str> {
+        let mut seen: HashSet<&str> = HashSet::new();
+        self.opts
+            .shared_libs
+            .iter()
+            .filter(|l| !l.as_needed || self.imports.iter().any(|n| l.lib.exports.contains(n)))
+            .map(|l| l.lib.soname.as_str())
+            .filter(move |s| seen.insert(s))
+    }
+
+    /// `-rpath` directories as the colon-separated string the tag holds.
+    fn rpath_string(&self) -> Option<String> {
+        (!self.opts.rpath.is_empty()).then(|| self.opts.rpath.join(":"))
     }
 
     /// Sizes of the dynamic tables for this pass, by section name.
@@ -3100,6 +4418,13 @@ impl<'a> LdsLinker<'a> {
             versym: addr(SYNTH_VERSYM),
             soname: match (t, self.opts.soname.as_deref()) {
                 (Some(t), Some(s)) => Some(t.str_offset(s)),
+                _ => None,
+            },
+            needed: t
+                .map(|t| self.needed_sonames().map(|s| t.str_offset(s)).collect())
+                .unwrap_or_default(),
+            rpath: match (t, self.rpath_string()) {
+                (Some(t), Some(p)) => Some((t.str_offset(&p), self.opts.new_dtags)),
                 _ => None,
             },
             symbolic: self.opts.symbolic,
@@ -3153,6 +4478,11 @@ impl<'a> LdsLinker<'a> {
                 continue;
             }
             let id = self.insecs[i];
+            // A group the dedup dropped is gone before bfd reaches
+            // check_relocs, so it reserves nothing.
+            if self.comdat_dropped.contains(&(id.obj, id.sec)) {
+                continue;
+            }
             let s = &self.objects[id.obj].sections[id.sec];
             if s.flags & SHF_ALLOC == 0 {
                 continue;
@@ -3207,7 +4537,12 @@ impl<'a> LdsLinker<'a> {
         match sym.shndx as u16 {
             SHN_ABS | SHN_UNDEF | SHN_COMMON => {
                 if sym.binding() != STB_LOCAL {
-                    if let Some(&(doi, dsi)) = self.globals.get(&sym.name) {
+                    // A global SHN_ABS definition is its own entry in
+                    // the global table; following it would not
+                    // terminate. Only a reference resolves elsewhere.
+                    if let Some(&(doi, dsi)) = self.globals.get(&sym.name)
+                        && (doi, dsi) != (oi, si)
+                    {
                         return self.reloc_is_relative(doi, dsi);
                     }
                     if let Some(s) = self
@@ -3226,6 +4561,44 @@ impl<'a> LdsLinker<'a> {
             }
             _ => true,
         }
+    }
+
+    /// Refusal for a site an `ET_DYN` image has no way to carry, or
+    /// `None` when it is representable. Writing a link-time address
+    /// into a field no dynamic relocation covers bakes an address the
+    /// loader then slides out from under. A non-allocated section,
+    /// which the loader never maps, and a value that is not a load
+    /// address both keep the link-time value.
+    fn unrepresentable_in_dyn(
+        &self,
+        oi: usize,
+        si: usize,
+        r: &RawReloc,
+        alloc: bool,
+    ) -> Option<String> {
+        if self.opts.emit != LdsEmit::Dyn
+            || !alloc
+            || !narrow_absolute(self.machine, r.rtype)
+            || !self.reloc_is_relative(oi, r.sym as usize)
+        {
+            return None;
+        }
+        let obj = &self.objects[oi];
+        let sym = &obj.symbols[r.sym as usize];
+        let target = if !sym.name.is_empty() {
+            sym.name.as_str()
+        } else {
+            // A section symbol: ld names the section it points at.
+            obj.shndx_map
+                .get(&sym.shndx)
+                .map_or("<section>", |&t| obj.sections[t].name.as_str())
+        };
+        Some(absolute_in_pie_body(
+            &locate_reloc(&obj.source, &obj.sections[si].name, r.offset),
+            &elf_reloc_desc(self.machine, r.rtype),
+            target,
+            self.opts.shared,
+        ))
     }
 
     fn resolve_sym_prevpass(&self, oi: usize, si: usize, addend: i64) -> Option<u64> {
@@ -3261,14 +4634,10 @@ impl<'a> LdsLinker<'a> {
                         // addend applies to the remapped address (matches
                         // bfd -- an addend past the entry, e.g. one past a
                         // string's NUL, must stay relative to that entry).
-                        let off = if self.merge_of.contains_key(&i) {
-                            if sym.kind() == STT_SECTION {
-                                self.merge_remap(i, sym.value.wrapping_add(addend as u64))
-                            } else {
-                                self.merge_remap(i, sym.value).wrapping_add(addend as u64)
-                            }
+                        let off = if sym.kind() == STT_SECTION {
+                            self.placed_off(i, sym.value.wrapping_add(addend as u64))?
                         } else {
-                            sym.value.wrapping_add(addend as u64)
+                            self.placed_off(i, sym.value)?.wrapping_add(addend as u64)
                         };
                         let base = if let Some(&pl) = self.merge_of.get(&i) {
                             self.placements[self.pools[pl].rep].off
@@ -3295,6 +4664,46 @@ impl<'a> LdsLinker<'a> {
             _ => None,
         }
     }
+
+    /// Whether the backend's GOT section is `.got.plt`. bfd defines
+    /// `_GLOBAL_OFFSET_TABLE_` on the section it creates for the GOT
+    /// and reserves that section's first slot for the `.dynamic`
+    /// address; the x86 targets set `elf_backend_want_got_plt`, so for
+    /// them both live on `.got.plt`.
+    fn got_on_got_plt(&self) -> bool {
+        matches!(self.machine, EM_386 | EM_X86_64)
+    }
+
+    /// Slots `.got` reserves ahead of its first entry.
+    fn got_reserved(&self) -> u64 {
+        u64::from(!self.got_on_got_plt())
+    }
+
+    /// The address `_GLOBAL_OFFSET_TABLE_` takes and every GOT-base
+    /// relative relocation is computed against.
+    fn got_symbol_addr(&self) -> Option<u64> {
+        if self.got_on_got_plt()
+            && let Some(addr) = self.synth_addr(SYNTH_GOTPLT)
+        {
+            return Some(addr);
+        }
+        self.got_addr_prevpass()
+    }
+
+    /// Output section the GOT base sits in, where the script kept it.
+    fn got_symbol_out(&self) -> Option<usize> {
+        if self.got_on_got_plt()
+            && let Some(out) = self.kept_synth(SYNTH_GOTPLT)
+        {
+            return Some(out);
+        }
+        self.kept_synth(SYNTH_GOT)
+    }
+
+    /// The address of the first GOT entry, past the reserved header.
+    fn got_slot_base(&self) -> Option<u64> {
+        Some(self.got_addr_prevpass()? + self.got_reserved() * self.class.addr_size())
+    }
 }
 
 /// Every symbol name an expression reads.
@@ -3317,6 +4726,22 @@ fn collect_symbols(e: &Expr, out: &mut HashSet<String>) {
         }
         _ => {}
     }
+}
+
+/// Name bfd gives a synthesized file symbol: the input's base name,
+/// which for an archive member is the member name.
+fn file_sym_name(source: &str) -> String {
+    let base = source.rsplit(['/', '\\']).next().unwrap_or(source);
+    base.split_once('(')
+        .map(|(_, m)| m.trim_end_matches(')'))
+        .unwrap_or(base)
+        .to_string()
+}
+
+/// Unwind and exception tables: kept whatever GC decides, and never a
+/// source of liveness -- each names every function it describes.
+fn is_unwind_section(name: &str) -> bool {
+    name == ".eh_frame" || name.starts_with(".eh_frame.") || name == ".eh_frame_hdr"
 }
 
 fn is_debug_section(name: &str) -> bool {
@@ -3498,15 +4923,18 @@ impl<'a> LdsLinker<'a> {
                             }
                         }
                     }
+                    ChunkSrc::Veneers => {}
                 }
             }
             contents.insert(oi, buf);
         }
+        self.patch_eh_frame(&mut contents);
 
         // Apply relocations into the content buffers.
         let relr_set: HashSet<u64> = self.relr_addrs.iter().copied().collect();
         self.apply_relocations(&mut contents, &relr_set)?;
         self.fill_synth_contents(&mut contents, &relr_set, &out_shndx);
+        self.a53_apply_fix(&mut contents);
 
         // Entry point.
         let entry_name: Option<String> = self
@@ -3525,10 +4953,13 @@ impl<'a> LdsLinker<'a> {
                 }
             },
             // Nothing named an entry. A shared object has none, as bfd
-            // leaves `e_entry` zero for one; an executable starts at
-            // its first text address.
-            None if self.opts.emit == LdsEmit::Dyn => 0,
-            None => self.default_entry(&emit_order),
+            // leaves `e_entry` zero for one; an executable takes bfd's
+            // default entry symbol and, failing that, its first text
+            // address. A PIE is an executable.
+            None if self.opts.shared => 0,
+            None => self
+                .final_sym_value("_start")
+                .unwrap_or_else(|| self.default_entry(&emit_order)),
         };
 
         // Program headers.
@@ -3549,14 +4980,18 @@ impl<'a> LdsLinker<'a> {
         })
     }
 
-    /// Bytes an input chunk contributes: its own section data, or the
-    /// merge pool for a pool representative (empty for other members).
+    /// Bytes an input chunk contributes: its own section data, the
+    /// merge pool for a pool representative (empty for other members),
+    /// or its deduplicated `.eh_frame`.
     fn chunk_input_bytes(&self, i: usize) -> &[u8] {
         if let Some(&p) = self.merge_of.get(&i) {
             if self.pools[p].rep == i {
                 return &self.pools[p].bytes;
             }
             return &[];
+        }
+        if let Some(&e) = self.eh_of.get(&i) {
+            return &self.eh_frames[e].bytes;
         }
         let id = self.insecs[i];
         let o = &self.objects[id.obj];
@@ -3612,14 +5047,21 @@ impl<'a> LdsLinker<'a> {
             let place = self.placements[i];
             let sec_addr = self.outs[out].addr + place.off;
             let alloc = self.outs[out].alloc;
+            let name = &self.objects[id.obj].sections[id.sec].name;
+            let tolerant = is_debug_section(name) || is_unwind_section(name);
             let relocs = self.objects[id.obj].sections[id.sec].relocs.clone();
             let Some(buf) = contents.get_mut(&out) else {
                 continue;
             };
             for r in &relocs {
-                let site = (place.off + r.offset) as usize;
-                let p = sec_addr + r.offset;
-                let target = self.resolve_reloc_target(id.obj, r, &mut errors);
+                // A relocation whose site went away with a duplicate
+                // CIE applies nowhere.
+                let Some(off) = self.placed_off(i, r.offset) else {
+                    continue;
+                };
+                let site = (place.off + off) as usize;
+                let p = sec_addr + off;
+                let target = self.resolve_reloc_target(id.obj, r, tolerant, &mut errors);
                 let Some(s_plus_a) = target else { continue };
                 if errors.len() > 40 {
                     break;
@@ -3636,6 +5078,10 @@ impl<'a> LdsLinker<'a> {
                 }
                 if r.rtype == R_NONE {
                     continue; // recorded, applies nothing
+                }
+                if let Some(e) = self.unrepresentable_in_dyn(id.obj, id.sec, r, alloc) {
+                    errors.push(e);
+                    continue;
                 }
                 self.apply_one(
                     buf,
@@ -3659,10 +5105,15 @@ impl<'a> LdsLinker<'a> {
 
     /// `S + A` for a relocation, or `None` when the reloc is skipped
     /// (undefined weak resolves to zero and still applies).
+    /// `tolerant` marks a referring section that describes other
+    /// sections rather than depending on them -- debug and unwind
+    /// tables -- where bfd resolves a dropped target to zero instead
+    /// of complaining.
     fn resolve_reloc_target(
         &self,
         oi: usize,
         r: &RawReloc,
+        tolerant: bool,
         errors: &mut Vec<String>,
     ) -> Option<u64> {
         let sym = match self.objects[oi].symbols.get(r.sym as usize) {
@@ -3684,6 +5135,7 @@ impl<'a> LdsLinker<'a> {
             if let Some(&(doi, dsi)) = self.globals.get(&sym.name) {
                 return match self.resolve_sym_prevpass(doi, dsi, r.addend) {
                     Some(v) => Some(v),
+                    None if tolerant => Some(r.addend as u64),
                     None => {
                         errors.push(format!(
                             "{}: `{}' resolves into a discarded section",
@@ -3693,13 +5145,26 @@ impl<'a> LdsLinker<'a> {
                     }
                 };
             }
-            if sym.name == "_GLOBAL_OFFSET_TABLE_" {
+            if sym.name == GOT_SYMBOL {
                 return self
-                    .got_addr_prevpass()
+                    .got_symbol_addr()
                     .map(|g| g.wrapping_add(r.addend as u64));
             }
             if let Some(s) = self.script_now.get(&sym.name) {
                 return Some(s.val.v.wrapping_add(r.addend as u64));
+            }
+            if self.import_of.contains_key(&sym.name) {
+                if let Some(v) = self.import_target(&sym.name, r.rtype) {
+                    return Some(v.wrapping_add(r.addend as u64));
+                }
+                errors.push(format!(
+                    "{}: {} against `{}' cannot reach a shared library; \
+                     the reference needs a GOT slot or a call",
+                    self.objects[oi].source,
+                    elf_reloc_desc(self.machine, r.rtype),
+                    sym.name
+                ));
+                return None;
             }
         }
         match sym.shndx as u16 {
@@ -3719,7 +5184,27 @@ impl<'a> LdsLinker<'a> {
             }
             // Local / section reference into this object; a discarded
             // target resolves to nothing and the site keeps its bytes.
-            _ => self.resolve_sym_prevpass(oi, r.sym as usize, r.addend),
+            _ => {
+                // The surviving copy of a deduplicated group need bear
+                // no relation to the dropped one, so a reference that
+                // name resolution above could not place has nowhere to
+                // go. GNU ld reports it rather than redirecting.
+                if let Some(home) = self.dropped_home(oi, sym) {
+                    if tolerant || (by_name && sym.binding() == STB_WEAK) {
+                        return Some(r.addend as u64);
+                    }
+                    let what = if by_name {
+                        format!("undefined reference to `{}'", sym.name)
+                    } else if sym.name.is_empty() {
+                        format!("reference to discarded section `{home}'")
+                    } else {
+                        format!("`{}' is defined in discarded section `{home}'", sym.name)
+                    };
+                    errors.push(format!("{}: {what}", self.objects[oi].source));
+                    return None;
+                }
+                self.resolve_sym_prevpass(oi, r.sym as usize, r.addend)
+            }
         }
     }
 
@@ -3765,14 +5250,18 @@ impl<'a> LdsLinker<'a> {
                 rt::R_X86_64_64 => {
                     w(buf, site, &sa.to_le_bytes());
                 }
-                rt::R_X86_64_PC64 => {
+                // GOTPC's symbol is `_GLOBAL_OFFSET_TABLE_`, so `sa` is
+                // already the GOT base and the field is the same
+                // pc-relative difference the PC forms write.
+                rt::R_X86_64_PC64 | rt::R_X86_64_GOTPC64 => {
                     w(buf, site, &sa.wrapping_sub(p).to_le_bytes());
                 }
-                rt::R_X86_64_PC32 | rt::R_X86_64_PLT32 => {
+                rt::R_X86_64_PC32 | rt::R_X86_64_PLT32 | rt::R_X86_64_GOTPC32 => {
                     let v = sa.wrapping_sub(p) as i64;
                     if (v as i32) as i64 != v {
                         errors.push(format!(
-                            "relocation truncated: R_X86_64_PC32 against `{}' (0x{v:x})",
+                            "relocation truncated: {} against `{}' (0x{v:x})",
+                            rt::x86_64_reloc_desc(r.rtype),
                             name()
                         ));
                     }
@@ -3812,7 +5301,14 @@ impl<'a> LdsLinker<'a> {
                     let v = sa.wrapping_sub(p);
                     w(buf, site, &[v as u8]);
                 }
-                rt::R_X86_64_GOTPCREL | 41 | rt::R_X86_64_REX_GOTPCRELX => {
+                rt::R_X86_64_GOTPCREL | R_X86_64_GOTPCRELX | rt::R_X86_64_REX_GOTPCRELX => {
+                    // An import has no link-time address to relax to;
+                    // the site keeps its load from the GOT slot.
+                    if self.import_of.contains_key(&name()) {
+                        let v = sa.wrapping_sub(p) as i64;
+                        w(buf, site, &(v as i32).to_le_bytes());
+                        return;
+                    }
                     // The kernel scripts assert an empty GOT: relax
                     // the load to a direct reference.
                     if site >= 2 && buf[site - 2] == 0x8b {
@@ -3858,7 +5354,10 @@ impl<'a> LdsLinker<'a> {
             },
             EM_386 => self.apply_i386(buf, site, p, sa, r, errors, oi),
             EM_AARCH64 => self.apply_aarch64(buf, site, p, sa, r, alloc, relr_set, errors, oi),
-            _ => errors.push(format!("unsupported machine {machine}")),
+            _ => errors.push(format!(
+                "unsupported machine {}",
+                super::relocatable::elf_machine_desc(machine)
+            )),
         }
     }
 
@@ -3891,7 +5390,7 @@ impl<'a> LdsLinker<'a> {
             rt::R_386_PC32 | rt::R_386_PC16 | rt::R_386_PC8 | rt::R_386_GOTPC | rt::R_386_PLT32 => {
                 sa.wrapping_sub(p)
             }
-            rt::R_386_GOTOFF => match self.got_addr_prevpass() {
+            rt::R_386_GOTOFF => match self.got_symbol_addr() {
                 Some(g) => sa.wrapping_sub(g),
                 None => {
                     errors.push(format!(
@@ -3996,8 +5495,7 @@ impl<'a> LdsLinker<'a> {
                     buf[site..site + 4].copy_from_slice(&(sa as u32).to_le_bytes());
                 }
             }
-            259 => {
-                // R_AARCH64_ABS16
+            rt::R_AARCH64_ABS16 => {
                 if !rt::AbsCheck::SignedOrUnsigned.admits(sa as i64, 2) {
                     errors.push(format!(
                         "relocation truncated to fit: R_AARCH64_ABS16 against `{}' (0x{sa:x})",
@@ -4177,7 +5675,7 @@ impl<'a> LdsLinker<'a> {
     fn got_slot_addr(&self, oi: usize, r: &RawReloc) -> Option<u64> {
         let name = &self.objects[oi].symbols[r.sym as usize].name;
         let idx = *self.got_map.get(name)?;
-        Some(self.got_addr_prevpass()? + 8 + idx as u64 * 8)
+        Some(self.got_slot_base()? + idx as u64 * self.class.addr_size())
     }
 
     /// Write the synthesized sections' content: dynamic relocation
@@ -4218,7 +5716,9 @@ impl<'a> LdsLinker<'a> {
                 bytes.resize(self.dyn_nones.unwrap_or(0) as usize * rela_ent as usize, 0);
                 for d in &self.dyn_relas {
                     bytes.extend_from_slice(&class.addr_bytes(d.offset)[..aw]);
-                    bytes.extend_from_slice(&class.addr_bytes(class.reloc_info(0, d.rtype))[..aw]);
+                    bytes.extend_from_slice(
+                        &class.addr_bytes(class.reloc_info(d.sym, d.rtype))[..aw],
+                    );
                     if use_rela {
                         bytes.extend_from_slice(&class.addr_bytes(d.addend as u64)[..aw]);
                     }
@@ -4234,13 +5734,15 @@ impl<'a> LdsLinker<'a> {
                     SYNTH_GOT => {
                         // The header slot holds the `.dynamic` address, as
                         // bfd writes `_GLOBAL_OFFSET_TABLE_[0]`.
-                        bytes.extend_from_slice(
-                            &class.addr_bytes(dyn_section_addr.unwrap_or(0))[..aw],
-                        );
-                        let base = self.got_addr_prevpass().unwrap_or(0);
+                        if self.got_reserved() != 0 {
+                            bytes.extend_from_slice(
+                                &class.addr_bytes(dyn_section_addr.unwrap_or(0))[..aw],
+                            );
+                        }
+                        let base = self.got_slot_base().unwrap_or(0);
                         for (k, gname) in self.got_slots.clone().iter().enumerate() {
                             let v = self.resolve_name(gname).unwrap_or(0);
-                            let slot_addr = base + slot + k as u64 * slot;
+                            let slot_addr = base + k as u64 * slot;
                             let write =
                                 relr_set.contains(&slot_addr) || self.opts.apply_dynamic_relocs;
                             bytes.extend_from_slice(
@@ -4250,6 +5752,15 @@ impl<'a> LdsLinker<'a> {
                     }
                     SYNTH_GOTPLT => {
                         bytes.resize(3 * aw, 0);
+                        // Where `_GLOBAL_OFFSET_TABLE_` names this
+                        // section, its first slot is the header the
+                        // psABI points at `.dynamic`; the next two are
+                        // the dynamic linker's.
+                        if self.got_on_got_plt() {
+                            bytes[..aw].copy_from_slice(
+                                &class.addr_bytes(dyn_section_addr.unwrap_or(0))[..aw],
+                            );
+                        }
                     }
                     SYNTH_BUILD_ID => {
                         bytes.extend_from_slice(&4u32.to_le_bytes()); // namesz
@@ -4259,6 +5770,11 @@ impl<'a> LdsLinker<'a> {
                         bytes.extend_from_slice(&[0u8; 20]);
                     }
                     SYNTH_GNU_PROPERTY => bytes = self.gnu_property.clone(),
+                    SYNTH_INTERP => {
+                        bytes = self.opts.interp.clone().unwrap_or_default().into_bytes();
+                        bytes.push(0);
+                    }
+                    SYNTH_PLT => bytes = self.plt_bytes(),
                     SYNTH_DYNAMIC => bytes = dynamic_bytes.clone(),
                     SYNTH_EH_FRAME_HDR => {
                         let Some(hdr_addr) = self.synth_addr(SYNTH_EH_FRAME_HDR) else {
@@ -4394,51 +5910,70 @@ impl<'a> LdsLinker<'a> {
             self.set_phdr_alignments(&mut segs);
             Ok(segs)
         } else {
-            // No PHDRS command: bfd's default segment assignment. A new
-            // PT_LOAD begins only at a read-only-to-writable transition
-            // (so read-only content keeps read-only pages) or where a
-            // file-backed section follows a NOBITS one (file content
-            // can't trail zero-fill in the same segment). Executable
-            // sections OR their bit into the current segment rather than
-            // forcing a split, which is why a writable segment can carry
-            // code (the RWE segment ld emits without a PHDRS command).
+            // No PHDRS command: bfd's default segment assignment
+            // (`_bfd_elf_map_sections_to_segments`). A new PT_LOAD
+            // begins where the section would leave a page of the
+            // segment unused, where the LMA stops tracking the VMA,
+            // and where the protection changes -- the last only when
+            // the section does not share the previous one's page,
+            // since a page carries one protection anyway. File-backed
+            // content following zero fill stays in the segment; the
+            // zero fill then occupies file space.
+            let page = self.opts.max_page_size.max(1);
             let mut segs: Vec<(Elf64Phdr, Vec<usize>)> = Vec::new();
             let mut cur: Option<usize> = None;
             let mut cur_writable = false;
-            let mut prev_nobits = false;
+            let mut cur_code = false;
+            let mut prev_end = 0u64;
+            let mut prev_bias = 0u64;
             for &oi in emit_order {
                 let o = &self.outs[oi];
                 if !o.alloc {
                     continue;
                 }
                 let writable = o.flags & SHF_WRITE != 0;
+                let code = o.flags & SHF_EXECINSTR != 0;
                 let nobits = o.shtype == SHT_NOBITS;
+                let bias = o.lma.wrapping_sub(o.addr);
+                let same_page = prev_end.saturating_sub(1) & !(page - 1) == o.addr & !(page - 1);
+                let protection_change = (writable && !cur_writable) || code != cur_code;
                 let start_new = match cur {
                     None => true,
-                    Some(_) => (writable && !cur_writable) || (!nobits && prev_nobits),
+                    Some(_) => {
+                        bias != prev_bias
+                            || align_up(prev_end, page) < align_up(o.addr, page)
+                            || (protection_change && !same_page)
+                    }
                 };
                 if start_new {
                     segs.push((
                         Elf64Phdr {
                             p_type: PT_LOAD,
                             p_flags: PF_R,
-                            p_align: self.opts.max_page_size,
+                            p_align: page,
                             ..Default::default()
                         },
                         Vec::new(),
                     ));
                     cur = Some(segs.len() - 1);
                     cur_writable = writable;
+                    cur_code = code;
                 }
                 cur_writable |= writable;
-                prev_nobits = nobits;
+                cur_code |= code;
+                prev_bias = bias;
+                // Zero-size TLS zero fill overlays the following
+                // section rather than occupying its own addresses.
+                if !nobits || o.flags & SHF_TLS == 0 {
+                    prev_end = o.addr + o.size;
+                }
                 let k = cur.expect("current segment exists");
                 segs[k].1.push(oi);
                 let mut fl = PF_R;
                 if writable {
                     fl |= PF_W;
                 }
-                if o.flags & SHF_EXECINSTR != 0 {
+                if code {
                     fl |= PF_X;
                 }
                 segs[k].0.p_flags |= fl;
@@ -4486,10 +6021,11 @@ impl<'a> LdsLinker<'a> {
             // `.eh_frame_hdr`, which is how an unwinder finds it;
             // PT_GNU_PROPERTY over the merged note, which is where a
             // loader looks for the image's feature claims.
-            for (name, ptype, flags) in [
-                (SYNTH_DYNAMIC, PT_DYNAMIC, PF_R | PF_W),
-                (SYNTH_EH_FRAME_HDR, PT_GNU_EH_FRAME, PF_R),
-                (SYNTH_GNU_PROPERTY, PT_GNU_PROPERTY, PF_R),
+            for (name, ptype, flags, align) in [
+                (SYNTH_INTERP, PT_INTERP, PF_R, 1),
+                (SYNTH_DYNAMIC, PT_DYNAMIC, PF_R | PF_W, 8),
+                (SYNTH_EH_FRAME_HDR, PT_GNU_EH_FRAME, PF_R, 8),
+                (SYNTH_GNU_PROPERTY, PT_GNU_PROPERTY, PF_R, 8),
             ] {
                 if let Some(&oi) = emit_order
                     .iter()
@@ -4499,7 +6035,7 @@ impl<'a> LdsLinker<'a> {
                         Elf64Phdr {
                             p_type: ptype,
                             p_flags: flags,
-                            p_align: 8,
+                            p_align: align,
                             ..Default::default()
                         },
                         alloc::vec![oi],
@@ -4516,6 +6052,28 @@ impl<'a> LdsLinker<'a> {
                 Vec::new(),
             ));
             self.set_phdr_alignments(&mut segs);
+            // An interpreted image needs PT_PHDR ahead of every
+            // loadable entry: a loader takes the load bias from it, and
+            // bfd pairs it with PT_INTERP for that reason. Its extent
+            // is the header table itself, filled once the count and the
+            // first segment's address are known.
+            if emit_order
+                .iter()
+                .any(|&oi| self.outs[oi].alloc && self.outs[oi].name == SYNTH_INTERP)
+            {
+                segs.insert(
+                    0,
+                    (
+                        Elf64Phdr {
+                            p_type: PT_PHDR,
+                            p_flags: PF_R,
+                            p_align: 8,
+                            ..Default::default()
+                        },
+                        Vec::new(),
+                    ),
+                );
+            }
             Ok(segs)
         }
     }
@@ -4542,6 +6100,72 @@ impl<'a> LdsLinker<'a> {
 
     // ------------------------------------------------------- symtab
 
+    /// `sh_link` of an `SHF_LINK_ORDER` output section: the output
+    /// section holding what its inputs are ordered against, as bfd
+    /// records in `assign_section_numbers`. Zero when the target went
+    /// away with its section.
+    fn link_order_target(&self, oi: usize, shndx_of_out: &HashMap<usize, u16>) -> u32 {
+        let Some(i) = self.first_input(oi) else {
+            return 0;
+        };
+        let id = self.insecs[i];
+        let sec = &self.objects[id.obj].sections[id.sec];
+        let Some(&target) = self.objects[id.obj].shndx_map.get(&sec.link) else {
+            return 0;
+        };
+        match self.fates[self.insec_index(id.obj, target)] {
+            SecFate::Placed { out } => shndx_of_out.get(&out).copied().unwrap_or(0) as u32,
+            _ => 0,
+        }
+    }
+
+    /// First input section placed into an output section.
+    fn first_input(&self, oi: usize) -> Option<usize> {
+        self.outs[oi].pieces.iter().find_map(|p| match p {
+            Piece::Inputs(v) => v.first().copied(),
+            _ => None,
+        })
+    }
+
+    /// Section flags of the input section a symbol is defined in, zero
+    /// for a symbol that names no section.
+    fn sym_input_flags(&self, obj_i: usize, sym_i: usize) -> u64 {
+        let sym = &self.objects[obj_i].symbols[sym_i];
+        match self.objects[obj_i].shndx_map.get(&sym.shndx) {
+            Some(&sec) => self.objects[obj_i].sections[sec].flags,
+            None => 0,
+        }
+    }
+
+    /// Object order for local symbols: bfd walks the output sections
+    /// and takes each object the first time one of its input sections
+    /// is reached, then sweeps the objects no output section took.
+    fn local_symbol_object_order(&self, emit_order: &[usize]) -> Vec<usize> {
+        let mut seen = alloc::vec![false; self.objects.len()];
+        let mut order: Vec<usize> = Vec::new();
+        if self.synth_obj < seen.len() {
+            seen[self.synth_obj] = true;
+        }
+        for &oi in emit_order {
+            for p in &self.outs[oi].pieces {
+                let Piece::Inputs(v) = p else { continue };
+                for &i in v {
+                    let obj = self.insecs[i].obj;
+                    if !seen[obj] {
+                        seen[obj] = true;
+                        order.push(obj);
+                    }
+                }
+            }
+        }
+        for (obj, taken) in seen.iter().enumerate() {
+            if !taken {
+                order.push(obj);
+            }
+        }
+        order
+    }
+
     fn build_symtab(
         &self,
         emit_order: &[usize],
@@ -4550,30 +6174,38 @@ impl<'a> LdsLinker<'a> {
     ) -> Vec<FinalSym> {
         let track = self.opts.emit_relocs;
         let mut syms: Vec<FinalSym> = Vec::new();
-        // Section symbols.
-        for &oi in emit_order {
-            if track {
+        // Section symbols exist for relocations to name, so bfd emits
+        // them only when the output carries relocations
+        // (`bfd_link_relocatable(info) || info->emitrelocations`). This
+        // engine writes no relocatable output; `-r` is a separate path.
+        if track {
+            for &oi in emit_order {
                 index.sec.insert(oi, syms.len());
+                syms.push(FinalSym {
+                    name: String::new(),
+                    info: STT_SECTION,
+                    other: 0,
+                    shndx: out_shndx(oi),
+                    value: self.outs[oi].addr,
+                    size: 0,
+                });
             }
-            syms.push(FinalSym {
-                name: String::new(),
-                info: STT_SECTION,
-                other: 0,
-                shndx: out_shndx(oi),
-                value: self.outs[oi].addr,
-                size: 0,
-            });
         }
-        // Local symbols per input object, in input order.
-        for (obj_i, o) in self.objects.iter().enumerate() {
-            if obj_i == self.synth_obj {
-                continue;
-            }
+        // Local symbols per input object, in the order bfd reaches the
+        // objects.
+        for obj_i in self.local_symbol_object_order(emit_order) {
+            let o = &self.objects[obj_i];
+            // bfd carries the file symbol of the object whose locals
+            // follow, synthesizing one from the input's name when the
+            // object has none, so a local is never read as belonging
+            // to the preceding file.
+            let mut have_file = false;
             for (sym_i, sym) in o.symbols.iter().enumerate() {
                 if sym.binding() != STB_LOCAL || sym.kind() == STT_SECTION {
                     continue;
                 }
                 if sym.kind() == STT_FILE {
+                    have_file = true;
                     if track {
                         index.local.insert((obj_i, sym_i as u32), syms.len());
                     }
@@ -4587,17 +6219,45 @@ impl<'a> LdsLinker<'a> {
                     });
                     continue;
                 }
-                if !self.opts.discard_none && self.opts.discard_locals && sym.name.starts_with(".L")
+                // `-X` drops every compiler temporary; bfd's default
+                // policy drops the ones a merged section holds, whose
+                // offsets deduplication moves, unless the link emits
+                // relocations that can name them.
+                if !self.opts.discard_none
+                    && sym.name.starts_with(".L")
+                    && (self.opts.discard_locals
+                        || (!track && self.sym_input_flags(obj_i, sym_i) & SHF_MERGE != 0))
                 {
                     continue;
                 }
                 if let Some(fs) = self.finalize_sym(obj_i, sym_i, out_shndx) {
+                    if !have_file {
+                        have_file = true;
+                        syms.push(FinalSym {
+                            name: file_sym_name(&o.source),
+                            info: (STB_LOCAL << 4) | STT_FILE,
+                            other: 0,
+                            shndx: SHN_ABS,
+                            value: 0,
+                            size: 0,
+                        });
+                    }
                     if track {
                         index.local.insert((obj_i, sym_i as u32), syms.len());
                     }
                     syms.push(fs);
                 }
             }
+        }
+        for (name, oi, addr) in &self.veneer_syms {
+            syms.push(FinalSym {
+                name: name.clone(),
+                info: (STB_LOCAL << 4) | STT_FUNC,
+                other: 0,
+                shndx: out_shndx(*oi),
+                value: *addr,
+                size: 8,
+            });
         }
         // A symbol's visibility aggregates over every reference and
         // definition; hidden or internal globals cannot be preempted
@@ -4656,25 +6316,27 @@ impl<'a> LdsLinker<'a> {
             }
             syms.push(FinalSym {
                 name: name.clone(),
-                info: (if vis.is_some() { STB_LOCAL } else { STB_GLOBAL } << 4) | STT_NOTYPE,
-                other: vis.unwrap_or(STV_DEFAULT),
+                info: (if vis.is_some() { STB_LOCAL } else { STB_GLOBAL } << 4) | s.kind,
+                other: vis.or(s.vis).unwrap_or(STV_DEFAULT),
                 shndx,
                 value: s.val.v,
                 size: 0,
             });
         }
-        // Referenced-but-undefined weak symbols surface as UNDEF.
+        // An undefined weak symbol reaches the table only where the
+        // output still names it: bfd keeps the ones its relocations
+        // reference and drops the rest, so a final link that emits no
+        // relocations carries none of them.
         let mut weak_undefs: BTreeSet<&String> = BTreeSet::new();
-        for o in &self.objects {
-            for sym in &o.symbols {
-                if sym.shndx as u16 == SHN_UNDEF
-                    && sym.binding() == STB_WEAK
-                    && !sym.name.is_empty()
-                    && !self.globals.contains_key(&sym.name)
-                    && !self.script_now.contains_key(&sym.name)
-                {
-                    weak_undefs.insert(&sym.name);
-                }
+        for r in &self.emitted {
+            let sym = &self.objects[r.obj].symbols[r.sym as usize];
+            if sym.shndx as u16 == SHN_UNDEF
+                && sym.binding() == STB_WEAK
+                && !sym.name.is_empty()
+                && !self.globals.contains_key(&sym.name)
+                && !self.script_now.contains_key(&sym.name)
+            {
+                weak_undefs.insert(&sym.name);
             }
         }
         for name in weak_undefs {
@@ -4687,6 +6349,26 @@ impl<'a> LdsLinker<'a> {
                 other: 0,
                 shndx: SHN_UNDEF,
                 value: 0,
+                size: 0,
+            });
+        }
+        // bfd defines `_GLOBAL_OFFSET_TABLE_` on the section it built
+        // the GOT in, as a sizeless local OBJECT, and emits no entry
+        // where the link built no GOT. Measured against GNU ld 2.46.1:
+        // on x86 the entry names `.got.plt` in every mode, on aarch64
+        // it names `.got` for non-PIC output and is absolute for PIE
+        // and shared objects.
+        if let (Some(value), Some(out)) = (self.got_symbol_addr(), self.got_symbol_out()) {
+            let abs = self.machine == EM_AARCH64 && self.opts.emit == LdsEmit::Dyn;
+            if track {
+                index.by_name.insert(GOT_SYMBOL.to_string(), syms.len());
+            }
+            syms.push(FinalSym {
+                name: GOT_SYMBOL.to_string(),
+                info: (STB_LOCAL << 4) | STT_OBJECT,
+                other: STV_DEFAULT,
+                shndx: if abs { SHN_ABS } else { out_shndx(out) },
+                value,
                 size: 0,
             });
         }
@@ -4912,6 +6594,14 @@ impl<'a> LdsLinker<'a> {
         // what lets a consumer derive the load bias from the first
         // PT_LOAD.
         let defs = self.script.phdrs().unwrap_or(&[]).to_owned();
+        // Absent a `PHDRS` command the first PT_LOAD covers them, which
+        // is what bfd's default segment map does and what leaves the
+        // headers mapped for a loader to read.
+        let default_first_load = defs.is_empty().then(|| {
+            phdrs
+                .iter()
+                .position(|(p, m)| p.p_type == PT_LOAD && !m.is_empty())
+        });
         for (k, (ph, members)) in phdrs.iter_mut().enumerate() {
             if members.is_empty() {
                 continue;
@@ -4920,6 +6610,12 @@ impl<'a> LdsLinker<'a> {
             ph.p_vaddr = self.outs[first].addr;
             ph.p_paddr = self.outs[first].lma;
             ph.p_offset = file_off[&first];
+            if default_first_load == Some(Some(k)) && ph.p_offset <= ph.p_vaddr {
+                let back = ph.p_offset;
+                ph.p_offset = 0;
+                ph.p_vaddr -= back;
+                ph.p_paddr = ph.p_paddr.saturating_sub(back);
+            }
             if let Some(d) = defs.get(k) {
                 let cover = match (d.filehdr, d.phdrs) {
                     (true, _) => Some(0),
@@ -4944,6 +6640,20 @@ impl<'a> LdsLinker<'a> {
             }
             ph.p_filesz = file_end - ph.p_offset;
             ph.p_memsz = mem_end - ph.p_vaddr;
+        }
+        // PT_PHDR covers the header table, inside the segment that
+        // reaches back over it.
+        if let Some(load) = phdrs
+            .iter()
+            .find(|(p, m)| p.p_type == PT_LOAD && !m.is_empty())
+            .map(|(p, _)| (p.p_offset, p.p_vaddr))
+            && let Some((ph, _)) = phdrs.iter_mut().find(|(p, _)| p.p_type == PT_PHDR)
+        {
+            ph.p_offset = class.ehdr_size();
+            ph.p_vaddr = load.1 + (class.ehdr_size() - load.0);
+            ph.p_paddr = ph.p_vaddr;
+            ph.p_filesz = phnum as u64 * class.phdr_size();
+            ph.p_memsz = ph.p_filesz;
         }
 
         // Symbol/string tables.
@@ -5200,6 +6910,7 @@ impl<'a> LdsLinker<'a> {
                         .unwrap_or(0),
                 ),
                 SYNTH_DYNAMIC => (dynstr_ndx, 0),
+                _ if o.flags & SHF_LINK_ORDER != 0 => (self.link_order_target(oi, shndx_of_out), 0),
                 _ => (0, 0),
             };
             wr_shdr(
@@ -5462,7 +7173,9 @@ fn file_glob(pattern: &str, source: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::c5::linker::default_script::default_script;
     use crate::c5::linker::lds::parse_linker_script;
+    use crate::c5::linker::object::NativeMachine;
 
     /// `(name, sh_type, flags, addralign, bytes, relocs)` of a test section.
     type TestSec = (String, u32, u64, u64, Vec<u8>, Vec<RawReloc>);
@@ -5475,6 +7188,12 @@ mod tests {
         entsizes: Vec<(usize, u64)>,
         // Symbol-list index -> st_other.
         sym_vis: Vec<(usize, u8)>,
+        // Section index -> sh_link.
+        links: Vec<(usize, u32)>,
+        // Section index -> sh_info.
+        infos: Vec<(usize, u32)>,
+        // Flag word, signature symbol (index into `syms`), members.
+        groups: Vec<(u32, usize, Vec<usize>)>,
     }
 
     impl TestObj {
@@ -5484,7 +7203,16 @@ mod tests {
                 syms: Vec::new(),
                 entsizes: Vec::new(),
                 sym_vis: Vec::new(),
+                links: Vec::new(),
+                infos: Vec::new(),
+                groups: Vec::new(),
             }
+        }
+        /// An `SHT_GROUP` section over `members`, signed by the symbol
+        /// at `sig` in the order `sym` added them.
+        fn group(mut self, flags: u32, sig: usize, members: &[usize]) -> Self {
+            self.groups.push((flags, sig, members.to_vec()));
+            self
         }
         fn sec(mut self, name: &str, shtype: u32, flags: u64, align: u64, body: &[u8]) -> Self {
             self.secs.push((
@@ -5499,6 +7227,11 @@ mod tests {
         }
         fn entsize(mut self, sec: usize, entsize: u64) -> Self {
             self.entsizes.push((sec, entsize));
+            self
+        }
+        /// `sh_link` of `sec`, naming another section by its index.
+        fn links_to(mut self, sec: usize, target: usize) -> Self {
+            self.links.push((sec, target as u32 + 1));
             self
         }
         fn reloc(mut self, sec: usize, offset: u64, sym: u32, rtype: u32, addend: i64) -> Self {
@@ -5554,7 +7287,26 @@ mod tests {
                     }
                 }
             }
+            // A group becomes a section: the flag word followed by its
+            // members' section indices, `sh_link` the symbol table and
+            // `sh_info` the signature symbol.
+            let specs = core::mem::take(&mut self.groups);
+            let first_group = self.secs.len();
+            for (flags, _, members) in &specs {
+                let mut body = flags.to_le_bytes().to_vec();
+                for &m in members {
+                    body.extend_from_slice(&(m as u32 + 1).to_le_bytes());
+                    self.secs[m].2 |= SHF_GROUP;
+                }
+                self.secs
+                    .push((".group".to_string(), SHT_GROUP, 0, 4, body, Vec::new()));
+            }
             let nsec = self.secs.len();
+            for (k, (_, sig, _)) in specs.iter().enumerate() {
+                self.links.push((first_group + k, 1 + nsec as u32));
+                self.infos.push((first_group + k, (1 + nsec + sig) as u32));
+                self.entsizes.push((first_group + k, 4));
+            }
             let mut bodies: Vec<u8> = Vec::new();
             let mut body_off: Vec<usize> = Vec::new();
             for (_, shtype, _, _, body, _) in &self.secs {
@@ -5699,14 +7451,20 @@ mod tests {
                     .find(|(s, _)| *s == k)
                     .map(|(_, e)| *e)
                     .unwrap_or(0);
+                let find = |v: &[(usize, u32)]| {
+                    v.iter()
+                        .find(|(s, _)| *s == k)
+                        .map(|(_, l)| *l)
+                        .unwrap_or(0)
+                };
                 shdrs.push(hdr(
                     names[k],
                     *shtype,
                     *flags,
                     body_off[k],
                     body.len(),
-                    0,
-                    0,
+                    find(&self.links),
+                    find(&self.infos),
                     *align,
                     entsize,
                 ));
@@ -6169,6 +7927,198 @@ SECTIONS {
         assert!(secs.iter().any(|s| s.0 == ".rodata.str"));
     }
 
+    /// An object placing data under a C-identifier section name keeps
+    /// that name as its own output section and gets the `__start_` /
+    /// `__stop_` pair bounding it, as bfd does.
+    #[test]
+    fn start_stop_bound_an_identifier_named_section() {
+        let script = parse_linker_script(SCRIPT).expect("script parses");
+        let a = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                16,
+                &[0x90],
+            )
+            .sec("mytab", SHT_PROGBITS, SHF_ALLOC, 8, &[7u8; 24])
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 1)
+            .sym("__start_mytab", STB_GLOBAL, STT_NOTYPE, usize::MAX, 0, 0)
+            .sym("__stop_mytab", STB_GLOBAL, STT_NOTYPE, usize::MAX, 0, 0)
+            .build(EM_X86_64);
+        let objs = alloc::vec![parse_lds_object("a.o", a).expect("parses")];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        let sec = readelf_sections(&res.image)
+            .into_iter()
+            .find(|s| s.0 == "mytab")
+            .expect("`mytab` keeps its identity as an output section");
+        let syms = image_symbols(&res.image);
+        let val = |n: &str| {
+            syms.iter()
+                .find(|s| s.0 == n)
+                .unwrap_or_else(|| panic!("{n}"))
+                .1
+        };
+        assert_eq!(val("__start_mytab"), sec.2);
+        assert_eq!(val("__stop_mytab"), sec.2 + 24);
+        assert_eq!(sec.3, 24);
+    }
+
+    /// bfd defines the pair only where nothing else does: an object
+    /// defining the name keeps its own definition.
+    #[test]
+    fn an_object_definition_outranks_the_synthesized_bound() {
+        let script = parse_linker_script(SCRIPT).expect("script parses");
+        let a = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                16,
+                &[0x90; 8],
+            )
+            .sec("tty", SHT_PROGBITS, SHF_ALLOC, 8, &[7u8; 8])
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 1)
+            .sym("__start_tty", STB_GLOBAL, STT_FUNC, 0, 4, 4)
+            .build(EM_X86_64);
+        let objs = alloc::vec![parse_lds_object("a.o", a).expect("parses")];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        let syms = image_symbols(&res.image);
+        let text = readelf_sections(&res.image)
+            .into_iter()
+            .find(|s| s.0 == ".text")
+            .expect(".text");
+        let start = syms.iter().find(|s| s.0 == "__start_tty").expect("kept");
+        assert_eq!(start.1, text.2 + 4);
+    }
+
+    /// A script assignment outranks the synthesized bound, keeping the
+    /// script symbol's own visibility. The kernel script bounds its
+    /// tables this way.
+    #[test]
+    fn a_script_assignment_outranks_the_synthesized_bound() {
+        let script_text = SCRIPT.replace(
+            ".data : AT(ADDR(.data) - 0x400000) { *(.data .data.*) LONG(0xdeadbeef) } :data",
+            "mytab : { __start_mytab = .; *(mytab) . += 8; __stop_mytab = .; }\n\
+             .data : AT(ADDR(.data) - 0x400000) { *(.data .data.*) LONG(0xdeadbeef) } :data",
+        );
+        let script = parse_linker_script(&script_text).expect("script parses");
+        let a = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                16,
+                &[0x90],
+            )
+            .sec("mytab", SHT_PROGBITS, SHF_ALLOC, 8, &[7u8; 16])
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 1)
+            .sym("__stop_mytab", STB_GLOBAL, STT_NOTYPE, usize::MAX, 0, 0)
+            .build(EM_X86_64);
+        let objs = alloc::vec![parse_lds_object("a.o", a).expect("parses")];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        let sec = readelf_sections(&res.image)
+            .into_iter()
+            .find(|s| s.0 == "mytab")
+            .expect("mytab");
+        let syms = image_symbols(&res.image);
+        let stop = syms.iter().find(|s| s.0 == "__stop_mytab").expect("stop");
+        // The script's `. += 8` puts its own bound past the input's end.
+        assert_eq!(stop.1, sec.2 + 24);
+    }
+
+    /// A name carrying a `.` is not an identifier, so it gets no pair.
+    #[test]
+    fn a_dotted_section_name_gets_no_bounds() {
+        let script = parse_linker_script(SCRIPT).expect("script parses");
+        let a = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                16,
+                &[0x90],
+            )
+            .sec(".my.tab", SHT_PROGBITS, SHF_ALLOC, 8, &[7u8; 8])
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 1)
+            .sym("__start_.my.tab", STB_GLOBAL, STT_NOTYPE, usize::MAX, 0, 0)
+            .build(EM_X86_64);
+        let objs = alloc::vec![parse_lds_object("a.o", a).expect("parses")];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        let syms = image_symbols(&res.image);
+        assert!(!syms.iter().any(|s| s.0 == "__start_.my.tab"), "{syms:?}");
+    }
+
+    /// Two text sections, one reached from the entry point and one
+    /// not, plus a `KEEP()`-named table nothing references.
+    fn gc_objects() -> Vec<LdsObject> {
+        let a = TestObj::new()
+            .sec(
+                ".text._start",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                16,
+                &[0xe8, 0, 0, 0, 0],
+            )
+            .sec(
+                ".text.live",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                16,
+                &[0xc3],
+            )
+            .sec(
+                ".text.dead",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                16,
+                &[0x90; 8],
+            )
+            .sec("__tab", SHT_PROGBITS, SHF_ALLOC, 8, &[5u8; 8])
+            .sec(".rodata.dead", SHT_PROGBITS, SHF_ALLOC, 8, &[6u8; 8])
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 5)
+            .sym("live", STB_GLOBAL, STT_FUNC, 1, 0, 1)
+            .sym("dead", STB_GLOBAL, STT_FUNC, 2, 0, 8)
+            // Symtab: null(0), sections(1..=5), _start(6), live(7), dead(8).
+            .reloc(0, 1, 7, rt::R_X86_64_PC32, -4)
+            .build(EM_X86_64);
+        alloc::vec![parse_lds_object("a.o", a).expect("parses")]
+    }
+
+    /// `--gc-sections` drops what the entry point does not reach, and
+    /// keeps what a `KEEP()` names.
+    #[test]
+    fn gc_sections_drops_what_the_entry_does_not_reach() {
+        let script = parse_linker_script(SCRIPT).expect("script parses");
+        let opts = LdsOptions {
+            gc_sections: true,
+            ..LdsOptions::default()
+        };
+        let res = link_with_script(&script, gc_objects(), &opts).expect("links");
+        let names: Vec<String> = image_symbols(&res.image).into_iter().map(|s| s.0).collect();
+        assert!(names.iter().any(|n| n == "_start"), "{names:?}");
+        assert!(names.iter().any(|n| n == "live"), "{names:?}");
+        assert!(!names.iter().any(|n| n == "dead"), "{names:?}");
+        // The script KEEPs `__tab` between its own bounds.
+        let syms = image_symbols(&res.image);
+        let v = |n: &str| {
+            syms.iter()
+                .find(|s| s.0 == n)
+                .unwrap_or_else(|| panic!("{n}"))
+                .1
+        };
+        assert_eq!(v("__stop_tab") - v("__start_tab"), 8);
+    }
+
+    /// Without the option nothing is collected.
+    #[test]
+    fn without_gc_sections_every_input_is_placed() {
+        let script = parse_linker_script(SCRIPT).expect("script parses");
+        let res = link_with_script(&script, gc_objects(), &LdsOptions::default()).expect("links");
+        let names: Vec<String> = image_symbols(&res.image).into_iter().map(|s| s.0).collect();
+        assert!(names.iter().any(|n| n == "dead"), "{names:?}");
+    }
+
     #[test]
     fn undefined_strong_reference_fails() {
         let script = parse_linker_script(SCRIPT).expect("script parses");
@@ -6286,6 +8236,220 @@ SECTIONS {
         let e = format!("{e}");
         assert!(e.contains("R_AARCH64_MOVW_SABS_G2"), "{e}");
         assert!(e.contains("overflow against `tgt'"), "{e}");
+    }
+
+    // ---- Cortex-A53 erratum 843419 (`--fix-cortex-a53-843419`) ----
+    // The expectations mirror GNU ld's workaround: the ADRP becomes an
+    // ADR where the addressed page is within a megabyte, otherwise the
+    // dependent load/store is replaced by a branch to an 8-byte veneer
+    // holding that load/store and a branch back, the veneer area is
+    // padded to a page so following page offsets do not move, and each
+    // veneer takes an `e843419@...` local symbol.
+
+    const A53_ADRP_FAR: u32 = 0x9000_1000; // adrp x0, +0x200 pages
+    const A53_ADRP_NEAR: u32 = 0xb000_0000; // adrp x0, +1 page
+    const A53_LDR: u32 = 0xf940_0041; // ldr x1, [x2]
+    const A53_DEP_LDR: u32 = 0xf940_0403; // ldr x3, [x0, #8]
+    const A53_RET: u32 = 0xd65f_03c0;
+
+    fn a53_object(insns: &[u32]) -> Vec<LdsObject> {
+        let body: Vec<u8> = insns.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let o = TestObj::new()
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &body)
+            .sec(
+                ".after",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                4,
+                &A53_RET.to_le_bytes(),
+            )
+            .sym("f", STB_GLOBAL, STT_FUNC, 0, 0, body.len() as u64);
+        alloc::vec![parse_lds_object("a.o", o.build(EM_AARCH64)).expect("a.o parses")]
+    }
+
+    fn a53_link(base: u64, insns: &[u32], fix: bool) -> LdsResult {
+        let script = parse_linker_script(&format!(
+            "SECTIONS {{ . = {base:#x}; .text : {{ *(.text) }} .after : {{ *(.after) }} }}"
+        ))
+        .expect("script parses");
+        let opts = LdsOptions {
+            emit: LdsEmit::Exec,
+            max_page_size: 0x1000,
+            fix_cortex_a53_843419: fix,
+            ..Default::default()
+        };
+        link_with_script(&script, a53_object(insns), &opts).expect("link succeeds")
+    }
+
+    /// `n` words at `sec_addr + delta`, `sec_addr` naming the section.
+    fn a53_words(image: &[u8], sec_addr: u64, delta: usize, n: usize) -> Vec<u32> {
+        let off = section_file_off(image, sec_addr) + delta;
+        (0..n)
+            .map(|i| {
+                u32::from_le_bytes(
+                    image[off + i * 4..off + i * 4 + 4]
+                        .try_into()
+                        .expect("word"),
+                )
+            })
+            .collect()
+    }
+
+    fn a53_sec(image: &[u8], name: &str) -> (u64, u64) {
+        readelf_sections(image)
+            .into_iter()
+            .find(|s| s.0 == name)
+            .map(|s| (s.2, s.3))
+            .expect("section present")
+    }
+
+    /// The dependent load/store is routed through a veneer when the
+    /// ADRP page is beyond ADR reach; `ld --fix-cortex-a53-843419`
+    /// leaves the ADRP in place and branches the load/store out.
+    #[test]
+    fn a53_veneer_redirects_the_dependent_load() {
+        let insns = [A53_ADRP_FAR, A53_LDR, A53_DEP_LDR, A53_RET];
+        let res = a53_link(0xff8, &insns, true);
+        assert_eq!(a53_sec(&res.image, ".text"), (0xff8, 0x1010));
+        assert_eq!(
+            a53_words(&res.image, 0xff8, 0, 4),
+            alloc::vec![A53_ADRP_FAR, A53_LDR, 0x1400_0002, A53_RET],
+        );
+        // Veneer at the reserved area: the load/store, then a branch
+        // back to the instruction after its original slot.
+        assert_eq!(
+            a53_words(&res.image, 0xff8, 0x10, 2),
+            alloc::vec![A53_DEP_LDR, 0x17ff_fffe],
+        );
+        let syms = image_symbols(&res.image);
+        assert!(
+            syms.iter()
+                .any(|s| s.0.starts_with("e843419@") && s.0.ends_with("_8") && s.1 == 0x1008),
+            "veneer symbol missing: {syms:?}"
+        );
+        // The insertion is a whole page: the following section moves by
+        // exactly 0x1000 and keeps its page offset.
+        let plain = a53_link(0xff8, &insns, false);
+        let (fixed, moved) = (
+            a53_sec(&res.image, ".after").0,
+            a53_sec(&plain.image, ".after").0,
+        );
+        assert_eq!(fixed - moved, 0x1000);
+        assert_eq!(fixed & 0xfff, moved & 0xfff);
+    }
+
+    /// With one non-branch instruction between the two accesses the
+    /// sequence still matches and the fourth instruction is veneered.
+    #[test]
+    fn a53_intervening_instruction_form_is_veneered() {
+        let insns = [A53_ADRP_FAR, A53_LDR, 0xd503_201f, A53_DEP_LDR];
+        let res = a53_link(0xff8, &insns, true);
+        assert_eq!(
+            a53_words(&res.image, 0xff8, 0, 4),
+            alloc::vec![A53_ADRP_FAR, A53_LDR, 0xd503_201f, 0x1400_0001],
+        );
+        assert_eq!(
+            a53_words(&res.image, 0xff8, 0x10, 2),
+            alloc::vec![A53_DEP_LDR, 0x17ff_ffff],
+        );
+        let syms = image_symbols(&res.image);
+        assert!(
+            syms.iter()
+                .any(|s| s.0.starts_with("e843419@") && s.0.ends_with("_c"))
+        );
+    }
+
+    /// A page within ADR range rewrites the ADRP in place, as ld's
+    /// default (`full`) mode does; the reserved slot stays empty the
+    /// way ld leaves its unused stub.
+    #[test]
+    fn a53_adr_rewrite_when_the_page_is_reachable() {
+        let insns = [A53_ADRP_NEAR, A53_LDR, A53_DEP_LDR, A53_RET];
+        let res = a53_link(0xff8, &insns, true);
+        // adr x0, #8: 0x1000 (the page) - 0xff8 (the site).
+        assert_eq!(
+            a53_words(&res.image, 0xff8, 0, 4),
+            alloc::vec![0x1000_0040, A53_LDR, A53_DEP_LDR, A53_RET],
+        );
+        assert_eq!(a53_sec(&res.image, ".text"), (0xff8, 0x1010));
+        assert_eq!(a53_words(&res.image, 0xff8, 0x10, 2), alloc::vec![0, 0]);
+        let syms = image_symbols(&res.image);
+        assert!(!syms.iter().any(|s| s.0.starts_with("e843419@")));
+    }
+
+    /// Sequences the erratum conditions exclude stay untouched: an
+    /// ADRP off the last two word slots of a page, a branch in the
+    /// intervening slot, a first load/store writing the ADRP register,
+    /// and a dependent access based elsewhere. `ld` patches none of
+    /// these.
+    #[test]
+    fn a53_non_matching_sequences_are_left_alone() {
+        let cases: [(u64, [u32; 4]); 4] = [
+            (0xff4, [A53_ADRP_FAR, A53_LDR, A53_DEP_LDR, A53_RET]),
+            (0xff8, [A53_ADRP_FAR, A53_LDR, 0x1400_0001, A53_DEP_LDR]),
+            (0xff8, [A53_ADRP_FAR, 0xf940_0040, A53_DEP_LDR, A53_RET]),
+            (0xff8, [A53_ADRP_FAR, A53_LDR, 0xf940_0443, A53_RET]),
+        ];
+        for (base, insns) in cases {
+            let res = a53_link(base, &insns, true);
+            assert_eq!(a53_sec(&res.image, ".text"), (base, 0x10), "at {base:#x}");
+            assert_eq!(a53_words(&res.image, base, 0, 4), insns.to_vec());
+            assert!(
+                !image_symbols(&res.image)
+                    .iter()
+                    .any(|s| s.0.starts_with("e843419@"))
+            );
+        }
+    }
+
+    /// Sites on consecutive pages take consecutive 8-byte slots in one
+    /// page-sized area, so the area still moves nothing off its page
+    /// offset.
+    #[test]
+    fn a53_multiple_sites_pack_into_one_area() {
+        let mut insns = alloc::vec![A53_ADRP_FAR, A53_LDR, A53_DEP_LDR, A53_RET];
+        insns.extend(core::iter::repeat_n(0xd503_201fu32, 1020));
+        insns.extend([A53_ADRP_FAR, A53_LDR, A53_DEP_LDR, A53_RET]);
+        let res = a53_link(0xff8, &insns, true);
+        assert_eq!(a53_sec(&res.image, ".text"), (0xff8, 0x2010));
+        let mut veneers: Vec<(String, u64)> = image_symbols(&res.image)
+            .into_iter()
+            .filter(|s| s.0.starts_with("e843419@"))
+            .map(|s| (s.0, s.1))
+            .collect();
+        veneers.sort_by_key(|v| v.1);
+        assert_eq!(veneers.len(), 2, "{veneers:?}");
+        assert!(veneers[0].0.ends_with("_8") && veneers[0].1 == 0x2008);
+        assert!(veneers[1].0.ends_with("_1008") && veneers[1].1 == 0x2010);
+        // Both dependent loads branch forward into their slots.
+        assert_eq!(a53_words(&res.image, 0xff8, 8, 1), alloc::vec![0x1400_0402]);
+        assert_eq!(
+            a53_words(&res.image, 0xff8, 0x1008, 1),
+            alloc::vec![0x1400_0004]
+        );
+    }
+
+    /// A `$d` mapping symbol marks the sequence as data, which the
+    /// scan skips as ld and LLD skip their data spans.
+    #[test]
+    fn a53_data_spans_are_not_scanned() {
+        let insns = [A53_ADRP_FAR, A53_LDR, A53_DEP_LDR, A53_RET];
+        let body: Vec<u8> = insns.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let o = TestObj::new()
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &body)
+            .sym("$d", STB_LOCAL, STT_NOTYPE, 0, 0, 0);
+        let objs = alloc::vec![parse_lds_object("a.o", o.build(EM_AARCH64)).expect("parses")];
+        let script =
+            parse_linker_script("SECTIONS { . = 0xff8; .text : { *(.text) } }").expect("parses");
+        let opts = LdsOptions {
+            emit: LdsEmit::Exec,
+            max_page_size: 0x1000,
+            fix_cortex_a53_843419: true,
+            ..Default::default()
+        };
+        let res = link_with_script(&script, objs, &opts).expect("link succeeds");
+        assert_eq!(a53_sec(&res.image, ".text"), (0xff8, 0x10));
+        assert_eq!(a53_words(&res.image, 0xff8, 0, 4), insns.to_vec());
     }
 
     #[test]
@@ -6470,16 +8634,17 @@ SECTIONS {
             gnu_property::encode(
                 &props
                     .iter()
-                    .map(|&(ty, datasz, value)| gnu_property::Property { ty, datasz, value })
+                    .map(|&(ty, datasz, value)| gnu_property::Property::number(ty, datasz, value))
                     .collect::<Vec<_>>(),
                 8,
             )
         };
-        let obj = |feature: u64, isa: u64| {
+        let obj = |unknown: u64, feature: u64, isa: u64| {
             let body = note(&[
-                // A type outside every defined range: dropped, and it
-                // must not end the walk over the properties behind it.
-                (0x10, 4, 0xaabb_ccdd),
+                // A type outside every defined range, which the inputs
+                // disagree on: dropped, and it must not end the walk
+                // over the properties behind it.
+                (0x10, 4, unknown),
                 (X86_FEATURE_1_AND, 4, feature),
                 (X86_ISA_1_USED, 4, isa),
             ]);
@@ -6507,8 +8672,8 @@ SECTIONS {
         let res = link_with_script(
             &script,
             alloc::vec![
-                parse_lds_object("a.o", obj(0x3, 0x0)).expect("parses"),
-                parse_lds_object("b.o", obj(0x1, 0x1)).expect("parses"),
+                parse_lds_object("a.o", obj(0xaabb_ccdd, 0x3, 0x0)).expect("parses"),
+                parse_lds_object("b.o", obj(0x1122_3344, 0x1, 0x1)).expect("parses"),
             ],
             &opts,
         )
@@ -6571,14 +8736,7 @@ SECTIONS {
   .note.gnu.build-id : { *(.note.gnu.build-id) }
 }
 "#;
-        let body = gnu_property::encode(
-            &[gnu_property::Property {
-                ty: 0xc000_0002,
-                datasz: 4,
-                value: 0x3,
-            }],
-            8,
-        );
+        let body = gnu_property::encode(&[gnu_property::Property::number(0xc000_0002, 4, 0x3)], 8);
         let a = TestObj::new()
             .sec(
                 ".text",
@@ -6684,6 +8842,169 @@ SECTIONS {
         assert_eq!(r_offset, data_addr + 9);
         assert_eq!(r_type, rt::R_AARCH64_RELATIVE);
         let _ = syms;
+    }
+
+    /// A `.text` displacement holding `slot`'s address as a 32-bit
+    /// absolute, plus an address-width `.data` pointer to it.
+    fn narrow_abs_object() -> Vec<u8> {
+        TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                8,
+                &[0u8; 16],
+            )
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0u8; 16])
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 16)
+            .sym("slot", STB_GLOBAL, STT_OBJECT, 1, 0, 8)
+            // Symtab: null(0), sections(1,2), _start(3), slot(4).
+            .reloc(0, 4, 4, rt::R_X86_64_32S, 0)
+            .reloc(1, 8, 4, rt::R_X86_64_64, 0)
+            .build(EM_X86_64)
+    }
+
+    /// An absolute relocation narrower than an address has no dynamic
+    /// form -- `R_X86_64_RELATIVE` writes an 8-byte word -- so an
+    /// ET_DYN image cannot carry the site. The engine used to write
+    /// the link-time address and emit no `.rela.dyn` entry covering
+    /// it, which the loader's slide then invalidated. GNU ld declines
+    /// the same input. The ET_EXEC link, where the address is a
+    /// link-time constant, still writes it.
+    #[test]
+    fn a_narrow_absolute_is_declined_in_a_dyn_link() {
+        let script = parse_linker_script(DYN_SCRIPT).expect("script parses");
+        let link = |emit, shared| {
+            link_with_script(
+                &script,
+                alloc::vec![parse_lds_object("t.o", narrow_abs_object()).expect("parses")],
+                &LdsOptions {
+                    emit,
+                    shared,
+                    max_page_size: 0x1000,
+                    ..Default::default()
+                },
+            )
+        };
+        let res = link(LdsEmit::Exec, false).expect("exec link succeeds");
+        let secs = readelf_sections(&res.image);
+        let data_addr = secs.iter().find(|s| s.0 == ".data").expect(".data").2;
+        let text_off = section_file_off(
+            &res.image,
+            secs.iter().find(|s| s.0 == ".text").expect(".text").2,
+        );
+        assert_eq!(
+            u32::from_le_bytes(res.image[text_off + 4..text_off + 8].try_into().unwrap()) as u64,
+            data_addr,
+            "ET_EXEC keeps writing the link-time address"
+        );
+        assert_eq!(
+            alloc::format!("{}", link(LdsEmit::Dyn, false).expect_err("pie link fails")),
+            "error: t.o(.text+0x4): R_X86_64_32S (11) against symbol `slot` can not be used \
+             when making a position-independent executable: the reference needs an absolute \
+             address, which no load address supplies"
+        );
+        assert!(
+            alloc::format!(
+                "{}",
+                link(LdsEmit::Dyn, true).expect_err("shared link fails")
+            )
+            .contains("when making a shared object"),
+            "the refusal names the output kind"
+        );
+    }
+
+    /// The screen fires only where no dynamic form exists. An
+    /// address-width absolute against a load address is exactly what
+    /// `.rela.dyn` carries, so the same input that loses its narrow
+    /// site keeps its RELATIVE entry.
+    #[test]
+    fn a_dyn_link_covers_an_address_width_absolute() {
+        let script = parse_linker_script(DYN_SCRIPT).expect("script parses");
+        let a = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                8,
+                &[0u8; 16],
+            )
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0u8; 16])
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 16)
+            .sym("slot", STB_GLOBAL, STT_OBJECT, 1, 0, 8)
+            .reloc(1, 8, 4, rt::R_X86_64_64, 0)
+            .build(EM_X86_64);
+        let res = link_with_script(
+            &script,
+            alloc::vec![parse_lds_object("t.o", a).expect("parses")],
+            &LdsOptions {
+                emit: LdsEmit::Dyn,
+                max_page_size: 0x1000,
+                ..Default::default()
+            },
+        )
+        .expect("abs64 links");
+        let secs = readelf_sections(&res.image);
+        let rela = secs.iter().find(|s| s.0 == ".rela.dyn").expect(".rela.dyn");
+        let off = section_file_off(&res.image, rela.2);
+        assert_eq!(rela.3, 24, "one RELA entry covers the ABS64 slot");
+        assert_eq!(
+            u32::from_le_bytes(res.image[off + 8..off + 12].try_into().unwrap()),
+            rt::R_X86_64_RELATIVE
+        );
+    }
+
+    /// An absolute against a global SHN_ABS symbol holds a link-time
+    /// constant at any field width: no load address is involved, so
+    /// the site keeps its value and needs no dynamic entry. Such a
+    /// symbol is its own entry in the global table, which the
+    /// load-address test used to follow until the stack ran out.
+    #[test]
+    fn a_dyn_link_keeps_an_absolute_global_constant() {
+        let script = parse_linker_script(DYN_SCRIPT).expect("script parses");
+        let a = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                8,
+                &[0u8; 16],
+            )
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0u8; 8])
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 16)
+            .sym("KCONST", STB_GLOBAL, STT_OBJECT, usize::MAX - 1, 0x1234, 0)
+            // Symtab: null(0), sections(1,2), _start(3), KCONST(4).
+            .reloc(0, 4, 4, rt::R_X86_64_32S, 0)
+            .reloc(1, 0, 4, rt::R_X86_64_64, 0)
+            .build(EM_X86_64);
+        let res = link_with_script(
+            &script,
+            alloc::vec![parse_lds_object("t.o", a).expect("parses")],
+            &LdsOptions {
+                emit: LdsEmit::Dyn,
+                max_page_size: 0x1000,
+                ..Default::default()
+            },
+        )
+        .expect("an absolute constant links");
+        let secs = readelf_sections(&res.image);
+        let body = |name: &str| {
+            section_file_off(&res.image, secs.iter().find(|s| s.0 == name).expect(name).2)
+        };
+        let text_off = body(".text");
+        assert_eq!(
+            u32::from_le_bytes(res.image[text_off + 4..text_off + 8].try_into().unwrap()),
+            0x1234
+        );
+        let data_off = body(".data");
+        assert_eq!(
+            u64::from_le_bytes(res.image[data_off..data_off + 8].try_into().unwrap()),
+            0x1234
+        );
+        assert!(
+            !secs.iter().any(|s| s.0 == ".rela.dyn" && s.3 > 0),
+            "a constant needs no dynamic entry"
+        );
     }
 
     /// An ABS64 slot against a symbol only the script defines is a
@@ -6860,7 +9181,9 @@ VERSION { LINUX_2.6 { global: __vdso_time; time; local: *; }; }
         // `.dynamic` names each table at the address it landed on.
         let dyn_off = section_file_off(&res.image, sec(".dynamic").2);
         let tags: HashMap<u64, u64> = res.image[dyn_off..dyn_off + sec(".dynamic").3 as usize]
-            .chunks_exact(16)
+            .as_chunks::<16>()
+            .0
+            .iter()
             .map(|c| {
                 (
                     u64::from_le_bytes(c[0..8].try_into().unwrap()),
@@ -6985,7 +9308,9 @@ VERSION { LINUX_2.6 { global: __vdso_time; time; local: *; }; }
         assert!(sec(".dynamic").2 < sec(".data").2);
         let dyn_off = section_file_off(&res.image, sec(".dynamic").2);
         let tags: HashMap<u64, u64> = res.image[dyn_off..dyn_off + sec(".dynamic").3 as usize]
-            .chunks_exact(16)
+            .as_chunks::<16>()
+            .0
+            .iter()
             .map(|c| {
                 (
                     u64::from_le_bytes(c[0..8].try_into().unwrap()),
@@ -7181,6 +9506,545 @@ SECTIONS {
         assert_eq!(find_sym(&syms, "b_four"), ro.2 + 16);
     }
 
+    fn shared_input(soname: &str, funcs: &[&str], data: &[&str]) -> SharedInput {
+        SharedInput {
+            lib: SharedLibrary {
+                soname: soname.to_string(),
+                machine: NativeMachine::X86_64,
+                exports: funcs.iter().chain(data).map(|s| s.to_string()).collect(),
+                data_exports: data.iter().map(|s| s.to_string()).collect(),
+            },
+            as_needed: false,
+        }
+    }
+
+    /// A PIE against shared libraries, under the built-in script.
+    fn dynamic_opts(libs: Vec<SharedInput>) -> LdsOptions {
+        LdsOptions {
+            emit: LdsEmit::Dyn,
+            interp: Some(String::from("/lib64/ld-linux-x86-64.so.2")),
+            shared_libs: libs,
+            max_page_size: 0x200000,
+            ..LdsOptions::default()
+        }
+    }
+
+    /// `.text` calling `foo` and loading `bar` through the GOT.
+    fn import_user() -> Vec<u8> {
+        let body = [
+            0xe8, 0, 0, 0, 0, // call foo
+            0x48, 0x8b, 0x05, 0, 0, 0, 0, // mov bar@GOTPCREL(%rip), %rax
+            0xc3, 0, 0, 0,
+        ];
+        TestObj::new()
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 16, &body)
+            .reloc(0, 1, 3, rt::R_X86_64_PLT32, -4)
+            .reloc(0, 8, 4, rt::R_X86_64_REX_GOTPCRELX, -4)
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 13)
+            .sym("foo", STB_GLOBAL, STT_FUNC, usize::MAX, 0, 0)
+            .sym("bar", STB_GLOBAL, STT_OBJECT, usize::MAX, 0, 0)
+            .build(EM_X86_64)
+    }
+
+    fn dyn_tags(image: &[u8]) -> Vec<(u64, u64)> {
+        let (_, body) = image_section(image, ".dynamic");
+        body.as_chunks::<16>()
+            .0
+            .iter()
+            .map(|c| {
+                (
+                    u64::from_le_bytes(c[..8].try_into().unwrap()),
+                    u64::from_le_bytes(c[8..].try_into().unwrap()),
+                )
+            })
+            .collect()
+    }
+
+    fn dynstr_at(image: &[u8], off: u64) -> String {
+        let (_, s) = image_section(image, ".dynstr");
+        strz(&s, off as usize)
+    }
+
+    /// A shared library input takes a `DT_NEEDED` naming its soname,
+    /// and `--dynamic-linker` an `.interp` a loader can find through
+    /// `PT_INTERP`, with `PT_PHDR` for the load bias.
+    #[test]
+    fn a_shared_library_input_records_a_dependency() {
+        let script = parse_linker_script(&default_script(true)).expect("parses");
+        let objs = alloc::vec![parse_lds_object("a.o", import_user()).expect("parses")];
+        let mut opts = dynamic_opts(alloc::vec![
+            shared_input("libc.so.6", &["foo"], &["bar"]),
+            shared_input("libm.so.6", &["unused"], &[]),
+        ]);
+        opts.rpath = alloc::vec![String::from("/opt/lib"), String::from("$ORIGIN")];
+        opts.shared_libs[1].as_needed = true;
+        let res = link_with_script(&script, objs, &opts).expect("links");
+        let needed: Vec<String> = dyn_tags(&res.image)
+            .iter()
+            .filter(|&&(t, _)| t == dynamic::DT_NEEDED)
+            .map(|&(_, v)| dynstr_at(&res.image, v))
+            .collect();
+        assert_eq!(
+            needed,
+            alloc::vec![String::from("libc.so.6")],
+            "the library the link binds to is recorded; an AS_NEEDED one it does not use is not"
+        );
+        let rpath: Vec<String> = dyn_tags(&res.image)
+            .iter()
+            .filter(|&&(t, _)| t == dynamic::DT_RPATH)
+            .map(|&(_, v)| dynstr_at(&res.image, v))
+            .collect();
+        assert_eq!(rpath, alloc::vec![String::from("/opt/lib:$ORIGIN")]);
+        let (_, interp) = image_section(&res.image, ".interp");
+        assert_eq!(interp, b"/lib64/ld-linux-x86-64.so.2\0");
+        let phdrs = image_phdrs(&res.image);
+        let interp_seg = phdrs
+            .iter()
+            .find(|p| p.p_type == PT_INTERP)
+            .expect("PT_INTERP");
+        let (addr, _) = image_section(&res.image, ".interp");
+        assert_eq!(interp_seg.p_vaddr, addr);
+        let phdr_seg = phdrs.iter().find(|p| p.p_type == PT_PHDR).expect("PT_PHDR");
+        assert_eq!(phdr_seg.p_offset, 64, "the table follows the ELF header");
+        assert_eq!(
+            phdr_seg.p_filesz,
+            phdrs.len() as u64 * 56,
+            "and covers all of it"
+        );
+        let load = phdrs
+            .iter()
+            .find(|p| p.p_type == PT_LOAD)
+            .expect("a loadable segment");
+        assert_eq!(
+            (load.p_offset, load.p_vaddr),
+            (0, 0),
+            "the first load covers the headers a loader reads"
+        );
+    }
+
+    /// A call to an imported function reaches it through a PLT stub and
+    /// a load through a GOT slot the loader fills from a `GLOB_DAT`
+    /// entry naming the symbol.
+    #[test]
+    fn an_import_binds_through_a_stub_and_a_got_slot() {
+        let script = parse_linker_script(&default_script(true)).expect("parses");
+        let objs = alloc::vec![parse_lds_object("a.o", import_user()).expect("parses")];
+        let opts = dynamic_opts(alloc::vec![shared_input("libc.so.6", &["foo"], &["bar"])]);
+        let res = link_with_script(&script, objs, &opts).expect("links");
+        // Imports lead the table, in name order, so a relocation can
+        // name one by index.
+        let syms = image_dynsyms(&res.image);
+        assert_eq!(syms[1].0, "bar");
+        assert_eq!(syms[2].0, "foo");
+        assert_eq!((syms[1].2, syms[2].2), (SHN_UNDEF, SHN_UNDEF));
+
+        let (got_addr, _) = image_section(&res.image, ".got");
+        let (_, rela) = image_section(&res.image, ".rela.dyn");
+        let entries: Vec<(u64, u32, u32)> = rela
+            .as_chunks::<24>()
+            .0
+            .iter()
+            .map(|c| {
+                let info = u64::from_le_bytes(c[8..16].try_into().unwrap());
+                (
+                    u64::from_le_bytes(c[..8].try_into().unwrap()),
+                    (info >> 32) as u32,
+                    info as u32,
+                )
+            })
+            .collect();
+        let glob: Vec<&(u64, u32, u32)> = entries
+            .iter()
+            .filter(|e| e.2 == rt::R_X86_64_GLOB_DAT)
+            .collect();
+        assert_eq!(glob.len(), 2, "one slot per import");
+        assert_eq!(
+            (glob[0].0, glob[0].1),
+            (got_addr, 1),
+            "bar's slot names bar"
+        );
+        assert_eq!(
+            (glob[1].0, glob[1].1),
+            (got_addr + 8, 2),
+            "foo's slot names foo"
+        );
+
+        let (text_addr, text) = image_section(&res.image, ".text");
+        let (plt_addr, plt) = image_section(&res.image, ".plt");
+        assert_eq!(plt.len(), 16, "only the called import takes a stub");
+        let call = i32::from_le_bytes(text[1..5].try_into().unwrap()) as i64;
+        assert_eq!(
+            text_addr as i64 + 5 + call,
+            plt_addr as i64,
+            "the call reaches the stub"
+        );
+        let load = i32::from_le_bytes(text[8..12].try_into().unwrap()) as i64;
+        assert_eq!(
+            text_addr as i64 + 12 + load,
+            got_addr as i64,
+            "the load keeps its GOT slot rather than relaxing to an address"
+        );
+        assert_eq!(
+            text[5..8],
+            [0x48, 0x8b, 0x05],
+            "so the load is not rewritten"
+        );
+        // The stub jumps through the slot: ff 25 <rip-relative>.
+        assert_eq!(plt[..2], [0xff, 0x25]);
+        let disp = i32::from_le_bytes(plt[2..6].try_into().unwrap()) as i64;
+        assert_eq!(plt_addr as i64 + 6 + disp, got_addr as i64 + 8);
+    }
+
+    /// A reference that would need the imported object copied into this
+    /// image is refused rather than left pointing at nothing.
+    #[test]
+    fn a_direct_reference_to_imported_data_is_refused() {
+        let script = parse_linker_script(&default_script(true)).expect("parses");
+        let obj = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                16,
+                &[0x90; 8],
+            )
+            .reloc(0, 2, 3, rt::R_X86_64_PC32, -4)
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 8)
+            .sym("bar", STB_GLOBAL, STT_OBJECT, usize::MAX, 0, 0)
+            .build(EM_X86_64);
+        let objs = alloc::vec![parse_lds_object("a.o", obj).expect("parses")];
+        let opts = dynamic_opts(alloc::vec![shared_input("libc.so.6", &[], &["bar"])]);
+        let e = alloc::format!(
+            "{}",
+            link_with_script(&script, objs, &opts).expect_err("refused")
+        );
+        assert!(
+            e.contains("`bar'") && e.contains("cannot reach a shared library"),
+            "{e}"
+        );
+    }
+
+    /// A `zR` CIE, the shape gcc emits for a unit needing no
+    /// personality routine.
+    fn eh_cie_zr() -> Vec<u8> {
+        alloc::vec![
+            0x14, 0, 0, 0, 0, 0, 0, 0, 1, b'z', b'R', 0, 1, 0x78, 0x10, 1, 0x1b, 0x0c, 0x07, 0x08,
+            0x90, 0x01, 0, 0,
+        ]
+    }
+
+    /// A `zPR` CIE; its personality pointer sits at offset 0x12 and is
+    /// relocated.
+    fn eh_cie_zpr() -> Vec<u8> {
+        alloc::vec![
+            0x1c, 0, 0, 0, 0, 0, 0, 0, 1, b'z', b'P', b'R', 0, 1, 0x78, 0x10, 6, 0x9b, 0, 0, 0, 0,
+            0x1b, 0x0c, 0x07, 0x08, 0x90, 0x01, 0, 0, 0, 0,
+        ]
+    }
+
+    /// An FDE of `total` bytes naming a CIE `back` bytes before its own
+    /// pointer field; its initial location sits at offset 8 and is
+    /// relocated.
+    fn eh_fde_sized(back: u32, total: usize) -> Vec<u8> {
+        let mut f: Vec<u8> = alloc::vec![(total - 4) as u8, 0, 0, 0];
+        f.extend_from_slice(&back.to_le_bytes());
+        f.extend_from_slice(&[0, 0, 0, 0, 8, 0, 0, 0]);
+        f.resize(total, 0);
+        f
+    }
+
+    fn eh_fde(back: u32) -> Vec<u8> {
+        eh_fde_sized(back, 24)
+    }
+
+    fn image_section(image: &[u8], name: &str) -> (u64, Vec<u8>) {
+        let shoff = u64::from_le_bytes(image[40..48].try_into().unwrap()) as usize;
+        let shnum = u16::from_le_bytes(image[60..62].try_into().unwrap()) as usize;
+        let sh = |i: usize| -> Elf64Shdr { read_struct(image, shoff + i * 64).unwrap() };
+        let str_sh = sh(u16::from_le_bytes(image[62..64].try_into().unwrap()) as usize);
+        let names = &image[str_sh.sh_offset as usize..(str_sh.sh_offset + str_sh.sh_size) as usize];
+        let h = (1..shnum)
+            .map(sh)
+            .find(|h| strz(names, h.sh_name as usize) == name)
+            .expect("section is in the image");
+        (
+            h.sh_addr,
+            image[h.sh_offset as usize..(h.sh_offset + h.sh_size) as usize].to_vec(),
+        )
+    }
+
+    /// bfd folds the identical CIEs of separately compiled units into
+    /// one and repoints every FDE at it. The pointer is the distance
+    /// back from its own field, so each FDE takes a different value.
+    #[test]
+    fn eh_frame_folds_identical_cies() {
+        let script = parse_linker_script(
+            "SECTIONS { . = 0x1000; .text : { *(.text) } .eh_frame : { *(.eh_frame) } }",
+        )
+        .expect("parses");
+        let unit = |name: &str| {
+            let mut eh = eh_cie_zr();
+            eh.extend_from_slice(&eh_fde(0x1c));
+            TestObj::new()
+                .sec(
+                    ".text",
+                    SHT_PROGBITS,
+                    SHF_ALLOC | SHF_EXECINSTR,
+                    8,
+                    &[0x90; 8],
+                )
+                .sec(".eh_frame", SHT_PROGBITS, SHF_ALLOC, 8, &eh)
+                // The FDE's initial location, against the text it covers.
+                .reloc(1, 0x20, 1, rt::R_X86_64_PC32, 0)
+                .sym(name, STB_GLOBAL, STT_FUNC, 0, 0, 8)
+                .build(EM_X86_64)
+        };
+        let objs = alloc::vec![
+            parse_lds_object("a.o", unit("fa")).expect("parses"),
+            parse_lds_object("b.o", unit("fb")).expect("parses"),
+        ];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        let (addr, body) = image_section(&res.image, ".eh_frame");
+        assert_eq!(body.len(), 24 + 24 + 24, "one CIE, both FDEs");
+        assert_eq!(&body[..24], &eh_cie_zr()[..], "the first CIE stays");
+        assert_eq!(
+            u32::from_le_bytes(body[0x1c..0x20].try_into().unwrap()),
+            0x1c
+        );
+        assert_eq!(
+            u32::from_le_bytes(body[0x34..0x38].try_into().unwrap()),
+            0x34,
+            "the second FDE reaches back to the surviving CIE"
+        );
+        let fdes = eh_frame::scan(&body, addr).expect("scans");
+        let syms = image_symbols(&res.image);
+        assert_eq!(
+            fdes.iter().map(|e| e.pc).collect::<Vec<_>>(),
+            alloc::vec![find_sym(&syms, "fa"), find_sym(&syms, "fb")],
+            "both FDEs still cover their own text"
+        );
+    }
+
+    /// A zero length ends `.eh_frame`, so the alignment padding between
+    /// two inputs may not fall inside the linked stream: the entry
+    /// before it absorbs the gap, as bfd's writer does.
+    #[test]
+    fn eh_frame_entries_leave_no_gap_at_an_input_boundary() {
+        let script = parse_linker_script(
+            "SECTIONS { . = 0x1000; .text : { *(.text) } .eh_frame : { *(.eh_frame) } }",
+        )
+        .expect("parses");
+        // 24-byte CIE + 20-byte FDE: 44 bytes under an 8-byte
+        // alignment, so the next input would start four bytes on.
+        let unit = |name: &str| {
+            let mut eh = eh_cie_zr();
+            eh.extend_from_slice(&eh_fde_sized(0x1c, 20));
+            TestObj::new()
+                .sec(
+                    ".text",
+                    SHT_PROGBITS,
+                    SHF_ALLOC | SHF_EXECINSTR,
+                    8,
+                    &[0x90; 8],
+                )
+                .sec(".eh_frame", SHT_PROGBITS, SHF_ALLOC, 8, &eh)
+                .reloc(1, 0x20, 1, rt::R_X86_64_PC32, 0)
+                .sym(name, STB_GLOBAL, STT_FUNC, 0, 0, 8)
+                .build(EM_X86_64)
+        };
+        let objs = alloc::vec![
+            parse_lds_object("a.o", unit("fa")).expect("parses"),
+            parse_lds_object("b.o", unit("fb")).expect("parses"),
+        ];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        let (addr, body) = image_section(&res.image, ".eh_frame");
+        assert_eq!(body.len(), 24 + 24 + 24, "one CIE and two padded FDEs");
+        assert_eq!(
+            u32::from_le_bytes(body[0x18..0x1c].try_into().unwrap()),
+            0x14,
+            "the first FDE covers the padding that followed it"
+        );
+        assert_eq!(eh_frame::scan(&body, addr).expect("scans").len(), 2);
+        assert_eq!(eh_frame::count_fdes(&body), 2);
+    }
+
+    /// bfd keys a CIE on the personality routine it resolves to, not on
+    /// the bytes of the pointer, which relocation leaves zero in every
+    /// input.
+    #[test]
+    fn eh_frame_cies_split_on_the_personality_they_name() {
+        let script = parse_linker_script(
+            "SECTIONS { . = 0x1000; .text : { *(.text) } .eh_frame : { *(.eh_frame) } }",
+        )
+        .expect("parses");
+        let unit = |fname: &str, pers: &str, defines: bool| {
+            let mut eh = eh_cie_zpr();
+            eh.extend_from_slice(&eh_fde(0x24));
+            let o = TestObj::new()
+                .sec(
+                    ".text",
+                    SHT_PROGBITS,
+                    SHF_ALLOC | SHF_EXECINSTR,
+                    8,
+                    &[0x90; 8],
+                )
+                .sec(".eh_frame", SHT_PROGBITS, SHF_ALLOC, 8, &eh)
+                .reloc(1, 0x12, 4, rt::R_X86_64_PC32, 0)
+                .reloc(1, 0x28, 1, rt::R_X86_64_PC32, 0)
+                .sym(fname, STB_GLOBAL, STT_FUNC, 0, 0, 8);
+            let sec = if defines { 0 } else { usize::MAX };
+            o.sym(pers, STB_GLOBAL, STT_FUNC, sec, 0, 0)
+                .build(EM_X86_64)
+        };
+        let objs = alloc::vec![
+            parse_lds_object("a.o", unit("fa", "pers", true)).expect("parses"),
+            parse_lds_object("b.o", unit("fb", "pers", false)).expect("parses"),
+            parse_lds_object("c.o", unit("fc", "pers2", true)).expect("parses"),
+        ];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        let (addr, body) = image_section(&res.image, ".eh_frame");
+        assert_eq!(
+            body.len(),
+            32 + 24 + 24 + 32 + 24,
+            "the two units naming one routine share a CIE; the third keeps its own"
+        );
+        assert_eq!(
+            u32::from_le_bytes(body[0x3c..0x40].try_into().unwrap()),
+            0x3c,
+            "b.o's FDE reaches back to a.o's CIE"
+        );
+        assert_eq!(
+            u32::from_le_bytes(body[0x74..0x78].try_into().unwrap()),
+            0x24,
+            "c.o's FDE keeps its own"
+        );
+        let syms = image_symbols(&res.image);
+        let pers = find_sym(&syms, "pers");
+        assert_eq!(
+            i32::from_le_bytes(body[0x12..0x16].try_into().unwrap()) as i64 + (addr + 0x12) as i64,
+            pers as i64,
+            "the surviving CIE keeps its own personality relocation"
+        );
+        assert_eq!(eh_frame::scan(&body, addr).expect("scans").len(), 3);
+    }
+
+    /// `eh_cie_zr` with a different `DW_CFA_def_cfa` offset, so the two
+    /// fold into nothing.
+    fn eh_cie_zr_alt() -> Vec<u8> {
+        let mut c = eh_cie_zr();
+        c[17] = 0x10;
+        c
+    }
+
+    /// A `.eh_frame` unit: one text section under `text`, a CIE and a
+    /// single FDE covering it.
+    fn eh_unit(text: &str, name: &str, cie: &[u8]) -> Vec<u8> {
+        eh_unit_typed(text, name, cie, SHT_PROGBITS)
+    }
+
+    fn eh_unit_typed(text: &str, name: &str, cie: &[u8], shtype: u32) -> Vec<u8> {
+        let mut eh = cie.to_vec();
+        eh.extend_from_slice(&eh_fde(0x1c));
+        TestObj::new()
+            .sec(text, SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 8, &[0x90; 8])
+            .sec(".eh_frame", shtype, SHF_ALLOC, 8, &eh)
+            .reloc(1, 0x20, 1, rt::R_X86_64_PC32, 0)
+            .sym(name, STB_GLOBAL, STT_FUNC, 0, 0, 8)
+            .build(EM_X86_64)
+    }
+
+    const EH_GC_SCRIPT: &str =
+        "SECTIONS { . = 0x1000; .text : { *(.text*) } .eh_frame : { *(.eh_frame) } }";
+
+    /// `--gc-sections` drops the FDE describing collected code, and the
+    /// CIE only that FDE named goes with it. `.eh_frame` is kept but
+    /// does not propagate, so the collector never reaches the text
+    /// through it.
+    #[test]
+    fn eh_frame_gc_drops_a_collected_fde_and_its_last_cie() {
+        let script = parse_linker_script(EH_GC_SCRIPT).expect("parses");
+        let objs = || {
+            alloc::vec![
+                parse_lds_object("a.o", eh_unit(".text.live", "live", &eh_cie_zr()))
+                    .expect("parses"),
+                parse_lds_object("b.o", eh_unit(".text.dead", "dead", &eh_cie_zr_alt()))
+                    .expect("parses"),
+            ]
+        };
+        let opts = LdsOptions {
+            gc_sections: true,
+            entry_override: Some(String::from("live")),
+            ..LdsOptions::default()
+        };
+        let res = link_with_script(&script, objs(), &opts).expect("links");
+        let (addr, body) = image_section(&res.image, ".eh_frame");
+        assert_eq!(body.len(), 24 + 24, "only the live unit's CIE and FDE");
+        assert_eq!(&body[..24], &eh_cie_zr()[..], "the collected CIE is gone");
+        assert_eq!(eh_frame::count_fdes(&body), 1);
+        let syms = image_symbols(&res.image);
+        assert_eq!(
+            eh_frame::scan(&body, addr)
+                .expect("scans")
+                .iter()
+                .map(|e| e.pc)
+                .collect::<Vec<_>>(),
+            alloc::vec![find_sym(&syms, "live")]
+        );
+        // Without the option both units keep everything.
+        let plain = link_with_script(&script, objs(), &LdsOptions::default()).expect("links");
+        assert_eq!(image_section(&plain.image, ".eh_frame").1.len(), 4 * 24);
+    }
+
+    /// The x86-64 psABI types `.eh_frame` SHT_X86_64_UNWIND, and gcc
+    /// and clang emit it that way; pruning and dedup treat it exactly
+    /// as a SHT_PROGBITS input.
+    #[test]
+    fn eh_frame_gc_prunes_unwind_typed_inputs() {
+        let script = parse_linker_script(EH_GC_SCRIPT).expect("parses");
+        let unit = |text, name, cie: &[u8]| eh_unit_typed(text, name, cie, SHT_X86_64_UNWIND);
+        let objs = alloc::vec![
+            parse_lds_object("a.o", unit(".text.live", "live", &eh_cie_zr())).expect("parses"),
+            parse_lds_object("b.o", unit(".text.dead", "dead", &eh_cie_zr_alt())).expect("parses"),
+        ];
+        let opts = LdsOptions {
+            gc_sections: true,
+            entry_override: Some(String::from("live")),
+            ..LdsOptions::default()
+        };
+        let res = link_with_script(&script, objs, &opts).expect("links");
+        let (addr, body) = image_section(&res.image, ".eh_frame");
+        assert_eq!(body.len(), 24 + 24, "only the live unit's CIE and FDE");
+        assert_eq!(eh_frame::count_fdes(&body), 1);
+        let syms = image_symbols(&res.image);
+        assert_eq!(
+            eh_frame::scan(&body, addr)
+                .expect("scans")
+                .iter()
+                .map(|e| e.pc)
+                .collect::<Vec<_>>(),
+            alloc::vec![find_sym(&syms, "live")],
+            "the surviving FDE still covers its own text"
+        );
+    }
+
+    /// A CIE no FDE names describes nothing wherever it came from, so
+    /// bfd drops it whether or not anything was collected.
+    #[test]
+    fn eh_frame_drops_a_cie_no_fde_names() {
+        let script = parse_linker_script(EH_GC_SCRIPT).expect("parses");
+        let lone = TestObj::new()
+            .sec(".eh_frame", SHT_PROGBITS, SHF_ALLOC, 8, &eh_cie_zr_alt())
+            .build(EM_X86_64);
+        let objs = alloc::vec![
+            parse_lds_object("a.o", eh_unit(".text.live", "live", &eh_cie_zr())).expect("parses"),
+            parse_lds_object("lone.o", lone).expect("parses"),
+        ];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        let (_, body) = image_section(&res.image, ".eh_frame");
+        assert_eq!(body.len(), 24 + 24, "the unreferenced CIE contributes none");
+        assert_eq!(eh_frame::count_fdes(&body), 1);
+    }
+
     /// An ABS64 against a non-local symbol in an allocated section the
     /// script discards reserves a `.rela.dyn` slot that is never
     /// written (bfd sizes the global path without a discard check);
@@ -7276,6 +10140,433 @@ SECTIONS {
         };
         assert_eq!(shndx_of("bnd"), data_shndx, "dot assignment prefers next");
         assert_eq!(shndx_of("tail"), data_shndx, "previous allocated section");
+    }
+
+    /// `(name, st_info, st_shndx)` in symbol table order.
+    fn image_sym_rows(image: &[u8]) -> Vec<(String, u8, u16)> {
+        let shoff = u64::from_le_bytes(image[40..48].try_into().unwrap()) as usize;
+        let shnum = u16::from_le_bytes(image[60..62].try_into().unwrap()) as usize;
+        let sh = |i: usize| -> Elf64Shdr { read_struct(image, shoff + i * 64).unwrap() };
+        for i in 1..shnum {
+            let h = sh(i);
+            if h.sh_type != SHT_SYMTAB {
+                continue;
+            }
+            let strh = sh(h.sh_link as usize);
+            let strtab = &image[strh.sh_offset as usize..(strh.sh_offset + strh.sh_size) as usize];
+            return (0..(h.sh_size / 24) as usize)
+                .map(|k| {
+                    let s: Elf64Sym = read_struct(image, h.sh_offset as usize + k * 24).unwrap();
+                    (strz(strtab, s.st_name as usize), s.st_info, s.st_shndx)
+                })
+                .collect();
+        }
+        Vec::new()
+    }
+
+    fn symtab_objects() -> Vec<LdsObject> {
+        // a.o names its source file; b.o has none, and its section is
+        // placed ahead of a.o's.
+        let a = TestObj::new()
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &[0xc3])
+            .sec(
+                ".rodata.str1.1",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_MERGE | SHF_STRINGS,
+                1,
+                b"hi\0",
+            )
+            .entsize(1, 1)
+            .sym("a.c", STB_LOCAL, STT_FILE, usize::MAX - 1, 0, 0)
+            .sym("a_local", STB_LOCAL, STT_OBJECT, 0, 0, 1)
+            .sym(".Lstr", STB_LOCAL, STT_NOTYPE, 1, 0, 0)
+            .sym("gfunc", STB_GLOBAL, STT_FUNC, 0, 0, 1)
+            .build(EM_X86_64);
+        let b = TestObj::new()
+            .sec(
+                ".text.b",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                4,
+                &[0xc3],
+            )
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0u8; 8])
+            .sym("b_local", STB_LOCAL, STT_OBJECT, 1, 0, 4)
+            .sym("gdata", STB_GLOBAL, STT_OBJECT, 1, 0, 8)
+            .build(EM_X86_64);
+        alloc::vec![
+            parse_lds_object("obj/a.o", a).expect("a parses"),
+            parse_lds_object("lib.a(b.o)", b).expect("b parses"),
+        ]
+    }
+
+    const SYMTAB_SCRIPT: &str = r#"
+SECTIONS {
+  . = 0x1000;
+  .btext : { *(.text.b) }
+  .text : { *(.text) }
+  .rodata : { *(.rodata.str1.1) }
+  .data : { *(.data) }
+  alias_func = gfunc;
+  alias_data = gdata;
+  alias_sum = gfunc + gdata;
+}
+"#;
+
+    /// bfd's `.symtab` composition: no section symbols in a final link
+    /// that emits no relocations, a file symbol heading every object's
+    /// locals in placement order, compiler temporaries of a merged
+    /// section dropped, and an assignment carrying the type of the one
+    /// symbol its expression names.
+    #[test]
+    fn symtab_composition_follows_bfd() {
+        let script = parse_linker_script(SYMTAB_SCRIPT).expect("script parses");
+        let res = link_with_script(&script, symtab_objects(), &LdsOptions::default())
+            .expect("link succeeds");
+        let rows = image_sym_rows(&res.image);
+        assert!(
+            rows.iter().all(|(_, info, _)| info & 0xf != STT_SECTION),
+            "no section symbols without emitted relocations"
+        );
+        let files: Vec<&str> = rows
+            .iter()
+            .filter(|(_, info, _)| info & 0xf == STT_FILE)
+            .map(|(n, _, _)| n.as_str())
+            .collect();
+        assert_eq!(files, alloc::vec!["b.o", "a.c"], "placement order");
+        let kind = |name: &str| {
+            rows.iter()
+                .find(|(n, _, _)| n == name)
+                .unwrap_or_else(|| panic!("{name}"))
+                .1
+                & 0xf
+        };
+        assert_eq!(kind("alias_func"), STT_FUNC);
+        assert_eq!(kind("alias_data"), STT_OBJECT);
+        assert_eq!(kind("alias_sum"), STT_NOTYPE, "two names carry no type");
+        assert!(
+            !rows.iter().any(|(n, _, _)| n == ".Lstr"),
+            "merged-section temporary dropped"
+        );
+        assert!(rows.iter().any(|(n, _, _)| n == "b_local"));
+    }
+
+    /// A definition taken from the location counter outside an output
+    /// section carries a section in its own entry but hands a number
+    /// to whatever names it, so the aliases a script builds from one
+    /// are absolute, as they are in ld.
+    #[test]
+    fn a_symbol_defined_from_dot_hands_on_a_number() {
+        let script = parse_linker_script(
+            r#"
+SECTIONS {
+  . = 0x1000;
+  .text : { *(.text) in_text = .; }
+  . = ALIGN(0x1000);
+  etext = .;
+  .data : { *(.data) }
+}
+alias_etext = etext;
+alias_in_text = in_text;
+alias_sum = etext + 4;
+"#,
+        )
+        .expect("script parses");
+        let a = TestObj::new()
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &[0xc3])
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0u8; 8])
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 1)
+            .build(EM_X86_64);
+        let objs = alloc::vec![parse_lds_object("a.o", a).expect("parses")];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        let syms = image_symbols(&res.image);
+        let at = |n: &str| {
+            let s = syms
+                .iter()
+                .find(|(name, _, _)| name == n)
+                .unwrap_or_else(|| panic!("{n}"));
+            (s.1, s.2)
+        };
+        let text_shndx = 1u16;
+        assert_ne!(at("etext").1, SHN_ABS, "the definition keeps a section");
+        assert_eq!(at("alias_etext"), (at("etext").0, SHN_ABS));
+        assert_eq!(at("alias_sum"), (at("etext").0 + 4, SHN_ABS));
+        assert_eq!(
+            at("alias_in_text"),
+            (at("in_text").0, text_shndx),
+            "an in-section definition stays section relative"
+        );
+    }
+
+    /// An undefined weak symbol reaches `.symtab` only where a
+    /// relocation the output keeps names it, as in bfd.
+    #[test]
+    fn undefined_weak_symbols_need_a_relocation_naming_them() {
+        let script = parse_linker_script(
+            r#"
+SECTIONS {
+  . = 0x1000;
+  .text : { *(.text) }
+  .data : { *(.data) }
+  /DISCARD/ : { *(.gone) }
+}
+"#,
+        )
+        .expect("script parses");
+        let obj = || {
+            let a = TestObj::new()
+                .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &[0xc3])
+                .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0u8; 8])
+                .sec(".gone", SHT_PROGBITS, SHF_ALLOC, 8, &[0u8; 8])
+                .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 1)
+                .sym("wu_kept", STB_WEAK, STT_NOTYPE, usize::MAX, 0, 0)
+                .sym("wu_gone", STB_WEAK, STT_NOTYPE, usize::MAX, 0, 0)
+                // Symtab: null(0), sections(1..=3), _start(4),
+                // wu_kept(5), wu_gone(6).
+                .reloc(1, 0, 5, rt::R_X86_64_64, 0)
+                .reloc(2, 0, 6, rt::R_X86_64_64, 0)
+                .build(EM_X86_64);
+            alloc::vec![parse_lds_object("a.o", a).expect("parses")]
+        };
+        let res = link_with_script(&script, obj(), &LdsOptions::default()).expect("links");
+        let names: Vec<String> = image_symbols(&res.image)
+            .into_iter()
+            .map(|(n, _, _)| n)
+            .collect();
+        assert!(!names.iter().any(|n| n.starts_with("wu_")), "none kept");
+        let opts = LdsOptions {
+            emit_relocs: true,
+            ..Default::default()
+        };
+        let res = link_with_script(&script, obj(), &opts).expect("links");
+        let weak: Vec<(String, u16)> = image_sym_rows(&res.image)
+            .into_iter()
+            .filter(|(_, info, _)| info >> 4 == STB_WEAK)
+            .map(|(n, _, shndx)| (n, shndx))
+            .collect();
+        assert_eq!(weak, alloc::vec![("wu_kept".to_string(), SHN_UNDEF)]);
+    }
+
+    /// Without a PHDRS command a PT_LOAD ends where bfd ends one: at a
+    /// protection change the sections do not share a page across, and
+    /// at a skipped page. A same-page change and file-backed content
+    /// after zero fill both stay in the segment.
+    #[test]
+    fn default_segments_group_like_bfd() {
+        let script = parse_linker_script(
+            r#"
+SECTIONS {
+  . = 0;
+  .header : { *(.header) }
+  . = ALIGN(4);
+  .rodata : { *(.rodata) }
+  . = ALIGN(0x1000);
+  .text : { *(.text) }
+  . = ALIGN(0x1000);
+  .data : { *(.data) }
+  .bss : { *(.bss) }
+  . = ALIGN(4);
+  .signature : { *(.signature) }
+}
+"#,
+        )
+        .expect("script parses");
+        let a = TestObj::new()
+            .sec(".header", SHT_PROGBITS, SHF_ALLOC, 4, &[0u8; 8])
+            .sec(".rodata", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 4, &[0u8; 8])
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &[0xc3])
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0u8; 8])
+            .sec(".bss", SHT_NOBITS, SHF_ALLOC | SHF_WRITE, 8, &[0u8; 32])
+            .sec(".signature", SHT_PROGBITS, SHF_ALLOC, 4, &[0u8; 4])
+            .build(EM_X86_64);
+        let objs = alloc::vec![parse_lds_object("a.o", a).expect("parses")];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        let loads: Vec<Elf64Phdr> = image_phdrs(&res.image)
+            .into_iter()
+            .filter(|p| p.p_type == PT_LOAD)
+            .collect();
+        let shape: Vec<(u64, u64, u32)> = loads
+            .iter()
+            .map(|p| (p.p_vaddr, p.p_memsz, p.p_flags))
+            .collect();
+        assert_eq!(
+            shape,
+            alloc::vec![
+                (0, 0x10, PF_R | PF_W),
+                (0x1000, 1, PF_R | PF_X),
+                (0x2000, 0x2c, PF_R | PF_W),
+            ]
+        );
+    }
+
+    /// Link order describes the whole output section, so bfd takes it
+    /// from the section that opens one and points `sh_link` at the
+    /// output section its target landed in; the retain flag survives
+    /// while the group flag does not.
+    #[test]
+    fn output_section_flags_follow_bfd() {
+        let script = parse_linker_script(
+            r#"
+SECTIONS {
+  . = 0x1000;
+  .tgt : { *(.tgt) }
+  .ordered : { *(.o1) *(.plain) }
+  .unordered : { *(.plain2) *(.o2) }
+  .kept : { *(.ret) *(.grp) }
+}
+"#,
+        )
+        .expect("script parses");
+        let a = TestObj::new()
+            .sec(".tgt", SHT_PROGBITS, SHF_ALLOC, 8, &[0u8; 8])
+            .sec(
+                ".o1",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_LINK_ORDER,
+                8,
+                &[0u8; 8],
+            )
+            .sec(".plain", SHT_PROGBITS, SHF_ALLOC, 8, &[0u8; 8])
+            .sec(".plain2", SHT_PROGBITS, SHF_ALLOC, 8, &[0u8; 8])
+            .sec(
+                ".o2",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_LINK_ORDER,
+                8,
+                &[0u8; 8],
+            )
+            .sec(
+                ".ret",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_GNU_RETAIN,
+                8,
+                &[0u8; 8],
+            )
+            .sec(".grp", SHT_PROGBITS, SHF_ALLOC | SHF_GROUP, 8, &[0u8; 8])
+            .links_to(1, 0)
+            .links_to(4, 0)
+            .build(EM_X86_64);
+        let objs = alloc::vec![parse_lds_object("a.o", a).expect("parses")];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        let secs = readelf_sections(&res.image);
+        let flags = |n: &str| {
+            secs.iter()
+                .find(|s| s.0 == n)
+                .unwrap_or_else(|| panic!("{n}"))
+                .4
+        };
+        assert_eq!(flags(".ordered") & SHF_LINK_ORDER, SHF_LINK_ORDER);
+        assert_eq!(flags(".unordered") & SHF_LINK_ORDER, 0, "opened unordered");
+        assert_eq!(flags(".kept") & SHF_GNU_RETAIN, SHF_GNU_RETAIN);
+        assert_eq!(flags(".kept") & SHF_GROUP, 0, "group is input-side");
+        let tgt = (secs.iter().position(|s| s.0 == ".tgt").expect("tgt") + 1) as u32;
+        assert_eq!(section_link(&res.image, ".ordered"), tgt);
+    }
+
+    /// SHF_EXCLUDE keeps an input section out of a final link whatever
+    /// its other flags say, and a script naming the section does not
+    /// bring it back. Measured against GNU ld 2.46.1 on linux-x86_64
+    /// and linux-aarch64: every `.exc.*` below is dropped there, in a
+    /// default link and under this script alike.
+    #[test]
+    fn shf_exclude_sections_never_reach_a_final_image() {
+        let script = parse_linker_script(
+            r#"
+SECTIONS {
+  . = 0x1000;
+  .text : { *(.text) }
+  .exc.alloc : { *(.exc.alloc) }
+  .exc.noalloc : { *(.exc.noalloc) }
+  .exc.aw : { *(.exc.aw) }
+  .exc.ax : { *(.exc.ax) }
+  .keep : { *(.keep) }
+}
+"#,
+        )
+        .expect("script parses");
+        let a = TestObj::new()
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &[0xc3])
+            .sec(
+                ".exc.alloc",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXCLUDE,
+                1,
+                &[0xa1, 0xa2, 0xa3, 0xa4],
+            )
+            .sec(
+                ".exc.noalloc",
+                SHT_PROGBITS,
+                SHF_EXCLUDE,
+                1,
+                &[0xb1, 0xb2, 0xb3, 0xb4],
+            )
+            .sec(
+                ".exc.aw",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_WRITE | SHF_EXCLUDE,
+                1,
+                &[0xc1, 0xc2, 0xc3, 0xc4],
+            )
+            .sec(
+                ".exc.ax",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR | SHF_EXCLUDE,
+                1,
+                &[0xd1, 0xd2, 0xd3, 0xd4],
+            )
+            .sec(
+                ".keep",
+                SHT_PROGBITS,
+                SHF_ALLOC,
+                1,
+                &[0xe1, 0xe2, 0xe3, 0xe4],
+            )
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 1)
+            .build(EM_X86_64);
+        let objs = alloc::vec![parse_lds_object("a.o", a).expect("parses")];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        let secs = readelf_sections(&res.image);
+        for name in [".exc.alloc", ".exc.noalloc", ".exc.aw", ".exc.ax"] {
+            assert!(
+                !secs.iter().any(|s| s.0 == name),
+                "{name} reached the image"
+            );
+        }
+        assert!(secs.iter().any(|s| s.0 == ".keep"), "control section kept");
+        for marker in [
+            [0xa1u8, 0xa2, 0xa3, 0xa4],
+            [0xb1, 0xb2, 0xb3, 0xb4],
+            [0xc1, 0xc2, 0xc3, 0xc4],
+            [0xd1, 0xd2, 0xd3, 0xd4],
+        ] {
+            assert!(
+                !res.image.windows(4).any(|w| w == marker),
+                "excluded content {marker:x?} reached the image"
+            );
+        }
+        assert!(
+            res.image.windows(4).any(|w| w == [0xe1, 0xe2, 0xe3, 0xe4]),
+            "control content missing"
+        );
+    }
+
+    /// `--emit-relocs` gives the entries relocations name: one section
+    /// symbol per output section, and the merged-section temporaries.
+    #[test]
+    fn emit_relocs_keeps_the_entries_relocations_name() {
+        let script = parse_linker_script(SYMTAB_SCRIPT).expect("script parses");
+        let opts = LdsOptions {
+            emit_relocs: true,
+            ..Default::default()
+        };
+        let res = link_with_script(&script, symtab_objects(), &opts).expect("link succeeds");
+        let rows = image_sym_rows(&res.image);
+        let sections = rows
+            .iter()
+            .filter(|(_, i, _)| i & 0xf == STT_SECTION)
+            .count();
+        assert_eq!(sections, readelf_sections(&res.image).len() - 3, "one each");
+        assert!(rows.iter().any(|(n, _, _)| n == ".Lstr"));
     }
 
     /// An unresolved default-visibility weak reference keeps
@@ -7567,6 +10858,327 @@ SECTIONS {
         assert!(format!("{e}").contains("R_386_8"), "{e}");
     }
 
+    /// AArch64 keeps the GOT header on `.got`: its first slot holds the
+    /// `.dynamic` address and GOT entries follow it, while `.got.plt`
+    /// stays the dynamic linker's.
+    #[test]
+    fn aarch64_got_keeps_its_header_and_entries_follow_it() {
+        let script = parse_linker_script(
+            r#"
+SECTIONS {
+  . = 0x10000;
+  .text : { *(.text) }
+  .data : { *(.data) }
+  .dynamic : { *(.dynamic) }
+  .got : { *(.got) }
+  .got.plt : { *(.got.plt) }
+  .rela.dyn : { *(.rela .rela*) }
+}
+"#,
+        )
+        .expect("script parses");
+        let a = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                8,
+                &[0u8; 8],
+            )
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0u8; 8])
+            // Symtab: null(0), sections(1..=2), _start(3), datum(4).
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 8)
+            .sym("datum", STB_GLOBAL, STT_OBJECT, 1, 0, 8)
+            .reloc(0, 0, 4, rt::R_AARCH64_ADR_GOT_PAGE, 0)
+            .reloc(0, 4, 4, rt::R_AARCH64_LD64_GOT_LO12_NC, 0)
+            .build(EM_AARCH64);
+        let opts = LdsOptions {
+            emit: LdsEmit::Dyn,
+            max_page_size: 0x10000,
+            ..Default::default()
+        };
+        let res = link_with_script(
+            &script,
+            alloc::vec![parse_lds_object("a.o", a).expect("parses")],
+            &opts,
+        )
+        .expect("links");
+        let secs = readelf_sections(&res.image);
+        let sec = |name: &str| {
+            secs.iter()
+                .find(|s| s.0 == name)
+                .unwrap_or_else(|| panic!("no `{name}' in the image"))
+        };
+        let (got_addr, got_size) = (sec(".got").2, sec(".got").3);
+        assert_eq!(got_size, 16, "the reserved header plus one entry");
+        let off = section_file_off(&res.image, got_addr);
+        assert_eq!(
+            u64::from_le_bytes(res.image[off..off + 8].try_into().unwrap()),
+            sec(".dynamic").2,
+            "`_GLOBAL_OFFSET_TABLE_[0]` holds the `.dynamic` address"
+        );
+        let rela = section_file_off(&res.image, sec(".rela.dyn").2);
+        assert_eq!(
+            u64::from_le_bytes(res.image[rela..rela + 8].try_into().unwrap()),
+            got_addr + 8,
+            "the GOT entry sits past the header"
+        );
+        let plt = section_file_off(&res.image, sec(".got.plt").2);
+        assert!(
+            res.image[plt..plt + sec(".got.plt").3 as usize]
+                .iter()
+                .all(|&b| b == 0),
+            "`.got.plt` carries no header here"
+        );
+    }
+
+    /// The x86 psABIs define `_GLOBAL_OFFSET_TABLE_` on `.got.plt`,
+    /// whose first slot holds the `.dynamic` address, and every
+    /// GOT-base relative relocation is computed against that same
+    /// address.
+    #[test]
+    fn i386_got_base_is_got_plt_holding_the_dynamic_address() {
+        let script = parse_linker_script(
+            r#"
+SECTIONS {
+  . = SIZEOF_HEADERS;
+  .dynsym : { *(.dynsym) }
+  .dynstr : { *(.dynstr) }
+  .gnu.hash : { *(.gnu.hash) }
+  .dynamic : { *(.dynamic) }
+  .text : { *(.text) }
+  .got : { *(.got) }
+  .got.plt : { *(.got.plt) }
+  .data : { *(.data) }
+}
+"#,
+        )
+        .expect("script parses");
+        let a = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                16,
+                &[0u8; 16],
+            )
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 4, &[0u8; 4])
+            // Symtab: null(0), .text(1), .data(2), then these two.
+            .sym(
+                "_GLOBAL_OFFSET_TABLE_",
+                STB_GLOBAL,
+                STT_NOTYPE,
+                usize::MAX,
+                0,
+                0,
+            )
+            .sym("datum", STB_GLOBAL, STT_OBJECT, 1, 0, 4)
+            .reloc(0, 0, 3, rt::R_386_GOTPC, 0)
+            .reloc(0, 4, 4, rt::R_386_GOTOFF, 0)
+            .build_class(EM_386, ElfClass::Elf32, false);
+        let opts = LdsOptions {
+            emit: LdsEmit::Dyn,
+            ..Default::default()
+        };
+        let res = link_with_script(
+            &script,
+            alloc::vec![parse_lds_object("a.o", a).expect("parses")],
+            &opts,
+        )
+        .expect("links");
+        let addr = |name: &str| elf32_section(&res.image, name).2 as i64;
+        let text = elf32_body(&res.image, ".text");
+        let field = |at: usize| i32::from_le_bytes(text[at..at + 4].try_into().unwrap()) as i64;
+        assert_eq!(
+            field(0) + addr(".text"),
+            addr(".got.plt"),
+            "R_386_GOTPC yields the `.got.plt` address"
+        );
+        assert_eq!(
+            field(4),
+            addr(".data") - addr(".got.plt"),
+            "R_386_GOTOFF is relative to the same base"
+        );
+        let got_plt = elf32_body(&res.image, ".got.plt");
+        assert_eq!(
+            u32::from_le_bytes(got_plt[..4].try_into().unwrap()) as i64,
+            addr(".dynamic"),
+            "`_GLOBAL_OFFSET_TABLE_[0]` holds the `.dynamic` address"
+        );
+        assert!(
+            !elf32_sections(&res.image)
+                .iter()
+                .any(|s| s.0 == ".got" && s.4 != 0),
+            "`.got` reserves no header where `.got.plt` carries it"
+        );
+    }
+
+    /// A script naming every section the GOT-base tests place.
+    const GOT_SYM_SCRIPT: &str = r#"
+SECTIONS {
+  . = 0x400000 + SIZEOF_HEADERS;
+  .dynsym : { *(.dynsym) }
+  .dynstr : { *(.dynstr) }
+  .gnu.hash : { *(.gnu.hash) }
+  .dynamic : { *(.dynamic) }
+  .rela.dyn : { *(.rela.dyn) }
+  .text : { *(.text) }
+  .got : { *(.got) }
+  .got.plt : { *(.got.plt) }
+  .data : { *(.data) }
+}
+"#;
+
+    /// An object naming the GOT base from `.text` and from `.data`.
+    /// Symtab: null(0), .text(1), .data(2), then the reference.
+    fn got_sym_object(machine: u16, pcrel: u32, wide: u32) -> Vec<u8> {
+        TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                16,
+                &[0u8; 16],
+            )
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0u8; 8])
+            .sym(GOT_SYMBOL, STB_GLOBAL, STT_NOTYPE, usize::MAX, 0, 0)
+            .reloc(0, 0, 3, pcrel, -4)
+            .reloc(1, 0, 3, wide, 0)
+            .build(machine)
+    }
+
+    /// `(value, st_info, st_shndx)` of the GOT base symbol, or `None`
+    /// where the link emitted no entry for it.
+    fn got_sym_row(image: &[u8]) -> Option<(u64, u8, u16)> {
+        let vals = image_symbols(image);
+        let rows = image_sym_rows(image);
+        let v = vals.iter().find(|(n, _, _)| n == GOT_SYMBOL)?;
+        let r = rows.iter().find(|(n, _, _)| n == GOT_SYMBOL)?;
+        Some((v.1, r.1, r.2))
+    }
+
+    fn link_got_sym(machine: u16, emit: LdsEmit, pcrel: u32, wide: u32) -> LdsResult {
+        let script = parse_linker_script(GOT_SYM_SCRIPT).expect("script parses");
+        let obj = got_sym_object(machine, pcrel, wide);
+        let opts = LdsOptions {
+            emit,
+            ..Default::default()
+        };
+        link_with_script(
+            &script,
+            alloc::vec![parse_lds_object("a.o", obj).expect("parses")],
+            &opts,
+        )
+        .expect("links")
+    }
+
+    /// bfd defines `_GLOBAL_OFFSET_TABLE_` as a sizeless local OBJECT
+    /// on `.got.plt` for the x86 targets, in a static link as in a
+    /// dynamic one, and builds the section on demand where an input
+    /// names the symbol. Both GOTPC forms yield that same base
+    /// relative to their own site. Measured against GNU ld 2.46.1 on
+    /// linux-x86_64.
+    #[test]
+    fn x86_64_got_symbol_and_gotpc_forms_follow_ld() {
+        for emit in [LdsEmit::Exec, LdsEmit::Dyn] {
+            let res = link_got_sym(EM_X86_64, emit, rt::R_X86_64_GOTPC32, rt::R_X86_64_GOTPC64);
+            let secs = readelf_sections(&res.image);
+            let addr = |n: &str| {
+                secs.iter()
+                    .find(|s| s.0 == n)
+                    .unwrap_or_else(|| panic!("{n} in output"))
+                    .2
+            };
+            let got = addr(".got.plt");
+            let (value, info, shndx) = got_sym_row(&res.image).expect("GOT base symbol");
+            assert_eq!(value, got, "{emit:?}: value is the `.got.plt` address");
+            assert_eq!(
+                info,
+                (STB_LOCAL << 4) | STT_OBJECT,
+                "{emit:?}: local object"
+            );
+            assert_eq!(
+                shndx,
+                section_index(&res.image, ".got.plt") as u16,
+                "{emit:?}: the entry names `.got.plt`"
+            );
+            let text = section_file_off(&res.image, addr(".text"));
+            let field = i32::from_le_bytes(res.image[text..text + 4].try_into().unwrap()) as i64;
+            assert_eq!(
+                field + 4 + addr(".text") as i64,
+                got as i64,
+                "{emit:?}: R_X86_64_GOTPC32"
+            );
+            let data = section_file_off(&res.image, addr(".data"));
+            let wide = i64::from_le_bytes(res.image[data..data + 8].try_into().unwrap());
+            assert_eq!(
+                wide + addr(".data") as i64,
+                got as i64,
+                "{emit:?}: R_X86_64_GOTPC64"
+            );
+        }
+    }
+
+    /// aarch64 keeps the GOT base on `.got`, one reserved slot ahead of
+    /// the first entry. Measured against GNU ld 2.46.1 on
+    /// linux-aarch64: the entry names `.got` for non-PIC output and is
+    /// absolute for a PIE or a shared object.
+    #[test]
+    fn aarch64_got_symbol_follows_ld() {
+        for (emit, absolute) in [(LdsEmit::Exec, false), (LdsEmit::Dyn, true)] {
+            let res = link_got_sym(
+                EM_AARCH64,
+                emit,
+                rt::R_AARCH64_ADR_PREL_PG_HI21,
+                rt::R_AARCH64_ABS64,
+            );
+            let secs = readelf_sections(&res.image);
+            let got = secs
+                .iter()
+                .find(|s| s.0 == ".got")
+                .unwrap_or_else(|| panic!("{emit:?}: `.got` in output"));
+            let (value, info, shndx) = got_sym_row(&res.image).expect("GOT base symbol");
+            assert_eq!(value, got.2, "{emit:?}: value is the `.got` address");
+            assert_eq!(got.3, 8, "{emit:?}: one reserved slot");
+            assert_eq!(
+                info,
+                (STB_LOCAL << 4) | STT_OBJECT,
+                "{emit:?}: local object"
+            );
+            let want = if absolute {
+                SHN_ABS
+            } else {
+                section_index(&res.image, ".got") as u16
+            };
+            assert_eq!(shndx, want, "{emit:?}: section the entry names");
+        }
+    }
+
+    /// bfd emits no `_GLOBAL_OFFSET_TABLE_` where the link built no
+    /// GOT, so a static link that never names it carries neither the
+    /// symbol nor the sections.
+    #[test]
+    fn no_got_symbol_where_the_link_builds_no_got() {
+        let script = parse_linker_script(GOT_SYM_SCRIPT).expect("script parses");
+        let a = TestObj::new()
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &[0xc3])
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 1)
+            .build(EM_X86_64);
+        let res = link_with_script(
+            &script,
+            alloc::vec![parse_lds_object("a.o", a).expect("parses")],
+            &LdsOptions::default(),
+        )
+        .expect("links");
+        assert!(got_sym_row(&res.image).is_none(), "no GOT, no entry");
+        assert!(
+            !readelf_sections(&res.image)
+                .iter()
+                .any(|s| s.0.starts_with(".got")),
+            "no GOT sections"
+        );
+    }
+
     #[test]
     fn i386_shared_object_carries_elf32_dynamic_metadata() {
         let script = parse_linker_script(
@@ -7628,7 +11240,7 @@ VERSION { LINUX_2.6 { global: exported; local: *; }; }
         let dynamic = elf32_body(&res.image, ".dynamic");
         assert!(dynamic.len().is_multiple_of(8));
         let mut syment = None;
-        for e in dynamic.chunks_exact(8) {
+        for e in dynamic.as_chunks::<8>().0.iter() {
             let (t, v) = (
                 u32::from_le_bytes(e[0..4].try_into().unwrap()) as u64,
                 u32::from_le_bytes(e[4..8].try_into().unwrap()) as u64,
@@ -7763,5 +11375,416 @@ VERSION { LINUX_2.6 { global: exported; local: *; }; }
         let e = link_with_script(&script, objs, &LdsOptions::default())
             .expect_err("an ELF32 x86-64 object has no emulation here");
         assert!(format!("{e}").contains("ELF class"), "{e}");
+    }
+
+    // ------------------------------------------- COMDAT / linkonce
+
+    const GROUP_SCRIPT: &str = r#"
+SECTIONS {
+  . = 0x1000;
+  .text : { *(.text .text.*) *(.gnu.linkonce.t.*) }
+  .rodata : { *(.rodata .rodata.*) }
+  .data : { *(.data .data.*) }
+  .eh_frame : { *(.eh_frame) }
+}
+"#;
+
+    fn link_group(objs: Vec<Vec<u8>>, opts: &LdsOptions) -> Result<LdsResult, C5Error> {
+        let script = parse_linker_script(GROUP_SCRIPT).expect("script parses");
+        let inputs: Vec<LdsObject> = objs
+            .into_iter()
+            .enumerate()
+            .map(|(i, b)| {
+                parse_lds_object(&format!("{}.o", (b'a' + i as u8) as char), b).expect("parses")
+            })
+            .collect();
+        link_with_script(&script, inputs, opts)
+    }
+
+    fn body_has(image: &[u8], section: &str, pat: &[u8]) -> bool {
+        image_section(image, section)
+            .1
+            .windows(pat.len())
+            .any(|w| w == pat)
+    }
+
+    /// A COMDAT group is keyed on its signature symbol's name alone.
+    /// The later group loses every member whatever the members are
+    /// named and however large they are, and nothing is diagnosed.
+    #[test]
+    fn a_comdat_group_is_kept_once_per_signature() {
+        let a = TestObj::new()
+            .sec(
+                ".text.aaa",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                4,
+                &[0xa1; 4],
+            )
+            .sec(".rodata.aaa", SHT_PROGBITS, SHF_ALLOC, 4, &[0xa2; 4])
+            .sym("sig", STB_WEAK, STT_FUNC, 0, 0, 4)
+            .sym("aonly", STB_GLOBAL, STT_OBJECT, 1, 0, 4)
+            .group(comdat::GRP_COMDAT, 0, &[0, 1])
+            .build(EM_X86_64);
+        let b = TestObj::new()
+            .sec(
+                ".text.bbb",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                4,
+                &[0xb1; 8],
+            )
+            .sec(".rodata.bbb", SHT_PROGBITS, SHF_ALLOC, 4, &[0xb2; 8])
+            .sec(
+                ".data.bbb",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_WRITE,
+                4,
+                &[0xb5; 4],
+            )
+            .sym("sig", STB_WEAK, STT_FUNC, 0, 0, 8)
+            .sym("bonly", STB_GLOBAL, STT_OBJECT, 2, 0, 4)
+            .group(comdat::GRP_COMDAT, 0, &[0, 1, 2])
+            .build(EM_X86_64);
+        let res = link_group(alloc::vec![a, b], &LdsOptions::default()).expect("links");
+        assert!(
+            body_has(&res.image, ".text", &[0xa1; 4]),
+            "the first copy stays"
+        );
+        assert!(
+            !body_has(&res.image, ".text", &[0xb1; 8]),
+            "the later copy is gone"
+        );
+        assert!(
+            !body_has(&res.image, ".rodata", &[0xb2; 8]),
+            "and so is every member"
+        );
+        let secs = readelf_sections(&res.image);
+        assert!(
+            !secs.iter().any(|s| s.0 == ".data"),
+            "a member the kept group has no counterpart for is dropped too"
+        );
+        let names: Vec<String> = image_symbols(&res.image)
+            .into_iter()
+            .map(|(n, _, _)| n)
+            .collect();
+        assert!(names.iter().any(|n| n == "aonly"), "{names:?}");
+        assert!(
+            !names.iter().any(|n| n == "bonly"),
+            "a dropped member defines nothing"
+        );
+    }
+
+    /// The dedup runs on `GRP_COMDAT`, not on the presence of a group:
+    /// a plain group keeps both copies, and duplicate definitions in
+    /// them collide as they would outside any group.
+    #[test]
+    fn a_group_without_grp_comdat_is_not_deduplicated() {
+        let unit = |flags: u32, fill: u8| {
+            TestObj::new()
+                .sec(
+                    ".text.g",
+                    SHT_PROGBITS,
+                    SHF_ALLOC | SHF_EXECINSTR,
+                    4,
+                    &[fill; 4],
+                )
+                .sym("gsig", STB_LOCAL, STT_NOTYPE, 0, 0, 0)
+                .sym("dup", STB_GLOBAL, STT_FUNC, 0, 0, 4)
+                .group(flags, 0, &[0])
+                .build(EM_X86_64)
+        };
+        let e = link_group(
+            alloc::vec![unit(0, 0xa1), unit(0, 0xb1)],
+            &LdsOptions::default(),
+        )
+        .expect_err("a plain group deduplicates nothing");
+        assert!(
+            format!("{e}").contains("multiple definition of `dup`"),
+            "{e}"
+        );
+        let res = link_group(
+            alloc::vec![
+                unit(comdat::GRP_COMDAT, 0xa1),
+                unit(comdat::GRP_COMDAT, 0xb1)
+            ],
+            &LdsOptions::default(),
+        )
+        .expect("the same objects with GRP_COMDAT set link");
+        assert!(!body_has(&res.image, ".text", &[0xb1; 4]));
+    }
+
+    /// A reference by name reaches the surviving definition; a local or
+    /// section-relative reference into a dropped member has nowhere to
+    /// go and is reported, because the surviving group's contents need
+    /// bear no relation to the dropped one's.
+    #[test]
+    fn a_reference_into_a_dropped_group_resolves_by_name_or_is_reported() {
+        let a = TestObj::new()
+            .sec(
+                ".text.f",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                4,
+                &[0xa1; 8],
+            )
+            .sym("f", STB_WEAK, STT_FUNC, 0, 0, 8)
+            .group(comdat::GRP_COMDAT, 0, &[0])
+            .build(EM_X86_64);
+        // Symtab: null, section symbols 1..=3, then f(4), bloc(5).
+        let b = |sym: u32, refsec: &str, flags: u64| {
+            TestObj::new()
+                .sec(
+                    ".text.f",
+                    SHT_PROGBITS,
+                    SHF_ALLOC | SHF_EXECINSTR,
+                    4,
+                    &[0xb1; 8],
+                )
+                .sec(refsec, SHT_PROGBITS, flags, 8, &[0u8; 8])
+                .sym("f", STB_WEAK, STT_FUNC, 0, 0, 8)
+                .sym("bloc", STB_LOCAL, STT_NOTYPE, 0, 4, 0)
+                .group(comdat::GRP_COMDAT, 0, &[0])
+                .reloc(1, 0, sym, rt::R_X86_64_64, 0)
+                .build(EM_X86_64)
+        };
+        let res = link_group(
+            alloc::vec![a.clone(), b(4, ".data.b", SHF_ALLOC | SHF_WRITE)],
+            &LdsOptions::default(),
+        )
+        .expect("a named reference binds to the kept copy");
+        let f = find_sym(&image_symbols(&res.image), "f");
+        assert_eq!(
+            u64::from_le_bytes(
+                image_section(&res.image, ".data").1[..8]
+                    .try_into()
+                    .unwrap()
+            ),
+            f,
+        );
+        for sym in [5u32, 1u32] {
+            let e = link_group(
+                alloc::vec![a.clone(), b(sym, ".data.b", SHF_ALLOC | SHF_WRITE)],
+                &LdsOptions::default(),
+            )
+            .expect_err("a local or section reference into a dropped member");
+            assert!(
+                format!("{e}").contains("discarded section `.text.f'"),
+                "{e}"
+            );
+        }
+        // A section describing the image rather than taking part in it
+        // resolves the same reference to nothing instead.
+        let res = link_group(
+            alloc::vec![a, b(5, ".debug_info", 0)],
+            &LdsOptions::default(),
+        )
+        .expect("a debug reference is tolerated");
+        assert_eq!(
+            image_section(&res.image, ".debug_info").1,
+            alloc::vec![0u8; 8]
+        );
+    }
+
+    /// `.gnu.linkonce.*` is the older form of the same rule, keyed on
+    /// the section's own name. The key spaces do not meet: a linkonce
+    /// section and a COMDAT group both defining one symbol collide.
+    #[test]
+    fn gnu_linkonce_sections_deduplicate_by_section_name() {
+        let linkonce = |fill: u8, only: &str| {
+            TestObj::new()
+                .sec(
+                    ".gnu.linkonce.t.foo",
+                    SHT_PROGBITS,
+                    SHF_ALLOC | SHF_EXECINSTR,
+                    4,
+                    &[fill; 4],
+                )
+                .sym("foo", STB_GLOBAL, STT_FUNC, 0, 0, 4)
+                .sym(only, STB_GLOBAL, STT_FUNC, 0, 2, 0)
+                .build(EM_X86_64)
+        };
+        let res = link_group(
+            alloc::vec![linkonce(0xa1, "aonly_lo"), linkonce(0xb1, "bonly_lo")],
+            &LdsOptions::default(),
+        )
+        .expect("links");
+        assert!(body_has(&res.image, ".text", &[0xa1; 4]));
+        assert!(!body_has(&res.image, ".text", &[0xb1; 4]));
+        let names: Vec<String> = image_symbols(&res.image)
+            .into_iter()
+            .map(|(n, _, _)| n)
+            .collect();
+        assert!(names.iter().any(|n| n == "aonly_lo") && !names.iter().any(|n| n == "bonly_lo"));
+        let grouped = TestObj::new()
+            .sec(
+                ".text.foo",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                4,
+                &[0xc1; 4],
+            )
+            .sym("foo", STB_GLOBAL, STT_FUNC, 0, 0, 4)
+            .group(comdat::GRP_COMDAT, 0, &[0])
+            .build(EM_X86_64);
+        let e = link_group(
+            alloc::vec![linkonce(0xa1, "aonly_lo"), grouped],
+            &LdsOptions::default(),
+        )
+        .expect_err("the two mechanisms do not deduplicate against each other");
+        assert!(
+            format!("{e}").contains("multiple definition of `foo`"),
+            "{e}"
+        );
+    }
+
+    /// Group dedup runs before garbage collection, so a dropped member
+    /// is neither a root nor a path to one.
+    #[test]
+    fn a_dropped_group_member_is_no_garbage_collection_root() {
+        let root = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                4,
+                &[0u8; 8],
+            )
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 8)
+            .sym("f", STB_WEAK, STT_NOTYPE, usize::MAX, 0, 0)
+            .reloc(0, 0, 3, rt::R_X86_64_64, 0)
+            .build(EM_X86_64);
+        // `.text.only` exists only in the object whose group member
+        // names it, so the two members define no symbol in common.
+        // Symtab there: null, sections 1..=3, f(4), only(5).
+        let member = |fill: u8, refs_only: bool| {
+            let mut o = TestObj::new().sec(
+                ".text.f",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                8,
+                &[fill; 8],
+            );
+            if refs_only {
+                o = o.sec(
+                    ".text.only",
+                    SHT_PROGBITS,
+                    SHF_ALLOC | SHF_EXECINSTR,
+                    8,
+                    &[0xbb; 8],
+                );
+            }
+            o = o.sym("f", STB_WEAK, STT_FUNC, 0, 0, 8);
+            if refs_only {
+                o = o.sym("only", STB_GLOBAL, STT_FUNC, 1, 0, 8);
+            }
+            o = o.group(comdat::GRP_COMDAT, 0, &[0]);
+            if refs_only {
+                o = o.reloc(0, 0, 5, rt::R_X86_64_64, 0);
+            }
+            o.build(EM_X86_64)
+        };
+        let opts = |gc: bool| LdsOptions {
+            gc_sections: gc,
+            entry_override: Some("_start".to_string()),
+            ..Default::default()
+        };
+        let objs = || alloc::vec![root.clone(), member(0xa1, false), member(0xb1, true)];
+        let kept = link_group(objs(), &opts(false)).expect("links");
+        assert!(
+            body_has(&kept.image, ".text", &[0xbb; 8]),
+            "nothing collects it"
+        );
+        let collected = link_group(objs(), &opts(true)).expect("links");
+        assert!(
+            !body_has(&collected.image, ".text", &[0xbb; 8]),
+            "the only reference lived in a dropped member"
+        );
+        let live = link_group(alloc::vec![root, member(0xa1, true)], &opts(true)).expect("links");
+        assert!(
+            body_has(&live.image, ".text", &[0xbb; 8]),
+            "the same reference from the winning group keeps it"
+        );
+    }
+
+    /// An FDE describing code that left the link describes nothing, so
+    /// the entry goes with it rather than being relocated.
+    #[test]
+    fn an_fde_for_a_dropped_group_member_is_dropped() {
+        let unit = |fill: u8| {
+            let mut eh = eh_cie_zr();
+            eh.extend_from_slice(&eh_fde(0x1c));
+            TestObj::new()
+                .sec(
+                    ".text.f",
+                    SHT_PROGBITS,
+                    SHF_ALLOC | SHF_EXECINSTR,
+                    8,
+                    &[fill; 8],
+                )
+                .sec(".eh_frame", SHT_PROGBITS, SHF_ALLOC, 8, &eh)
+                .sym("f", STB_WEAK, STT_FUNC, 0, 0, 8)
+                .group(comdat::GRP_COMDAT, 0, &[0])
+                .reloc(1, 0x20, 1, rt::R_X86_64_PC32, 0)
+                .build(EM_X86_64)
+        };
+        let res =
+            link_group(alloc::vec![unit(0xa1), unit(0xb1)], &LdsOptions::default()).expect("links");
+        let (addr, body) = image_section(&res.image, ".eh_frame");
+        assert_eq!(body.len(), 24 + 24, "one CIE and the surviving copy's FDE");
+        let fdes = eh_frame::scan(&body, addr).expect("scans");
+        assert_eq!(
+            fdes.iter().map(|e| e.pc).collect::<Vec<_>>(),
+            alloc::vec![find_sym(&image_symbols(&res.image), "f")],
+        );
+    }
+
+    /// The i386 shape the gcc PIC thunk arrives in: an ELF32 `SHT_REL`
+    /// object whose group holds one section signed by the thunk.
+    #[test]
+    fn an_elf32_group_parses_and_deduplicates() {
+        let thunk = "__x86.get_pc_thunk.ax";
+        let unit = |fill: u8| {
+            TestObj::new()
+                .sec(
+                    ".text",
+                    SHT_PROGBITS,
+                    SHF_ALLOC | SHF_EXECINSTR,
+                    4,
+                    &[fill; 4],
+                )
+                .sec(
+                    ".text.__x86.get_pc_thunk.ax",
+                    SHT_PROGBITS,
+                    SHF_ALLOC | SHF_EXECINSTR,
+                    1,
+                    &[0x8b, 0x04, 0x24, 0xc3],
+                )
+                .sym(thunk, STB_GLOBAL, STT_FUNC, 1, 0, 4)
+                .vis(2)
+                .group(comdat::GRP_COMDAT, 0, &[1])
+                .build_class(EM_386, ElfClass::Elf32, false)
+        };
+        let parsed = parse_lds_object("a.o", unit(0xa1)).expect("parses");
+        assert_eq!(parsed.groups.len(), 1);
+        assert_eq!(parsed.groups[0].flags, comdat::GRP_COMDAT);
+        assert_eq!(parsed.groups[0].signature, thunk);
+        assert_eq!(
+            parsed.sections[parsed.groups[0].members[0]].name,
+            ".text.__x86.get_pc_thunk.ax"
+        );
+        let opts = LdsOptions {
+            entry_override: Some(thunk.to_string()),
+            ..Default::default()
+        };
+        let res = link_group(alloc::vec![unit(0xa1), unit(0xb1)], &opts).expect("links");
+        let text = elf32_body(&res.image, ".text");
+        assert_eq!(
+            text.windows(4)
+                .filter(|w| *w == [0x8b, 0x04, 0x24, 0xc3])
+                .count(),
+            1,
+            "one thunk body: {text:02x?}"
+        );
     }
 }

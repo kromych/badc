@@ -10,14 +10,15 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#0x1
+               	brk	#0x1
+               	brk	#0x1
 
 <outer>:
-               	sxtw	x0, w0
-               	cmp	x0, #0x2
+               	cmp	w0, #0x2
                	b.lt	<addr>
-               	cmp	x0, #0x3
+               	cmp	w0, #0x3
                	b.lt	<addr>
-               	cmp	x0, #0x3
+               	cmp	w0, #0x3
                	b.eq	<addr>
                	mov	x0, #0xffff             // =65535
                	movk	x0, #0xffff, lsl #16
@@ -30,7 +31,7 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x2                // =2
                	b	<addr>
-               	cmp	x0, #0x1
+               	cmp	w0, #0x1
                	b.ne	<addr>
                	mov	x0, #0x1                // =1
                	b	<addr>

@@ -5,7 +5,8 @@
 //! host: the source is always the first prerequisite, the rule's
 //! default target is the source's base name with its suffix replaced
 //! by `.o` (directory components dropped), `-MD` / `-MMD` take the
-//! rule name from `-o` while the `-Wp,` spellings keep the default,
+//! rule name from `-o` -- except under `-E`, where `-o` names the
+//! preprocessed text -- while the `-Wp,` spellings keep the default,
 //! lists wrap past column 72 onto ` \`-continued lines, and `-MP`
 //! appends one empty rule per prerequisite after the source with no
 //! blank lines between them.
@@ -56,6 +57,20 @@ fn run(dir: &Path, args: &[&str]) -> String {
         String::from_utf8_lossy(&out.stderr)
     );
     String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
+/// Run badc in `dir` and return stderr, requiring failure.
+fn run_fail(dir: &Path, args: &[&str]) -> String {
+    let out = Command::new(badc())
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .expect("spawn badc");
+    assert!(
+        !out.status.success(),
+        "badc {args:?} unexpectedly succeeded"
+    );
+    String::from_utf8_lossy(&out.stderr).into_owned()
 }
 
 fn read(dir: &Path, name: &str) -> String {
@@ -181,6 +196,55 @@ fn dash_mmd_compiles_and_names_the_file_and_rule_after_the_object() {
         read(&dir, "custom.d"),
         "obj/main.o: main.c a.h sub/deep.h b.h\n"
     );
+}
+
+/// `-E` produces a translation unit's expansion, which is enough for
+/// `-MD` / `-MMD` to describe: gcc and clang preprocess and write the rule.
+/// The dependency file is named as it is for a compile -- `-MF` and the
+/// `-Wp,` payload first, else `-o` with a `.d` suffix, else the source base
+/// name -- but `-o` names the preprocessed text here, not an object, so the
+/// rule keeps gcc's default target rather than naming it.
+#[test]
+fn dash_e_writes_the_rule_and_preprocesses() {
+    let dir = fixture("dumppp");
+    let out = run(&dir, &["-q", "-E", "-Wp,-MMD,pp.d", "main.c", "-o", "pp.i"]);
+    let text = read(&dir, "pp.i");
+    assert!(text.contains("int main(void)"), "-E must expand: {text}");
+    assert!(out.is_empty(), "-o takes the expansion off stdout: {out:?}");
+    assert_eq!(read(&dir, "pp.d"), "main.o: main.c a.h sub/deep.h b.h\n");
+    // `-o` with no `-MF` names the file, never the rule.
+    run(&dir, &["-q", "-E", "-MMD", "main.c", "-o", "obj/pp.i"]);
+    assert_eq!(
+        read(&dir, "obj/pp.d"),
+        "main.o: main.c a.h sub/deep.h b.h\n"
+    );
+    // Without `-o` the source base name does.
+    run(&dir, &["-q", "-E", "-MMD", "main.c"]);
+    assert_eq!(read(&dir, "main.d"), "main.o: main.c a.h sub/deep.h b.h\n");
+}
+
+/// Under `-E`, `-o` names the file the expansion is written to and `-o -`
+/// names stdout, as in gcc 16.1.1 and clang; without `-o` it goes to
+/// stdout. One output stream holds one expansion, so `-o` with several
+/// sources is refused, which is what both of them do.
+#[test]
+fn dash_e_writes_the_expansion_to_the_o_operand() {
+    let dir = fixture("dumppp-o");
+    let streamed = run(&dir, &["-q", "-E", "main.c"]);
+    assert!(streamed.contains("int main(void)"), "{streamed}");
+
+    let out = run(&dir, &["-q", "-E", "main.c", "-o", "pp.i"]);
+    assert!(out.is_empty(), "expansion stayed on stdout: {out:?}");
+    assert_eq!(read(&dir, "pp.i"), streamed);
+
+    // A `-` operand is the stream, not a file of that name.
+    assert_eq!(run(&dir, &["-q", "-E", "main.c", "-o", "-"]), streamed);
+    assert!(!dir.join("-").exists(), "`-o -` wrote a file named `-`");
+
+    write(&dir, "other.c", "int other(void){return 1;}\n");
+    let err = run_fail(&dir, &["-q", "-E", "main.c", "other.c", "-o", "both.i"]);
+    assert!(err.contains("requires exactly one source input"), "{err}");
+    assert!(!dir.join("both.i").exists(), "refused run wrote its output");
 }
 
 #[test]

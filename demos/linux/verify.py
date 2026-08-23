@@ -15,6 +15,12 @@ initramfs prints only after its checks pass (initramfs.py). A kernel that boots
 and then cannot serve a procfs read fails on the second, and the failure names
 the file it stopped on.
 
+Diagnostics badc wrote on compiles and links that succeeded are counted by
+cause and reported with the unit and link counts; a warning comes with
+rc == 0, so nothing else in the build states them. The raw lines, each
+tagged with the unit that produced it, stay in `warnings-<arch>.txt` in the
+work directory.
+
 The build step also re-records the compiler identification: it re-runs the
 configuration with the build shim as CC, so CONFIG_CC_VERSION_TEXT -- the
 compiler text in the boot banner and /proc/version -- carries badc's
@@ -36,15 +42,21 @@ it used on its first line and in its verdict, so no result is ambiguous about
 which of the two produced the image it booted.
 
 The tree must already be configured (setup.py) and must be writable: the build
-runs in it. It is rebuilt from clean by default, because make skips units whose
+runs in it, and a run that builds holds it exclusively (ktree.py) because a
+second run's `make clean` removes this one's generated sources mid-compile. It
+is rebuilt from clean by default, because make skips units whose
 objects are already current and a gate that compiles nothing passes vacuously.
+Its configured architecture must be `--arch`, which is checked before the
+build starts; kbuild is then given `ARCH`, and `CROSS_COMPILE` and prefixed
+`--real-cc` / `--real-ld` defaults when the target is not the host.
 
 Each boot runs at a KASLR displacement the gate picked rather than one the
 machine drew, so a displacement-dependent defect is reproducible; see kaslr.py
 for what each architecture allows. `--kaslr-seed` replays one exactly, and
 `--no-build` boots the image already in the tree.
 
-`--self-test` checks the banner reading and takes no tree.
+`--self-test` checks the banner reading and the architecture selection, and
+takes no tree.
 """
 
 from __future__ import annotations
@@ -53,7 +65,6 @@ import argparse
 import collections
 import json
 import os
-import platform
 import re
 import shlex
 import shutil
@@ -62,7 +73,11 @@ import sys
 import time
 from pathlib import Path
 
+import buildcc
+import diags
+import karch
 import kaslr
+import ktree
 
 LINUX_DIR = Path(__file__).resolve().parent
 REPO_ROOT = LINUX_DIR.parents[1]
@@ -115,7 +130,7 @@ def die(m: str) -> "None":
 
 def read_manifest(path: Path,
                   verdicts: tuple[str, ...] = ("badc", "fallback", "fail",
-                                               "badc-asm", "gas")
+                                               "missing", "badc-asm", "gas")
                   ) -> dict[str, list[str]]:
     """Group a shim's per-invocation lines by verdict."""
     out: dict[str, list[str]] = {v: [] for v in verdicts}
@@ -126,6 +141,27 @@ def read_manifest(path: Path,
         if verdict in out:
             out[verdict].append(rest)
     return out
+
+
+# What a failed build is read from. make -j interleaves, so the recipe that
+# stopped it is not necessarily the last line; the diagnostics are.
+BUILD_ERROR_RE = r"error:|undefined reference|\*\*\*"
+# A console log carries the firmware's terminal escapes and a build log can
+# carry a compiler's color codes. Neither may reach the terminal a gate run is
+# printing to, so the C0 controls go and the printable residue stays.
+CONTROLS = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
+
+
+def excerpt(text: str, limit: int, pattern: str | None = None) -> list[str]:
+    """The lines a failure states itself in: those matching `pattern` when it
+    is given and matches anything, otherwise the tail. A run on a remote box
+    is read through its own output, not through the log paths it names."""
+    lines = [CONTROLS.sub("", l) for l in text.splitlines()]
+    if pattern:
+        hits = [l for l in lines if re.search(pattern, l)]
+        if hits:
+            return hits[-limit:]
+    return lines[-limit:]
 
 
 def cc_version_text(tree: Path) -> str:
@@ -139,13 +175,14 @@ def cc_version_text(tree: Path) -> str:
 
 
 def build(args, arch: dict, tree: Path, manifest: Path,
-          ld_manifest: Path) -> tuple[int, float, Path]:
-    env = dict(os.environ)
+          ld_manifest: Path, warn_log: Path) -> tuple[int, float, Path]:
+    env = karch.make_env(args.arch)
     env.update(
         BADC=str(args.badc),
         BADC_REAL_CC=args.real_cc,
         BADC_TARGET=arch["target"],
         BADC_MANIFEST=str(manifest),
+        BADC_WARN_LOG=str(warn_log),
         BADC_TIMEOUT=str(args.timeout),
         BADC_LD_REAL=args.real_ld,
         BADC_LD_MANIFEST=str(ld_manifest),
@@ -158,6 +195,7 @@ def build(args, arch: dict, tree: Path, manifest: Path,
 
     manifest.unlink(missing_ok=True)
     ld_manifest.unlink(missing_ok=True)
+    warn_log.unlink(missing_ok=True)
     # `LD=` selects the linker for every link the build makes: the
     # shim (badc, with the delegations ldshim.py records) or the
     # reference linker untouched. It is passed to the configuration
@@ -320,7 +358,7 @@ def _self_test() -> int:
     def line(ld: str) -> str:
         return f"Linux version 7.1.6 (u@h) ({cc}, {ld}) #1 SMP PREEMPT"
 
-    badc = line("GNU ld (badc 0.3.0) 2.30")
+    badc = line("GNU ld (badc 0.3.0) 2.33.1")
     ref = line("GNU ld version 2.46.1-1.fc44")
     assert banner_line(f"boot noise\n[    0.000000] {badc}\nmore") == badc
     assert banner_line("no banner in this log") == ""
@@ -336,6 +374,30 @@ def _self_test() -> int:
     assert banner_failure("Linux version 7.1.6 (u@h) (gcc 13.2, GNU ld 2.46) #1",
                           cc, True) == "does not identify badc as the compiler"
     assert banner_failure("", cc, True), "a log with no banner cannot pass"
+
+    # A failed build states its cause in the run's own output: the gate runs
+    # on remote boxes, where the log path it names is another trip away.
+    build = ("  GEN     net/wireless/shipped-certs.c\n"
+             "  CC      net/wireless/shipped-certs.o\n"
+             "badc: error: cannot read `net/wireless/shipped-certs.c`: "
+             "No such file or directory (os error 2)\n"
+             "make[4]: *** [scripts/Makefile.build:289: "
+             "net/wireless/shipped-certs.o] Error 1\n"
+             "  CC      net/wireless/util.o\n")
+    lines = excerpt(build, 20, BUILD_ERROR_RE)
+    assert len(lines) == 2 and "cannot read" in lines[0], lines
+    assert "Error 1" in lines[1], lines
+    # Nothing matched: the tail is what there is to report, and the firmware's
+    # escapes do not reach the terminal the run prints to.
+    assert excerpt("a\nb\nc\n", 2, BUILD_ERROR_RE) == ["b", "c"]
+    assert excerpt("\x1b[2JSeaBIOS\x1b[0m\n", 1) == ["[2JSeaBIOS[0m"]
+
+    diags.self_test()
+    ktree.self_test()
+    # The compile shim's flag classification, which decides what reaches
+    # badc; nothing else runs it, and a kernel unit is an hour into a run.
+    buildcc._self_test()
+    karch.self_test()
     print("linux verify: self-test ok", flush=True)
     return 0
 
@@ -350,24 +412,26 @@ def kaslr_configured(tree: Path) -> bool:
 
 
 def main() -> int:
-    host = platform.machine()
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--kernel-dir", required=True, type=Path,
                     help="writable, already-configured kernel tree to build")
     ap.add_argument("--arch", choices=sorted(ARCHES),
-                    default="x86_64" if host in ("x86_64", "AMD64") else "aarch64")
+                    default=karch.host_arch())
     ap.add_argument("--badc", type=Path,
                     default=os.environ.get("BADC", REPO_ROOT / "target/release/badc"))
-    ap.add_argument("--real-cc", default=os.environ.get("BADC_REAL_CC", "gcc"))
+    ap.add_argument("--real-cc", default=os.environ.get("BADC_REAL_CC"),
+                    help="compiler for the units badc does not take "
+                         "(default: the target's gcc)")
     ap.add_argument("--linker", choices=("reference", "badc"),
                     default=os.environ.get("BADC_LINKER", "badc"),
                     help="who links: `badc` (the default) runs every link "
                          "through ldshim.py, `reference` leaves them all to "
                          "--real-ld (the contrast run). See README.md")
-    ap.add_argument("--real-ld", default=os.environ.get("BADC_LD_REAL", "ld"),
+    ap.add_argument("--real-ld", default=os.environ.get("BADC_LD_REAL"),
                     help="linker for the steps badc does not implement, and "
-                         "for every step under --linker reference")
+                         "for every step under --linker reference (default: "
+                         "the target's ld)")
     ap.add_argument("-j", "--jobs", type=int, default=os.cpu_count() or 4)
     ap.add_argument("--timeout", type=int, default=600, help="seconds per badc unit")
     ap.add_argument("--fallback", help="units to leave to the reference compiler; "
@@ -406,6 +470,10 @@ def main() -> int:
 
     arch = ARCHES[args.arch]
     args.qemu = args.qemu or arch["qemu"]
+    # The fallback compiler and linker have to produce the target's objects,
+    # so an unset default follows --arch rather than naming the host tools.
+    args.real_cc = args.real_cc or karch.tool(args.arch, "gcc")
+    args.real_ld = args.real_ld or karch.tool(args.arch, "ld")
     args.qemu_args = shlex.split(args.qemu_args)
     tree = args.kernel_dir.resolve()
     args.badc = Path(args.badc).resolve()
@@ -417,8 +485,22 @@ def main() -> int:
             f"(cargo build --release --features full)")
     if not (tree / ".config").exists():
         die(f"{tree} is not configured (run setup.py)")
+    # A tree configured for another architecture would otherwise reach make
+    # and fail on the missing image target, naming neither architecture.
+    mismatch = karch.config_mismatch(tree / ".config", args.arch)
+    if mismatch:
+        die(mismatch)
+    if args.build:
+        gap = karch.cross_gap(args.arch)
+        if gap:
+            die(gap)
     if args.build and not os.access(tree, os.W_OK):
         die(f"{tree} is not writable; build a copy, not the reference corpus")
+    if args.build:
+        # Held to the end of the run: `make clean` and the build both write
+        # the tree, and a second run's clean removes this one's generated
+        # sources mid-compile.
+        ktree.exclusive(tree, f"verify.py --arch {args.arch}")
     if args.kaslr_seed and not arch["kaslr_seed_dtb"]:
         die(f"--kaslr-seed does not apply to {args.arch}: its boot path draws "
             f"the displacement from RDRAND / the TSC / the i8254 counter and "
@@ -432,8 +514,10 @@ def main() -> int:
         args.initramfs = Path(args.initramfs).resolve()
 
     failures = []
-    units = {"badc": [], "fallback": [], "fail": [], "badc-asm": [], "gas": []}
+    units = {"badc": [], "fallback": [], "fail": [], "missing": [],
+             "badc-asm": [], "gas": []}
     links = {"badc": [], "ld": [], "fallback": [], "fail": []}
+    diagnostics: collections.Counter = collections.Counter()
     rc, secs, undef = 0, 0.0, 0
     if args.build:
         # Named before anything is built: a console log has to say which
@@ -441,7 +525,9 @@ def main() -> int:
         log(f"linker: {'badc (ldshim.py)' if args.linker == 'badc' else args.real_ld}")
         manifest = args.workdir / f"manifest-{args.arch}.txt"
         ld_manifest = args.workdir / f"ld-manifest-{args.arch}.txt"
-        rc, secs, build_log = build(args, arch, tree, manifest, ld_manifest)
+        warn_log = args.workdir / f"warnings-{args.arch}.txt"
+        rc, secs, build_log = build(args, arch, tree, manifest, ld_manifest,
+                                    warn_log)
         units = read_manifest(manifest)
         links = read_manifest(ld_manifest,
                               ("badc", "ld", "fallback", "fail"))
@@ -450,7 +536,7 @@ def main() -> int:
 
         log(f"make rc={rc} in {secs:.0f}s: badc={len(units['badc'])} "
             f"fallback={len(units['fallback'])} fail={len(units['fail'])} "
-            f"undefined-refs={undef}")
+            f"missing={len(units['missing'])} undefined-refs={undef}")
         # Assembly is measured, not gated: gas assembling what badc's
         # assembler does not yet take is the expected state, so no `gas`
         # line joins `failures`. The counts and the reasons are the point.
@@ -479,12 +565,23 @@ def main() -> int:
             if not links["badc"]:
                 failures.append("no link was made by badc")
 
+        diagnostics, lines = diags.summary(warn_log)
+        for line in lines:
+            log(line)
+
         if rc != 0:
             failures.append(f"make exited {rc} (see {build_log})")
+            for line in excerpt(text, 20, BUILD_ERROR_RE):
+                log(f"build: {line}")
         if units["fail"]:
             named = ", ".join(u.split("\t")[0] for u in units["fail"][:5])
             failures.append(f"units badc could not compile: {len(units['fail'])} "
                             f"({named})")
+        if units["missing"]:
+            named = ", ".join(u.split("\t")[0] for u in units["missing"][:5])
+            failures.append(f"sources not in the tree when their compile ran: "
+                            f"{len(units['missing'])} ({named}); no compiler "
+                            f"saw them")
         if units["fallback"]:
             failures.append(f"units that fell back to {args.real_cc}: "
                             f"{len(units['fallback'])}")
@@ -555,6 +652,8 @@ def main() -> int:
                 want = args.marker if not booted else args.check_marker
                 failures.append(f"boot {i} did not reach {want!r}"
                                 f"{last_step(text)} (see {out}){replay}")
+                for line in excerpt(text, 12):
+                    log(f"boot {i} console: {line}")
         failures.extend(kaslr.displacement_failures(
             kaslr_configured(tree), plan, offsets))
 
@@ -571,6 +670,10 @@ def main() -> int:
                 for u in units["gas"]).most_common(),
             "links": {k: len(v) for k, v in links.items()},
             "links_left_to_ld": links["ld"],
+            # Diagnostics from compiles and links that succeeded, by
+            # (shim, severity, cause) and ranked by incidence.
+            "diagnostics": [[list(k), n]
+                            for k, n in diagnostics.most_common()],
             "undefined_refs": undef, "boots": boots,
             "kaslr": {
                 "configured": kaslr_configured(tree),

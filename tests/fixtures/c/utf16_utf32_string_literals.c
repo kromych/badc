@@ -20,8 +20,14 @@ int main(void) {
     const uint16_t *p = u"Hi";
     if (p[0] != 'H' || p[1] != 'i' || p[2] != 0) return 5;
 
-    // L"..." (target wchar_t) is unaffected.
-    const int w[] = L"ab";
+    // L"..." carries the target's wchar_t width, which is 2 bytes on
+    // Windows and 4 on the Unix targets, so the array element has to be
+    // the same width for the initializer to be the matching one.
+#if __SIZEOF_WCHAR_T__ == 2
+    const uint16_t w[] = L"ab";
+#else
+    const uint32_t w[] = L"ab";
+#endif
     if (w[0] != 'a' || w[1] != 'b' || w[2] != 0) return 6;
     return 0;
 }

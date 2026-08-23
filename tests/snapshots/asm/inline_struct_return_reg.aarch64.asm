@@ -10,45 +10,44 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#0x1
+               	brk	#0x1
+               	brk	#0x1
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x60
-               	sub	x0, x29, #0x50
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
+               	sub	x2, x29, #0x30
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x0]
-               	ldr	x10, [x1, #0x8]
-               	str	x10, [x0, #0x8]
-               	ldr	x10, [x1, #0x10]
-               	str	x10, [x0, #0x10]
-               	ldr	x10, [x1, #0x18]
-               	str	x10, [x0, #0x18]
+               	ldr	x10, [x0]
+               	str	x10, [x2]
+               	ldr	x10, [x0, #0x8]
+               	str	x10, [x2, #0x8]
+               	ldr	x10, [x0, #0x10]
+               	str	x10, [x2, #0x10]
+               	ldr	x10, [x0, #0x18]
+               	str	x10, [x2, #0x18]
                	ldr	x10, [sp], #0x10
+               	mov	x0, x2
                	mov	x0, #0x0                // =0
                	b	<addr>
-               	sub	x2, x29, #0x30
                	sub	x3, x29, #0x50
-               	ldr	x3, [x3, x1, lsl #3]
-               	str	x3, [x2, x1, lsl #3]
-               	add	x0, x1, #0x1
                	sxtw	x1, w0
-               	cmp	x1, #0x4
+               	ldr	x4, [x2, x1, lsl #3]
+               	str	x4, [x3, x1, lsl #3]
+               	add	x0, x1, #0x1
+               	cmp	w0, #0x4
                	b.lt	<addr>
-               	sub	x0, x29, #0x30
-               	add	x0, x0, #0x0
-               	ldr	x0, [x0]
+               	sub	x0, x29, #0x50
                	add	x1, x0, #0x0
-               	sub	x0, x29, #0x30
-               	ldr	x0, [x0, #0x8]
-               	add	x1, x1, x0
-               	sub	x0, x29, #0x30
-               	ldr	x0, [x0, #0x10]
-               	add	x1, x1, x0
-               	sub	x0, x29, #0x30
+               	ldr	x1, [x1]
+               	add	x1, x1, #0x0
+               	ldr	x2, [x0, #0x8]
+               	add	x1, x1, x2
+               	ldr	x2, [x0, #0x10]
+               	add	x1, x1, x2
                	ldr	x0, [x0, #0x18]
                	add	x0, x1, x0
                	add	x0, x0, #0x55

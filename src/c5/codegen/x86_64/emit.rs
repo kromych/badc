@@ -25,6 +25,7 @@
 //!   saved rbp, ret address        [rbp]
 //!   locals area                   [rbp - locals_bytes .. rbp]
 //!   allocator spill slots         ...
+//!   over-aligned region           [rbp + align_region_off ..]  (16-mode only)
 //!   saved callee-saved GPRs       rsp
 //! ```
 //!
@@ -97,21 +98,38 @@ pub(crate) struct Frame {
     /// was reused, so nothing the block needs afterwards may live there.
     pub asm_scratch_off: i32,
     /// The body moves rsp at runtime (`alloca` / C99 6.7.6.2 VLA), or the
-    /// prologue realigns rsp for an over-aligned automatic object, so spill
-    /// slots are addressed through rbp and the epilogue re-establishes rsp
-    /// from rbp before tearing the frame down.
+    /// prologue realigns rsp for an automatic object aligned above 16, so
+    /// spill slots are addressed through rbp and the epilogue re-establishes
+    /// rsp from rbp before tearing the frame down.
     pub dynamic_sp: bool,
-    /// Alignment the prologue forces on rsp for over-aligned automatic objects
-    /// (C11 6.7.5), a power of two > 16, or 0 when none. The realigned region
-    /// sits below the static frame; the objects live at `[rsp + region_off]`.
+    /// Alignment the prologue forces on rsp for automatic objects aligned
+    /// above 16 (C11 6.7.5), a power of two > 16, or 0 when none. The
+    /// realigned region sits below the static frame; the objects live at
+    /// `[rsp + region_off]`.
     pub realign_align: u32,
-    /// Byte size of the realigned region, a multiple of `realign_align`.
+    /// Byte size of the realigned region, a multiple of 16.
     pub realign_region_bytes: u32,
+    /// Bytes reserved directly below the frame base for the stack-protector
+    /// canary, 0 when the function is unprotected. Counted in `frame_bytes`
+    /// and in `alloc_spill_base`; every local slot sits below the region, so
+    /// the canary is between the locals and the saved return address.
+    pub canary_bytes: u32,
+    /// rbp-relative byte offset (negative) of the over-aligned region when the
+    /// region alignment is exactly 16, or 0 when none. rbp and every frame
+    /// region above it are 16-byte multiples, so the region base is 16-aligned
+    /// with no rsp move; its bytes are counted in `frame_bytes` and the
+    /// objects live at `[rbp + align_region_off + region_off]`.
+    pub align_region_off: i64,
 }
 
 fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Frame {
-    let (locals_bytes, alloc_spill_bytes, saved_gpr_bytes) =
+    let (declared_locals_bytes, alloc_spill_bytes, saved_gpr_bytes) =
         super::ssa::emit_common::compute_frame_base(func, alloc);
+    // The canary region joins the top of the locals region, so every offset
+    // measured down from rbp shifts by it and no other region formula changes.
+    let canary_bytes =
+        super::ssa::emit_common::canary_bytes(func, declared_locals_bytes, abi.stack_protect);
+    let locals_bytes = declared_locals_bytes + canary_bytes;
     // System V variadic callees reserve the 176-byte register save
     // area (System V AMD64 3.5.7) at the bottom of the frame. It is
     // added to `frame_bytes` only; `alloc_spill_base` (and thus the
@@ -145,12 +163,26 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Fra
     } else {
         0
     };
+    // An over-aligned region whose alignment is exactly 16 joins the static
+    // frame between the rbp-addressed regions and the rsp-addressed saved-
+    // register block: every region above it is a 16-byte multiple, so its
+    // base is 16-aligned with no rsp move. Above 16 the prologue realigns
+    // rsp instead. A region whose members have no emitted access needs no
+    // bytes, the same decision `compute_frame_base` makes for the locals
+    // region (`locals_bytes` is 0 exactly when no local access survives).
+    let region_bytes = func.realign_region_bytes.max(0) as u32;
+    let static_region_bytes = if func.frame_align == 16 && declared_locals_bytes > 0 {
+        region_bytes
+    } else {
+        0
+    };
     let frame_bytes = locals_bytes
         + alloc_spill_bytes
         + saved_gpr_bytes
         + va_save_bytes
         + saved_fpr_bytes
-        + asm_bytes;
+        + asm_bytes
+        + static_region_bytes;
     let param_spill_bytes = prologue_param_spill_bytes(func, alloc, abi);
     // A Win64 variadic callee receives every argument (named and
     // variadic) in a contiguous 8-byte-per-argument region: the
@@ -166,15 +198,20 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Fra
     } else {
         16
     };
-    // An over-aligned automatic object realigns rsp in the prologue and lives
-    // in a region below the static frame, addressed sp-relative; the frame is
-    // dynamic-sp so spills go through rbp and the epilogue restores rsp from
-    // rbp (C11 6.7.5).
-    let realign_align = func.frame_align.max(0) as u32;
-    let realign_region_bytes = func.realign_region_bytes.max(0) as u32;
+    // An automatic object aligned above 16 realigns rsp in the prologue and
+    // lives in a region below the static frame, addressed sp-relative; the
+    // frame is dynamic-sp so spills go through rbp and the epilogue restores
+    // rsp from rbp (C11 6.7.5). An alignment of exactly 16 keeps the static
+    // frame and addresses the region rbp-relative.
+    let realign_align = if func.frame_align > 16 {
+        func.frame_align as u32
+    } else {
+        0
+    };
     Frame {
         frame_bytes,
         alloc_spill_base: locals_bytes,
+        canary_bytes,
         param_spill_bytes,
         param_cell_stride,
         va_reg_save_off,
@@ -182,7 +219,13 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Fra
         asm_scratch_off,
         dynamic_sp: super::ssa::emit_common::uses_dynamic_alloca(func) || realign_align > 0,
         realign_align,
-        realign_region_bytes,
+        realign_region_bytes: if realign_align > 0 { region_bytes } else { 0 },
+        align_region_off: if static_region_bytes > 0 {
+            -((locals_bytes + alloc_spill_bytes + va_save_bytes + asm_bytes + static_region_bytes)
+                as i64)
+        } else {
+            0
+        },
     }
 }
 
@@ -195,6 +238,11 @@ fn asm_scratch_bytes(func: &FunctionSsa) -> u32 {
         let Inst::InlineAsm { asm, args } = inst else {
             continue;
         };
+        // A no-op statement emits no staging (`emit_inline_asm`), so it
+        // needs no scratch.
+        if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::X86) {
+            continue;
+        }
         let Ok(op_reg) =
             super::asm::assign_operand_regs(&asm.operands, asm.clobber_regs, asm.clobber_fp_regs)
         else {
@@ -878,6 +926,17 @@ fn fp_compare_cc(op: BinOp) -> Option<(Cc, FpCmpNanFix)> {
     })
 }
 
+/// Operand size in bytes for comparison `v`: 4 when the narrowing
+/// analysis proved the answer is decided by the low words
+/// (`passes::narrow`), 8 otherwise.
+fn cmp_width(alloc: &Allocation, v: super::super::ir::ValueId) -> u8 {
+    if crate::c5::codegen::passes::narrow::is_cmp32(&alloc.cmp32, v) {
+        4
+    } else {
+        8
+    }
+}
+
 /// Map an integer comparison [`BinOp`] to its x86_64 condition code
 /// (signed L / G / LE / GE, unsigned B / A / BE / AE per C99 6.5.8).
 /// `None` for any non-comparison op.
@@ -1333,12 +1392,14 @@ fn schedule_int_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>) {
 /// Resolve a call's `arg_aggs` indices into the `ArgAgg` vector the
 /// struct-aware planner consumes; empty when the call passes no
 /// aggregate by value.
+#[allow(clippy::too_many_arguments)]
 fn marshal_args(
     code: &mut Vec<u8>,
     plan: &super::CallPlan,
     args: &[u32],
     alloc: &Allocation,
     frame: Frame,
+    abi: super::Abi,
     site: &str,
 ) -> bool {
     let arg_place = |i: usize| -> Place { place_of(alloc, args[i]) };
@@ -1365,7 +1426,7 @@ fn marshal_args(
     // The address rides SCRATCH_R10, the per-word temp SCRATCH_R11;
     // both lie outside the allocator pools.
     for (i, &placement) in plan.placements.iter().enumerate() {
-        if let super::ArgPlacement::StructStack { off, size } = placement {
+        if let super::ArgPlacement::StructStack { off, size, align } = placement {
             let Some(src) =
                 materialize_int_shifted(code, arg_place(i), SCRATCH_R10, frame, plan.scratch_bytes)
             else {
@@ -1374,13 +1435,17 @@ fn marshal_args(
             if src.0 != SCRATCH_R10.0 {
                 emit_mov_rr(code, SCRATCH_R10, src);
             }
-            let words = size / 8;
+            // The outgoing stack slot is 8-aligned (System V AMD64
+            // 3.2.3); the source is the caller's object, so its own
+            // alignment bounds the unit.
+            let unit = super::super::access_chunk(align, abi.strict_align, 8);
+            let words = size / unit;
             for w in 0..words {
-                let o = (w * 8) as i32;
-                emit_mov_r_mem(code, SCRATCH_R11, SCRATCH_R10, o);
-                emit_mov_mem_r(code, Reg::RSP, off as i32 + o, SCRATCH_R11);
+                let o = (w * unit) as i32;
+                emit_load_unit(code, unit, SCRATCH_R11, SCRATCH_R10, o);
+                emit_store_unit(code, unit, Reg::RSP, off as i32 + o, SCRATCH_R11);
             }
-            for b in (words * 8)..size {
+            for b in (words * unit)..size {
                 let o = b as i32;
                 super::encode::emit_movzx_r_mem8(code, SCRATCH_R11, SCRATCH_R10, o);
                 super::encode::emit_mov_mem8_r(code, Reg::RSP, off as i32 + o, SCRATCH_R11);
@@ -1438,7 +1503,7 @@ fn marshal_args(
     // targets are argument GPRs that may still be another argument's
     // pending source, so their base rides the parallel move instead.
     for (i, &placement) in plan.placements.iter().enumerate() {
-        let super::ArgPlacement::StructRegs { regs, n } = placement else {
+        let super::ArgPlacement::StructRegs { regs, n, align } = placement else {
             continue;
         };
         if n == 0 || !regs.iter().take(n as usize).all(|c| c.is_fp) {
@@ -1453,7 +1518,15 @@ fn marshal_args(
             emit_mov_rr(code, SCRATCH_R10, base);
         }
         for (k, cr) in regs.iter().take(n as usize).enumerate() {
-            emit_movsd_xmm_mem(code, Reg(cr.reg), SCRATCH_R10, (k as i32) * 8);
+            emit_agg_load_sse(
+                code,
+                Reg(cr.reg),
+                SCRATCH_R10,
+                (k as i32) * 8,
+                align,
+                abi.strict_align,
+                SCRATCH_R11,
+            );
         }
     }
 
@@ -1487,7 +1560,7 @@ fn marshal_args(
                 }
             }
             // All-SSE aggregates loaded above.
-            super::ArgPlacement::StructRegs { regs, n } => {
+            super::ArgPlacement::StructRegs { regs, n, .. } => {
                 if let Some(dst) = agg_base_reg(&regs, n)
                     && let Place::IntReg(s) = arg_place(i)
                     && s != dst
@@ -1532,7 +1605,7 @@ fn marshal_args(
     // register, the same destination the move loop used for the
     // register-resident case.
     for (i, &placement) in plan.placements.iter().enumerate() {
-        if let super::ArgPlacement::StructRegs { regs, n } = placement
+        if let super::ArgPlacement::StructRegs { regs, n, .. } = placement
             && let Some(dst) = agg_base_reg(&regs, n)
             && !matches!(arg_place(i), Place::IntReg(_))
         {
@@ -1553,17 +1626,34 @@ fn marshal_args(
     // the base register's own eightbyte last since the load overwrites
     // it. All-SSE aggregates were loaded above.
     for &placement in plan.placements.iter() {
-        if let super::ArgPlacement::StructRegs { regs, n } = placement
+        if let super::ArgPlacement::StructRegs { regs, n, align } = placement
             && let Some(base) = agg_base_reg(&regs, n)
         {
             for (k, cr) in regs.iter().take(n as usize).enumerate() {
                 if cr.is_fp {
-                    emit_movsd_xmm_mem(code, Reg(cr.reg), Reg(base), (k as i32) * 8);
+                    emit_agg_load_sse(
+                        code,
+                        Reg(cr.reg),
+                        Reg(base),
+                        (k as i32) * 8,
+                        align,
+                        abi.strict_align,
+                        SCRATCH_R10,
+                    );
                 }
             }
             for (k, cr) in regs.iter().take(n as usize).enumerate().rev() {
                 if !cr.is_fp && cr.reg != base {
-                    emit_mov_r_mem(code, Reg(cr.reg), Reg(base), (k as i32) * 8);
+                    emit_agg_load_int(
+                        code,
+                        Reg(cr.reg),
+                        Reg(base),
+                        (k as i32) * 8,
+                        8,
+                        align,
+                        abi.strict_align,
+                        SCRATCH_R10,
+                    );
                 }
             }
             let base_off = regs
@@ -1571,7 +1661,24 @@ fn marshal_args(
                 .take(n as usize)
                 .position(|c| !c.is_fp && c.reg == base)
                 .unwrap_or(0);
-            emit_mov_r_mem(code, Reg(base), Reg(base), (base_off as i32) * 8);
+            let disp = (base_off as i32) * 8;
+            // The base's own eightbyte overwrites the base, so a
+            // composed one accumulates in scratch first.
+            if super::super::access_unit(disp as u32, 8, align, abi.strict_align) == 8 {
+                emit_mov_r_mem(code, Reg(base), Reg(base), disp);
+            } else {
+                emit_agg_load_int(
+                    code,
+                    SCRATCH_R10,
+                    Reg(base),
+                    disp,
+                    8,
+                    align,
+                    abi.strict_align,
+                    SCRATCH_R11,
+                );
+                emit_mov_rr(code, Reg(base), SCRATCH_R10);
+            }
         }
     }
 
@@ -1610,6 +1717,7 @@ pub(crate) fn emit_function(
     rodata: &mut super::RodataBuild,
     abs_jump_tables: bool,
     hardening: super::Hardening,
+    stack_protect: super::StackProtect,
 ) -> bool {
     // The bundled emit output arrives in `cx`; recreate the per-field names as
     // disjoint reborrows so the body below (including the per-`Inst` `cx` it
@@ -1626,8 +1734,11 @@ pub(crate) fn emit_function(
     let prologue_native = &mut *cx.prologue_native;
     let asm_sections = &mut *cx.asm_sections;
     let asm_extern_call_sites = &mut *cx.asm_extern_call_sites;
+    let asm_sym_fixups = &mut *cx.asm_sym_fixups;
     let text_align = &mut *cx.text_align;
     let label_relocs = &mut *cx.label_relocs;
+    let text_data_ranges = &mut *cx.text_data_ranges;
+    let canary_frame_bytes = &mut *cx.canary_frame_bytes;
     let snapshot = code.len();
     let fixups_snapshot = fixups.len();
     let plt_call_fixups_snapshot = plt_call_fixups.len();
@@ -1637,6 +1748,7 @@ pub(crate) fn emit_function(
     let asm_text_abs_refs_snapshot = asm_text_abs_refs.len();
     let asm_text_labels_snapshot = asm_text_labels.len();
     let asm_extern_call_sites_snapshot = asm_extern_call_sites.len();
+    let asm_sym_fixups_snapshot = asm_sym_fixups.len();
     let asm_sections_snapshot = asm_sections.snapshot();
     // A cross-unit `extern _Thread_local` access (`extern_tls_names` maps
     // the access value-id to the referenced symbol) and a same-unit one
@@ -1657,6 +1769,7 @@ pub(crate) fn emit_function(
             asm_text_abs_refs.truncate(asm_text_abs_refs_snapshot);
             asm_text_labels.truncate(asm_text_labels_snapshot);
             asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+            asm_sym_fixups.truncate(asm_sym_fixups_snapshot);
             asm_sections.restore(&asm_sections_snapshot);
             pending_func_fixups.truncate(pending_func_fixups_snapshot);
             return false;
@@ -1671,6 +1784,7 @@ pub(crate) fn emit_function(
         a.no_fp_varargs = no_fp_regs;
         a.strict_align = strict_align;
         a.hardening = hardening;
+        a.stack_protect = stack_protect;
         a
     };
     if let Some(bytes) = super::ssa::emit_common::locals_bytes_over_limit(func) {
@@ -1678,6 +1792,9 @@ pub(crate) fn emit_function(
         return false;
     }
     let frame = compute_frame(func, alloc, abi);
+    if frame.canary_bytes > 0 {
+        canary_frame_bytes.insert(func.ent_pc, frame.canary_bytes);
+    }
     if frame.frame_bytes > super::ssa::emit_common::MAX_FRAME_BYTES {
         bail_msg(&super::ssa::emit_common::frame_too_large_msg(
             frame.frame_bytes as i64,
@@ -1720,7 +1837,15 @@ pub(crate) fn emit_function(
         if abi.hardening.cf_protection_branch {
             super::encode::emit_endbr64(code);
         }
-        emit_prologue(code, func, alloc, frame, abi, snapshot)
+        emit_prologue(
+            code,
+            func,
+            alloc,
+            frame,
+            abi,
+            snapshot,
+            user_extern_data_refs,
+        )
     };
     uw.begin = snapshot as u32;
     super::ssa::emit_common::record_post_prologue_pc(func, prologue_native, code.len());
@@ -1866,6 +1991,7 @@ pub(crate) fn emit_function(
     let body_elf_tpoff = elf_tpoff_fixups.len();
     let body_line_rows = ssa_line_rows.len();
     let body_asm_extern = asm_extern_call_sites.len();
+    let body_asm_sym = asm_sym_fixups.len();
     // The section sink merges by name, so a re-emit restores its full
     // per-section state rather than a length (see [`AsmSectionSink::restore`]).
     let body_asm_sections = asm_sections.snapshot();
@@ -1965,7 +2091,9 @@ pub(crate) fn emit_function(
                         extern_code_names,
                         asm_sections,
                         asm_extern_call_sites,
+                        asm_sym_fixups,
                         data_fixups,
+                        pending_func_fixups,
                         user_extern_data_refs,
                         asm_section_text_refs,
                         asm_text_abs_refs,
@@ -1996,8 +2124,11 @@ pub(crate) fn emit_function(
                         prologue_native: &mut *prologue_native,
                         asm_sections: &mut *asm_sections,
                         asm_extern_call_sites: &mut *asm_extern_call_sites,
+                        asm_sym_fixups: &mut *asm_sym_fixups,
                         text_align: &mut *text_align,
                         label_relocs: &mut *label_relocs,
+                        text_data_ranges: &mut *text_data_ranges,
+                        canary_frame_bytes: &mut *canary_frame_bytes,
                     };
                     let fcx = FnCtx {
                         func,
@@ -2085,11 +2216,22 @@ pub(crate) fn emit_function(
                             fixups,
                             func,
                             fp_arg_mask,
+                            asm_extern_call_sites,
+                            user_extern_data_refs,
                         ) {
                             bail_rollback!();
                         }
                     } else {
-                        emit_return(code, v, alloc, frame, func, abi, asm_extern_call_sites)
+                        emit_return(
+                            code,
+                            v,
+                            alloc,
+                            frame,
+                            func,
+                            abi,
+                            asm_extern_call_sites,
+                            user_extern_data_refs,
+                        )
                     }
                 }
                 Terminator::Jmp(t) => {
@@ -2110,13 +2252,14 @@ pub(crate) fn emit_function(
                     target,
                     fall_through,
                 } => {
-                    if let Some(cc) = fused_branch_cc(func, alloc, cond, /* negate */ true) {
-                        emit_local_branch(
+                    if let Some(fused) = fused_branch_cc(func, alloc, cond, /* negate */ true) {
+                        emit_fused_branch(
                             code,
                             &mut branch_fixups,
                             &branch_short,
-                            LocalBranchKind::Jcc(cc),
+                            fused,
                             target,
+                            fall_through,
                         );
                         if fall_through as usize != block_idx + 1 {
                             emit_local_branch(
@@ -2159,13 +2302,14 @@ pub(crate) fn emit_function(
                     target,
                     fall_through,
                 } => {
-                    if let Some(cc) = fused_branch_cc(func, alloc, cond, /* negate */ false) {
-                        emit_local_branch(
+                    if let Some(fused) = fused_branch_cc(func, alloc, cond, /* negate */ false) {
+                        emit_fused_branch(
                             code,
                             &mut branch_fixups,
                             &branch_short,
-                            LocalBranchKind::Jcc(cc),
+                            fused,
                             target,
+                            fall_through,
                         );
                         if fall_through as usize != block_idx + 1 {
                             emit_local_branch(
@@ -2332,6 +2476,7 @@ pub(crate) fn emit_function(
                 elf_tpoff_fixups.truncate(body_elf_tpoff);
                 ssa_line_rows.truncate(body_line_rows);
                 asm_extern_call_sites.truncate(body_asm_extern);
+                asm_sym_fixups.truncate(body_asm_sym);
                 asm_sections.restore(&body_asm_sections);
                 for b in block_offsets.iter_mut() {
                     *b = 0;
@@ -2372,7 +2517,7 @@ pub(crate) fn emit_function(
     // Rewrite `asm goto` section fields (`.long %l0 - .`) to the label
     // block's now-final text offset. Scoped to this function's contribution
     // via the entry snapshot; only this pass's relocs survived the loop.
-    super::ssa::emit_common::resolve_asm_goto_relocs(
+    crate::c5::asm::resolve_asm_goto_relocs(
         asm_sections.relocs_mut(),
         &body_asm_sections,
         &|bid| block_offsets[bid as usize],
@@ -2462,6 +2607,63 @@ struct BranchFixup {
     /// `true` when the branch sits in an inline-asm template, whose bytes
     /// are emitted before relaxation runs and may not change length.
     pinned_long: bool,
+}
+
+/// Emit a fused terminator's branch shape: the single `jcc`, or the
+/// parity pair an FP `==` / `!=` needs (`JpOr` sends the unordered
+/// case to `target`, `JnpAnd` to `fall_through`). The caller emits
+/// the trailing `jmp fall_through` when the layout needs one.
+fn emit_fused_branch(
+    code: &mut alloc::vec::Vec<u8>,
+    branch_fixups: &mut alloc::vec::Vec<BranchFixup>,
+    branch_short: &[bool],
+    fused: FusedBranch,
+    target: super::super::ir::BlockId,
+    fall_through: super::super::ir::BlockId,
+) {
+    match fused {
+        FusedBranch::Jcc(cc) => {
+            emit_local_branch(
+                code,
+                branch_fixups,
+                branch_short,
+                LocalBranchKind::Jcc(cc),
+                target,
+            );
+        }
+        FusedBranch::JpOr(cc) => {
+            emit_local_branch(
+                code,
+                branch_fixups,
+                branch_short,
+                LocalBranchKind::Jcc(Cc::P),
+                target,
+            );
+            emit_local_branch(
+                code,
+                branch_fixups,
+                branch_short,
+                LocalBranchKind::Jcc(cc),
+                target,
+            );
+        }
+        FusedBranch::JnpAnd(cc) => {
+            emit_local_branch(
+                code,
+                branch_fixups,
+                branch_short,
+                LocalBranchKind::Jcc(Cc::P),
+                fall_through,
+            );
+            emit_local_branch(
+                code,
+                branch_fixups,
+                branch_short,
+                LocalBranchKind::Jcc(cc),
+                target,
+            );
+        }
+    }
 }
 
 /// Emit a local branch to `target`, choosing the 2-byte rel8 short form
@@ -2720,6 +2922,7 @@ fn emit_prologue(
     frame: Frame,
     abi: super::Abi,
     func_start: usize,
+    extern_data_refs: &mut Vec<super::UserExternDataRef>,
 ) -> super::FnUnwind {
     let mut uw = super::FnUnwind {
         param_spill_bytes: frame.param_spill_bytes,
@@ -2908,6 +3111,10 @@ fn emit_prologue(
     save_callee_saved(code, alloc, frame);
     emit_struct_param_scatter(code, func, frame, abi);
     emit_struct_stack_param_copy(code, func, frame, abi);
+    // After the parameter marshalling, which uses the same scratch, and
+    // before the realign: the slot is rbp-relative, so the rsp move that
+    // follows does not reach it.
+    emit_canary_store(code, frame, abi, extern_data_refs);
     // C11 6.7.5: reserve the over-aligned objects' region below the static
     // frame and align rsp down into it. Done last, after the callee-saved
     // stores (which stay at rbp-frame_bytes, where the epilogue's
@@ -2950,7 +3157,7 @@ fn emit_struct_stack_param_copy(
     }
     let base = 16 + (func.n_params as i64) * 16;
     for (i, &placement) in placements.iter().enumerate() {
-        let super::ArgPlacement::StructStack { off, size } = placement else {
+        let super::ArgPlacement::StructStack { off, size, .. } = placement else {
             continue;
         };
         let slot = func.param_local_slots.get(i).copied().unwrap_or(0);
@@ -2992,7 +3199,7 @@ fn emit_struct_param_scatter(
         if agg.is_none() {
             continue;
         }
-        let Some(super::ArgPlacement::StructRegs { regs, n }) = placements.get(i) else {
+        let Some(super::ArgPlacement::StructRegs { regs, n, .. }) = placements.get(i) else {
             continue;
         };
         let slot = func.param_local_slots.get(i).copied().unwrap_or(0);
@@ -3011,15 +3218,38 @@ fn emit_struct_param_scatter(
     }
 }
 
-/// Return the x86_64 condition code to use for `Jcc` when the
-/// terminator's cond was flagged as branch-fused by the allocator.
-/// `negate` is true for `Bz` (branch when comparison failed).
+/// Branch shape for a fused compare's terminator. An integer compare
+/// and the parity-clean FP compares take one `jcc`; `ucomisd` raises
+/// PF on an unordered (NaN) compare, so `==` / `!=` need it tested by
+/// a second branch (C99 6.5.9p3: `==` yields 0 on NaN, `!=` yields 1).
+enum FusedBranch {
+    /// `jcc target`.
+    Jcc(Cc),
+    /// Taken when PF=1 or `cc` holds: `jp target ; jcc target`.
+    JpOr(Cc),
+    /// Taken when PF=0 and `cc` holds: `jp fall_through ; jcc target`.
+    JnpAnd(Cc),
+}
+
+/// Whether a fused `Flt` / `Fle` compare emits `ucomisd rhs, lhs`.
+/// The swap turns them into the `>` / `>=` shapes whose `A` / `Ae`
+/// (and inverted `Be` / `B`) condition codes are exact under the
+/// unordered flag state, so the branch needs no parity test. The
+/// compare emit and [`fused_branch_cc`] both derive the swap from the
+/// inst so they agree.
+fn fused_fp_swaps_operands(op: BinOp) -> bool {
+    matches!(op, BinOp::Flt | BinOp::Fle)
+}
+
+/// Return the branch shape to use when the terminator's cond was
+/// flagged as branch-fused by the allocator. `negate` is true for
+/// `Bz` (branch when comparison failed).
 fn fused_branch_cc(
     func: &super::super::ir::FunctionSsa,
     alloc: &Allocation,
     cond: super::super::ir::ValueId,
     negate: bool,
-) -> Option<Cc> {
+) -> Option<FusedBranch> {
     if !alloc
         .branch_fused
         .get(cond as usize)
@@ -3032,11 +3262,45 @@ fn fused_branch_cc(
         Inst::Binop { op, .. } | Inst::BinopI { op, .. } => *op,
         _ => return None,
     };
-    let positive = int_cmp_cc(op)?;
-    if !negate {
-        return Some(positive);
+    if let Some(positive) = int_cmp_cc(op) {
+        // A `cmp`-set flag state is never "unordered": inverting the
+        // cc is the exact negation.
+        let cc = if negate {
+            invert_cc(positive)?
+        } else {
+            positive
+        };
+        return Some(FusedBranch::Jcc(cc));
     }
-    Some(match positive {
+    // FP compares. `ucomisd` leaves ZF=PF=CF=1 on NaN: `A` / `Ae` are
+    // false there and their inversions `Be` / `B` true, matching C99
+    // 6.5.8p6 for the ordered compares (`Flt` / `Fle` were emitted
+    // operand-swapped into those shapes); `==` / `!=` carry the
+    // parity test in the branch shape.
+    Some(match op {
+        BinOp::Fgt | BinOp::Flt => FusedBranch::Jcc(if negate { Cc::Be } else { Cc::A }),
+        BinOp::Fge | BinOp::Fle => FusedBranch::Jcc(if negate { Cc::B } else { Cc::Ae }),
+        BinOp::Feq => {
+            if negate {
+                FusedBranch::JpOr(Cc::Ne)
+            } else {
+                FusedBranch::JnpAnd(Cc::E)
+            }
+        }
+        BinOp::Fne => {
+            if negate {
+                FusedBranch::JnpAnd(Cc::E)
+            } else {
+                FusedBranch::JpOr(Cc::Ne)
+            }
+        }
+        _ => return None,
+    })
+}
+
+/// Logical complement of an integer-compare condition code.
+fn invert_cc(cc: Cc) -> Option<Cc> {
+    Some(match cc {
         Cc::E => Cc::Ne,
         Cc::Ne => Cc::E,
         Cc::L => Cc::Ge,
@@ -3165,8 +3429,11 @@ fn emit_inst(
                 // prologue stored the cell from the pristine argument
                 // register before any body instruction ran.
                 if param_from_home.get(i).copied().unwrap_or(false) {
-                    let home_off =
-                        c5_slot_to_fp_offset(*idx as i64 + 2, frame.param_cell_stride) as i32;
+                    let home_off = c5_slot_to_fp_offset(
+                        *idx as i64 + 2,
+                        frame.param_cell_stride,
+                        frame.canary_bytes,
+                    ) as i32;
                     let load = |code: &mut Vec<u8>, r: Reg| {
                         if matches!(kind, LoadKind::F32) {
                             emit_movss_xmm_mem(code, r, Reg::RBP, home_off);
@@ -3200,7 +3467,9 @@ fn emit_inst(
                 return true;
             }
             let from_home = param_from_home.get(i).copied().unwrap_or(false);
-            let home_off = c5_slot_to_fp_offset(*idx as i64 + 2, frame.param_cell_stride) as i32;
+            let home_off =
+                c5_slot_to_fp_offset(*idx as i64 + 2, frame.param_cell_stride, frame.canary_bytes)
+                    as i32;
             // The incoming integer register comes from the plan, not the
             // absolute parameter index: a floating-point parameter
             // earlier in the list consumes an FP register and does not
@@ -3279,7 +3548,11 @@ fn emit_inst(
             true
         }
         Inst::Load {
-            addr, disp, kind, ..
+            addr,
+            disp,
+            kind,
+            align,
+            ..
         } => emit_load(
             code,
             dst,
@@ -3290,15 +3563,27 @@ fn emit_inst(
             alloc.is_f32(v),
             alloc,
             frame,
+            narrow_bound(*align, abi),
         ),
         Inst::Store {
             addr,
             disp,
             value,
             kind,
+            align,
             ..
         } => emit_store(
-            code, dst, v, *addr, *disp, *value, *kind, None, alloc, frame,
+            code,
+            dst,
+            v,
+            *addr,
+            *disp,
+            *value,
+            *kind,
+            None,
+            alloc,
+            frame,
+            narrow_bound(*align, abi),
         ),
         Inst::SegLoad {
             addr, kind, seg, ..
@@ -3312,6 +3597,7 @@ fn emit_inst(
             alloc.is_f32(v),
             alloc,
             frame,
+            None,
         ),
         Inst::SegStore {
             addr,
@@ -3330,6 +3616,7 @@ fn emit_inst(
             seg_prefix(*seg),
             alloc,
             frame,
+            None,
         ),
         Inst::LoadLocal { off, kind, .. } => {
             emit_load_local(code, dst, *off, *kind, alloc.is_f32(v), frame, func, abi)
@@ -3491,6 +3778,7 @@ fn emit_inst(
         Inst::Intrinsic { kind, args } => {
             emit_intrinsic(code, *kind, args, dst, v, func, alloc, frame, abi)
         }
+        Inst::X86Simd { op, imm, args } => emit_x86_simd(code, *op, *imm, args, alloc, frame),
         Inst::InlineAsm { asm, args } => emit_inline_asm(
             code,
             asm,
@@ -3504,7 +3792,9 @@ fn emit_inst(
             extern_code_names,
             asm_sections,
             asm_extern_call_sites,
+            &mut *cx.asm_sym_fixups,
             data_fixups,
+            pending_func_fixups,
             user_extern_data_refs,
             asm_section_text_refs,
             asm_text_abs_refs,
@@ -3531,7 +3821,15 @@ fn emit_inst(
             alloc,
             frame,
         ),
+        Inst::MulAdd {
+            a,
+            b,
+            c,
+            neg_product,
+        } => emit_mul_add(code, dst, v, *a, *b, *c, *neg_product, alloc, frame),
         Inst::Extend { value, kind } => emit_extend(code, dst, *value, *kind, alloc, frame),
+        Inst::Bswap { value, width } => emit_bswap(code, dst, *value, *width, alloc, frame),
+        Inst::Copy { value, is_fp } => emit_copy(code, dst, *value, *is_fp, alloc, frame),
         Inst::FpCast { kind, value } => emit_fp_cast(code, dst, v, *kind, *value, alloc, frame),
         Inst::TlsAddr(offset) => emit_tls_addr(
             code,
@@ -3786,7 +4084,7 @@ fn local_slot_off(off: i64, func: &FunctionSsa, frame: Frame, abi: super::Abi) -
             }
         }
     } else {
-        c5_slot_to_fp_offset(off, frame.param_cell_stride)
+        c5_slot_to_fp_offset(off, frame.param_cell_stride, frame.canary_bytes)
     }
 }
 
@@ -3822,7 +4120,7 @@ fn emit_load_kind_mem(
         LoadKind::U16 => emit_movzx_r_mem16(code, rd, base, disp),
         LoadKind::I8 => super::encode::emit_movsx_r_mem8(code, rd, base, disp),
         LoadKind::U8 => super::encode::emit_movzx_r_mem8(code, rd, base, disp),
-        LoadKind::F32 | LoadKind::F64 => unreachable!(),
+        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => unreachable!(),
     }
 }
 
@@ -3843,7 +4141,7 @@ fn emit_store_kind_mem(
         StoreKind::I32 => super::encode::emit_mov_mem32_r(code, base, disp, src),
         StoreKind::I16 => super::encode::emit_mov_mem16_r(code, base, disp, src),
         StoreKind::I8 => super::encode::emit_mov_mem8_r(code, base, disp, src),
-        StoreKind::F32 | StoreKind::F64 => unreachable!(),
+        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 => unreachable!(),
     }
 }
 
@@ -3871,11 +4169,42 @@ fn emit_load_fp_mem(
     disp: i32,
     seg: Option<u8>,
     frame: Frame,
+    bound: Option<u32>,
     site: &str,
 ) -> bool {
     let Some(dd) = fp_or_spill_dst(dst) else {
         return fail(&alloc::format!("{site}: dst not fp reg / spill"));
     };
+    if matches!(kind, LoadKind::F80 | LoadKind::F128) {
+        if !matches!(kind, LoadKind::F80) {
+            return fail(&alloc::format!("{site}: binary128 load on x86-64"));
+        }
+        // `fld m80` + `fstp m64` narrows the stored x87 value to the
+        // f64 the compute path carries, through the red zone (no call
+        // intervenes; x87 accesses carry no alignment requirement, so
+        // the strict-align compose path does not apply).
+        if let Some(p) = seg {
+            code.push(p);
+        }
+        super::encode::emit_fld_m80(code, base, disp);
+        super::encode::emit_fstp_m64(code, Reg::RSP, -8);
+        emit_movsd_xmm_mem(code, dd, Reg::RSP, -8);
+        fp_spill_dst_to_slot(code, dst, dd, frame);
+        return true;
+    }
+    // A bounded access composes in a GPR and crosses via `movq`, which
+    // zeroes the register above the composed bytes exactly as the
+    // `movss` / `movsd` it replaces does.
+    if let Some(a) = bound {
+        let width = if matches!(kind, LoadKind::F32) { 4 } else { 8 };
+        let acc = emit_narrow_compose(code, base, disp, width, a, &[]);
+        super::encode::emit_movq_xmm_r(code, dd, acc);
+        if matches!(kind, LoadKind::F32) && !keep_f32 {
+            emit_cvtss2sd(code, dd, dd);
+        }
+        fp_spill_dst_to_slot(code, dst, dd, frame);
+        return true;
+    }
     // Segment override precedes the mandatory SSE prefix and the opcode.
     if let Some(p) = seg {
         code.push(p);
@@ -3910,6 +4239,7 @@ fn emit_store_fp_mem(
     disp: i32,
     seg: Option<u8>,
     frame: Frame,
+    bound: Option<u32>,
     site: &str,
 ) -> bool {
     let Some(dn) = materialize_fp(code, value_place, SCRATCH_XMM14, frame) else {
@@ -3917,6 +4247,22 @@ fn emit_store_fp_mem(
             "{site}: value not fp reg / spill / int reg"
         ));
     };
+    if matches!(kind, StoreKind::F80 | StoreKind::F128) {
+        if !matches!(kind, StoreKind::F80) {
+            return fail(&alloc::format!("{site}: binary128 store on x86-64"));
+        }
+        // `fld m64` widens the f64 exactly; `fstp m80` writes the 10
+        // significant bytes and leaves the object's padding untouched,
+        // as gcc's stores do. The round trip rides the red zone.
+        emit_movsd_mem_xmm(code, Reg::RSP, -8, dn);
+        super::encode::emit_fld_m64(code, Reg::RSP, -8);
+        if let Some(p) = seg {
+            code.push(p);
+        }
+        super::encode::emit_fstp_m80(code, base, disp);
+        mirror_fp_dst(code, dst, dn, frame);
+        return true;
+    }
     // Emit the segment override immediately before the store opcode, past any
     // value materialisation / narrowing the branches do first.
     let push_seg = |code: &mut Vec<u8>| {
@@ -3924,18 +4270,32 @@ fn emit_store_fp_mem(
             code.push(p);
         }
     };
+    let narrowed = |code: &mut Vec<u8>, src: Reg, width: u32, a: u32| {
+        super::encode::emit_movq_r_xmm(code, SCRATCH_R11, src);
+        emit_narrow_store(code, SCRATCH_R11, base, disp, width, a);
+    };
     if matches!(kind, StoreKind::F32) {
-        if value_is_f32 {
-            push_seg(code);
-            emit_movss_mem_xmm(code, base, disp, dn);
+        let src = if value_is_f32 {
+            dn
         } else {
             emit_cvtsd2ss(code, SCRATCH_XMM15, dn);
-            push_seg(code);
-            emit_movss_mem_xmm(code, base, disp, SCRATCH_XMM15);
+            SCRATCH_XMM15
+        };
+        match bound {
+            Some(a) => narrowed(code, src, 4, a),
+            None => {
+                push_seg(code);
+                emit_movss_mem_xmm(code, base, disp, src);
+            }
         }
     } else {
-        push_seg(code);
-        emit_movsd_mem_xmm(code, base, disp, dn);
+        match bound {
+            Some(a) => narrowed(code, dn, 8, a),
+            None => {
+                push_seg(code);
+                emit_movsd_mem_xmm(code, base, disp, dn);
+            }
+        }
     }
     mirror_fp_dst(code, dst, dn, frame);
     true
@@ -3946,14 +4306,20 @@ fn emit_store_fp_mem(
 /// directly, skipping the `LocalAddr` materialisation the
 /// `LocalAddr` + `Load` pair would have required.
 /// Base register and byte displacement for addressing a local slot. An
-/// over-aligned automatic object lives in the realigned region at
-/// `[rsp + region_off]` (rsp aligned to `frame.realign_align`); every other
-/// slot is `[rbp + local_slot_off]` (C11 6.7.5).
+/// over-aligned automatic object lives in the over-aligned region: at
+/// `[rsp + region_off]` when the prologue realigned rsp (alignment above 16),
+/// at `[rbp + align_region_off + region_off]` for the static 16-aligned
+/// placement; every other slot is `[rbp + local_slot_off]` (C11 6.7.5).
 fn local_slot_base_disp(off: i64, func: &FunctionSsa, frame: Frame, abi: super::Abi) -> (Reg, i64) {
     if off < 0
+        && (frame.align_region_off != 0 || frame.realign_align > 0)
         && let Some(&(_, region_off)) = func.over_aligned.iter().find(|&&(s, _)| s == off)
     {
-        (Reg::RSP, region_off)
+        if frame.align_region_off != 0 {
+            (Reg::RBP, frame.align_region_off + region_off)
+        } else {
+            (Reg::RSP, region_off)
+        }
     } else {
         (Reg::RBP, local_slot_off(off, func, frame, abi))
     }
@@ -3973,7 +4339,10 @@ fn emit_load_local(
     let Ok(disp) = i32::try_from(bytes) else {
         return fail("LoadLocal: offset doesn't fit in disp32");
     };
-    if matches!(kind, LoadKind::F32 | LoadKind::F64) {
+    if matches!(
+        kind,
+        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128
+    ) {
         return emit_load_fp_mem(
             code,
             dst,
@@ -3983,6 +4352,7 @@ fn emit_load_local(
             disp,
             None,
             frame,
+            None,
             "LoadLocal",
         );
     }
@@ -4015,7 +4385,10 @@ fn emit_store_local(
         return fail("StoreLocal: offset doesn't fit in disp32");
     };
     let value_place = place_of(alloc, value);
-    if matches!(kind, StoreKind::F32 | StoreKind::F64) {
+    if matches!(
+        kind,
+        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128
+    ) {
         // Mirrors the `Store` FP path so a mem2reg-promoted slot
         // round-trips identically to the prior address-taken
         // `LocalAddr + Store` form.
@@ -4029,6 +4402,7 @@ fn emit_store_local(
             disp,
             None,
             frame,
+            None,
             "StoreLocal",
         );
     }
@@ -4077,7 +4451,10 @@ fn emit_load_indexed(
     alloc: &Allocation,
     frame: Frame,
 ) -> bool {
-    if matches!(kind, LoadKind::F32 | LoadKind::F64) {
+    if matches!(
+        kind,
+        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128
+    ) {
         return fail("LoadIndexed: FP not implemented");
     }
     let expected_scale: u8 = match kind {
@@ -4085,7 +4462,7 @@ fn emit_load_indexed(
         LoadKind::I32 | LoadKind::U32 => 4,
         LoadKind::I16 | LoadKind::U16 => 2,
         LoadKind::I8 | LoadKind::U8 => 1,
-        LoadKind::F32 | LoadKind::F64 => unreachable!(),
+        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => unreachable!(),
     };
     if scale != expected_scale {
         return fail("LoadIndexed: scale doesn't match access width");
@@ -4108,7 +4485,7 @@ fn emit_load_indexed(
         LoadKind::U16 => super::encode::emit_movzx_r_sib16(code, rd, rbase, rindex, scale),
         LoadKind::I8 => super::encode::emit_movsx_r_sib8(code, rd, rbase, rindex, scale),
         LoadKind::U8 => super::encode::emit_movzx_r_sib8(code, rd, rbase, rindex, scale),
-        LoadKind::F32 | LoadKind::F64 => unreachable!(),
+        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => unreachable!(),
     }
     spill_dst_to_slot(code, dst, rd, frame);
     true
@@ -4127,7 +4504,10 @@ fn emit_store_indexed(
     alloc: &Allocation,
     frame: Frame,
 ) -> bool {
-    if matches!(kind, StoreKind::F32 | StoreKind::F64) {
+    if matches!(
+        kind,
+        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128
+    ) {
         return fail("StoreIndexed: FP not implemented");
     }
     let expected_scale: u8 = match kind {
@@ -4135,7 +4515,7 @@ fn emit_store_indexed(
         StoreKind::I32 => 4,
         StoreKind::I16 => 2,
         StoreKind::I8 => 1,
-        StoreKind::F32 | StoreKind::F64 => unreachable!(),
+        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 => unreachable!(),
     };
     if scale != expected_scale {
         return fail("StoreIndexed: scale doesn't match access width");
@@ -4196,14 +4576,14 @@ fn emit_store_indexed(
             StoreKind::I32 => super::encode::emit_mov_mem_r32(code, addr, 0, rv),
             StoreKind::I16 => super::encode::emit_mov_mem_r16(code, addr, 0, rv),
             StoreKind::I8 => super::encode::emit_mov_mem_r8(code, addr, 0, rv),
-            StoreKind::F32 | StoreKind::F64 => unreachable!(),
+            StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 => unreachable!(),
         },
         None => match kind {
             StoreKind::I64 => super::encode::emit_mov_sib_r(code, rbase, rindex, scale, rv),
             StoreKind::I32 => super::encode::emit_mov_sib_r32(code, rbase, rindex, scale, rv),
             StoreKind::I16 => super::encode::emit_mov_sib_r16(code, rbase, rindex, scale, rv),
             StoreKind::I8 => super::encode::emit_mov_sib_r8(code, rbase, rindex, scale, rv),
-            StoreKind::F32 | StoreKind::F64 => unreachable!(),
+            StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 => unreachable!(),
         },
     }
     // c5 store-op leaves the value in the accumulator.
@@ -4221,6 +4601,7 @@ fn emit_load(
     keep_f32: bool,
     alloc: &Allocation,
     frame: Frame,
+    bound: Option<u32>,
 ) -> bool {
     let addr_place = place_of(alloc, addr);
     // Spill-tolerant base materialisation: load a spilled address
@@ -4230,13 +4611,21 @@ fn emit_load(
     let Some(base) = materialize_int(code, addr_place, SCRATCH_R10, frame) else {
         return fail("Load: addr Place not int reg / spill");
     };
-    if matches!(kind, LoadKind::F32 | LoadKind::F64) {
-        return emit_load_fp_mem(code, dst, kind, keep_f32, base, disp, seg, frame, "Load");
+    if matches!(
+        kind,
+        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128
+    ) {
+        return emit_load_fp_mem(
+            code, dst, kind, keep_f32, base, disp, seg, frame, bound, "Load",
+        );
     }
     let Some(rd) = int_or_spill_dst(dst) else {
         return fail("Load: dst not int reg / spill");
     };
-    emit_load_kind_mem(code, kind, rd, base, disp, seg);
+    match bound {
+        Some(a) => emit_narrow_load(code, rd, base, disp, kind, a),
+        None => emit_load_kind_mem(code, kind, rd, base, disp, seg),
+    }
     spill_dst_to_slot(code, dst, rd, frame);
     true
 }
@@ -4252,6 +4641,7 @@ fn emit_store(
     seg: Option<u8>,
     alloc: &Allocation,
     frame: Frame,
+    bound: Option<u32>,
 ) -> bool {
     let addr_place = place_of(alloc, addr);
     let value_place = place_of(alloc, value);
@@ -4267,7 +4657,10 @@ fn emit_store(
     let Some(base) = materialize_int(code, addr_place, addr_scratch, frame) else {
         return fail("Store: addr Place not int reg / spill");
     };
-    if matches!(kind, StoreKind::F32 | StoreKind::F64) {
+    if matches!(
+        kind,
+        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128
+    ) {
         return emit_store_fp_mem(
             code,
             dst,
@@ -4278,6 +4671,7 @@ fn emit_store(
             disp,
             seg,
             frame,
+            bound,
             "Store",
         );
     }
@@ -4303,7 +4697,10 @@ fn emit_store(
     let Some(rs) = materialize_int(code, value_place, value_scratch, frame) else {
         return fail("Store: value Place not int reg / spill");
     };
-    emit_store_kind_mem(code, kind, base, disp, rs, seg);
+    match bound {
+        Some(a) => emit_narrow_store(code, rs, base, disp, int_store_width(kind), a),
+        None => emit_store_kind_mem(code, kind, base, disp, rs, seg),
+    }
     // Stored value also feeds dst when the allocator wants it
     // parked (Store ops leave the written value in the
     // accumulator per the c5 stack-machine semantics).
@@ -4337,6 +4734,83 @@ fn emit_extend(
         LoadKind::I16 => super::encode::emit_movsx_r_r16(code, rd, rn),
         LoadKind::I32 => super::encode::emit_movsxd_r_r(code, rd, rn),
         _ => return fail("Extend: unsupported kind"),
+    }
+    spill_dst_to_slot(code, dst, rd, frame);
+    true
+}
+
+/// `Inst::Copy { value, is_fp }` -- move `value` into this
+/// instruction's own place. Bit-exact in both banks, so a
+/// single-precision operand keeps its pattern.
+fn emit_copy(
+    code: &mut Vec<u8>,
+    dst: Place,
+    value: u32,
+    is_fp: bool,
+    alloc: &Allocation,
+    frame: Frame,
+) -> bool {
+    let src_place = place_of(alloc, value);
+    if is_fp {
+        let Some(dd) = fp_or_spill_dst(dst) else {
+            return fail("Copy: dst not fp reg / spill");
+        };
+        let Some(dn) = materialize_fp(code, src_place, dd, frame) else {
+            return fail("Copy: value not fp reg / spill / int reg");
+        };
+        if dn.0 != dd.0 {
+            emit_movapd_xmm_xmm(code, dd, dn);
+        }
+        fp_spill_dst_to_slot(code, dst, dd, frame);
+    } else {
+        let Some(rd) = int_or_spill_dst(dst) else {
+            return fail("Copy: dst not int reg / spill");
+        };
+        let Some(rn) = materialize_int(code, src_place, rd, frame) else {
+            return fail("Copy: value not int reg / spill");
+        };
+        if rd != rn {
+            emit_mov_rr(code, rd, rn);
+        }
+        spill_dst_to_slot(code, dst, rd, frame);
+    }
+    true
+}
+
+/// `Inst::Bswap { value, width }` -- reverse the low `width` bytes,
+/// zero-extended. 64-bit: `bswap r64`. 32-bit: `bswap r32` (reads the
+/// low dword, zero-extends). 16-bit: `movzx` clears the upper bits the
+/// rotate would keep, then `rol dst16, 8` swaps the two low bytes.
+fn emit_bswap(
+    code: &mut Vec<u8>,
+    dst: Place,
+    value: u32,
+    width: u8,
+    alloc: &Allocation,
+    frame: Frame,
+) -> bool {
+    let src_place = place_of(alloc, value);
+    let Some(rd) = int_or_spill_dst(dst) else {
+        return fail("Bswap: dst not int reg / spill");
+    };
+    let Some(rn) = materialize_int(code, src_place, rd, frame) else {
+        return fail("Bswap: value not int reg / spill");
+    };
+    match width {
+        2 => {
+            super::encode::emit_movzx_r_r16(code, rd, rn);
+            emit_shift_ri(code, Mnem::Rol, 2, rd, 8);
+        }
+        4 => {
+            if rd != rn {
+                super::encode::emit_mov_r32_r32(code, rd, rn);
+            }
+            super::encode::emit_bswap_r(code, rd, 4);
+        }
+        _ => {
+            emit_mov_rr(code, rd, rn);
+            super::encode::emit_bswap_r(code, rd, 8);
+        }
     }
     spill_dst_to_slot(code, dst, rd, frame);
     true
@@ -4402,6 +4876,98 @@ fn emit_fma(
         (true, true, true) => emit_vfnmsub231ss(code, dd, a14, b15),
     }
     fp_spill_dst_to_slot(code, dst, dd, frame);
+    true
+}
+
+/// `Inst::MulAdd { a, b, c, neg_product }` -- x86-64 has no
+/// three-operand integer multiply-accumulate, so the node lowers back
+/// to the `imul` plus `add` / `sub` pair. The two-operand `imul`
+/// overwrites its destination, which cannot be `rd` (still to receive
+/// `c`), so the product forms in a multiplicand's own register when
+/// this instruction is that value's last reader -- the register the
+/// allocator would have given the separate product -- and in
+/// `SCRATCH_R11` otherwise. Both multiplicands are consumed before `c`
+/// is staged, so `rd` may hold either of them.
+#[allow(clippy::too_many_arguments)]
+fn emit_mul_add(
+    code: &mut Vec<u8>,
+    dst: Place,
+    v: super::super::ir::ValueId,
+    a: u32,
+    b: u32,
+    c: u32,
+    neg_product: bool,
+    alloc: &Allocation,
+    frame: Frame,
+) -> bool {
+    let Some(rd) = int_or_spill_dst(dst) else {
+        return fail("MulAdd: dst not int reg / spill");
+    };
+    let (pa, pb, pc) = (place_of(alloc, a), place_of(alloc, b), place_of(alloc, c));
+    let dies_here = |val: u32| alloc.last_use.get(val as usize).copied() == Some(v);
+    // `c + a*b` with the addend elsewhere can multiply into the
+    // destination and add in place; `c - a*b` needs the destination
+    // for the addend, so its product goes to a multiplicand's own
+    // register when this instruction is that value's last reader, and
+    // to the fixed scratch otherwise.
+    let into_dst = !neg_product && pc != Place::IntReg(rd.0);
+    let (rp, other) = if into_dst && pb == Place::IntReg(rd.0) {
+        (rd, pa)
+    } else if into_dst {
+        let Some(ra) = materialize_int(code, pa, rd, frame) else {
+            return fail("MulAdd: a not int reg / spill");
+        };
+        if ra.0 != rd.0 {
+            emit_mov_rr(code, rd, ra);
+        }
+        (rd, pb)
+    } else if let Some(pair) =
+        [(a, pa, pb), (b, pb, pa)]
+            .into_iter()
+            .find_map(|(val, place, other)| match place {
+                Place::IntReg(r) if dies_here(val) && r != rd.0 && pc != Place::IntReg(r) => {
+                    Some((Reg(r), other))
+                }
+                _ => None,
+            })
+    {
+        pair
+    } else {
+        let Some(ra) = materialize_int(code, pa, SCRATCH_R11, frame) else {
+            return fail("MulAdd: a not int reg / spill");
+        };
+        if ra.0 != SCRATCH_R11.0 {
+            emit_mov_rr(code, SCRATCH_R11, ra);
+        }
+        (SCRATCH_R11, pb)
+    };
+    let Some(rm) = materialize_int(code, other, SCRATCH_R10, frame) else {
+        return fail("MulAdd: multiplicand not int reg / spill");
+    };
+    emit_rr(code, Mnem::Imul, 8, rp, rm);
+    // With the product in the destination the addend joins it there,
+    // and a spilled addend reloads into the scratch that path left
+    // free; otherwise the destination takes the addend first. Either
+    // way the multiplicands are already consumed.
+    let landing = if rp.0 == rd.0 { SCRATCH_R11 } else { rd };
+    let Some(rc) = materialize_int(code, pc, landing, frame) else {
+        return fail("MulAdd: c not int reg / spill");
+    };
+    if rp.0 == rd.0 {
+        emit_rr(code, Mnem::Add, 8, rd, rc);
+    } else {
+        if rc.0 != rd.0 {
+            emit_mov_rr(code, rd, rc);
+        }
+        emit_rr(
+            code,
+            if neg_product { Mnem::Sub } else { Mnem::Add },
+            8,
+            rd,
+            rp,
+        );
+    }
+    spill_dst_to_slot(code, dst, rd, frame);
     true
 }
 
@@ -4737,12 +5303,24 @@ fn emit_binop(
         let Some(dm) = materialize_fp(code, rhs_place, SCRATCH_XMM15, frame) else {
             return fail("Fcmp: rhs not fp reg / spill / int reg");
         };
+        // When a fused branch reads the flags, `Flt` / `Fle` compare
+        // with the operands swapped so the branch takes the
+        // parity-clean `A` / `Ae` shapes (see `fused_fp_swaps_operands`).
+        let fused = alloc.branch_fused.get(v as usize).copied().unwrap_or(false);
+        let (dn, dm) = if fused && fused_fp_swaps_operands(op) {
+            (dm, dn)
+        } else {
+            (dn, dm)
+        };
         // The compare width follows the operands' precision (C99
         // 6.3.1.8): two f32 operands use `ucomiss`, else `ucomisd`.
         if alloc.is_f32(lhs) || alloc.is_f32(rhs) {
             emit_ucomiss(code, dn, dm);
         } else {
             emit_ucomisd(code, dn, dm);
+        }
+        if fused {
+            return true;
         }
         let Some(rd) = int_or_spill_dst(dst) else {
             return fail("Fcmp: dst not int reg / spill");
@@ -4825,7 +5403,7 @@ fn emit_binop(
                 return fail("Binop: lhs not int reg / spill");
             };
             if let Some(cc) = cmp_cc {
-                emit_rm(code, Mnem::Cmp, 8, rn, rhs_base, rhs_off);
+                emit_rm(code, Mnem::Cmp, cmp_width(alloc, v), rn, rhs_base, rhs_off);
                 if finish_int_cmp(code, v, cc, rd, alloc) {
                     return true;
                 }
@@ -4889,22 +5467,26 @@ fn emit_binop(
     let Some(rn) = int_operand_into_rd(code, lhs_place, rd, frame) else {
         return fail("Binop: lhs not int reg / spill");
     };
-    // Div / Mod hijack rax + rdx (SDM: IDIV's implicit operand
-    // is rdx:rax and the result is rax (quot), rdx (rem)). They
+    // Div / Mod / Mulh / Mulhu hijack rax + rdx (SDM: IDIV's implicit
+    // operand is rdx:rax and the result is rax (quot), rdx (rem);
+    // one-operand IMUL / MUL multiply rax and write rdx:rax). They
     // need their own marshalling separate from the two-operand
     // path below.
-    if matches!(op, BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu) {
-        // When the divisor aliased rd and was saved into the scratch
-        // above (because the spilled lhs load just overwrote rd), the
-        // divisor now lives in that scratch register, not its original
+    if matches!(
+        op,
+        BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu | BinOp::Mulh | BinOp::Mulhu
+    ) {
+        // When the rhs aliased rd and was saved into the scratch
+        // above (because the spilled lhs load just overwrote rd), it
+        // now lives in that scratch register, not its original
         // place; reading the original place would take the lhs as the
-        // divisor.
-        let divisor_place = if rhs_preserved_in_scratch {
+        // second operand.
+        let rhs_place = if rhs_preserved_in_scratch {
             Place::IntReg(rhs_scratch.0)
         } else {
             rhs_place
         };
-        return emit_binop_divmod(code, op, dst, rd, rn, divisor_place, frame);
+        return emit_binop_rdx_rax(code, op, dst, rd, rn, rhs_place, frame);
     }
     // x86_64's two-operand op `OP rd, rm` mutates rd. The standard
     // sequence below stages LHS into rd then emits `OP rd, rm`.
@@ -5013,7 +5595,7 @@ fn emit_binop(
             // fused branch reads the flags. Write setcc into rd's own
             // low byte (rather than cl) so a live SSA value parked in
             // rcx is not destroyed.
-            emit_rr(code, Mnem::Cmp, 8, rn, rm);
+            emit_rr(code, Mnem::Cmp, cmp_width(alloc, v), rn, rm);
             if finish_int_cmp(code, v, int_cmp_cc(op).unwrap(), rd, alloc) {
                 return true;
             }
@@ -5047,20 +5629,22 @@ fn emit_binop(
     true
 }
 
-/// Lower `BinOp::{Div,Mod,Divu,Modu}` on x86_64. IDIV / DIV
-/// require the dividend in rdx:rax (low half in rax) and write
-/// the quotient back to rax and remainder to rdx, so the
-/// surrounding allocator-chosen value in rax (if any) must be
-/// preserved across the divide. The 8-byte preserve uses
-/// `push %rax` / `pop %rax`; the temporary 8-byte misalignment
-/// is fine -- IDIV doesn't read/write the stack, and SysV /
-/// Win64 only require 16-byte alignment at `call` sites.
+/// Lower `BinOp::{Div,Mod,Divu,Modu,Mulh,Mulhu}` on x86_64. All six
+/// use the implicit rdx:rax pair: IDIV / DIV take the dividend there
+/// (low half in rax) and write the quotient to rax and the remainder
+/// to rdx; one-operand IMUL / MUL multiply rax by the operand and
+/// write the 128-bit product to rdx:rax. The surrounding
+/// allocator-chosen values in rax / rdx must be preserved across the
+/// sequence. The 8-byte preserve uses `push %rax` / `pop %rax`; the
+/// temporary 8-byte misalignment is fine -- none of these read or
+/// write the stack, and SysV / Win64 only require 16-byte alignment
+/// at `call` sites.
 ///
-/// `rn` is the already-materialised dividend; `rhs_place` is the
-/// divisor's place so we can route it directly into r10 (which
-/// IDIV's reg/mem operand can name, and which is never in any
+/// `rn` is the already-materialised lhs; `rhs_place` is the second
+/// operand's place so we can route it directly into r10 (which the
+/// one-operand reg/mem field can name, and which is never in any
 /// allocator pool).
-fn emit_binop_divmod(
+fn emit_binop_rdx_rax(
     code: &mut Vec<u8>,
     op: BinOp,
     dst: Place,
@@ -5069,57 +5653,58 @@ fn emit_binop_divmod(
     rhs_place: Place,
     frame: Frame,
 ) -> bool {
-    let want_remainder = matches!(op, BinOp::Mod | BinOp::Modu);
-    let is_unsigned = matches!(op, BinOp::Divu | BinOp::Modu);
+    let is_mulh = matches!(op, BinOp::Mulh | BinOp::Mulhu);
+    // The high half of the product lands in rdx, as the remainder does.
+    let want_rdx = is_mulh || matches!(op, BinOp::Mod | BinOp::Modu);
+    let is_unsigned = matches!(op, BinOp::Divu | BinOp::Modu | BinOp::Mulhu);
 
     // Preserve rax / rdx: the allocator can park a live value in
-    // either register and the divmod must not destroy it. rax
-    // receives the dividend low half and the quotient; rdx
+    // either register and the sequence must not destroy it. rax
+    // receives the lhs and the quotient / low product half; rdx
     // receives the dividend high half (cqo / xor edx,edx) and the
-    // remainder. Skip the save when rd will overwrite the register
-    // anyway, since the value living there is dead the moment rd
-    // commits its result.
+    // remainder / high product half. Skip the save when rd will
+    // overwrite the register anyway, since the value living there is
+    // dead the moment rd commits its result.
     let preserve_rax = rd.0 != Reg::RAX.0;
     let preserve_rdx = rd.0 != Reg::RDX.0;
     let pushed_bytes = (preserve_rax as i32 + preserve_rdx as i32) * 8;
 
-    // Resolve the divisor operand. IDIV / DIV accept r/m64, so a
-    // spilled divisor is named directly through its stack slot (its
-    // rsp offset shifted by the rax/rdx preservation pushes below) and
-    // a register divisor outside the implicit rdx:rax pair is used in
-    // place -- neither needs a scratch register, which the surrounding
-    // high-pressure allocation may not have free. A divisor that
-    // aliases rax or rdx is copied into the dedicated scratch before
-    // the dividend setup overwrites those registers; the scratch is
-    // free unless it already holds the dividend (a spilled lhs).
-    enum DivOperand {
+    // Resolve the second operand. All four one-operand forms accept
+    // r/m64, so a spilled operand is named directly through its stack
+    // slot (its rsp offset shifted by the rax/rdx preservation pushes
+    // below) and a register operand outside the implicit rdx:rax pair
+    // is used in place -- neither needs a scratch register, which the
+    // surrounding high-pressure allocation may not have free. An
+    // operand that aliases rax or rdx is copied into the dedicated
+    // scratch before the rax setup overwrites those registers; the
+    // scratch is free unless it already holds the lhs (a spilled lhs).
+    enum RmOperand {
         Reg(Reg),
         Mem(Reg, i32),
     }
-    let div_operand = match rhs_place {
-        Place::IntReg(r) if r != Reg::RAX.0 && r != Reg::RDX.0 => DivOperand::Reg(Reg(r)),
+    let rm_operand = match rhs_place {
+        Place::IntReg(r) if r != Reg::RAX.0 && r != Reg::RDX.0 => RmOperand::Reg(Reg(r)),
         Place::Spill(slot) => {
             let (sb, off) = spill_slot_addr_shifted(frame, slot, pushed_bytes as u32);
-            DivOperand::Mem(sb, off)
+            RmOperand::Mem(sb, off)
         }
         Place::IntReg(r) => {
-            // A divisor in rax / rdx must be copied out before the
-            // dividend setup overwrites those registers. The copy
-            // target must not collide with the staged dividend: a
-            // spilled lhs is materialised into rd, which for a
-            // spilled dst is SCRATCH_R10, so SCRATCH_R10 is not
-            // always free here. SCRATCH_R11 is reserved outside both
-            // allocator pools and never holds the dividend, so it is
-            // always available for the divisor copy.
-            let div_scratch = if rn.0 == SCRATCH_R10.0 {
+            // An operand in rax / rdx must be copied out before the
+            // rax setup overwrites those registers. The copy target
+            // must not collide with the staged lhs: a spilled lhs is
+            // materialised into rd, which for a spilled dst is
+            // SCRATCH_R10, so SCRATCH_R10 is not always free here.
+            // SCRATCH_R11 is reserved outside both allocator pools
+            // and never holds the lhs, so it is always available.
+            let rhs_scratch = if rn.0 == SCRATCH_R10.0 {
                 SCRATCH_R11
             } else {
                 SCRATCH_R10
             };
-            emit_mov_rr(code, div_scratch, Reg(r));
-            DivOperand::Reg(div_scratch)
+            emit_mov_rr(code, rhs_scratch, Reg(r));
+            RmOperand::Reg(rhs_scratch)
         }
-        _ => return fail("Binop divmod: rhs not int reg / spill"),
+        _ => return fail("Binop rdx:rax: rhs not int reg / spill"),
     };
 
     if preserve_rax {
@@ -5128,27 +5713,32 @@ fn emit_binop_divmod(
     if preserve_rdx {
         emit_push_r(code, Reg::RDX);
     }
-    // rax := dividend low half.
+    // rax := lhs (dividend low half, or multiplicand).
     if rn.0 != Reg::RAX.0 {
         emit_mov_rr(code, Reg::RAX, rn);
     }
-    // rdx := dividend high half. Signed uses CQO to sign-extend
-    // rax; unsigned zero-extends with `xor edx, edx`.
-    if is_unsigned {
-        emit_rr(code, Mnem::Xor, 8, Reg::RDX, Reg::RDX);
-        match div_operand {
-            DivOperand::Reg(r) => super::encode::emit_unary_r(code, Mnem::Div, 8, r),
-            DivOperand::Mem(sb, off) => super::encode::emit_unary_m(code, Mnem::Div, 8, sb, off),
-        }
-    } else {
-        super::encode::emit_cqo(code);
-        match div_operand {
-            DivOperand::Reg(r) => super::encode::emit_unary_r(code, Mnem::Idiv, 8, r),
-            DivOperand::Mem(sb, off) => super::encode::emit_unary_m(code, Mnem::Idiv, 8, sb, off),
+    // A divide needs rdx seeded with the dividend's high half: signed
+    // uses CQO to sign-extend rax, unsigned zero-extends with
+    // `xor edx, edx`. A multiply reads only rax and overwrites rdx.
+    if !is_mulh {
+        if is_unsigned {
+            emit_rr(code, Mnem::Xor, 8, Reg::RDX, Reg::RDX);
+        } else {
+            super::encode::emit_cqo(code);
         }
     }
+    let mnem = match (is_mulh, is_unsigned) {
+        (true, true) => Mnem::Mul,
+        (true, false) => Mnem::Imul,
+        (false, true) => Mnem::Div,
+        (false, false) => Mnem::Idiv,
+    };
+    match rm_operand {
+        RmOperand::Reg(r) => super::encode::emit_unary_r(code, mnem, 8, r),
+        RmOperand::Mem(sb, off) => super::encode::emit_unary_m(code, mnem, 8, sb, off),
+    }
     // Capture result into rd before restoring rdx / rax.
-    let result_src = if want_remainder { Reg::RDX } else { Reg::RAX };
+    let result_src = if want_rdx { Reg::RDX } else { Reg::RAX };
     if rd.0 != result_src.0 {
         emit_mov_rr(code, rd, result_src);
     }
@@ -5245,6 +5835,29 @@ fn emit_shift_by_count_reg(
     }
     spill_dst_to_slot(code, dst, rd, frame);
     true
+}
+
+/// Whether lowering `Inst::BinopI { op, rhs_imm: imm }` builds the
+/// immediate into a register at the site -- the `mov r, imm64` the
+/// peepholes in [`emit_binop_imm`] exist to avoid. True means the
+/// loop-invariant hoist can lift that materialization into a preheader
+/// by rewriting the site to the register form; false means the
+/// immediate rides the instruction's own imm8 / imm32 field and the
+/// rewrite would add work. Mirrors the arm order below.
+pub(crate) fn binop_imm_materializes(op: BinOp, imm: i64) -> bool {
+    let fits_i32 = i32::try_from(imm).is_ok();
+    match op {
+        // imm8 form in range, and the cl path for a count C99 6.5.7p3
+        // leaves undefined; neither materializes the immediate.
+        BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror => false,
+        BinOp::Mod | BinOp::Modu => false,
+        BinOp::Mul => !(fits_i32 || (imm > 0 && (imm as u64).is_power_of_two())),
+        BinOp::Add | BinOp::Sub | BinOp::Or | BinOp::Xor => !fits_i32,
+        BinOp::And => !(fits_i32 || imm as u64 == 0xffff_ffff),
+        _ if int_cmp_cc(op).is_some() => !fits_i32,
+        // Mulh / Mulhu / Div / Divu reach the r11-scratch path below.
+        _ => true,
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -5464,10 +6077,11 @@ fn emit_binop_imm(
         // A compare against 0 is the shorter `test rn, rn`; ZF / SF /
         // CF / OF match `cmp rn, 0`, so the dependent setcc / jcc is
         // unchanged.
+        let w = cmp_width(alloc, v);
         if rhs_imm == 0 {
-            super::encode::emit_rr(code, Mnem::Test, 8, rn, rn);
+            super::encode::emit_rr(code, Mnem::Test, w, rn, rn);
         } else {
-            super::encode::emit_ri(code, Mnem::Cmp, 8, rn, rhs_imm as i32);
+            super::encode::emit_ri(code, Mnem::Cmp, w, rn, rhs_imm as i32);
         }
         if finish_int_cmp(code, v, cc, rd, alloc) {
             return true;
@@ -5547,7 +6161,7 @@ fn emit_binop_imm(
         | BinOp::Ugt
         | BinOp::Ule
         | BinOp::Uge => {
-            emit_rr(code, Mnem::Cmp, 8, rn, scratch);
+            emit_rr(code, Mnem::Cmp, cmp_width(alloc, v), rn, scratch);
             if finish_int_cmp(code, v, int_cmp_cc(op).unwrap(), rd, alloc) {
                 return true;
             }
@@ -5751,7 +6365,15 @@ fn emit_call(
         if plan.scratch_bytes > 0 {
             emit_stack_alloc(code, plan.scratch_bytes, None);
         }
-        if !marshal_args(code, &plan, args, alloc, frame, "Call (Win64 variadic)") {
+        if !marshal_args(
+            code,
+            &plan,
+            args,
+            alloc,
+            frame,
+            abi,
+            "Call (Win64 variadic)",
+        ) {
             return false;
         }
         let call_site = code.len();
@@ -5792,7 +6414,7 @@ fn emit_call(
         if plan.scratch_bytes > 0 {
             emit_stack_alloc(code, plan.scratch_bytes, None);
         }
-        if !marshal_args(code, &plan, args, alloc, frame, "Call (SysV variadic)") {
+        if !marshal_args(code, &plan, args, alloc, frame, abi, "Call (SysV variadic)") {
             return false;
         }
         super::encode::emit_mov_al_imm8(code, xmm_used);
@@ -5838,7 +6460,7 @@ fn emit_call(
     if plan.scratch_bytes > 0 {
         emit_stack_alloc(code, plan.scratch_bytes, None);
     }
-    if !marshal_args(code, &plan, args, alloc, frame, "Call") {
+    if !marshal_args(code, &plan, args, alloc, frame, abi, "Call") {
         return false;
     }
     // Record a fixup for the call's rel32 field. `emit_call_rel32`
@@ -5911,7 +6533,7 @@ fn emit_call_ext(
     if plan.scratch_bytes > 0 {
         emit_stack_alloc(code, plan.scratch_bytes, None);
     }
-    if !marshal_args(code, &plan, args, alloc, frame, "CallExt") {
+    if !marshal_args(code, &plan, args, alloc, frame, abi, "CallExt") {
         return false;
     }
     // System V AMD64 ABI 3.2.3: when the callee is variadic, `al`
@@ -6070,7 +6692,7 @@ fn emit_call_indirect(
             super::ArgPlacement::IntReg(r) | super::ArgPlacement::StructByRefReg(r) => {
                 blocked.push(Reg(*r));
             }
-            super::ArgPlacement::StructRegs { regs, n } => {
+            super::ArgPlacement::StructRegs { regs, n, .. } => {
                 for cr in &regs[..*n as usize] {
                     if !cr.is_fp {
                         blocked.push(Reg(cr.reg));
@@ -6114,7 +6736,7 @@ fn emit_call_indirect(
         if plan.scratch_bytes > 0 {
             emit_stack_alloc(code, plan.scratch_bytes, None);
         }
-        if !marshal_args(code, &plan, args, alloc, frame, "CallIndirect") {
+        if !marshal_args(code, &plan, args, alloc, frame, abi, "CallIndirect") {
             return false;
         }
         if sysv_variadic_call {
@@ -6149,7 +6771,7 @@ fn emit_call_indirect(
         // jumps through a corrupt register).
         let mut shifted = plan.clone();
         shifted.scratch_bytes = plan.scratch_bytes + slot_bytes;
-        if !marshal_args(code, &shifted, args, alloc, frame, "CallIndirect") {
+        if !marshal_args(code, &shifted, args, alloc, frame, abi, "CallIndirect") {
             return false;
         }
         // The target slot sits just above the marshal's scratch
@@ -6345,49 +6967,54 @@ enum AsmRipSym {
     /// Global defined in this unit: `data_offset` is its byte offset in the
     /// merged data segment.
     Local { data_offset: i64 },
+    /// Function defined in this unit, named by its entry PC. Resolved
+    /// through the same channel as an `Inst::ImmCode` function-pointer
+    /// literal, so the reference reaches the function's own body.
+    Text { ent_pc: usize },
 }
 
-/// Resolve an inline-asm `%a` address operand to a RIP-relative relocation
-/// target. `arg` is the operand's SSA value-id; the accepted shapes are an
-/// `Inst::ImmData` (a global's address) and that address plus a constant
-/// (`&global + k`, the struct-field case). Returns `None` when the operand
-/// is not a link-time data address.
+/// Resolve an inline-asm `%a` / `%c` address operand to a RIP-relative
+/// relocation target. `arg` is the operand's SSA value-id; the accepted
+/// shape is a C99 6.6p9 address constant -- the address of a static-storage
+/// object or of a function, plus a constant byte offset. Returns `None`
+/// when the operand is not a link-time address.
 fn asm_riprel_target(
     func: &FunctionSsa,
+    name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
     extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
+    extern_code_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     arg: u32,
 ) -> Option<AsmRipSym> {
-    use super::super::ir::{BinOp, Inst};
-    let (base_vid, offset) = match func.insts.get(arg as usize)? {
-        Inst::ImmData(off) => (arg, *off),
-        Inst::BinopI {
-            op: BinOp::Add,
-            lhs,
-            rhs_imm,
-        } => match func.insts.get(*lhs as usize) {
-            Some(Inst::ImmData(off)) => (*lhs, off + rhs_imm),
+    use crate::c5::asm::{asm_operand_code_base, asm_operand_data_target};
+    if let Some((target, addend)) =
+        asm_operand_data_target(&func.insts, arg, &|v| extern_data_names.get(&v).cloned())
+    {
+        use crate::c5::asm::AsmSectionTarget;
+        return Some(match target {
+            AsmSectionTarget::Symbol(name) => AsmRipSym::Extern {
+                name,
+                offset: addend,
+            },
+            AsmSectionTarget::Data(off) => AsmRipSym::Local {
+                data_offset: off as i64,
+            },
             _ => return None,
-        },
-        Inst::Binop {
-            op: BinOp::Add,
-            lhs,
-            rhs,
-        } => match (func.insts.get(*lhs as usize), func.insts.get(*rhs as usize)) {
-            (Some(Inst::ImmData(off)), Some(Inst::Imm(c))) => (*lhs, off + c),
-            (Some(Inst::Imm(c)), Some(Inst::ImmData(off))) => (*rhs, off + c),
-            _ => return None,
-        },
-        _ => return None,
-    };
-    match extern_data_names.get(&base_vid) {
-        Some(name) => Some(AsmRipSym::Extern {
+        });
+    }
+    let (base_vid, ent_pc, offset) = asm_operand_code_base(&func.insts, arg)?;
+    // `name2entpc` holds the unit's own definitions. One of them takes the
+    // entry-PC channel, which reaches the emitted body; every other name is
+    // cross-TU and relocates by name. The in-unit channel names the entry,
+    // so a byte offset into the body has nowhere to ride.
+    if name2entpc.values().any(|&pc| pc == ent_pc) {
+        return (offset == 0).then_some(AsmRipSym::Text { ent_pc });
+    }
+    extern_code_names
+        .get(&base_vid)
+        .map(|name| AsmRipSym::Extern {
             name: name.clone(),
             offset,
-        }),
-        None => Some(AsmRipSym::Local {
-            data_offset: offset,
-        }),
-    }
+        })
 }
 
 /// Encode replacement instructions in an executable inline-asm section
@@ -6401,7 +7028,7 @@ fn asm_riprel_target(
 /// a replacement referencing a register operand or a memory location is
 /// rejected rather than mis-encoded.
 fn encode_x86_asm_section_code(
-    blocks: &mut [super::ssa::emit_common::AsmSectionBlock],
+    blocks: &mut [crate::c5::asm::AsmSectionBlock],
     func: &FunctionSsa,
     args: &[u32],
     name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
@@ -6412,7 +7039,7 @@ fn encode_x86_asm_section_code(
     operands: &[super::super::ir::AsmOperand],
 ) -> Result<(), alloc::string::String> {
     use super::super::ir::Inst;
-    use super::ssa::emit_common::{AsmSectionItem, AsmSectionTarget};
+    use crate::c5::asm::{AsmSectionItem, AsmSectionTarget};
     // A same-TU function operand is an `ImmCode` whose ent_pc reverses to its
     // name here; a cross-TU one carries its name in `extern_code_names`.
     let mut entpc2name: alloc::collections::BTreeMap<usize, &str> =
@@ -6429,7 +7056,7 @@ fn encode_x86_asm_section_code(
             Some(Inst::ImmCode(pc)) => entpc2name
                 .get(pc)
                 .map(|n| AsmSectionTarget::Symbol(alloc::string::String::from(*n))),
-            _ => super::ssa::emit_common::asm_operand_data_target(&func.insts, arg, &|v| {
+            _ => crate::c5::asm::asm_operand_data_target(&func.insts, arg, &|v| {
                 extern_data_names.get(&v).cloned()
             })
             .map(|(t, _)| t),
@@ -6446,24 +7073,35 @@ fn encode_x86_asm_section_code(
     // target and the constant byte offset added to it.
     let addr_of = |idx: u8| -> Option<(AsmSectionTarget, i64)> {
         let arg = *args.get(idx as usize)?;
-        super::ssa::emit_common::asm_operand_data_target(&func.insts, arg, &|v| {
+        crate::c5::asm::asm_operand_data_target(&func.insts, arg, &|v| {
             extern_data_names.get(&v).cloned()
         })
     };
-    let refs = SectionOperandRefs {
-        op_reg,
-        operands,
-        imm_of: &imm_of,
-        addr_of: &addr_of,
-    };
     let mut mode = super::table::Mode::Bits64;
+    let mut fold = crate::c5::asm::AsmParseFold::default();
     for b in blocks.iter_mut() {
+        fold.enter_block(&*b);
         for item in b.items.iter_mut() {
-            let AsmSectionItem::Code(text) = item else {
-                continue;
-            };
-            *item =
-                encode_one_x86_section_insn(text, &mut mode, &operand_target, goto_block, &refs)?;
+            if let AsmSectionItem::Code(text) = item {
+                let f = |e: &str| fold.fold(e, &imm_of);
+                let refs = SectionOperandRefs {
+                    op_reg,
+                    operands,
+                    imm_of: &imm_of,
+                    addr_of: &addr_of,
+                    fold: &f,
+                    file_scope: false,
+                };
+                *item = encode_one_x86_section_insn(
+                    text,
+                    &mut mode,
+                    &operand_target,
+                    goto_block,
+                    &refs,
+                )?;
+            }
+            note_x86_align_mode(item, mode);
+            fold.note_item(item, &imm_of);
         }
     }
     Ok(())
@@ -6479,32 +7117,89 @@ fn encode_x86_asm_section_code(
 /// input stream, so it carries across the walk in section order rather than
 /// resetting per section.
 pub(crate) fn encode_x86_file_asm_section_code(
-    blocks: &mut [super::ssa::emit_common::AsmSectionBlock],
+    blocks: &mut [crate::c5::asm::AsmSectionBlock],
     class: crate::c5::ElfClass,
 ) -> Result<(), alloc::string::String> {
-    use super::ssa::emit_common::{AsmSectionItem, AsmSectionTarget};
+    use crate::c5::asm::{AsmSectionItem, AsmSectionTarget};
     let operand_target = |_: u8| -> Option<AsmSectionTarget> { None };
     let goto_block = |_: u8| -> Option<u32> { None };
     let imm_of = |_: u8| -> Option<i64> { None };
     let addr_of = |_: u8| -> Option<(AsmSectionTarget, i64)> { None };
-    let refs = SectionOperandRefs {
-        op_reg: &[],
-        operands: &[],
-        imm_of: &imm_of,
-        addr_of: &addr_of,
-    };
     let mut mode = if class.is32() {
         super::table::Mode::Bits32
     } else {
         super::table::Mode::Bits64
     };
-    super::ssa::emit_common::for_each_section_item_mut(blocks, &mut |item| {
-        let AsmSectionItem::Code(text) = item else {
-            return Ok(());
-        };
-        *item = encode_one_x86_section_insn(text, &mut mode, &operand_target, &goto_block, &refs)?;
+    // Inside a deferred `.rept` nothing folds: the count, and with it every
+    // offset the body's copies take, is settled by the layout.
+    fn encode_rept(
+        items: &mut [crate::c5::asm::AsmSectionItem],
+        mode: &mut super::table::Mode,
+        operand_target: &dyn Fn(u8) -> Option<crate::c5::asm::AsmSectionTarget>,
+        goto_block: &dyn Fn(u8) -> Option<u32>,
+        refs: &SectionOperandRefs<'_>,
+    ) -> Result<(), alloc::string::String> {
+        use crate::c5::asm::AsmSectionItem;
+        for it in items {
+            if let AsmSectionItem::Rept { items, .. } = it {
+                encode_rept(items, mode, operand_target, goto_block, refs)?;
+            } else if let AsmSectionItem::Code(text) = it {
+                *it = encode_one_x86_section_insn(text, mode, operand_target, goto_block, refs)?;
+            }
+            note_x86_align_mode(it, *mode);
+        }
         Ok(())
-    })
+    }
+    let mut fold = crate::c5::asm::AsmParseFold::default();
+    for b in blocks.iter_mut() {
+        fold.enter_block(&*b);
+        for item in b.items.iter_mut() {
+            if let AsmSectionItem::Rept { items, .. } = item {
+                let none = |_: &str| None;
+                let refs = SectionOperandRefs {
+                    op_reg: &[],
+                    operands: &[],
+                    imm_of: &imm_of,
+                    addr_of: &addr_of,
+                    fold: &none,
+                    file_scope: true,
+                };
+                encode_rept(items, &mut mode, &operand_target, &goto_block, &refs)?;
+            } else if let AsmSectionItem::Code(text) = item {
+                let f = |e: &str| fold.fold(e, &imm_of);
+                let refs = SectionOperandRefs {
+                    op_reg: &[],
+                    operands: &[],
+                    imm_of: &imm_of,
+                    addr_of: &addr_of,
+                    fold: &f,
+                    file_scope: true,
+                };
+                *item = encode_one_x86_section_insn(
+                    text,
+                    &mut mode,
+                    &operand_target,
+                    &goto_block,
+                    &refs,
+                )?;
+            }
+            note_x86_align_mode(item, mode);
+            fold.note_item(item, &imm_of);
+        }
+    }
+    Ok(())
+}
+
+/// Record on an alignment directive the encoding mode it stands in, which
+/// selects the no-op forms its default fill takes.
+fn note_x86_align_mode(item: &mut crate::c5::asm::AsmSectionItem, mode: super::table::Mode) {
+    if let crate::c5::asm::AsmSectionItem::Align { nops, .. } = item {
+        *nops = if mode == super::table::Mode::Bits16 {
+            crate::c5::asm::AlignNops::X86Bits16
+        } else {
+            crate::c5::asm::AlignNops::X86
+        };
+    }
 }
 
 /// Opcode of a branch whose displacement field is rel8 only.
@@ -6518,6 +7213,47 @@ pub(crate) fn short_branch_opcode(mnem: &str) -> Option<u8> {
     })
 }
 
+/// Address-size prefix of an `E3 rel8` branch. The counter the name spells is
+/// the instruction's address size: the mode's default takes no prefix, the
+/// mode's other address size takes `67`, and a width the mode cannot address
+/// has no encoding, as GNU as rejects it.
+fn e3_branch_prefix(
+    mnem: &str,
+    mode: super::table::Mode,
+) -> Result<Option<u8>, alloc::string::String> {
+    let width: u8 = match mnem {
+        "jcxz" => 2,
+        "jecxz" => 4,
+        "jrcxz" => 8,
+        _ => return Ok(None),
+    };
+    let dflt = mode.addrsize();
+    let alt = if dflt == 2 { 4 } else { dflt / 2 };
+    if width == dflt {
+        Ok(None)
+    } else if width == alt {
+        Ok(Some(0x67))
+    } else {
+        Err(alloc::format!(
+            "inline asm: `{mnem}` does not encode in {}-bit mode",
+            dflt * 8
+        ))
+    }
+}
+
+/// A branch target's section target: a bare name resolves through the label,
+/// section and `.set` maps; an expression over them (`jmp sym + 4`) is valued
+/// where the section materializes.
+fn branch_section_target(text: &str) -> crate::c5::asm::AsmSectionTarget {
+    use crate::c5::asm::AsmSectionTarget;
+    use crate::c5::asm::is_asm_symbol_name;
+    if is_asm_symbol_name(text) {
+        AsmSectionTarget::Symbol(alloc::string::String::from(text))
+    } else {
+        AsmSectionTarget::Expr(alloc::string::String::from(text))
+    }
+}
+
 /// The `rel8` encoding of a direct branch: `EB` for `jmp`, `70+cc` for a
 /// `jcc`. GNU as takes it whenever the target is a label of the branch's own
 /// section within a signed-byte displacement, in every code-size mode; the
@@ -6525,9 +7261,9 @@ pub(crate) fn short_branch_opcode(mnem: &str) -> Option<u8> {
 /// short form.
 fn short_branch_form(
     opcode: u8,
-    target: &super::ssa::emit_common::AsmSectionTarget,
-) -> super::ssa::emit_common::AsmShortBranch {
-    use super::ssa::emit_common::{AsmRelocKind, AsmSectionReloc, AsmShortBranch};
+    target: &crate::c5::asm::AsmSectionTarget,
+) -> crate::c5::asm::AsmShortBranch {
+    use crate::c5::asm::{AsmRelocKind, AsmSectionReloc, AsmShortBranch};
     AsmShortBranch {
         bytes: alloc::vec![opcode, 0],
         reloc: AsmSectionReloc {
@@ -6543,25 +7279,23 @@ fn short_branch_form(
     }
 }
 
-/// Address size of an instruction's memory operand in bytes: the width of the
-/// base or index register it names, or the mode default when the operand names
-/// no register or the register comes from a template operand (always 64-bit).
-fn section_addr_size(insn: &super::asm::AsmInsn, mode: super::table::Mode) -> u8 {
-    use super::asm::{AsmMemBase, AsmOpnd};
-    let of = |b: AsmMemBase| match b {
-        AsmMemBase::Reg { size, .. } => Some(size.bytes()),
-        AsmMemBase::Ref(_) => None,
-    };
-    insn.operands
-        .iter()
-        .find_map(|o| match *o {
-            AsmOpnd::Mem { base, index, .. } | AsmOpnd::SymMem { base, index, .. } => {
-                of(base).or_else(|| index.and_then(of))
-            }
-            AsmOpnd::IndexMem { index, .. } => of(index),
-            _ => None,
-        })
-        .unwrap_or_else(|| mode.addrsize())
+/// Legacy prefixes in GNU as order: segment, address size, operand size, then
+/// repeat / lock. `body` carries the size prefixes at its front and `pending`
+/// the bytes prefix statements deposited. Returns the count of `body` bytes
+/// taken; the rest is the caller's to append.
+fn push_legacy_prefixes(
+    out: &mut alloc::vec::Vec<u8>,
+    body: &[u8],
+    seg: Option<u8>,
+    pending: &[u8],
+) -> usize {
+    let is_seg = |b: u8| matches!(b, 0x26 | 0x2E | 0x36 | 0x3E | 0x64 | 0x65);
+    let sizes = body.iter().take_while(|b| matches!(b, 0x66 | 0x67)).count();
+    out.extend(seg);
+    out.extend(pending.iter().copied().filter(|&b| is_seg(b)));
+    out.extend_from_slice(&body[..sizes]);
+    out.extend(pending.iter().copied().filter(|&b| !is_seg(b)));
+    sizes
 }
 
 /// Byte width of a near-branch displacement and whether the operand-size
@@ -6593,7 +7327,16 @@ struct SectionOperandRefs<'a> {
     op_reg: &'a [Option<u8>],
     operands: &'a [super::super::ir::AsmOperand],
     imm_of: &'a dyn Fn(u8) -> Option<i64>,
-    addr_of: &'a dyn Fn(u8) -> Option<(super::ssa::emit_common::AsmSectionTarget, i64)>,
+    addr_of: &'a dyn Fn(u8) -> Option<(crate::c5::asm::AsmSectionTarget, i64)>,
+    /// The value an operand expression already has at this point of the
+    /// stream, when the walk's [`AsmParseFold`] can prove it is a constant.
+    /// A folded immediate or displacement encodes as a literal, taking the
+    /// narrow field GNU as picks at the same point.
+    fold: &'a dyn Fn(&str) -> Option<i64>,
+    /// File-scope / `.S`-unit text is basic asm, where `%kN` is an opmask
+    /// register; an extended-asm statement's section text keeps GCC's
+    /// `%k<N>` operand-modifier reading.
+    file_scope: bool,
 }
 
 /// Encode one replacement instruction to a `CodeBytes` item. A direct
@@ -6610,15 +7353,13 @@ struct SectionOperandRefs<'a> {
 fn encode_one_x86_section_insn(
     text: &str,
     mode: &mut super::table::Mode,
-    operand_target: &dyn Fn(u8) -> Option<super::ssa::emit_common::AsmSectionTarget>,
+    operand_target: &dyn Fn(u8) -> Option<crate::c5::asm::AsmSectionTarget>,
     goto_block: &dyn Fn(u8) -> Option<u32>,
     refs: &SectionOperandRefs<'_>,
-) -> Result<super::ssa::emit_common::AsmSectionItem, alloc::string::String> {
+) -> Result<crate::c5::asm::AsmSectionItem, alloc::string::String> {
     use super::super::ir::{AsmConstraint, AsmRegSize, AsmSeg};
     use super::asm::{AsmMemBase, AsmOpnd, Concrete, Mnemonic};
-    use super::ssa::emit_common::{
-        AsmRelocKind, AsmSectionItem, AsmSectionReloc, AsmSectionTarget,
-    };
+    use crate::c5::asm::{AsmRelocKind, AsmSectionItem, AsmSectionReloc, AsmSectionTarget};
     // An encoding-mode directive sets the state the rest of the stream
     // assembles under and deposits no bytes.
     if let Some(m) = match text {
@@ -6635,35 +7376,52 @@ fn encode_one_x86_section_insn(
         });
     }
     let mode = *mode;
-    let insns = super::asm::parse_template(text.as_bytes())
-        .map_err(|m| alloc::format!("inline asm: replacement `{text}`: {m}"))?;
-    // A leading `lock` / `rep` prefix parses as its own entry; it rides in
-    // front of the instruction's bytes.
-    let (prefix, insn) = match insns.as_slice() {
-        [insn] => (None, insn),
-        [
-            super::asm::AsmInsn {
-                mnemonic: Mnemonic::Prefix(b),
-                ..
-            },
-            insn,
-        ] => (Some(*b), insn),
-        _ => {
-            return Err(alloc::format!(
-                "inline asm: replacement `{text}` is not a single instruction"
-            ));
-        }
+    let insns = if refs.file_scope {
+        super::asm::parse_file_template(text.as_bytes())
+    } else {
+        super::asm::parse_template(text.as_bytes())
+    }
+    .map_err(|m| alloc::format!("inline asm: replacement `{text}`: {m}"))?;
+    // Each leading `lock` / `rep` / segment prefix parses as its own entry and
+    // rides in front of the instruction's bytes. A prefix statement standing
+    // alone is the instruction, so the run stops one short of the end.
+    let prefix: alloc::vec::Vec<u8> = insns
+        .split_last()
+        .map_or(&[][..], |(_, head)| head)
+        .iter()
+        .map_while(|i| match i.mnemonic {
+            Mnemonic::Prefix(b) => Some(b),
+            _ => None,
+        })
+        .collect();
+    let [insn] = &insns[prefix.len()..] else {
+        return Err(alloc::format!(
+            "inline asm: replacement `{text}` is not a single instruction"
+        ));
     };
+    let prefix = prefix.as_slice();
     let mnem = match insn.mnemonic {
         Mnemonic::Table(n) => n,
         _ => "",
     };
+    // REX is a 64-bit-mode prefix; the other modes read the byte as an
+    // instruction, so GNU as rejects it there.
+    if mode != super::table::Mode::Bits64
+        && (insn.rex.is_some()
+            || matches!(insn.mnemonic, Mnemonic::Prefix(b) if (0x40..=0x4F).contains(&b)))
+    {
+        return Err(alloc::format!(
+            "inline asm: replacement `{text}` takes a `rex` prefix outside 64-bit mode"
+        ));
+    }
     // A prefixed branch or symbol push has no meaning; the prefix applies
-    // on the general operand path below.
-    if prefix.is_some()
+    // on the general operand path below. The direct-branch forms are built
+    // by hand and carry neither prefix byte, so one on them would be
+    // dropped rather than encoded.
+    if (!prefix.is_empty() || insn.rex.is_some())
         && (matches!(
             insn.operands.first(),
-            Some(AsmOpnd::GotoLabel(_) | AsmOpnd::ImmSym { .. })
+            Some(AsmOpnd::GotoLabel(_) | AsmOpnd::ImmSym { .. } | AsmOpnd::Label { .. })
         ) || (!insn.sym_exprs.is_empty() && insn.operands.is_empty()))
     {
         return Err(alloc::format!(
@@ -6716,29 +7474,45 @@ fn encode_one_x86_section_insn(
     // label target resolves to a one-byte displacement rather than the
     // mode-width one the other branches take.
     if let Some(op) = short_branch_opcode(mnem) {
+        let prefix = e3_branch_prefix(mnem, mode).map_err(|m| alloc::format!("{m} (`{text}`)"))?;
         let target = if let Some(&AsmOpnd::Label { num, forward }) = insn.operands.first() {
-            Some(alloc::format!("{num}{}", if forward { 'f' } else { 'b' }))
+            Some(AsmSectionTarget::Symbol(alloc::format!(
+                "{num}{}",
+                if forward { 'f' } else { 'b' }
+            )))
         } else {
             insn.sym_exprs
                 .first()
                 .filter(|n| insn.operands.is_empty() && !n.contains('%'))
-                .cloned()
+                .map(|t| branch_section_target(t))
         };
-        if let Some(name) = target {
+        if let Some(target) = target {
+            let mut bytes = alloc::vec::Vec::new();
+            bytes.extend(prefix);
+            bytes.extend([op, 0]);
             return Ok(AsmSectionItem::CodeBytes {
-                bytes: alloc::vec![op, 0],
                 relocs: alloc::vec![AsmSectionReloc {
-                    offset: 1,
+                    offset: bytes.len() as u32 - 1,
                     width: 1,
-                    kind: AsmRelocKind::JumpRel,
+                    // Not `JumpRel`: these have no wider form, so GNU as
+                    // fixes them up rather than relaxing them, and a global
+                    // target keeps its relocation as it does for `call`.
+                    kind: AsmRelocKind::Data,
                     pcrel: true,
                     branch: false,
                     signed: false,
-                    target: AsmSectionTarget::Symbol(name),
+                    target,
                     addend: -1,
                 }],
+                bytes,
                 short: None,
             });
+        }
+        // `jcxz` / `jecxz` have no catalogue row to fall back to.
+        if matches!(mnem, "jcxz" | "jecxz") {
+            return Err(alloc::format!(
+                "inline asm: replacement `{text}`: `{mnem}` takes a label target"
+            ));
         }
     }
     let is_call = mnem.starts_with("call");
@@ -6753,7 +7527,7 @@ fn encode_one_x86_section_insn(
                     "inline asm: replacement `{text}` call target embeds an operand"
                 ));
             }
-            Some(AsmSectionTarget::Symbol(name.clone()))
+            Some(branch_section_target(name))
         } else if let Some(&AsmOpnd::RefConst { idx, .. }) = insn.operands.first() {
             Some(operand_target(idx).ok_or_else(|| {
                 alloc::format!("inline asm: replacement `{text}` call target is not a symbol")
@@ -6815,13 +7589,16 @@ fn encode_one_x86_section_insn(
                     "inline asm: replacement `{text}` branch target embeds an operand"
                 ));
             }
-            Some(name.clone())
+            Some(branch_section_target(name))
         } else if let Some(&AsmOpnd::Label { num, forward }) = insn.operands.first() {
-            Some(alloc::format!("{num}{}", if forward { 'f' } else { 'b' }))
+            Some(AsmSectionTarget::Symbol(alloc::format!(
+                "{num}{}",
+                if forward { 'f' } else { 'b' }
+            )))
         } else {
             None
         };
-        if let Some(name) = target {
+        if let Some(target) = target {
             let (rel, prefixed) = branch_rel_width(mode, insn.suffix);
             let mut bytes = alloc::vec::Vec::new();
             if prefixed {
@@ -6837,7 +7614,7 @@ fn encode_one_x86_section_insn(
                 pcrel: true,
                 branch: mode == super::table::Mode::Bits64,
                 signed: false,
-                target: AsmSectionTarget::Symbol(name),
+                target,
                 addend: -(rel as i64),
             };
             let short = (!prefixed).then(|| short_branch_form(0x70 | (cc as u8), &reloc.target));
@@ -6853,8 +7630,12 @@ fn encode_one_x86_section_insn(
     // operand uses its constant. A base register is a `%%reg` or an operand's
     // register; a `%a[N]` operand naming an `i`-class link-time address
     // resolves to no register and lowers to a RIP-relative reference.
+    // A reference with no width of its own takes the mode's default operand
+    // size, which the near-branch and stack group promotes to 64 bits in long
+    // mode and leaves at 32 or 16 outside it.
     let mem_size = |insn: &super::asm::AsmInsn| {
-        asm_mem_size(None, insn, refs.operands, refs.op_reg).unwrap_or(AsmRegSize::Quad)
+        asm_mem_size(None, insn, refs.operands, refs.op_reg)
+            .unwrap_or(AsmRegSize::from_width(mode.stack_opsize()))
     };
     let reg_of = |idx: u8, modifier: Option<AsmRegSize>| -> Option<Concrete> {
         let width = refs.operands.get(idx as usize)?.width;
@@ -6912,6 +7693,16 @@ fn encode_one_x86_section_insn(
         match *o {
             AsmOpnd::Imm(v) => concrete.push(Concrete::Imm(v)),
             AsmOpnd::ImmSym { expr } => {
+                // An expression that is already a constant encodes as the
+                // literal, taking the operand's narrowest form.
+                if let Some(v) = insn
+                    .sym_exprs
+                    .get(expr as usize)
+                    .and_then(|e| (refs.fold)(e))
+                {
+                    concrete.push(Concrete::Imm(v));
+                    continue;
+                }
                 if sym_imm.is_some() {
                     return Err(alloc::format!(
                         "inline asm: replacement `{text}` has more than one symbol immediate"
@@ -7056,7 +7847,7 @@ fn encode_one_x86_section_insn(
                 }
                 sym_disp = Some((expr_target(expr)?, 0, concrete.len(), false));
                 concrete.push(Concrete::AbsMem {
-                    disp: abs_probe(section_addr_size(insn, mode)).0,
+                    disp: abs_probe(super::asm::addr_size(insn, mode)).0,
                     size,
                 });
             }
@@ -7146,6 +7937,23 @@ fn encode_one_x86_section_insn(
                     })?),
                     None => None,
                 };
+                // A displacement expression that is already a constant
+                // encodes as the literal, taking the narrowest based form.
+                if let Some(v) = insn
+                    .sym_exprs
+                    .get(expr as usize)
+                    .and_then(|e| (refs.fold)(e))
+                    .and_then(|v| i32::try_from(v).ok())
+                {
+                    concrete.push(Concrete::Mem {
+                        base,
+                        index,
+                        scale,
+                        disp: v,
+                        size,
+                    });
+                    continue;
+                }
                 if sym_disp.is_some() {
                     return Err(alloc::format!(
                         "inline asm: replacement `{text}` has more than one memory operand"
@@ -7224,7 +8032,7 @@ fn encode_one_x86_section_insn(
                     false,
                 ));
                 concrete.push(Concrete::AbsMem {
-                    disp: abs_probe(section_addr_size(insn, mode)).0,
+                    disp: abs_probe(super::asm::addr_size(insn, mode)).0,
                     size: mem_size(insn),
                 });
             }
@@ -7237,10 +8045,14 @@ fn encode_one_x86_section_insn(
         }
     }
     // Encode the instruction body; a segment override rides in front of it.
-    let addr = section_addr_size(insn, mode);
+    let addr = super::asm::addr_size(insn, mode);
     let encode = |ops: &[Concrete]| {
         let mut out = alloc::vec::Vec::new();
-        super::asm::encode_in(&mut out, mode, addr, insn.mnemonic, insn.suffix, ops).map(|()| out)
+        super::asm::encode_in(&mut out, mode, addr, insn.mnemonic, insn.suffix, ops)?;
+        if let Some(rex) = insn.rex {
+            super::asm::splice_rex(&mut out, 0, rex)?;
+        }
+        Ok(out)
     };
     // A `$symbol` immediate: settle the field's width and signedness before
     // the body is encoded, since both follow from the form the probe value
@@ -7263,18 +8075,8 @@ fn encode_one_x86_section_insn(
     }
     let mut body =
         encode(&concrete).map_err(|m| alloc::format!("inline asm: replacement `{text}`: {m}"))?;
-    // GNU as orders the prefixes segment, address size, operand size, then
-    // repeat / lock; the encoded body carries the size prefixes at its front,
-    // so the repeat / lock byte goes after them.
-    let sizes = body.iter().take_while(|b| matches!(b, 0x66 | 0x67)).count();
     let mut bytes = alloc::vec::Vec::new();
-    if let Some(seg) = insn.seg.or(operand_seg) {
-        bytes.push(seg);
-    }
-    bytes.extend_from_slice(&body[..sizes]);
-    if let Some(b) = prefix {
-        bytes.push(b);
-    }
+    let sizes = push_legacy_prefixes(&mut bytes, &body, insn.seg.or(operand_seg), prefix);
     // A field of `body` past the size prefixes lands in `bytes` shifted by the
     // segment and repeat / lock bytes only, the size prefixes having moved
     // ahead of them.
@@ -7320,16 +8122,8 @@ fn encode_one_x86_section_insn(
             },
             other => other,
         };
-        let mut probe_bytes = alloc::vec::Vec::new();
-        super::asm::encode_in(
-            &mut probe_bytes,
-            mode,
-            addr,
-            insn.mnemonic,
-            insn.suffix,
-            &probe,
-        )
-        .map_err(|m| alloc::format!("inline asm: replacement `{text}`: {m}"))?;
+        let probe_bytes =
+            encode(&probe).map_err(|m| alloc::format!("inline asm: replacement `{text}`: {m}"))?;
         let (field, width) = differing_run(&body, &probe_bytes)
             .filter(|&(_, n)| matches!(n, 2 | 4))
             .ok_or_else(|| {
@@ -7460,6 +8254,29 @@ fn locate_sym_imm_field(
     None
 }
 
+/// The value of a template field's expression at stream offset `at`: a
+/// template label takes the offset its definition stands at, a section label
+/// the offset the measured layout gives it. `None` when a leaf is unresolved.
+fn template_expr_value(
+    expr: &str,
+    at: usize,
+    label_defs: &[(u32, usize)],
+    names: &[&str],
+    measure: &crate::c5::asm::SectionLabelOffsets,
+) -> Option<i64> {
+    let resolve = |name: &str| -> Option<i64> {
+        // A bare decimal is an integer literal; a GNU as numeric label is
+        // referenced only as `Nb` / `Nf`. Leave literals for the evaluator.
+        if name.bytes().all(|c| c.is_ascii_digit()) {
+            return None;
+        }
+        measure
+            .offset(name)
+            .or_else(|| crate::c5::asm::template_label_offset(name, at, label_defs, names))
+    };
+    crate::c5::asm::eval_asm_expr_with_labels(expr, &resolve)
+}
+
 /// A local label's name as the section materializer resolves it: the number
 /// plus its search direction.
 fn local_label_name(num: u32, forward: bool) -> alloc::string::String {
@@ -7518,6 +8335,13 @@ fn differing_run(a: &[u8], b: &[u8]) -> Option<(usize, usize)> {
 /// register-tied intrinsics above use, generalised over the constraints.
 /// `goto_ctx` is present for the `asm goto` form (the statement is the
 /// last instruction of a `Terminator::AsmGoto` block).
+///
+/// A template branch to a label of its own stream starts on the rel8 form
+/// and is lengthened, permanently, when the settled layout leaves its
+/// displacement outside the byte's reach: the attempt grows the set and
+/// this driver rolls the outputs back and lays the template out again.
+/// Each round either grows the set or is final, the rule
+/// `measure_asm_section_offsets` applies to a pushed section's branches.
 fn emit_inline_asm(
     code: &mut Vec<u8>,
     asm: &super::super::ir::AsmBlock,
@@ -7529,9 +8353,11 @@ fn emit_inline_asm(
     name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
     extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     extern_code_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
-    asm_sections: &mut super::ssa::emit_common::AsmSectionSink,
+    asm_sections: &mut crate::c5::asm::AsmSectionSink,
     asm_extern_call_sites: &mut Vec<super::UserExternCallSite>,
+    asm_sym_fixups: &mut Vec<super::AsmSymFixup>,
     data_fixups: &mut Vec<DataFixup>,
+    pending_func_fixups: &mut Vec<(usize, usize)>,
     user_extern_data_refs: &mut Vec<super::UserExternDataRef>,
     asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
     asm_text_abs_refs: &mut Vec<super::AsmTextAbsRef>,
@@ -7539,25 +8365,116 @@ fn emit_inline_asm(
     text_align: &mut usize,
     mut goto_ctx: Option<AsmGotoCtx<'_>>,
 ) -> bool {
+    let mut long_sites: alloc::collections::BTreeSet<usize> = alloc::collections::BTreeSet::new();
+    let base = (
+        code.len(),
+        fixups.len(),
+        asm_extern_call_sites.len(),
+        asm_sym_fixups.len(),
+        data_fixups.len(),
+        pending_func_fixups.len(),
+        user_extern_data_refs.len(),
+        *text_align,
+    );
+    let sink_base = asm_sections.snapshot();
+    loop {
+        let known = long_sites.len();
+        let round_ctx = goto_ctx.as_mut().map(|c| AsmGotoCtx {
+            row: c.row,
+            branch_fixups: &mut *c.branch_fixups,
+            branch_short: c.branch_short,
+        });
+        if !emit_inline_asm_once(
+            code,
+            asm,
+            args,
+            func,
+            alloc,
+            frame,
+            fixups,
+            name2entpc,
+            extern_data_names,
+            extern_code_names,
+            asm_sections,
+            asm_extern_call_sites,
+            asm_sym_fixups,
+            data_fixups,
+            pending_func_fixups,
+            user_extern_data_refs,
+            asm_section_text_refs,
+            asm_text_abs_refs,
+            asm_text_labels,
+            text_align,
+            round_ctx,
+            &mut long_sites,
+        ) {
+            return false;
+        }
+        if long_sites.len() == known {
+            return true;
+        }
+        code.truncate(base.0);
+        fixups.truncate(base.1);
+        asm_extern_call_sites.truncate(base.2);
+        asm_sym_fixups.truncate(base.3);
+        data_fixups.truncate(base.4);
+        pending_func_fixups.truncate(base.5);
+        user_extern_data_refs.truncate(base.6);
+        *text_align = base.7;
+        asm_sections.restore(&sink_base);
+    }
+}
+
+/// One layout attempt under the branch forms `long_sites` fixes. Returns
+/// with the set grown, ahead of any patching or section materialization,
+/// when a short branch does not reach; the driver above rolls back what
+/// the attempt emitted.
+fn emit_inline_asm_once(
+    code: &mut Vec<u8>,
+    asm: &super::super::ir::AsmBlock,
+    args: &[u32],
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    frame: Frame,
+    fixups: &mut Vec<super::encode::Fixup>,
+    name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
+    extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
+    extern_code_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
+    asm_sections: &mut crate::c5::asm::AsmSectionSink,
+    asm_extern_call_sites: &mut Vec<super::UserExternCallSite>,
+    asm_sym_fixups: &mut Vec<super::AsmSymFixup>,
+    data_fixups: &mut Vec<DataFixup>,
+    pending_func_fixups: &mut Vec<(usize, usize)>,
+    user_extern_data_refs: &mut Vec<super::UserExternDataRef>,
+    asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
+    asm_text_abs_refs: &mut Vec<super::AsmTextAbsRef>,
+    asm_text_labels: &mut Vec<super::AsmTextLabel>,
+    text_align: &mut usize,
+    mut goto_ctx: Option<AsmGotoCtx<'_>>,
+    long_sites: &mut alloc::collections::BTreeSet<usize>,
+) -> bool {
     use super::super::ir::{AsmConstraint, AsmRegSize, AsmSeg, Inst};
     use super::asm::{AsmOpnd, Concrete};
+    // A statement that lowers to nothing keeps only its IR-level ordering
+    // effect; the operand staging around zero bytes of code is dead, and
+    // `asm_scratch_bytes` reserved no region for it.
+    if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::X86) {
+        return true;
+    }
     // Expand `%=` once so the code text and any `.pushsection` content
     // share one instance number, then split off the section blocks; the
     // arch parser sees only the code text.
     let Ok(raw_text) = core::str::from_utf8(&asm.template) else {
         return fail("inline asm: non-UTF8 template");
     };
-    let stripped = super::ssa::emit_common::strip_asm_comments(
-        raw_text,
-        super::ssa::emit_common::AsmComments::X86,
-    );
+    let stripped = crate::c5::asm::strip_asm_comments(raw_text, crate::c5::asm::AsmComments::X86);
     let raw_text = stripped.as_deref().unwrap_or(raw_text);
-    let expanded = super::ssa::emit_common::expand_template_uniq(raw_text);
+    let expanded = crate::c5::asm::expand_template_uniq(raw_text);
     let text = expanded.as_deref().unwrap_or(raw_text);
     // Rename any numeric label defined more than once in one asm instance to
     // per-definition unique names, so the code and section resolvers below see
     // single-definition labels.
-    let multidef = super::ssa::emit_common::rewrite_multidef_local_labels(text);
+    let multidef = crate::c5::asm::rewrite_multidef_local_labels(text);
     let text = multidef.as_deref().unwrap_or(text);
     // The operand register assignment is needed both for the code stream and,
     // ahead of it, for the GNU-as macro pass and a replacement instruction that
@@ -7580,7 +8497,7 @@ fn emit_inline_asm(
             Some(Inst::Imm(v)) => Some(*v),
             // An unpromoted function (a computed goto opts out of mem2reg)
             // leaves an `"i"` constant operand a load of a constant local.
-            _ => super::ssa::emit_common::asm_operand_local_const(func, arg),
+            _ => crate::c5::asm::asm_operand_local_const(func, arg),
         }
     };
     let gas_subst = |tok: &str| -> Option<alloc::string::String> {
@@ -7617,7 +8534,7 @@ fn emit_inline_asm(
         };
         super::asm::gpr_att_name(r, width).map(|n| alloc::format!("%{n}"))
     };
-    let gas = match super::ssa::emit_common::expand_asm_gas_macros(text, 4, &gas_subst) {
+    let gas = match crate::c5::asm::expand_asm_gas_macros(text, 4, &gas_subst) {
         Ok(e) => e,
         Err(m) => {
             bail_msg(&m);
@@ -7625,7 +8542,7 @@ fn emit_inline_asm(
         }
     };
     let text = gas.as_deref().unwrap_or(text);
-    let mut extracted = match super::ssa::emit_common::extract_asm_sections(text, false) {
+    let mut extracted = match crate::c5::asm::extract_asm_sections(text, false) {
         Ok(e) => e,
         Err(m) => {
             bail_msg(&m);
@@ -7633,7 +8550,7 @@ fn emit_inline_asm(
         }
     };
     if let Some(ex) = &extracted {
-        if let Err(m) = super::ssa::emit_common::reject_unit_symbol_items(&ex.blocks) {
+        if let Err(m) = crate::c5::asm::reject_unit_symbol_items(&ex.blocks) {
             bail_msg(&m);
             return false;
         }
@@ -7685,6 +8602,26 @@ fn emit_inline_asm(
     // Code-stream label names, so a `.skip` expression can size its padding
     // from a named code label (a multiply-defined numeric label renamed above).
     let code_label_names = super::asm::scan_label_names(code_text);
+    // Names the unit binds weak, as the section relaxation reads them: an
+    // in-stream definition of one does not satisfy a branch in place, since
+    // the link may bind another definition, so the field keeps a relocation
+    // against the name, as GNU as keeps it.
+    let weak_names = crate::c5::asm::asm_weak_only_names(section_blocks, asm_sections);
+    let weak_target_name = |num: u32| -> Option<alloc::string::String> {
+        let idx = num.checked_sub(super::asm::NAMED_LABEL_BASE)?;
+        let name = *code_label_names.get(idx as usize)?;
+        weak_names
+            .contains(name)
+            .then(|| alloc::string::String::from(name))
+    };
+    // Label numbers the code stream defines, by instruction index, so a
+    // branch knows before layout whether its target lands in this stream
+    // and on which side of the reference.
+    let stream_defs: alloc::vec::Vec<(u32, usize)> = insns
+        .iter()
+        .enumerate()
+        .filter_map(|(ii, insn)| insn.label_def.map(|n| (n, ii)))
+        .collect();
     // Registers the asm overwrites: the operand registers plus the explicit
     // clobber list (a bound operand's register is the one the asm was asked
     // to see and affect, so it is not saved around the block). GP registers
@@ -7705,7 +8642,9 @@ fn emit_inline_asm(
     // the label's block instead of a teardown trampoline, so the template
     // branch and a `.long %lK - .` section field name one address. Runtime
     // patchers that read the section entry and rewrite the branch require
-    // that.
+    // that. TODO with exit work pending, a section field still names the
+    // block, so a patched-in branch skips the store-backs and restores; the
+    // aarch64 lowering rewrites such fields to the restore trampoline.
     let goto_direct = save_list.is_empty()
         && fp_save_list.is_empty()
         && !asm.operands.iter().any(|op| {
@@ -7787,14 +8726,22 @@ fn emit_inline_asm(
         }
     }
     // Local labels: definitions record the code offset they stand at; a
-    // jmp / jcc / lea referencing a label records the position of its rel32
-    // field, patched once every definition's offset is known.
+    // jmp / jcc / lea referencing a label records its displacement field as
+    // `(field, label, forward, field_width, instruction_index)`, patched
+    // once every definition's offset is known. A relaxable branch's field
+    // is one byte wide until `long_sites` holds its instruction.
     let mut label_defs: alloc::vec::Vec<(u32, usize)> = alloc::vec::Vec::new();
-    let mut label_fixups: alloc::vec::Vec<(usize, u32, bool)> = alloc::vec::Vec::new();
+    let mut label_fixups: alloc::vec::Vec<(usize, u32, bool, u8, usize)> = alloc::vec::Vec::new();
     // `$LABEL` address immediates: `(imm32_field, label_number, forward)`,
     // resolved to an absolute `.text` relocation once every definition's
     // offset is known.
     let mut abs_label_fixups: alloc::vec::Vec<(usize, u32, bool)> = alloc::vec::Vec::new();
+    // Fields over template labels (`.byte 662f-661b`, `subl $(2f - 1b)`):
+    // `(reference_site, field, width, expression)`. Only a forward reference
+    // reaches here; a backward one is a value where the field is laid down,
+    // so the encoding sees it and takes the narrow form where one fits.
+    let mut expr_fixups: alloc::vec::Vec<(usize, usize, u8, alloc::string::String)> =
+        alloc::vec::Vec::new();
     // `asm goto` label branches: `(rel32_site, branch_kind, label_index)`
     // per `%lK` reference, patched to the label's block directly when
     // `goto_direct`, else to the label's teardown trampoline (or to the
@@ -7808,7 +8755,7 @@ fn emit_inline_asm(
             Some(Inst::Imm(v)) => Some(*v),
             // An unpromoted function (a computed goto opts out of mem2reg)
             // leaves an `"i"` constant operand a load of a constant local.
-            _ => super::ssa::emit_common::asm_operand_local_const(func, arg),
+            _ => crate::c5::asm::asm_operand_local_const(func, arg),
         }
     };
     // Section-label offsets, so a `.skip` in the main stream can size its
@@ -7817,7 +8764,7 @@ fn emit_inline_asm(
     // Measured against the sink the sections merge into below, so this and
     // the materialization settle every branch form the same way and a
     // replacement length means the same to both.
-    let section_measure = match super::ssa::emit_common::measure_asm_section_offsets(
+    let section_measure = match crate::c5::asm::measure_asm_section_offsets(
         section_blocks,
         &const_of,
         false,
@@ -7833,12 +8780,55 @@ fn emit_inline_asm(
     // template opens right after the function's compiled code, so it does.
     // Alignment padding depends on it (see `push_x86_exec_align_fill`).
     let mut after_insn = true;
+    // Start of the run of legacy prefix bytes a `lock` / `rep` / segment
+    // statement deposited; the instruction they lead re-places them.
+    let mut prefix_run: Option<usize> = None;
     // Encode each template instruction with its operands resolved to the
     // assigned registers, explicit registers, and immediates.
-    for insn in &insns {
+    for (ii, insn) in insns.iter().enumerate() {
+        let pending_at = if matches!(insn.mnemonic, super::asm::Mnemonic::Prefix(_)) {
+            prefix_run.get_or_insert(code.len());
+            None
+        } else {
+            prefix_run.take()
+        };
         // A local-label definition marks the current offset; it emits no bytes.
         if let Some(num) = insn.label_def {
             label_defs.push((num, code.len()));
+            continue;
+        }
+        // `.align` / `.p2align` / `.balign`: pad `code` (the unit's whole
+        // text stream, so its length is a section offset) to the boundary, as
+        // GNU as does section-relative. A boundary above the section default
+        // raises the section alignment, so the padding holds absolutely; the
+        // default fill is the GNU as multi-byte NOP sequence, which an
+        // explicit one-byte-NOP fill also selects. The padding leaves no
+        // instruction boundary of its own.
+        //
+        // An operand over template labels resolves against the definitions
+        // already emitted, as GNU as resolves one where the directive stands.
+        if let Some(crate::c5::asm::AsmSectionItem::Align {
+            spec,
+            fill,
+            max,
+            nops,
+        }) = &insn.layout
+        {
+            let at = code.len();
+            let n = match spec.bytes(&|name| {
+                crate::c5::asm::template_label_offset(name, at, &label_defs, &code_label_names)
+                    .filter(|&off| off <= at as i64)
+            }) {
+                Ok(n) => n,
+                Err(e) => return fail(&e),
+            };
+            *text_align = (*text_align).max(n as usize);
+            let gap = crate::c5::asm::align_gap(at as i64, n as i64, *max) as usize;
+            if let Err(e) =
+                crate::c5::asm::push_align_fill(code, gap, *fill, true, *nops, after_insn)
+            {
+                return fail(&e);
+            }
             continue;
         }
         // A raw-byte piece emits its literal bytes with no operand resolution.
@@ -7855,33 +8845,13 @@ fn emit_inline_asm(
         // the two so a boot-time patch fits).
         if insn.mnemonic == super::asm::Mnemonic::Skip {
             let expr = insn.sym_exprs.first().map_or("0", |e| e.as_str());
-            let resolve = |name: &str| -> Option<i64> {
-                // A bare decimal is an integer literal; a GNU as numeric label is
-                // referenced only as `Nb` / `Nf`. Leave literals for the evaluator.
-                if name.bytes().all(|c| c.is_ascii_digit()) {
-                    return None;
-                }
-                if let Some(off) = section_measure.offset(name) {
-                    return Some(off);
-                }
-                // A named code label (a multiply-defined numeric label renamed
-                // above): its text offset, already emitted at a `.skip` site.
-                if let Some(idx) = code_label_names.iter().position(|&n| n == name) {
-                    let num = super::asm::NAMED_LABEL_BASE + idx as u32;
-                    return label_defs
-                        .iter()
-                        .rfind(|&&(n, _)| n == num)
-                        .map(|&(_, off)| off as i64);
-                }
-                let digits = name.strip_suffix(['b', 'f'])?;
-                let num: u32 = digits.parse().ok()?;
-                label_defs
-                    .iter()
-                    .rfind(|&&(n, _)| n == num)
-                    .map(|&(_, off)| off as i64)
-            };
-            let Some(count) = super::ssa::emit_common::eval_asm_expr_with_labels(expr, &resolve)
-            else {
+            let Some(count) = template_expr_value(
+                expr,
+                code.len(),
+                &label_defs,
+                &code_label_names,
+                &section_measure,
+            ) else {
                 return fail("inline asm: `.skip` count is not a constant");
             };
             if count < 0 {
@@ -7898,24 +8868,6 @@ fn emit_inline_asm(
             after_insn = false;
             continue;
         }
-        // `.align` / `.p2align` / `.balign`: pad `code` (the unit's whole
-        // text stream, so its length is a section offset) to the boundary, as
-        // GNU as does section-relative. A boundary above the section default
-        // raises the section alignment, so the padding holds absolutely; the
-        // default fill is the GNU as multi-byte NOP sequence, which an
-        // explicit one-byte-NOP fill also selects. The padding leaves no
-        // instruction boundary of its own.
-        if let super::asm::Mnemonic::Align { n, fill, max } = insn.mnemonic {
-            *text_align = (*text_align).max(n as usize);
-            let gap = super::ssa::emit_common::align_gap(code.len() as i64, n as i64, max) as usize;
-            match fill {
-                Some(b) if b != super::ssa::emit_common::X86_NOP_OPCODE => {
-                    code.resize(code.len() + gap, b)
-                }
-                _ => super::ssa::emit_common::push_x86_exec_align_fill(code, gap, after_insn),
-            }
-            continue;
-        }
         // A data directive with operand references (`.long %c0`): each
         // argument must resolve to a compile-time constant, emitted
         // little-endian at the directive width.
@@ -7927,6 +8879,26 @@ fn emit_inline_asm(
                         match const_of(idx) {
                             Some(v) => v,
                             None => return fail("inline asm: non-constant data-directive value"),
+                        }
+                    }
+                    // A value over template labels: the field width is the
+                    // directive's, so only the value waits on the layout.
+                    AsmOpnd::ImmSym { expr } => {
+                        let Some(text) = insn.sym_exprs.get(expr as usize) else {
+                            return fail("inline asm: data-directive expression is missing");
+                        };
+                        match template_expr_value(
+                            text,
+                            code.len(),
+                            &label_defs,
+                            &code_label_names,
+                            &section_measure,
+                        ) {
+                            Some(v) => v,
+                            None => {
+                                expr_fixups.push((code.len(), code.len(), w, text.clone()));
+                                0
+                            }
                         }
                     }
                     _ => return fail("inline asm: unsupported data-directive value"),
@@ -7983,8 +8955,21 @@ fn emit_inline_asm(
             after_insn = true;
             continue;
         }
-        // A jmp / jcc to a local label: emit the rel32 form now and record the
-        // site; the displacement is patched below against the label offset.
+        // The direct-branch forms below carry no REX byte, so a prefix on one
+        // would be dropped rather than encoded.
+        if insn.rex.is_some()
+            && (matches!(
+                insn.operands.first(),
+                Some(AsmOpnd::Label { .. } | AsmOpnd::GotoLabel(_))
+            ) || (!insn.sym_exprs.is_empty() && insn.operands.is_empty()))
+        {
+            return fail("inline asm: a `rex` prefix on a direct branch");
+        }
+        // A jmp / jcc to a local label. A target the unit binds weak is not
+        // satisfied by its in-stream definition: the field keeps the rel32
+        // form and relocates against the name. A target this stream defines
+        // relaxes to the rel8 form unless a round below lengthened it; a
+        // target outside the stream keeps rel32 for the section pass.
         if let Some(&AsmOpnd::Label { num, forward }) = insn.operands.first() {
             let super::asm::Mnemonic::Table(name) = insn.mnemonic else {
                 return fail("inline asm: label operand on a non-jump");
@@ -7993,11 +8978,39 @@ fn emit_inline_asm(
             if cc.is_none() && !matches!(name, "jmp" | "jmpq") {
                 return fail("inline asm: label operand on a non-jump");
             }
-            match cc {
-                Some(cc) => super::encode::emit_jcc_rel32(code, cc, 0),
-                None => super::encode::emit_jmp_rel32(code, 0),
+            if let Some(n) = weak_target_name(num) {
+                match cc {
+                    Some(cc) => super::encode::emit_jcc_rel32(code, cc, 0),
+                    None => super::encode::emit_jmp_rel32(code, 0),
+                }
+                asm_sym_fixups.push(super::AsmSymFixup {
+                    instr_offset: code.len() - 4,
+                    kind: crate::c5::asm::AsmRelocKind::JumpRel,
+                    target: crate::c5::asm::AsmSectionTarget::Symbol(n),
+                    addend: -4,
+                });
+                after_insn = true;
+                continue;
             }
-            label_fixups.push((code.len() - 4, num, forward));
+            let in_stream = stream_defs.iter().any(|&(n, di)| {
+                n == num
+                    && (num >= super::asm::NAMED_LABEL_BASE
+                        || if forward { di > ii } else { di < ii })
+            });
+            let width: u8 = if in_stream && !long_sites.contains(&ii) {
+                match cc {
+                    Some(cc) => super::encode::emit_jcc_rel8(code, cc, 0),
+                    None => super::encode::emit_jmp_rel8(code, 0),
+                }
+                1
+            } else {
+                match cc {
+                    Some(cc) => super::encode::emit_jcc_rel32(code, cc, 0),
+                    None => super::encode::emit_jmp_rel32(code, 0),
+                }
+                4
+            };
+            label_fixups.push((code.len() - width as usize, num, forward, width, ii));
             after_insn = true;
             continue;
         }
@@ -8054,7 +9067,7 @@ fn emit_inline_asm(
                     return false;
                 }
             }
-            label_fixups.push((code.len() - 4, num, forward));
+            label_fixups.push((code.len() - 4, num, forward, 4, ii));
             after_insn = true;
             continue;
         }
@@ -8099,14 +9112,21 @@ fn emit_inline_asm(
                 matches!(insn.mnemonic, super::asm::Mnemonic::Table(n) if n.starts_with("call"));
             // The name may embed operand references; substituting them first
             // is what makes `__get_user_%c0` name `__get_user_4`.
-            let name = match super::super::ssa::emit_common::resolve_asm_symbol_target(
+            let name = match crate::c5::asm::resolve_asm_symbol_target(
                 name,
-                &super::super::ssa::emit_common::X64_SYMBOL_SUBST,
+                &crate::c5::asm::X64_SYMBOL_SUBST,
                 &const_of,
             ) {
                 Ok(n) => n,
                 Err(e) => return fail(&e),
             };
+            // The code stream's branch channels name a symbol with no addend.
+            // TODO carry an addend on the call site and the fixup.
+            if !crate::c5::asm::is_asm_symbol_name(&name) {
+                return fail(
+                    "inline asm: a branch to a symbol expression is only supported in a section",
+                );
+            }
             // native_offset is the opcode byte; the fixup pass patches the
             // rel32 at +1 and computes the displacement from the 5-byte end.
             let native_offset = code.len();
@@ -8153,6 +9173,11 @@ fn emit_inline_asm(
         // the target and the operand's template displacement (folded into the
         // reloc addend). At most one memory operand per instruction.
         let mut riprel_reloc: Option<(AsmRipSym, i64)> = None;
+        // A `$expr` immediate, and a memory displacement, whose value the
+        // stream has not reached: the placeholder fixes the wide field and
+        // the expression settles into it below.
+        let mut imm_expr: Option<alloc::string::String> = None;
+        let mut disp_expr: Option<alloc::string::String> = None;
         // An immediate encodes after the memory operand's disp32, so a
         // RIP-relative form would put the relocation on the wrong bytes.
         // Instructions carrying one keep the register-indirect addressing.
@@ -8186,10 +9211,15 @@ fn emit_inline_asm(
                                 return fail("inline asm: absolute displacement out of range");
                             }
                         },
-                        None => match args
-                            .get(idx as usize)
-                            .and_then(|a| asm_riprel_target(func, extern_data_names, *a))
-                        {
+                        None => match args.get(idx as usize).and_then(|a| {
+                            asm_riprel_target(
+                                func,
+                                name2entpc,
+                                extern_data_names,
+                                extern_code_names,
+                                *a,
+                            )
+                        }) {
                             Some(sym) => {
                                 riprel_reloc = Some((sym, 0));
                                 Concrete::RipRel { disp: 0, size }
@@ -8229,8 +9259,15 @@ fn emit_inline_asm(
                             {
                                 None
                             } else {
-                                args.get(idx as usize)
-                                    .and_then(|a| asm_riprel_target(func, extern_data_names, *a))
+                                args.get(idx as usize).and_then(|a| {
+                                    asm_riprel_target(
+                                        func,
+                                        name2entpc,
+                                        extern_data_names,
+                                        extern_code_names,
+                                        *a,
+                                    )
+                                })
                             };
                             match sym {
                                 Some(sym) => {
@@ -8296,9 +9333,17 @@ fn emit_inline_asm(
                     // the symbol, as gcc does for `%a` (`sym(%rip)`). A scaled
                     // index cannot ride the RIP-relative form.
                     let sym = match base {
-                        super::asm::AsmMemBase::Ref(bi) if index.is_none() => args
-                            .get(bi as usize)
-                            .and_then(|a| asm_riprel_target(func, extern_data_names, *a)),
+                        super::asm::AsmMemBase::Ref(bi) if index.is_none() => {
+                            args.get(bi as usize).and_then(|a| {
+                                asm_riprel_target(
+                                    func,
+                                    name2entpc,
+                                    extern_data_names,
+                                    extern_code_names,
+                                    *a,
+                                )
+                            })
+                        }
                         _ => None,
                     };
                     let base = match (resolve(base), sym) {
@@ -8372,10 +9417,15 @@ fn emit_inline_asm(
                                 return fail("inline asm: RIP-relative displacement out of range");
                             }
                         },
-                        None => match args
-                            .get(idx as usize)
-                            .and_then(|a| asm_riprel_target(func, extern_data_names, *a))
-                        {
+                        None => match args.get(idx as usize).and_then(|a| {
+                            asm_riprel_target(
+                                func,
+                                name2entpc,
+                                extern_data_names,
+                                extern_code_names,
+                                *a,
+                            )
+                        }) {
                             Some(sym) => {
                                 riprel_reloc = Some((sym, 0));
                                 Concrete::RipRel { disp: 0, size }
@@ -8429,10 +9479,61 @@ fn emit_inline_asm(
                 }
                 // `disp+sym(%base)`: a symbol displacement, as for the
                 // no-base form above.
-                AsmOpnd::SymMem { .. } => {
-                    return fail(
-                        "inline asm: a symbol-displacement memory operand is only supported in file-scope asm",
-                    );
+                // A displacement expression over template labels is a value
+                // the stream settles; one naming a symbol needs a relocation
+                // only file-scope section code carries.
+                AsmOpnd::SymMem {
+                    base,
+                    index,
+                    scale,
+                    expr,
+                } => {
+                    let sym_only = "inline asm: a symbol-displacement memory operand is only \
+                                    supported in file-scope asm";
+                    let Some(text) = insn.sym_exprs.get(expr as usize) else {
+                        return fail(sym_only);
+                    };
+                    if !crate::c5::asm::is_template_label_expr(text, &code_label_names) {
+                        return fail(sym_only);
+                    }
+                    let disp = match template_expr_value(
+                        text,
+                        code.len(),
+                        &label_defs,
+                        &code_label_names,
+                        &section_measure,
+                    ) {
+                        Some(v) => match i32::try_from(v) {
+                            Ok(d) => d,
+                            Err(_) => return fail("inline asm: displacement out of range"),
+                        },
+                        None => {
+                            disp_expr = Some(text.clone());
+                            RIPREL_PROBE_DISP
+                        }
+                    };
+                    let reg_of = |b: super::asm::AsmMemBase| -> Option<u8> {
+                        match b {
+                            super::asm::AsmMemBase::Reg { num, .. } => Some(num),
+                            super::asm::AsmMemBase::Ref(i) => {
+                                op_reg.get(i as usize).copied().flatten()
+                            }
+                        }
+                    };
+                    let (Some(base), index) = (reg_of(base), index.map(reg_of)) else {
+                        return fail("inline asm: memory base is not a register");
+                    };
+                    if index == Some(None) {
+                        return fail("inline asm: memory index is not a register");
+                    }
+                    Concrete::Mem {
+                        base,
+                        index: index.flatten(),
+                        scale,
+                        disp,
+                        size: asm_mem_size(None, insn, &asm.operands, &op_reg)
+                            .unwrap_or(AsmRegSize::Quad),
+                    }
                 }
                 // `sym(%%rip)`: a PC-relative reference to a named symbol,
                 // resolved by name through the same relocation channel as a
@@ -8446,7 +9547,7 @@ fn emit_inline_asm(
                     let Some((name, addend)) = insn
                         .sym_exprs
                         .get(expr as usize)
-                        .and_then(|e| super::super::ssa::emit_common::asm_expr_sym_addend(e))
+                        .and_then(|e| crate::c5::asm::asm_expr_sym_addend(e))
                     else {
                         return fail(
                             "inline asm: a memory displacement over a label difference is only \
@@ -8456,13 +9557,30 @@ fn emit_inline_asm(
                     riprel_reloc = Some((AsmRipSym::Extern { name, offset: 0 }, addend));
                     Concrete::RipRel { disp: 0, size }
                 }
-                // A `$symbol` absolute-address immediate needs a symbol
-                // relocation the function-body stream does not carry; it is
-                // assembled only in file-scope section code.
-                AsmOpnd::ImmSym { .. } => {
-                    return fail(
-                        "inline asm: `$symbol` address immediate is only supported in file-scope asm",
-                    );
+                // A `$expr` immediate, under the same rule as a displacement.
+                AsmOpnd::ImmSym { expr } => {
+                    let Some(text) = insn.sym_exprs.get(expr as usize) else {
+                        return fail("inline asm: symbol immediate expression is missing");
+                    };
+                    match template_expr_value(
+                        text,
+                        code.len(),
+                        &label_defs,
+                        &code_label_names,
+                        &section_measure,
+                    ) {
+                        Some(v) => Concrete::Imm(v),
+                        None if crate::c5::asm::is_template_label_expr(text, &code_label_names) => {
+                            imm_expr = Some(text.clone());
+                            Concrete::Imm(ABS_LABEL_PLACEHOLDER)
+                        }
+                        None => {
+                            return fail(
+                                "inline asm: `$symbol` address immediate is only supported in \
+                                 file-scope asm",
+                            );
+                        }
+                    }
                 }
                 // A label address immediate encodes as a placeholder wide
                 // enough to force the imm32 field; the relocation replaces it.
@@ -8491,13 +9609,25 @@ fn emit_inline_asm(
         {
             return fail("inline asm: a label address immediate with a second immediate");
         }
-        // A segment override is a legacy prefix preceding the opcode. It comes
-        // from a template `%gs:` / `%fs:` or from a `__seg_gs` / `__seg_fs`
-        // memory operand; the two never conflict on one instruction.
-        if let Some(seg) = insn.seg.or(operand_seg) {
-            code.push(seg);
+        // A segment override comes from a template `%gs:` / `%fs:` or from a
+        // `__seg_gs` / `__seg_fs` memory operand; the two never conflict on one
+        // instruction. It joins the prefix statements ahead of the instruction.
+        let pending = match pending_at {
+            Some(at) => code.split_off(at),
+            None => alloc::vec::Vec::new(),
+        };
+        let insn_at = code.len();
+        let addr = super::asm::addr_size(insn, super::table::Mode::Bits64);
+        let mut body = alloc::vec::Vec::new();
+        if let Err(m) = super::asm::encode(&mut body, addr, insn.mnemonic, insn.suffix, &concrete) {
+            bail_msg(&m);
+            return false;
         }
-        if let Err(m) = super::asm::encode(code, insn.mnemonic, insn.suffix, &concrete) {
+        let sizes = push_legacy_prefixes(code, &body, insn.seg.or(operand_seg), &pending);
+        code.extend_from_slice(&body[sizes..]);
+        if let Some(rex) = insn.rex
+            && let Err(m) = super::asm::splice_rex(code, insn_at, rex)
+        {
             bail_msg(&m);
             return false;
         }
@@ -8510,6 +9640,28 @@ fn emit_inline_asm(
             let at = code.len() - 4;
             code[at..].fill(0);
             abs_label_fixups.push((at, num, forward));
+        }
+        // The displacement is the last four bytes; an immediate would follow
+        // it, so a form carrying one is refused rather than patched wrong.
+        if let Some(text) = disp_expr.take() {
+            if concrete.iter().any(|c| matches!(c, Concrete::Imm(_))) {
+                return fail("inline asm: an expression displacement with an immediate");
+            }
+            if code.len() < 4 || code[code.len() - 4..] != RIPREL_PROBE_DISP.to_le_bytes() {
+                return fail("inline asm: an expression displacement requires a wider form");
+            }
+            let at = code.len() - 4;
+            code[at..].fill(0);
+            expr_fixups.push((insn_at, at, 4, text));
+        }
+        // The same placement rule for a `$expr` immediate.
+        if let Some(text) = imm_expr.take() {
+            if code.len() < 4 || code[code.len() - 4..] != ABS_LABEL_PLACEHOLDER_BYTES {
+                return fail("inline asm: an expression immediate requires a wider form");
+            }
+            let at = code.len() - 4;
+            code[at..].fill(0);
+            expr_fixups.push((insn_at, at, 4, text));
         }
         // Record the RIP-relative relocation against the operand's symbol.
         // The disp32 occupies the last four bytes of the instruction just
@@ -8533,17 +9685,44 @@ fn emit_inline_asm(
                         part: AddrPart::Whole,
                     });
                 }
+                AsmRipSym::Text { ent_pc } if disp == 0 => {
+                    pending_func_fixups.push((instr_offset, ent_pc));
+                }
+                AsmRipSym::Text { .. } => {
+                    return fail(
+                        "inline asm: a displacement on an in-unit function address is not supported",
+                    );
+                }
             }
         }
         after_insn = true;
+    }
+    // Settle each deferred expression field: the layout is final, so a
+    // forward reference now has its definition.
+    for (site, at, width, text) in &expr_fixups {
+        let Some(v) = template_expr_value(
+            text,
+            *site,
+            &label_defs,
+            &code_label_names,
+            &section_measure,
+        ) else {
+            bail_msg(&alloc::format!(
+                "inline asm: expression `{text}` is not a constant"
+            ));
+            return false;
+        };
+        let w = *width as usize;
+        code[*at..*at + w].copy_from_slice(&(v as u64).to_le_bytes()[..w]);
     }
     // Patch each label reference now that every definition's offset is
     // known. A forward `Nf` takes the nearest matching definition after the
     // reference; a backward `Nb`, the nearest at or before it (GNU as
     // local-label rule). A named label has exactly one definition, so the
-    // direction is ignored. The rel32 is measured from the end of its field.
-    // A reference with no main-stream definition may name a label placed in
-    // one of the template's pushed sections; defer it to the section pass.
+    // direction is ignored. The displacement is measured from the end of
+    // its field. A reference with no main-stream definition may name a
+    // label placed in one of the template's pushed sections; defer it to
+    // the section pass.
     let mut pending_xsec: alloc::vec::Vec<(usize, u32, bool)> = alloc::vec::Vec::new();
     // The same, for `$LABEL` address immediates, whose field is absolute.
     let mut pending_abs_xsec: alloc::vec::Vec<(usize, u32, bool)> = alloc::vec::Vec::new();
@@ -8567,13 +9746,30 @@ fn emit_inline_asm(
                 .max()
         }
     };
-    for &(at, num, forward) in &label_fixups {
+    // Lengthen every short branch this layout leaves outside the byte's
+    // reach and hand the grown set back for the next round.
+    let known_long = long_sites.len();
+    for &(at, num, forward, width, ii) in &label_fixups {
+        if width == 1
+            && let Some(target) = resolve_label(at, num, forward)
+            && !(-128..=127).contains(&(target as i64 - (at as i64 + 1)))
+        {
+            long_sites.insert(ii);
+        }
+    }
+    if long_sites.len() != known_long {
+        return true;
+    }
+    for &(at, num, forward, width, _) in &label_fixups {
         match resolve_label(at, num, forward) {
             Some(target) => {
-                let rel = target as i64 - (at as i64 + 4);
-                code[at..at + 4].copy_from_slice(&(rel as i32).to_le_bytes());
+                let w = width as usize;
+                let rel = target as i64 - (at + w) as i64;
+                code[at..at + w].copy_from_slice(&rel.to_le_bytes()[..w]);
             }
-            None => pending_xsec.push((at, num, forward)),
+            // Only a target this stream defines takes the short form.
+            None if width == 4 => pending_xsec.push((at, num, forward)),
+            None => return fail("inline asm: undefined local label"),
         }
     }
     // A `$LABEL` immediate binds to the same main-stream definition, but the
@@ -8605,6 +9801,13 @@ fn emit_inline_asm(
         if name.starts_with(".L") {
             continue;
         }
+        // One definition per name across the unit, as in GNU as.
+        if asm_text_labels.iter().any(|l| l.name == name) {
+            bail_msg(&alloc::format!(
+                "inline asm: symbol `{name}` is already defined"
+            ));
+            return false;
+        }
         asm_text_labels.push(super::AsmTextLabel {
             name: alloc::string::String::from(name),
             text_offset: off,
@@ -8615,7 +9818,7 @@ fn emit_inline_asm(
     // to its offset; any other name is a symbol relocation.
     if !section_blocks.is_empty() {
         let names = super::asm::scan_label_names(code_text);
-        use super::ssa::emit_common::LabelLoc;
+        use crate::c5::asm::LabelLoc;
         let label_off = |name: &str| -> Option<LabelLoc> {
             let num = if let Some(i) = names.iter().position(|&n| n == name) {
                 super::asm::NAMED_LABEL_BASE + i as u32
@@ -8640,12 +9843,10 @@ fn emit_inline_asm(
         // An `i`-class operand naming a link-time data address (`.long %c0 - .`
         // where `%c0` is `&sym` or a string literal) relocates against the
         // data image, resolved like the operand's own `ImmData` lowering.
-        let operand_sym = |idx: u8| -> Option<(super::ssa::emit_common::AsmSectionTarget, i64)> {
-            super::ssa::emit_common::asm_operand_data_target(
-                &func.insts,
-                *args.get(idx as usize)?,
-                &|vid| extern_data_names.get(&vid).cloned(),
-            )
+        let operand_sym = |idx: u8| -> Option<(crate::c5::asm::AsmSectionTarget, i64)> {
+            crate::c5::asm::asm_operand_data_target(&func.insts, *args.get(idx as usize)?, &|vid| {
+                extern_data_names.get(&vid).cloned()
+            })
         };
         // An `asm goto` label operand (`.long %l0 - .`): the goto row's block
         // index. Its text offset is not final here; the reloc carries the
@@ -8654,7 +9855,7 @@ fn emit_inline_asm(
             let ctx = goto_ctx.as_ref()?;
             ctx.row.get(1 + idx as usize).copied()
         };
-        let defined = match super::ssa::emit_common::materialize_asm_sections(
+        let defined = match crate::c5::asm::materialize_asm_sections(
             section_blocks,
             &|idx| const_of(idx),
             &label_off,
@@ -8695,6 +9896,7 @@ fn emit_inline_asm(
                     section_offset: d.offset,
                     addend: -4,
                     absolute: false,
+                    kind: crate::c5::asm::AsmRelocKind::Data,
                 }),
                 None => return fail("inline asm: undefined local label"),
             }
@@ -8720,6 +9922,7 @@ fn emit_inline_asm(
                     section_offset: d.offset,
                     addend: 0,
                     absolute: true,
+                    kind: crate::c5::asm::AsmRelocKind::Data,
                 }),
                 None => {
                     return fail("inline asm: `$LABEL` address immediate names no local label");
@@ -8884,6 +10087,265 @@ fn emit_asm_store_width(code: &mut Vec<u8>, base: Reg, src: Reg, width: u8) {
         2 => super::encode::emit_mov_mem_r16(code, base, 0, src),
         4 => super::encode::emit_mov_mem_r32(code, base, 0, src),
         _ => super::encode::emit_mov_mem_r(code, base, 0, src),
+    }
+}
+
+/// `Inst::X86Simd`: load the 128-bit operands into the FP scratches, run
+/// the instruction the table row names, and write the result through the
+/// destination address. The operands are memory-resident and only 8-byte
+/// aligned, so every transfer is an unaligned `movdqu`.
+fn emit_x86_simd(
+    code: &mut Vec<u8>,
+    op: u32,
+    imm: Option<u8>,
+    args: &[super::super::ir::ValueId],
+    alloc: &Allocation,
+    frame: Frame,
+) -> bool {
+    use super::asm::{Concrete, XMM_BASE};
+    use crate::c5::ir::AsmRegSize;
+    use crate::c5::x86_simd::{self, Form};
+    const DST: u8 = SCRATCH_XMM15.0;
+    const SRC: u8 = SCRATCH_XMM14.0;
+    let row = x86_simd::get(op);
+    // An operand's value (an address for the 128-bit and pointer operands),
+    // in its own register or loaded into `scratch`.
+    let operand = |code: &mut Vec<u8>, i: usize, scratch: Reg| -> Option<Reg> {
+        let place = alloc.places.get(args[i] as usize).copied()?;
+        materialize_int(code, place, scratch, frame)
+    };
+    let xmm = |n: u8| Concrete::Reg {
+        reg: XMM_BASE + n,
+        size: AsmRegSize::Quad,
+    };
+    let gpr = |r: Reg, size: AsmRegSize| Concrete::Reg { reg: r.0, size };
+    let at = |r: Reg, size: AsmRegSize| Concrete::Mem {
+        base: r.0,
+        index: None,
+        scale: 1,
+        disp: 0,
+        size,
+    };
+    // The x86 assembler's own tables encode every form; a name it does
+    // not special-case resolves in the generated catalogue.
+    let insn = |code: &mut Vec<u8>, mnem: &'static str, ops: &[Concrete]| -> bool {
+        let m = super::asm::mnemonic_by_name(mnem).unwrap_or(super::asm::Mnemonic::Table(mnem));
+        if let Err(e) = super::asm::encode(code, 8, m, None, ops) {
+            bail_msg(&alloc::format!("x86 simd: {e}"));
+            return false;
+        }
+        true
+    };
+    // 128-bit transfers between an address in `addr` and xmm `n`.
+    let load128 = |code: &mut Vec<u8>, n: u8, addr: Reg| -> bool {
+        insn(code, "movdqu", &[at(addr, AsmRegSize::Quad), xmm(n)])
+    };
+    let store128 = |code: &mut Vec<u8>, addr: Reg, n: u8| -> bool {
+        insn(code, "movdqu", &[xmm(n), at(addr, AsmRegSize::Quad)])
+    };
+    let int_size = |w: u8| match w {
+        1 => AsmRegSize::Byte,
+        2 => AsmRegSize::Word,
+        8 => AsmRegSize::Quad,
+        _ => AsmRegSize::Long,
+    };
+    // Operand count: the destination address plus the sources, less the
+    // immediate the node carries. A store writes through its pointer
+    // operand, so it has no destination of its own.
+    let need = if row.form == Form::Store {
+        2
+    } else {
+        row.form.arity() + 1
+            - usize::from(row.form.takes_imm())
+            - usize::from(row.form == Form::Shift && imm.is_some())
+    };
+    if args.len() != need {
+        return fail("x86 simd: wrong operand count");
+    }
+    let imm8 = Concrete::Imm(imm.unwrap_or(0) as i64);
+    match row.form {
+        Form::Vv | Form::VvI => {
+            let Some(a) = operand(code, 1, SCRATCH_R10) else {
+                return fail("x86 simd: operand 1 has no place");
+            };
+            if !load128(code, DST, a) {
+                return false;
+            }
+            let Some(b) = operand(code, 2, SCRATCH_R10) else {
+                return fail("x86 simd: operand 2 has no place");
+            };
+            if !load128(code, SRC, b) {
+                return false;
+            }
+            let ok = if row.form == Form::Vv {
+                insn(code, row.mnem, &[xmm(SRC), xmm(DST)])
+            } else {
+                insn(code, row.mnem, &[imm8, xmm(SRC), xmm(DST)])
+            };
+            if !ok {
+                return false;
+            }
+        }
+        Form::V | Form::VI => {
+            let Some(a) = operand(code, 1, SCRATCH_R10) else {
+                return fail("x86 simd: operand 1 has no place");
+            };
+            if !load128(code, SRC, a) {
+                return false;
+            }
+            let ok = if row.form == Form::V {
+                insn(code, row.mnem, &[xmm(SRC), xmm(DST)])
+            } else {
+                insn(code, row.mnem, &[imm8, xmm(SRC), xmm(DST)])
+            };
+            if !ok {
+                return false;
+            }
+        }
+        Form::Shift => {
+            let Some(a) = operand(code, 1, SCRATCH_R10) else {
+                return fail("x86 simd: operand 1 has no place");
+            };
+            if !load128(code, DST, a) {
+                return false;
+            }
+            let ok = match imm {
+                Some(_) => insn(code, row.mnem, &[imm8, xmm(DST)]),
+                None => {
+                    let Some(c) = operand(code, 2, SCRATCH_R10) else {
+                        return fail("x86 simd: shift count has no place");
+                    };
+                    super::encode::emit_movq_xmm_r(code, Reg(SRC), c);
+                    insn(code, row.mnem, &[xmm(SRC), xmm(DST)])
+                }
+            };
+            if !ok {
+                return false;
+            }
+        }
+        Form::Load => {
+            let Some(p) = operand(code, 1, SCRATCH_R10) else {
+                return fail("x86 simd: pointer operand has no place");
+            };
+            if !load128(code, DST, p) {
+                return false;
+            }
+        }
+        Form::Store => {
+            let Some(a) = operand(code, 1, SCRATCH_R10) else {
+                return fail("x86 simd: source operand has no place");
+            };
+            if !load128(code, DST, a) {
+                return false;
+            }
+            let Some(p) = operand(code, 0, SCRATCH_R10) else {
+                return fail("x86 simd: pointer operand has no place");
+            };
+            return store128(code, p, DST);
+        }
+        Form::Extract => {
+            let Some(a) = operand(code, 1, SCRATCH_R10) else {
+                return fail("x86 simd: operand 1 has no place");
+            };
+            if !load128(code, SRC, a) {
+                return false;
+            }
+            // `pextrw` zero-extends into the 32-bit register; `pextrd`
+            // writes all 32 bits. Both leave a zero-extended `int`.
+            if !insn(
+                code,
+                row.mnem,
+                &[imm8, xmm(SRC), gpr(SCRATCH_R11, AsmRegSize::Long)],
+            ) {
+                return false;
+            }
+            let Some(d) = operand(code, 0, SCRATCH_R10) else {
+                return fail("x86 simd: destination has no place");
+            };
+            return insn(
+                code,
+                "mov",
+                &[gpr(SCRATCH_R11, AsmRegSize::Long), at(d, AsmRegSize::Long)],
+            );
+        }
+        Form::Insert => {
+            let Some(a) = operand(code, 1, SCRATCH_R10) else {
+                return fail("x86 simd: operand 1 has no place");
+            };
+            if !load128(code, DST, a) {
+                return false;
+            }
+            let Some(x) = operand(code, 2, SCRATCH_R10) else {
+                return fail("x86 simd: value operand has no place");
+            };
+            // Every `pinsr` narrower than a quadword reads a 32-bit
+            // register and uses the low lanes of it.
+            let size = int_size(row.int_width.max(4));
+            if !insn(code, row.mnem, &[imm8, gpr(x, size), xmm(DST)]) {
+                return false;
+            }
+        }
+        Form::MoveMask => {
+            let Some(a) = operand(code, 1, SCRATCH_R10) else {
+                return fail("x86 simd: operand 1 has no place");
+            };
+            if !load128(code, SRC, a) {
+                return false;
+            }
+            if !insn(
+                code,
+                row.mnem,
+                &[xmm(SRC), gpr(SCRATCH_R11, AsmRegSize::Long)],
+            ) {
+                return false;
+            }
+            let Some(d) = operand(code, 0, SCRATCH_R10) else {
+                return fail("x86 simd: destination has no place");
+            };
+            return insn(
+                code,
+                "mov",
+                &[gpr(SCRATCH_R11, AsmRegSize::Long), at(d, AsmRegSize::Long)],
+            );
+        }
+        Form::RdRand => {
+            let size = int_size(row.int_width);
+            let Some(p) = operand(code, 1, SCRATCH_R11) else {
+                return fail("x86 simd: pointer operand has no place");
+            };
+            // `rdrand` sets the carry flag when the value is valid; the
+            // stores in between leave the flags alone.
+            if !insn(code, "rdrand", &[gpr(SCRATCH_R10, size)])
+                || !insn(code, "mov", &[gpr(SCRATCH_R10, size), at(p, size)])
+                || !insn(code, "setc", &[gpr(SCRATCH_R10, AsmRegSize::Byte)])
+                || !insn(
+                    code,
+                    "movzx",
+                    &[
+                        gpr(SCRATCH_R10, AsmRegSize::Byte),
+                        gpr(SCRATCH_R10, AsmRegSize::Long),
+                    ],
+                )
+            {
+                return false;
+            }
+            let Some(d) = operand(code, 0, SCRATCH_R11) else {
+                return fail("x86 simd: destination has no place");
+            };
+            return insn(
+                code,
+                "mov",
+                &[gpr(SCRATCH_R10, AsmRegSize::Long), at(d, AsmRegSize::Long)],
+            );
+        }
+    }
+    let Some(d) = operand(code, 0, SCRATCH_R10) else {
+        return fail("x86 simd: destination has no place");
+    };
+    if row.form.returns_vector() {
+        store128(code, d, DST)
+    } else {
+        true
     }
 }
 
@@ -9374,80 +10836,6 @@ fn emit_intrinsic(
             code.push((reg_field << 3) | 0x02); // mod=00, reg=field, rm=r10
             true
         }
-        I::Cpuid | I::Xgetbv => {
-            // cpuid (0F A2) reads eax (leaf) + ecx (subleaf) and writes
-            // eax/ebx/ecx/edx; xgetbv (0F 01 D0) reads ecx and writes
-            // eax/edx. Both clobber fixed registers the allocator does not
-            // model -- ebx is callee-saved -- so save rax/rbx/rcx/rdx around
-            // the instruction. The output addresses are pushed before the
-            // clobber and popped after; the inputs are read into r10/r11
-            // before rax/rcx are overwritten, so an operand the allocator
-            // placed in one of the saved registers is still read correctly.
-            const RAX: Reg = Reg(0);
-            const RCX: Reg = Reg(1);
-            const RDX: Reg = Reg(2);
-            const RBX: Reg = Reg(3);
-            const R10: Reg = Reg(10);
-            const R11: Reg = Reg(11);
-            let is_cpuid = matches!(intrinsic, I::Cpuid);
-            let n_out = if is_cpuid { 4 } else { 2 };
-            let n_in = if is_cpuid { 2 } else { 1 };
-            if args.len() != n_out + n_in {
-                return fail("cpuid / xgetbv: wrong operand count");
-            }
-            // Save the clobbered / used registers.
-            super::encode::emit_push_r(code, RAX);
-            super::encode::emit_push_r(code, RBX);
-            super::encode::emit_push_r(code, RCX);
-            super::encode::emit_push_r(code, RDX);
-            // Push the output addresses (args[0..n_out]); they survive the
-            // clobber on the stack and are popped in reverse below. Four
-            // registers are already pushed, plus one per address.
-            for i in 0..n_out {
-                if materialize_at(code, i, R10, 4 + i as u32).is_none() {
-                    return fail("cpuid / xgetbv: output operand not an address");
-                }
-                super::encode::emit_push_r(code, R10);
-            }
-            // Inputs into r10 (eax) and, for cpuid, r11 (ecx); then move into
-            // the fixed registers. eax/ecx are not touched until both inputs
-            // are safely in scratch.
-            let in_depth = 4 + n_out as u32;
-            if materialize_at(code, n_out, R10, in_depth).is_none() {
-                return fail("cpuid / xgetbv: input operand missing");
-            }
-            if is_cpuid {
-                if materialize_at(code, n_out + 1, R11, in_depth).is_none() {
-                    return fail("cpuid: subleaf operand missing");
-                }
-                super::encode::emit_mov_rr(code, RAX, R10); // eax = leaf
-                super::encode::emit_mov_rr(code, RCX, R11); // ecx = subleaf
-                code.push(0x0F);
-                code.push(0xA2); // cpuid
-            } else {
-                super::encode::emit_mov_rr(code, RCX, R10); // ecx = reg
-                code.push(0x0F);
-                code.push(0x01);
-                code.push(0xD0); // xgetbv
-            }
-            // Store outputs to the popped addresses. cpuid order (top of
-            // stack first): edx, ecx, ebx, eax; xgetbv: edx, eax.
-            let out_regs: &[Reg] = if is_cpuid {
-                &[RDX, RCX, RBX, RAX]
-            } else {
-                &[RDX, RAX]
-            };
-            for &src in out_regs {
-                super::encode::emit_pop_r(code, R10);
-                super::encode::emit_mov_mem_r32(code, R10, 0, src);
-            }
-            // Restore the saved registers (reverse of the save order).
-            super::encode::emit_pop_r(code, RDX);
-            super::encode::emit_pop_r(code, RCX);
-            super::encode::emit_pop_r(code, RBX);
-            super::encode::emit_pop_r(code, RAX);
-            true
-        }
         I::Divq128 => {
             // Unsigned 128/64 division (`udiv_qrnnd`). The dividend is
             // rdx:rax = n1:n0, the divisor is `d`; `div` leaves the
@@ -9517,7 +10905,7 @@ fn emit_intrinsic(
         }
         I::FrameAddress => {
             // __builtin_frame_address(0): the current frame pointer (rbp).
-            // The level argument is ignored; only level 0 is supported.
+            // A level above 0 reaches here as this plus a load chain.
             let Some(rd) = int_or_spill_dst(dst) else {
                 return fail("FrameAddress: dst not int reg / spill");
             };
@@ -9537,7 +10925,8 @@ fn emit_intrinsic(
         }
         I::ReturnAddress => {
             // __builtin_return_address(0): the return address the call
-            // pushed, at [rbp + 8] above the saved rbp. Level 0 only.
+            // pushed, at [rbp + 8] above the saved rbp. The parser admits
+            // level 0 only, so there is no operand.
             let Some(rd) = int_or_spill_dst(dst) else {
                 return fail("ReturnAddress: dst not int reg / spill");
             };
@@ -9680,24 +11069,187 @@ fn emit_imm_ext_code(
 /// One load / store pair of `width` bytes (8, 4, 2 or 1) moving
 /// `[src + disp]` to `[dst + disp]` through `temp`.
 fn emit_copy_unit(code: &mut Vec<u8>, width: u32, temp: Reg, src: Reg, dst: Reg, disp: i32) {
+    emit_load_unit(code, width, temp, src, disp);
+    emit_store_unit(code, width, dst, disp, temp);
+}
+
+/// Store the low `width` bytes (8, 4, 2 or 1) of `src` to
+/// `[base + disp]`.
+fn emit_store_unit(code: &mut Vec<u8>, width: u32, base: Reg, disp: i32, src: Reg) {
     match width {
-        8 => {
-            emit_mov_r_mem(code, temp, src, disp);
-            emit_mov_mem_r(code, dst, disp, temp);
+        8 => emit_mov_mem_r(code, base, disp, src),
+        4 => super::encode::emit_mov_mem32_r(code, base, disp, src),
+        2 => super::encode::emit_mov_mem16_r(code, base, disp, src),
+        _ => super::encode::emit_mov_mem8_r(code, base, disp, src),
+    }
+}
+
+/// Zero-extending load of `width` bytes (8, 4, 2 or 1) from
+/// `[base + disp]` into `dst`.
+fn emit_load_unit(code: &mut Vec<u8>, width: u32, dst: Reg, base: Reg, disp: i32) {
+    match width {
+        8 => emit_mov_r_mem(code, dst, base, disp),
+        4 => super::encode::emit_mov_r32_mem(code, dst, base, disp),
+        2 => super::encode::emit_movzx_r_mem16(code, dst, base, disp),
+        _ => super::encode::emit_movzx_r_mem8(code, dst, base, disp),
+    }
+}
+
+/// Load `width` bytes at `[base + disp]` into the integer register
+/// `dst`, using no access wider than `align` proves at that address
+/// (see [`super::super::access_pieces`]). `tmp` holds each narrow
+/// piece; it must differ from `base` and `dst`, and stays untouched
+/// when one access suffices -- the only case in which `dst` may alias
+/// `base`.
+#[allow(clippy::too_many_arguments)]
+fn emit_agg_load_int(
+    code: &mut Vec<u8>,
+    dst: Reg,
+    base: Reg,
+    disp: i32,
+    width: u32,
+    align: u32,
+    strict_align: bool,
+    tmp: Reg,
+) {
+    let off = disp.max(0) as u32;
+    for (i, (o, w)) in super::super::access_pieces(off, width, align, strict_align).enumerate() {
+        let at = disp + (o - off) as i32;
+        if i == 0 {
+            emit_load_unit(code, w, dst, base, at);
+            continue;
         }
-        4 => {
-            super::encode::emit_mov_r_mem32(code, temp, src, disp);
-            super::encode::emit_mov_mem32_r(code, dst, disp, temp);
-        }
-        2 => {
-            super::encode::emit_movzx_r_mem16(code, temp, src, disp);
-            super::encode::emit_mov_mem16_r(code, dst, disp, temp);
-        }
-        _ => {
-            super::encode::emit_movzx_r_mem8(code, temp, src, disp);
-            super::encode::emit_mov_mem8_r(code, dst, disp, temp);
+        debug_assert!(dst.0 != base.0 && tmp.0 != base.0 && tmp.0 != dst.0);
+        emit_load_unit(code, w, tmp, base, at);
+        emit_shift_ri(code, Mnem::Shl, 8, tmp, ((o - off) * 8) as u8);
+        emit_rr(code, Mnem::Or, 8, dst, tmp);
+    }
+}
+
+/// As [`emit_agg_load_int`] with an SSE register destination: the
+/// eightbyte composes in `tmp` and moves across with `movq`. The
+/// composition's second register is borrowed from the stack, the
+/// marshal having no third free scratch; nothing between the push and
+/// the pop addresses `rsp`. `base` and `tmp` are the marshal's
+/// reserved scratches or argument registers, never `rax`.
+fn emit_agg_load_sse(
+    code: &mut Vec<u8>,
+    dst: Reg,
+    base: Reg,
+    disp: i32,
+    align: u32,
+    strict_align: bool,
+    tmp: Reg,
+) {
+    if super::super::access_unit(disp.max(0) as u32, 8, align, strict_align) == 8 {
+        emit_movsd_xmm_mem(code, dst, base, disp);
+        return;
+    }
+    debug_assert!(base.0 != Reg::RAX.0 && tmp.0 != Reg::RAX.0);
+    emit_push_r(code, Reg::RAX);
+    emit_agg_load_int(code, tmp, base, disp, 8, align, strict_align, Reg::RAX);
+    super::encode::emit_movq_xmm_r(code, dst, tmp);
+    emit_pop_r(code, Reg::RAX);
+}
+
+/// Alignment a scalar access must respect, or `None` when it may keep
+/// its natural width: an access carries a bound only where the walker
+/// proved one, and only `-mstrict-align` acts on it.
+fn narrow_bound(align: u8, abi: super::Abi) -> Option<u32> {
+    (abi.strict_align && align != 0).then_some(align as u32)
+}
+
+/// Register a narrowed scalar access borrows for its piece temp. Each
+/// candidate is in the allocator's caller-saved bank, so it is pushed
+/// and popped across the sequence; nothing in between addresses `rsp`.
+/// Mirrors the reservation `emit_mcpy` makes.
+fn narrow_borrow(avoid: &[u8]) -> Reg {
+    for cand in [Reg::RAX, Reg::RCX, Reg::RDX, Reg::RSI, Reg::RDI] {
+        if !avoid.contains(&cand.0) {
+            return cand;
         }
     }
+    unreachable!("narrow access: no free borrow register")
+}
+
+/// Byte width of an integer load kind, and whether it sign-extends.
+fn int_load_shape(kind: LoadKind) -> (u32, bool) {
+    match kind {
+        LoadKind::I64 => (8, false),
+        LoadKind::I32 => (4, true),
+        LoadKind::U32 => (4, false),
+        LoadKind::I16 => (2, true),
+        LoadKind::U16 => (2, false),
+        LoadKind::I8 => (1, true),
+        LoadKind::U8 => (1, false),
+        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => (0, false),
+    }
+}
+
+/// Byte width of an integer store kind.
+fn int_store_width(kind: StoreKind) -> u32 {
+    match kind {
+        StoreKind::I64 => 8,
+        StoreKind::I32 => 4,
+        StoreKind::I16 => 2,
+        StoreKind::I8 => 1,
+        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 => 0,
+    }
+}
+
+/// Compose `width` bytes at `[base + disp]`, whose address is proven
+/// only `align`-aligned, into SCRATCH_R11 and return it. The caller
+/// must not have `base` in r11.
+fn emit_narrow_compose(
+    code: &mut Vec<u8>,
+    base: Reg,
+    disp: i32,
+    width: u32,
+    align: u32,
+    avoid: &[u8],
+) -> Reg {
+    let acc = SCRATCH_R11;
+    let mut blocked = alloc::vec![base.0, acc.0];
+    blocked.extend_from_slice(avoid);
+    let tmp = narrow_borrow(&blocked);
+    emit_push_r(code, tmp);
+    emit_agg_load_int(code, acc, base, disp, width, align, true, tmp);
+    emit_pop_r(code, tmp);
+    acc
+}
+
+/// Lower an integer load bounded by `align` into `rd`, sign-extending
+/// the composed value when the kind is signed.
+fn emit_narrow_load(code: &mut Vec<u8>, rd: Reg, base: Reg, disp: i32, kind: LoadKind, align: u32) {
+    let (width, signed) = int_load_shape(kind);
+    let acc = emit_narrow_compose(code, base, disp, width, align, &[rd.0]);
+    match (signed, width) {
+        (true, 4) => super::encode::emit_movsxd_r_r(code, rd, acc),
+        (true, 2) => super::encode::emit_movsx_r_r16(code, rd, acc),
+        (true, 1) => super::encode::emit_movsx_r_r8(code, rd, acc),
+        _ if rd.0 != acc.0 => emit_mov_rr(code, rd, acc),
+        _ => {}
+    }
+}
+
+/// Store companion to [`emit_narrow_load`]: write the low `width`
+/// bytes of `rs` to `[base + disp]` in `align`-wide pieces.
+fn emit_narrow_store(code: &mut Vec<u8>, rs: Reg, base: Reg, disp: i32, width: u32, align: u32) {
+    let tmp = narrow_borrow(&[base.0, rs.0]);
+    emit_push_r(code, tmp);
+    let off = disp.max(0) as u32;
+    for (i, (o, w)) in super::super::access_pieces(off, width, align, true).enumerate() {
+        let at = disp + (o - off) as i32;
+        let src = if i == 0 {
+            rs
+        } else {
+            emit_mov_rr(code, tmp, rs);
+            emit_shift_ri(code, Mnem::Shr, 8, tmp, ((o - off) * 8) as u8);
+            tmp
+        };
+        emit_store_unit(code, w, base, at, src);
+    }
+    emit_pop_r(code, tmp);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -10104,6 +11656,8 @@ fn emit_tail_call(
     fixups: &mut Vec<Fixup>,
     func: &FunctionSsa,
     fp_arg_mask: u32,
+    extern_sites: &mut Vec<super::UserExternCallSite>,
+    extern_data_refs: &mut Vec<super::UserExternDataRef>,
 ) -> bool {
     debug_assert!(
         !frame.dynamic_sp,
@@ -10135,13 +11689,14 @@ fn emit_tail_call(
     // moved -- any spill load must use the natural slot offset.
     // Clear scratch_bytes to suppress the marshal's sp_shift add.
     plan.scratch_bytes = 0;
-    if !marshal_args(code, &plan, args, alloc, frame, "TailCall") {
+    if !marshal_args(code, &plan, args, alloc, frame, abi, "TailCall") {
         return false;
     }
     // Mirror emit_return's epilogue, omitting the return-value
     // staging (the callee's own `ret` carries the value back). The
     // marshalled args ride caller-saved arg registers, disjoint from the
     // callee-saved GPRs and the non-volatile xmm scratch restored here.
+    emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
     restore_callee_saved(code, alloc, frame);
     if !is_full_leaf(func, frame, alloc, abi) {
         if frame.frame_bytes > 0 {
@@ -10175,6 +11730,7 @@ fn emit_return(
     func: &FunctionSsa,
     abi: super::Abi,
     extern_sites: &mut Vec<super::UserExternCallSite>,
+    extern_data_refs: &mut Vec<super::UserExternDataRef>,
 ) {
     // Staging through rcx is needed only when the return value
     // itself lives in a callee-saved register the epilogue is about
@@ -10240,14 +11796,39 @@ fn emit_return(
         for (k, class) in eb_classes.iter().enumerate() {
             let off = (k as i32) * 8;
             if matches!(class, super::abi_classify::RegClass::Sse) {
-                emit_movsd_xmm_mem(code, Reg(Reg::XMM0.0 + sse_i), Reg::RCX, off);
+                emit_agg_load_sse(
+                    code,
+                    Reg(Reg::XMM0.0 + sse_i),
+                    Reg::RCX,
+                    off,
+                    desc.align,
+                    abi.strict_align,
+                    SCRATCH_R10,
+                );
                 sse_i += 1;
             } else {
-                emit_mov_r_mem(code, int_ret[int_i], Reg::RCX, off);
+                emit_agg_load_int(
+                    code,
+                    int_ret[int_i],
+                    Reg::RCX,
+                    off,
+                    8,
+                    desc.align,
+                    abi.strict_align,
+                    SCRATCH_R10,
+                );
                 int_i += 1;
             }
         }
-        emit_epilogue_ret(code, func, frame, alloc, abi, extern_sites);
+        emit_epilogue_ret(
+            code,
+            func,
+            frame,
+            alloc,
+            abi,
+            extern_sites,
+            extern_data_refs,
+        );
         return;
     }
     // A floating-point scalar return rides xmm0 (C99 6.2.5p10). The
@@ -10327,7 +11908,15 @@ fn emit_return(
     // AMD64 / Win64: scalar floating returns in xmm0). The receiving
     // call site is FP-classed (`Inst::Call::fp_return`) and reads
     // xmm0, so no rax mirror is emitted.
-    emit_epilogue_ret(code, func, frame, alloc, abi, extern_sites);
+    emit_epilogue_ret(
+        code,
+        func,
+        frame,
+        alloc,
+        abi,
+        extern_sites,
+        extern_data_refs,
+    );
 }
 
 /// Frame teardown + `ret` (callee-saved restores already ran): drop
@@ -10345,7 +11934,9 @@ fn emit_epilogue_ret(
     alloc: &Allocation,
     abi: super::Abi,
     extern_sites: &mut Vec<super::UserExternCallSite>,
+    extern_data_refs: &mut Vec<super::UserExternDataRef>,
 ) {
+    emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
     if !is_full_leaf(func, frame, alloc, abi) {
         if frame.frame_bytes > 0 {
             emit_add_rsp_imm32(code, frame.frame_bytes);
@@ -10363,6 +11954,120 @@ fn emit_epilogue_ret(
 /// Branch to a symbol this unit does not define: `E8`/`E9 rel32` with a
 /// zero displacement plus the by-name call site the writer turns into a
 /// relocation against an undefined symbol.
+/// Scratch for the stack-protector sequences. r11 is caller-saved, is
+/// neither ABI's argument or return register, and carries no live value at
+/// the end of the prologue or at any point a return path is taken.
+const CANARY_SCRATCH: Reg = Reg::R11;
+
+/// Leave the guard value in `rd`. `-mstack-protector-guard=tls` reads
+/// thread storage through a segment override -- at a fixed offset, or at a
+/// named object's PC-relative address when a guard symbol is given. The
+/// `global` form reads the object the target's C library exports.
+fn emit_load_stack_guard(
+    code: &mut Vec<u8>,
+    rd: Reg,
+    abi: super::Abi,
+    extern_data_refs: &mut Vec<super::UserExternDataRef>,
+) {
+    let ssp = abi.stack_protect;
+    let symbol = ssp.guard_symbol.as_str();
+    let super::StackGuard::Tls { seg, offset } = ssp.guard else {
+        // `global`: the writer turns the `lea` into a GOT load of the
+        // object's address, so a second load reaches its contents.
+        let name = if symbol.is_empty() {
+            super::STACK_GUARD_SYMBOL
+        } else {
+            symbol
+        };
+        extern_data_refs.push(super::UserExternDataRef {
+            instr_offset: code.len(),
+            symbol_name: name.into(),
+            direct_pcrel: None,
+        });
+        super::encode::emit_lea_r_rip32(code, rd, 0);
+        emit_mov_r_mem(code, rd, rd, 0);
+        return;
+    };
+    let prefix = match seg {
+        super::GuardSeg::Fs => 0x64,
+        super::GuardSeg::Gs => 0x65,
+    };
+    code.push(prefix);
+    code.push(if rd.high() { 0x4C } else { 0x48 });
+    code.push(0x8B);
+    if symbol.is_empty() {
+        // `mov rd, seg:offset`: mod=00 r/m=100 (SIB) with base=101,
+        // index=100 -- the disp32-only addressing form.
+        code.push(0x04 | (rd.lo() << 3));
+        code.push(0x25);
+        code.extend_from_slice(&offset.to_le_bytes());
+        return;
+    }
+    // `mov rd, seg:sym(%rip)`: mod=00 r/m=101. The named object supplies
+    // the whole address, so the displacement carries only the -4 that
+    // measures it from the end of the instruction. The relocation is
+    // anchored at the REX byte, three bytes ahead of the displacement.
+    let instr_offset = code.len() - 2;
+    code.push(0x05 | (rd.lo() << 3));
+    code.extend_from_slice(&0i32.to_le_bytes());
+    extern_data_refs.push(super::UserExternDataRef {
+        instr_offset,
+        symbol_name: symbol.into(),
+        direct_pcrel: Some(-4),
+    });
+}
+
+/// Prologue half of the stack protector: store the guard into the canary
+/// slot at `[rbp - 8]`, above every local and below the saved rbp, then
+/// clear the scratch so the guard value does not outlive the store.
+fn emit_canary_store(
+    code: &mut Vec<u8>,
+    frame: Frame,
+    abi: super::Abi,
+    extern_data_refs: &mut Vec<super::UserExternDataRef>,
+) {
+    if frame.canary_bytes == 0 {
+        return;
+    }
+    emit_load_stack_guard(code, CANARY_SCRATCH, abi, extern_data_refs);
+    emit_mov_mem_r(
+        code,
+        Reg::RBP,
+        super::ssa::emit_common::CANARY_SLOT_OFF,
+        CANARY_SCRATCH,
+    );
+    emit_rr(code, Mnem::Xor, 8, CANARY_SCRATCH, CANARY_SCRATCH);
+}
+
+/// Epilogue half: compare the canary slot against the guard and call
+/// `__stack_chk_fail` when they differ. Emitted on every path that leaves
+/// the frame, ahead of the teardown, while rbp still addresses the slot.
+fn emit_canary_check(
+    code: &mut Vec<u8>,
+    frame: Frame,
+    abi: super::Abi,
+    extern_sites: &mut Vec<super::UserExternCallSite>,
+    extern_data_refs: &mut Vec<super::UserExternDataRef>,
+) {
+    if frame.canary_bytes == 0 {
+        return;
+    }
+    emit_load_stack_guard(code, CANARY_SCRATCH, abi, extern_data_refs);
+    emit_rm(
+        code,
+        Mnem::Cmp,
+        8,
+        CANARY_SCRATCH,
+        Reg::RBP,
+        super::ssa::emit_common::CANARY_SLOT_OFF,
+    );
+    super::encode::emit_jcc_rel8(code, Cc::E, 0);
+    let rel8_at = code.len() - 1;
+    emit_extern_branch(code, extern_sites, super::STACK_CHK_FAIL_SYMBOL, true);
+    code[rel8_at] = (code.len() - rel8_at - 1) as u8;
+    emit_rr(code, Mnem::Xor, 8, CANARY_SCRATCH, CANARY_SCRATCH);
+}
+
 fn emit_extern_branch(
     code: &mut Vec<u8>,
     extern_sites: &mut Vec<super::UserExternCallSite>,
@@ -10485,6 +12190,48 @@ fn emit_hardened_jmp_r(
 }
 
 #[cfg(test)]
+mod asm_scratch_tests {
+    use super::super::super::ir::{AsmBlock, AsmConstraint, AsmOperand, AsmSeg};
+    use super::*;
+
+    fn asm_func(template: &str) -> FunctionSsa {
+        let asm = AsmBlock {
+            template: template.as_bytes().to_vec(),
+            operands: alloc::vec![AsmOperand {
+                constraint: AsmConstraint::Reg,
+                is_output: false,
+                is_rw: false,
+                width: 8,
+                seg: AsmSeg::None,
+            }],
+            clobber_regs: 0,
+            clobber_fp_regs: 0,
+            clobber_memory: true,
+            volatile: true,
+        };
+        FunctionSsa {
+            insts: alloc::vec![
+                Inst::Imm(0),
+                Inst::InlineAsm {
+                    asm: alloc::boxed::Box::new(asm),
+                    args: alloc::vec![0],
+                },
+            ],
+            ..Default::default()
+        }
+    }
+
+    /// A no-op template reserves no frame scratch; the same statement
+    /// with one instruction reserves the operand's save + capture slots.
+    #[test]
+    fn noop_template_needs_no_scratch() {
+        assert_eq!(asm_scratch_bytes(&asm_func("")), 0);
+        assert_eq!(asm_scratch_bytes(&asm_func("/* note */ ;")), 0);
+        assert!(asm_scratch_bytes(&asm_func("nop")) > 0);
+    }
+}
+
+#[cfg(test)]
 mod scratch_picker_tests {
     use super::*;
 
@@ -10529,6 +12276,199 @@ mod scratch_picker_tests {
         let rd = Reg(7);
         let operands = [Reg(0), Reg(1), Reg(2), Reg(8), Reg(9)];
         assert_eq!(pick_caller_saved_scratch(rd, &operands), None);
+    }
+}
+
+#[cfg(test)]
+mod mul_add_tests {
+    use super::*;
+    use alloc::vec::Vec;
+
+    /// `(dst, src)` of the sole `imul r64, r/m64` (REX.W 0F AF /r).
+    fn imul_regs(code: &[u8]) -> (u8, u8) {
+        for i in 0..code.len().saturating_sub(3) {
+            if code[i] & 0xF8 == 0x48 && code[i + 1] == 0x0f && code[i + 2] == 0xaf {
+                return rex_modrm(code[i], code[i + 3]);
+            }
+        }
+        panic!("no imul in {code:02x?}");
+    }
+
+    /// `(src, dst)` of an ALU `r/m64, r64` form (REX.W <op> /r), which
+    /// is how the pair's `add` (01) and `sub` (29) encode.
+    fn alu_regs(code: &[u8], opcode: u8) -> (u8, u8) {
+        for i in 0..code.len().saturating_sub(2) {
+            if code[i] & 0xF8 == 0x48 && code[i + 1] == opcode && code[i + 2] >= 0xc0 {
+                return rex_modrm(code[i], code[i + 2]);
+            }
+        }
+        panic!("no {opcode:02x} form in {code:02x?}");
+    }
+
+    /// ModR/M register-direct fields widened by the REX prefix, as
+    /// `(reg, rm)`.
+    fn rex_modrm(rex: u8, modrm: u8) -> (u8, u8) {
+        (
+            ((modrm >> 3) & 7) | ((rex >> 2) & 1) << 3,
+            (modrm & 7) | ((rex & 1) << 3),
+        )
+    }
+
+    /// Lower one `MulAdd` with the places the caller pins. `a_dies`
+    /// makes this instruction the last reader of `a`; `b` always
+    /// outlives it.
+    fn lower(
+        neg_product: bool,
+        dst: Place,
+        pa: Place,
+        pb: Place,
+        pc: Place,
+        a_dies: bool,
+    ) -> Vec<u8> {
+        let target = Target::LinuxX64;
+        let program = crate::Compiler::with_target(
+            "long long f(long long a, long long b, long long c){ return c - a*b; } \
+             int main(void){ return 0; }"
+                .into(),
+            target,
+        )
+        .compile()
+        .expect("compile");
+        let mut funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        crate::c5::codegen::passes::mul_add::run(&mut funcs);
+        let func = funcs
+            .into_iter()
+            .find(|f| {
+                f.insts
+                    .iter()
+                    .any(|i| matches!(i, crate::c5::ir::Inst::MulAdd { .. }))
+            })
+            .expect("a function with a MulAdd");
+        let (v, a, b, c) = func
+            .insts
+            .iter()
+            .enumerate()
+            .find_map(|(v, i)| match i {
+                crate::c5::ir::Inst::MulAdd { a, b, c, .. } => {
+                    Some((v as crate::c5::ir::ValueId, *a, *b, *c))
+                }
+                _ => None,
+            })
+            .expect("MulAdd operands");
+        let mut alloc = super::super::ssa::reg_alloc::allocate(&func, target);
+        alloc.places[a as usize] = pa;
+        alloc.places[b as usize] = pb;
+        alloc.places[c as usize] = pc;
+        alloc.places[v as usize] = dst;
+        alloc.last_use[a as usize] = if a_dies { v } else { v + 1 };
+        alloc.last_use[b as usize] = v + 1;
+        alloc.spill_count = alloc.spill_count.max(4);
+        let frame = compute_frame(&func, &alloc, target.abi());
+        let mut code = Vec::new();
+        assert!(
+            emit_mul_add(&mut code, dst, v, a, b, c, neg_product, &alloc, frame),
+            "emit_mul_add bailed",
+        );
+        code
+    }
+
+    /// `c + a*b` with the addend outside the destination multiplies
+    /// straight into the destination: no staging through the fixed
+    /// scratch, and the add reads the addend's own register.
+    #[test]
+    fn add_form_multiplies_into_the_destination() {
+        let code = lower(
+            false,
+            Place::IntReg(3),
+            Place::IntReg(0),
+            Place::IntReg(1),
+            Place::IntReg(2),
+            false,
+        );
+        assert_eq!(imul_regs(&code).0, 3, "product lands in rd: {code:02x?}");
+        assert_eq!(alu_regs(&code, 0x01), (2, 3), "add rd, c: {code:02x?}");
+    }
+
+    /// `c - a*b` keeps the destination for the addend, so the product
+    /// takes a multiplicand's own register when this instruction is
+    /// that value's last reader.
+    #[test]
+    fn sub_form_reuses_a_dying_multiplicand() {
+        let dst = Place::IntReg(3);
+        let code = lower(
+            true,
+            dst,
+            Place::IntReg(0),
+            Place::IntReg(1),
+            Place::IntReg(2),
+            true,
+        );
+        let (product, _) = imul_regs(&code);
+        assert_eq!(product, 0, "product reuses the dying operand: {code:02x?}");
+        assert_eq!(
+            alu_regs(&code, 0x29),
+            (0, 3),
+            "sub rd, product: {code:02x?}"
+        );
+    }
+
+    /// With both multiplicands live past the instruction the product
+    /// has to go to the fixed scratch, which no allocator value uses.
+    #[test]
+    fn sub_form_falls_back_to_the_fixed_scratch() {
+        let code = lower(
+            true,
+            Place::IntReg(3),
+            Place::IntReg(0),
+            Place::IntReg(1),
+            Place::IntReg(2),
+            false,
+        );
+        let (product, _) = imul_regs(&code);
+        assert_eq!(product, SCRATCH_R11.0, "product in r11: {code:02x?}");
+        assert_eq!(alu_regs(&code, 0x29), (SCRATCH_R11.0, 3), "sub rd, r11");
+    }
+
+    /// The add form with a spilled destination multiplies into the
+    /// scratch the destination borrows, so the spilled addend must
+    /// reload somewhere else or the product is lost.
+    #[test]
+    fn add_form_spilled_destination_keeps_the_product() {
+        let code = lower(
+            false,
+            Place::Spill(3),
+            Place::Spill(0),
+            Place::Spill(1),
+            Place::Spill(2),
+            false,
+        );
+        let (product, _) = imul_regs(&code);
+        let (addend, dst) = alu_regs(&code, 0x01);
+        assert_eq!(product, dst, "the product is the add's destination");
+        assert_ne!(addend, product, "the addend reload spared the product");
+    }
+
+    /// A spilled destination routes through the other fixed scratch
+    /// and stores; the product still avoids the addend's register.
+    #[test]
+    fn spilled_destination_stores_the_result() {
+        let code = lower(
+            true,
+            Place::Spill(3),
+            Place::Spill(0),
+            Place::Spill(1),
+            Place::Spill(2),
+            false,
+        );
+        let (product, _) = imul_regs(&code);
+        assert_eq!(product, SCRATCH_R11.0, "product in r11: {code:02x?}");
+        assert_eq!(
+            alu_regs(&code, 0x29),
+            (SCRATCH_R11.0, SCRATCH_R10.0),
+            "sub r10, r11: {code:02x?}",
+        );
     }
 }
 
@@ -10635,10 +12575,10 @@ mod code_mode_tests {
     /// is folded away here as GNU as folds it. Offsets are within the
     /// concatenated sections, in section order.
     fn assemble_relocs(text: &str) -> (Vec<u8>, Vec<Reloc>) {
-        use super::super::ssa::emit_common::{
-            AsmComments, AsmSectionSink, AsmSectionTarget, materialize_file_asm,
-            prepare_file_asm_text,
-        };
+        use crate::c5::asm::AsmComments;
+        use crate::c5::asm::AsmSectionSink;
+        use crate::c5::asm::AsmSectionTarget;
+        use crate::c5::asm::{materialize_file_asm, prepare_file_asm_text};
         // The driver prepares the template (comment stripping, GNU as macro
         // and equate expansion) before the section parse reads it.
         let text = prepare_file_asm_text(text, AsmComments::X86).expect("prepares");
@@ -10652,7 +12592,7 @@ mod code_mode_tests {
         )
         .expect("assembles");
         let (mut out, mut rs) = (Vec::new(), Vec::new());
-        for s in sink.iter() {
+        for s in sink.sections().iter() {
             for r in &s.relocs {
                 let name = match &r.target {
                     AsmSectionTarget::Symbol(n) => n.clone(),
@@ -10674,9 +12614,9 @@ mod code_mode_tests {
     /// The diagnostic a stream the assembler rejects produces, from encoding
     /// or from the layout the sections materialize against.
     fn assemble_err(text: &str) -> alloc::string::String {
-        use super::super::ssa::emit_common::{
-            AsmComments, AsmSectionSink, materialize_file_asm, prepare_file_asm_text,
-        };
+        use crate::c5::asm::AsmComments;
+        use crate::c5::asm::AsmSectionSink;
+        use crate::c5::asm::{materialize_file_asm, prepare_file_asm_text};
         let text = prepare_file_asm_text(text, AsmComments::X86).expect("prepares");
         let mut sink = AsmSectionSink::default();
         materialize_file_asm(
@@ -10687,6 +12627,151 @@ mod code_mode_tests {
             &mut sink,
         )
         .expect_err("rejected")
+    }
+
+    /// A label difference is an absolute value in an immediate and in a
+    /// memory displacement. GNU as fixes the field when the instruction is
+    /// assembled, so a backward difference takes the narrow field and a
+    /// forward one keeps the wide one. Bytes from GNU as 2.46.1.
+    #[test]
+    fn file_scope_x86_label_difference_operand_matches_gnu_as() {
+        let (bytes, relocs) = assemble_relocs(
+            ".pushsection .t,\"ax\"\n\
+             1:\n\
+             nop\n\
+             2:\n\
+             subl $(2b - 1b), %ebp\n\
+             subl $(4f - 3f), %ebp\n\
+             movl (2b - 1b)(%rax), %ebx\n\
+             movl (4f - 3f)(%rax), %ecx\n\
+             3:\n\
+             nop\n\
+             4:\n\
+             nop\n\
+             .popsection\n",
+        );
+        assert_eq!(
+            bytes,
+            alloc::vec![
+                0x90, // nop
+                0x83, 0xed, 0x01, // subl $1, %ebp        imm8, backward
+                0x81, 0xed, 0x01, 0x00, 0x00, 0x00, // subl $1, %ebp  imm32, forward
+                0x8b, 0x58, 0x01, // movl 1(%rax), %ebx   disp8, backward
+                0x8b, 0x88, 0x01, 0x00, 0x00, 0x00, // movl 1(%rax), %ecx  disp32, forward
+                0x90, 0x90,
+            ]
+        );
+        assert!(
+            relocs.is_empty(),
+            "a folded difference relocates: {relocs:?}"
+        );
+    }
+
+    /// A branch through a `.set` alias takes the location of the name the
+    /// chain ends at and the binding of the name written: a local alias of a
+    /// global resolves in place, a global or weak one keeps its relocation at
+    /// the long form's width. A data field keeps the name written, which is
+    /// what the kernel's `SYM_FUNC_ALIAS` + `EXPORT_SYMBOL` shape reads. Bytes
+    /// from GNU as 2.46.1.
+    #[test]
+    fn file_scope_x86_branch_binds_as_the_alias_name_does() {
+        let (bytes, relocs) = assemble_relocs(
+            ".pushsection .t,\"ax\"\n\
+             .globl gtgt\n\
+             gtgt:\n\
+             ret\n\
+             .set la, gtgt\n\
+             call la\n\
+             jmp la\n\
+             .globl ga\n\
+             .set ga, gtgt\n\
+             call ga\n\
+             .weak wa\n\
+             .set wa, gtgt\n\
+             jmp wa\n\
+             call gtgt\n\
+             .popsection\n\
+             .pushsection .d,\"a\"\n\
+             .quad la\n\
+             .popsection\n",
+        );
+        assert_eq!(
+            bytes[..23],
+            [
+                0xc3, // ret
+                0xe8, 0xfa, 0xff, 0xff, 0xff, // call la    local alias, in place
+                0xeb, 0xf8, // jmp la     local alias, short in place
+                0xe8, 0x00, 0x00, 0x00, 0x00, // call ga    global alias, relocated
+                0xe9, 0x00, 0x00, 0x00, 0x00, // jmp wa     weak alias, long + relocated
+                0xe8, 0x00, 0x00, 0x00, 0x00, // call gtgt
+            ]
+        );
+        let sites: alloc::vec::Vec<(u32, &str, i64)> =
+            relocs.iter().map(|r| (r.0, r.3.as_str(), r.4)).collect();
+        assert_eq!(
+            sites,
+            [
+                (9, "gtgt", -4),
+                (14, "gtgt", -4),
+                (19, "gtgt", -4),
+                (23, "la", 0),
+            ],
+            "an instruction field names the chain end, a data field the name written"
+        );
+    }
+
+    /// The two rules a `.set` alias answers to must agree: the binding the
+    /// symbol table gives the name decides whether the link may rebind a
+    /// reference to it, and a reference the link may rebind cannot reduce to a
+    /// location of this unit. So where the chain ends at a name the link does
+    /// not bind, a rebindable alias keeps its own relocation rather than the
+    /// chain end, and a local one resolves in place. Relocations from GNU as
+    /// 2.46.1 for the same source.
+    #[test]
+    fn a_rebindable_alias_of_a_local_target_keeps_its_relocation() {
+        let (_, relocs) = assemble_relocs(
+            ".pushsection .t,\"ax\"\n\
+             base:\n\
+             ret\n\
+             t:\n\
+             ret\n\
+             .set la, t\n\
+             call la\n\
+             .globl ga\n\
+             .set ga, t\n\
+             call ga\n\
+             .weak wa\n\
+             .set wa, t\n\
+             call wa\n\
+             .popsection\n",
+        );
+        let sites: alloc::vec::Vec<(&str, i64)> =
+            relocs.iter().map(|r| (r.3.as_str(), r.4)).collect();
+        assert_eq!(
+            sites,
+            [("ga", -4), ("wa", -4)],
+            "a local alias resolves in place; a rebindable one names itself"
+        );
+    }
+
+    /// `.org` reads its target against the final layout, so operator order
+    /// does not decide whether the target reduces. GNU as 2.46.1 accepts
+    /// every spelling with the same padding.
+    #[test]
+    fn file_scope_x86_org_target_folds_regardless_of_association() {
+        for expr in [". + 662b-661b", ". + (662b-661b)", ". + 662b - 661b"] {
+            let bytes = assemble(&alloc::format!(
+                ".pushsection .t,\"ax\"\n\
+                 661:\n\
+                 nop\n\
+                 nop\n\
+                 662:\n\
+                 .org {expr}\n\
+                 ret\n\
+                 .popsection\n"
+            ));
+            assert_eq!(bytes, alloc::vec![0x90, 0x90, 0x00, 0x00, 0xc3], "{expr}");
+        }
     }
 
     /// `crc32` encodes `r32, r/m8|r/m16|r/m32` and `r64, r/m8|r/m64`: REX.W is
@@ -10797,6 +12882,21 @@ mod code_mode_tests {
         assert_eq!(
             assemble(".code16\n.section \"a\",\"ax\"\nmovl %eax, %ebx\n"),
             [0x66, 0x89, 0xc3]
+        );
+    }
+
+    /// The mode also selects the no-op forms alignment padding takes: a
+    /// 32-bit no-op decodes to a shorter instruction under 16-bit addressing,
+    /// leaving its tail bytes to run as whatever they decode to. GNU as bytes
+    /// for the same source: a 7-byte gap in each mode.
+    #[test]
+    fn code_directives_select_the_alignment_nops() {
+        assert_eq!(
+            assemble(".code16\nnop\n.balign 8\nret\n.code64\n.balign 16\nret\n"),
+            [
+                0x90, 0x89, 0xf6, 0x2e, 0x8d, 0xb4, 0x00, 0x00, 0xc3, 0x0f, 0x1f, 0x80, 0x00, 0x00,
+                0x00, 0x00, 0xc3
+            ]
         );
     }
 
@@ -10929,6 +13029,73 @@ mod code_mode_tests {
         ] {
             assert_eq!(assemble(src), bytes, "{src}");
         }
+    }
+
+    /// A near `jmp` / `call` through an absolute address: AT&T's `*` marks
+    /// the operand as the memory holding the target, so a bare address after
+    /// it is a displacement-only memory reference rather than the branch
+    /// target itself. Long mode addresses it with a base-less SIB. Bytes
+    /// measured with GNU as 2.46.1 and llvm-mc 21 for the same source:
+    /// `jmp *0x1234` is `ff 24 25 34 12 00 00`, `call *0x1234`
+    /// `ff 14 25 34 12 00 00`, and `jmp *sym` the same with a signed 32-bit
+    /// relocation in the displacement.
+    #[test]
+    fn near_indirect_branch_through_an_absolute_address_matches_gnu_as() {
+        for (src, bytes) in [
+            ("jmp *0x1234\n", &[0xff, 0x24, 0x25, 0x34, 0x12, 0, 0][..]),
+            ("call *0x1234\n", &[0xff, 0x14, 0x25, 0x34, 0x12, 0, 0][..]),
+        ] {
+            assert_eq!(assemble(src), bytes, "{src}");
+        }
+        // Without the marker the same name is the branch target itself.
+        let (bytes, relocs) = assemble_relocs("jmp sym\n");
+        assert_eq!(bytes, [0xe9, 0, 0, 0, 0]);
+        assert_eq!(
+            relocs,
+            [(1, 4, false, alloc::string::String::from("sym"), -4)]
+        );
+        let (bytes, relocs) = assemble_relocs("jmp *sym\ncall *sym\n");
+        assert_eq!(
+            bytes,
+            [0xff, 0x24, 0x25, 0, 0, 0, 0, 0xff, 0x14, 0x25, 0, 0, 0, 0]
+        );
+        assert_eq!(
+            relocs,
+            [
+                (3, 4, true, alloc::string::String::from("sym"), 0),
+                (10, 4, true, alloc::string::String::from("sym"), 0),
+            ]
+        );
+    }
+
+    /// A near indirect branch outside long mode: the reference carries no
+    /// width of its own, so it takes the mode's default operand size, and the
+    /// address size decides the r/m form and the `67` prefix. The same rule
+    /// values a stack operand. Bytes measured with GNU as 2.46.1 and llvm-mc
+    /// 21 for the same source.
+    #[test]
+    fn a_near_indirect_branch_follows_the_mode_outside_long_mode() {
+        #[rustfmt::skip]
+        let cases: &[(&str, &[u8])] = &[
+            (".code16\njmp *(%bx)\n",        &[0xff, 0x27]),
+            (".code16\ncall *(%bx)\n",       &[0xff, 0x17]),
+            (".code16\njmp *2(%bp,%si)\n",   &[0xff, 0x62, 0x02]),
+            (".code16\npush (%bx)\n",        &[0xff, 0x37]),
+            (".code16\njmp *0x1234\n",       &[0xff, 0x26, 0x34, 0x12]),
+            (".code16\ncall *0x1234\n",      &[0xff, 0x16, 0x34, 0x12]),
+            (".code32\njmp *(%bx)\n",        &[0x67, 0xff, 0x27]),
+            (".code32\ncall *(%bx)\n",       &[0x67, 0xff, 0x17]),
+            (".code32\npush (%eax)\n",       &[0xff, 0x30]),
+            (".code32\njmp *0x1234\n",       &[0xff, 0x25, 0x34, 0x12, 0x00, 0x00]),
+            (".code32\ncall *0x1234\n",      &[0xff, 0x15, 0x34, 0x12, 0x00, 0x00]),
+            ("jmp *(%rax)\n",                &[0xff, 0x20]),
+            ("push (%rax)\n",                &[0xff, 0x30]),
+        ];
+        for (src, want) in cases {
+            assert_eq!(assemble(src), *want, "{src}");
+        }
+        // Long mode has no 16-bit addressing, as GNU as also reports.
+        assert!(assemble_err("jmp *(%bx)\n").contains("address size 2"));
     }
 
     /// A symbol in a direct far branch's offset relocates in that field,
@@ -11097,6 +13264,107 @@ mod code_mode_tests {
         }
     }
 
+    /// The descriptor-table and machine-status ops against memory. The
+    /// operand names a 16-bit field, so the memory forms carry no
+    /// operand-size prefix whatever width the source wrote; a 32-bit register
+    /// destination is the 16-bit encoding without the 0x66.
+    #[test]
+    fn descriptor_table_memory_forms_match_gnu_as() {
+        for (src, want) in [
+            ("sldt (%rax)\n", &[0x0fu8, 0x00, 0x00][..]),
+            ("sldt (%r12)\n", &[0x41, 0x0f, 0x00, 0x04, 0x24]),
+            ("sldt 8(%rbx)\n", &[0x0f, 0x00, 0x43, 0x08]),
+            ("sldt %ax\n", &[0x66, 0x0f, 0x00, 0xc0]),
+            ("sldt %eax\n", &[0x0f, 0x00, 0xc0]),
+            ("str (%rax)\n", &[0x0f, 0x00, 0x08]),
+            ("str %ax\n", &[0x66, 0x0f, 0x00, 0xc8]),
+            ("lldt (%rax)\n", &[0x0f, 0x00, 0x10]),
+            ("lldt (%r13)\n", &[0x41, 0x0f, 0x00, 0x55, 0x00]),
+            ("lldt %ax\n", &[0x0f, 0x00, 0xd0]),
+            ("ltr (%rax)\n", &[0x0f, 0x00, 0x18]),
+            ("ltr %ax\n", &[0x0f, 0x00, 0xd8]),
+            ("smsw (%rax)\n", &[0x0f, 0x01, 0x20]),
+            ("smsw %ax\n", &[0x66, 0x0f, 0x01, 0xe0]),
+            ("smsw %eax\n", &[0x0f, 0x01, 0xe0]),
+            ("lmsw (%rax)\n", &[0x0f, 0x01, 0x30]),
+            ("lmsw %ax\n", &[0x0f, 0x01, 0xf0]),
+        ] {
+            assert_eq!(assemble(src), want, "{src}");
+        }
+    }
+
+    /// Packed integer absolute value, VEX and legacy. VEX.L follows the
+    /// destination; the source may be a register or memory.
+    #[test]
+    fn packed_absolute_value_matches_gnu_as() {
+        for (src, want) in [
+            (
+                "vpabsb %xmm13, %xmm13\n",
+                &[0xc4u8, 0x42, 0x79, 0x1c, 0xed][..],
+            ),
+            ("vpabsb %ymm13, %ymm13\n", &[0xc4, 0x42, 0x7d, 0x1c, 0xed]),
+            ("vpabsb %xmm0, %xmm15\n", &[0xc4, 0x62, 0x79, 0x1c, 0xf8]),
+            ("vpabsw %xmm1, %xmm2\n", &[0xc4, 0xe2, 0x79, 0x1d, 0xd1]),
+            ("vpabsd %xmm1, %xmm2\n", &[0xc4, 0xe2, 0x79, 0x1e, 0xd1]),
+            ("vpabsd %ymm1, %ymm2\n", &[0xc4, 0xe2, 0x7d, 0x1e, 0xd1]),
+            ("vpabsb (%rax), %xmm1\n", &[0xc4, 0xe2, 0x79, 0x1c, 0x08]),
+            (
+                "vpabsd (%r12), %ymm9\n",
+                &[0xc4, 0x42, 0x7d, 0x1e, 0x0c, 0x24],
+            ),
+            (
+                "pabsb %xmm13, %xmm13\n",
+                &[0x66, 0x45, 0x0f, 0x38, 0x1c, 0xed],
+            ),
+            ("pabsw %xmm1, %xmm2\n", &[0x66, 0x0f, 0x38, 0x1d, 0xd1]),
+            ("pabsd %xmm1, %xmm2\n", &[0x66, 0x0f, 0x38, 0x1e, 0xd1]),
+        ] {
+            assert_eq!(assemble(src), want, "{src}");
+        }
+    }
+
+    /// Packed shifts by a variable count. The count is `xmm/m128` at every
+    /// destination width, so it takes ModRM.rm and VEX.L follows the
+    /// destination and source; a ymm count has no encoding.
+    #[test]
+    fn variable_count_packed_shifts_match_gnu_as() {
+        for (src, want) in [
+            (
+                "vpslld %xmm11, %xmm8, %xmm15\n",
+                &[0xc4u8, 0x41, 0x39, 0xf2, 0xfb][..],
+            ),
+            ("vpsllw %xmm1, %xmm2, %xmm3\n", &[0xc5, 0xe9, 0xf1, 0xd9]),
+            ("vpsllq %xmm1, %xmm2, %xmm3\n", &[0xc5, 0xe9, 0xf3, 0xd9]),
+            ("vpsrlw %xmm1, %xmm2, %xmm3\n", &[0xc5, 0xe9, 0xd1, 0xd9]),
+            ("vpsrld %xmm1, %xmm2, %xmm3\n", &[0xc5, 0xe9, 0xd2, 0xd9]),
+            ("vpsrlq %xmm1, %xmm2, %xmm3\n", &[0xc5, 0xe9, 0xd3, 0xd9]),
+            ("vpsraw %xmm1, %xmm2, %xmm3\n", &[0xc5, 0xe9, 0xe1, 0xd9]),
+            ("vpsrad %xmm1, %xmm2, %xmm3\n", &[0xc5, 0xe9, 0xe2, 0xd9]),
+            ("vpslld %xmm1, %ymm2, %ymm3\n", &[0xc5, 0xed, 0xf2, 0xd9]),
+            ("vpsrld (%rax), %xmm2, %xmm3\n", &[0xc5, 0xe9, 0xd2, 0x18]),
+            ("vpsrld (%rax), %ymm2, %ymm3\n", &[0xc5, 0xed, 0xd2, 0x18]),
+            ("psrld %xmm1, %xmm2\n", &[0x66, 0x0f, 0xd2, 0xd1]),
+            ("psllw %xmm1, %xmm9\n", &[0x66, 0x44, 0x0f, 0xf1, 0xc9]),
+            ("psrlq %xmm9, %xmm10\n", &[0x66, 0x45, 0x0f, 0xd3, 0xd1]),
+            ("psrld (%rax), %xmm2\n", &[0x66, 0x0f, 0xd2, 0x10]),
+            // The immediate forms keep the destination in VEX.vvvv.
+            ("vpslld $5, %xmm2, %xmm3\n", &[0xc5, 0xe1, 0x72, 0xf2, 0x05]),
+            ("pslld $5, %xmm2\n", &[0x66, 0x0f, 0x72, 0xf2, 0x05]),
+        ] {
+            assert_eq!(assemble(src), want, "{src}");
+        }
+        // A ymm count is not encodable, and the shifts without a
+        // variable-count member keep requiring an immediate.
+        for (src, want) in [
+            ("vpslld %ymm1, %ymm2, %ymm3\n", "count is xmm"),
+            ("vpslldq %xmm1, %xmm2, %xmm3\n", "immediate expected"),
+            ("pslldq %xmm1, %xmm2\n", "immediate expected"),
+        ] {
+            let e = assemble_err(src);
+            assert!(e.contains(want), "{src}: {e}");
+        }
+    }
+
     /// `vmovd` / `vmovq` between an xmm lane and a general register or
     /// memory. VEX.W selects the width of a general-register transfer; the
     /// xmm and memory forms are W-ignored and take the two-byte VEX.
@@ -11181,10 +13449,13 @@ mod code_mode_tests {
         assert_eq!(names("call glob\n"), ["glob"]);
         assert_eq!(names("call wk\n"), ["wk"]);
         assert_eq!(names("lea glob(%rip), %rax\n"), ["glob"]);
-        // The relaxed jump resolves a global target and relocates a weak one.
+        // A relaxed jump binds a same-section global in place: the branch
+        // relaxes and no relocation survives. A weak target keeps both the
+        // long form and its relocation.
         assert!(names("jmp glob\n").is_empty());
         assert!(names("je glob\n").is_empty());
         assert_eq!(names("jmp wk\n"), ["wk"]);
+        assert_eq!(names("je wk\n"), ["wk"]);
         // A difference of two symbols folds whatever the binding, as GNU as
         // folds it: `.long glob - .` deposits a constant.
         assert!(names(".long glob - .\n").is_empty());
@@ -11224,6 +13495,29 @@ mod code_mode_tests {
         assert_eq!(assemble(".Lx:\nnop\njrcxz .Lx\n"), [0x90, 0xe3, 0xfd]);
         assert_eq!(assemble(".Lx:\nnop\nloope .Lx\n"), [0x90, 0xe1, 0xfd]);
         assert_eq!(assemble(".Lx:\nnop\nloopne .Lx\n"), [0x90, 0xe0, 0xfd]);
+        assert_eq!(assemble(".Lx:\nnop\nloopz .Lx\n"), [0x90, 0xe1, 0xfd]);
+        assert_eq!(assemble(".Lx:\nnop\nloopnz .Lx\n"), [0x90, 0xe0, 0xfd]);
+    }
+
+    /// The counter an `E3` branch name spells is the address size, so the
+    /// name off the mode's default takes the `67` prefix and a width the
+    /// mode cannot address is rejected.
+    #[test]
+    fn e3_branch_takes_the_address_size_of_its_counter() {
+        assert_eq!(assemble("x: jecxz x\n"), [0x67, 0xe3, 0xfd]);
+        assert_eq!(assemble(".code32\nx: jecxz x\n"), [0xe3, 0xfe]);
+        assert_eq!(assemble(".code32\nx: jcxz x\n"), [0x67, 0xe3, 0xfd]);
+        assert_eq!(assemble(".code16\nx: jcxz x\n"), [0xe3, 0xfe]);
+        assert_eq!(assemble(".code16\nx: jecxz x\n"), [0x67, 0xe3, 0xfd]);
+        assert!(assemble_err("x: jcxz x\n").contains("64-bit mode"));
+        assert!(assemble_err(".code32\nx: jrcxz x\n").contains("32-bit mode"));
+        assert!(assemble_err(".code16\nx: jrcxz x\n").contains("16-bit mode"));
+        // No wider form exists: a target out of rel8 range is an error, not
+        // a relaxation.
+        assert!(
+            assemble_err("x: .skip 200, 0x90\njecxz x\n").contains("out of range"),
+            "an out-of-range rel8 target must be diagnosed"
+        );
     }
 
     /// A `.code16` stub's symbol immediate takes the 16-bit field, and the
@@ -11710,5 +14004,140 @@ mod code_mode_tests {
         ] {
             assert_eq!(assemble(src), want, "{src}");
         }
+    }
+
+    /// Bespoke-path memory forms (x87, mxcsr, cmpxchg16b, the MMX / SSE
+    /// quadword moves, segment moves, crc32, and the indirect far branches)
+    /// follow the address size: a 16-bit address takes the 16-bit r/m
+    /// numbering and a non-default one the `67` prefix, ahead of any
+    /// operand-size or mandatory prefix. Bytes measured with GNU as 2.46.1
+    /// and clang for the same source.
+    #[test]
+    fn bespoke_memory_forms_follow_the_address_size() {
+        #[rustfmt::skip]
+        let cases: &[(&str, &[u8])] = &[
+            (".code16\nljmp *(%bx)\n",           &[0xff, 0x2f]),
+            (".code16\nljmpw *(%bx)\n",          &[0xff, 0x2f]),
+            (".code16\nlcall *8(%bp,%si)\n",     &[0xff, 0x5a, 0x08]),
+            (".code16\nlcalll *(%bx)\n",         &[0x66, 0xff, 0x1f]),
+            (".code16\nljmpl *(%eax)\n",         &[0x67, 0x66, 0xff, 0x28]),
+            (".code16\nfnstsw (%bx)\n",          &[0xdd, 0x3f]),
+            (".code16\nfnstsw 2(%bx,%si)\n",     &[0xdd, 0x78, 0x02]),
+            (".code16\nfnstcw -2(%bp)\n",        &[0xd9, 0x7e, 0xfe]),
+            (".code16\nfldl (%si)\n",            &[0xdd, 0x04]),
+            (".code16\nfstpl 6(%di)\n",          &[0xdd, 0x5d, 0x06]),
+            (".code16\nfistpl -4(%bp,%di)\n",    &[0xdb, 0x5b, 0xfc]),
+            (".code16\nldmxcsr (%bx,%si)\n",     &[0x0f, 0xae, 0x10]),
+            (".code16\nstmxcsr (%bp)\n",         &[0x0f, 0xae, 0x5e, 0x00]),
+            (".code32\nfnstsw (%bx)\n",          &[0x67, 0xdd, 0x3f]),
+            (".code32\nlcall *8(%bp,%si)\n",     &[0x67, 0xff, 0x5a, 0x08]),
+            (".code32\nljmp *(%bx)\n",           &[0x67, 0xff, 0x2f]),
+            ("fnstsw (%eax)\n",                  &[0x67, 0xdd, 0x38]),
+            ("ldmxcsr (%ebx)\n",                 &[0x67, 0x0f, 0xae, 0x13]),
+            ("cmpxchg16b (%ebx)\n",              &[0x67, 0x48, 0x0f, 0xc7, 0x0b]),
+            ("movq (%ebx), %mm0\n",              &[0x67, 0x0f, 0x6f, 0x03]),
+            ("movq %xmm3, (%edi)\n",             &[0x67, 0x66, 0x0f, 0xd6, 0x1f]),
+            ("movq (%ecx), %xmm2\n",             &[0x67, 0xf3, 0x0f, 0x7e, 0x11]),
+            ("mov %ds, (%eax)\n",                &[0x67, 0x8c, 0x18]),
+            ("mov (%eax), %ds\n",                &[0x67, 0x8e, 0x18]),
+            ("crc32w (%ebx), %ecx\n",            &[0x67, 0x66, 0xf2, 0x0f, 0x38, 0xf1, 0x0b]),
+        ];
+        for (src, want) in cases {
+            assert_eq!(assemble(src), *want, "{src}");
+        }
+        // The 16-bit r/m forms carry no scale and only bx / bp with si / di.
+        assert!(assemble_err(".code16\nfnstsw (%bx,%bp)\n").contains("bx / bp with si / di"));
+        assert!(assemble_err(".code16\nfnstsw (%bx,%si,2)\n").contains("no scale"));
+    }
+
+    /// `mov` between a segment register and a GPR moves 16 bits: 8C writes
+    /// and zero-extends, 8E reads. REX.W is unused in both directions, and
+    /// 8E's operand size is the opcode's rather than the register's, so only
+    /// an 8C with a 16-bit destination takes the `66` prefix. The GDT reload
+    /// in `arch/x86/kernel/relocate_kernel_64.S` writes the 64-bit pair.
+    /// Bytes measured with GNU as 2.46.1 for the same source.
+    #[test]
+    fn segment_register_moves_take_no_rex_w() {
+        #[rustfmt::skip]
+        let cases: &[(&str, &[u8])] = &[
+            ("mov %ds, %rax\n",      &[0x8c, 0xd8]),
+            ("mov %rax, %ds\n",      &[0x8e, 0xd8]),
+            ("mov %ds, %eax\n",      &[0x8c, 0xd8]),
+            ("mov %eax, %ds\n",      &[0x8e, 0xd8]),
+            ("mov %ds, %ax\n",       &[0x66, 0x8c, 0xd8]),
+            ("mov %ax, %ds\n",       &[0x8e, 0xd8]),
+            ("mov %fs, %r8\n",       &[0x41, 0x8c, 0xe0]),
+            ("mov %fs, %r8d\n",      &[0x41, 0x8c, 0xe0]),
+            ("mov %fs, %r8w\n",      &[0x66, 0x41, 0x8c, 0xe0]),
+            ("mov %r8, %fs\n",       &[0x41, 0x8e, 0xe0]),
+            ("mov %r8w, %fs\n",      &[0x41, 0x8e, 0xe0]),
+            ("mov %gs, %rbx\n",      &[0x8c, 0xeb]),
+            ("mov %rbx, %gs\n",      &[0x8e, 0xeb]),
+            ("mov %ds, (%rax)\n",    &[0x8c, 0x18]),
+            ("mov (%rax), %ds\n",    &[0x8e, 0x18]),
+            ("mov %ds, (%r9)\n",     &[0x41, 0x8c, 0x19]),
+        ];
+        for (src, want) in cases {
+            assert_eq!(assemble(src), *want, "{src}");
+        }
+    }
+
+    /// An explicit size suffix on `push` / `pop` selects the stack operand
+    /// size in every mode: the `66` prefix when it is not the mode default,
+    /// the immediate field width, and the shortest immediate form. Long mode
+    /// has no 32-bit stack operand and the other modes no 64-bit one. Bytes
+    /// measured with GNU as 2.46.1 and clang for the same source.
+    #[test]
+    fn push_pop_suffix_selects_the_stack_operand_size() {
+        #[rustfmt::skip]
+        let cases: &[(&str, &[u8])] = &[
+            ("pushw (%rax)\n",           &[0x66, 0xff, 0x30]),
+            ("popw (%rax)\n",            &[0x66, 0x8f, 0x00]),
+            (".code16\npushl $0\n",      &[0x66, 0x6a, 0x00]),
+            (".code16\npushw $0\n",      &[0x6a, 0x00]),
+            (".code32\npushw $0\n",      &[0x66, 0x6a, 0x00]),
+            ("pushw $0\n",               &[0x66, 0x6a, 0x00]),
+            ("pushq $0\n",               &[0x6a, 0x00]),
+            ("pushw $-129\n",            &[0x66, 0x68, 0x7f, 0xff]),
+            (".code16\npushw $0x1234\n", &[0x68, 0x34, 0x12]),
+            (".code16\npush $0x1234\n",  &[0x68, 0x34, 0x12]),
+            (".code16\npushl $0x12345\n", &[0x66, 0x68, 0x45, 0x23, 0x01, 0x00]),
+            (".code16\npushw (%bx)\n",   &[0xff, 0x37]),
+            (".code16\npushl (%bx)\n",   &[0x66, 0xff, 0x37]),
+            (".code16\npopl (%bx)\n",    &[0x66, 0x8f, 0x07]),
+            (".code32\npushw (%eax)\n",  &[0x66, 0xff, 0x30]),
+            (".code16\npushw %ax\n",     &[0x50]),
+            (".code16\npushl %eax\n",    &[0x66, 0x50]),
+            (".code16\npopl %eax\n",     &[0x66, 0x58]),
+            ("pushw %ax\n",              &[0x66, 0x50]),
+            ("popw %ax\n",               &[0x66, 0x58]),
+        ];
+        for (src, want) in cases {
+            assert_eq!(assemble(src), *want, "{src}");
+        }
+        for src in [
+            "pushl $0\n",
+            ".code16\npushq $0\n",
+            ".code32\npushq $0\n",
+            ".code16\npushq %rax\n",
+        ] {
+            assert!(assemble_err(src).contains("not encodable"), "{src}");
+        }
+    }
+
+    /// A `push` symbol immediate's field is the spelled operand size wide,
+    /// so its relocation is too.
+    #[test]
+    fn push_symbol_immediate_field_follows_the_operand_size() {
+        let s = alloc::string::String::from("s");
+        let (bytes, relocs) = assemble_relocs(".code16\npushw $s\n");
+        assert_eq!(bytes, [0x68, 0, 0]);
+        assert_eq!(relocs, [(1, 2, false, s.clone(), 0)]);
+        let (bytes, relocs) = assemble_relocs(".code16\npushl $s\n");
+        assert_eq!(bytes, [0x66, 0x68, 0, 0, 0, 0]);
+        assert_eq!(relocs, [(2, 4, false, s.clone(), 0)]);
+        let (bytes, relocs) = assemble_relocs("pushw $s\n");
+        assert_eq!(bytes, [0x66, 0x68, 0, 0]);
+        assert_eq!(relocs, [(2, 2, false, s, 0)]);
     }
 }

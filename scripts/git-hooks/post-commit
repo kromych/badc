@@ -37,22 +37,23 @@ def main() -> int:
             text=True,
         )
         root = Path(out.stdout.strip())
-        subprocess.run(
-            [sys.executable, str(root / "scripts" / "snapshots.py")],
-            cwd=root,
-            check=False,
-            stdout=subprocess.DEVNULL,
-        )
+        # `--check` reports added and removed snapshots as well as modified
+        # ones; a fixture committed without its snapshots leaves untracked
+        # files that `git diff` does not see.
         proc = subprocess.run(
-            ["git", "diff", "--quiet", "tests/snapshots/"],
+            [sys.executable, str(root / "scripts" / "snapshots.py"), "--check"],
             cwd=root,
+            capture_output=True,
+            text=True,
         )
         if proc.returncode != 0:
+            print(proc.stdout, end="")
+            print(proc.stderr, end="")
             print(
-                "\n[post-commit] tests/snapshots/ drift detected. Inspect with:\n"
-                "    git diff tests/snapshots/\n"
+                "\n[post-commit] tests/snapshots/ is not clean. Inspect with:\n"
+                "    git status --porcelain tests/snapshots/\n"
                 "Then fold into the previous commit:\n"
-                "    git add tests/snapshots/ && git commit --amend --no-edit\n"
+                "    git add -A tests/snapshots/ && git commit --amend --no-edit\n"
                 "or land a follow-up snapshot-only commit."
             )
     finally:

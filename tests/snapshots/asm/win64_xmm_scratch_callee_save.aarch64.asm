@@ -10,6 +10,8 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#0x1
+               	brk	#0x1
+               	brk	#0x1
 
 <rt>:
                	stp	x29, x30, [sp, #-0x10]!
@@ -27,15 +29,15 @@ Disassembly of section .text:
                	stp	d8, d9, [sp, #-0x50]!
                	stp	d10, d11, [sp, #0x10]
                	str	d12, [sp, #0x20]
-               	str	x20, [sp, #0x30]
+               	stp	x20, x21, [sp, #0x30]
                	stp	x29, x30, [sp, #0x40]
                	add	x29, sp, #0x40
-               	mov	x0, #0x3ff0000000000000 // =4607182418800017408
-               	fmov	d0, x0
+               	mov	x21, #0x3ff0000000000000 // =4607182418800017408
+               	fmov	d0, x21
                	bl	<addr>
                	fmov	d8, d0
-               	mov	x0, #0x4000000000000000 // =4611686018427387904
-               	fmov	d0, x0
+               	mov	x20, #0x4000000000000000 // =4611686018427387904
+               	fmov	d0, x20
                	bl	<addr>
                	fmov	d9, d0
                	mov	x0, #0x4008000000000000 // =4613937818241073152
@@ -56,27 +58,24 @@ Disassembly of section .text:
                	fmul	d1, d11, d12
                	fmadd	d1, d8, d9, d1
                	fmadd	d0, d10, d0, d1
-               	fcvtzs	x1, d0
-               	mov	x0, #0x4000000000000000 // =4611686018427387904
-               	fmov	d17, x0
-               	fmadd	d0, d0, d17, d8
                	fcvtzs	x0, d0
-               	sxtw	x1, w1
-               	cmp	x1, #0x2c
+               	fmov	d17, x20
+               	fmadd	d0, d0, d17, d8
+               	fcvtzs	x1, d0
+               	cmp	w0, #0x2c
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x40]
-               	ldr	x20, [sp, #0x30]
+               	ldp	x20, x21, [sp, #0x30]
                	ldr	d12, [sp, #0x20]
                	ldp	d10, d11, [sp, #0x10]
                	ldp	d8, d9, [sp], #0x50
                	ret
-               	sxtw	x0, w0
-               	cmp	x0, #0x59
+               	cmp	w1, #0x59
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x40]
-               	ldr	x20, [sp, #0x30]
+               	ldp	x20, x21, [sp, #0x30]
                	ldr	d12, [sp, #0x20]
                	ldp	d10, d11, [sp, #0x10]
                	ldp	d8, d9, [sp], #0x50
@@ -85,53 +84,49 @@ Disassembly of section .text:
                	fmov	d0, x0
                	bl	<addr>
                	fmov	d8, d0
-               	mov	x0, #0x3ff0000000000000 // =4607182418800017408
-               	fmov	d0, x0
+               	fmov	d0, x21
                	bl	<addr>
                	fmov	d9, d0
-               	mov	x20, #0x0               // =0
-               	fmov	d0, x20
+               	mov	x21, #0x0               // =0
+               	fmov	d0, x21
                	bl	<addr>
                	fmov	d11, d0
-               	fmov	d0, x20
+               	fmov	d0, x21
                	bl	<addr>
                	fmov	d12, d0
-               	fmov	d0, x20
+               	fmov	d0, x21
                	bl	<addr>
                	fmov	d10, d0
-               	fmov	d0, x20
+               	fmov	d0, x21
                	bl	<addr>
                	fmul	d1, d11, d12
                	fmadd	d1, d8, d9, d1
                	fmadd	d0, d10, d0, d1
-               	fcvtzs	x1, d0
-               	mov	x0, #0x4000000000000000 // =4611686018427387904
-               	fmov	d17, x0
-               	fmadd	d0, d0, d17, d8
                	fcvtzs	x0, d0
-               	sxtw	x1, w1
-               	cmp	x1, #0xa
+               	fmov	d17, x20
+               	fmadd	d0, d0, d17, d8
+               	fcvtzs	x1, d0
+               	cmp	w0, #0xa
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp, #0x40]
-               	ldr	x20, [sp, #0x30]
+               	ldp	x20, x21, [sp, #0x30]
                	ldr	d12, [sp, #0x20]
                	ldp	d10, d11, [sp, #0x10]
                	ldp	d8, d9, [sp], #0x50
                	ret
-               	sxtw	x0, w0
-               	cmp	x0, #0x1e
+               	cmp	w1, #0x1e
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp, #0x40]
-               	ldr	x20, [sp, #0x30]
+               	ldp	x20, x21, [sp, #0x30]
                	ldr	d12, [sp, #0x20]
                	ldp	d10, d11, [sp, #0x10]
                	ldp	d8, d9, [sp], #0x50
                	ret
-               	mov	x0, #0x0                // =0
+               	mov	x0, x21
                	ldp	x29, x30, [sp, #0x40]
-               	ldr	x20, [sp, #0x30]
+               	ldp	x20, x21, [sp, #0x30]
                	ldr	d12, [sp, #0x20]
                	ldp	d10, d11, [sp, #0x10]
                	ldp	d8, d9, [sp], #0x50

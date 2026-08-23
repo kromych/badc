@@ -14,7 +14,8 @@ end to end. x86_64 uses the 8259 PIC + 8254 PIT + an IDT (exercising naked
 prologue suppression, explicit-register operands, push/pop, immediate port I/O,
 and a direct `call` to a C symbol); AArch64 uses the GICv2 + the virtual generic
 timer + an EL1 vector table, reaching the scheduler through TPIDR_EL1 and a
-`blr`.
+`blr`. A third lane rebuilds preempt.c with its fault injection enabled and
+requires the unhandled-vector diagnostic on the serial line.
 
 Override the badc binary via `$BADC` (default: `target/release/badc[.exe]`).
 The boot check is skipped (build-only) when QEMU or the firmware is missing.
@@ -41,10 +42,13 @@ TARGETS = [
     ("windows-arm64", "aarch64", "qemu-system-aarch64"),
 ]
 
-# (kernel source, {arch: expected serial markers}).
+# (label, kernel source, extra badc flags, {arch: expected serial markers}).
+# An arch missing from the marker map is not built for that lane.
 KERNELS = [
     (
+        "kernel",
         "kernel.c",
+        [],
         {
             "x64": ["badc kernel: hello", "cpuid vendor:",
                     "bswap: 0x0807060504030201", "rawbyte: ok", "BADC-KERNEL-OK"],
@@ -53,7 +57,9 @@ KERNELS = [
         },
     ),
     (
+        "preempt",
         "preempt.c",
+        [],
         # Both arches now round-robin three threads under a timer ISR.
         {
             arch: ["BADC-PREEMPT: start", "[thread 0]", "[thread 1]",
@@ -61,6 +67,15 @@ KERNELS = [
                    "BADC-PREEMPT-OK"]
             for arch in ("x64", "aarch64")
         },
+    ),
+    (
+        # The unhandled-vector diagnostic: the guest raises #GP once its IDT is
+        # installed and must name the vector and the error code instead of
+        # triple-faulting. x86_64 only; the AArch64 path has no IDT.
+        "preempt-fault",
+        "preempt.c",
+        ["-DPREEMPT_FAULT_INJECT"],
+        {"x64": ["BADC-PREEMPT: unhandled vector 13 error 0x1234 rip 0x"]},
     ),
 ]
 
@@ -91,16 +106,17 @@ def main() -> int:
     log(f"badc={badc}")
     failures = 0
     with tempfile.TemporaryDirectory(prefix="badc-kernel-") as work:
-        for source, markers in KERNELS:
-            stem = Path(source).stem
+        for label, source, defines, markers in KERNELS:
             for target, arch, qemu in TARGETS:
+                if arch not in markers:
+                    continue
                 # Both optimization levels: -O runs the SSA/inliner pipeline the
                 # default build skips, which the naked ISR and the exact context
                 # frame must survive unchanged.
                 for opt_label, opt_flags in (("O0", []), ("O", ["-O"])):
-                    tag = f"{stem}/{arch}/{opt_label}"
-                    efi = Path(work) / f"{stem}-{arch}-{opt_label}.efi"
-                    cmd = [str(badc), *opt_flags, f"--target={target}",
+                    tag = f"{label}/{arch}/{opt_label}"
+                    efi = Path(work) / f"{label}-{arch}-{opt_label}.efi"
+                    cmd = [str(badc), *opt_flags, *defines, f"--target={target}",
                            str(HERE / source), "-o", str(efi)]
                     r = subprocess.run(cmd, capture_output=True, text=True)
                     if r.returncode != 0 or not efi.is_file():

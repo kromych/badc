@@ -9,6 +9,21 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <sys_alias_two>:
                	movabsq	$-0x26, %rax
@@ -16,6 +31,6 @@ Disassembly of section .text:
 
 <main>:
                	xorq	%rax, %rax
-               	xorq	%rax, %rax
+               	movq	%rax, %rcx
                	retq
                	addb	%al, (%rax)

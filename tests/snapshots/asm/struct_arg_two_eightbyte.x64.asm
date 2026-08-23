@@ -9,6 +9,21 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <main>:
                	movl	$0x1111, %ecx           # imm = 0x1111
@@ -24,11 +39,11 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movq	%rdx, (%rax)
                	leaq	<rip>, %rax
-               	movl	$0x6, %esi
-               	movl	%esi, (%rax)
+               	movl	$0x6, %edi
+               	movl	%edi, (%rax)
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
-               	cmpq	$0x9, %rax
+               	cmpl	$0x9, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	retq
@@ -43,7 +58,7 @@ Disassembly of section .text:
                	movl	(%rax), %eax
                	xorq	$0x4, %rax
                	movl	%eax, %eax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -61,7 +76,7 @@ Disassembly of section .text:
                	movl	(%rax), %eax
                	xorq	$0x6, %rax
                	movl	%eax, %eax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -71,13 +86,11 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movq	%rcx, (%rax)
                	leaq	<rip>, %rax
-               	movl	$0x4, %ecx
-               	movl	%ecx, (%rax)
+               	movl	%esi, (%rax)
                	leaq	<rip>, %rax
                	movq	%rdx, (%rax)
                	leaq	<rip>, %rax
-               	movl	$0x6, %ecx
-               	movl	%ecx, (%rax)
+               	movl	%edi, (%rax)
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	cmpq	$0x1111, %rax           # imm = 0x1111
@@ -89,7 +102,7 @@ Disassembly of section .text:
                	movl	(%rax), %eax
                	xorq	$0x4, %rax
                	movl	%eax, %eax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -107,7 +120,7 @@ Disassembly of section .text:
                	movl	(%rax), %eax
                	xorq	$0x6, %rax
                	movl	%eax, %eax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

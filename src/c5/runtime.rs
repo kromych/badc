@@ -36,10 +36,16 @@ pub fn embedded_compiler_rt() -> &'static [(&'static str, &'static str)] {
     EMBEDDED_COMPILER_RT
 }
 
-pub(super) const EMBEDDED_COMPILER_RT: &[(&str, &str)] = &[(
-    "compiler_rt.c",
-    include_str!("../../libc/lib/compiler_rt.c"),
-)];
+pub(super) const EMBEDDED_COMPILER_RT: &[(&str, &str)] = &[
+    (
+        "compiler_rt.c",
+        include_str!("../../libc/lib/compiler_rt.c"),
+    ),
+    (
+        "stack_protector.c",
+        include_str!("../../libc/lib/stack_protector.c"),
+    ),
+];
 
 /// C-library sources joined to the link the same way, for entry points a
 /// bundled header declares on a target whose platform library has no
@@ -51,5 +57,7 @@ pub fn embedded_libc() -> &'static [(&'static str, &'static str)] {
 
 pub(super) const EMBEDDED_LIBC: &[(&str, &str)] = &[
     ("pattern.c", include_str!("../../libc/lib/pattern.c")),
+    ("stdio_ext.c", include_str!("../../libc/lib/stdio_ext.c")),
     ("string_ext.c", include_str!("../../libc/lib/string_ext.c")),
+    ("unistd_ext.c", include_str!("../../libc/lib/unistd_ext.c")),
 ];

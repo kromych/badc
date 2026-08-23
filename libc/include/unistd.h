@@ -428,13 +428,20 @@ int dup2(int oldfd, int newfd);
 #ifdef __linux__
 int dup3(int oldfd, int newfd, int flags);
 int pipe2(int *pipefd, int flags);
-long copy_file_range(int fd_in, long *off_in, int fd_out, long *off_out,
-                     unsigned long len, unsigned int flags);
 int setresuid(int ruid, int euid, int suid);
 int setresgid(int rgid, int egid, int sgid);
 int getresuid(int *ruid, int *euid, int *suid);
 int getresgid(int *rgid, int *egid, int *sgid);
 #endif
+// Linux system call; a null `off_in` / `off_out` copies from and to the
+// descriptors' own offsets and advances them, a non-null one names the
+// starting position, leaves the descriptor offset alone and is advanced
+// by the byte count returned. Bound to the Linux C library; elsewhere
+// `libc/lib/unistd_ext.c` supplies the same read/write emulation glibc
+// falls back to when the kernel does not implement the call, and joins
+// the link on demand.
+long copy_file_range(int fd_in, long *off_in, int fd_out, long *off_out,
+                     unsigned long len, unsigned int flags);
 int pipe(int *fds);
 int fork();
 int vfork();

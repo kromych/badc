@@ -1939,10 +1939,10 @@ mod differential {
     }
 
     fn clang_word_with(itxt: &str, args: &[&str]) -> Option<u32> {
-        let dir = std::env::temp_dir();
-        let stem = alloc::format!("badc-a64-{:x}", hash(itxt.as_bytes()));
-        let s = dir.join(alloc::format!("{stem}.s"));
-        let o = dir.join(alloc::format!("{stem}.o"));
+        let stem = alloc::format!("{:x}", hash(itxt.as_bytes()));
+        let base = crate::c5::tests::unique_temp_path("badc-a64", &stem, "");
+        let s = base.with_extension("s");
+        let o = base.with_extension("o");
         std::fs::write(&s, alloc::format!(".text\n{itxt}\n")).ok()?;
         let out = Command::new("clang")
             .args(args)

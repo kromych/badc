@@ -495,6 +495,18 @@ pub(crate) fn enc_mul(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     enc_rrr(0x9B00_7C00, rd, rn, rm)
 }
 
+/// `SMULH <Xd>, <Xn>, <Xm>` -- high 64 bits of the signed 64x64
+/// product.
+pub(crate) fn enc_smulh(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    enc_rrr(0x9B40_7C00, rd, rn, rm)
+}
+
+/// `UMULH <Xd>, <Xn>, <Xm>` -- high 64 bits of the unsigned 64x64
+/// product.
+pub(crate) fn enc_umulh(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    enc_rrr(0x9BC0_7C00, rd, rn, rm)
+}
+
 /// `SDIV <Xd>, <Xn>, <Xm>` -- signed integer division. Pairs with
 /// [`enc_msub`] when computing modulo.
 pub(crate) fn enc_sdiv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
@@ -508,15 +520,21 @@ pub(crate) fn enc_udiv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     enc_rrr(0x9AC0_0800, rd, rn, rm)
 }
 
+/// Four-register multiply-accumulate encoding shared by MADD / MSUB.
+fn enc_mul_acc(base: u32, rd: Reg, rn: Reg, rm: Reg, ra: Reg) -> u32 {
+    base | ((rm.0 as u32) << 16) | ((ra.0 as u32) << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
 /// `MSUB <Xd>, <Xn>, <Xm>, <Xa>` -- `Xd = Xa - (Xn * Xm)`. The
 /// AArch64 idiom for `mod` is `sdiv q, a, b ; msub r, q, b, a`,
 /// which yields `r = a - (a/b)*b`.
 pub(crate) fn enc_msub(rd: Reg, rn: Reg, rm: Reg, ra: Reg) -> u32 {
-    0x9B00_8000
-        | ((rm.0 as u32) << 16)
-        | ((ra.0 as u32) << 10)
-        | ((rn.0 as u32) << 5)
-        | (rd.0 as u32)
+    enc_mul_acc(0x9B00_8000, rd, rn, rm, ra)
+}
+
+/// `MADD <Xd>, <Xn>, <Xm>, <Xa>` -- `Xd = Xa + (Xn * Xm)`.
+pub(crate) fn enc_madd(rd: Reg, rn: Reg, rm: Reg, ra: Reg) -> u32 {
+    enc_mul_acc(0x9B00_0000, rd, rn, rm, ra)
 }
 
 /// `LSLV <Xd>, <Xn>, <Xm>` -- variable left shift, masking the shift
@@ -539,6 +557,11 @@ pub(crate) fn enc_asrv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
 /// `RORV <Xd>, <Xn>, <Xm>` -- variable rotate right.
 pub(crate) fn enc_rorv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     enc_rrr(0x9AC0_2C00, rd, rn, rm)
+}
+
+/// `CLZ <Xd>, <Xn>` -- count leading zero bits; 64 for a zero source.
+pub(crate) fn enc_clz(rd: Reg, rn: Reg) -> u32 {
+    0xDAC0_1000 | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
 /// `ROR <Xd>, <Xs>, #<shift>` -- bit-rotate-right by constant. Encoded
@@ -687,6 +710,19 @@ pub(crate) fn enc_fcmp_d(dn: u8, dm: u8) -> u32 {
 pub(crate) fn enc_fmov_w_to_s(sd: u8, wn: Reg) -> u32 {
     debug_assert!(sd < 32);
     0x1E27_0000 | ((wn.0 as u32) << 5) | (sd as u32)
+}
+
+/// `INS <Vd>.<T>[index], <Wn>` -- insert the low `esize` bytes of a
+/// general register into one element of a vector register, leaving the
+/// other elements alone. `esize` is 1, 2, 4 or 8. Composes a vector
+/// value from narrower loads when the source address does not satisfy
+/// the full width.
+pub(crate) fn enc_ins_gen(vd: u8, esize: u32, index: u32, wn: Reg) -> u32 {
+    debug_assert!(vd < 32);
+    debug_assert!(esize.is_power_of_two() && esize <= 8);
+    debug_assert!(index * esize < 16);
+    let imm5 = (index << (esize.trailing_zeros() + 1)) | esize;
+    0x4E00_1C00 | (imm5 << 16) | ((wn.0 as u32) << 5) | (vd as u32)
 }
 
 /// `FMOV <Sd>, <Sn>` -- copy a single-precision register. Used to
@@ -839,6 +875,14 @@ pub(crate) fn enc_mrs_tpidr_el0(rt: Reg) -> u32 {
     0xD53B_D040 | (rt.0 as u32)
 }
 
+/// `MRS <Xt>, <systemreg>`, where `field` is the register's `mrs`/`msr`
+/// selector packed as `op0<<14 | op1<<11 | CRn<<7 | CRm<<3 | op2` (the
+/// form [`crate::c5::codegen::stack_guard_sysreg`] returns). The
+/// instruction carries the low 15 bits of the field at bits 19..5.
+pub(crate) fn enc_mrs(rt: Reg, field: u16) -> u32 {
+    0xD530_0000 | ((u32::from(field) & 0x7FFF) << 5) | (rt.0 as u32)
+}
+
 /// `LDR <Dt>, [<Xn|SP>, #imm]` -- 64-bit unsigned-offset FP/SIMD
 /// load. The offset is byte-addressed but encoded as `imm/8`; the
 /// caller passes raw bytes (a multiple of 8, up to 32760).
@@ -932,6 +976,18 @@ pub(crate) fn enc_cmp_reg(rn: Reg, rm: Reg) -> u32 {
     0xEB00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (Reg::SP.0 as u32)
 }
 
+/// `CMP <Wn>, <Wm>` -- the 32-bit form of [`enc_cmp_reg`]. The operands
+/// are read as W registers, so bits 32..63 do not reach the flags.
+pub(crate) fn enc_cmp_reg_w(rn: Reg, rm: Reg) -> u32 {
+    0x6B00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (Reg::SP.0 as u32)
+}
+
+/// `SUBS <Wd>, <Wn|WSP>, #imm12` -- the 32-bit form of [`enc_subs_imm`].
+pub(crate) fn enc_subs_imm_w(rd: Reg, rn: Reg, imm12: u32) -> u32 {
+    debug_assert!(imm12 < 4096, "subs imm: {imm12} > 12-bit max");
+    0x7100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
 /// AArch64 condition codes -- the 4-bit field that follows comparisons
 /// and conditional moves. Names match the ARM ARM. The Mi/Ls
 /// variants are the FP-comparison flavour: after `FCMP`, the
@@ -948,6 +1004,9 @@ pub(crate) enum Cond {
     Lo = 0x3,
     /// FP "less than" -- N==1, set by FCMP when Dn < Dm (ordered).
     Mi = 0x4,
+    /// N==0, the exact complement of `Mi`; taken by a `Bz`-fused FP
+    /// `<` branch, including the unordered case FCMP leaves N clear.
+    Pl = 0x5,
     /// Unsigned `>`. After SUBS, set when C==1 && Z==0.
     Hi = 0x8,
     /// FP "less than or equal" / unsigned `<=` -- C==0 || Z==1.
@@ -972,8 +1031,10 @@ impl Cond {
     /// variant. Used by the cmp+branch fusion peephole: when a
     /// `BinOp::Lt` is followed by a `Terminator::Bz`, the
     /// branch fires on "(lhs < rhs) is false", i.e. "lhs >= rhs"
-    /// -- so `Cond::Lt.flip() == Cond::Ge`.
-    fn flip(self) -> Cond {
+    /// -- so `Cond::Lt.flip() == Cond::Ge`. The complement is exact
+    /// over the NZCV states, so it also inverts an FCMP condition
+    /// correctly for the unordered (NaN) state.
+    pub(crate) fn flip(self) -> Cond {
         match self {
             Cond::Eq => Cond::Ne,
             Cond::Ne => Cond::Eq,
@@ -985,11 +1046,8 @@ impl Cond {
             Cond::Hs => Cond::Lo,
             Cond::Hi => Cond::Ls,
             Cond::Ls => Cond::Hi,
-            // Mi <-> Pl -- FP comparisons go through the cset-only
-            // path so the cmp+branch fusion peephole shouldn't
-            // reach here, but map to the closest integer flip in
-            // case it does.
-            Cond::Mi => Cond::Ge,
+            Cond::Mi => Cond::Pl,
+            Cond::Pl => Cond::Mi,
         }
     }
 }
@@ -1061,6 +1119,23 @@ pub(crate) const BTI_C: u32 = 0xD503_245F;
 /// `BTI J` -- landing pad accepting a `BR` through any register
 /// (PSTATE.BTYPE 0b11) as well as 0b01. `HINT #36`.
 pub(crate) const BTI_J: u32 = 0xD503_249F;
+
+/// `PACIASP` -- sign x30 with key A, modifier sp. `HINT #25`, so it
+/// decodes as a NOP where FEAT_PAuth is absent. Also a landing pad
+/// for PSTATE.BTYPE 0b01 / 0b10, which is every way a function entry
+/// is reached indirectly (Arm ARM D24.2.2).
+pub(crate) const PACIASP: u32 = 0xD503_233F;
+
+/// `AUTIASP` -- authenticate x30 with key A, modifier sp. `HINT #29`.
+/// The modifier must match the one `PACIASP` signed with, so sp has to
+/// be back at its function-entry value.
+pub(crate) const AUTIASP: u32 = 0xD503_23BF;
+
+/// `XPACLRI` -- strip the authentication code from x30. `HINT #7`, so it
+/// decodes as a NOP where FEAT_PAuth is absent and leaves an unsigned
+/// pointer unchanged. x30 is the only register the hint form reaches;
+/// stripping any other needs `XPACI <Xd>`, which requires FEAT_PAuth.
+pub(crate) const XPACLRI: u32 = 0xD503_20FF;
 
 /// `BR <Xn>` -- branch (no link) to the address in `Xn`. Used by
 /// the `Terminator::TailExt` lowering to forward control to the
@@ -1451,6 +1526,26 @@ pub(crate) fn enc_asr_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {
     0x9340_FC00 | immr | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
+/// `REV <Xd>, <Xn>` -- reverse the 8 bytes.
+pub(crate) fn enc_rev64(rd: Reg, rn: Reg) -> u32 {
+    0xDAC0_0C00 | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `REV <Wd>, <Wn>` -- reverse the low 4 bytes; the 32-bit write
+/// zero-extends into `Xd`.
+pub(crate) fn enc_rev32(rd: Reg, rn: Reg) -> u32 {
+    0x5AC0_0800 | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `LSR <Wd>, <Wn>, #shift` -- 32-bit logical shift right by
+/// immediate. Encoded as `UBFM Wd, Wn, #shift, #31`; the 32-bit
+/// write zero-extends into `Xd`.
+pub(crate) fn enc_lsr32_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {
+    debug_assert!(shift < 32, "lsr32 imm: {shift} >= 32");
+    let immr = ((shift as u32) & 31) << 16;
+    0x5300_7C00 | immr | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
 /// `SXTW <Xd>, <Wn>` -- sign-extend low 32 bits of `Wn` into `Xd`.
 /// Alias of `SBFM Xd, Xn, #0, #31`. Used by the sxtw peephole that
 /// folds c5's `Shl 32; Shr 32` sign-narrow shape into one inst.
@@ -1520,6 +1615,13 @@ pub(crate) fn enc_adrp(rd: Reg, imm21: i32) -> u32 {
     let immlo = v & 0x3;
     let immhi = (v >> 2) & 0x7_FFFF;
     0x9000_0000 | (immlo << 29) | (immhi << 5) | (rd.0 as u32)
+}
+
+/// Instruction count [`load_imm64`] issues for `value`: one per
+/// non-zero 16-bit lane, and one `movz` for zero.
+pub(crate) fn imm64_insts(value: u64) -> u32 {
+    let lanes = (0..4).filter(|i| (value >> (i * 16)) & 0xFFFF != 0).count();
+    lanes.max(1) as u32
 }
 
 /// Build an arbitrary 64-bit immediate into `rd` using a `movz` plus
@@ -1642,21 +1744,22 @@ pub(crate) fn lower(
     mode: super::LowerMode,
 ) -> Result<Build, C5Error> {
     // Asm label numbering restarts per lowering; see
-    // `emit_common::reset_asm_instance`.
-    super::ssa::emit_common::reset_asm_instance();
+    // `crate::c5::asm::reset_asm_instance`.
+    crate::c5::asm::reset_asm_instance();
     let mut code = Vec::new();
     let mut func_ent_pcs: Vec<usize> = Vec::new();
+    let mut func_ends: Vec<usize> = Vec::new();
     let mut func_names: Vec<alloc::string::String> = Vec::new();
     let mut func_prologue_native: alloc::collections::BTreeMap<usize, usize> =
         alloc::collections::BTreeMap::new();
     let mut ssa_line_rows: Vec<(usize, u32, u32)> = Vec::new();
-    let mut asm_sections = super::ssa::emit_common::AsmSectionSink::default();
+    let mut asm_sections = crate::c5::asm::AsmSectionSink::default();
     // File-scope asm section blocks precede the per-function ones
     // (`.align` takes a power-of-two exponent on aarch64).
-    super::ssa::emit_common::materialize_file_asm(
+    crate::c5::asm::materialize_file_asm(
         &program.file_asm,
         true,
-        super::ssa::emit_common::AsmComments::A64,
+        crate::c5::asm::AsmComments::A64,
         &|blocks| {
             crate::c5::codegen::encode_file_asm_section_code(blocks, target, native.elf_class)
         },
@@ -1702,15 +1805,27 @@ pub(crate) fn lower(
     // walk and the -O passes that produced them are skipped, the rest of
     // the pipeline runs unchanged.
     let walked = prebuilt.is_none();
+    let mut rodata = super::RodataBuild::default();
     let (mut ssa_funcs, prebuilt_promoted) = match prebuilt {
         Some(p) => (p.funcs, p.promoted_local_slots),
         None => (
             super::ssa::emit_common::time_pass("ssa::produce_ssa_funcs (aarch64)", || {
-                super::ssa::shadow::produce_ssa_funcs(program, target, native.optimize)
+                super::ssa::shadow::produce_ssa_funcs(
+                    program,
+                    target,
+                    native.optimize,
+                    native.jump_tables,
+                )
             })?,
             alloc::collections::BTreeMap::new(),
         ),
     };
+    // A final image is its own link step: bind import placeholders a
+    // function alias of this unit resolves. A relocatable object keeps
+    // them symbolic for the linker.
+    if native.output_kind != super::OutputKind::Relocatable {
+        super::ssa::shadow::bind_alias_imports(program, &mut ssa_funcs);
+    }
     super::ssa::emit_common::check_frame_limits(&ssa_funcs)?;
     // Frame slots mem2reg promoted to registers (-O) or that slot
     // coalescing moved onto shared storage: the debug-info emitter drops
@@ -1718,6 +1833,8 @@ pub(crate) fn lower(
     // offset are recorded separately so the emitter rewrites the location.
     let mut promoted_local_slots: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>> =
         prebuilt_promoted;
+    let mut canary_frame_bytes: alloc::collections::BTreeMap<usize, u32> =
+        alloc::collections::BTreeMap::new();
     let mut coalesced_slot_remap: alloc::collections::BTreeMap<
         usize,
         alloc::collections::BTreeMap<i64, i64>,
@@ -1780,6 +1897,15 @@ pub(crate) fn lower(
         super::ssa::emit_common::time_pass("passes::unroll::run (aarch64)", || {
             crate::c5::codegen::passes::unroll::run(&mut ssa_funcs);
         });
+        // Merge byte-at-a-time accesses; see x86_64.rs's matching block
+        // for the ordering rationale.
+        super::ssa::emit_common::time_pass("passes::byteload::run (aarch64)", || {
+            crate::c5::codegen::passes::byteload::run(
+                &mut ssa_funcs,
+                target.is_little_endian(),
+                native.strict_align,
+            );
+        });
         // Seed a parameter every call site of an internal function
         // agrees a constant for, and record the range each parameter's
         // argument stays inside for the range analysis below. After
@@ -1797,11 +1923,13 @@ pub(crate) fn lower(
             });
         // Inline after mem2reg; see x86_64.rs's matching block for
         // the ordering rationale.
+        let code_syms = super::ssa::emit_common::defined_fn_syms(program);
         super::ssa::emit_common::time_pass("passes::inline::run (aarch64)", || {
             crate::c5::codegen::passes::inline::run(
                 &mut ssa_funcs,
                 native.inline_cap,
                 target.abi(),
+                &code_syms,
             );
         });
         // Turn self-tail-recursion into a loop back edge; see x86_64.rs's
@@ -1840,9 +1968,19 @@ pub(crate) fn lower(
         // matching block on x86_64.
         super::ssa::emit_common::time_pass("passes::sroa::run (aarch64)", || {
             let usable_gpr = super::ssa::reg_alloc::usable_gpr_count(target);
+            // What each function does with its pointer parameters, so a
+            // call taking an object's address gives up only the fields
+            // it can reach. Derived once over the whole unit, and only
+            // where the gate below admits some function.
+            let footprints = if ssa_funcs.iter().any(|f| f.did_unroll || f.did_inline) {
+                crate::c5::codegen::passes::sroa::param_footprints(&ssa_funcs)
+            } else {
+                Default::default()
+            };
             for f in &mut ssa_funcs {
                 if f.did_unroll || f.did_inline {
-                    let promoted = crate::c5::codegen::passes::sroa::run(f, usable_gpr);
+                    let promoted =
+                        crate::c5::codegen::passes::sroa::run(f, usable_gpr, &footprints);
                     if !promoted.is_empty() {
                         promoted_local_slots
                             .entry(f.ent_pc)
@@ -1947,6 +2085,20 @@ pub(crate) fn lower(
         super::ssa::emit_common::time_pass("passes::index_fold::run (aarch64)", || {
             crate::c5::codegen::passes::index_fold::run(&mut ssa_funcs);
         });
+        // Dominator-scoped CSE of pure arithmetic and address values.
+        // After the index fold, so merging cannot weld two `base + K`
+        // addresses the fold would have turned into displacements; the
+        // canonical bases then feed store forwarding.
+        super::ssa::emit_common::time_pass("passes::cse::run (aarch64)", || {
+            let caps = super::ssa::reg_alloc::bank_capacity(target);
+            crate::c5::codegen::passes::cse::run(&mut ssa_funcs, caps);
+        });
+        // Rebuild the single modulo where the builder's split quotient
+        // found no division to share with. After the value numbering,
+        // which is what can still supply that second consumer.
+        super::ssa::emit_common::time_pass("passes::divmod_pair::run (aarch64)", || {
+            crate::c5::codegen::passes::divmod_pair::run(&mut ssa_funcs);
+        });
         // Store-to-load and load-to-load forwarding within a block. Runs
         // after the index fold so a struct field's store and load address
         // are both normalised to the same `(base, disp)`. Bounded by
@@ -1954,6 +2106,23 @@ pub(crate) fn lower(
         // register-starved unrolled loop.
         super::ssa::emit_common::time_pass("passes::store_forward::run (aarch64)", || {
             crate::c5::codegen::passes::store_forward::run(&mut ssa_funcs);
+        });
+        // Contract an integer multiply into the add / sub that reads it
+        // (aarch64 madd / msub). After the index fold and the store
+        // forwarding, whose address matching reads the `base + index *
+        // scale` shape a fused node would hide, and after the divide
+        // pairing, which is what leaves `n - q*d` behind.
+        super::ssa::emit_common::time_pass("passes::mul_add::run (aarch64)", || {
+            crate::c5::codegen::passes::mul_add::run(&mut ssa_funcs);
+        });
+        // Rewrite `CallIndirect`-of-`ImmCode` pairs the passes since the
+        // inline run exposed -- the post-inline promotions and the
+        // forwarding above turn function-pointer cell reads into
+        // `ImmCode` values -- so the emit issues direct calls. Last of
+        // the passes that change call targets.
+        super::ssa::emit_common::time_pass("passes::inline::devirtualize (aarch64)", || {
+            let code_syms = super::ssa::emit_common::defined_fn_syms(program);
+            crate::c5::codegen::passes::inline::devirtualize(&mut ssa_funcs, &code_syms);
         });
         // Block layout: fallthrough chains, loop rotation to
         // bottom-test, branch inversion. Reorders blocks and remaps
@@ -1983,14 +2152,13 @@ pub(crate) fn lower(
         .collect();
     {
         use crate::c5::symbol::Linkage;
-        use crate::c5::token::Token;
         let extern_pcs: alloc::collections::BTreeSet<usize> = program
             .extern_function_imports
             .iter()
             .map(|(pc, _)| *pc)
             .collect();
         for sym in &program.symbols {
-            if sym.class == Token::Fun as i64
+            if sym.is_fun_entity()
                 && !sym.defined_here
                 && sym.linkage == Linkage::External
                 && sym.is_variadic
@@ -2000,11 +2168,26 @@ pub(crate) fn lower(
             }
         }
     }
+    // Branch on a zero test's operand directly. Immediately before
+    // allocation so every mid-end fold keyed on the compare shape has
+    // run.
+    for f in ssa_funcs.iter_mut() {
+        crate::c5::codegen::passes::constfold_branch::strip_zero_test_conds(f);
+    }
+    // At -O each function is allocated, then reallocated with the
+    // spilled values' call-free reuse runs split out; the split is kept
+    // only when it lowers the function's loop-weighted spill traffic.
     let ssa_allocs: alloc::vec::Vec<super::ssa::reg_alloc::Allocation> =
         super::ssa::emit_common::time_pass("ssa::reg_alloc::allocate (aarch64)", || {
             ssa_funcs
-                .iter()
-                .map(|f| super::ssa::reg_alloc::allocate(f, target))
+                .iter_mut()
+                .map(|f| {
+                    if native.optimize {
+                        super::ssa::licm::allocate_hoisted(f, target)
+                    } else {
+                        super::ssa::reg_alloc::allocate(f, target)
+                    }
+                })
                 .collect()
         });
     #[cfg(feature = "std")]
@@ -2027,14 +2210,46 @@ pub(crate) fn lower(
     // Function name -> entry PC, so an inline-asm `bl` / `b` to a bare
     // identifier resolves to the target's fixup like a compiler-emitted call.
     let mut asm_extern_call_sites: Vec<super::UserExternCallSite> = Vec::new();
+    let mut asm_sym_fixups: Vec<super::AsmSymFixup> = Vec::new();
     let mut text_align: usize = 16;
     let mut label_relocs: Vec<super::LabelReloc> = Vec::new();
+    let mut text_data_ranges: Vec<(usize, usize)> = Vec::new();
+    let mut text_map_state: Option<super::map_syms::MapClass> = None;
+    let mut asm_text_labels: Vec<super::AsmTextLabel> = Vec::new();
+    let mut asm_section_text_refs: Vec<super::AsmSectionTextRef> = Vec::new();
     let name2entpc: alloc::collections::BTreeMap<alloc::string::String, usize> = ssa_funcs
         .iter()
         .map(|f| (f.name.clone(), f.ent_pc))
         .collect();
+    // Internal-linkage data object name -> unified data offset, so a
+    // function-body inline-asm symbol operand naming a static resolves to
+    // its storage; an external-linkage name stays symbolic and keeps its
+    // own symbol's binding. First record wins, matching the writer's
+    // local-symbol dedup for a block-scope static sharing a file-scope name.
+    let data_sym_offsets: alloc::collections::BTreeMap<alloc::string::String, i64> = {
+        use crate::c5::symbol::Linkage;
+        use crate::c5::token::Token;
+        let mut m = alloc::collections::BTreeMap::new();
+        for s in program.symbols.iter().filter(|s| {
+            s.class == Token::Glo as i64
+                && s.defined_here
+                && !s.is_thread_local
+                && !s.is_alias
+                && !s.name.is_empty()
+                && s.linkage == Linkage::Internal
+        }) {
+            m.entry(alloc::string::String::from(s.link_name()))
+                .or_insert(s.val);
+        }
+        m
+    };
+    let fn_align = native.min_function_alignment.max(1) as usize;
+    text_align = text_align.max(fn_align);
     for (func_ssa, alloc_for) in ssa_funcs.iter().zip(ssa_allocs.iter()) {
         let ent_pc = func_ssa.ent_pc;
+        // `-fmin-function-alignment=N`: the entry starts at a multiple of
+        // N, the gap filled with NOPs (A64 `HINT #0`).
+        super::pad_to_alignment(&mut code, fn_align, &0xd503_201fu32.to_le_bytes());
         pc_to_native[ent_pc] = code.len();
         func_ent_pcs.push(ent_pc);
         func_names.push(func_ssa.name.clone());
@@ -2067,8 +2282,11 @@ pub(crate) fn lower(
                 prologue_native: &mut func_prologue_native,
                 asm_sections: &mut asm_sections,
                 asm_extern_call_sites: &mut asm_extern_call_sites,
+                asm_sym_fixups: &mut asm_sym_fixups,
                 text_align: &mut text_align,
                 label_relocs: &mut label_relocs,
+                text_data_ranges: &mut text_data_ranges,
+                canary_frame_bytes: &mut canary_frame_bytes,
             };
             #[cfg(feature = "std")]
             let _ = super::ssa::emit_common::take_bail();
@@ -2085,9 +2303,16 @@ pub(crate) fn lower(
                 &mut macho_tlv_fixups,
                 &mut macho_tlv_descriptors,
                 &name2entpc,
+                &data_sym_offsets,
+                &mut asm_text_labels,
+                &mut asm_section_text_refs,
+                &mut text_map_state,
                 native.no_fp_regs,
                 native.strict_align,
+                &mut rodata,
+                native.output_kind == super::OutputKind::Relocatable && !native.pic,
                 native.hardening,
+                native.stack_protect.resolved_for(target),
             )
         };
         if !ok {
@@ -2107,6 +2332,7 @@ pub(crate) fn lower(
                 ),
             )));
         }
+        func_ends.push(code.len());
     }
     #[cfg(feature = "std")]
     if super::ssa::emit_common::time_passes_enabled() {
@@ -2289,42 +2515,56 @@ pub(crate) fn lower(
         off
     };
 
+    asm_sections
+        .emit_cfi_sections(super::ssa::cfi::CfiTarget {
+            arch: super::ssa::cfi::CfiArch::Aarch64,
+            addr_bytes: 8,
+        })
+        .map_err(|m| C5Error::Compile(alloc::format!("<file-scope asm>: {m}")))?;
     let (asm_section_list, asm_sym_decls) = asm_sections.into_parts();
     Ok(Build {
         emitted_relocs: Vec::new(),
+        named_sections: Vec::new(),
+        // The GOT base is a cross-unit link fact; the single-TU emit
+        // has no table to name.
+        got_base_fixups: Vec::new(),
         asm_sections: asm_section_list,
         asm_sym_decls,
-        // The aarch64 ALTERNATIVE replacement is appended to `.text` (a
-        // deferred region), not a separately loaded section, so no
-        // main-stream reference crosses into a pushed section here.
-        asm_section_text_refs: Vec::new(),
+        text_data_ranges,
+        asm_section_text_refs,
         // No aarch64 form takes a label address as an absolute immediate.
         asm_text_abs_refs: Vec::new(),
-        // The A64 template parser accepts numeric local labels only, so no
-        // main-stream label can carry a name a C reference spells.
-        asm_text_labels: Vec::new(),
+        asm_sym_fixups,
+        asm_text_labels,
         copy_relocs: Vec::new(),
         text: code,
         text_align,
         data: program.data.clone(),
-        // The single-TU path keeps one writable data image; the
-        // read-only carve happens in the relocatable writer.
-        data_ro_len: 0,
+        // Region boundaries the data compaction produced; zero when
+        // the pass did not run (JIT, empty data).
+        data_ro_len: program.data_ro_len.min(program.data.len()),
+        data_relro_len: program
+            .data_relro_len
+            .clamp(program.data_ro_len, program.data.len()),
         data_align: program.data_align,
         bss_size: 0,
         init_fini_arrays: Default::default(),
         entry_offset,
         got_fixups,
         data_fixups,
-        rodata: super::RodataBuild::default(),
+        rodata,
         data_pcrel_relocs: Vec::new(),
+        text_pcrel_relocs: Vec::new(),
+        text_abs_relocs: Vec::new(),
         func_fixups,
         pc_to_native,
         func_ent_pcs,
+        func_ends,
         func_names,
         func_prologue_native,
         promoted_local_slots,
         coalesced_slot_remap,
+        canary_frame_bytes,
         // x86_64-only Win64 unwind; the aarch64 PE writer uses packed
         // RUNTIME_FUNCTIONs and consults no per-function descriptor.
         fn_unwind: Vec::new(),
@@ -2344,11 +2584,14 @@ pub(crate) fn lower(
         data_relocs: Vec::new(),
         extern_data_relocs: Vec::new(),
         code_relocs: Vec::new(),
+        tls_data_relocs: Vec::new(),
+        tls_extern_data_relocs: Vec::new(),
+        tls_code_relocs: Vec::new(),
         label_relocs,
         exports: Vec::new(),
         dynamic_exports: Vec::new(),
         output_kind: super::OutputKind::Executable,
-        pic: native.pic,
+        pic_link: native.pic || native.pic_link,
         code_model: native.code_model,
         elf_class: native.elf_class,
         shared_lib_name: None,
@@ -2610,6 +2853,15 @@ mod tests {
     }
 
     #[test]
+    fn rev_and_lsr32_forms() {
+        // rev x0, x1 -> 0xDAC00C20; rev w2, w3 -> 0x5AC00862;
+        // lsr w0, w0, #16 -> 0x53107C00
+        assert_eq!(enc_rev64(Reg::X0, Reg(1)), 0xDAC0_0C20);
+        assert_eq!(enc_rev32(Reg(2), Reg(3)), 0x5AC0_0862);
+        assert_eq!(enc_lsr32_imm(Reg::X0, Reg::X0, 16), 0x5310_7C00);
+    }
+
+    #[test]
     fn movz_x0_abcd_lsl16() {
         // movz x0, #0xABCD, lsl #16  ->  0xD2B579A0
         assert_eq!(enc_movz(Reg::X0, 0xABCD, 1), 0xD2B5_79A0);
@@ -2619,6 +2871,18 @@ mod tests {
     fn movk_x0_1234_lsl32() {
         // movk x0, #0x1234, lsl #32  ->  0xF2C24680
         assert_eq!(enc_movk(Reg::X0, 0x1234, 2), 0xF2C2_4680);
+    }
+
+    #[test]
+    fn ins_vector_element_from_gpr() {
+        // ins v0.b[0], w17 / v0.b[1], w17 / v3.b[7], w16
+        assert_eq!(enc_ins_gen(0, 1, 0, Reg(17)), 0x4E01_1E20);
+        assert_eq!(enc_ins_gen(0, 1, 1, Reg(17)), 0x4E03_1E20);
+        assert_eq!(enc_ins_gen(3, 1, 7, Reg(16)), 0x4E0F_1E03);
+        // ins v1.h[1], w17 / v2.s[1], w17 / v5.d[1], x9
+        assert_eq!(enc_ins_gen(1, 2, 1, Reg(17)), 0x4E06_1E21);
+        assert_eq!(enc_ins_gen(2, 4, 1, Reg(17)), 0x4E0C_1E22);
+        assert_eq!(enc_ins_gen(5, 8, 1, Reg(9)), 0x4E18_1D25);
     }
 
     #[test]
@@ -2749,7 +3013,10 @@ mod tests {
         assert_eq!(enc_eor_reg(r(0), r(1), r(2)), 0xCA02_0020);
         assert_eq!(enc_mul(r(0), r(1), r(2)), 0x9B02_7C20);
         assert_eq!(enc_sdiv(r(0), r(1), r(2)), 0x9AC2_0C20);
+        assert_eq!(enc_smulh(r(0), r(1), r(2)), 0x9B42_7C20);
+        assert_eq!(enc_umulh(r(0), r(1), r(2)), 0x9BC2_7C20);
         assert_eq!(enc_msub(r(0), r(1), r(2), r(3)), 0x9B02_8C20);
+        assert_eq!(enc_madd(r(0), r(1), r(2), r(3)), 0x9B02_0C20);
         assert_eq!(enc_lslv(r(0), r(1), r(2)), 0x9AC2_2020);
         assert_eq!(enc_asrv(r(0), r(1), r(2)), 0x9AC2_2820);
         assert_eq!(enc_lsrv(r(0), r(1), r(2)), 0x9AC2_2420);
@@ -2830,13 +3097,25 @@ mod tests {
 
     #[test]
     fn cond_flip_round_trips() {
-        for c in [Cond::Eq, Cond::Ne, Cond::Lt, Cond::Ge, Cond::Gt, Cond::Le] {
+        for c in [
+            Cond::Eq,
+            Cond::Ne,
+            Cond::Lt,
+            Cond::Ge,
+            Cond::Gt,
+            Cond::Le,
+            Cond::Mi,
+            Cond::Pl,
+        ] {
             assert_eq!(c.flip().flip(), c, "double flip should be identity");
+            // The architectural inversion flips bit 0 of the encoding.
+            assert_eq!(c.flip() as u32, (c as u32) ^ 1);
         }
         // Spot checks of the inversion semantics.
         assert_eq!(Cond::Eq.flip(), Cond::Ne);
         assert_eq!(Cond::Lt.flip(), Cond::Ge);
         assert_eq!(Cond::Gt.flip(), Cond::Le);
+        assert_eq!(Cond::Mi.flip(), Cond::Pl);
     }
 
     #[test]

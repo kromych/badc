@@ -55,12 +55,27 @@ fn build_and_run_outcome_with_options(src: &str, stem: &str, opts: NativeOptions
         Ok(p) => p,
         Err(e) => return RunOutcome::BuildError(format!("compile: {e}")),
     };
-    let bytes = match emit_native_with_options(&program, Target::MacOSAarch64, opts) {
+    emit_sign_run(&program, stem, opts)
+}
+
+/// [`build_and_run_outcome`] without [`super::TEST_PRELUDE`], for
+/// sources whose binding scope is part of what the test asserts.
+fn build_and_run_outcome_bare(src: &str, stem: &str) -> RunOutcome {
+    let program = match Compiler::new(src.to_string()).compile() {
+        Ok(p) => p,
+        Err(e) => return RunOutcome::BuildError(format!("compile: {e}")),
+    };
+    emit_sign_run(&program, stem, NativeOptions::default())
+}
+
+/// Emit `program` for macOS arm64, write, ad-hoc-sign, exec, classify.
+fn emit_sign_run(program: &crate::c5::Program, stem: &str, opts: NativeOptions) -> RunOutcome {
+    let bytes = match emit_native_with_options(program, Target::MacOSAarch64, opts) {
         Ok(b) => b,
         Err(e) => return RunOutcome::BuildError(format!("emit_native: {e}")),
     };
 
-    let path = std::env::temp_dir().join(format!("badc-test-{stem}.bin"));
+    let path = super::unique_temp_path("badc-test", stem, ".bin");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");
@@ -103,6 +118,100 @@ fn return_42() {
     assert_eq!(build_and_run("int main() { return 42; }", "ret42"), 42);
 }
 
+/// Return-address signing on the host CPU: every frame shape the
+/// signing decision distinguishes returns through `autiasp` and
+/// produces its value. The signature itself is inert in a plain arm64
+/// macOS process -- the keys are an arm64e facility -- so this pins
+/// that the pair executes and the epilogue leaves sp where `paciasp`
+/// salted with it, which is what the emitted-code assertions cannot
+/// establish on their own.
+#[test]
+fn pac_ret_signed_frames_return_natively() {
+    const SRC: &str = "
+        int g(int x) { return x + 1; }
+        int framed(int x) { return g(x) * 2; }
+        int recur(int n) { return n <= 1 ? 1 : n * recur(n - 1); }
+        int vla(int n) { int a[n]; a[0] = n; for (int i = 1; i < n; i++) a[i] = a[i-1] + i;
+                         return a[n-1]; }
+        int leaf(void) { return 1; }
+        int many(long a, long b, long c, long d, long e, long f, long g_, long h, long i) {
+            return (int)(a + b + c + d + e + f + g_ + h + i);
+        }
+        int main(void) {
+            int bad = 0;
+            if (framed(20) != 42) bad++;
+            if (recur(6) != 720) bad++;
+            if (vla(5) != 15) bad++;
+            if (leaf() != 1) bad++;
+            if (many(1,2,3,4,5,6,7,8,9) != 45) bad++;
+            return bad == 0 ? 42 : bad;
+        }
+    ";
+    let opts = NativeOptions {
+        hardening: crate::Hardening {
+            pac_ret: true,
+            ..crate::Hardening::NONE
+        },
+        ..NativeOptions::default()
+    };
+    let outcome = build_and_run_outcome_with_options(SRC, "pac_ret_native", opts);
+    assert!(
+        outcome.matches(42),
+        "signed frames must return their values, got {outcome:?}"
+    );
+}
+
+/// `__builtin_return_address(0)` stages the slot through x30 so
+/// `xpaclri` can strip it. x30 holds the live link register, so this
+/// pins that the epilogue's reload puts it back: a caller that keeps
+/// running after the read would otherwise return through the loaded
+/// value. Also checks the result carries no authentication bits.
+#[test]
+fn return_address_reads_a_bare_pointer_and_keeps_the_return_path() {
+    const SRC: &str = "
+        void *ra(void) { return __builtin_return_address(0); }
+        int add1(int x) { return x + 1; }
+        /* Reads the slot, then calls and returns: x30 must survive. */
+        int mixed(int x) {
+            void *p = __builtin_return_address(0);
+            int y = add1(x);
+            return p == 0 ? -1 : y;
+        }
+        int canonical(void *p) {
+            /* A signed pointer sets bits above the 48-bit address range. */
+            return ((unsigned long)p >> 48) == 0;
+        }
+        int main(void) {
+            int bad = 0;
+            void *a = ra();
+            if (a == 0) bad++;
+            if (!canonical(a)) bad++;
+            if (!canonical(__builtin_return_address(0))) bad++;
+            if (mixed(10) != 11) bad++;
+            if (add1(41) != 42) bad++;
+            return bad == 0 ? 42 : bad;
+        }
+    ";
+    for hardening in [
+        crate::Hardening::NONE,
+        crate::Hardening {
+            pac_ret: true,
+            ..crate::Hardening::NONE
+        },
+    ] {
+        let opts = NativeOptions {
+            hardening,
+            ..NativeOptions::default()
+        };
+        let outcome = build_and_run_outcome_with_options(SRC, "ra_strip_native", opts);
+        assert!(
+            outcome.matches(42),
+            "pac_ret={}: got {outcome:?}",
+            hardening.pac_ret
+        );
+    }
+}
+
 /// Link + run a source through the startup runtime (`__c5_entry`),
 /// signing before exec. Mirrors `build_and_run` but takes the full
 /// link path so `__attribute__((constructor))` functions run: dyld
@@ -119,14 +228,14 @@ fn link_run_capture(src: &str, stem: &str) -> (i32, String) {
         NativeOptions::default(),
     )
     .expect("link with runtime");
-    let path = std::env::temp_dir().join(format!("badc-test-{stem}.bin"));
+    let path = super::unique_temp_path("badc-test", stem, ".bin");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");
     }
     set_executable(&path);
     codesign(&path);
-    let output = Command::new(&path).output().expect("exec produced binary");
+    let output = super::output_when_not_busy(|| Command::new(&path));
     let _ = std::fs::remove_file(&path);
     let code = output.status.code().unwrap_or(-1);
     (code, String::from_utf8_lossy(&output.stdout).into_owned())
@@ -163,6 +272,45 @@ fn constructor_priority_and_destructor_order() {
 }
 
 #[test]
+fn constructor_on_prototype_runs_before_main() {
+    // The attribute sits on a separate prototype and the definition is
+    // bare; the declaration's attributes merge onto the definition, so
+    // the `.init_array` entry is still emitted.
+    let (code, _) = link_run_capture(
+        "static int g;\n\
+         static void ctor(void) __attribute__((constructor));\n\
+         static void ctor(void) { g = 42; }\n\
+         int main(void) { return g; }\n",
+        "mac-ctor-proto",
+    );
+    assert_eq!(
+        code, 42,
+        "prototype-declared constructor must run before main"
+    );
+}
+
+#[test]
+fn constructor_prototype_priority_and_destructor_order() {
+    // Priority and destructor forms declared on prototypes, defined
+    // bare: prioritized constructors ascending, unprioritized last,
+    // main, then the destructor at exit.
+    let (_, stdout) = link_run_capture(
+        "#include <stdio.h>\n\
+         static void c2(void) __attribute__((constructor(102)));\n\
+         static void c2(void) { printf(\"c2\\n\"); }\n\
+         static void c1(void) __attribute__((constructor(101)));\n\
+         static void c1(void) { printf(\"c1\\n\"); }\n\
+         static void c3(void) __attribute__((constructor));\n\
+         static void c3(void) { printf(\"c3\\n\"); }\n\
+         static void d1(void) __attribute__((destructor));\n\
+         static void d1(void) { printf(\"d1\\n\"); }\n\
+         int main(void) { printf(\"main\\n\"); return 0; }\n",
+        "mac-ctor-proto-order",
+    );
+    assert_eq!(stdout, "c1\nc2\nc3\nmain\nd1\n");
+}
+
+#[test]
 fn return_zero() {
     assert_eq!(build_and_run("int main() { return 0; }", "ret0"), 0);
 }
@@ -185,6 +333,66 @@ fn return_value_truncates_to_byte() {
 }
 
 #[test]
+fn string_literal_store_faults() {
+    // C99 6.4.5p6 leaves the store undefined; the literal lives in
+    // `__TEXT,__const`, so the write hits a non-writable mapping.
+    let src = "int main(void) { char *p = \"immutable\"; p[0] = 'X'; return 0; }";
+    match build_and_run_outcome(src, "lit_store") {
+        RunOutcome::Signal(_) => {}
+        other => panic!("store through a string literal must fault, got {other:?}"),
+    }
+    // Writable storage a literal initializes stays writable: the
+    // array is the object, the literal is only its initializer image.
+    let src = "char buf[] = \"abc\"; \
+               int main(void) { buf[0] = 'X'; return buf[0] == 'X' ? 0 : 1; }";
+    assert_eq!(build_and_run(src, "lit_copy_store"), 0);
+    // Reading a literal through a relocated const pointer crosses
+    // from the writable slot into the read-only region.
+    let src = "const char *const cp = \"readback\"; \
+               int main(void) { return cp[0] == 'r' ? 0 : 1; }";
+    assert_eq!(build_and_run(src, "lit_readback"), 0);
+    // The multi-TU link path (object merge -> Mach-O) enforces the
+    // same mapping; a signal surfaces as a `None` exit code here.
+    let (code, _) = link_run_capture(
+        "int main(void) { char *p = \"immutable\"; p[0] = 'X'; return 0; }",
+        "lit_store_linked",
+    );
+    assert_eq!(code, -1, "linked-image literal store must die on a signal");
+}
+
+/// The read-only prefix of the data image maps without write
+/// permission on Mach-O: `__TEXT,__const` rides the segment's R+X
+/// mapping, so a store through a cast-away `const` faults while a read
+/// of the same object succeeds.
+#[test]
+fn const_object_store_faults() {
+    let src = "static const int table[4] = {1,2,3,4}; \
+               int main(void) { int *p = (int *)table; *p = 9; return 0; }";
+    match build_and_run_outcome(src, "const_store") {
+        RunOutcome::Signal(_) => {}
+        other => panic!("store into const storage must fault, got {other:?}"),
+    }
+    let src = "static const int table[4] = {1,2,3,4}; \
+               int main(void) { return table[3] == 4 ? 0 : 1; }";
+    assert_eq!(build_and_run(src, "const_read"), 0);
+    // A named section in the read-only family maps the same way.
+    let src = "static const int t __attribute__((section(\"myro\"), used)) = 5; \
+               int main(void) { int *p = (int *)&t; *p = 9; return 0; }";
+    match build_and_run_outcome(src, "named_const_store") {
+        RunOutcome::Signal(_) => {}
+        other => panic!("store into a read-only named section must fault, got {other:?}"),
+    }
+    // The multi-TU link path enforces it too; a signal surfaces as a
+    // `None` exit code, which `link_run_capture` reports as -1.
+    let (code, _) = link_run_capture(
+        "static const int table[4] = {1,2,3,4}; \
+         int main(void) { int *p = (int *)table; *p = 9; return 0; }",
+        "const_store_linked",
+    );
+    assert_eq!(code, -1, "linked-image const store must die on a signal");
+}
+
+#[test]
 fn bss_segregation_maps_and_zero_fills() {
     // With segregation on, wholly-zero globals leave `__data` for the
     // `__DATA` segment's `vmsize > filesize` zero-fill tail. The array
@@ -204,6 +412,160 @@ fn bss_segregation_maps_and_zero_fills() {
     match build_and_run_outcome_with_options(src, "bss_segregate", opts) {
         RunOutcome::Exit(0) => {}
         other => panic!("segregated .bss program must exit 0, got {other:?}"),
+    }
+}
+
+/// Executed companion to the `-mstrict-align` marshalling encoding
+/// checks: composing an eightbyte or HFA member from narrower accesses
+/// must reproduce the value the whole-width load would have read. Every
+/// aggregate here has alignment 1 and sits at an odd address, so each
+/// access the marshalling emits is under-aligned at its natural width.
+/// Covers the caller-side argument gather (direct and indirect calls,
+/// integer eightbytes, HFA members, System V SSE eightbytes), the
+/// by-value return gather, and the oversize by-stack / indirect-result
+/// transfers.
+#[test]
+fn strict_align_marshals_an_under_aligned_aggregate() {
+    const SRC: &str = "struct __attribute__((packed)) P9 { char c; int a, b; };\n\
+         struct __attribute__((packed)) H2 { float a, b; };\n\
+         struct __attribute__((packed)) P25 { char c; long a, b, d; };\n\
+         static int sum_of(const char *p, int n) {\n\
+         \tint s = 0;\n\
+         \tfor (int i = 0; i < n; i++) s += (int)(unsigned char)p[i];\n\
+         \treturn s;\n\
+         }\n\
+         static int bytes_equal(const char *x, const char *y, int n) {\n\
+         \tfor (int i = 0; i < n; i++) if (x[i] != y[i]) return 0;\n\
+         \treturn 1;\n\
+         }\n\
+         int sink_p(struct P9 v) { return sum_of((const char *)&v, (int)sizeof v); }\n\
+         int sink_h(struct H2 v) { return sum_of((const char *)&v, (int)sizeof v); }\n\
+         int sink_big(struct P25 v) { return sum_of((const char *)&v, (int)sizeof v); }\n\
+         struct P9 fetch_p(struct P9 *q) { return *q; }\n\
+         struct H2 fetch_h(struct H2 *q) { return *q; }\n\
+         struct P25 fetch_big(struct P25 *q) { return *q; }\n\
+         int (*volatile vp)(struct P9) = sink_p;\n\
+         int (*volatile vh)(struct H2) = sink_h;\n\
+         int main(void) {\n\
+         \tchar buf[80];\n\
+         \tchar *raw = buf + 1;\n\
+         \tfor (int i = 0; i < 79; i++) raw[i] = (char)(i * 7 + 3);\n\
+         \tstruct P9 *p = (struct P9 *)raw;\n\
+         \tstruct H2 *h = (struct H2 *)(raw + 32);\n\
+         \tstruct P25 *b = (struct P25 *)(raw + 40);\n\
+         \tif (sink_p(*p) != sum_of(raw, (int)sizeof *p)) return 1;\n\
+         \tif (sink_h(*h) != sum_of(raw + 32, (int)sizeof *h)) return 2;\n\
+         \tif (sink_big(*b) != sum_of(raw + 40, (int)sizeof *b)) return 3;\n\
+         \tif (vp(*p) != sum_of(raw, (int)sizeof *p)) return 4;\n\
+         \tif (vh(*h) != sum_of(raw + 32, (int)sizeof *h)) return 5;\n\
+         \tstruct P9 rp = fetch_p(p);\n\
+         \tstruct H2 rh = fetch_h(h);\n\
+         \tstruct P25 rb = fetch_big(b);\n\
+         \tif (!bytes_equal((const char *)&rp, raw, (int)sizeof rp)) return 6;\n\
+         \tif (!bytes_equal((const char *)&rh, raw + 32, (int)sizeof rh)) return 7;\n\
+         \tif (!bytes_equal((const char *)&rb, raw + 40, (int)sizeof rb)) return 8;\n\
+         \treturn 42;\n\
+         }\n";
+    for optimize in [false, true] {
+        let opts = NativeOptions {
+            strict_align: true,
+            optimize,
+            ..NativeOptions::default()
+        };
+        match build_and_run_outcome_with_options(SRC, "strict_align_marshal", opts) {
+            RunOutcome::Exit(42) => {}
+            other => panic!("strict-align marshalling (optimize={optimize}): {other:?}"),
+        }
+    }
+}
+
+/// Executed companion to the under-aligned member-access encoding
+/// check: composing a member, a bitfield storage unit or a float from
+/// narrower accesses must reproduce the value the whole-width access
+/// would have moved, in both directions. The object sits at an odd
+/// address, so every access the lowering emits is under-aligned at its
+/// natural width.
+#[test]
+fn strict_align_round_trips_an_under_aligned_member() {
+    const SRC: &str = "struct __attribute__((packed)) P {\n\
+         \tchar c;\n\
+         \tint a;\n\
+         \tlong b;\n\
+         \tfloat f;\n\
+         \tdouble d;\n\
+         };\n\
+         struct __attribute__((packed)) B { char c; unsigned x : 24; int y : 20; };\n\
+         typedef long __attribute__((aligned(4))) l4;\n\
+         struct R { int a; l4 b; };\n\
+         int main(void) {\n\
+         \tchar buf[96];\n\
+         \tstruct P *p = (struct P *)(buf + 1);\n\
+         \tstruct B *q = (struct B *)(buf + 33);\n\
+         \tstruct R *r = (struct R *)(buf + 49);\n\
+         \tfor (int i = 0; i < 95; i++) buf[i + 1] = (char)(i * 5 + 1);\n\
+         \tp->a = -123456789;\n\
+         \tp->b = -1234567890123456789L;\n\
+         \tp->f = 12.5f;\n\
+         \tp->d = -1e300;\n\
+         \tif (p->a != -123456789) return 1;\n\
+         \tif (p->b != -1234567890123456789L) return 2;\n\
+         \tif (p->f != 12.5f) return 3;\n\
+         \tif (p->d != -1e300) return 4;\n\
+         \tp->a += 1;\n\
+         \tif (p->a != -123456788) return 5;\n\
+         \tq->c = 3;\n\
+         \tq->x = 0xabcdef;\n\
+         \tq->y = -12345;\n\
+         \tif (q->c != 3 || q->x != 0xabcdefu || q->y != -12345) return 6;\n\
+         \tq->x += 1;\n\
+         \tif (q->x != 0xabcdf0u) return 7;\n\
+         \tr->b = 0x1122334455667788L;\n\
+         \tif (r->b != 0x1122334455667788L) return 8;\n\
+         \t/* a too-wide store would reach the preceding member */\n\
+         \tp->c = 0x5a;\n\
+         \tp->a = 7;\n\
+         \tif (p->c != 0x5a || p->a != 7) return 9;\n\
+         \treturn 42;\n\
+         }\n";
+    for optimize in [false, true] {
+        let opts = NativeOptions {
+            strict_align: true,
+            optimize,
+            ..NativeOptions::default()
+        };
+        match build_and_run_outcome_with_options(SRC, "strict_align_member", opts) {
+            RunOutcome::Exit(42) => {}
+            other => panic!("strict-align member access (optimize={optimize}): {other:?}"),
+        }
+    }
+}
+
+/// The AAPCS64 indirect-result copy addresses both endpoints through
+/// scaled immediates, whose reach is 4095 bytes for the byte form and
+/// 32760 for the eightbyte one. An aggregate past the narrower reach
+/// must advance the base pointers instead of encoding an out-of-range
+/// offset, and still return the caller's original buffer pointer.
+/// Independent of `-mstrict-align`, which only lowers the unit width.
+#[test]
+fn oversize_by_value_return_advances_its_bases() {
+    const SRC: &str = "struct Big { char x[8003]; };\n\
+         struct Big fetch(struct Big *p) { return *p; }\n\
+         int main(void) {\n\
+         \tstatic struct Big src, out;\n\
+         \tfor (int i = 0; i < 8003; i++) src.x[i] = (char)(i * 3 + 1);\n\
+         \tout = fetch(&src);\n\
+         \tfor (int i = 0; i < 8003; i++) if (out.x[i] != (char)(i * 3 + 1)) return 1;\n\
+         \treturn 42;\n\
+         }\n";
+    for strict_align in [false, true] {
+        let opts = NativeOptions {
+            strict_align,
+            ..NativeOptions::default()
+        };
+        match build_and_run_outcome_with_options(SRC, "oversize_ret", opts) {
+            RunOutcome::Exit(42) => {}
+            other => panic!("oversize by-value return (strict_align={strict_align}): {other:?}"),
+        }
     }
 }
 
@@ -230,6 +592,34 @@ fn bss_segregation_coexists_with_thread_local() {
     match build_and_run_outcome_with_options(src, "bss_tls", opts) {
         RunOutcome::Exit(0) => {}
         other => panic!("segregated .bss with _Thread_local must exit 0, got {other:?}"),
+    }
+}
+
+#[test]
+fn thread_local_without_exit_binding_in_scope() {
+    // `_Thread_local` with only `<stdio.h>` included: libSystem is
+    // resolved through the `printf` import and no `exit` binding
+    // exists. The TLV libSystem anchor must ride the dylib list, not
+    // a forced `exit` import.
+    let src = "#include <stdio.h>\n\
+               _Thread_local int t = 5;\n\
+               int main(void) { printf(\"%d\\n\", t); return t + 37; }\n";
+    match build_and_run_outcome_bare(src, "tls_no_exit") {
+        RunOutcome::Exit(42) => {}
+        other => panic!("TLS without an `exit` binding must run, got {other:?}"),
+    }
+}
+
+#[test]
+fn thread_local_headerless_pulls_libsystem() {
+    // No headers at all: no import resolves any dylib, so the TLV
+    // anchor must add libSystem itself or dyld cannot bind
+    // `__tlv_bootstrap` for the descriptors.
+    let src = "_Thread_local int t = 5;\n\
+               int main(void) { t = t + 37; return t; }\n";
+    match build_and_run_outcome_bare(src, "tls_headerless") {
+        RunOutcome::Exit(42) => {}
+        other => panic!("header-free TLS must run, got {other:?}"),
     }
 }
 
@@ -428,7 +818,7 @@ where
         Err(e) => return RunOutcome::BuildError(format!("emit_native: {e}")),
     };
 
-    let bin_path = std::env::temp_dir().join(format!("badc-test-{stem}.bin"));
+    let bin_path = super::unique_temp_path("badc-test", stem, ".bin");
     {
         let mut f = std::fs::File::create(&bin_path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");
@@ -452,14 +842,12 @@ where
 
 #[test]
 fn file_io_natively() {
-    // Native counterpart of `tests::programs::file_io`. Drops a
-    // 10-byte test_dummy.txt next to where the binary will run, then
-    // expects the fixture's open/read/close path to exit 0.
-    // The fixture hard-codes the filename `test_dummy.txt`, so we
-    // can't rename it -- instead we put it inside the temp dir we'll
-    // use as the binary's CWD.
-    let dummy_path = std::env::temp_dir().join("test_dummy.txt");
-    std::fs::write(&dummy_path, "1234567890").unwrap();
+    // Native counterpart of `tests::programs::file_io`. The fixture
+    // hard-codes the filename `test_dummy.txt`, resolved against the
+    // CWD, so the binary runs in a per-process directory holding it.
+    let cwd = super::unique_temp_path("badc-test", "file_io-cwd", "");
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::write(cwd.join("test_dummy.txt"), "1234567890").unwrap();
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("tests");
     path.push("fixtures");
@@ -468,17 +856,17 @@ fn file_io_natively() {
     let src = std::fs::read_to_string(&path).unwrap();
     let program = Compiler::new(src).compile().expect("compile file_io.c");
     let bytes = emit_native(&program, Target::MacOSAarch64).expect("emit_native");
-    let bin_path = std::env::temp_dir().join("badc-test-file_io.bin");
+    let bin_path = super::unique_temp_path("badc-test", "file_io", ".bin");
     std::fs::write(&bin_path, &bytes).unwrap();
     set_executable(&bin_path);
     codesign(&bin_path);
 
     let output = Command::new(&bin_path)
-        .current_dir(std::env::temp_dir())
+        .current_dir(&cwd)
         .output()
         .expect("exec native binary");
     let _ = std::fs::remove_file(&bin_path);
-    let _ = std::fs::remove_file(&dummy_path);
+    let _ = std::fs::remove_dir_all(&cwd);
     assert_eq!(output.status.code(), Some(0));
 }
 
@@ -497,7 +885,7 @@ fn getenv_value_natively() {
         .compile()
         .expect("compile getenv_value.c");
     let bytes = emit_native(&program, Target::MacOSAarch64).expect("emit_native");
-    let bin_path = std::env::temp_dir().join("badc-test-getenv.bin");
+    let bin_path = super::unique_temp_path("badc-test", "getenv", ".bin");
     std::fs::write(&bin_path, &bytes).unwrap();
     set_executable(&bin_path);
     codesign(&bin_path);
@@ -553,11 +941,11 @@ fn string_extensions_join_the_macos_link() {
     )
     .expect("link the fixture for MacOSAarch64");
 
-    let path = std::env::temp_dir().join("badc-test-string-ext-link.bin");
+    let path = super::unique_temp_path("badc-test", "string-ext-link", ".bin");
     std::fs::write(&path, &bytes).expect("write temp file");
     set_executable(&path);
     codesign(&path);
-    let output = Command::new(&path).output().expect("exec native binary");
+    let output = super::output_when_not_busy(|| Command::new(&path));
     let _ = std::fs::remove_file(&path);
     assert_eq!(
         output.status.code(),
@@ -566,15 +954,44 @@ fn string_extensions_join_the_macos_link() {
     );
 }
 
+/// `copy_file_range` is a Linux system call with no libSystem export,
+/// so a macOS image takes the emulation from `libc/lib/unistd_ext.c`,
+/// which joins the link only because the fixture leaves the symbol
+/// undefined. Same reasoning as `string_extensions_join_the_macos_link`:
+/// `fixture_parity` emits one object and never links.
+#[test]
+fn unistd_extensions_join_the_macos_link() {
+    let program = super::compile_str_bare_for(
+        &super::load_fixture("copy_file_range_posix.c"),
+        Target::MacOSAarch64,
+    );
+    let bytes = super::link_executable_with_runtime(
+        &program,
+        Target::MacOSAarch64,
+        NativeOptions::default(),
+    )
+    .expect("link the fixture for MacOSAarch64");
+
+    let path = super::unique_temp_path("badc-test", "unistd-ext-link", ".bin");
+    std::fs::write(&path, &bytes).expect("write temp file");
+    set_executable(&path);
+    codesign(&path);
+    let output = super::output_when_not_busy(|| Command::new(&path));
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "copy_file_range_posix.c must exit 0 once the bundled source is joined"
+    );
+}
+
 #[test]
 fn fixture_parity() {
-    let mut failures: Vec<String> = Vec::new();
-    for (name, expected) in NATIVE_FIXTURES {
+    let failures = super::parity_failures(NATIVE_FIXTURES, |name, expected| {
         let outcome = build_and_run_fixture(name);
-        if !outcome.matches(*expected) {
-            failures.push(format!("{name}: expected exit {expected}, got {outcome:?}"));
-        }
-    }
+        (!outcome.matches(*expected))
+            .then(|| format!("{name}: expected exit {expected}, got {outcome:?}"))
+    });
     assert!(
         failures.is_empty(),
         "{} of {} native fixtures regressed:\n  {}",
@@ -609,15 +1026,11 @@ fn atoi_negative_sign_extends() {
 #[test]
 fn fixture_parity_native_optimized() {
     let opts = NativeOptions::new().with_optimize();
-    let mut failures: Vec<String> = Vec::new();
-    for (name, expected) in NATIVE_FIXTURES {
+    let failures = super::parity_failures(NATIVE_FIXTURES, |name, expected| {
         let outcome = build_and_run_fixture_with_options(name, opts, "-O");
-        if !outcome.matches(*expected) {
-            failures.push(format!(
-                "{name} (-O): expected exit {expected}, got {outcome:?}"
-            ));
-        }
-    }
+        (!outcome.matches(*expected))
+            .then(|| format!("{name} (-O): expected exit {expected}, got {outcome:?}"))
+    });
     assert!(
         failures.is_empty(),
         "{} of {} native fixtures regressed under -O:\n  {}",
@@ -754,7 +1167,7 @@ fn dylib_export_dlopen_call_returns_42() {
     )
     .expect("emit_native dylib");
 
-    let path = std::env::temp_dir().join("badc-dylib-export-test.dylib");
+    let path = super::unique_temp_path("badc-dylib", "export", ".dylib");
     std::fs::write(&path, &bytes).unwrap();
     // dyld refuses to load an unsigned dylib on Apple Silicon.
     let status = Command::new("/usr/bin/codesign")
@@ -850,7 +1263,7 @@ fn dylib_reads_host_data_symbol_through_its_import_slot() {
         super::link_shared_library(&program, Target::MacOSAarch64, NativeOptions::default())
             .expect("link shared library");
 
-    let path = std::env::temp_dir().join("badc-dylib-host-data-test.dylib");
+    let path = super::unique_temp_path("badc-dylib", "host-data", ".dylib");
     std::fs::write(&path, &bytes).unwrap();
     codesign(&path);
 

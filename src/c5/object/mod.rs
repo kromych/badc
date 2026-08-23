@@ -21,6 +21,8 @@ pub(crate) mod pe;
 pub(crate) mod section_table;
 #[cfg(feature = "std")]
 pub(crate) mod so_versions;
+#[cfg(feature = "std")]
+pub(crate) mod strtab;
 pub(crate) mod weak_undef;
 
 #[cfg(feature = "native-emit")]
@@ -103,6 +105,42 @@ pub(crate) fn apply_merged_dwarf_data_reloc(
     Ok(())
 }
 
+/// The producer fingerprint every final image carries: the
+/// NUL-terminated release version line, `strings(1)`-visible and
+/// placed outside the instruction stream (ELF `.comment`, the Mach-O
+/// `__TEXT,__const` tail, the PE `.rdata` tail) so decoders never
+/// walk into it. Release version only -- no git state -- so identical
+/// source/flags/target produce identical bytes.
+#[cfg(feature = "native-emit")]
+fn provenance_comment() -> Vec<u8> {
+    let mut v = crate::OUTPUT_MARKER.as_bytes().to_vec();
+    v.push(0);
+    v
+}
+
+/// Index of a relocated 8-byte slot within the writable data payload
+/// (`data[data_ro_len..]`). A slot below the read-only prefix would
+/// need a load-time write to a page the loader maps without write
+/// permission, so the producer's segregation is checked rather than
+/// assumed. Shared by every final-image writer.
+#[cfg(feature = "native-emit")]
+fn reloc_slot_in_data(
+    format: &str,
+    data_offset: u64,
+    ro_len: u64,
+    kind: &str,
+) -> Result<usize, C5Error> {
+    if data_offset < ro_len {
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &alloc::format!(
+                "{format}: {kind} reloc slot {data_offset:#x} lies in the read-only data prefix \
+                 (len {ro_len:#x})"
+            ),
+        )));
+    }
+    Ok((data_offset - ro_len) as usize)
+}
+
 #[cfg(feature = "native-emit")]
 pub fn emit_native(program: &Program, target: Target) -> Result<Vec<u8>, C5Error> {
     emit_native_with_options(program, target, NativeOptions::default())
@@ -114,6 +152,20 @@ pub fn emit_native(program: &Program, target: Target) -> Result<Vec<u8>, C5Error
 #[cfg(feature = "native-emit")]
 pub fn emit_native_with_options(
     program: &Program,
+    target: Target,
+    options: NativeOptions,
+) -> Result<Vec<u8>, C5Error> {
+    emit_native_with_options_owned(program.clone(), target, options)
+}
+
+/// [`emit_native_with_options`] taking the program by value. The emit
+/// path rewrites the program -- the data compaction packs `.data` and
+/// maps every offset surface onto the new layout -- so a caller with
+/// nothing left to do with it skips a whole-program copy. The borrowing
+/// forms clone into this one.
+#[cfg(feature = "native-emit")]
+pub fn emit_native_with_options_owned(
+    program: Program,
     target: Target,
     options: NativeOptions,
 ) -> Result<Vec<u8>, C5Error> {
@@ -231,7 +283,8 @@ fn fold_asm_sections(
     build: &mut Build,
     target: Target,
 ) -> Result<alloc::collections::BTreeMap<String, AsmLabelPlacement>, C5Error> {
-    use crate::c5::codegen::ssa::emit_common::{AsmSectionTarget, align_fill_pattern};
+    use crate::c5::asm::AsmSectionTarget;
+    use crate::c5::asm::align_fill_pattern;
     if build.output_kind == OutputKind::Relocatable {
         return Ok(alloc::collections::BTreeMap::new());
     }
@@ -320,7 +373,8 @@ fn fold_asm_sections(
                 AsmLabelPlacement::Data(at)
             } else {
                 let align = s.align.max(1) as usize;
-                let (pat, plen) = align_fill_pattern(None, true, is_a64);
+                let (pat, plen) =
+                    align_fill_pattern(None, true, crate::c5::asm::AlignNops::of_target(is_a64));
                 while !build.text.len().is_multiple_of(align) {
                     build.text.push(pat[build.text.len() % plen]);
                 }
@@ -393,7 +447,7 @@ fn fold_asm_sections(
             // absolute field, a page / lo12 form) needs a load-time
             // relocation this image cannot carry.
             let disp = target_off as i64 + r.addend - at as i64;
-            let patched = crate::c5::codegen::ssa::emit_common::patch_asm_insn_field(
+            let patched = crate::c5::asm::patch_asm_insn_field(
                 &mut build.text,
                 at,
                 r.kind,
@@ -429,12 +483,196 @@ fn fold_asm_sections(
         };
         let at = r.instr_offset;
         let val = (text_base + r.section_offset as usize) as i64 + r.addend - at as i64;
-        build.text[at..at + 4].copy_from_slice(&(val as i32).to_le_bytes());
+        // The shared patcher covers the rel32 data field and the aarch64
+        // PC-relative instruction kinds; both sides landed in the text
+        // stream, so the displacement is final.
+        let patched =
+            crate::c5::asm::patch_asm_insn_field(&mut build.text, at, r.kind, true, 4, val)
+                .map_err(|m| err(alloc::format!("inline-asm section `{}`: {m}", s.name)))?;
+        if !patched {
+            return Err(err(alloc::format!(
+                "inline-asm section `{}`: this reference to a section label is not \
+                 supported in a single-file image; compile with `-c` and link",
+                s.name
+            )));
+        }
     }
     // The folded sections are placed; remove them so no writer emits a copy.
     let mut keep = bases.iter().map(|b| b.is_none());
     build.asm_sections.retain(|_| keep.next().unwrap());
     Ok(label_at)
+}
+
+/// Resolve function-body inline-asm symbol-operand sites (aarch64) on a
+/// single-TU final image. A page / low-12 field against a resolved target
+/// becomes the writers' per-site address fixup; a PC-relative field whose
+/// target landed in the text stream is patched in place. The GOT base
+/// parks as a [`GotBaseFixup`], the same record the link path hands the
+/// writer. A `movw` group needs the image base, and a PC-relative field
+/// cannot reach the data segment before layout; both are refused toward
+/// the `-c` + link path, as is a name the image does not define.
+///
+/// [`GotBaseFixup`]: crate::c5::codegen::GotBaseFixup
+#[cfg(feature = "native-emit")]
+fn resolve_single_image_asm_sym_fixups(
+    program: &Program,
+    build: &mut Build,
+    asm_labels: &alloc::collections::BTreeMap<String, AsmLabelPlacement>,
+) -> Result<(), C5Error> {
+    use crate::c5::asm::{AsmRelocKind, AsmSectionTarget, patch_asm_insn_field};
+    use crate::c5::codegen::AddrPart;
+    if build.output_kind == OutputKind::Relocatable || build.asm_sym_fixups.is_empty() {
+        return Ok(());
+    }
+    use crate::c5::token::Token;
+    let weak_names: alloc::collections::BTreeSet<&str> = program
+        .symbols
+        .iter()
+        .filter(|s| s.is_weak && (s.is_fun_entity() || s.class == Token::Glo as i64))
+        .map(|s| s.link_name())
+        .collect();
+    let defined_data_by_name: alloc::collections::BTreeMap<&str, i64> = {
+        use crate::c5::symbol::Linkage;
+        program
+            .symbols
+            .iter()
+            .filter(|s| {
+                s.class == Token::Glo as i64
+                    && s.defined_here
+                    && !s.is_alias
+                    && !s.is_thread_local
+                    && !s.name.is_empty()
+                    && matches!(s.linkage, Linkage::External | Linkage::Internal)
+            })
+            .map(|s| (s.link_name(), s.val))
+            .collect()
+    };
+    let err = |m: alloc::string::String| C5Error::Compile(crate::c5::error::fmt_link_err(&m));
+    // Where a record's target landed; the addend is already applied.
+    enum Loc {
+        Text(usize),
+        Data(u64),
+        /// The GOT base, carrying the addend as a byte offset from it.
+        GotBase(i64),
+        WeakUndef,
+    }
+    let records = core::mem::take(&mut build.asm_sym_fixups);
+    let mut resolved: Vec<(crate::c5::codegen::AsmSymFixup, Loc)> = Vec::new();
+    {
+        let func_off = |name: &str| -> Option<usize> {
+            let i = build.func_names.iter().position(|n| n == name)?;
+            build.pc_to_native.get(*build.func_ent_pcs.get(i)?).copied()
+        };
+        for r in records {
+            let loc = match &r.target {
+                AsmSectionTarget::Data(off) => Loc::Data(off.wrapping_add_signed(r.addend)),
+                AsmSectionTarget::Symbol(name) => match asm_labels.get(name.as_str()) {
+                    Some(AsmLabelPlacement::Text(off)) => {
+                        Loc::Text(off.wrapping_add_signed(r.addend as isize))
+                    }
+                    Some(AsmLabelPlacement::Data(off)) => {
+                        Loc::Data((*off as u64).wrapping_add_signed(r.addend))
+                    }
+                    None => {
+                        if let Some(off) = func_off(name.as_str()) {
+                            Loc::Text(off.wrapping_add_signed(r.addend as isize))
+                        } else if let Some(&val) = defined_data_by_name.get(name.as_str()) {
+                            Loc::Data((val.max(0) as u64).wrapping_add_signed(r.addend))
+                        } else if name == crate::c5::object::elf_reloc_types::GOT_BASE_SYMBOL {
+                            // Linker-defined, so it is looked up after the
+                            // unit's own definitions and ahead of the weak
+                            // rule: the name is declared weak-undefined by
+                            // the usual C idiom for reaching the GOT.
+                            Loc::GotBase(r.addend)
+                        } else if weak_names.contains(name.as_str()) {
+                            Loc::WeakUndef
+                        } else {
+                            return Err(err(alloc::format!("undefined reference to `{name}`")));
+                        }
+                    }
+                },
+                other => {
+                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                        &alloc::format!(
+                            "asm operand relocation target {other:?} is not a data offset or symbol"
+                        ),
+                    )));
+                }
+            };
+            resolved.push((r, loc));
+        }
+    }
+    let refuse = |what: &str| {
+        err(alloc::format!(
+            "inline asm: {what} needs a load-time relocation and cannot be resolved in a \
+             single-file image; compile with `-c` and link"
+        ))
+    };
+    for (r, loc) in resolved {
+        let part = match r.kind {
+            AsmRelocKind::A64AdrpPage21 => Some(AddrPart::Page),
+            AsmRelocKind::A64AddLo12 | AsmRelocKind::A64LdstLo12(_) => Some(AddrPart::InPage),
+            _ => None,
+        };
+        match (part, loc) {
+            (Some(part), Loc::Data(off)) => build.data_fixups.push(crate::c5::codegen::DataFixup {
+                instr_offset: r.instr_offset,
+                data_offset: off,
+                part,
+            }),
+            (Some(part), Loc::Text(off)) => build.func_fixups.push(crate::c5::codegen::FuncFixup {
+                instr_offset: r.instr_offset,
+                target_native_offset: off,
+                part,
+            }),
+            // The GOT's address is the writer's to decide, so the site
+            // takes the same record the link path parks for it.
+            (Some(part), Loc::GotBase(off)) => {
+                build
+                    .got_base_fixups
+                    .push(crate::c5::codegen::GotBaseFixup {
+                        instr_offset: r.instr_offset,
+                        got_offset: off,
+                        part,
+                    })
+            }
+            // An undefined weak name resolves to address 0, as the linkers
+            // resolve it: the `adrp` becomes `movz rd, #0`, the `add` keeps
+            // the zero base, and a load/store keeps its zero immediate over
+            // the zero base.
+            (Some(AddrPart::Page), Loc::WeakUndef) => {
+                if !weak_undef::aarch64_adrp_to_zero(&mut build.text, r.instr_offset) {
+                    return Err(refuse("a weak symbol operand"));
+                }
+            }
+            (Some(AddrPart::InPage), Loc::WeakUndef) => {
+                if matches!(r.kind, AsmRelocKind::A64AddLo12)
+                    && !weak_undef::aarch64_add_lo12_to_zero(&mut build.text, r.instr_offset)
+                {
+                    return Err(refuse("a weak symbol operand"));
+                }
+            }
+            (None, Loc::Text(off)) => {
+                if matches!(r.kind, AsmRelocKind::A64MovwAbs { .. }) {
+                    return Err(refuse("a `movz`/`movk` symbol operand"));
+                }
+                let disp = off as i64 - r.instr_offset as i64;
+                let patched =
+                    patch_asm_insn_field(&mut build.text, r.instr_offset, r.kind, true, 4, disp)
+                        .map_err(&err)?;
+                if !patched {
+                    return Err(refuse("a symbol operand"));
+                }
+            }
+            (None, Loc::WeakUndef)
+                if matches!(r.kind, AsmRelocKind::A64Branch26 { .. })
+                    && weak_undef::aarch64_branch_to_nop(&mut build.text, r.instr_offset) => {}
+            (None, _) | (Some(AddrPart::Whole), _) => {
+                return Err(refuse("a symbol operand"));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Resolve or diagnose the external references still recorded on a
@@ -464,7 +702,7 @@ fn resolve_single_tu_extern_refs(
     let weak_names: alloc::collections::BTreeSet<&str> = program
         .symbols
         .iter()
-        .filter(|s| s.is_weak && (s.class == Token::Fun as i64 || s.class == Token::Glo as i64))
+        .filter(|s| s.is_weak && (s.is_fun_entity() || s.class == Token::Glo as i64))
         .map(|s| s.link_name())
         .collect();
     // Data objects this unit defines, by name and unified data offset --
@@ -554,6 +792,23 @@ fn resolve_single_tu_extern_refs(
             });
             continue;
         }
+        // The GOT base is linker-defined: looked up after the unit's own
+        // definitions and ahead of the weak rule, since the usual C idiom
+        // for reaching it declares the name weak-undefined. The writer
+        // holds the table's address, so the site parks as the same record
+        // the link path hands it.
+        if r.symbol_name == crate::c5::object::elf_reloc_types::GOT_BASE_SYMBOL
+            && let Some(addend) = r.direct_pcrel
+        {
+            build
+                .got_base_fixups
+                .push(crate::c5::codegen::GotBaseFixup {
+                    instr_offset: r.instr_offset,
+                    got_offset: addend + 4,
+                    part: AddrPart::Whole,
+                });
+            continue;
+        }
         if !weak_names.contains(r.symbol_name.as_str()) {
             return Err(undefined(&r.symbol_name));
         }
@@ -624,10 +879,11 @@ fn bss_segregation_disabled() -> bool {
 /// `LC_ID_DYLIB` install name) so a consumer linking against it by name
 /// references the file it loads at runtime. `shared_lib_name` is the
 /// `-o` basename for `--shared`; `None` falls back to the per-format
-/// default and is ignored for non-shared output.
+/// default and is ignored for non-shared output. Takes the program by
+/// value, as [`emit_native_with_options_owned`] does.
 #[cfg(feature = "native-emit")]
 pub fn emit_native_with_options_named(
-    program: &Program,
+    program: Program,
     target: Target,
     options: NativeOptions,
     shared_lib_name: Option<&str>,
@@ -637,6 +893,7 @@ pub fn emit_native_with_options_named(
     build.bss_size = bss_size;
     route_single_tu_data_imports(&mut build, target);
     let asm_labels = fold_asm_sections(&mut build, target)?;
+    resolve_single_image_asm_sym_fixups(program, &mut build, &asm_labels)?;
     resolve_single_tu_extern_refs(program, &mut build, target, &asm_labels)?;
     if options.output_kind == OutputKind::SharedLibrary {
         build.shared_lib_name = shared_lib_name.map(alloc::string::String::from);
@@ -672,14 +929,17 @@ pub fn emit_native_with_options_named(
 /// stopped anyway would leave the writer a `Build` with no image.
 #[cfg(feature = "native-emit")]
 fn compact_and_lower(
-    program: &Program,
+    program: Program,
     target: Target,
     options: NativeOptions,
 ) -> Result<(Program, i64, Build), C5Error> {
     use crate::c5::codegen::LowerMode;
     use crate::c5::codegen::ssa::shadow;
     let segregate = options.bss_segregate && !bss_segregation_disabled();
-    let first = shadow::compact_program_data(program, target, segregate, options.optimize)?;
+    let first =
+        crate::c5::codegen::ssa::emit_common::time_pass("object::compact_program_data", || {
+            shadow::compact_program_data(&program, target, segregate, options.optimize)
+        })?;
     let mode = match first.plan {
         Some(_) => LowerMode::DataLivenessProbe,
         None => LowerMode::Full,
@@ -723,7 +983,28 @@ pub(crate) fn emit_native_single_tu_for_test(
     target: Target,
     options: NativeOptions,
 ) -> Result<alloc::vec::Vec<u8>, C5Error> {
-    let (compacted, bss_size, mut build) = compact_and_lower(program, target, options)?;
+    Ok(single_tu_image_for_test(program, target, options)?.0)
+}
+
+/// The single-TU image plus the data-region boundaries it was written
+/// from and the compacted `.data` offset of every named global:
+/// `data[..ro_len]` is the pure read-only prefix, `data[ro_len..
+/// relro_len]` the relro region, the rest writable.
+#[cfg(all(test, feature = "native-emit"))]
+pub(crate) struct SingleTuRegions {
+    pub ro_len: usize,
+    pub relro_len: usize,
+    pub sym_offsets: alloc::vec::Vec<(alloc::string::String, u64)>,
+}
+
+#[cfg(all(test, feature = "native-emit"))]
+pub(crate) fn single_tu_image_for_test(
+    program: &Program,
+    target: Target,
+    options: NativeOptions,
+) -> Result<(alloc::vec::Vec<u8>, SingleTuRegions), C5Error> {
+    use crate::c5::token::Token;
+    let (compacted, bss_size, mut build) = compact_and_lower(program.clone(), target, options)?;
     let program = &compacted;
     build.bss_size = bss_size;
     let pc = build.pc_to_native.len();
@@ -734,7 +1015,17 @@ pub(crate) fn emit_native_single_tu_for_test(
         .func_names
         .push(alloc::string::String::from("__c5_entry"));
     build.func_ent_pcs.push(pc);
-    write_for(program, &build, target)
+    let regions = SingleTuRegions {
+        ro_len: build.data_ro_len,
+        relro_len: build.data_relro_len,
+        sym_offsets: program
+            .symbols
+            .iter()
+            .filter(|s| s.class == Token::Glo as i64 && s.defined_here && !s.is_alias)
+            .map(|s| (s.name.clone(), s.val as u64))
+            .collect(),
+    };
+    Ok((write_for(program, &build, target)?, regions))
 }
 
 #[cfg(all(feature = "full", feature = "std"))]
@@ -760,7 +1051,10 @@ fn write_for(program: &Program, build: &Build, target: Target) -> Result<Vec<u8>
             }
             Target::LinuxX64 | Target::WindowsX64 => Machine::X86_64,
         };
-        return elf_reloc::write_relocatable(program, build, machine, target);
+        return crate::c5::codegen::ssa::emit_common::time_pass(
+            "object::write_relocatable",
+            || elf_reloc::write_relocatable(program, build, machine, target),
+        );
     }
     // The no-std build can't reach the relocatable writer; the
     // `-c` path lives in the CLI, which itself is std-only. If

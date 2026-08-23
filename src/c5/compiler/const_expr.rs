@@ -523,6 +523,22 @@ impl Compiler {
         Ok(v)
     }
 
+    /// C11 6.7.9p4: an object with static storage duration is initialized
+    /// by constant expressions, and a thread-local object's address is not
+    /// one -- it has no value until a thread's block is materialized, which
+    /// is after image relocation. Keyed on the object whose address is
+    /// taken, so a thread-local initialized with an ordinary object's
+    /// address stays accepted.
+    pub(super) fn reject_thread_local_addr_const(&self, target: usize) -> Result<(), C5Error> {
+        if self.symbols[target].is_thread_local {
+            return Err(self.compile_err(alloc::format!(
+                "address of thread-local `{}` is not a constant expression",
+                self.symbols[target].name
+            )));
+        }
+        Ok(())
+    }
+
     /// Try to fold an array-declarator dimension to an integer
     /// constant. Returns `Some(value)` for a constant dimension, or
     /// `None` when the dimension is a non-constant expression (a C99
@@ -1410,6 +1426,14 @@ impl Compiler {
         self.parse_const_expr_primary_val()
     }
 
+    /// Whether `-fno-builtin` / `-ffreestanding` bars this spelling from
+    /// folding. The flag applies to the library name only; gcc keeps the
+    /// `__builtin_` prefixed form folding under it.
+    pub(super) fn library_name_is_opaque(&self, name: &str) -> bool {
+        !name.starts_with("__builtin_")
+            && (self.no_builtin || self.no_builtin_fns.iter().any(|n| n == name))
+    }
+
     /// Fold `strlen` / `__builtin_strlen` of a string literal, which gcc
     /// and clang admit in an integer constant expression. The count stops
     /// at the first NUL, as the library function does, so a literal with an
@@ -1421,12 +1445,11 @@ impl Compiler {
     /// whatever it already was in this context -- a VLA bound, or the
     /// error the context raises for a non-constant operand.
     pub(super) fn try_fold_strlen_builtin(&mut self) -> Result<Option<ConstVal>, C5Error> {
-        if self.lex.tk != Token::Id
-            || !matches!(
-                self.symbols[self.lex.curr_id_idx].name.as_str(),
-                "strlen" | "__builtin_strlen"
-            )
-        {
+        if self.lex.tk != Token::Id {
+            return Ok(None);
+        }
+        let name = self.symbols[self.lex.curr_id_idx].name.as_str();
+        if !matches!(name, "strlen" | "__builtin_strlen") || self.library_name_is_opaque(name) {
             return Ok(None);
         }
         // A local, a global object, or an enum constant of this name is
@@ -1485,6 +1508,9 @@ impl Compiler {
             "strncmp" | "memcmp" | "__builtin_strncmp" | "__builtin_memcmp" => true,
             _ => return Ok(None),
         };
+        if self.library_name_is_opaque(name) {
+            return Ok(None);
+        }
         let stop_at_nul = !name.ends_with("memcmp");
         // A local, a global object, or an enum constant of this name is
         // not the library function.
@@ -1605,6 +1631,7 @@ impl Compiler {
                  such as `((T*)0)->field`",
             ));
         }
+        self.reject_automatic_compound_literal_root(d.root)?;
         Ok(ConstAddr {
             value: d.value,
             root: d.root,
@@ -1668,10 +1695,12 @@ impl Compiler {
                 self.next()?;
                 if d.is_lvalue {
                     // Array element `a[N]` at `&a + N*sizeof(elem)`. A field's
-                    // `ty` is its element type, so scale by that.
+                    // `ty` is its element type, so scale by that; an
+                    // array-aggregate tag peels one dimension per subscript.
+                    let (next_ty, stride) = self.const_subscript_step(d.ty);
                     d = ConstDesig {
-                        value: d.value + n * self.size_of_type(d.ty) as i64,
-                        ty: d.ty,
+                        value: d.value + n * stride,
+                        ty: next_ty,
                         is_lvalue: true,
                         root: d.root,
                     };
@@ -1693,6 +1722,55 @@ impl Compiler {
         Ok(d)
     }
 
+    /// C99 6.5.2.5p5: a compound literal written inside a function body has
+    /// automatic storage duration, so its address is not an address constant
+    /// (6.6p9) and cannot initialize an object of static storage duration
+    /// (6.7.8p4). One at file scope has static storage duration and stands,
+    /// as does one initializing an automatic object, whose initializer need
+    /// not be constant. Reading a staged element back is a value, not an
+    /// address, and does not reach here.
+    pub(super) fn reject_automatic_compound_literal(&self, sym: usize) -> Result<(), C5Error> {
+        if self.static_duration_init > 0
+            && self.in_function_body()
+            && self.symbols[sym].is_compound_literal
+        {
+            return Err(self.compile_err(
+                "address of a compound literal with automatic storage duration \
+                 is not a constant expression",
+            ));
+        }
+        Ok(())
+    }
+
+    /// One subscript applied to a designated object: an array-aggregate
+    /// tag peels a dimension -- the designated object becomes the row of
+    /// the remaining ones (or the element) and the stride is its size.
+    /// Any other type designates by element convention and strides by
+    /// itself.
+    fn const_subscript_step(&mut self, ty: i64) -> (i64, i64) {
+        if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+            let id = struct_id_of(ty);
+            if id < self.structs.len() && self.structs[id].is_array {
+                let f = &self.structs[id].fields[0];
+                let (elem, fdims) = (f.ty, f.array_dims.clone());
+                let next = if fdims.len() >= 2 {
+                    self.array_agg_type(elem, &fdims[1..])
+                } else {
+                    elem
+                };
+                return (next, (self.size_of_type(next) as i64).max(1));
+            }
+        }
+        (ty, (self.size_of_type(ty) as i64).max(1))
+    }
+
+    fn reject_automatic_compound_literal_root(&self, root: ConstRoot) -> Result<(), C5Error> {
+        match root {
+            ConstRoot::Data(sym) => self.reject_automatic_compound_literal(sym),
+            _ => Ok(()),
+        }
+    }
+
     fn parse_const_designation_primary(&mut self) -> Result<ConstDesig, C5Error> {
         let line = self.lex.line;
         if self.lex.tk == Token::AndOp {
@@ -1704,6 +1782,7 @@ impl Compiler {
                     self.compile_err_at(line, "`&` requires an lvalue in a constant expression")
                 );
             }
+            self.reject_automatic_compound_literal_root(inner.root)?;
             return Ok(ConstDesig {
                 value: inner.value,
                 ty: inner.ty + Ty::Ptr as i64,
@@ -1736,22 +1815,41 @@ impl Compiler {
             if self.lex_is_type_start() {
                 // Cast `(T ...*) operand` -- a (usually pointer) rvalue.
                 let mut ty = self.parse_decl_base_type()?;
+                let mut cast_ptrs: i64 = 0;
                 while self.lex.tk == Token::MulOp {
                     self.next()?;
                     ty += Ty::Ptr as i64;
+                    cast_ptrs += 1;
                     while self.lex.tk == Token::TypeQual {
                         self.next()?;
                     }
                 }
+                let base_dims = self.take_typedef_literal_dims(cast_ptrs);
                 // C99 6.5.2.5 array-typed compound literal `(T[]){ ... }`: an
                 // anonymous static array. Its name decays to the address of
-                // the first element, so the object is an lvalue of element
-                // type `ty` that a following `[i].member` chain designates.
-                if self.lex.tk == Token::Brak {
-                    let (off, sym) = self.emit_array_compound_literal_body(ty)?;
+                // the first element, so the object is an lvalue that a
+                // following `[i].member` chain designates -- typed by the
+                // element for one dimension, by the array-aggregate tag for
+                // more so each subscript strides by its row.
+                let is_typedef_literal = !base_dims.is_empty() && self.lex.tk == ')' && {
+                    let snap = self.lex.snapshot();
+                    let staged = self.data.len();
+                    self.next()?;
+                    let hit = self.lex.tk == '{';
+                    self.restore_lex(snap);
+                    self.truncate_data(staged);
+                    hit
+                };
+                if self.lex.tk == Token::Brak || is_typedef_literal {
+                    let (off, sym, dims) = self.emit_array_compound_literal_body(ty, &base_dims)?;
+                    let desig_ty = if dims.len() >= 2 {
+                        self.array_agg_type(ty, &dims)
+                    } else {
+                        ty
+                    };
                     return Ok(ConstDesig {
                         value: off,
-                        ty,
+                        ty: desig_ty,
                         is_lvalue: true,
                         root: ConstRoot::Data(sym),
                     });
@@ -1950,11 +2048,14 @@ impl Compiler {
                 self.pending.base_is_function_type = false;
                 self.pending.bare_function_type_declarator = false;
                 self.pending.fn_ptr_indirection = None;
+                self.pending.fn_ptr_ret_indirection = 0;
                 self.pending.typedef_fn_proto = None;
                 self.pending.fn_ptr_param_types = None;
+                let mut cast_ptrs: i64 = 0;
                 while self.lex.tk == Token::MulOp {
                     self.next()?;
                     target_ty += Ty::Ptr as i64;
+                    cast_ptrs += 1;
                     while self.lex.tk == Token::TypeQual {
                         self.next()?;
                     }
@@ -1962,13 +2063,28 @@ impl Compiler {
                 while self.lex.tk == Token::TypeQual {
                     self.next()?;
                 }
+                let base_dims = self.take_typedef_literal_dims(cast_ptrs);
                 // C99 6.5.2.5 array-typed compound literal `(T[]){...}` in a
                 // value context: the literal decays to the address of its
-                // anonymous static object; a `[i]` subscript reads the staged
+                // anonymous static object. A subscript chain selects a row
+                // per leading index; the final index reads the staged
                 // element back as the constant value.
-                if self.lex.tk == Token::Brak {
-                    let (off, sym) = self.emit_array_compound_literal_body(target_ty)?;
-                    if self.lex.tk == Token::Brak {
+                let is_typedef_literal = !base_dims.is_empty() && self.lex.tk == ')' && {
+                    let snap = self.lex.snapshot();
+                    let staged = self.data.len();
+                    self.next()?;
+                    let hit = self.lex.tk == '{';
+                    self.restore_lex(snap);
+                    self.truncate_data(staged);
+                    hit
+                };
+                if self.lex.tk == Token::Brak || is_typedef_literal {
+                    let (off, sym, dims) =
+                        self.emit_array_compound_literal_body(target_ty, &base_dims)?;
+                    let elem_size = (self.size_of_type(target_ty) as i64).max(1);
+                    let mut base = off;
+                    let mut level = 0usize;
+                    while self.lex.tk == Token::Brak && level < dims.len() {
                         self.next()?;
                         let n = self.parse_const_expr_cond_val()?.as_int();
                         if self.lex.tk != ']' {
@@ -1977,12 +2093,22 @@ impl Compiler {
                             );
                         }
                         self.next()?;
-                        return self.read_staged_const_element(target_ty, off, n);
+                        level += 1;
+                        if level == dims.len() {
+                            return self.read_staged_const_element(target_ty, base, n);
+                        }
+                        let span: i64 = dims[level..].iter().product::<i64>().max(1);
+                        base += n * span * elem_size;
                     }
+                    // Fewer subscripts than dimensions: the address of a
+                    // row, whose pointer strides by the remaining span.
+                    let root = ConstRoot::Data(sym);
+                    self.reject_automatic_compound_literal_root(root)?;
+                    let span: i64 = dims[level + 1..].iter().product::<i64>().max(1);
                     return Ok(ConstVal::Addr(ConstAddr {
-                        value: off,
-                        root: ConstRoot::Data(sym),
-                        elem_size: (self.size_of_type(target_ty) as i64).max(1),
+                        value: base,
+                        root,
+                        elem_size: span * elem_size,
                     }));
                 }
                 // Parenthesized abstract declarator: `(*)(args)` (function
@@ -2082,10 +2208,10 @@ impl Compiler {
             return Ok(v);
         }
         if self.lex.tk == Token::Num {
-            // Type the literal per C99 6.4.4.1p5 (suffix + magnitude)
-            // before `next()` resets the lexer's suffix fields.
+            // Type the literal before `next()` resets the lexer's
+            // suffix and character-constant fields.
             let v = self.lex.ival;
-            let ty = self.literal_auto_promoted_type(v);
+            let ty = self.num_token_type(v);
             self.next()?;
             return Ok(ConstVal::Int { val: v as i128, ty });
         }
@@ -2097,11 +2223,36 @@ impl Compiler {
             // subtract pointer offsets like
             // `(char *)"..." - (char *)0`.
             let addr = self.lex.ival;
+            let narrow = !self.lex.str_is_wide;
             self.next()?;
             while self.lex.tk == '"' {
                 self.next()?;
             }
             self.push_literal_nul();
+            // `"..."[i]` with a constant index reads the staged byte back
+            // (C99 6.4.5p6: the literal is a static char array), so the
+            // subscript is a constant value, not just the address constant
+            // the designation grammar folds. The bytes stay staged: an
+            // enclosing checkpoint may span them, so they cannot be
+            // reclaimed here.
+            if narrow && self.lex.tk == Token::Brak {
+                let len = self.data.len() as i64 - addr;
+                self.next()?;
+                let n = self.parse_const_expr_cond_val()?.as_int();
+                if self.lex.tk != ']' {
+                    return Err(self.compile_err("close bracket expected in constant subscript"));
+                }
+                self.next()?;
+                if n < 0 || n >= len {
+                    return Err(
+                        self.compile_err(format!("string subscript {n} out of bounds [0, {len})"))
+                    );
+                }
+                return Ok(ConstVal::Int {
+                    val: self.data[(addr + n) as usize] as i8 as i128,
+                    ty: Ty::Char as i64,
+                });
+            }
             return Ok(ConstVal::Int {
                 val: addr as i128,
                 ty: Ty::Ptr as i64,

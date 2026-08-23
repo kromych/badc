@@ -64,13 +64,11 @@ def base_flags() -> list[str]:
     # x86-64 builds upstream's native asm context switch; other
     # architectures use DILL_ARCH_FALLBACK, upstream's own sigsetjmp
     # knob. DILL_BADC_SETSP selects the asm sp move added by setup.py.
-    # The x86intrin.h shim next to this script satisfies now.c's
-    # __rdtsc include on x86 targets. --gnu satisfies the visibility
-    # and __builtin_expect surface.
+    # The bundled <x86intrin.h> satisfies now.c's __rdtsc include on
+    # x86 targets. --gnu satisfies the visibility and
+    # __builtin_expect surface.
     flags = [
         "--gnu",
-        "-I",
-        str(DILL_DIR),
         "-DDILL_BADC_SETSP",
     ]
     if platform.machine().lower() not in ("x86_64", "amd64"):

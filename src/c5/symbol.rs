@@ -1,6 +1,30 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
+/// The part of a declaration's type that the `i64` type tag does not
+/// carry: the typedef it was spelled through, and the `const` /
+/// `restrict` qualifiers. DWARF describes each with its own DIE
+/// (DWARF 4 5.2, 5.3), so the debug-info writers read this to name a
+/// type the way the source did instead of naming the type it resolves
+/// to. `volatile` is absent because the tag already records it
+/// (`types::VOLATILE_BIT`), and nothing outside debug info reads any
+/// of it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct DeclSpelling {
+    /// Index in the unit's symbol table of the typedef the base type
+    /// was named through. The slot keeps its name for the whole unit
+    /// even where a block-scope binding reverts its class.
+    pub typedef: Option<u32>,
+    /// Qualifiers on the base type. Under a pointer declarator these
+    /// are the pointee's (`const T *p`).
+    pub base_const: bool,
+    pub base_restrict: bool,
+    /// Qualifiers on the declared object itself (`T *const p`), which
+    /// C99 6.7.5.1p1 takes from the outermost derivation.
+    pub outer_const: bool,
+    pub outer_restrict: bool,
+}
+
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Symbol {
     pub name: String,
@@ -135,6 +159,16 @@ pub(crate) struct Symbol {
     /// `.bss` placement.
     pub section_name: Option<String>,
 
+    /// `__attribute__((constructor))` seen on any declaration of the
+    /// name. Sticky like `is_weak`, so a prototype's attribute reaches
+    /// the definition, which registers the `InitFunc` at body open.
+    pub is_constructor: bool,
+    /// `__attribute__((destructor))`, same carry as `is_constructor`.
+    pub is_destructor: bool,
+    /// Explicit `constructor(N)` / `destructor(N)` priority; `None`
+    /// for the bare form.
+    pub init_priority: Option<u32>,
+
     /// Placement alignment of a `Token::Glo` object with storage: the
     /// widest of the declarator's `aligned(N)` / `_Alignas` request, the
     /// type's natural alignment, and a typedef's `aligned(N)` type
@@ -229,6 +263,10 @@ pub(crate) struct Symbol {
     /// Shadow slot for `is_zero_len_array`. See `h_array_size`.
     pub h_is_zero_len_array: bool,
 
+    /// How the declaration spelled the type; see [`DeclSpelling`].
+    /// Debug info only.
+    pub decl_spelling: DeclSpelling,
+
     /// True for a `const`-qualified plain integer object with static
     /// storage (`static const int N = ...`, a file-scope `const`). C99 6.6
     /// does not make it a constant expression, but GCC and common practice
@@ -299,6 +337,18 @@ pub(crate) struct Symbol {
     /// `*p = ...` against the rebound scalar pointer is treated
     /// as a fn-ptr decay no-op.
     pub h_fn_ptr_indirection: i64,
+    /// Fn-pointer lineage of the value a call through this variable
+    /// returns, in `fn_ptr_indirection`'s plus-1 convention: 0 when the
+    /// call result has no fn-pointer lineage, 1 when it IS a function
+    /// pointer (`int (*(*p)(int))(int)`), 2 when one deref above one.
+    /// The flat tag holds only the total pointer depth, which cannot
+    /// separate `int (*(*)(int))(int)` from `int (**)(int)`; this field
+    /// carries the split. The call arms read it to seed
+    /// `fn_ptr_chain_depth` after an indirect call so a following
+    /// unary `*` is the C99 6.3.2.1p4 decay no-op.
+    pub fn_ptr_ret_indirection: i64,
+    /// Scope-restore shadow for `fn_ptr_ret_indirection`.
+    pub h_fn_ptr_ret_indirection: i64,
     /// True for a typedef of a function TYPE (`typedef RET F(args)`),
     /// as opposed to a function POINTER (`typedef RET (*F)(args)`). The
     /// type encoding pre-decays both to a function pointer (`RET` plus
@@ -405,6 +455,17 @@ pub(crate) struct Symbol {
     /// suppresses the unused-function diagnostic.
     pub is_inline_definition: bool,
 
+    /// Assembler name the inline definition's body is emitted under,
+    /// distinct from the identifier so the identifier stays available as
+    /// an undefined external reference. `None` for every other symbol.
+    /// See [`Symbol::def_link_name`].
+    pub inline_body_name: Option<String>,
+
+    /// Placeholder `ent_pc` naming the identifier as an import, used by
+    /// the address sites of an inline definition. `val` keeps the real
+    /// `ent_pc`, so a direct call still reaches the body in this unit.
+    pub inline_addr_pc: Option<i64>,
+
     /// True while a block-scope `extern` declaration that shadows an
     /// enclosing local (or other bound name) holds this slot. The slot
     /// is converted to `Glo` for the block so in-block references take
@@ -416,20 +477,21 @@ pub(crate) struct Symbol {
     /// independent of the slot's restored class at walk time.
     pub block_extern_active: bool,
 
-    /// True for a block-scope `static` local that shadowed an outer
-    /// binding (a file-scope object of the same name). The local is
-    /// promoted to `Glo` class for its data-segment storage but keeps
-    /// block scope (C99 6.2.1, 6.2.4p3), so the function-exit cleanup
-    /// must restore the shadowed outer binding even though the
-    /// symbol's class is no longer `Loc`. Cleared on restore.
-    pub is_scope_static: bool,
+    /// True for a binding made at the function-body top level whose
+    /// class no longer reads as `Loc`, so the function-exit cleanup
+    /// cannot infer it: a block-scope `static` (promoted to `Glo`), a
+    /// typedef, an enumerator, or a block-scope / C89-implicit function
+    /// declaration (C99 6.2.1p4: all have block scope). The cleanup
+    /// restores the shadowed outer binding. Cleared on restore.
+    pub is_scope_bound: bool,
 
-    /// True for a `typedef` declared at the function-body top level
-    /// (C99 6.7.7, 6.2.1: block scope). The name binds to `Typedef`
-    /// class for the function body but must not leak to file scope,
-    /// so the function-exit cleanup restores the shadowed outer
-    /// binding even though the class is not `Loc`. Cleared on restore.
-    pub is_scope_typedef: bool,
+    /// True once a block-scope or C89-implicit function declaration
+    /// bound this symbol. Scope exit unbinds the name (`class` returns
+    /// to 0), but the entity -- prototype, linkage, asm rename -- stays
+    /// on the slot for call lowering and the extern-import scan (C99
+    /// 6.2.2p4: every declaration with external linkage denotes the
+    /// same function). Never cleared.
+    pub scoped_fn_decl: bool,
 
     /// ent_pc of the enclosing function for a block-scope static's
     /// emission record (the persistent `name.N` symbol; the scoped
@@ -625,6 +687,31 @@ impl Symbol {
     pub fn link_name(&self) -> &str {
         self.asm_name.as_deref().unwrap_or(&self.name)
     }
+
+    /// Assembler name of the definition this unit emits. Equals
+    /// [`Self::link_name`] except for an inline definition, whose body is
+    /// private to the unit while the identifier stays an external
+    /// reference (C99 6.2.2p2). Consumers naming the body -- the emitted
+    /// function symbol, the per-function attribute lookups keyed on it --
+    /// use this; consumers naming the entity across units use
+    /// `link_name`.
+    pub fn def_link_name(&self) -> &str {
+        match self.inline_body_name.as_deref() {
+            Some(n) => n,
+            None => self.link_name(),
+        }
+    }
+
+    /// Whether the slot denotes a function entity: a live `Token::Fun`
+    /// binding, or a scoped function declaration whose name binding was
+    /// unwound at scope exit (`class` back to 0) while `val`, the
+    /// prototype and the linkage stayed on the slot. Consumers reading
+    /// the entity (call lowering, import scans) use this; name lookup
+    /// keys on `class` alone.
+    pub fn is_fun_entity(&self) -> bool {
+        self.class == crate::c5::token::Token::Fun as i64
+            || (self.class == 0 && self.scoped_fn_decl)
+    }
 }
 
 impl crate::c5::layout::DataOffsets for Symbol {
@@ -663,6 +750,9 @@ impl crate::c5::layout::DataOffsets for Symbol {
             is_used,
             is_hidden: _,
             section_name,
+            is_constructor: _,
+            is_destructor: _,
+            init_priority: _,
             data_align: _, // an alignment, not an offset
             is_alias: _,
             array_size: _,
@@ -679,6 +769,7 @@ impl crate::c5::layout::DataOffsets for Symbol {
             h_vla_size_slot: _,
             is_zero_len_array: _,
             h_is_zero_len_array: _,
+            decl_spelling: _, // debug-info spelling, not an offset
             is_const_qualified: _,
             const_object_value: _,
             h_const_object_value: _, // scope-restore shadow
@@ -687,6 +778,8 @@ impl crate::c5::layout::DataOffsets for Symbol {
             runtime_initialized: _,
             fn_ptr_indirection: _,
             h_fn_ptr_indirection: _,
+            fn_ptr_ret_indirection: _,
+            h_fn_ptr_ret_indirection: _,
             is_function_type: _,
             returns_void: _,
             is_void_typedef: _,
@@ -701,10 +794,12 @@ impl crate::c5::layout::DataOffsets for Symbol {
             saw_extern_inline_decl: _, // linkage model input, not an offset
             is_gnu_inline: _,          // linkage model selector
             is_inline_definition: _,   // linkage model result
+            inline_body_name: _,       // assembler name, not an offset
+            inline_addr_pc: _,         // code address space
             saw_static_decl: _,
             block_extern_active: _,
-            is_scope_static: _,
-            is_scope_typedef: _,
+            is_scope_bound: _,
+            scoped_fn_decl: _,
             owner_ent_pc: _, // code address space
             is_compound_literal: _,
             was_referenced: _,

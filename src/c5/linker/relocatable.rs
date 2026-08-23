@@ -16,22 +16,53 @@
 #![cfg(feature = "std")]
 
 use alloc::borrow::ToOwned;
+use alloc::collections::BTreeMap;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use hashbrown::{HashMap, HashSet};
 
 use crate::c5::error::C5Error;
+use crate::c5::object::strtab::build_string_table;
 
+use super::attributes;
+use super::comdat::{self, SecId};
 use super::gnu_property;
 use super::lds::{
     BinOp, DataWidth, Expr, LinkerScript, SectionContent, SectionsItem, SortKind, UnOp,
 };
-use super::object::{Elf64Ehdr, Elf64Shdr, read_struct};
+use super::object::{
+    Elf64Ehdr, Elf64Shdr, elf_reloc_desc, elf_reloc_field_width, implicit_addend, read_struct,
+};
 
 pub const EM_386: u16 = 3;
 pub const EM_X86_64: u16 = 62;
 pub const EM_AARCH64: u16 = 183;
+
+/// `e_machine` spelled as the psABI names it, for diagnostics. Covers the
+/// values a message is likely to carry, not the whole registry.
+pub fn elf_machine_name(e_machine: u16) -> Option<&'static str> {
+    match e_machine {
+        EM_386 => Some("EM_386"),
+        EM_X86_64 => Some("EM_X86_64"),
+        EM_AARCH64 => Some("EM_AARCH64"),
+        2 => Some("EM_SPARC"),
+        8 => Some("EM_MIPS"),
+        20 => Some("EM_PPC"),
+        21 => Some("EM_PPC64"),
+        40 => Some("EM_ARM"),
+        243 => Some("EM_RISCV"),
+        _ => None,
+    }
+}
+
+/// `EM_NAME (n)` when the value is known, `n` alone when it is not.
+pub fn elf_machine_desc(e_machine: u16) -> String {
+    match elf_machine_name(e_machine) {
+        Some(n) => format!("{n} ({e_machine})"),
+        None => format!("{e_machine}"),
+    }
+}
 
 const ET_REL: u16 = 1;
 const SHT_PROGBITS: u32 = 1;
@@ -49,7 +80,6 @@ const SHF_MERGE: u64 = 0x10;
 const SHF_INFO_LINK: u64 = 0x40;
 const SHF_LINK_ORDER: u64 = 0x80;
 const SHF_GROUP: u64 = 0x200;
-const GRP_COMDAT: u32 = 1;
 
 const SHN_UNDEF: u16 = 0;
 const SHN_LORESERVE: u16 = 0xff00;
@@ -66,11 +96,18 @@ const STT_FILE: u8 = 4;
 const ELF64_SHDR_SIZE: usize = 64;
 const ELF64_SYM_SIZE: usize = 24;
 const ELF64_RELA_SIZE: usize = 24;
+const ELF64_REL_SIZE: usize = 16;
 
 fn err(msg: &str) -> C5Error {
     C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
         "linker::relocatable: {msg}",
     )))
+}
+
+/// An input shape the relocatable link declines rather than a broken
+/// invariant: the reader's own diagnostics stay internal errors.
+fn unsupported(msg: &str) -> C5Error {
+    C5Error::Compile(crate::c5::error::fmt_unsupported_err(msg))
 }
 
 /// Where a symbol's `st_shndx` points, with section indices mapped to
@@ -208,8 +245,15 @@ pub fn parse_et_rel(bytes: &[u8], source: &str) -> Result<EtRel, C5Error> {
         return Err(err(&format!("{source}: not an ELF object")));
     }
     let ehdr: Elf64Ehdr = read_struct(bytes, 0)?;
-    if ehdr.e_ident[4] != 2 || ehdr.e_ident[5] != 1 {
-        return Err(err(&format!("{source}: not a little-endian ELF64 object")));
+    if ehdr.e_ident[4] != 2 {
+        return Err(unsupported(&format!(
+            "{source}: a relocatable link takes ELFCLASS64 inputs only"
+        )));
+    }
+    if ehdr.e_ident[5] != 1 {
+        return Err(unsupported(&format!(
+            "{source}: a relocatable link takes little-endian inputs only"
+        )));
     }
     if ehdr.e_type != ET_REL {
         return Err(err(&format!(
@@ -223,9 +267,17 @@ pub fn parse_et_rel(bytes: &[u8], source: &str) -> Result<EtRel, C5Error> {
             ehdr.e_shentsize
         )));
     }
-    let e_shnum = ehdr.e_shnum as usize;
+    // Extended numbering: a section count that does not fit e_shnum
+    // lives in section header 0's sh_size and the header-name index in
+    // its sh_link.
     let e_shoff = ehdr.e_shoff as usize;
-    if e_shnum
+    let shnum = if ehdr.e_shnum == 0 && e_shoff != 0 {
+        let sh0: Elf64Shdr = read_struct(bytes, e_shoff)?;
+        sh0.sh_size as usize
+    } else {
+        ehdr.e_shnum as usize
+    };
+    if shnum
         .checked_mul(ELF64_SHDR_SIZE)
         .and_then(|t| e_shoff.checked_add(t))
         .is_none_or(|end| end > bytes.len())
@@ -234,21 +286,26 @@ pub fn parse_et_rel(bytes: &[u8], source: &str) -> Result<EtRel, C5Error> {
             "{source}: section header table runs past end of file"
         )));
     }
-    let mut shdrs: Vec<Elf64Shdr> = Vec::with_capacity(e_shnum);
-    for i in 0..e_shnum {
+    let mut shdrs: Vec<Elf64Shdr> = Vec::with_capacity(shnum);
+    for i in 0..shnum {
         shdrs.push(read_struct(bytes, e_shoff + i * ELF64_SHDR_SIZE)?);
     }
+    let shstrndx = match ehdr.e_shstrndx {
+        SHN_XINDEX => shdrs.first().map_or(0, |sh| sh.sh_link) as usize,
+        n => n as usize,
+    };
     let shstr = shdrs
-        .get(ehdr.e_shstrndx as usize)
+        .get(shstrndx)
         .ok_or_else(|| err(&format!("{source}: e_shstrndx out of range")))?;
     let shstr_bytes = section_slice(bytes, shstr)?;
 
     // First walk: pick the symtab, classify each header as carried or
     // consumed, and build the shndx -> carried-index map.
     let mut symtab_idx: Option<usize> = None;
-    let mut carried: Vec<Option<usize>> = alloc::vec![None; e_shnum];
+    let mut carried: Vec<Option<usize>> = alloc::vec![None; shnum];
     let mut sections: Vec<EtSection> = Vec::new();
     let mut group_shndx: Vec<usize> = Vec::new();
+    let mut shndx_ext: Option<usize> = None;
     for (i, sh) in shdrs.iter().enumerate().skip(1) {
         match sh.sh_type {
             SHT_SYMTAB => {
@@ -257,17 +314,9 @@ pub fn parse_et_rel(bytes: &[u8], source: &str) -> Result<EtRel, C5Error> {
                 }
             }
             SHT_SYMTAB_SHNDX => {
-                return Err(err(&format!(
-                    "{source}: SHT_SYMTAB_SHNDX (>= 0xff00 sections) is not supported"
-                )));
+                shndx_ext = Some(i);
             }
-            SHT_REL => {
-                return Err(err(&format!(
-                    "{source}: SHT_REL relocations are not supported (x86_64 / aarch64 \
-                     objects use SHT_RELA)"
-                )));
-            }
-            SHT_RELA | SHT_GROUP => {
+            SHT_RELA | SHT_REL | SHT_GROUP => {
                 if sh.sh_type == SHT_GROUP {
                     group_shndx.push(i);
                 }
@@ -275,7 +324,7 @@ pub fn parse_et_rel(bytes: &[u8], source: &str) -> Result<EtRel, C5Error> {
             SHT_STRTAB => {
                 // Consumed when it serves the symtab or the header
                 // names; a free-standing string table is carried.
-                let is_shstr = i == ehdr.e_shstrndx as usize;
+                let is_shstr = i == shstrndx;
                 let serves_symtab = shdrs
                     .iter()
                     .any(|s| s.sh_type == SHT_SYMTAB && s.sh_link as usize == i);
@@ -311,6 +360,11 @@ pub fn parse_et_rel(bytes: &[u8], source: &str) -> Result<EtRel, C5Error> {
             .ok_or_else(|| err(&format!("{source}: .symtab sh_link out of range")))?;
         let strtab = section_slice(bytes, strtab_sh)?;
         let symtab = section_slice(bytes, symtab_sh)?;
+        // Extended section indices, one word per symbol.
+        let ext: &[u8] = match shndx_ext {
+            Some(xi) => section_slice(bytes, &shdrs[xi])?,
+            None => &[],
+        };
         let n = symtab.len() / ELF64_SYM_SIZE;
         symbols.reserve(n);
         for j in 0..n {
@@ -321,28 +375,37 @@ pub fn parse_et_rel(bytes: &[u8], source: &str) -> Result<EtRel, C5Error> {
             let st_shndx = u16::from_le_bytes(symtab[off + 6..off + 8].try_into().unwrap());
             let st_value = u64::from_le_bytes(symtab[off + 8..off + 16].try_into().unwrap());
             let st_size = u64::from_le_bytes(symtab[off + 16..off + 24].try_into().unwrap());
+            // A symbol into a consumed section (group / rela /
+            // symtab) is only meaningful for the section symbols the
+            // assembler emits; treat it as undefined and reject it if
+            // a relocation uses it.
+            let section_ref = |s: u32| match carried.get(s as usize).copied().flatten() {
+                Some(ci) => EtSymRef::Section(ci),
+                None => EtSymRef::Undef,
+            };
             let sec = match st_shndx {
                 SHN_UNDEF => EtSymRef::Undef,
                 SHN_ABS => EtSymRef::Abs,
                 SHN_COMMON => EtSymRef::Common,
+                // Extended numbering: the real index, which may itself
+                // be past SHN_LORESERVE, is the table's j-th word.
                 SHN_XINDEX => {
-                    return Err(err(&format!("{source}: SHN_XINDEX symbol unsupported")));
+                    let at = j * 4;
+                    if at + 4 > ext.len() {
+                        return Err(err(&format!(
+                            "{source}: SHN_XINDEX symbol {j} past the SHT_SYMTAB_SHNDX table"
+                        )));
+                    }
+                    section_ref(u32::from_le_bytes(ext[at..at + 4].try_into().unwrap()))
                 }
+                // A reserved index the ABI leaves to the OS or the
+                // processor; nothing this linker places.
                 s if s >= SHN_LORESERVE => {
-                    return Err(err(&format!(
-                        "{source}: reserved st_shndx 0x{s:x} unsupported"
+                    return Err(unsupported(&format!(
+                        "{source}: reserved st_shndx 0x{s:x} in a relocatable link"
                     )));
                 }
-                s => match carried.get(s as usize).copied().flatten() {
-                    Some(ci) => EtSymRef::Section(ci),
-                    None => {
-                        // Symbol into a consumed section (group /
-                        // rela / symtab): only meaningful for the
-                        // section symbols the assembler emits; treat
-                        // as undefined and reject if a reloc uses it.
-                        EtSymRef::Undef
-                    }
-                },
+                s => section_ref(s as u32),
             };
             symbols.push(EtSym {
                 name: if st_name == 0 {
@@ -360,33 +423,46 @@ pub fn parse_et_rel(bytes: &[u8], source: &str) -> Result<EtRel, C5Error> {
         }
     }
 
-    // Relocation sections attach to their carried target.
+    // Relocation sections attach to their carried target. An SHT_REL
+    // entry keeps its addend in the field it relocates, so it is read
+    // out of the target's bytes and the entry becomes RELA-shaped.
+    // The output tables are RELA whatever the input carried; the field
+    // keeps its bytes, which a RELA consumer overwrites.
     for sh in shdrs.iter().skip(1) {
-        if sh.sh_type != SHT_RELA {
-            continue;
-        }
-        if sh.sh_entsize != ELF64_RELA_SIZE as u64 {
-            return Err(err(&format!("{source}: SHT_RELA entry size mismatch")));
+        let rel = match sh.sh_type {
+            SHT_RELA => false,
+            SHT_REL => true,
+            _ => continue,
+        };
+        let ent = if rel { ELF64_REL_SIZE } else { ELF64_RELA_SIZE };
+        if sh.sh_entsize != ent as u64 {
+            let kind = if rel { "SHT_REL" } else { "SHT_RELA" };
+            return Err(err(&format!("{source}: {kind} entry size mismatch")));
         }
         let Some(ci) = carried.get(sh.sh_info as usize).copied().flatten() else {
             continue; // relocations for a consumed section carry nothing
         };
         let body = section_slice(bytes, sh)?;
-        let n = body.len() / ELF64_RELA_SIZE;
-        let relocs = &mut sections[ci].relocs;
-        relocs.reserve(n);
+        let n = body.len() / ent;
+        let mut relocs: Vec<EtReloc> = Vec::with_capacity(n);
         for j in 0..n {
-            let off = j * ELF64_RELA_SIZE;
+            let off = j * ent;
             let r_offset = u64::from_le_bytes(body[off..off + 8].try_into().unwrap());
             let r_info = u64::from_le_bytes(body[off + 8..off + 16].try_into().unwrap());
-            let r_addend = i64::from_le_bytes(body[off + 16..off + 24].try_into().unwrap());
+            let rtype = (r_info & 0xffff_ffff) as u32;
+            let addend = if rel {
+                rel_addend(&sections[ci], ehdr.e_machine, rtype, r_offset, source)?
+            } else {
+                i64::from_le_bytes(body[off + 16..off + 24].try_into().unwrap())
+            };
             relocs.push(EtReloc {
                 offset: r_offset,
                 sym: (r_info >> 32) as u32,
-                rtype: (r_info & 0xffff_ffff) as u32,
-                addend: r_addend,
+                rtype,
+                addend,
             });
         }
+        sections[ci].relocs.extend(relocs);
     }
 
     // Groups.
@@ -403,8 +479,8 @@ pub fn parse_et_rel(bytes: &[u8], source: &str) -> Result<EtRel, C5Error> {
             .map(|s| s.name.clone())
             .unwrap_or_default();
         let mut members = Vec::new();
-        for w in body[4..].chunks_exact(4) {
-            let shndx = u32::from_le_bytes(w.try_into().unwrap()) as usize;
+        for w in body[4..].as_chunks::<4>().0.iter() {
+            let shndx = u32::from_le_bytes(*w) as usize;
             // Rela members are implied by their target; record only
             // carried sections.
             if let Some(ci) = carried.get(shndx).copied().flatten() {
@@ -432,6 +508,36 @@ pub fn parse_et_rel(bytes: &[u8], source: &str) -> Result<EtRel, C5Error> {
         symbols,
         groups,
     })
+}
+
+/// Read one `SHT_REL` entry's implicit addend out of the section it
+/// relocates. A type whose field is not a plain little-endian integer
+/// -- the aarch64 instruction forms -- carries no recoverable addend.
+fn rel_addend(
+    sec: &EtSection,
+    machine: u16,
+    rtype: u32,
+    offset: u64,
+    source: &str,
+) -> Result<i64, C5Error> {
+    if rtype == 0 {
+        return Ok(0); // R_*_NONE
+    }
+    let Some(width) = elf_reloc_field_width(machine, rtype) else {
+        return Err(unsupported(&format!(
+            "{source}: {} in `{}' has no implicit-addend field",
+            elf_reloc_desc(machine, rtype),
+            sec.name
+        )));
+    };
+    let end = offset + width as u64;
+    if sec.sh_type == SHT_NOBITS || end > sec.bytes.len() as u64 {
+        return Err(err(&format!(
+            "{source}: relocation offset 0x{offset:x} outside `{}'",
+            sec.name
+        )));
+    }
+    Ok(implicit_addend(&sec.bytes[offset as usize..end as usize]))
 }
 
 fn read_carried(bytes: &[u8], sh: &Elf64Shdr, shstr: &[u8]) -> Result<EtSection, C5Error> {
@@ -679,9 +785,6 @@ pub struct RelinkOptions {
     pub expect_machine: Option<u16>,
 }
 
-/// (object index, carried-section index) of one input section.
-type SecId = (usize, usize);
-
 #[derive(Debug, Clone, Copy)]
 struct Contribution {
     obj: usize,
@@ -831,17 +934,11 @@ impl OutSec {
     }
 }
 
-/// ELF object-attribute sections carry one attribute set, not a
-/// concatenation of the inputs': BFD reads the first subsection length
-/// and rejects anything past it. Only the first copy is kept, and the
-/// rest must agree.
-/// TODO: merge per tag -- the AArch64 `aeabi_feature_and_bits` set is
-/// an AND across inputs, so disagreeing objects have a defined result.
-fn is_attributes_section(sh_type: u32) -> bool {
-    const SHT_GNU_ATTRIBUTES: u32 = 0x6fff_fff5;
-    /// `SHT_ARM_ATTRIBUTES` / `SHT_AARCH64_ATTRIBUTES`, the same value.
-    const SHT_ARCH_ATTRIBUTES: u32 = 0x7000_0003;
-    matches!(sh_type, SHT_GNU_ATTRIBUTES | SHT_ARCH_ATTRIBUTES)
+/// Every object's body for one attribute section name.
+struct AttrInputs<'a> {
+    sh_type: u32,
+    addralign: u64,
+    bodies: Vec<Option<&'a [u8]>>,
 }
 
 fn merge_property_notes(inputs: &[Vec<&[u8]>], align: u64) -> Option<EtSection> {
@@ -875,42 +972,25 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
         }
     }
 
-    // COMDAT dedup: first group with a signature wins; later ones drop
-    // their member sections. `twin` maps a dropped member to the kept
-    // group's same-name member so stray relocations can retarget.
-    let mut kept_groups: Vec<(usize, usize)> = Vec::new(); // (obj, group idx)
-    let mut sig_first: HashMap<&str, usize> = HashMap::new(); // -> kept_groups idx
-    let mut dropped: HashSet<SecId> = HashSet::new();
-    let mut twin: HashMap<SecId, SecId> = HashMap::new();
-    for (oi, o) in objs.iter().enumerate() {
-        for (gi, g) in o.groups.iter().enumerate() {
-            if g.flags & GRP_COMDAT == 0 {
-                kept_groups.push((oi, gi));
-                continue;
-            }
-            match sig_first.get(g.signature.as_str()) {
-                None => {
-                    sig_first.insert(g.signature.as_str(), kept_groups.len());
-                    kept_groups.push((oi, gi));
-                }
-                Some(&kept) => {
-                    let (koi, kgi) = kept_groups[kept];
-                    let kept_members = &objs[koi].groups[kgi].members;
-                    for (mi, &sec) in g.members.iter().enumerate() {
-                        dropped.insert((oi, sec));
-                        let name = &o.sections[sec].name;
-                        let t = kept_members
-                            .iter()
-                            .find(|&&ks| objs[koi].sections[ks].name == *name)
-                            .or(kept_members.get(mi));
-                        if let Some(&ks) = t {
-                            twin.insert((oi, sec), (koi, ks));
-                        }
-                    }
-                }
-            }
-        }
-    }
+    let views: Vec<comdat::ObjView<'_>> = objs
+        .iter()
+        .map(|o| comdat::ObjView {
+            groups: o
+                .groups
+                .iter()
+                .map(|g| comdat::GroupView {
+                    flags: g.flags,
+                    signature: &g.signature,
+                    members: &g.members,
+                })
+                .collect(),
+            section_names: o.sections.iter().map(|s| s.name.as_str()).collect(),
+        })
+        .collect();
+    let comdat::Dedup {
+        kept: kept_groups,
+        mut dropped,
+    } = comdat::dedup(&views);
 
     // Property notes leave the generic name-merge; script discards and
     // --strip-debug drop sections outright.
@@ -918,6 +998,9 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
     let script = opts.script.as_ref().unwrap_or(&empty);
     let mut prop_notes: Vec<Vec<&[u8]>> = alloc::vec![Vec::new(); objs.len()];
     let mut prop_align = 4u64;
+    // Attribute sections hold one attribute set each, so they leave the
+    // generic name-merge too: `attrs[name][obj]` is the input's body.
+    let mut attrs: BTreeMap<&str, AttrInputs> = BTreeMap::new();
     for (oi, o) in objs.iter().enumerate() {
         for (si, s) in o.sections.iter().enumerate() {
             if s.name == ".note.gnu.property" && s.sh_type == SHT_NOTE {
@@ -927,6 +1010,15 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
             } else if (opts.strip_debug && s.name.starts_with(".debug"))
                 || script.discard.iter().any(|p| glob_match(p, &s.name))
             {
+                dropped.insert((oi, si));
+            } else if attributes::is_attributes_section(s.sh_type) {
+                let e = attrs.entry(&s.name).or_insert_with(|| AttrInputs {
+                    sh_type: s.sh_type,
+                    addralign: s.addralign,
+                    bodies: alloc::vec![None; objs.len()],
+                });
+                e.addralign = e.addralign.max(s.addralign);
+                e.bodies[oi] = Some(s.bytes.as_slice());
                 dropped.insert((oi, si));
             }
         }
@@ -1018,17 +1110,6 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
                 outsecs.push(OutSec::new(&s.name, exec_fill));
                 outsecs.len() - 1
             });
-            if is_attributes_section(s.sh_type) {
-                if outsecs[idx].bytes.is_empty() {
-                    outsecs[idx].append(objs, oi, si);
-                } else if outsecs[idx].bytes != s.bytes {
-                    return Err(err(&format!(
-                        "{}: `{}` disagrees with an earlier object's;                          object attributes are not merged per tag",
-                        o.source, s.name
-                    )));
-                }
-                continue;
-            }
             outsecs[idx].append(objs, oi, si);
         }
     }
@@ -1044,6 +1125,22 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
                 outsecs.push(out);
             }
         }
+    }
+    for (name, a) in &attrs {
+        let inputs: Vec<attributes::Input> = objs
+            .iter()
+            .zip(&a.bodies)
+            .map(|(o, b)| (o.source.as_str(), *b))
+            .collect();
+        let fmt = attributes::format_for(machine, a.sh_type);
+        let Some(bytes) = attributes::merge(name, fmt, &inputs).map_err(|e| err(&e))? else {
+            continue;
+        };
+        let mut out = OutSec::new(name, exec_fill);
+        out.sh_type = a.sh_type;
+        out.addralign = a.addralign;
+        out.bytes = bytes;
+        outsecs.push(out);
     }
     if let Some(p) = merge_property_notes(&prop_notes, prop_align) {
         let mut out = OutSec::new(&p.name, exec_fill);
@@ -1067,12 +1164,6 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
         out.bytes.extend_from_slice(&[0u8; 20]);
         outsecs.push(out);
     }
-    if outsecs.len() >= (SHN_LORESERVE as usize) - 8 {
-        return Err(err(
-            "output would need extended section numbering (>= 0xff00 sections); unsupported",
-        ));
-    }
-
     // Placement lookup: input section -> (outsec, offset).
     let mut placed: HashMap<SecId, (usize, u64)> = HashMap::new();
     for (idx, out) in outsecs.iter().enumerate() {
@@ -1223,7 +1314,7 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
         name: String,
         info: u8,
         other: u8,
-        shndx: u16, // SHN_* or 1-based output section index
+        sec: OutRef,
         value: u64,
         size: u64,
     }
@@ -1232,7 +1323,7 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
         name: String::new(),
         info: 0,
         other: 0,
-        shndx: SHN_UNDEF,
+        sec: OutRef::Undef,
         value: 0,
         size: 0,
     });
@@ -1244,7 +1335,7 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
             name: String::new(),
             info: STT_SECTION, // STB_LOCAL << 4 | STT_SECTION
             other: 0,
-            shndx: (i + 1) as u16, // patched to final index at write
+            sec: OutRef::Sec(i as u32),
             value: 0,
             size: 0,
         });
@@ -1276,7 +1367,7 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
                 name: base.to_string(),
                 info: (STB_LOCAL << 4) | STT_FILE,
                 other: 0,
-                shndx: SHN_ABS,
+                sec: OutRef::Abs,
                 value: 0,
                 size: 0,
             });
@@ -1285,21 +1376,21 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
             if yi == 0 || sym.binding != STB_LOCAL || sym.kind == STT_SECTION {
                 continue;
             }
-            let (shndx, value) = match sym.sec {
-                EtSymRef::Abs => (SHN_ABS, sym.value),
+            let (sec, value) = match sym.sec {
+                EtSymRef::Abs => (OutRef::Abs, sym.value),
                 EtSymRef::Undef => {
                     if sym.kind == STT_FILE {
-                        (SHN_ABS, sym.value)
+                        (OutRef::Abs, sym.value)
                     } else {
                         continue;
                     }
                 }
-                EtSymRef::Common => (SHN_COMMON, sym.value),
+                EtSymRef::Common => (OutRef::Common, sym.value),
                 EtSymRef::Section(si) => {
                     let Some(&(outsec, off)) = placed.get(&(oi, si)) else {
                         continue; // section dropped; its locals go with it
                     };
-                    ((outsec + 1) as u16, sym.value + off)
+                    (OutRef::Sec(outsec as u32), sym.value + off)
                 }
             };
             let discard = match opts.discard_locals {
@@ -1315,7 +1406,7 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
                 name: sym.name.clone(),
                 info: (STB_LOCAL << 4) | sym.kind,
                 other: sym.other,
-                shndx,
+                sec,
                 value,
                 size: sym.size,
             });
@@ -1342,7 +1433,7 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
                     name: name.clone(),
                     info: (binding << 4) | hinted(*kind),
                     other: *other,
-                    shndx: SHN_UNDEF,
+                    sec: OutRef::Undef,
                     value: 0,
                     size: 0,
                 },
@@ -1350,14 +1441,14 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
                     name: name.clone(),
                     info: (STB_GLOBAL << 4) | 1, // STT_OBJECT
                     other: *other,
-                    shndx: SHN_COMMON,
+                    sec: OutRef::Common,
                     value: *align,
                     size: *size,
                 },
                 GState::Def { obj, sym, .. } => {
                     let s = &objs[*obj].symbols[*sym];
-                    let (shndx, value) = match s.sec {
-                        EtSymRef::Abs => (SHN_ABS, s.value),
+                    let (sec, value) = match s.sec {
+                        EtSymRef::Abs => (OutRef::Abs, s.value),
                         EtSymRef::Section(si) => {
                             let &(outsec, off) = placed.get(&(*obj, si)).ok_or_else(|| {
                                 err(&format!(
@@ -1365,7 +1456,7 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
                                     objs[*obj].source, name
                                 ))
                             })?;
-                            ((outsec + 1) as u16, s.value + off)
+                            (OutRef::Sec(outsec as u32), s.value + off)
                         }
                         _ => unreachable!(),
                     };
@@ -1373,7 +1464,7 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
                         name: name.clone(),
                         info: (s.binding << 4) | hinted(s.kind),
                         other: s.other,
-                        shndx,
+                        sec,
                         value,
                         size: s.size,
                     }
@@ -1385,7 +1476,7 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
                 name: name.clone(),
                 info: STB_GLOBAL << 4, // STT_NOTYPE
                 other: 0,
-                shndx: (*outsec + 1) as u16,
+                sec: OutRef::Sec(*outsec as u32),
                 value: *off,
                 size: 0,
             });
@@ -1418,8 +1509,7 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
                     o.source, r.sym
                 )));
             };
-            let (tobj, tsec) = twin.get(&(oi, si)).copied().unwrap_or((oi, si));
-            let Some(&(outsec, off)) = placed.get(&(tobj, tsec)) else {
+            let Some(&(outsec, off)) = placed.get(&(oi, si)) else {
                 if !allocated {
                     return Ok((0, 0));
                 }
@@ -1436,14 +1526,13 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
             }
             // Discarded local: convert to the containing section's
             // symbol with the local's value folded into the addend.
-            if let EtSymRef::Section(si) = sym.sec {
-                let (tobj, tsec) = twin.get(&(oi, si)).copied().unwrap_or((oi, si));
-                if let Some(&(outsec, off)) = placed.get(&(tobj, tsec)) {
-                    return Ok((
-                        secsym_of_outsec[outsec],
-                        r.addend + off as i64 + sym.value as i64,
-                    ));
-                }
+            if let EtSymRef::Section(si) = sym.sec
+                && let Some(&(outsec, off)) = placed.get(&(oi, si))
+            {
+                return Ok((
+                    secsym_of_outsec[outsec],
+                    r.addend + off as i64 + sym.value as i64,
+                ));
             }
             if !allocated {
                 return Ok((0, 0));
@@ -1500,7 +1589,7 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
             name: s.name.clone(),
             info: s.info,
             other: s.other,
-            shndx: s.shndx,
+            sec: s.sec,
             value: s.value,
             size: s.size,
         })
@@ -1535,18 +1624,45 @@ struct OutGroup {
     members: Vec<usize>, // outsec indices
 }
 
+/// Where an output symbol points. A section reference numbers the
+/// output section until [`write_et_rel`] patches it to the final
+/// section numbering.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum OutRef {
+    Undef,
+    Abs,
+    Common,
+    Sec(u32),
+}
+
+impl OutRef {
+    /// `(st_shndx, extended index)`. A section past `SHN_LORESERVE`
+    /// only fits the 16-bit field through `SHN_XINDEX` plus an
+    /// `SHT_SYMTAB_SHNDX` entry.
+    fn encode(self) -> (u16, u32) {
+        match self {
+            OutRef::Undef => (SHN_UNDEF, 0),
+            OutRef::Abs => (SHN_ABS, 0),
+            OutRef::Common => (SHN_COMMON, 0),
+            OutRef::Sec(n) if n < SHN_LORESERVE as u32 => (n as u16, 0),
+            OutRef::Sec(n) => (SHN_XINDEX, n),
+        }
+    }
+}
+
 struct RawSym {
     name: String,
     info: u8,
     other: u8,
-    shndx: u16,
+    sec: OutRef,
     value: u64,
     size: u64,
 }
 
 /// Serialize the merged image. Layout: ehdr, section bodies in order
 /// (each `.rela.X` follows its `X`, a group section precedes its first
-/// member), `.symtab`, `.strtab`, `.shstrtab`, section header table.
+/// member), `.symtab`, `.symtab_shndx` when the section count needs
+/// it, `.strtab`, `.shstrtab`, section header table.
 #[allow(clippy::too_many_arguments)]
 fn write_et_rel(
     machine: u16,
@@ -1565,6 +1681,7 @@ fn write_et_rel(
         Rela(usize),
         Group(usize),
         Symtab,
+        SymtabShndx,
         Strtab,
         Shstrtab,
     }
@@ -1577,75 +1694,89 @@ fn write_et_rel(
             group_before.insert(first, gi);
         }
     }
-    let mut final_of_outsec: Vec<u16> = alloc::vec![0; outsecs.len()];
-    let mut final_of_group: Vec<u16> = alloc::vec![0; out_groups.len()];
+    let mut final_of_outsec: Vec<u32> = alloc::vec![0; outsecs.len()];
     for (i, _) in outsecs.iter().enumerate() {
         if let Some(&gi) = group_before.get(&i) {
-            final_of_group[gi] = (ents.len() + 1) as u16;
             ents.push(Ent::Group(gi));
         }
-        final_of_outsec[i] = (ents.len() + 1) as u16;
+        final_of_outsec[i] = (ents.len() + 1) as u32;
         ents.push(Ent::Sec(i));
         if !out_relocs[i].is_empty() {
             ents.push(Ent::Rela(i));
         }
     }
+
+    // Patch symbol section references from outsec to final numbering.
+    for s in syms.iter_mut() {
+        if let OutRef::Sec(i) = s.sec {
+            s.sec = OutRef::Sec(final_of_outsec[i as usize]);
+        }
+    }
+
     let symtab_final = (ents.len() + 1) as u32;
     ents.push(Ent::Symtab);
+    // A symbol in a section past SHN_LORESERVE needs the companion
+    // index table; nothing else does, so it is emitted only then.
+    let ext_shndx = syms.iter().any(|s| s.sec.encode().0 == SHN_XINDEX);
+    if ext_shndx {
+        ents.push(Ent::SymtabShndx);
+    }
+    let strtab_final = (ents.len() + 1) as u32;
     ents.push(Ent::Strtab);
     ents.push(Ent::Shstrtab);
     let shnum = ents.len() + 1;
+    let shstrndx = (shnum - 1) as u32;
 
-    // Patch symbol st_shndx from outsec numbering to final numbering.
-    for s in syms.iter_mut() {
-        if s.shndx != SHN_UNDEF && s.shndx < SHN_LORESERVE {
-            s.shndx = final_of_outsec[(s.shndx - 1) as usize];
-        }
-    }
-
-    // String tables.
-    let mut strtab: Vec<u8> = alloc::vec![0];
-    let mut strmap: HashMap<String, u32> = HashMap::new();
-    let intern = |t: &mut Vec<u8>, m: &mut HashMap<String, u32>, s: &str| -> u32 {
-        if s.is_empty() {
-            return 0;
-        }
-        *m.entry(s.to_string()).or_insert_with(|| {
-            let at = t.len() as u32;
-            t.extend_from_slice(s.as_bytes());
-            t.push(0);
-            at
-        })
-    };
+    // Symbol table, and the extended index table when one is needed.
+    let sym_names: Vec<&str> = syms.iter().map(|s| s.name.as_str()).collect();
+    let (strtab, sym_name_offs) = build_string_table(&sym_names);
     let mut symtab_bytes: Vec<u8> = Vec::with_capacity(syms.len() * ELF64_SYM_SIZE);
-    for s in &syms {
-        let name_off = intern(&mut strtab, &mut strmap, &s.name);
-        symtab_bytes.extend_from_slice(&name_off.to_le_bytes());
+    let mut shndx_bytes: Vec<u8> = Vec::new();
+    for (i, s) in syms.iter().enumerate() {
+        let (st_shndx, ext) = s.sec.encode();
+        symtab_bytes.extend_from_slice(&sym_name_offs[i].to_le_bytes());
         symtab_bytes.push(s.info);
         symtab_bytes.push(s.other);
-        symtab_bytes.extend_from_slice(&s.shndx.to_le_bytes());
+        symtab_bytes.extend_from_slice(&st_shndx.to_le_bytes());
         symtab_bytes.extend_from_slice(&s.value.to_le_bytes());
         symtab_bytes.extend_from_slice(&s.size.to_le_bytes());
+        if ext_shndx {
+            shndx_bytes.extend_from_slice(&ext.to_le_bytes());
+        }
     }
 
-    let mut shstr: Vec<u8> = alloc::vec![0];
-    let mut shstrmap: HashMap<String, u32> = HashMap::new();
+    // Section names. Every name is known before the bodies are laid
+    // out, so `.shstrtab` is one more body rather than a fixup.
+    let ent_name = |e: &Ent| -> String {
+        match e {
+            Ent::Sec(i) => outsecs[*i].name.clone(),
+            Ent::Rela(i) => format!(".rela{}", outsecs[*i].name),
+            Ent::Group(_) => ".group".to_string(),
+            Ent::Symtab => ".symtab".to_string(),
+            Ent::SymtabShndx => ".symtab_shndx".to_string(),
+            Ent::Strtab => ".strtab".to_string(),
+            Ent::Shstrtab => ".shstrtab".to_string(),
+        }
+    };
+    let ent_names: Vec<String> = ents.iter().map(ent_name).collect();
+    let name_refs: Vec<&str> = ent_names.iter().map(|n| n.as_str()).collect();
+    let (shstr, ent_name_offs) = build_string_table(&name_refs);
 
     // Group bodies (final indices; a group lists its members and their
     // rela sections).
-    let mut rela_final: HashMap<usize, u16> = HashMap::new();
+    let mut rela_final: HashMap<usize, u32> = HashMap::new();
     for (fi, e) in ents.iter().enumerate() {
         if let Ent::Rela(i) = e {
-            rela_final.insert(*i, (fi + 1) as u16);
+            rela_final.insert(*i, (fi + 1) as u32);
         }
     }
     let group_body = |g: &OutGroup| -> Vec<u8> {
         let mut b = Vec::new();
         b.extend_from_slice(&g.flags.to_le_bytes());
         for &m in &g.members {
-            b.extend_from_slice(&(final_of_outsec[m] as u32).to_le_bytes());
+            b.extend_from_slice(&final_of_outsec[m].to_le_bytes());
             if let Some(&rf) = rela_final.get(&m) {
-                b.extend_from_slice(&(rf as u32).to_le_bytes());
+                b.extend_from_slice(&rf.to_le_bytes());
             }
         }
         b
@@ -1656,9 +1787,8 @@ fn write_et_rel(
     let mut shdrs: Vec<[u8; ELF64_SHDR_SIZE]> = Vec::with_capacity(shnum);
     shdrs.push([0; ELF64_SHDR_SIZE]);
     let mut build_id_desc_off: Option<usize> = None;
-    for e in &ents {
-        let (name, sh_type, flags, off_align, link, info, entsize, addralign, body, nobits): (
-            String,
+    for (k, e) in ents.iter().enumerate() {
+        let (sh_type, flags, off_align, link, info, entsize, addralign, body, nobits): (
             u32,
             u64,
             u64,
@@ -1673,7 +1803,6 @@ fn write_et_rel(
                 let o = &outsecs[*i];
                 // SHF_LINK_ORDER sh_link is patched after numbering.
                 (
-                    o.name.clone(),
                     o.sh_type,
                     o.flags,
                     o.addralign,
@@ -1694,12 +1823,11 @@ fn write_et_rel(
                     b.extend_from_slice(&addend.to_le_bytes());
                 }
                 (
-                    format!(".rela{}", o.name),
                     SHT_RELA,
                     SHF_INFO_LINK | (o.flags & SHF_GROUP),
                     8,
                     symtab_final,
-                    final_of_outsec[*i] as u32,
+                    final_of_outsec[*i],
                     ELF64_RELA_SIZE as u64,
                     8,
                     b,
@@ -1709,7 +1837,6 @@ fn write_et_rel(
             Ent::Group(gi) => {
                 let g = &out_groups[*gi];
                 (
-                    ".group".to_string(),
                     SHT_GROUP,
                     0,
                     4,
@@ -1722,48 +1849,31 @@ fn write_et_rel(
                 )
             }
             Ent::Symtab => (
-                ".symtab".to_string(),
                 SHT_SYMTAB,
                 0,
                 8,
-                (symtab_final + 1), // .strtab follows
+                strtab_final,
                 first_global,
                 ELF64_SYM_SIZE as u64,
                 8,
                 symtab_bytes.clone(),
                 0,
             ),
-            Ent::Strtab => (
-                ".strtab".to_string(),
-                SHT_STRTAB,
+            Ent::SymtabShndx => (
+                SHT_SYMTAB_SHNDX,
                 0,
-                1,
+                4,
+                symtab_final,
                 0,
-                0,
-                0,
-                1,
-                strtab.clone(),
-                0,
-            ),
-            Ent::Shstrtab => (
-                String::new(), // interned below with the final table
-                SHT_STRTAB,
-                0,
-                1,
-                0,
-                0,
-                0,
-                1,
-                Vec::new(),
+                4,
+                4,
+                shndx_bytes.clone(),
                 0,
             ),
+            Ent::Strtab => (SHT_STRTAB, 0, 1, 0, 0, 0, 1, strtab.clone(), 0),
+            Ent::Shstrtab => (SHT_STRTAB, 0, 1, 0, 0, 0, 1, shstr.clone(), 0),
         };
-        let is_shstr = matches!(e, Ent::Shstrtab);
-        let name_off = if is_shstr {
-            intern(&mut shstr, &mut shstrmap, ".shstrtab")
-        } else {
-            intern(&mut shstr, &mut shstrmap, &name)
-        };
+        let name_off = ent_name_offs[k];
         let align = off_align.max(1);
         let sh_offset = if sh_type == SHT_NOBITS {
             file.len() as u64
@@ -1796,19 +1906,10 @@ fn write_et_rel(
         h[56..64].copy_from_slice(&entsize.to_le_bytes());
         shdrs.push(h);
     }
-    // The shstrtab body was interned during the walk; append it now
-    // and fix its header's offset/size.
-    {
-        let at = file.len() as u64;
-        file.extend_from_slice(&shstr);
-        let h = shdrs.last_mut().unwrap();
-        h[24..32].copy_from_slice(&at.to_le_bytes());
-        h[32..40].copy_from_slice(&(shstr.len() as u64).to_le_bytes());
-    }
     // SHF_LINK_ORDER sh_link fixup: resolve via first contribution's
     // link target now that final numbering exists.
     {
-        let mut placed_final: HashMap<SecId, u16> = HashMap::new();
+        let mut placed_final: HashMap<SecId, u32> = HashMap::new();
         for (i, out) in outsecs.iter().enumerate() {
             for c in &out.contribs {
                 placed_final.insert((c.obj, c.sec), final_of_outsec[i]);
@@ -1819,11 +1920,20 @@ fn write_et_rel(
                 && let Some(&fin) = placed_final.get(&t)
             {
                 let hi = final_of_outsec[i] as usize;
-                shdrs[hi][40..44].copy_from_slice(&(fin as u32).to_le_bytes());
+                shdrs[hi][40..44].copy_from_slice(&fin.to_le_bytes());
             }
         }
     }
 
+    // Extended numbering: a count or a header-name index that does
+    // not fit the ELF header's 16-bit fields escapes through section
+    // header 0, which is otherwise all zeroes.
+    if shnum >= SHN_LORESERVE as usize {
+        shdrs[0][32..40].copy_from_slice(&(shnum as u64).to_le_bytes());
+    }
+    if shstrndx >= SHN_LORESERVE as u32 {
+        shdrs[0][40..44].copy_from_slice(&shstrndx.to_le_bytes());
+    }
     let e_shoff = (file.len() as u64).next_multiple_of(8);
     file.resize(e_shoff as usize, 0);
     for h in &shdrs {
@@ -1847,8 +1957,18 @@ fn write_et_rel(
     file[54..56].copy_from_slice(&0u16.to_le_bytes()); // e_phentsize
     file[56..58].copy_from_slice(&0u16.to_le_bytes()); // e_phnum
     file[58..60].copy_from_slice(&(ELF64_SHDR_SIZE as u16).to_le_bytes());
-    file[60..62].copy_from_slice(&(shnum as u16).to_le_bytes());
-    file[62..64].copy_from_slice(&((shnum - 1) as u16).to_le_bytes()); // shstrtab last
+    let e_shnum = if shnum >= SHN_LORESERVE as usize {
+        0
+    } else {
+        shnum as u16
+    };
+    let e_shstrndx = if shstrndx >= SHN_LORESERVE as u32 {
+        SHN_XINDEX
+    } else {
+        shstrndx as u16 // .shstrtab is last
+    };
+    file[60..62].copy_from_slice(&e_shnum.to_le_bytes());
+    file[62..64].copy_from_slice(&e_shstrndx.to_le_bytes());
 
     if let Some(off) = build_id_desc_off {
         let digest = sha1(&file);
@@ -1868,9 +1988,9 @@ fn sha1(data: &[u8]) -> [u8; 20] {
     }
     msg.extend_from_slice(&ml.to_be_bytes());
     let mut w = [0u32; 80];
-    for chunk in msg.chunks_exact(64) {
-        for (i, word) in chunk.chunks_exact(4).enumerate() {
-            w[i] = u32::from_be_bytes(word.try_into().unwrap());
+    for chunk in msg.as_chunks::<64>().0.iter() {
+        for (i, word) in chunk.as_chunks::<4>().0.iter().enumerate() {
+            w[i] = u32::from_be_bytes(*word);
         }
         for i in 16..80 {
             w[i] = (w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16]).rotate_left(1);

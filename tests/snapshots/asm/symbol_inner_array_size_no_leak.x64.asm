@@ -9,41 +9,55 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
-               	leaq	-0x20(%rbp), %rsi
+               	leaq	-0x20(%rbp), %rdx
                	xorq	%rax, %rax
                	jmp	<addr>
-               	leaq	(%rcx,%rcx,2), %rdx
-               	movslq	%edx, %rdi
-               	movw	%di, (%rsi,%rcx,2)
-               	incq	%rax
                	movslq	%eax, %rcx
-               	cmpq	$0x8, %rcx
+               	leaq	(%rcx,%rcx,2), %rsi
+               	movslq	%esi, %rsi
+               	movw	%si, (%rdx,%rcx,2)
+               	incq	%rax
+               	cmpl	$0x8, %eax
                	jl	<addr>
-               	movswq	0xe(%rsi), %rax
-               	cmpq	$0x15, %rax
+               	movswq	0xe(%rdx), %rax
+               	cmpl	$0x15, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
                	leaq	-0x20(%rbp), %rax
-               	movswq	(%rax), %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	movswq	(%rax), %rdx
+               	testl	%edx, %edx
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	testq	%rdx, %rdx
                	jne	<addr>
-               	leaq	-0x20(%rbp), %rax
                	movswq	0xe(%rax), %rax
-               	cmpq	$0x15, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	cmpl	$0x15, %eax
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x2, %eax
                	addq	$0x30, %rsp

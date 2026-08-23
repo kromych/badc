@@ -22,6 +22,11 @@ from pathlib import Path
 PHASES: list[tuple[str, str]] = [
     ("preprocess", r"badc::c5::preprocessor::"),
     ("lex", r"badc::c5::(lexer|token)"),
+    # Inline-asm section materialization lives in emit_common but runs for
+    # file-scope asm during the front end, so it has to be charged before
+    # the ssa-emit rule below or it reads as codegen time.
+    ("asm-sections", r"(materialize_(file_)?asm|measure_(round|asm_section|fill)"
+                     r"|AsmSection|asm_(non_local|weak_only)_names|section_name_keys)"),
     ("regalloc", r"badc::c5::codegen::ssa::(reg_alloc|liveness|phi_class|slot_coalesce|shadow)"),
     ("ssa-build", r"badc::c5::codegen::ssa::(build|mem2reg)"),
     ("optimizer", r"badc::c5::codegen::passes::"),

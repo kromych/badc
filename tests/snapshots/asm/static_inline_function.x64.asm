@@ -9,6 +9,21 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <main>:
                	movl	$0xdeadbeef, %eax       # imm = 0xDEADBEEF
@@ -25,13 +40,6 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	retq
                	xorq	%rax, %rax
-               	xorq	%rcx, %rcx
-               	jmp	<addr>
+               	movq	%rax, %rcx
                	movq	%rax, %rdx
-               	andq	$0x1, %rdx
-               	addq	%rdx, %rcx
-               	shrq	%rax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	xorq	%rax, %rax
                	retq

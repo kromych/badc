@@ -9,6 +9,21 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <main>:
                	pushq	%rbp
@@ -25,20 +40,18 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	leaq	-0x10(%rbp), %rax
-               	movq	0x8(%rax), %rax
-               	testq	%rax, %rax
-               	setl	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	movq	0x8(%rax), %rcx
+               	testq	%rcx, %rcx
+               	setl	%cl
+               	movzbq	%cl, %rcx
+               	testq	%rcx, %rcx
                	jne	<addr>
-               	leaq	-0x10(%rbp), %rax
-               	movq	0x8(%rax), %rax
-               	cmpq	$0xf4240, %rax          # imm = 0xF4240
-               	setge	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	movq	0x8(%rax), %rcx
+               	cmpq	$0xf4240, %rcx          # imm = 0xF4240
+               	setge	%cl
+               	movzbq	%cl, %rcx
+               	testq	%rcx, %rcx
                	jne	<addr>
-               	leaq	-0x10(%rbp), %rax
                	movq	(%rax), %rax
                	testq	%rax, %rax
                	jg	<addr>
@@ -46,8 +59,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movslq	%ebx, %rax
                	leaq	0x1(%rax), %rbx
-               	movslq	%ebx, %rax
-               	cmpq	$0x64, %rax
+               	cmpl	$0x64, %ebx
                	jl	<addr>
                	xorq	%rax, %rax
                	movq	(%rsp), %rbx

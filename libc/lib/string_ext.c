@@ -1,7 +1,8 @@
 // String routines <string.h> declares for every target but only some C
 // libraries export: GNU `strchrnul` / `memrchr` / `explicit_bzero`,
-// which neither libSystem nor msvcrt has, and POSIX `strndup`, which
-// msvcrt has not. Each block is gated to the targets with no definition
+// which neither libSystem nor msvcrt has, and POSIX `strndup` and GNU
+// `memmem`, which msvcrt has not. Each block is gated to the targets
+// with no definition
 // to bind, so elsewhere this file compiles to nothing. The native-link
 // driver offers it like an archive member, so an image that calls none
 // of these carries none of it.
@@ -63,6 +64,34 @@ char *strndup(char *s, int n) {
         p[len] = 0;
     }
     return p;
+}
+
+// GNU `memmem`. A needle longer than the haystack never matches. For
+// an empty needle this follows the Linux C library and returns the
+// haystack; libSystem returns null there, and no standard covers the
+// case. The compare is open-coded rather than routed through `memcmp`,
+// whose c5 prototype narrows the length to `int`.
+void *memmem(const void *haystack, size_t haystacklen,
+             const void *needle, size_t needlelen) {
+    const unsigned char *h = (const unsigned char *)haystack;
+    const unsigned char *n = (const unsigned char *)needle;
+    size_t i;
+    if (needlelen == 0) {
+        return (void *)haystack;
+    }
+    if (needlelen > haystacklen) {
+        return 0;
+    }
+    for (i = 0; i + needlelen <= haystacklen; i++) {
+        size_t k = 0;
+        while (k < needlelen && h[i + k] == n[k]) {
+            k++;
+        }
+        if (k == needlelen) {
+            return (void *)(h + i);
+        }
+    }
+    return 0;
 }
 
 #endif

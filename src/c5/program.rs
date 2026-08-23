@@ -47,18 +47,58 @@ pub struct InitFunc {
     pub is_destructor: bool,
 }
 
-/// A function symbol declared `__attribute__((alias("target")))`: the
-/// object's symbol table carries `name` as an additional symbol at
-/// `target`'s address. The target is a function defined in this unit
-/// (data aliases ride the regular data-symbol path with the target's
-/// offset). `weak` selects STB_WEAK over STB_GLOBAL. TODO: the ELF
-/// writer emits these; the Mach-O / PE final-image symbol tables do
-/// not carry the extra name (calls resolve at parse time regardless).
+/// Where an alias symbol's binding comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AliasBind {
+    /// `__attribute__((alias))` on an external-linkage declarator.
+    Global,
+    /// The same declarator with `__attribute__((weak))`.
+    Weak,
+    /// The same declarator with internal linkage.
+    Local,
+    /// A `.set` of the unit's assembly: local unless a `.globl` / `.weak` of
+    /// the unit declared the name.
+    Assigned,
+}
+
+/// A function symbol declared `__attribute__((alias("target")))` or assigned
+/// by a `.set` of the unit's assembly: the object's symbol table carries
+/// `name` as an additional symbol at `target`'s address. The target is a
+/// function defined in this unit (data aliases ride the regular data-symbol
+/// path with the target's offset). TODO: the ELF writer emits these; the
+/// Mach-O / PE final-image symbol tables do not carry the extra name (calls
+/// resolve at parse time regardless).
 #[derive(Debug, Clone)]
 pub struct FunctionAlias {
     pub name: String,
     pub target: String,
-    pub weak: bool,
+    pub bind: AliasBind,
+    /// Byte offset from the target (`.set name, target + 8`). A reference
+    /// through the alias takes it in the relocation addend.
+    pub addend: i64,
+}
+
+/// ELF symbol visibility, as the `.hidden` / `.internal` / `.protected`
+/// directives name it. The discriminant is the `st_other` visibility field;
+/// `STV_DEFAULT` is the absence of an entry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SymVisibility {
+    Internal = 1,
+    Hidden = 2,
+    Protected = 3,
+}
+
+impl SymVisibility {
+    /// The `st_other` visibility value.
+    pub fn stv(self) -> u8 {
+        self as u8
+    }
+
+    /// Whether the visibility keeps the name inside its component. Hidden and
+    /// internal do; protected exports the name but forbids preemption.
+    pub fn is_local_to_component(self) -> bool {
+        matches!(self, SymVisibility::Internal | SymVisibility::Hidden)
+    }
 }
 
 /// A pointer-to-extern-data initializer. The slot at `data_offset` in
@@ -136,6 +176,11 @@ pub struct CodeReloc {
 /// decide whether to print, ignore, or treat them as errors.
 #[derive(Debug, Clone)]
 pub struct Program {
+    /// Target the unit was compiled for. Sole source of the target
+    /// for a consumer that lowers the program after the compile --
+    /// the SSA interpreter, which otherwise has to guess the host and
+    /// would lower a cross-target unit under the wrong data model.
+    pub target: crate::c5::codegen::Target,
     pub data: Vec<u8>,
     /// File-scope `asm("...")` templates in source order, parse-time
     /// validated to hold section data directives only. The native
@@ -146,17 +191,48 @@ pub struct Program {
     /// `.weak` symbol names from file-scope asm. The object writer
     /// binds the name STB_WEAK wherever it surfaces -- a definition
     /// (function, data, asm-section label, alias) or an undefined
-    /// reference -- and emits a weak undefined entry for a name that
-    /// surfaces nowhere else, as GNU as does.
+    /// reference. A name that surfaces nowhere else gets no entry, as
+    /// GNU as emits none for an unreferenced undefined weak.
     pub asm_weak_names: Vec<String>,
-    /// `.hidden` symbol names from file-scope asm. The object writer sets
-    /// `STV_HIDDEN` in `st_other` wherever the name surfaces.
-    pub asm_hidden_names: Vec<String>,
+    /// `.globl` symbol names from file-scope asm. A name the unit neither
+    /// defines nor references still gets an undefined global entry, as
+    /// GNU as emits one; `ld -r` carries it into the next link stage.
+    pub asm_global_names: Vec<String>,
+    /// Symbol visibility named by `.hidden` / `.internal` / `.protected` in
+    /// file-scope asm. The object writer sets `st_other` wherever the name
+    /// surfaces. A later directive on the same name wins, as in GNU as.
+    pub asm_visibility: Vec<(String, SymVisibility)>,
+    /// The unit is assembler source (`.s` / `.S`). The object writer then
+    /// takes the GNU as shape: an STT_FILE symbol only per `.file` directive
+    /// and a `.comment` section only from `.ident` strings, where a compiled
+    /// unit names its source file and carries the producer fingerprint.
+    pub asm_unit: bool,
+    /// `.file "name"` operands from file-scope asm, in directive order; one
+    /// STT_FILE symbol each, as GNU as emits them.
+    pub asm_file_names: Vec<String>,
+    /// `.ident` strings from file-scope asm, in directive order; pooled
+    /// NUL-terminated into `.comment`.
+    pub asm_idents: Vec<String>,
     /// Base alignment `data` requires in the image, at least 8;
     /// raised to 16 when a file-scope object carries `_Alignas(16)`
     /// (or the attribute equivalents). The native writers place the
     /// data section at a multiple of it.
     pub data_align: usize,
+    /// Length of the read-only prefix of `data`: `const`-qualified
+    /// storage with no relocated slot, packed to the front by the
+    /// native data compaction so the image writers can map it without
+    /// write permission. Zero until that pass runs (VM, JIT, a
+    /// freshly compiled unit); any repack resets it, and the pass
+    /// re-establishes it for the layout it produced.
+    pub data_ro_len: usize,
+    /// End of the relro region of `data`: `data[data_ro_len..
+    /// data_relro_len]` is `const`-qualified storage whose slots a
+    /// relocation writes, so it cannot ride the read-only prefix. The
+    /// image writers place it where the loader can patch it and
+    /// re-protect it before the entry point runs. Equals
+    /// [`Self::data_ro_len`] when the layout produced no such object,
+    /// and is reset with it by any repack.
+    pub data_relro_len: usize,
     /// Start offsets of anonymous data objects (string literals and the
     /// implicit `__func__` arrays of C99 6.4.2.2) within `data`. Named
     /// globals already carry their offset in `symbols[..].val`; these are
@@ -233,6 +309,20 @@ pub struct Program {
     /// writer handling mirrors `data_relocs` -- see [`CodeReloc`]
     /// for the per-format strategy.
     pub code_relocs: Vec<CodeReloc>,
+    /// Address-constant initializers of `_Thread_local` objects (C99
+    /// 6.7.8p4). `data_offset` is a byte offset into [`Self::tls_data`],
+    /// the initialization template the runtime copies per thread; the
+    /// target is an object in [`Self::data`], as for [`DataReloc`].
+    /// The relocation applies to the template image at load time and the
+    /// per-thread copies inherit the relocated value: every supported
+    /// format materializes the template as ordinary loadable bytes
+    /// (`.tdata`, `__DATA,__thread_data`, the PE `.data` TLS blob) and
+    /// applies image relocations before any thread's block exists.
+    pub tls_data_relocs: Vec<DataReloc>,
+    /// [`ExternDataReloc`] whose slot is in [`Self::tls_data`].
+    pub tls_extern_data_relocs: Vec<ExternDataReloc>,
+    /// [`CodeReloc`] whose slot is in [`Self::tls_data`].
+    pub tls_code_relocs: Vec<CodeReloc>,
     /// Functions the program asked to expose externally via
     /// `#pragma export(<name>)`. Each entry pairs the source
     /// name with the function's ent_pc -- the
@@ -497,6 +587,9 @@ pub struct VariableInfo {
     /// first (mirrors `Symbol::array_dims`). Empty for a scalar or a
     /// one-dimensional array, whose extent `array_size` already gives.
     pub array_dims: Vec<i64>,
+    /// How the declaration spelled the type; see
+    /// [`crate::c5::symbol::DeclSpelling`]. Debug info only.
+    pub decl_spelling: crate::c5::symbol::DeclSpelling,
 }
 
 // ---- Data-offset surface ----
@@ -507,25 +600,33 @@ pub struct VariableInfo {
 
 use crate::c5::layout::{DataOffsets, DataRemap, remap_self_u64};
 
+impl DataReloc {
+    /// Remap the target only. The slot of a TLS-template relocation is a
+    /// `tls_data` offset, which the `data` compaction never moves.
+    fn remap_target_offsets(&mut self, r: &dyn DataRemap) {
+        // The target follows the object its anchor names: a one-past-the-end
+        // target (C99 6.5.6p8) sits on the next object's start, so its own
+        // value would track the wrong object.
+        let anchor = self.target_anchor as i64;
+        if r.in_data(anchor) {
+            self.target_offset = r.remap(self.target_offset as i64, anchor).unwrap_or(0) as u64;
+            remap_self_u64(&mut self.target_anchor, r);
+        } else {
+            remap_self_u64(&mut self.target_offset, r);
+            self.target_anchor = self.target_offset;
+        }
+    }
+}
+
 impl DataOffsets for DataReloc {
     fn remap_data_offsets(&mut self, r: &dyn DataRemap) {
         let Self {
             data_offset,
-            target_offset,
-            target_anchor,
+            target_offset: _, // remapped by `remap_target_offsets`
+            target_anchor: _,
         } = self;
         remap_self_u64(data_offset, r);
-        // The target follows the object its anchor names: a one-past-the-end
-        // target (C99 6.5.6p8) sits on the next object's start, so its own
-        // value would track the wrong object.
-        let anchor = *target_anchor as i64;
-        if r.in_data(anchor) {
-            *target_offset = r.remap(*target_offset as i64, anchor).unwrap_or(0) as u64;
-            remap_self_u64(target_anchor, r);
-        } else {
-            remap_self_u64(target_offset, r);
-            *target_anchor = *target_offset;
-        }
+        self.remap_target_offsets(r);
     }
 }
 
@@ -553,11 +654,18 @@ impl DataOffsets for ExternDataReloc {
 impl DataOffsets for Program {
     fn remap_data_offsets(&mut self, r: &dyn DataRemap) {
         let Self {
+            target: _,
             data: _, // the bytes the offsets index; the pass replaces them wholesale
             file_asm: _,
             asm_weak_names: _,
-            asm_hidden_names: _,
+            asm_global_names: _,
+            asm_visibility: _,
+            asm_unit: _,
+            asm_file_names: _,
+            asm_idents: _,
             data_align: _, // an alignment, not an offset
+            data_ro_len,
+            data_relro_len,
             data_object_starts,
             const_data_ranges,
             data_pad_ranges,
@@ -569,6 +677,9 @@ impl DataOffsets for Program {
             data_relocs,
             extern_data_relocs,
             code_relocs,
+            tls_data_relocs,
+            tls_extern_data_relocs: _, // slot in `tls_data`, target by name
+            tls_code_relocs: _,        // slot in `tls_data`, target in code
             exports: _,
             dylibs: _,
             dllmain_pc: _,
@@ -589,6 +700,10 @@ impl DataOffsets for Program {
             init_funcs: _,              // code address space
             function_aliases: _,
         } = self;
+        // A repack invalidates the region boundaries; the producing pass
+        // re-establishes them for the layout it emitted.
+        *data_ro_len = 0;
+        *data_relro_len = 0;
         data_object_starts.retain_mut(|s| match r.remap(*s, *s) {
             Some(_) if !r.in_data(*s) => false,
             Some(new) => {
@@ -632,6 +747,9 @@ impl DataOffsets for Program {
         for x in code_relocs.iter_mut() {
             x.remap_data_offsets(r);
         }
+        for x in tls_data_relocs.iter_mut() {
+            x.remap_target_offsets(r);
+        }
         for x in symbols.iter_mut() {
             x.remap_data_offsets(r);
         }
@@ -671,10 +789,17 @@ mod data_offset_tests {
     /// A `Program` with no content, for seeding one offset per field.
     fn empty_program() -> Program {
         Program {
+            target: crate::c5::codegen::Target::host(),
             data: Vec::new(),
             file_asm: Vec::new(),
             asm_weak_names: Vec::new(),
-            asm_hidden_names: Vec::new(),
+            asm_global_names: Vec::new(),
+            asm_visibility: Vec::new(),
+            asm_unit: false,
+            asm_file_names: Vec::new(),
+            asm_idents: Vec::new(),
+            data_ro_len: 0,
+            data_relro_len: 0,
             data_object_starts: Vec::new(),
             const_data_ranges: Vec::new(),
             data_pad_ranges: Vec::new(),
@@ -686,6 +811,9 @@ mod data_offset_tests {
             data_relocs: Vec::new(),
             extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
+            tls_data_relocs: Vec::new(),
+            tls_extern_data_relocs: Vec::new(),
+            tls_code_relocs: Vec::new(),
             exports: Vec::new(),
             dylibs: Vec::new(),
             dllmain_pc: None,

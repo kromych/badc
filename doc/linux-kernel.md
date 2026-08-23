@@ -147,8 +147,8 @@ one, which is what `scripts/tools-support-relr.sh` probes with.
 reference compiler, so `CONFIG_GCC_VERSION` keeps the reference toolchain's
 value. Identification follows the compiler that built the objects;
 classification stays with the toolchain whose bug-history gates the corpus was
-captured under. badc's claimed `__GNUC__` is 4.2.1, below the kernel's gcc
-floor.
+captured under. badc's claimed `__GNUC__` is 4.3.0, below the kernel's gcc
+floor (8.1.0).
 
 ## What the objects have to survive
 

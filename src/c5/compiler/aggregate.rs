@@ -54,8 +54,10 @@ impl Compiler {
         // declaration, not to the first member; park it across the
         // body parse so the member checks see only member attributes.
         let decl_attr_align = core::mem::take(&mut self.pending.attr_align);
+        let decl_attr_alignas = core::mem::take(&mut self.pending.attr_alignas);
         let r = self.parse_aggregate_body_inner(name, is_union, packed);
         self.pending.attr_align = self.pending.attr_align.max(decl_attr_align);
+        self.pending.attr_alignas = self.pending.attr_alignas.max(decl_attr_alignas);
         r
     }
 
@@ -66,6 +68,7 @@ impl Compiler {
     /// object of such a type is diagnosed at its declaration instead.
     fn take_member_align(&mut self) -> Result<i64, C5Error> {
         let m_align = core::mem::take(&mut self.pending.attr_align);
+        self.pending.attr_alignas = 0;
         if m_align > 0 && !(m_align as usize).is_power_of_two() {
             return Err(
                 self.compile_err(format!("member alignment {m_align} is not a power of two"))
@@ -109,6 +112,7 @@ impl Compiler {
                     size: 0,
                     align: 1,
                     explicit_align: 0,
+                    natural_align: 0,
                     fields: Vec::new(),
                     anon_bitfields: Vec::new(),
                     anon_members: Vec::new(),
@@ -150,6 +154,10 @@ impl Compiler {
         // alignment. Recorded on the StructDef for the automatic-storage
         // placement decision.
         let mut struct_explicit: usize = 0;
+        // The same running max with every alignment attribute and every
+        // packing request removed -- the floor a variable-level
+        // `aligned(N)` cannot place the object below.
+        let mut struct_natural: usize = 1;
         // Bit-packing state for contiguous bitfields. `bf_bit_cursor`
         // is the next free bit position measured from the start of the
         // aggregate; the run begins at `offset * 8` when `bf_active`
@@ -185,6 +193,9 @@ impl Compiler {
             self.pending.typedef_base_array_size = 0;
             self.pending.typedef_base_zero_len = false;
             self.pending.type_align = 0;
+            // Same for the debug-info spelling carriers, which the
+            // inline reader below seeds itself.
+            let _ = self.take_base_spelling();
             // Field type prefix: int, char, float, double, or struct Name.
             // Leading qualifiers / int modifiers / function specifiers
             // (`const`, `unsigned`, ...) are no-ops; track if any int
@@ -205,6 +216,10 @@ impl Compiler {
             // alignment of every field in the group; a per-declarator one
             // (below) adds to it. Applied at field placement, not dropped.
             let mut group_align: usize = 0;
+            // Qualifiers ahead of the type (`volatile int x;`). C99
+            // 6.7.2p2 admits them in any order, and the trailing form
+            // already folds in below, so collect the leading one too.
+            let mut leading_quals: i64 = 0;
             while is_decl_modifier(self.lex.tk) {
                 if self.lex.tk == Token::Attribute {
                     self.skip_attribute_specifiers()?;
@@ -224,6 +239,9 @@ impl Compiler {
                 if self.try_consume_int_modifier(&mut mods)? {
                     continue;
                 }
+                leading_quals |= self.lex_qualifier_bits();
+                self.pending.spell_base_const |= self.lex_is_const_qual();
+                self.pending.spell_base_restrict |= self.lex_is_restrict_qual();
                 self.next()?;
             }
             // Set when the field's base type is an `enum` (directly or
@@ -243,7 +261,7 @@ impl Compiler {
                 mods.int_base()
             } else if self.lex.tk == Token::Char {
                 self.next()?;
-                mods.char_tag(self.target.plain_char_signed())
+                mods.char_tag(self.lex.char_signed)
             } else if self.lex.tk == Token::Void {
                 self.next()?;
                 // `void *p;` / `void (*fp)(...);` fields. Bare
@@ -256,7 +274,11 @@ impl Compiler {
                 Ty::Float as i64
             } else if self.lex.tk == Token::Double {
                 self.next()?;
-                Ty::Double as i64
+                if mods.saw_long() {
+                    Ty::Double as i64 | super::types::LONG_DOUBLE_BIT
+                } else {
+                    Ty::Double as i64
+                }
             } else if self.lex.tk == Token::Struct || self.lex.tk == Token::Union {
                 let nested_is_union = self.lex.tk == Token::Union;
                 self.next()?;
@@ -324,6 +346,7 @@ impl Compiler {
                     field_base_is_enum = true;
                 }
                 let aliased = self.symbols[self.lex.curr_id_idx].type_;
+                self.pending.spell_base_typedef = Some(self.lex.curr_id_idx as u32);
                 // C99 6.7.7 paragraph 3: a typedef name carries
                 // through any array dimension on its alias. Stash
                 // the count so the field-binding code below can
@@ -354,6 +377,8 @@ impl Compiler {
                 let typedef_fpi = self.symbols[self.lex.curr_id_idx].fn_ptr_indirection;
                 if typedef_fpi > 0 {
                     self.pending.fn_ptr_indirection = Some(typedef_fpi);
+                    self.pending.fn_ptr_ret_indirection =
+                        self.symbols[self.lex.curr_id_idx].fn_ptr_ret_indirection;
                     self.pending.base_is_function_type =
                         self.symbols[self.lex.curr_id_idx].is_function_type;
                     // Carry the typedef's pointed-to prototype (parameter
@@ -384,10 +409,14 @@ impl Compiler {
                 if field_base_tok == Token::Int {
                     field_base = mods.int_base();
                 } else if field_base_tok == Token::Char {
-                    field_base = mods.char_tag(self.target.plain_char_signed());
+                    field_base = mods.char_tag(self.lex.char_signed);
+                } else if field_base_tok == Token::Double && mods.saw_long() {
+                    // `double long m;` -- the trailing-modifier spelling.
+                    field_base |= super::types::LONG_DOUBLE_BIT;
                 }
             }
-            field_base |= trailing_quals;
+            field_base = super::types::apply_qual_bits(field_base, leading_quals | trailing_quals);
+            let base_spelling = self.take_base_spelling();
 
             // Explicit type alignment carried by a typedef base (GNU
             // `aligned(N)`), consumed once for every declarator sharing
@@ -425,6 +454,7 @@ impl Compiler {
                     struct_explicit = struct_explicit.max(
                         (self.structs[inner_id].explicit_align as usize).min(inner_align.max(1)),
                     );
+                    struct_natural = struct_natural.max(self.structs[inner_id].natural_align);
                     let base_offset = if is_union {
                         0
                     } else {
@@ -490,12 +520,14 @@ impl Compiler {
                             bit_width: inner_field.bit_width,
                             bit_unit_size: inner_field.bit_unit_size,
                             fn_ptr_indirection: inner_field.fn_ptr_indirection,
+                            fn_ptr_ret_indirection: inner_field.fn_ptr_ret_indirection,
                             params: inner_field.params,
                             is_variadic: inner_field.is_variadic,
                             anon_union_group: union_group,
                             anon_struct_group: struct_group,
                             explicit_align: inner_field.explicit_align,
                             align: inner_field.align,
+                            decl_spelling: inner_field.decl_spelling,
                         });
                     }
 
@@ -517,6 +549,7 @@ impl Compiler {
             // typedef-derived fields are restored; `fn_ptr_param_types`
             // is a per-declarator output of `parse_declarator`.
             let base_field_fn_ptr_indirection = self.pending.fn_ptr_indirection;
+            let base_field_fn_ptr_ret_indirection = self.pending.fn_ptr_ret_indirection;
             let base_field_is_function_type = self.pending.base_is_function_type;
             // A function-pointer typedef base (`fn_t cb;`) seeds its
             // prototype (parameter types + variadic flag) once; a nested
@@ -603,6 +636,7 @@ impl Compiler {
                 }
 
                 self.pending.fn_ptr_indirection = base_field_fn_ptr_indirection;
+                self.pending.fn_ptr_ret_indirection = base_field_fn_ptr_ret_indirection;
                 self.pending.base_is_function_type = base_field_is_function_type;
                 self.pending.typedef_fn_proto = base_field_typedef_fn_proto;
                 self.pending.fn_ptr_param_types = base_field_fn_ptr_param_types.clone();
@@ -679,6 +713,8 @@ impl Compiler {
                 // `typedef struct { ... } T;` as a fn-pointer
                 // alias.
                 let field_fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
+                let field_fn_ptr_ret_indirection =
+                    core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
                 // Capture the function-pointer field's parameter prototype
                 // (set by the same declarator branch) so a later
                 // `s.fp(args)` narrows its arguments. Always consume the
@@ -860,6 +896,7 @@ impl Compiler {
                     if field_align > struct_align {
                         struct_align = field_align;
                     }
+                    struct_natural = struct_natural.max(self.unattributed_align_of(field_ty));
                     // The field's explicit alignment sources; a nested
                     // aggregate contributes its own attribute-derived part.
                     let mut fe = group_align.max(decl_align);
@@ -890,6 +927,7 @@ impl Compiler {
                 if let Some((idx, saved)) = self.pending.member_decl_save.take() {
                     self.symbols[idx] = *saved;
                 }
+                let field_spelling = self.decl_spelling(base_spelling);
                 self.structs[struct_id].fields.push(StructField {
                     name: field_name,
                     offset: field_offset,
@@ -901,12 +939,14 @@ impl Compiler {
                     bit_width,
                     bit_unit_size: if bit_width > 0 { bit_unit as u8 } else { 0 },
                     fn_ptr_indirection: field_fn_ptr_indirection,
+                    fn_ptr_ret_indirection: field_fn_ptr_ret_indirection,
                     params: field_params,
                     is_variadic: field_is_variadic,
                     anon_union_group: 0,
                     anon_struct_group: 0,
                     explicit_align: group_align.max(decl_align) as u32,
                     align: placed_align as u32,
+                    decl_spelling: field_spelling,
                 });
 
                 if self.lex.tk == ',' {
@@ -950,7 +990,15 @@ impl Compiler {
         self.structs[struct_id].size = total;
         self.structs[struct_id].align = struct_align;
         self.structs[struct_id].explicit_align = struct_explicit.min(struct_align) as u32;
+        self.structs[struct_id].natural_align = struct_natural.min(super::MAX_STATIC_ALIGN);
         self.structs[struct_id].is_complete = true;
+        // The leading spelling lays out exactly like the trailing one.
+        // Threading `packed` into the per-member alignment above covers a
+        // non-bitfield member; the bit-level packing and the alignment-1
+        // result come from the same re-lay the trailing form runs.
+        if packed {
+            self.repack_struct(struct_id);
+        }
         Ok(struct_id)
     }
 

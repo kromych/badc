@@ -9,32 +9,45 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <main>:
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rcx
                	xorq	%rax, %rax
                	jmp	<addr>
-               	movslq	(%rdx,%rcx,4), %rdi
-               	imulq	$0xa, %rcx, %rsi
+               	movslq	%eax, %rdx
+               	movslq	(%rcx,%rdx,4), %rdi
+               	imulq	$0xa, %rdx, %rsi
                	addq	$0xa, %rsi
-               	movslq	%esi, %rsi
-               	cmpq	%rsi, %rdi
+               	cmpl	%esi, %edi
                	jne	<addr>
-               	leaq	0x1(%rcx), %rax
-               	movslq	%eax, %rcx
-               	cmpq	$0x4, %rcx
+               	leaq	0x1(%rdx), %rax
+               	cmpl	$0x4, %eax
                	jl	<addr>
                	xorq	%rax, %rax
                	jmp	<addr>
-               	movslq	(%rdx,%rcx,4), %rdi
-               	imulq	$0xa, %rcx, %rsi
+               	movslq	%eax, %rdx
+               	movslq	(%rcx,%rdx,4), %rdi
+               	imulq	$0xa, %rdx, %rsi
                	addq	$0xa, %rsi
-               	movslq	%esi, %rsi
-               	cmpq	%rsi, %rdi
+               	cmpl	%esi, %edi
                	jne	<addr>
-               	leaq	0x1(%rcx), %rax
-               	movslq	%eax, %rcx
-               	cmpq	$0x4, %rcx
+               	leaq	0x1(%rdx), %rax
+               	cmpl	$0x4, %eax
                	jl	<addr>
                	xorq	%rax, %rax
                	retq

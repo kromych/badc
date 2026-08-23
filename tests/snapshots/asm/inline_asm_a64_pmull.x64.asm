@@ -9,26 +9,40 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <main>:
-               	movl	$0x3, %edx
                	movl	$0x3, %ecx
                	xorq	%rax, %rax
+               	movq	%rcx, %rdx
                	jmp	<addr>
-               	movq	%rcx, %rsi
+               	movq	%rdx, %rsi
                	andq	$0x1, %rsi
                	testq	%rsi, %rsi
                	je	<addr>
-               	xorq	%rdx, %rax
+               	xorq	%rcx, %rax
                	jmp	<addr>
-               	shlq	%rdx
-               	shrq	%rcx
-               	testq	%rcx, %rcx
+               	shlq	%rcx
+               	shrq	%rdx
+               	testq	%rdx, %rdx
                	jne	<addr>
                	movl	%eax, %eax
                	andq	$0xffff, %rax           # imm = 0xFFFF
-               	movslq	%eax, %rax
-               	cmpq	$0x5, %rax
+               	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	retq
@@ -48,27 +62,26 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	%eax, %eax
                	andq	$0xffff, %rax           # imm = 0xFFFF
-               	movslq	%eax, %rax
-               	cmpq	$0x12, %rax
+               	cmpl	$0x12, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	movl	$0x3, %edx
                	movl	$0x3, %ecx
                	xorq	%rax, %rax
+               	movq	%rcx, %rdx
                	jmp	<addr>
-               	movq	%rcx, %rsi
+               	movq	%rdx, %rsi
                	andq	$0x1, %rsi
                	testq	%rsi, %rsi
                	je	<addr>
-               	xorq	%rdx, %rax
+               	xorq	%rcx, %rax
                	jmp	<addr>
-               	shlq	%rdx
-               	shrq	%rcx
-               	testq	%rcx, %rcx
+               	shlq	%rcx
+               	shrq	%rdx
+               	testq	%rdx, %rdx
                	jne	<addr>
                	movl	%eax, %eax
-               	cmpq	$0x5, %rax
+               	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	retq

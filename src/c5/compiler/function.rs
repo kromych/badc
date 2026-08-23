@@ -48,12 +48,13 @@ impl Compiler {
     /// declarator to bind it) leaks into the next declaration -- e.g. the
     /// first field of a following struct definition would record a phantom
     /// function-pointer prototype.
-    fn take_param_fn_ptr_carriers(&mut self) -> (i64, Option<Vec<i64>>, bool) {
+    fn take_param_fn_ptr_carriers(&mut self) -> (i64, i64, Option<Vec<i64>>, bool) {
         let indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
+        let ret_indirection = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
         let params = self.pending.fn_ptr_param_types.take();
         let variadic = matches!(self.pending.typedef_fn_proto.take(), Some((_, true)));
         self.pending.base_is_function_type = false;
-        (indirection, params, variadic)
+        (indirection, ret_indirection, params, variadic)
     }
 
     pub(super) fn parse_function_params(&mut self) -> Result<ParsedParams, C5Error> {
@@ -100,11 +101,13 @@ impl Compiler {
             // cannot leak; the base-type parse below sets it for the
             // leading form, the post-declarator skip for the trailing.
             self.pending.attr_maybe_unused = false;
+            let _ = self.take_base_spelling();
             let base = if self.lex_is_type_start() {
                 self.parse_decl_base_type()?
             } else {
                 Ty::Int as i64
             };
+            let base_spelling = self.take_base_spelling();
             // `(void)` via a typedef alias. The early check above
             // matches only the bare `void` keyword; aliases reach
             // here with `base_was_void` set by `parse_decl_base_type`.
@@ -143,6 +146,15 @@ impl Compiler {
             if leading_ptr_count > 0 && self.pending.typedef_base_array_size > 0 {
                 ty = self.ptr_to_array_typedef_ty(base, ty, leading_ptr_count);
             }
+            // A function-TYPE typedef base pre-decays to a function
+            // pointer; the first `*` forms that pointer-to-function (C99
+            // 6.2.7) rather than adding a level, mirroring
+            // `parse_declarator`'s epilogue. Later `*`s add normally.
+            let absorb_fn_type_ptr = self.pending.base_is_function_type && leading_ptr_count > 0;
+            if absorb_fn_type_ptr {
+                self.pending.base_is_function_type = false;
+                ty -= Ty::Ptr as i64;
+            }
             // A parameter that is a pointer to a function-pointer typedef
             // base (`curl_write_callback *p`) gains one fn-pointer
             // indirection level per leading `*`, matching the general
@@ -150,10 +162,14 @@ impl Compiler {
             // (`*fp == fp`) misfires on `*p`, landing the load/store one
             // level too shallow (at the pointer's own slot).
             if leading_ptr_count > 0
-                && !self.pending.base_is_function_type
                 && let Some(fpi) = self.pending.fn_ptr_indirection
             {
-                self.pending.fn_ptr_indirection = Some(fpi + leading_ptr_count);
+                let added = if absorb_fn_type_ptr {
+                    leading_ptr_count - 1
+                } else {
+                    leading_ptr_count
+                };
+                self.pending.fn_ptr_indirection = Some(fpi + added);
             }
             // Optional `[N]` / `[]` after an unnamed parameter
             // type ('int []' / 'char [16]'). Per C99 6.7.5.3p7,
@@ -240,7 +256,8 @@ impl Compiler {
             // populated. Drained even if the declarator didn't
             // set anything so they don't leak into the next
             // parameter or expression.
-            let (fn_ptr_indirection, fnptr_pp, fnptr_variadic) = self.take_param_fn_ptr_carriers();
+            let (fn_ptr_indirection, fn_ptr_ret_indirection, fnptr_pp, fnptr_variadic) =
+                self.take_param_fn_ptr_carriers();
             self.ty = full_ty;
             // An unnamed parameter, or any parameter of a function-pointer
             // declarator's prototype, records its type without binding a
@@ -264,9 +281,16 @@ impl Compiler {
                 return Err(self.compile_err("duplicate parameter definition"));
             }
 
+            // A parameter has automatic storage, which no named address
+            // space covers (pointers into one are fine: the qualifier
+            // then sits on the pointee).
+            if super::types::segment_of_object_ty(full_ty).is_some() {
+                return Err(self.compile_err("a named address space requires static storage"));
+            }
             self.shadow_symbol(param_idx);
             self.symbols[param_idx].class = Token::Loc as i64;
             self.symbols[param_idx].type_ = full_ty;
+            self.symbols[param_idx].decl_spelling = self.decl_spelling(base_spelling);
             self.symbols[param_idx].array_size = 0;
             self.symbols[param_idx].was_referenced = false;
             self.symbols[param_idx].decl_line = self.lex.line;
@@ -280,6 +304,7 @@ impl Compiler {
             // `*p = ...` against the rebind looks like a fn-ptr
             // decay no-op to the unary `*` handler.
             self.symbols[param_idx].fn_ptr_indirection = fn_ptr_indirection;
+            self.symbols[param_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
             // A function-pointer parameter records its pointee signature's
             // parameter types so an indirect call through it narrows each
             // argument to its declared type (the common callback shape).

@@ -45,7 +45,7 @@ extern crate alloc;
 // build the consts below from a single spelling of each.
 macro_rules! gnu_compat_version {
     () => {
-        "4.2.1"
+        "4.3.0"
     };
 }
 macro_rules! version_line {
@@ -64,7 +64,8 @@ macro_rules! version_line {
 /// derives `__GNUC__` / `__GNUC_MINOR__` / `__GNUC_PATCHLEVEL__`
 /// and `__VERSION__` from it, and [`VERSION_LINE`] states it, so
 /// the claim cannot drift between the macros and the banner. See
-/// `Preprocessor::enable_gnu` for why the value stays at 4.2.1.
+/// `Preprocessor::enable_gnu` for what backs the value and what
+/// bounds it.
 pub const GNU_COMPAT_VERSION: &str = gnu_compat_version!();
 
 /// One-line compiler identification: name, release version, and
@@ -116,14 +117,15 @@ pub mod c5;
 
 #[allow(unused_imports)]
 pub use c5::{
-    BinaryFormat, C5Error, CodeModel, CompileOptions, Compiler, ElfClass, Hardening, Host,
-    IncludeOrigin, IncludeRecord, IncludeStatus, IndirectBranch, NativeOptions, OutputKind,
-    Overwrite, PredefinedKind, PredefinedSymbol, Program, Target, Trace, VariableInfo, Vm,
-    dep_escape, dep_prerequisites, dep_render, embedded_headers, jit_run, jit_run_with_options,
-    predefined_symbols,
+    BinaryFormat, C5Error, CodeModel, CompileOptions, Compiler, DEFAULT_SSP_BUFFER_SIZE, ElfClass,
+    GuardSeg, GuardSymbol, Hardening, Host, IncludeOrigin, IncludeRecord, IncludeStatus,
+    IndirectBranch, NativeOptions, OutputKind, Overwrite, PredefinedKind, PredefinedSymbol,
+    Program, SYSV_TLS_GUARD_OFFSET, StackGuard, StackProtect, StackProtector, Target, Trace,
+    VariableInfo, Vm, dep_escape, dep_prerequisites, dep_render, embedded_headers, jit_run,
+    jit_run_with_options, predefined_symbols, stack_guard_sysreg,
 };
 #[cfg(feature = "native-emit")]
-pub use c5::{emit_native, emit_native_with_options};
+pub use c5::{emit_native, emit_native_with_options, emit_native_with_options_owned};
 
 #[cfg(feature = "std")]
 pub use c5::StdHost;
@@ -139,9 +141,12 @@ pub use c5::{
     ArchiveInclusion, LdsEmit, LdsObject, LdsOptions, LdsResult, LinkerScript, MergedNative,
     MergedSymbol, NativeMachine, NativeObject, NativeReloc, NativeSymSection, NativeSymbol,
     OrphanHandling, PendingImportReloc, PltTrampoline, SectionContribution, SectionMap,
-    SharedLibrary, detect_binary_format, emit_aarch64_plt, emit_x86_64_plt, is_elf_object,
-    is_ld_invocation, link_native_objects, link_native_objects_with_options,
-    link_native_objects_with_shared_libs, link_with_script, parse_lds_object, parse_linker_script,
-    parse_native_elf, parse_shared_library, read_archive_at, render_link_map, run_ld,
-    write_executable_elf64, write_native_image_from_merged, write_native_image_from_merged_ex,
+    SharedLibrary, TargetCLibrary, detect_binary_format, emit_aarch64_plt, emit_x86_64_plt,
+    is_elf_object, is_ld_invocation, is_mach_o_dylib, is_mach_o_fat, is_mach_o_object,
+    is_native_object, is_tbd, link_native_objects, link_native_objects_with_options,
+    link_native_objects_with_shared_libs, link_synthesized_symbol, link_with_script,
+    mach_o_fat_slice, parse_lds_object, parse_linker_script, parse_mach_o_dylib, parse_native_elf,
+    parse_native_mach_o, parse_native_object, parse_shared_library, parse_tbd, read_archive_at,
+    render_link_map, run_ld, write_executable_elf64, write_native_image_from_merged,
+    write_native_image_from_merged_ex,
 };

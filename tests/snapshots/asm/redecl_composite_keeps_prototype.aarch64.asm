@@ -10,6 +10,8 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#0x1
+               	brk	#0x1
+               	brk	#0x1
 
 <take_wrap>:
                	sub	sp, sp, #0x10
@@ -67,11 +69,10 @@ Disassembly of section .text:
                	sub	x16, x29, #0x8
                	str	x0, [x16]
                	sub	x0, x29, #0x8
-               	ldr	w0, [x0, #0x4]
-               	lsl	x0, x0, #32
-               	sub	x1, x29, #0x8
-               	ldr	w1, [x1]
-               	orr	x0, x0, x1
+               	ldr	w1, [x0, #0x4]
+               	lsl	x1, x1, #32
+               	ldr	w0, [x0]
+               	orr	x0, x1, x0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x10

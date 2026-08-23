@@ -32,14 +32,57 @@ signedness agrees with the `__CHAR_UNSIGNED__` predefine and
 drives the extension when an 8-bit `char` l-value widens to a
 larger integer.
 
-**`long double` is 8-byte IEEE binary64** (the same representation as
-`double`) regardless of host. C99 6.2.5p10 permits any FP type at least as
-wide as `double`. This matches macOS and Windows directly. On Linux x86_64
-(host 80-bit x87) and Linux aarch64 (host IEEE binary128) the libc-boundary
-readers narrow the wider host return into the FP64 slot (x87
-`fstp QWORD PTR [rsp]` and a `__trunctfdf2` libgcc call respectively), so
-`strtold` and friends round-trip to FP64 precision; a `long double` literal
-and any value held in c5 cannot represent the wider host dynamic range.
+**`long double`'s storage follows the target ABI.** C99 6.2.5p10 permits
+any FP type at least as wide as `double`. `sizeof`, `_Alignof`, struct
+offsets, array stride, static initializers, `<float.h>`, and the
+`__LDBL_*` / `__SIZEOF_LONG_DOUBLE__` predefines all report one layout
+per target:
+
+| target          | platform `long double` | badc stores    | size / align |
+|-----------------|------------------------|----------------|--------------|
+| linux-x64       | x87 80-bit             | x87 80-bit     | 16 / 16      |
+| linux-aarch64   | IEEE binary128         | IEEE binary128 | 16 / 16      |
+| macos-aarch64   | IEEE binary64          | IEEE binary64  | 8 / 8        |
+| windows-x64     | IEEE binary64          | IEEE binary64  | 8 / 8        |
+| windows-aarch64 | IEEE binary64          | IEEE binary64  | 8 / 8        |
+
+An object therefore has the platform's layout and encoding on every
+target, so a struct, an array, or a `.data` object shared with code
+built by the platform toolchain agrees byte for byte. A load converts
+the stored value to binary64 and a store converts back exactly: on
+linux-x64 through `fld`/`fstp`, matching the hardware conversions bit
+for bit including the noncanonical encodings; on linux-aarch64, which
+has no quad-precision unit, through open-coded integer sequences that
+match gcc's `__extenddftf2` / `__trunctfdf2` bit for bit.
+
+Two consequences remain on both Linux targets:
+
+* **Precision.** Arithmetic is carried out at binary64 precision on
+  every target, so a value needing more than 53 significand bits does
+  not round-trip -- `(unsigned long long)(long double)((1ULL<<53)+1)`
+  loses the low bit where the platform types keep it. On linux-x64 the
+  stored object holds the full 64-bit significand, but a value that
+  passes through the compute path has already been rounded.
+* **Argument passing.** Where a `long double` reaches a platform-libc
+  callee still typed `long double`, the callee decodes it in the
+  platform's calling convention -- a 16-byte stack slot on System V
+  x86-64, a vector register on AAPCS64 -- while badc supplies the
+  binary64 it computes with in the FP argument bank. That is the
+  variadic tail: `printf("%Lf", 1.0L)` prints `nan` on linux-x64 and
+  `0.000000` on linux-aarch64. Each such argument draws a compile-time
+  warning naming the platform format, so the mismatch is not silent. The
+  fixed parameters are unaffected -- `<math.h>` binds the `l` entry
+  points (`ldexpl`, `fabsl`, ...) to their `double` counterparts, so the
+  argument converts to a `double` parameter exactly and the ABI matches.
+* **Returns** are handled: the libc-boundary readers narrow the wider
+  platform return into the FP64 slot (x87 `fstp QWORD PTR [rsp]` and a
+  `__trunctfdf2` libgcc call respectively), so `strtold` and friends
+  round-trip to FP64 precision.
+
+The remaining work is the argument / return conventions (a MEMORY-class
+16-byte stack slot and an `st(0)` return on System V, a Q register on
+AAPCS64) and extended-precision arithmetic. TODO: extended-precision
+`long double`.
 
 Byte order is little-endian on every target: `__BYTE_ORDER__` expands to
 `__ORDER_LITTLE_ENDIAN__` and `__LITTLE_ENDIAN__` is defined.
@@ -64,17 +107,21 @@ so a program that modifies a `const` object compiles without the required
 diagnostic. `restrict` is accepted as a sound no-op -- it is only an
 aliasing hint with no observable semantics.
 
-### Function-pointer return through a function-pointer variable, severity 5
+### Function-pointer return lineage carries one call level, severity 5
 
-A function whose return type is itself a function pointer is called
-correctly when the callee is named: `int (*f(void))(int)` then `(*f())(3)`,
-`f()(3)`, or `int (*q)(int) = f(); q(3)`. The unhandled shape is calling
-such a function *through a function-pointer variable*
-(`int (*(*p)(int))(int) = f; (*p)(0)(3)`): c5 records a function pointer's
-indirection as a single scalar on the flat type, so `p` and `int (**)(int)`
-collapse to the same encoding. The shape is accepted rather than diagnosed,
-and the call branches to a word read out of the callee's own instruction
-stream. TODO: reject it, then carry the extra level in the encoding.
+A pointer to a function returning a function pointer
+(`int (*(*p)(int))(int) = f`) is called correctly in every spelling --
+`(*p)(0)(3)`, `p(0)(3)`, `(*(*p)(0))(3)` -- for local, global, typedef,
+struct-member, and parameter carriers. The flat tag holds only the total
+pointer depth (shared with `int (**)(int)`); the symbol carries the split
+as two scalars, the derefs down to the function pointer and the return
+value's own lineage, and the call sites seed the decay tracking from them
+(C99 6.3.2.1p4). One scalar per side covers one function-pointer level per
+call: a return chain that is *itself* a pointer to a
+function-pointer-returning function (`int (*(*(*p)(int))(int))(int)`)
+calls correctly without `*` between the later calls, while a
+star-decorated later call (`(*(*(*p)(0))(0))(3)`) is rejected with a
+diagnostic rather than compiled. TODO: carry the full per-level lineage.
 
 ### An inline definition is materialized unit-locally, severity 5
 
@@ -161,15 +208,17 @@ header takes its standard-C path for the GNU features badc lacks.
   arguments are not modelled -- every form carries the target's strongest
   ordering -- and only the non-`_explicit` spellings are recognized.
 - `_Thread_local`, and the GNU `__thread` spelling, at file and block scope
-  (a block-scope `static _Thread_local` gets one per-thread instance) on the
-  ELF and PE targets. On ELF, variables land in `.tdata` / `.tbss`, their
+  (a block-scope `static _Thread_local` gets one per-thread instance) on
+  every target. On ELF, variables land in `.tdata` / `.tbss`, their
   symbols are typed `STT_TLS`, and TLS-relative relocations let a badc object
   link against external TLS through the system linker; on PE the image
-  carries an `IMAGE_TLS_DIRECTORY64`. File-scope initializers are limited to
+  carries an `IMAGE_TLS_DIRECTORY64`; on Mach-O each variable gets a
+  `__DATA,__thread_vars` descriptor whose getter slot dyld binds to
+  libSystem's `__tlv_bootstrap`, with the per-thread image in
+  `__thread_data` / `__thread_bss` (libSystem is added to the dylib list
+  when nothing else pulls it in). File-scope initializers are limited to
   scalars and NULL, and an initializer on a block-scope `_Thread_local`
-  object is rejected. The macOS target has no thread-local support and
-  reports an internal compiler error on one. TODO: Mach-O thread-local
-  variables, and a real diagnostic in the meantime.
+  object is rejected.
 - Anonymous `struct` / `union` members (C11 6.7.2.1p13).
 - Binary integer literals `0b...` / `0B...` (C23 / GCC), with the same
   `u` / `l` suffix handling as hex and decimal.
@@ -292,6 +341,25 @@ header takes its standard-C path for the GNU features badc lacks.
 - On Windows targets, `__int8` / `__int16` / `__int32` / `__int64`. The
   wider MSVC / MinGW mimicry surface (`_MSC_VER`, `__MINGW32__`, ...) is
   opt-in per translation unit with `-include msvc_compat.h`.
+- On x86 targets, the SIMD intrinsic headers `<xmmintrin.h>`,
+  `<emmintrin.h>`, `<tmmintrin.h>`, `<smmintrin.h>`, `<wmmintrin.h>` and
+  `<immintrin.h>`, reached through `<x86intrin.h>`. They are
+  compiler-owned and carry the SSE2 integer core plus a subset of SSSE3 /
+  SSE4.1 / AES-NI / PCLMUL / RDRAND: each operation lowers to the
+  instruction the SDM documents for it, over `__builtin_ia32_*` builtins
+  with gcc's names. The SSE2 integer set covers the lane arithmetic,
+  logic and compares, the packs and interleaves, the shifts, the
+  shuffles, the element accesses and the sign mask, plus `__m128i_u` and
+  the composition intrinsics (`_mm_set*`, `_mm_setr*`, `_mm_cvtsi*`, the
+  casts) the header builds over the vector extension. Not carried: the
+  packed-single and packed-double operations, the saturating and
+  averaging integer arithmetic, the min / max / absolute-difference
+  family, the shifts whose count is a vector rather than an integer, the
+  non-temporal transfers, and everything above SSE4.1 (AVX, AVX2,
+  AVX-512, FMA). An operation outside the subset is
+  absent rather than emulated, so a unit needing one fails at the
+  undeclared name. The forms whose last operand the instruction encodes
+  as `imm8` are macros, as gcc's are without `-O`.
 
 ### c5-specific
 

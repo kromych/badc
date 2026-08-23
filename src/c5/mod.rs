@@ -1,3 +1,4 @@
+mod asm;
 mod ast;
 mod codegen;
 mod compiler;
@@ -16,9 +17,11 @@ mod preprocessor;
 mod program;
 #[cfg(feature = "full")]
 mod runtime;
+mod softfp;
 mod symbol;
 mod token;
 mod vm;
+mod x86_simd;
 
 #[cfg(test)]
 mod tests;
@@ -30,11 +33,12 @@ mod tests;
 pub use object::elf_class::ElfClass;
 #[allow(unused_imports)]
 #[cfg(feature = "native-emit")]
-pub use object::{emit_native, emit_native_with_options};
+pub use object::{emit_native, emit_native_with_options, emit_native_with_options_owned};
 pub use {
     codegen::{
-        BinaryFormat, CodeModel, Hardening, IndirectBranch, NativeOptions, OutputKind, Target,
-        jit_run, jit_run_with_options,
+        BinaryFormat, CodeModel, DEFAULT_SSP_BUFFER_SIZE, GuardSeg, GuardSymbol, Hardening,
+        IndirectBranch, NativeOptions, OutputKind, SYSV_TLS_GUARD_OFFSET, StackGuard, StackProtect,
+        StackProtector, Target, jit_run, jit_run_with_options, stack_guard_sysreg,
     },
     compiler::{CompileOptions, Compiler, StructDef, StructField},
     depfile::{escape as dep_escape, prerequisites as dep_prerequisites, render as dep_render},
@@ -59,11 +63,13 @@ pub use linker::{
     ArchiveInclusion, LdsEmit, LdsObject, LdsOptions, LdsResult, LinkerScript, MergedNative,
     MergedSymbol, NativeMachine, NativeObject, NativeReloc, NativeSymSection, NativeSymbol,
     OrphanHandling, PendingImportReloc, PltTrampoline, SectionContribution, SectionMap,
-    SharedLibrary, detect_binary_format, emit_aarch64_plt, emit_x86_64_plt, is_elf_object,
+    SharedLibrary, TargetCLibrary, detect_binary_format, emit_aarch64_plt, emit_x86_64_plt,
+    is_elf_object, is_mach_o_dylib, is_mach_o_fat, is_mach_o_object, is_native_object, is_tbd,
     link_native_objects, link_native_objects_with_options, link_native_objects_with_shared_libs,
-    link_with_script, parse_lds_object, parse_linker_script, parse_native_elf,
-    parse_shared_library, render_link_map, write_executable_elf64, write_native_image_from_merged,
-    write_native_image_from_merged_ex,
+    link_synthesized_symbol, link_with_script, mach_o_fat_slice, parse_lds_object,
+    parse_linker_script, parse_mach_o_dylib, parse_native_elf, parse_native_mach_o,
+    parse_native_object, parse_shared_library, parse_tbd, render_link_map, write_executable_elf64,
+    write_native_image_from_merged, write_native_image_from_merged_ex,
 };
 #[cfg(feature = "full")]
 #[allow(unused_imports)]

@@ -45,6 +45,21 @@ name = "cli_fixture_smoke"
 path = "tests/cli_fixture_smoke.rs"
 required-features = ["full"]
 
+[[test]]
+name = "cli_assembler_smoke"
+path = "tests/cli_assembler_smoke.rs"
+required-features = ["full"]
+
+[[test]]
+name = "cli_depfile_smoke"
+path = "tests/cli_depfile_smoke.rs"
+required-features = ["full"]
+
+[[test]]
+name = "cli_dwarf_types"
+path = "tests/cli_dwarf_types.rs"
+required-features = ["full"]
+
 [features]
 # The default library is the host-arch JIT only (lexer / parser /
 # preprocessor / codegen passes / `jit_run`). On-disk native output

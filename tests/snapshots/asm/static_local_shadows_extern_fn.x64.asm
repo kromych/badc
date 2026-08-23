@@ -9,19 +9,33 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <driver>:
-               	movslq	%edi, %rdi
                	xorq	%rax, %rax
-               	cmpq	$0x2, %rdi
+               	cmpl	$0x2, %edi
                	jl	<addr>
-               	cmpq	$0x2, %rdi
+               	cmpl	$0x2, %edi
                	je	<addr>
                	movslq	%eax, %rax
                	retq
                	movabsq	$-0x1, %rax
                	jmp	<addr>
-               	cmpq	$0x1, %rdi
+               	cmpl	$0x1, %edi
                	je	<addr>
                	jmp	<addr>
                	movl	$0x2a, %eax

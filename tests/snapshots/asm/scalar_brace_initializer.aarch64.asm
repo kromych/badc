@@ -10,23 +10,25 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#0x1
+               	brk	#0x1
+               	brk	#0x1
 
 <main>:
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldrsw	x1, [x1]
-               	cmp	x1, #0x29
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldrsw	x0, [x0]
+               	cmp	w0, #0x29
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	mov	x1, #0x0                // =0
                	mov	x0, #0x0                // =0
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
-               	cmp	x0, #0x64
+               	mov	x2, x0
+               	mov	x1, x0
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	x1, [x1]
+               	cmp	x1, #0x64
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	ret
-               	mov	x0, #0x0                // =0
                	ret

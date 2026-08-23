@@ -15,6 +15,11 @@ struct A { int flags:8; char c; } __attribute__((packed));
 struct B { int a:17; int b:10; char c; } __attribute__((packed));
 struct C { char a:3; char b:7; char c; } __attribute__((packed));
 struct E { char c; int b:16; } __attribute__((packed));
+// The leading spelling lays out identically: the attribute reaches the
+// bitfield members' storage units and the aggregate's alignment, not
+// only the non-bitfield members.
+struct __attribute__((packed)) L { char c; unsigned x:24; };
+union __attribute__((packed)) LU { char c; unsigned x:24; };
 
 struct A ga = { 85, 7 };
 
@@ -53,5 +58,12 @@ int main(void) {
 
     // Static initializer merges into the packed unit.
     if (ga.flags != 85 || ga.c != 7) return 9;
+
+    if (sizeof(struct L) != 4 || __alignof__(struct L) != 1) return 10;
+    if (sizeof(union LU) != 3 || __alignof__(union LU) != 1) return 11;
+    struct L l;
+    l.c = 6;
+    l.x = 0xabcdef;
+    if (l.c != 6 || l.x != 0xabcdefu) return 12;
     return 0;
 }

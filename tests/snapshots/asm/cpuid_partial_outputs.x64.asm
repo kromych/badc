@@ -9,86 +9,78 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	leaq	-0x10(%rbp), %rcx
-               	leaq	-0x18(%rbp), %rdx
-               	leaq	-0x20(%rbp), %rsi
-               	leaq	-0x28(%rbp), %rdi
-               	xorq	%rax, %rax
-               	pushq	%rax
-               	pushq	%rbx
-               	pushq	%rcx
-               	pushq	%rdx
-               	movq	%rcx, %r10
-               	pushq	%r10
-               	movq	%rdx, %r10
-               	pushq	%r10
-               	movq	%rsi, %r10
-               	pushq	%r10
-               	movq	%rdi, %r10
-               	pushq	%r10
-               	movq	%rax, %r10
-               	movq	%rax, %r11
-               	movq	%r10, %rax
-               	movq	%r11, %rcx
+               	subq	$0x80, %rsp
+               	leaq	-0x10(%rbp), %rax
+               	xorq	%rcx, %rcx
+               	movq	%rax, -0x80(%rbp)
+               	movq	%rcx, -0x78(%rbp)
+               	movq	%rdx, -0x70(%rbp)
+               	movq	%rbx, -0x68(%rbp)
+               	movq	%rax, -0x60(%rbp)
+               	movq	%rcx, -0x58(%rbp)
+               	movq	-0x58(%rbp), %rax
                	cpuid
-               	popq	%r10
-               	movl	%edx, (%r10)
-               	popq	%r10
-               	movl	%ecx, (%r10)
-               	popq	%r10
-               	movl	%ebx, (%r10)
-               	popq	%r10
+               	movq	-0x60(%rbp), %r10
                	movl	%eax, (%r10)
-               	popq	%rdx
-               	popq	%rcx
-               	popq	%rbx
-               	popq	%rax
-               	movl	-0x10(%rbp), %ecx
-               	leaq	-0x10(%rbp), %rdx
+               	movq	-0x80(%rbp), %rax
+               	movq	-0x78(%rbp), %rcx
+               	movq	-0x70(%rbp), %rdx
+               	movq	-0x68(%rbp), %rbx
+               	movl	-0x10(%rbp), %edx
                	leaq	-0x18(%rbp), %rsi
                	leaq	-0x20(%rbp), %rdi
                	leaq	-0x28(%rbp), %r8
-               	xorq	%rax, %rax
-               	pushq	%rax
-               	pushq	%rbx
-               	pushq	%rcx
-               	pushq	%rdx
-               	movq	%rdx, %r10
-               	pushq	%r10
-               	movq	%rsi, %r10
-               	pushq	%r10
-               	movq	%rdi, %r10
-               	pushq	%r10
-               	movq	%r8, %r10
-               	pushq	%r10
-               	movq	%rax, %r10
-               	movq	%rax, %r11
-               	movq	%r10, %rax
-               	movq	%r11, %rcx
+               	xorq	%rcx, %rcx
+               	movq	%rax, -0x80(%rbp)
+               	movq	%rcx, -0x78(%rbp)
+               	movq	%rdx, -0x70(%rbp)
+               	movq	%rbx, -0x68(%rbp)
+               	movq	%rax, -0x60(%rbp)
+               	movq	%rsi, -0x58(%rbp)
+               	movq	%rdi, -0x50(%rbp)
+               	movq	%r8, -0x48(%rbp)
+               	movq	%rcx, -0x40(%rbp)
+               	movq	%rcx, -0x38(%rbp)
+               	movq	-0x40(%rbp), %rax
+               	movq	-0x38(%rbp), %rcx
                	cpuid
-               	popq	%r10
-               	movl	%edx, (%r10)
-               	popq	%r10
-               	movl	%ecx, (%r10)
-               	popq	%r10
-               	movl	%ebx, (%r10)
-               	popq	%r10
+               	movq	-0x60(%rbp), %r10
                	movl	%eax, (%r10)
-               	popq	%rdx
-               	popq	%rcx
-               	popq	%rbx
-               	popq	%rax
+               	movq	-0x58(%rbp), %r10
+               	movl	%ebx, (%r10)
+               	movq	-0x50(%rbp), %r10
+               	movl	%ecx, (%r10)
+               	movq	-0x48(%rbp), %r10
+               	movl	%edx, (%r10)
+               	movq	-0x80(%rbp), %rax
+               	movq	-0x78(%rbp), %rcx
+               	movq	-0x70(%rbp), %rdx
+               	movq	-0x68(%rbp), %rbx
                	movl	-0x10(%rbp), %eax
-               	cmpq	%rax, %rcx
+               	cmpl	%eax, %edx
                	jne	<addr>
                	xorq	%rax, %rax
                	movslq	%eax, %rax
-               	addq	$0x30, %rsp
+               	addq	$0x80, %rsp
                	popq	%rbp
                	retq
                	movl	$0x1, %eax

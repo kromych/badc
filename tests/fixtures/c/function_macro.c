@@ -1,11 +1,11 @@
 // Locks the C99 6.4.2.2 predeclared identifier `__func__` and
 // its GCC aliases `__FUNCTION__` / `__PRETTY_FUNCTION__`.
 //
-// The standard requires `__func__` to evaluate to the enclosing
-// function's name as a pointer to a NUL-terminated character
-// array. The c5 dialect emits the identifier as a data-segment
-// string at expression time. Aliases must agree byte-for-byte
-// with `__func__` so the GCC-compatible form is interchangeable.
+// The standard declares `__func__` as one `static const char[]`
+// per function, so every reference in a function designates the
+// same object and the identifier evaluates to a pointer to its
+// NUL-terminated bytes. Aliases must agree byte-for-byte with
+// `__func__` so the GCC-compatible form is interchangeable.
 //
 // Returns 0 only when every check passes; each failure path
 // returns a distinct nonzero code.
@@ -29,6 +29,10 @@ static int helper_one(void) {
 
 static int helper_two(void) {
     if (!string_eq(__func__, "helper_two")) return 31;
+    // C99 6.4.2.2 declares one object per function, so both
+    // references designate it and sizeof is the array's.
+    if (__func__ != __func__) return 32;
+    if (sizeof(__func__) != 11) return 33;
     return 0;
 }
 

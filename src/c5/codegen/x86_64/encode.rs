@@ -1455,6 +1455,18 @@ pub(crate) fn emit_movsx_r_r16(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     super::table::encode_into(code, Mnem::Movsx, None, &[rw(dst, 8), rw(src, 2)]);
 }
 
+/// `MOVZX r32, r/m16` (register form) -- zero-extend low 16 bits;
+/// the 32-bit write clears the upper half of the 64-bit register.
+pub(crate) fn emit_movzx_r_r16(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    super::table::encode_into(code, Mnem::Movzx, None, &[rw(dst, 4), rw(src, 2)]);
+}
+
+/// `BSWAP r32/r64` -- reverse the register's bytes. The 32-bit form
+/// zero-extends into the full 64-bit register.
+pub(crate) fn emit_bswap_r(code: &mut Vec<u8>, dst: Reg, width: u8) {
+    super::table::encode_into(code, Mnem::Bswap, Some(width), &[rw(dst, width)]);
+}
+
 /// `MOVSX r64, r/m8` (register form) -- sign-extend low 8 bits.
 /// REX is always emitted to access the new-encoding 8-bit subregs
 /// (`sil` / `dil` / `bpl` / `spl`) instead of the legacy AH/CH/etc.
@@ -1585,6 +1597,47 @@ pub(crate) fn emit_mov_sib_r8(code: &mut Vec<u8>, base: Reg, index: Reg, scale: 
         Some(1),
         &[msib(base, index, scale, 1), rw(src, 1)],
     );
+}
+
+/// `FLD tbyte [base+disp]` (DB /5) -- push the x87 80-bit extended
+/// value onto the x87 register stack.
+pub(crate) fn emit_fld_m80(code: &mut Vec<u8>, base: Reg, disp: i32) {
+    if base.high() {
+        emit_byte(code, rex(false, false, false, true));
+    }
+    emit_byte(code, 0xDB);
+    emit_modrm_mem(code, Reg(5), base, disp);
+}
+
+/// `FSTP tbyte [base+disp]` (DB /7) -- pop st(0) into an 80-bit
+/// extended object, writing 10 bytes.
+pub(crate) fn emit_fstp_m80(code: &mut Vec<u8>, base: Reg, disp: i32) {
+    if base.high() {
+        emit_byte(code, rex(false, false, false, true));
+    }
+    emit_byte(code, 0xDB);
+    emit_modrm_mem(code, Reg(7), base, disp);
+}
+
+/// `FLD qword [base+disp]` (DD /0) -- push a binary64 value, widened
+/// exactly to the x87 extended format.
+pub(crate) fn emit_fld_m64(code: &mut Vec<u8>, base: Reg, disp: i32) {
+    if base.high() {
+        emit_byte(code, rex(false, false, false, true));
+    }
+    emit_byte(code, 0xDD);
+    emit_modrm_mem(code, Reg(0), base, disp);
+}
+
+/// `FSTP qword [base+disp]` (DD /3) -- pop st(0) rounded to binary64
+/// (round to nearest, ties to even; the conversion ignores the x87
+/// precision-control field).
+pub(crate) fn emit_fstp_m64(code: &mut Vec<u8>, base: Reg, disp: i32) {
+    if base.high() {
+        emit_byte(code, rex(false, false, false, true));
+    }
+    emit_byte(code, 0xDD);
+    emit_modrm_mem(code, Reg(3), base, disp);
 }
 
 fn emit_modrm_mem(code: &mut Vec<u8>, reg: Reg, base: Reg, disp: i32) {
@@ -1774,22 +1827,23 @@ pub(crate) fn lower(
     mode: super::LowerMode,
 ) -> Result<Build, C5Error> {
     // Asm label numbering restarts per lowering; see
-    // `emit_common::reset_asm_instance`.
-    super::ssa::emit_common::reset_asm_instance();
+    // `crate::c5::asm::reset_asm_instance`.
+    crate::c5::asm::reset_asm_instance();
     let mut code: Vec<u8> = Vec::new();
     let mut func_ent_pcs: Vec<usize> = Vec::new();
+    let mut func_ends: Vec<usize> = Vec::new();
     let mut func_names: Vec<alloc::string::String> = Vec::new();
     let mut func_prologue_native: alloc::collections::BTreeMap<usize, usize> =
         alloc::collections::BTreeMap::new();
     let mut fn_unwind: Vec<super::FnUnwind> = Vec::new();
     let mut ssa_line_rows: Vec<(usize, u32, u32)> = Vec::new();
-    let mut asm_sections = super::ssa::emit_common::AsmSectionSink::default();
+    let mut asm_sections = crate::c5::asm::AsmSectionSink::default();
     // File-scope asm section blocks precede the per-function ones
     // (`.align` takes a byte count on x86-64 ELF).
-    super::ssa::emit_common::materialize_file_asm(
+    crate::c5::asm::materialize_file_asm(
         &program.file_asm,
         false,
-        super::ssa::emit_common::AsmComments::X86,
+        crate::c5::asm::AsmComments::X86,
         &|blocks| {
             crate::c5::codegen::encode_file_asm_section_code(blocks, target, native.elf_class)
         },
@@ -1833,11 +1887,22 @@ pub(crate) fn lower(
         Some(p) => (p.funcs, p.promoted_local_slots),
         None => (
             super::ssa::emit_common::time_pass("ssa::produce_ssa_funcs (x86_64)", || {
-                super::ssa::shadow::produce_ssa_funcs(program, target, native.optimize)
+                super::ssa::shadow::produce_ssa_funcs(
+                    program,
+                    target,
+                    native.optimize,
+                    native.jump_tables,
+                )
             })?,
             alloc::collections::BTreeMap::new(),
         ),
     };
+    // A final image is its own link step: bind import placeholders a
+    // function alias of this unit resolves. A relocatable object keeps
+    // them symbolic for the linker.
+    if native.output_kind != super::OutputKind::Relocatable {
+        super::ssa::shadow::bind_alias_imports(program, &mut ssa_funcs);
+    }
     super::ssa::emit_common::check_frame_limits(&ssa_funcs)?;
     // Frame slots mem2reg promoted to registers (-O) or that slot
     // coalescing moved onto shared storage: the debug-info emitter drops
@@ -1845,6 +1910,8 @@ pub(crate) fn lower(
     // offset are recorded separately so the emitter rewrites the location.
     let mut promoted_local_slots: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>> =
         prebuilt_promoted;
+    let mut canary_frame_bytes: alloc::collections::BTreeMap<usize, u32> =
+        alloc::collections::BTreeMap::new();
     let mut coalesced_slot_remap: alloc::collections::BTreeMap<
         usize,
         alloc::collections::BTreeMap<i64, i64>,
@@ -1916,6 +1983,18 @@ pub(crate) fn lower(
         super::ssa::emit_common::time_pass("passes::unroll::run (x86_64)", || {
             crate::c5::codegen::passes::unroll::run(&mut ssa_funcs);
         });
+        // Merge byte-at-a-time memory idioms after the unroll, which
+        // straight-lines the per-byte loops they are often written as,
+        // and before the inliner: a helper that collapses to one wide
+        // access becomes a single-block candidate the inliner takes,
+        // and its call sites see the merged body.
+        super::ssa::emit_common::time_pass("passes::byteload::run (x86_64)", || {
+            crate::c5::codegen::passes::byteload::run(
+                &mut ssa_funcs,
+                target.is_little_endian(),
+                native.strict_align,
+            );
+        });
         // Seed a parameter every call site of an internal function
         // agrees a constant for, and record the range each parameter's
         // argument stays inside for the range analysis below. After
@@ -1933,12 +2012,15 @@ pub(crate) fn lower(
             });
         // Inline after mem2reg so the candidate filter sees the
         // promoted form: dead cell loads / stores are gone and the
-        // callee's body reads its parameters via `ParamRef`.
+        // callee's body reads its parameters via `ParamRef`. The symbol
+        // map feeds the pass's indirect-call devirtualization.
+        let code_syms = super::ssa::emit_common::defined_fn_syms(program);
         super::ssa::emit_common::time_pass("passes::inline::run (x86_64)", || {
             crate::c5::codegen::passes::inline::run(
                 &mut ssa_funcs,
                 native.inline_cap,
                 target.abi(),
+                &code_syms,
             );
         });
         // Turn self-tail-recursion into a loop back edge on the
@@ -1990,9 +2072,19 @@ pub(crate) fn lower(
         // drop as the initial mem2reg.
         super::ssa::emit_common::time_pass("passes::sroa::run (x86_64)", || {
             let usable_gpr = super::ssa::reg_alloc::usable_gpr_count(target);
+            // What each function does with its pointer parameters, so a
+            // call taking an object's address gives up only the fields
+            // it can reach. Derived once over the whole unit, and only
+            // where the gate below admits some function.
+            let footprints = if ssa_funcs.iter().any(|f| f.did_unroll || f.did_inline) {
+                crate::c5::codegen::passes::sroa::param_footprints(&ssa_funcs)
+            } else {
+                Default::default()
+            };
             for f in &mut ssa_funcs {
                 if f.did_unroll || f.did_inline {
-                    let promoted = crate::c5::codegen::passes::sroa::run(f, usable_gpr);
+                    let promoted =
+                        crate::c5::codegen::passes::sroa::run(f, usable_gpr, &footprints);
                     if !promoted.is_empty() {
                         promoted_local_slots
                             .entry(f.ent_pc)
@@ -2103,6 +2195,20 @@ pub(crate) fn lower(
         super::ssa::emit_common::time_pass("passes::index_fold::run (x86_64)", || {
             crate::c5::codegen::passes::index_fold::run(&mut ssa_funcs);
         });
+        // Dominator-scoped CSE of pure arithmetic and address values.
+        // After the index fold, so merging cannot weld two `base + K`
+        // addresses the fold would have turned into displacements; the
+        // canonical bases then feed store forwarding.
+        super::ssa::emit_common::time_pass("passes::cse::run (x86_64)", || {
+            let caps = super::ssa::reg_alloc::bank_capacity(target);
+            crate::c5::codegen::passes::cse::run(&mut ssa_funcs, caps);
+        });
+        // Rebuild the single modulo where the builder's split quotient
+        // found no division to share with. After the value numbering,
+        // which is what can still supply that second consumer.
+        super::ssa::emit_common::time_pass("passes::divmod_pair::run (x86_64)", || {
+            crate::c5::codegen::passes::divmod_pair::run(&mut ssa_funcs);
+        });
         // Store-to-load and load-to-load forwarding within a block. Runs
         // after the index fold so a struct field's store and load address
         // are both normalised to the same `(base, disp)`. Bounded by
@@ -2110,6 +2216,15 @@ pub(crate) fn lower(
         // register-starved unrolled loop.
         super::ssa::emit_common::time_pass("passes::store_forward::run (x86_64)", || {
             crate::c5::codegen::passes::store_forward::run(&mut ssa_funcs);
+        });
+        // Rewrite `CallIndirect`-of-`ImmCode` pairs the passes since the
+        // inline run exposed -- the post-inline promotions and the
+        // forwarding above turn function-pointer cell reads into
+        // `ImmCode` values -- so the emit issues direct calls. Last of
+        // the passes that change call targets.
+        super::ssa::emit_common::time_pass("passes::inline::devirtualize (x86_64)", || {
+            let code_syms = super::ssa::emit_common::defined_fn_syms(program);
+            crate::c5::codegen::passes::inline::devirtualize(&mut ssa_funcs, &code_syms);
         });
         // Block layout: fallthrough chains, loop rotation to
         // bottom-test, branch inversion. Reorders blocks and remaps
@@ -2143,14 +2258,13 @@ pub(crate) fn lower(
     // comment on the aarch64 lowering's `variadic_targets`.
     {
         use crate::c5::symbol::Linkage;
-        use crate::c5::token::Token;
         let extern_pcs: alloc::collections::BTreeSet<usize> = program
             .extern_function_imports
             .iter()
             .map(|(pc, _)| *pc)
             .collect();
         for sym in &program.symbols {
-            if sym.class == Token::Fun as i64
+            if sym.is_fun_entity()
                 && !sym.defined_here
                 && sym.linkage == Linkage::External
                 && sym.is_variadic
@@ -2160,11 +2274,26 @@ pub(crate) fn lower(
             }
         }
     }
+    // Branch on a zero test's operand directly. Immediately before
+    // allocation so every mid-end fold keyed on the compare shape has
+    // run.
+    for f in ssa_funcs.iter_mut() {
+        crate::c5::codegen::passes::constfold_branch::strip_zero_test_conds(f);
+    }
+    // At -O each function is allocated, then reallocated with the
+    // spilled values' call-free reuse runs split out; the split is kept
+    // only when it lowers the function's loop-weighted spill traffic.
     let ssa_allocs: alloc::vec::Vec<super::ssa::reg_alloc::Allocation> =
         super::ssa::emit_common::time_pass("ssa::reg_alloc::allocate (x86_64)", || {
             ssa_funcs
-                .iter()
-                .map(|f| super::ssa::reg_alloc::allocate(f, target))
+                .iter_mut()
+                .map(|f| {
+                    if native.optimize {
+                        super::ssa::licm::allocate_hoisted(f, target)
+                    } else {
+                        super::ssa::reg_alloc::allocate(f, target)
+                    }
+                })
                 .collect()
         });
     #[cfg(feature = "std")]
@@ -2172,8 +2301,12 @@ pub(crate) fn lower(
     // Function name -> entry PC, so an inline-asm `call`/`jmp` to a bare symbol
     // resolves to a relocation the fixup pass patches like any other call.
     let mut asm_extern_call_sites: Vec<super::UserExternCallSite> = Vec::new();
+    // aarch64-only channel; empty on x86_64, whose function-body symbol
+    // operands ride `UserExternDataRef` / `DataFixup`.
+    let mut asm_sym_fixups: Vec<super::AsmSymFixup> = Vec::new();
     let mut text_align: usize = 16;
     let mut label_relocs: Vec<super::LabelReloc> = Vec::new();
+    let mut text_data_ranges: Vec<(usize, usize)> = Vec::new();
     let name2entpc: alloc::collections::BTreeMap<alloc::string::String, usize> = ssa_funcs
         .iter()
         .map(|f| (f.name.clone(), f.ent_pc))
@@ -2182,17 +2315,19 @@ pub(crate) fn lower(
     // function referenced by address gets an ent_pc placeholder too). A `%c`
     // function operand a replacement `call` in a section relocates against
     // resolves its `ImmCode` ent_pc through this.
-    let fn_name_by_pc: alloc::collections::BTreeMap<usize, &str> = {
-        use crate::c5::token::Token;
-        program
-            .symbols
-            .iter()
-            .filter(|s| s.class == Token::Fun as i64 && !s.name.is_empty())
-            .map(|s| (s.val as usize, s.link_name()))
-            .collect()
-    };
+    let fn_name_by_pc: alloc::collections::BTreeMap<usize, &str> = program
+        .symbols
+        .iter()
+        .filter(|s| s.is_fun_entity() && !s.name.is_empty())
+        .map(|s| (s.val as usize, s.link_name()))
+        .collect();
+    let fn_align = native.min_function_alignment.max(1) as usize;
+    text_align = text_align.max(fn_align);
     for (func_ssa, alloc_for) in ssa_funcs.iter().zip(ssa_allocs.iter()) {
         let ent_pc = func_ssa.ent_pc;
+        // `-fmin-function-alignment=N`: the entry starts at a multiple of
+        // N, the gap filled with one-byte NOPs.
+        super::pad_to_alignment(&mut code, fn_align, &[0x90]);
         pc_to_native[ent_pc] = code.len();
         func_ent_pcs.push(ent_pc);
         func_names.push(func_ssa.name.clone());
@@ -2237,8 +2372,11 @@ pub(crate) fn lower(
                 prologue_native: &mut func_prologue_native,
                 asm_sections: &mut asm_sections,
                 asm_extern_call_sites: &mut asm_extern_call_sites,
+                asm_sym_fixups: &mut asm_sym_fixups,
                 text_align: &mut text_align,
                 label_relocs: &mut label_relocs,
+                text_data_ranges: &mut text_data_ranges,
+                canary_frame_bytes: &mut canary_frame_bytes,
             };
             #[cfg(feature = "std")]
             let _ = super::ssa::emit_common::take_bail();
@@ -2266,6 +2404,7 @@ pub(crate) fn lower(
                 &mut rodata,
                 native.output_kind == super::OutputKind::Relocatable && !native.pic,
                 native.hardening,
+                native.stack_protect.resolved_for(target),
             )
         };
         #[cfg(feature = "std")]
@@ -2295,6 +2434,7 @@ pub(crate) fn lower(
                 ),
             )));
         }
+        func_ends.push(code.len());
     }
     #[cfg(feature = "std")]
     if super::ssa::emit_common::time_passes_enabled() {
@@ -2475,21 +2615,42 @@ pub(crate) fn lower(
         off
     };
 
+    // `-m32` narrows the object to i386, whose frame register numbering and
+    // alignment factors differ from x86-64's.
+    let cfi_target = super::ssa::cfi::CfiTarget {
+        arch: match native.elf_class {
+            crate::c5::object::elf_class::ElfClass::Elf32 => super::ssa::cfi::CfiArch::X86,
+            crate::c5::object::elf_class::ElfClass::Elf64 => super::ssa::cfi::CfiArch::X86_64,
+        },
+        addr_bytes: native.elf_class.addr_size() as u8,
+    };
+    asm_sections
+        .emit_cfi_sections(cfi_target)
+        .map_err(|m| C5Error::Compile(alloc::format!("<file-scope asm>: {m}")))?;
     let (asm_section_list, asm_sym_decls) = asm_sections.into_parts();
     Ok(Build {
         emitted_relocs: Vec::new(),
+        named_sections: Vec::new(),
+        // The GOT base is a cross-unit link fact; the single-TU emit
+        // has no table to name.
+        got_base_fixups: Vec::new(),
         asm_sections: asm_section_list,
         asm_sym_decls,
+        text_data_ranges,
         asm_section_text_refs,
         asm_text_abs_refs,
         asm_text_labels,
+        asm_sym_fixups,
         label_relocs,
         copy_relocs: Vec::new(),
         text: code,
         data: program.data.clone(),
-        // The single-TU path keeps one writable data image; the
-        // read-only carve happens in the relocatable writer.
-        data_ro_len: 0,
+        // Region boundaries the data compaction produced; zero when
+        // the pass did not run (JIT, empty data).
+        data_ro_len: program.data_ro_len.min(program.data.len()),
+        data_relro_len: program
+            .data_relro_len
+            .clamp(program.data_ro_len, program.data.len()),
         data_align: program.data_align,
         text_align,
         bss_size: 0,
@@ -2499,13 +2660,17 @@ pub(crate) fn lower(
         data_fixups,
         rodata,
         data_pcrel_relocs: Vec::new(),
+        text_pcrel_relocs: Vec::new(),
+        text_abs_relocs: Vec::new(),
         func_fixups,
         pc_to_native,
         func_ent_pcs,
+        func_ends,
         func_names,
         func_prologue_native,
         promoted_local_slots,
         coalesced_slot_remap,
+        canary_frame_bytes,
         fn_unwind,
         reloc_call_sites,
         user_extern_call_sites,
@@ -2522,10 +2687,13 @@ pub(crate) fn lower(
         data_relocs: Vec::new(),
         extern_data_relocs: Vec::new(),
         code_relocs: Vec::new(),
+        tls_data_relocs: Vec::new(),
+        tls_extern_data_relocs: Vec::new(),
+        tls_code_relocs: Vec::new(),
         exports: Vec::new(),
         dynamic_exports: Vec::new(),
         output_kind: super::OutputKind::Executable,
-        pic: native.pic,
+        pic_link: native.pic || native.pic_link,
         code_model: native.code_model,
         elf_class: native.elf_class,
         shared_lib_name: None,
@@ -2787,6 +2955,25 @@ mod tests {
         assert_eq!(
             assemble(|c| emit_mov_rr(c, Reg::RDI, Reg::RAX)),
             vec![0x48, 0x89, 0xC7]
+        );
+    }
+
+    #[test]
+    fn bswap_and_16bit_swap_forms() {
+        // bswap rax -> 48 0F C8; bswap ecx -> 0F C9
+        assert_eq!(
+            assemble(|c| emit_bswap_r(c, Reg::RAX, 8)),
+            vec![0x48, 0x0F, 0xC8]
+        );
+        assert_eq!(assemble(|c| emit_bswap_r(c, Reg::RCX, 4)), vec![0x0F, 0xC9]);
+        // movzx eax, di -> 0F B7 C7; rol ax, 8 -> 66 C1 C0 08
+        assert_eq!(
+            assemble(|c| emit_movzx_r_r16(c, Reg::RAX, Reg::RDI)),
+            vec![0x0F, 0xB7, 0xC7]
+        );
+        assert_eq!(
+            assemble(|c| emit_shift_ri(c, Mnem::Rol, 2, Reg::RAX, 8)),
+            vec![0x66, 0xC1, 0xC0, 0x08]
         );
     }
 

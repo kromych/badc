@@ -10,6 +10,8 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#0x1
+               	brk	#0x1
+               	brk	#0x1
 
 <f>:
                	sub	sp, sp, #0xc0
@@ -54,7 +56,7 @@ Disassembly of section .text:
                	mov	x17, #0xf               // =15
                	mul	x13, x0, x17
                	add	x0, x0, #0x3
-               	sub	x14, x29, #0x20
+               	sub	x14, x29, #0x40
                	add	x15, x29, #0x10
                	mov	x16, x14
                	add	x17, x29, #0xd0
@@ -73,8 +75,8 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	str	w17, [x16, #0x1c]
-               	sub	x14, x29, #0x40
-               	sub	x15, x29, #0x20
+               	sub	x14, x29, #0x20
+               	sub	x15, x29, #0x40
                	str	x9, [sp, #-0x10]!
                	ldr	x9, [x15]
                	str	x9, [x14]
@@ -85,7 +87,7 @@ Disassembly of section .text:
                	ldr	x9, [x15, #0x18]
                	str	x9, [x14, #0x18]
                	ldr	x9, [sp], #0x10
-               	sub	x14, x29, #0x40
+               	sub	x14, x29, #0x20
                	mov	x17, x14
                	str	x9, [sp, #-0x10]!
                	ldrsw	x16, [x17, #0x18]
@@ -105,7 +107,7 @@ Disassembly of section .text:
                	ldr	x9, [sp], #0x10
                	mov	x14, x16
                	ldr	x14, [x14]
-               	sub	x15, x29, #0x40
+               	sub	x15, x29, #0x20
                	mov	x17, x15
                	str	x9, [sp, #-0x10]!
                	ldrsw	x16, [x17, #0x18]
@@ -125,8 +127,8 @@ Disassembly of section .text:
                	ldr	x9, [sp], #0x10
                	mov	x15, x16
                	ldr	x15, [x15]
-               	sub	x20, x29, #0x40
                	sub	x20, x29, #0x20
+               	sub	x20, x29, #0x40
                	add	x1, x1, x2
                	add	x1, x1, x3
                	add	x1, x1, x4

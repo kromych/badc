@@ -1,7 +1,7 @@
 use super::include::include_parent_dir;
 use super::text::{
     ends_in_open_block_comment_once, scan_steps_taken, strip_c_comments, strip_c_comments_ref,
-    unfold_line_continuations, unfold_ref,
+    unfold_and_strip, unfold_line_continuations, unfold_ref,
 };
 use super::*;
 
@@ -38,6 +38,35 @@ fn if_signed_right_shift_is_arithmetic() {
     assert!(out.contains('Y'), "{out}");
     let out = process("#if (0xFFFFFFFFFFFFFFFFu >> 63) == 1\nY\n#else\nN\n#endif\n");
     assert!(out.contains('Y'), "{out}");
+}
+
+#[test]
+fn if_char_literal_takes_a_universal_character_name() {
+    // C11 6.4.3: a universal character name in a `#if` character
+    // constant means what it means outside one -- the UTF-8 bytes of its
+    // code point, packed per C99 6.4.4.4p10 and read at the constant's
+    // `int` type, so four of them give a negative value. Matches GCC.
+    for e in [
+        r"'\u0024' == 0x24",
+        r"'\u00E9' == 0xC3A9",
+        r"'\U0001F600' == -257976192",
+        r"'a\u00E9' == 0x61C3A9",
+    ] {
+        let out = process(&format!("#if {e}\nTAKEN\n#else\nNOT\n#endif\n"));
+        assert!(out.contains("TAKEN"), "{e}: {out}");
+    }
+    // 6.4.3p2 bars the surrogates, a value below 00A0 outside {0024,
+    // 0040, 0060}, and anything past the code space; p1 fixes the digit
+    // count. The evaluator rejects rather than folding a wrong value.
+    for e in [
+        r"'\uD800' == 0",
+        r"'\u0041' == 0x41",
+        r"'\U00110000' == 0",
+        r"'\u12' == 0",
+    ] {
+        let err = process_err(&format!("#if {e}\nX\n#endif\n"));
+        assert!(err.contains("universal character name"), "{e}: {err}");
+    }
 }
 
 #[test]
@@ -144,6 +173,98 @@ fn gnu_identity_macros_are_opt_in() {
         out.contains("G yes") && out.contains("S no"),
         "--gnu -std=gnu11: {out}"
     );
+}
+
+#[test]
+fn gnu_predefine_set_is_locked() {
+    // Every macro `--gnu` adds over the default set, with its value. A
+    // capability macro here is a promise about what badc backs, so the
+    // list is exact in both directions: adding one requires backing the
+    // feature, dropping one requires removing the promise.
+    let base = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    let mut gnu = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    gnu.enable_gnu(false, true);
+    let mut added: Vec<(String, String)> = gnu
+        .macros
+        .iter()
+        .filter(|(k, _)| !base.macros.contains_key(*k))
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    added.sort();
+    let version = crate::GNU_COMPAT_VERSION;
+    let mut want: Vec<(String, String)> = [
+        ("__GCC_ASM_FLAG_OUTPUTS__", "1"),
+        ("__GCC_ATOMIC_BOOL_LOCK_FREE", "2"),
+        ("__GCC_ATOMIC_CHAR16_T_LOCK_FREE", "2"),
+        ("__GCC_ATOMIC_CHAR32_T_LOCK_FREE", "2"),
+        ("__GCC_ATOMIC_CHAR_LOCK_FREE", "2"),
+        ("__GCC_ATOMIC_INT_LOCK_FREE", "2"),
+        ("__GCC_ATOMIC_LLONG_LOCK_FREE", "2"),
+        ("__GCC_ATOMIC_LONG_LOCK_FREE", "2"),
+        ("__GCC_ATOMIC_POINTER_LOCK_FREE", "2"),
+        ("__GCC_ATOMIC_SHORT_LOCK_FREE", "2"),
+        ("__GCC_ATOMIC_TEST_AND_SET_TRUEVAL", "1"),
+        ("__GCC_ATOMIC_WCHAR_T_LOCK_FREE", "2"),
+        ("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_1", "1"),
+        ("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_2", "1"),
+        ("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_4", "1"),
+        ("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_8", "1"),
+        ("__GNUC_STDC_INLINE__", "1"),
+        ("__STRICT_ANSI__", "1"),
+    ]
+    .iter()
+    .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+    .collect();
+    let mut claim = version.split('.');
+    for name in ["__GNUC__", "__GNUC_MINOR__", "__GNUC_PATCHLEVEL__"] {
+        want.push((name.to_string(), claim.next().expect("x.y.z").to_string()));
+    }
+    want.push((
+        "__VERSION__".to_string(),
+        format!(
+            "\"{version} Compatible badc {}\"",
+            env!("CARGO_PKG_VERSION")
+        ),
+    ));
+    want.sort();
+    assert_eq!(added, want, "the --gnu predefine set changed");
+    // A 16-byte compare-exchange has no lowering, so the width the
+    // `__sync_*` family does not cover stays unclaimed.
+    assert!(
+        !gnu.macros
+            .contains_key("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_16")
+    );
+    // `-std=gnu*` drops the ISO-conformance macro and nothing else.
+    let mut gnu_dialect = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    gnu_dialect.enable_gnu(false, false);
+    assert!(!gnu_dialect.macros.contains_key("__STRICT_ANSI__"));
+    // The inline-model macro follows `gnu89_inline`; exactly one is set.
+    let mut gnu89 = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    gnu89.enable_gnu(true, true);
+    assert!(gnu89.macros.contains_key("__GNUC_GNU_INLINE__"));
+    assert!(!gnu89.macros.contains_key("__GNUC_STDC_INLINE__"));
+    // The asm flag-output macro is x86-only, as the feature is.
+    let mut arm = Preprocessor::new("linux-aarch64", Target::LinuxAarch64, "0.1.0");
+    arm.enable_gnu(false, true);
+    assert!(!arm.macros.contains_key("__GCC_ASM_FLAG_OUTPUTS__"));
+}
+
+#[test]
+fn segment_and_utf_capability_macros_track_the_feature() {
+    // `__SEG_FS` / `__SEG_GS` report the x86 named address spaces, so
+    // they follow the target rather than the dialect; the C11 UTF
+    // encoding macros hold on every target.
+    let probe = "#ifdef __SEG_GS\nGS yes\n#else\nGS no\n#endif\n\
+                 #ifdef __SEG_FS\nFS yes\n#else\nFS no\n#endif\n\
+                 U16 __STDC_UTF_16__\nU32 __STDC_UTF_32__\n";
+    let mut x86 = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    let out = x86.process(probe).expect("preprocessor failed");
+    assert!(out.contains("GS yes") && out.contains("FS yes"), "{out}");
+    assert!(out.contains("U16 1") && out.contains("U32 1"), "{out}");
+    let mut arm = Preprocessor::new("linux-aarch64", Target::LinuxAarch64, "0.1.0");
+    let out = arm.process(probe).expect("preprocessor failed");
+    assert!(out.contains("GS no") && out.contains("FS no"), "{out}");
+    assert!(out.contains("U16 1") && out.contains("U32 1"), "{out}");
 }
 
 #[test]
@@ -304,24 +425,27 @@ fn lp64_predefined_for_lp64_targets_only() {
     }
 }
 
-/// `set_elf_class` re-selects the whole data-model group, so an ILP32
+/// `set_unit_model` re-selects the whole data-model group, so an ILP32
 /// unit carries no macro from the LP64 one and back again is exact.
 /// Values are gcc 16.1.1's for `-m32` / `-m64` on `linux-x64`.
 #[test]
 fn elf_class_selects_the_data_model_predefines() {
-    use crate::c5::ElfClass;
+    use crate::c5::{CodeModel, ElfClass};
     let probe = concat!(
         "#ifdef __x86_64__\nx86_64\n#endif\n#ifdef __amd64__\namd64\n#endif\n",
         "#ifdef __i386__\ni386\n#endif\n#ifdef __i386\ni386_bare\n#endif\n",
         "#ifdef __LP64__\nlp64\n#endif\n#ifdef __ILP32__\nilp32\n#endif\n",
         "#ifdef __SIZEOF_INT128__\nint128\n#endif\n",
+        "#ifdef __code_model_32__\ncm32\n#endif\n",
+        "#ifdef __code_model_small__\ncmsmall\n#endif\n",
         "sizes __SIZEOF_POINTER__ __SIZEOF_LONG__ __SIZEOF_SIZE_T__ __SIZEOF_PTRDIFF_T__\n",
         "types __SIZE_TYPE__ / __PTRDIFF_TYPE__\n",
+        "wchar __WCHAR_TYPE__ .\n",
     );
-    let names64 = ["x86_64", "amd64", "lp64", "int128"];
-    let names32 = ["i386", "i386_bare", "ilp32"];
+    let names64 = ["x86_64", "amd64", "lp64", "int128", "cmsmall"];
+    let names32 = ["i386", "i386_bare", "ilp32", "cm32"];
     let mut pp = Preprocessor::new(Target::LinuxX64.id_str(), Target::LinuxX64, "0.1.0");
-    pp.set_elf_class(ElfClass::Elf32);
+    pp.set_unit_model(ElfClass::Elf32, CodeModel::Small, false);
     let out = pp.process(probe).expect("preprocessor failed");
     for n in names32 {
         assert!(out.contains(n), "ELFCLASS32 must define {n}: {out}");
@@ -334,10 +458,11 @@ fn elf_class_selects_the_data_model_predefines() {
         out.contains("types unsigned int / int"),
         "ILP32 size_t / ptrdiff_t: {out}"
     );
+    assert!(out.contains("wchar long int ."), "i386 wchar_t: {out}");
     // Back to ELFCLASS64: no i386 macro survives the round trip.
     let mut pp = Preprocessor::new(Target::LinuxX64.id_str(), Target::LinuxX64, "0.1.0");
-    pp.set_elf_class(ElfClass::Elf32);
-    pp.set_elf_class(ElfClass::Elf64);
+    pp.set_unit_model(ElfClass::Elf32, CodeModel::Small, false);
+    pp.set_unit_model(ElfClass::Elf64, CodeModel::Small, false);
     let out = pp.process(probe).expect("preprocessor failed");
     for n in names64 {
         assert!(out.contains(n), "ELFCLASS64 must define {n}: {out}");
@@ -350,13 +475,175 @@ fn elf_class_selects_the_data_model_predefines() {
         out.contains("types unsigned long / long"),
         "LP64 size_t / ptrdiff_t: {out}"
     );
+    assert!(out.contains("wchar int ."), "LP64 wchar_t: {out}");
     // An ELFCLASS32 AArch64 object would be AArch32, which badc neither
     // encodes nor describes; the target's own model stands.
     let mut pp = Preprocessor::new(Target::LinuxAarch64.id_str(), Target::LinuxAarch64, "0.1.0");
-    pp.set_elf_class(ElfClass::Elf32);
+    pp.set_unit_model(ElfClass::Elf32, CodeModel::Small, false);
     let out = pp.process(probe).expect("preprocessor failed");
     assert!(out.contains("lp64") && !out.contains("ilp32"), "{out}");
     assert!(out.contains("sizes 8 8 8 8"), "{out}");
+}
+
+/// The `__code_model_*__` name follows `-mcmodel` on the x86-64
+/// targets, `-m16` / `-m32` override it to the 32-bit model, and the
+/// aarch64 targets define none, all as gcc 16.1.1 does.
+#[test]
+fn the_code_model_predefine_names_the_selected_model() {
+    use crate::c5::{CodeModel, ElfClass};
+    let probe = concat!(
+        "#ifdef __code_model_32__\ncm32\n#endif\n",
+        "#ifdef __code_model_small__\ncmsmall\n#endif\n",
+        "#ifdef __code_model_kernel__\ncmkernel\n#endif\n",
+    );
+    let cases = [
+        (ElfClass::Elf64, CodeModel::Small, "cmsmall"),
+        (ElfClass::Elf64, CodeModel::Kernel, "cmkernel"),
+        (ElfClass::Elf32, CodeModel::Small, "cm32"),
+    ];
+    for (class, model, want) in cases {
+        for t in [Target::LinuxX64, Target::WindowsX64] {
+            let mut pp = Preprocessor::new(t.id_str(), t, "0.1.0");
+            pp.set_unit_model(class, model, false);
+            let out = pp.process(probe).expect("preprocessor failed");
+            for n in ["cm32", "cmsmall", "cmkernel"] {
+                assert_eq!(
+                    out.contains(n),
+                    n == want,
+                    "{t:?} {class:?} {model:?}: {out}"
+                );
+            }
+        }
+    }
+    for t in [
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsAarch64,
+    ] {
+        let mut pp = Preprocessor::new(t.id_str(), t, "0.1.0");
+        let out = pp.process(probe).expect("preprocessor failed");
+        assert!(
+            !out.contains("cm"),
+            "{t:?} must define no code-model macro: {out}"
+        );
+    }
+}
+
+/// Sizes and underlying types the layout engine fixes across targets:
+/// `long double` takes the target ABI's storage size (16 on both Linux
+/// targets, 8 elsewhere; no `__float80` / `__float128` exists to
+/// describe), `wint_t` is the bundled <wchar.h>'s `int`, a bare
+/// `__attribute__((aligned))` resolves to 16, and `__WCHAR_TYPE__`
+/// agrees with `__SIZEOF_WCHAR_T__` on every target.
+/// `__CHAR16_TYPE__` / `__CHAR32_TYPE__` name the types C11
+/// 6.4.4.4p3-p4 give `u'c'` and `U'c'`; neither tracks `wchar_t`, so
+/// both hold on every target.
+#[test]
+fn type_size_predefines_match_the_layout_engine() {
+    let probe = concat!(
+        "ld __SIZEOF_LONG_DOUBLE__ wint __SIZEOF_WINT_T__ ",
+        "align __BIGGEST_ALIGNMENT__ .\n",
+        "winttype __WINT_TYPE__ .\n",
+        "wchar __WCHAR_TYPE__ = __SIZEOF_WCHAR_T__ .\n",
+        "c16 __CHAR16_TYPE__ c32 __CHAR32_TYPE__ .\n",
+        "#if defined(__SIZEOF_FLOAT80__) || defined(__SIZEOF_FLOAT128__)\n",
+        "phantom-float\n#endif\n",
+    );
+    for (t, wchar, ld) in [
+        (Target::LinuxX64, "int = 4", 16),
+        (Target::LinuxAarch64, "unsigned int = 4", 16),
+        (Target::MacOSAarch64, "int = 4", 8),
+        (Target::WindowsX64, "unsigned short = 2", 8),
+        (Target::WindowsAarch64, "unsigned short = 2", 8),
+    ] {
+        let mut pp = Preprocessor::new(t.id_str(), t, "0.1.0");
+        let out = pp.process(probe).expect("preprocessor failed");
+        assert!(
+            out.contains(&format!("ld {ld} wint 4 align 16 .")),
+            "{t:?}: {out}"
+        );
+        assert!(out.contains("winttype int ."), "{t:?}: {out}");
+        assert!(out.contains(&format!("wchar {wchar} .")), "{t:?}: {out}");
+        assert!(
+            out.contains("c16 unsigned short c32 unsigned int ."),
+            "{t:?}: {out}"
+        );
+        assert!(!out.contains("phantom-float"), "{t:?}: {out}");
+    }
+}
+
+/// `-fshort-wchar` moves `__SIZEOF_WCHAR_T__` and `__WCHAR_TYPE__`
+/// together on every target: 2 and an unsigned 16-bit spelling, which
+/// is what gcc 16.1.1 reports (`short unsigned int`, the same type).
+/// The Windows targets are already there, so the flag leaves them and
+/// its absence does not widen them. `<stddef.h>` keys its typedef on
+/// `__SIZEOF_WCHAR_T__`, so the pair is the type the unit sees.
+#[test]
+fn short_wchar_moves_the_wchar_predefines() {
+    use crate::c5::{CodeModel, ElfClass};
+    let probe = "wchar __WCHAR_TYPE__ = __SIZEOF_WCHAR_T__ .\n";
+    for (t, wide) in [
+        (Target::LinuxX64, "int = 4"),
+        (Target::LinuxAarch64, "unsigned int = 4"),
+        (Target::MacOSAarch64, "int = 4"),
+        (Target::WindowsX64, "unsigned short = 2"),
+        (Target::WindowsAarch64, "unsigned short = 2"),
+    ] {
+        for (short_wchar, want) in [(false, wide), (true, "unsigned short = 2")] {
+            let mut pp = Preprocessor::new(t.id_str(), t, "0.1.0");
+            pp.set_unit_model(ElfClass::Elf64, CodeModel::Small, short_wchar);
+            let out = pp.process(probe).expect("preprocessor failed");
+            assert!(
+                out.contains(&format!("wchar {want} .")),
+                "{t:?} short_wchar={short_wchar}: {out}"
+            );
+        }
+    }
+    // The i386 spelling is gcc's `long int` at the default width; the
+    // narrowed one wins over it, as the width does.
+    let mut pp = Preprocessor::new(Target::LinuxX64.id_str(), Target::LinuxX64, "0.1.0");
+    pp.set_unit_model(ElfClass::Elf32, CodeModel::Small, true);
+    let out = pp.process(probe).expect("preprocessor failed");
+    assert!(out.contains("wchar unsigned short = 2 ."), "ILP32: {out}");
+}
+
+/// C99 5.2.4.2.2 characteristics, in the `__FLT_*` / `__DBL_*` /
+/// `__LDBL_*` spellings third-party headers test directly. `float` is
+/// binary32 and `double` binary64 everywhere; the LDBL row describes
+/// the storage format badc gives the type per target: x87 80-bit on
+/// linux-x64 and IEEE binary128 on linux-aarch64, matching gcc on
+/// both, and binary64 on the targets whose ABI defines it that way.
+/// `__DECIMAL_DIG__` follows the widest format (5.2.4.2.2p11).
+#[test]
+fn float_characteristic_predefines_describe_the_target_formats() {
+    let probe = concat!(
+        "flt __FLT_MANT_DIG__ __FLT_DIG__ __FLT_DECIMAL_DIG__ .\n",
+        "dbl __DBL_MANT_DIG__ __DBL_DIG__ __DBL_MAX_EXP__ .\n",
+        "ldbl __LDBL_MANT_DIG__ __LDBL_DIG__ __LDBL_MAX_EXP__ .\n",
+        "radix __FLT_RADIX__ decimal __DECIMAL_DIG__ .\n",
+        "#if __LDBL_MANT_DIG__ == __DBL_MANT_DIG__\n",
+        "ldbl-is-dbl\n#endif\n",
+        "traits __FLT_HAS_DENORM__ __DBL_HAS_INFINITY__ __LDBL_HAS_QUIET_NAN__ .\n",
+    );
+    for (t, ldbl, decimal, is_dbl) in [
+        (Target::LinuxX64, "ldbl 64 18 16384 .", 21, false),
+        (Target::LinuxAarch64, "ldbl 113 33 16384 .", 36, false),
+        (Target::MacOSAarch64, "ldbl 53 15 1024 .", 17, true),
+        (Target::WindowsX64, "ldbl 53 15 1024 .", 17, true),
+        (Target::WindowsAarch64, "ldbl 53 15 1024 .", 17, true),
+    ] {
+        let mut pp = Preprocessor::new(t.id_str(), t, "0.1.0");
+        let out = pp.process(probe).expect("preprocessor failed");
+        assert!(out.contains("flt 24 6 9 ."), "{t:?}: {out}");
+        assert!(out.contains("dbl 53 15 1024 ."), "{t:?}: {out}");
+        assert!(out.contains(ldbl), "{t:?}: {out}");
+        assert!(
+            out.contains(&format!("radix 2 decimal {decimal} .")),
+            "{t:?}: {out}"
+        );
+        assert_eq!(out.contains("ldbl-is-dbl"), is_dbl, "{t:?}: {out}");
+        assert!(out.contains("traits 1 1 1 ."), "{t:?}: {out}");
+    }
 }
 
 #[test]
@@ -665,6 +952,30 @@ fn stringify_escapes_quote_and_backslash() {
 }
 
 #[test]
+fn a_file_name_is_escaped_wherever_it_becomes_a_string_literal() {
+    // A Windows path is what reaches this: `\U` opens a universal
+    // character name, so `__FILE__` naming `...\UefiApp\...` failed to
+    // lex once the lexer diagnosed an incomplete one. gcc and clang
+    // escape `\` and `"` in both positions.
+    let name = "R:\\src\\UefiApp\\a\"b.c";
+    let want = "\"R:\\\\src\\\\UefiApp\\\\a\\\"b.c\"";
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    pp.set_source_label(name);
+    let out = pp.process("__FILE__\n").expect("preprocessor failed");
+    assert!(
+        out.contains(want),
+        "__FILE__ must expand to a valid string literal:\n{out}"
+    );
+    // The line marker names the same file, and the two escaped
+    // independently -- only the marker did. Assert they agree so a
+    // third copy cannot drift from either.
+    assert_eq!(
+        super::directive::format_line_marker(1, name),
+        alloc::format!("# 1 {want}\n")
+    );
+}
+
+#[test]
 fn token_paste_joins_tokens() {
     let out = process("#define PASTE(a, b) a ## b\nint PASTE(x, y) = 0;\n");
     assert!(
@@ -933,6 +1244,104 @@ fn c_literals_are_unaffected_by_the_line_bound() {
     assert!(!out.contains("note"), "comment leaked: {out}");
 }
 
+fn process_asm(source: &str) -> String {
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    pp.set_asm_source(true);
+    pp.process(source).expect("preprocessor failed")
+}
+
+/// Assembler-with-cpp: a `#` line naming no directive is text, passed
+/// through with the surrounding phase-3 rules intact, as GNU cpp emits
+/// it for assembler input. The kernel's `arch/x86/boot/header.S`
+/// reduces to this shape: an apostrophe in such a line, then a comment
+/// in a `# define` body.
+#[test]
+fn asm_hash_comment_line_passes_through() {
+    let src = "#define CONFIG_X86_64 1\n\
+               #define XLF_KERNEL_64 (1<<0)\n\
+               \t\t\t\t\t# with loadlin-1.5 (header v1.5). Don't\n\
+               #ifdef CONFIG_X86_64\n\
+               # define XLF0 XLF_KERNEL_64\t\t\t/* 64-bit kernel */\n\
+               #else\n\
+               # define XLF0 0\n\
+               #endif\n\
+               \t\t\t.word XLF0 | XLF1\n";
+    let out = process_asm(src);
+    assert!(
+        out.contains("# with loadlin-1.5 (header v1.5). Don't"),
+        "{out}"
+    );
+    assert!(out.contains("\t\t\t.word (1<<0) | XLF1"), "{out}");
+    assert!(!out.contains("64-bit kernel"), "comment leaked: {out}");
+}
+
+/// The passed-through line's tail is macro-expanded and its comments
+/// are stripped (`gcc -E -x assembler-with-cpp` produces `# hello 1`);
+/// an inactive branch still drops the line; C input still diagnoses
+/// and drops an unknown directive instead of passing it through.
+#[test]
+fn asm_hash_line_tail_is_macro_expanded() {
+    let out = process_asm("#define BAR 1\n# hello BAR /* gone */\n");
+    assert!(out.contains("# hello 1"), "{out}");
+    assert!(!out.contains("gone"), "{out}");
+    let out = process_asm("#if 0\n# hidden\n#endif\n\t.word 1\n");
+    assert!(!out.contains("hidden"), "{out}");
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let out = pp.process("# hello\nint x;\n").expect("preprocess");
+    assert!(!out.contains("# hello"), "{out}");
+    assert!(
+        pp.warnings.iter().any(|w| w.contains("`#hello`")),
+        "{:?}",
+        pp.warnings
+    );
+}
+
+/// A keyword-less line marker is text in assembler input and a directive
+/// in C. `#` opens a comment for several assemblers, so GNU cpp and clang
+/// pass every `# <n> ...` line through unchanged there -- flag digits and
+/// the file-less form included -- and honor only `#line`; consuming one
+/// re-homes the unit's diagnostics onto a file it never read and drops the
+/// line's own text.
+#[test]
+fn asm_keeps_line_markers_as_text() {
+    let src = "nop1\n# 42 \"injected.h\"\nnop2\n# 7 \"flagged.h\" 1\n\
+               nop3\n# 99\nnop4\n#line 55 \"real.h\"\nnop5\n";
+    let out = process_asm(src);
+    for text in ["# 42 \"injected.h\"", "# 7 \"flagged.h\" 1", "# 99"] {
+        assert!(out.contains(text), "{text} not passed through: {out}");
+    }
+    // `#line` is a directive in both languages, and renders as a marker.
+    assert!(out.contains("# 55 \"real.h\""), "{out}");
+    assert!(!out.contains("#line"), "{out}");
+
+    // C input keeps the GNU spelling, which generated sources rely on: the
+    // marker is consumed and re-rendered from the tracked position, so the
+    // flag digit goes and a file-less form acquires the current file.
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let out = pp
+        .process("# 7 \"flagged.h\" 1\nint x;\n# 99\nint y;\n")
+        .expect("preprocess");
+    assert!(
+        out.contains("# 7 \"flagged.h\"") && !out.contains(" 1\n"),
+        "{out}"
+    );
+    assert!(out.contains("# 99 \"flagged.h\""), "{out}");
+    assert!(pp.warnings.is_empty(), "{:?}", pp.warnings);
+}
+
+/// C99 6.10p9: `#` with nothing after it is the null directive,
+/// consumed without effect and without diagnostic in either language.
+#[test]
+fn null_directive_is_silent() {
+    for asm in [false, true] {
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.set_asm_source(asm);
+        let out = pp.process("#\nline1\n").expect("preprocess");
+        assert!(out.contains("line1"), "{out}");
+        assert!(pp.warnings.is_empty(), "{:?}", pp.warnings);
+    }
+}
+
 #[test]
 fn ifdef_keeps_active_branch() {
     let src = "#define FOO 1\n#ifdef FOO\nint a;\n#else\nint b;\n#endif\n";
@@ -1138,6 +1547,54 @@ fn wide_char_constant_in_if() {
     let out = process(src);
     assert!(out.contains("int yes;"), "{out:?}");
     assert!(!out.contains("int no;"), "{out:?}");
+}
+
+/// C99 6.10.1p4 evaluates `#if` in `intmax_t`, but a character constant
+/// enters that evaluation at the type 6.4.4.4p10 gives it -- `int` -- so
+/// bytes that fill the width read as a negative value. gcc-16 agrees on
+/// every row.
+#[test]
+fn if_character_constant_narrows_to_int() {
+    for (e, want) in [
+        (r"'a' == 97", true),
+        (r"'ab' == 24930", true),
+        (r"'abc' == 6382179", true),
+        (r"'abcd' == 1633837924", true),
+        (r"'\xF0\x9F\x98\x80' < 0", true),
+        (r"'\xF0\x9F\x98\x80' == -257976192", true),
+        (r"'\xF0\x9F\x98\x80' == 4036991104", false),
+        (r"'\x7F\xFF\xFF\xFF' == 2147483647", true),
+        (r"'\x80\x00\x00\x00' == -2147483648", true),
+        // Fewer than four bytes cannot reach the sign bit.
+        (r"'\xF0\x9F' == 61599", true),
+        (r"'\xF0\x9F\x98' == 15769496", true),
+    ] {
+        let out = process(&format!("#if {e}\nTAKEN\n#else\nNOT\n#endif\n"));
+        assert_eq!(out.contains("TAKEN"), want, "{e}: {out}");
+    }
+}
+
+/// A prefixed character constant holds one code point at the `wchar_t` /
+/// `char16_t` / `char32_t` width (C99 6.4.4.4p11), not the UTF-8 bytes an
+/// unprefixed one packs. `#if` must read it the way the lexer does
+/// outside one, so the same constant cannot mean two things.
+#[test]
+fn if_prefixed_character_constant_holds_a_code_point() {
+    for e in [
+        // A hex escape is not truncated to a byte at these widths.
+        r"L'\xFFFF' == 65535",
+        r"U'\U0001F600' == 128512",
+        // Written as a universal character name and as the source's own
+        // UTF-8, which both name U+00E9.
+        r"L'\U000000E9' == 233",
+        r"u'\U000000E9' == 233",
+        "L'\u{e9}' == 233",
+        // Unprefixed, the same code point packs its UTF-8 bytes.
+        "'\u{e9}' == 0xC3A9",
+    ] {
+        let out = process(&format!("#if {e}\nTAKEN\n#else\nNOT\n#endif\n"));
+        assert!(out.contains("TAKEN"), "{e}: {out}");
+    }
 }
 
 #[test]
@@ -1723,6 +2180,45 @@ fn bundled_header_resolves_bundled_includes_over_search_paths() {
     assert!(out.contains("file_clone_range"), "{out}");
 }
 
+#[test]
+fn nostdinc_withdraws_the_bundled_headers_but_keeps_the_compiler_owned_ones() {
+    // `-nostdinc` takes the standard library headers off the search, so a
+    // name only the bundled set carries stops resolving; a `-I` directory
+    // that carries it still does. The compiler's own headers stay
+    // reachable, since the flag withdraws the library, not the builtins.
+    let base = std::env::temp_dir().join(format!("badc-nostdinc-{}", std::process::id()));
+    let sys = base.join("sys");
+    std::fs::create_dir_all(&sys).unwrap();
+    std::fs::write(sys.join("types.h"), "int tree_types_marker;\n").unwrap();
+
+    let mut off = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    off.process("#include <sys/types.h>\n")
+        .expect("the bundled sys/types.h resolves without the flag");
+
+    let mut on = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    on.set_nostdinc(true);
+    let err = on
+        .process("#include <sys/types.h>\n")
+        .expect_err("under -nostdinc no search path carries the name");
+    assert!(format!("{err:?}").contains("not found"), "{err:?}");
+
+    let mut named = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    named.set_nostdinc(true);
+    named.add_search_path(base.to_str().unwrap());
+    let out = named
+        .process("#include <sys/types.h>\n")
+        .expect("a -I directory still resolves the name");
+    assert!(out.contains("tree_types_marker"), "{out}");
+
+    let mut owned = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    owned.set_nostdinc(true);
+    let out = owned
+        .process("#include <_builtins.h>\nint f(int x) { return __builtin_expect(x, 1); }\n")
+        .expect("the __builtin_* thunk header stays reachable");
+    std::fs::remove_dir_all(&base).ok();
+    assert!(out.contains("return (x);"), "{out}");
+}
+
 /// The computed-include macro chain of the tests below: the header
 /// name is assembled from a parameter inside `<dir/n.h>`, so a
 /// digit-leading argument substitutes as the tokens `1x` `.` `h`.
@@ -2092,6 +2588,12 @@ fn unfold_80k_line_block_comment_is_fast() {
     // the comment survives.
     assert_eq!(out.matches('\n').count(), s.lines().count());
     assert!(out.contains("code;"));
+    // The fused pass walks the same comment once as well.
+    let start = std::time::Instant::now();
+    let fused = unfold_and_strip(&s);
+    let elapsed = start.elapsed();
+    assert!(elapsed.as_secs() < 20, "fused pass too slow: {elapsed:?}");
+    assert_eq!(fused, strip_c_comments(&out));
 }
 
 /// Deterministic pseudo-random source generator for the phase-2 /
@@ -2155,6 +2657,100 @@ fn unfold_matches_reference_over_corpus_and_fuzz() {
             unfold_line_continuations(&src),
             unfold_ref(&src),
             "unfold diverged on seed {seed}: {src:?}"
+        );
+    }
+}
+
+/// The fused phase-2 / phase-3 pass must agree byte for byte with the
+/// two-pass composition over the header corpus, the fuzz generator, and
+/// CR-bearing variants (the generator's alphabet has no `\r`, so CRLF
+/// terminators and lone CRs are grafted onto every fuzzed source).
+#[test]
+fn unfold_and_strip_matches_composition_over_corpus_and_fuzz() {
+    let reference = |s: &str| strip_c_comments(&unfold_line_continuations(s));
+    for (name, body) in crate::c5::headers::embedded_headers() {
+        assert_eq!(
+            unfold_and_strip(body),
+            reference(body),
+            "fused pass diverged on embedded header `{name}`"
+        );
+    }
+    for seed in 0..6000u64 {
+        let src = fuzz_source(seed, 200);
+        assert_eq!(
+            unfold_and_strip(&src),
+            reference(&src),
+            "fused pass diverged on seed {seed}: {src:?}"
+        );
+        let crlf = src.replace('\n', "\r\n");
+        assert_eq!(
+            unfold_and_strip(&crlf),
+            reference(&crlf),
+            "fused pass diverged on CRLF seed {seed}: {crlf:?}"
+        );
+        let lone_cr = src.replace('*', "\r");
+        assert_eq!(
+            unfold_and_strip(&lone_cr),
+            reference(&lone_cr),
+            "fused pass diverged on lone-CR seed {seed}: {lone_cr:?}"
+        );
+    }
+}
+
+/// Edges the fusion has to get right, locked against literal expected
+/// bytes rather than only the reference composition.
+#[test]
+fn unfold_and_strip_edge_cases() {
+    let cases: &[(&str, &str)] = &[
+        // A `\`-run followed by empty lines: phase 2 pops one trailing
+        // backslash per joined line, reaching back through the run.
+        ("x\\\\\n\ny\n", "xy\n\n\n"),
+        ("\"ab\\\\\n\nz\n", "\"abz\n\n\n"),
+        ("a;\\\\\\\\\n\n\n\nb\n", "a;b\n\n\n\n\n"),
+        // A line of backslashes only merges into the deferred run.
+        ("x\\\\\n\\\n\ny\n", "xy\n\n\n\n"),
+        // Comment openers and closers split across a splice.
+        ("a /\\\n* c *\\\n/ b\n", "a   b\n\n\n"),
+        ("a /\\\n/ c\nb\n", "a  \n\nb\n"),
+        ("/*x*\\\n/y\n", " y\n\n"),
+        // A pending `/` whose splice pops the following backslash but
+        // no comment forms.
+        ("x/\\\nay\n", "x/ay\n\n"),
+        ("x/\\\n\nz\n", "x/\n\nz\n"),
+        ("x/\\\\\ny\n", "x/\\y\n\n"),
+        // Escapes rebuilt across a splice inside a literal.
+        ("\"a\\\n\\\"b\"c\n", "\"a\\\"b\"c\n\n"),
+        // Unterminated literal ends at its line; the next line's
+        // comment is stripped.
+        (
+            "char *s = \"abc\nint x; /* c */ int y;\n",
+            "char *s = \"abc\nint x;   int y;\n",
+        ),
+        // EOF while joining.
+        ("xyz\\", "xyz\n\n"),
+        ("x/\\\\", "x/\\\n\n"),
+        ("a /* x", "a \n\n "),
+        ("a /* x\n", "a \n\n "),
+        ("a // x\\", "a  \n\n"),
+        ("int a; // t", "int a;  \n"),
+        // CRLF: the CR joins the newline in the splice and the line
+        // terminator, and survives when no LF follows.
+        ("#define M \\\r\n 1\r\nM\r\n", "#define M  1\n\nM\n"),
+        ("a\rb\n", "a\rb\n"),
+        ("abc\r", "abc\r\n"),
+        ("x\\\r", "x\\\r\n"),
+        // Degenerate inputs.
+        ("", ""),
+        ("\n", "\n"),
+        ("\\\n", "\n\n"),
+        ("\\", "\n\n"),
+    ];
+    for (src, expect) in cases {
+        assert_eq!(unfold_and_strip(src), *expect, "fused output for {src:?}");
+        assert_eq!(
+            strip_c_comments(&unfold_line_continuations(src)),
+            *expect,
+            "reference composition disagrees with the expectation for {src:?}"
         );
     }
 }
@@ -2447,7 +3043,7 @@ fn merge_test_covers_every_punctuator_pair() {
         for b in 0u8..=255 {
             if super::expand::punct_len(&[a, b], 0) == 2 {
                 assert!(
-                    pp_tokens_would_merge(super::expand::TokKind::Punct, a, b),
+                    pp_tokens_would_merge(super::expand::TokKind::Punct, &[a], b),
                     "punctuator {:?} is not separated by the serializer",
                     core::str::from_utf8(&[a, b]).unwrap_or("<non-utf8>")
                 );
@@ -2475,6 +3071,43 @@ fn serializer_separates_only_real_pastes() {
     // The paste-preventing spaces the byte-level rules do call for.
     let out = process("#define PLUS +\nint z = PLUS+1;\n");
     assert!(out.contains("+ +1"), "`+` `+` must not paste: {out}");
+}
+
+/// An encoding prefix and a following literal are two tokens unless `##`
+/// joins them (C99 6.10.3.2, 6.10.3.3), so the serializer separates them
+/// however the adjacency arises: a literal prefix written before `#param`
+/// in the replacement list, or a parameter substituting to the prefix
+/// before a literal. gcc-16 emits the same separators.
+#[test]
+fn serializer_separates_an_encoding_prefix_from_a_literal() {
+    for (prefix, sep) in [("L", " "), ("u", " "), ("U", " "), ("u8", " ")] {
+        let out = process(&format!("#define S(x) {prefix}#x\nchar *s = S(hi);\n"));
+        assert!(
+            out.contains(&format!("{prefix}{sep}\"hi\"")),
+            "`{prefix}#x` must stay two tokens: {out}"
+        );
+        let out = process(&format!("#define A(x) x\"s\"\nchar *s = A({prefix});\n"));
+        assert!(
+            out.contains(&format!("{prefix}{sep}\"s\"")),
+            "`{prefix}` before a string literal must stay two tokens: {out}"
+        );
+    }
+    // 6.4.4.4p2 has no `u8` character constant, so `u8` and `'c'` are
+    // already two tokens and need no separator.
+    for (prefix, sep) in [("L", " "), ("u", " "), ("U", " "), ("u8", "")] {
+        let out = process(&format!("#define C(x) x'c'\nchar c = C({prefix});\n"));
+        assert!(
+            out.contains(&format!("{prefix}{sep}'c'")),
+            "`{prefix}` before a character constant: {out}"
+        );
+    }
+    // An identifier that is not an encoding prefix cannot absorb a quote,
+    // so no separator is inserted there.
+    let out = process("#define S(x) foo#x\nchar *s = S(hi);\n");
+    assert!(out.contains("foo\"hi\""), "no gratuitous separator: {out}");
+    // `##` is the operator that does join them (6.10.3.3p3).
+    let out = process("#define P(a, b) a##b\nchar *s = P(u8, \"hi\");\n");
+    assert!(out.contains("u8\"hi\""), "`##` must still paste: {out}");
 }
 
 /// `__has_include` resolves through the same code path as `#include`,
@@ -2820,4 +3453,120 @@ fn va_opt_expands_on_a_non_empty_variadic_tail() {
             .trim();
         assert_eq!(got, *want, "{def} / {call}");
     }
+}
+
+/// A fresh preprocessor of the fixed test target.
+fn reuse_pp() -> Preprocessor {
+    Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0")
+}
+
+#[test]
+fn retry_reuses_the_source_pass_when_the_extension_is_disjoint() {
+    // The source's observations (its macros, conditionals, an embedded
+    // include, dylib/binding/export pragmas) share nothing with what
+    // <string.h> installs, so a re-run that only appends that
+    // force-include must reuse the recorded pass -- and match a full
+    // re-run in text and side outputs exactly.
+    let src = "#include <stdbool.h>\n\
+               #define W 3\n\
+               #ifdef W\n\
+               int picked = W;\n\
+               #endif\n\
+               #pragma dylib(mylib, \"libmy.so\")\n\
+               #pragma binding(mylib::hook, \"hook_impl\")\n\
+               #pragma export(picked_up)\n\
+               #pragma intrinsic(\"alloca\")\n\
+               bool flag = true;\n\
+               int untouched_name;\n";
+    let (_, cache) = reuse_pp()
+        .process_recording(src)
+        .expect("recording run succeeds");
+
+    let mut reused = reuse_pp();
+    reused.add_force_include("string.h");
+    let out_reused = reused
+        .process_reusing(&cache)
+        .expect("a disjoint extension reuses the pass");
+
+    let mut full = reuse_pp();
+    full.add_force_include("string.h");
+    let out_full = full.process(src).expect("full run succeeds");
+
+    assert_eq!(out_reused, out_full, "spliced text differs from a full run");
+    assert_eq!(reused.warnings, full.warnings);
+    assert_eq!(format!("{:?}", reused.dylibs), format!("{:?}", full.dylibs));
+    assert_eq!(reused.exports, full.exports);
+    assert_eq!(reused.intrinsics, full.intrinsics);
+    assert_eq!(reused.entrypoint, full.entrypoint);
+    assert_eq!(reused.subsystem, full.subsystem);
+}
+
+#[test]
+fn retry_reuse_declines_when_the_extension_defines_an_observed_name() {
+    // The recorded pass expanded the conditional with `NULL` undefined;
+    // <string.h> defines it, so the pass is not reusable.
+    let src = "#ifndef NULL\n#define NULL 0\n#endif\nchar *p = NULL;\n";
+    let (_, cache) = reuse_pp()
+        .process_recording(src)
+        .expect("recording run succeeds");
+    let mut reused = reuse_pp();
+    reused.add_force_include("string.h");
+    assert!(
+        reused.process_reusing(&cache).is_none(),
+        "an observed-name redefinition must fall back to a full run"
+    );
+}
+
+#[test]
+fn retry_reuse_declines_when_the_extension_covers_a_source_include() {
+    // The extension once-registers (and pre-defines) what the source's
+    // own `#include` supplied, flipping that include from open to skip.
+    let src = "#include <stdbool.h>\nbool ok = true;\n";
+    let (_, cache) = reuse_pp()
+        .process_recording(src)
+        .expect("recording run succeeds");
+    let mut reused = reuse_pp();
+    reused.add_force_include("stdbool.h");
+    assert!(
+        reused.process_reusing(&cache).is_none(),
+        "overlap with the source's own reading must fall back"
+    );
+}
+
+#[test]
+fn retry_reuse_follows_the_counter_position() {
+    // A preamble that consumes `__COUNTER__` values shifts every later
+    // expansion: reuse must decline for a source that used the counter
+    // and engage for one that did not.
+    let dir = std::env::temp_dir().join(format!("badc_pp_reuse_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let hdr = dir.join("ctr.h");
+    std::fs::write(&hdr, "int consumed = __COUNTER__;\n").unwrap();
+
+    for (src, engages) in [
+        ("int uses = __COUNTER__;\n", false),
+        ("int plain = 1;\n", true),
+    ] {
+        let (_, cache) = reuse_pp()
+            .process_recording(src)
+            .expect("recording run succeeds");
+        let mut reused = reuse_pp();
+        reused.add_search_path(dir.to_str().unwrap());
+        reused.add_force_include("ctr.h");
+        let got = reused.process_reusing(&cache);
+        if engages {
+            let mut full = reuse_pp();
+            full.add_search_path(dir.to_str().unwrap());
+            full.add_force_include("ctr.h");
+            let out_full = full.process(src).expect("full run succeeds");
+            assert_eq!(got.expect("counter unused: pass reusable"), out_full);
+        } else {
+            assert!(
+                got.is_none(),
+                "a shifted counter the source read must fall back"
+            );
+        }
+    }
+    std::fs::remove_file(&hdr).ok();
+    std::fs::remove_dir(&dir).ok();
 }

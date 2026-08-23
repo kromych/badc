@@ -56,11 +56,17 @@ jobs:
       # whether the booted image names badc as compiler and linker; all are
       # pure functions with a self-check, so they are verified here rather
       # than in the kernel lane, which runs on a fraction of the pushes and
-      # takes an hour to say so.
-      - name: kernel gate harness self-tests
+      # takes an hour to say so. The snapshot-clean comparison is checked
+      # here for the same reason: a pure git query, and the job that uses
+      # it needs a release build first. The local gate's lane transports are
+      # checked here too -- they build a command line and a stdin script, and
+      # whether the token stays out of the former is decidable without a box.
+      - name: script harness self-tests
         run: |
           python3 demos/linux/kaslr.py
           python3 demos/linux/verify.py --self-test
+          python3 scripts/snapshots.py --self-test
+          python3 scripts/validate_local_boxes.py --self-test
       # Sources and docs are ASCII-only. Smart quotes / em dashes /
       # arrows tend to sneak in via copy-paste and rendered editor
       # autocorrect; keep them out at the gate. A fixture that exercises
@@ -938,14 +944,13 @@ jobs:
         run: sudo apt-get update -y && sudo apt-get install -y llvm
       - name: build badc release
         run: cargo build --release --locked --features full
-      - name: regenerate snapshots
-        run: python3 scripts/snapshots.py
-      - name: verify no diff
+      # `--check` compares through `git status`, not `git diff`: a fixture
+      # added without its snapshots produces untracked files, which
+      # `git diff` does not report.
+      - name: regenerate snapshots and verify clean
         run: |
-          if ! git diff --quiet tests/snapshots/; then
-            echo "::error::tests/snapshots/ drifted from the committed copy"
-            git --no-pager diff --stat tests/snapshots/
-            git --no-pager diff tests/snapshots/ | head -200
+          if ! python3 scripts/snapshots.py --check; then
+            echo "::error::tests/snapshots/ is not clean after regeneration"
             exit 1
           fi
 

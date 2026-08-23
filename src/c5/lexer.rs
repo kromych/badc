@@ -58,7 +58,7 @@ enum VisibilityDirective {
 /// `(code_point, byte_length)`. A malformed lead or truncated sequence
 /// falls back to the single byte interpreted as Latin-1, so the lexer
 /// always advances.
-fn decode_utf8(bytes: &[u8]) -> (u32, usize) {
+pub(crate) fn decode_utf8(bytes: &[u8]) -> (u32, usize) {
     let b0 = bytes[0];
     let (mut cp, len) = if b0 & 0x80 == 0 {
         return (b0 as u32, 1);
@@ -81,6 +81,102 @@ fn decode_utf8(bytes: &[u8]) -> (u32, usize) {
         return (b0 as u32, 1);
     }
     (cp, len)
+}
+
+/// UTF-8 encoding of `cp` into `out` (Unicode 3.9 D92), returning the
+/// byte count. `cp` must be a scalar value: `scan_ucn` has already
+/// barred the surrogates and anything above U+10FFFF.
+pub(crate) fn encode_utf8(cp: u32, out: &mut [u8; 4]) -> usize {
+    match cp {
+        0x0000..=0x007F => {
+            out[0] = cp as u8;
+            1
+        }
+        0x0080..=0x07FF => {
+            out[0] = 0xC0 | (cp >> 6) as u8;
+            out[1] = 0x80 | (cp & 0x3F) as u8;
+            2
+        }
+        0x0800..=0xFFFF => {
+            out[0] = 0xE0 | (cp >> 12) as u8;
+            out[1] = 0x80 | ((cp >> 6) & 0x3F) as u8;
+            out[2] = 0x80 | (cp & 0x3F) as u8;
+            3
+        }
+        _ => {
+            out[0] = 0xF0 | (cp >> 18) as u8;
+            out[1] = 0x80 | ((cp >> 12) & 0x3F) as u8;
+            out[2] = 0x80 | ((cp >> 6) & 0x3F) as u8;
+            out[3] = 0x80 | (cp & 0x3F) as u8;
+            4
+        }
+    }
+}
+
+/// Outcome of scanning a universal character name.
+pub(crate) enum Ucn {
+    Ok(u32),
+    /// Fewer hex digits than C11 6.4.3p1 requires.
+    Incomplete,
+    /// Well-formed but naming a code point 6.4.3p2 bars.
+    Invalid(u32),
+}
+
+/// Hex digit count a `\u` / `\U` name takes (C11 6.4.3p1).
+pub(crate) fn ucn_digits(esc: u8) -> usize {
+    if esc == b'u' { 4 } else { 8 }
+}
+
+/// Universal character name at `bytes[*pos..]`, whose `\u` / `\U`
+/// introducer `esc` is already consumed; `*pos` advances past the
+/// digits read. C11 6.4.3p2 bars a value below 00A0 other than 0024,
+/// 0040 and 0060, the surrogate range D800..DFFF, and anything outside
+/// the 10FFFF code space. The lexer and the `#if` evaluator share this
+/// so a name means the same in both.
+pub(crate) fn scan_ucn(bytes: &[u8], pos: &mut usize, esc: u8) -> Ucn {
+    let digits = ucn_digits(esc);
+    let mut acc: u32 = 0;
+    let mut count = 0;
+    while count < digits && *pos < bytes.len() {
+        let Some(d) = (bytes[*pos] as char).to_digit(16) else {
+            break;
+        };
+        acc = (acc << 4) | d;
+        *pos += 1;
+        count += 1;
+    }
+    if count != digits {
+        return Ucn::Incomplete;
+    }
+    let permitted_low = matches!(acc, 0x24 | 0x40 | 0x60);
+    if (acc < 0xA0 && !permitted_low) || (0xD800..=0xDFFF).contains(&acc) || acc > 0x10FFFF {
+        return Ucn::Invalid(acc);
+    }
+    Ucn::Ok(acc)
+}
+
+/// Encoding prefix of a string literal or character constant
+/// (C11 6.4.5p2, 6.4.4.4p2). `string_prefix_width` maps each to its
+/// element width.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum StrPrefix {
+    None,
+    Utf8,
+    Wide,
+    Char16,
+    Char32,
+}
+
+impl StrPrefix {
+    fn spelling(self) -> &'static [u8] {
+        match self {
+            Self::None => b"",
+            Self::Utf8 => b"u8",
+            Self::Wide => b"L",
+            Self::Char16 => b"u",
+            Self::Char32 => b"U",
+        }
+    }
 }
 
 /// One parsed GNU-style line marker (`# N "file" [flags]`) or
@@ -248,19 +344,68 @@ pub(crate) struct LexerSnapshot {
     int_suffix_unsigned: bool,
     int_is_decimal: bool,
     float_suffix_f32: bool,
-    char_is_wide: bool,
+    num_is_char: bool,
+    char_prefix: StrPrefix,
     str_is_wide: bool,
     str_elem_bytes: usize,
 }
 
-/// Marker-aware map from (file, line) to the line's byte span in
-/// `Lexer::src`. First occurrence wins, matching the sequential-scan
-/// semantics it replaces. Built once, on the first diagnostic that
-/// echoes a source line; the source buffer never changes after
-/// construction.
+/// Resolved (file, line) -> byte span answers; `None` when no run
+/// holds the line.
+type LineSpanMemo = alloc::collections::BTreeMap<(u32, u32), Option<(u32, u32)>>;
+
+/// A run of consecutive lines between two preprocessor line markers:
+/// the lines in `Lexer::src[start..end]` are numbered `first_line`,
+/// `first_line + 1`, ... in `LineIndex::files[file_id]`.
+struct LineRun {
+    file_id: u32,
+    first_line: u32,
+    start: u32,
+    end: u32,
+}
+
+/// Marker-aware view of the preprocessed buffer, mapping (file, line) to
+/// the line's byte span in `Lexer::src`. One entry per line marker, not
+/// per line: the buffers run to hundreds of thousands of lines and a
+/// compile asks single-digit questions of them. The first run holding a
+/// (file, line) pair answers it, matching the sequential-scan semantics
+/// this replaces. Built once, on the first diagnostic that echoes a
+/// source line; the source buffer never changes after construction.
 struct LineIndex {
     files: Vec<String>,
-    spans: alloc::collections::BTreeMap<(u32, u32), (u32, u32)>,
+    runs: Vec<LineRun>,
+    /// Spans already resolved, so a diagnostic repeated on a discarded
+    /// trial-parse path walks no run twice.
+    memo: core::cell::RefCell<LineSpanMemo>,
+}
+
+impl LineIndex {
+    /// Byte span of `line` in `files[file_id]`, or `None` when no run
+    /// holds it.
+    fn span_of(&self, src: &[u8], file_id: u32, line: u32) -> Option<(u32, u32)> {
+        let nl = |from: usize, to: usize| src[from..to].iter().position(|&b| b == b'\n');
+        for run in &self.runs {
+            if run.file_id != file_id || line < run.first_line {
+                continue;
+            }
+            let end = run.end as usize;
+            let mut pos = run.start as usize;
+            let mut skip = line - run.first_line;
+            while skip > 0 && pos < end {
+                match nl(pos, end) {
+                    Some(k) => pos += k + 1,
+                    None => pos = end,
+                }
+                skip -= 1;
+            }
+            if skip > 0 || pos >= end {
+                continue;
+            }
+            let stop = pos + nl(pos, end).unwrap_or(end - pos);
+            return Some((pos as u32, stop as u32));
+        }
+        None
+    }
 }
 
 pub(crate) struct Lexer {
@@ -316,19 +461,33 @@ pub(crate) struct Lexer {
     /// `U"..."` (char32_t). Only meaningful when `str_is_wide` is set.
     pub str_elem_bytes: usize,
 
-    /// `true` when the most recent `Token::Num` came from a wide
-    /// character constant (`L'x'`). C99 6.4.4.4p11 gives such a constant
-    /// type `wchar_t`; the expression parser reads this to type it at the
-    /// target's `wchar_t` width instead of `int`, so `sizeof (L'x')` is 2
-    /// on Windows (UTF-16) and 4 on the Unix targets. Reset per token in
-    /// `next`; set only in the wide-character branch of the literal lexer.
-    pub char_is_wide: bool,
+    /// Encoding prefix of the most recent `Token::Num` character
+    /// constant. C11 6.4.4.4p2-p4 types each prefix separately -- `L'x'`
+    /// is `wchar_t`, `u'x'` is `char16_t`, `U'x'` is `char32_t` -- so the
+    /// width alone does not identify the type. Only meaningful when
+    /// `num_is_char` is set. Reset per token in `next`; set in both
+    /// character branches of the literal lexer.
+    pub char_prefix: StrPrefix,
 
-    /// Byte width of a `wchar_t` element. 4 on the Unix targets (where
-    /// `wchar_t` is `int`) and 2 on Windows (UTF-16). The compiler sets
-    /// it from the target after construction; wide string and character
-    /// literals store this many bytes per element.
+    /// `true` when the most recent `Token::Num` came from a character
+    /// constant rather than an integer constant. C99 6.4.4.4p10 gives
+    /// every character constant a fixed type, so the expression parser
+    /// must not apply the value-driven rank selection of 6.4.4.1p5.
+    /// Reset per token in `next`; set in both literal-lexer character
+    /// branches.
+    pub num_is_char: bool,
+
+    /// Byte width of a `wchar_t` element. 4 on the Unix targets and 2 on
+    /// Windows (UTF-16). The compiler sets it from the target after
+    /// construction; wide string and character literals store this many
+    /// bytes per element.
     pub wchar_bytes: usize,
+
+    /// Whether `wchar_t` is signed for the target. Set from the target
+    /// alongside `wchar_bytes`; the two together are the type, and the
+    /// expression parser reads them to give `L'...'` its type
+    /// (C11 6.4.4.4p2).
+    pub wchar_signed: bool,
 
     /// Whether plain `char` is signed for the target (C99 6.2.5p15
     /// leaves it implementation-defined). Set from the target after
@@ -473,8 +632,10 @@ impl Lexer {
             float_suffix_f32: false,
             str_is_wide: false,
             str_elem_bytes: 4,
-            char_is_wide: false,
+            char_prefix: StrPrefix::None,
+            num_is_char: false,
             wchar_bytes: 4,
+            wchar_signed: true,
             char_signed: true,
             // Bottom of the stack is the default pack -- c5 already
             // caps struct alignment at 8, and that's the implicit
@@ -509,14 +670,15 @@ impl Lexer {
     /// like other pragmas, because pack is source-position-
     /// dependent in a way the per-translation-unit `dylibs` /
     /// `bindings` accumulator can't capture).
-    /// Tokenise a C99 wide-string (`L"..."`) or wide-character
-    /// (`L'...'`) literal. Caller has consumed the `L`; `self.pos`
-    /// points at the opening quote. Characters are emitted into
-    /// `data` as 16-bit little-endian values (one slot per `char`)
-    /// per the UTF-16 representation. Adjacent `L"..."` literals
-    /// are absorbed into the current token so the parser's narrow
-    /// concatenation loop does not interleave a 1-byte gap, and a
-    /// 16-bit `0` terminator is appended at the end.
+    /// Tokenise a wide string (`L"..."`, `u"..."`, `U"..."`) or wide
+    /// character (`L'...'`) literal. Caller has consumed the prefix;
+    /// `self.pos` points at the opening quote. Characters are emitted
+    /// into `data` as little-endian values `elem_bytes` wide, one per
+    /// code point. The rest of the adjacent run -- further parts with
+    /// this prefix and unprefixed parts -- is absorbed into the current
+    /// token so the parser's narrow concatenation loop does not
+    /// interleave a 1-byte gap, and an `elem_bytes`-wide `0` terminator
+    /// is appended at the end.
     /// Parse the rest of a C99 6.4.4.2 hexadecimal floating
     /// constant. The integer hex digits occupy `[mant_start,
     /// self.pos)`; `self.pos` points at the `.` or the binary-
@@ -606,11 +768,154 @@ impl Lexer {
         Ok(mant)
     }
 
+    /// Element width in bytes of a literal carrying `prefix`
+    /// (C11 6.4.5p3).
+    fn string_prefix_width(&self, prefix: StrPrefix) -> usize {
+        match prefix {
+            StrPrefix::None | StrPrefix::Utf8 => 1,
+            StrPrefix::Wide => self.wchar_bytes,
+            StrPrefix::Char16 => 2,
+            StrPrefix::Char32 => 4,
+        }
+    }
+
+    /// Encoding prefix at `pos` when `quote` directly follows it.
+    /// `u8` applies to string literals only; C11 6.4.4.4p2 has no `u8`
+    /// character constant (C23 added one).
+    fn prefix_at(&self, pos: usize, quote: u8) -> StrPrefix {
+        let at = |off: usize| self.src.get(pos + off).copied();
+        match at(0) {
+            Some(b'u') if at(1) == Some(b'8') => {
+                if quote == b'"' && at(2) == Some(b'"') {
+                    StrPrefix::Utf8
+                } else {
+                    StrPrefix::None
+                }
+            }
+            Some(b'L') if at(1) == Some(quote) => StrPrefix::Wide,
+            Some(b'u') if at(1) == Some(quote) => StrPrefix::Char16,
+            Some(b'U') if at(1) == Some(quote) => StrPrefix::Char32,
+            _ => StrPrefix::None,
+        }
+    }
+
+    /// Encoding prefix shared by the run of adjacent string literals
+    /// starting at `at`. C99 6.4.5p4 makes a run mixing unprefixed and
+    /// prefixed parts one literal carrying that prefix; two different
+    /// prefixes in one run have no defined result, and GCC and clang
+    /// both reject it. Scans without consuming: the parts are lexed
+    /// afterwards at the width this resolves to.
+    fn survey_string_run(&self, at: usize) -> Result<StrPrefix, C5Error> {
+        let mut pos = at;
+        let mut line = self.line;
+        let mut found = StrPrefix::None;
+        while pos < self.src.len() {
+            let prefix = match self.src[pos] {
+                b'"' => StrPrefix::None,
+                b'L' | b'u' | b'U' => match self.prefix_at(pos, b'"') {
+                    StrPrefix::None => break,
+                    p => {
+                        pos += p.spelling().len();
+                        p
+                    }
+                },
+                _ => break,
+            };
+            if prefix != StrPrefix::None {
+                if found != StrPrefix::None && found != prefix {
+                    return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+                        &self.file,
+                        line,
+                        "concatenated string literals have different encoding prefixes",
+                    )));
+                }
+                found = prefix;
+            }
+            pos += 1; // opening quote
+            loop {
+                match self.src.get(pos) {
+                    // Unterminated: the part lexer reports it.
+                    None => return Ok(found),
+                    Some(&b'\\') => pos += 2,
+                    Some(&b'"') => {
+                        pos += 1;
+                        break;
+                    }
+                    Some(&b'\n') => {
+                        line += 1;
+                        pos += 1;
+                    }
+                    Some(_) => pos += 1,
+                }
+            }
+            while matches!(self.src.get(pos), Some(b' ' | b'\t' | b'\r' | b'\n')) {
+                if self.src[pos] == b'\n' {
+                    line += 1;
+                }
+                pos += 1;
+            }
+        }
+        Ok(found)
+    }
+
+    /// Code point named by a universal character name whose `\u` / `\U`
+    /// introducer has just been consumed.
+    fn read_ucn(&mut self, esc: u8) -> Result<u32, C5Error> {
+        let mut pos = self.pos;
+        let scanned = scan_ucn(&self.src, &mut pos, esc);
+        self.pos = pos;
+        match scanned {
+            Ucn::Ok(cp) => Ok(cp),
+            Ucn::Incomplete => Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+                &self.file,
+                self.line,
+                &format!(
+                    "incomplete universal character name: \\{} takes {} hex digits",
+                    esc as char,
+                    ucn_digits(esc)
+                ),
+            ))),
+            Ucn::Invalid(acc) => Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+                &self.file,
+                self.line,
+                &format!(
+                    "\\{}{:0width$X} is not a valid universal character name",
+                    esc as char,
+                    acc,
+                    width = ucn_digits(esc)
+                ),
+            ))),
+        }
+    }
+
+    /// Fold one byte of a character constant into its value
+    /// (C99 6.4.4.4p10).
+    fn push_char_byte(&mut self, val: i64, count: &mut i64, acc: &mut i64) {
+        *count += 1;
+        *acc = (*acc << 8) | (val & 0xFF);
+        // A single-character constant has the value of its char
+        // interpreted as int. Sign-extend on signed-char targets so
+        // `'\x80'` is -128, matching a `char` lvalue read; a hex /
+        // octal escape that overran a byte keeps its wider value.
+        let v = if *count == 1 {
+            if self.char_signed && (0..=0xFF).contains(&val) {
+                val as i8 as i64
+            } else {
+                val
+            }
+        } else {
+            *acc
+        };
+        // C99 6.4.4.4p10: the constant has type `int`, so the packed
+        // bytes wrap into that width -- `'\xF0\x9F\x98\x80'` is negative.
+        self.ival = v as i32 as i64;
+    }
+
     fn lex_wide_literal(
         &mut self,
         data: &mut Vec<u8>,
         elem_bytes: usize,
-        prefix_byte: u8,
+        prefix: StrPrefix,
     ) -> Result<(), C5Error> {
         let quote = self.src[self.pos];
         self.pos += 1;
@@ -684,35 +989,7 @@ impl Lexer {
                             }
                             val = acc;
                         }
-                        b'u' | b'U' => {
-                            // Universal character name (C99 6.4.3):
-                            // `\u` takes exactly four hex digits, `\U`
-                            // exactly eight, naming a Unicode code point.
-                            let digits = if esc == b'u' { 4 } else { 8 };
-                            let mut acc: i64 = 0;
-                            let mut count = 0;
-                            while count < digits && self.pos < self.src.len() {
-                                let h = self.src[self.pos];
-                                let d = match h {
-                                    b'0'..=b'9' => (h - b'0') as i64,
-                                    b'a'..=b'f' => 10 + (h - b'a') as i64,
-                                    b'A'..=b'F' => 10 + (h - b'A') as i64,
-                                    _ => break,
-                                };
-                                acc = (acc << 4) | d;
-                                self.pos += 1;
-                                count += 1;
-                            }
-                            if count != digits {
-                                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                                    &format!(
-                                        "{}: \\{} needs {} hex digits",
-                                        self.line, esc as char, digits
-                                    ),
-                                )));
-                            }
-                            val = acc;
-                        }
+                        b'u' | b'U' => val = self.read_ucn(esc)? as i64,
                         b'0'..=b'7' => {
                             let mut acc: i64 = (esc - b'0') as i64;
                             let mut count = 1;
@@ -762,12 +1039,15 @@ impl Lexer {
             if quote != b'"' {
                 self.ival = char_value;
                 self.tk = Tok(Token::Num as i64);
-                self.char_is_wide = true;
+                self.num_is_char = true;
+                self.char_prefix = prefix;
                 return Ok(());
             }
-            // Absorb adjacent `L"..."` literals so the 16-bit
-            // terminator below isn't split by the parser's narrow
-            // concatenation loop.
+            // Absorb the rest of the run so the wide terminator below
+            // isn't split by the parser's narrow concatenation loop. An
+            // unprefixed part joins at this run's element width (C99
+            // 6.4.5p4); the survey at the run's start has already
+            // rejected a differently-prefixed part.
             let saved_pos = self.pos;
             let saved_line = self.line;
             while self.pos < self.src.len() {
@@ -781,11 +1061,15 @@ impl Lexer {
                     break;
                 }
             }
-            if self.pos + 1 < self.src.len()
-                && self.src[self.pos] == prefix_byte
-                && self.src[self.pos + 1] == b'"'
+            if self.pos < self.src.len() && self.src[self.pos] == b'"' {
+                self.pos += 1;
+                continue;
+            }
+            let spelling = prefix.spelling();
+            if self.src[self.pos..].starts_with(spelling)
+                && self.src.get(self.pos + spelling.len()) == Some(&b'"')
             {
-                self.pos += 2;
+                self.pos += spelling.len() + 1;
                 continue;
             }
             self.pos = saved_pos;
@@ -800,6 +1084,125 @@ impl Lexer {
             self.str_elem_bytes = elem_bytes;
             return Ok(());
         }
+    }
+
+    /// String literal or character constant at `char` element width.
+    /// C11 6.4.5p3 makes a `u8` literal UTF-8 with element type `char`,
+    /// the same encoding an unprefixed one carries here, so both take
+    /// this path. On entry `self.pos` is just past the opening `quote`.
+    fn lex_narrow_literal(&mut self, data: &mut Vec<u8>, quote: u8) -> Result<(), C5Error> {
+        let start_data = data.len() as i64;
+        // C99 6.4.4.4p10: a character constant containing more than one
+        // character has an implementation-defined value; the common
+        // convention packs the bytes with the first character in the
+        // most significant position. A single-character constant keeps
+        // its exact value.
+        let mut char_acc: i64 = 0;
+        let mut char_count: i64 = 0;
+        while self.pos < self.src.len() && self.src[self.pos] != quote {
+            let mut val = self.src[self.pos] as i64;
+            self.pos += 1;
+            if val == b'\\' as i64 {
+                if self.pos >= self.src.len() {
+                    return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+                        &self.file,
+                        self.line,
+                        "unterminated escape sequence",
+                    )));
+                }
+                let esc = self.src[self.pos];
+                self.pos += 1;
+                match esc {
+                    b'a' => val = 0x07,
+                    b'b' => val = 0x08,
+                    b't' => val = 0x09,
+                    b'n' => val = 0x0A,
+                    b'v' => val = 0x0B,
+                    b'f' => val = 0x0C,
+                    b'r' => val = 0x0D,
+                    b'\\' => val = b'\\' as i64,
+                    b'\'' => val = b'\'' as i64,
+                    b'"' => val = b'"' as i64,
+                    b'?' => val = b'?' as i64,
+                    // A universal character name contributes the UTF-8
+                    // encoding of its code point, which is more than one
+                    // byte above U+007F.
+                    b'u' | b'U' => {
+                        let cp = self.read_ucn(esc)?;
+                        let mut enc = [0u8; 4];
+                        let n = encode_utf8(cp, &mut enc);
+                        for &b in &enc[..n] {
+                            if quote == b'"' {
+                                data.push(b);
+                            } else {
+                                self.push_char_byte(b as i64, &mut char_count, &mut char_acc);
+                            }
+                        }
+                        continue;
+                    }
+                    // \xHH -- hex escape, 1+ hex digits, the C spec is
+                    // greedy ("as many hex digits as make sense") but
+                    // only the low byte matters for c5's char/string
+                    // streams.
+                    b'x' => {
+                        let mut acc: i64 = 0;
+                        let mut count = 0;
+                        while self.pos < self.src.len() {
+                            let Some(d) = (self.src[self.pos] as char).to_digit(16) else {
+                                break;
+                            };
+                            acc = (acc << 4) | d as i64;
+                            self.pos += 1;
+                            count += 1;
+                        }
+                        if count == 0 {
+                            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                                &format!("{}: \\x escape needs at least one hex digit", self.line),
+                            )));
+                        }
+                        val = acc;
+                    }
+                    // \NNN -- octal escape, 1..3 digits. Includes plain
+                    // `\0` which is just the 1-digit case.
+                    b'0'..=b'7' => {
+                        let mut acc: i64 = (esc - b'0') as i64;
+                        let mut count = 1;
+                        while count < 3 && self.pos < self.src.len() {
+                            let o = self.src[self.pos];
+                            if !(b'0'..=b'7').contains(&o) {
+                                break;
+                            }
+                            acc = (acc << 3) | (o - b'0') as i64;
+                            self.pos += 1;
+                            count += 1;
+                        }
+                        val = acc;
+                    }
+                    // Unknown escape -- C says undefined, GCC warns. Pass
+                    // the literal char through so legacy fixtures work.
+                    _ => val = esc as i64,
+                }
+            }
+            if quote == b'"' {
+                data.push(val as u8);
+            } else {
+                self.push_char_byte(val, &mut char_count, &mut char_acc);
+            }
+        }
+        self.pos += 1;
+        if quote == b'"' {
+            // NB: no NUL terminator pushed here. Adjacent string
+            // literals (`"a" "b"`) concatenate in C, so the parser is
+            // the right place to add the single trailing NUL once all
+            // the parts have been read.
+            self.ival = start_data;
+            self.tk = Tok('"' as i64);
+            self.str_is_wide = false;
+        } else {
+            self.tk = Tok(Token::Num as i64);
+            self.num_is_char = true;
+        }
+        Ok(())
     }
 
     fn apply_pack_directive(&mut self, dir: PackDirective) {
@@ -920,7 +1323,8 @@ impl Lexer {
             int_suffix_unsigned: self.int_suffix_unsigned,
             int_is_decimal: self.int_is_decimal,
             float_suffix_f32: self.float_suffix_f32,
-            char_is_wide: self.char_is_wide,
+            num_is_char: self.num_is_char,
+            char_prefix: self.char_prefix,
             str_is_wide: self.str_is_wide,
             str_elem_bytes: self.str_elem_bytes,
         }
@@ -941,7 +1345,8 @@ impl Lexer {
         self.int_suffix_unsigned = s.int_suffix_unsigned;
         self.int_is_decimal = s.int_is_decimal;
         self.float_suffix_f32 = s.float_suffix_f32;
-        self.char_is_wide = s.char_is_wide;
+        self.num_is_char = s.num_is_char;
+        self.char_prefix = s.char_prefix;
         self.str_is_wide = s.str_is_wide;
         self.str_elem_bytes = s.str_elem_bytes;
     }
@@ -1171,7 +1576,7 @@ impl Lexer {
     /// has read ahead of it (an unused-parameter warning fires at the
     /// closing brace but names the parameter's declaration line).
     pub(crate) fn line_text_by_number(&self, target: usize) -> Option<&str> {
-        // Build the (file, line) -> byte-span index on first use. A
+        // Split the buffer into marker-delimited runs on first use. A
         // diagnostic may be constructed speculatively on a trial-parse
         // path that its caller discards, so this lookup must not
         // re-scan the buffer per call.
@@ -1179,22 +1584,28 @@ impl Lexer {
             let src = &self.src;
             let n = src.len();
             let mut files: Vec<String> = alloc::vec![String::from("<source>")];
-            let mut spans: alloc::collections::BTreeMap<(u32, u32), (u32, u32)> =
-                alloc::collections::BTreeMap::new();
+            let mut runs: Vec<LineRun> = Vec::new();
             let mut file_id: u32 = 0;
-            let mut line = 1usize;
+            let mut first_line: u32 = 1;
+            let mut start = 0usize;
             let mut i = 0usize;
             while i < n {
-                let start = i;
-                let mut j = i;
-                while j < n && src[j] != b'\n' {
-                    j += 1;
-                }
-                let bytes = &src[start..j];
-                if bytes.first() == Some(&b'#')
-                    && let Some(marker) = parse_line_marker(&bytes[1..])
+                let j = match src[i..].iter().position(|&b| b == b'\n') {
+                    Some(k) => i + k,
+                    None => n,
+                };
+                if src[i] == b'#'
+                    && let Some(marker) = parse_line_marker(&src[i + 1..j])
                 {
-                    line = marker.line;
+                    if i > start {
+                        runs.push(LineRun {
+                            file_id,
+                            first_line,
+                            start: start as u32,
+                            end: i as u32,
+                        });
+                    }
+                    first_line = marker.line as u32;
                     if let Some(f) = marker.file {
                         file_id = match files.iter().position(|x| *x == f) {
                             Some(id) => id as u32,
@@ -1204,22 +1615,45 @@ impl Lexer {
                             }
                         };
                     }
-                    i = j + 1;
-                    continue;
+                    start = j + 1;
                 }
-                spans
-                    .entry((file_id, line as u32))
-                    .or_insert((start as u32, j as u32));
-                line += 1;
                 i = j + 1;
             }
-            LineIndex { files, spans }
+            if start < n {
+                runs.push(LineRun {
+                    file_id,
+                    first_line,
+                    start: start as u32,
+                    end: n as u32,
+                });
+            }
+            LineIndex {
+                files,
+                runs,
+                memo: core::cell::RefCell::new(LineSpanMemo::new()),
+            }
         });
         let file_id = index.files.iter().position(|f| *f == self.file)? as u32;
-        let (start, end) = *index.spans.get(&(file_id, target as u32))?;
+        let key = (file_id, target as u32);
+        let cached = index.memo.borrow().get(&key).copied();
+        let span = match cached {
+            Some(hit) => hit,
+            None => {
+                let span = index.span_of(&self.src, key.0, key.1);
+                index.memo.borrow_mut().insert(key, span);
+                span
+            }
+        };
+        let (start, end) = span?;
         core::str::from_utf8(&self.src[start as usize..end as usize])
             .ok()
             .map(|s| s.trim_end())
+    }
+
+    /// Entries the line index holds, 0 when no diagnostic built it.
+    #[cfg(test)]
+    pub(crate) fn line_index_entries(&self) -> usize {
+        self.line_index.get().map_or(0, |i| i.runs.len())
     }
 
     pub fn next(
@@ -1236,7 +1670,8 @@ impl Lexer {
         self.int_suffix_unsigned = false;
         self.int_is_decimal = true;
         self.float_suffix_f32 = false;
-        self.char_is_wide = false;
+        self.num_is_char = false;
+        self.char_prefix = StrPrefix::None;
         loop {
             if self.pos >= self.src.len() {
                 self.tk = Tok::EOF;
@@ -1296,26 +1731,25 @@ impl Lexer {
                     hash = hash.wrapping_mul(147).wrapping_add(nc as i64);
                     self.pos += 1;
                 }
-                // C11 6.4.5 wide / UTF literal prefix: a lone `L`, `u`, or
-                // `U` directly before `"` or `'` starts a wide literal
-                // rather than an identifier. `L` uses the target's
-                // `wchar_t` width, `u` is char16_t (2 bytes), `U` is
-                // char32_t (4 bytes). `u8"..."` (narrow UTF-8) is not yet
-                // wired up and falls through to an identifier.
-                if self.pos - start == 1
-                    && self.pos < self.src.len()
-                    && (self.src[self.pos] == b'"' || self.src[self.pos] == b'\'')
-                {
-                    let prefix = self.src[start];
-                    let elem_bytes = match prefix {
-                        b'L' => self.wchar_bytes,
-                        b'u' => 2,
-                        b'U' => 4,
-                        _ => 0,
-                    };
-                    if elem_bytes != 0 {
+                // C11 6.4.5p2 encoding prefix: `L`, `u`, `U` or `u8`
+                // directly before a quote starts a literal rather than an
+                // identifier. `u8` is narrow (element type `char`), the
+                // others carry a wider element.
+                let quote = self.src.get(self.pos).copied().unwrap_or(0);
+                let prefix = match quote {
+                    b'"' | b'\'' => self.prefix_at(start, quote),
+                    _ => StrPrefix::None,
+                };
+                if prefix != StrPrefix::None && self.pos - start == prefix.spelling().len() {
+                    if quote == b'"' {
+                        self.survey_string_run(start)?;
+                    }
+                    let elem_bytes = self.string_prefix_width(prefix);
+                    if elem_bytes > 1 {
                         return self.lex_wide_literal(data, elem_bytes, prefix);
                     }
+                    self.pos += 1; // opening quote
+                    return self.lex_narrow_literal(data, quote);
                 }
                 let name_slice = &self.src[start..self.pos];
                 self.curr_id_idx = resolve_symbol(symbols, index, name_slice, hash);
@@ -1587,121 +2021,17 @@ impl Lexer {
                     return Ok(());
                 }
             } else if c == '\'' || c == '"' {
-                let start_data = data.len() as i64;
-                // C99 6.4.4.4p10: a character constant containing more
-                // than one character has an implementation-defined value;
-                // the common convention packs the bytes with the first
-                // character in the most significant position. Accumulate
-                // here; a single-character constant keeps its exact value.
-                let mut char_acc: i64 = 0;
-                let mut char_count: i64 = 0;
-                while self.pos < self.src.len() && self.src[self.pos] as char != c {
-                    let mut val = self.src[self.pos] as i64;
-                    self.pos += 1;
-                    if val == '\\' as i64 {
-                        let esc = self.src[self.pos];
-                        self.pos += 1;
-                        match esc {
-                            b'a' => val = 0x07,
-                            b'b' => val = 0x08,
-                            b't' => val = 0x09,
-                            b'n' => val = 0x0A,
-                            b'v' => val = 0x0B,
-                            b'f' => val = 0x0C,
-                            b'r' => val = 0x0D,
-                            b'\\' => val = b'\\' as i64,
-                            b'\'' => val = b'\'' as i64,
-                            b'"' => val = b'"' as i64,
-                            b'?' => val = b'?' as i64,
-                            // \xHH -- hex escape, 1+ hex digits, the
-                            // C spec is greedy ("as many hex digits as
-                            // make sense") but only the low byte
-                            // matters for c5's char/string streams.
-                            b'x' => {
-                                let mut acc: i64 = 0;
-                                let mut count = 0;
-                                while self.pos < self.src.len() {
-                                    let h = self.src[self.pos];
-                                    let d = match h {
-                                        b'0'..=b'9' => (h - b'0') as i64,
-                                        b'a'..=b'f' => 10 + (h - b'a') as i64,
-                                        b'A'..=b'F' => 10 + (h - b'A') as i64,
-                                        _ => break,
-                                    };
-                                    acc = (acc << 4) | d;
-                                    self.pos += 1;
-                                    count += 1;
-                                }
-                                if count == 0 {
-                                    return Err(C5Error::Compile(
-                                        crate::c5::error::fmt_internal_err(&format!(
-                                            "{}: \\x escape needs at least one hex digit",
-                                            self.line
-                                        )),
-                                    ));
-                                }
-                                val = acc;
-                            }
-                            // \NNN -- octal escape, 1..3 digits.
-                            // Includes plain `\0` which is just the
-                            // 1-digit case.
-                            b'0'..=b'7' => {
-                                let mut acc: i64 = (esc - b'0') as i64;
-                                let mut count = 1;
-                                while count < 3 && self.pos < self.src.len() {
-                                    let o = self.src[self.pos];
-                                    if !(b'0'..=b'7').contains(&o) {
-                                        break;
-                                    }
-                                    acc = (acc << 3) | (o - b'0') as i64;
-                                    self.pos += 1;
-                                    count += 1;
-                                }
-                                val = acc;
-                            }
-                            _ => {
-                                // Unknown escape -- C says undefined, GCC
-                                // warns. We pass the literal char through
-                                // so legacy fixtures don't break.
-                                val = esc as i64;
-                            }
-                        }
-                    }
-                    if c == '"' {
-                        data.push(val as u8);
-                    } else {
-                        char_count += 1;
-                        char_acc = (char_acc << 8) | (val & 0xFF);
-                        // C99 6.4.4.4p10: a single-character constant has
-                        // the value of its char interpreted as int.
-                        // Sign-extend on signed-char targets so `'\x80'`
-                        // is -128, matching a `char` lvalue read; a hex /
-                        // octal escape that overran a byte keeps its wider
-                        // value. Multi-character packs the bytes.
-                        self.ival = if char_count == 1 {
-                            if self.char_signed && (0..=0xFF).contains(&val) {
-                                val as i8 as i64
-                            } else {
-                                val
-                            }
-                        } else {
-                            char_acc
-                        };
-                    }
-                }
-                self.pos += 1;
+                // C99 6.4.5p4: a run whose first part is unprefixed is
+                // still one literal carrying a later part's prefix.
                 if c == '"' {
-                    // NB: no NUL terminator pushed here. Adjacent string
-                    // literals (`"a" "b"`) concatenate in C, so the
-                    // parser is the right place to add the single
-                    // trailing NUL once all the parts have been read.
-                    self.ival = start_data;
-                    self.tk = Tok('"' as i64);
-                    self.str_is_wide = false;
-                } else {
-                    self.tk = Tok(Token::Num as i64);
+                    let prefix = self.survey_string_run(self.pos - 1)?;
+                    let elem_bytes = self.string_prefix_width(prefix);
+                    if elem_bytes > 1 {
+                        self.pos -= 1;
+                        return self.lex_wide_literal(data, elem_bytes, prefix);
+                    }
                 }
-                return Ok(());
+                return self.lex_narrow_literal(data, c as u8);
             } else {
                 let next_char = if self.pos < self.src.len() {
                     self.src[self.pos] as char
@@ -2475,6 +2805,61 @@ mod tests {
     }
 
     #[test]
+    fn multi_character_constant_narrows_to_int() {
+        // C99 6.4.4.4p10 gives every character constant type `int`, so
+        // the packed bytes wrap into that width rather than widening the
+        // constant. Each byte is masked on the way in, so the values do
+        // not depend on the target's plain-char signedness. gcc-16 and
+        // clang produce the same numbers.
+        assert_eq!(lex_char_literal(r#"'ab'"#), 24930);
+        assert_eq!(lex_char_literal(r#"'abc'"#), 6382179);
+        assert_eq!(lex_char_literal(r#"'abcd'"#), 1633837924);
+        assert_eq!(lex_char_literal(r#"'\xF0\x9F\x98\x80'"#), -257976192);
+        assert_eq!(lex_char_literal(r#"'\x7F\xFF\xFF\xFF'"#), 2147483647);
+        assert_eq!(lex_char_literal(r#"'\x80\x00\x00\x00'"#), -2147483648);
+        // Fewer than four bytes cannot reach the sign bit.
+        assert_eq!(lex_char_literal(r#"'\xF0\x9F'"#), 61599);
+        assert_eq!(lex_char_literal(r#"'\xF0\x9F\x98'"#), 15769496);
+    }
+
+    #[test]
+    fn a_character_constant_is_marked_as_one() {
+        // The type of 6.4.4.4p10 is fixed, not value-driven, so the
+        // expression parser needs the token's origin: an integer constant
+        // spelled with the same value takes the ranks of 6.4.4.1p5.
+        let mut lex = Lexer::new(r#"'a' 97"#.to_string());
+        let mut symbols: Vec<Symbol> = Vec::new();
+        let mut index = SymbolIndex::new();
+        let mut data: Vec<u8> = Vec::new();
+        lex.next(&mut symbols, &mut index, &mut data).unwrap();
+        assert!(lex.num_is_char);
+        assert!(lex.char_prefix == StrPrefix::None);
+        lex.next(&mut symbols, &mut index, &mut data).unwrap();
+        assert!(!lex.num_is_char);
+    }
+
+    #[test]
+    fn a_character_constant_records_its_encoding_prefix() {
+        // C11 6.4.4.4p2-p4 type each prefix separately, so the width
+        // alone cannot stand in for which one was written.
+        let mut lex = Lexer::new(r#"'a' L'a' u'a' U'a'"#.to_string());
+        let mut symbols: Vec<Symbol> = Vec::new();
+        let mut index = SymbolIndex::new();
+        let mut data: Vec<u8> = Vec::new();
+        for want in [
+            StrPrefix::None,
+            StrPrefix::Wide,
+            StrPrefix::Char16,
+            StrPrefix::Char32,
+        ] {
+            lex.next(&mut symbols, &mut index, &mut data).unwrap();
+            assert!(lex.num_is_char);
+            assert!(lex.char_prefix == want, "prefix mismatch");
+            assert_eq!(lex.ival, 'a' as i64);
+        }
+    }
+
+    #[test]
     fn unknown_escape_passes_through_the_letter() {
         // Matches GCC's implementation-defined behaviour for unknown
         // escapes: emit the literal char.
@@ -2546,6 +2931,219 @@ mod tests {
             lex_string_literal(r#"L"A" L"B""#),
             vec![0x41, 0, 0, 0, 0x42, 0, 0, 0, 0, 0, 0, 0]
         );
+    }
+
+    #[test]
+    fn string_run_absorbs_unprefixed_parts_at_the_run_width() {
+        // C99 6.4.5p4: an unprefixed part of a run joins at the run's
+        // element width, at either end and in the middle.
+        assert_eq!(
+            lex_string_literal(r#"L"A" "B""#),
+            vec![0x41, 0, 0, 0, 0x42, 0, 0, 0, 0, 0, 0, 0]
+        );
+        assert_eq!(
+            lex_string_literal(r#""A" L"B""#),
+            vec![0x41, 0, 0, 0, 0x42, 0, 0, 0, 0, 0, 0, 0]
+        );
+        assert_eq!(
+            lex_string_literal(r#""A" u"B" "C""#),
+            vec![0x41, 0, 0x42, 0, 0x43, 0, 0, 0]
+        );
+        // An all-unprefixed run stays narrow: the lexer leaves the parts
+        // for the parser's concatenation loop and adds no terminator.
+        assert_eq!(lex_string_literal(r#""A" "B""#), vec![0x41]);
+    }
+
+    #[test]
+    fn string_run_rejects_two_encoding_prefixes() {
+        // C99 6.4.5p5 leaves the mixed case undefined; GCC and clang both
+        // reject it. Every ordered pair of two different prefixes, plus a
+        // run of three where the unprefixed part sits between them.
+        for src in [
+            r#"char *s = L"a" u"b";"#,
+            r#"char *s = L"a" U"b";"#,
+            r#"char *s = u"a" L"b";"#,
+            r#"char *s = u"a" U"b";"#,
+            r#"char *s = U"a" L"b";"#,
+            r#"char *s = U"a" u"b";"#,
+            r#"char *s = L"a" "b" u"c";"#,
+            r#"char *s = "a" u"b" U"c";"#,
+            r#"char *s = L"a" L"b" U"c";"#,
+        ] {
+            let err = lex_all(src).expect_err("expected a lex error for {src:?}");
+            assert!(
+                alloc::format!("{err}").contains("different encoding prefixes"),
+                "{src:?} reported {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn string_run_accepts_one_encoding_prefix() {
+        for src in [
+            r#"char *s = "a" "b";"#,
+            r#"char *s = L"a" L"b";"#,
+            r#"char *s = u"a" u"b";"#,
+            r#"char *s = U"a" U"b";"#,
+            r#"char *s = L"a" "b";"#,
+            r#"char *s = "a" L"b";"#,
+            r#"char *s = "a" "b" U"c";"#,
+            r#"char *s = u"a" "b" u"c";"#,
+            // A character constant is not part of a string run.
+            r#"char c = 'a'; char *s = u"b";"#,
+        ] {
+            lex_all(src).unwrap_or_else(|e| panic!("{src:?} rejected: {e}"));
+        }
+    }
+
+    #[test]
+    fn an_escape_at_end_of_source_is_an_error_not_a_panic() {
+        // A literal whose last byte is `\` leaves no escape character to
+        // read; the narrow path must diagnose it, as the wide path does.
+        for src in ["char *s = \"\\", "char c = '\\", "char *s = u8\"a\\"] {
+            let err = lex_all(src).expect_err("expected a lex error");
+            assert!(
+                alloc::format!("{err}").contains("unterminated"),
+                "{src:?} reported {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn utf8_prefix_lexes_a_narrow_literal() {
+        // C11 6.4.5p3 gives `u8` element type `char`, so the parts stay
+        // narrow and the parser concatenates them: the lexer stages the
+        // first part's bytes only and adds no terminator.
+        assert_eq!(lex_string_literal(r#"u8"AB""#), vec![0x41, 0x42]);
+        assert_eq!(lex_string_literal(r#"u8"A" u8"B""#), vec![0x41]);
+        // Without a quote after it, `u8` is an ordinary identifier.
+        lex_all("int u8 = 1; int b = u8;").expect("u8 is a valid identifier");
+        lex_all(r#"int u8x = 1; char *s = "a";"#).expect("u8x is an identifier");
+        // A character constant is not a string-run part, so a prefixed
+        // one after a string does not widen the run.
+        assert_eq!(lex_string_literal(r#""a" L'b'"#), vec![0x61]);
+        assert_eq!(lex_string_literal(r#""a" u8"b" U'c'"#), vec![0x61]);
+    }
+
+    #[test]
+    fn utf8_prefix_joins_a_narrow_run_and_bars_a_wider_one() {
+        // C11 6.4.5p5: `u8` pairs with itself and with an unprefixed
+        // part; every other pairing has no defined result and both GCC
+        // and clang reject it.
+        for src in [
+            r#"char *s = u8"a" u8"b";"#,
+            r#"char *s = u8"a" "b";"#,
+            r#"char *s = "a" u8"b";"#,
+            r#"char *s = u8"a" "b" u8"c";"#,
+        ] {
+            lex_all(src).unwrap_or_else(|e| panic!("{src:?} rejected: {e}"));
+        }
+        for src in [
+            r#"char *s = u8"a" L"b";"#,
+            r#"char *s = u8"a" u"b";"#,
+            r#"char *s = u8"a" U"b";"#,
+            r#"char *s = L"a" u8"b";"#,
+            r#"char *s = u"a" u8"b";"#,
+            r#"char *s = U"a" u8"b";"#,
+            r#"char *s = u8"a" "b" u"c";"#,
+        ] {
+            let err = lex_all(src).expect_err("expected a lex error");
+            assert!(
+                alloc::format!("{err}").contains("different encoding prefixes"),
+                "{src:?} reported {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn narrow_literal_encodes_a_universal_character_name_as_utf8() {
+        // C11 6.4.5: a narrow or `u8` literal is UTF-8, so a universal
+        // character name contributes its encoding rather than one
+        // truncated element.
+        for src in [r#""\u00E9""#, r#"u8"\u00e9""#] {
+            assert_eq!(lex_string_literal(src), vec![0xC3, 0xA9], "{src}");
+        }
+        for src in [r#""\U0001F600""#, r#"u8"\U0001f600""#] {
+            assert_eq!(
+                lex_string_literal(src),
+                vec![0xF0, 0x9F, 0x98, 0x80],
+                "{src}"
+            );
+        }
+        // The three code points 6.4.3p2 permits below U+00A0, the first
+        // two-byte one, and the code space limit.
+        assert_eq!(
+            lex_string_literal(r#""\u0024\u0040\u0060""#),
+            vec![0x24, 0x40, 0x60]
+        );
+        assert_eq!(lex_string_literal(r#""\u00A0""#), vec![0xC2, 0xA0]);
+        assert_eq!(
+            lex_string_literal(r#""\U0010FFFF""#),
+            vec![0xF4, 0x8F, 0xBF, 0xBF]
+        );
+        // A raw multibyte source character encodes the same way, and a
+        // `u8` run's unprefixed part joins at the same width.
+        assert_eq!(lex_string_literal("u8\"\u{00E9}\""), vec![0xC3, 0xA9]);
+        assert_eq!(lex_string_literal(r#"u8"a" "\u00A0""#), vec![0x61]);
+    }
+
+    #[test]
+    fn wide_literal_takes_a_universal_character_name_as_one_code_point() {
+        assert_eq!(
+            lex_string_literal(r#"L"\u00E9""#),
+            vec![0xE9, 0, 0, 0, 0, 0, 0, 0]
+        );
+        // C11 6.4.5: a code point above U+FFFF needs the surrogate pair
+        // encoding at a two-byte element width.
+        assert_eq!(
+            lex_string_literal(r#"u"\U0001F600""#),
+            vec![0x3D, 0xD8, 0x00, 0xDE, 0, 0]
+        );
+        assert_eq!(
+            lex_string_literal(r#"U"\U0001F600""#),
+            vec![0x00, 0xF6, 0x01, 0x00, 0, 0, 0, 0]
+        );
+        assert_eq!(lex_char_literal(r#"L'\u00E9'"#), 0xE9);
+    }
+
+    #[test]
+    fn narrow_character_constant_packs_a_universal_character_name() {
+        // C99 6.4.4.4p10: the UTF-8 bytes of a code point above U+007F
+        // pack as a multi-character constant, first byte most
+        // significant. GCC agrees; clang rejects the form outright.
+        assert_eq!(lex_char_literal(r#"'\u00E9'"#), 0xC3A9);
+        assert_eq!(lex_char_literal(r#"'\u0024'"#), 0x24);
+    }
+
+    #[test]
+    fn invalid_universal_character_names_are_rejected() {
+        // C11 6.4.3p2 bars a value below 00A0 outside {0024, 0040,
+        // 0060}, the surrogate range D800..DFFF, and anything past the
+        // code space; p1 fixes the digit count.
+        const BAD: &str = "not a valid universal character name";
+        const SHORT: &str = "incomplete universal character name";
+        for (src, want) in [
+            (r#"char *s = "\uD800";"#, BAD),
+            (r#"char *s = "\uDFFF";"#, BAD),
+            (r#"char *s = "\U0000D800";"#, BAD),
+            (r#"char *s = "\u0041";"#, BAD),
+            (r#"char *s = "\u0000";"#, BAD),
+            (r#"char *s = "\u009F";"#, BAD),
+            (r#"char *s = "\U00110000";"#, BAD),
+            (r#"char *s = u8"\uD800";"#, BAD),
+            (r#"char *s = (char *)L"\uD800";"#, BAD),
+            (r#"char *s = (char *)U"\U00110000";"#, BAD),
+            (r#"char c = '\uD800';"#, BAD),
+            (r#"char *s = "\u12";"#, SHORT),
+            (r#"char *s = "\U0001F60";"#, SHORT),
+            (r#"char *s = (char *)L"\u12";"#, SHORT),
+        ] {
+            let err = lex_all(src).expect_err("expected a lex error");
+            assert!(
+                alloc::format!("{err}").contains(want),
+                "{src:?} reported {err}"
+            );
+        }
     }
 
     #[test]

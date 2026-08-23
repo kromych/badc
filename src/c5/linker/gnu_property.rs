@@ -5,7 +5,8 @@
 //! `NT_GNU_PROPERTY_TYPE_0` notes; the output carries one note whose
 //! properties are the per-type combination of the inputs'. The rule per
 //! type comes from the psABI ranges, so a type this linker has no name
-//! for still merges correctly as long as it sits in a defined range.
+//! for still merges correctly as long as it sits in a defined range; a
+//! type outside every range survives only where the inputs agree.
 
 #![cfg(feature = "std")]
 
@@ -32,33 +33,76 @@ enum Rule {
     Max,
     /// Valueless; survives if any input has it.
     Present,
+    /// No defined rule: the property survives only where every input
+    /// carries the same payload, which is the result under each of the
+    /// rules above and so needs none of them. Inputs that disagree
+    /// leave a value this linker cannot compute, and emitting one
+    /// input's would claim what the others do not.
+    Agree,
 }
 
-fn rule_for(ty: u32) -> Option<Rule> {
+impl Rule {
+    /// Whether the rule reads the payload as a little-endian number.
+    fn numeric(self) -> bool {
+        !matches!(self, Rule::Agree | Rule::Present)
+    }
+}
+
+fn rule_for(ty: u32) -> Rule {
     match ty {
-        GNU_PROPERTY_STACK_SIZE => Some(Rule::Max),
-        GNU_PROPERTY_NO_COPY_ON_PROTECTED => Some(Rule::Present),
-        0xb000_0000..=0xb000_7fff | 0xc000_0000..=0xc000_7fff => Some(Rule::And),
-        0xb000_8000..=0xb000_ffff | 0xc000_8000..=0xc000_ffff => Some(Rule::Or),
-        0xc001_0000..=0xc001_7fff => Some(Rule::OrAnd),
-        // No defined range: GNU ld warns and drops rather than passing
-        // a value it cannot combine.
-        _ => None,
+        GNU_PROPERTY_STACK_SIZE => Rule::Max,
+        GNU_PROPERTY_NO_COPY_ON_PROTECTED => Rule::Present,
+        0xb000_0000..=0xb000_7fff | 0xc000_0000..=0xc000_7fff => Rule::And,
+        0xb000_8000..=0xb000_ffff | 0xc000_8000..=0xc000_ffff => Rule::Or,
+        0xc001_0000..=0xc001_7fff => Rule::OrAnd,
+        _ => Rule::Agree,
     }
 }
 
 struct Acc {
     rule: Rule,
-    value: u64,
-    datasz: usize,
+    data: Vec<u8>,
     seen: usize,
+    conflict: bool,
+}
+
+impl Acc {
+    /// Combine `data` into the accumulator. `within` folds one input's
+    /// repeats of the type, which union rather than intersect: bfd
+    /// unions them as it parses a note, so an input claims a bit it
+    /// states anywhere.
+    fn fold(&mut self, data: &[u8], within: bool) {
+        let width = self.data.len().max(data.len());
+        let (a, b) = (read_le(&self.data), read_le(data));
+        self.data = match self.rule {
+            Rule::Present => return,
+            Rule::Agree => {
+                self.conflict |= self.data != data;
+                return;
+            }
+            Rule::Max => le_bytes(a.max(b), width),
+            Rule::And if !within => le_bytes(a & b, width),
+            Rule::And | Rule::Or | Rule::OrAnd => le_bytes(a | b, width),
+        };
+    }
 }
 
 /// One property in the merged note.
 pub struct Property {
     pub ty: u32,
-    pub datasz: usize,
-    pub value: u64,
+    pub data: Vec<u8>,
+}
+
+impl Property {
+    /// A property whose payload is a `datasz`-byte little-endian
+    /// number.
+    #[cfg(test)]
+    pub fn number(ty: u32, datasz: usize, value: u64) -> Property {
+        Property {
+            ty,
+            data: le_bytes(value, datasz),
+        }
+    }
 }
 
 /// Merge the `NT_GNU_PROPERTY_TYPE_0` notes of every relocatable input,
@@ -72,45 +116,44 @@ pub fn merge(inputs: &[Vec<&[u8]>], align: usize) -> Vec<Property> {
     for notes in inputs {
         // Fold the input's own notes first, so a type it repeats
         // counts once against the all-input rules.
-        let mut own: BTreeMap<u32, (Rule, u64, usize)> = BTreeMap::new();
+        let mut own: BTreeMap<u32, Acc> = BTreeMap::new();
         for note in notes {
             for (ty, data) in properties(note, align) {
-                // Every rule here combines a value of at most eight
+                let rule = rule_for(ty);
+                // A numeric rule combines a value of at most eight
                 // bytes. A wider payload is malformed for the type, and
                 // merging it would emit a `pr_datasz` past what the
                 // value holds.
-                let Some(rule) = rule_for(ty).filter(|_| data.len() <= 8) else {
+                if rule.numeric() && data.len() > 8 {
                     continue;
-                };
-                let value = if rule == Rule::Present {
-                    0
-                } else {
-                    read_le(data)
-                };
-                let e = own.entry(ty).or_insert((rule, 0, data.len()));
-                e.1 = if rule == Rule::Max {
-                    e.1.max(value)
-                } else {
-                    e.1 | value
-                };
-                e.2 = e.2.max(data.len());
+                }
+                match own.get_mut(&ty) {
+                    Some(acc) => acc.fold(data, true),
+                    None => {
+                        own.insert(
+                            ty,
+                            Acc {
+                                rule,
+                                data: data.to_vec(),
+                                seen: 1,
+                                conflict: false,
+                            },
+                        );
+                    }
+                }
             }
         }
-        for (ty, (rule, value, datasz)) in own {
-            let e = accs.entry(ty).or_insert(Acc {
-                rule,
-                value: if rule == Rule::And { u64::MAX } else { 0 },
-                datasz,
-                seen: 0,
-            });
-            match rule {
-                Rule::And => e.value &= value,
-                Rule::Or | Rule::OrAnd => e.value |= value,
-                Rule::Max => e.value = e.value.max(value),
-                Rule::Present => {}
+        for (ty, o) in own {
+            match accs.get_mut(&ty) {
+                Some(acc) => {
+                    acc.fold(&o.data, false);
+                    acc.conflict |= o.conflict;
+                    acc.seen += 1;
+                }
+                None => {
+                    accs.insert(ty, o);
+                }
             }
-            e.datasz = e.datasz.max(datasz);
-            e.seen += 1;
         }
     }
     accs.into_iter()
@@ -118,15 +161,12 @@ pub fn merge(inputs: &[Vec<&[u8]>], align: usize) -> Vec<Property> {
             // A property every input must claim is withheld by any
             // input that does not, and an all-zero bit set claims
             // nothing.
-            Rule::And | Rule::OrAnd => a.seen == n_inputs && a.value != 0,
-            Rule::Or => a.value != 0,
+            Rule::And | Rule::OrAnd => a.seen == n_inputs && read_le(&a.data) != 0,
+            Rule::Or => read_le(&a.data) != 0,
             Rule::Max | Rule::Present => true,
+            Rule::Agree => a.seen == n_inputs && !a.conflict,
         })
-        .map(|(ty, a)| Property {
-            ty,
-            datasz: a.datasz,
-            value: a.value,
-        })
+        .map(|(ty, a)| Property { ty, data: a.data })
         .collect()
 }
 
@@ -168,14 +208,18 @@ fn read_le(data: &[u8]) -> u64 {
     v
 }
 
+fn le_bytes(value: u64, width: usize) -> Vec<u8> {
+    value.to_le_bytes()[..width.min(8)].to_vec()
+}
+
 /// Encode merged properties as a `.note.gnu.property` section body.
 /// `align` is the note alignment: 8 for ELF64, 4 for ELF32.
 pub fn encode(props: &[Property], align: usize) -> Vec<u8> {
     let mut desc: Vec<u8> = Vec::new();
     for p in props {
         desc.extend_from_slice(&p.ty.to_le_bytes());
-        desc.extend_from_slice(&(p.datasz as u32).to_le_bytes());
-        desc.extend_from_slice(&p.value.to_le_bytes()[..p.datasz.min(8)]);
+        desc.extend_from_slice(&(p.data.len() as u32).to_le_bytes());
+        desc.extend_from_slice(&p.data);
         while !desc.len().is_multiple_of(align) {
             desc.push(0);
         }
@@ -209,7 +253,7 @@ mod tests {
         encode(
             &props
                 .iter()
-                .map(|&(ty, datasz, value)| Property { ty, datasz, value })
+                .map(|&(ty, datasz, value)| Property::number(ty, datasz, value))
                 .collect::<Vec<_>>(),
             8,
         )
@@ -222,7 +266,7 @@ mod tests {
         inputs.resize(n_inputs, Vec::new());
         merge(&inputs, 8)
             .into_iter()
-            .map(|p| (p.ty, p.value))
+            .map(|p| (p.ty, read_le(&p.data)))
             .collect()
     }
 
@@ -285,13 +329,47 @@ mod tests {
         );
     }
 
+    /// A type in no defined range has no combination rule, so the
+    /// inputs' agreement is the only result that claims nothing an
+    /// input withholds.
     #[test]
-    fn a_type_outside_every_defined_range_is_dropped_without_ending_the_walk() {
+    fn a_type_outside_every_defined_range_survives_when_every_input_agrees() {
         // The unknown type sits first, so a walk that stopped there
         // would lose the AND property behind it.
         let a = note(&[(0x10, 4, 0xaabb_ccdd), (X86_FEATURE_1_AND, 4, 0x3)]);
         let b = note(&[(0x10, 4, 0xaabb_ccdd), (X86_FEATURE_1_AND, 4, 0x3)]);
+        assert_eq!(
+            merged(&[a, b], 2),
+            [(0x10, 0xaabb_ccdd), (X86_FEATURE_1_AND, 0x3)]
+        );
+    }
+
+    #[test]
+    fn a_type_outside_every_defined_range_is_dropped_when_the_inputs_disagree() {
+        let a = note(&[(0x10, 4, 0xaabb_ccdd), (X86_FEATURE_1_AND, 4, 0x3)]);
+        let b = note(&[(0x10, 4, 0x1122_3344), (X86_FEATURE_1_AND, 4, 0x3)]);
         assert_eq!(merged(&[a, b], 2), [(X86_FEATURE_1_AND, 0x3)]);
+    }
+
+    #[test]
+    fn a_type_outside_every_defined_range_is_dropped_when_an_input_omits_it() {
+        let a = note(&[(0x10, 4, 0xaabb_ccdd)]);
+        let b = note(&[(X86_FEATURE_1_AND, 4, 0x3)]);
+        assert_eq!(merged(&[a, b], 2), []);
+    }
+
+    /// An unknown type's payload is passed through, not read as a
+    /// number: no rule here interprets it.
+    #[test]
+    fn an_unknown_type_keeps_a_payload_wider_than_a_number() {
+        let wide = Property {
+            ty: 0x10,
+            data: (0u8..16).collect(),
+        };
+        let a = encode(&[wide], 8);
+        let props = merge(&[alloc::vec![a.as_slice()], alloc::vec![a.as_slice()]], 8);
+        assert_eq!(props.len(), 1);
+        assert_eq!(props[0].data, (0u8..16).collect::<Vec<u8>>());
     }
 
     #[test]
@@ -300,8 +378,7 @@ mod tests {
         // cannot fill. The property behind it still merges.
         let wide = Property {
             ty: X86_FEATURE_1_AND,
-            datasz: 16,
-            value: 0x3,
+            data: alloc::vec![3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         };
         let mut a = encode(&[wide], 8);
         a.extend_from_slice(&note(&[(X86_ISA_1_USED, 4, 0x1)]));
@@ -333,7 +410,7 @@ mod tests {
                 8
             )
             .into_iter()
-            .map(|p| (p.ty, p.value))
+            .map(|p| (p.ty, read_le(&p.data)))
             .collect::<Vec<_>>(),
             [(X86_FEATURE_1_AND, 0x3)]
         );
@@ -355,16 +432,8 @@ mod tests {
         // The merged x86_64 vDSO note, byte for byte.
         let body = encode(
             &[
-                Property {
-                    ty: X86_FEATURE_2_USED,
-                    datasz: 4,
-                    value: 0x9,
-                },
-                Property {
-                    ty: X86_ISA_1_USED,
-                    datasz: 4,
-                    value: 0x1,
-                },
+                Property::number(X86_FEATURE_2_USED, 4, 0x9),
+                Property::number(X86_ISA_1_USED, 4, 0x1),
             ],
             8,
         );

@@ -49,6 +49,10 @@ use alloc::vec::Vec;
 
 pub(crate) fn run(funcs: &mut [FunctionSsa]) {
     for func in funcs.iter_mut() {
+        // Decide the comparison operand widths first: a comparison
+        // read at 32 bits stops observing its operands' upper half,
+        // which is what makes the renormalizations feeding it dead.
+        super::narrow::mark_compares(func);
         run_one(func);
     }
     drop_call_arg_reextends(funcs);
@@ -92,7 +96,8 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
     let mut hi = alloc::vec![false; n];
     let mut work: Vec<ValueId> = Vec::new();
 
-    for inst in &func.insts {
+    for (i, inst) in func.insts.iter().enumerate() {
+        let cmp32 = super::narrow::is_cmp32(&func.cmp32, i as ValueId);
         match inst {
             Inst::Imm(_)
             | Inst::ImmData(_)
@@ -106,6 +111,7 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
             | Inst::AllocaInit(_)
             | Inst::ParamRef { .. }
             | Inst::Extend { .. } => {}
+            Inst::Copy { value, .. } => observe(&mut hi, &mut work, *value),
             Inst::Load { addr, .. } => observe(&mut hi, &mut work, *addr),
             Inst::LoadIndexed { base, index, .. } => {
                 observe(&mut hi, &mut work, *base);
@@ -146,9 +152,13 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
                     observe(&mut hi, &mut work, *value);
                 }
             }
+            // Same low-word rule as the `Mul` / `Add` / `Sub` pair it
+            // contracts: the result's low bytes need only the operands'.
+            Inst::MulAdd { .. } => {}
             Inst::Binop { op, lhs, rhs } => match op {
                 BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::And | BinOp::Or | BinOp::Xor => {}
                 BinOp::Shl => observe(&mut hi, &mut work, *rhs),
+                _ if cmp32 => {}
                 _ => {
                     observe(&mut hi, &mut work, *lhs);
                     observe(&mut hi, &mut work, *rhs);
@@ -162,8 +172,16 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
                 | BinOp::Or
                 | BinOp::Xor
                 | BinOp::Shl => {}
+                _ if cmp32 => {}
                 _ => observe(&mut hi, &mut work, *lhs),
             },
+            // The 2- and 4-byte reversals read only the low bytes they
+            // reverse; the 8-byte form reads the full register.
+            Inst::Bswap { value, width } => {
+                if *width == 8 {
+                    observe(&mut hi, &mut work, *value);
+                }
+            }
             Inst::FpCast { value, .. } => observe(&mut hi, &mut work, *value),
             Inst::Fneg(v) => observe(&mut hi, &mut work, *v),
             Inst::Fma { a, b, c, .. } => {
@@ -174,6 +192,7 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
             Inst::Call { args, .. }
             | Inst::CallExt { args, .. }
             | Inst::Intrinsic { args, .. }
+            | Inst::X86Simd { args, .. }
             | Inst::InlineAsm { args, .. } => {
                 for a in args {
                     observe(&mut hi, &mut work, *a);
@@ -323,6 +342,7 @@ fn dedup_dominated_extends(func: &FunctionSsa, redirect: &mut [Option<ValueId>])
             Inst::Call { args, .. }
             | Inst::CallExt { args, .. }
             | Inst::Intrinsic { args, .. }
+            | Inst::X86Simd { args, .. }
             | Inst::InlineAsm { args, .. } => {
                 for a in args {
                     mark(&mut placed, *a);
@@ -754,10 +774,12 @@ mod tests {
             ent_pc: 0,
             end_pc: 0,
             locals: 0,
+            ssp: crate::c5::ir::SspFacts::default(),
             n_params: 0,
             is_variadic: false,
             is_inline: false,
             is_always_inline: false,
+            is_noinline: false,
             is_naked: false,
             section: None,
             is_weak: false,
@@ -765,6 +787,7 @@ mod tests {
             const_params: 0,
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
+            cmp32: Vec::new(),
             param_fp_mask: 0,
             agg_descs: alloc::vec::Vec::new(),
             param_aggs: alloc::vec::Vec::new(),
@@ -807,6 +830,7 @@ mod tests {
                     disp: 0,
                     kind: LoadKind::I32,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::Extend {
                     value: 1,
@@ -842,6 +866,7 @@ mod tests {
                     disp: 0,
                     kind: LoadKind::I8,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::Extend {
                     value: 1,
@@ -877,6 +902,7 @@ mod tests {
                     disp: 0,
                     kind: LoadKind::U8,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::Extend {
                     value: 1,
@@ -910,6 +936,7 @@ mod tests {
                     disp: 0,
                     kind: LoadKind::I32,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::Extend {
                     value: 1,
@@ -940,6 +967,7 @@ mod tests {
                     disp: 0,
                     kind: LoadKind::I32,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::Extend {
                     value: 1,
@@ -968,6 +996,7 @@ mod tests {
                     disp: 0,
                     kind: LoadKind::U32,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::Extend {
                     value: 1,
@@ -1013,6 +1042,7 @@ mod tests {
                     disp: 0,
                     kind: LoadKind::I32,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::Binop {
                     op: BinOp::Add,
@@ -1029,6 +1059,7 @@ mod tests {
                     value: 3,
                     kind: store_kind,
                     volatile: false,
+                    align: 0,
                 },
             ],
             vec![Block {
@@ -1431,6 +1462,7 @@ mod tests {
                     disp: 0,
                     kind: LoadKind::I32,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::Binop {
                     op: BinOp::Mul,

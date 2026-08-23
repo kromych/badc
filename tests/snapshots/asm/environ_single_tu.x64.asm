@@ -9,6 +9,21 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <main>:
                	pushq	%rbp
@@ -29,8 +44,7 @@ Disassembly of section .text:
                	movq	(%rax), %rdx
                	testq	%rdx, %rdx
                	jne	<addr>
-               	movslq	%ecx, %rax
-               	testq	%rax, %rax
+               	testl	%ecx, %ecx
                	jle	<addr>
                	xorq	%rax, %rax
                	movslq	%eax, %rax

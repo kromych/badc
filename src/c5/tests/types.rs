@@ -34,6 +34,223 @@ fn wide_char_constant_has_target_wchar_width() {
     assert_eq!(run(val, Target::WindowsX64), 7, "L'A' keeps its value");
 }
 
+/// C11 6.4.4.4p2-p4: `u'c'` has type `char16_t` (`uint_least16_t`) and
+/// `U'c'` has type `char32_t` (`uint_least32_t`). Both are unsigned and
+/// keep their width on every target, so neither follows `wchar_t` --
+/// which would make `u'c'` 4 bytes on the ELF and Mach-O targets and
+/// `U'c'` 2 on Windows.
+#[test]
+fn prefixed_char_constant_takes_its_own_type() {
+    use super::Vm;
+    use crate::{Compiler, Target};
+    let run = |src: &str, t: Target| -> i64 {
+        Vm::new(Compiler::with_target(src.to_string(), t).compile().unwrap())
+            .run()
+            .unwrap()
+    };
+    // Width, then signedness: an unsigned type leaves `(T)-1` positive.
+    let probe = "int main(void){ return (int)(sizeof(u'A') * 1000 + sizeof(U'A') * 100 \
+                 + ((__typeof__(u'A'))-1 > 0) * 10 + ((__typeof__(U'A'))-1 > 0)); }";
+    for t in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        assert_eq!(
+            run(probe, t),
+            2411,
+            "{t:?}: u'A' is 2-byte, U'A' 4, unsigned"
+        );
+    }
+    // The prefix picks the type, so `L` stays on `wchar_t` and the two
+    // do not coincide where `wchar_t` is 2 bytes.
+    let wide = "int main(void){ return (int)(sizeof(L'A') * 10 + sizeof(u'A')); }";
+    assert_eq!(run(wide, Target::WindowsX64), 22, "Windows wchar_t is 2");
+    assert_eq!(run(wide, Target::LinuxX64), 42, "ELF wchar_t is 4");
+    // Values are unaffected by the retyping.
+    let val = "int main(void){ return u'A' == 65 && U'A' == 65 \
+               && u'\\uFFFD' == 65533 && U'\\U0001F600' == 128512 ? 7 : 0; }";
+    assert_eq!(run(val, Target::LinuxX64), 7, "code points preserved");
+}
+
+/// `-fshort-wchar` gives `wchar_t` an unsigned 16-bit type on every
+/// target, as gcc 16.1.1 does: `sizeof(wchar_t)` and the element width
+/// of `L"..."` / `L'...'` follow it, and a `wchar_t`-width array is then
+/// the 2-byte one (C99 6.7.8p15). The Windows targets are already
+/// 2-byte, so the flag is a no-op there and `-fno-short-wchar` does not
+/// widen them.
+#[test]
+fn short_wchar_narrows_wchar_t_on_every_target() {
+    use super::Vm;
+    use crate::{CompileOptions, Compiler, Target};
+    let run = |src: &str, t: Target, short: bool| -> i64 {
+        let opts = CompileOptions::default().with_short_wchar(short);
+        Vm::new(
+            Compiler::with_options(src.to_string(), t, opts)
+                .compile()
+                .unwrap(),
+        )
+        .run()
+        .unwrap()
+    };
+    // sizeof(wchar_t) through the bundled <stddef.h> typedef, the wide
+    // literal's array size (3 elements including the terminator), and
+    // the wide character constant's own width.
+    let probe = "#include <stddef.h>\n\
+                 int main(void){ return (int)(sizeof(wchar_t) * 100 \
+                 + sizeof(L\"ab\") * 10 + sizeof(L'A')); }";
+    for t in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let wide = if t.is_windows() { 262 } else { 524 };
+        assert_eq!(run(probe, t, false), wide, "{t:?} default wchar_t");
+        assert_eq!(run(probe, t, true), 262, "{t:?} under -fshort-wchar");
+    }
+    // The staged elements are the code points at the selected width, not
+    // a reinterpretation of 4-byte ones.
+    let elems = "#include <stddef.h>\n\
+                 int main(void){ const wchar_t *s = L\"ab\"; \
+                 return s[0] == 'a' && s[1] == 'b' && s[2] == 0 ? 7 : 0; }";
+    assert_eq!(run(elems, Target::LinuxX64, true), 7, "narrowed elements");
+    // C99 6.7.8p15: the destination element must be wchar_t-wide, so the
+    // flag is what lets a wide literal stage into an unsigned short array
+    // (the shape the kernel's efi_char16_t arrays take).
+    let u16_array = "unsigned short d[] = L\"ab\";\n\
+                     int main(void){ return (int)sizeof(d); }";
+    assert_eq!(
+        run(u16_array, Target::LinuxX64, true),
+        6,
+        "u16 array staged"
+    );
+    let opts = CompileOptions::default();
+    let err = Compiler::with_options(u16_array.to_string(), Target::LinuxX64, opts)
+        .compile()
+        .expect_err("a 4-byte wchar_t must refuse a 2-byte destination element");
+    assert!(
+        format!("{err:?}").contains("wchar_t-width array element"),
+        "diagnostic must name the element width; got: {err:?}"
+    );
+}
+
+/// Plain `char`'s signedness is the target ABI's (C99 6.2.5p15 leaves it
+/// to the implementation): unsigned under AAPCS64, signed under the
+/// Linux/x86-64 psABI, Apple's arm64 ABI and MSVC. `-fsigned-char` /
+/// `-funsigned-char` override it on any target. Every dependent fact
+/// moves together -- the `char` type tag, `<limits.h>`'s CHAR_MIN /
+/// CHAR_MAX, the `__CHAR_UNSIGNED__` predefine, a `#if` character
+/// constant and the promotion of a byte above 0x7F -- which is what
+/// gcc 16.1.1 and clang 22.1.8 report on both Linux targets.
+#[test]
+fn plain_char_signedness_follows_the_target_abi_and_its_flags() {
+    use super::Vm;
+    use crate::{CompileOptions, Compiler, Target};
+    let run = |t: Target, sel: Option<bool>| -> i64 {
+        let opts = CompileOptions::default().with_char_signed(sel);
+        Vm::new(
+            Compiler::with_options(PROBE.to_string(), t, opts)
+                .compile()
+                .unwrap(),
+        )
+        .run()
+        .unwrap()
+    };
+    const PROBE: &str = "#include <limits.h>\n\
+         #ifdef __CHAR_UNSIGNED__\n#define PREDEF 1\n#else\n#define PREDEF 0\n#endif\n\
+         #if '\\xFF' < 0\n#define IF_NEG 1\n#else\n#define IF_NEG 0\n#endif\n\
+         int main(void){ return (int)(((char)-1 < 0) * 100000 \
+         + (CHAR_MIN < 0) * 10000 + (CHAR_MAX == 127) * 1000 \
+         + PREDEF * 100 + IF_NEG * 10 + ((int)(char)0x80 < 0)); }";
+    // Signed leaves `__CHAR_UNSIGNED__` undefined and takes 0x80 to -128;
+    // unsigned sets only the predefine and keeps 0x80 positive.
+    const SIGNED: i64 = 111_011;
+    const UNSIGNED: i64 = 100;
+    for (t, dflt) in [
+        (Target::LinuxX64, SIGNED),
+        (Target::LinuxAarch64, UNSIGNED),
+        (Target::MacOSAarch64, SIGNED),
+        (Target::WindowsX64, SIGNED),
+        (Target::WindowsAarch64, SIGNED),
+    ] {
+        assert_eq!(run(t, None), dflt, "{t:?} ABI default");
+        assert_eq!(run(t, Some(true)), SIGNED, "{t:?} under -fsigned-char");
+        assert_eq!(run(t, Some(false)), UNSIGNED, "{t:?} under -funsigned-char");
+    }
+}
+
+/// `wchar_t`'s signedness comes from the target ABI, not from its width:
+/// AAPCS64 makes the 4-byte type unsigned while the Linux/x86-64 psABI
+/// and Apple's arm64 ABI make the same width signed, which is what
+/// gcc 16.1.1 and clang 22.1.8 report on each. The `<stddef.h>` typedef,
+/// the `__WCHAR_MAX__` / `__WCHAR_MIN__` bounds and the type C11
+/// 6.4.4.4p2 gives `L'...'` all follow the one definition.
+#[test]
+fn wchar_t_signedness_follows_the_target_abi() {
+    use super::Vm;
+    use crate::{CompileOptions, Compiler, Target};
+    let run = |src: &str, t: Target| -> i64 {
+        Vm::new(
+            Compiler::with_options(src.to_string(), t, CompileOptions::default())
+                .compile()
+                .unwrap(),
+        )
+        .run()
+        .unwrap()
+    };
+    // Width, whether the typedef is unsigned, and whether both bounds
+    // agree with it: an unsigned type has `(wchar_t)-1` as its maximum
+    // and zero as its minimum.
+    let probe = "#include <stddef.h>\n\
+                 int main(void){ return (int)(sizeof(wchar_t) * 1000 \
+                 + ((wchar_t)-1 > 0) * 100 \
+                 + (__WCHAR_MAX__ == (wchar_t)-1) * 10 \
+                 + (__WCHAR_MIN__ == 0)); }";
+    for (t, want) in [
+        (Target::LinuxX64, 4000),
+        (Target::LinuxAarch64, 4111),
+        (Target::MacOSAarch64, 4000),
+        (Target::WindowsX64, 2111),
+        (Target::WindowsAarch64, 2111),
+    ] {
+        assert_eq!(run(probe, t), want, "{t:?} wchar_t definition");
+    }
+    // C11 6.4.4.4p2 types `L'...'` as `wchar_t`, so the comparison is
+    // unsigned exactly where the type is and the 2-byte type promotes to
+    // `int` first (C99 6.3.1.1p2), making the comparison signed there.
+    let promo = "int main(void){ return L'a' > -1 ? 1 : 0; }";
+    for (t, want) in [
+        (Target::LinuxX64, 1),
+        (Target::LinuxAarch64, 0),
+        (Target::MacOSAarch64, 1),
+        (Target::WindowsX64, 1),
+        (Target::WindowsAarch64, 1),
+    ] {
+        assert_eq!(run(promo, t), want, "{t:?} L'a' > -1");
+    }
+    // The `#if` evaluator takes its signedness from the same definition,
+    // but C99 6.10.1p4 gives every unsigned operand `uintmax_t` with no
+    // integer promotion first, so an unsigned `wchar_t` compares unsigned
+    // at every width -- including the 2-byte one whose expression form
+    // promotes to `int` above. gcc 16.1.1 and clang 22.1.8 both report
+    // this split on x86_64 and on AArch64.
+    let cond = "#if L'a' > -1\nint main(void){ return 1; }\n\
+                #else\nint main(void){ return 0; }\n#endif\n";
+    for (t, want) in [
+        (Target::LinuxX64, 1),
+        (Target::LinuxAarch64, 0),
+        (Target::MacOSAarch64, 1),
+        (Target::WindowsX64, 0),
+        (Target::WindowsAarch64, 0),
+    ] {
+        assert_eq!(run(cond, t), want, "{t:?} #if L'a' > -1");
+    }
+}
+
 #[test]
 fn warn_int_to_pointer_assignment() {
     // `int *p; p = 5;` -- assigning a non-zero integer to a pointer.
@@ -193,6 +410,39 @@ fn unprototyped_declaration_supplies_no_parameters() {
         "unprototyped call must not be arity-checked, got: {:?}",
         p.warnings
     );
+}
+
+#[test]
+fn typeof_redeclaration_merges_with_the_recorded_prototype() {
+    // C99 6.2.7p4: the composite type of two compatible declarations keeps
+    // the parameter type list, so a redeclaration through the function's
+    // own type merges with the recorded prototype instead of replacing it.
+    // The orderings differ in what the specifier reads: a definition alone,
+    // a prototype the definition follows, and a block-scope redeclaration.
+    let orderings = [
+        "unsigned inner(kuid_t k) { return k.val; }\n\
+         extern typeof(inner) inner;\n\
+         unsigned use(kuid_t k) { return inner(k, 1, 2); }\n",
+        "unsigned inner(kuid_t k);\n\
+         extern typeof(inner) inner;\n\
+         unsigned inner(kuid_t k) { return k.val; }\n\
+         unsigned use(kuid_t k) { return inner(k, 1, 2); }\n",
+        "unsigned inner(kuid_t k) { return k.val; }\n\
+         unsigned use(kuid_t k) { extern typeof(inner) inner; return inner(k, 1, 2); }\n",
+    ];
+    for body in orderings {
+        let src = alloc::format!(
+            "typedef struct {{ int val; }} kuid_t;\n{body}int main(void) {{ return 0; }}\n"
+        );
+        let p = compile_str(&src);
+        assert!(
+            p.warnings
+                .iter()
+                .any(|w| w.contains("too many arguments") && w.contains("inner")),
+            "expected an arity warning past the redeclaration, got: {:?}",
+            p.warnings
+        );
+    }
 }
 
 /// C99 6.2.4 + 6.2.2: block-scope locals, function parameters,
@@ -565,4 +815,300 @@ fn union_target_does_not_raise_the_object_mismatch_constraint() {
         "a union parameter must not be rejected, got: {:?}",
         p.warnings
     );
+}
+
+#[test]
+fn bool_target_accepts_a_pointer_in_every_assignment_context() {
+    // C99 6.5.16.1p1 lists "the left operand has type _Bool and the right
+    // is a pointer" among the simple-assignment cases, and 6.3.1.2 makes
+    // the conversion yield 0 or 1. The rule reaches every context the
+    // as-if-by-assignment wording covers.
+    let p = compile_str(
+        "struct R { struct R *parent; };\n\
+         _Bool assigned(struct R *r) { return r->parent; }\n\
+         _Bool ints(unsigned int *p) { return p; }\n\
+         void take(_Bool b);\n\
+         void ctx(struct R *r) { _Bool a; a = r; _Bool i = r; take(r); (void)a; (void)i; }\n\
+         int main(void) { return 0; }",
+    );
+    assert!(p.warnings.is_empty(), "got: {:?}", p.warnings);
+
+    // The reverse direction is still a mismatch: only `_Bool` on the left
+    // is exempt, and `_Bool *` is a pointer, not the exempt scalar.
+    let p = compile_str(
+        "void f(_Bool b, _Bool *bp) { int *q; q = b; struct S { int a; } *s; s = bp; (void)q; \
+         (void)s; }\n\
+         int main(void) { return 0; }",
+    );
+    assert!(
+        p.warnings
+            .iter()
+            .any(|w| w.contains("integer assigned to pointer in assignment"))
+            && p.warnings
+                .iter()
+                .any(|w| w.contains("incompatible struct types in assignment")),
+        "got: {:?}",
+        p.warnings
+    );
+}
+
+#[test]
+fn pointer_converted_to_bool_yields_zero_or_one() {
+    use super::Vm;
+    use crate::Compiler;
+    // The exemption above must not hide a conversion that keeps the
+    // pointer's bits: 6.3.1.2 compares against 0.
+    let src = "struct R { struct R *parent; };\n\
+               static _Bool assigned(struct R *r) { return r->parent; }\n\
+               static int take(_Bool b) { return (int)b; }\n\
+               int main(void) { struct R a, b; a.parent = &b; b.parent = 0;\n\
+               int acc = assigned(&a); acc = acc * 10 + assigned(&b);\n\
+               acc = acc * 10 + take(&a); return acc * 10 + take(0); }";
+    let got = Vm::new(Compiler::new(src.to_string()).compile().unwrap())
+        .run()
+        .unwrap();
+    assert_eq!(got, 1010);
+}
+
+#[test]
+fn a_named_address_space_on_the_object_does_not_change_compatibility() {
+    use crate::{Compiler, Target};
+    // C99 6.3.2.1p2 gives an lvalue's value the unqualified type, so a
+    // named address space qualifying the object itself takes no part in
+    // assignment compatibility -- the same rule `volatile` already gets.
+    // Both spellings the x86 per-cpu accessors produce are covered: a
+    // qualified pointer object, and a dereference of a pointer to one.
+    let src = "struct mm_struct;\n\
+               extern struct mm_struct *__seg_gs cur_mm;\n\
+               extern struct mm_struct *pcpu_mm;\n\
+               struct mm_struct *direct(void) { return cur_mm; }\n\
+               struct mm_struct *through_cast(void) {\n\
+                 return *(struct mm_struct *__seg_gs *)(__UINTPTR_TYPE__)&pcpu_mm; }\n\
+               void assign(void) { struct mm_struct *m; m = cur_mm; (void)m; }\n\
+               int main(void) { return 0; }";
+    let p = Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .expect("a qualified object is compatible with its unqualified type");
+    assert!(p.warnings.is_empty(), "got: {:?}", p.warnings);
+}
+
+#[test]
+fn a_named_address_space_on_the_pointee_is_named_in_the_diagnostic() {
+    use crate::{Compiler, Target};
+    // The qualifier below the outermost derivation is a real difference,
+    // and no diagnostic may print two type texts that read alike.
+    let src = "struct task_struct;\n\
+               extern __seg_gs struct task_struct *cur;\n\
+               struct task_struct *f(void) { return cur; }\n\
+               int main(void) { return 0; }";
+    let p = Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .unwrap();
+    assert!(
+        p.warnings.iter().any(|w| {
+            w.contains("incompatible struct types in return")
+                && w.contains("declared=struct task_struct*")
+                && w.contains("returned=struct task_struct __seg_gs *")
+        }),
+        "got: {:?}",
+        p.warnings
+    );
+}
+
+/// `long double`'s layout follows the target ABI: System V x86-64
+/// gives it the x87 80-bit format in a 16-byte object at 16-byte
+/// alignment and AAPCS64 ELF gives it IEEE binary128, also 16/16;
+/// macOS/arm64 and both Windows targets define it as binary64.
+#[test]
+fn long_double_layout_follows_the_target_abi() {
+    use super::Vm;
+    use crate::Compiler;
+    use crate::Target;
+    let run = |src: &str, t: Target| -> i64 {
+        Vm::new(Compiler::with_target(src.to_string(), t).compile().unwrap())
+            .run()
+            .unwrap()
+    };
+    // sizeof, _Alignof, the offset a preceding `char` pads to, the
+    // whole-struct size, an array's stride, and the pointer stride.
+    let probe = "struct S { char c; long double l; };\n\
+                 int main(void){ long double a[3]; long double *p = &a[0];\n\
+                 return sizeof(long double) + 100 * _Alignof(long double)\n\
+                 + 10000 * __builtin_offsetof(struct S, l)\n\
+                 + 1000000 * (sizeof(a) / 3) + 100000000 * (int)(&a[1] - &a[0])\n\
+                 + 1000000000 * (int)(sizeof(struct S) / 16); }";
+    for (t, width) in [
+        (Target::LinuxX64, 16),
+        (Target::LinuxAarch64, 16),
+        (Target::MacOSAarch64, 8),
+        (Target::WindowsX64, 8),
+        (Target::WindowsAarch64, 8),
+    ] {
+        let want = width
+            + 100 * width
+            + 10000 * width
+            + 1000000 * width
+            + 100000000
+            + 1000000000 * (if width == 16 { 2 } else { 1 });
+        assert_eq!(run(probe, t), want, "{t:?}: long double layout");
+    }
+    // `long double *` is a pointer: 8 bytes on every target.
+    let ptr = "int main(void){ return sizeof(long double *); }";
+    for t in [Target::LinuxX64, Target::MacOSAarch64] {
+        assert_eq!(run(ptr, t), 8, "{t:?}: pointer width");
+    }
+}
+
+/// The wide storage format round-trips through memory: a value stored
+/// into a `long double` object and read back is unchanged, and the
+/// object's bytes carry the platform's encoding rather than a binary64
+/// in the low half (which every foreign reader would misdecode).
+#[test]
+fn long_double_storage_round_trips_through_its_abi_format() {
+    use super::Vm;
+    use crate::Compiler;
+    use crate::Target;
+    let run = |src: &str, t: Target| -> i64 {
+        Vm::new(Compiler::with_target(src.to_string(), t).compile().unwrap())
+            .run()
+            .unwrap()
+    };
+    let round_trip = "int main(void){ long double x = 2.5L; double d = (double)x;\n\
+                      long double y = (long double)(d + 1.0);\n\
+                      return (d == 2.5 && (double)y == 3.5) ? 7 : 0; }";
+    for t in [Target::LinuxX64, Target::LinuxAarch64, Target::MacOSAarch64] {
+        assert_eq!(run(round_trip, t), 7, "{t:?}: round trip");
+    }
+    // x87 stores 1.0 as an explicit integer bit (0x8000...) with
+    // exponent 0x3FFF; a binary64 in the low half would read 0 there.
+    let image = "int main(void){ long double x = 1.0L;\n\
+                 unsigned char *b = (unsigned char *)&x;\n\
+                 return b[7] + b[8] + b[9]; }";
+    assert_eq!(
+        run(image, Target::LinuxX64),
+        0x80 + 0xff + 0x3f,
+        "linux-x64 stores the x87 encoding"
+    );
+    // A file-scope initializer lands in the same format.
+    let global = "long double g = 1.0L;\n\
+                  int main(void){ unsigned char *b = (unsigned char *)&g;\n\
+                  return b[7] + b[8] + b[9]; }";
+    assert_eq!(
+        run(global, Target::LinuxX64),
+        0x80 + 0xff + 0x3f,
+        "a static initializer stores the x87 encoding"
+    );
+    // binary128 keeps the leading bit implicit, so 1.0 is exponent
+    // 0x3fff over a zero significand: only the top two bytes are set.
+    let image128 = "int main(void){ long double x = 1.0L;\n\
+                    unsigned char *b = (unsigned char *)&x; int i, s = 0;\n\
+                    for (i = 0; i < 14; i++) s += b[i];\n\
+                    return s * 1000 + b[15] + b[14]; }";
+    let global128 = "long double g = 1.0L;\n\
+                     int main(void){ unsigned char *b = (unsigned char *)&g;\n\
+                     int i, s = 0; for (i = 0; i < 14; i++) s += b[i];\n\
+                     return s * 1000 + b[15] + b[14]; }";
+    for (src, what) in [(image128, "an automatic"), (global128, "a static")] {
+        assert_eq!(
+            run(src, Target::LinuxAarch64),
+            0x3f + 0xff,
+            "linux-aarch64: {what} object stores the binary128 encoding"
+        );
+    }
+    // 2^-1074 is subnormal in binary64 and normal in binary128, so the
+    // widening normalizes it: exponent 16383 - 1074 = 0x3bcd.
+    let sub = "int main(void){ double d = 5e-324; long double x = d;\n\
+               unsigned char *b = (unsigned char *)&x; int i, s = 0;\n\
+               for (i = 0; i < 14; i++) s += b[i];\n\
+               return s * 100000 + b[15] * 256 + b[14]; }";
+    assert_eq!(
+        run(sub, Target::LinuxAarch64),
+        0x3b * 256 + 0xcd,
+        "linux-aarch64: a binary64 subnormal widens to a normal binary128"
+    );
+}
+
+/// `long double` keeps `double`'s 53-bit significand through the compute
+/// path, so a value needing more than 53 bits does not round-trip even
+/// where the stored object could hold it (x87 80-bit has 64 significand
+/// bits, binary128 has 113). doc/std-conformance.md records the limit.
+#[test]
+fn long_double_carries_only_the_binary64_significand() {
+    let probe = "int main(void){ unsigned long long u = (1ULL<<53)+1ULL;\n\
+                 long double l = (long double)u;\n\
+                 return ((unsigned long long)l == u) ? 1 : 7; }";
+    assert_eq!(super::run_str(probe), 7, "2^53+1 must not round-trip");
+    let fits = "int main(void){ unsigned long long u = (1ULL<<53);\n\
+                long double l = (long double)u;\n\
+                return ((unsigned long long)l == u) ? 7 : 0; }";
+    assert_eq!(
+        super::run_str(fits),
+        7,
+        "2^53 is representable and must round-trip"
+    );
+}
+
+/// A `long double` handed to a platform-libc import is read by the
+/// callee in the target ABI's format. badc passes the binary64 it
+/// stores, so on the two Linux targets the callee decodes a different
+/// object; the mismatch is announced at compile time instead of
+/// surfacing as a wrong value at run time. macOS/arm64 and Windows x64
+/// define `long double` as binary64, so nothing is lost there.
+#[test]
+fn long_double_libc_argument_warns_where_the_platform_abi_is_wider() {
+    use crate::Compiler;
+    use crate::Target;
+    let warns = |src: &str, t: Target| -> alloc::vec::Vec<alloc::string::String> {
+        Compiler::with_target(super::with_prelude(src), t)
+            .compile()
+            .unwrap()
+            .warnings
+    };
+    let src = "int main(void){ long double x = 1.0L; double d = 2.0;\n\
+               printf(\"%Lf\\n\", x); printf(\"%f\\n\", d); return 0; }";
+    let hit = |ws: &[alloc::string::String], needle: &str| {
+        ws.iter()
+            .any(|w| w.contains("`long double` argument") && w.contains(needle))
+    };
+    let x64 = warns(src, Target::LinuxX64);
+    assert!(
+        hit(&x64, "x87 80-bit"),
+        "LinuxX64 must name the x87 format, got: {x64:?}"
+    );
+    let a64 = warns(src, Target::LinuxAarch64);
+    assert!(
+        hit(&a64, "IEEE binary128"),
+        "LinuxAarch64 must name the binary128 format, got: {a64:?}"
+    );
+    for t in [
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let ws = warns(src, t);
+        assert!(
+            !ws.iter().any(|w| w.contains("`long double` argument")),
+            "{t:?} defines long double as binary64 and must not warn, got: {ws:?}"
+        );
+    }
+    // Exactly one argument is at issue: the `double` call must stay quiet.
+    assert_eq!(
+        x64.iter()
+            .filter(|w| w.contains("`long double` argument"))
+            .count(),
+        1,
+        "only the `%Lf` argument may warn, got: {x64:?}"
+    );
+    // <math.h> binds the `l` entry points to their `double` counterparts, so
+    // the argument is converted to a `double` parameter and reaches the callee
+    // exactly. A declared parameter that is not `long double` must stay quiet.
+    let prototyped = "#include <math.h>\n\
+                      int main(void){ return (int)ldexpl((long double)1.0, 53); }";
+    for t in [Target::LinuxX64, Target::LinuxAarch64] {
+        let ws = warns(prototyped, t);
+        assert!(
+            !ws.iter().any(|w| w.contains("`long double` argument")),
+            "{t:?}: a `double` parameter takes the value exactly and must not warn, got: {ws:?}"
+        );
+    }
 }

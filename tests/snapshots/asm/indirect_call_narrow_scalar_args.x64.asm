@@ -9,58 +9,52 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
-
-<take>:
-               	movsbq	%dil, %rdi
-               	movswq	%si, %rsi
-               	imulq	$0x186a0, %rdi, %rax    # imm = 0x186A0
-               	imulq	$0xa, %rsi, %rcx
-               	addq	%rcx, %rax
-               	addq	%rdx, %rax
-               	movslq	%eax, %rax
-               	retq
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
-               	leaq	-<rip>, %rdx       # <addr>
                	leaq	<rip>, %rax
-               	movslq	(%rax), %rdi
-               	movslq	%edi, %rax
-               	movsbq	%al, %rcx
-               	movswq	%ax, %rsi
-               	imulq	$0x186a0, %rcx, %rax    # imm = 0x186A0
-               	imulq	$0xa, %rsi, %rcx
-               	addq	%rcx, %rax
-               	addq	%rdi, %rax
-               	movslq	%eax, %rbx
-               	movq	%rdx, %rax
-               	movq	%rdi, %rsi
-               	movq	%rdi, %rdx
-               	callq	*%rax
-               	movslq	%eax, %rax
-               	cmpq	%rax, %rbx
+               	movslq	(%rax), %rcx
+               	movslq	%ecx, %rax
+               	movsbq	%al, %r9
+               	movswq	%ax, %rbx
+               	imulq	$0x186a0, %r9, %rdx     # imm = 0x186A0
+               	imulq	$0xa, %rbx, %rsi
+               	leaq	(%rdx,%rsi), %rdi
+               	leaq	(%rdi,%rcx), %rax
+               	cmpl	%eax, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	cmpq	$0x6bcd17, %rax         # imm = 0x6BCD17
+               	cmpl	$0x6bcd17, %eax         # imm = 0x6BCD17
                	je	<addr>
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq

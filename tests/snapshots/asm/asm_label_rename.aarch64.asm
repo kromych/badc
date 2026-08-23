@@ -10,6 +10,8 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#0x1
+               	brk	#0x1
+               	brk	#0x1
 
 <badc_real_fn>:
                	mov	x0, #0xb                // =11
@@ -41,7 +43,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
-               	cmp	x0, #0x2c
+               	cmp	w0, #0x2c
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp], #0x10
@@ -49,22 +51,19 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
-               	cmp	x0, #0x1
-               	cset	x1, ne
+               	cmp	w0, #0x1
                	mov	x0, #0x1                // =1
-               	cbnz	x1, <addr>
+               	b.ne	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0, #0x4]
-               	cmp	x0, #0x2
-               	cset	x0, ne
-               	cmp	x0, #0x0
+               	cmp	w0, #0x2
                	cset	x0, ne
                	cbnz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0, #0x8]
-               	cmp	x0, #0x3
+               	cmp	w0, #0x3
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x6                // =6
@@ -73,8 +72,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	mov	x0, #0x7                // =7
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -82,7 +80,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
                	ldrsw	x0, [x0]
-               	cmp	x0, #0x2c
+               	cmp	w0, #0x2c
                	b.eq	<addr>
                	mov	x0, #0x9                // =9
                	ldp	x29, x30, [sp], #0x10
@@ -91,8 +89,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
                	add	x0, x0, #0xb
-               	sxtw	x0, w0
-               	cmp	x0, #0x4d
+               	cmp	w0, #0x4d
                	b.eq	<addr>
                	mov	x0, #0xb                // =11
                	ldp	x29, x30, [sp], #0x10
@@ -102,6 +99,7 @@ Disassembly of section .text:
                	ret
                	b	<addr>
                	b	<addr>
+               	udf	#0x0
 
 <badc_real_sect>:
                	mov	x0, #0x58               // =88

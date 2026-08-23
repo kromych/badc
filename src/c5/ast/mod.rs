@@ -486,6 +486,17 @@ pub(crate) enum Expr {
         elem_ty: i64,
         ty: i64,
     },
+    /// x86 SIMD intrinsic (`__builtin_ia32_*`). `op` indexes
+    /// [`crate::c5::x86_simd::OPS`]; `args` are the operand expressions in
+    /// source order, with a constant immediate or shift count already
+    /// removed and folded into `imm`. `ty` is the result type -- a 16-byte
+    /// vector or `int`.
+    X86Simd {
+        op: u32,
+        args: Vec<ExprId>,
+        imm: Option<u8>,
+        ty: i64,
+    },
     /// GCC `__builtin_memcpy` / `__builtin_memmove` / `__builtin_memset`
     /// with an integer-constant-expression byte count. `src` is the
     /// source address for the copies and the fill byte for the set.
@@ -737,6 +748,8 @@ pub(crate) struct FinishedFunction {
     /// Propagated onto `FunctionSsa::is_always_inline`; implies
     /// `is_inline`.
     pub is_always_inline: bool,
+    /// Propagated onto `FunctionSsa::is_noinline`.
+    pub is_noinline: bool,
     /// `__attribute__((naked))`: propagated onto `FunctionSsa::is_naked`.
     pub is_naked: bool,
     pub n_locals: i64,
@@ -772,18 +785,24 @@ pub(crate) struct FinishedFunction {
     /// the running top. Zero when `alloca` is unused, in which
     /// case codegen treats AllocaInit as a no-op.
     pub alloca_top_slot: i64,
-    /// `(base_offset, cells)` for each declared multi-cell local (aggregate
-    /// or multi-cell scalar): the local occupies `base_offset ..=
+    /// `(base_offset, cells)` for each declared aggregate local (any cell
+    /// count) and multi-cell scalar: the local occupies `base_offset ..=
     /// base_offset + cells - 1`. The walker seeds `FunctionSsa::multi_cell_slots`
-    /// with these so slot coalescing reserves the interior cells, which carry
-    /// no direct slot reference (reached only via the base address). Empty
-    /// when the function has no multi-cell local.
+    /// with these; slot coalescing reserves the interior cells, which carry
+    /// no direct slot reference (reached only via the base address), and the
+    /// scalar promotion reads the list as its candidate set. Empty when the
+    /// function has no such local.
     pub multi_cell_slots: alloc::vec::Vec<(i64, i64)>,
     /// `(slot_off, align, size_bytes)` for each automatic object whose required
-    /// alignment exceeds 16 (C11 6.7.5 `_Alignas` / GNU `aligned`). The walker
-    /// packs these into `FunctionSsa::over_aligned` + `frame_align`. Empty when
-    /// no automatic object needs stack realignment.
+    /// alignment exceeds the 8-byte frame slot (C11 6.7.5 `_Alignas` / GNU
+    /// `aligned`, or a type naturally aligned to 16). The walker packs these
+    /// into `FunctionSsa::over_aligned` + `frame_align`. Empty when every
+    /// automatic object fits the frame slots.
     pub over_aligned_slots: alloc::vec::Vec<(i64, i64, i64)>,
+    /// Stack-protector classification of the declared automatic objects;
+    /// the walker copies it onto `FunctionSsa::ssp`. See
+    /// [`crate::c5::ir::SspFacts`].
+    pub ssp: crate::c5::ir::SspFacts,
     /// `&&label` elements of this function's static initializers, as
     /// data slots awaiting a label address. The walk resolves each
     /// label to its basic block and seeds
@@ -951,6 +970,7 @@ impl Ast {
                 | Expr::VlaSizeof { .. }
                 | Expr::StmtExpr { .. }
                 | Expr::CheckedArith { .. }
+                | Expr::X86Simd { .. }
                 | Expr::MemTransfer { .. } => {}
             }
         }
@@ -1146,6 +1166,7 @@ fn visit_expr_ty(expr: &mut Expr, f: &mut impl FnMut(&mut i64)) {
         | Expr::VlaBase { ty, .. }
         | Expr::StmtExpr { ty, .. }
         | Expr::CheckedArith { ty, .. }
+        | Expr::X86Simd { ty, .. }
         | Expr::MemTransfer { ty, .. } => f(ty),
         Expr::VlaSizeof { .. } => {}
         Expr::Cast { to_ty, .. } => f(to_ty),
@@ -1190,6 +1211,7 @@ impl crate::c5::layout::DataOffsets for FinishedFunction {
             is_variadic: _,
             is_inline: _,
             is_always_inline: _,
+            is_noinline: _,
             is_naked: _,
             n_locals: _,
             param_tys: _,
@@ -1200,6 +1222,7 @@ impl crate::c5::layout::DataOffsets for FinishedFunction {
             alloca_top_slot: _,
             multi_cell_slots: _,
             over_aligned_slots: _,
+            ssp: _,
             label_data_slots,
             name: _,
         } = self;

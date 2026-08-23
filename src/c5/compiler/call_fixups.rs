@@ -76,6 +76,7 @@ impl Compiler {
             if s.class == Token::Fun as i64
                 && !s.defined_here
                 && !s.is_extern_decl
+                && !s.is_alias
                 && s.val == 0
                 && !s.name.is_empty()
             {

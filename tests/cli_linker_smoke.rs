@@ -84,6 +84,76 @@ fn two_sources_compile_separately_then_link() {
     assert_eq!(out.status.code(), Some(42), "exit code mismatch");
 }
 
+#[test]
+fn weak_alias_strong_override_wins_at_link() {
+    // A call through a weak alias keeps its relocation under -O, so a
+    // strong definition of the alias name in another object replaces
+    // the target's body at link time; with no override the weak alias
+    // binds to its target.
+    let dir = tempdir("weak-alias-override");
+    let a = write_source(
+        &dir,
+        "a.c",
+        "int real_fn(void) { return 41; }\n\
+         int alias_fn(void) __attribute__((weak, alias(\"real_fn\")));\n\
+         int caller(void) { return alias_fn() + 1; }\n",
+    );
+    let b = write_source(
+        &dir,
+        "b.c",
+        "extern int caller(void);\n\
+         int alias_fn(void) { return 7; }\n\
+         int main(void) { return caller(); }\n",
+    );
+    let c = write_source(
+        &dir,
+        "c.c",
+        "extern int caller(void);\nint main(void) { return caller(); }\n",
+    );
+    for s in [&a, &b, &c] {
+        run(
+            Command::new(badc())
+                .arg("-O")
+                .arg("-c")
+                .arg(s)
+                .current_dir(&dir),
+            "compile unit",
+        );
+    }
+    let strong = dir.join("strong");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&strong)
+            .arg(dir.join("a.o"))
+            .arg(dir.join("b.o"))
+            .current_dir(&dir),
+        "link with override",
+    );
+    let out = Command::new(&strong).output().expect("run strong");
+    assert_eq!(
+        out.status.code(),
+        Some(8),
+        "the strong alias_fn must override the weak alias"
+    );
+    let weak = dir.join("weak");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&weak)
+            .arg(dir.join("a.o"))
+            .arg(dir.join("c.o"))
+            .current_dir(&dir),
+        "link without override",
+    );
+    let out = Command::new(&weak).output().expect("run weak");
+    assert_eq!(
+        out.status.code(),
+        Some(42),
+        "with no override the weak alias binds to its target"
+    );
+}
+
 // Gated on Linux: same end-to-end exec + native-ELF-only
 // constraint as `two_sources_compile_separately_then_link`.
 #[cfg(target_os = "linux")]
@@ -188,6 +258,133 @@ fn archive_members_are_pulled_on_demand() {
         "exit code mismatch: stderr={:?}",
         String::from_utf8_lossy(&out.stderr)
     );
+}
+
+// The embedded on-demand sources join the member pool only when
+// selection over the real archives stalls with a symbol still
+// undefined. Host-independent: cross-links windows-x64 PEs, where
+// the pool is never preprocessed away, and reads the `rtlib` phase
+// of the BADC_LINK_STATS report -- present iff the pool compiled.
+#[test]
+fn on_demand_runtime_sources_compile_only_when_a_symbol_needs_them() {
+    let dir = tempdir("lazy-rtlib");
+    write_source(&dir, "plain.c", "int main(void) { return 0; }\n");
+    // fnmatch has no msvcrt definition; the bundled pattern.c
+    // supplies it, so this link stalls until the pool joins.
+    write_source(
+        &dir,
+        "match.c",
+        "#include <fnmatch.h>\nint main(void) { return fnmatch(\"a*\", \"abc\", 0); }\n",
+    );
+    let stats = |src: &str| -> String {
+        let out = run(
+            Command::new(badc())
+                .env("BADC_LINK_STATS", "1")
+                .arg("--target=windows-x64")
+                .arg("-o")
+                .arg(dir.join(src).with_extension("exe"))
+                .arg(dir.join(src))
+                .current_dir(&dir),
+            "link windows-x64",
+        );
+        let err = String::from_utf8_lossy(&out.stderr).into_owned();
+        assert!(err.contains("link stats"), "no stats line: {err}");
+        err
+    };
+    let plain = stats("plain.c");
+    assert!(
+        !plain.contains(" rtlib="),
+        "a fully resolved link compiled the on-demand sources: {plain}"
+    );
+    let matched = stats("match.c");
+    assert!(
+        matched.contains(" rtlib="),
+        "the stalled link did not compile the on-demand sources: {matched}"
+    );
+}
+
+// A cross link reads none of the host's libraries. The host's C
+// library exports names the target's does not -- `fnmatch` is one
+// glibc has and msvcrt lacks -- and resolving a reference against the
+// host's would import a name the target's C library cannot supply,
+// producing an image the loader rejects. The bundled sources define it
+// instead, so the name stays out of the import table.
+#[test]
+fn a_cross_link_does_not_import_host_libc_names() {
+    let dir = tempdir("cross-host-libc");
+    let src = write_source(
+        &dir,
+        "match.c",
+        "#include <fnmatch.h>\nint main(void) { return fnmatch(\"a*\", \"abc\", 0); }\n",
+    );
+    let exe = dir.join("match.exe");
+    run(
+        Command::new(badc())
+            .arg("--target=windows-x64")
+            .arg("-o")
+            .arg(&exe)
+            .arg(&src)
+            .current_dir(&dir),
+        "link windows-x64",
+    );
+    let image = std::fs::read(&exe).expect("read the image");
+    // An import name is the only place a PE image spells a symbol.
+    assert!(
+        !image.windows(b"fnmatch".len()).any(|w| w == b"fnmatch"),
+        "`fnmatch` reached the import table of {}",
+        exe.display()
+    );
+}
+
+// A shared library resolves a reference into a load-time import of the
+// library the image depends on, so one in another container or for
+// another architecture cannot supply it: the reference would bind to a
+// library the image never loads (on PE, to the C library its bindings
+// name). Both mismatches are a diagnostic, not an image.
+#[test]
+fn a_shared_library_for_another_target_is_refused() {
+    let dir = tempdir("foreign-shared-lib");
+    let lib_src = write_source(&dir, "ext.c", "int ext_fn(void) { return 3; }\n");
+    let main_src = write_source(
+        &dir,
+        "main.c",
+        "int ext_fn(void);\nint main(void) { return ext_fn(); }\n",
+    );
+    // An ELF shared object under each spelling a `-l` search accepts.
+    for name in ["libext.dll", "libext.so"] {
+        run(
+            Command::new(badc())
+                .arg("--target=linux-x64")
+                .arg("--shared")
+                .arg("-o")
+                .arg(dir.join(name))
+                .arg(&lib_src)
+                .current_dir(&dir),
+            "build the ELF shared library",
+        );
+    }
+    let refused = |target: &str, want: &str| {
+        let out = Command::new(badc())
+            .arg(format!("--target={target}"))
+            .arg("-o")
+            .arg(dir.join("out"))
+            .arg(&main_src)
+            .arg(format!("-L{}", dir.display()))
+            .arg("-lext")
+            .current_dir(&dir)
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr).into_owned();
+        assert!(
+            !out.status.success() && err.contains(want),
+            "{target}: expected a diagnostic naming {want}, got status={} stderr={err}",
+            out.status
+        );
+    };
+    // Container mismatch: an ELF library cannot back a PE import.
+    refused("windows-x64", "PE/COFF");
+    // Architecture mismatch, both sides ELF.
+    refused("linux-aarch64", "arm64");
 }
 
 // An archive-only invocation is a valid link: the members supply the
@@ -905,6 +1102,95 @@ fn array_to_pointer_decay_in_global_initializer() {
         "exit code mismatch: stdout={:?} stderr={:?}",
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+// C99 6.2.2p2: an inline definition's identifier keeps external
+// linkage, so `&f` denotes one function program-wide even though
+// 6.7.4p6 lets the unit implement its own calls from the local body.
+// The unit holding the inline definition and the unit holding the
+// external definition must agree on the pointer, as they do under gcc
+// and clang.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn inline_definition_address_is_the_same_across_tus() {
+    for opt in ["", "-O"] {
+        let dir = tempdir(&format!("inline-addr{}", opt.len()));
+        write_source(
+            &dir,
+            "inl.c",
+            "inline int f(int x) { return x + 1; }\n\
+             int (*pa)(int) = f;\n\
+             int ca(void) { return f(1); }\n",
+        );
+        write_source(
+            &dir,
+            "ext.c",
+            "int f(int x) { return x + 1; }\n\
+             int (*pb)(int) = f;\n",
+        );
+        write_source(
+            &dir,
+            "main.c",
+            "extern int (*pa)(int);\n\
+             extern int (*pb)(int);\n\
+             extern int ca(void);\n\
+             int main(void) { return (pa == pb) && ca() == 2 ? 42 : 1; }\n",
+        );
+        let exe = dir.join("prog");
+        let mut cmd = Command::new(badc());
+        if !opt.is_empty() {
+            cmd.arg(opt);
+        }
+        run(
+            cmd.arg("-o")
+                .arg(&exe)
+                .arg(dir.join("inl.c"))
+                .arg(dir.join("ext.c"))
+                .arg(dir.join("main.c"))
+                .current_dir(&dir),
+            "link inline definition + external definition",
+        );
+        let out = Command::new(&exe).output().expect("run prog");
+        assert_eq!(
+            out.status.code(),
+            Some(42),
+            "{opt}: the two units disagree on `&f`: stdout={:?} stderr={:?}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+}
+
+// The address escaping as an external reference means a program that
+// never defines the function fails to link, which is what gcc and clang
+// report for the same source.
+#[test]
+fn inline_definition_address_without_an_external_definition_fails_link() {
+    let dir = tempdir("inline-addr-undef");
+    write_source(
+        &dir,
+        "only.c",
+        "inline int f(int x) { return x + 1; }\n\
+         int (*p)(int) = f;\n\
+         int main(void) { return p(41); }\n",
+    );
+    let result = Command::new(badc())
+        .arg("-o")
+        .arg(dir.join("prog"))
+        .arg(dir.join("only.c"))
+        .current_dir(&dir)
+        .output()
+        .expect("invoke badc");
+    assert!(
+        !result.status.success(),
+        "link should have failed: stderr={:?}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert!(
+        stderr.contains("undefined reference") && stderr.contains('f'),
+        "expected an undefined reference to `f`, got: {stderr}"
     );
 }
 
@@ -2638,6 +2924,91 @@ fn macos_native_link_two_sources_with_libc() {
     assert!(stdout.contains("answer=42"), "unexpected stdout: {stdout}");
 }
 
+/// A universal (fat) static library and a fat `.o` archive member both
+/// resolve to their arm64 slice on the macos target. The fixtures come
+/// from the platform toolchain (`cc -arch` + `lipo` + `ar`), which is
+/// what produces such archives in the wild; hosts without it skip.
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[test]
+fn macos_universal_archive_and_fat_member_link() {
+    let dir = tempdir("macos-fat-archive");
+    write_source(&dir, "forty.c", "int forty(void) { return 40; }\n");
+    write_source(
+        &dir,
+        "main.c",
+        "extern int forty(void);\nint main(void) { return forty() + 2; }\n",
+    );
+    for (arch, obj) in [("arm64", "forty_arm64.o"), ("x86_64", "forty_x86.o")] {
+        let ok = Command::new("cc")
+            .args(["-c", "-arch", arch, "forty.c", "-o", obj])
+            .current_dir(&dir)
+            .output()
+            .is_ok_and(|o| o.status.success());
+        if !ok {
+            return; // no multi-arch platform toolchain on this host
+        }
+    }
+    // A fat archive: one thin archive per arch, joined by lipo.
+    for (ar_name, obj) in [
+        ("thin_arm64.a", "forty_arm64.o"),
+        ("thin_x86.a", "forty_x86.o"),
+    ] {
+        run(
+            Command::new("ar")
+                .args(["rc", ar_name, obj])
+                .current_dir(&dir),
+            "ar per-arch archive",
+        );
+    }
+    let ok = Command::new("lipo")
+        .args([
+            "-create",
+            "thin_arm64.a",
+            "thin_x86.a",
+            "-output",
+            "libuniv.a",
+        ])
+        .current_dir(&dir)
+        .output()
+        .is_ok_and(|o| o.status.success());
+    if !ok {
+        return; // lipo refuses archives on some toolchain versions
+    }
+    // An archive whose member is itself a fat object.
+    run(
+        Command::new("lipo")
+            .args([
+                "-create",
+                "forty_arm64.o",
+                "forty_x86.o",
+                "-output",
+                "forty_fat.o",
+            ])
+            .current_dir(&dir),
+        "lipo fat member",
+    );
+    run(
+        Command::new("ar")
+            .args(["rc", "libfatmem.a", "forty_fat.o"])
+            .current_dir(&dir),
+        "ar fat-member archive",
+    );
+    for lib in ["univ", "fatmem"] {
+        let exe = dir.join(format!("prog_{lib}"));
+        run(
+            Command::new(badc())
+                .arg("-o")
+                .arg(&exe)
+                .args(["-L.", &format!("-l{lib}")])
+                .arg(dir.join("main.c"))
+                .current_dir(&dir),
+            "link against the fat archive",
+        );
+        let out = Command::new(&exe).output().expect("run prog");
+        assert_eq!(out.status.code(), Some(42), "-l{lib} exit status");
+    }
+}
+
 // Windows arm64 PE .o link path through the synthesizer. Compiles
 // two sources with `-c --target=windows-aarch64`, links into a PE
 // executable, and execs (natively on Windows arm64, via wine on
@@ -3041,8 +3412,9 @@ fn link_defined_symbol_wins_over_auto_included_binding() {
 // targets that compile neither (e.g. windows-x64) do not see it as dead code.
 #[cfg(any(target_os = "linux", target_arch = "aarch64"))]
 const OUTLINE_ATOMICS_SRC: &str = "\
-typedef unsigned char u8; typedef unsigned int u32; typedef unsigned long u64;\n\
+typedef unsigned char u8; typedef unsigned int u32; typedef unsigned long long u64;\n\
 extern u64 __aarch64_ldadd8_acq_rel(u64, u64*);\n\
+extern u64 __aarch64_swp8_acq_rel(u64, u64*);\n\
 extern u32 __aarch64_ldclr4_acq_rel(u32, u32*);\n\
 extern u32 __aarch64_ldset4_acq_rel(u32, u32*);\n\
 extern u32 __aarch64_ldeor4_acq_rel(u32, u32*);\n\
@@ -3050,7 +3422,7 @@ extern u32 __aarch64_swp4_acq_rel(u32, u32*);\n\
 extern u32 __aarch64_cas4_acq_rel(u32, u32, u32*);\n\
 extern u8  __aarch64_cas1_acq_rel(u8, u8, u8*);\n\
 int main(void){\n\
-    u64 a=100; if(__aarch64_ldadd8_acq_rel(7,&a)!=100||a!=107) return 1;\n\
+    u64 a=0x1000000064ULL; if(__aarch64_ldadd8_acq_rel(7,&a)!=0x1000000064ULL||a!=0x100000006bULL) return 1;\n\
     u32 c=0xF0; if(__aarch64_ldclr4_acq_rel(0x30,&c)!=0xF0||c!=0xC0) return 2;\n\
     u32 s=0x01; if(__aarch64_ldset4_acq_rel(0x30,&s)!=0x01||s!=0x31) return 3;\n\
     u32 e=0xFF; if(__aarch64_ldeor4_acq_rel(0x0F,&e)!=0xFF||e!=0xF0) return 4;\n\
@@ -3058,6 +3430,8 @@ int main(void){\n\
     u32 k=5;    if(__aarch64_cas4_acq_rel(5,42,&k)!=5||k!=42) return 6;\n\
     u32 j=5;    if(__aarch64_cas4_acq_rel(9,42,&j)!=5||j!=5) return 7;\n\
     u8 b=3;     if(__aarch64_cas1_acq_rel(3,7,&b)!=3||b!=7) return 8;\n\
+    u64 x=0x2000000000ULL;\n\
+    if(__aarch64_swp8_acq_rel(0x3000000000ULL,&x)!=0x2000000000ULL||x!=0x3000000000ULL) return 9;\n\
     return 0;\n\
 }\n";
 
@@ -3104,7 +3478,8 @@ fn outline_atomics_resolve_on_demand() {
 }
 
 // On an aarch64 host the produced binary runs directly, checking the atomic
-// semantics of every op family the helpers cover.
+// semantics of every op family the helpers cover. The 8-byte cases carry a
+// value in the upper half, so a helper built over a 4-byte operand fails.
 #[cfg(target_arch = "aarch64")]
 #[test]
 fn outline_atomics_run_correct() {
@@ -3131,12 +3506,11 @@ fn outline_atomics_run_correct() {
 // A program using the glibc entry points that live only in the static
 // libc_nonshared.a: atexit, at_quick_exit, pthread_atfork. The atexit handler
 // prints a marker so a run confirms it was registered and invoked.
-#[cfg(target_os = "linux")]
 const GLIBC_NONSHARED_SRC: &str = "\
+#include <stdio.h>\n\
 extern int atexit(void (*)(void));\n\
 extern int at_quick_exit(void (*)(void));\n\
 extern int pthread_atfork(void (*)(void), void (*)(void), void (*)(void));\n\
-extern int puts(const char *);\n\
 static void bye(void) { puts(\"ATEXIT_RAN\"); }\n\
 static void nop(void) {}\n\
 int main(void) {\n\
@@ -3150,8 +3524,9 @@ int main(void) {\n\
 // badc supplies these from compiler-rt (wrapping the shared-library entry
 // points), so a glibc program links against libc.so alone -- no host
 // libc_nonshared.a. Cross-linking both arches exercises the resolution
-// without needing to run.
-#[cfg(target_os = "linux")]
+// without needing to run, on any host: the wrappers come from the
+// embedded sources and the `<stdio.h>` call from the header's binding,
+// so no library of the host's takes part.
 #[test]
 fn glibc_nonshared_wrappers_resolve() {
     for (tag, target) in [
@@ -3196,6 +3571,168 @@ fn glibc_nonshared_atexit_runs() {
         stdout.contains("MAIN") && stdout.contains("ATEXIT_RAN"),
         "atexit handler must run: stdout={stdout:?}"
     );
+}
+
+// `--dump-ssa` reports the compilation of the inputs and the runtime.
+// The on-demand pool is compiled only when symbol selection stalls,
+// which turns on the libraries the host has installed and on how much
+// of the target's C library the link reads, so its members must not
+// reach the dump: the same source would otherwise dump a different set
+// of functions on each host. This source references the entry points
+// the pool defines, so the pool is offered on any host and target.
+#[test]
+fn dump_ssa_names_the_same_functions_on_every_target() {
+    let dir = tempdir("dump-ssa-pool");
+    let src = write_source(&dir, "m.c", GLIBC_NONSHARED_SRC);
+    let mut first: Option<Vec<String>> = None;
+    for (tag, target) in [
+        ("x64", "--target=linux-x64"),
+        ("arm", "--target=linux-aarch64"),
+    ] {
+        let out = run(
+            Command::new(badc())
+                .arg(target)
+                .arg("--dump-ssa")
+                .arg("-o")
+                .arg(dir.join(format!("m-{tag}")))
+                .arg(&src)
+                .current_dir(&dir),
+            "dump SSA for a hosted link",
+        );
+        let names: Vec<String> = String::from_utf8_lossy(&out.stderr)
+            .lines()
+            .filter_map(|l| l.strip_prefix("; name=").map(str::to_string))
+            .collect();
+        assert!(
+            names.iter().any(|n| n == "main"),
+            "{tag}: the input's own functions are dumped: {names:?}"
+        );
+        for pool in [
+            "atexit",
+            "at_quick_exit",
+            "pthread_atfork",
+            "__stack_chk_fail_local",
+        ] {
+            assert!(
+                !names.iter().any(|n| n == pool),
+                "{tag}: on-demand pool member `{pool}` reached the dump: {names:?}"
+            );
+        }
+        match &first {
+            None => first = Some(names),
+            Some(prev) => assert_eq!(
+                prev, &names,
+                "{tag}: the dump names the same functions for every target"
+            ),
+        }
+    }
+}
+
+// C99 7.1.4p2: a program may declare a library function itself instead
+// of including its header. The call then reaches the link as a plain
+// external reference carrying no `#pragma binding`, and the C library
+// the link resolves it against has to be the target's -- the same one
+// on every host. The names below are bound by the bundled headers for
+// each of these targets, so each link must produce an image; only one
+// of the targets is ever the host's.
+const HEADER_LESS_LIBC_SRC: &str = "\
+extern void *memmem(const void *, unsigned long, const void *, unsigned long);\n\
+extern char *strdup(const char *);\n\
+int main(void) {\n\
+    return memmem(\"abc\", 3, \"b\", 1) && strdup(\"abc\") ? 0 : 1;\n\
+}\n";
+
+#[test]
+fn header_less_libc_names_resolve_for_every_target() {
+    let dir = tempdir("header-less-libc");
+    let src = write_source(&dir, "m.c", HEADER_LESS_LIBC_SRC);
+    for target in ["linux-x64", "linux-aarch64", "macos-aarch64"] {
+        let exe = dir.join(format!("m-{target}"));
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .arg("-o")
+                .arg(&exe)
+                .arg(&src)
+                .current_dir(&dir),
+            &format!("link header-less libc names for {target}"),
+        );
+        assert!(exe.exists(), "{target}: linked executable should exist");
+    }
+}
+
+// The other half of the same rule: a name no C library exports stays a
+// link error. Resolving an undefined reference against the target's C
+// library must not become a blanket admission of every undefined name.
+#[test]
+fn an_undeclared_non_libc_name_is_a_link_error_for_every_target() {
+    let dir = tempdir("header-less-unknown");
+    let src = write_source(
+        &dir,
+        "m.c",
+        "extern int badc_no_such_libc_entry_point(void);\n\
+         int main(void) { return badc_no_such_libc_entry_point(); }\n",
+    );
+    for target in ["linux-x64", "linux-aarch64", "macos-aarch64"] {
+        let out = Command::new(badc())
+            .arg(format!("--target={target}"))
+            .arg("-o")
+            .arg(dir.join(format!("m-{target}")))
+            .arg(&src)
+            .current_dir(&dir)
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr).into_owned();
+        assert!(
+            !out.status.success() && err.contains("badc_no_such_libc_entry_point"),
+            "{target}: an unknown name must not resolve: status={} stderr={err}",
+            out.status
+        );
+    }
+}
+
+// A hosted link must read no C library the command line did not name.
+// The driver used to open the host's own `libc.so.6` / `libSystem.tbd`
+// off the search path, so the image turned on which shared object the
+// machine running the link happened to have -- and on anything ahead of
+// it on that path. Both invocations below must write the same bytes.
+#[test]
+fn a_c_library_on_the_search_path_does_not_change_the_image() {
+    let dir = tempdir("implicit-libc-path");
+    let src = write_source(&dir, "m.c", HEADER_LESS_LIBC_SRC);
+    let decoy = dir.join("decoy");
+    std::fs::create_dir_all(&decoy).expect("create decoy dir");
+    // The names the implicit read probed, in both target formats.
+    for name in ["libc.so.6", "libc.so", "libSystem.tbd", "libSystem.B.dylib"] {
+        std::fs::write(decoy.join(name), b"").expect("write decoy library");
+    }
+    let search = format!("-L{}", decoy.display());
+    // Named targets rather than the host's: the implicit C library is
+    // described by the target, and PE has no entry, so a Windows host
+    // would otherwise link a header-less name it cannot resolve.
+    for target in ["linux-x64", "linux-aarch64", "macos-aarch64"] {
+        let mut images: Vec<Vec<u8>> = Vec::new();
+        for (tag, extra) in [("plain", None), ("decoy", Some(search.as_str()))] {
+            let out_dir = dir.join(format!("{tag}-{target}"));
+            std::fs::create_dir_all(&out_dir).expect("create output dir");
+            let exe = out_dir.join("m");
+            let mut cmd = Command::new(badc());
+            cmd.arg(format!("--target={target}"))
+                .args(extra)
+                .arg("-o")
+                .arg(&exe)
+                .arg(&src);
+            run(
+                &mut cmd,
+                &format!("{target}: link with the {tag} search path"),
+            );
+            images.push(std::fs::read(&exe).expect("read image"));
+        }
+        assert_eq!(
+            images[0], images[1],
+            "{target}: a C library on the search path must not change the image"
+        );
+    }
 }
 
 // A load through an extern data symbol must not fold against this unit's
@@ -3315,6 +3852,140 @@ fn elf_segments(bytes: &[u8]) -> Vec<(u32, u32)> {
             (rd32(ph), rd32(ph + 4))
         })
         .collect()
+}
+
+/// Program headers of an ELF64 image as
+/// `(p_type, p_flags, p_offset, p_filesz)`.
+fn elf_segment_ranges(bytes: &[u8]) -> Vec<(u32, u32, usize, usize)> {
+    let rd16 = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
+    let rd32 = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+    let rd64 = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let e_phoff = rd64(0x20) as usize;
+    let (e_phentsize, e_phnum) = (rd16(0x36), rd16(0x38));
+    (0..e_phnum)
+        .map(|i| {
+            let ph = e_phoff + i * e_phentsize;
+            (
+                rd32(ph),
+                rd32(ph + 4),
+                rd64(ph + 0x08) as usize,
+                rd64(ph + 0x20) as usize,
+            )
+        })
+        .collect()
+}
+
+/// A `-c` object is laid out for a link that applies its relocations
+/// after mapping, because this toolchain's own linker is the usual
+/// consumer and every image it writes is `ET_DYN`. Only the `const`
+/// object carrying the relocation reaches the relro region; the unit's
+/// relocation-free `const` objects keep the read-only prefix.
+///
+/// Without that, a section being the atom of placement costs the whole
+/// `.rodata` the prefix, and the demoted storage is only re-protected
+/// once the loader has applied the fixups. `-fno-pic` states the
+/// opposite -- a link that resolves the relocation statically -- and is
+/// checked here too, since the kernel corpus builds under it.
+#[test]
+fn compile_only_object_keeps_the_read_only_prefix_when_linked() {
+    const PT_GNU_RELRO: u32 = 0x6474_E552;
+    const PF_R: u32 = 4;
+    let dir = tempdir("c-object-read-only-prefix");
+    let src = write_source(
+        &dir,
+        "ro.c",
+        "const char pure_tab[16] = \"PURETABPURETAB\";\n\
+         static int probe(void) { return 1; }\n\
+         struct ops { int (*p)(void); char tag[8]; };\n\
+         const struct ops mixer = { probe, \"MIXTAG\" };\n\
+         int main(void) { return mixer.p() + pure_tab[0] + mixer.tag[0]; }\n",
+    );
+    let holds = |img: &[u8], off: usize, len: usize, needle: &[u8]| {
+        img[off..off + len]
+            .windows(needle.len())
+            .any(|w| w == needle)
+    };
+    for target in ["linux-x64", "linux-aarch64"] {
+        // `-c` with no PIC flag, then linked: the shape every
+        // make-driven build produces.
+        let obj = dir.join(format!("ro-{target}.o"));
+        let img = dir.join(format!("ro-{target}.bin"));
+        run(
+            Command::new(badc())
+                .args(["-c", &format!("--target={target}")])
+                .arg(&src)
+                .arg("-o")
+                .arg(&obj),
+            "compile -c",
+        );
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .arg(&obj)
+                .arg("-o")
+                .arg(&img),
+            "link the object",
+        );
+        let bytes = std::fs::read(&img).expect("read image");
+        let segs = elf_segment_ranges(&bytes);
+        assert!(
+            segs.iter()
+                .any(|&(_, f, o, l)| f == PF_R && holds(&bytes, o, l, b"PURETAB")),
+            "{target}: relocation-free const outside every read-only load"
+        );
+        let (_, _, roff, rlen) = *segs
+            .iter()
+            .find(|&&(t, ..)| t == PT_GNU_RELRO)
+            .expect("PT_GNU_RELRO");
+        assert!(
+            holds(&bytes, roff, rlen, b"MIXTAG"),
+            "{target}: relocated const outside PT_GNU_RELRO"
+        );
+        assert!(
+            !holds(&bytes, roff, rlen, b"PURETAB"),
+            "{target}: relocation-free const demoted into PT_GNU_RELRO"
+        );
+
+        // `-fno-pic` keeps gcc's static-link assignment: both objects
+        // in `.rodata`, so the link has the whole section to demote.
+        let nobj = dir.join(format!("ro-nopic-{target}.o"));
+        run(
+            Command::new(badc())
+                .args(["-c", "-fno-pic", &format!("--target={target}")])
+                .arg(&src)
+                .arg("-o")
+                .arg(&nobj),
+            "compile -c -fno-pic",
+        );
+        let nbytes = std::fs::read(&nobj).expect("read object");
+        let names: Vec<String> = elf_sections(&nbytes).into_iter().map(|(n, ..)| n).collect();
+        assert!(
+            !names.iter().any(|n| n == ".data.rel.ro"),
+            "{target}: -fno-pic must keep relocated const in .rodata"
+        );
+    }
+
+    // The kernel code model names a static link at fixed addresses, so
+    // it keeps the same assignment with no flag of its own.
+    let kobj = dir.join("ro-kernel.o");
+    run(
+        Command::new(badc())
+            .args(["-c", "-mcmodel=kernel", "--target=linux-x64"])
+            .arg(&src)
+            .arg("-o")
+            .arg(&kobj),
+        "compile -c -mcmodel=kernel",
+    );
+    let kbytes = std::fs::read(&kobj).expect("read object");
+    let knames: Vec<String> = elf_sections(&kbytes).into_iter().map(|(n, ..)| n).collect();
+    assert!(
+        !knames.iter().any(|n| n == ".data.rel.ro"),
+        "the kernel code model must keep relocated const in .rodata"
+    );
+    assert!(
+        knames.iter().any(|n| n == ".rodata"),
+        "kernel object .rodata"
+    );
 }
 
 const SHF_WRITE: u64 = 0x1;
@@ -3628,6 +4299,119 @@ fn absolute_text_reloc_is_rejected_for_a_pie() {
     );
 }
 
+/// The same relocation where the output format admits it: PE rebases
+/// every section through `.reloc`, so an assembler `movabsq $sym, %reg`
+/// links. The field takes the symbol's preferred VA and the image
+/// carries an `IMAGE_REL_BASED_DIR64` entry for it, which is what the
+/// Windows loader applies after sliding the image.
+#[test]
+fn absolute_text_reloc_links_and_rebases_in_a_pe() {
+    let dir = tempdir("abs-text-reloc-pe");
+    let asm = write_source(
+        &dir,
+        "gd.s",
+        "\t.text\n\
+         \t.globl get_gdata\n\
+         get_gdata:\n\
+         \tmovabsq $gdata, %rax\n\
+         \tmovl (%rax), %eax\n\
+         \tret\n\
+         \t.data\n\
+         \t.globl gdata\n\
+         gdata:\n\
+         \t.long 42\n",
+    );
+    let main = write_source(
+        &dir,
+        "m.c",
+        "int get_gdata(void);\nint main(void) { return get_gdata(); }\n",
+    );
+    for src in [&asm, &main] {
+        run(
+            Command::new(badc())
+                .args(["-c", "--target=windows-x64", "-o"])
+                .arg(dir.join(src.with_extension("o").file_name().unwrap()))
+                .arg(src)
+                .current_dir(&dir),
+            "compile to an object",
+        );
+    }
+    let exe = dir.join("prog.exe");
+    run(
+        Command::new(badc())
+            .args(["--target=windows-x64", "-o"])
+            .arg(&exe)
+            .arg(dir.join("m.o"))
+            .arg(dir.join("gd.o"))
+            .current_dir(&dir),
+        "link the PE",
+    );
+    let image = std::fs::read(&exe).expect("read the PE");
+    let u16le = |o: usize| u16::from_le_bytes(image[o..o + 2].try_into().unwrap()) as usize;
+    let u32le = |o: usize| u32::from_le_bytes(image[o..o + 4].try_into().unwrap());
+    let pe = u32le(0x3c) as usize;
+    let opt = pe + 24;
+    let image_base = u64::from_le_bytes(image[opt + 24..opt + 32].try_into().unwrap());
+    let sect = opt + u16le(pe + 20);
+    // (name, rva, raw offset, raw size) per section header.
+    let secs: Vec<(String, u32, usize, usize)> = (0..u16le(pe + 6))
+        .map(|i| {
+            let o = sect + i * 40;
+            let end = image[o..o + 8].iter().position(|&b| b == 0).unwrap_or(8);
+            let name = String::from_utf8_lossy(&image[o..o + end]).into_owned();
+            (
+                name,
+                u32le(o + 12),
+                u32le(o + 20) as usize,
+                u32le(o + 16) as usize,
+            )
+        })
+        .collect();
+    let find = |n: &str| secs.iter().find(|s| s.0 == n).expect("section");
+    let (_, text_rva, text_off, text_size) = *find(".text");
+    let (_, data_rva, data_off, data_size) = *find(".data");
+    // The `movabsq` immediate is the eight bytes after its two-byte
+    // REX + opcode prefix; the object defines nothing else absolute.
+    let body = &image[text_off..text_off + text_size];
+    let site = body
+        .windows(2)
+        .position(|w| w == [0x48, 0xb8])
+        .expect("movabsq in .text")
+        + 2;
+    let value = u64::from_le_bytes(body[site..site + 8].try_into().unwrap());
+    // The field must name `gdata` itself: its preferred VA lands
+    // inside `.data` and the word there is the initializer.
+    let target = (value - image_base) as usize;
+    assert!(
+        target >= data_rva as usize && target + 4 <= data_rva as usize + data_size,
+        "the field must hold a `.data` VA, got {value:#x}"
+    );
+    let at = data_off + target - data_rva as usize;
+    assert_eq!(u32le(at), 42, "the field must reach `gdata`");
+    let (_, reloc_rva, reloc_off, _) = *find(".reloc");
+    let reloc_size = u32le(opt + 112 + 5 * 8 + 4) as usize;
+    assert_ne!(
+        reloc_size, 0,
+        "the image must carry a base-relocation table"
+    );
+    assert_eq!(u32le(opt + 112 + 5 * 8), reloc_rva, "reloc directory rva");
+    let want = text_rva + site as u32;
+    let mut found = false;
+    let mut off = 0usize;
+    while off + 8 <= reloc_size {
+        let page = u32le(reloc_off + off);
+        let size = u32le(reloc_off + off + 4) as usize;
+        assert!(size >= 8, "malformed .reloc block");
+        for j in 0..(size - 8) / 2 {
+            let e = u16le(reloc_off + off + 8 + j * 2) as u16;
+            // Type 10 is IMAGE_REL_BASED_DIR64.
+            found |= e >> 12 == 10 && page + (e & 0xfff) as u32 == want;
+        }
+        off += size;
+    }
+    assert!(found, "no DIR64 base relocation covering rva {want:#x}");
+}
+
 // Gated on Linux: the read-only data page only exists on the native ELF
 // link path, and the test exec's the produced binary.
 //
@@ -3930,9 +4714,10 @@ fn aarch64_low12_references_sharing_one_adrp_are_all_patched() {
     // serving several in-page references at -O2. Assembling and linking
     // the sequence through the driver must patch every in-page site.
     //
-    // The expected words are GNU ld 2.46.1's for the same two objects
-    // from GNU as 2.46.1, whose `.o` bytes badc's assembler reproduces;
-    // `gdata` lands at in-page offset 0xd0 in both links.
+    // The instruction forms are GNU ld 2.46.1's for the same two objects
+    // from GNU as 2.46.1, whose `.o` bytes badc's assembler reproduces.
+    // Each field is checked against `gdata`'s own in-page offset, so a
+    // site left unpatched fails whatever the data layout is.
     let dir = tempdir("a64-shared-adrp");
     // The image writer prepends its own entry stub, so the sequence is
     // located by the unrelocated trailer parked behind it.
@@ -3979,16 +4764,31 @@ fn aarch64_low12_references_sharing_one_adrp_are_all_patched() {
     );
     let image = std::fs::read(&exe).expect("read the linked image");
     let words = words_before_marker(&image, MARKER, 5);
+    // `add` carries the in-page offset unscaled, so it names what the two
+    // loads must reach through their own scales. A site the linker leaves
+    // unpatched keeps the assembler's zero field, so the assertion is that
+    // all three agree on one non-zero offset.
+    let off = words[3] >> 10 & 0xfff;
     assert_eq!(
-        words[3] >> 10 & 0xfff,
-        0xd0,
-        "the reference words assume `gdata` at in-page offset 0xd0; \
-         this link placed it at {:#x}",
-        words[3] >> 10 & 0xfff
+        words[3] & !(0xfff << 10),
+        0x9100_0024,
+        "add x4, x1, #:lo12:gdata"
     );
-    assert_eq!(words[1], 0xf940_6822, "ldr x2, [x1, #208]");
-    assert_eq!(words[2], 0x3dc0_3423, "ldr q3, [x1, #208]");
-    assert_eq!(words[3], 0x9103_4024, "add x4, x1, #0xd0");
+    assert!(
+        off != 0 && off.is_multiple_of(16),
+        "`gdata` is `.balign 16` behind other data, so its in-page offset \
+         is a non-zero multiple of 16; got {off:#x}"
+    );
+    assert_eq!(
+        words[1],
+        0xf940_0022 | (off / 8) << 10,
+        "ldr x2, [x1, #{off}]"
+    );
+    assert_eq!(
+        words[2],
+        0x3dc0_0023 | (off / 16) << 10,
+        "ldr q3, [x1, #{off}]"
+    );
     assert_eq!(words[4], 0xd65f_03c0, "ret");
 }
 
@@ -4181,6 +4981,155 @@ fn library_search_spelling_follows_the_target_format() {
     }
 }
 
+/// `-l` against a Mach-O dylib: the export trie resolves the
+/// undefined reference, the dylib's install name becomes a load
+/// command, and the binary runs. The dylib comes from the platform
+/// toolchain; hosts without one skip.
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[test]
+fn macos_dylib_resolves_an_undefined_reference() {
+    let dir = tempdir("macos-dylib-link");
+    write_source(&dir, "demo.c", "int forty_one(void) { return 41; }\n");
+    write_source(
+        &dir,
+        "main.c",
+        "extern int forty_one(void);\nint main(void) { return forty_one() + 1; }\n",
+    );
+    let dylib_path = dir.join("libdemo.dylib");
+    let ok = Command::new("cc")
+        .args([
+            "-dynamiclib",
+            "demo.c",
+            "-o",
+            "libdemo.dylib",
+            "-install_name",
+        ])
+        .arg(&dylib_path)
+        .current_dir(&dir)
+        .output()
+        .is_ok_and(|o| o.status.success());
+    if !ok {
+        return; // no platform toolchain on this host
+    }
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .args(["-L.", "-ldemo"])
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "link against the dylib",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(out.status.code(), Some(42), "exit status mismatch");
+}
+
+/// A `.tbd` text stub stands in for a dylib the way the SDK's stubs
+/// stand in for the shared cache: the stub is found ahead of any
+/// archive, its exports resolve the reference, and the recorded
+/// install name loads the real dylib from its own location.
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[test]
+fn macos_tbd_stub_resolves_via_the_real_dylib_install_name() {
+    let dir = tempdir("macos-tbd-link");
+    let impl_dir = dir.join("impl");
+    std::fs::create_dir_all(&impl_dir).expect("create impl dir");
+    write_source(&impl_dir, "demo.c", "int forty_two(void) { return 42; }\n");
+    write_source(
+        &dir,
+        "main.c",
+        "extern int forty_two(void);\nint main(void) { return forty_two(); }\n",
+    );
+    let dylib_path = impl_dir.join("libdemo.dylib");
+    let ok = Command::new("cc")
+        .args([
+            "-dynamiclib",
+            "demo.c",
+            "-o",
+            "libdemo.dylib",
+            "-install_name",
+        ])
+        .arg(&dylib_path)
+        .current_dir(&impl_dir)
+        .output()
+        .is_ok_and(|o| o.status.success());
+    if !ok {
+        return; // no platform toolchain on this host
+    }
+    // The link directory holds only the stub; the dylib stays in
+    // `impl/`, reachable through the stub's install-name.
+    let tbd = format!(
+        "--- !tapi-tbd\n\
+         tbd-version:     4\n\
+         targets:         [ arm64-macos ]\n\
+         install-name:    '{}'\n\
+         exports:\n  \
+         - targets:         [ arm64-macos ]\n    \
+         symbols:         [ _forty_two ]\n\
+         ...\n",
+        dylib_path.display()
+    );
+    std::fs::write(dir.join("libdemo.tbd"), tbd).expect("write the stub");
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .args(["-L.", "-ldemo"])
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "link against the tbd stub",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(out.status.code(), Some(42), "exit status mismatch");
+}
+
+/// A foreign archive member's libc references resolve through the
+/// implicit libSystem the way a compiler driver's implicit `-lc` /
+/// `-lSystem` resolves them, with no binding scaffolding in any input.
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[test]
+fn macos_foreign_member_libc_references_resolve_implicitly() {
+    let dir = tempdir("macos-foreign-libc");
+    write_source(
+        &dir,
+        "lenof.c",
+        "#include <string.h>\nint lenof(const char *s) { return (int)strlen(s); }\n",
+    );
+    write_source(
+        &dir,
+        "main.c",
+        "extern int lenof(const char *);\nint main(void) { return lenof(\"forty-two!\"); }\n",
+    );
+    let ok = Command::new("cc")
+        .args(["-c", "lenof.c", "-o", "lenof.o"])
+        .current_dir(&dir)
+        .output()
+        .is_ok_and(|o| o.status.success());
+    if !ok {
+        return; // no platform toolchain on this host
+    }
+    run(
+        Command::new("ar")
+            .args(["rc", "libforeign.a", "lenof.o"])
+            .current_dir(&dir),
+        "archive the foreign member",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .args(["-L.", "-lforeign"])
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "link the foreign member against the implicit libSystem",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(out.status.code(), Some(10), "strlen result mismatch");
+}
+
 /// A shared library in a container the linker cannot read is reported
 /// as such. Without the check the bytes fall through to the linker-
 /// script reader, which finds no GROUP / INPUT entries in them and
@@ -4290,4 +5239,1219 @@ fn bsd_format_archive_links_on_the_host_target() {
     );
     let out = Command::new(&exe).output().expect("run prog");
     assert_eq!(out.status.code(), Some(38), "14 + 24");
+}
+
+/// Feed a source on stdin and return the finished invocation.
+fn run_with_stdin(cmd: &mut Command, src: &str, what: &str) -> std::process::Output {
+    use std::io::Write;
+    use std::process::Stdio;
+    let mut child = cmd
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap_or_else(|e| panic!("{what}: spawn: {e}"));
+    child
+        .stdin
+        .take()
+        .expect("stdin")
+        .write_all(src.as_bytes())
+        .unwrap_or_else(|e| panic!("{what}: write: {e}"));
+    let out = child
+        .wait_with_output()
+        .unwrap_or_else(|e| panic!("{what}: wait: {e}"));
+    if !out.status.success() {
+        panic!(
+            "{what} failed: status={} stderr={:?}",
+            out.status,
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+    out
+}
+
+/// `-` names stdin for the object and archive modes as it does for the
+/// link, so a generator's output can be piped straight into a build. gcc
+/// and clang name the object after the input, giving `-.o`; `--ar` takes
+/// the same name for the member.
+#[test]
+fn stdin_source_compiles_to_an_object_and_into_an_archive() {
+    let dir = tempdir("stdin-object");
+    let src = "int from_stdin(void) { return 41; }\n";
+
+    // `-c -` without `-o` writes `-.o` beside the other objects.
+    run_with_stdin(
+        Command::new(badc())
+            .args(["-q", "-c", "-"])
+            .current_dir(&dir),
+        src,
+        "compile stdin to a default-named object",
+    );
+    let dashed = dir.join("-.o");
+    assert!(dashed.is_file(), "`-c -` must write `-.o`");
+    assert!(
+        badc::parse_native_elf(&std::fs::read(&dashed).expect("read -.o")).is_ok(),
+        "`-.o` must be a readable relocatable object"
+    );
+
+    // `-o` names the object explicitly, and it links like any other.
+    let obj = dir.join("stdin.o");
+    run_with_stdin(
+        Command::new(badc())
+            .args(["-q", "-c", "-", "-o"])
+            .arg(&obj)
+            .current_dir(&dir),
+        src,
+        "compile stdin to a named object",
+    );
+    let main = write_source(
+        &dir,
+        "main.c",
+        "extern int from_stdin(void);\nint main(void) { return from_stdin(); }\n",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .args(["-q", "-o"])
+            .arg(&exe)
+            .arg(&main)
+            .arg(&obj)
+            .current_dir(&dir),
+        "link the object built from stdin",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(out.status.code(), Some(41), "the stdin unit's value");
+
+    // `--ar -` bundles the same bytes under the same `-.o` member name.
+    let lib = dir.join("libstdin.a");
+    run_with_stdin(
+        Command::new(badc())
+            .args(["-q", "--ar", "-", "-o"])
+            .arg(&lib)
+            .current_dir(&dir),
+        src,
+        "archive a unit read from stdin",
+    );
+    let members =
+        badc::read_archive(&std::fs::read(&lib).expect("read archive")).expect("read the archive");
+    assert!(
+        members.iter().any(|m| m.name == "-.o"),
+        "member names: {:?}",
+        members.iter().map(|m| &m.name).collect::<Vec<_>>()
+    );
+}
+
+/// The gcc / clang link-time-table idiom: several units place data
+/// under one C-identifier section name and walk it between
+/// `__start_<name>` and `__stop_<name>`. Every unit's contribution has
+/// to be contiguous and the bounds have to enclose exactly it.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn start_stop_bound_a_named_section_across_units() {
+    let dir = tempdir("start-stop-table");
+    write_source(
+        &dir,
+        "tab.h",
+        "struct ent { long v; };\n\
+         #define REG(n, val) static const struct ent e_##n \\\n\
+           __attribute__((section(\"mytab\"), used, aligned(8))) = { val }\n\
+         extern const struct ent __start_mytab[], __stop_mytab[];\n",
+    );
+    write_source(
+        &dir,
+        "a.c",
+        "#include \"tab.h\"\nint pad_a[3] = { 1, 2, 3 };\nREG(alpha, 1);\nREG(beta, 2);\n",
+    );
+    write_source(
+        &dir,
+        "b.c",
+        "#include \"tab.h\"\nconst char *rod_b = \"b\";\nREG(gamma, 4);\n",
+    );
+    write_source(
+        &dir,
+        "main.c",
+        "#include \"tab.h\"\n\
+         REG(delta, 8);\n\
+         int main(void) {\n\
+         \tif (__stop_mytab - __start_mytab != 4) return 1;\n\
+         \tint sum = 0;\n\
+         \tfor (const struct ent *p = __start_mytab; p < __stop_mytab; p++) sum += (int)p->v;\n\
+         \treturn sum == 15 ? 0 : 2;\n\
+         }\n",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .arg(dir.join("a.c"))
+            .arg(dir.join("b.c"))
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "link a named-section table",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "named-section bounds: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+/// Section-header names of an ELF64 image, in table order.
+fn elf_section_names(bytes: &[u8]) -> Vec<String> {
+    let u16at = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap()) as usize;
+    let u32at = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
+    let u64at = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap()) as usize;
+    let (shoff, shnum, shstrndx) = (u64at(40), u16at(60), u16at(62));
+    assert!(shoff != 0 && shnum != 0, "image carries no section headers");
+    let strtab = u64at(shoff + shstrndx * 64 + 24);
+    (0..shnum)
+        .map(|i| {
+            let at = strtab + u32at(shoff + i * 64);
+            let end = at + bytes[at..].iter().position(|&b| b == 0).unwrap_or(0);
+            String::from_utf8_lossy(&bytes[at..end]).into_owned()
+        })
+        .collect()
+}
+
+/// The merged path gives a grouped named section its own ELF section
+/// header, not just `__start_` / `__stop_` bounds over bytes folded
+/// into the family blob. Read-only, writable and zero-initialised
+/// placements each land in the family whose region holds them.
+#[test]
+fn named_sections_get_their_own_elf_section_header() {
+    let dir = tempdir("named-section-header");
+    write_source(
+        &dir,
+        "a.c",
+        "static const long ro __attribute__((section(\"myro\"), used)) = 1;\n\
+         static long rw __attribute__((section(\"myrw\"), used)) = 2;\n",
+    );
+    write_source(
+        &dir,
+        "main.c",
+        "extern const long __start_myro[], __stop_myro[];\n\
+         int main(void) { return __stop_myro - __start_myro == 1 ? 0 : 1; }\n",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("--target=linux-x64")
+            .arg("-o")
+            .arg(&exe)
+            .arg(dir.join("a.c"))
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "link named sections for ELF",
+    );
+    let names = elf_section_names(&std::fs::read(&exe).expect("read image"));
+    for n in ["myro", "myrw"] {
+        assert!(names.iter().any(|s| s == n), "`{n}` in {names:?}");
+    }
+    // The family headers stay, holding what was not grouped out.
+    for n in [".rodata", ".data", ".text"] {
+        assert!(names.iter().any(|s| s == n), "`{n}` in {names:?}");
+    }
+}
+
+/// `(segment, section)` pairs of a Mach-O image, in declaration order.
+fn macho_section_names(bytes: &[u8]) -> Vec<(String, String)> {
+    let u32at = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
+    let name = |at: usize| {
+        let end = at
+            + bytes[at..at + 16]
+                .iter()
+                .position(|&b| b == 0)
+                .unwrap_or(16);
+        String::from_utf8_lossy(&bytes[at..end]).into_owned()
+    };
+    let mut out = Vec::new();
+    let mut lc = 32;
+    for _ in 0..u32at(16) {
+        if u32at(lc) == 0x19 {
+            for s in 0..u32at(lc + 64) {
+                let sh = lc + 72 + s * 80;
+                out.push((name(sh + 16), name(sh)));
+            }
+        }
+        lc += u32at(lc + 4);
+    }
+    out
+}
+
+/// Section names of a PE image, in section-table order, each with its
+/// characteristics word.
+fn pe_section_names(bytes: &[u8]) -> Vec<(String, u32)> {
+    let u16at = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap()) as usize;
+    let u32at = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+    let pe = u32at(0x3C) as usize;
+    let table = pe + 24 + u16at(pe + 20);
+    (0..u16at(pe + 6))
+        .map(|i| {
+            let at = table + i * 40;
+            let end = at + bytes[at..at + 8].iter().position(|&b| b == 0).unwrap_or(8);
+            (
+                String::from_utf8_lossy(&bytes[at..end]).into_owned(),
+                u32at(at + 36),
+            )
+        })
+        .collect()
+}
+
+/// Sources exercising one named section per storage class, plus a name
+/// over the 16-byte Mach-O section-name limit.
+fn write_named_section_sources(dir: &std::path::Path) {
+    write_source(
+        dir,
+        "a.c",
+        "static const long ro __attribute__((section(\"myro\"), used)) = 1;\n\
+         static long rw __attribute__((section(\"myrw\"), used)) = 2;\n\
+         static long over __attribute__((section(\"a_name_past_the_macho_limit\"), used)) = 3;\n",
+    );
+    write_source(
+        dir,
+        "main.c",
+        "extern const long __start_myro[], __stop_myro[];\n\
+         extern const long __start_a_name_past_the_macho_limit[];\n\
+         extern const long __stop_a_name_past_the_macho_limit[];\n\
+         int main(void) {\n\
+         if (__stop_myro - __start_myro != 1) return 1;\n\
+         return __stop_a_name_past_the_macho_limit\n\
+         - __start_a_name_past_the_macho_limit == 1 ? 0 : 2; }\n",
+    );
+}
+
+/// The merged path gives a grouped named section its own Mach-O
+/// section inside the segment its family maps, and the family sections
+/// stay for what was not grouped out. A name past the 16-byte section
+/// name field keeps the folded placement its bounds already describe.
+#[test]
+fn named_sections_get_their_own_macho_section() {
+    let dir = tempdir("named-section-macho");
+    write_named_section_sources(&dir);
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("--target=macos-aarch64")
+            .arg("-o")
+            .arg(&exe)
+            .arg(dir.join("a.c"))
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "link named sections for Mach-O",
+    );
+    let image = std::fs::read(&exe).expect("read image");
+    let names = macho_section_names(&image);
+    let find = |s: &str| names.iter().find(|(_, n)| n == s).map(|(g, _)| g.clone());
+    assert_eq!(
+        find("myro").as_deref(),
+        Some("__TEXT"),
+        "a read-only name maps in __TEXT: {names:?}"
+    );
+    assert_eq!(
+        find("myrw").as_deref(),
+        Some("__DATA"),
+        "a writable name maps in __DATA: {names:?}"
+    );
+    assert!(
+        find("a_name_past_the_macho_limit").is_none(),
+        "a name past 16 bytes has no section of its own: {names:?}"
+    );
+    for (seg, sect) in [
+        ("__TEXT", "__text"),
+        ("__TEXT", "__const"),
+        ("__DATA", "__data"),
+    ] {
+        assert!(
+            names.iter().any(|(g, n)| g == seg && n == sect),
+            "`{seg},{sect}` in {names:?}"
+        );
+    }
+    // Sections are declared in address order within each segment.
+    for (seg, _) in &names {
+        let addrs: Vec<u64> = section_addrs(&image, seg);
+        assert!(
+            addrs.windows(2).all(|w| w[0] <= w[1]),
+            "`{seg}` sections out of address order: {addrs:?}"
+        );
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let out = Command::new(&exe).output().expect("run the image");
+        assert_eq!(out.status.code(), Some(0), "named-section bounds hold");
+    }
+}
+
+/// Section `addr` fields of one Mach-O segment, in declaration order.
+fn section_addrs(bytes: &[u8], seg: &str) -> Vec<u64> {
+    let u32at = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
+    let mut out = Vec::new();
+    let mut lc = 32;
+    for _ in 0..u32at(16) {
+        if u32at(lc) == 0x19 && bytes[lc + 8..lc + 8 + seg.len()] == *seg.as_bytes() {
+            for s in 0..u32at(lc + 64) {
+                let sh = lc + 72 + s * 80;
+                out.push(u64::from_le_bytes(
+                    bytes[sh + 32..sh + 40].try_into().unwrap(),
+                ));
+            }
+        }
+        lc += u32at(lc + 4);
+    }
+    out
+}
+
+/// The PE writer gives a grouped named section a section header of
+/// its own. A PE section RVA is SectionAlignment-aligned, so each
+/// takes a slot past `.data`; the read-only families keep `.rdata`'s
+/// characteristics and the writable ones `.data`'s, and the table
+/// stays in ascending RVA order.
+#[test]
+fn named_sections_get_their_own_pe_section() {
+    const CNT_INITIALIZED: u32 = 0x40;
+    const MEM_READ: u32 = 0x4000_0000;
+    const MEM_WRITE: u32 = 0x8000_0000;
+    let dir = tempdir("named-section-pe");
+    write_named_section_sources(&dir);
+    let exe = dir.join("prog.exe");
+    run(
+        Command::new(badc())
+            .arg("--target=windows-x64")
+            .arg("-o")
+            .arg(&exe)
+            .arg(dir.join("a.c"))
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "link named sections for PE",
+    );
+    let image = std::fs::read(&exe).expect("read image");
+    let names = pe_section_names(&image);
+    let chars = |s: &str| names.iter().find(|(n, _)| n == s).map(|(_, c)| *c);
+    assert_eq!(
+        chars("myro"),
+        Some(CNT_INITIALIZED | MEM_READ),
+        "a read-only name maps without write permission: {names:?}"
+    );
+    assert_eq!(
+        chars("myrw"),
+        Some(CNT_INITIALIZED | MEM_READ | MEM_WRITE),
+        "a writable name keeps .data's characteristics: {names:?}"
+    );
+    // A name past the 8-byte header field is truncated, as link.exe
+    // truncates its own; the bytes still get a section.
+    assert!(
+        chars("a_name_p").is_some(),
+        "a truncated name still gets a section: {names:?}"
+    );
+    for n in [".text", ".rdata", ".data"] {
+        assert!(names.iter().any(|(s, _)| s == n), "`{n}` in {names:?}");
+    }
+    let rvas = pe_section_rvas(&image);
+    assert!(
+        rvas.windows(2).all(|w| w[0] < w[1]),
+        "the section table must ascend by RVA: {rvas:?}"
+    );
+}
+
+/// Section `VirtualAddress` fields of a PE image, in table order.
+fn pe_section_rvas(bytes: &[u8]) -> Vec<u32> {
+    let u16at = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap()) as usize;
+    let u32at = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+    let pe = u32at(0x3C) as usize;
+    let table = pe + 24 + u16at(pe + 20);
+    (0..u16at(pe + 6))
+        .map(|i| u32at(table + i * 40 + 12))
+        .collect()
+}
+
+/// A unit defining `__start_<name>` itself keeps that definition: bfd
+/// synthesizes the pair only where nothing else does, and
+/// `__start_tty` is an ordinary function in at least one real tree.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn an_object_definition_outranks_a_synthesized_section_bound() {
+    let dir = tempdir("start-stop-conflict");
+    write_source(
+        &dir,
+        "main.c",
+        "static const int t __attribute__((section(\"tty\"), used)) = 5;\n\
+         int __start_tty(void) { return 7; }\n\
+         int main(void) { return __start_tty() == 7 && t == 5 ? 0 : 1; }\n",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "link a unit defining __start_tty itself",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(out.status.code(), Some(0), "the object's definition wins");
+}
+
+/// `--gc-sections` through the ld persona: an identifier-named section
+/// nothing reaches is dropped, one bracketed by a referenced
+/// `__start_` / `__stop_` pair is kept, and without the option both
+/// survive.
+#[cfg(target_os = "linux")]
+#[test]
+fn gc_sections_drops_unreachable_named_sections() {
+    let dir = tempdir("gc-sections");
+    let src = write_source(
+        &dir,
+        "gc.c",
+        "static const int live[2] __attribute__((section(\"livetab\"), used)) = { 1, 2 };\n\
+         static const int dead[8] __attribute__((section(\"deadtab\"), used)) = { 0 };\n\
+         extern const int __start_livetab[], __stop_livetab[];\n\
+         int main(void) { return __stop_livetab - __start_livetab; }\n",
+    );
+    let obj = dir.join("gc.o");
+    run(
+        Command::new(badc())
+            .args(["-q", "-c"])
+            .arg(&src)
+            .arg("-o")
+            .arg(&obj)
+            .current_dir(&dir),
+        "compile the gc unit",
+    );
+    let link = |out: &str, gc: bool| -> Vec<(String, u32, u64)> {
+        let exe = dir.join(out);
+        let mut c = Command::new(badc());
+        c.arg("--ld");
+        if gc {
+            c.arg("--gc-sections");
+        }
+        run(
+            c.args(["-e", "main", "-o"])
+                .arg(&exe)
+                .arg(&obj)
+                .current_dir(&dir),
+            "link the gc unit",
+        );
+        elf_sections(&std::fs::read(&exe).expect("read image"))
+    };
+    let kept = link("gc_off", false);
+    assert!(kept.iter().any(|s| s.0 == "deadtab"), "{kept:?}");
+    assert!(kept.iter().any(|s| s.0 == "livetab"), "{kept:?}");
+    let swept = link("gc_on", true);
+    assert!(!swept.iter().any(|s| s.0 == "deadtab"), "{swept:?}");
+    assert!(swept.iter().any(|s| s.0 == "livetab"), "{swept:?}");
+}
+
+// AArch64 input-section alignment and the MOVW group relocations.
+// Every golden here was measured against GNU as 2.46.1 + GNU ld
+// 2.46.1 on linux-aarch64; the cross-target links run on any host.
+mod aarch64_link {
+    use super::{badc, run, tempdir};
+    use std::path::{Path, PathBuf};
+    use std::process::Command;
+
+    fn write(dir: &Path, name: &str, body: &str) -> PathBuf {
+        let p = dir.join(name);
+        std::fs::write(&p, body).expect("write source");
+        p
+    }
+
+    /// Write each source and assemble it for linux-aarch64.
+    fn assemble_a64(dir: &Path, srcs: &[(&str, &str)]) -> Vec<PathBuf> {
+        let mut objs: Vec<PathBuf> = Vec::new();
+        for (name, body) in srcs {
+            let src = write(dir, name, body);
+            let obj = dir.join(format!("{}.o", name.trim_end_matches(".s")));
+            run(
+                Command::new(badc())
+                    .args(["-q", "-c", "--target=linux-aarch64"])
+                    .arg(&src)
+                    .arg("-o")
+                    .arg(&obj)
+                    .current_dir(dir),
+                "assemble for linux-aarch64",
+            );
+            objs.push(obj);
+        }
+        objs
+    }
+
+    /// Link the sources into a freestanding linux-aarch64 image and
+    /// return `(image bytes, link map)`.
+    fn link_a64(dir: &Path, srcs: &[(&str, &str)]) -> (Vec<u8>, String) {
+        let objs = assemble_a64(dir, srcs);
+        let exe = dir.join("prog");
+        let map = dir.join("prog.map");
+        let mut c = Command::new(badc());
+        c.args(["-q", "--target=linux-aarch64", "--freestanding"]);
+        run(
+            c.args(&objs)
+                .arg("-o")
+                .arg(&exe)
+                .arg(format!("-Map={}", map.display()))
+                .current_dir(dir),
+            "link for linux-aarch64",
+        );
+        (
+            std::fs::read(&exe).expect("read image"),
+            std::fs::read_to_string(&map).expect("read map"),
+        )
+    }
+
+    /// Attempt the same link and return the driver's stderr on failure.
+    fn link_a64_err(dir: &Path, srcs: &[(&str, &str)]) -> String {
+        let objs = assemble_a64(dir, srcs);
+        let out = Command::new(badc())
+            .args(["-q", "--target=linux-aarch64", "--freestanding"])
+            .args(&objs)
+            .arg("-o")
+            .arg(dir.join("prog"))
+            .current_dir(dir)
+            .output()
+            .expect("run the link");
+        assert!(!out.status.success(), "the link was expected to fail");
+        String::from_utf8_lossy(&out.stderr).into_owned()
+    }
+
+    /// Runtime address a link map gives a global symbol.
+    fn map_symbol(map: &str, name: &str) -> u64 {
+        for line in map.lines() {
+            let mut f = line.split_whitespace();
+            let (Some(addr), Some(sym)) = (f.next(), f.next()) else {
+                continue;
+            };
+            if sym == name
+                && f.next().is_none()
+                && let Some(hex) = addr.strip_prefix("0x")
+            {
+                return u64::from_str_radix(hex, 16).expect("map address");
+            }
+        }
+        panic!("`{name}` not in the link map:\n{map}");
+    }
+
+    /// Little-endian word an ELF64 image holds at `vaddr`.
+    fn word_at(bytes: &[u8], vaddr: u64) -> u32 {
+        let rd16 = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
+        let rd32 = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+        let rd64 = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+        let e_phoff = rd64(0x20) as usize;
+        let e_phentsize = rd16(0x36);
+        for i in 0..rd16(0x38) {
+            let ph = e_phoff + i * e_phentsize;
+            let (p_vaddr, p_offset, p_filesz) = (rd64(ph + 16), rd64(ph + 8), rd64(ph + 32));
+            if rd32(ph) == 1 && (p_vaddr..p_vaddr + p_filesz).contains(&vaddr) {
+                return rd32((p_offset + (vaddr - p_vaddr)) as usize);
+            }
+        }
+        panic!("vaddr {vaddr:#x} is in no PT_LOAD");
+    }
+
+    const ISLANDS: &str = "	.text\n\
+                           	nop\n\
+                           	nop\n\
+                           	nop\n\
+                           	.balign 16\n\
+                           	.globl isle16\n\
+                           isle16:\n\
+                           	.quad 0x1122334455667788\n\
+                           	.quad 0x99aabbccddeeff00\n\
+                           	nop\n\
+                           	.section .text.k32,\"ax\",@progbits\n\
+                           	.balign 32\n\
+                           	.globl isle32\n\
+                           isle32:\n\
+                           	.quad 1\n\
+                           	.quad 2\n\
+                           	nop\n\
+                           	.section .text.k64,\"ax\",@progbits\n\
+                           	.balign 64\n\
+                           	.globl isle64\n\
+                           isle64:\n\
+                           	.quad 5\n";
+
+    /// Each input text section keeps the alignment it claims once the
+    /// image is laid out, which is the guarantee GNU ld gives: with
+    /// the same three islands `ld` places them at 16-, 32- and
+    /// 64-aligned addresses, and `.text` reports the widest of them.
+    #[test]
+    fn merged_text_keeps_each_input_section_alignment() {
+        let dir = tempdir("a64-text-align");
+        let main = "	.text\n\
+                    	.globl __c5_entry\n\
+                    __c5_entry:\n\
+                    	adrp	x0, isle16\n\
+                    	ldr	q0, [x0, #:lo12:isle16]\n\
+                    	ret\n";
+        let (image, map) = link_a64(&dir, &[("m.s", main), ("i.s", ISLANDS)]);
+        for (name, align) in [("isle16", 16u64), ("isle32", 32), ("isle64", 64)] {
+            let at = map_symbol(&map, name);
+            assert_eq!(at % align, 0, "{name} at {at:#x} is not {align}-aligned");
+        }
+        // `.text`'s own header has to agree with where it starts.
+        let rd16 = |o: usize| u16::from_le_bytes([image[o], image[o + 1]]) as usize;
+        let rd64 = |o: usize| u64::from_le_bytes(image[o..o + 8].try_into().unwrap());
+        let e_shoff = rd64(0x28) as usize;
+        let (esz, num, strndx) = (rd16(0x3a), rd16(0x3c), rd16(0x3e));
+        let str_off = rd64(e_shoff + strndx * esz + 0x18) as usize;
+        let mut seen = false;
+        for i in 0..num {
+            let sh = e_shoff + i * esz;
+            let n = str_off + u32::from_le_bytes(image[sh..sh + 4].try_into().unwrap()) as usize;
+            if image[n..n + 6] != *b".text\0" {
+                continue;
+            }
+            let (addr, align) = (rd64(sh + 16), rd64(sh + 48));
+            assert_eq!(align, 64, ".text should report the widest input alignment");
+            assert_eq!(addr % align, 0, ".text at {addr:#x} is not {align}-aligned");
+            seen = true;
+        }
+        assert!(seen, "no .text section header");
+    }
+
+    /// A 16-byte load reaching a 16-aligned island: the scaled imm12
+    /// can only carry a multiple of the access size, so a dropped
+    /// alignment stops the link.
+    #[test]
+    fn scaled_16_byte_load_reaches_an_aligned_text_island() {
+        let dir = tempdir("a64-scaled-ldr");
+        let main = "	.text\n\
+                    	.globl __c5_entry\n\
+                    __c5_entry:\n\
+                    	adrp	x0, isle16\n\
+                    	ldr	q0, [x0, #:lo12:isle16]\n\
+                    	ret\n";
+        let (image, map) = link_a64(&dir, &[("m.s", main), ("i.s", ISLANDS)]);
+        let entry = map_symbol(&map, "__c5_entry");
+        let isle = map_symbol(&map, "isle16");
+        // `ldr q0, [x0, #imm12]`: imm12 at bits 21:10, scaled by 16.
+        let ldr = word_at(&image, entry + 4);
+        assert_eq!(
+            u64::from((ldr >> 10) & 0xfff) * 16,
+            isle & 0xfff,
+            "the scaled offset must reach the island's in-page address"
+        );
+    }
+
+    /// Every MOVW group relocation over a link-time constant, against
+    /// the words GNU ld writes for the same input.
+    #[test]
+    fn movw_group_relocations_match_gnu_ld() {
+        // (specifier, symbol value, the word `ld` produced)
+        let cases: &[(&str, &str, u32)] = &[
+            ("movz	x5, :abs_g3:K", "0xfedc89ab1234f0f0", 0xd2ff_db85),
+            ("movz	x5, :abs_g2_nc:K", "0xfedc89ab1234f0f0", 0xd2d1_3565),
+            ("movz	x5, :abs_g1_nc:K", "0xfedc89ab1234f0f0", 0xd2a2_4685),
+            ("movz	x5, :abs_g0_nc:K", "0xfedc89ab1234f0f0", 0xd29e_1e05),
+            ("movk	x5, :abs_g2_nc:K", "0xfedc89ab1234f0f0", 0xf2d1_3565),
+            ("movk	x5, :abs_g1_nc:K", "0xfedc89ab1234f0f0", 0xf2a2_4685),
+            ("movk	x5, :abs_g0_nc:K", "0xfedc89ab1234f0f0", 0xf29e_1e05),
+            ("movz	x5, :abs_g0:K", "0xbeef", 0xd297_dde5),
+            ("movz	x5, :abs_g1:K", "0xcafe0000", 0xd2b9_5fc5),
+            ("movz	x5, :abs_g2:K", "0xdead00000000", 0xd2db_d5a5),
+            ("movz	x5, :abs_g0_s:K", "0x7fff", 0xd28f_ffe5),
+            ("movz	x5, :abs_g0_s:K", "-0x8000", 0x928f_ffe5),
+            ("movz	x5, :abs_g1_s:K", "0x7fffffff", 0xd2af_ffe5),
+            ("movz	x5, :abs_g1_s:K", "-0x80000000", 0x92af_ffe5),
+            ("movz	x5, :abs_g2_s:K", "0x123456789abc", 0xd2c2_4685),
+            ("movz	x5, :abs_g2_s:K", "-0x800", 0x92c0_0005),
+            ("movz	w5, :abs_g0_nc:K", "0xbeef", 0x5297_dde5),
+            ("movk	w5, :abs_g1_nc:K", "0xcafe0000", 0x72b9_5fc5),
+        ];
+        for (i, (insn, value, want)) in cases.iter().enumerate() {
+            let dir = tempdir(&format!("a64-movw-{i}"));
+            let main = format!("	.text\n	.globl __c5_entry\n__c5_entry:\n	{insn}\n	ret\n");
+            let defs = format!("	.globl K\n	.set K, {value}\n");
+            let (image, map) = link_a64(&dir, &[("m.s", &main), ("d.s", &defs)]);
+            let got = word_at(&image, map_symbol(&map, "__c5_entry"));
+            assert_eq!(
+                got, *want,
+                "`{insn}` over {value}: got {got:#010x}, ld writes {want:#010x}"
+            );
+        }
+    }
+
+    /// The checked groups refuse a value they cannot hold, as ld does
+    /// rather than narrowing it. The `_NC` groups take the same values.
+    #[test]
+    fn movw_checked_groups_refuse_an_out_of_range_value() {
+        for (i, (insn, value)) in [
+            ("movz	x5, :abs_g0:K", "0x10000"),
+            ("movz	x5, :abs_g1:K", "0x100000000"),
+            ("movz	x5, :abs_g2:K", "0x1000000000000"),
+            ("movz	x5, :abs_g0_s:K", "0x10000"),
+            ("movz	x5, :abs_g1_s:K", "0x100000000"),
+            ("movz	x5, :abs_g2_s:K", "0x1000000000000"),
+        ]
+        .iter()
+        .enumerate()
+        {
+            let dir = tempdir(&format!("a64-movw-range-{i}"));
+            let main = format!("	.text\n	.globl __c5_entry\n__c5_entry:\n	{insn}\n	ret\n");
+            let defs = format!("	.globl K\n	.set K, {value}\n");
+            let err = link_a64_err(&dir, &[("m.s", &main), ("d.s", &defs)]);
+            assert!(
+                err.contains("relocation truncated to fit"),
+                "`{insn}` over {value} should be refused: {err}"
+            );
+        }
+    }
+
+    /// A MOVW group over a section-relative symbol holds part of a
+    /// runtime address, and no dynamic form carries an instruction
+    /// field, so an image the loader places refuses it -- the refusal
+    /// GNU ld gives for the same input in a `-pie` / `-shared` link.
+    #[test]
+    fn movw_against_a_placed_symbol_is_refused_in_a_pie() {
+        let dir = tempdir("a64-movw-pie");
+        let main = "	.text\n\
+                    	.globl __c5_entry\n\
+                    __c5_entry:\n\
+                    	movz	x5, :abs_g2_s:tgt\n\
+                    	movk	x5, :abs_g1_nc:tgt\n\
+                    	movk	x5, :abs_g0_nc:tgt\n\
+                    	ret\n\
+                    	.globl tgt\n\
+                    tgt:\n\
+                    	nop\n";
+        let err = link_a64_err(&dir, &[("m.s", main)]);
+        assert!(
+            err.contains("R_AARCH64_MOVW_SABS_G2")
+                && err.contains("can not be used when making a position-independent executable"),
+            "{err}"
+        );
+        assert!(err.contains("m.o(.text+0x0)"), "the site is named: {err}");
+    }
+
+    /// Build a host-native image from one asm source plus a `main` that
+    /// exits nonzero on the first check it fails, run it, and require 0.
+    /// The `main` compiles for the host data model, which is LLP64 on
+    /// Windows, so a 64-bit value the asm returns needs `long long`.
+    #[cfg(target_arch = "aarch64")]
+    fn run_host_image(tag: &str, asm: &str, main: &str) {
+        let dir = tempdir(tag);
+        let exe = dir.join("prog");
+        run(
+            Command::new(badc())
+                .arg("-q")
+                .arg(write(&dir, "unit.s", asm))
+                .arg(write(&dir, "main.c", main))
+                .arg("-o")
+                .arg(&exe)
+                .current_dir(&dir),
+            "build the host-native image",
+        );
+        let out = Command::new(&exe).output().expect("run prog");
+        assert_eq!(
+            out.status.code(),
+            Some(0),
+            "stdout={:?} stderr={:?}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
+    /// The alignment fix on the host: a 16-aligned island read through
+    /// a scaled 16-byte load, in a Mach-O image on macOS, an ELF one on
+    /// Linux and a PE one on Windows.
+    #[cfg(target_arch = "aarch64")]
+    #[test]
+    fn aligned_text_island_runs_on_the_host() {
+        let asm = "	.text\n\
+                   	nop\n\
+                   	nop\n\
+                   	nop\n\
+                   	.balign 16\n\
+                   	.globl isle16\n\
+                   isle16:\n\
+                   	.quad 0x1122334455667788\n\
+                   	.quad 0x99aabbccddeeff00\n\
+                   	.globl load_isle\n\
+                   load_isle:\n\
+                   	adrp	x1, isle16\n\
+                   	ldr	q0, [x1, #:lo12:isle16]\n\
+                   	mov	x0, v0.d[0]\n\
+                   	ret\n\
+                   	.globl isle_addr\n\
+                   isle_addr:\n\
+                   	adrp	x0, isle16\n\
+                   	add	x0, x0, #:lo12:isle16\n\
+                   	ret\n";
+        let main = "extern unsigned long long load_isle(void), isle_addr(void);\n\
+                    int main(void) {\n\
+                    	if (isle_addr() % 16) return 1;\n\
+                    	if (load_isle() != 0x1122334455667788ULL) return 2;\n\
+                    	return 0;\n\
+                    }\n";
+        run_host_image("a64-align-run", asm, main);
+    }
+
+    /// The MOVW groups on the host: a value assembled from four
+    /// unsigned groups, one from the signed top group, and a negative
+    /// one that turns the leading `movz` into a `movn`.
+    #[cfg(target_arch = "aarch64")]
+    #[test]
+    fn movw_constants_run_on_the_host() {
+        let asm = "	.globl KBIG\n\
+                   	.globl KMID\n\
+                   	.globl KNEG\n\
+                   	.set KBIG, 0xfedc89ab1234f0f0\n\
+                   	.set KMID, 0x123456789abc\n\
+                   	.set KNEG, -0x800\n\
+                   	.text\n\
+                   	.globl get_kbig\n\
+                   get_kbig:\n\
+                   	movz	x0, :abs_g3:KBIG\n\
+                   	movk	x0, :abs_g2_nc:KBIG\n\
+                   	movk	x0, :abs_g1_nc:KBIG\n\
+                   	movk	x0, :abs_g0_nc:KBIG\n\
+                   	ret\n\
+                   	.globl get_kmid\n\
+                   get_kmid:\n\
+                   	movz	x0, :abs_g2_s:KMID\n\
+                   	movk	x0, :abs_g1_nc:KMID\n\
+                   	movk	x0, :abs_g0_nc:KMID\n\
+                   	ret\n\
+                   	.globl get_kneg\n\
+                   get_kneg:\n\
+                   	movz	x0, :abs_g2_s:KNEG\n\
+                   	movk	x0, :abs_g1_nc:KNEG\n\
+                   	movk	x0, :abs_g0_nc:KNEG\n\
+                   	ret\n";
+        let main = "extern unsigned long long get_kbig(void), get_kmid(void), get_kneg(void);\n\
+                    int main(void) {\n\
+                    	if (get_kbig() != 0xfedc89ab1234f0f0ULL) return 1;\n\
+                    	if (get_kmid() != 0x123456789abcULL) return 2;\n\
+                    	if (get_kneg() != (unsigned long long)-0x800LL) return 3;\n\
+                    	return 0;\n\
+                    }\n";
+        run_host_image("a64-movw-run", asm, main);
+    }
+
+    /// An `R_AARCH64_ABS64` data slot naming an absolute symbol takes
+    /// the constant, with no load-time relocation behind it.
+    #[test]
+    fn abs64_data_slot_over_an_absolute_symbol_takes_the_constant() {
+        let dir = tempdir("a64-abs64-const");
+        let main = "	.text\n\
+                    	.globl __c5_entry\n\
+                    __c5_entry:\n\
+                    	ret\n\
+                    	.data\n\
+                    	.globl slot\n\
+                    slot:\n\
+                    	.quad K\n";
+        let defs = "	.globl K\n	.set K, 0x123456789abc\n";
+        let (image, map) = link_a64(&dir, &[("m.s", main), ("d.s", defs)]);
+        let at = map_symbol(&map, "slot");
+        let lo = u64::from(word_at(&image, at));
+        let hi = u64::from(word_at(&image, at + 4));
+        assert_eq!(lo | (hi << 32), 0x1234_5678_9abc);
+    }
+}
+
+// COMDAT groups reach the linker from C++ inline functions and from
+// gcc's PIC thunks, and no compiler here emits one, so the inputs are
+// written out directly. x86-64 only: the bodies are machine code.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+mod comdat {
+    use super::{badc, run, tempdir};
+    use std::path::{Path, PathBuf};
+    use std::process::Command;
+
+    const SHT_PROGBITS: u32 = 1;
+    const SHT_SYMTAB: u32 = 2;
+    const SHT_STRTAB: u32 = 3;
+    const SHT_RELA: u32 = 4;
+    const SHT_GROUP: u32 = 17;
+    const SHF_ALLOC: u64 = 0x2;
+    const SHF_EXECINSTR: u64 = 0x4;
+    const SHF_GROUP: u64 = 0x200;
+    const GRP_COMDAT: u32 = 1;
+    const R_X86_64_PLT32: u32 = 4;
+
+    struct Sec<'a> {
+        name: &'a str,
+        flags: u64,
+        body: &'a [u8],
+        /// `(offset, symbol index, type, addend)`.
+        relocs: &'a [(u64, u32, u32, i64)],
+    }
+
+    /// `(name, st_info, one-based section index)`.
+    struct Sym<'a>(&'a str, u8, u16);
+
+    /// Write an ELF64 x86-64 ET_REL object. `group`, where given, is
+    /// `(flags, signature symbol index, zero-based member sections)`.
+    fn write_object(
+        path: &Path,
+        secs: &[Sec<'_>],
+        syms: &[Sym<'_>],
+        group: Option<(u32, u32, &[u32])>,
+    ) {
+        let n = secs.len();
+        let group_shndx = 1 + n as u32;
+        let has_group = group.is_some();
+        let symtab_shndx = group_shndx + u32::from(has_group);
+        let mut shstr = vec![0u8];
+        let name_of = |s: &str, tab: &mut Vec<u8>| -> u32 {
+            let at = tab.len() as u32;
+            tab.extend_from_slice(s.as_bytes());
+            tab.push(0);
+            at
+        };
+        let sec_names: Vec<u32> = secs.iter().map(|s| name_of(s.name, &mut shstr)).collect();
+        let n_group = has_group.then(|| name_of(".group", &mut shstr));
+        let n_symtab = name_of(".symtab", &mut shstr);
+        let n_strtab = name_of(".strtab", &mut shstr);
+        let rela_of: Vec<usize> = (0..n).filter(|&i| !secs[i].relocs.is_empty()).collect();
+        let n_rela: Vec<u32> = rela_of
+            .iter()
+            .map(|&i| name_of(&format!(".rela{}", secs[i].name), &mut shstr))
+            .collect();
+        let n_shstr = name_of(".shstrtab", &mut shstr);
+
+        let mut strtab = vec![0u8];
+        let sym_names: Vec<u32> = syms.iter().map(|s| name_of(s.0, &mut strtab)).collect();
+        let mut symtab = vec![0u8; 24];
+        for (k, s) in syms.iter().enumerate() {
+            let mut e = [0u8; 24];
+            e[0..4].copy_from_slice(&sym_names[k].to_le_bytes());
+            e[4] = s.1;
+            e[6..8].copy_from_slice(&s.2.to_le_bytes());
+            symtab.extend_from_slice(&e);
+        }
+
+        let mut out = vec![0u8; 64];
+        let mut off = Vec::new();
+        for s in secs {
+            off.push(out.len());
+            out.extend_from_slice(s.body);
+            while !out.len().is_multiple_of(8) {
+                out.push(0);
+            }
+        }
+        let group_at = out.len();
+        if let Some((flags, _, members)) = group {
+            out.extend_from_slice(&flags.to_le_bytes());
+            for &m in members {
+                out.extend_from_slice(&(m + 1).to_le_bytes());
+            }
+        }
+        let symtab_at = out.len();
+        out.extend_from_slice(&symtab);
+        let strtab_at = out.len();
+        out.extend_from_slice(&strtab);
+        let mut rela_at = Vec::new();
+        for &i in &rela_of {
+            rela_at.push(out.len());
+            for &(o, sym, ty, add) in secs[i].relocs {
+                out.extend_from_slice(&o.to_le_bytes());
+                out.extend_from_slice(&(((sym as u64) << 32) | ty as u64).to_le_bytes());
+                out.extend_from_slice(&(add as u64).to_le_bytes());
+            }
+        }
+        let shstr_at = out.len();
+        out.extend_from_slice(&shstr);
+        while !out.len().is_multiple_of(8) {
+            out.push(0);
+        }
+        let shoff = out.len();
+
+        let mut hdr = |name: u32,
+                       ty: u32,
+                       flags: u64,
+                       offset: usize,
+                       size: usize,
+                       link: u32,
+                       info: u32,
+                       align: u64,
+                       entsize: u64| {
+            let mut h = [0u8; 64];
+            h[0..4].copy_from_slice(&name.to_le_bytes());
+            h[4..8].copy_from_slice(&ty.to_le_bytes());
+            h[8..16].copy_from_slice(&flags.to_le_bytes());
+            h[24..32].copy_from_slice(&(offset as u64).to_le_bytes());
+            h[32..40].copy_from_slice(&(size as u64).to_le_bytes());
+            h[40..44].copy_from_slice(&link.to_le_bytes());
+            h[44..48].copy_from_slice(&info.to_le_bytes());
+            h[48..56].copy_from_slice(&align.to_le_bytes());
+            h[56..64].copy_from_slice(&entsize.to_le_bytes());
+            out.extend_from_slice(&h);
+        };
+        hdr(0, 0, 0, 0, 0, 0, 0, 0, 0);
+        for (i, s) in secs.iter().enumerate() {
+            hdr(
+                sec_names[i],
+                SHT_PROGBITS,
+                s.flags,
+                off[i],
+                s.body.len(),
+                0,
+                0,
+                1,
+                0,
+            );
+        }
+        if let Some((_, sig, members)) = group {
+            hdr(
+                n_group.unwrap(),
+                SHT_GROUP,
+                0,
+                group_at,
+                4 + 4 * members.len(),
+                symtab_shndx,
+                sig,
+                4,
+                4,
+            );
+        }
+        hdr(
+            n_symtab,
+            SHT_SYMTAB,
+            0,
+            symtab_at,
+            symtab.len(),
+            symtab_shndx + 1,
+            1,
+            8,
+            24,
+        );
+        hdr(n_strtab, SHT_STRTAB, 0, strtab_at, strtab.len(), 0, 0, 1, 0);
+        for (k, &i) in rela_of.iter().enumerate() {
+            hdr(
+                n_rela[k],
+                SHT_RELA,
+                0,
+                rela_at[k],
+                secs[i].relocs.len() * 24,
+                symtab_shndx,
+                1 + i as u32,
+                8,
+                24,
+            );
+        }
+        hdr(n_shstr, SHT_STRTAB, 0, shstr_at, shstr.len(), 0, 0, 1, 0);
+
+        let shnum = 1 + n + usize::from(has_group) + 2 + rela_of.len() + 1;
+        out[0..16].copy_from_slice(&[0x7f, b'E', b'L', b'F', 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        out[16..18].copy_from_slice(&1u16.to_le_bytes()); // ET_REL
+        out[18..20].copy_from_slice(&62u16.to_le_bytes()); // EM_X86_64
+        out[20..24].copy_from_slice(&1u32.to_le_bytes());
+        out[40..48].copy_from_slice(&(shoff as u64).to_le_bytes());
+        out[52..54].copy_from_slice(&64u16.to_le_bytes());
+        out[58..60].copy_from_slice(&64u16.to_le_bytes());
+        out[60..62].copy_from_slice(&(shnum as u16).to_le_bytes());
+        out[62..64].copy_from_slice(&((shnum - 1) as u16).to_le_bytes());
+        std::fs::write(path, out).expect("write object");
+    }
+
+    /// One translation unit's copy of an inline function: `scale`
+    /// multiplies by `k` and sits in its own COMDAT group, and the
+    /// unit's own entry tail-calls it with `arg`.
+    fn unit(dir: &Path, name: &str, caller: &str, k: u8, arg: u8) -> PathBuf {
+        let scale = [0x89, 0xf8, 0x6b, 0xc0, k, 0xc3];
+        let call = [0xbf, arg, 0x00, 0x00, 0x00, 0xe9, 0, 0, 0, 0];
+        let p = dir.join(name);
+        write_object(
+            &p,
+            &[
+                Sec {
+                    name: ".text.scale",
+                    flags: SHF_ALLOC | SHF_EXECINSTR | SHF_GROUP,
+                    body: &scale,
+                    relocs: &[],
+                },
+                Sec {
+                    name: ".text.caller",
+                    flags: SHF_ALLOC | SHF_EXECINSTR,
+                    body: &call,
+                    relocs: &[(6, 1, R_X86_64_PLT32, -4)],
+                },
+            ],
+            &[Sym("scale", 0x22, 1), Sym(caller, 0x12, 2)],
+            Some((GRP_COMDAT, 1, &[0])),
+        );
+        p
+    }
+
+    /// `_start` sums the two units' results and exits with the total.
+    fn main_object(dir: &Path) -> PathBuf {
+        let body = [
+            0xe8, 0, 0, 0, 0, // call from_a
+            0x89, 0xc3, // mov %eax,%ebx
+            0xe8, 0, 0, 0, 0, // call from_b
+            0x01, 0xd8, // add %ebx,%eax
+            0x89, 0xc7, // mov %eax,%edi
+            0xb8, 0x3c, 0x00, 0x00, 0x00, // mov $60,%eax
+            0x0f, 0x05, // syscall
+        ];
+        let p = dir.join("m.o");
+        write_object(
+            &p,
+            &[Sec {
+                name: ".text",
+                flags: SHF_ALLOC | SHF_EXECINSTR,
+                body: &body,
+                relocs: &[(1, 2, R_X86_64_PLT32, -4), (8, 3, R_X86_64_PLT32, -4)],
+            }],
+            &[
+                Sym("_start", 0x12, 1),
+                Sym("from_a", 0x12, 0),
+                Sym("from_b", 0x12, 0),
+            ],
+            None,
+        );
+        p
+    }
+
+    /// Two objects carry the same inline function, each in its own
+    /// COMDAT group, and the bodies differ so the exit status names
+    /// the copy that survived. Without the dedup the link fails on the
+    /// duplicate; with it, the first copy serves both call sites.
+    #[test]
+    fn one_copy_of_a_comdat_inline_function_serves_every_caller() {
+        let dir = tempdir("comdat-inline");
+        let m = main_object(&dir);
+        let a = unit(&dir, "a.o", "from_a", 3, 10);
+        let b = unit(&dir, "b.o", "from_b", 7, 20);
+        let exe = dir.join("prog");
+        run(
+            Command::new(badc())
+                .arg("--ld")
+                .arg("-static")
+                .arg("-e")
+                .arg("_start")
+                .args([&m, &a, &b])
+                .arg("-o")
+                .arg(&exe),
+            "link with comdat groups",
+        );
+        let out = Command::new(&exe).output().expect("run prog");
+        assert_eq!(
+            out.status.code(),
+            Some(90),
+            "10*3 + 20*3: the first group's body serves both callers"
+        );
+        let swapped = dir.join("swapped");
+        run(
+            Command::new(badc())
+                .arg("--ld")
+                .arg("-static")
+                .arg("-e")
+                .arg("_start")
+                .args([&m, &b, &a])
+                .arg("-o")
+                .arg(&swapped),
+            "link with the groups in the other order",
+        );
+        let out = Command::new(&swapped).output().expect("run swapped");
+        assert_eq!(
+            out.status.code(),
+            Some(210),
+            "10*7 + 20*7: first in link order wins"
+        );
+    }
 }

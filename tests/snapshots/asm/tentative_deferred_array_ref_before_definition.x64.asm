@@ -9,34 +9,49 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <main>:
                	leaq	<rip>, %rax
                	leaq	(%rax), %rcx
                	movslq	0x10(%rcx), %rcx
-               	cmpq	$0xb, %rcx
+               	cmpl	$0xb, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	0xd8(%rax), %rcx
                	movslq	0x10(%rcx), %rcx
-               	cmpq	$0x13, %rcx
+               	cmpl	$0x13, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	movq	0x48(%rax), %rcx
-               	testq	%rcx, %rcx
+               	movq	0x48(%rax), %rdx
+               	testq	%rdx, %rdx
                	sete	%cl
                	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
-               	jne	<addr>
+               	testq	%rdx, %rdx
+               	je	<addr>
                	movq	0x48(%rax), %rcx
                	movsbq	(%rcx), %rcx
-               	cmpq	$0x6d, %rcx
+               	cmpl	$0x6d, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
@@ -53,7 +68,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movq	(%rcx), %rcx
                	movslq	0x10(%rcx), %rcx
-               	cmpq	$0xb, %rcx
+               	cmpl	$0xb, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
@@ -71,7 +86,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	movslq	0x10(%rax), %rax
-               	cmpq	$0xd, %rax
+               	cmpl	$0xd, %eax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

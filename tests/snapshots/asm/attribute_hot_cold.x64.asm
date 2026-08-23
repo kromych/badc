@@ -9,6 +9,21 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <fast_path>:
                	leaq	0x1(%rdi), %rax
@@ -26,5 +41,14 @@ Disassembly of section .text:
                	retq
 
 <main>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	callq	<addr>
+               	cmpq	$0x29, %rax
+               	je	<addr>
+               	movl	$0x3, %eax
+               	popq	%rbp
+               	retq
                	xorq	%rax, %rax
+               	popq	%rbp
                	retq

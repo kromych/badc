@@ -446,20 +446,24 @@ fn emit_modrm_mem(code: &mut InsnBuf, reg: u8, base: u8, index: Option<u8>, scal
     }
 }
 
-/// ModRM for a 16-bit address. There is no SIB byte: the r/m field names one
-/// of the fixed base / index pairs over bx, bp, si and di, and the
-/// displacement is 8- or 16-bit.
-fn emit_modrm_mem16(
-    code: &mut InsnBuf,
+/// ModRM + displacement bytes of a 16-bit address, as `(bytes, length)`.
+/// There is no SIB byte: the r/m field names one of the fixed base / index
+/// pairs over bx, bp, si and di, and the displacement is 8- or 16-bit.
+pub(super) fn modrm_mem16(
     reg: u8,
     base: Option<u8>,
-    index: Option<u8>,
+    index: Option<(u8, u8)>,
     disp: i32,
-) -> Result<(), String> {
+) -> Result<([u8; 3], usize), String> {
     const BX: u8 = 3;
     const BP: u8 = 5;
     const SI: u8 = 6;
     const DI: u8 = 7;
+    if index.is_some_and(|(_, scale)| scale != 1) {
+        return Err(String::from("inline asm: 16-bit addressing has no scale"));
+    }
+    let index = index.map(|(i, _)| i);
+    let mut out = [0u8; 3];
     // The pair is unordered: `(%bx,%si)` and `(%si,%bx)` name one address.
     let pair = match (base, index) {
         (Some(b), Some(i)) if i == BX || i == BP => (i, b),
@@ -476,9 +480,9 @@ fn emit_modrm_mem16(
         (Some(BX), None, _) => 7,
         (None, None, _) => {
             // mod=00 rm=110 is the base-less disp16 form.
-            code.push(((reg & 7) << 3) | 6);
-            code.extend_from_slice(&(disp as u16).to_le_bytes());
-            return Ok(());
+            out[0] = ((reg & 7) << 3) | 6;
+            out[1..3].copy_from_slice(&(disp as u16).to_le_bytes());
+            return Ok((out, 3));
         }
         _ => {
             return Err(String::from(
@@ -494,13 +498,18 @@ fn emit_modrm_mem16(
     } else {
         2
     };
-    code.push((mod_ << 6) | ((reg & 7) << 3) | rm);
+    out[0] = (mod_ << 6) | ((reg & 7) << 3) | rm;
     match mod_ {
-        1 => code.push(disp as u8),
-        2 => code.extend_from_slice(&(disp as u16).to_le_bytes()),
-        _ => {}
+        1 => {
+            out[1] = disp as u8;
+            Ok((out, 2))
+        }
+        2 => {
+            out[1..3].copy_from_slice(&(disp as u16).to_le_bytes());
+            Ok((out, 3))
+        }
+        _ => Ok((out, 1)),
     }
-    Ok(())
 }
 
 fn reg_num(o: Opnd) -> u8 {
@@ -553,6 +562,9 @@ fn mode_pat(p: OpPat, f: &Form, opw: u8, mode: Mode) -> OpPat {
         OpPat::Mem(w) => OpPat::Mem(eff_w(w, f.rexw, mode)),
         OpPat::Fixed(n, w) => OpPat::Fixed(n, eff_w(w, f.rexw, mode)),
         OpPat::Rel(sz) => OpPat::Rel(rel_bytes(sz, f, opw)),
+        // The stack group's imm32 is generated for long mode; its field
+        // follows the operand size (`iv`), 16-bit under the 16-bit one.
+        OpPat::Imm(ImmC::Id) if f.rexw == RexW::Default64 => OpPat::Imm(ImmC::Iv),
         other => other,
     }
 }
@@ -677,6 +689,11 @@ pub(crate) fn encode_into(
 /// distinguish "no such form" from "form matched but not encodable"). The
 /// catalogue is sorted by mnemonic and `Mnem`'s Ord matches that order, so this
 /// binary-searches on the integer discriminant to the mnemonic's run of forms.
+///
+/// Forms of equal length are ranked by immediate field width, which is how
+/// GNU as orders its own templates: a 16-bit operand against the accumulator
+/// encodes `add $1, %ax` as either `05 iw` or `83 /0 ib`, both three bytes,
+/// and the sign-extended byte form is the one it picks.
 fn encode_best(
     mnem: Mnem,
     opw: u8,
@@ -687,7 +704,7 @@ fn encode_best(
 ) -> (Option<InsnBuf>, bool) {
     let forms = super::isa_x86_table::FORMS;
     let start = forms.partition_point(|f| f.mnem < mnem);
-    let mut best: Option<InsnBuf> = None;
+    let mut best: Option<(InsnBuf, u8)> = None;
     let mut matched = false;
     let generated = forms[start..].iter().take_while(|f| f.mnem == mnem);
     let supplemental = FORMS_SUPPLEMENT.iter().filter(|f| f.mnem == mnem);
@@ -696,17 +713,21 @@ fn encode_best(
             continue;
         }
         matched = true;
+        let imm = f.imm.and_then(|c| imm_field_bytes(c, opw)).unwrap_or(0);
         if let Ok(buf) = encode_form(f, ops, opw, opw_known, mode, addr)
-            && best.is_none_or(|b| buf.len < b.len)
+            && best.is_none_or(|(b, bi)| (buf.len, imm) < (b.len, bi))
         {
-            best = Some(buf);
+            best = Some((buf, imm));
         }
     }
-    (best, matched)
+    (best.map(|(b, _)| b), matched)
 }
 
 /// Forms the external instruction database omits, encoded by the same
-/// interpreter as the generated catalogue. The segment-descriptor loads
+/// interpreter as the generated catalogue. `inc` / `dec` on a 16- or 32-bit
+/// register have a one-byte `+r` encoding outside 64-bit mode, where those
+/// opcodes are the REX prefix instead; the database carries only the
+/// mode-independent `FF /0` and `FF /1`. The segment-descriptor loads
 /// `lsl` / `lar` take a 16-bit source but the destination may be 32-bit; the
 /// generator's uniform-width `r/m` model drops those mixed-width forms. The
 /// source is `r/m16` regardless of whether the assembler wrote a 16- or
@@ -720,9 +741,74 @@ fn encode_best(
 /// named in the opcode. `invlpga` is the two-operand member of the same class:
 /// the address rides an implicit `rax` and the ASID an implicit `ecx`, so the
 /// compilers emit `invlpga %rax, %ecx` (Intel-ordered `ecx, rax` here); like
-/// `vmsave` the registers are not named in the opcode.
+/// `vmsave` the registers are not named in the opcode. The descriptor-table
+/// and machine-status ops `verr` / `verw` / `lldt` / `ltr` / `sldt` / `str` /
+/// `smsw` / `lmsw` address a 16-bit field in memory whatever width the operand
+/// was written with, and the memory forms take no operand-size prefix, so each
+/// takes a prefixless `MemAny` form beside the register ones. The three that
+/// store into a register (`sldt`, `str`, `smsw`) also write a 32-bit
+/// destination, which is the same encoding without the 0x66 the generated
+/// 16-bit form carries. The stack-adjusting returns `ret imm16` (C2) and
+/// `retf imm16` (CA) are absent from the generated catalogue; the immediate
+/// is 16-bit at every operand size, so each is one form.
 static FORMS_SUPPLEMENT: &[Form] = &[
     Form {
+        mnem: Mnem::Ret,
+        mnemonic: "ret",
+        ops: &[OpPat::Imm(ImmC::Iw)],
+        pp: &[],
+        map: Map::Legacy,
+        opcode: &[0xC2],
+        plus_r: false,
+        rexw: RexW::Default64,
+        reg: RegField::NoReg,
+        rm: 255,
+        imm: Some(ImmC::Iw),
+        imm_op: 0,
+    },
+    Form {
+        mnem: Mnem::Retf,
+        mnemonic: "retf",
+        ops: &[OpPat::Imm(ImmC::Iw)],
+        pp: &[],
+        map: Map::Legacy,
+        opcode: &[0xCA],
+        plus_r: false,
+        rexw: RexW::Default64,
+        reg: RegField::NoReg,
+        rm: 255,
+        imm: Some(ImmC::Iw),
+        imm_op: 0,
+    },
+    Form {
+        mnem: Mnem::Inc,
+        mnemonic: "inc",
+        ops: &[OpPat::Reg(W::V)],
+        pp: &[],
+        map: Map::Legacy,
+        opcode: &[0x40],
+        plus_r: true,
+        rexw: RexW::W0,
+        reg: RegField::NoReg,
+        rm: 0,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Dec,
+        mnemonic: "dec",
+        ops: &[OpPat::Reg(W::V)],
+        pp: &[],
+        map: Map::Legacy,
+        opcode: &[0x48],
+        plus_r: true,
+        rexw: RexW::W0,
+        reg: RegField::NoReg,
+        rm: 0,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
         mnem: Mnem::Lsl,
         mnemonic: "lsl",
         ops: &[OpPat::Reg(W::Q), OpPat::Rm(W::Q)],
@@ -858,6 +944,132 @@ static FORMS_SUPPLEMENT: &[Form] = &[
         plus_r: false,
         rexw: RexW::W0,
         reg: RegField::Ext(5),
+        rm: 0,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Lldt,
+        mnemonic: "lldt",
+        ops: &[OpPat::MemAny],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x00],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::Ext(2),
+        rm: 0,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Ltr,
+        mnemonic: "ltr",
+        ops: &[OpPat::MemAny],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x00],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::Ext(3),
+        rm: 0,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Sldt,
+        mnemonic: "sldt",
+        ops: &[OpPat::MemAny],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x00],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::Ext(0),
+        rm: 0,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Sldt,
+        mnemonic: "sldt",
+        ops: &[OpPat::Rm(W::L)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x00],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::Ext(0),
+        rm: 0,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Str,
+        mnemonic: "str",
+        ops: &[OpPat::MemAny],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x00],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::Ext(1),
+        rm: 0,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Str,
+        mnemonic: "str",
+        ops: &[OpPat::Rm(W::L)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x00],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::Ext(1),
+        rm: 0,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Smsw,
+        mnemonic: "smsw",
+        ops: &[OpPat::MemAny],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x01],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::Ext(4),
+        rm: 0,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Smsw,
+        mnemonic: "smsw",
+        ops: &[OpPat::Rm(W::L)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x01],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::Ext(4),
+        rm: 0,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Lmsw,
+        mnemonic: "lmsw",
+        ops: &[OpPat::MemAny],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x01],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::Ext(6),
         rm: 0,
         imm: None,
         imm_op: 255,
@@ -1041,6 +1253,17 @@ fn encode_form(
     addr: u8,
 ) -> Result<InsnBuf, String> {
     let mut code = InsnBuf::new();
+    // Opcodes 0x40..0x4F are the REX prefix in long mode, so a legacy `+r`
+    // form based there encodes only in 16- and 32-bit modes.
+    if mode == Mode::Bits64
+        && f.map == Map::Legacy
+        && f.plus_r
+        && matches!(f.opcode, [op] if (0x40..0x50).contains(op))
+    {
+        return Err(String::from(
+            "inline asm: the one-byte `inc`/`dec` form is a REX prefix in 64-bit mode",
+        ));
+    }
     // Address-size prefix: `67` selects the non-default address size. A form
     // with no memory r/m operand addresses nothing and takes none.
     let rm_op = (f.rm != 255).then(|| ops[f.rm as usize]);
@@ -1069,12 +1292,25 @@ fn encode_form(
     } else {
         mode.opsize()
     };
+    // The stack / near-branch group encodes 16- and 64-bit operands in long
+    // mode and 16- and 32-bit ones elsewhere.
+    if f.rexw == RexW::Default64 && opw_known && opw == (if mode == Mode::Bits64 { 4 } else { 8 }) {
+        return Err(format!(
+            "inline asm: operand size {opw} is not encodable for this group in this mode"
+        ));
+    }
     // An operandless form, and a descriptor-table op, take their width from
     // the mnemonic's size suffix (`retl` and `lgdtl` in a `.code16` stub);
     // with no suffix it is the mode default, which the 64-bit exclusion below
     // leaves unprefixed.
     let desc_table = matches!(f.mnem, Mnem::Lgdt | Mnem::Lidt | Mnem::Sgdt | Mnem::Sidt);
-    let sized = has_v || pp66 || desc_table || pinned_width(f) || (f.ops.is_empty() && opw_known);
+    // A stack-group form with an established width is operand-sized even when
+    // no slot carries the `v` class (`push imm8`).
+    let sized = has_v
+        || pp66
+        || desc_table
+        || pinned_width(f)
+        || (opw_known && (f.ops.is_empty() || f.rexw == RexW::Default64));
     if sized && fopw != dflt && fopw != 8 {
         code.push(0x66);
     }
@@ -1170,10 +1406,9 @@ fn encode_form(
                 disp,
                 ..
             }) if addr == 2 => {
-                if scale != 1 {
-                    return Err(String::from("inline asm: 16-bit addressing has no scale"));
-                }
-                emit_modrm_mem16(&mut code, regfield, Some(base), index, disp)?
+                let (bytes, n) =
+                    modrm_mem16(regfield, Some(base), index.map(|i| (i, scale)), disp)?;
+                code.extend_from_slice(&bytes[..n]);
             }
             Some(Opnd::Mem {
                 base,
@@ -1193,7 +1428,8 @@ fn encode_form(
                 code.extend_from_slice(&disp.to_le_bytes());
             }
             Some(Opnd::AbsMem { disp, .. }) if addr == 2 => {
-                emit_modrm_mem16(&mut code, regfield, None, None, disp)?
+                let (bytes, n) = modrm_mem16(regfield, None, None, disp)?;
+                code.extend_from_slice(&bytes[..n]);
             }
             Some(Opnd::AbsMem { disp, .. }) if mode != Mode::Bits64 => {
                 // mod=00 rm=101 is the plain disp32 form; only long mode reads
@@ -1225,8 +1461,14 @@ fn encode_form(
         }
     }
 
-    // Immediate.
+    // Immediate. The stack group's imm32 field follows the operand size, as
+    // in `mode_pat`.
     if let Some(c) = f.imm {
+        let c = if f.rexw == RexW::Default64 && c == ImmC::Id {
+            ImmC::Iv
+        } else {
+            c
+        };
         let val = if f.imm_op == 255 {
             1
         } else {

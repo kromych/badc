@@ -2,8 +2,9 @@
 """Pre-push gate: enforce the same fmt + clippy + no-default-features
 CI jobs locally and reject non-ASCII bytes in tracked source files.
 
-`cargo fmt --check`, `cargo clippy --release --all-targets -- -D
-warnings`, and `cargo build --no-default-features --lib` run here. A
+`cargo fmt --check`, `cargo clippy --all-targets -- -D warnings` with
+and without `--features full`, and `cargo build --no-default-features
+--lib` run here, each matching its CI counterpart's profile. A
 failure aborts the push so a rebase or fix can land first. The ASCII
 check guards against zero-width / homoglyph characters slipping into
 Rust source, headers, fixtures, or scripts. Bypass with
@@ -120,6 +121,56 @@ def check_ascii(root: Path) -> int:
     return 0
 
 
+# Code behind `cfg(target_os = ...)` is not compiled for the host, so
+# clippy cannot see it: a lint in a Linux-only path passes every check on a
+# macOS host and fails in CI. Linting once per target family closes that.
+# `clippy` type-checks without linking, so no cross linker is needed.
+CROSS_LINT_TARGETS = ("x86_64-unknown-linux-gnu", "x86_64-pc-windows-gnu")
+
+
+def installed_targets() -> set[str]:
+    try:
+        out = subprocess.run(
+            ["rustup", "target", "list", "--installed"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return set()
+    return {line.strip() for line in out.stdout.splitlines() if line.strip()}
+
+
+def cross_lint(root: Path) -> int:
+    have = installed_targets()
+    for target in CROSS_LINT_TARGETS:
+        if target not in have:
+            print(
+                f"[pre-push] skipping clippy for {target}: target not installed "
+                f"(rustup target add {target})"
+            )
+            continue
+        rc = run(
+            f"cargo clippy --target {target} --all-targets --features full -- -D warnings",
+            [
+                "cargo",
+                "clippy",
+                "--target",
+                target,
+                "--all-targets",
+                "--features",
+                "full",
+                "--",
+                "-D",
+                "warnings",
+            ],
+            root,
+        )
+        if rc != 0:
+            return rc
+    return 0
+
+
 def main() -> int:
     out = subprocess.run(
         ["git", "rev-parse", "--show-toplevel"],
@@ -134,12 +185,15 @@ def main() -> int:
     rc = run("cargo fmt --check", ["cargo", "fmt", "--check"], root)
     if rc != 0:
         return rc
+    # Debug, not release, because that is what the `fmt + clippy` CI job
+    # runs. `--release` clears `debug_assertions`, so a lint inside a
+    # `cfg(debug_assertions)` path is invisible to a release-only run and
+    # reaches CI instead.
     rc = run(
-        "cargo clippy --release --all-targets -- -D warnings",
+        "cargo clippy --all-targets -- -D warnings",
         [
             "cargo",
             "clippy",
-            "--release",
             "--all-targets",
             "--",
             "-D",
@@ -153,11 +207,10 @@ def main() -> int:
     # above skips the `badc` binary and the CLI integration tests (both
     # gated on `full`). Lint them too.
     rc = run(
-        "cargo clippy --release --all-targets --features full -- -D warnings",
+        "cargo clippy --all-targets --features full -- -D warnings",
         [
             "cargo",
             "clippy",
-            "--release",
             "--all-targets",
             "--features",
             "full",
@@ -167,6 +220,9 @@ def main() -> int:
         ],
         root,
     )
+    if rc != 0:
+        return rc
+    rc = cross_lint(root)
     if rc != 0:
         return rc
     # Matches the `feature combos` CI job's first step. The lib still

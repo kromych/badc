@@ -3,7 +3,7 @@
 // which spawns a pthread to verify the storage is genuinely
 // per-thread and not just a regular global. This fixture passes on
 // any target where the parser accepts the keyword and the codegen
-// has a TLS lowering (currently Linux/aarch64 + Linux/x86_64).
+// has a TLS lowering.
 
 #include <stdlib.h>
 

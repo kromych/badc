@@ -10,6 +10,8 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#0x1
+               	brk	#0x1
+               	brk	#0x1
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
@@ -17,7 +19,8 @@ Disassembly of section .text:
                	sub	sp, sp, #0x500
                	mov	x0, #0x0                // =0
                	b	<addr>
-               	sub	x2, x29, #0x100
+               	sub	x2, x29, #0x500
+               	sxtw	x1, w0
                	lsl	x3, x1, #2
                	add	x2, x2, x3
                	scvtf	s0, x1
@@ -26,30 +29,25 @@ Disassembly of section .text:
                	fmul	s0, s0, s17
                	str	s0, [x2]
                	add	x0, x1, #0x1
-               	sxtw	x1, w0
-               	cmp	x1, #0x40
+               	cmp	w0, #0x40
                	b.lt	<addr>
-               	sub	x0, x29, #0x100
+               	sub	x0, x29, #0x500
                	ldr	s0, [x0, #0x20]
-               	mov	x0, #0x40000000         // =1073741824
-               	fmov	s17, w0
+               	mov	x1, #0x40000000         // =1073741824
+               	fmov	s17, w1
                	fcmp	s0, s17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x500
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x1, x29, #0x100
-               	mov	x0, #0x42c60000         // =1120272384
-               	fmov	s16, w0
-               	str	s16, [x1]
-               	sub	x1, x29, #0x100
-               	ldr	s0, [x1]
-               	fmov	s17, w0
+               	mov	x1, #0x42c60000         // =1120272384
+               	fmov	s16, w1
+               	str	s16, [x0]
+               	ldr	s0, [x0]
+               	fmov	s17, w1
                	fcmp	s0, s17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x500
                	ldp	x29, x30, [sp], #0x10

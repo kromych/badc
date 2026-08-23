@@ -183,6 +183,12 @@ impl Compiler {
                 // constants.
                 i = self.parse_constant_int()?;
             }
+            // Inside a function the enumerator has block scope (C99
+            // 6.2.1p4): a name the current scope already declared is a
+            // redeclaration (6.7p3); otherwise the outer binding is
+            // saved and restored at scope exit. File scope binds
+            // permanently.
+            self.rebind_scoped(idx)?;
             self.symbols[idx].class = Token::Num as i64;
             // During the body the constant carries its value's own type
             // so a reference from a later enumerator converts correctly;

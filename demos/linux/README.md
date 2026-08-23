@@ -61,11 +61,25 @@ kernel and a compiler of different vintages disagree over warnings the kernel
 promotes to errors. The `.cmd` file count is reported and is what says whether
 the build was usable.
 
-The build is native per architecture: run it on a box of the architecture being
-measured.
+`--arch` selects the target rather than following the host: kbuild is given
+`ARCH`, and `CROSS_COMPILE` plus prefixed `--real-cc` / `--real-ld` defaults
+when the target is not the host. A cross target whose `<triple>-` toolchain is
+not on PATH is refused, naming the tools it wants, and a configured tree whose
+architecture is not the one asked for fails at the configure step rather than
+at the missing image target later. Measuring a target on a box of its own
+architecture is still preferred: it is what CI and the pre-push gate do.
+
+One tree at a time is written. `setup.py` and a building `verify.py` hold the
+tree exclusively (`ktree.py`), and a second run is refused naming the first
+rather than queued. Two runs sharing a tree delete each other's inputs -- a
+second run's `make clean` removes the generated sources the first is
+compiling, and the first reports a compiler that cannot read a source, at
+whichever unit the two overlapped on. The gate names one cached tree per box,
+so two runs meet there by default; `--kernel-dir` points a run at its own.
 
 Requirements for the reference build: gcc, make, flex, bison, bc, and the
-libelf + openssl development headers.
+libelf + openssl development headers; for a cross target also the matching
+`aarch64-linux-gnu-*` / `x86_64-linux-gnu-*` toolchain.
 
 ## How the sweep works
 
@@ -77,7 +91,7 @@ level is honored (`-O1` and above become badc `-O`; `-O0` units -- e.g. ones
 that `#error` under `__OPTIMIZE__` -- stay plain), and everything else is
 dropped -- warnings, `-g`/`-std`, and the gcc code-model/hardening set
 (`-mcmodel=kernel`, `-mno-red-zone`, `-fno-strict-aliasing`,
-`-fstack-protector*`, ...) have no badc spelling. Each unit runs as
+`-ftrivial-auto-var-init=`, ...) have no badc spelling. Each unit runs as
 `badc --gnu -q -c --target=<triple>` from the kernel tree (Kbuild paths are
 relative). Assembly units (`.S`) are out of scope and counted separately, as
 are `.cmd` files that hold no kernel C compile (host tools, linker steps).
@@ -155,6 +169,46 @@ compiler under test rather than the one being measured.
 
 Prerequisite, as for the sweep: a completed build. A `.cmd` file exists
 only for an object the tree has already built.
+
+## Cost of a compile (`timing.py`, `timing_report.py`)
+
+The sweep records whether a unit compiles; `timing.py` records what it cost.
+It replays the same corpus and writes a JSON record per unit -- wall time,
+user and system CPU and peak RSS from the child's own `wait4` rusage, plus
+the input sizes the cost should scale against. `--stride N` samples every
+Nth unit of the path-sorted corpus, which spreads the sample across
+subsystems rather than truncating it; `-j1` keeps the per-unit numbers free
+of contention.
+
+```sh
+python3 demos/linux/timing.py --kernel-dir <built tree> \
+    --badc target/release/badc --stride 6 --mode both \
+    --time-passes --reference gcc -j1 --out /tmp/cost.json
+python3 demos/linux/timing_report.py /tmp/cost.json
+```
+
+`--mode both` times `-E` and `-c` over the same unit, so their difference
+isolates the post-preprocessor cost with no instrumentation at all.
+
+`--time-passes` adds the per-pass breakdown, read from the `pass:` lines a
+`--features codegen_test` build writes to stderr under `BADC_TIME_PASSES`.
+The timers do not cover every instruction the process executes, so the report
+states the uninstrumented remainder as its own line rather than folding it
+into a pass. A label marked `[nested]` times a region inside another timed
+pass; it is listed among the costliest passes and kept out of the phase
+totals, so the columns still add up.
+
+`--reference cc` compiles each unit with a second compiler as well, on the
+command kbuild recorded. That line carries work badc's rewritten flag set
+does not do (warnings, patchable function entries), so the
+ratio is build cost against build cost rather than pass for pass; a
+per-unit distribution and the units badc is furthest behind on come with it.
+
+`timing_report.py` also fits cost against preprocessed and object bytes by
+decile and reports a log-log slope, which is how a superlinear phase shows
+itself. `--exclude <substring>` drops units from the aggregate: one
+pathological unit can own most of a corpus and make every other share
+unreadable.
 
 ## badc-probed configuration (opt-in)
 
@@ -260,6 +314,37 @@ and gas assembles the unit. gas taking what badc's assembler does not yet
 implement is the expected state, so the counts are the measurement rather
 than a gate. A unit badc assembles is recorded `badc-asm`.
 
+The mitigation flags are forwarded verbatim rather than dropped
+(`-mindirect-branch*`, `-mfunction-return=`, `-mharden-sls=`,
+`-fcf-protection=`, `-mbranch-protection=`): each changes what the object
+guarantees, and the flags are probed with `cc-option`, which the shim
+delegates to the reference compiler -- so a flag the shim withheld would
+leave the unit unprotected under a configuration that says otherwise.
+`arch/arm64/kernel/pi/map_kernel.c` drops the shadow call stack on the
+strength of `CONFIG_ARM64_PTR_AUTH_KERNEL`, so the flag behind it has to
+reach badc. badc rejects the argument sets it does not implement, so a
+spelling it does not cover fails the unit rather than building it
+unprotected.
+
+Every other flag on the command line is accounted for too. It is
+forwarded, or listed in `UNSUPPORTED_*` -- badc has no equivalent and the
+object's difference is measured or not ruled out, so each unit that
+carries one reports `<flag> not applied` down the diagnostic channel and
+the count lands in the build's summary -- or listed in `IGNORE_*` with the
+measurement showing badc's object is the same without it. A flag on no
+list fails the unit and names itself in the manifest. Silently discarding
+what the shim does not recognize is what let `-fno-jump-tables` reach no
+compiler while every `.o.cmd` recorded it: the probe behind it is
+delegated to the reference compiler, so nothing in the build's own
+artifacts disagreed. On the pinned `defconfig` the unsupported set is
+`-ftrivial-auto-var-init=zero`,
+`-fzero-init-padding-bits=all`, `-fstrict-flex-arrays=3`,
+`-fpatchable-function-entry=` (x86_64) and
+`-fasynchronous-unwind-tables`:
+those properties are not in the built image whatever the configuration
+says. `buildcc.py --self-test` checks the classification and takes no
+tree; `verify.py --self-test` runs it, which CI does on every push.
+
 Everything else (probes, `-E`, `-S`, links, the host tools under
 `scripts/` and `tools/`) goes to gcc untouched, so the configuration and
 object population match the reference corpus. Linking is `ldshim.py`'s,
@@ -268,8 +353,8 @@ In particular `scripts/cc-version.sh` classifies the reference
 compiler (`-E`), keeping `CONFIG_GCC_VERSION` at the reference
 toolchain's value: identification follows the compiler that built the
 objects, classification stays with the toolchain whose bug-history gates
-the corpus was captured under (badc's claimed `__GNUC__`, 4.2.1, sits
-below the kernel's gcc floor).
+the corpus was captured under (badc's claimed `__GNUC__`, 4.3.0, sits
+below the kernel's gcc floor, 8.1.0).
 
 The one way a kernel C unit reaches another compiler is `$BADC_FALLBACK`,
 which names units explicitly. It exists to bisect a suspected miscompile:
@@ -353,16 +438,15 @@ except what `$BADC_LD_FALLBACK` names:
   implement, so kbuild drops them rather than passing options that would be
   accepted and ignored.
 
-badc's `--version` prints `GNU ld (badc <version>) 2.30`, which
-`scripts/ld-version.sh` reads as a BFD-flavour linker at binutils 2.30 --
-the kernel's own floor, and deliberately no higher, so nothing gated on a
-newer linker is claimed. Two configuration symbols move as a result:
-`CONFIG_LD_VERSION` records 23000, and `CONFIG_ARM64_PTR_AUTH_KERNEL` turns
-off (`arch/arm64/Kconfig` gates it on `LD_VERSION >= 23301`). The latter
-costs nothing here: `buildcc.py` already withholds `-mbranch-protection=`
-specs naming `pac-ret`, because badc emits no pointer-authentication
-prologue. `CONFIG_DEBUG_INFO_COMPRESSED_{ZLIB,ZSTD}` also disappear, because
-badc rejects `--compress-debug-sections`.
+badc's `--version` prints `GNU ld (badc <version>) 2.33.1`, which
+`scripts/ld-version.sh` reads as a BFD-flavour linker at binutils 2.33.1 --
+the level at which `arch/arm64/Kconfig` enables `ARM64_PTR_AUTH_KERNEL`, and
+deliberately no higher, so nothing gated on a newer linker is claimed.
+`CONFIG_LD_VERSION` records 23301 as a result. On the pinned release that is
+the only `LD_VERSION` threshold in `(23000, 23301]`; the rest are 23600 and
+above, and no x86 Kconfig reads the symbol at all.
+`CONFIG_DEBUG_INFO_COMPRESSED_{ZLIB,ZSTD}` still disappear, because badc
+rejects `--compress-debug-sections`.
 
 `BADC_LD_FALLBACK` names output paths to leave to the real linker, the
 bisect tool for a suspected bad link; each is recorded as `fallback`, so a
@@ -503,7 +587,7 @@ nothing and names no linker at all.
 
 The booted image carries the same statement, so it is checked there too. The
 banner's compiler identification is followed by the one the build probed from
-`$(LD)` -- `GNU ld (badc <version>) 2.30` under `--linker badc`, the real
+`$(LD)` -- `GNU ld (badc <version>) 2.33.1` under `--linker badc`, the real
 linker's version string under `--linker reference` -- and each boot must
 agree with the run's choice. A stale image from the other lane therefore
 fails rather than passing as this one's.
@@ -515,6 +599,16 @@ that compiled fewer units than `--expect-units` -- make skips units whose
 objects are current, so without a floor a tree that rebuilt nothing would
 pass while testing nothing. For the same reason the tree is rebuilt from
 clean by default.
+
+What badc wrote on the compiles and links that *succeeded* is measured
+rather than gated. A warning comes with `rc == 0`, so the shims append it
+to `$BADC_WARN_LOG` -- `warnings-<arch>.txt` in the work directory, one
+line per diagnostic tagged with the unit -- and the gate reports a count
+per cause, the message with its site folded out. A defconfig x86_64 build
+writes tens of thousands of lines under about 130 distinct causes; every
+cause is listed however rare, so one warning among thousands stays
+visible. `diags.py <log>` prints the same summary for a log already
+produced, and `packages.py` reports it the same way.
 
 Per-arch differences (target triple, image path, qemu machine and console)
 are a table in the script; `--arch` selects the row and defaults to the host.

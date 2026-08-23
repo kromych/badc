@@ -88,9 +88,10 @@ fn dot_s_assembles_to_an_object() {
     let bytes = std::fs::read(d.join("leaf.o")).expect("object written next to the source");
     assert_eq!(&bytes[..4], b"\x7fELF");
     let names = section_names(&bytes);
-    assert!(
-        names.iter().filter(|n| *n == ".text").count() >= 1,
-        "assembled `.text` missing: {names:?}"
+    assert_eq!(
+        names.iter().filter(|n| *n == ".text").count(),
+        1,
+        "assembled `.text` is not named exactly once: {names:?}"
     );
 }
 
@@ -240,6 +241,140 @@ fn visibility(bytes: &[u8], want: &str) -> Option<u8> {
         }
     }
     None
+}
+
+/// `(name, binding, section index)` of every named symbol table entry.
+fn sym_bindings(bytes: &[u8]) -> Vec<(String, u8, u16)> {
+    sym_table(bytes)
+        .into_iter()
+        .filter(|s| !s.0.is_empty())
+        .map(|(n, info, shndx, _, _)| (n, info >> 4, shndx))
+        .collect()
+}
+
+/// `(name, st_info, st_shndx, st_value, st_size)` of every `.symtab` entry,
+/// in table order.
+fn sym_table(bytes: &[u8]) -> Vec<(String, u8, u16, u64, u64)> {
+    let u16at = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
+    let u32at = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
+    let u64at = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let shoff = u64at(0x28) as usize;
+    let (shentsize, shnum) = (u16at(0x3a), u16at(0x3c));
+    let mut out = Vec::new();
+    for i in 0..shnum {
+        let sh = shoff + i * shentsize;
+        if u32at(sh + 4) != 2 {
+            continue;
+        }
+        let off = u64at(sh + 0x18) as usize;
+        let size = u64at(sh + 0x20) as usize;
+        let stroff = u64at(shoff + u32at(sh + 0x28) * shentsize + 0x18) as usize;
+        for e in (0..size).step_by(24) {
+            let sym = off + e;
+            let n = stroff + u32at(sym);
+            let end = bytes[n..].iter().position(|&b| b == 0).unwrap();
+            let name = String::from_utf8(bytes[n..n + end].to_vec()).unwrap();
+            out.push((
+                name,
+                bytes[sym + 4],
+                u16at(sym + 6) as u16,
+                u64at(sym + 8),
+                u64at(sym + 16),
+            ));
+        }
+    }
+    out
+}
+
+/// A `.globl` naming a symbol the unit neither defines nor references still
+/// gets an undefined global entry; a `.weak` in the same position gets no
+/// entry at all. Both are GNU as 2.46.1's symbol table for the same source,
+/// and `ld -r` carries the undefined global into the next link stage.
+#[test]
+fn an_unreferenced_globl_declaration_reaches_the_symbol_table() {
+    const STB_GLOBAL: u8 = 1;
+    let bytes = object_of(
+        "globl-undef",
+        "\t.globl before_section\n\t.weak weak_before\n\t.text\n\t.globl after_section\n\
+         \t.weak weak_after\n\t.globl defined_sym\ndefined_sym:\n\tret\n",
+    );
+    let syms = sym_bindings(&bytes);
+    let find = |n: &str| syms.iter().find(|s| s.0 == n).cloned();
+    const SHN_UNDEF: u16 = 0;
+    assert_eq!(
+        find("before_section"),
+        Some((String::from("before_section"), STB_GLOBAL, SHN_UNDEF)),
+        "a `.globl` before any section directive",
+    );
+    assert_eq!(
+        find("after_section"),
+        Some((String::from("after_section"), STB_GLOBAL, SHN_UNDEF)),
+        "a `.globl` inside a section",
+    );
+    assert!(find("defined_sym").is_some_and(|s| s.2 != SHN_UNDEF));
+    assert_eq!(find("weak_before"), None, "an unreferenced `.weak`");
+    assert_eq!(find("weak_after"), None, "an unreferenced `.weak`");
+}
+
+/// An immediate whose expression folds to a value already fixed where the
+/// instruction sits takes the operand's `imm8` form, as GNU as 2.46.1 does;
+/// the kernel's boot decompressor writes `subl $rva(1b), %ebp` this way. A
+/// form with no `imm8` keeps the wide field, and so does a reference to a
+/// label the instruction's own width would move -- there GNU as settles the
+/// field before the layout, and the two widths give different values.
+#[test]
+fn a_folded_expression_immediate_takes_the_narrow_form() {
+    let back = "\t.text\nstart:\n\tcall 1f\n1:\tpopq %rbp\n";
+    let t = text_of(
+        "imm-narrow",
+        &format!(
+            "{back}\tsubl $(1b - start), %ebp\n\tsubq $(1b - start), %rbp\n\
+             \tsubw $(1b - start), %bp\n\timull $(1b - start), %ebp, %ebp\n\
+             \tpushq $(1b - start)\n\taddl $(1b - start), (%rsp)\n"
+        ),
+    );
+    assert_eq!(
+        &t[6..],
+        [
+            0x83, 0xed, 0x05, // subl
+            0x48, 0x83, 0xed, 0x05, // subq
+            0x66, 0x83, 0xed, 0x05, // subw
+            0x6b, 0xed, 0x05, // imull
+            0x6a, 0x05, // pushq
+            0x83, 0x04, 0x24, 0x05, // addl to memory
+        ],
+    );
+    // `test` and `mov` have no imm8 form, so the wide field stands.
+    let t = text_of(
+        "imm-wide-form",
+        &format!("{back}\ttestl $(1b - start), %ebp\n\tmovl $(1b - start), %ebp\n"),
+    );
+    assert_eq!(&t[6..], [0xf7, 0xc5, 0x05, 0, 0, 0, 0xbd, 0x05, 0, 0, 0]);
+    // A forward reference keeps the wide field and its value, matching the
+    // layout GNU as settles on.
+    let t = text_of(
+        "imm-forward",
+        "\t.text\nlo:\n\tsubl $(hi - lo), %ebp\n\tnop\n\tnop\nhi:\n\tnop\n",
+    );
+    assert_eq!(&t[..6], [0x81, 0xed, 0x08, 0, 0, 0]);
+}
+
+/// `inc` / `dec` on a 16- or 32-bit register take the one-byte `0x40+rd` /
+/// `0x48+rd` form outside 64-bit mode, where those opcodes are the REX
+/// prefix instead. Every expectation is GNU as 2.46.1's encoding of the
+/// same source; the kernel's `efi-mixed.S` carries the 32-bit form.
+#[test]
+fn one_byte_inc_and_dec_encode_outside_long_mode() {
+    let t = text_of(
+        "inc32",
+        "\t.code32\n\tinc %ecx\n\tdec %ecx\n\tinc %cx\n\tinc %cl\n\tincl (%ecx)\n",
+    );
+    assert_eq!(t, [0x41, 0x49, 0x66, 0x41, 0xfe, 0xc1, 0xff, 0x01]);
+    let t = text_of("inc16", "\t.code16\n\tinc %cx\n\tdec %cx\n\tinc %ecx\n");
+    assert_eq!(t, [0x41, 0x49, 0x66, 0x41]);
+    // In 64-bit mode the short form is a REX prefix, so the ModRM one stands.
+    let t = text_of("inc64", "\t.code64\n\tinc %ecx\n\tdec %ecx\n\tinc %rcx\n");
+    assert_eq!(t, [0xff, 0xc1, 0xff, 0xc9, 0x48, 0xff, 0xc1]);
 }
 
 #[test]
@@ -509,11 +644,26 @@ int f(unsigned *p)
     }
 }
 
+/// `.set name, .` assigns the location counter's value, not an alias to a
+/// symbol spelled `.`: the name reads back as a label at that spot. GNU as
+/// 2.46 fills the same values.
+#[test]
+fn a_set_to_the_location_counter_defines_a_label() {
+    let b = object_of(
+        "set-dot-label",
+        "\t.text\na:\n\tnop\n\t.set here, .\n\tnop\nb:\n\tnop\n\
+         \t.data\n\t.byte here - a\n\t.byte b - here\n\t.long here - a\n",
+    );
+    assert_eq!(section64(&b, ".data"), [1, 1, 1, 0, 0, 0]);
+}
+
 #[test]
 fn assembler_options_are_checked_rather_than_passed_on() {
     let d = dir("wa");
     write(&d, "leaf.s", LEAF);
-    // The two options the kernel's assembly units carry.
+    // The options the kernel's assembly units carry. `-march=` is the
+    // arm64 defconfig's, and refusing it failed the first unit of the
+    // build -- an instruction-set ceiling selects nothing badc varies.
     run_ok(
         &d,
         &[
@@ -522,6 +672,7 @@ fn assembler_options_are_checked_rather_than_passed_on() {
             &format!("--target={TARGET}"),
             "-Wa,--fatal-warnings",
             "-Wa,-mrelax-relocations=no",
+            "-Wa,-march=armv8.5-a",
             "leaf.s",
             "-o",
             "leaf.o",
@@ -785,13 +936,88 @@ fn code16_same_section_branches_resolve_in_place() {
     );
 }
 
-/// Contents of the first non-empty `.text`, from an object of either
-/// ELF class.
+/// The same source relaxes to the same `rel8` bytes under `.code32` and
+/// `.code64`: only the long form's displacement width varies by mode.
+#[test]
+fn code32_and_code64_short_branches_take_rel8() {
+    let bytes = [0x90, 0xeb, 0xfd, 0x90, 0xeb, 0x01, 0x90, 0x90, 0x74, 0xf6];
+    let body = "c:\tnop\n\tjmp c\n\tnop\n\tjmp f\n\tnop\nf:\tnop\n\tje c\n";
+    let t = text_of("code32-br", &format!("\t.code32\n\t.text\n{body}"));
+    assert_eq!(t, bytes);
+    let t = text_of("code64-br", &format!("\t.text\n{body}"));
+    assert_eq!(t, bytes);
+}
+
+/// `jcxz` / `jecxz` / `jrcxz` are one `E3 rel8` opcode; the counter the name
+/// spells is the address size, so the name off the mode's default carries the
+/// `67` prefix. Bytes are GNU as 2.46.1's for the same unit.
+#[test]
+fn e3_branches_take_the_address_size_prefix_by_mode() {
+    const SRC: &str = concat!(
+        "\t.code16\n",
+        "a:\tjcxz a\n",  // e3 fe
+        "b:\tjecxz b\n", // 67 e3 fd
+        "\t.code32\n",
+        "c:\tjecxz c\n", // e3 fe
+        "d:\tjcxz d\n",  // 67 e3 fd
+        "\t.code64\n",
+        "e:\tjecxz e\n", // 67 e3 fd
+        "f:\tjrcxz f\n", // e3 fe
+    );
+    assert_eq!(
+        text_of("e3-branches", SRC),
+        [
+            0xe3, 0xfe, 0x67, 0xe3, 0xfd, 0xe3, 0xfe, 0x67, 0xe3, 0xfd, 0x67, 0xe3, 0xfd, 0xe3,
+            0xfe
+        ]
+    );
+    // A counter the mode cannot address is rejected, as GNU as rejects it.
+    let d = dir("e3-reject");
+    write(&d, "r.s", "x:\tjcxz x\n");
+    let (ok, text) = run(&d, &["-q", "-c", "--target=linux-x64", "r.s", "-o", "r.o"]);
+    assert!(!ok && text.contains("64-bit mode"), "{text}");
+}
+
+/// Opmask registers as first-class operands in a `.S` unit, where basic asm
+/// reads `%kN` under a single `%` as a register (extended asm keeps GCC's
+/// `%k<N>` operand-modifier meaning). Bytes are GNU as 2.46.1's, and llvm-mc
+/// agrees on every instruction.
+#[test]
+fn opmask_operands_assemble_in_a_section_unit() {
+    const SRC: &str = concat!(
+        "\t.text\n\t.globl mask_unit\nmask_unit:\n",
+        "\tkxnorw %k2, %k2, %k2\n",           // c5 ec 46 d2
+        "\tkmovd %eax, %k1\n",                // c5 fb 92 c8
+        "\tkmovw %k1, %ecx\n",                // c5 f8 93 c9
+        "\tkshiftrw $8, %k1, %k2\n",          // c4 e3 f9 30 d1 08
+        "\tkmovq %k3, (%rdi)\n",              // c4 e1 f8 91 1f
+        "\tkmovb 1(%rsi), %k4\n",             // c5 f9 90 66 01
+        "\tkandq %k1, %k2, %k3\n",            // c4 e1 ec 41 d9
+        "\tktestw %k1, %k2\n",                // c5 f8 99 d1
+        "\tvpcmpeqd %zmm1, %zmm2, %k3\n",     // 62 f1 6d 48 76 d9
+        "\tvpcmpub $6, (%rdx), %zmm5, %k1\n", // 62 f3 55 48 3e 0a 06
+        "\tvpmovm2b %k1, %zmm3\n",            // 62 f2 7e 48 28 d9
+        "\tvmovdqu8 (%rsi), %zmm0{%k1}{z}\n", // 62 f1 7f c9 6f 06
+        "\tret\n",
+    );
+    assert_eq!(
+        text_of("opmask-unit", SRC),
+        [
+            0xc5, 0xec, 0x46, 0xd2, 0xc5, 0xfb, 0x92, 0xc8, 0xc5, 0xf8, 0x93, 0xc9, 0xc4, 0xe3,
+            0xf9, 0x30, 0xd1, 0x08, 0xc4, 0xe1, 0xf8, 0x91, 0x1f, 0xc5, 0xf9, 0x90, 0x66, 0x01,
+            0xc4, 0xe1, 0xec, 0x41, 0xd9, 0xc5, 0xf8, 0x99, 0xd1, 0x62, 0xf1, 0x6d, 0x48, 0x76,
+            0xd9, 0x62, 0xf3, 0x55, 0x48, 0x3e, 0x0a, 0x06, 0x62, 0xf2, 0x7e, 0x48, 0x28, 0xd9,
+            0x62, 0xf1, 0x7f, 0xc9, 0x6f, 0x06, 0xc3,
+        ]
+    );
+}
+
+/// Contents of `.text`, from an object of either ELF class.
 fn text_bytes(b: &[u8]) -> Vec<u8> {
     if b[4] == 1 {
         let t = elf32_sections(b)
             .into_iter()
-            .find(|s| s.0 == ".text" && s.3 != 0)
+            .find(|s| s.0 == ".text")
             .expect(".text");
         return b[t.2..t.2 + t.3].to_vec();
     }
@@ -800,15 +1026,178 @@ fn text_bytes(b: &[u8]) -> Vec<u8> {
     let (shoff, shentsize) = (u64at(0x28), u16at(0x3a));
     let (off, size) = section_names(b)
         .iter()
-        .enumerate()
-        .filter(|(_, n)| *n == ".text")
-        .map(|(i, _)| {
+        .position(|n| n == ".text")
+        .map(|i| {
             let sh = shoff + i * shentsize;
             (u64at(sh + 0x18), u64at(sh + 0x20))
         })
-        .find(|(_, size)| *size != 0)
         .expect(".text");
     b[off..off + size].to_vec()
+}
+
+/// A difference of two local numeric labels is an absolute value in every
+/// operand position, in plain `.text` as much as inside a `.pushsection`:
+/// the ALTERNATIVE idiom stores it as a length byte and reads it as an
+/// instruction field. GNU as 2.46.1 emits these bytes for the same unit --
+/// a backward difference takes the narrow field, a forward one keeps the
+/// wide field the encoding chose.
+#[test]
+fn label_difference_operands_in_plain_text() {
+    const SRC: &str = concat!(
+        "\t.text\n\t.globl f\nf:\n",
+        "661:\n\tnop\n\tnop\n662:\n",
+        "\t.byte 662b-661b\n\t.short 662b-661b\n",
+        "\t.long 662b-661b\n\t.quad 662b-661b\n",
+        "\t.byte 664f-663f\n",
+        "663:\n",
+        "\tsubl $(662b - 661b), %ebp\n",
+        "\tsubl $(664f - 663b), %ebp\n",
+        "\tmovl (662b - 661b)(%rax), %ebx\n",
+        "\tmovl (664f - 663b)(%rax), %ecx\n",
+        "\tnop\n664:\n\tnop\n",
+    );
+    let d = dir("label-difference-text");
+    write(&d, "ld.s", SRC);
+    run_ok(
+        &d,
+        &["-q", "-c", "--target=linux-x64", "ld.s", "-o", "ld.o"],
+    );
+    let b = std::fs::read(d.join("ld.o")).expect("object");
+    assert_eq!(
+        text_bytes(&b),
+        vec![
+            0x90, 0x90, 0x02, 0x02, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x13, 0x83, 0xed, 0x02, 0x81, 0xed, 0x13, 0x00, 0x00, 0x00, 0x8b,
+            0x58, 0x02, 0x8b, 0x88, 0x13, 0x00, 0x00, 0x00, 0x90, 0x90,
+        ]
+    );
+}
+
+/// A constant operand expression encodes as the literal, so it reaches
+/// every short form the encoder has, not only the one-field-narrower one:
+/// `disp8` and `imm8` in one instruction, the dropped displacement byte of
+/// a zero, and the `D1` shift-by-one opcode. Each expectation is GNU as
+/// 2.46's encoding of the same source.
+#[test]
+fn a_folded_operand_expression_takes_every_short_form() {
+    let t = text_of(
+        "fold-imm-disp",
+        "\t.text\na:\n\tnop\nb:\n\taddl $(b - a), (a - b)(%rdx)\n",
+    );
+    assert_eq!(t, [0x90, 0x83, 0x42, 0xff, 0x01], "disp8 and imm8 together");
+    let t = text_of(
+        "fold-disp0",
+        "\t.text\na:\nb:\n\tmovl (a - b)(%rbx), %eax\n",
+    );
+    assert_eq!(t, [0x8b, 0x03], "a zero displacement drops its byte");
+    let t = text_of(
+        "fold-shift1",
+        "\t.text\na:\n\tnop\nb:\n\tshll $(b - a), %ecx\n",
+    );
+    assert_eq!(t, [0x90, 0xd1, 0xe1], "shift by one takes the D1 form");
+    let t = text_of("fold-dot-imm", "\t.text\na:\n\tnop\n\tpushq $(. - a)\n");
+    assert_eq!(t, [0x90, 0x6a, 0x01], "`.` is the instruction's own start");
+    let t = text_of(
+        "fold-dot-disp",
+        "\t.text\na:\n\tnop\n\tmovl (a - .)(%rbx), %eax\n",
+    );
+    assert_eq!(t, [0x90, 0x8b, 0x43, 0xff]);
+}
+
+/// GNU as fixes a non-branch field's width when it parses the instruction,
+/// so a difference folds only over items whose sizes are already fixed
+/// there. A branch that may still relax, an alignment, and an `.org`
+/// between the labels keep the wide field even though the final layout
+/// would fit the narrow one -- the value is still resolved in place. A
+/// fixed-size span folds whatever it holds: data, a `call`, an instruction
+/// whose own wide field waits for a relocation. Each expectation is GNU as
+/// 2.46's encoding of the same source.
+#[test]
+fn an_operand_difference_narrows_only_over_a_parse_fixed_span() {
+    let t = text_of(
+        "fold-branch-span",
+        "\t.text\na:\n\tnop\n\tjmp far\nb:\n\tmovl (a - b)(%rbx), %eax\n\
+         \taddq $(b - a), %r8\nfar:\n\tnop\n",
+    );
+    assert_eq!(
+        t,
+        [
+            0x90, 0xeb, 0x0d, 0x8b, 0x83, 0xfd, 0xff, 0xff, 0xff, 0x49, 0x81, 0xc0, 0x03, 0x00,
+            0x00, 0x00, 0x90,
+        ],
+        "a span over a relaxable jmp keeps both wide fields"
+    );
+    let t = text_of(
+        "fold-align-span",
+        "\t.text\na:\n\tnop\n\t.balign 4\nb:\n\tpushq $(b - a)\n",
+    );
+    assert_eq!(&t[4..], [0x68, 0x04, 0x00, 0x00, 0x00], "span over .balign");
+    let t = text_of(
+        "fold-org-span",
+        "\t.text\na:\n\tnop\n\t.org 4\nb:\n\tpushq $(b - a)\n",
+    );
+    assert_eq!(&t[4..], [0x68, 0x04, 0x00, 0x00, 0x00], "span over .org");
+    let t = text_of(
+        "fold-fill-span",
+        "\t.text\na:\n\tnop\n\t.fill 3,1,0x90\nb:\n\tpushq $(b - a)\n\
+         c:\n\tnop\n\t.skip 3\nd:\n\tpushq $(d - c)\n",
+    );
+    assert_eq!(&t[4..6], [0x6a, 0x04], "a constant .fill span folds");
+    assert_eq!(&t[10..], [0x6a, 0x04], "a constant .skip span folds");
+    let t = text_of(
+        "fold-fixed-insns-span",
+        "\t.text\na:\n\tnop\n\tcall x\n\taddl $x, %eax\nb:\n\tpushq $(b - a)\n",
+    );
+    assert_eq!(
+        &t[11..],
+        [0x6a, 0x0b],
+        "calls and relocated fields are fixed"
+    );
+    let t = text_of(
+        "fold-mul-expr",
+        "\t.text\na:\n\tnop\n\tnop\nb:\n\tpushq $((b - a) * 8 - 6)\n",
+    );
+    assert_eq!(&t[2..], [0x6a, 0x0a], "arithmetic over a folded difference");
+}
+
+/// The fold reads names as the source defined them up to the instruction:
+/// numeric labels by their latest definition, `.set` aliases through the
+/// chain, a `.set` to the location counter as a label, and a weak or global
+/// binding not at all -- a difference of two defined locations is a value
+/// whatever their binding. A subsection is its own chain, so a difference
+/// across two of them stays wide. Each expectation is GNU as 2.46's
+/// encoding of the same source.
+#[test]
+fn an_operand_difference_resolves_names_as_the_parse_defined_them() {
+    let t = text_of(
+        "fold-numeric",
+        "\t.text\n1:\n\tnop\n2:\n\tpushq $(2b - 1b)\n",
+    );
+    assert_eq!(t, [0x90, 0x6a, 0x01]);
+    let t = text_of(
+        "fold-set-alias",
+        "\t.text\na:\n\tnop\n\t.set x, a\nb:\n\tpushq $(b - x)\n",
+    );
+    assert_eq!(t, [0x90, 0x6a, 0x01]);
+    let t = text_of(
+        "fold-set-dot",
+        "\t.text\na:\n\tnop\n\t.set x, .\nb:\n\tnop\n\tpushq $(x - a)\n",
+    );
+    assert_eq!(t, [0x90, 0x90, 0x6a, 0x01], "`.set x, .` is a location");
+    let t = text_of(
+        "fold-weak-diff",
+        "\t.text\n\t.weak b\na:\n\tnop\nb:\n\tpushq $(b - a)\n",
+    );
+    assert_eq!(t, [0x90, 0x6a, 0x01], "binding does not hold a difference");
+    let t = text_of(
+        "fold-subsec-cross",
+        "\t.text\n\t.subsection 1\na:\n\tnop\n\t.subsection 0\nb:\n\tnop\n\tpushq $(b - a)\n",
+    );
+    assert_eq!(
+        t,
+        [0x90, 0x68, 0xfa, 0xff, 0xff, 0xff, 0x90],
+        "a cross-subsection difference stays wide"
+    );
 }
 
 /// gcc selects the preprocessor's predefines from the code model:
@@ -853,6 +1242,8 @@ fn m32_predefines_the_ilp32_data_model() {
         "ilp32-ok\n#endif\n",
         "#ifndef __SIZEOF_INT128__\nno-int128\n#endif\n",
         "#ifdef __GCC_ASM_FLAG_OUTPUTS__\ncc-outputs\n#endif\n",
+        "wchar S(__WCHAR_TYPE__)\n",
+        "#ifdef __code_model_32__\ncm32-ok\n#endif\n",
     );
     let d = dir("m32-data-model");
     write(&d, "dm.S", SRC);
@@ -866,9 +1257,178 @@ fn m32_predefines_the_ilp32_data_model() {
         body.contains(r#""unsigned int" "int""#),
         "ILP32 size_t / ptrdiff_t: {body}"
     );
-    for want in ["ilp32-ok", "no-int128", "cc-outputs"] {
+    assert!(body.contains(r#"wchar "long int""#), "i386 wchar_t: {body}");
+    for want in ["ilp32-ok", "no-int128", "cc-outputs", "cm32-ok"] {
         assert!(body.contains(want), "missing {want}: {body}");
     }
+}
+
+/// `-fshort-wchar` reaches the front end from the driver: the `wchar_t`
+/// predefine pair narrows and a wide literal stages 16-bit elements, so
+/// an `unsigned short` array takes one (C99 6.7.8p15) where the default
+/// 4-byte `wchar_t` refuses it. `-fno-short-wchar` is the explicit
+/// default, as in gcc 16.1.1, and leaves the already-16-bit Windows
+/// targets alone. The kernel builds its whole tree this way and stages
+/// `L"..."` into `efi_char16_t` arrays.
+#[test]
+fn short_wchar_narrows_wchar_t_from_the_driver() {
+    const PP: &str = concat!(
+        "#define Q(x) #x\n#define S(x) Q(x)\n",
+        "wchar S(__WCHAR_TYPE__) __SIZEOF_WCHAR_T__\n",
+    );
+    let d = dir("short-wchar");
+    write(&d, "pp.c", PP);
+    for (target, flags, want) in [
+        ("linux-x64", &[][..], r#"wchar "int" 4"#),
+        ("linux-x64", &["-fno-short-wchar"][..], r#"wchar "int" 4"#),
+        (
+            "linux-x64",
+            &["-fshort-wchar"][..],
+            r#"wchar "unsigned short" 2"#,
+        ),
+        (
+            "linux-aarch64",
+            &["-fshort-wchar"][..],
+            r#"wchar "unsigned short" 2"#,
+        ),
+        (
+            "windows-x64",
+            &["-fno-short-wchar"][..],
+            r#"wchar "unsigned short" 2"#,
+        ),
+    ] {
+        let tgt = format!("--target={target}");
+        let mut args = vec!["-q", "-E", &tgt];
+        args.extend_from_slice(flags);
+        args.push("pp.c");
+        let out = run_ok(&d, &args);
+        let body: String = out.split_whitespace().collect::<Vec<_>>().join(" ");
+        assert!(body.contains(want), "{target} {flags:?}: {body}");
+    }
+    // The staged bytes are UTF-16 code units, which is what makes the
+    // 2-byte destination element legal.
+    write(&d, "w.c", "unsigned short d[] = L\"ab\";\n");
+    run_ok(
+        &d,
+        &[
+            "-q",
+            "-c",
+            "--target=linux-x64",
+            "-fshort-wchar",
+            "w.c",
+            "-o",
+            "w.o",
+        ],
+    );
+    let b = std::fs::read(d.join("w.o")).expect("object");
+    assert!(
+        b.windows(6).any(|w| w == b"a\0b\0\0\0"),
+        "wide literal must stage 16-bit elements"
+    );
+    let (ok, text) = run(
+        &d,
+        &["-q", "-c", "--target=linux-x64", "w.c", "-o", "wide.o"],
+    );
+    assert!(!ok, "a 4-byte wchar_t must refuse a 2-byte element: {text}");
+    assert!(
+        text.contains("wchar_t-width array element"),
+        "diagnostic must name the element width: {text}"
+    );
+}
+
+/// `-fsigned-char` / `-funsigned-char` reach the front end from the
+/// driver and move `__CHAR_UNSIGNED__` with the type, so `<limits.h>`
+/// and the compiler agree. Without either, the target ABI decides:
+/// unsigned on AArch64 ELF, signed elsewhere, as gcc 16.1.1 and
+/// clang 22.1.8 do on each. The kernel builds every unit
+/// `-funsigned-char`.
+#[test]
+fn char_signedness_flags_reach_the_front_end() {
+    const PP: &str = concat!(
+        "#ifdef __CHAR_UNSIGNED__\n",
+        "plain unsigned\n#else\nplain signed\n#endif\n",
+    );
+    let d = dir("char-signedness");
+    write(&d, "pp.c", PP);
+    for (target, flags, want) in [
+        ("linux-x64", &[][..], "plain signed"),
+        ("linux-aarch64", &[][..], "plain unsigned"),
+        ("macos-aarch64", &[][..], "plain signed"),
+        ("windows-x64", &[][..], "plain signed"),
+        ("linux-x64", &["-funsigned-char"][..], "plain unsigned"),
+        ("linux-x64", &["-fno-signed-char"][..], "plain unsigned"),
+        ("linux-aarch64", &["-fsigned-char"][..], "plain signed"),
+        ("linux-aarch64", &["-fno-unsigned-char"][..], "plain signed"),
+        // The last selection wins, as it does in gcc.
+        (
+            "linux-x64",
+            &["-funsigned-char", "-fsigned-char"][..],
+            "plain signed",
+        ),
+    ] {
+        let tgt = format!("--target={target}");
+        let mut args = vec!["-q", "-E", &tgt];
+        args.extend_from_slice(flags);
+        args.push("pp.c");
+        let out = run_ok(&d, &args);
+        let body: String = out.split_whitespace().collect::<Vec<_>>().join(" ");
+        assert!(body.contains(want), "{target} {flags:?}: {body}");
+    }
+    // `<limits.h>` keys CHAR_MIN on the predefine, so a unit compiled
+    // with the flag sees the matching range rather than the ABI's.
+    write(
+        &d,
+        "l.c",
+        "#include <limits.h>\nint probe[CHAR_MIN < 0 ? -1 : 1];\n",
+    );
+    run_ok(
+        &d,
+        &[
+            "-q",
+            "-c",
+            "--target=linux-x64",
+            "-funsigned-char",
+            "l.c",
+            "-o",
+            "l.o",
+        ],
+    );
+    let (ok, text) = run(&d, &["-q", "-c", "--target=linux-x64", "l.c", "-o", "ls.o"]);
+    assert!(!ok, "the signed default must give CHAR_MIN < 0: {text}");
+}
+
+/// `-mcmodel` names the selected x86-64 model in a predefine and
+/// `-m16` / `-m32` override the name to the 32-bit model; the aarch64
+/// targets name none. Names are gcc 16.1.1's.
+#[test]
+fn the_code_model_macro_follows_mcmodel() {
+    const SRC: &str = concat!(
+        "#ifdef __code_model_32__\ncm-32\n#endif\n",
+        "#ifdef __code_model_small__\ncm-small\n#endif\n",
+        "#ifdef __code_model_kernel__\ncm-kernel\n#endif\n",
+    );
+    let d = dir("mcmodel-predefine");
+    write(&d, "cm.S", SRC);
+    let x64 = ["-q", "-E", "--target=linux-x64"];
+    for (extra, want) in [
+        (None, "cm-small"),
+        (Some("-mcmodel=kernel"), "cm-kernel"),
+        (Some("-m32"), "cm-32"),
+        (Some("-m16"), "cm-32"),
+    ] {
+        let mut args = x64.to_vec();
+        args.extend(extra);
+        args.push("cm.S");
+        let out = run_ok(&d, &args);
+        for n in ["cm-32", "cm-small", "cm-kernel"] {
+            assert_eq!(out.contains(n), n == want, "{extra:?}: {out}");
+        }
+    }
+    let out = run_ok(&d, &["-q", "-E", "--target=linux-aarch64", "cm.S"]);
+    assert!(
+        !out.contains("cm-"),
+        "aarch64 must name no code model: {out}"
+    );
 }
 
 /// Which headers a unit opens depends on the predefine set, so the
@@ -1089,7 +1649,7 @@ fn section64(bytes: &[u8], want: &str) -> Vec<u8> {
         let n = strtab + u32at(sh);
         let end = bytes[n..].iter().position(|&c| c == 0).unwrap();
         let size = u64at(sh + 0x20);
-        if &bytes[n..n + end] == want.as_bytes() && size != 0 {
+        if &bytes[n..n + end] == want.as_bytes() {
             let off = u64at(sh + 0x18);
             return bytes[off..off + size].to_vec();
         }
@@ -1099,10 +1659,140 @@ fn section64(bytes: &[u8], want: &str) -> Vec<u8> {
 
 /// Assemble `src` for x86_64 and return its `.text`.
 fn text_of(name: &str, src: &str) -> Vec<u8> {
+    section64(&object_of(name, src), ".text")
+}
+
+/// Assemble `src` for x86_64 and return the object bytes.
+fn object_of(name: &str, src: &str) -> Vec<u8> {
+    object_for(name, src, "linux-x64")
+}
+
+/// Compile the C source `src` for x86_64 and return the object bytes.
+fn object_of_c(name: &str, src: &str) -> Vec<u8> {
+    let d = dir(name);
+    write(&d, "u.c", src);
+    run_ok(&d, &["-q", "-c", "--target=linux-x64", "u.c", "-o", "u.o"]);
+    std::fs::read(d.join("u.o")).expect("object")
+}
+
+/// Assemble `src` for `target` and return the object bytes.
+fn object_for(name: &str, src: &str, target: &str) -> Vec<u8> {
     let d = dir(name);
     write(&d, "b.s", src);
-    run_ok(&d, &["-q", "-c", "--target=linux-x64", "b.s", "-o", "b.o"]);
-    section64(&std::fs::read(d.join("b.o")).expect("object"), ".text")
+    let t = format!("--target={target}");
+    run_ok(&d, &["-q", "-c", &t, "b.s", "-o", "b.o"]);
+    std::fs::read(d.join("b.o")).expect("object")
+}
+
+/// `(offset, type, symbol name, addend)` of every `.rela.text` entry.
+fn text_relocs(name: &str, src: &str) -> Vec<(u64, u32, String, i64)> {
+    named_relocs(&object_of(name, src), ".rela.text")
+}
+
+/// `(offset, type, symbol name, addend)` of every entry of the named RELA
+/// section of an ELF64 object.
+fn named_relocs(bytes: &[u8], want: &str) -> Vec<(u64, u32, String, i64)> {
+    let u16at = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
+    let u32at = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
+    let u64at = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let shoff = u64at(0x28) as usize;
+    let shentsize = u16at(0x3a);
+    let shnum = u16at(0x3c);
+    // The symbol table the RELA section indexes, with its string table.
+    let (symtab, stroff) = (0..shnum)
+        .map(|i| shoff + i * shentsize)
+        .find(|&sh| u32at(sh + 4) == 2)
+        .map(|sh| {
+            let strsh = shoff + u32at(sh + 0x28) * shentsize;
+            (u64at(sh + 0x18) as usize, u64at(strsh + 0x18) as usize)
+        })
+        .expect(".symtab");
+    let shstrndx = u16at(0x3e);
+    let strtab = u64at(shoff + shstrndx * shentsize + 0x18) as usize;
+    let str_at = |base: usize, off: usize| {
+        let n = base + off;
+        let end = bytes[n..].iter().position(|&b| b == 0).unwrap();
+        String::from_utf8(bytes[n..n + end].to_vec()).unwrap()
+    };
+    // A section symbol carries no name of its own; readers take the
+    // section's, so name it that way here too.
+    let sym_name = |i: usize| {
+        let sym = symtab + i * 24;
+        if u32at(sym) == 0 {
+            let sh = shoff + u16at(sym + 6) * shentsize;
+            return str_at(strtab, u32at(sh));
+        }
+        str_at(stroff, u32at(sym))
+    };
+    let named = (0..shnum)
+        .map(|i| shoff + i * shentsize)
+        .find(|&sh| str_at(strtab, u32at(sh)) == want);
+    let Some(sh) = named else {
+        return Vec::new();
+    };
+    let (off, size) = (u64at(sh + 0x18) as usize, u64at(sh + 0x20) as usize);
+    (0..size)
+        .step_by(24)
+        .map(|e| {
+            let r = off + e;
+            let info = u64at(r + 8);
+            (
+                u64at(r),
+                (info & 0xffff_ffff) as u32,
+                sym_name((info >> 32) as usize),
+                u64at(r + 16) as i64,
+            )
+        })
+        .collect()
+}
+
+/// A direct branch takes `R_X86_64_PLT32` only where the link may bind it
+/// through a PLT slot -- a named function symbol. A target the assembler
+/// reduces to a section symbol takes `R_X86_64_PC32`, which is what GNU as
+/// 2.46.1 emits for the same source; it is the shape `entry_64.o`,
+/// `memmove_64.o` and `retpoline.o` carry.
+#[test]
+fn a_branch_against_a_section_symbol_takes_pc32() {
+    const PC32: u32 = 2;
+    const PLT32: u32 = 4;
+    assert_eq!(
+        text_relocs(
+            "reloc-xsec",
+            "\t.text\nf:\n\tjmp o\n\t.section .other,\"ax\"\no:\n\tnop\n",
+        ),
+        [(1, PC32, String::from(".other"), -4)],
+    );
+    // A local label of a third section reduces the same way, and a `call`
+    // to one does too: the reduction, not the mnemonic, picks the type.
+    assert_eq!(
+        text_relocs(
+            "reloc-xsec-call",
+            "\t.text\nf:\n\tcall o\n\t.section .other,\"ax\"\no:\n\tnop\n",
+        ),
+        [(1, PC32, String::from(".other"), -4)],
+    );
+    // An undefined named symbol keeps PLT32.
+    assert_eq!(
+        text_relocs("reloc-undef", "\t.text\nf:\n\tjmp undef\n"),
+        [(1, PLT32, String::from("undef"), -4)],
+    );
+    // A `call` to a same-section global keeps PLT32; the relaxable `jmp`
+    // to the same target resolves in place, which is GNU as 2.46.1's
+    // encoding of each source.
+    assert_eq!(
+        text_relocs(
+            "reloc-glob-call",
+            "\t.text\n\t.globl g\nf:\n\tcall g\n\tnop\ng:\n\tnop\n",
+        ),
+        [(1, PLT32, String::from("g"), -4)],
+    );
+    assert_eq!(
+        text_relocs(
+            "reloc-glob",
+            "\t.text\n\t.globl g\nf:\n\tjmp g\n\tnop\ng:\n\tnop\n",
+        ),
+        [],
+    );
 }
 
 /// `rel8` reaches a displacement in `-128..=127` measured from the end of
@@ -1165,7 +1855,9 @@ fn a_branch_an_org_pushes_out_of_range_keeps_the_long_form() {
 
 /// Only a reference the assembler resolves in place may take the short
 /// form: a weak name, a name in another section, and an undefined name all
-/// keep a relocation, which the link fills at the long form's width.
+/// keep a relocation, which the link fills at the long form's width. A
+/// same-section global is not among them -- the link cannot rebind it away
+/// from the definition here, so the branch relaxes.
 #[test]
 fn a_relocated_branch_keeps_the_long_form() {
     let t = text_of(
@@ -1180,13 +1872,574 @@ fn a_relocated_branch_keeps_the_long_form() {
         "\t.text\nf:\n\tjmp o\n\t.section .other,\"ax\"\no:\n\tnop\n",
     );
     assert_eq!(&t[..5], [0xe9, 0, 0, 0, 0], "target in another section");
-    // A global definition in the same section is resolved in place, as GNU
-    // as resolves it, so it does relax.
+    // A global definition in the same section relaxes: GNU as 2.46.1 emits
+    // `eb 01` here, while the non-relaxable `call` to the same target keeps
+    // rel32 and its relocation.
     let t = text_of(
         "relax-glob",
         "\t.text\n\t.globl g\nf:\n\tjmp g\n\tnop\ng:\n\tnop\n",
     );
     assert_eq!(&t[..2], [0xeb, 0x01], "global target in this section");
+    let t = text_of(
+        "relax-glob-call",
+        "\t.text\n\t.globl g\nf:\n\tcall g\n\tnop\ng:\n\tnop\n",
+    );
+    assert_eq!(&t[..5], [0xe8, 0, 0, 0, 0], "call to a same-section global");
+}
+
+/// The same binding rule inside a function-body template: an in-stream
+/// definition satisfies a `jmp` / `jcc` only when the link cannot rebind it.
+/// GNU as 2.46.1 for the stream this template pastes keeps the rel32 form
+/// and `R_X86_64_PLT32 wk - 4`, and resolves a `.globl`-declared target
+/// against its definition.
+#[test]
+fn a_template_branch_to_a_weak_label_keeps_its_relocation() {
+    const PLT32: u32 = 4;
+    let bytes = object_of_c(
+        "tmpl-weak-branch",
+        "int f(int x) {\n\
+         __asm__ volatile(\"jmp wk\\n\\tnop\\n.weak wk\\nwk:\\n\\tnop\");\n\
+         __asm__ volatile(\"jmp gl\\n\\t.globl gl\\ngl:\\n\\tnop\");\n\
+         return x;\n}\n",
+    );
+    let relocs = named_relocs(&bytes, ".rela.text");
+    let wk: Vec<_> = relocs.iter().filter(|(_, _, n, _)| n == "wk").collect();
+    let t = section64(&bytes, ".text");
+    assert_eq!(wk.len(), 1, "one branch row: {relocs:?}");
+    let &(off, rtype, _, addend) = wk[0];
+    assert_eq!((rtype, addend), (PLT32, -4));
+    assert_eq!(t[off as usize - 1], 0xe9, "rel32 jmp under the reloc");
+    assert_eq!(&t[off as usize..off as usize + 4], [0, 0, 0, 0]);
+    assert!(
+        !relocs.iter().any(|(_, _, n, _)| n == "gl"),
+        "a global definition resolves in place: {relocs:?}"
+    );
+}
+
+/// A template branch to a label of its own stream settles on the rel8 form
+/// where the layout reaches, as the section path settles one. GNU as 2.46.1
+/// for the stream this template pastes gives `eb 01` over the nop and
+/// `75 fc` back over the `inc`, and holds the branch over the 130-byte
+/// `.skip` on the rel32 form; nothing here relocates.
+#[test]
+fn a_template_stream_branch_takes_the_short_form() {
+    let bytes = object_of_c(
+        "tmpl-branch-relax",
+        "int f(void) {\n\
+         __asm__ volatile(\"jmp 1f\\n\\tnop\\n1:\\n\\tinc %eax\\n\\tjne 1b\\n\\t\" \
+         \"jmp 2f\\n\\t.skip 130\\n2:\\n\\tnop\" ::: \"eax\", \"cc\");\n\
+         return 0;\n}\n",
+    );
+    let t = section64(&bytes, ".text");
+    let seq = [
+        0xeb, 0x01, 0x90, 0xff, 0xc0, 0x75, 0xfc, 0xe9, 0x82, 0x00, 0x00, 0x00,
+    ];
+    assert!(t.windows(seq.len()).any(|w| w == seq), "{t:x?}");
+    assert!(
+        named_relocs(&bytes, ".rela.text").is_empty(),
+        "no relocation rows"
+    );
+}
+
+/// A branch relaxes across `.align` and a label-valued `.skip`, whose
+/// padding absorbs the branch's own width. The kernel's `clear_bhb_loop` is
+/// this shape; the bytes are GNU as 2.46.1's for the same source, which
+/// needs the function's base to keep the 64-byte modulus the padding is
+/// measured against.
+#[test]
+fn a_branch_over_alignment_padding_matches_gnu_as() {
+    let src = "\t.text\n\t.skip 32, 0x90\n\t.globl f\nf:\n\tpush %rbp\n\tmov %rsp, %rbp\n\
+               \tmovl $5, %ecx\n\tcall 1f\n\tjmp 5f\n\t.align 64, 0xcc\n\
+               \t.skip 32 - (.Lret1 - 1f), 0xcc\n1:\tcall 2f\n.Lret1:\tjmp thunk\n\
+               \t.align 64, 0xcc\n\t.skip 32 - 18, 0xcc\n2:\tmovl $5, %eax\n\
+               3:\tjmp 4f\n\tnop\n4:\tsub $1, %eax\n\tjnz 3b\n\tsub $1, %ecx\n\tjnz 1b\n\
+               .Lret2:\tjmp thunk\n5:\tlfence\n\tpop %rbp\n\tjmp thunk\n";
+    let t = text_of("relax-bhb", src);
+    // The `jmp 5f` at 0x2e reaches 0xa5 in the short form; the following
+    // `.align 64` absorbs the three bytes, so every later offset stands.
+    assert_eq!(&t[0x2e..0x30], [0xeb, 0x75], "jmp 5f");
+    assert_eq!(&t[0x29..0x2e], [0xe8, 0x2d, 0, 0, 0], "call 1f");
+    assert_eq!(&t[0x5b..0x60], [0xe8, 0x2e, 0, 0, 0], "1: call 2f");
+    assert_eq!(&t[0x8e..0x93], [0xb8, 0x05, 0, 0, 0], "2: movl $5, %eax");
+    assert_eq!(&t[0xa5..0xa8], [0x0f, 0xae, 0xe8], "5: lfence");
+}
+
+/// A branch to a `.set name, symbol` alias takes the location and the
+/// binding of the name the chain ends at. An alias of a local label of the
+/// branch's own section resolves at assembly time and takes the short form,
+/// and one of a label of another section reduces to that section's symbol;
+/// both are GNU as 2.46.1's encoding of the same source. An alias of a name
+/// the unit binds global relaxes, as a direct reference to that name does.
+#[test]
+fn a_branch_to_a_set_alias_follows_the_chain() {
+    let src = "\t.text\nf:\n\tjmp a\n\tnop\nt:\n\tnop\n\t.set a, t\n";
+    assert_eq!(text_of("alias-local", src), [0xeb, 0x01, 0x90, 0x90]);
+    assert_eq!(text_relocs("alias-local-rel", src), []);
+    // A chain of assignments resolves the same way.
+    let src = "\t.text\nf:\n\tjmp a\n\tnop\nt:\n\tnop\n\t.set a, b\n\t.set b, t\n";
+    assert_eq!(text_of("alias-chain", src), [0xeb, 0x01, 0x90, 0x90]);
+    assert_eq!(text_relocs("alias-chain-rel", src), []);
+    // An alias of a label of another section reduces to that section.
+    let src = "\t.text\nf:\n\tjmp ya\n\t.set ya, o\n\t.section .other,\"ax\"\no:\n\tnop\n";
+    assert_eq!(&text_of("alias-xsec", src)[..5], [0xe9, 0, 0, 0, 0]);
+    assert_eq!(
+        text_relocs("alias-xsec-rel", src),
+        [(1, 2, String::from(".other"), -4)],
+    );
+    // An alias of a same-section global relaxes, as a direct reference to
+    // that name does; GNU as 2.46.1 emits `eb 01` with no relocation.
+    let src = "\t.text\n\t.globl g\nf:\n\tjmp ga\n\tnop\ng:\n\tnop\n\t.set ga, g\n";
+    assert_eq!(&text_of("alias-glob", src)[..2], [0xeb, 0x01]);
+    assert_eq!(text_relocs("alias-glob-rel", src), []);
+}
+
+/// A data field naming a `.set name, symbol` alias relocates against the
+/// name the source wrote: the chain supplies the value, not the symbol the
+/// relocation names, which is how GNU as 2.46.1 assembles the source below
+/// on both targets. `SYM_FUNC_ALIAS` plus `EXPORT_SYMBOL` gives the kernel
+/// one `.export_symbol` entry per name, and modpost matches each entry's
+/// label suffix against the name its relocation targets, so reducing the
+/// entry to the aliased name rejects the export.
+#[test]
+fn a_data_reference_to_a_set_alias_names_the_written_symbol() {
+    const X86_64: u32 = 1;
+    const A64_ABS64: u32 = 257;
+    let src = concat!(
+        "\t.text\n\t.globl memcpy\nmemcpy:\n\tnop\n",
+        "\t.globl __memcpy\n\t.set __memcpy, memcpy\n",
+        "\t.section \"exp\",\"a\"\n\t.quad __memcpy\n\t.quad memcpy\n"
+    );
+    for (target, kind) in [("linux-x64", X86_64), ("linux-aarch64", A64_ABS64)] {
+        let o = object_for(&format!("alias-data-{target}"), src, target);
+        assert_eq!(
+            named_relocs(&o, ".relaexp"),
+            [
+                (0, kind, String::from("__memcpy"), 0),
+                (8, kind, String::from("memcpy"), 0),
+            ],
+            "{target}"
+        );
+    }
+    // A branch still resolves through the chain: the alias of a local label
+    // of the branch's own section needs no relocation on either target.
+    let src = "\t.text\nf:\n\tjmp a\n\tnop\nt:\n\tnop\n\t.set a, t\n";
+    assert_eq!(
+        text_of("alias-data-branch-x64", src),
+        [0xeb, 0x01, 0x90, 0x90]
+    );
+    assert_eq!(text_relocs("alias-data-branch-x64-rel", src), []);
+    let src = "\t.text\nf:\n\tb a\n\tnop\nt:\n\tnop\n\t.set a, t\n";
+    let o = object_for("alias-data-branch-a64", src, "linux-aarch64");
+    assert_eq!(&section64(&o, ".text")[..4], [0x02, 0x00, 0x00, 0x14]);
+    assert_eq!(named_relocs(&o, ".rela.text"), []);
+}
+
+/// A `.set` alias takes the binding the unit gave the name it assigns: local
+/// unless a `.globl` or a `.weak` of the unit declared it, which is GNU as
+/// 2.46.1's symbol table for the source below. The three positions the
+/// assignment holds -- a `.s` unit, file-scope asm, and a function body's code
+/// stream -- share the rule, and every local entry precedes the rest, as ELF
+/// requires of `sh_info`.
+#[test]
+fn a_set_alias_binds_as_the_unit_declared_the_name() {
+    const LOCAL: u8 = 0;
+    const GLOBAL: u8 = 1;
+    const WEAK: u8 = 2;
+    const BODY: &str = "\t.globl g\ng:\n\tnop\nt:\n\tnop\n\
+                        \t.set la, t\n\t.set ga, g\n\
+                        \t.globl ega\n\t.set ega, g\n\
+                        \t.weak wa\n\t.set wa, t\n\t.set chain, la\n";
+    const WANT: [(&str, u8); 6] = [
+        ("la", LOCAL),
+        ("ga", LOCAL),
+        ("chain", LOCAL),
+        ("g", GLOBAL),
+        ("ega", GLOBAL),
+        ("wa", WEAK),
+    ];
+    let body_c = BODY.replace('\n', "\\n").replace('\t', "\\t");
+    let objects = [
+        (
+            "set-bind-s",
+            object_of("set-bind-s", &format!("\t.text\n{BODY}")),
+        ),
+        (
+            "set-bind-file",
+            object_of_c(
+                "set-bind-file",
+                &format!("__asm__(\".text\\n{body_c}\");\n"),
+            ),
+        ),
+        (
+            "set-bind-body",
+            object_of_c(
+                "set-bind-body",
+                &format!("void f(void) {{ __asm__ volatile(\"{body_c}\"); }}\n"),
+            ),
+        ),
+    ];
+    for (name, bytes) in &objects {
+        let syms = sym_bindings(bytes);
+        for (n, bind) in WANT {
+            let got = syms.iter().find(|s| s.0 == n);
+            assert!(
+                got.is_some_and(|s| s.1 == bind),
+                "{name}: `{n}` in {syms:?}"
+            );
+        }
+        let first_nonlocal = syms.iter().position(|s| s.1 != LOCAL).unwrap_or(syms.len());
+        assert!(
+            syms[first_nonlocal..].iter().all(|s| s.1 != LOCAL),
+            "{name}: a local entry follows a global one: {syms:?}"
+        );
+    }
+}
+
+/// A `.set` alias whose chain ends at a name the unit does not define emits
+/// no symbol of its own: GNU as 2.46.1 drops the alias, resolves every
+/// reference against the chain's end, and gives the end an undefined global
+/// entry whether or not anything references it. A `.globl` on the alias
+/// changes none of that.
+#[test]
+fn a_set_alias_of_an_undefined_name_resolves_against_the_name() {
+    const GLOBAL: u8 = 1;
+    const SHN_UNDEF: u16 = 0;
+    const PLT32: u32 = 4;
+    const ABS64: u32 = 1;
+    let find = |syms: &[(String, u8, u16)], n: &str| syms.iter().find(|s| s.0 == n).cloned();
+    // Unreferenced: the alias vanishes and the end surfaces undefined.
+    let bytes = object_of("set-undef", "\t.text\n\t.set x, ext\n");
+    let syms = sym_bindings(&bytes);
+    assert_eq!(find(&syms, "x"), None, "{syms:?}");
+    assert_eq!(
+        find(&syms, "ext"),
+        Some((String::from("ext"), GLOBAL, SHN_UNDEF)),
+        "{syms:?}"
+    );
+    // A branch through the alias, also via a chain and under `.globl`,
+    // relocates against the end.
+    for (name, src) in [
+        ("set-undef-call", "\t.text\n\t.set x, ext\n\tcall x\n"),
+        (
+            "set-undef-chain",
+            "\t.text\n\t.set a, b\n\t.set b, ext\n\tcall a\n",
+        ),
+        (
+            "set-undef-globl",
+            "\t.text\n\t.globl x\n\t.set x, ext\n\tcall x\n",
+        ),
+    ] {
+        let bytes = object_of(name, src);
+        let syms = sym_bindings(&bytes);
+        assert_eq!(find(&syms, "x"), None, "{name}: {syms:?}");
+        assert_eq!(find(&syms, "a"), None, "{name}: {syms:?}");
+        assert_eq!(find(&syms, "b"), None, "{name}: {syms:?}");
+        assert_eq!(
+            named_relocs(&bytes, ".rela.text"),
+            [(1, PLT32, String::from("ext"), -4)],
+            "{name}"
+        );
+    }
+    // A data field through the alias relocates against the end too.
+    let bytes = object_of("set-undef-data", "\t.set x, ext\n\t.data\n\t.quad x\n");
+    assert_eq!(
+        named_relocs(&bytes, ".rela.data"),
+        [(0, ABS64, String::from("ext"), 0)],
+    );
+}
+
+/// `.set name, sym + k` assigns the symbol at an offset. Where the unit's
+/// layout does not place `sym`, the name is an alias with an addend: GNU as
+/// 2.46.1 emits no symbol for it and lands every reference on `sym`, the
+/// offset folded into the addend. For `.text: .set x, ext+8; call x; jmp x`
+/// it writes `e8 00 00 00 00 e9 00 00 00 00` with `PLT32 ext + 4` at 0x1 and
+/// 0x6; for `.set x, ext+8; .data; .quad x; .long x` it writes `64 ext + 8`
+/// at 0 and `32 ext + 8` at 8. An alias of a name the unit defines takes its
+/// place at the offset, keeping the target's type and size, as gas gives
+/// `d+8` value 8 size 16 OBJECT and `f+1` value 1 size 1 FUNC.
+#[test]
+fn a_set_alias_of_a_symbol_at_an_offset_carries_the_addend() {
+    const OBJECT_GLOBAL: u8 = 0x11;
+    const FUNC_GLOBAL: u8 = 0x12;
+    const GLOBAL: u8 = 1;
+    const SHN_UNDEF: u16 = 0;
+    const PLT32: u32 = 4;
+    const ABS64: u32 = 1;
+    const ABS32: u32 = 10;
+    // An undefined end: no symbol for the alias, the offset in the addend.
+    let src = "\t.text\n\t.set x, ext+8\n\tcall x\n\tjmp x\n";
+    assert_eq!(
+        text_of("set-off-call", src),
+        [0xe8, 0, 0, 0, 0, 0xe9, 0, 0, 0, 0]
+    );
+    let bytes = object_of("set-off-undef", src);
+    let syms = sym_bindings(&bytes);
+    assert_eq!(syms.iter().find(|s| s.0 == "x"), None, "{syms:?}");
+    assert_eq!(
+        syms.iter().find(|s| s.0 == "ext"),
+        Some(&(String::from("ext"), GLOBAL, SHN_UNDEF)),
+        "{syms:?}"
+    );
+    assert_eq!(
+        named_relocs(&bytes, ".rela.text"),
+        [
+            (1, PLT32, String::from("ext"), 4),
+            (6, PLT32, String::from("ext"), 4),
+        ],
+    );
+    let bytes = object_of(
+        "set-off-data",
+        "\t.set x, ext+8\n\t.data\n\t.quad x\n\t.long x\n",
+    );
+    assert_eq!(
+        named_relocs(&bytes, ".rela.data"),
+        [
+            (0, ABS64, String::from("ext"), 8),
+            (8, ABS32, String::from("ext"), 8),
+        ],
+    );
+    // Offsets accumulate along a chain of assignments.
+    let bytes = object_of(
+        "set-off-chain",
+        "\t.text\n\t.set a, b+2\n\t.set b, ext+8\n\t.quad a\n",
+    );
+    assert_eq!(
+        named_relocs(&bytes, ".rela.text"),
+        [(0, ABS64, String::from("ext"), 10)],
+    );
+    // A defined end: the name takes its target's place at the offset.
+    let bytes = object_of_c(
+        "set-off-defined",
+        "int d[4] = {1,2,3,4};\nvoid f(void) {}\n\
+         __asm__(\".globl ad\\n.set ad, d+8\\n.globl af\\n.set af, f+1\\n\");\n",
+    );
+    let syms = sym_table(&bytes);
+    let of = |n: &str| syms.iter().find(|s| s.0 == n).cloned().unwrap();
+    let (_, d_info, d_shndx, d_val, d_size) = of("d");
+    let (_, f_info, f_shndx, f_val, f_size) = of("f");
+    assert_eq!((d_info, d_size, f_info), (OBJECT_GLOBAL, 16, FUNC_GLOBAL));
+    assert_eq!(
+        of("ad"),
+        (
+            String::from("ad"),
+            OBJECT_GLOBAL,
+            d_shndx,
+            d_val + 8,
+            d_size
+        )
+    );
+    assert_eq!(
+        of("af"),
+        (String::from("af"), FUNC_GLOBAL, f_shndx, f_val + 1, f_size)
+    );
+}
+
+/// A `.set` alias whose chain ends at a definition of this unit takes that
+/// definition's section, value, type and size, through whichever channel
+/// defines the name. GNU as 2.46.1 over the equivalent assembly emits
+/// `(value, size, type, bind)` `(0, 4, OBJECT, LOCAL)` for an alias of a
+/// `.data` object, `(0, 4, TLS, LOCAL)` for one of a `.tdata` object,
+/// `(1, 0, NOTYPE, LOCAL)` for one of a code-stream label at `.text+1`, and
+/// `(0, 3, FUNC, GLOBAL)` for a `.globl` alias of a 3-byte function.
+#[test]
+fn a_set_alias_of_a_defined_name_takes_its_place() {
+    const NOTYPE_LOCAL: u8 = 0x00;
+    const OBJECT_LOCAL: u8 = 0x01;
+    const TLS_LOCAL: u8 = 0x06;
+    const OBJECT_GLOBAL: u8 = 0x11;
+    const FUNC_GLOBAL: u8 = 0x12;
+    const ABS64: u32 = 1;
+    // `(st_info, st_shndx, st_value, st_size)` of a named entry.
+    let place = |bytes: &[u8], n: &str| {
+        sym_table(bytes)
+            .into_iter()
+            .find(|s| s.0 == n)
+            .map(|(_, info, shndx, val, size)| (info, shndx, val, size))
+    };
+    let at = |bytes: &[u8], n: &str, info: u8| {
+        let (_, shndx, val, size) = place(bytes, n).unwrap_or_else(|| panic!("no `{n}` entry"));
+        (info, shndx, val, size)
+    };
+    // Assembled directly: an alias of a data object, a chain through it,
+    // and a `.globl` alias of a function.
+    let bytes = object_of(
+        "set-defined-s",
+        "\t.text\n\t.globl g\n\t.type g, @function\ng:\n\tret\n\t.size g, .-g\n\
+         \t.data\n\t.globl d\n\t.type d, @object\n\t.size d, 4\nd:\n\t.long 5\n\
+         \t.set alias_d, d\n\t.globl alias_g\n\t.set alias_g, g\n\t.set chain, alias_d\n",
+    );
+    let d = at(&bytes, "d", OBJECT_GLOBAL);
+    let g = at(&bytes, "g", FUNC_GLOBAL);
+    assert_eq!((d.2, d.3, g.2, g.3), (0, 4, 0, 1));
+    assert_eq!(
+        place(&bytes, "alias_d"),
+        Some((OBJECT_LOCAL, d.1, d.2, d.3))
+    );
+    assert_eq!(place(&bytes, "chain"), Some((OBJECT_LOCAL, d.1, d.2, d.3)));
+    assert_eq!(place(&bytes, "alias_g"), Some((FUNC_GLOBAL, g.1, g.2, g.3)));
+    // The same assignments in a C unit's file-scope asm. A target that is
+    // neither an inline-asm section label nor a function body reaches the
+    // writer through another channel: a data or thread-local object, or a
+    // label an inline-asm template defined in the main code stream.
+    let bytes = object_of_c(
+        "set-defined-c",
+        "int d = 5;\n_Thread_local int t = 3;\n\
+         void f(void) { __asm__ volatile(\"nop\\n mylbl:\\n nop\\n\"); }\n\
+         __asm__(\".set ad, d\\n.set chain, ad\\n.set at, t\\n.set al, mylbl\\n\
+         .globl af\\n.set af, f\\n\");\n",
+    );
+    let d = at(&bytes, "d", OBJECT_GLOBAL);
+    let t = at(&bytes, "t", TLS_LOCAL | 0x10);
+    let lbl = at(&bytes, "mylbl", NOTYPE_LOCAL);
+    let f = at(&bytes, "f", FUNC_GLOBAL);
+    assert_eq!((d.3, t.3, lbl.2), (4, 4, 1));
+    assert_eq!(place(&bytes, "ad"), Some((OBJECT_LOCAL, d.1, d.2, d.3)));
+    assert_eq!(place(&bytes, "chain"), Some((OBJECT_LOCAL, d.1, d.2, d.3)));
+    assert_eq!(place(&bytes, "at"), Some((TLS_LOCAL, t.1, t.2, t.3)));
+    assert_eq!(
+        place(&bytes, "al"),
+        Some((NOTYPE_LOCAL, lbl.1, lbl.2, lbl.3))
+    );
+    assert_eq!(place(&bytes, "af"), Some((FUNC_GLOBAL, f.1, f.2, f.3)));
+    // A C reference to such an alias binds to the definition rather than
+    // adding an undefined entry beside it.
+    let bytes = object_of_c(
+        "set-defined-ref",
+        "int d = 5;\n__asm__(\".globl ad\\n.set ad, d\\n\");\nextern int ad;\nint *q = &ad;\n",
+    );
+    let ad: Vec<_> = sym_table(&bytes)
+        .into_iter()
+        .filter(|s| s.0 == "ad")
+        .collect();
+    assert_eq!(ad.len(), 1, "{ad:?}");
+    assert_eq!(ad[0].1 >> 4, 1, "{ad:?}");
+    assert_ne!(ad[0].2, 0, "{ad:?}");
+    let rows: Vec<_> = named_relocs(&bytes, ".rela.data")
+        .into_iter()
+        .map(|(_, ty, name, addend)| (ty, name, addend))
+        .collect();
+    assert_eq!(rows, [(ABS64, String::from("ad"), 0)]);
+}
+
+/// An `__attribute__((alias))` declarator's symbol takes the declarator's own
+/// linkage, as gcc 16.1 emits it: `static` binds it local,
+/// `__attribute__((weak))` weak, and external linkage global.
+#[test]
+fn an_attribute_alias_binds_as_its_declarator() {
+    const LOCAL: u8 = 0;
+    const GLOBAL: u8 = 1;
+    const WEAK: u8 = 2;
+    let bytes = object_of_c(
+        "attr-alias-bind",
+        "void real(void) {}\n\
+         static void sal(void) __attribute__((alias(\"real\")));\n\
+         void gal(void) __attribute__((alias(\"real\")));\n\
+         void wal(void) __attribute__((weak, alias(\"real\")));\n\
+         void use(void) { sal(); }\n",
+    );
+    let syms = sym_bindings(&bytes);
+    for (n, bind) in [("sal", LOCAL), ("gal", GLOBAL), ("wal", WEAK)] {
+        let got = syms.iter().find(|s| s.0 == n);
+        assert!(got.is_some_and(|s| s.1 == bind), "`{n}` in {syms:?}");
+    }
+}
+
+/// A branch target may be an expression over symbols and labels, as every
+/// other operand may. A reference to a symbol at an offset takes `PC32`: the
+/// offset is no entry point, so it binds no PLT slot. A plain reference keeps
+/// `PLT32`, and so does one whose expression leaves no offset. A target in
+/// the branch's own section resolves in place and takes the short form,
+/// through a `.set` alias as a bare name does. The bytes and the relocations
+/// are GNU as 2.46.1's for the same source.
+#[test]
+fn a_branch_takes_an_expression_target() {
+    let src = "\t.text\nf:\n\tjmp sym+4\n\tcall sym+8\n\tje sym+4\n\tjmp sym+0\n";
+    assert_eq!(
+        text_of("branch-expr", src),
+        [
+            0xe9, 0, 0, 0, 0, 0xe8, 0, 0, 0, 0, 0x0f, 0x84, 0, 0, 0, 0, 0xe9, 0, 0, 0, 0,
+        ],
+    );
+    assert_eq!(
+        text_relocs("branch-expr-rel", src),
+        [
+            (1, 2, String::from("sym"), 0),
+            (6, 2, String::from("sym"), 4),
+            (0xc, 2, String::from("sym"), 0),
+            (0x11, 4, String::from("sym"), -4),
+        ],
+    );
+    let src = "\t.text\nf:\n\tjmp lo+4\n\tnop\nlo:\n\tnop\n";
+    assert_eq!(text_of("branch-expr-local", src), [0xeb, 0x05, 0x90, 0x90]);
+    assert_eq!(text_relocs("branch-expr-local-rel", src), []);
+    let src = "\t.text\nf:\n\tnop\n\tjmp a+1\n\t.set a, t\nt:\n\tnop\n";
+    assert_eq!(text_of("branch-expr-alias", src), [0x90, 0xeb, 0x01, 0x90]);
+    assert_eq!(text_relocs("branch-expr-alias-rel", src), []);
+}
+
+/// GNU as writes a 64-bit far branch with its `rex[.WRXB]` prefix and has no
+/// `q` suffix for one; LLVM spells the same encoding `ljmpq` and prints it
+/// that way, so both are accepted. On one statement the prefix merges into
+/// the instruction's own REX byte, which is where the extended base register
+/// puts its bit. The bytes are GNU as 2.46.1's for the same source.
+#[test]
+fn a_rex_prefix_writes_a_far_branch() {
+    let t = text_of(
+        "rex-far",
+        "\t.text\n\trex.W ljmp *(%rax)\n\trex.W ljmp *(%r13)\n\tljmpq *(%rax)\n",
+    );
+    assert_eq!(
+        t,
+        [0x48, 0xff, 0x28, 0x49, 0xff, 0x6d, 0x00, 0x48, 0xff, 0x28]
+    );
+}
+
+/// GNU as orders the legacy prefixes segment, address size, operand size,
+/// then repeat / lock, whatever order the statement writes them in, and takes
+/// a memory operand's address size from the base register it names. The three
+/// positions a template holds -- a `.s` unit, file-scope asm, and a function
+/// body -- share the ordering, so each yields GNU as 2.46.1's bytes for the
+/// source below.
+#[test]
+fn legacy_prefixes_take_gnu_as_order_in_every_position() {
+    const BODY: &str = "\tlock cmpxchgw %bx, 2(%rax)\n\
+                        \tlock cmpxchgw %bx, 2(%eax)\n\
+                        \tlock incl %gs:2(%rax)\n\
+                        \tgs lock cmpxchgw %bx, 2(%rax)\n\
+                        \tlock gs cmpxchgw %bx, 2(%rax)\n\
+                        \trep stosw\n\
+                        \trepnz scasb\n";
+    const WANT: [u8; 37] = [
+        0x66, 0xf0, 0x0f, 0xb1, 0x58, 0x02, // lock cmpxchgw %bx, 2(%rax)
+        0x67, 0x66, 0xf0, 0x0f, 0xb1, 0x58, 0x02, // lock cmpxchgw %bx, 2(%eax)
+        0x65, 0xf0, 0xff, 0x40, 0x02, // lock incl %gs:2(%rax)
+        0x65, 0x66, 0xf0, 0x0f, 0xb1, 0x58, 0x02, // gs lock cmpxchgw %bx, 2(%rax)
+        0x65, 0x66, 0xf0, 0x0f, 0xb1, 0x58, 0x02, // lock gs cmpxchgw %bx, 2(%rax)
+        0x66, 0xf3, 0xab, // rep stosw
+        0xf2, 0xae, // repnz scasb
+    ];
+    assert_eq!(
+        text_of("prefix-order-s", &format!("\t.text\np:\n{BODY}")),
+        WANT,
+    );
+    let body_c = BODY.replace('\n', "\\n").replace('\t', "\\t");
+    for (name, src) in [
+        (
+            "prefix-order-file",
+            format!("__asm__(\".text\\npf:\\n{body_c}\");\n"),
+        ),
+        (
+            "prefix-order-body",
+            format!("void f(void) {{ __asm__ volatile(\"{body_c}\"); }}\n"),
+        ),
+    ] {
+        let t = section64(&object_of_c(name, &src), ".text");
+        assert_eq!(
+            t.windows(WANT.len()).filter(|w| *w == WANT).count(),
+            1,
+            "{name}: {t:02x?}"
+        );
+    }
 }
 
 /// `call` has no `rel8` form, so it keeps `e8 rel32` at any distance.
@@ -1194,4 +2447,423 @@ fn a_relocated_branch_keeps_the_long_form() {
 fn a_near_call_is_not_shortened() {
     let t = text_of("relax-call", "\t.text\nf:\n\tcall 1f\n1:\n\tnop\n");
     assert_eq!(&t[..5], [0xe8, 0, 0, 0, 0], "call keeps rel32");
+}
+
+/// A near branch through an absolute address: AT&T's `*` makes the operand
+/// the memory holding the target, which long mode addresses with a base-less
+/// SIB. GNU as 2.46.1 writes `ff 24 25 34 12 00 00` for `jmp *0x1234` and
+/// `ff 14 25 34 12 00 00` for `call *0x1234`; the symbol spelling takes an
+/// `R_X86_64_32S` in the same displacement field.
+#[test]
+fn a_near_indirect_branch_takes_an_absolute_address() {
+    const X86_64_32S: u32 = 11;
+    let t = text_of("jmp-abs", "\t.text\n\tjmp *0x1234\n\tcall *0x1234\n");
+    #[rustfmt::skip]
+    let want = [0xff, 0x24, 0x25, 0x34, 0x12, 0, 0,
+                0xff, 0x14, 0x25, 0x34, 0x12, 0, 0];
+    assert_eq!(t, want);
+    let src = "\t.text\n\tjmp *sym\n";
+    assert_eq!(&text_of("jmp-abs-sym", src)[..3], [0xff, 0x24, 0x25]);
+    assert_eq!(
+        text_relocs("jmp-abs-sym-rel", src),
+        [(3, X86_64_32S, String::from("sym"), 0)],
+    );
+    // Outside long mode the reference takes the mode's operand size, and the
+    // address size decides the r/m form and the `67` prefix: gas writes
+    // `ff 26 34 12` / `ff 27` in `.code16` and `ff 25 34 12 00 00` /
+    // `67 ff 27` in `.code32`.
+    let t = text_of("jmp-abs-16", "\t.code16\n\tjmp *0x1234\n\tjmp *(%bx)\n");
+    assert_eq!(t, [0xff, 0x26, 0x34, 0x12, 0xff, 0x27]);
+    let t = text_of("jmp-abs-32", "\t.code32\n\tjmp *0x1234\n\tjmp *(%bx)\n");
+    assert_eq!(t, [0xff, 0x25, 0x34, 0x12, 0, 0, 0x67, 0xff, 0x27]);
+}
+
+const X64: &str = "linux-x64";
+const A64: &str = "linux-aarch64";
+
+/// A prologue described by `.cfi_*` and nothing else. Every byte below is
+/// GNU as 2.46.1's for the same source: a `zR` CIE carrying the x86-64
+/// entry rules, then one FDE whose address field is a PC-relative
+/// displacement the link resolves against `.text`.
+#[test]
+fn cfi_directives_build_the_eh_frame_gnu_as_does() {
+    let b = object_for(
+        "cfi-eh",
+        "\t.text\n\t.globl f\n\t.type f,@function\nf:\n\
+         \t.cfi_startproc\n\tpushq\t%rbp\n\t.cfi_adjust_cfa_offset 8\n\
+         \t.cfi_rel_offset %rbp, 0\n\tnop\n\tpopq\t%rbp\n\
+         \t.cfi_restore %rbp\n\t.cfi_def_cfa %rsp, 8\n\tret\n\
+         \t.cfi_endproc\n\t.size f,.-f\n",
+        X64,
+    );
+    assert_eq!(
+        section_data(&b, ".eh_frame"),
+        [
+            0x14, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x7a, 0x52, 0x00, 0x01, 0x78, 0x10, 0x01, 0x1b, 0x0c,
+            0x07, 0x08, 0x90, 0x01, 0x00, 0x00, 0x1c, 0, 0, 0, 0x1c, 0, 0, 0, 0, 0, 0, 0, 0x04, 0,
+            0, 0, 0x00, 0x41, 0x0e, 0x10, 0x86, 0x02, 0x42, 0xc6, 0x0c, 0x07, 0x08, 0x00, 0, 0, 0,
+            0
+        ]
+    );
+    // R_X86_64_PC32 over the FDE's address field, so the table needs no
+    // load-time relocation in a shared object.
+    assert_eq!(relocs(&b, ".rela.eh_frame"), [(0x20, 2, 0)]);
+    assert!(!section_names(&b).iter().any(|n| n == ".debug_frame"));
+}
+
+/// `.cfi_sections .debug_frame` moves the same description to the offline
+/// table: an all-ones `cie_id`, an absolute address field, and a CIE
+/// pointer the link rebases. GNU as 2.46.1's bytes for the same source.
+#[test]
+fn cfi_sections_moves_the_table_to_debug_frame() {
+    let b = object_for(
+        "cfi-dbg",
+        "\t.text\n\t.globl f\n\t.type f,@function\nf:\n\
+         \t.cfi_sections .debug_frame\n\t.cfi_startproc\n\tpushq\t%rbp\n\
+         \t.cfi_adjust_cfa_offset 8\n\t.cfi_rel_offset %rbp, 0\n\tnop\n\
+         \tpopq\t%rbp\n\t.cfi_restore %rbp\n\t.cfi_def_cfa %rsp, 8\n\tret\n\
+         \t.cfi_endproc\n\t.size f,.-f\n",
+        X64,
+    );
+    assert_eq!(
+        section_data(&b, ".debug_frame"),
+        [
+            0x14, 0, 0, 0, 0xff, 0xff, 0xff, 0xff, 0x01, 0x00, 0x01, 0x78, 0x10, 0x0c, 0x07, 0x08,
+            0x90, 0x01, 0x00, 0x00, 0, 0, 0, 0, 0x24, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0x04, 0, 0, 0, 0, 0, 0, 0, 0x41, 0x0e, 0x10, 0x86, 0x02, 0x42, 0xc6, 0x0c, 0x07, 0x08,
+            0, 0, 0, 0, 0, 0
+        ]
+    );
+    // The CIE pointer is a 32-bit offset into this section; the address
+    // field is a full absolute address.
+    assert_eq!(
+        relocs(&b, ".rela.debug_frame"),
+        [(0x1c, 10, 0), (0x20, 1, 0)]
+    );
+    assert!(!section_names(&b).iter().any(|n| n == ".eh_frame"));
+}
+
+/// `.cfi_signal_frame` marks the CIE in both tables: `zRS` where the
+/// augmentation block exists, a bare `S` in `.debug_frame`. An unwinder
+/// reads it to take the return address unmodified, which is what lets a
+/// walk step out of a signal handler. GNU as 2.46.1's augmentation bytes.
+#[test]
+fn a_signal_frame_is_marked_in_both_tables() {
+    let b = object_for(
+        "cfi-sig",
+        "\t.text\n\t.globl f\n\t.type f,@function\nf:\n\
+         \t.cfi_sections .eh_frame, .debug_frame\n\t.cfi_startproc\n\
+         \t.cfi_signal_frame\n\tnop\n\t.cfi_endproc\n\t.size f,.-f\n",
+        X64,
+    );
+    assert_eq!(&section_data(&b, ".eh_frame")[9..13], b"zRS\0");
+    assert_eq!(&section_data(&b, ".debug_frame")[9..11], b"S\0");
+}
+
+/// The AArch64 PCS puts the entry CFA at `sp` with the return address in
+/// x30, and factors code offsets by four. GNU as 2.46.1's bytes.
+#[test]
+fn an_aarch64_frame_takes_the_pcs_alignment_factors() {
+    let b = object_for(
+        "cfi-a64",
+        "\t.text\n\t.globl f\n\t.type f,%function\nf:\n\t.cfi_startproc\n\
+         \tstp\tx29, x30, [sp, #-16]!\n\t.cfi_def_cfa_offset 16\n\
+         \t.cfi_offset x29, -16\n\t.cfi_offset x30, -8\n\tnop\n\
+         \tldp\tx29, x30, [sp], #16\n\t.cfi_restore x30\n\t.cfi_restore x29\n\
+         \t.cfi_def_cfa_offset 0\n\tret\n\t.cfi_endproc\n\t.size f,.-f\n",
+        A64,
+    );
+    assert_eq!(
+        section_data(&b, ".eh_frame"),
+        [
+            0x10, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x7a, 0x52, 0x00, 0x04, 0x78, 0x1e, 0x01, 0x1b, 0x0c,
+            0x1f, 0x00, 0x20, 0, 0, 0, 0x18, 0, 0, 0, 0, 0, 0, 0, 0x10, 0, 0, 0, 0x00, 0x41, 0x0e,
+            0x10, 0x9d, 0x02, 0x9e, 0x01, 0x42, 0xde, 0xdd, 0x0e, 0x00, 0, 0, 0, 0, 0, 0, 0
+        ]
+    );
+    // R_AARCH64_PREL32 over the FDE's address field.
+    assert_eq!(relocs(&b, ".rela.eh_frame"), [(0x1c, 261, 0)]);
+}
+
+/// `-m32` narrows the object to i386, whose frame registers are numbered
+/// from a different table (`ecx` is 1, the return column 8) and whose data
+/// alignment factor is -4. This is the shape the 32-bit vDSO ships, so it
+/// is checked against GNU as 2.46.1's bytes for the same source.
+#[test]
+fn an_i386_frame_takes_the_i386_register_numbering() {
+    let d = dir("cfi-i386");
+    write(
+        &d,
+        "u.s",
+        "\t.text\n\t.globl f\n\t.type f,@function\nf:\n\t.cfi_startproc\n\
+         \tpushl\t%ecx\n\t.cfi_adjust_cfa_offset 4\n\t.cfi_rel_offset ecx, 0\n\
+         \tnop\n\tpopl\t%ecx\n\t.cfi_restore ecx\n\t.cfi_adjust_cfa_offset -4\n\
+         \tret\n\t.cfi_endproc\n\t.size f,.-f\n",
+    );
+    run_ok(
+        &d,
+        &["-q", "-c", "--target=linux-x64", "-m32", "u.s", "-o", "u.o"],
+    );
+    let b = std::fs::read(d.join("u.o")).unwrap();
+    let secs = elf32_sections(&b);
+    let eh = secs.iter().find(|s| s.0 == ".eh_frame").expect(".eh_frame");
+    assert_eq!(
+        &b[eh.2..eh.2 + eh.3],
+        [
+            0x14, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x7a, 0x52, 0x00, 0x01, 0x7c, 0x08, 0x01, 0x1b, 0x0c,
+            0x04, 0x04, 0x88, 0x01, 0x00, 0x00, 0x18, 0, 0, 0, 0x1c, 0, 0, 0, 0, 0, 0, 0, 0x04, 0,
+            0, 0, 0x00, 0x41, 0x0e, 0x08, 0x81, 0x02, 0x42, 0xc1, 0x0e, 0x04, 0x00, 0x00
+        ]
+    );
+    // i386 has no RELA: the FDE address is a `SHT_REL` R_386_PC32.
+    assert!(secs.iter().any(|s| s.0 == ".rel.eh_frame"));
+}
+
+/// `.cfi_val_offset` states a register's value rather than where it was
+/// saved, and takes the signed opcode when the factored offset is negative.
+/// `.cfi_negate_ra_state` is the AArch64 return-address-signing toggle,
+/// which shares its vendor opcode with `DW_CFA_GNU_window_save`. GNU as
+/// 2.46.1's bytes.
+#[test]
+fn val_offset_and_ra_state_take_their_own_opcodes() {
+    let b = object_for(
+        "cfi-val",
+        "\t.text\n\t.globl f\n\t.type f,%function\nf:\n\t.cfi_startproc\n\
+         \t.cfi_negate_ra_state\n\tnop\n\t.cfi_val_offset x19, -16\n\tnop\n\
+         \t.cfi_val_offset x20, 24\n\tnop\n\t.cfi_endproc\n\t.size f,.-f\n",
+        A64,
+    );
+    assert_eq!(
+        section_data(&b, ".eh_frame"),
+        [
+            0x10, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x7a, 0x52, 0x00, 0x04, 0x78, 0x1e, 0x01, 0x1b, 0x0c,
+            0x1f, 0x00, 0x18, 0, 0, 0, 0x18, 0, 0, 0, 0, 0, 0, 0, 0x0c, 0, 0, 0, 0x00, 0x2d, 0x41,
+            0x14, 0x13, 0x02, 0x41, 0x15, 0x14, 0x7d, 0x00, 0x00
+        ]
+    );
+}
+
+/// A frame operand is an absolute expression, not a literal: the kernel's
+/// signal trampolines spell every saved-register slot as offset arithmetic
+/// over a macro argument. Both frames below describe the same state, so
+/// the two must encode identically.
+#[test]
+fn a_frame_operand_may_be_a_constant_expression() {
+    let lit = object_for(
+        "cfi-lit",
+        "\t.text\nf:\n\t.cfi_startproc simple\n\t.cfi_def_cfa %rsp, 12\n\
+         \t.cfi_offset %rbx, -24\n\tnop\n\t.cfi_endproc\n",
+        X64,
+    );
+    let expr = object_for(
+        "cfi-expr",
+        "\t.text\nf:\n\t.cfi_startproc simple\n\t.cfi_def_cfa %rsp, 16 - 4\n\
+         \t.cfi_offset %rbx, (0 - 3) * 8\n\tnop\n\t.cfi_endproc\n",
+        X64,
+    );
+    assert_eq!(
+        section_data(&lit, ".eh_frame"),
+        section_data(&expr, ".eh_frame")
+    );
+    assert!(!section_data(&lit, ".eh_frame").is_empty());
+}
+
+/// A unit with no `.cfi_startproc` gains no frame table, and an unclosed
+/// description is an error rather than a truncated one: a consumer trusts
+/// the table, so a partial one is worse than none.
+#[test]
+fn frames_appear_only_for_a_closed_description() {
+    let plain = object_for("cfi-none", "\t.text\nf:\n\tnop\n\tret\n", X64);
+    assert!(!section_names(&plain).iter().any(|n| n == ".eh_frame"));
+
+    let d = dir("cfi-open");
+    write(&d, "u.s", "\t.text\nf:\n\t.cfi_startproc\n\tnop\n");
+    let (ok, out) = run(
+        &d,
+        &["-q", "-c", &format!("--target={X64}"), "u.s", "-o", "u.o"],
+    );
+    assert!(!ok, "an unclosed frame description must fail: {out}");
+    assert!(out.contains("cfi_endproc"), "{out}");
+}
+
+/// `(name, st_info, st_shndx)` of every symbol table entry, the unnamed
+/// ones included, in table order.
+fn sym_entries(bytes: &[u8]) -> Vec<(String, u8, u16)> {
+    sym_table(bytes)
+        .into_iter()
+        .map(|(n, info, shndx, _, _)| (n, info, shndx))
+        .collect()
+}
+
+/// `(name, sh_type, sh_flags, sh_addralign, sh_entsize)` per section.
+fn section_headers(bytes: &[u8]) -> Vec<(String, u32, u64, u64, u64)> {
+    let u16at = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
+    let u32at = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+    let u64at = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let shoff = u64at(0x28) as usize;
+    let (shentsize, shnum, shstrndx) = (u16at(0x3a), u16at(0x3c), u16at(0x3e));
+    let names = u64at(shoff + shstrndx * shentsize + 0x18) as usize;
+    (0..shnum)
+        .map(|i| {
+            let sh = shoff + i * shentsize;
+            let n = names + u32at(sh) as usize;
+            let end = bytes[n..].iter().position(|&b| b == 0).unwrap();
+            (
+                String::from_utf8(bytes[n..n + end].to_vec()).unwrap(),
+                u32at(sh + 4),
+                u64at(sh + 8),
+                u64at(sh + 0x30),
+                u64at(sh + 0x38),
+            )
+        })
+        .collect()
+}
+
+const STT_FILE_INFO: u8 = 4; // STB_LOCAL << 4 | STT_FILE
+const STT_SECTION_INFO: u8 = 3; // STB_LOCAL << 4 | STT_SECTION
+
+/// A unit with a call, a data reference, and a data definition, per ISA.
+const SHAPE_A64: &str = "\t.text\n\t.globl f\n\t.type f, @function\nf:\n\
+\tbl ext\n\tadrp x0, v\n\tadd x0, x0, :lo12:v\n\tret\n\
+\t.data\n\t.globl v\nv:\n\t.word 7\n";
+const SHAPE_X64: &str = "\t.text\n\t.globl f\n\t.type f, @function\nf:\n\
+\tcall ext\n\tmovq v(%rip), %rax\n\tret\n\
+\t.data\n\t.globl v\nv:\n\t.quad 7\n";
+
+/// A `.s` object carries the GNU as section roster and nothing else: no
+/// `.note.badc`, no `.comment`, and no `.debug_*` without `-g`. GNU as
+/// 2.46 emits exactly the null section, the three defaults, the used
+/// `.rela.text`, and the three table sections for the same source.
+#[test]
+fn a_dot_s_object_carries_the_gnu_as_section_roster() {
+    for (target, src) in [("linux-aarch64", SHAPE_A64), (X64, SHAPE_X64)] {
+        let name = format!("roster-{target}");
+        let bytes = object_for(&name, src, target);
+        let mut names = section_names(&bytes);
+        names.sort();
+        let mut want: Vec<String> = [
+            "",
+            ".bss",
+            ".data",
+            ".rela.text",
+            ".shstrtab",
+            ".strtab",
+            ".symtab",
+            ".text",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        want.sort();
+        assert_eq!(names, want, "{target}: section roster");
+    }
+}
+
+/// An STT_FILE symbol appears only for a `.file "name"` directive, named
+/// by its operand; GNU as emits none for a unit without one, and the
+/// numbered DWARF form (`.file N "name"`) names no symbol either.
+#[test]
+fn a_file_symbol_appears_only_per_dot_file_directive() {
+    let plain = object_for("file-none", SHAPE_A64, "linux-aarch64");
+    assert!(
+        !sym_entries(&plain).iter().any(|s| s.1 == STT_FILE_INFO),
+        "no `.file`, no STT_FILE symbol"
+    );
+
+    let named = object_for(
+        "file-named",
+        "\t.file \"unit.c\"\n\t.text\nf:\n\tret\n",
+        "linux-aarch64",
+    );
+    let files: Vec<_> = sym_entries(&named)
+        .into_iter()
+        .filter(|s| s.1 == STT_FILE_INFO)
+        .collect();
+    assert_eq!(
+        files,
+        vec![(String::from("unit.c"), STT_FILE_INFO, 0xfff1)],
+        "`.file \"unit.c\"` names one SHN_ABS file symbol"
+    );
+
+    let numbered = object_for(
+        "file-numbered",
+        "\t.file 1 \"unit.c\"\n\t.text\nf:\n\tret\n",
+        "linux-aarch64",
+    );
+    assert!(
+        !sym_entries(&numbered).iter().any(|s| s.1 == STT_FILE_INFO),
+        "the numbered `.file` form is line-table input, not a symbol"
+    );
+}
+
+/// `.ident` strings pool into `.comment` in GNU as shape -- a leading NUL,
+/// each string NUL-terminated, SHF_MERGE | SHF_STRINGS with byte entsize.
+#[test]
+fn ident_strings_pool_into_dot_comment() {
+    let bytes = object_for(
+        "ident",
+        "\t.ident \"one\"\n\t.ident \"two\"\n\t.text\nf:\n\tret\n",
+        "linux-aarch64",
+    );
+    assert_eq!(section_data(&bytes, ".comment"), b"\0one\0two\0");
+    let (_, ty, flags, _, entsize) = section_headers(&bytes)
+        .into_iter()
+        .find(|s| s.0 == ".comment")
+        .expect(".comment present");
+    assert_eq!(
+        (ty, flags, entsize),
+        (1, 0x30, 1),
+        "PROGBITS, MS, entsize 1"
+    );
+}
+
+/// A default section the unit leaves empty claims no alignment: GNU as
+/// keeps `.text` / `.data` / `.bss` at addralign 1 until content raises it.
+#[test]
+fn an_empty_default_section_claims_no_alignment() {
+    let bytes = object_for(
+        "empty-defaults",
+        "\t.data\n\t.globl d\nd:\n\t.word 9\n",
+        "linux-aarch64",
+    );
+    for want in [".text", ".bss"] {
+        let (_, _, _, align, _) = section_headers(&bytes)
+            .into_iter()
+            .find(|s| s.0 == want)
+            .unwrap_or_else(|| panic!("{want} present"));
+        assert_eq!(align, 1, "empty {want} addralign");
+    }
+}
+
+/// Section symbols follow the GNU as target policy: the x86 backend omits
+/// every one no relocation references, the aarch64 backend keeps them all.
+#[test]
+fn unused_section_symbols_follow_the_target_policy() {
+    let count = |bytes: &[u8]| {
+        sym_entries(bytes)
+            .iter()
+            .filter(|s| s.1 == STT_SECTION_INFO)
+            .count()
+    };
+
+    let x = object_for("secsym-x64", "\t.text\n\t.globl f\nf:\n\tret\n", X64);
+    assert_eq!(count(&x), 0, "x86-64: no relocation, no section symbol");
+
+    let x_used = object_for(
+        "secsym-x64-used",
+        "\t.text\nf:\n\tmovq lv(%rip), %rax\n\tret\n\t.data\nlv:\n\t.quad 1\n",
+        X64,
+    );
+    assert_eq!(
+        count(&x_used),
+        1,
+        "x86-64: only the `.data` a relocation names keeps its symbol"
+    );
+
+    let a = object_for(
+        "secsym-a64",
+        "\t.text\n\t.globl f\nf:\n\tret\n",
+        "linux-aarch64",
+    );
+    assert_eq!(count(&a), 3, "aarch64: the three defaults keep theirs");
 }

@@ -142,6 +142,62 @@ fn cie_fde_encoding(data: &[u8], cie_at: usize, end: usize) -> Result<u8, String
     Ok(DW_EH_PE_ABSPTR)
 }
 
+/// One entry of a `.eh_frame` section.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Entry {
+    pub off: usize,
+    /// Total size, the length field included.
+    pub len: usize,
+    /// Section offset of the CIE an FDE names; `None` for a CIE.
+    pub cie: Option<usize>,
+}
+
+/// The FDE field holding the distance back to its CIE.
+pub const CIE_POINTER: usize = 4;
+
+/// Split `.eh_frame` into its entries, in section order. Stops at the
+/// terminating zero length; the bytes from there on are the caller's to
+/// carry over.
+pub fn entries(data: &[u8]) -> Result<Vec<Entry>, String> {
+    let mut out: Vec<Entry> = Vec::new();
+    let mut pos = 0usize;
+    while pos + 8 <= data.len() {
+        let len = u32_at(data, pos).ok_or("`.eh_frame`: truncated length")? as usize;
+        if len == 0 {
+            break;
+        }
+        if len == 0xffff_ffff {
+            return Err(String::from(
+                "`.eh_frame`: 64-bit entries are not supported",
+            ));
+        }
+        let end = pos
+            .checked_add(4)
+            .and_then(|p| p.checked_add(len))
+            .ok_or("`.eh_frame`: entry length overflows")?;
+        if end > data.len() {
+            return Err(String::from("`.eh_frame`: entry runs past the section"));
+        }
+        let id = u32_at(data, pos + CIE_POINTER).ok_or("`.eh_frame`: truncated CIE id")?;
+        let cie = if id == 0 {
+            None
+        } else {
+            Some(
+                (pos + CIE_POINTER)
+                    .checked_sub(id as usize)
+                    .ok_or("`.eh_frame`: FDE names a CIE outside the section")?,
+            )
+        };
+        out.push(Entry {
+            off: pos,
+            len: end - pos,
+            cie,
+        });
+        pos = end;
+    }
+    Ok(out)
+}
+
 /// Walk `.eh_frame`, returning one entry per FDE. `sec_addr` is the
 /// section's final address; entries come back in address order, which
 /// is the order an unwinder binary-searches.
@@ -291,6 +347,34 @@ mod tests {
                 fde: 0x1018
             }
         );
+    }
+
+    #[test]
+    fn entries_split_the_section_and_name_each_cie() {
+        let mut d = sample();
+        d.extend_from_slice(&0u32.to_le_bytes()); // terminator
+        let e = entries(&d).expect("splits");
+        assert_eq!(
+            e,
+            [
+                Entry {
+                    off: 0,
+                    len: 0x18,
+                    cie: None
+                },
+                Entry {
+                    off: 0x18,
+                    len: 0x18,
+                    cie: Some(0)
+                },
+                Entry {
+                    off: 0x30,
+                    len: 0x18,
+                    cie: Some(0)
+                },
+            ]
+        );
+        assert!(entries(&d[..0x2c]).is_err(), "an entry past the end");
     }
 
     #[test]

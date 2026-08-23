@@ -9,6 +9,21 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <bump>:
                	popq	%r10
@@ -18,11 +33,11 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movq	%rdi, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rcx
                	leaq	-0x8(%rbp), %rax
-               	movq	(%rax), %rax
-               	addq	$0x64, %rax
-               	movq	%rax, (%rcx)
+               	movq	(%rax), %rcx
+               	addq	$0x64, %rcx
+               	movq	%rcx, (%rax)
+               	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	popq	%r11
@@ -34,10 +49,9 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	leaq	-0x8(%rbp), %rax
-               	movl	$0x5, %ecx
-               	movq	%rcx, (%rax)
                	leaq	-0x8(%rbp), %rdi
+               	movl	$0x5, %eax
+               	movq	%rax, (%rdi)
                	movq	(%rdi), %rdi
                	callq	<addr>
                	imulq	$0x3e8, %rax, %rax      # imm = 0x3E8

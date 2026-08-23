@@ -20,6 +20,10 @@ pub(crate) enum ScalarKind {
     Int,
     F32,
     F64,
+    /// x87 80-bit `long double` in a 16-byte field (System V x86-64).
+    F80,
+    /// IEEE binary128 `long double` (AAPCS64 ELF).
+    F128,
 }
 
 /// One flattened leaf field of an aggregate: its byte offset from
@@ -111,6 +115,17 @@ fn classify_sysv(size: u32, fields: &[FlatField], is_return: bool) -> AggClass {
     if size == 0 {
         return AggClass::Regs(alloc::vec::Vec::new());
     }
+    // An eightbyte covering an x87 field is X87/X87UP, which sends the
+    // whole aggregate to memory as an argument (3.2.3 rule 5). As a
+    // return value gcc leaves a sole `long double` member in st(0).
+    // TODO: extended-precision long double -- st(0) struct returns.
+    if fields.iter().any(|f| f.kind == ScalarKind::F80) {
+        return if is_return {
+            AggClass::ReturnIndirect
+        } else {
+            AggClass::ByStack
+        };
+    }
     if size > 16 {
         return if is_return {
             AggClass::ReturnIndirect
@@ -180,7 +195,9 @@ fn hfa_member_count(fields: &[FlatField]) -> Option<usize> {
         return None;
     }
     let first = fields[0].kind;
-    if first == ScalarKind::Int {
+    // TODO: extended-precision long double -- binary128 members form
+    // HFAs (AAPCS64 6.4.2) once a 16-byte FP register slot exists.
+    if !matches!(first, ScalarKind::F32 | ScalarKind::F64) {
         return None;
     }
     if fields.iter().all(|f| f.kind == first) {

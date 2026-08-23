@@ -9,47 +9,53 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <main>:
-               	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
-               	xorq	%rcx, %rcx
-               	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
+               	movabsq	$0x4008000000000000, %rdx # imm = 0x4008000000000000
+               	xorq	%rax, %rax
+               	movq	%rdx, %xmm14
+               	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm14
-               	setae	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	jb	<addr>
+               	movl	$0x1, %ecx
+               	movslq	%ecx, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
-               	movl	$0x1, %eax
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
-               	movq	%rax, %xmm0
+               	movq	%rdx, %xmm0
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
-               	xorq	%rax, %rax
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	setae	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	jb	<addr>
                	movl	$0x1, %eax
                	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
+               	sete	%cl
+               	movzbq	%cl, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x2a, %eax
                	movslq	%eax, %rax
                	retq
                	xorq	%rax, %rax
                	jmp	<addr>
-               	xorq	%rax, %rax
                	jmp	<addr>
                	jmp	<addr>
-               	xorq	%rax, %rax
+               	movq	%rax, %rcx
                	jmp	<addr>

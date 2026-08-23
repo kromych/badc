@@ -21,7 +21,7 @@
     all(target_os = "macos", target_arch = "aarch64"),
 ))]
 
-use super::fixture_tables::JIT_FIXTURES;
+use super::fixture_tables::{JIT_FIXTURES, JIT_UNSUPPORTED_FIXTURES};
 use crate::{Compiler, NativeOptions, jit_run, jit_run_with_options};
 
 /// Compile `src` and run it through the JIT with `args` as argv.
@@ -633,7 +633,7 @@ fn while_loop_promotes_counter_through_phi_under_phi_promote() {
             .compile()
             .expect("compile failed");
         let mut funcs =
-            produce_ssa_funcs(&program, Target::host(), false).expect("produce_ssa_funcs");
+            produce_ssa_funcs(&program, Target::host(), false, true).expect("produce_ssa_funcs");
         for f in &mut funcs {
             crate::c5::codegen::ssa::mem2reg::run(f);
         }
@@ -1754,15 +1754,42 @@ fn jit_fixture(name: &str) -> i32 {
     jit_exit(&src, &[name])
 }
 
+/// A construct the JIT declines must fail to load with a diagnostic
+/// naming it, on every JIT host. Left undriven, the combination
+/// regressed to a fault in the generated code instead: nothing in the
+/// suite ran a thread-local through the JIT.
+#[test]
+fn unsupported_fixtures_are_refused() {
+    let failures = super::parity_failures(JIT_UNSUPPORTED_FIXTURES, |name, needle| {
+        let src = super::with_prelude(&super::load_fixture(name));
+        let program = match Compiler::new(src).compile() {
+            Ok(p) => p,
+            Err(e) => return Some(format!("{name}: compile failed: {e}")),
+        };
+        match jit_run(&program, &[name.to_string()]) {
+            Ok(exit) => Some(format!("{name}: expected a refusal, ran and exited {exit}")),
+            Err(e) => {
+                let msg = format!("{e}");
+                (!msg.contains(needle))
+                    .then(|| format!("{name}: refusal does not name `{needle}`: {msg}"))
+            }
+        }
+    });
+    assert!(
+        failures.is_empty(),
+        "{} of {} unsupported JIT fixtures did not refuse as expected:\n  {}",
+        failures.len(),
+        JIT_UNSUPPORTED_FIXTURES.len(),
+        failures.join("\n  ")
+    );
+}
+
 #[test]
 fn fixture_parity() {
-    let mut failures: Vec<String> = Vec::new();
-    for (name, expected) in JIT_FIXTURES {
+    let failures = super::parity_failures(JIT_FIXTURES, |name, expected| {
         let got = jit_fixture(name);
-        if got != *expected {
-            failures.push(format!("{name}: expected {expected}, got {got}"));
-        }
-    }
+        (got != *expected).then(|| format!("{name}: expected {expected}, got {got}"))
+    });
     assert!(
         failures.is_empty(),
         "{} of {} JIT fixtures regressed:\n  {}",
@@ -1784,19 +1811,15 @@ fn fixture_parity_native_optimized() {
     path.push("tests");
     path.push("fixtures");
     path.push("c");
-    let mut failures: Vec<String> = Vec::new();
-    for (name, expected) in JIT_FIXTURES {
+    let failures = super::parity_failures(JIT_FIXTURES, |name, expected| {
         let mut p = path.clone();
         p.push(name);
         let src =
             std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("read {}: {e}", p.display()));
         let got = jit_exit_native_optimized(&src, &[name]);
-        if got != *expected {
-            failures.push(format!(
-                "{name} (native optimizer on): expected {expected}, got {got}"
-            ));
-        }
-    }
+        (got != *expected)
+            .then(|| format!("{name} (native optimizer on): expected {expected}, got {got}"))
+    });
     assert!(
         failures.is_empty(),
         "{} of {} JIT fixtures regressed under the native optimizer:\n  {}",
@@ -1928,7 +1951,8 @@ fn dead_strip_drops_unused_static_function() {
     let program = Compiler::new(src.to_string())
         .compile()
         .expect("compile failed");
-    let funcs = produce_ssa_funcs(&program, Target::host(), false).expect("produce_ssa_funcs");
+    let funcs =
+        produce_ssa_funcs(&program, Target::host(), false, true).expect("produce_ssa_funcs");
     let names: Vec<&str> = funcs.iter().map(|f| f.name.as_str()).collect();
     assert!(names.contains(&"main"), "entry must survive: {names:?}");
     assert!(
@@ -1942,6 +1966,33 @@ fn dead_strip_drops_unused_static_function() {
     assert!(
         !names.contains(&"never_called"),
         "unused static must be dead-stripped: {names:?}"
+    );
+}
+
+#[test]
+fn asm_template_leading_token_is_not_a_reference() {
+    // A statement's leading token is a label, mnemonic or directive, so it
+    // does not reference a same-named static; a name in operand position
+    // does. `8:` covers the mnemonic that leads its statement behind a label.
+    use crate::Target;
+    use crate::c5::codegen::ssa::shadow::produce_ssa_funcs;
+    let src = "static int nop(int x){return x+1;}\n\
+               static int target(int x){return x+2;}\n\
+               void user(void){__asm__ __volatile__(\"nop\\n8: nop\\ncall target\\n\");}\n\
+               int main(void){user();return 0;}";
+    let program = Compiler::new(src.to_string())
+        .compile()
+        .expect("compile failed");
+    let funcs =
+        produce_ssa_funcs(&program, Target::host(), false, true).expect("produce_ssa_funcs");
+    let names: Vec<&str> = funcs.iter().map(|f| f.name.as_str()).collect();
+    assert!(
+        !names.contains(&"nop"),
+        "a leading mnemonic must not keep a same-named static: {names:?}"
+    );
+    assert!(
+        names.contains(&"target"),
+        "a name in operand position must keep its definition: {names:?}"
     );
 }
 

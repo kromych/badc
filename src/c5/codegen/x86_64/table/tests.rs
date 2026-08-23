@@ -108,6 +108,7 @@ fn atomics_and_system() {
     assert_eq!(enc("cli", &[]), [0xfa]);
     assert_eq!(enc("hlt", &[]), [0xf4]);
     assert_eq!(enc("cpuid", &[]), [0x0f, 0xa2]);
+    assert_eq!(enc("xgetbv", &[]), [0x0f, 0x01, 0xd0]);
 }
 
 #[test]
@@ -458,6 +459,63 @@ fn enc_in(mode: Mode, addr: u8, mnem: &str, w: Option<u8>, ops: &[Opnd]) -> Vec<
     encode_in(mode, addr, m, w, ops).unwrap_or_else(|e| panic!("{mnem}: {e}"))
 }
 
+/// A 16-bit operand against the accumulator is the one width where the
+/// `05 iw` accumulator form and the `83 /n ib` sign-extended form are the
+/// same length. GNU as picks the sign-extended one, and does so in every
+/// mode; an immediate outside the signed-byte range has no such form and
+/// takes the accumulator one in both assemblers.
+#[test]
+fn word_accumulator_alu_immediate_matches_gnu_as() {
+    // Mnemonic, its `83 /n` ModRM byte for `%ax`, and its accumulator opcode.
+    let group: &[(&str, u8, u8)] = &[
+        ("add", 0xc0, 0x05),
+        ("or", 0xc8, 0x0d),
+        ("adc", 0xd0, 0x15),
+        ("sbb", 0xd8, 0x1d),
+        ("and", 0xe0, 0x25),
+        ("sub", 0xe8, 0x2d),
+        ("xor", 0xf0, 0x35),
+        ("cmp", 0xf8, 0x3d),
+    ];
+    for &(mnem, modrm, acc) in group {
+        for (mode, addr, prefix) in [
+            (Mode::Bits16, 2u8, &[][..]),
+            (Mode::Bits32, 4, &[0x66][..]),
+            (Mode::Bits64, 8, &[0x66][..]),
+        ] {
+            let e = |imm: i64| enc_in(mode, addr, mnem, None, &[r(0, 2), Opnd::Imm(imm)]);
+            let want = |tail: &[u8]| [prefix, tail].concat();
+            for imm in [0i64, 1, 127, -1, -128] {
+                assert_eq!(
+                    e(imm),
+                    want(&[0x83, modrm, imm as u8]),
+                    "{mnem} ${imm} ({mode:?})"
+                );
+            }
+            // Past the signed-byte range only the accumulator form matches.
+            assert_eq!(e(128), want(&[acc, 0x80, 0x00]), "{mnem} $128 ({mode:?})");
+        }
+    }
+    // A non-accumulator destination has only the ModRM forms, and the 8-bit
+    // and wider operand sizes are not ties: the accumulator form is shorter
+    // at 8 bits and the sign-extended one is shorter above 16.
+    assert_eq!(
+        enc("add", &[r(3, 2), Opnd::Imm(1)]),
+        [0x66, 0x83, 0xc3, 0x01]
+    );
+    assert_eq!(enc("add", &[r(0, 1), Opnd::Imm(1)]), [0x04, 0x01]);
+    assert_eq!(enc("add", &[r(0, 4), Opnd::Imm(1)]), [0x83, 0xc0, 0x01]);
+    assert_eq!(
+        enc("add", &[r(0, 8), Opnd::Imm(1)]),
+        [0x48, 0x83, 0xc0, 0x01]
+    );
+    // `test` has no sign-extended form, so the accumulator one stands.
+    assert_eq!(
+        enc("test", &[r(0, 2), Opnd::Imm(1)]),
+        [0x66, 0xa9, 0x01, 0x00]
+    );
+}
+
 #[test]
 fn code16_operand_size_prefix_matches_gnu_as() {
     let e = |mnem: &str, w: Option<u8>, ops: &[Opnd]| enc_in(Mode::Bits16, 2, mnem, w, ops);
@@ -524,6 +582,51 @@ fn code16_operand_size_prefix_matches_gnu_as() {
     assert_eq!(e("lgdt", Some(2), &[m(3, 2)]), [0x0f, 0x01, 0x17]);
     assert_eq!(e("lidt", Some(4), &[m(3, 4)]), [0x66, 0x0f, 0x01, 0x1f]);
     assert_eq!(e("clflush", None, &[m(3, 2)]), [0x0f, 0xae, 0x3f]);
+}
+
+/// The stack group's immediate follows the operation width: an operand-width
+/// (`iv`) field for the `68` form, the `66` prefix when the width is not the
+/// mode's stack default, and no 32-bit member in long mode nor a 64-bit one
+/// elsewhere. Bytes measured with GNU as 2.46.1 under each `.code` directive.
+#[test]
+fn stack_group_immediates_follow_the_operation_width() {
+    let i = Opnd::Imm;
+    assert_eq!(
+        enc_in(Mode::Bits16, 2, "push", Some(2), &[i(0)]),
+        [0x6a, 0x00]
+    );
+    assert_eq!(
+        enc_in(Mode::Bits16, 2, "push", Some(4), &[i(0)]),
+        [0x66, 0x6a, 0x00]
+    );
+    assert_eq!(
+        enc_in(Mode::Bits16, 2, "push", None, &[i(0x1234)]),
+        [0x68, 0x34, 0x12]
+    );
+    assert_eq!(
+        enc_in(Mode::Bits16, 2, "push", Some(4), &[i(0x12345)]),
+        [0x66, 0x68, 0x45, 0x23, 0x01, 0x00]
+    );
+    assert_eq!(
+        enc_in(Mode::Bits32, 4, "push", Some(2), &[i(0)]),
+        [0x66, 0x6a, 0x00]
+    );
+    assert_eq!(
+        enc_in(Mode::Bits64, 8, "push", Some(2), &[i(0)]),
+        [0x66, 0x6a, 0x00]
+    );
+    assert_eq!(
+        enc_in(Mode::Bits64, 8, "push", Some(2), &[i(-129)]),
+        [0x66, 0x68, 0x7f, 0xff]
+    );
+    assert_eq!(
+        enc_in(Mode::Bits64, 8, "push", Some(8), &[i(0)]),
+        [0x6a, 0x00]
+    );
+    let push = Mnem::from_name("push").unwrap();
+    assert!(encode_in(Mode::Bits64, 8, push, Some(4), &[i(0)]).is_err());
+    assert!(encode_in(Mode::Bits16, 2, push, Some(8), &[i(0)]).is_err());
+    assert!(encode_in(Mode::Bits32, 4, push, Some(8), &[i(0)]).is_err());
 }
 
 #[test]
@@ -814,24 +917,17 @@ mod differential {
         }
     }
 
-    /// A temp stem unique to this invocation. A content-derived name collides
-    /// whenever two concurrent callers assemble the same text, which alias
-    /// mnemonics guarantee (`sal r9b, cl` and `shl r9b, cl` are one encoding);
-    /// the loser then reads a file the winner has already removed.
-    fn temp_stem(prefix: &str) -> String {
-        static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let n = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        alloc::format!("badc-{prefix}-{}-{n}", std::process::id())
-    }
-
     /// Assemble `src`, disassemble the result, and return the single
     /// normalized (mnemonic, operands) it decodes to. Errors carry the tool
     /// invocation and its output so a CI log is diagnosable on its own.
+    /// A content-derived scratch name collides whenever two concurrent
+    /// callers assemble the same text, which alias mnemonics guarantee
+    /// (`sal r9b, cl` and `shl r9b, cl` are one encoding); the loser then
+    /// reads a file the winner has already removed.
     fn assemble_and_decode(src: &str, prefix: &str) -> Result<(String, Vec<String>), String> {
-        let dir = std::env::temp_dir();
-        let stem = temp_stem(prefix);
-        let s = dir.join(alloc::format!("{stem}.s"));
-        let o = dir.join(alloc::format!("{stem}.o"));
+        let base = crate::c5::tests::unique_temp_path("badc", prefix, "");
+        let s = base.with_extension("s");
+        let o = base.with_extension("o");
         let clean = |s: &std::path::Path, o: &std::path::Path| {
             let _ = std::fs::remove_file(s);
             let _ = std::fs::remove_file(o);

@@ -53,7 +53,7 @@ fn build_and_run_outcome_with_options(src: &str, stem: &str, opts: NativeOptions
         Err(e) => return RunOutcome::BuildError(format!("emit_native: {e}")),
     };
 
-    let path = unique_temp_path("badc-elf-test", stem);
+    let path = super::unique_temp_path("badc-elf-test", stem, ".bin");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");
@@ -78,17 +78,6 @@ fn build_and_run_outcome_with_options(src: &str, stem: &str, opts: NativeOptions
         }
         Err(e) => panic!("could not exec the produced binary: {e}"),
     }
-}
-
-/// Build a per-process, per-test temp path so concurrent tests can't
-/// step on each other and leftover files from previous runs can't
-/// confuse the kernel's "is this executable busy?" check.
-fn unique_temp_path(prefix: &str, stem: &str) -> std::path::PathBuf {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let pid = std::process::id();
-    std::env::temp_dir().join(format!("{prefix}-{pid}-{n}-{stem}.bin"))
 }
 
 /// Run the binary at `path`, retrying briefly on ETXTBUSY. Linux
@@ -138,6 +127,81 @@ fn set_executable(path: &Path) {
     let mut perms = meta.permissions();
     perms.set_mode(perms.mode() | 0o111);
     std::fs::set_permissions(path, perms).unwrap();
+}
+
+/// Build through the multi-object link path (ET_REL merge +
+/// `write_native_image_from_merged`) and run the produced image.
+/// Exercises the merged stream layout -- the direct
+/// `emit_native` path above never produces a relro region.
+#[cfg(feature = "full")]
+fn link_and_run_outcome(src: &str, stem: &str) -> RunOutcome {
+    let program = match Compiler::with_target(src.to_string(), Target::LinuxAarch64).compile() {
+        Ok(p) => p,
+        Err(e) => return RunOutcome::BuildError(format!("compile: {e}")),
+    };
+    let bytes = match super::link_executable_with_runtime(
+        &program,
+        Target::LinuxAarch64,
+        NativeOptions::default(),
+    ) {
+        Ok(b) => b,
+        Err(e) => return RunOutcome::BuildError(format!("link: {e}")),
+    };
+    let path = super::unique_temp_path("badc-elf-test", stem, ".bin");
+    {
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+        f.sync_all().expect("sync temp file");
+    }
+    set_executable(&path);
+    let output = exec_with_retry(&path);
+    let _ = std::fs::remove_file(&path);
+    match output {
+        Ok(o) => {
+            if let Some(code) = o.status.code() {
+                RunOutcome::Exit(code)
+            } else {
+                use std::os::unix::process::ExitStatusExt;
+                RunOutcome::Signal(o.status.signal().unwrap_or(0))
+            }
+        }
+        Err(e) => panic!("could not exec the produced binary: {e}"),
+    }
+}
+
+/// A relocated `const` initializer routes its unit's read-only
+/// content to the relro region; after the loader's fixups the pages
+/// are re-protected (PT_GNU_RELRO), so a store faults while a
+/// writable global stays writable.
+#[test]
+#[cfg(feature = "full")]
+fn relro_const_store_faults() {
+    let decls = "const unsigned char tab[2048] = {7, 7, 7, 7};\n\
+                 const char *const cp = \"hello\";\n\
+                 int wglobal = 5;\n";
+    let read = format!("{decls}int main(void) {{ return cp[0] == 'h' && tab[3] == 7 ? 0 : 1; }}");
+    match link_and_run_outcome(&read, "relro_read") {
+        RunOutcome::Exit(0) => {}
+        other => panic!("relocated-pointer read must exit 0, got {other:?}"),
+    }
+    let tab_store =
+        format!("{decls}int main(void) {{ *(unsigned char *)&tab[5] = 9; return tab[5]; }}");
+    match link_and_run_outcome(&tab_store, "relro_tab_store") {
+        RunOutcome::Signal(_) => {}
+        other => panic!("store to relro const table must fault, got {other:?}"),
+    }
+    let slot_store = format!(
+        "{decls}int main(void) {{ *(const char **)&cp = (const char *)tab; return cp == 0; }}"
+    );
+    match link_and_run_outcome(&slot_store, "relro_slot_store") {
+        RunOutcome::Signal(_) => {}
+        other => panic!("store to the relocated pointer slot must fault, got {other:?}"),
+    }
+    let control = format!("{decls}int main(void) {{ wglobal = 6; return wglobal == 6 ? 0 : 2; }}");
+    match link_and_run_outcome(&control, "relro_control") {
+        RunOutcome::Exit(0) => {}
+        other => panic!("writable global must stay writable, got {other:?}"),
+    }
 }
 
 // ---- Smoke tests -- the same shapes as src/c5/tests/native.rs but
@@ -299,7 +363,7 @@ fn environ_populated_through_runtime() {
         NativeOptions::default(),
     )
     .expect("link LinuxAarch64 with runtime");
-    let path = unique_temp_path("badc-environ", "env");
+    let path = super::unique_temp_path("badc-environ", "env", ".bin");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");
@@ -335,7 +399,7 @@ fn constructor_runs_before_main() {
         NativeOptions::default(),
     )
     .expect("link with runtime");
-    let path = unique_temp_path("badc-ctor", "run");
+    let path = super::unique_temp_path("badc-ctor", "run", ".bin");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");
@@ -374,7 +438,7 @@ fn constructor_priority_and_destructor_order() {
         NativeOptions::default(),
     )
     .expect("link with runtime");
-    let path = unique_temp_path("badc-ctor-order", "run");
+    let path = super::unique_temp_path("badc-ctor-order", "run", ".bin");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");
@@ -412,13 +476,11 @@ fn build_and_run_fixture_with_options(name: &str, opts: NativeOptions, suffix: &
 
 #[test]
 fn fixture_parity() {
-    let mut failures: Vec<String> = Vec::new();
-    for (name, expected) in NATIVE_ELF_FIXTURES {
+    let failures = super::parity_failures(NATIVE_ELF_FIXTURES, |name, expected| {
         let outcome = build_and_run_fixture(name);
-        if !outcome.matches(*expected) {
-            failures.push(format!("{name}: expected exit {expected}, got {outcome:?}"));
-        }
-    }
+        (!outcome.matches(*expected))
+            .then(|| format!("{name}: expected exit {expected}, got {outcome:?}"))
+    });
     assert!(
         failures.is_empty(),
         "{} of {} ELF fixtures regressed:\n  {}",
@@ -451,15 +513,11 @@ fn atoi_negative_sign_extends() {
 #[test]
 fn fixture_parity_native_optimized() {
     let opts = NativeOptions::new().with_optimize();
-    let mut failures: Vec<String> = Vec::new();
-    for (name, expected) in NATIVE_ELF_FIXTURES {
+    let failures = super::parity_failures(NATIVE_ELF_FIXTURES, |name, expected| {
         let outcome = build_and_run_fixture_with_options(name, opts, "-O");
-        if !outcome.matches(*expected) {
-            failures.push(format!(
-                "{name} (-O): expected exit {expected}, got {outcome:?}"
-            ));
-        }
-    }
+        (!outcome.matches(*expected))
+            .then(|| format!("{name} (-O): expected exit {expected}, got {outcome:?}"))
+    });
     assert!(
         failures.is_empty(),
         "{} of {} ELF fixtures regressed under -O:\n  {}",
@@ -474,8 +532,11 @@ fn fixture_parity_native_optimized() {
 
 #[test]
 fn file_io_natively() {
-    let dummy_path = std::env::temp_dir().join("test_dummy.txt");
-    std::fs::write(&dummy_path, "1234567890").unwrap();
+    // The fixture opens `test_dummy.txt` relative to the CWD, so the
+    // binary runs in a per-process directory holding that file.
+    let cwd = super::unique_temp_path("badc-elf-test", "file_io-cwd", "");
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::write(cwd.join("test_dummy.txt"), "1234567890").unwrap();
 
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("tests");
@@ -485,7 +546,7 @@ fn file_io_natively() {
     let src = std::fs::read_to_string(&path).unwrap();
     let program = Compiler::new(src).compile().expect("compile file_io.c");
     let bytes = emit_native(&program, Target::LinuxAarch64).expect("emit_native");
-    let bin_path = unique_temp_path("badc-elf-test-file_io", "file_io");
+    let bin_path = super::unique_temp_path("badc-elf-test-file_io", "file_io", ".bin");
     std::fs::write(&bin_path, &bytes).unwrap();
     set_executable(&bin_path);
 
@@ -493,7 +554,7 @@ fn file_io_natively() {
     let mut last: Option<std::io::Result<std::process::Output>> = None;
     for attempt in 0..10 {
         let mut cmd = Command::new(&bin_path);
-        cmd.current_dir(std::env::temp_dir());
+        cmd.current_dir(&cwd);
         match cmd.output() {
             Ok(o) => {
                 last = Some(Ok(o));
@@ -511,7 +572,7 @@ fn file_io_natively() {
     }
     let output = last.unwrap().expect("exec native binary");
     let _ = std::fs::remove_file(&bin_path);
-    let _ = std::fs::remove_file(&dummy_path);
+    let _ = std::fs::remove_dir_all(&cwd);
     assert_eq!(output.status.code(), Some(0));
 }
 
@@ -527,7 +588,7 @@ fn getenv_value_natively() {
         .compile()
         .expect("compile getenv_value.c");
     let bytes = emit_native(&program, Target::LinuxAarch64).expect("emit_native");
-    let bin_path = unique_temp_path("badc-elf-test-getenv", "getenv_value");
+    let bin_path = super::unique_temp_path("badc-elf-test-getenv", "getenv_value", ".bin");
     std::fs::write(&bin_path, &bytes).unwrap();
     set_executable(&bin_path);
 
@@ -551,7 +612,7 @@ fn original_c4_compiles_and_runs_hello_natively() {
     let src = std::fs::read_to_string(&path).unwrap();
     let program = Compiler::new(src).compile().expect("compile c4.c");
     let bytes = emit_native(&program, Target::LinuxAarch64).expect("emit_native");
-    let bin_path = unique_temp_path("badc-elf-test-c4", "c4");
+    let bin_path = super::unique_temp_path("badc-elf-test-c4", "c4", ".bin");
     std::fs::write(&bin_path, &bytes).unwrap();
     set_executable(&bin_path);
 
@@ -605,7 +666,7 @@ fn char_limits_match_unsigned_char() {
         .compile()
         .expect("compile char_limits_consistency.c");
     let bytes = emit_native(&program, Target::LinuxAarch64).expect("emit_native");
-    let bin_path = unique_temp_path("badc-elf-char-limits", "char_limits");
+    let bin_path = super::unique_temp_path("badc-elf-char-limits", "char_limits", ".bin");
     std::fs::write(&bin_path, &bytes).unwrap();
     set_executable(&bin_path);
     let output = exec_with_retry(&bin_path).expect("exec native binary");
@@ -670,7 +731,7 @@ int main(void) {\n\
     )
     .unwrap_or_else(|e| panic!("link: {e}"));
 
-    let path = unique_temp_path("badc-elf-aarch64-tls2", "cross_unit_tls");
+    let path = super::unique_temp_path("badc-elf-aarch64-tls2", "cross_unit_tls", ".bin");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");
@@ -720,7 +781,11 @@ int main(void) { return (read_shared() == 0x12345678) ? 0 : 1; }\n";
     )
     .unwrap_or_else(|e| panic!("link: {e}"));
 
-    let path = unique_temp_path("badc-elf-aarch64-inl-extref", "cross_unit_inline_extref");
+    let path = super::unique_temp_path(
+        "badc-elf-aarch64-inl-extref",
+        "cross_unit_inline_extref",
+        ".bin",
+    );
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");
@@ -770,7 +835,8 @@ int main(void) { return (combine(1) == 107) ? 0 : 1; }\n";
     )
     .unwrap_or_else(|e| panic!("link: {e}"));
 
-    let path = unique_temp_path("badc-elf-aarch64-dedup-imm", "cross_unit_dedup_imm");
+    let path =
+        super::unique_temp_path("badc-elf-aarch64-dedup-imm", "cross_unit_dedup_imm", ".bin");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");
@@ -824,7 +890,7 @@ int main(void) { return (sum_arr() == 666) ? 0 : 1; }\n";
     )
     .unwrap_or_else(|e| panic!("link: {e}"));
 
-    let path = unique_temp_path("badc-elf-aarch64-data-dce", "cross_unit_data_dce");
+    let path = super::unique_temp_path("badc-elf-aarch64-data-dce", "cross_unit_data_dce", ".bin");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");
@@ -985,22 +1051,31 @@ fn frame_past_the_immediate_reach_runs() {
         "expected the register-form stack teardown"
     );
 
-    let path = unique_temp_path("badc-elf-aarch64-frame", "large_frame");
+    let path = super::unique_temp_path("badc-elf-aarch64-frame", "large_frame", ".bin");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");
         f.sync_all().expect("sync temp file");
     }
     set_executable(&path);
-    let output = Command::new("sh")
-        .arg("-c")
-        .arg(format!("ulimit -s 65536 && exec {}", path.display()))
-        .output()
-        .expect("run under a raised stack limit");
+    let output = super::output_when_not_busy(|| {
+        let mut c = Command::new("sh");
+        c.arg("-c")
+            .arg(format!("ulimit -s 65536 && exec {}", path.display()));
+        c
+    });
+    let meta = std::fs::metadata(&path).map(|m| m.len());
     let _ = std::fs::remove_file(&path);
+    // The shell's own failure codes are indistinguishable from the
+    // program's without its stderr: 126 is "cannot execute" and 127 is
+    // "not found", neither of which says anything about the frame this
+    // test is about. Report what the shell said, and the image size, so a
+    // failure names its own cause instead of only its exit code.
     assert_eq!(
         output.status.code(),
         Some(5),
-        "a frame past the immediate stack-adjustment reach miscomputed"
+        "a frame past the immediate stack-adjustment reach miscomputed; \
+         image {meta:?} bytes, stderr {:?}",
+        String::from_utf8_lossy(&output.stderr),
     );
 }

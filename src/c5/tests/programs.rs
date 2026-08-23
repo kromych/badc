@@ -426,10 +426,17 @@ fn inline_asm_fixed_reg_output_width() {
 #[test]
 fn cpuid_partial_outputs() {
     // A `cpuid` asm with one output and the remaining implicit outputs
-    // listed as clobbers lowers to the same Intrinsic::Cpuid as the
-    // full four-output form; the VM zeroes every output, including the
-    // synthesized scratch slots of the clobbered registers.
+    // listed as clobbers takes the same generic extended-asm path as the
+    // full four-output form; the VM zeroes every register cpuid defines.
     assert_eq!(run_fixture("cpuid_partial_outputs.c"), 0);
+}
+
+#[test]
+fn cpuid_xgetbv_output_width() {
+    // `cpuid` / `xgetbv` outputs store back at the width of the C
+    // operand: a `long` output takes all eight bytes (the instruction
+    // clears the register's upper half), an `unsigned` output four.
+    assert_eq!(run_fixture("cpuid_xgetbv_output_width.c"), 0);
 }
 
 #[test]
@@ -501,6 +508,74 @@ fn builtin_return_address() {
     // reads the saved slot at [fp+8], the VM returns a non-zero per-frame
     // proxy. The fixture returns 0 only when it is non-null.
     assert_eq!(run_fixture("builtin_return_address.c"), 0);
+}
+
+#[test]
+fn builtin_return_address_rejects_a_non_zero_level() {
+    // GCC types the operand as the number of frames to walk up and
+    // rejects a non-constant one. Only level 0 is answerable for a
+    // return address: gcc's aarch64 backend returns a constant 0 for a
+    // higher level, and its x86-64 backend yields a stack address once a
+    // caller drops its frame pointer. A diagnostic replaces both wrong
+    // answers.
+    use crate::c5::Compiler;
+    for (src, want) in [
+        (
+            "void *f(void){ return __builtin_return_address(1); }",
+            "supports level 0 only",
+        ),
+        (
+            "void *f(void){ return __builtin_return_address(2 + 3); }",
+            "supports level 0 only",
+        ),
+        (
+            "void *f(int n){ return __builtin_return_address(n); }",
+            "must be an integer constant",
+        ),
+        (
+            "void *f(int n){ return __builtin_frame_address(n); }",
+            "must be an integer constant",
+        ),
+        (
+            "void *f(void){ return __builtin_frame_address(-1); }",
+            "must not be negative",
+        ),
+        (
+            "void *f(void){ return __builtin_return_address(-1); }",
+            "must not be negative",
+        ),
+    ] {
+        let err = Compiler::new(src.to_string())
+            .compile()
+            .expect_err("the level must be rejected");
+        let msg = format!("{err:?}");
+        assert!(
+            msg.contains(want),
+            "expected {want:?} for {src:?}, got {msg:?}"
+        );
+    }
+    // Level 0 compiles, spelled directly or as a constant expression;
+    // a frame-address level above 0 compiles to the chain walk.
+    for ok in [
+        "void *f(void){ return __builtin_return_address(0); } int main(void){return 0;}",
+        "void *f(void){ return __builtin_frame_address(0); } int main(void){return 0;}",
+        "void *f(void){ return __builtin_return_address(1 - 1); } int main(void){return 0;}",
+        "void *f(void){ return __builtin_frame_address(1); } int main(void){return 0;}",
+        "void *f(void){ return __builtin_frame_address(1 + 2); } int main(void){return 0;}",
+    ] {
+        Compiler::new(ok.to_string())
+            .compile()
+            .unwrap_or_else(|e| panic!("{ok:?} must compile: {e:?}"));
+    }
+}
+
+#[test]
+fn builtin_frame_address_walks_to_a_callers_frame() {
+    // __builtin_frame_address(N > 0) reports the frame address level 0
+    // reports N calls up. The fixture checks three levels against the
+    // frames that published them; gcc answers identically at -O0 and -O2
+    // on linux-x86_64 and linux-aarch64.
+    assert_eq!(run_fixture("builtin_frame_address_levels.c"), 0);
 }
 
 #[test]
@@ -807,6 +882,16 @@ fn overaligned_data_placement() {
 }
 
 #[test]
+fn attributed_aggregate_align_floor() {
+    // A variable-level `aligned(N)` lower than the type's alignment still
+    // places at the members' attribute-free alignment, including where the
+    // aggregate's own alignment is attribute-derived. Runtime address
+    // checks, matched against clang; gcc keeps no floor for a lowered
+    // request.
+    assert_eq!(run_fixture("attributed_aggregate_align_floor.c"), 0);
+}
+
+#[test]
 fn overaligned_type_placement() {
     // An object whose alignment comes from its type (an over-aligned
     // struct member raising the aggregate), with no attribute on the
@@ -878,6 +963,21 @@ fn overaligned_automatic_boundaries() {
     // frame slots cannot place), the intermediate ones, a page, and an object
     // larger than a page, whose region reservation descends in probed steps.
     assert_eq!(run_fixture("overaligned_automatic_boundaries.c"), 0);
+}
+
+#[test]
+fn overaligned_automatic_type_derived_16() {
+    // An automatic object whose type alignment is exactly 16 -- `__int128`,
+    // an aligned(16) aggregate, a member-derived 16 -- lands on 16 at a
+    // static frame offset, at both frame parities and across call depths.
+    assert_eq!(run_fixture("overaligned_automatic16.c"), 0);
+}
+
+#[test]
+fn overaligned_automatic_beside_vla() {
+    // A 16-aligned automatic coexists with a VLA (the region needs no sp
+    // move), and a VLA of a 16-aligned element type lands on 16.
+    assert_eq!(run_fixture("overaligned_vla_int128.c"), 0);
 }
 
 #[test]
@@ -1016,6 +1116,41 @@ fn stmt_expr_goto_label_value() {
 }
 
 #[test]
+fn local_label_shadowing_branches_to_the_innermost_declaration() {
+    // An inner `__label__ l` shadows the enclosing one, and the outer
+    // binding is back in scope at the inner block's `}`. Each `goto`
+    // skips the addend guarding the label it must not reach, so a
+    // mis-bound branch changes the result.
+    let src = "
+        int main(void) {
+            __label__ l;
+            int acc = 0;
+            { __label__ l; if (acc == 0) goto l; acc += 100; l: acc += 2; }
+            if (acc == 2) goto l;
+            acc += 1000;
+            l: acc += 4;
+            return acc;
+        }
+    ";
+    assert_eq!(run_str(src), 6);
+}
+
+#[test]
+fn local_labels_of_two_sibling_blocks_stay_separate() {
+    // Each block's `l` is its own label, so neither `goto` can reach
+    // the other block's.
+    let src = "
+        int main(void) {
+            int acc = 0;
+            { __label__ l; if (acc == 0) goto l; acc += 10; l: acc += 1; }
+            { __label__ l; if (acc == 1) goto l; acc += 20; l: acc += 2; }
+            return acc;
+        }
+    ";
+    assert_eq!(run_str(src), 3);
+}
+
+#[test]
 fn stmt_expr_pointer_arith_arrow() {
     // A statement expression ending in pointer arithmetic keeps the pointer
     // result type (C99 6.5.6p8), so `({ ...; p - 1; })->field` resolves the
@@ -1056,6 +1191,31 @@ fn builtin_types_compatible_ptr_array() {
     // bounds stay exact, and `_Generic` selects through the same rule.
     // Matches gcc and clang.
     assert_eq!(run_fixture("builtin_types_compatible_ptr_array.c"), 0);
+}
+
+#[test]
+fn gnu_capability_macros_match_their_features() {
+    use crate::{CompileOptions, Compiler, Target, Vm};
+    // Every capability macro the `--gnu` predefine set claims, checked
+    // against the behaviour it promises: the atomic lock-free properties
+    // and test-and-set true value, the `__sync_*` widths, the byte-swap
+    // builtins the version claim covers, and the UTF literal encodings.
+    let src = super::load_fixture("gnu_capability_macros.c");
+    let opts = CompileOptions::default().with_gnu(true);
+    let program = Compiler::with_options(src, Target::host(), opts)
+        .compile()
+        .expect("fixture must compile under --gnu");
+    assert_eq!(Vm::new(program).with_pointer_tracking().run().unwrap(), 0);
+}
+
+#[test]
+fn builtin_types_compatible_typedef() {
+    // C99 6.7.7p3: an array typedef in a `__builtin_types_compatible_p`
+    // type-name position is that array type, `A *` over it names a
+    // pointer to the array, and both compose through chained aliases,
+    // qualifiers, deferred / zero-length / multi-dimensional bounds and
+    // aggregate elements. Matches gcc.
+    assert_eq!(run_fixture("builtin_types_compatible_typedef.c"), 0);
 }
 
 #[test]
@@ -2031,10 +2191,18 @@ fn speculative_init_parse_data_rewind() {
 
 #[test]
 fn attribute_weak_alias() {
-    // `weak` / `alias` / `used`: the interpreter resolves an alias to
-    // its target at parse time; weak binding is an object-file
-    // property it ignores.
+    // `weak` / `alias` / `used`: a non-weak alias resolves to its
+    // target at parse time; a weak alias stays symbolic and the
+    // interpreter binds it at execution, its link step.
     assert_eq!(run_fixture("attribute_weak_alias.c"), 0);
+}
+
+#[test]
+fn weak_alias_call_not_inlined() {
+    // Calls, a static function-pointer initializer, and an address
+    // comparison through a weak alias; execution binds them to the
+    // target once no strong override can appear.
+    assert_eq!(run_fixture("weak_alias_call_not_inlined.c"), 42);
 }
 
 #[test]
@@ -2371,6 +2539,24 @@ fn fn_returning_fn_ptr() {
     // A function returning a function pointer: the result decays so a
     // following `*` is a no-op and the result is callable.
     assert_eq!(run_fixture("fn_returning_fn_ptr.c"), 0);
+}
+
+#[test]
+fn fn_ptr_return_via_fn_ptr_var() {
+    // A pointer to a function returning a function pointer
+    // (`int (*(*p)(int))(int)`): `(*p)` decays, and the call result is
+    // itself callable, for local / global / typedef / member /
+    // parameter carriers of the type.
+    assert_eq!(run_fixture("fn_ptr_return_via_fn_ptr_var.c"), 0);
+}
+
+#[test]
+fn fn_type_typedef_ptr() {
+    // `F *` for a function-TYPE typedef `F` is the spelled-out
+    // fn-pointer type (C99 6.2.7): mixed-spelling prototype pairs,
+    // the `F **` deref, `F (*p)` grouping, and calls through stored
+    // pointers.
+    assert_eq!(run_fixture("fn_type_typedef_ptr.c"), 0);
 }
 
 #[test]
@@ -2721,6 +2907,60 @@ fn zero_length_array() {
 }
 
 #[test]
+fn x86intrin_umbrella_scalar_subset() {
+    use crate::{CompileOptions, Compiler, Target};
+    // <x86intrin.h> carries the scalar ia32 subset: byte swaps, bit
+    // scans, rotates, rdtsc/rdtscp/rdpmc and pause. It compiles on the
+    // x86 targets only; elsewhere the include reports the missing
+    // header, as gcc's per-target header set does.
+    let compiles = |target: Target| -> bool {
+        let src = "#include <x86intrin.h>\n\
+                   unsigned long long f(unsigned int *aux) {\n\
+                     __pause();\n\
+                     return __rdtsc() + __rdtscp(aux) + __rdpmc(0)\n\
+                       + (unsigned long long)__bswapd(__bsfd(0x10) + __bsrd(0x10))\n\
+                       + (unsigned long long)_bswap64(1) + _lrotl(1, 2)\n\
+                       + __rolw(1, 3) + __rorb(8, 1) + _rotr(4u, 1);\n\
+                   }\n";
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), target, opts)
+            .compile()
+            .is_ok()
+    };
+    assert!(compiles(Target::LinuxX64), "x86intrin.h on linux-x64");
+    assert!(compiles(Target::WindowsX64), "x86intrin.h on windows-x64");
+    assert!(
+        !compiles(Target::LinuxAarch64),
+        "x86intrin.h must report non-x86 targets"
+    );
+}
+
+#[test]
+fn the_pty_headers_complete_struct_termios() {
+    use crate::{CompileOptions, Compiler, Target};
+    // glibc's <pty.h> and the BSD <util.h> include <termios.h>, so a unit
+    // that reaches the pty helpers through either header alone still sees
+    // the struct definition. QEMU's chardev/char-pty.c is such a unit.
+    let compiles = |header: &str, target: Target| -> bool {
+        let src = alloc::format!(
+            "#include <{header}>\nint f(void) {{ struct termios t; t.c_iflag = 0; \
+             return (int)t.c_iflag; }}\n"
+        );
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src, target, opts).compile().is_ok()
+    };
+    assert!(compiles("pty.h", Target::LinuxX64), "<pty.h> on linux-x64");
+    assert!(
+        compiles("pty.h", Target::LinuxAarch64),
+        "<pty.h> on linux-aarch64"
+    );
+    assert!(
+        compiles("util.h", Target::MacOSAarch64),
+        "<util.h> on macos"
+    );
+}
+
+#[test]
 fn setbuffer_is_a_unix_stdio_binding() {
     use crate::{CompileOptions, Compiler, Target};
     // The BSD `setbuffer` is bound on the Unix targets (glibc / macOS) and
@@ -2922,6 +3162,23 @@ fn utf16_utf32_string_literals() {
 }
 
 #[test]
+fn string_concat_encoding_prefix() {
+    // C99 6.4.5p4: an unprefixed part of an adjacent-literal run joins at
+    // the run's element width, whichever end carries the prefix. Matched
+    // against GCC and clang.
+    assert_eq!(run_fixture("string_concat_encoding_prefix.c"), 0);
+}
+
+#[test]
+fn utf8_string_prefix_ucn() {
+    // C11 6.4.5p3: `u8` is a narrow literal, so it joins an unprefixed
+    // part in a run; 6.4.3 universal character names encode as UTF-8
+    // there and as one code point in a wide literal. Matched against
+    // GCC and clang.
+    assert_eq!(run_fixture("utf8_string_prefix_ucn.c"), 0);
+}
+
+#[test]
 fn const_object_array_bound() {
     // A static `const` integer object folds its value in a later constant
     // expression, so it works as an array bound (a fixed array, not a VLA)
@@ -3034,6 +3291,37 @@ fn byteswap_glibc() {
 }
 
 #[test]
+fn builtin_bswap_reversal() {
+    // The Inst::Bswap lowering: runtime operands at each width, the
+    // truncation of a wider operand, and the zero-extended result.
+    assert_eq!(run_fixture("builtin_bswap_reversal.c"), 0);
+}
+
+#[test]
+fn byte_load_wide_merge() {
+    // Byte-assembly readers merge to one wide load, with a byte
+    // reversal for the order opposite the target's; the 3-byte reader
+    // has no width to merge into.
+    assert_eq!(run_fixture("byte_load_wide_merge.c"), 0);
+}
+
+#[test]
+fn byte_store_wide_merge() {
+    // The store side: runs of byte stores of one value merge to one
+    // wide store, reversed first for the opposite order.
+    assert_eq!(run_fixture("byte_store_wide_merge.c"), 0);
+}
+
+#[test]
+fn inline_byte_access_leaf() {
+    // A pointer-parameter byte-access leaf called in a tight loop: the
+    // merge collapses each body to a wide access and the inliner takes
+    // the collapsed body, so the loop pays no call per byte group. The
+    // asm snapshots hold that shape; this holds the values.
+    assert_eq!(run_fixture("inline_byte_access_leaf.c"), 0);
+}
+
+#[test]
 fn sysexits_codes() {
     // <sysexits.h>: the BSD exit-status codes, same on every target.
     assert_eq!(run_fixture("sysexits_codes.c"), 0);
@@ -3141,6 +3429,15 @@ fn designator_multidim_scalar_array() {
 }
 
 #[test]
+fn designator_chain_runtime_multidim() {
+    // A chained `[i][j]... =` designator on the per-element runtime
+    // store path takes the constant collector's grammar, member chains
+    // and ranges included, and positional entries resume at the
+    // designated rank.
+    assert_eq!(run_fixture("designator_chain_runtime_multidim.c"), 0);
+}
+
+#[test]
 fn macro_alias_tail_invocation() {
     // C99 6.10.3.4p1: a function-like macro name ending an object-like
     // macro's body takes its arguments from the source that follows,
@@ -3163,10 +3460,24 @@ fn compound_literal_array_init() {
 }
 
 #[test]
+fn compound_literal_multidim() {
+    // C99 6.5.2.5: every bracket dimension of an array-typed compound
+    // literal shapes its initializer; the value decays to a row pointer.
+    assert_eq!(run_fixture("compound_literal_multidim.c"), 0);
+}
+
+#[test]
 fn struct_array_brace_elision() {
     // C99 6.7.9p20/p21: a sub-array of structs whose braces are elided
     // takes what it holds from the enclosing list; the rest stays zero.
     assert_eq!(run_fixture("struct_array_brace_elision.c"), 0);
+}
+
+#[test]
+fn struct_array_designator_resume() {
+    // C99 6.7.8p17: a positional entry after a designated one in an array
+    // of structs takes the next subobject, not the next outer row.
+    assert_eq!(run_fixture("struct_array_designator_resume.c"), 0);
 }
 
 #[test]
@@ -3972,6 +4283,15 @@ fn thread_local_initializer() {
 }
 
 #[test]
+fn thread_local_address_constant_initializer() {
+    // C99 6.7.8p4: thread storage duration takes the same initializer
+    // forms as static, address constants included. The VM keeps one
+    // copy of the template, so a slot holding a data offset reads back
+    // as the pointer it names. Returns 0 on success.
+    assert_eq!(run_fixture("thread_local_address_init.c"), 0);
+}
+
+#[test]
 fn struct_sizeof_reports_aggregate_size() {
     // sizeof(struct Three) == 24, etc. Returns 0 on success.
     assert_eq!(run_fixture("struct_sizeof.c"), 0);
@@ -4146,6 +4466,15 @@ fn multi_dim_array_typedef_object() {
         }
     "#;
     assert_eq!(run_str(src), 42);
+}
+
+#[test]
+fn inner_binding_keeps_outer_array_shape() {
+    // A parameter or block local of the same name binds for its own scope
+    // only (C99 6.2.1p4). The declarator writes the shared symbol slot
+    // before the scope save runs, so the outer array's stride list has to
+    // be saved from before that write.
+    assert_eq!(run_fixture("inner_binding_keeps_outer_array_shape.c"), 0);
 }
 
 #[test]
@@ -4669,6 +4998,35 @@ fn static_locals() {
 }
 
 #[test]
+fn static_local_array_init_bounds() {
+    // C99 6.7.8p2/p14/p21: a static-local array initializer fills the storage
+    // reserved for the declared bound and no more -- an over-long list is
+    // rejected (see `tests::parser`), and the legal shapes leave the
+    // neighbouring statics untouched.
+    assert_eq!(run_fixture("static_local_array_init_bounds.c"), 0);
+}
+
+#[test]
+fn string_initializer_copy_rules() {
+    // C99 6.7.8p14/p21: one set of copy rules at every string-literal
+    // destination -- bare and brace-wrapped array, multi-dimensional row,
+    // struct member (constant and runtime paths), flexible array member.
+    // An embedded NUL is a copied character (the flexible array member used
+    // to stop there) and a wide row decodes at the wchar_t stride (it used
+    // to fall through to the pointer path).
+    assert_eq!(run_fixture("string_initializer_copy_rules.c"), 0);
+}
+
+#[test]
+fn struct_arg_value_form() {
+    // A by-value aggregate argument has two call-site forms: the address of
+    // the caller's copy, and -- when the callee's parameter list is not in
+    // scope -- the object's bytes in one machine word. The interpreter read
+    // the second form's word as an address; the native backends take both.
+    assert_eq!(run_fixture("struct_arg_value_form.c"), 0);
+}
+
+#[test]
 fn bitfields_basic() {
     // bitfields pack into shared 8-byte storage units;
     // reads use Li/Shr/And; writes use load-clear-shift-or-store.
@@ -4747,6 +5105,31 @@ fn qsort_scan_extend_dedup() {
 }
 
 #[test]
+fn cross_block_cse() {
+    // Dominator-scoped CSE: duplicates at dominated positions reuse the
+    // dominating value, and the cases the pressure gate declines keep
+    // computing the same results.
+    assert_eq!(run_fixture("cross_block_cse.c"), 0);
+}
+
+#[test]
+fn divmod_pair_shared_quotient() {
+    // One quotient serves a division and a modulo over the same
+    // operands, in either source order and across blocks; the
+    // remaining lone divides keep their own.
+    assert_eq!(run_fixture("divmod_pair_shared_quotient.c"), 0);
+}
+
+#[test]
+fn mul_add_contraction() {
+    // An integer multiply feeding an add or a subtract contracts into
+    // one multiply-accumulate; the results match the pair at both
+    // widths, signed and unsigned, and where the product has a second
+    // reader or the operands spill.
+    assert_eq!(run_fixture("mul_add_contraction.c"), 0);
+}
+
+#[test]
 fn tailcall_return_extension() {
     // int-returning tail callee under an unsigned-returning caller:
     // the widened value must zero-extend (bit 31 set).
@@ -4757,6 +5140,15 @@ fn tailcall_return_extension() {
 fn fnptr_array_call() {
     // `(*arr[i])()` and struct-returning K&R fn-pointer array elements.
     assert_eq!(run_fixture("fnptr_array_call.c"), 0);
+}
+
+#[test]
+fn int_compare_narrow_width() {
+    // Comparisons over `int` operands are decided by the low words, so
+    // they are emitted at 32 bits; the widening conversions, unsigned
+    // wraparound and `int`-indexed subscripts around them keep their
+    // C99 results.
+    assert_eq!(run_fixture("int_compare_narrow_width.c"), 0);
 }
 
 #[test]
@@ -5140,6 +5532,20 @@ fn loop_iv_spill_priority() {
 }
 
 #[test]
+fn split_spilled_reload_run() {
+    // Live-range splitting of the values one cold call forces out of
+    // the caller-saved bank; the result is unchanged.
+    assert_eq!(run_fixture("split_spilled_reload_run.c"), 229);
+}
+
+#[test]
+fn hoist_loop_invariant_address() {
+    // Loop-invariant addresses and constants lifted out of the loops
+    // that rebuild them; the results are unchanged.
+    assert_eq!(run_fixture("hoist_loop_invariant_address.c"), 42);
+}
+
+#[test]
 fn linked_list() {
     assert_eq!(run_fixture("linked_list.c"), 10);
 }
@@ -5229,16 +5635,24 @@ fn bound_import_arg_narrowing() {
 }
 
 #[test]
-fn long_double_advertised_as_fp64() {
-    // c5 stores `long double` as 8-byte IEEE binary64 on every target, so
-    // float.h must advertise the binary64 characteristics. The previous
-    // x86_64-ELF 80-bit row let LDBL_MAX overflow to +inf and LDBL_EPSILON
-    // drop below the real machine epsilon.
+fn long_double_characteristics_track_the_target() {
+    // <float.h> advertises the target ABI's `long double` storage
+    // format; `sizeof` and the predefines agree on whichever host this
+    // runs on, and the MANT_DIG value is one of the three formats.
     let src = "#include <float.h>\n\
-               int main(void){ return (sizeof(long double)==8 && LDBL_MANT_DIG==53\n\
-               && LDBL_MAX==DBL_MAX && LDBL_EPSILON==DBL_EPSILON\n\
-               && LDBL_MIN==DBL_MIN) ? 0 : 1; }";
+               int main(void){ return (sizeof(long double)==__SIZEOF_LONG_DOUBLE__\n\
+               && (LDBL_MANT_DIG==53 || LDBL_MANT_DIG==64 || LDBL_MANT_DIG==113)\n\
+               && (LDBL_MANT_DIG!=53 || (LDBL_MAX==DBL_MAX && LDBL_MIN==DBL_MIN))) ? 0 : 1; }";
     assert_eq!(super::run_str(src), 0);
+    // <float.h> derives every name from the predefines, so the header
+    // and `__LDBL_*` / `__DBL_*` / `__FLT_*` cannot drift apart.
+    let derived = "#include <float.h>\n\
+                   int main(void){ return (LDBL_MANT_DIG==__LDBL_MANT_DIG__\n\
+                   && DBL_MANT_DIG==__DBL_MANT_DIG__ && FLT_MANT_DIG==__FLT_MANT_DIG__\n\
+                   && FLT_RADIX==__FLT_RADIX__ && DBL_MAX==__DBL_MAX__\n\
+                   && LDBL_TRUE_MIN==__LDBL_DENORM_MIN__\n\
+                   && DECIMAL_DIG==__DECIMAL_DIG__) ? 0 : 1; }";
+    assert_eq!(super::run_str(derived), 0);
 }
 
 #[cfg(target_os = "macos")]
@@ -5974,6 +6388,57 @@ fn initializer_cost_is_linear_in_element_count() {
     );
 }
 
+/// One block declaring `n` `__label__` names, each defined and reached
+/// by a `goto`. The shape that exercises the declaration bookkeeping
+/// and the reference resolution together.
+#[cfg(not(debug_assertions))]
+fn local_label_unit(n: usize) -> String {
+    let mut s = String::from("int main(void) {\n__label__ L0");
+    for i in 1..n {
+        s.push_str(&format!(", L{i}"));
+    }
+    s.push_str(";\nint acc = 0;\ngoto L0;\n");
+    for i in 0..n - 1 {
+        s.push_str(&format!("L{i}: acc++; goto L{};\n", i + 1));
+    }
+    s.push_str(&format!("L{}: return acc;\n}}\n", n - 1));
+    s
+}
+
+#[test]
+#[cfg(not(debug_assertions))]
+fn local_label_parse_cost_is_linear_in_declaration_count() {
+    // End-to-end cover for the same property the lookup-count test
+    // asserts, independent of that instrumentation: `__label__` parse
+    // must cost per name rather than per name pair.
+    //
+    // The span is 16x the names; the smaller point carries the fixed
+    // per-compile cost, so linear growth reads under 16x. Measured here,
+    // the keyed bindings ran 7.2x and the per-block scan they replaced
+    // ran 135x, so 32x separates them with better than 4x margin on
+    // either side. The metric is the ratio rather than either time, so
+    // a loaded box scales both ends.
+    fn once(src: &str) -> f64 {
+        let t = std::time::Instant::now();
+        let _ = compile_str(src);
+        t.elapsed().as_secs_f64()
+    }
+    let units = [local_label_unit(800), local_label_unit(12800)];
+    let mut best = [f64::MAX; 2];
+    for _ in 0..3 {
+        for (b, u) in best.iter_mut().zip(units.iter()) {
+            *b = b.min(once(u));
+        }
+    }
+    let (small, large) = (best[0], best[1]);
+    assert!(small > 0.0, "no measurable parse cost to compare");
+    assert!(
+        large < small * 32.0,
+        "`__label__` parse grew {:.1}x for 16x the names ({small:.3e}s -> {large:.3e}s)",
+        large / small
+    );
+}
+
 /// Closing a function scope must cost its own bindings, not the whole
 /// symbol table. Measured in symbols examined at scope exit, so the
 /// claim holds exactly rather than to within timer noise: the same
@@ -6094,6 +6559,471 @@ fn elf_header_publishes_the_abi_constant_set() {
         ),
         "the negative-size assertion must reject a wrong value"
     );
+}
+
+/// Every target badc emits for. The header-presence checks below run the
+/// same snippet through all of them, so a header that resolves on the
+/// host but nowhere else fails here rather than in a cross build.
+#[cfg(test)]
+const ALL_TARGETS: [crate::Target; 5] = [
+    crate::Target::MacOSAarch64,
+    crate::Target::LinuxAarch64,
+    crate::Target::LinuxX64,
+    crate::Target::WindowsX64,
+    crate::Target::WindowsAarch64,
+];
+
+#[test]
+fn fnmatch_flags_follow_each_platform_libc() {
+    use crate::Target;
+    // The flags every target agrees on. FNM_PATHNAME / FNM_NOESCAPE are
+    // numbered the other way round by the two platform libraries, so
+    // only their distinctness and the GNU aliases are common.
+    let common = "#include <fnmatch.h>\n\
+        int ck[(FNM_NOMATCH==1 && FNM_NOSYS==-1 && FNM_PERIOD==0x04 \
+             && FNM_LEADING_DIR==0x08 && FNM_CASEFOLD==0x10 \
+             && FNM_PATHNAME!=FNM_NOESCAPE \
+             && FNM_FILE_NAME==FNM_PATHNAME \
+             && FNM_IGNORECASE==FNM_CASEFOLD)?1:-1];\n";
+    for target in ALL_TARGETS {
+        assert!(
+            header_snippet_compiles(common, target),
+            "<fnmatch.h> on {target:?}"
+        );
+    }
+
+    // The BSD-derived libc numbers FNM_NOESCAPE first, glibc
+    // FNM_PATHNAME; Windows takes badc's engine, compiled against the
+    // glibc numbering.
+    let bsd = "#include <fnmatch.h>\nint ck[(FNM_NOESCAPE==0x01 && FNM_PATHNAME==0x02)?1:-1];\n";
+    let gnu = "#include <fnmatch.h>\nint ck[(FNM_PATHNAME==0x01 && FNM_NOESCAPE==0x02)?1:-1];\n";
+    assert!(header_snippet_compiles(bsd, Target::MacOSAarch64));
+    assert!(!header_snippet_compiles(gnu, Target::MacOSAarch64));
+    for target in [
+        Target::LinuxAarch64,
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        assert!(header_snippet_compiles(gnu, target), "{target:?}");
+        assert!(!header_snippet_compiles(bsd, target), "{target:?}");
+    }
+
+    // FNM_EXTMATCH selects ksh extended patterns, which only glibc's
+    // fnmatch matches; defining it elsewhere would accept a flag the
+    // implementation behind the call ignores.
+    let ext = "#include <fnmatch.h>\nint ck[(FNM_EXTMATCH==0x20)?1:-1];\n";
+    assert!(header_snippet_compiles(ext, Target::LinuxX64));
+    assert!(header_snippet_compiles(ext, Target::LinuxAarch64));
+    for target in [
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        assert!(
+            !header_snippet_compiles(ext, target),
+            "FNM_EXTMATCH must be absent on {target:?}"
+        );
+    }
+}
+
+#[test]
+fn byteswap_header_needs_no_platform_library() {
+    // glibc's spelling over badc's byte-reversal builtins, which fold in
+    // a constant expression, so the values are checked at compile time.
+    let src = "#include <byteswap.h>\n\
+        int ck[(bswap_16(0x0102)==0x0201 && bswap_32(0x01020304u)==0x04030201u \
+             && bswap_64(0x0102030405060708ull)==0x0807060504030201ull \
+             && __bswap_16(0x0102)==0x0201 && __bswap_32(0x01020304u)==0x04030201u \
+             && __bswap_64(0x0102030405060708ull)==0x0807060504030201ull)?1:-1];\n";
+    for target in ALL_TARGETS {
+        assert!(
+            header_snippet_compiles(src, target),
+            "<byteswap.h> on {target:?}"
+        );
+    }
+}
+
+#[test]
+fn sysexits_codes_are_target_independent() {
+    // sysexits(3) is a set of integer constants with no library, syscall
+    // or target dependency behind it.
+    let src = "#include <sysexits.h>\n\
+        int ck[(EX_OK==0 && EX__BASE==64 && EX_USAGE==64 && EX_DATAERR==65 \
+             && EX_NOINPUT==66 && EX_NOUSER==67 && EX_NOHOST==68 \
+             && EX_UNAVAILABLE==69 && EX_SOFTWARE==70 && EX_OSERR==71 \
+             && EX_OSFILE==72 && EX_CANTCREAT==73 && EX_IOERR==74 \
+             && EX_TEMPFAIL==75 && EX_PROTOCOL==76 && EX_NOPERM==77 \
+             && EX_CONFIG==78 && EX__MAX==78)?1:-1];\n";
+    for target in ALL_TARGETS {
+        assert!(
+            header_snippet_compiles(src, target),
+            "<sysexits.h> on {target:?}"
+        );
+    }
+}
+
+#[test]
+fn strchrnul_memrchr_and_explicit_bzero_declare_on_every_target() {
+    // libSystem and msvcrt export none of these; there the call resolves
+    // to `libc/lib/string_ext.c`, joined to the link on demand. A
+    // successful compile is the declaration check.
+    let src = "#include <string.h>\n\
+        char *f(char *s, void *p) { explicit_bzero(p, 4); \
+        return strchrnul(s, '/') + (memrchr(s, '/', 4) - s); }\n";
+    for target in ALL_TARGETS {
+        assert!(
+            header_snippet_compiles(src, target),
+            "the GNU string extensions on {target:?}"
+        );
+    }
+}
+
+#[test]
+fn mach_vm_statistics_carries_the_user_memory_tags() {
+    use crate::Target;
+    // The allocator tag namespace and the shift that places a tag in the
+    // top 8 bits of a VM flags word. Values follow the macOS SDK's
+    // <mach/vm_statistics.h>.
+    let src = "#include <mach/vm_statistics.h>\n\
+        int ck[(VM_MAKE_TAG(VM_MEMORY_MALLOC)==0x01000000 \
+             && VM_MEMORY_MALLOC==1 && VM_MEMORY_MALLOC_SMALL==2 \
+             && VM_MEMORY_MALLOC_NANO==11 && VM_MEMORY_STACK==30 \
+             && VM_MEMORY_DYLD==60 && VM_MEMORY_SQLITE==62 \
+             && VM_MEMORY_SANITIZER==99 && VM_MEMORY_IOACCELERATOR==100 \
+             && VM_MEMORY_APPLICATION_SPECIFIC_1==240 \
+             && VM_MEMORY_APPLICATION_SPECIFIC_16==255 \
+             && VM_MEMORY_COUNT==256 \
+             && VM_MEMORY_CARBON==VM_MEMORY_CORESERVICES \
+             && VM_FLAGS_ANYWHERE==1 && VM_FLAGS_OVERWRITE==0x4000 \
+             && VM_FLAGS_ALIAS_MASK==0xFF000000 \
+             && VM_FLAGS_SUPERPAGE_SIZE_2MB==(2<<16))?1:-1];\n";
+    assert!(header_snippet_compiles(src, Target::MacOSAarch64));
+    // A Mach tag has no meaning off Darwin; mimalloc's own probe is
+    // `#if defined(VM_MAKE_TAG)`, so defining it elsewhere would select a
+    // tagged mmap on a kernel that reads the fd argument as a descriptor.
+    for target in [
+        Target::LinuxAarch64,
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        assert!(
+            !header_snippet_compiles(src, target),
+            "the Mach memory tags must be absent on {target:?}"
+        );
+    }
+}
+
+#[test]
+fn the_mach_process_inspection_headers_are_macos_only() {
+    use crate::Target;
+    // The include set a remote-memory reader pulls in: the process
+    // introspection calls, the Mach-O fat and symbol-table layouts, and
+    // the 64-bit VM routines with their region-info flavours.
+    let src = "#include <libproc.h>\n\
+        #include <mach-o/fat.h>\n\
+        #include <mach-o/loader.h>\n\
+        #include <mach-o/nlist.h>\n\
+        #include <mach/mach.h>\n\
+        #include <mach/mach_vm.h>\n\
+        #include <mach/machine.h>\n\
+        #include <sys/proc.h>\n\
+        #include <sys/sysctl.h>\n\
+        int f(int pid, char *buf) {\n\
+            mach_vm_address_t a = 0; mach_vm_size_t n = 0;\n\
+            vm_region_basic_info_data_64_t info;\n\
+            mach_msg_type_number_t c = VM_REGION_BASIC_INFO_COUNT_64;\n\
+            mach_port_t obj = 0;\n\
+            mach_vm_region(mach_task_self(), &a, &n, VM_REGION_BASIC_INFO_64,\n\
+                           (vm_region_info_t)&info, &c, &obj);\n\
+            mach_vm_read_overwrite(mach_task_self(), a, n, (mach_vm_address_t)buf, &n);\n\
+            proc_pidpath(pid, buf, PROC_PIDPATHINFO_MAXSIZE);\n\
+            return proc_regionfilename(pid, a, buf, 1024) + info.protection; }\n";
+    assert!(header_snippet_compiles(src, Target::MacOSAarch64));
+    for target in [
+        Target::LinuxAarch64,
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        assert!(
+            !header_snippet_compiles(src, target),
+            "the Mach introspection surface must be absent on {target:?}"
+        );
+    }
+
+    // The file-format layouts describe fixed on-disk records, so they are
+    // readable from any host. Sizes are what clang reports against the
+    // macOS SDK; `struct nlist` keeps its 12-byte on-disk shape because
+    // the SDK gates the in-core `char *n_name` on !__LP64__.
+    let layout = "#include <mach-o/fat.h>\n#include <mach-o/nlist.h>\n\
+        #include <mach/machine.h>\n\
+        int ck[(sizeof(struct fat_header)==8 && sizeof(struct fat_arch)==20 \
+             && sizeof(struct fat_arch_64)==32 \
+             && sizeof(struct nlist)==12 && sizeof(struct nlist_64)==16 \
+             && FAT_MAGIC==0xcafebabe && FAT_CIGAM==0xbebafeca \
+             && FAT_MAGIC_64==0xcafebabf && FAT_CIGAM_64==0xbfbafeca \
+             && N_STAB==0xe0 && N_TYPE==0x0e && N_EXT==0x01 && N_SECT==0xe \
+             && NO_SECT==0 && MAX_SECT==255 && DYNAMIC_LOOKUP_ORDINAL==0xfe \
+             && CPU_TYPE_X86_64==0x01000007 && CPU_TYPE_ARM64==0x0100000c \
+             && CPU_SUBTYPE_ARM64E==2 && CPU_SUBTYPE_X86_64_ALL==3)?1:-1];\n";
+    for target in ALL_TARGETS {
+        assert!(
+            header_snippet_compiles(layout, target),
+            "the Mach-O record layouts on {target:?}"
+        );
+    }
+}
+
+#[test]
+fn vm_region_basic_info_keeps_the_kernel_packing() {
+    use crate::Target;
+    // <mach/vm_region.h> is 4-byte packed. Without it the 64-bit flavour
+    // pads to 40 bytes and VM_REGION_BASIC_INFO_COUNT_64 reports 10, so
+    // mach_vm_region would be handed a reply size the kernel rejects.
+    let src = "#include <mach/vm_region.h>\n\
+        int ck[(sizeof(vm_region_basic_info_data_64_t)==36 \
+             && sizeof(vm_region_basic_info_data_t)==32 \
+             && VM_REGION_BASIC_INFO_COUNT_64==9 \
+             && VM_REGION_BASIC_INFO_COUNT==8 \
+             && VM_REGION_BASIC_INFO_64==9 && VM_REGION_BASIC_INFO==10)?1:-1];\n";
+    assert!(header_snippet_compiles(src, Target::MacOSAarch64));
+}
+
+#[test]
+fn commoncrypto_random_is_bound_to_libsystem() {
+    use crate::Target;
+    // mimalloc's Unix layer reaches for both headers to draw entropy:
+    // <AvailabilityMacros.h> puts MAC_OS_X_VERSION_MAX_ALLOWED past
+    // 10.15, which selects CCRandomGenerateBytes over arc4random_buf.
+    let src = "#include <AvailabilityMacros.h>\n\
+        #include <CommonCrypto/CommonCryptoError.h>\n\
+        #include <CommonCrypto/CommonRandom.h>\n\
+        #include <stddef.h>\n\
+        int ck[(sizeof(CCStatus)==4 && sizeof(CCCryptorStatus)==4 \
+             && sizeof(CCRNGStatus)==4 \
+             && kCCSuccess==0 && kCCParamError==-4300 \
+             && kCCBufferTooSmall==-4301 && kCCRNGFailure==-4307 \
+             && kCCInvalidKey==-4311 \
+             && MAC_OS_X_VERSION_MAX_ALLOWED>=MAC_OS_X_VERSION_10_15)?1:-1];\n\
+        int f(void *buf, size_t n) {\n\
+            return CCRandomGenerateBytes(buf, n) == kCCSuccess; }\n";
+    assert!(header_snippet_compiles(src, Target::MacOSAarch64));
+    for target in [
+        Target::LinuxAarch64,
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        assert!(
+            !header_snippet_compiles(src, target),
+            "the CommonCrypto surface must be absent on {target:?}"
+        );
+    }
+}
+
+#[test]
+fn mach_time_declares_the_sdk_clock_set() {
+    use crate::Target;
+    // The SDK's declaration set, all bound to libSystem. The struct tag
+    // and mach_timebase_info_t matter because callers spell the argument
+    // either way.
+    let src = "#include <mach/mach_time.h>\n\
+        int ck[(sizeof(mach_timebase_info_data_t)==8 \
+             && sizeof(struct mach_timebase_info)==8)?1:-1];\n\
+        unsigned long long f(void) {\n\
+            mach_timebase_info_data_t tb;\n\
+            mach_timebase_info_t p = &tb;\n\
+            mach_timebase_info(p);\n\
+            mach_wait_until(mach_absolute_time());\n\
+            return mach_absolute_time() * tb.numer / tb.denom\n\
+                 + mach_approximate_time() + mach_continuous_time()\n\
+                 + mach_continuous_approximate_time(); }\n";
+    assert!(header_snippet_compiles(src, Target::MacOSAarch64));
+    for target in [
+        Target::LinuxAarch64,
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        assert!(
+            !header_snippet_compiles(src, target),
+            "the Mach clock surface must be absent on {target:?}"
+        );
+    }
+}
+
+#[test]
+fn corevideo_umbrella_carries_the_time_types() {
+    use crate::Target;
+    // Sizes, offsets and values are what clang reports against the macOS
+    // SDK. CVSMPTETime packs to 24 bytes on 4-byte alignment, which puts
+    // CVTimeStamp's trailing two 64-bit words at 64 and 72.
+    let src = "#include <CoreVideo/CoreVideo.h>\n\
+        #include <stddef.h>\n\
+        int ck[(sizeof(CVOptionFlags)==8 && sizeof(CVSMPTETimeType)==4 \
+             && sizeof(CVSMPTETimeFlags)==4 && sizeof(CVTimeFlags)==4 \
+             && sizeof(CVTimeStampFlags)==8 && sizeof(CVReturn)==4 \
+             && sizeof(CVSMPTETime)==24 && sizeof(CVTime)==16 \
+             && sizeof(CVTimeStamp)==80 \
+             && offsetof(CVSMPTETime,counter)==4 \
+             && offsetof(CVSMPTETime,hours)==16 \
+             && offsetof(CVSMPTETime,frames)==22 \
+             && offsetof(CVTime,timeScale)==8 && offsetof(CVTime,flags)==12 \
+             && offsetof(CVTimeStamp,videoTime)==8 \
+             && offsetof(CVTimeStamp,rateScalar)==24 \
+             && offsetof(CVTimeStamp,smpteTime)==40 \
+             && offsetof(CVTimeStamp,flags)==64 \
+             && offsetof(CVTimeStamp,reserved)==72 \
+             && kCVSMPTETimeType24==0 && kCVSMPTETimeType5994==7 \
+             && kCVSMPTETimeValid==1 && kCVSMPTETimeRunning==2 \
+             && kCVTimeIsIndefinite==1 \
+             && kCVTimeStampVideoTimeValid==1 \
+             && kCVTimeStampRateScalarValid==16 \
+             && kCVTimeStampTopField==65536 \
+             && kCVTimeStampBottomField==131072 \
+             && kCVTimeStampVideoHostTimeValid==3 \
+             && kCVTimeStampIsInterlaced==196608 \
+             && kCVReturnSuccess==0 && kCVReturnFirst==-6660 \
+             && kCVReturnError==-6660 && kCVReturnLast==-6699 \
+             && kCVReturnInvalidArgument==-6661 \
+             && kCVReturnUnsupported==-6663 \
+             && kCVReturnDisplayLinkCallbacksNotSet==-6673 \
+             && kCVReturnPixelBufferNotMetalCompatible==-6684 \
+             && kCVReturnRetry==-6692)?1:-1];\n\
+        enum _CVReturn tag_is_named;\n";
+    assert!(header_snippet_compiles(src, Target::MacOSAarch64));
+    // Every declaration sits behind __APPLE__, so no other target sees it.
+    for target in [
+        Target::LinuxAarch64,
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        assert!(
+            !header_snippet_compiles(src, target),
+            "the CoreVideo surface must be absent on {target:?}"
+        );
+    }
+}
+
+#[test]
+fn corevideo_host_clock_is_bound_to_the_framework() {
+    use crate::Target;
+    // The only CoreVideo entry points the bundled set declares. Anything
+    // else in the framework is left undeclared so a caller fails at the
+    // link rather than against a stand-in.
+    let src = "#include <CoreVideo/CVHostTime.h>\n\
+        double f(CVTimeStamp *ts) {\n\
+            ts->hostTime = CVGetCurrentHostTime();\n\
+            ts->version = CVGetHostClockMinimumTimeDelta();\n\
+            return CVGetHostClockFrequency(); }\n";
+    assert!(header_snippet_compiles(src, Target::MacOSAarch64));
+
+    let absent = "#include <CoreVideo/CoreVideo.h>\n\
+        void f(void) { CVDisplayLinkRelease(0); }\n";
+    assert!(
+        !header_snippet_compiles(absent, Target::MacOSAarch64),
+        "the display-link surface needs CoreGraphics types that are not bundled"
+    );
+}
+
+#[test]
+fn process_vm_transfers_are_a_linux_binding() {
+    use crate::Target;
+    // glibc declares the pair in <sys/uio.h> under __USE_GNU; no other
+    // platform libc has a cross-address-space vectored transfer.
+    let src = "#include <sys/uio.h>\n\
+        long f(int pid, struct iovec *l, struct iovec *r) {\n\
+            return process_vm_readv(pid, l, 1, r, 1, 0)\n\
+                 + process_vm_writev(pid, l, 1, r, 1, 0); }\n";
+    assert!(header_snippet_compiles(src, Target::LinuxX64));
+    assert!(header_snippet_compiles(src, Target::LinuxAarch64));
+    for target in [
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        assert!(
+            !header_snippet_compiles(src, target),
+            "process_vm_readv must be absent on {target:?}"
+        );
+    }
+}
+
+#[test]
+fn cpu_time_clocks_follow_each_platform_libc() {
+    use crate::Target;
+    // POSIX names the two CPU-time clocks but leaves the ids to the
+    // implementation: libSystem's clockid_t enum numbers them 12 and 16,
+    // glibc 2 and 3. Windows takes the glibc numbering, as the realtime
+    // and monotonic ids already do.
+    let apple = "#include <time.h>\n\
+        int ck[(CLOCK_PROCESS_CPUTIME_ID==12 && CLOCK_THREAD_CPUTIME_ID==16)?1:-1];\n";
+    let gnu = "#include <time.h>\n\
+        int ck[(CLOCK_PROCESS_CPUTIME_ID==2 && CLOCK_THREAD_CPUTIME_ID==3)?1:-1];\n";
+    assert!(header_snippet_compiles(apple, Target::MacOSAarch64));
+    assert!(!header_snippet_compiles(gnu, Target::MacOSAarch64));
+    for target in [
+        Target::LinuxAarch64,
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        assert!(header_snippet_compiles(gnu, target), "{target:?}");
+        assert!(!header_snippet_compiles(apple, target), "{target:?}");
+    }
+    // The three ids that were already defined keep their values.
+    let common = "#include <time.h>\n\
+        int ck[(CLOCK_REALTIME==0 && CLOCK_MONOTONIC_RAW==4 \
+             && CLOCK_PROCESS_CPUTIME_ID!=CLOCK_THREAD_CPUTIME_ID)?1:-1];\n";
+    for target in ALL_TARGETS {
+        assert!(header_snippet_compiles(common, target), "{target:?}");
+    }
+}
+
+#[test]
+fn closefrom_is_a_linux_binding() {
+    use crate::Target;
+    // glibc exports closefrom from 2.34 on. libSystem has never had it --
+    // the macOS SDK's <unistd.h> does not declare it -- and neither does
+    // msvcrt, so declaring it there would bind a symbol the loader cannot
+    // resolve.
+    let src = "#include <unistd.h>\nvoid f(void) { closefrom(3); }\n";
+    assert!(header_snippet_compiles(src, Target::LinuxX64));
+    assert!(header_snippet_compiles(src, Target::LinuxAarch64));
+    for target in [
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        assert!(
+            !header_snippet_compiles(src, target),
+            "closefrom must be absent on {target:?}"
+        );
+    }
+}
+
+#[test]
+fn underscore_putenv_is_an_msvcrt_binding() {
+    use crate::Target;
+    // msvcrt spells POSIX putenv `_putenv`; code written against the CRT
+    // uses that name directly. The Unix targets keep only `putenv`.
+    let src = "#include <stdlib.h>\nint f(char *s) { return _putenv(s); }\n";
+    assert!(header_snippet_compiles(src, Target::WindowsX64));
+    assert!(header_snippet_compiles(src, Target::WindowsAarch64));
+    for target in [Target::MacOSAarch64, Target::LinuxX64, Target::LinuxAarch64] {
+        assert!(
+            !header_snippet_compiles(src, target),
+            "_putenv must be absent on {target:?}"
+        );
+    }
+    // `putenv` itself stays available everywhere.
+    let posix = "#include <stdlib.h>\nint f(char *s) { return putenv(s); }\n";
+    for target in ALL_TARGETS {
+        assert!(header_snippet_compiles(posix, target), "{target:?}");
+    }
 }
 
 #[test]

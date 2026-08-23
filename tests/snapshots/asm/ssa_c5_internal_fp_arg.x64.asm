@@ -9,6 +9,21 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <main>:
                	pushq	%rbp
@@ -22,26 +37,22 @@ Disassembly of section .text:
                	movslq	%ecx, %rcx
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rcx, %xmm0
-               	movapd	%xmm0, %xmm15
-               	movq	%rdx, %xmm0
-               	addsd	%xmm15, %xmm0
-               	xorps	%xmm1, %xmm1
-               	cvtsi2sd	%rax, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	movq	%rdx, %xmm1
+               	addsd	%xmm0, %xmm1
+               	xorps	%xmm0, %xmm0
+               	cvtsi2sd	%rax, %xmm0
+               	ucomisd	%xmm0, %xmm1
                	setb	%cl
                	movzbq	%cl, %rcx
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rcx
-               	movslq	%ecx, %rcx
-               	cmpq	$0x1, %rcx
+               	cmpl	$0x1, %ecx
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
                	movabsq	$0x4062d00000000000, %rcx # imm = 0x4062D00000000000
-               	xorps	%xmm0, %xmm0
-               	cvtsi2sd	%rax, %xmm0
                	movq	%rcx, %xmm14
                	ucomisd	%xmm0, %xmm14
                	setb	%cl
@@ -55,30 +66,22 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	xorps	%xmm0, %xmm0
-               	cvtsi2sd	%rax, %xmm0
-               	xorps	%xmm1, %xmm1
-               	cvtsi2sd	%rax, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	%xmm0, %xmm0
                	setbe	%cl
                	movzbq	%cl, %rcx
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rcx
-               	movslq	%ecx, %rcx
-               	cmpq	$0x1, %rcx
+               	cmpl	$0x1, %ecx
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbp
                	retq
-               	xorps	%xmm0, %xmm0
-               	cvtsi2sd	%rax, %xmm0
                	movabsq	$0x3fe0000000000000, %rcx # imm = 0x3FE0000000000000
                	movq	%rcx, %xmm15
-               	addsd	%xmm15, %xmm0
-               	xorps	%xmm1, %xmm1
-               	cvtsi2sd	%rax, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	movapd	%xmm0, %xmm1
+               	addsd	%xmm15, %xmm1
+               	ucomisd	%xmm0, %xmm1
                	setbe	%al
                	movzbq	%al, %rax
                	setnp	%r10b

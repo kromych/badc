@@ -170,10 +170,13 @@ fn write_static_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8>
     let phoff: u64 = ELF_HEADER_SIZE as u64;
     let headers_size: u64 = phoff + (PROGRAM_HEADER_SIZE as u64) * (phnum as u64);
 
-    let text_file_off: u64 = headers_size;
+    // The merged text starts at the alignment its input sections
+    // claim; `p_vaddr - p_offset` is constant across the segment, so
+    // the file offset carries that alignment to the runtime address.
+    let text_file_off: u64 = headers_size.next_multiple_of(merged.text_align.max(16) as u64);
     let text_file_size: u64 = text.len() as u64;
     let text_vaddr: u64 = BASE_ADDR + text_file_off;
-    let entry_vaddr: u64 = BASE_ADDR + headers_size + stub_text_offset as u64;
+    let entry_vaddr: u64 = text_vaddr + stub_text_offset as u64;
 
     // Place the data segment on the next page boundary. The
     // segment's file offset uses the same page-aligned bump so
@@ -266,9 +269,10 @@ fn write_static_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8>
         PAGE_SIZE,
     );
 
-    // .text bytes -- already placed at `text_file_off` by the
-    // header sequence above (the header counted forward to
-    // exactly that point).
+    // .text bytes, past whatever gap aligning `text_file_off` left.
+    while (out.len() as u64) < text_file_off {
+        out.push(0);
+    }
     debug_assert_eq!(out.len() as u64, text_file_off);
     out.extend_from_slice(&text);
 
@@ -641,10 +645,10 @@ fn write_dynamic_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8
     let dynsym_size = dynsym.len() as u64;
     let rela_plt_off = dynsym_off + dynsym_size;
     let rela_plt_size = (n_imports as u64) * ELF64_RELA_SIZE;
-    // 4-align so `text_vaddr = BASE_ADDR + text_off` and every
-    // instruction landing in `.text` is 4-byte aligned for
-    // aarch64.
-    let text_off = (rela_plt_off + rela_plt_size + 3) & !3;
+    // The merged text starts at the alignment its input sections
+    // claim, never below the instruction alignment aarch64 needs.
+    let text_off =
+        (rela_plt_off + rela_plt_size).next_multiple_of(merged.text_align.max(16) as u64);
     let text_size = text.len() as u64;
 
     // Second PT_LOAD starts on the next page after the text
@@ -900,12 +904,14 @@ fn patch_data_refs(
         // writable data and the zero-fill tail share one base.
         let target_base = match r.target_section {
             NativeSymSection::Text => text_vaddr as i64,
-            NativeSymSection::RoData | NativeSymSection::Data | NativeSymSection::Bss => {
-                data_vaddr as i64
-            }
+            NativeSymSection::RoData
+            | NativeSymSection::RelRo
+            | NativeSymSection::Data
+            | NativeSymSection::Bss => data_vaddr as i64,
             NativeSymSection::Undef
             | NativeSymSection::Abs
             | NativeSymSection::Common
+            | NativeSymSection::Got
             | NativeSymSection::Tls
             | NativeSymSection::DebugAbbrev
             | NativeSymSection::DebugLine
@@ -1203,11 +1209,13 @@ mod tests {
         );
         MergedNative {
             applied_text_relocs: Vec::new(),
+            named_sections: Vec::new(),
             text_align: 16,
             // x86_64: `mov eax, 42; ret` -- minimal main body.
             text: alloc::vec![0xb8, 0x2a, 0x00, 0x00, 0x00, 0xc3],
             data: alloc::vec![],
             data_ro_len: 0,
+            data_relro_len: 0,
             data_align: 8,
             bss_size: 0,
             defined,
@@ -1233,7 +1241,6 @@ mod tests {
             debug_info_bases: alloc::vec![],
             debug_abbrev_bases: alloc::vec![],
             debug_line_bases: alloc::vec![],
-            debug_str_bases: alloc::vec![],
             debug_info_relocs: alloc::vec![],
             debug_line_relocs: alloc::vec![],
             unit_for_debug_info_reloc: alloc::vec![],
@@ -1244,6 +1251,7 @@ mod tests {
             prologue_ends: hashbrown::HashMap::new(),
             local_funcs: alloc::vec::Vec::new(),
             tls_data: alloc::vec![],
+            tls_abs_relocs: alloc::vec![],
             tls_init_size: 0,
             init_fini_arrays: Default::default(),
             section_map: Default::default(),

@@ -95,8 +95,9 @@ pub fn render_link_map(
     // Stream base addresses. The `.text` section is the writer-emitted
     // entry stub followed by the merged text verbatim, so the stub's
     // length is the section size minus the stream length. The unified
-    // data stream splits at `data_ro_len`: the read-only prefix backs
-    // `.rodata` from its start, the remainder backs `.data`.
+    // data stream splits at `data_ro_len` / `data_relro_len`: the
+    // read-only prefix backs `.rodata`, the relro region
+    // `.data.rel.ro`, the remainder `.data`.
     let find = |name: &str| sections.iter().find(|s| s.name == name);
     let text_sec = find(".text").ok_or_else(|| map_err("image has no .text section"))?;
     let stream_len = merged.text.len() as u64;
@@ -109,10 +110,13 @@ pub fn render_link_map(
     let stub_len = text_sec.size - stream_len;
     let text_base = text_sec.addr + stub_len;
     let ro_len = merged.data_ro_len as u64;
+    let relro_len = merged.data_relro_len as u64;
     let rodata_base = find(".rodata").map(|s| s.addr);
-    // `.data` holds `merged.data[data_ro_len..]`, so a stream offset
-    // maps to `data_base + offset` with the prefix length folded in.
-    let data_base = find(".data").map(|s| s.addr.wrapping_sub(ro_len));
+    // Each region's section holds the matching stream slice, so a
+    // stream offset maps to `base + offset` with the preceding
+    // regions' lengths folded in.
+    let relro_base = find(".data.rel.ro").map(|s| s.addr.wrapping_sub(ro_len));
+    let data_base = find(".data").map(|s| s.addr.wrapping_sub(relro_len));
     let bss_base = find(".bss").map(|s| s.addr);
     let tls_base = find(".tdata")
         .map(|s| s.addr)
@@ -122,12 +126,14 @@ pub fn render_link_map(
     // keep the defined table's name order). ld lists globals only.
     let mut text_syms: Vec<(u64, &str)> = Vec::new();
     let mut ro_syms: Vec<(u64, &str)> = Vec::new();
+    let mut relro_syms: Vec<(u64, &str)> = Vec::new();
     let mut data_syms: Vec<(u64, &str)> = Vec::new();
     let mut bss_syms: Vec<(u64, &str)> = Vec::new();
     for (name, sym) in &merged.defined {
         let (list, base) = match sym.section {
             NativeSymSection::Text => (&mut text_syms, Some(text_base)),
             NativeSymSection::Data if sym.value < ro_len => (&mut ro_syms, rodata_base),
+            NativeSymSection::Data if sym.value < relro_len => (&mut relro_syms, relro_base),
             NativeSymSection::Data => (&mut data_syms, data_base),
             NativeSymSection::Bss => (&mut bss_syms, bss_base),
             _ => continue,
@@ -136,7 +142,13 @@ pub fn render_link_map(
             list.push((base + sym.value, name.as_str()));
         }
     }
-    for l in [&mut text_syms, &mut ro_syms, &mut data_syms, &mut bss_syms] {
+    for l in [
+        &mut text_syms,
+        &mut ro_syms,
+        &mut relro_syms,
+        &mut data_syms,
+        &mut bss_syms,
+    ] {
         l.sort_by_key(|&(addr, _)| addr);
     }
 
@@ -208,10 +220,20 @@ pub fn render_link_map(
                 ),
                 ro_syms.as_slice(),
             ),
+            ".data.rel.ro" => (
+                stream_rows(
+                    sm.data
+                        .iter()
+                        .filter(|c| c.offset >= ro_len && c.offset < relro_len),
+                    sec.addr.wrapping_sub(ro_len),
+                    &label_of,
+                ),
+                relro_syms.as_slice(),
+            ),
             ".data" => (
                 stream_rows(
-                    sm.data.iter().filter(|c| c.offset >= ro_len),
-                    sec.addr.wrapping_sub(ro_len),
+                    sm.data.iter().filter(|c| c.offset >= relro_len),
+                    sec.addr.wrapping_sub(relro_len),
                     &label_of,
                 ),
                 data_syms.as_slice(),
@@ -344,7 +366,10 @@ fn parse_image_sections(image: &[u8]) -> Result<(Vec<OutSec>, &'static str), C5E
         (_, EM_AARCH64) => "elf64-littleaarch64",
         (_, EM_386) => "elf32-i386",
         (_, other) => {
-            return Err(map_err(&format!("unsupported e_machine {other}")));
+            return Err(map_err(&format!(
+                "unsupported e_machine {}",
+                super::relocatable::elf_machine_desc(other)
+            )));
         }
     };
     let shoff = ehdr.e_shoff as usize;

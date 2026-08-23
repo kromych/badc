@@ -11,8 +11,14 @@ Pipeline:
   - ``tests/all.tcl`` runs the suite; the total failure count is checked
     against a pinned baseline so a codegen regression fails the smoke.
 
+Each run gets its own working directory and its own process group, so a
+run that times out is killed whole rather than leaving an interpreter
+behind, and no two runs share the scratch space tcltest writes into.
+
 POSIX only (the build runs ``configure`` + ``make``). Linux is the
 supported host; the CI lane and ``validate_local_boxes`` invoke it there.
+On darwin the tests in ``DARWIN_SKIP`` are skipped for the reason
+recorded there.
 """
 
 from __future__ import annotations
@@ -21,8 +27,11 @@ import argparse
 import os
 import re
 import shlex
+import shutil
+import signal
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -40,6 +49,17 @@ ZLIB_UNITS = (
 # Maximum total test failures tolerated. The suite is green with badc; a
 # regression that raises the count fails the smoke.
 BASELINE_FAILURES = 0
+
+SUITE_TIMEOUT = 1800
+
+# unixFCmd-2.4 copies a FIFO, and Tcl then hands the pair to macOS's
+# copyfile(3) in TclMacOSXCopyFileAttributes. copyfile_set_dst_permissions
+# opens the destination, and open() on a FIFO blocks until the other end is
+# opened, which nothing does -- so the suite stops there at 0% CPU. The
+# same block occurs in a tclsh built by the system compiler, and in a C
+# program that calls copyfile() over two FIFOs with the flags
+# tclMacOSXFCmd.c passes, so no badc-generated code is involved.
+DARWIN_SKIP = ("unixFCmd-2.4",)
 
 
 def run(cmd, **kw):
@@ -152,20 +172,60 @@ def link(badc: str, objs: list[str], out: Path, log) -> Path:
     return tclsh
 
 
+def kill_group(proc: subprocess.Popen) -> None:
+    """Kill the interpreter and everything it started."""
+    try:
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        proc.kill()
+    try:
+        proc.wait(timeout=30)
+    except subprocess.TimeoutExpired:
+        pass
+
+
 def run_suite(tclsh: Path, log) -> None:
     tests = SRC / "tests"
     library = SRC / "library"
     env = dict(os.environ, TCL_LIBRARY=str(library))
-    log("running tests/all.tcl")
-    r = subprocess.run(
-        [str(tclsh), str(tests / "all.tcl")],
-        cwd=tests,
-        capture_output=True,
+    # tcltest puts its scratch files in the working directory under fixed
+    # names (tf1, tf2, ...) and deletes them between files, so two runs
+    # sharing one delete each other's and report failures belonging to
+    # neither. A directory a previous run may still hold is therefore not
+    # reused: a timed-out run can leave an interpreter behind. all.tcl
+    # takes its test files from its own location, so the working directory
+    # is free to be a fresh one. It stays beside the sources: fCmd.test
+    # sets its `xdev` constraint from the working directory's device
+    # against /tmp's, so a working directory on /tmp skips six tests.
+    runs = TCL_DIR / ".cache" / "runs"
+    runs.mkdir(parents=True, exist_ok=True)
+    work = Path(tempfile.mkdtemp(prefix=f"{os.getpid()}-", dir=runs))
+    cmd = [str(tclsh), str(tests / "all.tcl")]
+    if sys.platform == "darwin":
+        cmd += ["-skip", " ".join(DARWIN_SKIP)]
+        log(f"skipping on darwin: {' '.join(DARWIN_SKIP)}")
+    log(f"running tests/all.tcl in {work}")
+    # Its own process group. tcltest runs each test file in a child
+    # interpreter, so killing the process this starts leaves that child
+    # orphaned and still holding the working directory; the group is what
+    # has to be killed.
+    proc = subprocess.Popen(
+        cmd,
+        cwd=work,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         text=True,
         env=env,
-        timeout=1800,
+        start_new_session=True,
     )
-    out = r.stdout + r.stderr
+    try:
+        out, _ = proc.communicate(timeout=SUITE_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        kill_group(proc)
+        out, _ = proc.communicate()
+        sys.stderr.write((out or "")[-2000:])
+        sys.exit(f"smoke: test suite did not finish in {SUITE_TIMEOUT}s "
+                 f"(working directory {work})")
     # tcltest prints a per-file `Failed N` line and a final aggregate; sum
     # the per-file counts so a single file's regression is caught even when
     # the aggregate line is absent.
@@ -177,10 +237,13 @@ def run_suite(tclsh: Path, log) -> None:
         for line in out.splitlines():
             if "FAILED" in line:
                 print("  " + line)
-        sys.exit(f"smoke: {failed} test failures exceed baseline {BASELINE_FAILURES}")
+        sys.exit(f"smoke: {failed} test failures exceed baseline "
+                 f"{BASELINE_FAILURES} (working directory {work})")
     if files == 0:
         sys.stderr.write(out[-2000:])
-        sys.exit("smoke: no test files ran")
+        sys.exit(f"smoke: no test files ran (working directory {work})")
+    # Kept on every failure above, for triage.
+    shutil.rmtree(work, ignore_errors=True)
 
 
 def main(argv: list[str] | None = None) -> int:

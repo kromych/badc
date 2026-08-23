@@ -33,7 +33,7 @@ use alloc::vec::Vec;
 
 use super::super::ir::{
     AsmSeg, AtomicRmwOp, BinOp, Block, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE,
-    StoreKind, Terminator, ValueId,
+    StoreKind, Terminator, ValueId, quotient_op,
 };
 
 /// Cached `(off, kind, value)` for a previously-pushed
@@ -96,6 +96,10 @@ enum PureKey {
         value: ValueId,
         kind: LoadKind,
     },
+    Bswap {
+        value: ValueId,
+        width: u8,
+    },
 }
 
 /// Builder over a [`FunctionSsa`]. Each method that defines a value
@@ -139,6 +143,10 @@ pub(crate) struct SsaBuilder {
     /// Last value defined in the current block. Used as the default
     /// `exit_acc` if the block's terminator doesn't specify one.
     last_def: ValueId,
+    /// When set, a modulo with a register divisor is built as a
+    /// divide plus `n - q*d` so a division over the same operands
+    /// shares the quotient. See [`Self::binop`].
+    split_modulo: bool,
     /// Current `(line, file_idx)` source position. Stamped onto
     /// every inst pushed into the function so the DWARF emitter
     /// can recover a per-statement line table for walker-produced
@@ -157,10 +165,12 @@ impl SsaBuilder {
             ent_pc,
             end_pc: ent_pc,
             locals: 0,
+            ssp: crate::c5::ir::SspFacts::default(),
             n_params,
             is_variadic,
             is_inline: false,
             is_always_inline: false,
+            is_noinline: false,
             is_naked: false,
             is_weak: false,
             is_internal: false,
@@ -174,6 +184,7 @@ impl SsaBuilder {
             extern_imm_data_refs: Vec::new(),
             extern_tls_refs: Vec::new(),
             f32_values: Vec::new(),
+            cmp32: Vec::new(),
             param_fp_mask: 0,
             agg_descs: alloc::vec::Vec::new(),
             param_aggs: alloc::vec::Vec::new(),
@@ -205,6 +216,7 @@ impl SsaBuilder {
             block_exit_accs: Vec::new(),
             last_def: NO_VALUE,
             cur_src: (0, 0),
+            split_modulo: false,
         };
         let entry = b.new_block();
         b.switch_to(entry);
@@ -229,13 +241,24 @@ impl SsaBuilder {
         self.func.end_pc = end_pc;
     }
 
-    /// Record the prologue-realigned region for over-aligned automatic
+    /// Enable the register-divisor modulo split. See [`Self::binop`].
+    pub(crate) fn set_split_modulo(&mut self, on: bool) {
+        self.split_modulo = on;
+    }
+
+    /// Record the over-aligned frame region for over-aligned automatic
     /// objects: the `(slot_off, region_off)` placements, the region alignment,
     /// and its byte size. Consumed by the per-arch frame layout and the VM.
     pub(crate) fn set_realign(&mut self, placed: Vec<(i64, i64)>, align: i64, region_bytes: i64) {
         self.func.over_aligned = placed;
         self.func.frame_align = align;
         self.func.realign_region_bytes = region_bytes;
+    }
+
+    /// Record the front end's stack-protector classification of the
+    /// function's declared automatic objects.
+    pub(crate) fn set_ssp(&mut self, ssp: crate::c5::ir::SspFacts) {
+        self.func.ssp = ssp;
     }
 
     /// Set the source-level function name. Codegen consumers use
@@ -621,11 +644,24 @@ impl SsaBuilder {
 
     /// [`Self::load`] with an explicit volatile mark (C99 6.7.3p6).
     pub(crate) fn load_vol(&mut self, addr: ValueId, kind: LoadKind, volatile: bool) -> ValueId {
+        self.load_at(addr, kind, volatile, 0)
+    }
+
+    /// [`Self::load_vol`] with the address's proven alignment; see
+    /// [`Inst::Load`]. Zero means naturally aligned for the width.
+    pub(crate) fn load_at(
+        &mut self,
+        addr: ValueId,
+        kind: LoadKind,
+        volatile: bool,
+        align: u8,
+    ) -> ValueId {
         let v = self.push(Inst::Load {
             addr,
             disp: 0,
             kind,
             volatile,
+            align,
         });
         if matches!(kind, LoadKind::F32) {
             self.mark_f32(v);
@@ -651,6 +687,19 @@ impl SsaBuilder {
         kind: StoreKind,
         volatile: bool,
     ) -> ValueId {
+        self.store_at(addr, value, kind, volatile, 0)
+    }
+
+    /// [`Self::store_vol`] with the address's proven alignment; see
+    /// [`Inst::Load`].
+    pub(crate) fn store_at(
+        &mut self,
+        addr: ValueId,
+        value: ValueId,
+        kind: StoreKind,
+        volatile: bool,
+        align: u8,
+    ) -> ValueId {
         self.local_cache.clear();
         self.push(Inst::Store {
             addr,
@@ -658,6 +707,7 @@ impl SsaBuilder {
             value,
             kind,
             volatile,
+            align,
         })
     }
 
@@ -782,10 +832,30 @@ impl SsaBuilder {
     /// already SSA values whose definitions dominate this site, so
     /// the cached result is bit-identical (including IEEE-754 NaN
     /// payloads: same inputs to same FP op produce the same NaN).
+    ///
+    /// With [`Self::set_split_modulo`], `n % d` over a register
+    /// divisor is built as `q = n / d; n - q*d` instead of one `Mod`,
+    /// so a division over the same operands reaches the same quotient
+    /// through the cache above (in either source order) and the value
+    /// numbering sees it across blocks. The quotient traps exactly
+    /// where the modulo did; `passes::divmod_pair` rebuilds the single
+    /// `Mod` when nothing else consumes it. An immediate divisor stays
+    /// whole: `divmod_const` strength-reduces it, and a zero one is
+    /// left to the hardware divide.
     pub(crate) fn binop(&mut self, op: BinOp, lhs: ValueId, rhs: ValueId) -> ValueId {
         let key = PureKey::Binop { op, lhs, rhs };
         if let Some(cached) = self.lookup_pure(key) {
             return cached;
+        }
+        if self.split_modulo
+            && let Some(quot) = quotient_op(op)
+            && self.peek_imm(rhs).is_none()
+        {
+            let q = self.binop(quot, lhs, rhs);
+            let qd = self.binop(BinOp::Mul, q, rhs);
+            let rem = self.binop(BinOp::Sub, lhs, qd);
+            self.pure_cache.insert(key, rem);
+            return rem;
         }
         let id = self.push(Inst::Binop { op, lhs, rhs });
         self.pure_cache.insert(key, id);
@@ -793,50 +863,22 @@ impl SsaBuilder {
     }
 
     /// Strength-reduce `Div` / `Divu` / `Mod` / `Modu` by a constant
-    /// positive power of two to shifts / masks; the hardware divide is
-    /// multi-cycle. Returns `None` when `op` is not a divide / modulo
-    /// or `rhs` is not a power-of-two immediate, leaving the caller on
-    /// the register-rhs divide path (the per-arch `BinopI` emit does
-    /// not lower Div / Mod). The divmod emit divides the 64-bit operand
-    /// -- narrow types are sign/zero-extended first -- so the rewrites
-    /// are evaluated at the same width.
-    pub(crate) fn divmod_pow2(&mut self, op: BinOp, lhs: ValueId, rhs: ValueId) -> Option<ValueId> {
+    /// divisor to shifts, masks and reciprocal multiplies. Returns
+    /// `None` when `op` is not a divide / modulo, `rhs` is not an
+    /// immediate, or the divisor is zero, leaving the caller on the
+    /// register-rhs divide path (the per-arch `BinopI` emit does not
+    /// lower Div / Mod). `width_bits` is the operand width after the
+    /// usual arithmetic conversions; narrower types are already
+    /// sign- / zero-extended into the 64-bit SSA value.
+    pub(crate) fn divmod_const(
+        &mut self,
+        op: BinOp,
+        lhs: ValueId,
+        rhs: ValueId,
+        width_bits: u32,
+    ) -> Option<ValueId> {
         let d = self.peek_imm(rhs)?;
-        if d <= 0 || !(d as u64).is_power_of_two() {
-            return None;
-        }
-        let k = d.trailing_zeros() as i64; // 0..=62 (d > 0 fits i64)
-        let mask = d - 1; // 2^k - 1
-        Some(match op {
-            // Unsigned: `x / 2^k == x >>u k`, `x % 2^k == x & (2^k-1)`.
-            // The k == 0 (divisor 1) forms fold to the shift / mask
-            // identities in `binop_imm`.
-            BinOp::Divu => self.binop_imm(BinOp::Shru, lhs, k),
-            BinOp::Modu => self.binop_imm(BinOp::And, lhs, mask),
-            // Signed division truncates toward zero (C99 6.5.5p6), so a
-            // negative dividend takes a bias of 2^k - 1 before the
-            // arithmetic shift. `bias = (x >>s 63) >>u (64 - k)`: all
-            // ones masked to 2^k - 1 when x < 0, else 0.
-            BinOp::Div if k >= 1 => {
-                let sign = self.binop_imm(BinOp::Shr, lhs, 63);
-                let bias = self.binop_imm(BinOp::Shru, sign, 64 - k);
-                let adj = self.binop(BinOp::Add, lhs, bias);
-                self.binop_imm(BinOp::Shr, adj, k)
-            }
-            // Signed `x % 2^k == ((x + bias) & (2^k-1)) - bias` with the
-            // same bias, giving a remainder with the sign of x.
-            BinOp::Mod if k >= 1 => {
-                let sign = self.binop_imm(BinOp::Shr, lhs, 63);
-                let bias = self.binop_imm(BinOp::Shru, sign, 64 - k);
-                let adj = self.binop(BinOp::Add, lhs, bias);
-                let masked = self.binop_imm(BinOp::And, adj, mask);
-                self.binop(BinOp::Sub, masked, bias)
-            }
-            // Divisor 1 (k == 0): division is identity, modulo is 0.
-            BinOp::Div => lhs,
-            BinOp::Mod => self.imm(0),
-            _ => return None,
-        })
+        super::super::magic::lower_divmod(self, op, lhs, d, width_bits)
     }
 
     /// If `v` names an `Inst::Imm` in the current function, return
@@ -1075,6 +1117,21 @@ impl SsaBuilder {
         id
     }
 
+    /// `Inst::Bswap` -- reverse the low `width` bytes of `value`,
+    /// zero-extended. A constant operand folds. CSE-eligible.
+    pub(crate) fn bswap(&mut self, value: ValueId, width: u8) -> ValueId {
+        if let Some(k) = self.peek_imm(value) {
+            return self.imm(crate::c5::vm::eval::eval_bswap(k, width));
+        }
+        let key = PureKey::Bswap { value, width };
+        if let Some(cached) = self.lookup_pure(key) {
+            return cached;
+        }
+        let id = self.push(Inst::Bswap { value, width });
+        self.pure_cache.insert(key, id);
+        id
+    }
+
     /// `Inst::FpCast`. Pure value; same input + same kind ->
     /// same output. CSE-eligible. The f32-ness of the result is set
     /// from `kind`: `F64ToF32` and `IntToFp`-to-float callers mark via
@@ -1274,6 +1331,13 @@ impl SsaBuilder {
     /// to pick the right lowering. Conservative: invalidate the
     /// CSE cache -- setjmp / longjmp move control across the
     /// block, va_start / va_arg may write through caller buffers.
+    /// `Inst::X86Simd` -- one x86 SIMD instruction. Writes through the
+    /// destination address in `args[0]`, so the local caches are cleared.
+    pub(crate) fn x86_simd(&mut self, op: u32, imm: Option<u8>, args: Vec<ValueId>) -> ValueId {
+        self.local_cache.clear();
+        self.push(Inst::X86Simd { op, imm, args })
+    }
+
     pub(crate) fn intrinsic(&mut self, kind: i64, args: Vec<ValueId>) -> ValueId {
         self.local_cache.clear();
         let id = self.push(Inst::Intrinsic { kind, args });
@@ -1557,6 +1621,23 @@ fn fold_int_binop_imm(op: BinOp, k1: i64, k2: i64) -> Option<i64> {
         Divu if k2 != 0 => Some(((k1 as u64) / (k2 as u64)) as i64),
         Modu if k2 != 0 => Some(((k1 as u64) % (k2 as u64)) as i64),
         _ => None,
+    }
+}
+
+/// Emitting side of the shared constant-divide lowering.
+impl super::super::magic::DivSink for SsaBuilder {
+    type Val = ValueId;
+
+    fn imm(&mut self, k: i64) -> ValueId {
+        SsaBuilder::imm(self, k)
+    }
+
+    fn binop(&mut self, op: BinOp, lhs: ValueId, rhs: ValueId) -> ValueId {
+        SsaBuilder::binop(self, op, lhs, rhs)
+    }
+
+    fn binop_imm(&mut self, op: BinOp, lhs: ValueId, rhs: i64) -> ValueId {
+        SsaBuilder::binop_imm(self, op, lhs, rhs)
     }
 }
 

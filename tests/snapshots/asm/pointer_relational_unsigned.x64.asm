@@ -9,6 +9,21 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <main>:
                	leaq	<rip>, %rax
@@ -24,11 +39,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	retq
                	cmpq	%rax, %rcx
-               	setbe	%dl
-               	movzbq	%dl, %rdx
-               	movslq	%edx, %rdx
-               	testq	%rdx, %rdx
-               	jne	<addr>
+               	jbe	<addr>
                	movl	$0x2, %eax
                	retq
                	cmpq	%rcx, %rax
@@ -40,36 +51,12 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	retq
                	cmpq	%rcx, %rax
-               	seta	%dl
-               	movzbq	%dl, %rdx
-               	movslq	%edx, %rdx
-               	testq	%rdx, %rdx
-               	jne	<addr>
+               	ja	<addr>
                	movl	$0x4, %eax
                	retq
                	cmpq	%rcx, %rax
-               	setae	%dl
-               	movzbq	%dl, %rdx
-               	movslq	%edx, %rdx
-               	testq	%rdx, %rdx
-               	jne	<addr>
+               	jae	<addr>
                	movl	$0x5, %eax
-               	retq
-               	cmpq	%rcx, %rax
-               	setbe	%dl
-               	movzbq	%dl, %rdx
-               	movslq	%edx, %rdx
-               	testq	%rdx, %rdx
-               	je	<addr>
-               	movl	$0x6, %eax
-               	retq
-               	cmpq	%rcx, %rax
-               	setbe	%al
-               	movzbq	%al, %rax
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x7, %eax
                	retq
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax

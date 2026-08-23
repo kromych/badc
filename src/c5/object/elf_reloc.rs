@@ -29,14 +29,17 @@
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
+use core::ops::Range;
 
+use super::super::codegen::map_syms::{self, MapClass, MapMark};
 use super::super::error::C5Error;
-use super::super::program::{ExportedFunction, Program};
+use super::super::program::{ExportedFunction, Program, SymVisibility};
 use super::Machine;
 use super::dwarf_reloc::{self, DwarfReloc, DwarfRelocTarget};
 use super::elf_class::{
     Elf64Ehdr, Elf64Rela, Elf64Shdr, Elf64Sym, ElfClass, write_ehdr, write_shdr, write_sym,
 };
+use super::strtab::build_string_table;
 use super::{AddrPart, Build};
 use crate::c5::CodeModel;
 use crate::c5::layout::{round_up, write_struct};
@@ -66,7 +69,7 @@ use super::elf_reloc_types::{
     R_AARCH64_MOVW_UABS_G2_NC, R_AARCH64_MOVW_UABS_G3, R_AARCH64_PREL32, R_AARCH64_PREL64,
     R_AARCH64_TLS_DTPREL64, R_AARCH64_TLSLE_ADD_TPREL_HI12, R_AARCH64_TLSLE_ADD_TPREL_LO12_NC,
     R_AARCH64_TSTBR14, R_X86_64_8, R_X86_64_16, R_X86_64_32, R_X86_64_32S, R_X86_64_64,
-    R_X86_64_DTPOFF64, R_X86_64_PC16, R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32,
+    R_X86_64_DTPOFF64, R_X86_64_PC8, R_X86_64_PC16, R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32,
     R_X86_64_REX_GOTPCRELX, R_X86_64_TPOFF32, i386_field_width, i386_reloc_desc,
 };
 
@@ -217,9 +220,10 @@ const SHF_INFO_LINK: u64 = 0x40;
 const STB_LOCAL: u8 = 0;
 const STB_GLOBAL: u8 = 1;
 const STB_WEAK: u8 = 2;
-// st_other visibility (the low two bits of the byte).
+// st_other visibility (the low two bits of the byte). The non-default values
+// come from `SymVisibility`, which the asm directives and the front-end
+// attribute both resolve to.
 const STV_DEFAULT: u8 = 0;
-const STV_HIDDEN: u8 = 2;
 const STT_NOTYPE: u8 = 0;
 const STT_OBJECT: u8 = 1;
 const STT_FUNC: u8 = 2;
@@ -235,22 +239,6 @@ const SHN_ABS: u16 = 0xfff1;
 /// Size of the ELF64 relocation record the in-memory tables use
 /// before [`encode_reloc_table`] narrows them for the class.
 const ELF64_RELA_SIZE: usize = 24;
-
-/// Build a NUL-separated string blob. Returns (`bytes`, `offsets`)
-/// where `offsets[i]` is the offset of `names[i]` in `bytes`.
-/// `bytes[0]` is the leading NUL so offset 0 indexes the empty
-/// string per the ELF convention.
-fn build_strtab(names: &[&str]) -> (Vec<u8>, Vec<u32>) {
-    let mut bytes = Vec::new();
-    bytes.push(0);
-    let mut offsets = Vec::with_capacity(names.len());
-    for name in names {
-        offsets.push(bytes.len() as u32);
-        bytes.extend_from_slice(name.as_bytes());
-        bytes.push(0);
-    }
-    (bytes, offsets)
-}
 
 /// psABI whose relocation numbers an object carries. Fixed by the
 /// machine and the ELF class: an ELFCLASS32 x86 object is an i386
@@ -323,7 +311,7 @@ fn fold_rel_addends(class: ElfClass, table: &[u8], body: &mut [u8]) -> Result<()
     if !class.is32() {
         return Ok(());
     }
-    for row in table.chunks_exact(ELF64_RELA_SIZE) {
+    for row in table.as_chunks::<ELF64_RELA_SIZE>().0.iter() {
         let off = u64::from_le_bytes(row[0..8].try_into().unwrap()) as usize;
         let rtype = u64::from_le_bytes(row[8..16].try_into().unwrap()) as u32;
         let addend = i64::from_le_bytes(row[16..24].try_into().unwrap());
@@ -359,7 +347,7 @@ fn encode_reloc_table(class: ElfClass, table: &[u8]) -> Vec<u8> {
         return table.to_vec();
     }
     let mut out = Vec::with_capacity(table.len() / ELF64_RELA_SIZE * 8);
-    for row in table.chunks_exact(ELF64_RELA_SIZE) {
+    for row in table.as_chunks::<ELF64_RELA_SIZE>().0.iter() {
         let r_offset = u64::from_le_bytes(row[0..8].try_into().unwrap());
         let r_info = u64::from_le_bytes(row[8..16].try_into().unwrap());
         let info = class.reloc_info((r_info >> 32) as u32, r_info as u32);
@@ -509,11 +497,15 @@ enum DataHome {
 }
 
 impl DataHome {
+    /// `delta` is a two's-complement byte displacement: a negative
+    /// addend arrives as a wrapped `u64` and the section-relative
+    /// offset goes negative through the same wrap (`home_sym` reads
+    /// it back as `i64`).
     fn add(self, delta: u64) -> DataHome {
         match self {
-            DataHome::Data(b) => DataHome::Data(b + delta),
-            DataHome::Bss(b) => DataHome::Bss(b + delta),
-            DataHome::Named(e, b) => DataHome::Named(e, b + delta),
+            DataHome::Data(b) => DataHome::Data(b.wrapping_add(delta)),
+            DataHome::Bss(b) => DataHome::Bss(b.wrapping_add(delta)),
+            DataHome::Named(e, b) => DataHome::Named(e, b.wrapping_add(delta)),
         }
     }
 }
@@ -591,12 +583,13 @@ impl DataPlan {
         s.home.add(delta)
     }
 
-    /// Map a data reference through its object anchor so a
-    /// one-past-the-end target (C99 6.5.6p8) follows its own object
-    /// rather than the next span.
+    /// Map a data reference through its object anchor: the anchor picks
+    /// the span, the signed displacement `target - anchor` rides as the
+    /// addend. A one-past-the-end target (C99 6.5.6p8) would otherwise
+    /// home on the next span, a negative addend (C99 6.6 address
+    /// constant minus an integer) on the preceding one.
     fn map_ref(&self, target: u64, anchor: u64) -> DataHome {
-        let a = anchor.min(target);
-        self.map(a).add(target - a)
+        self.map(anchor).add(target.wrapping_sub(anchor))
     }
 }
 
@@ -610,7 +603,7 @@ fn carve_partition_relas(bytes: &mut Vec<u8>, carve: &mut CarvePlan, text_sym: u
         return;
     }
     let mut kept: Vec<u8> = Vec::with_capacity(bytes.len());
-    for row in bytes.chunks_exact(ELF64_RELA_SIZE) {
+    for row in bytes.as_chunks::<ELF64_RELA_SIZE>().0.iter() {
         let r_offset = u64::from_le_bytes(row[0..8].try_into().unwrap());
         let mut r_info = u64::from_le_bytes(row[8..16].try_into().unwrap());
         let mut r_addend = i64::from_le_bytes(row[16..24].try_into().unwrap());
@@ -993,17 +986,24 @@ pub(super) fn write_relocatable(
     const SHIDX_DEBUG_ABBREV: u16 = 12;
     const SHIDX_DEBUG_LINE: u16 = 13;
     const SHIDX_RELA_DEBUG_LINE: u16 = 14;
+    const SHIDX_DEBUG_STR: u16 = 15;
     // TLS sections are emitted only when the unit carries
     // `_Thread_local` storage; `has_tls` gates both the section
     // headers and the `.shstrtab` name entries.
     let has_tls = !program.tls_data.is_empty();
-    const SHIDX_TDATA: u16 = 15;
-    const SHIDX_TBSS: u16 = 16;
+    const SHIDX_TDATA: u16 = 16;
+    const SHIDX_TBSS: u16 = 17;
+    //  18 = .rela.tdata (present only when the template carries an
+    //       address-constant initializer)
+    const SHIDX_RELA_TDATA: u16 = 18;
+    let has_tls_relocs = !build.tls_data_relocs.is_empty()
+        || !build.tls_extern_data_relocs.is_empty()
+        || !build.tls_code_relocs.is_empty();
     // Base section count (null + the fixed sections, plus the two TLS
-    // sections when present). Each `.init_array` / `.fini_array` group
-    // adds two more (the array + its `.rela`), counted once the groups
-    // are known below.
-    let base_sections: usize = if has_tls { 17 } else { 15 };
+    // sections when present and their relocation table when the template
+    // carries one). Each `.init_array` / `.fini_array` group adds two more
+    // (the array + its `.rela`), counted once the groups are known below.
+    let base_sections: usize = 16 + if has_tls { 2 } else { 0 } + usize::from(has_tls_relocs);
 
     // ---- `__attribute__((section("name")))` placement plan ----
     //
@@ -1166,7 +1166,7 @@ pub(super) fn write_relocatable(
                         .range(val..val.saturating_add(size.extent))
                         .next()
                         .is_some();
-                    if holds_reloc && build.pic {
+                    if holds_reloc && build.pic_link {
                         (DATA_REL_RO_SECTION, SHF_ALLOC | SHF_WRITE)
                     } else {
                         (RODATA_SECTION, SHF_ALLOC)
@@ -1265,6 +1265,9 @@ pub(super) fn write_relocatable(
         }
         plan_data_layout(program, build, &named_objs, &mut sizes, internal)?
     };
+    // Per-entry length of the attribute-placed content, before any
+    // inline-asm payload is appended past it.
+    let attr_sizes = sizes.clone();
     // Inline-asm `.pushsection` payloads join the same table. Letter
     // flags and the `@type` argument map to sh_flags / sh_type; a
     // block sharing a name with an attribute placement merges into the
@@ -1328,14 +1331,43 @@ pub(super) fn write_relocatable(
         sizes[e] = base + s.bytes.len() as u64;
         asm_placements.push((e, base));
     }
+    // `.note.gnu.property`: the AArch64 feature word the branch
+    // protections claim. The consumer AND-merges it across inputs, so
+    // an object may only set a bit whose instructions it actually
+    // emits (`Hardening` gates both sides).
+    let gnu_property_align: u64 = match class {
+        ElfClass::Elf32 => 4,
+        ElfClass::Elf64 => 8,
+    };
+    let gnu_property_note: Option<(usize, u64, Vec<u8>)> =
+        match build_gnu_property_note(machine, build, gnu_property_align as usize) {
+            None => None,
+            Some(body) => {
+                let e = carve
+                    .table
+                    .get_or_insert(
+                        ".note.gnu.property",
+                        SHT_NOTE,
+                        SHF_ALLOC,
+                        gnu_property_align,
+                    )
+                    .map_err(|msg| C5Error::Compile(crate::c5::error::fmt_internal_err(&msg)))?;
+                if sizes.len() <= e {
+                    sizes.resize(e + 1, 0);
+                }
+                let base = round_up(sizes[e], gnu_property_align);
+                sizes[e] = base + body.len() as u64;
+                Some((e, base, body))
+            }
+        };
     // Switch dispatch tables: a read-only entry of their own. The
     // name keeps the `.rodata` prefix consumers that discover
     // compiler jump tables key on, and stays apart from the carved
-    // `.rodata` so its pc-relative entry relocations don't demote
-    // that section's const objects to the writable stream on
-    // re-ingestion. No named symbol covers the tables: the same
-    // consumers require the region anonymous, addressed only through
-    // the section symbol.
+    // `.rodata` so its pc-relative entry relocations don't pull that
+    // section's const objects into the relro stream on re-ingestion.
+    // No named symbol covers the tables: the same consumers require
+    // the region anonymous, addressed only through the section
+    // symbol.
     let jt_placement: Option<(usize, u64)> = if build.rodata.bytes.is_empty() {
         None
     } else {
@@ -1356,14 +1388,35 @@ pub(super) fn write_relocatable(
     }
     let named_section_count = carve.table.entries.len();
 
-    // Strtab + symtab construction. The file symbol leads
+    // A default section the unit leaves empty while an assembled or
+    // attribute-placed section claims its name -- how a `.s` unit's
+    // own `.text` / `.data` / `.bss` arrive -- is dropped below. Two
+    // sections of one name in an object make selection by name
+    // ambiguous: `objcopy --dump-section=.text` reads the empty one.
+    let shadowed = |name: &str, empty: bool| -> bool {
+        empty && carve.table.entries.iter().any(|e| e.name == name)
+    };
+    let text_shadowed = shadowed(".text", build.text.is_empty());
+    let data_shadowed = shadowed(".data", build.data.is_empty() && plan.data_len == 0);
+    let bss_shadowed = shadowed(".bss", plan.bss_len == 0);
+
+    // Strtab + symtab construction. The file symbols lead
     // (binding LOCAL, type FILE); per-function symbols follow
     // (binding GLOBAL, type FUNC). ELF requires every LOCAL
     // symbol to precede every GLOBAL one, with sh_info pointing
     // at the first GLOBAL entry.
+    //
+    // A compiled unit names its source file; an assembled unit gets
+    // one STT_FILE symbol per `.file` directive and none otherwise,
+    // as GNU as emits them.
     let file_basename = source_path.rsplit('/').next().unwrap_or("<unknown>");
+    let file_names: Vec<&str> = if program.asm_unit {
+        program.asm_file_names.iter().map(|s| s.as_str()).collect()
+    } else {
+        alloc::vec![file_basename]
+    };
 
-    // Section symbols come first after the file symbol; we
+    // Section symbols come first after the file symbols; we
     // emit one for each progbits section so relocations can
     // address them by section index.
     let mut symbols: Vec<Elf64Sym> = Vec::new();
@@ -1371,31 +1424,42 @@ pub(super) fn write_relocatable(
     // entry.
     symbols.push(Elf64Sym::default());
 
-    // File symbol -> shndx = SHN_ABS by convention. Name offset
-    // gets backfilled below once the final strtab is built.
-    symbols.push(Elf64Sym {
-        st_name: 0,
-        st_info: pack_sym_info(STB_LOCAL, STT_FILE),
-        st_shndx: SHN_ABS,
-        ..Default::default()
-    });
+    // File symbols -> shndx = SHN_ABS by convention. Name offsets
+    // get backfilled below once the final strtab is built.
+    for _ in &file_names {
+        symbols.push(Elf64Sym {
+            st_name: 0,
+            st_info: pack_sym_info(STB_LOCAL, STT_FILE),
+            st_shndx: SHN_ABS,
+            ..Default::default()
+        });
+    }
 
-    // Section symbols (.text, .data, .bss, .debug_line,
-    // .debug_abbrev). Each has empty name and SHN of the matching
-    // section. The DWARF section symbols let `.rela.debug_info` /
-    // `.rela.debug_line` relocations target them: a placeholder
-    // slot in `.debug_info` that refers to the unit's
-    // `.debug_line` start surfaces as
+    // Section symbols (.text, .data, .bss, and under `-g`
+    // .debug_line, .debug_abbrev). Each has empty name and SHN of the
+    // matching section; data and function-pointer fixups land against
+    // one with the offset in `r_addend`. The DWARF section symbols let
+    // `.rela.debug_info` / `.rela.debug_line` relocations target
+    // them: a placeholder slot in `.debug_info` that refers to the
+    // unit's `.debug_line` start surfaces as
     // `R_*_32 against .debug_line section sym, addend = 0`, which
     // the linker rebases to the unit's final `.debug_line` offset
-    // after concatenation.
-    for shndx in [
-        SHIDX_TEXT,
-        SHIDX_DATA,
-        SHIDX_BSS,
-        SHIDX_DEBUG_LINE,
-        SHIDX_DEBUG_ABBREV,
-    ] {
+    // after concatenation. Without `-g` the `.debug_*` sections are
+    // not written, so their symbols are not either.
+    let text_sym_idx = symbols.len() as u64;
+    let data_sym_idx = text_sym_idx + 1;
+    let bss_sym_idx = text_sym_idx + 2;
+    let (debug_line_sym_idx, debug_abbrev_sym_idx) = (text_sym_idx + 3, text_sym_idx + 4);
+    let debug_str_sym_idx = text_sym_idx + 5;
+    let mut fixed_section_shndx = alloc::vec![SHIDX_TEXT, SHIDX_DATA, SHIDX_BSS];
+    if build.debug_info {
+        fixed_section_shndx.push(SHIDX_DEBUG_LINE);
+        fixed_section_shndx.push(SHIDX_DEBUG_ABBREV);
+        fixed_section_shndx.push(SHIDX_DEBUG_STR);
+    }
+    let fixed_section_syms: Range<u64> =
+        text_sym_idx..text_sym_idx + fixed_section_shndx.len() as u64;
+    for shndx in fixed_section_shndx {
         symbols.push(Elf64Sym {
             st_info: pack_sym_info(STB_LOCAL, STT_SECTION),
             st_shndx: shndx,
@@ -1425,8 +1489,23 @@ pub(super) fn write_relocatable(
         (0, 0)
     };
     // One STT_SECTION symbol per named section so relocations into a
-    // carved range can reference the section + offset.
+    // carved range can reference the section + offset. An entry that
+    // takes a dropped default's name takes its symbol with it, so the
+    // section still carries exactly one.
     for k in 0..named_section_count {
+        let inherited = [
+            (".text", text_shadowed, text_sym_idx),
+            (".data", data_shadowed, data_sym_idx),
+            (".bss", bss_shadowed, bss_sym_idx),
+        ]
+        .into_iter()
+        .find(|&(name, dropped, _)| dropped && carve.table.entries[k].name == name)
+        .map(|(_, _, sym)| sym);
+        if let Some(sym) = inherited {
+            carve.sym_idx[k] = sym;
+            symbols[sym as usize].st_shndx = carve.shndx[k];
+            continue;
+        }
         carve.sym_idx[k] = symbols.len() as u64;
         symbols.push(Elf64Sym {
             st_info: pack_sym_info(STB_LOCAL, STT_SECTION),
@@ -1472,14 +1551,14 @@ pub(super) fn write_relocatable(
     // STB_WEAK wherever the name surfaces: as a definition or as an UNDEF
     // reference.
     let weak_names: alloc::collections::BTreeSet<&str> = {
-        use crate::c5::codegen::ssa::emit_common::AsmSymBind;
+        use crate::c5::asm::AsmSymBind;
         use crate::c5::token::Token;
         program
             .symbols
             .iter()
             .filter(|s| {
                 s.is_weak
-                    && (s.class == Token::Fun as i64 || s.class == Token::Glo as i64)
+                    && (s.is_fun_entity() || s.class == Token::Glo as i64)
                     && !s.name.is_empty()
             })
             .map(|s| s.link_name())
@@ -1500,31 +1579,26 @@ pub(super) fn write_relocatable(
             STB_GLOBAL
         }
     };
-    // `__attribute__((visibility("hidden")))` symbols and asm `.hidden`
-    // names: not preemptible, so the symtab entry carries STV_HIDDEN and, on
-    // x86_64, address-of sites resolve PC-relative directly instead of
-    // through the GOT (below).
-    let hidden_names: alloc::collections::BTreeSet<&str> = {
+    // `__attribute__((visibility(...)))` symbols and the asm visibility
+    // directives. A name kept inside its component is not preemptible, so on
+    // x86_64 address-of sites resolve PC-relative directly instead of through
+    // the GOT (below). An asm directive on a name the front end also marked
+    // wins: it names the visibility explicitly.
+    let visibility: alloc::collections::BTreeMap<&str, SymVisibility> = {
         use crate::c5::token::Token;
         program
             .symbols
             .iter()
             .filter(|s| {
                 s.is_hidden
-                    && (s.class == Token::Fun as i64 || s.class == Token::Glo as i64)
+                    && (s.is_fun_entity() || s.class == Token::Glo as i64)
                     && !s.name.is_empty()
             })
-            .map(|s| s.link_name())
-            .chain(program.asm_hidden_names.iter().map(|s| s.as_str()))
+            .map(|s| (s.link_name(), SymVisibility::Hidden))
+            .chain(program.asm_visibility.iter().map(|(n, v)| (n.as_str(), *v)))
             .collect()
     };
-    let vis_for = |name: &str| -> u8 {
-        if hidden_names.contains(name) {
-            STV_HIDDEN
-        } else {
-            STV_DEFAULT
-        }
-    };
+    let vis_for = |name: &str| -> u8 { visibility.get(name).map_or(STV_DEFAULT, |v| v.stv()) };
     // Addressing form of a cross-TU address materialization. A hidden
     // name is not preemptible, so the direct page-relative pair is
     // correct and keeps the GOT empty. On x86_64 every other name rides
@@ -1538,7 +1612,10 @@ pub(super) fn write_relocatable(
     // exactly that case.
     let kernel_abs = machine == Machine::X86_64 && build.code_model == CodeModel::Kernel;
     let extern_addr_form = |name: &str| -> ExternAddrForm {
-        if hidden_names.contains(name) {
+        if visibility
+            .get(name)
+            .is_some_and(|v| v.is_local_to_component())
+        {
             return ExternAddrForm::Direct;
         }
         match machine {
@@ -1608,19 +1685,140 @@ pub(super) fn write_relocatable(
     let defined_fn_names: alloc::collections::BTreeSet<&str> =
         build.func_names.iter().map(|s| s.as_str()).collect();
     // Labels the unit's assembly defines: inside an inline-asm named
-    // section, or in the main code stream. GNU as makes each a definition of
-    // the unit, so every reference to the name -- from another asm statement
-    // or from C -- binds to it and no undefined entry is emitted.
-    let asm_defined_labels: alloc::collections::BTreeSet<&str> = build
+    // section, or in the main code stream.
+    let asm_label_names: alloc::collections::BTreeSet<&str> = build
         .asm_sections
         .iter()
         .flat_map(|s| s.labels.iter().map(|l| l.name.as_str()))
         .chain(build.asm_text_labels.iter().map(|l| l.name.as_str()))
         .collect();
+    // A `.set` / `.equ` outside any section defines a symbol of the unit: a
+    // constant, or another name whose definition it takes, following a chain
+    // of assignments to its end. An assignment to a name nothing in the unit
+    // defines is not a definition and emits no symbol, as in GNU as.
+    let asm_set_defs = {
+        use crate::c5::asm::AsmSymValue;
+        let value_of = |n: &str| {
+            build
+                .asm_sym_decls
+                .iter()
+                .find(|d| d.name == n)
+                .and_then(|d| d.value.as_ref())
+        };
+        build
+            .asm_sym_decls
+            .iter()
+            .filter_map(|d| {
+                // Offsets accumulate along the chain: `.set a, b + 4` over
+                // `.set b, c + 8` values `a` at `c + 12`.
+                let mut v = d.value.as_ref()?;
+                let mut off = 0i64;
+                for _ in 0..build.asm_sym_decls.len() {
+                    let AsmSymValue::Sym(t, k) = v else { break };
+                    match value_of(t.as_str()) {
+                        Some(next) => {
+                            off += k;
+                            v = next;
+                        }
+                        None => break,
+                    }
+                }
+                match v {
+                    AsmSymValue::Abs(n) => Some((d.name.as_str(), AsmSymValue::Abs(n + off))),
+                    AsmSymValue::Sym(t, k) => (asm_label_names.contains(t.as_str())
+                        || defined_fn_names.contains(t.as_str()))
+                    .then(|| (d.name.as_str(), AsmSymValue::Sym(t.clone(), off + k))),
+                }
+            })
+            .collect::<Vec<_>>()
+    };
+    // GNU as makes each a definition of the unit, so every reference to the
+    // name -- from another asm statement or from C -- binds to it and no
+    // undefined entry is emitted.
+    let asm_defined_labels: alloc::collections::BTreeSet<&str> = asm_label_names
+        .iter()
+        .copied()
+        .chain(asm_set_defs.iter().map(|&(n, _)| n))
+        .collect();
+    // Objects this unit defines, by name: unified `.data` offset (TLS block
+    // offset for a thread-local), byte size, and whether it is thread-local.
+    // An alias definition carries its target's offset and binds like any
+    // defined object; dropping it here would hand its name an undefined
+    // entry beside the definition.
+    let defined_obj_by_name: alloc::collections::BTreeMap<&str, (i64, u64, bool)> = {
+        use crate::c5::symbol::Linkage;
+        use crate::c5::token::Token;
+        program
+            .symbols
+            .iter()
+            .filter(|s| {
+                s.class == Token::Glo as i64
+                    && s.defined_here
+                    && !s.name.is_empty()
+                    && matches!(s.linkage, Linkage::External | Linkage::Internal)
+            })
+            .map(|s| {
+                let size = crate::c5::layout::data_object_byte_size(s);
+                (s.link_name(), (s.val, size, s.is_thread_local))
+            })
+            .collect()
+    };
+    // The non-thread-local ones, whose value is a `.data` offset: an
+    // inline-asm section reloc naming one resolves section-relative like the
+    // attribute path.
+    let defined_data_by_name = |n: &str| -> Option<i64> {
+        defined_obj_by_name
+            .get(n)
+            .filter(|&&(_, _, tls)| !tls)
+            .map(|&(val, _, _)| val)
+    };
+    // The end of an alias's `.set` chain. An alias whose chain ends at a
+    // name nothing in the unit defines is no definition: GNU as emits no
+    // symbol for it and resolves every reference against the chain's end,
+    // which surfaces as an undefined global. The map carries those aliases;
+    // one whose end is defined keeps its own symbol below.
+    // Offsets accumulate along the chain, so a reference through it takes
+    // the distance from the end in its addend.
+    fn alias_chain_end<'p>(
+        aliases: &'p [crate::c5::program::FunctionAlias],
+        a: &'p crate::c5::program::FunctionAlias,
+    ) -> (&'p str, i64) {
+        let mut target = a.target.as_str();
+        let mut off = a.addend;
+        for _ in 0..aliases.len() {
+            match aliases.iter().find(|x| x.name == target) {
+                Some(next) => {
+                    target = next.target.as_str();
+                    off += next.addend;
+                }
+                None => break,
+            }
+        }
+        (target, off)
+    }
+    let undef_alias_end: alloc::collections::BTreeMap<&str, (&str, i64)> = program
+        .function_aliases
+        .iter()
+        .filter_map(|a| {
+            let (end, off) = alias_chain_end(&program.function_aliases, a);
+            (!asm_defined_labels.contains(end)
+                && !defined_fn_names.contains(end)
+                && !defined_obj_by_name.contains_key(end)
+                && func_strs.iter().all(|n| n != end))
+            .then_some((a.name.as_str(), (end, off)))
+        })
+        .collect();
+    // An alias that emits a symbol of its own defines the name; one whose
+    // chain ends undefined does not, and its references keep an undefined
+    // entry to resolve against.
+    let defines_alias = |n: &str| -> bool {
+        program.function_aliases.iter().any(|a| a.name == n) && !undef_alias_end.contains_key(n)
+    };
     let mut user_extern_names: Vec<&str> = Vec::new();
     for site in &build.user_extern_call_sites {
         let s = site.symbol_name.as_str();
         if !defined_fn_names.contains(s)
+            && !program.function_aliases.iter().any(|a| a.name == s)
             && !asm_defined_labels.contains(s)
             && !user_extern_names.contains(&s)
         {
@@ -1639,6 +1837,7 @@ pub(super) fn write_relocatable(
         .collect();
     for r in &build.code_relocs {
         if let Some(&name) = extern_fn_by_pc.get(&(r.target_ent_pc as usize))
+            && !program.function_aliases.iter().any(|a| a.name == name)
             && !asm_defined_labels.contains(name)
             && !user_extern_names.contains(&name)
         {
@@ -1722,52 +1921,51 @@ pub(super) fn write_relocatable(
     let mut user_extern_data_names: Vec<&str> = Vec::new();
     for r in &build.user_extern_data_refs {
         let s = r.symbol_name.as_str();
-        if !asm_defined_labels.contains(s) && !user_extern_data_names.contains(&s) {
+        if !asm_defined_labels.contains(s)
+            && !program.function_aliases.iter().any(|a| a.name == s)
+            && !user_extern_data_names.contains(&s)
+        {
             user_extern_data_names.push(s);
         }
     }
-    for r in &build.extern_data_relocs {
+    for r in build
+        .extern_data_relocs
+        .iter()
+        .chain(&build.tls_extern_data_relocs)
+    {
         let s = r.symbol_name.as_str();
-        if !asm_defined_labels.contains(s) && !user_extern_data_names.contains(&s) {
+        if !asm_defined_labels.contains(s)
+            && !defines_alias(s)
+            && !user_extern_data_names.contains(&s)
+        {
             user_extern_data_names.push(s);
         }
     }
 
-    // Data objects defined in this unit, by name and unified data
-    // offset; an inline-asm section reloc naming one resolves
-    // section-relative like the attribute path. An alias definition
-    // carries its target's offset and binds like any defined object;
-    // dropping it here would hand its name an undefined entry beside
-    // the definition.
-    let defined_data_by_name: alloc::collections::BTreeMap<&str, i64> = {
-        use crate::c5::symbol::Linkage;
-        use crate::c5::token::Token;
-        program
-            .symbols
-            .iter()
-            .filter(|s| {
-                s.class == Token::Glo as i64
-                    && s.defined_here
-                    && !s.is_thread_local
-                    && !s.name.is_empty()
-                    && matches!(s.linkage, Linkage::External | Linkage::Internal)
-            })
-            .map(|s| (s.link_name(), s.val))
-            .collect()
-    };
-    // Inline-asm section reloc names with neither a definition in this
-    // unit nor an existing UNDEF entry get their own undefined symbols.
+    // Inline-asm section reloc and function-body symbol-operand names with
+    // neither a definition in this unit nor an existing UNDEF entry get
+    // their own undefined symbols.
     let mut asm_extern_names: Vec<&str> = Vec::new();
-    for s in &build.asm_sections {
-        for r in &s.relocs {
-            use crate::c5::codegen::ssa::emit_common::AsmSectionTarget;
-            let AsmSectionTarget::Symbol(name) = &r.target else {
-                continue;
-            };
-            let n = name.as_str();
+    {
+        use crate::c5::asm::AsmSectionTarget;
+        let section_syms = build
+            .asm_sections
+            .iter()
+            .flat_map(|s| &s.relocs)
+            .map(|r| &r.target);
+        let operand_syms = build.asm_sym_fixups.iter().map(|r| &r.target);
+        // A reference through a dropped alias resolves against its chain's
+        // end; the ends of all dropped aliases follow, since GNU as emits
+        // the undefined entry for an unreferenced `.set` target too.
+        let referenced = section_syms.chain(operand_syms).filter_map(|t| match t {
+            AsmSectionTarget::Symbol(name) => Some(name.as_str()),
+            _ => None,
+        });
+        for name in referenced.chain(undef_alias_end.values().map(|&(n, _)| n)) {
+            let n = undef_alias_end.get(name).map_or(name, |&(n, _)| n);
             if !defined_fn_names.contains(n)
                 && !program.function_aliases.iter().any(|a| a.name == n)
-                && !defined_data_by_name.contains_key(n)
+                && defined_data_by_name(n).is_none()
                 && !asm_defined_labels.contains(n)
                 && !user_extern_names.contains(&n)
                 && !user_extern_data_names.contains(&n)
@@ -1777,12 +1975,12 @@ pub(super) fn write_relocatable(
             }
         }
     }
-    // A `.hidden` name that surfaces nowhere else still gets an undefined
-    // global entry carrying the visibility, as GNU as emits one.
-    for n in program.asm_hidden_names.iter().map(|s| s.as_str()) {
+    // A visibility directive naming a symbol that surfaces nowhere else still
+    // gets an undefined global entry carrying it, as GNU as emits one.
+    for n in program.asm_visibility.iter().map(|(n, _)| n.as_str()) {
         if !defined_fn_names.contains(n)
             && !program.function_aliases.iter().any(|a| a.name == n)
-            && !defined_data_by_name.contains_key(n)
+            && defined_data_by_name(n).is_none()
             && !asm_defined_labels.contains(n)
             && !user_extern_names.contains(&n)
             && !user_extern_data_names.contains(&n)
@@ -1791,20 +1989,24 @@ pub(super) fn write_relocatable(
             asm_extern_names.push(n);
         }
     }
-    // A `.weak` name that surfaces nowhere else still gets a weak undefined
-    // entry, as GNU as emits one for a `.weak` with no definition.
-    let asm_weak_undef: Vec<&str> = program
-        .asm_weak_names
+    // A `.globl` name that surfaces nowhere else gets an undefined global
+    // entry, as GNU as emits one for a `.globl` with no definition. A
+    // `.weak` in the same position gets none: GNU as emits a weak symbol
+    // only where something references the name, and a reference reaches
+    // `asm_extern_names` above and takes STB_WEAK through `weak_names`.
+    let asm_global_undef: Vec<&str> = program
+        .asm_global_names
         .iter()
         .map(|s| s.as_str())
         .filter(|&n| {
             !defined_fn_names.contains(n)
                 && !program.function_aliases.iter().any(|a| a.name == n)
-                && !defined_data_by_name.contains_key(n)
+                && defined_data_by_name(n).is_none()
                 && !asm_defined_labels.contains(n)
                 && !user_extern_names.contains(&n)
                 && !user_extern_data_names.contains(&n)
                 && !asm_extern_names.contains(&n)
+                && !program.asm_weak_names.iter().any(|w| w == n)
         })
         .collect();
 
@@ -1819,7 +2021,10 @@ pub(super) fn write_relocatable(
             + defined_data_globals.len()
             + user_extern_data_names.len(),
     );
-    all_names.push(file_basename);
+    for name in &file_names {
+        all_names.push(name);
+    }
+    let func_names_start = all_names.len();
     for s in &func_strs {
         all_names.push(s.as_str());
     }
@@ -1858,8 +2063,8 @@ pub(super) fn write_relocatable(
     for name in &asm_extern_names {
         all_names.push(*name);
     }
-    let asm_weak_undef_start = all_names.len();
-    for name in &asm_weak_undef {
+    let asm_global_undef_start = all_names.len();
+    for name in &asm_global_undef {
         all_names.push(*name);
     }
     // Standard TLS symbols + local-exec relocations are the ELF interop
@@ -1907,7 +2112,7 @@ pub(super) fn write_relocatable(
     // Labels defined inside inline-asm named sections. The value is the
     // label's offset within the section, rebased by the block's placement;
     // `.type` / `.size` directives set `st_type` / `st_size`.
-    use crate::c5::codegen::ssa::emit_common::{AsmSymBind, AsmSymDecl, AsmSymType};
+    use crate::c5::asm::{AsmSymBind, AsmSymDecl, AsmSymType, AsmSymValue};
     // A unit-level symbol directive an asm template carried outside any
     // section. It reaches whichever definition the unit holds for the name --
     // a section label, a main-stream label, or none at all.
@@ -2011,6 +2216,16 @@ pub(super) fn write_relocatable(
     for s in &asm_text_label_syms {
         all_names.push(s.name);
     }
+    // The assignments outside any section, less the names a section or the
+    // code stream also defines: those have their own entry above.
+    let asm_decl_set: Vec<&(&str, AsmSymValue)> = asm_set_defs
+        .iter()
+        .filter(|&&(n, _)| !asm_label_names.contains(n))
+        .collect();
+    let asm_decl_set_start = all_names.len();
+    for &(n, _) in &asm_decl_set {
+        all_names.push(n);
+    }
     // A `.globl` naming nothing the unit defines is an undefined global, as
     // GNU as emits for one with no definition. `.weak` is not: GNU as gives
     // an undefined weak name a symbol only where something references it,
@@ -2020,24 +2235,34 @@ pub(super) fn write_relocatable(
         .iter()
         .filter(|d| {
             d.bind == AsmSymBind::Global
+                && d.value.is_none()
                 && !defined_fn_names.contains(d.name.as_str())
                 && !program.function_aliases.iter().any(|a| a.name == d.name)
-                && !defined_data_by_name.contains_key(d.name.as_str())
+                && defined_data_by_name(d.name.as_str()).is_none()
                 && !asm_defined_labels.contains(d.name.as_str())
                 && !user_extern_names.contains(&d.name.as_str())
                 && !user_extern_data_names.contains(&d.name.as_str())
                 && !asm_extern_names.contains(&d.name.as_str())
-                && !asm_weak_undef.contains(&d.name.as_str())
+                && !asm_global_undef.contains(&d.name.as_str())
         })
         .collect();
     let asm_decl_undef_start = all_names.len();
     for d in &asm_decl_undef {
         all_names.push(d.name.as_str());
     }
-    let (strtab_bytes, name_offs) = build_strtab(&all_names);
-    // Patch the file symbol's name offset against the final
-    // strtab.
-    symbols[1].st_name = name_offs[0];
+    // Mapping-symbol names, on the one architecture that has them, so no
+    // other target's string table carries them.
+    let map_names_start = all_names.len();
+    if machine == Machine::Aarch64 {
+        all_names.push(MapClass::Code.symbol_name());
+        all_names.push(MapClass::Data.symbol_name());
+    }
+    let (strtab_bytes, name_offs) = build_string_table(&all_names);
+    // Patch the file symbols' name offsets against the final
+    // strtab; they sit right after the null entry.
+    for i in 0..file_names.len() {
+        symbols[1 + i].st_name = name_offs[i];
+    }
 
     let func_extent = |i: usize| -> Result<(usize, usize), C5Error> {
         let ent_pc = build.func_ent_pcs[i];
@@ -2053,12 +2278,7 @@ pub(super) fn write_relocatable(
                 ),
             )));
         }
-        let hi = build
-            .func_ent_pcs
-            .get(i + 1)
-            .and_then(|&next_ent| build.pc_to_native.get(next_ent).copied())
-            .unwrap_or(build.text.len());
-        Ok((lo, hi))
+        Ok((lo, build.func_code_end(i)))
     };
     // Function name -> `.symtab` index, for the `.init_array` /
     // `.fini_array` relocations to reference each constructor /
@@ -2078,6 +2298,89 @@ pub(super) fn write_relocatable(
             None => (SHIDX_TEXT, off),
         }
     };
+    // The unit's TLS block is `.tdata` bytes then `.tbss` zero fill; an
+    // offset past the initialized bytes is `.tbss`-relative.
+    let tls_init_len = program.tls_init_size.min(program.tls_data.len()) as i64;
+    let tls_home = |off: i64| {
+        if off >= tls_init_len {
+            (SHIDX_TBSS, off - tls_init_len)
+        } else {
+            (SHIDX_TDATA, off)
+        }
+    };
+    // Where a name this unit defines lands: section index, value, symbol type
+    // and size. Every definition channel resolves here -- a label of an
+    // inline-asm section, a label the main code stream defines, a function
+    // body, and a data or thread-local object.
+    let defined_place = |t: &str| -> Result<Option<(u16, u64, u8, u64)>, C5Error> {
+        if let Some(l) = asm_labels.iter().find(|l| l.name == t) {
+            return Ok(Some((l.shndx, l.value, l.st_type, l.st_size)));
+        }
+        if let Some(s) = asm_text_label_syms.iter().find(|s| s.name == t) {
+            let (shndx, value) = text_place(s.offset as u64);
+            return Ok(Some((shndx, value, s.st_type, s.st_size)));
+        }
+        if let Some(i) = func_strs.iter().position(|n| n == t) {
+            let (lo, hi) = func_extent(i)?;
+            let (shndx, value) = text_place(lo as u64);
+            return Ok(Some((shndx, value, STT_FUNC, hi.saturating_sub(lo) as u64)));
+        }
+        let Some(&(val, size, tls)) = defined_obj_by_name.get(t) else {
+            return Ok(None);
+        };
+        if tls {
+            let (shndx, value) = tls_home(val);
+            return Ok(Some((shndx, value as u64, STT_TLS, size)));
+        }
+        let (shndx, value) = match plan.map(val.max(0) as u64) {
+            DataHome::Data(o) => (SHIDX_DATA, o),
+            DataHome::Bss(o) => (SHIDX_BSS, o),
+            DataHome::Named(e, o) => (carve.shndx[e], o),
+        };
+        Ok(Some((shndx, value, STT_OBJECT, size)))
+    };
+    // Where an assignment's value lands: a constant is SHN_ABS, an
+    // assignment to another name takes that name's placement, which the
+    // chain resolution above narrowed to a definition of this unit.
+    let set_place = |v: &AsmSymValue| -> Result<(u16, u64, u8, u64), C5Error> {
+        let (t, off) = match v {
+            AsmSymValue::Abs(n) => return Ok((SHN_ABS, *n as u64, STT_NOTYPE, 0)),
+            AsmSymValue::Sym(t, k) => (t.as_str(), *k),
+        };
+        let (shndx, value, st_type, st_size) = defined_place(t)?.ok_or_else(|| {
+            C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
+                "elf_reloc: `.set` target `{t}` has no definition"
+            )))
+        })?;
+        Ok((shndx, value.wrapping_add_signed(off), st_type, st_size))
+    };
+    // Binding of an assigned name: local unless a directive of the unit
+    // declared it global or weak. Both channels a directive arrives through
+    // count -- a file-scope statement's and a function-scope one's.
+    let set_bind = |n: &str| -> u8 {
+        let declared = program.asm_global_names.iter().any(|g| g == n)
+            || weak_names.contains(n)
+            || matches!(
+                build
+                    .asm_sym_decls
+                    .iter()
+                    .find(|d| d.name == n)
+                    .map(|d| d.bind),
+                Some(AsmSymBind::Global | AsmSymBind::Weak)
+            );
+        if declared { bind_for(n) } else { STB_LOCAL }
+    };
+    // Binding of an alias symbol: a `.set` assignment follows the unit's
+    // directives, a declarator's own linkage its attributes.
+    let alias_bind = |a: &crate::c5::program::FunctionAlias| -> u8 {
+        use crate::c5::program::AliasBind;
+        match a.bind {
+            AliasBind::Weak => STB_WEAK,
+            AliasBind::Local => STB_LOCAL,
+            AliasBind::Global => bind_for(&a.name),
+            AliasBind::Assigned => set_bind(&a.name),
+        }
+    };
     // STB_LOCAL function symbols. Emitted before `first_global`
     // so the LOCAL block is contiguous as ELF requires.
     for &i in &local_func_idxs {
@@ -2085,7 +2388,7 @@ pub(super) fn write_relocatable(
         let (shndx, value) = text_place(lo as u64);
         func_symidx_by_name.insert(func_strs[i].clone(), symbols.len() as u32);
         symbols.push(Elf64Sym {
-            st_name: name_offs[1 + i],
+            st_name: name_offs[func_names_start + i],
             st_info: pack_sym_info(STB_LOCAL, STT_FUNC),
             st_shndx: shndx,
             st_value: value,
@@ -2153,6 +2456,73 @@ pub(super) fn write_relocatable(
             ..Default::default()
         });
     }
+    // Assignments outside any section that no directive bound global or
+    // weak, still inside the LOCAL block.
+    for (i, &(n, v)) in asm_decl_set.iter().enumerate() {
+        if set_bind(n) != STB_LOCAL {
+            continue;
+        }
+        let (shndx, value, st_type, st_size) = set_place(v)?;
+        asm_label_symidx.insert(n, symbols.len() as u32);
+        symbols.push(Elf64Sym {
+            st_name: name_offs[asm_decl_set_start + i],
+            st_info: pack_sym_info(STB_LOCAL, st_type),
+            st_other: vis_for(n),
+            st_shndx: shndx,
+            st_value: value,
+            st_size,
+        });
+    }
+    // `alias("target")` symbols: an additional name at the target's extent,
+    // following a chain of aliases (`memcpy` -> `__memcpy` -> `__pi_memcpy`)
+    // to its defined end. Resolved once and emitted in two passes, since ELF
+    // requires every LOCAL symbol to precede `sh_info`. An alias whose chain
+    // ends undefined emits no symbol; its references resolve against the
+    // end's undefined entry.
+    let alias_syms: Vec<Option<(u8, Elf64Sym)>> = program
+        .function_aliases
+        .iter()
+        .enumerate()
+        .map(|(i, a)| -> Result<Option<(u8, Elf64Sym)>, C5Error> {
+            // A label of the unit under the same name carries it already:
+            // an assignment the layout placed defines one.
+            if undef_alias_end.contains_key(a.name.as_str())
+                || asm_label_names.contains(a.name.as_str())
+            {
+                return Ok(None);
+            }
+            let (target, off) = alias_chain_end(&program.function_aliases, a);
+            let bind = alias_bind(a);
+            let Some((shndx, value, st_type, st_size)) = defined_place(target)? else {
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!("alias `{}`: target `{target}` has no definition", a.name),
+                )));
+            };
+            Ok(Some((
+                bind,
+                Elf64Sym {
+                    st_name: name_offs[fn_alias_names_start + i],
+                    st_info: pack_sym_info(bind, st_type),
+                    st_other: vis_for(&a.name),
+                    st_shndx: shndx,
+                    st_value: value.wrapping_add_signed(off),
+                    st_size,
+                },
+            )))
+        })
+        .collect::<Result<_, _>>()?;
+    // The local ones, still inside the LOCAL block.
+    for (i, entry) in alias_syms.iter().enumerate() {
+        let Some((bind, sym)) = *entry else { continue };
+        if bind != STB_LOCAL {
+            continue;
+        }
+        func_symidx_by_name.insert(
+            program.function_aliases[i].name.clone(),
+            symbols.len() as u32,
+        );
+        symbols.push(sym);
+    }
     // Internal-linkage data objects: STB_LOCAL + STT_OBJECT, placed
     // through the same layout plan the external ones use, so
     // compaction and named-section moves are reflected.
@@ -2177,16 +2547,6 @@ pub(super) fn write_relocatable(
     // `_Thread_local` objects: STT_TLS against `.tdata` / `.tbss` with a
     // section-relative value, so a sibling unit's local-exec relocation
     // and this unit's debug info resolve through the merged TLS block.
-    // The unit's block is `.tdata` bytes then `.tbss` zero fill; an
-    // offset past the initialized bytes is `.tbss`-relative.
-    let tls_init_len = program.tls_init_size.min(program.tls_data.len()) as i64;
-    let tls_home = |off: i64| {
-        if off >= tls_init_len {
-            (SHIDX_TBSS, off - tls_init_len)
-        } else {
-            (SHIDX_TDATA, off)
-        }
-    };
     let mut defined_tls_symidx: alloc::collections::BTreeMap<&str, u64> =
         alloc::collections::BTreeMap::new();
     for (i, (name, off, size)) in defined_tls_locals
@@ -2205,7 +2565,114 @@ pub(super) fn write_relocatable(
             ..Default::default()
         });
     }
-    let first_global = symbols.len() as u32;
+    // AArch64 mapping symbols. Every producer records the class of the
+    // bytes it lays down; the marks are gathered per output section here,
+    // since they arrive in section-independent passes, and folded once.
+    if machine == Machine::Aarch64 {
+        let mut marks: Vec<(u16, MapMark)> = Vec::new();
+        // Per output section: its length and whether it is executable,
+        // which decides whether leading data opens a run.
+        let mut sec_shape: alloc::collections::BTreeMap<u16, (u64, bool)> =
+            alloc::collections::BTreeMap::new();
+        sec_shape.insert(SHIDX_TEXT, (carve.text_keep_len as u64, true));
+        sec_shape.insert(SHIDX_DATA, (plan.data_len, false));
+        sec_shape.insert(SHIDX_BSS, (plan.bss_len, false));
+        for (k, e) in carve.table.entries.iter().enumerate() {
+            sec_shape.insert(
+                carve.shndx[k],
+                (
+                    sizes.get(k).copied().unwrap_or(0),
+                    e.flags & SHF_EXECINSTR != 0,
+                ),
+            );
+        }
+        // The text stream holds instructions apart from the data ranges the
+        // backend recorded. Each mark is split at the carve boundaries it
+        // crosses, so a function placed in a named section opens a run in
+        // that section rather than in `.text`.
+        for m in map_syms::code_stream_marks(build.text.len(), &build.text_data_ranges) {
+            let (mut lo, hi) = (u64::from(m.at), u64::from(m.at + m.len));
+            while lo < hi {
+                let end = carve
+                    .text_ranges
+                    .iter()
+                    .find_map(|r| match () {
+                        _ if lo < r.old_lo => Some(r.old_lo),
+                        _ if lo < r.old_hi => Some(r.old_hi),
+                        _ => None,
+                    })
+                    .map_or(hi, |b| b.min(hi));
+                let (shndx, value) = text_place(lo);
+                marks.push((
+                    shndx,
+                    MapMark {
+                        at: value as u32,
+                        len: (end - lo) as u32,
+                        class: m.class,
+                        opens: false,
+                    },
+                ));
+                lo = end;
+            }
+        }
+        // Content the writer places at a section's own alignment opens a
+        // data run at its start, as the alignment ahead of it does in an
+        // assembled unit: the unified data image, the switch-table blob,
+        // and the attribute-placed content of a named section.
+        let mut data_start = |shndx: u16, at: u64, len: u64| {
+            if len > 0 {
+                marks.push((
+                    shndx,
+                    MapMark {
+                        at: at as u32,
+                        len: 0,
+                        class: MapClass::Data,
+                        opens: true,
+                    },
+                ));
+            }
+        };
+        data_start(SHIDX_DATA, 0, plan.data_len);
+        data_start(SHIDX_BSS, 0, plan.bss_len);
+        for k in 0..carve.table.entries.len() {
+            // Carved text is placed first in its entry; the attribute
+            // content that follows starts past it.
+            let text_end = carve
+                .text_ranges
+                .iter()
+                .filter(|r| r.entry == k)
+                .map(|r| r.new_base + (r.old_hi - r.old_lo))
+                .max()
+                .unwrap_or(0);
+            let attr = attr_sizes.get(k).copied().unwrap_or(0);
+            data_start(carve.shndx[k], text_end, attr.saturating_sub(text_end));
+        }
+        if let Some((e, base)) = jt_placement {
+            data_start(carve.shndx[e], base, build.rodata.bytes.len() as u64);
+        }
+        for (&(e, base), s) in asm_placements.iter().zip(build.asm_sections.iter()) {
+            marks.extend(s.map.shifted(base as u32).map(|m| (carve.shndx[e], m)));
+        }
+        marks.sort_by_key(|&(shndx, _)| shndx);
+        let mut i = 0;
+        while i < marks.len() {
+            let shndx = marks[i].0;
+            let j = i + marks[i..].partition_point(|&(s, _)| s == shndx);
+            let mut group: Vec<MapMark> = marks[i..j].iter().map(|&(_, m)| m).collect();
+            let (len, exec) = sec_shape.get(&shndx).copied().unwrap_or((0, false));
+            for (at, class) in map_syms::fold(&mut group, len as usize, exec) {
+                symbols.push(Elf64Sym {
+                    st_name: name_offs[map_names_start + usize::from(class == MapClass::Data)],
+                    st_info: pack_sym_info(STB_LOCAL, STT_NOTYPE),
+                    st_shndx: shndx,
+                    st_value: u64::from(at),
+                    ..Default::default()
+                });
+            }
+            i = j;
+        }
+    }
+    let mut first_global = symbols.len() as u32;
     // Global (`.globl`) and weak (`.weak`) inline-asm section labels.
     for (j, l) in asm_labels.iter().enumerate() {
         if !(l.global || l.weak) {
@@ -2237,6 +2704,23 @@ pub(super) fn write_relocatable(
             ..Default::default()
         });
     }
+    // Assignments a `.globl` / `.weak` of the unit bound.
+    for (i, &(n, v)) in asm_decl_set.iter().enumerate() {
+        let bind = set_bind(n);
+        if bind == STB_LOCAL {
+            continue;
+        }
+        let (shndx, value, st_type, st_size) = set_place(v)?;
+        asm_label_symidx.insert(n, symbols.len() as u32);
+        symbols.push(Elf64Sym {
+            st_name: name_offs[asm_decl_set_start + i],
+            st_info: pack_sym_info(bind, st_type),
+            st_other: vis_for(n),
+            st_shndx: shndx,
+            st_value: value,
+            st_size,
+        });
+    }
     // STB_GLOBAL (or, for `__attribute__((weak))` definitions,
     // STB_WEAK) function symbols.
     for &i in &global_func_idxs {
@@ -2244,7 +2728,7 @@ pub(super) fn write_relocatable(
         let (shndx, value) = text_place(lo as u64);
         func_symidx_by_name.insert(func_strs[i].clone(), symbols.len() as u32);
         symbols.push(Elf64Sym {
-            st_name: name_offs[1 + i],
+            st_name: name_offs[func_names_start + i],
             st_info: pack_sym_info(bind_for(&func_strs[i]), STT_FUNC),
             st_other: vis_for(&func_strs[i]),
             st_shndx: shndx,
@@ -2253,56 +2737,17 @@ pub(super) fn write_relocatable(
         });
     }
 
-    // `alias("target")` function symbols: an additional name at the
-    // target's extent. A `.set alias, target` whose target is a label an
-    // inline-asm section defined aliases that label's placement; a chain
-    // of aliases (`memcpy` -> `__memcpy` -> `__pi_memcpy`) follows to its
-    // defined end.
-    for (i, a) in program.function_aliases.iter().enumerate() {
-        let mut target = a.target.as_str();
-        for _ in 0..program.function_aliases.len() {
-            match program.function_aliases.iter().find(|x| x.name == target) {
-                Some(next) => target = next.target.as_str(),
-                None => break,
-            }
-        }
-        let a = crate::c5::program::FunctionAlias {
-            name: a.name.clone(),
-            target: String::from(target),
-            weak: a.weak,
-        };
-        let a = &a;
-        if let Some(l) = asm_labels.iter().find(|l| l.name == a.target) {
-            func_symidx_by_name.insert(a.name.clone(), symbols.len() as u32);
-            symbols.push(Elf64Sym {
-                st_name: name_offs[fn_alias_names_start + i],
-                st_info: pack_sym_info(if a.weak { STB_WEAK } else { STB_GLOBAL }, l.st_type),
-                st_shndx: l.shndx,
-                st_value: l.value,
-                st_size: l.st_size,
-                ..Default::default()
-            });
+    // Alias symbols a directive bound global or weak.
+    for (i, entry) in alias_syms.iter().enumerate() {
+        let Some((bind, sym)) = *entry else { continue };
+        if bind == STB_LOCAL {
             continue;
         }
-        let Some(ti) = func_strs.iter().position(|n| n == &a.target) else {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!(
-                    "alias `{}`: target `{}` has no emitted body",
-                    a.name, a.target
-                ),
-            )));
-        };
-        let (lo, hi) = func_extent(ti)?;
-        let (shndx, value) = text_place(lo as u64);
-        func_symidx_by_name.insert(a.name.clone(), symbols.len() as u32);
-        symbols.push(Elf64Sym {
-            st_name: name_offs[fn_alias_names_start + i],
-            st_info: pack_sym_info(if a.weak { STB_WEAK } else { STB_GLOBAL }, STT_FUNC),
-            st_shndx: shndx,
-            st_value: value,
-            st_size: hi.saturating_sub(lo) as u64,
-            ..Default::default()
-        });
+        func_symidx_by_name.insert(
+            program.function_aliases[i].name.clone(),
+            symbols.len() as u32,
+        );
+        symbols.push(sym);
     }
 
     // Import symbols: STB_WEAK + STT_NOTYPE, SHN_UNDEF. The
@@ -2341,17 +2786,6 @@ pub(super) fn write_relocatable(
             ..Default::default()
         });
     }
-
-    // Section symbol indices follow the order they are pushed:
-    // null(0), file(1), text(2), data(3), bss(4), .debug_line(5),
-    // .debug_abbrev(6). Data + function-pointer fixups land against the
-    // matching section symbol; the `r_addend` carries the offset within
-    // the section.
-    let text_sym_idx: u64 = 2;
-    let data_sym_idx: u64 = 3;
-    let bss_sym_idx: u64 = 4;
-    let debug_line_sym_idx: u64 = 5;
-    let debug_abbrev_sym_idx: u64 = 6;
 
     // Every unified data offset resolves through the plan: `.data` /
     // `.bss` (a `.bss` offset names a byte in the zero-fill region past
@@ -2457,11 +2891,12 @@ pub(super) fn write_relocatable(
         });
     }
 
-    // Weak undefined entries for `.weak` names that surface nowhere else.
-    for (i, _name) in asm_weak_undef.iter().enumerate() {
+    // Undefined global entries for `.globl` names that surface nowhere else.
+    for (i, name) in asm_global_undef.iter().enumerate() {
         symbols.push(Elf64Sym {
-            st_name: name_offs[asm_weak_undef_start + i],
-            st_info: pack_sym_info(STB_WEAK, STT_NOTYPE),
+            st_name: name_offs[asm_global_undef_start + i],
+            st_info: pack_sym_info(STB_GLOBAL, STT_NOTYPE),
+            st_other: vis_for(name),
             st_shndx: SHN_UNDEF,
             ..Default::default()
         });
@@ -2539,6 +2974,9 @@ pub(super) fn write_relocatable(
         };
         let (rtype, r_offset, r_addend) = match machine_for_rela {
             Machine::X86_64 => (R_X86_64_PLT32, site.instr_offset as u64 + 1, base - 4),
+            // GNU as types the field by the instruction: `bl` takes CALL26,
+            // a plain `b` JUMP26. Both patch the same imm26.
+            Machine::Aarch64 if site.is_tail => (R_AARCH64_JUMP26, site.instr_offset as u64, base),
             Machine::Aarch64 => (R_AARCH64_CALL26, site.instr_offset as u64, base),
         };
         let r_info = (sym_idx << 32) | (rtype as u64);
@@ -2591,10 +3029,12 @@ pub(super) fn write_relocatable(
         // (S is the symbol value, A the addend).
         //
         // aarch64 BL/B is 4 bytes with the imm26 in the low
-        // bits; `R_AARCH64_CALL26` applies at the instruction
-        // start with addend 0.
+        // bits; the reloc applies at the instruction start with
+        // addend 0, typed CALL26 for `bl` and JUMP26 for `b` as
+        // GNU as types them.
         let (rtype, r_offset, r_addend) = match machine_for_rela {
             Machine::X86_64 => (R_X86_64_PLT32, site.instr_offset as u64 + 1, -4i64),
+            Machine::Aarch64 if site.is_tail => (R_AARCH64_JUMP26, site.instr_offset as u64, 0),
             Machine::Aarch64 => (R_AARCH64_CALL26, site.instr_offset as u64, 0),
         };
         let r_info = (sym_idx << 32) | (rtype as u64);
@@ -2775,21 +3215,33 @@ pub(super) fn write_relocatable(
         // A GOT reference keeps the symbol: the slot is per-symbol, so the
         // section+offset reduction has nothing to bind to there.
         let form = extern_addr_form(r.symbol_name.as_str());
-        let (sym_idx, base) = match asm_label_ref(r.symbol_name.as_str()) {
-            Some(_) if form == ExternAddrForm::Got => (
-                *asm_label_symidx
-                    .get(r.symbol_name.as_str())
-                    .expect("a resolved asm label has a symbol") as u64,
-                0,
-            ),
-            Some(pair) => pair,
-            None => {
-                let pos = user_extern_data_names
-                    .iter()
-                    .position(|n| *n == r.symbol_name.as_str())
-                    .expect("user_extern_data_names contains every ref's name");
-                (user_extern_data_sym_idx[pos] as u64, 0)
-            }
+        // A function-alias name resolves against its defined (weak)
+        // symbol; the reference form stays symbolic so the linker's
+        // binding decides which definition the address names.
+        let alias_sym = program
+            .function_aliases
+            .iter()
+            .any(|a| a.name == r.symbol_name)
+            .then(|| func_symidx_by_name.get(r.symbol_name.as_str()).copied())
+            .flatten();
+        let (sym_idx, base) = match alias_sym {
+            Some(i) => (i as u64, 0),
+            None => match asm_label_ref(r.symbol_name.as_str()) {
+                Some(_) if form == ExternAddrForm::Got => (
+                    *asm_label_symidx
+                        .get(r.symbol_name.as_str())
+                        .expect("a resolved asm label has a symbol") as u64,
+                    0,
+                ),
+                Some(pair) => pair,
+                None => {
+                    let pos = user_extern_data_names
+                        .iter()
+                        .position(|n| *n == r.symbol_name.as_str())
+                        .expect("user_extern_data_names contains every ref's name");
+                    (user_extern_data_sym_idx[pos] as u64, 0)
+                }
+            },
         };
         // A segment-qualified inline-asm `%a` operand takes a direct
         // `R_X86_64_PC32` against the symbol (x86_64 only): the access rides
@@ -2850,10 +3302,14 @@ pub(super) fn write_relocatable(
         let (e, base) = asm_placements[r.section_index];
         let sym = carve.sym_idx[e];
         let addend = base as i64 + r.section_offset as i64 + r.addend;
-        let rtype = match machine_for_rela {
-            Machine::X86_64 if r.absolute => R_X86_64_32S,
-            Machine::X86_64 => R_X86_64_PC32,
-            Machine::Aarch64 => R_AARCH64_PREL32,
+        let rtype = match r.kind {
+            crate::c5::asm::AsmRelocKind::Data => match machine_for_rela {
+                Machine::X86_64 if r.absolute => R_X86_64_32S,
+                Machine::X86_64 => R_X86_64_PC32,
+                Machine::Aarch64 => R_AARCH64_PREL32,
+            },
+            // An aarch64 branch / `adr` field into the pushed section.
+            kind => a64_insn_reloc_type(kind).expect("every instruction-field kind maps to a type"),
         };
         write_struct(
             &mut rela_bytes,
@@ -2879,6 +3335,102 @@ pub(super) fn write_relocatable(
         );
     }
 
+    // Undefined-symbol index by name. The three name lists are
+    // disjoint by construction (each is filtered against the ones
+    // before it), so one map answers all three.
+    let mut extern_symidx_by_name: alloc::collections::BTreeMap<&str, usize> =
+        alloc::collections::BTreeMap::new();
+    for (list, idx) in [
+        (&user_extern_names, &user_extern_sym_idx),
+        (&user_extern_data_names, &user_extern_data_sym_idx),
+        (&asm_extern_names, &asm_extern_sym_idx),
+    ] {
+        for (k, n) in list.iter().enumerate() {
+            extern_symidx_by_name.insert(n, idx[k]);
+        }
+    }
+
+    // Function-body inline-asm symbol-operand sites: one row per record at
+    // the instruction word, typed by the field kind. The target resolves
+    // like an inline-asm section reloc's: a resolved data offset, an asm
+    // label, a defined function or data object, or an undefined symbol.
+    for r in &build.asm_sym_fixups {
+        use crate::c5::asm::AsmSectionTarget;
+        let (sym_idx, addend) = match &r.target {
+            AsmSectionTarget::Data(off) => {
+                home_sym(plan.map_ref(off.wrapping_add_signed(r.addend), *off))
+            }
+            AsmSectionTarget::Symbol(name) => {
+                // A dropped alias resolves against its chain's end, its
+                // distance from it riding in the addend.
+                let (name, alias_off) = undef_alias_end
+                    .get(name.as_str())
+                    .copied()
+                    .unwrap_or((name.as_str(), 0));
+                let (sym, base) = if let Some(pair) = asm_label_ref(name) {
+                    pair
+                } else if let Some(&idx) = func_symidx_by_name.get(name) {
+                    (idx as u64, 0)
+                } else if let Some(&idx) = defined_data_symidx.get(name) {
+                    (idx, 0)
+                } else if let Some(val) = defined_data_by_name(name) {
+                    data_section_ref(val)
+                } else if let Some(&idx) = extern_symidx_by_name.get(name) {
+                    (idx as u64, 0)
+                } else {
+                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                        &alloc::format!(
+                            "elf_reloc: asm operand relocation names `{name}`, which \
+                             reached no defined or undefined symbol"
+                        ),
+                    )));
+                };
+                (sym, base + r.addend + alias_off)
+            }
+            other => {
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &alloc::format!(
+                        "elf_reloc: asm operand relocation target {other:?} is not a \
+                         data offset or symbol"
+                    ),
+                )));
+            }
+        };
+        // The x86_64 rel32 branch field (a jmp / jcc to a rebindable name):
+        // `instr_offset` is the field itself, and a target keeping its own
+        // symbol binds through the PLT slot as the section path types it; a
+        // target reduced to a section symbol names no entry point.
+        let x86_jump = matches!(r.kind, crate::c5::asm::AsmRelocKind::JumpRel)
+            && machine_for_rela == Machine::X86_64;
+        let rtype = match a64_insn_reloc_type(r.kind) {
+            Some(t) => t,
+            None if x86_jump
+                && r.addend == -4
+                && !fixed_section_syms.contains(&sym_idx)
+                && !carve.sym_idx.contains(&sym_idx) =>
+            {
+                R_X86_64_PLT32
+            }
+            None if x86_jump => R_X86_64_PC32,
+            None => {
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &alloc::format!(
+                        "elf_reloc: asm operand relocation kind {:?} names no field type",
+                        r.kind
+                    ),
+                )));
+            }
+        };
+        write_struct(
+            &mut rela_bytes,
+            &Elf64Rela {
+                r_offset: r.instr_offset as u64,
+                r_info: (sym_idx << 32) | rtype as u64,
+                r_addend: addend,
+            },
+        );
+    }
+
     // Route `.rela.text` rows applying within a carved range into the
     // owning named section, and retarget rows whose text-section
     // addend the carve moved.
@@ -2890,21 +3442,13 @@ pub(super) fn write_relocatable(
     // resolves to a defined function, a defined data object, or an
     // undefined symbol.
     {
-        use crate::c5::codegen::ssa::emit_common::AsmSectionTarget;
-        // Undefined-symbol index by name. The three name lists are
-        // disjoint by construction (each is filtered against the ones
-        // before it), so one map answers all three.
-        let mut extern_symidx_by_name: alloc::collections::BTreeMap<&str, usize> =
-            alloc::collections::BTreeMap::new();
-        for (list, idx) in [
-            (&user_extern_names, &user_extern_sym_idx),
-            (&user_extern_data_names, &user_extern_data_sym_idx),
-            (&asm_extern_names, &asm_extern_sym_idx),
-        ] {
-            for (k, n) in list.iter().enumerate() {
-                extern_symidx_by_name.insert(n, idx[k]);
-            }
-        }
+        use crate::c5::asm::AsmSectionTarget;
+        // The STT_SECTION symbols a reduction can land on. A branch against
+        // one names no function, so no PLT slot can carry it.
+        let section_syms: alloc::collections::BTreeSet<u64> = fixed_section_syms
+            .clone()
+            .chain(carve.sym_idx.iter().copied())
+            .collect();
         for (&(e, base), s) in asm_placements.iter().zip(build.asm_sections.iter()) {
             for r in &s.relocs {
                 let (sym_idx, addend) = match &r.target {
@@ -2927,9 +3471,7 @@ pub(super) fn write_relocatable(
                         let at = build
                             .asm_sections
                             .iter()
-                            .position(|s| {
-                                crate::c5::codegen::ssa::emit_common::section_key_of(s) == *key
-                            })
+                            .position(|s| crate::c5::asm::section_key_of(s) == *key)
                             .ok_or_else(|| {
                                 C5Error::Compile(crate::c5::error::fmt_internal_err(
                                     &alloc::format!(
@@ -2965,20 +3507,27 @@ pub(super) fn write_relocatable(
                         )));
                     }
                     AsmSectionTarget::Symbol(name) => {
-                        if let Some((sym, base)) = asm_label_ref(name.as_str()) {
-                            (sym, base + r.addend)
-                        } else if let Some(&idx) = func_symidx_by_name.get(name.as_str()) {
-                            (idx as u64, r.addend)
-                        } else if let Some(&idx) = defined_data_symidx.get(name.as_str()) {
+                        // A dropped alias resolves against its chain's end,
+                        // its distance from it riding in the addend.
+                        let (name, alias_off) = undef_alias_end
+                            .get(name.as_str())
+                            .copied()
+                            .unwrap_or((name.as_str(), 0));
+                        let addend = r.addend + alias_off;
+                        if let Some((sym, base)) = asm_label_ref(name) {
+                            (sym, base + addend)
+                        } else if let Some(&idx) = func_symidx_by_name.get(name) {
+                            (idx as u64, addend)
+                        } else if let Some(&idx) = defined_data_symidx.get(name) {
                             // An external-linkage object carries its binding on
                             // its own symbol; reducing to section+addend would
                             // present it to readers as a local definition.
-                            (idx, r.addend)
-                        } else if let Some(&val) = defined_data_by_name.get(name.as_str()) {
+                            (idx, addend)
+                        } else if let Some(val) = defined_data_by_name(name) {
                             let (sym, off) = data_section_ref(val);
-                            (sym, off + r.addend)
-                        } else if let Some(&idx) = extern_symidx_by_name.get(name.as_str()) {
-                            (idx as u64, r.addend)
+                            (sym, off + addend)
+                        } else if let Some(&idx) = extern_symidx_by_name.get(name) {
+                            (idx as u64, addend)
                         } else {
                             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                                 &alloc::format!(
@@ -2989,13 +3538,23 @@ pub(super) fn write_relocatable(
                         }
                     }
                 };
-                use crate::c5::codegen::ssa::emit_common::AsmRelocKind as RK;
+                use crate::c5::asm::AsmRelocKind as RK;
                 let rtype = match r.kind {
                     RK::Data | RK::JumpRel => match (abi, r.pcrel, r.width) {
                         // A replacement instruction's direct `call` / `jmp` to a
-                        // symbol reaches it through the PLT slot, like a compiler-
-                        // emitted call: `R_X86_64_PLT32`, not a data `PC32`.
-                        (RelocAbi::X86_64, true, 4) if r.branch => R_X86_64_PLT32,
+                        // named symbol reaches it through the PLT slot, like a
+                        // compiler-emitted call: `R_X86_64_PLT32`, not a data
+                        // `PC32`. A target reduced to a section symbol binds no
+                        // slot, so GNU as leaves it `PC32`, and so does a
+                        // target naming the symbol at an offset (`jmp sym+4`),
+                        // which is no entry point.
+                        (RelocAbi::X86_64, true, 4)
+                            if r.branch
+                                && !section_syms.contains(&sym_idx)
+                                && r.addend == -(r.width as i64) =>
+                        {
+                            R_X86_64_PLT32
+                        }
                         (RelocAbi::X86_64, false, 8) => R_X86_64_64,
                         // A `push $symbol` imm32 the CPU sign-extends takes 32S.
                         (RelocAbi::X86_64, false, 4) if r.signed => R_X86_64_32S,
@@ -3009,6 +3568,9 @@ pub(super) fn write_relocatable(
                         (RelocAbi::X86_64, false, _) => R_X86_64_32,
                         (RelocAbi::X86_64, true, 8) => R_X86_64_PC64,
                         (RelocAbi::X86_64, true, 2) => R_X86_64_PC16,
+                        // A rel8-only branch (`loop`, `jcxz`) to a non-local
+                        // name; the type must match the one-byte field.
+                        (RelocAbi::X86_64, true, 1) => R_X86_64_PC8,
                         (RelocAbi::X86_64, true, _) => R_X86_64_PC32,
                         // i386 has no 64-bit field: the psABI defines no
                         // 8-byte absolute or PC-relative relocation, so a
@@ -3031,38 +3593,8 @@ pub(super) fn write_relocatable(
                         (RelocAbi::Aarch64, true, 8) => R_AARCH64_PREL64,
                         (RelocAbi::Aarch64, true, _) => R_AARCH64_PREL32,
                     },
-                    RK::A64Branch26 { link: true } => R_AARCH64_CALL26,
-                    RK::A64Branch26 { link: false } => R_AARCH64_JUMP26,
-                    RK::A64Condbr19 => R_AARCH64_CONDBR19,
-                    RK::A64Tstbr14 => R_AARCH64_TSTBR14,
-                    RK::A64Adr21 => R_AARCH64_ADR_PREL_LO21,
-                    RK::A64AdrpPage21 => R_AARCH64_ADR_PREL_PG_HI21,
-                    RK::A64AddLo12 => R_AARCH64_ADD_ABS_LO12_NC,
-                    RK::A64LdrLit19 => R_AARCH64_LD_PREL_LO19,
-                    RK::Explicit(t) => t,
-                    RK::A64LdstLo12(sz) => match sz {
-                        1 => R_AARCH64_LDST8_ABS_LO12_NC,
-                        2 => R_AARCH64_LDST16_ABS_LO12_NC,
-                        4 => R_AARCH64_LDST32_ABS_LO12_NC,
-                        8 => R_AARCH64_LDST64_ABS_LO12_NC,
-                        _ => R_AARCH64_LDST128_ABS_LO12_NC,
-                    },
-                    RK::A64MovwAbs {
-                        group,
-                        signed,
-                        check,
-                    } => match (group, signed, check.is_some()) {
-                        (0, false, true) => R_AARCH64_MOVW_UABS_G0,
-                        (1, false, true) => R_AARCH64_MOVW_UABS_G1,
-                        (2, false, true) => R_AARCH64_MOVW_UABS_G2,
-                        (0, false, false) => R_AARCH64_MOVW_UABS_G0_NC,
-                        (1, false, false) => R_AARCH64_MOVW_UABS_G1_NC,
-                        (2, false, false) => R_AARCH64_MOVW_UABS_G2_NC,
-                        (0, true, _) => R_AARCH64_MOVW_SABS_G0,
-                        (1, true, _) => R_AARCH64_MOVW_SABS_G1,
-                        (2, true, _) => R_AARCH64_MOVW_SABS_G2,
-                        _ => R_AARCH64_MOVW_UABS_G3,
-                    },
+                    kind => a64_insn_reloc_type(kind)
+                        .expect("every instruction-field kind maps to a type"),
                 };
                 carve.table.entries[e]
                     .relas
@@ -3133,12 +3665,19 @@ pub(super) fn write_relocatable(
     // defining unit's storage. The addend carries the byte offset added
     // to the symbol (`&extern_arr[N]`).
     for r in &build.extern_data_relocs {
-        let (sym_idx, base) = match asm_label_ref(r.symbol_name.as_str()) {
-            Some(pair) => pair,
-            None => {
+        let name = r.symbol_name.as_str();
+        // A name this unit defines through an alias resolves against the
+        // alias's own symbol, as a call through one does.
+        let alias_sym = defines_alias(name)
+            .then(|| func_symidx_by_name.get(name).copied())
+            .flatten();
+        let (sym_idx, base) = match (asm_label_ref(name), alias_sym) {
+            (Some(pair), _) => pair,
+            (None, Some(idx)) => (idx as u64, 0),
+            (None, None) => {
                 let pos = user_extern_data_names
                     .iter()
-                    .position(|n| *n == r.symbol_name.as_str())
+                    .position(|n| *n == name)
                     .expect("user_extern_data_names contains every extern_data_reloc name");
                 (user_extern_data_sym_idx[pos] as u64, 0)
             }
@@ -3175,15 +3714,20 @@ pub(super) fn write_relocatable(
         // since the named symbol carries the target's text
         // offset directly.
         if let Some(&name) = extern_fn_by_pc.get(&ent_pc) {
-            let (sym_idx, base) = match asm_label_ref(name) {
-                Some(pair) => pair,
-                None => {
-                    let pos = user_extern_names
-                        .iter()
-                        .position(|n| *n == name)
-                        .expect("user_extern_names contains every code-reloc extern callee");
-                    (user_extern_sym_idx[pos] as u64, 0)
-                }
+            // A name this unit defines -- a function alias -- resolves
+            // against its defined (weak) symbol; otherwise the UNDEF.
+            let (sym_idx, base) = match func_symidx_by_name.get(name) {
+                Some(&i) => (i as u64, 0),
+                None => match asm_label_ref(name) {
+                    Some(pair) => pair,
+                    None => {
+                        let pos = user_extern_names
+                            .iter()
+                            .position(|n| *n == name)
+                            .expect("user_extern_names contains every code-reloc extern callee");
+                        (user_extern_sym_idx[pos] as u64, 0)
+                    }
+                },
             };
             push_data_row(
                 &mut carve,
@@ -3211,6 +3755,70 @@ pub(super) fn write_relocatable(
         push_data_row(&mut carve, &mut rela_data_bytes, r.data_offset, sym, addend);
     }
 
+    // `.rela.tdata` -- address-constant initializers of `_Thread_local`
+    // objects. Same absolute-64 relocation as `.rela.data`; the slot is a
+    // `.tdata` offset, which the named-section carve never claims, so the
+    // rows go straight into the table.
+    let mut rela_tdata_bytes: Vec<u8> = Vec::new();
+    {
+        let mut push = |slot: u64, sym: u64, addend: i64| {
+            write_struct(
+                &mut rela_tdata_bytes,
+                &Elf64Rela {
+                    r_offset: slot,
+                    r_info: (sym << 32) | rtype_abs64 as u64,
+                    r_addend: addend,
+                },
+            );
+        };
+        for r in &build.tls_data_relocs {
+            let (sym, addend) = home_sym(plan.map_ref(r.target_offset, r.target_anchor));
+            push(r.data_offset, sym, addend);
+        }
+        for r in &build.tls_extern_data_relocs {
+            let (sym_idx, base) = match asm_label_ref(r.symbol_name.as_str()) {
+                Some(pair) => pair,
+                None => {
+                    let pos = user_extern_data_names
+                        .iter()
+                        .position(|n| *n == r.symbol_name.as_str())
+                        .expect("user_extern_data_names contains every extern_data_reloc name");
+                    (user_extern_data_sym_idx[pos] as u64, 0)
+                }
+            };
+            push(r.data_offset, sym_idx, base + r.addend);
+        }
+        for r in &build.tls_code_relocs {
+            let ent_pc = r.target_ent_pc as usize;
+            if let Some(&name) = extern_fn_by_pc.get(&ent_pc) {
+                let (sym_idx, base) = match func_symidx_by_name.get(name) {
+                    Some(&i) => (i as u64, 0),
+                    None => match asm_label_ref(name) {
+                        Some(pair) => pair,
+                        None => {
+                            let pos = user_extern_names.iter().position(|n| *n == name).expect(
+                                "user_extern_names contains every code-reloc extern callee",
+                            );
+                            (user_extern_sym_idx[pos] as u64, 0)
+                        }
+                    },
+                };
+                push(r.data_offset, sym_idx, base);
+                continue;
+            }
+            let Some(&native_off) = build.pc_to_native.get(ent_pc) else {
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!("elf_reloc: TLS code reloc references missing ent_pc {ent_pc}"),
+                )));
+            };
+            let (sym, addend) = match carve.map_text(native_off as u64) {
+                Some((te, new_off)) => (carve.sym_idx[te], new_off as i64),
+                None => (text_sym_idx, native_off as i64),
+            };
+            push(r.data_offset, sym, addend);
+        }
+    }
+
     // `.init_array` / `.fini_array` groups. C99 has no such attribute;
     // GNU practice (matched by every mainstream toolchain) lowers each
     // `__attribute__((constructor))` into an `SHT_INIT_ARRAY` pointer
@@ -3220,7 +3828,7 @@ pub(super) fn write_relocatable(
     // across units; unprioritized entries land in the bare
     // `.init_array` the script places last. Entries sharing a group
     // keep source order.
-    let init_sections =
+    let mut init_sections =
         build_init_array_sections(&program.init_funcs, &func_symidx_by_name, rtype_abs64)?;
     // Every named section's relocation list is settled; a `.rela`
     // companion exists exactly for the entries that carry relocations.
@@ -3234,12 +3842,10 @@ pub(super) fn write_relocatable(
     // Generate the DWARF triple for this TU. Address slots end
     // up as placeholders paired with `DwarfReloc` records that
     // the loop below translates into ELF `.rela.debug_*`
-    // entries. Without `-g` the DWARF build is skipped entirely:
-    // the `.debug_*` sections stay zero-length, so `link_native_-
-    // objects` sees no debug info and the final image carries
-    // none, and the type-catalog walk is avoided on a default
-    // build. TODO: drop the empty `.debug_*` section headers from
-    // the relocatable object as well.
+    // entries. Without `-g` the DWARF build is skipped entirely and
+    // the `.debug_*` sections are not written at all, so `link_-
+    // native_objects` sees no debug info and the final image carries
+    // none, and the type-catalog walk is avoided on a default build.
     let dwarf = if build.debug_info {
         dwarf_reloc::emit(program, build, source_path, machine, target)
     } else {
@@ -3257,15 +3863,19 @@ pub(super) fn write_relocatable(
             .or_else(|| asm_label_symidx.get(name).map(|&i| i as u64))
             .or_else(|| defined_tls_symidx.get(name).copied())
     };
+    let dwarf_section_syms = DwarfSectionSyms {
+        text: text_sym_idx,
+        line: debug_line_sym_idx,
+        abbrev: debug_abbrev_sym_idx,
+        strs: debug_str_sym_idx,
+    };
     let mut rela_debug_info_bytes: Vec<u8> =
         Vec::with_capacity(dwarf.info_relocs.len() * ELF64_RELA_SIZE);
     for r in &dwarf.info_relocs {
         if let Some(rela) = dwarf_reloc_to_elf_rela(
             r,
             abi,
-            debug_line_sym_idx,
-            debug_abbrev_sym_idx,
-            text_sym_idx,
+            dwarf_section_syms,
             &dwarf.reloc_symbols,
             &dwarf_obj_sym_idx,
         )? {
@@ -3278,9 +3888,7 @@ pub(super) fn write_relocatable(
         if let Some(rela) = dwarf_reloc_to_elf_rela(
             r,
             abi,
-            debug_line_sym_idx,
-            debug_abbrev_sym_idx,
-            text_sym_idx,
+            dwarf_section_syms,
             &dwarf.reloc_symbols,
             &dwarf_obj_sym_idx,
         )? {
@@ -3302,23 +3910,116 @@ pub(super) fn write_relocatable(
         )));
     }
 
+    // GNU as on x86 omits a section symbol no relocation references
+    // (its aarch64 backend keeps every one). Match each: every
+    // relocation table is final here, so drop the unreferenced
+    // STT_SECTION entries and re-index the tables.
+    if matches!(abi, RelocAbi::X86_64 | RelocAbi::I386) {
+        let mut used = alloc::vec![false; symbols.len()];
+        let mark = |used: &mut Vec<bool>, table: &[u8]| {
+            for rec in table.as_chunks::<ELF64_RELA_SIZE>().0.iter() {
+                let info = u64::from_le_bytes(rec[8..16].try_into().unwrap());
+                if let Some(u) = used.get_mut((info >> 32) as usize) {
+                    *u = true;
+                }
+            }
+        };
+        mark(&mut used, &rela_bytes);
+        mark(&mut used, &rela_data_bytes);
+        mark(&mut used, &rela_debug_info_bytes);
+        mark(&mut used, &rela_debug_line_bytes);
+        mark(&mut used, &rela_tdata_bytes);
+        for s in &init_sections {
+            mark(&mut used, &s.rela);
+        }
+        for e in &carve.table.entries {
+            for r in &e.relas {
+                if let Some(u) = used.get_mut(r.sym as usize) {
+                    *u = true;
+                }
+            }
+        }
+        let mut remap: Vec<u64> = Vec::with_capacity(symbols.len());
+        let mut kept: Vec<Elf64Sym> = Vec::with_capacity(symbols.len());
+        for (i, s) in symbols.iter().enumerate() {
+            remap.push(kept.len() as u64);
+            if s.st_info & 0xf != STT_SECTION || used[i] {
+                kept.push(*s);
+            }
+        }
+        if kept.len() != symbols.len() {
+            first_global -= (symbols.len() - kept.len()) as u32;
+            symbols = kept;
+            let rewrite = |table: &mut [u8]| {
+                for rec in table.as_chunks_mut::<ELF64_RELA_SIZE>().0.iter_mut() {
+                    let info = u64::from_le_bytes(rec[8..16].try_into().unwrap());
+                    let ns = remap[(info >> 32) as usize];
+                    rec[8..16].copy_from_slice(&((ns << 32) | (info & 0xffff_ffff)).to_le_bytes());
+                }
+            };
+            rewrite(&mut rela_bytes);
+            rewrite(&mut rela_data_bytes);
+            rewrite(&mut rela_debug_info_bytes);
+            rewrite(&mut rela_debug_line_bytes);
+            rewrite(&mut rela_tdata_bytes);
+            for s in &mut init_sections {
+                rewrite(&mut s.rela);
+            }
+            for e in &mut carve.table.entries {
+                for r in &mut e.relas {
+                    r.sym = remap[r.sym as usize];
+                }
+            }
+        }
+    }
+
     // Every relocation table of the fixed set is final here. A
     // relocation section with no entries is dropped: it describes
     // nothing, and a consumer reaching one through its target's
-    // `sh_info` link has no entry to read. `shndx_map` renumbers the
-    // nominal layout over the sections that survive; the named and
-    // `.init_array` groups that follow the fixed set shift by the
-    // total. Applied to every recorded index before it is written.
-    let fixed_rela_empty = [
+    // `sh_info` link has no entry to read. The `.debug_*` triple goes
+    // the same way without `-g`, where it would carry no bytes:
+    // `readelf --debug-dump` and `objdump --dwarf` both report an
+    // error on a zero-length debug section, and gcc emits none.
+    //
+    // A shadowed default section goes with them, per the rule above.
+    //
+    // `shndx_map` renumbers the nominal layout over the sections that
+    // survive; the named and `.init_array` groups that follow the
+    // fixed set shift by the total. Applied to every recorded index
+    // before it is written.
+    let no_dwarf = !build.debug_info;
+    // Built ahead of the section-count planning: an empty body drops
+    // the section, which the note parser reads as it does a foreign
+    // object carrying none.
+    let note_bytes = build_badc_note(
+        &build.imports,
+        &program.exports,
+        &build.tls_index_fixups,
+        &build.macho_tlv_descriptors,
+        &build.macho_tlv_fixups,
+        &defined_tls_globals,
+        &build.elf_tpoff_fixups,
+        &prologue_end_pairs,
+    );
+    let fixed_dropped = [
+        (SHIDX_TEXT, text_shadowed),
         (SHIDX_RELA_TEXT, rela_bytes.is_empty()),
+        (SHIDX_DATA, data_shadowed),
+        (SHIDX_BSS, bss_shadowed),
         (SHIDX_RELA_DATA, rela_data_bytes.is_empty()),
+        (SHIDX_NOTE_BADC, note_bytes.is_empty()),
+        (SHIDX_DEBUG_INFO, no_dwarf),
         (SHIDX_RELA_DEBUG_INFO, rela_debug_info_bytes.is_empty()),
+        (SHIDX_DEBUG_ABBREV, no_dwarf),
+        (SHIDX_DEBUG_LINE, no_dwarf),
         (SHIDX_RELA_DEBUG_LINE, rela_debug_line_bytes.is_empty()),
+        (SHIDX_DEBUG_STR, no_dwarf),
+        (SHIDX_RELA_TDATA, rela_tdata_bytes.is_empty()),
     ];
     let dropped_below = |n: u16| -> u16 {
-        fixed_rela_empty
+        fixed_dropped
             .iter()
-            .filter(|&&(idx, empty)| empty && idx < n)
+            .filter(|&&(idx, dropped)| dropped && idx < n)
             .count() as u16
     };
     let dropped_sections = dropped_below(base_sections as u16);
@@ -3345,19 +4046,38 @@ pub(super) fn write_relocatable(
     let shidx_debug_info = shndx_map(SHIDX_DEBUG_INFO);
     let shidx_debug_line = shndx_map(SHIDX_DEBUG_LINE);
 
-    // `+ 1` is `.comment`: the producer fingerprint rides a non-alloc
-    // section here rather than the `.text` tail final images use, so
-    // the code section stays a pure instruction stream for decoders.
+    // `.comment` pools the unit's `.ident` strings in GNU as shape
+    // (leading NUL, each string NUL-terminated); a compiled unit
+    // contributes the producer fingerprint the way gcc's implicit
+    // `.ident` does. An assembled unit without `.ident` gets no
+    // `.comment`, as GNU as emits none.
+    let comment_body: Option<Vec<u8>> = {
+        let mut strings: Vec<&str> = Vec::new();
+        if !program.asm_unit {
+            strings.push(crate::OUTPUT_MARKER);
+        }
+        strings.extend(program.asm_idents.iter().map(|s| s.as_str()));
+        if strings.is_empty() {
+            None
+        } else {
+            let mut body: Vec<u8> = alloc::vec![0];
+            for s in &strings {
+                body.extend_from_slice(s.as_bytes());
+                body.push(0);
+            }
+            Some(body)
+        }
+    };
     let num_sections: usize = base_sections - dropped_sections as usize
         + named_section_count
         + named_rela_count
         + 2 * init_sections.len()
-        + 1;
+        + usize::from(comment_body.is_some());
 
     // Section name table. One entry per non-null section, in section
     // order, so the name of section `n` sits at `shndx_map(n) - 1`.
     let rp = reloc_prefix(class);
-    let fixed_names: [String; 14] = [
+    let fixed_names: [String; 15] = [
         ".text".to_string(),
         format!("{rp}.text"),
         ".data".to_string(),
@@ -3372,13 +4092,14 @@ pub(super) fn write_relocatable(
         ".debug_abbrev".to_string(),
         ".debug_line".to_string(),
         format!("{rp}.debug_line"),
+        ".debug_str".to_string(),
     ];
     let mut shstrtab_names: Vec<String> = Vec::with_capacity(num_sections);
     for (i, name) in fixed_names.iter().enumerate() {
         let nominal = i as u16 + 1;
-        if !fixed_rela_empty
+        if !fixed_dropped
             .iter()
-            .any(|&(idx, empty)| empty && idx == nominal)
+            .any(|&(idx, dropped)| dropped && idx == nominal)
         {
             shstrtab_names.push(name.clone());
         }
@@ -3388,6 +4109,9 @@ pub(super) fn write_relocatable(
     if has_tls {
         shstrtab_names.push(".tdata".to_string());
         shstrtab_names.push(".tbss".to_string());
+    }
+    if !rela_tdata_bytes.is_empty() {
+        shstrtab_names.push(format!("{rp}.tdata"));
     }
     // Named sections (attribute placements + inline-asm payloads) take
     // the indices right after the fixed set; the on-demand `.rela`
@@ -3414,9 +4138,11 @@ pub(super) fn write_relocatable(
         shstrtab_names.push(format!("{rp}{}", s.name));
     }
     let comment_name_idx = shstrtab_names.len();
-    shstrtab_names.push(".comment".to_string());
+    if comment_body.is_some() {
+        shstrtab_names.push(".comment".to_string());
+    }
     let name_refs: Vec<&str> = shstrtab_names.iter().map(|n| n.as_str()).collect();
-    let (shstrtab_bytes, shstrtab_offs) = build_strtab(&name_refs);
+    let (shstrtab_bytes, shstrtab_offs) = build_string_table(&name_refs);
     // Name offset of a fixed section, addressed by its nominal index.
     let fixed_name = |nominal: u16| shstrtab_offs[shndx_map(nominal) as usize - 1];
 
@@ -3484,19 +4210,27 @@ pub(super) fn write_relocatable(
         text_body.drain(carve.text_keep_len..carve_hi);
     }
     fold_rel_addends(class, &rela_bytes, &mut text_body)?;
-    let text_align = build.text_align.max(16) as u64;
-    let text_off = round_up(out.len() as u64, text_align);
-    out.resize(text_off as usize, 0);
-    out.extend_from_slice(&text_body);
-    sh.push(Elf64Shdr {
-        sh_name: fixed_name(SHIDX_TEXT),
-        sh_type: SHT_PROGBITS,
-        sh_flags: SHF_ALLOC | SHF_EXECINSTR,
-        sh_offset: text_off,
-        sh_size: text_body.len() as u64,
-        sh_addralign: text_align,
-        ..Default::default()
-    });
+    if !text_shadowed {
+        // An empty section constrains nothing; GNU as leaves the
+        // default sections it creates at alignment 1.
+        let text_align = if text_body.is_empty() {
+            1
+        } else {
+            build.text_align.max(16) as u64
+        };
+        let text_off = round_up(out.len() as u64, text_align);
+        out.resize(text_off as usize, 0);
+        out.extend_from_slice(&text_body);
+        sh.push(Elf64Shdr {
+            sh_name: fixed_name(SHIDX_TEXT),
+            sh_type: SHT_PROGBITS,
+            sh_flags: SHF_ALLOC | SHF_EXECINSTR,
+            sh_offset: text_off,
+            sh_size: text_body.len() as u64,
+            sh_addralign: text_align,
+            ..Default::default()
+        });
+    }
 
     // .rela.text -- one entry per `RelocCallSite`. `sh_link`
     // points at the symbol table; `sh_info` at the section the
@@ -3592,6 +4326,13 @@ pub(super) fn write_relocatable(
         }
         ent.bytes.extend_from_slice(&s.bytes);
     }
+    if let Some((e, base, body)) = &gnu_property_note {
+        let ent = &mut carve.table.entries[*e];
+        if (ent.bytes.len() as u64) < *base {
+            ent.bytes.resize(*base as usize, 0);
+        }
+        ent.bytes.extend_from_slice(body);
+    }
     // Switch-table blob bytes; slots stay zero, the entry's `.rela`
     // rows recorded above carry the values.
     if let Some((e, base)) = jt_placement {
@@ -3601,33 +4342,41 @@ pub(super) fn write_relocatable(
         }
         ent.bytes.extend_from_slice(&build.rodata.bytes);
     }
-    let data_align = plan.data_align;
-    let data_off = round_up(out.len() as u64, data_align);
-    out.resize(data_off as usize, 0);
-    out.extend_from_slice(&data_body);
-    sh.push(Elf64Shdr {
-        sh_name: fixed_name(SHIDX_DATA),
-        sh_type: SHT_PROGBITS,
-        sh_flags: SHF_ALLOC | SHF_WRITE,
-        sh_offset: data_off,
-        sh_size: data_body.len() as u64,
-        sh_addralign: data_align,
-        ..Default::default()
-    });
+    if !data_shadowed {
+        let data_align = if data_body.is_empty() {
+            1
+        } else {
+            plan.data_align
+        };
+        let data_off = round_up(out.len() as u64, data_align);
+        out.resize(data_off as usize, 0);
+        out.extend_from_slice(&data_body);
+        sh.push(Elf64Shdr {
+            sh_name: fixed_name(SHIDX_DATA),
+            sh_type: SHT_PROGBITS,
+            sh_flags: SHF_ALLOC | SHF_WRITE,
+            sh_offset: data_off,
+            sh_size: data_body.len() as u64,
+            sh_addralign: data_align,
+            ..Default::default()
+        });
+    }
 
     // .bss (no file bytes) -- zero-init data segregated past the file
     // image; the linker zero-fills it. Its alignment covers the
     // zero-init objects the plan keeps in it; a fixed 16 would
     // silently under-align an over-aligned one.
-    sh.push(Elf64Shdr {
-        sh_name: fixed_name(SHIDX_BSS),
-        sh_type: SHT_NOBITS,
-        sh_flags: SHF_ALLOC | SHF_WRITE,
-        sh_offset: out.len() as u64,
-        sh_size: plan.bss_len,
-        sh_addralign: plan.bss_align,
-        ..Default::default()
-    });
+    if !bss_shadowed {
+        sh.push(Elf64Shdr {
+            sh_name: fixed_name(SHIDX_BSS),
+            sh_type: SHT_NOBITS,
+            sh_flags: SHF_ALLOC | SHF_WRITE,
+            sh_offset: out.len() as u64,
+            sh_size: plan.bss_len,
+            sh_addralign: if plan.bss_len == 0 { 1 } else { plan.bss_align },
+            ..Default::default()
+        });
+    }
 
     // .symtab
     let symtab_off = round_up(out.len() as u64, 8);
@@ -3702,43 +4451,37 @@ pub(super) fn write_relocatable(
     //                           the same PE) places its IAT slot
     //                           under the right loader entry.
     // Standard ELF tooling ignores unknown note types; the badc
-    // reader picks the entries up by name + type.
-    let note_bytes = build_badc_note(
-        &build.imports,
-        &program.exports,
-        &build.tls_index_fixups,
-        &build.macho_tlv_descriptors,
-        &build.macho_tlv_fixups,
-        &defined_tls_globals,
-        &build.elf_tpoff_fixups,
-        &prologue_end_pairs,
-    );
-    let note_off = round_up(out.len() as u64, 4);
-    out.resize(note_off as usize, 0);
-    out.extend_from_slice(&note_bytes);
-    sh.push(Elf64Shdr {
-        sh_name: fixed_name(SHIDX_NOTE_BADC),
-        sh_type: SHT_NOTE,
-        sh_offset: note_off,
-        sh_size: note_bytes.len() as u64,
-        sh_addralign: 4,
-        ..Default::default()
-    });
-    let _ = SHIDX_NOTE_BADC;
+    // reader picks the entries up by name + type. Dropped above when
+    // no record has content.
+    if !note_bytes.is_empty() {
+        let note_off = round_up(out.len() as u64, 4);
+        out.resize(note_off as usize, 0);
+        out.extend_from_slice(&note_bytes);
+        sh.push(Elf64Shdr {
+            sh_name: fixed_name(SHIDX_NOTE_BADC),
+            sh_type: SHT_NOTE,
+            sh_offset: note_off,
+            sh_size: note_bytes.len() as u64,
+            sh_addralign: 4,
+            ..Default::default()
+        });
+    }
 
     // .debug_info -- one CU DIE per `.o`. SHT_PROGBITS without
     // SHF_ALLOC: not loaded at runtime, just consumed by the
-    // debugger via its `.shdr` walk.
-    let debug_info_off = out.len() as u64;
-    out.extend_from_slice(&dwarf.debug_info);
-    sh.push(Elf64Shdr {
-        sh_name: fixed_name(SHIDX_DEBUG_INFO),
-        sh_type: SHT_PROGBITS,
-        sh_offset: debug_info_off,
-        sh_size: dwarf.debug_info.len() as u64,
-        sh_addralign: 1,
-        ..Default::default()
-    });
+    // debugger via its `.shdr` walk. Written under `-g` only.
+    if !no_dwarf {
+        let debug_info_off = out.len() as u64;
+        out.extend_from_slice(&dwarf.debug_info);
+        sh.push(Elf64Shdr {
+            sh_name: fixed_name(SHIDX_DEBUG_INFO),
+            sh_type: SHT_PROGBITS,
+            sh_offset: debug_info_off,
+            sh_size: dwarf.debug_info.len() as u64,
+            sh_addralign: 1,
+            ..Default::default()
+        });
+    }
 
     // .rela.debug_info -- placeholder slots described above.
     if !rela_debug_info_bytes.is_empty() {
@@ -3763,29 +4506,33 @@ pub(super) fn write_relocatable(
     // .debug_abbrev -- abbreviation table. No relocs; the slot
     // it's referenced from in `.debug_info` already carries the
     // reloc that rebases to its merged-section offset.
-    let debug_abbrev_off = out.len() as u64;
-    out.extend_from_slice(&dwarf.debug_abbrev);
-    sh.push(Elf64Shdr {
-        sh_name: fixed_name(SHIDX_DEBUG_ABBREV),
-        sh_type: SHT_PROGBITS,
-        sh_offset: debug_abbrev_off,
-        sh_size: dwarf.debug_abbrev.len() as u64,
-        sh_addralign: 1,
-        ..Default::default()
-    });
+    if !no_dwarf {
+        let debug_abbrev_off = out.len() as u64;
+        out.extend_from_slice(&dwarf.debug_abbrev);
+        sh.push(Elf64Shdr {
+            sh_name: fixed_name(SHIDX_DEBUG_ABBREV),
+            sh_type: SHT_PROGBITS,
+            sh_offset: debug_abbrev_off,
+            sh_size: dwarf.debug_abbrev.len() as u64,
+            sh_addralign: 1,
+            ..Default::default()
+        });
+    }
 
     // .debug_line -- per-statement line program. Reloc against
     // `.text` rebases each `DW_LNE_set_address` opcode.
-    let debug_line_off = out.len() as u64;
-    out.extend_from_slice(&dwarf.debug_line);
-    sh.push(Elf64Shdr {
-        sh_name: fixed_name(SHIDX_DEBUG_LINE),
-        sh_type: SHT_PROGBITS,
-        sh_offset: debug_line_off,
-        sh_size: dwarf.debug_line.len() as u64,
-        sh_addralign: 1,
-        ..Default::default()
-    });
+    if !no_dwarf {
+        let debug_line_off = out.len() as u64;
+        out.extend_from_slice(&dwarf.debug_line);
+        sh.push(Elf64Shdr {
+            sh_name: fixed_name(SHIDX_DEBUG_LINE),
+            sh_type: SHT_PROGBITS,
+            sh_offset: debug_line_off,
+            sh_size: dwarf.debug_line.len() as u64,
+            sh_addralign: 1,
+            ..Default::default()
+        });
+    }
 
     // .rela.debug_line -- the placeholder slots above.
     if !rela_debug_line_bytes.is_empty() {
@@ -3806,6 +4553,27 @@ pub(super) fn write_relocatable(
             ..Default::default()
         });
     }
+
+    // .debug_str -- the unit's name pool, reached from `.debug_info`
+    // through relocated `DW_FORM_strp` slots. SHF_MERGE|SHF_STRINGS
+    // with sh_entsize 1 is what lets a linker fold across units.
+    if !no_dwarf {
+        const SHF_MERGE: u64 = 0x10;
+        const SHF_STRINGS: u64 = 0x20;
+        let debug_str_off = out.len() as u64;
+        out.extend_from_slice(&dwarf.debug_str);
+        sh.push(Elf64Shdr {
+            sh_name: fixed_name(SHIDX_DEBUG_STR),
+            sh_type: SHT_PROGBITS,
+            sh_flags: SHF_MERGE | SHF_STRINGS,
+            sh_offset: debug_str_off,
+            sh_size: dwarf.debug_str.len() as u64,
+            sh_addralign: 1,
+            sh_entsize: 1,
+            ..Default::default()
+        });
+    }
+
     // TLS sections (only when the unit carries `_Thread_local`
     // storage). `.tdata` holds the initialised slice
     // `tls_data[..tls_init_size]`; `.tbss` is the zero-fill
@@ -3840,6 +4608,26 @@ pub(super) fn write_relocatable(
         });
     } else {
         let _ = (SHIDX_TDATA, SHIDX_TBSS);
+    }
+    // .rela.tdata -- follows `.tbss` so the fixed indices below it stay
+    // put. `sh_info` names `.tdata`, whose bytes it patches.
+    if !rela_tdata_bytes.is_empty() {
+        let table = encode_reloc_table(class, &rela_tdata_bytes);
+        let rela_tdata_off = round_up(out.len() as u64, class.addr_size());
+        out.resize(rela_tdata_off as usize, 0);
+        out.extend_from_slice(&table);
+        sh.push(Elf64Shdr {
+            sh_name: fixed_name(SHIDX_RELA_TDATA),
+            sh_type: reloc_sht(class),
+            sh_flags: SHF_INFO_LINK,
+            sh_offset: rela_tdata_off,
+            sh_size: table.len() as u64,
+            sh_link: shidx_symtab as u32,
+            sh_info: shndx_map(SHIDX_TDATA) as u32,
+            sh_addralign: class.addr_size(),
+            sh_entsize: reloc_entsize(class),
+            ..Default::default()
+        });
     }
 
     let _ = SHIDX_DEBUG_INFO;
@@ -3960,24 +4748,24 @@ pub(super) fn write_relocatable(
         });
     }
 
-    // .comment -- the producer fingerprint (non-alloc, so it never
-    // reaches the loaded image through this object). Flagged
-    // SHF_MERGE | SHF_STRINGS with a byte entsize, as gcc and clang
-    // flag theirs, so a linker merging many badc objects folds the
-    // identical NUL-terminated line into one copy.
-    let comment_off = out.len() as u64;
-    out.extend_from_slice(crate::OUTPUT_MARKER.as_bytes());
-    out.push(0);
-    sh.push(Elf64Shdr {
-        sh_name: shstrtab_offs[comment_name_idx],
-        sh_type: SHT_PROGBITS,
-        sh_flags: SHF_MERGE | SHF_STRINGS,
-        sh_offset: comment_off,
-        sh_size: crate::OUTPUT_MARKER.len() as u64 + 1,
-        sh_addralign: 1,
-        sh_entsize: 1,
-        ..Default::default()
-    });
+    // .comment -- non-alloc, so it never reaches the loaded image
+    // through this object. Flagged SHF_MERGE | SHF_STRINGS with a byte
+    // entsize, as gcc and clang flag theirs, so a linker merging many
+    // badc objects folds identical NUL-terminated lines into one copy.
+    if let Some(body) = &comment_body {
+        let comment_off = out.len() as u64;
+        out.extend_from_slice(body);
+        sh.push(Elf64Shdr {
+            sh_name: shstrtab_offs[comment_name_idx],
+            sh_type: SHT_PROGBITS,
+            sh_flags: SHF_MERGE | SHF_STRINGS,
+            sh_offset: comment_off,
+            sh_size: body.len() as u64,
+            sh_addralign: 1,
+            sh_entsize: 1,
+            ..Default::default()
+        });
+    }
 
     debug_assert_eq!(sh.len(), num_sections);
 
@@ -4031,9 +4819,52 @@ fn pack_sym_info(bind: u8, ty: u8) -> u8 {
 ///                            offset pairs.
 /// All records share the namesz="badc\0" namespace; the parser
 /// distinguishes by `type`. Each note is independently padded to
-/// the 4-byte ELF gABI boundary. The binding-map and exports
-/// records are omitted when empty so a TU with neither still
-/// round-trips through the older single-record shape.
+/// the 4-byte ELF gABI boundary. Every record is omitted when it
+/// has no content; the parser reads records by type and tolerates
+/// any subset, and the writer drops the section when the body is
+/// empty.
+/// `NT_GNU_PROPERTY_TYPE_0` (ELF gABI, "Program Property").
+const NT_GNU_PROPERTY_TYPE_0: u32 = 5;
+/// `GNU_PROPERTY_AARCH64_FEATURE_1_AND` and the two feature bits badc
+/// can claim (AArch64 ELF ABI). `GCS` is not claimed: badc runs no
+/// analysis that would establish it.
+const GNU_PROPERTY_AARCH64_FEATURE_1_AND: u32 = 0xc000_0000;
+const GNU_PROPERTY_AARCH64_FEATURE_1_BTI: u32 = 1 << 0;
+const GNU_PROPERTY_AARCH64_FEATURE_1_PAC: u32 = 1 << 1;
+
+/// The `.note.gnu.property` body claiming the branch protections the
+/// emitted code carries, or `None` when it claims none. The note holds
+/// one `NT_GNU_PROPERTY_TYPE_0` note with one property whose payload is
+/// padded to the note alignment (8 for ELF64, 4 for ELF32).
+fn build_gnu_property_note(machine: Machine, build: &Build, align: usize) -> Option<Vec<u8>> {
+    let h = build.abi.hardening;
+    let (ty, bits) = match RelocAbi::of(machine, build.elf_class) {
+        RelocAbi::Aarch64 => (
+            GNU_PROPERTY_AARCH64_FEATURE_1_AND,
+            (u32::from(h.bti) * GNU_PROPERTY_AARCH64_FEATURE_1_BTI)
+                | (u32::from(h.pac_ret) * GNU_PROPERTY_AARCH64_FEATURE_1_PAC),
+        ),
+        _ => return None,
+    };
+    if bits == 0 {
+        return None;
+    }
+    let mut desc: Vec<u8> = Vec::new();
+    desc.extend_from_slice(&ty.to_le_bytes());
+    desc.extend_from_slice(&4u32.to_le_bytes());
+    desc.extend_from_slice(&bits.to_le_bytes());
+    while !desc.len().is_multiple_of(align) {
+        desc.push(0);
+    }
+    let mut body: Vec<u8> = Vec::new();
+    body.extend_from_slice(&4u32.to_le_bytes());
+    body.extend_from_slice(&(desc.len() as u32).to_le_bytes());
+    body.extend_from_slice(&NT_GNU_PROPERTY_TYPE_0.to_le_bytes());
+    body.extend_from_slice(b"GNU\0");
+    body.extend_from_slice(&desc);
+    Some(body)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn build_badc_note(
     imports: &super::ResolvedImports,
@@ -4048,19 +4879,23 @@ fn build_badc_note(
     let mut out: Vec<u8> = Vec::new();
     let name = b"badc\0";
 
-    // Record 1: dylib paths.
-    let mut dylibs_desc: Vec<u8> = Vec::new();
-    for d in &imports.dylibs {
-        dylibs_desc.extend_from_slice(d.path.as_bytes());
-        dylibs_desc.push(0);
+    // Record 1: dylib paths. Skipped when there are none, like every
+    // other record, so a unit using no note channel builds an empty
+    // body and the writer drops the section.
+    if !imports.dylibs.is_empty() {
+        let mut dylibs_desc: Vec<u8> = Vec::new();
+        for d in &imports.dylibs {
+            dylibs_desc.extend_from_slice(d.path.as_bytes());
+            dylibs_desc.push(0);
+        }
+        out.extend_from_slice(&(name.len() as u32).to_le_bytes());
+        out.extend_from_slice(&(dylibs_desc.len() as u32).to_le_bytes());
+        out.extend_from_slice(&NT_BADC_DYLIBS.to_le_bytes());
+        out.extend_from_slice(name);
+        crate::c5::layout::pad_to_align(&mut out, 4);
+        out.extend_from_slice(&dylibs_desc);
+        crate::c5::layout::pad_to_align(&mut out, 4);
     }
-    out.extend_from_slice(&(name.len() as u32).to_le_bytes());
-    out.extend_from_slice(&(dylibs_desc.len() as u32).to_le_bytes());
-    out.extend_from_slice(&NT_BADC_DYLIBS.to_le_bytes());
-    out.extend_from_slice(name);
-    crate::c5::layout::pad_to_align(&mut out, 4);
-    out.extend_from_slice(&dylibs_desc);
-    crate::c5::layout::pad_to_align(&mut out, 4);
 
     // Record 2: per-import dylib map. Skip when there are no
     // imports -- the parser tolerates a missing record so the
@@ -4266,6 +5101,16 @@ fn build_badc_note(
     out
 }
 
+/// Symtab indices of the `STT_SECTION` entries a DWARF relocation
+/// resolves against.
+#[derive(Clone, Copy)]
+struct DwarfSectionSyms {
+    text: u64,
+    line: u64,
+    abbrev: u64,
+    strs: u64,
+}
+
 /// Translate a `DwarfReloc` (target = section kind + width) into
 /// an `Elf64Rela`. The reloc type comes from `(width, machine)`:
 /// 32-bit slots use `R_X86_64_32` / `R_AARCH64_ABS32`, 64-bit
@@ -4280,17 +5125,16 @@ fn build_badc_note(
 fn dwarf_reloc_to_elf_rela(
     r: &DwarfReloc,
     abi: RelocAbi,
-    debug_line_sym_idx: u64,
-    debug_abbrev_sym_idx: u64,
-    text_sym_idx: u64,
+    syms: DwarfSectionSyms,
     reloc_symbols: &[String],
     obj_sym_idx: &dyn Fn(&str) -> Option<u64>,
 ) -> Result<Option<Elf64Rela>, C5Error> {
     let named = |i: u32| obj_sym_idx(reloc_symbols.get(i as usize).map(|s| s.as_str())?);
     let sym_idx = match r.target {
-        DwarfRelocTarget::Text => text_sym_idx,
-        DwarfRelocTarget::DebugLine => debug_line_sym_idx,
-        DwarfRelocTarget::DebugAbbrev => debug_abbrev_sym_idx,
+        DwarfRelocTarget::Text => syms.text,
+        DwarfRelocTarget::DebugLine => syms.line,
+        DwarfRelocTarget::DebugAbbrev => syms.abbrev,
+        DwarfRelocTarget::DebugStr => syms.strs,
         DwarfRelocTarget::Symbol(i) | DwarfRelocTarget::ThreadLocalSymbol(i) => match named(i) {
             Some(idx) => idx,
             None => return Ok(None),
@@ -4344,6 +5188,48 @@ fn dwarf_reloc_to_elf_rela(
 /// first instruction of the pair (or the lea's opcode byte on
 /// x86_64). The codegen's existing `DataFixup` / `FuncFixup`
 /// already record this position.
+/// ELF relocation type of an AArch64 instruction-field kind. `None` for the
+/// data-field kinds (`Data` / `JumpRel`), whose type depends on the field's
+/// width and flags.
+fn a64_insn_reloc_type(kind: crate::c5::asm::AsmRelocKind) -> Option<u32> {
+    use crate::c5::asm::AsmRelocKind as RK;
+    Some(match kind {
+        RK::Data | RK::JumpRel => return None,
+        RK::A64Branch26 { link: true } => R_AARCH64_CALL26,
+        RK::A64Branch26 { link: false } => R_AARCH64_JUMP26,
+        RK::A64Condbr19 => R_AARCH64_CONDBR19,
+        RK::A64Tstbr14 => R_AARCH64_TSTBR14,
+        RK::A64Adr21 => R_AARCH64_ADR_PREL_LO21,
+        RK::A64AdrpPage21 => R_AARCH64_ADR_PREL_PG_HI21,
+        RK::A64AddLo12 => R_AARCH64_ADD_ABS_LO12_NC,
+        RK::A64LdrLit19 => R_AARCH64_LD_PREL_LO19,
+        RK::Explicit(t) => t,
+        RK::A64LdstLo12(sz) => match sz {
+            1 => R_AARCH64_LDST8_ABS_LO12_NC,
+            2 => R_AARCH64_LDST16_ABS_LO12_NC,
+            4 => R_AARCH64_LDST32_ABS_LO12_NC,
+            8 => R_AARCH64_LDST64_ABS_LO12_NC,
+            _ => R_AARCH64_LDST128_ABS_LO12_NC,
+        },
+        RK::A64MovwAbs {
+            group,
+            signed,
+            check,
+        } => match (group, signed, check.is_some()) {
+            (0, false, true) => R_AARCH64_MOVW_UABS_G0,
+            (1, false, true) => R_AARCH64_MOVW_UABS_G1,
+            (2, false, true) => R_AARCH64_MOVW_UABS_G2,
+            (0, false, false) => R_AARCH64_MOVW_UABS_G0_NC,
+            (1, false, false) => R_AARCH64_MOVW_UABS_G1_NC,
+            (2, false, false) => R_AARCH64_MOVW_UABS_G2_NC,
+            (0, true, _) => R_AARCH64_MOVW_SABS_G0,
+            (1, true, _) => R_AARCH64_MOVW_SABS_G1,
+            (2, true, _) => R_AARCH64_MOVW_SABS_G2,
+            _ => R_AARCH64_MOVW_UABS_G3,
+        },
+    })
+}
+
 fn emit_addr_fixup_relocs(
     machine: Machine,
     out: &mut Vec<u8>,
@@ -4614,7 +5500,7 @@ mod tests {
         for name in [".rel.debug_info", ".rel.debug_line"] {
             let (off, size) = secs[name];
             assert!(size > 0 && size % 8 == 0, "{name} holds Elf32_Rel records");
-            for row in bytes[off..off + size].chunks_exact(8) {
+            for row in bytes[off..off + size].as_chunks::<8>().0.iter() {
                 let info = u32::from_le_bytes(row[4..8].try_into().unwrap());
                 assert_eq!(info & 0xff, R_386_32, "{name} entry type");
             }
@@ -4658,6 +5544,93 @@ mod tests {
         assert_eq!(bytes[secs[".debug_info"].0 + 10], 4, "CU address_size");
         assert!(secs.contains_key(".rel.debug_info"));
         assert!(secs.contains_key(".rel.debug_line"));
+    }
+
+    /// Section names of an ELF64 object, in header order.
+    fn elf64_section_names(bytes: &[u8]) -> Vec<String> {
+        let u16a = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap()) as usize;
+        let u32a = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
+        let u64a = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap()) as usize;
+        let (shoff, shentsize, shnum) = (u64a(0x28), u16a(0x3a), u16a(0x3c));
+        let strtab = u64a(shoff + u16a(0x3e) * shentsize + 0x18);
+        (0..shnum)
+            .map(|i| {
+                let at = strtab + u32a(shoff + i * shentsize);
+                let end = at + bytes[at..].iter().position(|&b| b == 0).expect("name ends");
+                String::from_utf8_lossy(&bytes[at..end]).into_owned()
+            })
+            .collect()
+    }
+
+    /// An object names each section once, and carries `.debug_*` only
+    /// under `-g`. Two sections of one name make selection by name
+    /// ambiguous: `objcopy --dump-section=.text` reads the first, which
+    /// for an assembled unit was the empty default rather than the
+    /// assembly. A zero-length `.debug_info` makes
+    /// `readelf --debug-dump` and `objdump --dwarf` report an error over
+    /// a unit that has no debug info to read. GNU as and gcc emit
+    /// neither for the same source.
+    #[test]
+    fn an_object_names_each_section_once_and_carries_dwarf_only_under_g() {
+        use crate::c5::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+        // Every default section name is claimed by the assembly, so each
+        // one has an empty default to shadow.
+        const ASM: &str = "\t.text\n\t.globl f\nf:\n\t.byte 0\n\
+                           \t.data\n\t.globl d\nd:\n\t.long 1\n\
+                           \t.section .rodata\nr:\n\t.long 2\n\
+                           \t.bss\nb:\n\t.zero 4\n";
+        const C: &str = "int g = 3; int f(void) { return g; }";
+        for target in [Target::LinuxX64, Target::LinuxAarch64] {
+            for debug in [false, true] {
+                for (label, program) in [
+                    (
+                        "asm",
+                        Compiler::assemble(
+                            ASM,
+                            target,
+                            CompileOptions {
+                                no_entry_point: true,
+                                ..Default::default()
+                            },
+                        ),
+                    ),
+                    (
+                        "c",
+                        Compiler::with_options(
+                            String::from(C),
+                            target,
+                            CompileOptions::default().with_no_entry_point(true),
+                        )
+                        .compile(),
+                    ),
+                ] {
+                    let ctx = alloc::format!("{label} [{target:?}, debug={debug}]");
+                    let program = program.unwrap_or_else(|e| panic!("{ctx}: {e}"));
+                    let bytes = crate::c5::emit_native_with_options(
+                        &program,
+                        target,
+                        NativeOptions {
+                            output_kind: OutputKind::Relocatable,
+                            ..NativeOptions::new().with_debug_info(debug)
+                        },
+                    )
+                    .unwrap_or_else(|e| panic!("{ctx}: {e}"));
+                    let names = elf64_section_names(&bytes);
+                    for want in [".text", ".data", ".bss"] {
+                        assert_eq!(
+                            names.iter().filter(|n| n.as_str() == want).count(),
+                            1,
+                            "{ctx}: `{want}` is not named exactly once in {names:?}"
+                        );
+                    }
+                    assert_eq!(
+                        names.iter().any(|n| n.starts_with(".debug")),
+                        debug,
+                        "{ctx}: debug sections in {names:?}"
+                    );
+                }
+            }
+        }
     }
 
     /// `(offset, size)` of each named section of an ELFCLASS32 object.
@@ -4743,10 +5716,17 @@ mod tests {
 
     fn empty_program(path: &str) -> Program {
         Program {
+            target: crate::c5::codegen::Target::host(),
             data: Vec::new(),
             file_asm: Vec::new(),
             asm_weak_names: Vec::new(),
-            asm_hidden_names: Vec::new(),
+            asm_global_names: Vec::new(),
+            asm_visibility: Vec::new(),
+            asm_unit: false,
+            asm_file_names: Vec::new(),
+            asm_idents: Vec::new(),
+            data_ro_len: 0,
+            data_relro_len: 0,
             data_object_starts: Vec::new(),
             const_data_ranges: Vec::new(),
             data_pad_ranges: Vec::new(),
@@ -4758,6 +5738,9 @@ mod tests {
             data_relocs: Vec::new(),
             extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
+            tls_data_relocs: Vec::new(),
+            tls_extern_data_relocs: Vec::new(),
+            tls_code_relocs: Vec::new(),
             exports: Vec::new(),
             dylibs: Vec::new(),
             dllmain_pc: None,
@@ -4784,7 +5767,10 @@ mod tests {
     fn empty_build_for(_machine: Machine) -> Build {
         use super::super::{Abi, OutputKind, ResolvedImports};
         Build {
+            text_data_ranges: alloc::vec::Vec::new(),
             emitted_relocs: Vec::new(),
+            named_sections: Vec::new(),
+            got_base_fixups: Vec::new(),
             text_align: 16,
             orphaned_data: None,
             stopped_at_data_liveness: false,
@@ -4792,17 +5778,21 @@ mod tests {
             asm_sections: Vec::new(),
             asm_section_text_refs: Vec::new(),
             asm_text_abs_refs: Vec::new(),
+            asm_sym_fixups: Vec::new(),
             asm_text_labels: Vec::new(),
             asm_sym_decls: Vec::new(),
             copy_relocs: Default::default(),
             text: Vec::new(),
             data: Vec::new(),
             data_ro_len: 0,
-            pic: false,
+            data_relro_len: 0,
+            pic_link: false,
             code_model: Default::default(),
             elf_class: Default::default(),
             rodata: Default::default(),
             data_pcrel_relocs: Vec::new(),
+            text_pcrel_relocs: Vec::new(),
+            text_abs_relocs: Vec::new(),
             data_align: 8,
             bss_size: 0,
             init_fini_arrays: Default::default(),
@@ -4812,10 +5802,12 @@ mod tests {
             func_fixups: Vec::new(),
             pc_to_native: Vec::new(),
             func_ent_pcs: Vec::new(),
+            func_ends: Vec::new(),
             func_names: Vec::new(),
             func_prologue_native: alloc::collections::BTreeMap::new(),
             promoted_local_slots: alloc::collections::BTreeMap::new(),
             coalesced_slot_remap: alloc::collections::BTreeMap::new(),
+            canary_frame_bytes: alloc::collections::BTreeMap::new(),
             fn_unwind: Vec::new(),
             reloc_call_sites: Vec::new(),
             user_extern_call_sites: Vec::new(),
@@ -4830,6 +5822,9 @@ mod tests {
             data_relocs: Vec::new(),
             extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
+            tls_data_relocs: Vec::new(),
+            tls_extern_data_relocs: Vec::new(),
+            tls_code_relocs: Vec::new(),
             label_relocs: Vec::new(),
             exports: Vec::new(),
             dynamic_exports: Vec::new(),

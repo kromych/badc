@@ -66,6 +66,7 @@ fn load_width(kind: LoadKind) -> u8 {
         LoadKind::I32 | LoadKind::U32 | LoadKind::F32 => 4,
         LoadKind::I16 | LoadKind::U16 => 2,
         LoadKind::I8 | LoadKind::U8 => 1,
+        LoadKind::F80 | LoadKind::F128 => 16,
     }
 }
 
@@ -76,6 +77,7 @@ fn store_width(kind: StoreKind) -> u8 {
         StoreKind::I32 | StoreKind::F32 => 4,
         StoreKind::I16 => 2,
         StoreKind::I8 => 1,
+        StoreKind::F80 | StoreKind::F128 => 16,
     }
 }
 
@@ -256,6 +258,7 @@ fn run_one(func: &mut FunctionSsa) {
                     disp,
                     kind,
                     volatile: false,
+                    ..
                 } => {
                     let addr = *addr;
                     let disp = *disp;
@@ -326,6 +329,7 @@ fn run_one(func: &mut FunctionSsa) {
                     value,
                     kind,
                     volatile,
+                    ..
                 } => {
                     let addr = *addr;
                     let disp = *disp;
@@ -457,7 +461,10 @@ fn run_one(func: &mut FunctionSsa) {
                 | Inst::BinopI { .. }
                 | Inst::Fneg(_)
                 | Inst::Fma { .. }
+                | Inst::MulAdd { .. }
                 | Inst::Extend { .. }
+                | Inst::Bswap { .. }
+                | Inst::Copy { .. }
                 | Inst::FpCast { .. }
                 | Inst::ParamRef { .. }
                 | Inst::Phi { .. } => {}
@@ -482,6 +489,7 @@ fn run_one(func: &mut FunctionSsa) {
                 | Inst::CallIndirect { .. }
                 | Inst::CallExt { .. }
                 | Inst::Intrinsic { .. }
+                | Inst::X86Simd { .. }
                 | Inst::InlineAsm { .. }
                 | Inst::TailExt(_) => {
                     table.clear();
@@ -541,10 +549,12 @@ mod tests {
             ent_pc: 0,
             end_pc: 0,
             locals: 0,
+            ssp: crate::c5::ir::SspFacts::default(),
             n_params: 2,
             is_variadic: false,
             is_inline: false,
             is_always_inline: false,
+            is_noinline: false,
             is_naked: false,
             section: None,
             is_weak: false,
@@ -552,6 +562,7 @@ mod tests {
             const_params: 0,
             inst_src: alloc::vec![(0, 0); n],
             f32_values: alloc::vec![false; n],
+            cmp32: Vec::new(),
             param_fp_mask: 0,
             agg_descs: alloc::vec::Vec::new(),
             param_aggs: alloc::vec::Vec::new(),
@@ -605,12 +616,14 @@ mod tests {
                     value: 1,
                     kind: StoreKind::I64,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::Load {
                     addr: 0,
                     disp: 0,
                     kind: LoadKind::I64,
                     volatile: false,
+                    align: 0,
                 },
             ],
             Terminator::Return(3),
@@ -643,12 +656,14 @@ mod tests {
                     value: 1,
                     kind: StoreKind::I32,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::Load {
                     addr: 0,
                     disp: 0,
                     kind: LoadKind::I32,
                     volatile: false,
+                    align: 0,
                 },
             ],
             Terminator::Return(3),
@@ -688,12 +703,14 @@ mod tests {
                     value: 1,
                     kind: StoreKind::I8,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::Load {
                     addr: 0,
                     disp: 0,
                     kind: LoadKind::U8,
                     volatile: false,
+                    align: 0,
                 },
             ],
             Terminator::Return(3),
@@ -708,6 +725,7 @@ mod tests {
                     disp: 0,
                     kind: LoadKind::U8,
                     volatile: false,
+                    align: 0,
                 }
             ),
             "an unsigned sub-width reload must not forward",
@@ -736,6 +754,7 @@ mod tests {
                     value: 1,
                     kind: StoreKind::I64,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::Mcpy {
                     dst: 0,
@@ -748,6 +767,7 @@ mod tests {
                     disp: 0,
                     kind: LoadKind::I64,
                     volatile: false,
+                    align: 0,
                 },
             ],
             Terminator::Return(4),
@@ -790,6 +810,7 @@ mod tests {
                     value: 1,
                     kind: StoreKind::I64,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::InlineAsm {
                     asm,
@@ -800,6 +821,7 @@ mod tests {
                     disp: 0,
                     kind: LoadKind::I64,
                     volatile: false,
+                    align: 0,
                 },
             ],
             Terminator::Return(4),
@@ -832,12 +854,14 @@ mod tests {
                     value: 1,
                     kind: StoreKind::I64,
                     volatile: true,
+                    align: 0,
                 },
                 Inst::Load {
                     addr: 0,
                     disp: 0,
                     kind: LoadKind::I64,
                     volatile: false,
+                    align: 0,
                 },
             ],
             Terminator::Return(3),
@@ -871,18 +895,21 @@ mod tests {
                     value: 1,
                     kind: StoreKind::I64,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::Load {
                     addr: 0,
                     disp: 0,
                     kind: LoadKind::I64,
                     volatile: true,
+                    align: 0,
                 },
                 Inst::Load {
                     addr: 0,
                     disp: 0,
                     kind: LoadKind::I64,
                     volatile: true,
+                    align: 0,
                 },
                 Inst::Binop {
                     op: crate::c5::ir::BinOp::Add,
@@ -999,6 +1026,7 @@ mod tests {
                     value: 0,
                     kind: StoreKind::I64,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::LoadLocal {
                     off: -1,
@@ -1189,12 +1217,14 @@ mod tests {
                     disp: 0,
                     kind: LoadKind::I64,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::Load {
                     addr: 0,
                     disp: 0,
                     kind: LoadKind::I64,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::Binop {
                     op: crate::c5::ir::BinOp::Add,

@@ -9,6 +9,21 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <main>:
                	leaq	<rip>, %rax
@@ -16,13 +31,8 @@ Disassembly of section .text:
                	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	sete	%al
-               	movzbq	%al, %rax
-               	setnp	%r10b
-               	movzbq	%r10b, %r10
-               	andq	%r10, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
+               	jp	<addr>
+               	je	<addr>
                	movl	$0x1, %eax
                	retq
                	leaq	<rip>, %rax
@@ -30,13 +40,8 @@ Disassembly of section .text:
                	movabsq	$0x400c000000000000, %rax # imm = 0x400C000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	sete	%al
-               	movzbq	%al, %rax
-               	setnp	%r10b
-               	movzbq	%r10b, %r10
-               	andq	%r10, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
+               	jp	<addr>
+               	je	<addr>
                	movl	$0x2, %eax
                	retq
                	leaq	<rip>, %rax
@@ -44,13 +49,8 @@ Disassembly of section .text:
                	movl	$0x3fc00000, %eax       # imm = 0x3FC00000
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0
-               	sete	%al
-               	movzbq	%al, %rax
-               	setnp	%r10b
-               	movzbq	%r10b, %r10
-               	andq	%r10, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
+               	jp	<addr>
+               	je	<addr>
                	movl	$0x3, %eax
                	retq
                	xorq	%rax, %rax

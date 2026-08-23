@@ -23,11 +23,18 @@ the addressing form of an unresolved reference is visible.
 
 Fixtures that fail to compile (missing headers in the stripped fixture
 form, etc.) are logged but don't fail the run.
+
+`--check` follows the regeneration with a git comparison against the
+commit, failing on added, removed and modified snapshots alike.
+
+`--frame-sizes` reports the static stack bytes the corpus reserves, and
+with `--against REV` diffs that against the snapshots committed at REV.
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import shutil
 import subprocess
@@ -39,11 +46,14 @@ from pathlib import Path
 def repo_root() -> Path:
     out = subprocess.run(
         ["git", "rev-parse", "--show-toplevel"],
-        check=True,
         capture_output=True,
         text=True,
     )
-    return Path(out.stdout.strip())
+    if out.returncode == 0:
+        return Path(out.stdout.strip())
+    # An rsync/tar export of the tree carries no .git; the script's own
+    # location fixes the root.
+    return Path(__file__).resolve().parents[1]
 
 
 def ensure_badc(root: Path) -> Path:
@@ -64,11 +74,6 @@ def ensure_badc(root: Path) -> Path:
 TARGETS = [("x64", "linux-x64"), ("aarch64", "linux-aarch64")]
 OBJDUMP_FLAGS = ["--disassemble", "--no-show-raw-insn", "--no-addresses"]
 
-# badc appends its version-line marker (`badc <version> ...`, see
-# OUTPUT_MARKER in src/lib.rs) to the tail of every emitted `.text`
-# section. Disassembled, those bytes would churn the snapshot on
-# every release bump. Truncate the objdump output at the marker.
-BUILD_INFO_MARKER = b"badc "
 
 # objdump's disassembly bakes in several forms of absolute addresses
 # that shift on any earlier-code reflow even when the local emit is
@@ -105,9 +110,15 @@ ASM_NORMALISATION_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
     # the next line is always this pattern, never arithmetic, so the
     # immediate carries no codegen signal and is normalized to keep
     # the snapshot stable against any earlier reflow.
+    #
+    # The ADRP operand reads `<addr>` rather than `<page>` when the
+    # disassembler resolved the page to a symbol, since the `<addr>`
+    # rule above consumes the address and its `<symbol>` comment
+    # together. Both spellings introduce the same pair.
     (
         re.compile(
-            r"(adrp\s+(\w+),\s+<page>\n\s*add\s+\2,\s+\2,\s+)#0x[0-9a-fA-F]+"
+            r"(adrp\s+(\w+),\s+<(?:page|addr)>\n\s*add\s+\2,\s+\2,\s+)"
+            r"#0x[0-9a-fA-F]+"
         ),
         r"\1<lo12>",
     ),
@@ -117,7 +128,8 @@ ASM_NORMALISATION_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
     # shifts with any earlier reflow and carries no codegen signal.
     (
         re.compile(
-            r"(adrp\s+(\w+),\s+<page>\n\s*ldr\s+\2,\s+\[\2,\s+)#0x[0-9a-fA-F]+(\])"
+            r"(adrp\s+(\w+),\s+<(?:page|addr)>\n\s*ldr\s+\2,\s+\[\2,\s+)"
+            r"#0x[0-9a-fA-F]+(\])"
         ),
         r"\1<lo12>\3",
     ),
@@ -209,62 +221,65 @@ def emit_ssa(badc: Path, src: Path, dst: Path, tmp_bin: Path, root: Path) -> boo
     return proc.returncode == 0
 
 
-def build_info_stop_address(binary: Path) -> int | None:
-    """Return the .text virtual address at which the BUILD_INFO marker
-    begins, or None if either ELF parsing fails or the marker is
-    absent. The caller passes the result as `--stop-address` to
-    objdump so the trailing BUILD_INFO bytes (which embed the current
-    git commit and would churn the snapshot every push) don't reach
-    the disassembled output.
-    """
-    import struct
+def fixture_text_stop_address(map_path: Path, source: str) -> int | None:
+    """Return the virtual address one past the last `.text` contribution
+    the badc link map attributes to `source`, the path the fixture was
+    compiled from. The caller's `--stop-address` keeps the snapshot to the
+    fixture's own code: the trailing fill and the identical runtime tail
+    every image shares would otherwise churn the whole tree on any runtime
+    edit.
 
-    data = binary.read_bytes()
-    if data[:4] != b"\x7fELF":
+    The fixture's rows are selected by name rather than the other inputs
+    excluded by theirs. An input's label is its path when it has one, so
+    the runtime carries `<runtime/...>` only while it comes from the
+    embedded copy; an installed `$BADC_HOME/lib/runtime.c` labels the same
+    rows with an absolute path, which no exclusion rule can anticipate.
+    None when the map is missing or names no contribution from `source`.
+    """
+    try:
+        text = map_path.read_text()
+    except OSError:
         return None
-    is_64 = data[4] == 2
-    is_le = data[5] == 1
-    if not is_64 or not is_le:
-        return None
-    e_shoff = struct.unpack_from("<Q", data, 0x28)[0]
-    e_shentsize = struct.unpack_from("<H", data, 0x3a)[0]
-    e_shnum = struct.unpack_from("<H", data, 0x3c)[0]
-    e_shstrndx = struct.unpack_from("<H", data, 0x3e)[0]
-    shstr_off = struct.unpack_from(
-        "<Q", data, e_shoff + e_shstrndx * e_shentsize + 0x18
-    )[0]
-    for i in range(e_shnum):
-        base = e_shoff + i * e_shentsize
-        sh_name = struct.unpack_from("<I", data, base)[0]
-        end = data.index(b"\x00", shstr_off + sh_name)
-        name = data[shstr_off + sh_name : end].decode("ascii", errors="replace")
-        if name != ".text":
+    in_text = False
+    last_end = None
+    for line in text.splitlines():
+        if re.match(r"\.text\s+0x", line):
+            in_text = True
             continue
-        sh_addr = struct.unpack_from("<Q", data, base + 0x10)[0]
-        sh_offset = struct.unpack_from("<Q", data, base + 0x18)[0]
-        sh_size = struct.unpack_from("<Q", data, base + 0x20)[0]
-        section = data[sh_offset : sh_offset + sh_size]
-        idx = section.find(BUILD_INFO_MARKER)
-        if idx < 0:
-            return None
-        return sh_addr + idx
-    return None
+        if not in_text:
+            continue
+        if not line.strip() or not line.startswith(" "):
+            break
+        # A contribution is `[name] 0xaddr 0xsize input`, with the name
+        # wrapped onto its own line when long; symbol and `*fill*` rows
+        # carry no input token and don't match.
+        m = re.match(r"\s+(?:\S+\s+)?0x([0-9a-fA-F]+)\s+0x([0-9a-fA-F]+)\s+(\S+)\s*$", line)
+        if not m or m.group(3) != source:
+            continue
+        end = int(m.group(1), 16) + int(m.group(2), 16)
+        last_end = end if last_end is None else max(last_end, end)
+    return last_end
 
 
 def emit_asm(badc: Path, src: Path, dst: Path, tmp_bin: Path, target: str, root: Path) -> bool:
     # Relative source path + cwd=root: keep `__FILE__` checkout-independent
     # (see emit_ssa).
     flags = fixture_flags(src)
+    # `-Map` records where the embedded runtime's .text begins; `-c`
+    # produces no link and takes no map (an object carries no runtime).
+    map_path = tmp_bin.with_suffix(".map")
+    map_flags = [] if "-c" in flags else [f"-Map={map_path}"]
+    rel = str(src.relative_to(root))
     proc = subprocess.run(
-        [str(badc), "-q", "-O", f"--target={target}", *flags, "-o", str(tmp_bin),
-         str(src.relative_to(root))],
+        [str(badc), "-q", "-O", f"--target={target}", *flags, *map_flags,
+         "-o", str(tmp_bin), rel],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         cwd=root,
     )
     if proc.returncode != 0:
         return False
-    stop = build_info_stop_address(tmp_bin)
+    stop = None if "-c" in flags else fixture_text_stop_address(map_path, rel)
     extra: list[str] = []
     if stop is not None:
         extra.append(f"--stop-address=0x{stop:x}")
@@ -345,6 +360,234 @@ def regenerate(root: Path, only: list[str] | None) -> int:
     return 0
 
 
+CHECK_DIFF_LINES = 200
+
+
+def check_clean(root: Path) -> int:
+    """Fail when the regeneration left `tests/snapshots/` differing from
+    the commit.
+
+    `git diff` reports tracked files only, so a fixture added without its
+    snapshots -- whose regeneration writes untracked files -- reads as
+    clean. `git status --porcelain` reports both, and the three cases get
+    separate messages because they take different actions. Fixtures that
+    produce no code take no snapshots and are skipped by design, so the
+    rule is on the generator's output rather than on a fixture count.
+    """
+    out = subprocess.run(
+        ["git", "status", "--porcelain", "-uall", "--", "tests/snapshots"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    added: list[str] = []
+    removed: list[str] = []
+    modified: list[str] = []
+    for line in out.splitlines():
+        status, path = line[:2], line[3:]
+        if status == "??":
+            added.append(path)
+        elif "D" in status:
+            removed.append(path)
+        else:
+            modified.append(path)
+    for label, paths in (
+        ("produced but not committed (a fixture was added without its "
+         "snapshots; commit them)", added),
+        ("committed but no longer produced (the fixture is gone or no "
+         "longer compiles; remove them)", removed),
+        ("differ from the committed copy (compiler output changed)", modified),
+    ):
+        if not paths:
+            continue
+        print(f"[snapshots] {len(paths)} snapshot(s) {label}:")
+        for p in paths[:40]:
+            print(f"  {p}")
+    if modified:
+        diff = subprocess.run(
+            ["git", "--no-pager", "diff", "--", "tests/snapshots"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+        ).stdout.splitlines()
+        for line in diff[:CHECK_DIFF_LINES]:
+            print(line)
+    if added or removed or modified:
+        return 1
+    print("[snapshots] tests/snapshots/ is clean")
+    return 0
+
+
+# The static SP decrements a prologue or a call-site adjustment emits.
+# The aarch64 immediate is 12 bits with an optional `lsl #12`, so a
+# reservation over 4095 bytes is a shifted instruction plus a remainder
+# and a reader that drops the shift undercounts it 4096-fold. A
+# variable adjustment (alloca, over-alignment) has no static size and
+# matches neither form.
+FRAME_DECREMENTS: dict[str, re.Pattern[str]] = {
+    "aarch64": re.compile(
+        r"\bsub\s+sp,\s*sp,\s*#(0x[0-9a-fA-F]+|\d+)(?:\s*,\s*lsl\s*#(\d+))?"
+    ),
+    "x64": re.compile(r"\bsubq?\s+\$(0x[0-9a-fA-F]+|\d+),\s*%rsp\b"),
+}
+
+
+def snapshot_arch(name: str) -> str:
+    for suffix, _ in TARGETS:
+        if name.endswith(f".{suffix}.asm"):
+            return suffix
+    raise ValueError(f"not an asm snapshot name: {name}")
+
+
+def frame_bytes(text: str, arch: str) -> int:
+    """Total static stack bytes reserved across a snapshot's functions."""
+    total = 0
+    for m in FRAME_DECREMENTS[arch].finditer(text):
+        imm = m.group(1)
+        value = int(imm, 16) if imm.startswith("0x") else int(imm)
+        if arch == "aarch64" and m.group(2):
+            value <<= int(m.group(2))
+        total += value
+    return total
+
+
+def tree_frames(root: Path) -> dict[str, int]:
+    asm = root / "tests" / "snapshots" / "asm"
+    return {
+        p.name: frame_bytes(p.read_text(errors="replace"), snapshot_arch(p.name))
+        for p in sorted(asm.glob("*.asm"))
+    }
+
+
+def revision_frames(root: Path, rev: str) -> dict[str, int]:
+    """The same accounting over the snapshots committed at `rev`."""
+    listing = subprocess.run(
+        ["git", "ls-tree", "-r", "-z", rev, "--", "tests/snapshots/asm"],
+        cwd=root,
+        capture_output=True,
+        check=True,
+    ).stdout.split(b"\0")
+    entries = []
+    for row in listing:
+        if not row:
+            continue
+        meta, _, path = row.partition(b"\t")
+        entries.append((meta.split()[2], Path(path.decode()).name))
+    blobs = subprocess.run(
+        ["git", "cat-file", "--batch"],
+        cwd=root,
+        input=b"".join(sha + b"\n" for sha, _ in entries),
+        capture_output=True,
+        check=True,
+    ).stdout
+    out: dict[str, int] = {}
+    pos = 0
+    for _, name in entries:
+        head = blobs.index(b"\n", pos)
+        size = int(blobs[pos:head].split()[-1])
+        body = blobs[head + 1 : head + 1 + size].decode("utf-8", errors="replace")
+        pos = head + 1 + size + 1
+        out[name] = frame_bytes(body, snapshot_arch(name))
+    return out
+
+
+FRAME_MOVERS_SHOWN = 40
+
+
+def frame_report(root: Path, against: str | None) -> int:
+    """Print the corpus frame total, and against a revision the movers.
+
+    The comparison covers the snapshots both sides carry: a fixture added
+    since `against` has no earlier size and would otherwise read as growth.
+    """
+    cur = tree_frames(root)
+    per_arch = {
+        suffix: sum(v for k, v in cur.items() if snapshot_arch(k) == suffix)
+        for suffix, _ in TARGETS
+    }
+    parts = " ".join(f"{a}={b}" for a, b in sorted(per_arch.items()))
+    print(f"[frames] {len(cur)} snapshots, {sum(cur.values())} bytes ({parts})")
+    if against is None:
+        return 0
+    old = revision_frames(root, against)
+    shared = sorted(set(cur) & set(old))
+    was, now = sum(old[k] for k in shared), sum(cur[k] for k in shared)
+
+    # Growth first, then the largest shrinks: the cap trims the small
+    # middle rather than either extreme.
+    def rank(entry: tuple[str, int, int]) -> tuple[int, int, str]:
+        delta = entry[2] - entry[1]
+        return (0, -delta, entry[0]) if delta > 0 else (1, delta, entry[0])
+
+    moved = sorted(
+        ((k, old[k], cur[k]) for k in shared if old[k] != cur[k]), key=rank
+    )
+    grew = sum(1 for _, a, b in moved if b > a)
+    pct = (now - was) / was * 100 if was else 0.0
+    print(
+        f"[frames] against {against}: {was} -> {now} ({now - was:+d}, {pct:+.1f}%), "
+        f"{len(moved) - grew} shrink, {grew} grow, {len(shared) - len(moved)} same"
+    )
+    for name, a, b in moved[:FRAME_MOVERS_SHOWN]:
+        print(f"  {b - a:+8d}  {name}  {a} -> {b}")
+    if len(moved) > FRAME_MOVERS_SHOWN:
+        print(f"  ... {len(moved) - FRAME_MOVERS_SHOWN} more")
+    return 0
+
+
+def self_test() -> int:
+    """Exercise `check_clean` over the three states it separates, in a
+    throwaway repository: the added case is the one `git diff` misses."""
+    env = dict(
+        os.environ,
+        GIT_AUTHOR_NAME="t",
+        GIT_AUTHOR_EMAIL="t@t",
+        GIT_COMMITTER_NAME="t",
+        GIT_COMMITTER_EMAIL="t@t",
+    )
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        snap = root / "tests" / "snapshots" / "ssa"
+        snap.mkdir(parents=True)
+        (snap / "a.ssa").write_text("a\n")
+        for cmd in (["init", "-q"], ["add", "-A"], ["commit", "-qm", "s"]):
+            subprocess.run(["git", *cmd], cwd=root, check=True, env=env)
+
+        def state() -> int:
+            return check_clean(root)
+
+        assert state() == 0, "a committed corpus must read clean"
+        (snap / "b.ssa").write_text("b\n")
+        assert state() == 1, "an untracked snapshot must fail"
+        (snap / "b.ssa").unlink()
+        (snap / "a.ssa").unlink()
+        assert state() == 1, "a removed snapshot must fail"
+        (snap / "a.ssa").write_text("changed\n")
+        assert state() == 1, "a modified snapshot must fail"
+        (snap / "a.ssa").write_text("a\n")
+        assert state() == 0, "the restored corpus must read clean again"
+
+    # A frame past the aarch64 12-bit immediate is a shifted instruction
+    # plus a remainder, and the page-wise probe splits it further; the
+    # shift carries the bulk of the size.
+    cases = [
+        ("aarch64", "\tsub\tsp, sp, #0x1, lsl #12\n\tstr\txzr, [sp]\n"
+                    "\tsub\tsp, sp, #0x700\n", 5888),
+        ("aarch64", "\tsub\tsp, sp, #0xf10\n", 3856),
+        ("aarch64", "\tsub\tx0, x29, #0x1, lsl #12\n", 0),
+        ("x64", "\tsubq\t$0x1000, %rsp\n\tsubq\t$0x750, %rsp\n", 5968),
+        ("x64", "\tsubq\t0x38(%rsp), %rdx\n", 0),
+    ]
+    for arch, text, want in cases:
+        got = frame_bytes(text, arch)
+        assert got == want, f"{arch} frame decode: {got} != {want}"
+    assert snapshot_arch("f.aarch64.asm") == "aarch64"
+    assert snapshot_arch("f.x64.asm") == "x64"
+    print("[snapshots] self-test OK")
+    return 0
+
+
 def main(argv: list[str]) -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument(
@@ -352,8 +595,39 @@ def main(argv: list[str]) -> int:
         nargs="*",
         help="restrict to the given fixture names (with or without .c)",
     )
+    p.add_argument(
+        "--check",
+        action="store_true",
+        help="after regenerating, fail if tests/snapshots/ differs from the "
+        "commit -- added, removed or modified files alike",
+    )
+    p.add_argument(
+        "--self-test",
+        action="store_true",
+        help="check the --check comparison itself and exit; no regeneration",
+    )
+    p.add_argument(
+        "--frame-sizes",
+        action="store_true",
+        help="report the static stack bytes the committed corpus reserves "
+        "and exit; no regeneration",
+    )
+    p.add_argument(
+        "--against",
+        metavar="REV",
+        help="with --frame-sizes, diff the totals against the snapshots "
+        "committed at REV",
+    )
     args = p.parse_args(argv)
-    return regenerate(repo_root(), args.only)
+    if args.self_test:
+        return self_test()
+    root = repo_root()
+    if args.frame_sizes:
+        return frame_report(root, args.against)
+    rc = regenerate(root, args.only)
+    if rc != 0 or not args.check:
+        return rc
+    return check_clean(root)
 
 
 if __name__ == "__main__":

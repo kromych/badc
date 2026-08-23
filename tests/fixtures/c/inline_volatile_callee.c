@@ -1,8 +1,9 @@
 /* C99 5.1.2.3p2 / 6.7.3p6: a volatile access is a side effect even
-   when the value is unused. A callee whose inlined form would drop
-   such an access -- a dead read of a volatile parameter, a store to
-   one, a volatile local -- stays out of line, and each access is
-   performed exactly once per call. */
+   when the value is unused. Inlining must preserve each access
+   exactly once per call: a volatile parameter's cell relocates into a
+   caller frame slot initialized from the argument and keeps its reads
+   and writes, while a callee whose spliced form would drop an access
+   (the volatile local here) stays out of line. */
 volatile int g = 6;
 
 static int read_param(volatile int x) {

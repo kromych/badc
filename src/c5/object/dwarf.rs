@@ -94,14 +94,12 @@ const DW_AT_FRAME_BASE: u32 = 0x40;
 /// `DW_AT_data_member_location` (0x38) carries the byte offset of
 /// a member from the start of its containing struct / union.
 const DW_AT_DATA_MEMBER_LOCATION: u32 = 0x38;
-/// `DW_AT_bit_offset` (0x0c) is DWARF 3-style; deprecated in v4
-/// but every consumer we target still handles it. Encodes the
-/// distance from the MSB of the storage unit to the MSB of the
-/// bitfield (so on little-endian targets we transform c5's
-/// LSB-relative `bit_offset` into `storage_bits - lsb - width`
-/// at emit time).
-const DW_AT_BIT_OFFSET: u32 = 0x0c;
 const DW_AT_BIT_SIZE: u32 = 0x0d;
+/// `DW_AT_data_bit_offset` (0x6b) is the DWARF 4 5.6.6 bitfield
+/// position: bits from the start of the containing aggregate,
+/// independent of byte order. It replaces `DW_AT_bit_offset`, which
+/// DWARF 4 deprecates and defines against the storage unit's MSB.
+const DW_AT_DATA_BIT_OFFSET: u32 = 0x6b;
 const DW_AT_DECL_LINE: u32 = 0x3b;
 const DW_AT_DECL_FILE: u32 = 0x3a;
 const DW_AT_PROTOTYPED: u32 = 0x27;
@@ -181,20 +179,15 @@ const OPCODE_BASE: u8 = 13;
 /// `DW_CFA_advance_loc` is encoded as an opcode-with-operand: the
 /// top two bits are `0b01` (= 0x40) and the low six bits carry
 /// the factored delta. Used inline; broken out as a helper.
-const DW_CFA_ADVANCE_LOC_HI: u8 = 0x40;
-const DW_CFA_OFFSET_HI: u8 = 0x80;
-
-const DW_CFA_ADVANCE_LOC1: u8 = 0x02;
-const DW_CFA_ADVANCE_LOC2: u8 = 0x03;
-const DW_CFA_ADVANCE_LOC4: u8 = 0x04;
-const DW_CFA_DEF_CFA: u8 = 0x0c;
-/// `DW_CFA_undefined <register>` -- mark a register as having
-/// no recoverable value in the previous frame. The unwinder
-/// uses this to recognise the bottom of the stack: when the
-/// return-address column is undefined, there's nothing to walk
-/// to. Used in the `_start` FDE so gdb stops gracefully
-/// instead of reading past the bottom-most frame.
-const DW_CFA_UNDEFINED: u8 = 0x07;
+/// The opcodes themselves come from the assembler's frame emitter, which
+/// needs the whole set; `DW_CFA_undefined` marks a register as having no
+/// recoverable value in the previous frame, which is how the `_start` FDE
+/// tells an unwinder it has reached the bottom of the stack.
+use crate::c5::codegen::ssa::cfi::{
+    DW_CFA_ADVANCE_LOC_HI, DW_CFA_ADVANCE_LOC1, DW_CFA_ADVANCE_LOC2, DW_CFA_ADVANCE_LOC4,
+    DW_CFA_DEF_CFA, DW_CFA_NEGATE_RA_STATE, DW_CFA_OFFSET_HI, DW_CFA_UNDEFINED, write_sleb128,
+    write_uleb128,
+};
 
 // Architecture-specific register codes used in CFI rules.
 //
@@ -325,6 +318,12 @@ pub(crate) struct DwarfSections {
 
 /// Produce DWARF for `program` / `build`.
 ///
+/// The whole result is consumed on the single-TU path that writes a
+/// final image with no link step (`emit_native_with_options` with a
+/// non-relocatable `OutputKind`). A merged link takes `.debug_info` /
+/// `.debug_abbrev` / `.debug_line` / `.debug_str` from
+/// `Build::merged_dwarf` and only `.debug_frame` from here.
+///
 /// `target` selects the data model used to size c5's `long`
 /// (LP64 = 8 bytes vs LLP64 = 4 bytes) so the emitted base-type
 /// DIEs match what the codegen actually loads / stores.
@@ -442,6 +441,12 @@ struct Subprog {
     /// CFI FDE's `DW_CFA_advance_loc` so the post-prologue CFA
     /// rule starts at the right PC.
     prologue_size: u32,
+    /// The function opens with `paciasp`, so from that point the
+    /// return address it saves carries a pointer-authentication code.
+    /// The FDE flags it with `DW_CFA_AARCH64_negate_ra_state` -- an
+    /// unwinder that misses the flag reads the signature as address
+    /// bits and loses the parent frame.
+    ra_signed: bool,
     /// Locals + formal-parameters that c5 captured for this
     /// subprogram (see `Compiler::variables`). The DWARF emitter
     /// turns each into a `DW_TAG_variable` /
@@ -528,6 +533,18 @@ fn prologue_size_for(ent_pc: usize, low_pc: usize, build: &Build) -> u32 {
     } else {
         (body_start - low_pc) as u32
     }
+}
+
+/// Whether the function at `low_pc` signs its return address, read
+/// off the emitted code rather than the option: only the a64 emitter
+/// decides which functions take the pair, and this is the same
+/// instruction word it wrote.
+fn opens_with_paciasp(build: &Build, low_pc: usize) -> bool {
+    build
+        .text
+        .get(low_pc..low_pc + 4)
+        .and_then(|w| w.try_into().ok())
+        .is_some_and(|w| u32::from_le_bytes(w) == crate::c5::codegen::aarch64::encode::PACIASP)
 }
 
 /// One-past-the-last byte of user code in `build.text`. The PLT
@@ -642,16 +659,21 @@ fn collect_subprograms(
     // `(ent_pc, name)` pairs in lockstep, so an `ent_pc -> name` map
     // covers the sort-by-native-offset reorder below.
     //
-    // `func_names` holds assembler names. A GNU asm-label rename makes
-    // that differ from the identifier, and `DW_AT_name` is the source
-    // name (the symbol table already carries the assembler one), so the
-    // identifier is recovered from the symbol table where one exists.
+    // `func_names` holds assembler names. A GNU asm-label rename or an
+    // inline definition's private body name makes that differ from the
+    // identifier, and `DW_AT_name` is the source name (the symbol table
+    // already carries the assembler one), so the identifier is recovered
+    // from the symbol table where one exists.
     let ident_by_pc: BTreeMap<usize, &alloc::string::String> = {
         use crate::c5::token::Token;
         program
             .symbols
             .iter()
-            .filter(|s| s.class == Token::Fun as i64 && s.asm_name.is_some() && !s.name.is_empty())
+            .filter(|s| {
+                s.class == Token::Fun as i64
+                    && (s.asm_name.is_some() || s.inline_body_name.is_some())
+                    && !s.name.is_empty()
+            })
             .map(|s| (s.val as usize, &s.name))
             .collect()
     };
@@ -745,6 +767,7 @@ fn collect_subprograms(
         // function-body close, indexed by the Ent's ent_pc
         // so a simple equality check groups them.
         let function_bc_pc = ent_pc as u64;
+        let canary_shift = build.canary_frame_bytes.get(&ent_pc).copied().unwrap_or(0) as i64;
         let variables = program
             .variables
             .iter()
@@ -770,7 +793,18 @@ fn collect_subprograms(
                     // +32). Negative (locals) use 8-byte stride. Mirror
                     // of `aarch64::lea_offset_bytes`. The x86_64 backend
                     // matches; both arches share this layout.
-                    fp_byte_offset: if eff >= 2 { (eff - 1) * 16 } else { eff * 8 },
+                    // TODO: an over-aligned automatic lives in the frame's
+                    // over-aligned region, not at this slot offset; its
+                    // location needs the per-function region base.
+                    fp_byte_offset: if eff >= 2 {
+                        (eff - 1) * 16
+                    } else {
+                        // A protected frame reserves its canary region at the
+                        // top of the locals, so every local slot sits that
+                        // much lower; parameter cells are above the frame
+                        // base and keep their offsets.
+                        eff * 8 - canary_shift
+                    },
                     promoted: build
                         .promoted_local_slots
                         .get(&ent_pc)
@@ -787,6 +821,7 @@ fn collect_subprograms(
             low_pc: code_vmaddr + lo as u64,
             high_pc: code_vmaddr + hi as u64,
             prologue_size: prologue_size_for(ent_pc, lo, build),
+            ra_signed: opens_with_paciasp(build, lo),
             variables,
             external: !internal_pcs.contains(&ent_pc),
         });
@@ -869,12 +904,15 @@ impl CatalogEntry {
                 let mut size: u32 = 1 + 4 + 4;
                 if let Some(s) = structs.get(*id as usize) {
                     for f in &s.fields {
-                        // member abbrev(1) + name(4) + type(4) + location(4)
-                        size += 13;
-                        if f.bit_width > 0 {
-                            // + byte_size(1) + bit_offset(1) + bit_size(1)
-                            size += 3;
-                        }
+                        size += if f.bit_width > 0 {
+                            // abbrev(1) + name(4) + type(4)
+                            // + data_bit_offset(uleb) + bit_size(uleb)
+                            9 + uleb128_byte_len((f.offset as u64) * 8 + f.bit_offset as u64)
+                                + uleb128_byte_len(f.bit_width as u64)
+                        } else {
+                            // abbrev(1) + name(4) + type(4) + location(4)
+                            13
+                        };
                     }
                 }
                 // children-list terminator
@@ -1391,9 +1429,9 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_DATA_MEMBER_LOCATION, DW_FORM_DATA4),
         ],
     },
-    // bitfield member -- DWARF 3-style byte_size + bit_offset +
-    // bit_size on top of the regular member triple; lldb / gdb both
-    // accept this shape on DWARF 4 input.
+    // bitfield member -- name + type ref4 + DWARF 4
+    // DW_AT_data_bit_offset (absolute bit offset from the aggregate
+    // start) + DW_AT_bit_size (bit width).
     AbbrevDecl {
         code: ABBREV_BITFIELD_MEMBER,
         tag: DW_TAG_MEMBER,
@@ -1401,10 +1439,8 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         attrs: &[
             (DW_AT_NAME, DW_FORM_STRP),
             (DW_AT_TYPE, DW_FORM_REF4),
-            (DW_AT_DATA_MEMBER_LOCATION, DW_FORM_DATA4),
-            (DW_AT_BYTE_SIZE, DW_FORM_DATA1),
-            (DW_AT_BIT_OFFSET, DW_FORM_DATA1),
-            (DW_AT_BIT_SIZE, DW_FORM_DATA1),
+            (DW_AT_DATA_BIT_OFFSET, DW_FORM_UDATA),
+            (DW_AT_BIT_SIZE, DW_FORM_UDATA),
         ],
     },
     // PLT-trampoline subprogram -- abbrev 2's shape plus DW_AT_type
@@ -2037,22 +2073,17 @@ fn emit_type_die(
                     body.extend_from_slice(&member_type_off.to_le_bytes());
                     body.extend_from_slice(&(f.offset as u32).to_le_bytes());
                 } else {
-                    // Bitfield: abbrev 10. c5 packs bitfields
-                    // into 8-byte storage units; convert c5's
-                    // LSB-relative `bit_offset` to DWARF v4's
-                    // MSB-relative `DW_AT_bit_offset` on
-                    // little-endian targets:
-                    //   dwarf_bit_offset = 64 - lsb_offset - width
+                    // DWARF 4 5.6.6: DW_AT_data_bit_offset is the
+                    // absolute bit offset from the start of the
+                    // aggregate. c5 stores `offset` as the byte offset
+                    // of the storage unit and `bit_offset` as the bit
+                    // offset within it.
+                    let data_bit_offset = (f.offset as u64) * 8 + f.bit_offset as u64;
                     write_uleb128(body, ABBREV_BITFIELD_MEMBER);
                     body.extend_from_slice(&member_name_off.to_le_bytes());
                     body.extend_from_slice(&member_type_off.to_le_bytes());
-                    body.extend_from_slice(&(f.offset as u32).to_le_bytes());
-                    body.push(8); // DW_AT_byte_size: storage unit is 8 bytes.
-                    let dwarf_bit_offset = 64u32
-                        .saturating_sub(f.bit_offset)
-                        .saturating_sub(f.bit_width);
-                    body.push(dwarf_bit_offset as u8);
-                    body.push(f.bit_width as u8);
+                    write_uleb128(body, data_bit_offset);
+                    write_uleb128(body, f.bit_width as u64);
                 }
             }
             // Children-list terminator for this struct.
@@ -2374,7 +2405,16 @@ fn build_debug_frame(
         // CFA rule. Functions whose prologue size couldn't be
         // recovered (DCE'd, etc.) pass `prologue_size == 0` and
         // get the rule installed at the function's first byte.
-        if sub.prologue_size > 0 {
+        // `paciasp` is the entry instruction, so the return address is
+        // signed from the second word on. The rest of the prologue and
+        // the whole body inherit that state; the epilogue's `autiasp`
+        // is not described, matching the FDE's existing granularity
+        // (the frame teardown is not described either).
+        if sub.ra_signed && sub.prologue_size >= 4 {
+            write_advance_loc(&mut fde_body, arch, 4);
+            fde_body.push(DW_CFA_NEGATE_RA_STATE);
+            write_advance_loc(&mut fde_body, arch, sub.prologue_size - 4);
+        } else if sub.prologue_size > 0 {
             write_advance_loc(&mut fde_body, arch, sub.prologue_size);
         }
         write_post_prologue_instructions(&mut fde_body, arch);
@@ -2764,34 +2804,6 @@ impl StrTable {
     }
 }
 
-fn write_uleb128(buf: &mut Vec<u8>, mut value: u64) {
-    loop {
-        let mut byte = (value & 0x7f) as u8;
-        value >>= 7;
-        if value != 0 {
-            byte |= 0x80;
-            buf.push(byte);
-        } else {
-            buf.push(byte);
-            return;
-        }
-    }
-}
-
-fn write_sleb128(buf: &mut Vec<u8>, mut value: i64) {
-    loop {
-        let byte = (value & 0x7f) as u8;
-        let cont = !((value == 0 && (byte & 0x40) == 0) || (value == -1 && (byte & 0x40) != 0));
-        value >>= 7;
-        if cont {
-            buf.push(byte | 0x80);
-        } else {
-            buf.push(byte);
-            return;
-        }
-    }
-}
-
 // ---- tests ----
 
 #[cfg(test)]
@@ -2816,10 +2828,55 @@ mod tests {
              40180000132e01030e110112072719360b40180000032400030e0b0b3e0b00000434\
              00030e491302183a0f3b0f0000050500030e491302183a0f3b0f0000060f000b0b49\
              130000071301030e0b060000081701030e0b060000090d00030e4913380600000a0d\
-             00030e491338060b0b0c0b0d0b00000b2e01030e110112073f19491300000c050003\
-             0e491300000d180000000e0500030e4913021800000f0101491300001021002f0f00\
-             0011040103080b0b000012280003081c0d000000"
+             00030e49136b0f0d0f00000b2e01030e110112073f19491300000c0500030e491300\
+             000d180000000e0500030e4913021800000f0101491300001021002f0f0000110401\
+             03080b0b000012280003081c0d000000"
         );
+    }
+
+    /// This module emits DWARF for a single translation unit written
+    /// straight to a final image (`emit_native_with_options` with a
+    /// non-relocatable `OutputKind`); `dwarf_reloc` emits it for
+    /// ET_REL, which the linker merges. Both describe the same C
+    /// types, so an attribute carries the same form in both unless it
+    /// is listed below with the reason it cannot.
+    #[test]
+    fn abbrev_attribute_forms_match_the_et_rel_producer() {
+        // `die_size` lays out CU-relative DIE offsets before emission,
+        // so these carry a fixed-width form here where the ET_REL
+        // producer, which patches refs after the fact, uses udata.
+        const FIXED_WIDTH_HERE: &[u32] = &[DW_AT_BYTE_SIZE, DW_AT_DATA_MEMBER_LOCATION];
+
+        // The enum DIEs here are written after the string table is
+        // sealed, so their names stay inline where every other name in
+        // both producers is a `.debug_str` reference.
+        let norm = |form: u32| {
+            if form == DW_FORM_STRING {
+                DW_FORM_STRP
+            } else {
+                form
+            }
+        };
+        let mut here: BTreeMap<u32, BTreeSet<u32>> = BTreeMap::new();
+        for d in ABBREV_DECLS {
+            for &(at, form) in d.attrs {
+                here.entry(at).or_default().insert(norm(form));
+            }
+        }
+        let mut there: BTreeMap<u32, BTreeSet<u32>> = BTreeMap::new();
+        for (at, form) in super::super::dwarf_reloc::abbrev_attr_forms() {
+            there.entry(at as u32).or_default().insert(form as u32);
+        }
+        for (at, forms) in &here {
+            if FIXED_WIDTH_HERE.contains(at) {
+                continue;
+            }
+            let Some(other) = there.get(at) else { continue };
+            assert_eq!(
+                forms, other,
+                "attribute {at:#04x} is encoded differently by the two DWARF producers",
+            );
+        }
     }
 
     #[test]
@@ -3014,6 +3071,54 @@ mod tests {
         // initial_location = 0x1100, address_range = 0x40.
         assert_eq!(&last_24[8..16], &0x1100u64.to_le_bytes());
         assert_eq!(&last_24[16..24], &0x40u64.to_le_bytes());
+    }
+
+    #[test]
+    fn debug_frame_flags_a_signed_return_address() {
+        // A `paciasp`-opening function's FDE has to toggle
+        // RA_SIGN_STATE one instruction in, before the rest of the
+        // prologue: an unwinder that misses it reads the signature as
+        // address bits and loses the parent frame.
+        let sub = |ra_signed| Subprog {
+            name_off: 0,
+            low_pc: 0x1000,
+            high_pc: 0x1040,
+            prologue_size: 12,
+            ra_signed,
+            variables: Vec::new(),
+            external: true,
+        };
+        // The single FDE follows the CIE; its instructions start 24
+        // bytes in (unit_length + cie_pointer + the two addresses).
+        let body = |ra_signed| {
+            let out = build_debug_frame(Target::LinuxAarch64, &[sub(ra_signed)], None, None);
+            let fde = 4 + u32::from_le_bytes(out[..4].try_into().unwrap()) as usize;
+            let len = u32::from_le_bytes(out[fde..fde + 4].try_into().unwrap()) as usize;
+            let mut b = out[fde + 24..fde + 4 + len].to_vec();
+            // Drop the record's `DW_CFA_nop` alignment padding.
+            while b.last() == Some(&0) {
+                b.pop();
+            }
+            b
+        };
+        let plain = body(false);
+        let signed = body(true);
+        assert!(
+            !plain.contains(&DW_CFA_NEGATE_RA_STATE),
+            "an unsigned frame claims nothing"
+        );
+        // advance_loc(1 unit), negate, advance_loc(2 units), then the
+        // post-prologue rules the unsigned form opens with after its
+        // own advance_loc(3 units).
+        assert_eq!(
+            &signed[..3],
+            &[
+                DW_CFA_ADVANCE_LOC_HI | 1,
+                DW_CFA_NEGATE_RA_STATE,
+                DW_CFA_ADVANCE_LOC_HI | 2,
+            ]
+        );
+        assert_eq!(&signed[3..], &plain[1..], "same rules follow");
     }
 
     #[test]
@@ -3238,6 +3343,7 @@ mod info_golden {
             low_pc: 0x1000,
             high_pc: 0x1010,
             prologue_size: 4,
+            ra_signed: false,
             variables: alloc::vec![],
             external: true,
         }];

@@ -10,6 +10,8 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#0x1
+               	brk	#0x1
+               	brk	#0x1
 
 <sys_alias_two>:
                	mov	x0, #0xffda             // =65498
@@ -20,5 +22,5 @@ Disassembly of section .text:
 
 <main>:
                	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
+               	mov	x1, x0
                	ret

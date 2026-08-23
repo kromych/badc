@@ -9,11 +9,26 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <fill_and_sum>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
+               	subq	$0x10, %rsp
                	movslq	%edi, %rdi
                	movq	%rdi, %r11
                	addq	$0xf, %r11
@@ -30,27 +45,27 @@ Disassembly of section .text:
                	movq	%rsi, %rsp
                	xorq	%rax, %rax
                	jmp	<addr>
+               	movslq	%eax, %rcx
                	leaq	(%rsi,%rcx), %r9
                	leaq	0x1(%rcx), %rdx
                	movslq	%edx, %r8
                	movb	%r8b, (%r9)
                	leaq	0x1(%rcx), %rax
-               	movslq	%eax, %rcx
-               	cmpq	%rdi, %rcx
+               	cmpl	%edi, %eax
                	jl	<addr>
                	xorq	%rax, %rax
                	movq	%rax, %rcx
                	jmp	<addr>
+               	movslq	%eax, %rdx
                	leaq	(%rsi,%rdx), %r8
                	movsbq	(%r8), %r8
                	addq	%r8, %rcx
                	leaq	0x1(%rdx), %rax
-               	movslq	%eax, %rdx
-               	cmpq	%rdi, %rdx
+               	cmpl	%edi, %eax
                	jl	<addr>
                	movslq	%ecx, %rax
-               	leaq	-0x30(%rbp), %rsp
-               	addq	$0x30, %rsp
+               	leaq	-0x10(%rbp), %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
 

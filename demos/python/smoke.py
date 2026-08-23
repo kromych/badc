@@ -13,7 +13,9 @@ Pipeline:
   - The badc-built interpreter runs a baselined slice of the standard
     library test suite.
 
-Configuration, with the first error each disabled knob produces today:
+Configuration, with the first error each disabled knob produces today.
+``--with-mimalloc`` and ``--with-remote-debug`` flip the first two on;
+each knob set gets its own host build and trace.
 
   ``--without-mimalloc``
     ``Objects/obmalloc.c`` includes the whole allocator, whose per-thread
@@ -66,7 +68,10 @@ BASELINE_FAILURES = 0
 # The last group (`test_pickle` onwards) covers the `dlopen`'d extension
 # modules that bind the interpreter's data globals -- `_pickle`, `_ssl`,
 # `pyexpat` and `_elementtree` all resolve `_PyByteArray_empty_string`
-# or `_Py_HashSecret`, both zero-initialized.
+# or `_Py_HashSecret`, both zero-initialized. `test_coroutines` adds
+# `_asyncio`, which computes field offsets into the interpreter's thread
+# state; it holds only while badc's pthread types match the platform
+# layout the reference compiler used for the module.
 #
 # `test_generators` needs the process to start with SIGINT at its default
 # disposition: one case raises SIGINT and expects `KeyboardInterrupt` in a
@@ -75,8 +80,6 @@ BASELINE_FAILURES = 0
 # too.
 #
 # Deliberately absent, each with a tracked cause:
-#   test_coroutines (macOS)-- an async comprehension faults in the
-#     badc-built interpreter on macos-aarch64; passes on linux-x64.
 #   test_time              -- <time.h> lacks CLOCK_THREAD_CPUTIME_ID, so
 #     time.thread_time() is absent.
 #   test_json              -- json.tool's colour cases spawn an isolated
@@ -109,10 +112,8 @@ TEST_SLICE = [
     "test_ssl",
     "test_pyexpat",
     "test_xml_etree",
+    "test_coroutines",
 ]
-# Runs everywhere but macos-aarch64; see the note above.
-if sys.platform != "darwin":
-    TEST_SLICE.append("test_coroutines")
 
 
 def run(cmd, **kw):
@@ -139,24 +140,39 @@ def ensure_source(verbose: bool) -> None:
         sys.exit("smoke: setup.py failed")
 
 
-def host_build(log) -> Path:
-    """Configure --without-mimalloc and build with the host compiler.
+def config_tag(knobs: list[str]) -> str:
+    """Filename-safe key for a configure knob set."""
+    return "-".join(k.lstrip("-") for k in knobs)
+
+
+def host_build(log, knobs: list[str]) -> Path:
+    """Configure with `knobs` and build with the host compiler.
 
     Returns the path to the build trace (the per-TU compile + link
-    commands). Idempotent: a completed build is reused.
+    commands). Idempotent per knob set: a completed build is reused, and
+    a differing one reconfigures.
     """
-    marker = SRC / ".badc_pymalloc_built"
-    trace = SRC / ".badc_build_trace.txt"
+    tag = config_tag(knobs)
+    marker = SRC / f".badc_built_{tag}"
+    trace = SRC / f".badc_build_trace_{tag}.txt"
     ref_python = SRC / "python"
     if marker.is_file() and ref_python.is_file() and trace.is_file():
         log("host build present, reusing")
         return trace
 
+    # The trace has to carry a compile command for every object on the
+    # link line, so a knob change needs a full rebuild rather than the
+    # partial one make would derive from the regenerated pyconfig.h.
+    if (SRC / "Makefile").is_file():
+        log("reconfiguring -- make clean")
+        run(["make", "clean"], cwd=SRC)
+        for stale in SRC.glob(".badc_built_*"):
+            stale.unlink()
+
     args = [
         "./configure",
-        "--without-mimalloc",
+        *knobs,
         "--with-ensurepip=no",
-        "--without-remote-debug",
     ]
     if sys.platform == "darwin":
         args.append("--disable-test-modules")
@@ -319,7 +335,21 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("-v", "--verbose", action="store_true")
     p.add_argument("--compile-only", action="store_true", help="stop after compile + link")
+    p.add_argument(
+        "--with-mimalloc",
+        action="store_true",
+        help="configure the mimalloc allocator instead of pymalloc",
+    )
+    p.add_argument(
+        "--with-remote-debug",
+        action="store_true",
+        help="configure the remote-debugging reader instead of its stub",
+    )
     args = p.parse_args(argv)
+    knobs = [
+        "--with-mimalloc" if args.with_mimalloc else "--without-mimalloc",
+        "--with-remote-debug" if args.with_remote_debug else "--without-remote-debug",
+    ]
 
     if os.name != "posix" or sys.platform.startswith("win"):
         print("python smoke skipped (POSIX-only build)")
@@ -331,7 +361,7 @@ def main(argv: list[str] | None = None) -> int:
 
     badc = badc_path()
     ensure_source(args.verbose)
-    trace = host_build(log)
+    trace = host_build(log, knobs)
     out = PY_DIR / ".cache" / "obj"
     if out.exists():
         shutil.rmtree(out)

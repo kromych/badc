@@ -9,6 +9,21 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <trigger>:
                	pushq	%rbp
@@ -23,15 +38,14 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x230, %rsp            # imm = 0x230
+               	subq	$0x210, %rsp            # imm = 0x210
                	xorq	%rax, %rax
                	movl	%eax, -0x210(%rbp)
                	leaq	-0x208(%rbp), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	movslq	%eax, %rcx
-               	testq	%rcx, %rcx
+               	testq	%rax, %rax
                	jne	<addr>
                	movslq	-0x210(%rbp), %rax
                	incq	%rax
@@ -40,31 +54,31 @@ Disassembly of section .text:
                	movl	$0x7, %esi
                	callq	<addr>
                	movl	$0xc, %eax
-               	addq	$0x230, %rsp            # imm = 0x230
+               	addq	$0x210, %rsp            # imm = 0x210
                	popq	%rbp
                	retq
-               	cmpq	$0x7, %rcx
+               	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0xd, %eax
-               	addq	$0x230, %rsp            # imm = 0x230
+               	addq	$0x210, %rsp            # imm = 0x210
                	popq	%rbp
                	retq
                	movslq	-0x210(%rbp), %rax
-               	cmpq	$0x1, %rax
+               	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0xe, %eax
-               	addq	$0x230, %rsp            # imm = 0x230
+               	addq	$0x210, %rsp            # imm = 0x210
                	popq	%rbp
                	retq
                	leaq	-0x208(%rbp), %rax
                	movslq	0x200(%rax), %rax
-               	cmpq	$0x7, %rax
+               	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0xf, %eax
-               	addq	$0x230, %rsp            # imm = 0x230
+               	addq	$0x210, %rsp            # imm = 0x210
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	addq	$0x230, %rsp            # imm = 0x230
+               	addq	$0x210, %rsp            # imm = 0x210
                	popq	%rbp
                	retq

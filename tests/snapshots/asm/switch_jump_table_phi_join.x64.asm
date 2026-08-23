@@ -9,6 +9,21 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <chain>:
                	movslq	%edi, %rdi
@@ -82,8 +97,7 @@ Disassembly of section .text:
                	jl	<addr>
                	movslq	%r12d, %rcx
                	leaq	0x1(%rcx), %r12
-               	movslq	%r12d, %rcx
-               	cmpq	$0xe, %rcx
+               	cmpl	$0xe, %r12d
                	jl	<addr>
                	movabsq	$-0x2eb506b7b9cbd8a0, %r11 # imm = 0xD14AF94846342760
                	cmpq	%r11, %rax

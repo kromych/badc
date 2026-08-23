@@ -25,6 +25,10 @@ const DW_TAG_MEMBER: u64 = 0x0d;
 const DW_TAG_VARIABLE: u64 = 0x34;
 const DW_TAG_FORMAL_PARAMETER: u64 = 0x05;
 const DW_TAG_SUBPROGRAM: u64 = 0x2e;
+const DW_TAG_TYPEDEF: u64 = 0x16;
+const DW_TAG_CONST_TYPE: u64 = 0x26;
+const DW_TAG_VOLATILE_TYPE: u64 = 0x35;
+const DW_TAG_RESTRICT_TYPE: u64 = 0x37;
 
 const DW_AT_LOCATION: u64 = 0x02;
 const DW_AT_NAME: u64 = 0x03;
@@ -100,8 +104,8 @@ fn u64le(b: &[u8], off: usize) -> u64 {
 }
 
 /// The named section's runtime address, file offset and size in a
-/// little-endian ELF64 object.
-fn section_header(elf: &[u8], want: &str) -> (u64, usize, usize) {
+/// little-endian ELF64 object, or `None` when it has no such section.
+fn find_section(elf: &[u8], want: &str) -> Option<(u64, usize, usize)> {
     assert_eq!(&elf[..4], b"\x7fELF", "not an ELF object");
     let shoff = u64le(elf, 0x28) as usize;
     let shentsize = u16le(elf, 0x3a) as usize;
@@ -118,20 +122,33 @@ fn section_header(elf: &[u8], want: &str) -> (u64, usize, usize) {
         let name_off = u32le(elf, sh) as usize;
         let end = strtab[name_off..].iter().position(|&c| c == 0).unwrap();
         if &strtab[name_off..name_off + end] == want.as_bytes() {
-            return (
+            return Some((
                 u64le(elf, sh + 0x10),
                 u64le(elf, sh + 0x18) as usize,
                 u64le(elf, sh + 0x20) as usize,
-            );
+            ));
         }
     }
-    panic!("section {want} not found");
+    None
+}
+
+fn section_header(elf: &[u8], want: &str) -> (u64, usize, usize) {
+    find_section(elf, want).unwrap_or_else(|| panic!("section {want} not found"))
 }
 
 /// The named section's bytes.
 fn section(elf: &[u8], want: &str) -> Vec<u8> {
     let (_, off, size) = section_header(elf, want);
     elf[off..off + size].to_vec()
+}
+
+/// The named section's bytes, empty when the object has no such
+/// section. A linked image carries no relocation tables.
+fn section_or_empty(elf: &[u8], want: &str) -> Vec<u8> {
+    match find_section(elf, want) {
+        Some((_, off, size)) => elf[off..off + size].to_vec(),
+        None => Vec::new(),
+    }
 }
 
 struct Reader<'a> {
@@ -375,6 +392,24 @@ fn parse_object(path: &Path) -> Unit {
     let elf = std::fs::read(path).expect("read object");
     let info = section(&elf, ".debug_info");
     let abbrev_section = section(&elf, ".debug_abbrev");
+    let strs = section_or_empty(&elf, ".debug_str");
+    // In an ET_REL object a `DW_FORM_strp` slot is zero and its
+    // `.debug_str` offset is the relocation's addend; in a linked
+    // image the slot carries the offset and no table is left.
+    let mut strp_addend: BTreeMap<u64, u64> = BTreeMap::new();
+    for e in section_or_empty(&elf, ".rela.debug_info")
+        .as_chunks::<24>()
+        .0
+    {
+        strp_addend.insert(u64le(e, 0), u64le(e, 16));
+    }
+    let string_at = |off: usize| -> String {
+        let end = strs[off..]
+            .iter()
+            .position(|&c| c == 0)
+            .map_or(strs.len(), |i| off + i);
+        String::from_utf8_lossy(&strs[off..end]).into_owned()
+    };
     let mut dies = Vec::new();
     let mut cu_base = 0usize;
     while cu_base + 11 <= info.len() {
@@ -409,6 +444,11 @@ fn parse_object(path: &Path) -> Unit {
                     0x07 => Val::Uint(u64le(r.take(8), 0)),         // data8
                     0x08 => Val::Str(r.cstr()),                     // string
                     0x0b => Val::Uint(r.u8() as u64),               // data1
+                    0x0e => {
+                        let at = r.p as u64;
+                        let slot = u32le(r.take(4), 0) as u64;
+                        Val::Str(string_at(*strp_addend.get(&at).unwrap_or(&slot) as usize))
+                    } // strp
                     0x0d => Val::Int(r.sleb()),                     // sdata
                     0x0f => Val::Uint(r.uleb()),                    // udata
                     0x13 => Val::Ref(u32le(r.take(4), 0)),          // ref4
@@ -1058,4 +1098,234 @@ fn thread_local_objects_get_a_variable_die() {
         "`static` has internal linkage, so no DW_AT_external"
     );
     assert_eq!(u.type_of(s).name(), Some("long"));
+}
+
+/// DWARF 4 3.3.2: a subprogram that returns a value carries
+/// `DW_AT_type` naming the return type, and one that returns none
+/// omits it. Without the attribute every function reads as void.
+#[test]
+fn subprograms_name_their_return_type() {
+    let u = compile_unit(
+        "subprogram-return",
+        "struct pt { int x, y; };\n\
+         int apply(int (*fn)(int), int x) { return fn(x); }\n\
+         void nothing(void) { }\n\
+         static void sv(int a) { (void)a; }\n\
+         static int si(void) { return 1; }\n\
+         struct pt mk(void) { struct pt p; p.x = 1; p.y = 2; return p; }\n\
+         char *sp(char *s) { return s; }\n\
+         void **ppv(void) { return 0; }\n\
+         unsigned long ul(void) { return 0; }\n\
+         double dd(void) { return 0.0; }\n\
+         int va(const char *f, ...) { (void)f; return 0; }\n\
+         int use(void) { sv(1); return si() + apply(0, 0) + (int)ul() + (int)dd()\n\
+             + va(\"x\") + mk().x + (sp(0) != 0) + (ppv() != 0); }\n",
+    );
+
+    for (f, ty) in [
+        ("apply", "int"),
+        ("si", "int"),
+        ("va", "int"),
+        ("ul", "unsigned long"),
+        ("dd", "double"),
+        ("mk", "pt"),
+    ] {
+        let die = u.named(DW_TAG_SUBPROGRAM, f);
+        assert_eq!(u.type_of(die).name(), Some(ty), "return type of `{f}`");
+    }
+
+    // A pointer return keeps every level; `void **` bottoms out in an
+    // untyped pointer.
+    let sp = u.type_of(u.named(DW_TAG_SUBPROGRAM, "sp"));
+    assert_eq!(sp.tag, DW_TAG_POINTER_TYPE);
+    assert_eq!(u.type_of(sp).name(), Some("char"));
+    let ppv = u.type_of(u.named(DW_TAG_SUBPROGRAM, "ppv"));
+    assert_eq!(ppv.tag, DW_TAG_POINTER_TYPE);
+    let inner = u.type_of(ppv);
+    assert_eq!(inner.tag, DW_TAG_POINTER_TYPE);
+    assert!(
+        inner.at(DW_AT_TYPE).is_none(),
+        "the inner level of `void **` is `void *`"
+    );
+
+    for f in ["nothing", "sv"] {
+        assert!(
+            u.named(DW_TAG_SUBPROGRAM, f).at(DW_AT_TYPE).is_none(),
+            "a void-returning subprogram carries no DW_AT_type"
+        );
+    }
+    // The return type rides alongside the linkage and child-list
+    // distinctions rather than replacing them.
+    for (f, external) in [("si", false), ("sv", false), ("apply", true), ("ul", true)] {
+        let die = u.named(DW_TAG_SUBPROGRAM, f);
+        assert_eq!(
+            die.at(DW_AT_EXTERNAL).is_some(),
+            external,
+            "linkage of `{f}`"
+        );
+    }
+    let va_kids: Vec<u64> = u
+        .children(u.named(DW_TAG_SUBPROGRAM, "va"))
+        .iter()
+        .map(|d| d.tag)
+        .collect();
+    assert_eq!(
+        va_kids,
+        [DW_TAG_FORMAL_PARAMETER, DW_TAG_UNSPECIFIED_PARAMETERS]
+    );
+}
+
+/// DWARF 4 5.3: a typedef gets its own DIE naming the type it aliases,
+/// and a use of the alias references that DIE. Without it a debugger
+/// names every member by the type the alias resolves to.
+#[test]
+fn typedefs_get_their_own_die() {
+    let u = compile_unit(
+        "typedef",
+        "typedef unsigned int u32;\n\
+         typedef struct refcount_struct { int counter; } refcount_t;\n\
+         typedef int (*cmp_t)(int, int);\n\
+         struct ns {\n\
+           refcount_t ref;\n\
+           u32 inum;\n\
+           u32 tag[4];\n\
+           cmp_t cmp;\n\
+           int plain;\n\
+         };\n\
+         u32 g_inum;\n\
+         u32 idfn(u32 v) { u32 local = v; return local; }\n\
+         int use(void) { struct ns n; return (int)n.inum + (int)idfn(g_inum); }\n",
+    );
+
+    let td = u.named(DW_TAG_TYPEDEF, "u32");
+    assert_eq!(u.type_of(td).name(), Some("unsigned int"));
+    assert_eq!(u.type_of(td).tag, DW_TAG_BASE_TYPE);
+
+    let ns = u.named(DW_TAG_STRUCTURE_TYPE, "ns");
+    assert_eq!(u.type_of(u.member(ns, "inum")).offset, td.offset);
+    let refm = u.type_of(u.member(ns, "ref"));
+    assert_eq!(refm.tag, DW_TAG_TYPEDEF);
+    assert_eq!(refm.name(), Some("refcount_t"));
+    assert_eq!(u.type_of(refm).name(), Some("refcount_struct"));
+    // An alias on the element type stays under the array.
+    let tagm = u.type_of(u.member(ns, "tag"));
+    assert_eq!(tagm.tag, DW_TAG_ARRAY_TYPE);
+    assert_eq!(u.type_of(tagm).offset, td.offset);
+    // A function-pointer alias names the pointer type as a whole.
+    let cmpm = u.type_of(u.member(ns, "cmp"));
+    assert_eq!(cmpm.tag, DW_TAG_TYPEDEF);
+    assert_eq!(cmpm.name(), Some("cmp_t"));
+    assert_eq!(u.type_of(cmpm).tag, DW_TAG_POINTER_TYPE);
+    assert_eq!(u.type_of(u.type_of(cmpm)).tag, DW_TAG_SUBROUTINE_TYPE);
+    // A member the source spelled without an alias keeps the base type.
+    assert_eq!(u.type_of(u.member(ns, "plain")).tag, DW_TAG_BASE_TYPE);
+
+    // Objects, parameters, locals and a return type all resolve through
+    // the one interned typedef DIE.
+    let idfn = u.named(DW_TAG_SUBPROGRAM, "idfn");
+    for d in [
+        u.named(DW_TAG_VARIABLE, "g_inum"),
+        u.named(DW_TAG_FORMAL_PARAMETER, "v"),
+        u.named(DW_TAG_VARIABLE, "local"),
+        idfn,
+    ] {
+        assert_eq!(u.type_of(d).offset, td.offset, "one DIE per typedef");
+    }
+}
+
+/// DWARF 4 5.2 describes a qualifier with a wrapper DIE. Which level it
+/// wraps is what tells `const T *` from `T *const`.
+#[test]
+fn qualifiers_get_their_own_die() {
+    let u = compile_unit(
+        "qualifiers",
+        "struct ops { int x; };\n\
+         struct q {\n\
+           volatile int lead;\n\
+           int volatile trail;\n\
+           volatile int *pv;\n\
+           int *volatile vp;\n\
+           const int ci;\n\
+           const struct ops *cops;\n\
+           char *const pc;\n\
+           char *restrict rp;\n\
+           const void *cv;\n\
+           int plain;\n\
+         };\n\
+         const int g_ci = 1;\n\
+         int use(void) { struct q s; return s.plain + g_ci; }\n",
+    );
+    let q = u.named(DW_TAG_STRUCTURE_TYPE, "q");
+    let int_die = u.named(DW_TAG_BASE_TYPE, "int");
+
+    // Either spelling of a leading / trailing qualifier is the same
+    // type, so both members reach the one interned DIE.
+    let lead = u.type_of(u.member(q, "lead"));
+    assert_eq!(lead.tag, DW_TAG_VOLATILE_TYPE);
+    assert_eq!(u.type_of(lead).offset, int_die.offset);
+    assert_eq!(u.type_of(u.member(q, "trail")).offset, lead.offset);
+
+    // `volatile int *` qualifies the pointee, `int *volatile` the
+    // pointer.
+    let pv = u.type_of(u.member(q, "pv"));
+    assert_eq!(pv.tag, DW_TAG_POINTER_TYPE);
+    assert_eq!(u.type_of(pv).offset, lead.offset);
+    let vp = u.type_of(u.member(q, "vp"));
+    assert_eq!(vp.tag, DW_TAG_VOLATILE_TYPE);
+    assert_eq!(u.type_of(vp).tag, DW_TAG_POINTER_TYPE);
+    assert_eq!(u.type_of(u.type_of(vp)).offset, int_die.offset);
+
+    let ci = u.type_of(u.member(q, "ci"));
+    assert_eq!(ci.tag, DW_TAG_CONST_TYPE);
+    assert_eq!(u.type_of(ci).offset, int_die.offset);
+    assert_eq!(
+        u.type_of(u.named(DW_TAG_VARIABLE, "g_ci")).offset,
+        ci.offset
+    );
+
+    let cops = u.type_of(u.member(q, "cops"));
+    assert_eq!(cops.tag, DW_TAG_POINTER_TYPE);
+    let cops_inner = u.type_of(cops);
+    assert_eq!(cops_inner.tag, DW_TAG_CONST_TYPE);
+    assert_eq!(u.type_of(cops_inner).name(), Some("ops"));
+
+    let pc = u.type_of(u.member(q, "pc"));
+    assert_eq!(pc.tag, DW_TAG_CONST_TYPE);
+    assert_eq!(u.type_of(pc).tag, DW_TAG_POINTER_TYPE);
+
+    let rp = u.type_of(u.member(q, "rp"));
+    assert_eq!(rp.tag, DW_TAG_RESTRICT_TYPE);
+    assert_eq!(u.type_of(rp).tag, DW_TAG_POINTER_TYPE);
+
+    // `const void *`: the qualified type has no DW_AT_type, since
+    // `void` has no DIE to name.
+    let cv = u.type_of(u.member(q, "cv"));
+    assert_eq!(cv.tag, DW_TAG_POINTER_TYPE);
+    let cv_inner = u.type_of(cv);
+    assert_eq!(cv_inner.tag, DW_TAG_CONST_TYPE);
+    assert!(cv_inner.at(DW_AT_TYPE).is_none());
+
+    // An unqualified member still names the bare type.
+    assert_eq!(u.type_of(u.member(q, "plain")).offset, int_die.offset);
+}
+
+/// A qualifier and an alias compose the way C spells them: the alias
+/// names the type, the qualifier wraps the alias.
+#[test]
+fn a_qualified_typedef_wraps_the_alias() {
+    let u = compile_unit(
+        "qualified-typedef",
+        "typedef unsigned int u32;\n\
+         const u32 g_c = 1;\n\
+         int use(void) { const u32 local = g_c; return (int)local; }\n",
+    );
+    let td = u.named(DW_TAG_TYPEDEF, "u32");
+    assert_eq!(u.type_of(td).name(), Some("unsigned int"));
+    let c = u.type_of(u.named(DW_TAG_VARIABLE, "g_c"));
+    assert_eq!(c.tag, DW_TAG_CONST_TYPE);
+    assert_eq!(u.type_of(c).offset, td.offset);
+    assert_eq!(
+        u.type_of(u.named(DW_TAG_VARIABLE, "local")).offset,
+        c.offset
+    );
 }

@@ -9,19 +9,48 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+
+<scoped_cond_guard>:
+               	movl	$0x3, %eax
+               	retq
 
 <main>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	callq	<addr>
+               	cmpq	$0x3, %rax
+               	je	<addr>
+               	movl	$0x1, %eax
+               	popq	%rbp
+               	retq
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
-               	cmpq	$0xb, %rax
+               	cmpl	$0xb, %eax
                	je	<addr>
                	movl	$0x3, %eax
+               	popq	%rbp
                	retq
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	cmpq	$0x1, %rax
                	je	<addr>
                	movl	$0x4, %eax
+               	popq	%rbp
                	retq
                	leaq	<rip>, %rax
                	movl	$0x63, %ecx
@@ -31,6 +60,8 @@ Disassembly of section .text:
                	cmpq	$0x63, %rax
                	je	<addr>
                	movl	$0x5, %eax
+               	popq	%rbp
                	retq
                	xorq	%rax, %rax
+               	popq	%rbp
                	retq

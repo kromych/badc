@@ -241,6 +241,9 @@ impl Memory {
         base
     }
 
+    /// Size of the per-frame record: one link to the caller's record.
+    const FRAME_RECORD_BYTES: usize = 8;
+
     fn alloc_frame(&mut self, frame_bytes: usize) -> Result<usize, C5Error> {
         let base = self.stack_top;
         let next = base.checked_add(frame_bytes).ok_or_else(|| {
@@ -427,6 +430,12 @@ struct Frame<'a> {
     /// `stack_base + (N - 1) * 8`; param `i + 2` lives at
     /// `stack_base + (locals + i) * 8`.
     stack_base: usize,
+    /// Byte offset of this frame's record, just above its slots. Holds
+    /// the caller's record offset (0 for the entry frame) in its first
+    /// eight bytes. `Intrinsic::FrameAddress` answers with it, so a
+    /// chained load walks callers the way it does on a native frame
+    /// pointer.
+    record: usize,
     /// Total bytes the frame allocated; saved here so
     /// `release_frame` lines up with the alloc_frame returned by
     /// `Memory::alloc_frame`.
@@ -560,7 +569,7 @@ pub(super) fn run_program_with_args_tracked<H: Host>(
         let ctor = prog
             .lookup(pc)
             .ok_or_else(|| C5Error::Runtime(format!("vm_ssa: no constructor at ent_pc {pc}")))?;
-        if let Err(e) = run_func(&prog, &mut mem, host, ctor, &[]) {
+        if let Err(e) = run_func(&prog, &mut mem, host, ctor, &[], &[], 0) {
             return match exit_status_of(&e) {
                 Some(status) => Ok(status),
                 None => Err(e),
@@ -578,7 +587,7 @@ pub(super) fn run_program_with_args_tracked<H: Host>(
     } else {
         &entry_args
     };
-    let status = match run_func(&prog, &mut mem, host, entry, slice) {
+    let status = match run_func(&prog, &mut mem, host, entry, slice, &[], 0) {
         Err(e) => match exit_status_of(&e) {
             Some(status) => status,
             None => return Err(e),
@@ -592,7 +601,7 @@ pub(super) fn run_program_with_args_tracked<H: Host>(
         let dtor = prog
             .lookup(pc)
             .ok_or_else(|| C5Error::Runtime(format!("vm_ssa: no destructor at ent_pc {pc}")))?;
-        if let Err(e) = run_func(&prog, &mut mem, host, dtor, &[]) {
+        if let Err(e) = run_func(&prog, &mut mem, host, dtor, &[], &[], 0) {
             match exit_status_of(&e) {
                 Some(s) => return Ok(s),
                 None => return Err(e),
@@ -688,17 +697,31 @@ impl Host for NullHost {
 /// Run one function in the program context. `args` lands in the
 /// parameter byte slots per the c5 cdecl: arg `i` at
 /// `stack_base + (locals + i) * 8`.
+///
+/// `arg_aggs` is the call site's per-argument aggregate tagging, which
+/// says how an aggregate argument was passed: an entry names the
+/// layout when the operand is the address of the caller's copy, and is
+/// unset when the operand is the aggregate's value in one machine
+/// word. Empty for a call with no aggregate argument and for the
+/// program entry.
 fn run_func<H: Host>(
     prog: &Program<'_>,
     mem: &mut Memory,
     host: &mut H,
     func: &FunctionSsa,
     args: &[i64],
+    arg_aggs: &[Option<u32>],
+    caller_record: usize,
 ) -> Result<i64, C5Error> {
     let locals = func.locals.max(0) as usize;
     let n_params = func.n_params.max(args.len());
     let frame_bytes = (locals + n_params) * 8;
-    let stack_base = mem.alloc_frame(frame_bytes)?;
+    // The record sits above the slots: the arena grows up, so that keeps
+    // the frame-address proxy above the stack-pointer one, as on a native
+    // stack.
+    let stack_base = mem.alloc_frame(frame_bytes + Memory::FRAME_RECORD_BYTES)?;
+    let record = stack_base + frame_bytes;
+    mem.write_bytes(record, &(caller_record as u64).to_le_bytes())?;
     // C11 6.7.5: reserve the aligned region for over-aligned automatic objects
     // above this frame; `release_frame(stack_base)` reclaims it on return.
     let realign_base = if func.over_aligned.is_empty() {
@@ -710,16 +733,25 @@ fn run_func<H: Host>(
         )?
     };
     for (i, &v) in args.iter().enumerate() {
-        // Host-ABI register-passed aggregate parameter: `v` is the
-        // source struct's address. The callee body reads the aggregate
-        // from a parser-reserved body local (no entry copy in the SSA),
-        // so copy `size` bytes there directly -- the native prologue's
-        // register scatter, in interpreter terms.
+        // Host-ABI register-passed aggregate parameter. The callee body
+        // reads the aggregate from a parser-reserved body local (no entry
+        // copy in the SSA), so fill that local here -- the native
+        // prologue's register scatter, in interpreter terms.
         if let Some(Some(idx)) = func.param_aggs.get(i).copied() {
             let size = func.agg_descs[idx as usize].size as usize;
             let slot = func.param_local_slots[i];
             let dst = (stack_base as i64 + (locals as i64 + slot) * 8) as usize;
-            mem.copy_within(dst, v as usize, size)?;
+            if arg_aggs.get(i).copied().flatten().is_some() {
+                // Address form: `v` is the caller's copy.
+                mem.copy_within(dst, v as usize, size)?;
+            } else {
+                // Value form: the callee's parameter list was not in scope
+                // at the call site, so the walker loaded an aggregate of at
+                // most one machine word into `v`. The word is the object's
+                // bytes, not its address.
+                let bytes = v.to_le_bytes();
+                mem.write_bytes(dst, &bytes[..size.min(bytes.len())])?;
+            }
             continue;
         }
         let addr = stack_base + (locals + i) * 8;
@@ -729,6 +761,7 @@ fn run_func<H: Host>(
         func,
         regs: alloc::vec![i64::MIN; func.insts.len()],
         stack_base,
+        record,
         frame_bytes,
         locals,
         realign_base,
@@ -1128,6 +1161,10 @@ fn run_inst<H: Host>(
             frame.regs[v as usize] = round_if_f32(neg, frame.func.f32_values.get(v as usize));
             return Ok(());
         }
+        Inst::Bswap { value, width } => {
+            frame.regs[v as usize] = eval::eval_bswap(frame.regs[*value as usize], *width);
+            return Ok(());
+        }
         Inst::Fma {
             a,
             b,
@@ -1147,9 +1184,28 @@ fn run_inst<H: Host>(
             frame.regs[v as usize] = round_if_f32(res, frame.func.f32_values.get(v as usize));
             return Ok(());
         }
+        Inst::MulAdd {
+            a,
+            b,
+            c,
+            neg_product,
+        } => {
+            let product = frame.regs[*a as usize].wrapping_mul(frame.regs[*b as usize]);
+            let c = frame.regs[*c as usize];
+            frame.regs[v as usize] = if *neg_product {
+                c.wrapping_sub(product)
+            } else {
+                c.wrapping_add(product)
+            };
+            return Ok(());
+        }
         Inst::Extend { value, kind } => {
             let raw = frame.regs[*value as usize];
             frame.regs[v as usize] = eval::eval_extend(raw, *kind);
+            return Ok(());
+        }
+        Inst::Copy { value, .. } => {
+            frame.regs[v as usize] = frame.regs[*value as usize];
             return Ok(());
         }
         Inst::FpCast { kind, value } => {
@@ -1171,7 +1227,7 @@ fn run_inst<H: Host>(
                 C5Error::Runtime(format!("vm_ssa: Call: no function at ent_pc {target_pc}",))
             })?;
             let arg_vals = collect_call_args(frame, mem, args, arg_aggs, *fixed_args)?;
-            let ret = run_func(prog, mem, host, callee, &arg_vals)?;
+            let ret = run_func(prog, mem, host, callee, &arg_vals, arg_aggs, frame.record)?;
             frame.regs[v as usize] = finish_agg_return(frame, mem, *ret_agg, *ret_slot_local, ret)?;
             return Ok(());
         }
@@ -1221,7 +1277,7 @@ fn run_inst<H: Host>(
                 ))
             })?;
             let arg_vals = collect_call_args(frame, mem, args, arg_aggs, *fixed_args)?;
-            let ret = run_func(prog, mem, host, callee, &arg_vals)?;
+            let ret = run_func(prog, mem, host, callee, &arg_vals, arg_aggs, frame.record)?;
             frame.regs[v as usize] = finish_agg_return(frame, mem, *ret_agg, *ret_slot_local, ret)?;
             return Ok(());
         }
@@ -1240,6 +1296,10 @@ fn run_inst<H: Host>(
         Inst::TailExt(_) => "TailExt",
         Inst::Intrinsic { kind, args } => {
             run_intrinsic(mem, frame, v, *kind, args)?;
+            return Ok(());
+        }
+        Inst::X86Simd { op, imm, args } => {
+            run_x86_simd(mem, frame, *op, *imm, args)?;
             return Ok(());
         }
         Inst::InlineAsm { asm, args } => {
@@ -2255,7 +2315,7 @@ fn run_inline_asm(
             // padding, and `.align` padding are opaque to the register model,
             // like the privileged / port ops below: no modelled effect under
             // the VM.
-            Mnemonic::RawBytes | Mnemonic::Data(_) | Mnemonic::Skip | Mnemonic::Align { .. } => {}
+            Mnemonic::RawBytes | Mnemonic::Data(_) | Mnemonic::Skip => {}
             // The interpreter is not a CPU emulator: a mnemonic reached through
             // the catalogue is refused rather than modelled. Such inline asm is
             // an ahead-of-time / JIT construct, executed natively there.
@@ -2268,6 +2328,7 @@ fn run_inline_asm(
             | Mnemonic::SseMov { .. }
             | Mnemonic::SseRmImm { .. }
             | Mnemonic::SseShiftImm { .. }
+            | Mnemonic::SseSignMask { .. }
             | Mnemonic::Vex { .. }
             | Mnemonic::VexMov { .. }
             | Mnemonic::VexMovd { .. }
@@ -2278,6 +2339,8 @@ fn run_inline_asm(
             | Mnemonic::VexNullary { .. }
             | Mnemonic::VexElemExtract { .. }
             | Mnemonic::VexElemInsert { .. }
+            | Mnemonic::MaskOp { .. }
+            | Mnemonic::Kmov { .. }
             | Mnemonic::Evex(_)
             | Mnemonic::VexGpr { .. } => {
                 // The interpreter has no XMM register file; SSE inline asm is a
@@ -2301,6 +2364,20 @@ fn run_inline_asm(
                     xregs[2] = 0;
                     xregs[1] = 0;
                 }
+            }
+            Mnemonic::Cpuid => {
+                // No host CPUID: the identification read produces zero
+                // (feature-absent) in rax/rbx/rcx/rdx.
+                xregs[0] = 0;
+                xregs[3] = 0;
+                xregs[1] = 0;
+                xregs[2] = 0;
+            }
+            Mnemonic::Xgetbv => {
+                // No extended control registers: the read produces zero
+                // in rax/rdx.
+                xregs[0] = 0;
+                xregs[2] = 0;
             }
             Mnemonic::Bswap => {
                 let (val, size) = value_of(&ops[0], &xregs);
@@ -2565,6 +2642,98 @@ fn width_store_kind(width: u8) -> StoreKind {
     }
 }
 
+/// Evaluate one x86 SIMD instruction on the interpreter's memory. The
+/// operand images are read from and written back to the addresses the
+/// walker passed, so the result placement matches the native lowering.
+fn run_x86_simd(
+    mem: &mut Memory,
+    frame: &mut Frame<'_>,
+    op: u32,
+    imm: Option<u8>,
+    args: &[ValueId],
+) -> Result<(), C5Error> {
+    use crate::c5::x86_simd::{self, Form};
+    let row = x86_simd::get(op);
+    let reg = |i: usize| frame.regs[args[i] as usize] as usize;
+    let read = |mem: &Memory, addr: usize| -> Result<[u8; 16], C5Error> {
+        let mut v = [0u8; 16];
+        v.copy_from_slice(mem.read_bytes(addr, 16)?);
+        Ok(v)
+    };
+    // The destination plus the sources, less what the node carries as an
+    // immediate: the folded `imm8` and a constant shift count.
+    let want = if row.form == Form::Store {
+        2
+    } else {
+        row.form.arity() + 1
+            - usize::from(row.form.takes_imm())
+            - usize::from(row.form == Form::Shift && imm.is_some())
+    };
+    if args.len() < want {
+        return Err(C5Error::Runtime(format!(
+            "vm_ssa: {} expects {want} operands",
+            row.name
+        )));
+    }
+    let imm8 = imm.unwrap_or(0);
+    match row.form {
+        Form::Vv | Form::VvI => {
+            let (a, b) = (read(mem, reg(1))?, read(mem, reg(2))?);
+            let out = x86_simd::eval(row.sem, &a, &b, imm8, 0);
+            mem.write_bytes(reg(0), &out)?;
+        }
+        Form::V | Form::VI => {
+            let a = read(mem, reg(1))?;
+            let out = x86_simd::eval(row.sem, &a, &[0u8; 16], imm8, 0);
+            mem.write_bytes(reg(0), &out)?;
+        }
+        Form::Shift => {
+            let a = read(mem, reg(1))?;
+            // A non-constant count arrives as a value; the instruction
+            // reads it as an unsigned 64-bit quantity.
+            let count = match imm {
+                Some(n) => n as u64,
+                None => frame.regs[args[2] as usize] as u64,
+            };
+            let out = x86_simd::eval(row.sem, &a, &[0u8; 16], 0, count);
+            mem.write_bytes(reg(0), &out)?;
+        }
+        Form::Load => {
+            let a = read(mem, reg(1))?;
+            mem.write_bytes(reg(0), &a)?;
+        }
+        Form::Store => {
+            let a = read(mem, reg(1))?;
+            mem.write_bytes(reg(0), &a)?;
+        }
+        Form::Extract => {
+            let a = read(mem, reg(1))?;
+            let x = x86_simd::eval_extract(&a, row.int_width, imm8);
+            mem.write_bytes(reg(0), &(x as i64).to_le_bytes())?;
+        }
+        Form::MoveMask => {
+            let a = read(mem, reg(1))?;
+            let x = x86_simd::eval_movemask(&a);
+            mem.write_bytes(reg(0), &(x as i64).to_le_bytes())?;
+        }
+        Form::Insert => {
+            let a = read(mem, reg(1))?;
+            let x = frame.regs[args[2] as usize] as u64;
+            let out = x86_simd::eval_insert(&a, row.int_width, imm8, x);
+            mem.write_bytes(reg(0), &out)?;
+        }
+        Form::RdRand => {
+            // The interpreter has no entropy source. `rdrand` reports the
+            // failure the ISA defines for that state -- a zero destination
+            // and a clear carry -- which callers must already handle.
+            let n = row.int_width as usize;
+            mem.write_bytes(reg(1), &0u64.to_le_bytes()[..n])?;
+            mem.write_bytes(reg(0), &0i64.to_le_bytes())?;
+        }
+    }
+    Ok(())
+}
+
 fn run_intrinsic(
     mem: &mut Memory,
     frame: &mut Frame<'_>,
@@ -2587,8 +2756,12 @@ fn run_intrinsic(
                     "vm_ssa: Alloca: negative size {n_raw}",
                 )));
             }
+            // 16-byte size rounding and base alignment, matching the native
+            // lowering where sp stays 16-aligned: the storage is suitably
+            // aligned for any object type (C11 6.2.8), 16-aligned VLA
+            // element types included.
             let rounded = ((n_raw as usize) + 15) & !15;
-            let base = mem.alloc_frame(rounded)?;
+            let base = mem.alloc_aligned_frame(16, rounded)?;
             frame.regs[v as usize] = base as i64;
             Ok(())
         }
@@ -2736,22 +2909,6 @@ fn run_intrinsic(
             // observable effect on the interpreter's memory or register model.
             Ok(())
         }
-        Intrinsic::Cpuid => {
-            // No host CPUID; zero the four output words so a caller reads a
-            // defined (feature-absent) result rather than uninitialized data.
-            for &a in &args[0..4] {
-                let addr = frame.regs[a as usize] as usize;
-                store_to_memory(mem, addr, 0, StoreKind::I32)?;
-            }
-            Ok(())
-        }
-        Intrinsic::Xgetbv => {
-            for &a in &args[0..2] {
-                let addr = frame.regs[a as usize] as usize;
-                store_to_memory(mem, addr, 0, StoreKind::I32)?;
-            }
-            Ok(())
-        }
         Intrinsic::Divq128 => {
             // Unsigned 128/64 division. args: [q_addr, rem_addr, n0, n1, d].
             // Dividend = (n1 << 64) | n0; quotient -> *q, remainder -> *r.
@@ -2871,11 +3028,14 @@ fn run_intrinsic(
         }
         Intrinsic::FrameAddress => {
             // The interpreter has no native frame pointer; return this
-            // frame's base in the byte arena. It is non-zero, stable
-            // within a frame, and distinct across nested calls -- enough
-            // for a stack-depth comparison. (The arena grows up, so a
-            // deeper frame has a larger address than on a native stack.)
-            frame.regs[v as usize] = frame.stack_base as i64;
+            // frame's record in the byte arena. It is non-zero, stable
+            // within a frame, distinct across nested calls, and links to
+            // the caller's record at offset 0, so the load chain the
+            // parser emits for a level above 0 walks callers as it does
+            // natively and reads 0 past the entry frame. (The arena grows
+            // up, so a deeper frame has a larger address than on a native
+            // stack.)
+            frame.regs[v as usize] = frame.record as i64;
             Ok(())
         }
         Intrinsic::StackPointer => {
@@ -2936,6 +3096,10 @@ fn run_intrinsic(
 /// pointer doesn't read uninitialised state.
 fn load_width(kind: LoadKind) -> usize {
     match kind {
+        // The x87 read covers the 10 significant bytes; the binary128
+        // read covers all 16.
+        LoadKind::F80 => 10,
+        LoadKind::F128 => 16,
         LoadKind::I64 | LoadKind::F64 => 8,
         LoadKind::I32 | LoadKind::U32 | LoadKind::F32 => 4,
         LoadKind::I16 | LoadKind::U16 => 2,
@@ -2945,6 +3109,10 @@ fn load_width(kind: LoadKind) -> usize {
 
 fn store_width(kind: StoreKind) -> usize {
     match kind {
+        // The x87 store writes 10 bytes and leaves the 6 padding
+        // bytes untouched, as gcc's FSTP does; binary128 writes 16.
+        StoreKind::F80 => 10,
+        StoreKind::F128 => 16,
         StoreKind::I64 | StoreKind::F64 => 8,
         StoreKind::I32 | StoreKind::F32 => 4,
         StoreKind::I16 => 2,
@@ -2970,6 +3138,18 @@ fn load_from_memory(mem: &Memory, addr: usize, kind: LoadKind) -> Result<i64, C5
         // `double` is already 8 bytes; the c5 accumulator carries
         // f64 bit patterns, so the load returns the raw 64-bit value.
         LoadKind::F64 => i64::from_le_bytes(slice.try_into().unwrap()),
+        // The wide `long double` formats narrow to the f64 the
+        // compute path carries (round to nearest, ties to even).
+        LoadKind::F80 => {
+            let frac = u64::from_le_bytes(slice[..8].try_into().unwrap());
+            let se = u16::from_le_bytes(slice[8..10].try_into().unwrap());
+            crate::c5::softfp::f80_to_f64(frac, se) as i64
+        }
+        LoadKind::F128 => {
+            let lo = u64::from_le_bytes(slice[..8].try_into().unwrap());
+            let hi = u64::from_le_bytes(slice[8..16].try_into().unwrap());
+            crate::c5::softfp::f128_to_f64(lo, hi) as i64
+        }
         LoadKind::I16 => i16::from_le_bytes(slice.try_into().unwrap()) as i64,
         LoadKind::U16 => u16::from_le_bytes(slice.try_into().unwrap()) as i64,
         LoadKind::I8 => slice[0] as i8 as i64,
@@ -3002,6 +3182,21 @@ fn store_to_memory(
         }
         // `double` is 8 bytes; write the raw f64 bit pattern.
         StoreKind::F64 => mem.write_bytes(addr, &value.to_le_bytes()),
+        // The wide `long double` formats widen the f64 exactly.
+        StoreKind::F80 => {
+            let (frac, se) = crate::c5::softfp::f64_to_f80(value as u64);
+            let mut b = [0u8; 10];
+            b[..8].copy_from_slice(&frac.to_le_bytes());
+            b[8..].copy_from_slice(&se.to_le_bytes());
+            mem.write_bytes(addr, &b)
+        }
+        StoreKind::F128 => {
+            let (lo, hi) = crate::c5::softfp::f64_to_f128(value as u64);
+            let mut b = [0u8; 16];
+            b[..8].copy_from_slice(&lo.to_le_bytes());
+            b[8..].copy_from_slice(&hi.to_le_bytes());
+            mem.write_bytes(addr, &b)
+        }
     }
 }
 
@@ -3040,7 +3235,7 @@ fn narrow_store(value: i64, kind: StoreKind) -> i64 {
         StoreKind::I32 => (value as i32) as i64,
         StoreKind::I16 => (value as i16) as i64,
         StoreKind::I8 => (value as i8) as i64,
-        StoreKind::F32 | StoreKind::F64 => value,
+        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 => value,
     }
 }
 
@@ -3148,6 +3343,7 @@ mod tests {
             &program,
             super::super::super::Target::MacOSAarch64,
             false,
+            true,
         )
         .expect("ssa lift");
         // The first walker-produced function is the user's
@@ -3164,6 +3360,7 @@ mod tests {
             &program,
             super::super::super::Target::MacOSAarch64,
             false,
+            true,
         )
         .expect("ssa lift");
         let binding_names: alloc::vec::Vec<alloc::string::String> = program
@@ -3232,6 +3429,7 @@ mod tests {
             &program,
             super::super::super::Target::MacOSAarch64,
             false,
+            true,
         )
         .expect("ssa lift");
         let mut host = super::super::super::host::StdHost::default();
@@ -3437,6 +3635,7 @@ mod tests {
             &program,
             super::super::super::Target::MacOSAarch64,
             false,
+            true,
         )
         .expect("ssa lift");
         let binding_names: alloc::vec::Vec<alloc::string::String> = program
@@ -3522,6 +3721,7 @@ mod tests {
             &program,
             super::super::super::Target::MacOSAarch64,
             false,
+            true,
         )
         .expect("ssa lift");
         let binding_names: alloc::vec::Vec<alloc::string::String> = program

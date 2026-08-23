@@ -333,6 +333,9 @@ def main() -> int:
         "fib.c",
         "qsort.c",
         "sieve.c",
+        # Digit loop over a counted range: division and modulo by a
+        # constant, a table load, and an early-exit compare.
+        "munchausen.c",
         "crypto.c",
         "compress.c",
         "stb.c",

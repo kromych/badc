@@ -10,6 +10,8 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#0x1
+               	brk	#0x1
+               	brk	#0x1
 
 <main>:
                	adrp	x0, <page>
@@ -18,8 +20,7 @@ Disassembly of section .text:
                	mov	x1, #0x40000000         // =1073741824
                	fmov	s17, w1
                	fcmp	s0, s17
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
                	ldr	s0, [x0, #0x4]
@@ -27,16 +28,14 @@ Disassembly of section .text:
                	fmov	s16, w1
                	fneg	s1, s16
                	fcmp	s0, s1
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
                	ldr	s0, [x0, #0x8]
                	mov	x0, #0x41400000         // =1094713344
                	fmov	s17, w0
                	fcmp	s0, s17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
                	adrp	x0, <page>
@@ -70,8 +69,7 @@ Disassembly of section .text:
                	fmov	d16, x0
                	fneg	d1, d16
                	fcmp	d0, d1
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ret
                	mov	x0, #0x0                // =0

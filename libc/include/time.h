@@ -26,9 +26,15 @@
 #ifdef __APPLE__
 #define CLOCK_REALTIME  0
 #define CLOCK_MONOTONIC 6
+// Per-process and per-thread CPU-time clocks (POSIX). libSystem's
+// clockid_t enum numbers them 12 and 16, glibc 2 and 3.
+#define CLOCK_PROCESS_CPUTIME_ID 12
+#define CLOCK_THREAD_CPUTIME_ID  16
 #else
 #define CLOCK_REALTIME  0
 #define CLOCK_MONOTONIC 1
+#define CLOCK_PROCESS_CPUTIME_ID 2
+#define CLOCK_THREAD_CPUTIME_ID  3
 #endif
 // Raw hardware monotonic clock, unadjusted by NTP slewing. Same id on
 // macOS and Linux.

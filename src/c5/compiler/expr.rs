@@ -51,11 +51,43 @@ const MAX_MEM_FILL_ACCESSES: i64 = super::super::ast::MAX_MEM_FILL_ACCESSES;
 const MAX_MEM_MOVE_ACCESSES: i64 = 8;
 /// Alignment ceiling for the derived endpoint alignment: the widest
 /// access `Inst::Mcpy` and the inline expansions use.
-const MAX_MEM_TRANSFER_ALIGN: u32 = 8;
+pub(super) const MAX_MEM_TRANSFER_ALIGN: u32 = 8;
+
+/// Whether a transfer of `size` bytes at `align`-byte endpoint
+/// alignment expands inline, or has to be a library call.
+pub(super) fn mem_transfer_fits(
+    op: super::super::ast::MemTransferOp,
+    size: i64,
+    align: u32,
+) -> bool {
+    use super::super::ast::MemTransferOp;
+    size >= 0
+        && match op {
+            MemTransferOp::Copy => size <= MAX_MEM_TRANSFER_BYTES,
+            MemTransferOp::Move => {
+                super::super::ast::mem_transfer_accesses(size, align) <= MAX_MEM_MOVE_ACCESSES
+            }
+            MemTransferOp::Fill => {
+                super::super::ast::mem_transfer_accesses(size, align) <= MAX_MEM_FILL_ACCESSES
+            }
+        }
+}
+
+/// Library function a declined expansion calls (C99 7.21.2.1,
+/// 7.21.2.2, 7.21.6.1).
+pub(super) fn mem_transfer_lib_name(op: super::super::ast::MemTransferOp) -> &'static str {
+    use super::super::ast::MemTransferOp;
+    match op {
+        MemTransferOp::Copy => "memcpy",
+        MemTransferOp::Move => "memmove",
+        MemTransferOp::Fill => "memset",
+    }
+}
 use super::types::{
     UNSIGNED_BIT, VOLATILE_BIT, apply_qual_bits, format_type, fp_result_ty, integer_promote,
-    is_bool_ty, is_float_ty, is_floating_scalar, is_pointer_ty, is_struct_ty, is_struct_value_ty,
-    is_unsigned_ty, is_vector_ty, is_void_ptr_ty, struct_id_of, struct_ptr_depth,
+    is_bool_ty, is_float_ty, is_floating_scalar, is_long_double_ty, is_pointer_ty, is_struct_ty,
+    is_struct_value_ty, is_unsigned_ty, is_vector_ty, is_void_ptr_ty, object_segment_bits,
+    segment_of_ty, struct_id_of, struct_ptr_depth,
 };
 
 /// Relational comparison operator. The four variants share an
@@ -195,6 +227,39 @@ impl Compiler {
         ty
     }
 
+    /// Type of the `Token::Num` the lexer just produced. C11 6.4.4.4p2-p4
+    /// fix a character constant's type by its encoding prefix, so the
+    /// value never selects it; only an integer constant takes the
+    /// value-driven rank selection of 6.4.4.1p5.
+    pub(super) fn num_token_type(&self, val: i64) -> i64 {
+        use crate::c5::lexer::StrPrefix;
+        if !self.lex.num_is_char {
+            return self.literal_auto_promoted_type(val);
+        }
+        match self.lex.char_prefix {
+            // `char16_t` is `uint_least16_t` and `char32_t` is
+            // `uint_least32_t`: unsigned, and the same width on every
+            // target. `wchar_t` takes both its width and its signedness
+            // from the target ABI, so neither is derived from the other.
+            StrPrefix::Char16 => Ty::Short as i64 | UNSIGNED_BIT,
+            StrPrefix::Char32 => Ty::Int as i64 | UNSIGNED_BIT,
+            StrPrefix::Wide => {
+                let base = if self.lex.wchar_bytes == 2 {
+                    Ty::Short as i64
+                } else {
+                    Ty::Int as i64
+                };
+                if self.lex.wchar_signed {
+                    base
+                } else {
+                    base | UNSIGNED_BIT
+                }
+            }
+            // Unprefixed is `int` (6.4.4.4p10).
+            _ => Ty::Int as i64,
+        }
+    }
+
     /// Parse a C11 7.17 atomic builtin call. The opening `(` has
     /// already been consumed. The first operand is the atomic-object
     /// pointer; its pointee type sets the operand width. The result
@@ -278,10 +343,14 @@ impl Compiler {
     /// value is the `int` overflow flag.
     fn parse_overflow_builtin(&mut self, name: &str) -> Result<(), C5Error> {
         use super::super::ast::{Expr, ExprId};
-        let op = match name {
-            "__builtin_add_overflow" => 0i64,
-            "__builtin_sub_overflow" => 1,
-            _ => 2,
+        let typed = typed_overflow_builtin(name);
+        let op = match typed {
+            Some((op, _, _)) => op,
+            None => match name {
+                "__builtin_add_overflow" => 0i64,
+                "__builtin_sub_overflow" => 1,
+                _ => 2,
+            },
         };
         let mut args: Vec<ExprId> = Vec::new();
         let mut dst_ty = 0i64;
@@ -309,6 +378,22 @@ impl Compiler {
             );
         }
         let elem_ty = dst_ty - Ty::Ptr as i64;
+        // A type-specific form names the operand and result type, so the
+        // pointee must be that type rather than any integer type.
+        if let Some((_, unsigned, rank)) = typed {
+            let want = self.overflow_rank_width(rank);
+            if self.size_of_type(elem_ty) != want || is_unsigned_ty(elem_ty) != unsigned {
+                return Err(self.compile_err(format!(
+                    "`{name}` result pointer must be `{}{} *`",
+                    if unsigned { "unsigned " } else { "" },
+                    match rank {
+                        b'l' => "long",
+                        b'q' => "long long",
+                        _ => "int",
+                    }
+                )));
+            }
+        }
         self.mark_emit_other();
         let ty = Ty::Int as i64;
         let pos = self.ast_src_pos();
@@ -323,6 +408,135 @@ impl Compiler {
             },
             pos,
         );
+        self.ty = ty;
+        self.ast_acc = Some(id);
+        Ok(())
+    }
+
+    /// Byte width of the integer rank a type-specific checked-arithmetic
+    /// builtin names.
+    fn overflow_rank_width(&self, rank: u8) -> usize {
+        match rank {
+            b'l' => self.target.long_width_bytes(),
+            b'q' => 8,
+            _ => 4,
+        }
+    }
+
+    /// Parse an x86 SIMD builtin call (`__builtin_ia32_*`), the opening
+    /// `(` already consumed. Operand count and kinds come from the table
+    /// row; the immediate operand of the forms that take one must be an
+    /// integer constant expression, as it does in gcc.
+    fn parse_x86_simd_builtin(&mut self, op: u32, name: &str) -> Result<(), C5Error> {
+        use super::super::ast::{Expr, ExprId};
+        use super::super::x86_simd::{self, Form, Sem};
+        let row = x86_simd::get(op);
+        if !self.target.is_x86_64() {
+            return Err(self.compile_err(format!("`{name}` requires an x86 target")));
+        }
+        let mut args: Vec<ExprId> = Vec::new();
+        let mut arg_tys: Vec<i64> = Vec::new();
+        if self.lex.tk != ')' {
+            loop {
+                self.expr(Token::Assign as i64)?;
+                if let Some(a) = self.ast_acc {
+                    args.push(a);
+                    arg_tys.push(self.ty);
+                }
+                if self.lex.tk == ',' {
+                    self.next()?;
+                    continue;
+                }
+                break;
+            }
+        }
+        if self.lex.tk != ')' || args.len() != row.form.arity() {
+            return Err(
+                self.compile_err(format!("`{name}` expects {} arguments", row.form.arity()))
+            );
+        }
+        self.next()?; // consume ')'
+        let v128 = self.make_vector_type(Ty::LongLong as i64, 16);
+        // Operand kinds: a 128-bit vector where the row wants one, a
+        // pointer for the transfer and rdrand forms, an integer otherwise.
+        for (i, &ty) in arg_tys.iter().enumerate() {
+            let wants_vector = match row.form {
+                Form::V
+                | Form::VI
+                | Form::Shift
+                | Form::Extract
+                | Form::Insert
+                | Form::MoveMask => i == 0,
+                Form::Vv | Form::VvI => i < 2,
+                Form::Store => i == 1,
+                Form::Load | Form::RdRand => false,
+            };
+            let wants_pointer = matches!(row.form, Form::Load | Form::RdRand)
+                || (row.form == Form::Store && i == 0);
+            if wants_vector && !(is_vector_ty(&self.structs, ty) && self.size_of_type(ty) == 16) {
+                return Err(self.compile_err(format!(
+                    "`{name}` argument {} must be a 16-byte vector",
+                    i + 1
+                )));
+            }
+            if wants_pointer && !is_pointer_ty(ty) {
+                return Err(
+                    self.compile_err(format!("`{name}` argument {} must be a pointer", i + 1))
+                );
+            }
+        }
+        // The immediate is the last operand; it leaves the argument list
+        // and rides the node, as the instruction encodes it in place. A
+        // shift count folds the same way when it is a constant that the
+        // 8-bit field can hold, and stays an operand otherwise.
+        let mut imm = None;
+        if row.form.takes_imm() {
+            let last = args.len() - 1;
+            let Some(n) = self.expr_const_int(args[last]) else {
+                return Err(self.compile_err(format!(
+                    "`{name}` last argument must be an integer constant expression"
+                )));
+            };
+            imm = Some(n as u8);
+            args.truncate(last);
+        } else if row.form == Form::Shift {
+            // The byte-granular shifts encode a byte count while their
+            // builtins take bits, as gcc's do; they have no register-count
+            // form, so the operand must be constant.
+            let bits_per_unit = if matches!(row.sem, Sem::ShlBytes | Sem::ShrBytes) {
+                8
+            } else {
+                1
+            };
+            match self.expr_const_int(args[1]) {
+                Some(n) if (0..=255 * bits_per_unit).contains(&n) => {
+                    imm = Some((n / bits_per_unit) as u8);
+                    args.truncate(1);
+                }
+                // Any count at or past the lane width yields zero, which
+                // the widest encodable immediate also produces.
+                Some(_) => {
+                    imm = Some(255);
+                    args.truncate(1);
+                }
+                None if bits_per_unit != 1 => {
+                    return Err(self.compile_err(format!(
+                        "`{name}` count must be an integer constant expression"
+                    )));
+                }
+                None => {}
+            }
+        }
+        self.mark_emit_other();
+        let ty = if row.form.returns_vector() {
+            v128
+        } else if row.form == Form::Store {
+            super::types::void_ty()
+        } else {
+            Ty::Int as i64
+        };
+        let pos = self.ast_src_pos();
+        let id = self.ast.push_expr(Expr::X86Simd { op, args, imm, ty }, pos);
         self.ty = ty;
         self.ast_acc = Some(id);
         Ok(())
@@ -374,24 +588,10 @@ impl Compiler {
             return Err(self.compile_err(format!("`{name}` expects (dst, src, count)")));
         }
         self.next()?;
-        let fits = |n: i64| {
-            n >= 0
-                && match op {
-                    MemTransferOp::Copy => n <= MAX_MEM_TRANSFER_BYTES,
-                    MemTransferOp::Move => {
-                        super::super::ast::mem_transfer_accesses(n, ptr_align)
-                            <= MAX_MEM_MOVE_ACCESSES
-                    }
-                    MemTransferOp::Fill => {
-                        super::super::ast::mem_transfer_accesses(n, ptr_align)
-                            <= MAX_MEM_FILL_ACCESSES
-                    }
-                }
-        };
         // Both forms yield the destination address (C99 7.21.2.1p2).
         let ty = Ty::Char as i64 + UNSIGNED_BIT + Ty::Ptr as i64;
         let size = match self.expr_const_int(args[2]) {
-            Some(n) if fits(n) => n,
+            Some(n) if mem_transfer_fits(op, n, ptr_align) => n,
             _ => return self.emit_mem_transfer_libcall(op, &args, ty),
         };
         self.mark_emit_other();
@@ -410,6 +610,30 @@ impl Compiler {
         self.ty = ty;
         self.ast_acc = Some(id);
         Ok(())
+    }
+
+    /// The symbol-table index of `name` when the unit declared it as
+    /// something callable.
+    pub(super) fn callable_symbol(&self, name: &str) -> Option<usize> {
+        super::super::lexer::find_symbol(&self.symbols, &self.symbol_index, name).filter(|&i| {
+            self.symbols[i].class == Token::Fun as i64 || self.symbols[i].class == Token::Sys as i64
+        })
+    }
+
+    /// Symbol of the library function a synthesized transfer calls.
+    /// `None` where the name may not be assumed to be the library's
+    /// (`-fno-builtin` / `-ffreestanding`), where the unit declared no
+    /// such function, or inside that function's own definition, where
+    /// the call would be recursion.
+    pub(super) fn mem_transfer_lib_symbol(
+        &self,
+        op: super::super::ast::MemTransferOp,
+    ) -> Option<usize> {
+        let name = mem_transfer_lib_name(op);
+        if self.library_name_is_opaque(name) || self.current_function_name == name {
+            return None;
+        }
+        self.callable_symbol(name)
     }
 
     /// The symbol-table index of `name`, creating an unbound entry when
@@ -432,22 +656,36 @@ impl Compiler {
         args: &[super::super::ast::ExprId],
         ty: i64,
     ) -> Result<(), C5Error> {
-        use super::super::ast::MemTransferOp;
-        let name = match op {
-            MemTransferOp::Copy => "memcpy",
-            MemTransferOp::Move => "memmove",
-            MemTransferOp::Fill => "memset",
-        };
-        let idx = super::super::lexer::find_symbol(&self.symbols, &self.symbol_index, name);
-        let callable = idx.filter(|&i| {
-            self.symbols[i].class == Token::Fun as i64 || self.symbols[i].class == Token::Sys as i64
-        });
-        let Some(idx) = callable else {
-            let suggestion = match super::super::headers::header_declaring(name) {
-                Some(h) => format!(" -- try `#include <{h}>`"),
-                None => String::new(),
-            };
-            return Err(self.compile_err(format!("unknown function `{name}`{suggestion}")));
+        let name = mem_transfer_lib_name(op);
+        let callable = self.callable_symbol(name);
+        let retry_unavailable = self.no_builtin || self.nostdinc;
+        let idx = match callable {
+            Some(i) => i,
+            // The `__builtin_` spelling stays callable in every mode
+            // (gcc documents the fallback call for freestanding units).
+            // Where the auto-include retry cannot run, an undeclared
+            // library name binds here as the extern function the builtin
+            // implies and the environment defines it at link time; a
+            // hosted unit keeps the error so the retry installs the
+            // header's own library binding.
+            None if retry_unavailable => {
+                let i = self.resolve_symbol_named(name);
+                if self.symbols[i].class != 0 {
+                    return Err(self.compile_err(format!("unknown function `{name}`")));
+                }
+                self.symbols[i].class = Token::Fun as i64;
+                self.symbols[i].type_ = ty;
+                self.symbols[i].linkage = crate::c5::symbol::Linkage::External;
+                self.symbols[i].defined_here = false;
+                i
+            }
+            None => {
+                let suggestion = match super::super::headers::header_declaring(name) {
+                    Some(h) => format!(" -- try `#include <{h}>`"),
+                    None => String::new(),
+                };
+                return Err(self.compile_err(format!("unknown function `{name}`{suggestion}")));
+            }
         };
         self.symbols[idx].was_referenced = true;
         self.flush_pending_stores();
@@ -661,15 +899,10 @@ impl Compiler {
     /// silently operating on the operand's address. Called by each
     /// value-computing binary branch after both operand types are known.
     fn reject_aggregate_binop(&self, lhs_ty: i64, rhs_ty: i64, op: &str) -> Result<(), C5Error> {
-        // GCC vector extension: a bitwise operator on two same-width vector
-        // values is element-wise (no inter-lane carry, so the walker lowers it
-        // as wide chunks). Mixed vector/scalar, mismatched widths, and the
-        // arithmetic / shift / relational operators still reject here.
-        if matches!(op, "^" | "&" | "|")
-            && is_vector_ty(&self.structs, lhs_ty)
-            && is_vector_ty(&self.structs, rhs_ty)
-            && self.structs[struct_id_of(lhs_ty)].size == self.structs[struct_id_of(rhs_ty)].size
-        {
+        // GCC vector extension: the element-wise operators take a vector
+        // operand pair or a vector against a broadcast scalar. The relational
+        // and logical operators, and every other aggregate operand, reject.
+        if self.vector_binop_ty(lhs_ty, rhs_ty, op).is_some() {
             return Ok(());
         }
         // The GCC 128-bit integer shares the aggregate layout machinery
@@ -682,6 +915,56 @@ impl Compiler {
             return Err(self.compile_err(format!("invalid operands to binary `{op}`")));
         }
         Ok(())
+    }
+
+    /// Result type of a GCC vector-extension binary operation, or `None` when
+    /// the operand pair is not one. `+ - * / %`, `& | ^` and the shifts take
+    /// two vectors of the same byte width and the same element width and
+    /// kind, or a vector against a scalar that broadcasts to every lane.
+    /// `% & | ^ << >>` need integer elements, and an integer-element vector
+    /// does not take a floating scalar. The relational and equality operators
+    /// are not lowered and are excluded so they keep rejecting.
+    fn vector_binop_ty(&self, lhs_ty: i64, rhs_ty: i64, op: &str) -> Option<i64> {
+        if !matches!(
+            op,
+            "+" | "-" | "*" | "/" | "%" | "&" | "|" | "^" | "<<" | ">>"
+        ) {
+            return None;
+        }
+        let lhs_vec = is_vector_ty(&self.structs, lhs_ty);
+        let rhs_vec = is_vector_ty(&self.structs, rhs_ty);
+        let vec_ty = if lhs_vec {
+            lhs_ty
+        } else if rhs_vec {
+            rhs_ty
+        } else {
+            return None;
+        };
+        let elem_ty = self.structs[struct_id_of(vec_ty)].fields[0].ty;
+        let integer_only = matches!(op, "%" | "&" | "|" | "^" | "<<" | ">>");
+        if integer_only && is_floating_scalar(elem_ty) {
+            return None;
+        }
+        if lhs_vec && rhs_vec {
+            let (l, r) = (struct_id_of(lhs_ty), struct_id_of(rhs_ty));
+            let (le, re) = (self.structs[l].fields[0].ty, self.structs[r].fields[0].ty);
+            if self.structs[l].size != self.structs[r].size
+                || self.size_of_type(le) != self.size_of_type(re)
+                || is_floating_scalar(le) != is_floating_scalar(re)
+            {
+                return None;
+            }
+            return Some(lhs_ty);
+        }
+        let scalar_ty = if lhs_vec { rhs_ty } else { lhs_ty };
+        if is_struct_value_ty(scalar_ty)
+            || is_pointer_ty(scalar_ty)
+            || self.is_int128_ty(scalar_ty)
+            || (!is_floating_scalar(elem_ty) && is_floating_scalar(scalar_ty))
+        {
+            return None;
+        }
+        Some(vec_ty)
     }
 
     /// Opcode for `E1 op= E2` given the operand types. C99 6.5.16.2p3:
@@ -803,20 +1086,7 @@ impl Compiler {
         } else if self.lex.tk == Token::Num {
             let val = self.lex.ival;
             self.emit_imm(val);
-            // C99 6.4.4.4p11: a wide character constant (`L'x'`) has type
-            // `wchar_t`, sized by the target -- `unsigned short` (2 bytes)
-            // on Windows, `int` (4 bytes) on the Unix targets, matching the
-            // `<stddef.h>` typedef. A plain integer or narrow character
-            // constant takes the usual value-driven promotion.
-            self.ty = if self.lex.char_is_wide {
-                if self.lex.wchar_bytes == 2 {
-                    Ty::Short as i64 | super::types::UNSIGNED_BIT
-                } else {
-                    Ty::Int as i64
-                }
-            } else {
-                self.literal_auto_promoted_type(val)
-            };
+            self.ty = self.num_token_type(val);
             self.ast_emit_int_lit(val, self.ty);
             self.next()?;
         } else if self.lex.tk == Token::FloatNum {
@@ -988,7 +1258,13 @@ impl Compiler {
                         .iter()
                         .any(|n| n == &self.symbols[id_idx].name)
                 {
+                    // The implicit declaration lands in the innermost
+                    // block containing the call (C89 6.3.2.2) and
+                    // unbinds at its exit; the entity survives on the
+                    // slot for link resolution.
+                    self.rebind_scoped(id_idx)?;
                     self.symbols[id_idx].class = Token::Fun as i64;
+                    self.symbols[id_idx].scoped_fn_decl = true;
                     self.symbols[id_idx].type_ = Ty::Int as i64;
                     self.symbols[id_idx].implicit_return_int = true;
                     self.symbols[id_idx].linkage = crate::c5::symbol::Linkage::External;
@@ -1019,12 +1295,12 @@ impl Compiler {
                 // GCC checked-arithmetic builtins, lowered at the call
                 // site to a wrapped store plus an overflow test.
                 let is_overflow = not_real_fn
-                    && matches!(
+                    && (matches!(
                         self.symbols[id_idx].name.as_str(),
                         "__builtin_add_overflow"
                             | "__builtin_sub_overflow"
                             | "__builtin_mul_overflow"
-                    );
+                    ) || typed_overflow_builtin(&self.symbols[id_idx].name).is_some());
                 // GCC `__builtin_object_size`, folded to a constant at
                 // the call site (the pointer operand is unevaluated).
                 let is_object_size =
@@ -1041,6 +1317,13 @@ impl Compiler {
                 // operands (badc does not model the queried attributes).
                 let is_has_attribute =
                     not_real_fn && self.symbols[id_idx].name == "__builtin_has_attribute";
+                // x86 SIMD builtins, expanded at the call site to the
+                // instruction the table row names.
+                let simd_op = if not_real_fn {
+                    super::super::x86_simd::lookup(self.symbols[id_idx].name.as_str())
+                } else {
+                    None
+                };
                 // GCC memory transfers, expanded inline when the byte
                 // count is an integer constant expression.
                 let mem_transfer = if not_real_fn {
@@ -1048,7 +1331,10 @@ impl Compiler {
                 } else {
                     None
                 };
-                if let Some(mop) = mem_transfer {
+                if let Some(sop) = simd_op {
+                    let name = self.symbols[id_idx].name.clone();
+                    self.parse_x86_simd_builtin(sop, &name)?;
+                } else if let Some(mop) = mem_transfer {
                     let name = self.symbols[id_idx].name.clone();
                     self.parse_mem_transfer_builtin(mop, &name)?;
                 } else if is_choose_expr {
@@ -1085,6 +1371,8 @@ impl Compiler {
                     let fma_id = crate::c5::op::Intrinsic::Fma as i64;
                     let fmaf_id = crate::c5::op::Intrinsic::Fmaf as i64;
                     let trap_id = crate::c5::op::Intrinsic::Trap as i64;
+                    let frame_address_id = crate::c5::op::Intrinsic::FrameAddress as i64;
+                    let return_address_id = crate::c5::op::Intrinsic::ReturnAddress as i64;
                     let intr_kind = crate::c5::op::Intrinsic::from_i64(intrinsic_id);
                     let is_fp_unary = intr_kind.is_some_and(|i| i.is_fp_unary());
                     let is_int_bit_unary = intr_kind.is_some_and(|i| i.is_int_bit_unary());
@@ -1094,6 +1382,9 @@ impl Compiler {
                     // the intrinsic node is built the result is wrapped
                     // in a load of this type (GCC value semantics).
                     let mut va_arg_result_ty: Option<i64> = None;
+                    // `__builtin_frame_address` level above 0: how many
+                    // saved-frame-pointer loads wrap the intrinsic node.
+                    let mut frame_walk_levels: i64 = 0;
                     let mut ast_intrinsic_args: alloc::vec::Vec<super::super::ast::ExprId> =
                         alloc::vec::Vec::new();
                     if intrinsic_id == trap_id {
@@ -1317,6 +1608,47 @@ impl Compiler {
                             self.ast_fpcast();
                             self.ty = Ty::Int as i64;
                         }
+                    } else if intrinsic_id == frame_address_id || intrinsic_id == return_address_id
+                    {
+                        // GCC defines the operand as the number of frames to
+                        // walk up and requires it to be a constant. Level 0
+                        // reads this function's own frame. Above 0,
+                        // `__builtin_frame_address` walks the saved
+                        // frame-pointer chain; `__builtin_return_address` has
+                        // no single behaviour to reproduce -- gcc's aarch64
+                        // backend folds it to a constant 0 and its x86-64
+                        // backend yields a stack address once a caller drops
+                        // its frame pointer -- so it is rejected. The level is
+                        // consumed at parse time and reaches no operand.
+                        self.expr(Token::Assign as i64)?;
+                        let level = self.ast_acc.and_then(|a| self.expr_const_int(a));
+                        match level {
+                            Some(0) => {}
+                            Some(n) if n > 0 && intrinsic_id == frame_address_id => {
+                                frame_walk_levels = n;
+                            }
+                            Some(n) if n < 0 => {
+                                return Err(self.compile_err(format!(
+                                    "invalid argument to `{fn_name}`: \
+                                     the level must not be negative, got {n}"
+                                )));
+                            }
+                            Some(n) => {
+                                return Err(self.compile_err(format!(
+                                    "`{fn_name}` supports level 0 only, not {n}: \
+                                     the targets gcc supports disagree on what a \
+                                     caller's return address is, so there is no \
+                                     one behaviour to reproduce"
+                                )));
+                            }
+                            None => {
+                                return Err(self.compile_err(format!(
+                                    "invalid argument to `{fn_name}`: \
+                                     the level must be an integer constant"
+                                )));
+                            }
+                        }
+                        self.ast_acc = None;
                     } else {
                         self.expr(Token::Assign as i64)?;
                         if let Some(a) = self.ast_acc {
@@ -1432,6 +1764,19 @@ impl Compiler {
                         self.ty = res_ty;
                         self.ast_apply_unary(super::super::ast::UnOp::Deref);
                     }
+                    // `__builtin_frame_address(N)`, N > 0. A frame record
+                    // holds the caller's frame pointer at offset 0, so each
+                    // level is one load through the level below it. This is
+                    // the sequence gcc emits on both supported targets.
+                    let void_ptr_ty = (Ty::Char as i64) + (Ty::Ptr as i64);
+                    for _ in 0..frame_walk_levels {
+                        if let Some(child) = self.ast_acc {
+                            self.ast_emit_cast(child, void_ptr_ty + Ty::Ptr as i64);
+                        }
+                        self.mark_emit_scalar_load();
+                        self.ty = void_ptr_ty;
+                        self.ast_apply_unary(super::super::ast::UnOp::Deref);
+                    }
                 } else {
                     // Snapshot the declared signature up front: the per-arg
                     // type checks read from `expected_params` and `is_variadic`,
@@ -1507,7 +1852,7 @@ impl Compiler {
                     let result_temp_off: i64 = if callee_returns_struct {
                         let slots = self.slots_of_type(callee_ret_ty);
                         let off = self.reserve_slots(slots);
-                        if slots > 1 {
+                        if slots >= 1 {
                             self.multi_cell_temps.push((off, slots));
                         }
                         off
@@ -1542,6 +1887,35 @@ impl Compiler {
                         self.emit_lea(temp_off);
                         self.ast_psh();
                         self.expr(Token::Assign as i64)?;
+
+                        // A `long double` that reaches a platform-libc callee
+                        // as a `long double` is decoded there in the target
+                        // ABI's wider format, not the binary64 c5 supplies.
+                        // The declared parameter decides: an argument
+                        // converted to a `double` parameter is exact, which is
+                        // how <math.h> binds the `l` entry points. Past the
+                        // fixed parameters -- a variadic tail, or a callee
+                        // with no prototype -- 6.5.2.2p6 leaves the type
+                        // alone, so the argument's own type governs.
+                        let reaches_callee_as_long_double =
+                            match expected_params.get(nargs as usize) {
+                                Some(want) => is_long_double_ty(*want),
+                                None => is_long_double_ty(self.ty),
+                            };
+                        if is_sys_call
+                            && reaches_callee_as_long_double
+                            && let Some(platform_fmt) = self.target.platform_long_double_abi()
+                        {
+                            self.warn_at(
+                                arg_line,
+                                format!(
+                                    "`long double` argument {} of `{}` is passed as 8-byte \
+                                     binary64; this target's ABI passes {platform_fmt}",
+                                    nargs + 1,
+                                    fn_name_for_warn,
+                                ),
+                            );
+                        }
 
                         // Type-check before the Si overwrites self.ty.
                         if (nargs as usize) < expected_params.len() {
@@ -1812,11 +2186,16 @@ impl Compiler {
                     // pointer (`int (*f())()`) leaves a fn-pointer
                     // rvalue, so a following unary `*` is the C99
                     // 6.3.2.1p4 decay no-op. The lineage is recorded on
-                    // the function symbol by the declarator.
+                    // the function symbol by the declarator; for a call
+                    // through a fn-pointer variable the return lineage
+                    // rides its own field.
                     if self.symbols[id_idx].class == Token::Fun as i64
                         && self.symbols[id_idx].fn_ptr_indirection > 0
                     {
                         self.pending.fn_ptr_chain_depth = 0;
+                    } else if is_var_call && self.symbols[id_idx].fn_ptr_ret_indirection > 0 {
+                        self.pending.fn_ptr_chain_depth =
+                            self.symbols[id_idx].fn_ptr_ret_indirection - 1;
                     }
                 } // close intrinsic-vs-normal-call else branch
             } else if self.symbols[id_idx].class == Token::Num as i64 {
@@ -1915,11 +2294,7 @@ impl Compiler {
                     }
                     _ => crate::c5::op::Intrinsic::StackPointer,
                 };
-                let mut args = alloc::vec::Vec::new();
-                if kind == crate::c5::op::Intrinsic::FrameAddress {
-                    // FrameAddress carries the (ignored) level operand.
-                    args.push(self.ast_emit_int_lit(0, Ty::Int as i64));
-                }
+                let args = alloc::vec::Vec::new();
                 let intr_ty = self.ty;
                 let pos = self.ast_src_pos();
                 let id = self.ast.push_expr(
@@ -1969,6 +2344,8 @@ impl Compiler {
                     self.pending.indirect_callee_is_variadic = self.symbols[id_idx].is_variadic;
                     self.pending.indirect_callee_fn_ptr_depth =
                         self.symbols[id_idx].fn_ptr_indirection;
+                    self.pending.indirect_callee_ret_fn_ptr =
+                        self.symbols[id_idx].fn_ptr_ret_indirection;
                 }
                 // Array variables decay to a pointer to the first
                 // element: the symbol's address IS its value, no
@@ -2070,6 +2447,8 @@ impl Compiler {
                             Some(self.symbols[id_idx].params.clone());
                         self.pending.indirect_callee_is_variadic = self.symbols[id_idx].is_variadic;
                         self.pending.indirect_callee_fn_ptr_depth = fpi;
+                        self.pending.indirect_callee_ret_fn_ptr =
+                            self.symbols[id_idx].fn_ptr_ret_indirection;
                     }
                 } else if is_struct_value {
                     if identifier_is_local {
@@ -2191,6 +2570,9 @@ impl Compiler {
                 // fn-ptr branch further down overrides this when a
                 // `(*)(args)` shape is present in the cast.
                 let mut cast_fpi = self.pending.fn_ptr_indirection.take();
+                // The cast spells a flat type; its result carries no
+                // declarator-recorded return lineage.
+                self.pending.fn_ptr_ret_indirection = 0;
                 // A function-TYPE typedef already encodes one pointer
                 // level, so the first `*` in `(F *)x` forms the
                 // pointer-to-function rather than adding a level (matching
@@ -2214,22 +2596,27 @@ impl Compiler {
                         self.next()?;
                     }
                 }
-                // Top-level array brackets in the abstract
-                // declarator: `(int[]){...}` / `(char[N]){...}`.
-                // Only a compound literal (detected after the `)`)
-                // gives these meaning; `t` stays the element type and
-                // `cast_array_size` records the count (`-1` when the
-                // bracket is empty and the initializer determines it).
-                let mut cast_is_array = false;
-                let mut cast_array_size: i64 = 0;
+                // Top-level array brackets in the abstract declarator:
+                // `(int[]){...}` / `(char[N]){...}` / `(s8[2][3]){...}`.
+                // Only a compound literal (detected after the `)`) gives
+                // these meaning; `t` stays the element type and
+                // `cast_array_dims` records the counts outermost first
+                // (`-1` when the leading bracket is empty and the
+                // initializer determines it; C99 6.7.5.2 completes only
+                // the outermost dimension that way).
+                let mut cast_array_dims: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
                 while self.lex.tk == Token::Brak {
-                    cast_is_array = true;
                     self.next()?;
                     if self.lex.tk == ']' {
-                        cast_array_size = -1;
+                        if !cast_array_dims.is_empty() {
+                            return Err(
+                                self.compile_err("array type has an incomplete inner dimension")
+                            );
+                        }
+                        cast_array_dims.push(-1);
                         self.next()?;
                     } else {
-                        cast_array_size = self.parse_constant_int()?;
+                        cast_array_dims.push(self.parse_constant_int()?);
                         self.accept(']')?;
                     }
                 }
@@ -2273,8 +2660,20 @@ impl Compiler {
                 if self.lex.tk == '{' {
                     // C99 6.5.2.5 compound literal: `(type){ init }`.
                     // The `(type)` parsed above is the literal's
-                    // type, not a cast operator.
-                    self.parse_block_compound_literal(t, cast_is_array, cast_array_size)?;
+                    // type, not a cast operator. An array typedef's
+                    // dimensions complete the type from the inside:
+                    // `(row[2]){...}` with `typedef int row[3]` is
+                    // `int[2][3]` (C99 6.7.7); a `*` absorbed the
+                    // typedef array into the pointee instead.
+                    let mut literal_dims = cast_array_dims.clone();
+                    if cast_typedef_array > 0 && cast_ptr_levels == 0 && cast_fn_proto.is_none() {
+                        if cast_typedef_dims.is_empty() {
+                            literal_dims.push(cast_typedef_array);
+                        } else {
+                            literal_dims.extend_from_slice(&cast_typedef_dims);
+                        }
+                    }
+                    self.parse_block_compound_literal(t, &literal_dims)?;
                 } else {
                     self.expr(Token::Inc as i64)?;
                     let cast_child_ast = self.ast_acc;
@@ -2354,7 +2753,7 @@ impl Compiler {
                     if cast_typedef_array > 0
                         && cast_ptr_levels >= 1
                         && cast_fn_proto.is_none()
-                        && !cast_is_array
+                        && cast_array_dims.is_empty()
                     {
                         let dims: alloc::vec::Vec<i64> = if cast_typedef_dims.len() >= 2 {
                             cast_typedef_dims.clone()
@@ -2408,6 +2807,7 @@ impl Compiler {
                         ));
                         self.pending.indirect_callee_is_variadic = pp.is_variadic;
                         self.pending.indirect_callee_fn_ptr_depth = cast_fpi.unwrap_or(1).max(1);
+                        self.pending.indirect_callee_ret_fn_ptr = 0;
                         self.pending.indirect_callee_params = if pp.types.is_empty() {
                             None
                         } else {
@@ -2736,26 +3136,41 @@ impl Compiler {
         } else if self.lex.tk == '!' {
             self.next()?;
             self.expr(Token::Inc as i64)?;
+            // C99 6.5.3.3p1 requires a scalar operand; the GCC vector
+            // extension does not extend `!` to a vector either.
+            if is_struct_value_ty(self.ty) && !self.is_int128_ty(self.ty) {
+                return Err(self.compile_err("invalid operand to unary `!` (aggregate type)"));
+            }
             self.emit_binop_with_imm(crate::c5::ir::BinOp::Eq, 0);
             self.ty = Ty::Int as i64;
         } else if self.lex.tk == '~' {
             self.next()?;
             self.expr(Token::Inc as i64)?;
-            self.emit_binop_with_imm(crate::c5::ir::BinOp::Xor, -1);
-            // C99 6.5.3.3p4: `~` applies the integer promotions and the
-            // result has the promoted operand type. `unsigned char` /
-            // `unsigned short` promote to signed `int`. A `long` /
-            // `long long` (signed or unsigned) keeps its width and
-            // signedness -- forcing `Ty::Int` here would both narrow it
-            // and drop the unsigned bit, so a following `>>` would pick
-            // an arithmetic shift on `~(unsigned long)x`. A 4-byte
-            // unsigned result needs the high half masked back to 32
-            // bits because `XOR -1` sets the full 64-bit register.
-            let promoted = integer_promote(self.ty);
-            if is_unsigned_ty(promoted) && self.size_of_type(promoted) == 4 {
-                self.emit_binop_with_imm(crate::c5::ir::BinOp::And, 0xffff_ffff);
+            // GCC vector extension: `~v` is element-wise over an integer
+            // vector and the result keeps the vector type (no promotion).
+            if is_vector_ty(&self.structs, self.ty) {
+                let elem_ty = self.structs[struct_id_of(self.ty)].fields[0].ty;
+                if is_floating_scalar(elem_ty) {
+                    return Err(self.compile_err("invalid operand to unary `~` (vector of float)"));
+                }
+                self.ast_apply_unary(super::super::ast::UnOp::BitNot);
+            } else {
+                self.emit_binop_with_imm(crate::c5::ir::BinOp::Xor, -1);
+                // C99 6.5.3.3p4: `~` applies the integer promotions and the
+                // result has the promoted operand type. `unsigned char` /
+                // `unsigned short` promote to signed `int`. A `long` /
+                // `long long` (signed or unsigned) keeps its width and
+                // signedness -- forcing `Ty::Int` here would both narrow it
+                // and drop the unsigned bit, so a following `>>` would pick
+                // an arithmetic shift on `~(unsigned long)x`. A 4-byte
+                // unsigned result needs the high half masked back to 32
+                // bits because `XOR -1` sets the full 64-bit register.
+                let promoted = integer_promote(self.ty);
+                if is_unsigned_ty(promoted) && self.size_of_type(promoted) == 4 {
+                    self.emit_binop_with_imm(crate::c5::ir::BinOp::And, 0xffff_ffff);
+                }
+                self.ty = promoted;
             }
-            self.ty = promoted;
         } else if self.lex.tk == Token::AddOp {
             // Unary `+`: a no-op per C99 6.5.3.3p2; the result has the
             // integer-promoted operand type. Integer promotion only
@@ -2789,7 +3204,7 @@ impl Compiler {
                 // the post-Add/Sub mask in `convert.rs` truncates
                 // a downstream `-MAX - 1` back to 32 bits and
                 // yields 0 instead of `INT64_MIN`.
-                self.ty = self.literal_auto_promoted_type(val);
+                self.ty = self.num_token_type(val);
                 // Dual-emit: the constant-folded `-N` collapses
                 // the unary-minus on the AST side too. Seed
                 // `ast_acc` with the matching IntLit so a
@@ -2800,7 +3215,11 @@ impl Compiler {
                 self.next()?;
             } else {
                 self.expr(Token::Inc as i64)?;
-                if is_floating_scalar(self.ty) {
+                if is_vector_ty(&self.structs, self.ty) {
+                    // GCC vector extension: `-v` is element-wise and the
+                    // result keeps the vector type (no promotion).
+                    self.ast_apply_unary(super::super::ast::UnOp::Neg);
+                } else if is_floating_scalar(self.ty) {
                     self.ast_fneg();
                     // self.ty already matches the operand's FP type
                 } else {
@@ -2934,16 +3353,10 @@ impl Compiler {
             if is_struct_value_ty(t)
                 && self.lex.tk >= Token::Lor as i64
                 && self.lex.tk <= Token::ModOp as i64
-                // GCC vector extension: a vector LHS with a bitwise operator is
-                // element-wise; let it reach the per-operator branch, which
-                // does the same-width check. Other operators still reject.
-                && !(is_vector_ty(&self.structs, t)
-                    && matches!(
-                        self.lex.tk,
-                        x if x == Token::XorOp as i64
-                            || x == Token::AndOp as i64
-                            || x == Token::OrOp as i64
-                    ))
+                // GCC vector extension: a vector LHS with an element-wise
+                // operator reaches the per-operator branch, which checks the
+                // RHS. The relational and logical operators still reject.
+                && !(is_vector_ty(&self.structs, t) && is_vector_binop_token(self.lex.tk.raw()))
                 // The GCC 128-bit integer is an integer type; the
                 // per-operator branch below routes it to the walker's
                 // half-pair expansion.
@@ -3067,6 +3480,8 @@ impl Compiler {
                 // for the walker's host-ABI tail placement.
                 let callee_is_variadic =
                     core::mem::take(&mut self.pending.indirect_callee_is_variadic);
+                let callee_ret_fn_ptr =
+                    core::mem::take(&mut self.pending.indirect_callee_ret_fn_ptr);
                 let callee_fixed = callee_params.as_ref().map_or(0, |p| p.len()) as u32;
                 let mut arg_idx: usize = 0;
                 while self.lex.tk != ')' {
@@ -3094,6 +3509,13 @@ impl Compiler {
                 // regardless; the tag lets a following `->` / `[` / `*`
                 // see the right pointer level.
                 self.ty = indirect_ret_ty;
+                // A callee whose return type is itself a function pointer
+                // leaves a fn-pointer rvalue: seed the chain depth so a
+                // following unary `*` is the C99 6.3.2.1p4 decay no-op,
+                // matching the direct-call arm.
+                if callee_ret_fn_ptr > 0 {
+                    self.pending.fn_ptr_chain_depth = callee_ret_fn_ptr - 1;
+                }
                 // Same as the direct call: the result is the return type, so
                 // drop any array-decay hint an argument left pending.
                 self.drop_operand_array_decay();
@@ -3311,17 +3733,14 @@ impl Compiler {
                 // in c5.
                 let binop = self.lex.ival;
                 let compound_lhs_ast = self.ast_acc;
-                // GCC vector extension: `v OP= w` for a bitwise OP on same-width
-                // vectors is `v = v OP w`. Build that node pair directly (the
-                // scalar compound path below handles only scalar / pointer
-                // lvalues). The lhs is a side-effect-free operand reused as both
-                // the store target and the binop's left operand.
-                if is_vector_ty(&self.structs, t)
-                    && (binop == Token::XorOp as i64
-                        || binop == Token::AndOp as i64
-                        || binop == Token::OrOp as i64)
-                {
+                // GCC vector extension: `v OP= w` is `v = v OP w` (C99
+                // 6.5.16.2p3) for every element-wise OP. The scalar path below
+                // takes only scalar / pointer lvalues, so build the node pair
+                // here, reusing the side-effect-free lhs as both the store
+                // target and the binop's left operand.
+                if is_vector_ty(&self.structs, t) && is_vector_binop_token(binop) {
                     let vec_ty = t;
+                    let op_name = vector_binop_name(binop);
                     let lhs_node = compound_lhs_ast
                         .ok_or_else(|| self.compile_err("bad lvalue in compound assignment"))?;
                     let pos = self.ast_src_pos();
@@ -3330,20 +3749,14 @@ impl Compiler {
                     let rhs_node = self
                         .ast_acc
                         .ok_or_else(|| self.compile_err("bad operand in compound assignment"))?;
-                    if !(is_vector_ty(&self.structs, self.ty)
-                        && self.structs[struct_id_of(self.ty)].size
-                            == self.structs[struct_id_of(vec_ty)].size)
-                    {
-                        return Err(self.compile_err("invalid operands to vector compound `^=`"));
+                    if self.vector_binop_ty(vec_ty, self.ty, op_name) != Some(vec_ty) {
+                        return Err(self.compile_err(format!(
+                            "invalid operands to vector compound `{op_name}=`"
+                        )));
                     }
-                    use super::super::ir::BinOp as B;
-                    let bop = if binop == Token::XorOp as i64 {
-                        B::Xor
-                    } else if binop == Token::AndOp as i64 {
-                        B::And
-                    } else {
-                        B::Or
-                    };
+                    // The nominal opcode; the walker picks the signed /
+                    // unsigned / floating flavour from the element type.
+                    let bop = vector_binop_op(binop);
                     let bin = self.ast.push_expr(
                         super::super::ast::Expr::Binary {
                             op: bop,
@@ -3739,10 +4152,9 @@ impl Compiler {
                 // `ty` as the cast source type, so an order-dependent tag
                 // breaks `(int)(unsigned | int)` sign extension. Mirrors
                 // the additive path.
-                self.ty = if is_vector_ty(&self.structs, lhs_ty) {
-                    lhs_ty
-                } else {
-                    self.arith_common_ty(lhs_ty, self.ty)
+                self.ty = match self.vector_binop_ty(lhs_ty, self.ty, "|") {
+                    Some(vty) => vty,
+                    None => self.arith_common_ty(lhs_ty, self.ty),
                 };
                 self.ast_binop(crate::c5::ir::BinOp::Or);
             } else if self.lex.tk == Token::XorOp {
@@ -3752,10 +4164,9 @@ impl Compiler {
                 self.ast_psh();
                 self.expr(Token::AndOp as i64)?;
                 self.reject_aggregate_binop(t, self.ty, "^")?;
-                self.ty = if is_vector_ty(&self.structs, lhs_ty) {
-                    lhs_ty
-                } else {
-                    self.arith_common_ty(lhs_ty, self.ty)
+                self.ty = match self.vector_binop_ty(lhs_ty, self.ty, "^") {
+                    Some(vty) => vty,
+                    None => self.arith_common_ty(lhs_ty, self.ty),
                 };
                 self.ast_binop(crate::c5::ir::BinOp::Xor);
             } else if self.lex.tk == Token::AndOp {
@@ -3765,10 +4176,9 @@ impl Compiler {
                 self.ast_psh();
                 self.expr(Token::EqOp as i64)?;
                 self.reject_aggregate_binop(t, self.ty, "&")?;
-                self.ty = if is_vector_ty(&self.structs, lhs_ty) {
-                    lhs_ty
-                } else {
-                    self.arith_common_ty(lhs_ty, self.ty)
+                self.ty = match self.vector_binop_ty(lhs_ty, self.ty, "&") {
+                    Some(vty) => vty,
+                    None => self.arith_common_ty(lhs_ty, self.ty),
                 };
                 self.ast_binop(crate::c5::ir::BinOp::And);
             } else if self.lex.tk == Token::EqOp || self.lex.tk == Token::NeOp {
@@ -3821,6 +4231,11 @@ impl Compiler {
                 self.ast_psh();
                 self.expr(Token::AddOp as i64)?;
                 self.reject_aggregate_binop(t, self.ty, "<<")?;
+                if let Some(vty) = self.vector_binop_ty(t, self.ty, "<<") {
+                    self.ty = vty;
+                    self.ast_binop(crate::c5::ir::BinOp::Shl);
+                    continue;
+                }
                 // C99 6.5.7: `E1 << E2` has the type of `E1` after
                 // integer promotion, not `E2` (the shift count).
                 // `char` / `short` (signed or unsigned, size 1 or 2)
@@ -3847,6 +4262,11 @@ impl Compiler {
                 self.ast_psh();
                 self.expr(Token::AddOp as i64)?;
                 self.reject_aggregate_binop(t, self.ty, ">>")?;
+                if let Some(vty) = self.vector_binop_ty(t, self.ty, ">>") {
+                    self.ty = vty;
+                    self.ast_binop(crate::c5::ir::BinOp::Shr);
+                    continue;
+                }
                 // Pick logical (Shru) for unsigned LHS, arithmetic (Shr)
                 // otherwise; the RHS is the shift count and does not
                 // participate. C99 6.5.7p3: the result has the promoted
@@ -3871,6 +4291,11 @@ impl Compiler {
                 self.ast_psh();
                 self.expr(Token::MulOp as i64)?;
                 self.reject_aggregate_binop(t, self.ty, "+")?;
+                if let Some(vty) = self.vector_binop_ty(t, self.ty, "+") {
+                    self.ty = vty;
+                    self.ast_binop(crate::c5::ir::BinOp::Add);
+                    continue;
+                }
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, "+")?;
                     self.ast_binop(crate::c5::ir::BinOp::Fadd);
@@ -3898,7 +4323,7 @@ impl Compiler {
                         // run the sequence, then restore.
                         let lhs_ast = self.ast_vstack.pop().flatten();
                         let rhs_ast = self.ast_acc.take();
-                        let saved_vstack: alloc::vec::Vec<_> = self.ast_vstack.drain(..).collect();
+                        let saved_vstack = core::mem::take(&mut self.ast_vstack);
                         self.ast_vstack.push(None);
                         // RHS is the pointer; a pointer-to-array RHS left
                         // its array stride in `end_of_expr_stride` at the
@@ -4000,6 +4425,11 @@ impl Compiler {
                 self.ast_psh();
                 self.expr(Token::MulOp as i64)?;
                 self.reject_aggregate_binop(t, self.ty, "-")?;
+                if let Some(vty) = self.vector_binop_ty(t, self.ty, "-") {
+                    self.ty = vty;
+                    self.ast_binop(crate::c5::ir::BinOp::Sub);
+                    continue;
+                }
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, "-")?;
                     self.ast_binop(crate::c5::ir::BinOp::Fsub);
@@ -4057,6 +4487,11 @@ impl Compiler {
                 self.ast_psh();
                 self.expr(Token::Inc as i64)?;
                 self.reject_aggregate_binop(t, self.ty, "*")?;
+                if let Some(vty) = self.vector_binop_ty(t, self.ty, "*") {
+                    self.ty = vty;
+                    self.ast_binop(crate::c5::ir::BinOp::Mul);
+                    continue;
+                }
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, "*")?;
                     self.ast_binop(crate::c5::ir::BinOp::Fmul);
@@ -4078,6 +4513,11 @@ impl Compiler {
                 self.ast_psh();
                 self.expr(Token::Inc as i64)?;
                 self.reject_aggregate_binop(t, self.ty, "/")?;
+                if let Some(vty) = self.vector_binop_ty(t, self.ty, "/") {
+                    self.ty = vty;
+                    self.ast_binop(crate::c5::ir::BinOp::Div);
+                    continue;
+                }
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, "/")?;
                     self.ast_binop(crate::c5::ir::BinOp::Fdiv);
@@ -4109,7 +4549,7 @@ impl Compiler {
                         // masking from the operand type.
                         let lhs_ast = self.ast_vstack.pop().flatten();
                         let rhs_ast = self.ast_acc.take();
-                        let saved_vstack: alloc::vec::Vec<_> = self.ast_vstack.drain(..).collect();
+                        let saved_vstack = core::mem::take(&mut self.ast_vstack);
                         self.ast_vstack.push(None);
                         self.maybe_mask_operands_to_unsigned_common(t, self.ty);
                         self.ast_binop(crate::c5::ir::BinOp::Divu);
@@ -4149,6 +4589,11 @@ impl Compiler {
                 self.ast_psh();
                 self.expr(Token::Inc as i64)?;
                 self.reject_aggregate_binop(t, self.ty, "%")?;
+                if let Some(vty) = self.vector_binop_ty(t, self.ty, "%") {
+                    self.ty = vty;
+                    self.ast_binop(crate::c5::ir::BinOp::Mod);
+                    continue;
+                }
                 if is_floating_scalar(self.ty) {
                     return Err(self.compile_err("`%` is not defined on floating-point operands"));
                 }
@@ -4156,7 +4601,7 @@ impl Compiler {
                 if is_unsigned_ty(common) {
                     let lhs_ast = self.ast_vstack.pop().flatten();
                     let rhs_ast = self.ast_acc.take();
-                    let saved_vstack: alloc::vec::Vec<_> = self.ast_vstack.drain(..).collect();
+                    let saved_vstack = core::mem::take(&mut self.ast_vstack);
                     self.ast_vstack.push(None);
                     self.maybe_mask_operands_to_unsigned_common(t, self.ty);
                     self.ast_binop(crate::c5::ir::BinOp::Modu);
@@ -4301,6 +4746,8 @@ impl Compiler {
                     core::mem::take(&mut self.pending.indirect_callee_is_variadic);
                 let saved_callee_depth =
                     core::mem::take(&mut self.pending.indirect_callee_fn_ptr_depth);
+                let saved_callee_ret =
+                    core::mem::take(&mut self.pending.indirect_callee_ret_fn_ptr);
                 let saved_fn_ptr_chain = self.pending.fn_ptr_chain_depth;
                 self.ast_psh();
                 self.expr(Token::Assign as i64)?;
@@ -4308,6 +4755,7 @@ impl Compiler {
                 self.pending.indirect_callee_params = saved_callee_params;
                 self.pending.indirect_callee_is_variadic = saved_callee_variadic;
                 self.pending.indirect_callee_fn_ptr_depth = saved_callee_depth;
+                self.pending.indirect_callee_ret_fn_ptr = saved_callee_ret;
                 self.pending.fn_ptr_chain_depth = saved_fn_ptr_chain;
                 // Restore the queue and shift one level down so
                 // the next `[i]` sees the stride for that level
@@ -4476,11 +4924,31 @@ impl Compiler {
                 } else {
                     0
                 };
+                self.pending.indirect_callee_ret_fn_ptr = if field_is_fn_ptr {
+                    field.fn_ptr_ret_indirection
+                } else {
+                    0
+                };
 
                 if field.offset > 0 {
                     self.emit_binop_with_imm(crate::c5::ir::BinOp::Add, field.offset as i64);
                 }
-                self.ty = field.ty;
+                // A named address space is a property of the object, so a
+                // member of a segment-qualified struct is reached through
+                // the same segment: fold the object's qualifier onto the
+                // field's tag at the field's own derivation level.
+                let obj_seg_bits = object_segment_bits(if is_dot { t } else { t - Ty::Ptr as i64 });
+                let field_ty = if obj_seg_bits != 0 {
+                    if segment_of_ty(field.ty).is_some() {
+                        return Err(self.compile_err(
+                            "segment-qualified member of a segment-qualified object",
+                        ));
+                    }
+                    apply_qual_bits(field.ty, obj_seg_bits)
+                } else {
+                    field.ty
+                };
+                self.ty = field_ty;
 
                 if field.bit_width > 0 {
                     // Bitfield. Two shapes:
@@ -4514,7 +4982,7 @@ impl Compiler {
                     // the integer promotions may narrow (C99 6.3.1.1p2),
                     // so the walker and the surrounding expression agree
                     // on the value's width.
-                    let bf_field_ty = super::emit::bitfield_value_ty(field.bit_width, field.ty);
+                    let bf_field_ty = super::emit::bitfield_value_ty(field.bit_width, field_ty);
                     self.pending.bf_assign_rhs = None;
                     self.pending.bf_compound_assign = None;
                     // emit_bitfield_access drives the c5 stack
@@ -4527,7 +4995,7 @@ impl Compiler {
                     // dedicated dual-emit for the bitfield
                     // produces the only AST node this site needs.
                     let bf_vstack_depth = self.ast_vstack.len();
-                    self.emit_bitfield_access(field.bit_offset, field.bit_width, field.ty)?;
+                    self.emit_bitfield_access(field.bit_offset, field.bit_width, field_ty)?;
                     if self.ast_vstack.len() > bf_vstack_depth {
                         self.ast_vstack.truncate(bf_vstack_depth);
                     }
@@ -5141,6 +5609,12 @@ impl Compiler {
         &mut self,
     ) -> Result<(i64, alloc::vec::Vec<i64>, Option<FnTypeName>), C5Error> {
         self.pending.typeof_operand_was_array = false;
+        // Clear the array carriers so a stale value from an earlier parse
+        // cannot read as this type name's extent; the base parse below
+        // refills them for an array typedef or `typeof` base.
+        self.pending.typedef_base_array_size = 0;
+        self.pending.typedef_base_array_dims.clear();
+        self.pending.typedef_base_zero_len = false;
         let mut ty = self.parse_decl_base_type()?;
         // A function-pointer / function-type base -- a typedef, or `typeof`
         // of a function or of a function's address -- carries the pointee
@@ -5150,6 +5624,7 @@ impl Compiler {
         let base_is_fn = self.pending.base_is_function_type;
         let base_variadic = matches!(self.pending.typedef_fn_proto.take(), Some((_, true)));
         let base_params = self.pending.fn_ptr_param_types.take();
+        self.pending.fn_ptr_ret_indirection = 0;
         let mut fn_ty = self
             .pending
             .fn_ptr_indirection
@@ -5161,24 +5636,33 @@ impl Compiler {
             });
         // `typeof(arr)` and an array typedef leave the operand's extent on
         // the carrier; a multi-dimensional alias also fills the dims list.
+        // The carrier gates (not the `typeof` flag): a bare array typedef
+        // in the type-name position is that array type (C99 6.7.7p3).
         let base_extent = core::mem::take(&mut self.pending.typedef_base_array_size);
         let base_dims = core::mem::take(&mut self.pending.typedef_base_array_dims);
-        let mut dims = if !self.pending.typeof_operand_was_array {
+        let base_zero_len = core::mem::take(&mut self.pending.typedef_base_zero_len);
+        let mut dims = if base_extent == 0 && !base_zero_len {
             alloc::vec::Vec::new()
         } else if !base_dims.is_empty() {
             base_dims
+        } else if base_zero_len {
+            alloc::vec![0]
         } else {
             alloc::vec![if base_extent > 0 { base_extent } else { -1 }]
         };
         while self.lex.tk == Token::MulOp {
             self.next()?;
+            if !dims.is_empty() {
+                // `A *` over an array base names a pointer to the array
+                // (C99 6.7.7p3): fold the extent into the aggregate
+                // pointee, as the declarator path does.
+                ty = self.array_agg_type(ty, &dims);
+                dims.clear();
+            }
             ty += Ty::Ptr as i64;
             if let Some(f) = fn_ty.as_mut() {
                 f.ptr_depth += 1;
             }
-            // A pointer through the specifier names a pointer, not an
-            // array; the extent belongs to the pointee.
-            dims.clear();
             while self.lex.tk == Token::TypeQual {
                 self.next()?;
             }
@@ -5218,9 +5702,12 @@ impl Compiler {
                 });
             } else if !ptr_dims.is_empty() && levels > 0 {
                 // `T (*)[N]`: fold the pointee dimensions into the tag so the
-                // pointee keeps its size, as the cast path does.
-                ty = self.array_agg_type(ty, &ptr_dims) + levels * Ty::Ptr as i64;
-                dims.clear();
+                // pointee keeps its size, as the cast path does. An array
+                // typedef base contributes the inner dimensions (C99
+                // 6.7.7p3: `A (*)[N]` is a pointer to `N` arrays of `A`).
+                let mut pointee = ptr_dims;
+                pointee.append(&mut dims);
+                ty = self.array_agg_type(ty, &pointee) + levels * Ty::Ptr as i64;
             } else {
                 ty += levels * Ty::Ptr as i64;
             }
@@ -5228,6 +5715,9 @@ impl Compiler {
         // Abstract array declarator `T []` / `T [N]` (C99 6.7.6). An
         // omitted bound is an incomplete array type, which C99 6.7.5.2p6
         // makes compatible with any bound for the same element type.
+        // These bounds are outer; an array typedef base supplies the
+        // inner ones, as the `typeof` type-name reader orders them.
+        let mut outer = alloc::vec::Vec::new();
         while self.lex.tk == Token::Brak {
             self.next()?;
             let n = if self.lex.tk == ']' {
@@ -5247,7 +5737,11 @@ impl Compiler {
                 return Err(self.compile_err("close bracket expected in an array type name"));
             }
             self.next()?;
-            dims.push(n);
+            outer.push(n);
+        }
+        if !outer.is_empty() {
+            outer.append(&mut dims);
+            dims = outer;
         }
         Ok((ty, dims, fn_ty))
     }
@@ -5282,6 +5776,41 @@ impl Compiler {
 /// `unsigned int` and `T *` select distinct associations.
 fn generic_type_match(ctrl: i64, assoc: i64) -> bool {
     (ctrl & !super::types::VOLATILE_MASK) == (assoc & !super::types::VOLATILE_MASK)
+}
+
+/// The operators the GCC vector extension lowers element-wise: token,
+/// spelling, and the nominal opcode. The walker picks the signed /
+/// unsigned / floating flavour of the opcode from the element type.
+const VECTOR_BINOPS: [(Token, &str, super::super::ir::BinOp); 10] = {
+    use super::super::ir::BinOp as B;
+    [
+        (Token::AddOp, "+", B::Add),
+        (Token::SubOp, "-", B::Sub),
+        (Token::MulOp, "*", B::Mul),
+        (Token::DivOp, "/", B::Div),
+        (Token::ModOp, "%", B::Mod),
+        (Token::AndOp, "&", B::And),
+        (Token::OrOp, "|", B::Or),
+        (Token::XorOp, "^", B::Xor),
+        (Token::ShlOp, "<<", B::Shl),
+        (Token::ShrOp, ">>", B::Shr),
+    ]
+};
+
+fn vector_binop_entry(tk: i64) -> Option<&'static (Token, &'static str, super::super::ir::BinOp)> {
+    VECTOR_BINOPS.iter().find(|(t, ..)| *t as i64 == tk)
+}
+
+fn is_vector_binop_token(tk: i64) -> bool {
+    vector_binop_entry(tk).is_some()
+}
+
+fn vector_binop_name(tk: i64) -> &'static str {
+    vector_binop_entry(tk).map_or("", |(_, n, _)| *n)
+}
+
+fn vector_binop_op(tk: i64) -> super::super::ir::BinOp {
+    vector_binop_entry(tk).map_or(super::super::ir::BinOp::Add, |(.., op)| *op)
 }
 
 /// A function type named by a type name. The flat type tag carries only
@@ -5375,6 +5904,33 @@ fn atomic_kind_from_intrinsic(id: i64) -> Option<super::super::ast::AtomicKind> 
 
 /// Map a GCC memory-transfer builtin name to its transfer kind;
 /// `None` for any other name.
+/// A type-specific checked-arithmetic builtin
+/// (`__builtin_{s,u}{add,sub,mul}{,l,ll}_overflow`), as
+/// `(op, unsigned, rank)`; `op` matches [`Expr::CheckedArith`] and `rank`
+/// is `i` / `l` / `q` for int / long / long long. gcc documents the
+/// family from 5.1; the generic three take any integer type instead.
+fn typed_overflow_builtin(name: &str) -> Option<(i64, bool, u8)> {
+    let rest = name.strip_prefix("__builtin_")?;
+    let (unsigned, rest) = match rest.strip_prefix('s') {
+        Some(r) => (false, r),
+        None => (true, rest.strip_prefix('u')?),
+    };
+    let (op, rest) = if let Some(r) = rest.strip_prefix("add") {
+        (0i64, r)
+    } else if let Some(r) = rest.strip_prefix("sub") {
+        (1, r)
+    } else {
+        (2, rest.strip_prefix("mul")?)
+    };
+    let rank = match rest {
+        "_overflow" => b'i',
+        "l_overflow" => b'l',
+        "ll_overflow" => b'q',
+        _ => return None,
+    };
+    Some((op, unsigned, rank))
+}
+
 fn mem_transfer_op(name: &str) -> Option<super::super::ast::MemTransferOp> {
     use super::super::ast::MemTransferOp;
     Some(match name {

@@ -17,9 +17,10 @@ use alloc::format;
 use alloc::rc::Rc;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use hashbrown::HashMap;
 
-use super::text::{is_ident_byte, literal_prefix_len, pp_number_len, skip_literal};
+use super::text::{
+    MAX_LITERAL_PREFIX, is_ident_byte, literal_prefix_len, pp_number_len, skip_literal,
+};
 use super::{FnMacro, Preprocessor};
 
 #[derive(Clone, Copy, PartialEq)]
@@ -58,6 +59,17 @@ impl Hideset {
     fn contains(&self, name: &str) -> bool {
         self.names.binary_search_by(|n| (**n).cmp(name)).is_ok()
     }
+}
+
+/// A file name spelled as a string literal, for `__FILE__` and
+/// `__BASE_FILE__`. A name is arbitrary text, so it takes the escaping a
+/// line marker's filename takes.
+fn quoted_path(path: &str) -> String {
+    let mut s = String::with_capacity(path.len() + 2);
+    s.push('"');
+    super::directive::push_string_body(path, &mut s);
+    s.push('"');
+    s
 }
 
 fn hs_union(a: &Hideset, b: &Hideset) -> Hideset {
@@ -396,20 +408,19 @@ impl<'a> Exp<'a> {
         out.reserve(cap);
         let first_at = out.len();
         let mut prev_kind = TokKind::Other;
+        let mut prev_text: &[u8] = b"";
         for &t in toks {
+            let text = self.text(t);
             if out.len() > first_at
                 && (t.space
                     || (relex_safe
-                        && pp_tokens_would_merge(
-                            prev_kind,
-                            *out.as_bytes().last().unwrap(),
-                            self.first_byte(t),
-                        )))
+                        && pp_tokens_would_merge(prev_kind, prev_text, self.first_byte(t))))
             {
                 out.push(' ');
             }
-            out.push_str(self.text(t));
+            out.push_str(text);
             prev_kind = t.kind;
+            prev_text = text.as_bytes();
         }
     }
 
@@ -477,13 +488,7 @@ impl<'a> Exp<'a> {
             }
             let text = self.text(t);
             if matches!(t.kind, TokKind::Str | TokKind::Char) {
-                for c in text.chars() {
-                    match c {
-                        '"' => s.push_str("\\\""),
-                        '\\' => s.push_str("\\\\"),
-                        _ => s.push(c),
-                    }
-                }
+                super::directive::push_string_body(text, &mut s);
             } else {
                 s.push_str(text);
             }
@@ -625,6 +630,7 @@ impl<'a> Exp<'a> {
             }
             let (is_fn, is_obj) = {
                 let name = self.text(tok);
+                pp.obs_note(name);
                 (
                     pp.fn_macros.contains_key(name),
                     pp.macros.contains_key(name),
@@ -697,18 +703,19 @@ impl<'a> Exp<'a> {
                 out.push(t);
             }
             "__FILE__" => {
-                let t = self.synth(format!("\"{filename}\""), TokKind::Str, tok.space);
+                let t = self.synth(quoted_path(filename), TokKind::Str, tok.space);
                 out.push(t);
             }
             // The main input file, so it keeps its value inside an
             // include where `__FILE__` names the header.
             "__BASE_FILE__" => {
                 let base = self.pp.source_label.clone();
-                let t = self.synth(format!("\"{base}\""), TokKind::Str, tok.space);
+                let t = self.synth(quoted_path(&base), TokKind::Str, tok.space);
                 out.push(t);
             }
             // Extension: each use expands to the next integer.
             "__COUNTER__" => {
+                self.pp.obs_note_counter();
                 let n = self.pp.counter.get();
                 self.pp.counter.set(n + 1);
                 let t = self.synth(format!("{n}"), TokKind::Number, tok.space);
@@ -1150,6 +1157,7 @@ impl Preprocessor {
                     i += 1;
                 }
                 let ident = &line[start..i];
+                self.obs_note(ident);
                 if is_dynamic_predefine(ident)
                     || matches!(ident, "__has_builtin" | "__has_attribute")
                     || self.macros.contains_key(ident)
@@ -1244,6 +1252,7 @@ impl Preprocessor {
     /// `expand` plus the chain of intermediate macro names the walk
     /// passed through. A revisited name ends the walk.
     pub(super) fn expand_chain(&self, name: &str) -> Option<(String, Vec<String>)> {
+        self.obs_note(name);
         let first = self.macros.get(name)?;
         let mut chain: Vec<String> = Vec::new();
         let mut current = first.clone();
@@ -1251,6 +1260,7 @@ impl Preprocessor {
             if current == name || chain.iter().any(|c| c == &current) {
                 break;
             }
+            self.obs_note(&current);
             match self.macros.get(&current) {
                 Some(next) => {
                     chain.push(core::mem::replace(&mut current, next.clone()));
@@ -1279,32 +1289,46 @@ pub(super) fn is_dynamic_predefine(name: &str) -> bool {
     )
 }
 
-/// True when the token ending in `prev` directly followed by a token
+/// True when the token spelled `prev` directly followed by a token
 /// starting with `next` would re-lex as one preprocessing token. The
 /// serializer inserts one space at such boundaries -- white space
 /// between tokens never changes phase-7 semantics -- so substituted text
 /// cannot paste onto its neighbours (C99 6.10.3.3 reserves pasting for
 /// `##`). `prev_kind` is the preceding token's kind, which decides
-/// whether the pp-number continuation rules apply.
+/// whether the pp-number and encoding-prefix rules apply.
 ///
 /// Every case is read off a token-grammar rule rather than listed:
 /// identifier and pp-number continuation (6.4.2.1 / 6.4.8), the
-/// punctuator table `punct_len` matches, and the merge-only pairs.
-pub(super) fn pp_tokens_would_merge(prev_kind: TokKind, prev: u8, next: u8) -> bool {
-    if is_ident_byte(prev) && is_ident_byte(next) {
+/// encoding prefixes `literal_prefix_len` accepts (6.4.4.4 / 6.4.5),
+/// the punctuator table `punct_len` matches, and the merge-only pairs.
+pub(super) fn pp_tokens_would_merge(prev_kind: TokKind, prev: &[u8], next: u8) -> bool {
+    let Some(&last) = prev.last() else {
+        return false;
+    };
+    if is_ident_byte(last) && is_ident_byte(next) {
         return true;
+    }
+    // 6.4.4.4 / 6.4.5: an identifier spelled exactly as an encoding
+    // prefix takes a directly following quote into one literal token.
+    if prev_kind == TokKind::Ident && prev.len() <= MAX_LITERAL_PREFIX {
+        let mut probe = [0u8; MAX_LITERAL_PREFIX + 1];
+        probe[..prev.len()].copy_from_slice(prev);
+        probe[prev.len()] = next;
+        if literal_prefix_len(&probe[..=prev.len()], 0) == Some(prev.len()) {
+            return true;
+        }
     }
     // 6.4.8: a pp-number runs on through `.` and through a sign after an
     // exponent marker, so only a preceding pp-number merges with those.
     if prev_kind == TokKind::Number
         && (next == b'.'
-            || (matches!(prev, b'e' | b'E' | b'p' | b'P') && matches!(next, b'+' | b'-')))
+            || (matches!(last, b'e' | b'E' | b'p' | b'P') && matches!(next, b'+' | b'-')))
     {
         return true;
     }
-    let pair = [prev, next];
+    let pair = [last, next];
     // A `.` before a digit opens a pp-number.
-    if prev == b'.' && pp_number_len(&pair, 0) == 2 {
+    if last == b'.' && pp_number_len(&pair, 0) == 2 {
         return true;
     }
     punct_len(&pair, 0) == 2 || MERGE_ONLY2.iter().any(|p| *p == pair)
@@ -1349,12 +1373,7 @@ impl JoinScan {
     }
 
     /// Advance the scan over newly appended text.
-    pub(super) fn feed(
-        &mut self,
-        text: &str,
-        fn_macros: &HashMap<String, FnMacro>,
-        obj_macros: &HashMap<String, String>,
-    ) {
+    pub(super) fn feed(&mut self, text: &str, pp: &Preprocessor) {
         let bytes = text.as_bytes();
         let mut i = 0;
         loop {
@@ -1433,7 +1452,7 @@ impl JoinScan {
                     while i < bytes.len() && is_ident_byte(bytes[i]) {
                         i += 1;
                     }
-                    if !join_head(&text[start..i], fn_macros, obj_macros) {
+                    if !join_head(&text[start..i], pp) {
                         continue;
                     }
                     let mut j = i;
@@ -1465,17 +1484,14 @@ impl JoinScan {
 /// rescans the replacement list together with the tokens that follow, so
 /// it is the name ending the list that meets the `(` -- which may be on a
 /// later line (`#define dprintk if (debug) printk`).
-fn join_head(
-    name: &str,
-    fn_macros: &HashMap<String, FnMacro>,
-    obj_macros: &HashMap<String, String>,
-) -> bool {
+fn join_head(name: &str, pp: &Preprocessor) -> bool {
     let mut name = name;
     for _ in 0..MAX_MACRO_DEPTH {
-        if fn_macros.contains_key(name) {
+        pp.obs_note(name);
+        if pp.fn_macros.contains_key(name) {
             return true;
         }
-        let Some(tail) = obj_macros.get(name).and_then(|b| trailing_identifier(b)) else {
+        let Some(tail) = pp.macros.get(name).and_then(|b| trailing_identifier(b)) else {
             return false;
         };
         if tail == name {

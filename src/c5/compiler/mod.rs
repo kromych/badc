@@ -6,7 +6,7 @@ use super::CODE_BASE;
 use super::codegen::Target;
 use super::error::C5Error;
 use super::lexer::{self, Lexer};
-use super::preprocessor::{DylibSpec, IncludeRecord, Preprocessor};
+use super::preprocessor::{DylibSpec, IncludeRecord, PpReuse, Preprocessor};
 use super::program::Program;
 use super::symbol::Symbol;
 use super::token::Token;
@@ -26,6 +26,7 @@ mod function;
 mod global_init;
 mod initializer;
 mod locals;
+mod loop_idiom;
 mod run_compile;
 mod sizeof_expr;
 mod stmt;
@@ -40,8 +41,8 @@ pub(crate) mod types;
 /// `_Alignas` / the GCC `aligned` attribute, whether the request comes
 /// from the declarator or the object's type. Static objects (file-scope,
 /// block-scope static, and initialised or zero-init alike) are placed at
-/// this alignment in `.data` / `.bss`; automatic objects stay capped lower
-/// because stack-frame realignment is not implemented. 64 KiB is the
+/// this alignment in `.data` / `.bss`; automatic objects stay capped at
+/// `MAX_FRAME_ALIGN`. 64 KiB is the
 /// largest page size in common use (the aarch64 max-page-size) and covers
 /// cache-line, page, and page-multiple requests such as a per-CPU stack.
 /// The self-contained ELF writer raises the read-write segment `p_align`
@@ -108,10 +109,14 @@ pub struct StructDef {
     pub align: usize,
     /// The attribute-derived part of `align`: the widest `aligned(N)` /
     /// `_Alignas` reaching the aggregate through its tag, body, members,
-    /// or a member's typedef, 0 when the alignment is purely natural. An
-    /// automatic object of the type treats this like its own explicit
-    /// request when deciding on the realigned frame region.
+    /// or a member's typedef, 0 when the alignment is purely natural.
     pub explicit_align: u32,
+    /// The alignment the members require with every `aligned(N)` /
+    /// `_Alignas` / `packed` / `#pragma pack` removed, computed
+    /// recursively through nested aggregates. `align` cannot report it
+    /// once an attribute raised or lowered the aggregate, and object
+    /// placement keeps it as a floor. `0` until layout finishes.
+    pub natural_align: usize,
     pub fields: Vec<StructField>,
     /// Unnamed bit-fields, in declaration order. C99 6.7.2.1p11 makes
     /// them members that reserve storage, but they have no name, so
@@ -241,6 +246,12 @@ pub struct StructField {
     /// function-to-pointer no-op decay instead of emitting a
     /// spurious `Li` that loads through code memory.
     pub fn_ptr_indirection: i64,
+    /// Fn-pointer lineage of the value a call through this field
+    /// returns (mirrors `Symbol::fn_ptr_ret_indirection`, same plus-1
+    /// convention). The postfix call arm seeds `fn_ptr_chain_depth`
+    /// from it so `(*s.cb(x))(y)`-style chains decay instead of
+    /// loading through the returned function pointer.
+    pub fn_ptr_ret_indirection: i64,
     /// Parameter type tags of a function-pointer field, captured from
     /// the field declarator's prototype (mirrors `Symbol::params`).
     /// Empty for a non-function-pointer field or one declared without a
@@ -282,6 +293,9 @@ pub struct StructField {
     /// typedef-carried `aligned(N)` the flat field type cannot express.
     /// `__alignof__` on a member lvalue reports it. 0 for bitfields.
     pub align: u32,
+    /// How the member declaration spelled the type; see
+    /// [`crate::c5::symbol::DeclSpelling`]. Debug info only.
+    pub decl_spelling: crate::c5::symbol::DeclSpelling,
 }
 
 /// Optional preprocessor / driver knobs threaded through compiler
@@ -317,6 +331,20 @@ pub struct CompileOptions {
     /// tree's `libc/include`, `$BADC_HOME/include`). A bundled name
     /// found there replaces the in-binary body.
     pub own_header_roots: Vec<String>,
+    /// `-nostdinc` -- the bundled standard headers and the system
+    /// directories leave the `#include` search, so only `-I`, `-iquote`
+    /// and the including file's directory resolve a name. The auto-include
+    /// retry is off with it: a unit that asked for no library headers must
+    /// not be given one. See [`Preprocessor::set_nostdinc`].
+    pub nostdinc: bool,
+    /// `-fno-builtin` / `-ffreestanding` -- a call spelled with a library
+    /// function's own name is an ordinary call, not a builtin the compiler
+    /// may fold. The `__builtin_` spellings keep folding, as they do under
+    /// gcc's flag, and the auto-include retry is off with it: a
+    /// freestanding unit has no library to declare the name from.
+    pub no_builtin: bool,
+    /// `-fno-builtin-<name>` -- the same, for one library name each.
+    pub no_builtin_fns: Vec<String>,
     /// `-include FILE` -- headers force-included before the source.
     pub force_includes: Vec<String>,
     /// Filename string used in compiler diagnostics
@@ -379,6 +407,10 @@ pub struct CompileOptions {
     /// conformance so a header takes its standard-C path for the GNU
     /// features badc lacks.
     pub gnu_dialect: bool,
+    /// Assembler-with-cpp input (a `.S` unit). The preprocessor then
+    /// passes a `#` line naming no directive through as text, as GNU
+    /// cpp does for assembler input.
+    pub asm_source: bool,
     /// Mirror of [`crate::NativeOptions::elf_class`]. The assembler's
     /// starting code mode follows it, the way `as --32` starts in
     /// 32-bit mode and `as --64` in 64-bit; a `.code16` / `.code32` /
@@ -386,6 +418,17 @@ pub struct CompileOptions {
     /// preprocessor's data-model predefines follow it as well, as gcc's
     /// do under `-m16` / `-m32`.
     pub elf_class: crate::c5::ElfClass,
+    /// Mirror of [`crate::NativeOptions::code_model`] (`-mcmodel`).
+    /// The preprocessor's `__code_model_*__` predefine follows it.
+    pub code_model: crate::c5::CodeModel,
+    /// `-fshort-wchar` -- give `wchar_t` an unsigned 16-bit type on
+    /// every target, which narrows `L"..."` / `L'...'` elements and the
+    /// `__SIZEOF_WCHAR_T__` / `__WCHAR_TYPE__` predefines with it.
+    pub short_wchar: bool,
+    /// `-fsigned-char` / `-funsigned-char`, which C99 6.2.5p15 leaves to
+    /// the implementation. `None` keeps the target ABI's own choice; see
+    /// [`Self::plain_char_signed`], the sole resolution of the pair.
+    pub char_signed: Option<bool>,
 }
 
 impl CompileOptions {
@@ -398,6 +441,56 @@ impl CompileOptions {
     /// starting code mode follows it.
     pub fn with_elf_class(mut self, class: crate::c5::ElfClass) -> Self {
         self.elf_class = class;
+        self
+    }
+    /// x86-64 code model of the object being produced (`-mcmodel`).
+    pub fn with_code_model(mut self, model: crate::c5::CodeModel) -> Self {
+        self.code_model = model;
+        self
+    }
+    /// Narrow `wchar_t` to an unsigned 16-bit type (`-fshort-wchar`).
+    pub fn with_short_wchar(mut self, on: bool) -> Self {
+        self.short_wchar = on;
+        self
+    }
+    /// Take the standard library headers off the `#include` search
+    /// (`-nostdinc`).
+    pub fn with_nostdinc(mut self, on: bool) -> Self {
+        self.nostdinc = on;
+        self
+    }
+    /// Stop treating a library function's own name as a builtin
+    /// (`-fno-builtin` / `-ffreestanding`).
+    pub fn with_no_builtin(mut self, on: bool) -> Self {
+        self.no_builtin = on;
+        self
+    }
+    /// The same for the named library functions (`-fno-builtin-<name>`).
+    pub fn with_no_builtin_fns(mut self, names: Vec<String>) -> Self {
+        self.no_builtin_fns = names;
+        self
+    }
+
+    /// Select plain `char`'s signedness (`-fsigned-char` /
+    /// `-funsigned-char`); `None` restores the target default.
+    pub fn with_char_signed(mut self, signed: Option<bool>) -> Self {
+        self.char_signed = signed;
+        self
+    }
+
+    /// Whether plain `char` is signed in this unit: the target ABI's
+    /// choice unless an explicit flag overrode it. Every site that
+    /// depends on the signedness -- the `__CHAR_UNSIGNED__` predefine,
+    /// `#if` character constants, the lexer's constant folding and the
+    /// `char` type tag -- resolves it here.
+    pub fn plain_char_signed(&self, target: Target) -> bool {
+        self.char_signed
+            .unwrap_or_else(|| target.plain_char_signed())
+    }
+
+    /// Mark the input as assembler-with-cpp (a `.S` unit).
+    pub fn with_asm_source(mut self, on: bool) -> Self {
+        self.asm_source = on;
         self
     }
     /// Select the GNU89 inline linkage model as the unit default
@@ -531,6 +624,15 @@ pub(in crate::c5::compiler) struct Pending {
     /// implementation; GCC and common practice fold `const int N = ...`).
     pub base_is_const: bool,
 
+    /// Side channel from `parse_decl_base_type`: the base specifiers
+    /// included `restrict`, and the symbol-table index of the typedef
+    /// they named the base type through. Debug info only -- nothing
+    /// else reads either, so neither reaching a declaration it does
+    /// not belong to can change generated code.
+    pub spell_base_const: bool,
+    pub spell_base_restrict: bool,
+    pub spell_base_typedef: Option<u32>,
+
     /// Side channel from `parse_decl_base_type` to the function-
     /// prototype path: the base type was spelled `long double`,
     /// not bare `double`. Cleared at the start of every base-type
@@ -563,6 +665,23 @@ pub(in crate::c5::compiler) struct Pending {
     /// each parse. The caller takes() the value when binding the
     /// symbol.
     pub fn_ptr_indirection: Option<i64>,
+
+    /// Companion to `fn_ptr_indirection`: fn-pointer lineage of the
+    /// value a call through the declared pointer returns, in the same
+    /// plus-1 convention (0 = no lineage, 1 = the result IS a fn
+    /// pointer). Set by `parse_declarator` when signature-bearing
+    /// declarator groups enclose the innermost one
+    /// (`int (*(*p)(int))(int)` records indirection 1, return
+    /// lineage 1), taken alongside `fn_ptr_indirection`.
+    pub fn_ptr_ret_indirection: i64,
+
+    /// Set by a `parse_declarator` frame whose parenthesised group
+    /// carried its own function signature; the enclosing frame takes it
+    /// after the nested recursion to learn the fn-pointer lineage was
+    /// already fixed by an inner group, so the enclosing pointer levels
+    /// belong to the return type (`fn_ptr_ret_indirection`), not to
+    /// `fn_ptr_indirection`.
+    pub fn_ptr_group_resolved: bool,
 
     /// Set when the base type of the declarator currently being parsed
     /// came from a function-TYPE typedef (`typedef RET F(args)`), so the
@@ -670,6 +789,9 @@ pub(in crate::c5::compiler) struct Pending {
     /// declared object itself, unlike a `const` in the specifiers of a
     /// pointer declaration (`const T *p`), which applies to the pointee.
     pub declarator_outer_const: bool,
+    /// `declarator_outer_const` for `restrict` (`T *restrict p`).
+    /// Debug info only.
+    pub declarator_outer_restrict: bool,
     /// Set true while parsing a block-scope object declarator, where
     /// a non-constant array dimension is a C99 6.7.6.2 variable-length
     /// array. Elsewhere (file scope, struct member, typedef, cast,
@@ -739,6 +861,12 @@ pub(in crate::c5::compiler) struct Pending {
     /// convention (1: the value is the function pointer). Threaded at the
     /// same sites; `typeof` reads it to spell the operand's indirection.
     pub indirect_callee_fn_ptr_depth: i64,
+    /// Fn-pointer lineage of the indirect callee's return value, in the
+    /// same plus-1 convention (`Symbol::fn_ptr_ret_indirection`).
+    /// Threaded at the same sites; the postfix call arm takes it to
+    /// seed `fn_ptr_chain_depth` when the call result is itself a
+    /// function pointer, matching the direct-call arm.
+    pub indirect_callee_ret_fn_ptr: i64,
     /// Signature of the last completed function-pointer cast: (cast
     /// result tag, parameter types, variadic, pointer depth). The flat
     /// tag carries only the return type, so `typeof(<cast>)` recovers
@@ -761,6 +889,12 @@ pub(in crate::c5::compiler) struct Pending {
     /// own declaration.
     pub member_decl_save: Option<(usize, alloc::boxed::Box<crate::c5::symbol::Symbol>)>,
     pub in_member_declarator: bool,
+    /// Array shape (`inner_array_size`, `array_dims`) the identifier a
+    /// declarator just bound carried before that declarator overwrote it.
+    /// The scope save runs after the declarator, so it would otherwise
+    /// record the new binding's shape as the outer one's (C99 6.2.1p4).
+    /// Taken by `shadow_symbol` / `capture_block_shadow` for that symbol.
+    pub declarator_prior_shape: Option<(usize, i64, alloc::vec::Vec<i64>)>,
     /// Set by `parse_function_params` immediately before the per-parameter
     /// `parse_declarator` call and taken (cleared) at the top of that call,
     /// so it applies only to the parameter's own declarator and not to any
@@ -927,6 +1061,12 @@ pub(in crate::c5::compiler) struct Pending {
     /// honor up to 16, anything larger (or an automatic object above
     /// the 8-byte slot alignment) is a diagnostic, never silent.
     pub attr_align: i64,
+    /// The `_Alignas(N)` share of `attr_align`, 0 when the request came
+    /// only from `__attribute__((aligned(N)))` / `__declspec(align(N))`.
+    /// C11 6.7.5 makes `_Alignas` raise-only and an alignment below the
+    /// type's a constraint violation, where a variable-level GNU
+    /// `aligned(N)` sets the object's alignment and may lower it.
+    pub attr_alignas: i64,
     /// Alignment (bytes) carried by the base type of the declaration
     /// under parse, from a typedef whose type has a GNU
     /// `aligned(N)` attribute. Distinct from `attr_align` (an object /
@@ -958,8 +1098,9 @@ pub(in crate::c5::compiler) struct Pending {
     /// A consumed `__declspec(dllexport)`. Read after the declarator to add the
     /// declared name to the export list -- the equivalent of `#pragma export`.
     pub attr_dllexport: bool,
-    /// A consumed `__attribute__((constructor))`. Read at function-body
-    /// close to record the function in `Compiler::init_funcs`.
+    /// A consumed `__attribute__((constructor))`. Merged onto
+    /// `Symbol::is_constructor`, which the function-body open reads to
+    /// record the function in `Compiler::init_funcs`.
     pub attr_constructor: bool,
     /// A consumed `__attribute__((destructor))`.
     pub attr_destructor: bool,
@@ -1017,6 +1158,7 @@ pub(super) struct DeclSpecifiers {
     attr_section: Option<alloc::string::String>,
     attr_cleanup: Option<usize>,
     attr_align: i64,
+    attr_alignas: i64,
     type_align: i64,
     attr_vector_size: i64,
     attr_mode: Option<(u8, bool)>,
@@ -1035,6 +1177,7 @@ impl Pending {
             attr_section: self.attr_section.take(),
             attr_cleanup: self.attr_cleanup.take(),
             attr_align: core::mem::take(&mut self.attr_align),
+            attr_alignas: core::mem::take(&mut self.attr_alignas),
             type_align: core::mem::take(&mut self.type_align),
             attr_vector_size: core::mem::take(&mut self.attr_vector_size),
             attr_mode: self.attr_mode.take(),
@@ -1050,6 +1193,7 @@ impl Pending {
         self.attr_section = s.attr_section;
         self.attr_cleanup = s.attr_cleanup;
         self.attr_align = s.attr_align;
+        self.attr_alignas = s.attr_alignas;
         self.type_align = s.type_align;
         self.attr_vector_size = s.attr_vector_size;
         self.attr_mode = s.attr_mode;
@@ -1065,9 +1209,13 @@ impl Pending {
         DeclTypeCarriers {
             base_was_void: core::mem::take(&mut self.base_was_void),
             base_is_const: core::mem::take(&mut self.base_is_const),
+            spell_base_const: core::mem::take(&mut self.spell_base_const),
+            spell_base_restrict: core::mem::take(&mut self.spell_base_restrict),
+            spell_base_typedef: self.spell_base_typedef.take(),
             base_was_long_double: core::mem::take(&mut self.base_was_long_double),
             base_is_function_type: core::mem::take(&mut self.base_is_function_type),
             fn_ptr_indirection: self.fn_ptr_indirection.take(),
+            fn_ptr_ret_indirection: core::mem::take(&mut self.fn_ptr_ret_indirection),
             typedef_fn_proto: self.typedef_fn_proto.take(),
             fn_ptr_param_types: self.fn_ptr_param_types.take(),
             typedef_base_array_size: core::mem::take(&mut self.typedef_base_array_size),
@@ -1081,9 +1229,13 @@ impl Pending {
     pub(super) fn restore_decl_type_carriers(&mut self, s: DeclTypeCarriers) {
         self.base_was_void = s.base_was_void;
         self.base_is_const = s.base_is_const;
+        self.spell_base_const = s.spell_base_const;
+        self.spell_base_restrict = s.spell_base_restrict;
+        self.spell_base_typedef = s.spell_base_typedef;
         self.base_was_long_double = s.base_was_long_double;
         self.base_is_function_type = s.base_is_function_type;
         self.fn_ptr_indirection = s.fn_ptr_indirection;
+        self.fn_ptr_ret_indirection = s.fn_ptr_ret_indirection;
         self.typedef_fn_proto = s.typedef_fn_proto;
         self.fn_ptr_param_types = s.fn_ptr_param_types;
         self.typedef_base_array_size = s.typedef_base_array_size;
@@ -1100,9 +1252,13 @@ impl Pending {
 pub(super) struct DeclTypeCarriers {
     base_was_void: bool,
     base_is_const: bool,
+    spell_base_const: bool,
+    spell_base_restrict: bool,
+    spell_base_typedef: Option<u32>,
     base_was_long_double: bool,
     base_is_function_type: bool,
     fn_ptr_indirection: Option<i64>,
+    fn_ptr_ret_indirection: i64,
     typedef_fn_proto: Option<(usize, bool)>,
     fn_ptr_param_types: Option<alloc::vec::Vec<i64>>,
     typedef_base_array_size: i64,
@@ -1117,9 +1273,14 @@ impl Default for Pending {
         Self {
             base_was_void: false,
             base_is_const: false,
+            spell_base_const: false,
+            spell_base_restrict: false,
+            spell_base_typedef: None,
             base_was_long_double: false,
             fn_params: None,
             fn_ptr_indirection: None,
+            fn_ptr_ret_indirection: 0,
+            fn_ptr_group_resolved: false,
             base_is_function_type: false,
             bare_function_type_declarator: false,
             index_stride: 0,
@@ -1133,6 +1294,7 @@ impl Default for Pending {
             typedef_base_array_dims: alloc::vec::Vec::new(),
             declarator_leading_ptr_count: 0,
             declarator_outer_const: false,
+            declarator_outer_restrict: false,
             vla_allowed: false,
             vla_dim_expr: None,
             declarator_zero_len_array: false,
@@ -1143,10 +1305,12 @@ impl Default for Pending {
             indirect_callee_params: None,
             indirect_callee_is_variadic: false,
             indirect_callee_fn_ptr_depth: 0,
+            indirect_callee_ret_fn_ptr: 0,
             last_fn_ptr_cast: None,
             parsing_fn_ptr_proto: false,
             member_decl_save: None,
             in_member_declarator: false,
+            declarator_prior_shape: None,
             param_decl_context: false,
             last_array_decay_size: 0,
             last_array_decay_dims: alloc::vec::Vec::new(),
@@ -1168,6 +1332,7 @@ impl Default for Pending {
             compound_lit_close_parens: 0,
             attr_maybe_unused: false,
             attr_align: 0,
+            attr_alignas: 0,
             type_align: 0,
             attr_packed: false,
             attr_vector_size: 0,
@@ -1189,6 +1354,120 @@ impl Default for Pending {
     }
 }
 
+/// Per-function state of one label name, held in `Compiler::labels`.
+pub(super) struct LabelState {
+    /// AST slot shared by the label's references and its labelled
+    /// statement, allocated on the first mention either way.
+    id: super::ast::LabelId,
+    /// Set once the labelled statement is parsed. A second one for
+    /// the same name violates C99 6.8.1p3.
+    defined: bool,
+}
+
+/// One `__label__` binding: the key its name interns under, and the
+/// block-nesting depth of the declaring block.
+struct LocalLabelBinding {
+    key: String,
+    depth: usize,
+}
+
+/// GCC `__label__` bindings for the blocks open in the current
+/// function, keyed by the name's symbol-table index -- the lexer
+/// interns one entry per spelling, so a name is a `usize` here.
+/// Declaring, resolving and closing a block each cost one map probe
+/// per name rather than a scan of the declaring block's list.
+#[derive(Default)]
+pub(super) struct LocalLabelScopes {
+    /// Per name, the bindings currently in scope, innermost last: a
+    /// declaration pushes, its block's exit pops. `last()` is the
+    /// binding a reference resolves to, so an inner declaration
+    /// shadows an outer one.
+    active: hashbrown::HashMap<usize, Vec<LocalLabelBinding>>,
+    /// Per open block, the names it declared, so its exit pops exactly
+    /// its own bindings.
+    declared: Vec<Vec<usize>>,
+    /// Makes each declaration's key unique within the function, which
+    /// keeps two sibling blocks declaring one name apart.
+    seq: u32,
+}
+
+impl LocalLabelScopes {
+    /// Drop every binding. Called at each function start.
+    fn clear(&mut self) {
+        self.active.clear();
+        self.declared.clear();
+        self.seq = 0;
+    }
+
+    fn open(&mut self) {
+        self.declared.push(Vec::new());
+    }
+
+    fn close(&mut self) {
+        for idx in self.declared.pop().unwrap_or_default() {
+            if let hashbrown::hash_map::Entry::Occupied(mut e) = self.active.entry(idx) {
+                e.get_mut().pop();
+                if e.get().is_empty() {
+                    e.remove();
+                }
+            }
+        }
+    }
+
+    /// Bind the name at symbol index `idx` in the innermost open block
+    /// and return its key. `None` when that block already declares the
+    /// name, which gcc rejects.
+    fn declare(&mut self, idx: usize, name: &str) -> Option<String> {
+        let depth = self.declared.len();
+        if self.innermost(idx).is_some_and(|b| b.depth == depth) {
+            return None;
+        }
+        let key = format!("{name}#{}", self.seq);
+        self.seq += 1;
+        self.active.entry(idx).or_default().push(LocalLabelBinding {
+            key: key.clone(),
+            depth,
+        });
+        self.declared
+            .last_mut()
+            .expect("a block scope is open while parsing its `__label__` declaration")
+            .push(idx);
+        Some(key)
+    }
+
+    /// The key the name at symbol index `idx` resolves to, or `None`
+    /// when no open block declares it (a function-scoped label).
+    fn resolve(&self, idx: usize) -> Option<&str> {
+        self.innermost(idx).map(|b| b.key.as_str())
+    }
+
+    fn innermost(&self, idx: usize) -> Option<&LocalLabelBinding> {
+        let found = self.active.get(&idx).and_then(|s| s.last());
+        note_local_label_lookup(usize::from(found.is_some()), self.active.len());
+        found
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Label lookups, `__label__` bindings those lookups examined, and
+    /// bindings that were in scope at them. Read by the scaling test,
+    /// which bounds the second against the first and the third.
+    pub(crate) static LOCAL_LABEL_LOOKUP: core::cell::Cell<(usize, usize, usize)> =
+        const { core::cell::Cell::new((0, 0, 0)) };
+}
+
+#[cfg(test)]
+fn note_local_label_lookup(examined: usize, in_scope: usize) {
+    LOCAL_LABEL_LOOKUP.with(|c| {
+        let (n, e, s) = c.get();
+        c.set((n + 1, e + examined, s + in_scope));
+    });
+}
+
+#[cfg(not(test))]
+fn note_local_label_lookup(_examined: usize, _in_scope: usize) {}
+
 /// Single-pass C compiler. Holds the lexer, the symbol table, and the
 /// codegen scaffolding. `compile(self)` consumes the compiler and produces
 /// a [`Program`] ready for the VM.
@@ -1208,6 +1487,14 @@ pub struct Compiler {
     /// which keeps the entries whose binding outlives the scope (a
     /// file-scope register variable is permanently `Loc`).
     scope_bound: Vec<u32>,
+    /// Open nested-block scopes' saved bindings, innermost last. A
+    /// level is pushed at block / `for`-init entry and drained at its
+    /// exit through `restore_block_shadow`; any rebinding site reached
+    /// while a level is open (declaration, enum body, block-scope or
+    /// implicit function declaration) saves the outer binding into the
+    /// innermost level. Empty at the function-body top level, whose
+    /// bindings use the per-symbol `h_*` slots instead.
+    block_scopes: Vec<Vec<stmt::BlockShadow>>,
 
     // --- Codegen state ---
     /// Next available `ent_pc` identifier for a user function or
@@ -1268,6 +1555,13 @@ pub struct Compiler {
     /// function.
     func_over_aligned: alloc::vec::Vec<(i64, i64, i64)>,
 
+    /// True once the current function has applied the address-of operator
+    /// to one of its automatic objects, directly or through a member,
+    /// element or cast of one. Feeds
+    /// [`crate::c5::ir::SspFacts::addr_taken`], which
+    /// `-fstack-protector-strong` reads. Reset per function.
+    func_local_addr_taken: bool,
+
     /// True once the current function has emitted at least one
     /// alloca intrinsic. Drives the function-end backpatch that
     /// grows the function's local count to include the alloca
@@ -1305,6 +1599,8 @@ pub struct Compiler {
     /// request (`__attribute__((always_inline))` / MSVC
     /// `__forceinline`); implies `pending_is_inline`.
     pending_is_always_inline: bool,
+    /// `__attribute__((noinline))` seen on the declarator being emitted.
+    pending_is_noinline: bool,
 
     /// True when the most recent decl-spec parse consumed an `inline`
     /// function specifier -- `inline` / `__inline` / `__inline__` or
@@ -1344,6 +1640,12 @@ pub struct Compiler {
     /// the folding contexts raise this depth.
     const_object_fold: u32,
 
+    /// Nesting depth of initializers for an object with static storage
+    /// duration declared inside a function body. C99 6.7.8p4 requires
+    /// those to be constant expressions; an automatic object's
+    /// initializer at the same nesting has no such requirement.
+    static_duration_init: u32,
+
     /// Per-function AST. The arena is reset at every function
     /// entry; the SSA walker reads from these snapshots at codegen
     /// entry.
@@ -1379,14 +1681,6 @@ pub struct Compiler {
     /// helpers that aren't built from source (sys-trampolines).
     /// The codegen reads these directly via `produce_ssa_funcs`.
     pub(super) synthetic_ssa_funcs: Vec<super::ir::FunctionSsa>,
-
-    /// Per-function map from goto label name -> AST `LabelId`.
-    /// Reset at every function entry (alongside `ast_reset`).
-    /// Keeps the AST's flat per-function label-id space in sync
-    /// with the parser's name-keyed `self.labels` /
-    /// `self.unresolved_gotos`, so `goto L; ... L:` resolves on
-    /// the AST side regardless of source order.
-    pub(super) ast_labels: Vec<(String, super::ast::LabelId)>,
 
     /// Cross-helper carry: `emit_local_init_store` stashes the
     /// initializer's ExprId here so the calling `parse_*_local_decl`
@@ -1430,30 +1724,23 @@ pub struct Compiler {
     /// `with_nesting` so pathological nesting is diagnosed instead
     /// of exhausting the native stack.
     nest_depth: usize,
-    /// Linear table of `(label_name, text_pc)`. Per-function (cleared
-    /// at every function start), so it stays small -- typically 0-2
-    /// entries even in code that uses `goto`. Linear scan beats
-    /// pulling in `HashMap` (which would force `std`).
-    /// Names of `label:` statements seen in the current function;
-    /// `Compiler::run_compile` validates every `goto` target
-    /// against this list at function end. Cleared at every
-    /// function start.
-    labels: Vec<String>,
+    /// Every label named in the current function, keyed by its
+    /// resolved name (see `resolve_label_name`). Ties the parser's
+    /// name-keyed view to the AST's flat per-function label-id space,
+    /// so a `goto` resolves regardless of source order;
+    /// `Compiler::run_compile` validates every `goto` target against
+    /// it at function end. Cleared at every function start.
+    labels: hashbrown::HashMap<String, LabelState>,
     /// Names of `goto label` statements whose target wasn't yet
     /// defined when the goto was parsed. Each name is rechecked
     /// against `labels` at function end; an unresolved entry is
     /// a compile error.
     unresolved_gotos: Vec<String>,
-    /// One entry per open block, holding that block's `__label__`
-    /// declarations as (source name, unique key). A label name is
-    /// resolved by scanning the stack from the innermost block out,
-    /// so an inner declaration shadows an outer one and two sibling
-    /// blocks declaring the same name get distinct keys. Cleared at
-    /// every function start.
-    local_label_scopes: Vec<Vec<(String, String)>>,
-    /// Counter making each `__label__` declaration's key unique
-    /// within the function.
-    local_label_seq: u32,
+    /// GCC `__label__` bindings of the open blocks: an inner
+    /// declaration shadows an outer one and two sibling blocks
+    /// declaring the same name get distinct keys. Cleared at every
+    /// function start.
+    local_label_scopes: LocalLabelScopes,
     /// Per nested `switch` body: drained at switch close. The
     /// AST emitter records each case's constant on its `Stmt::Case`
     /// node; this stack is the parser-side depth tracker that
@@ -1492,15 +1779,24 @@ pub struct Compiler {
     /// `.weak` symbol names from file-scope asm, bound STB_WEAK by the
     /// object writer wherever the name surfaces.
     pub(super) asm_weak_names: Vec<String>,
-    pub(super) asm_hidden_names: Vec<String>,
+    /// `.globl` symbol names from file-scope asm, given an undefined global
+    /// entry when the unit neither defines nor references the name.
+    pub(super) asm_global_names: Vec<String>,
+    /// Symbol visibility named by `.hidden` / `.internal` / `.protected` in
+    /// file-scope asm.
+    pub(super) asm_visibility: Vec<(String, crate::c5::program::SymVisibility)>,
     /// `.set name, target` symbol aliases from file-scope asm, merged
     /// onto `Program::function_aliases`.
-    pub(super) asm_sym_sets: Vec<(String, String)>,
+    pub(super) asm_sym_sets: Vec<(String, String, i64)>,
+    /// `.file "name"` operands from file-scope asm, in directive order.
+    pub(super) asm_file_names: Vec<String>,
+    /// `.ident` strings from file-scope asm, in directive order.
+    pub(super) asm_idents: Vec<String>,
     /// Sink the parse-time validation materializes every file-scope asm
     /// template into, in source order. Per unit, as the codegen sink is:
     /// a location expression may reach a label an earlier template
     /// defined (`.size name, .-name` split across two `asm()`).
-    pub(super) asm_validate_sink: crate::c5::codegen::ssa::emit_common::AsmSectionSink,
+    pub(super) asm_validate_sink: crate::c5::asm::AsmSectionSink,
 
     /// Include resolutions recorded by the preprocessor when
     /// [`CompileOptions::track_includes`] was set. Empty otherwise.
@@ -1563,6 +1859,19 @@ pub struct Compiler {
     /// function pointers carry the small `CODE_BASE + ent_pc` bias
     /// and the indirect-call lowering recognises that range.
     code_relocs: Vec<crate::c5::program::CodeReloc>,
+    /// Address-constant initializers of `_Thread_local` objects. Slots are
+    /// `tls_data` offsets; see [`program::Program::tls_data_relocs`].
+    pub(super) tls_data_relocs: Vec<crate::c5::program::DataReloc>,
+    /// Per-`tls_data_relocs` originating symbol index, as
+    /// [`Self::data_reloc_sym_idx`] is for `data_relocs`.
+    pub(super) tls_data_reloc_sym_idx: Vec<usize>,
+    /// [`Self::extern_data_relocs`] whose slot is in `tls_data`.
+    pub(super) tls_extern_data_relocs: Vec<crate::c5::program::ExternDataReloc>,
+    /// [`Self::code_relocs`] whose slot is in `tls_data`.
+    pub(super) tls_code_relocs: Vec<crate::c5::program::CodeReloc>,
+    /// Per-`tls_code_relocs` originating symbol index, as
+    /// [`Self::code_reloc_sym_idx`] is for `code_relocs`.
+    pub(super) tls_code_reloc_sym_idx: Vec<usize>,
     /// `&&label` initializer elements staged while parsing the current
     /// function body; moved onto `FinishedFunction::label_data_slots` at
     /// function close.
@@ -1581,8 +1890,8 @@ pub struct Compiler {
     pending_exports: Vec<String>,
     /// Functions defined with `__attribute__((constructor))` /
     /// `((destructor))`, accumulated in source order and copied onto
-    /// `Program::init_funcs`. Populated at each function-body close
-    /// when `pending.attr_constructor` / `attr_destructor` is set.
+    /// `Program::init_funcs`. Populated at each function-body open
+    /// when the symbol carries `is_constructor` / `is_destructor`.
     init_funcs: Vec<crate::c5::program::InitFunc>,
     /// `__attribute__((alias("target")))` function declarations, moved
     /// onto `Program::function_aliases`.
@@ -1597,6 +1906,11 @@ pub struct Compiler {
     /// The directive may precede the definition, so the names are applied
     /// once the unit is complete.
     pending_asm_globl: Vec<String>,
+    /// File-scope object definitions whose aggregate tag was incomplete at
+    /// the declarator. C99 6.9.2p3 admits a tentative definition the unit
+    /// completes later, so each entry -- the symbol, its tag, and the
+    /// declarator's line -- is rechecked once the unit is complete.
+    pending_incomplete_objects: Vec<(usize, usize, usize)>,
     /// Return type of the function whose body is currently being
     /// parsed (0 outside any function). Used by the `return s`
     /// path to emit a struct-copy through the hidden out-pointer
@@ -1684,6 +1998,18 @@ pub struct Compiler {
     /// `resolve_exports` adds every non-static defined function to the
     /// export list so a `--shared` consumer can `dlsym` it.
     export_all_functions: bool,
+    /// Mirror of [`CompileOptions::no_builtin`] and
+    /// [`CompileOptions::no_builtin_fns`]. Read by the library-name
+    /// folds, which decline under them.
+    no_builtin: bool,
+    no_builtin_fns: Vec<String>,
+    /// Mirror of [`CompileOptions::optimize`]. Gates the parse-side
+    /// transforms that are optimizations rather than lowerings.
+    optimize: bool,
+    /// Mirror of [`CompileOptions::nostdinc`]. With either flag set the
+    /// auto-include retry never runs, which is when a builtin's
+    /// fallback call must bind without a declaration.
+    nostdinc: bool,
     /// Mirror of [`CompileOptions::elf_class`]: the assembler's
     /// starting code mode.
     elf_class: crate::c5::ElfClass,
@@ -1714,6 +2040,9 @@ pub struct Compiler {
     /// this TU). Empty when the caller didn't set a label; the
     /// preprocessor's `"<source>"` placeholder then stands in.
     source_label: String,
+    /// The unit is assembler source (`.s` / `.S`), carried to
+    /// `Program::asm_unit` for the object writer's GNU as shape.
+    asm_unit: bool,
     /// Per-function locals + parameters captured at body close,
     /// before the c5 shadow-symbol restore unwinds the binding.
     /// The DWARF emitter walks this list to attach
@@ -1821,6 +2150,14 @@ pub struct Compiler {
     /// and the data-object model identifies an object by its start.
     staged_literal_syms: Vec<(i64, usize)>,
 
+    /// `(function, spelling, data offset)` of every `__func__` object
+    /// already materialised. C99 6.4.2.2 declares one object per
+    /// function, so a second reference resolves to the same storage.
+    func_name_objects: Vec<(String, String, i64)>,
+    /// Per-TU counter for the `__func__.<n>` backing symbols, shared
+    /// across the three spellings as gcc's is.
+    next_func_name_id: usize,
+
     /// Symbol indices of block-scope statics' emission records pushed
     /// while the current function body parses. Function close stamps
     /// each record's `owner_ent_pc` (mirrors `pending_block_locals`).
@@ -1840,6 +2177,11 @@ pub struct Compiler {
     /// rely on it. `None` after the first retry attempt, so the
     /// recursion bottoms out at one level.
     retry_state: Option<(String, CompileOptions)>,
+
+    /// The first pass's recorded preprocessor state, letting a retry
+    /// reuse that pass instead of re-preprocessing when the appended
+    /// force-include provably cannot change it.
+    pp_reuse: Option<PpReuse>,
 }
 
 /// Header of `__builtin_*` thunks every translation unit is given; see
@@ -1958,12 +2300,16 @@ impl Compiler {
         let mut pp = Preprocessor::new(target.id_str(), target, env!("CARGO_PKG_VERSION"));
         // `-m16` / `-m32` reach the front end as an ELFCLASS32 object;
         // gcc preprocesses those units with the i386 predefine set.
-        pp.set_elf_class(opts.elf_class);
+        // `-mcmodel` moves the `__code_model_*__` name the same way, and
+        // `-fshort-wchar` the `wchar_t` pair.
+        pp.set_unit_model(opts.elf_class, opts.code_model, opts.short_wchar);
+        pp.set_plain_char_signed(opts.plain_char_signed(target));
         if opts.gnu {
             pp.enable_gnu(opts.gnu89_inline, !opts.gnu_dialect);
         }
         pp.set_source_label(&opts.source_label);
         pp.set_track_includes(opts.track_includes);
+        pp.set_asm_source(opts.asm_source);
         for path in &opts.include_paths {
             pp.add_search_path(path);
         }
@@ -1976,6 +2322,8 @@ impl Compiler {
         for path in &opts.own_header_roots {
             pp.add_own_header_root(path);
         }
+        pp.set_nostdinc(opts.nostdinc);
+        pp.set_no_builtin(opts.no_builtin);
         // The GCC `__builtin_*` library thunks, which gcc and clang give
         // every unit with no `#include`. The header is only `#define`s of
         // names C99 7.1.3 reserves to the implementation, so it declares
@@ -2030,14 +2378,23 @@ impl Compiler {
     pub fn with_options(source: String, target: Target, opts: CompileOptions) -> Self {
         // The retry re-runs the compile from this source, so it is kept
         // rather than copied; only the options, which the retry extends
-        // with a force-include, need a copy.
+        // with a force-include, need a copy. Recording for pass reuse is
+        // skipped when the retry itself is off (mirroring `compile`).
         let retry_opts = opts.clone();
-        let mut this = Self::build(&source, target, opts);
+        let record = !(opts.nostdinc || opts.no_builtin);
+        let mut this = Self::build_recording(&source, target, opts, record);
         this.retry_state = Some((source, retry_opts));
         this
     }
 
     fn build(source: &str, target: Target, opts: CompileOptions) -> Self {
+        Self::build_recording(source, target, opts, false)
+    }
+
+    /// Run the preprocessor and construct the compiler. With `record`,
+    /// the run additionally captures the reuse state the auto-include
+    /// retry consults ([`Self::build_retry`]).
+    fn build_recording(source: &str, target: Target, opts: CompileOptions, record: bool) -> Self {
         // Run the preprocessor first so we know the
         // `#pragma binding(...)` set before seeding the symbol
         // table. The bindings come from whichever standard headers
@@ -2049,14 +2406,61 @@ impl Compiler {
         let mut pp = Self::configure_preprocessor(target, &opts);
         #[cfg(feature = "codegen_test")]
         let pp_start = std::time::Instant::now();
-        let (preprocessed, deferred_error) = match pp.process(source) {
-            Ok(s) => (s, None),
-            Err(e) => (String::new(), Some(e)),
+        let (preprocessed, pp_reuse, deferred_error) = if record {
+            match pp.process_recording(source) {
+                Ok((s, cache)) => (s, Some(cache), None),
+                Err(e) => (String::new(), None, Some(e)),
+            }
+        } else {
+            match pp.process(source) {
+                Ok(s) => (s, None, None),
+                Err(e) => (String::new(), None, Some(e)),
+            }
         };
         #[cfg(feature = "codegen_test")]
         if std::env::var("BADC_TIME_PASSES").is_ok() {
             eprintln!("pass: preprocess -- {}us", pp_start.elapsed().as_micros());
         }
+        let mut this = Self::finish_build(pp, preprocessed, deferred_error, target, opts);
+        this.pp_reuse = pp_reuse;
+        this
+    }
+
+    /// One auto-include retry pass: reuse the recorded first pass when
+    /// the appended force-include provably cannot change it, else run a
+    /// full build from source.
+    fn build_retry(
+        source: &str,
+        target: Target,
+        opts: CompileOptions,
+        prior: Option<&PpReuse>,
+    ) -> Self {
+        if let Some(prior) = prior {
+            let mut pp = Self::configure_preprocessor(target, &opts);
+            #[cfg(feature = "codegen_test")]
+            let pp_start = std::time::Instant::now();
+            if let Some(text) = pp.process_reusing(prior) {
+                #[cfg(feature = "codegen_test")]
+                if std::env::var("BADC_TIME_PASSES").is_ok() {
+                    eprintln!(
+                        "pass: preprocess (source pass reused) -- {}us",
+                        pp_start.elapsed().as_micros()
+                    );
+                }
+                return Self::finish_build(pp, text, None, target, opts);
+            }
+        }
+        Self::build(source, target, opts)
+    }
+
+    /// Construct the compiler from a finished preprocessor run.
+    fn finish_build(
+        pp: Preprocessor,
+        preprocessed: String,
+        deferred_error: Option<C5Error>,
+        target: Target,
+        opts: CompileOptions,
+    ) -> Self {
         // Debug knob: when BADC_DUMP_PP is set, write the post-
         // preprocessor source to /tmp/badc-pp.c so the exact token
         // stream the lexer is about to see can be inspected. Read
@@ -2099,17 +2503,12 @@ impl Compiler {
 
         let lex = {
             let mut l = Lexer::new(preprocessed);
-            // `wchar_t` is 2 bytes (UTF-16) on Windows, 4 bytes on the
-            // Unix targets; wide literals follow suit.
-            l.wchar_bytes = if matches!(
-                target,
-                super::codegen::Target::WindowsX64 | super::codegen::Target::WindowsAarch64
-            ) {
-                2
-            } else {
-                4
-            };
-            l.char_signed = target.plain_char_signed();
+            // Wide literals take their element width, and `L'...'` its
+            // type, from the target's `wchar_t`.
+            let wchar = target.wchar_type(opts.short_wchar);
+            l.wchar_bytes = wchar.bytes;
+            l.wchar_signed = wchar.signed;
+            l.char_signed = opts.plain_char_signed(target);
             l
         };
         Self {
@@ -2117,6 +2516,7 @@ impl Compiler {
             symbols,
             symbol_index,
             scope_bound: Vec::new(),
+            block_scopes: Vec::new(),
             deferred_error,
             dylibs,
             warned_implicit_ret: alloc::collections::BTreeSet::new(),
@@ -2134,33 +2534,34 @@ impl Compiler {
             max_loc_offs: 0,
             multi_cell_temps: alloc::vec::Vec::new(),
             func_over_aligned: alloc::vec::Vec::new(),
+            func_local_addr_taken: false,
             uses_alloca_in_current_fn: false,
             func_vla_decls: 0,
             stmt_expr_arena_ranges: Vec::new(),
             pending_is_inline: false,
             pending_is_always_inline: false,
+            pending_is_noinline: false,
             pending_saw_inline_specifier: false,
             pending_is_gnu_inline: false,
             pending_is_naked: false,
             pending_noreturn: false,
             const_unevaluated: 0,
             const_object_fold: 0,
+            static_duration_init: 0,
             ast: super::ast::Ast::new(),
             ast_acc: None,
             ast_vstack: Vec::new(),
             finished_functions: Vec::new(),
             synthetic_ssa_funcs: Vec::new(),
-            ast_labels: Vec::new(),
             pending_local_init_ast: None,
             pending_local_aggregate_ast: None,
             pending_local_runtime_elements: Vec::new(),
             loop_break_depth: 0,
             loop_continue_depth: 0,
             nest_depth: 0,
-            labels: Vec::new(),
+            labels: hashbrown::HashMap::new(),
             unresolved_gotos: Vec::new(),
-            local_label_scopes: Vec::new(),
-            local_label_seq: 0,
+            local_label_scopes: LocalLabelScopes::default(),
             switch_cases: Vec::new(),
             switch_defaults: Vec::new(),
             structs: Vec::new(),
@@ -2169,8 +2570,11 @@ impl Compiler {
             warnings: pp_warnings,
             file_asm: Vec::new(),
             asm_weak_names: Vec::new(),
-            asm_hidden_names: Vec::new(),
+            asm_global_names: Vec::new(),
+            asm_visibility: Vec::new(),
             asm_sym_sets: Vec::new(),
+            asm_file_names: Vec::new(),
+            asm_idents: Vec::new(),
             asm_validate_sink: Default::default(),
             include_records: pp_include_records,
             pp_entrypoint,
@@ -2181,12 +2585,18 @@ impl Compiler {
             data_relocs: Vec::new(),
             extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
+            tls_data_relocs: Vec::new(),
+            tls_data_reloc_sym_idx: Vec::new(),
+            tls_extern_data_relocs: Vec::new(),
+            tls_code_relocs: Vec::new(),
+            tls_code_reloc_sym_idx: Vec::new(),
             pending_label_relocs: Vec::new(),
             in_function_body: false,
             pending_exports,
             init_funcs: Vec::new(),
             function_aliases: Vec::new(),
             pending_aliases: Vec::new(),
+            pending_incomplete_objects: Vec::new(),
             pending_asm_globl: Vec::new(),
             current_func_return_ty: 0,
             current_func_returns_void: false,
@@ -2197,6 +2607,10 @@ impl Compiler {
             data_align: 8,
             implicit_extern_fns: opts.implicit_extern_fns.clone(),
             export_all_functions: opts.export_all_functions,
+            no_builtin: opts.no_builtin,
+            nostdinc: opts.nostdinc,
+            no_builtin_fns: opts.no_builtin_fns.clone(),
+            optimize: opts.optimize,
             elf_class: opts.elf_class,
             inline_model: if opts.gnu89_inline {
                 crate::c5::symbol::InlineModel::Gnu89
@@ -2206,6 +2620,7 @@ impl Compiler {
             source_files: Vec::new(),
             source_file_index: hashbrown::HashMap::new(),
             source_label: opts.source_label.clone(),
+            asm_unit: opts.asm_source,
             variables: Vec::new(),
             pending_block_locals: Vec::new(),
             cleanup_scopes: Vec::new(),
@@ -2219,9 +2634,12 @@ impl Compiler {
             init_reloc_slots: alloc::collections::BTreeSet::new(),
             next_compound_literal_id: 0,
             staged_literal_syms: Vec::new(),
+            func_name_objects: Vec::new(),
+            next_func_name_id: 0,
             pending_block_static_syms: Vec::new(),
             next_block_static_id: 0,
             retry_state: None,
+            pp_reuse: None,
         }
     }
 
@@ -2388,11 +2806,19 @@ impl Compiler {
     /// propagates the original error.
     pub fn compile(mut self) -> Result<Program, C5Error> {
         let retry_state = self.retry_state.take();
+        let pp_reuse = self.pp_reuse.take();
         let target = self.target;
         let mut result = self.compile_one_pass();
         let Some((source, mut opts)) = retry_state else {
             return result;
         };
+        // C99 7.1.4p2's permission to use a library function without a
+        // declaration is a hosted-implementation one, and the header it
+        // would splice in is off the search under `-nostdinc`. The
+        // undeclared-function error stands instead.
+        if opts.nostdinc || opts.no_builtin {
+            return result;
+        }
         // Auto-include retry. Each pass that fails on an undeclared
         // function names the header declaring it; force-include that
         // header and run again. Looping (rather than retrying once)
@@ -2434,7 +2860,8 @@ impl Compiler {
                 "info: auto-including <{header}> for undeclared `{name}`"
             ));
             auto_names.push(name);
-            result = Self::build(&source, target, opts.clone()).compile_one_pass();
+            result = Self::build_retry(&source, target, opts.clone(), pp_reuse.as_ref())
+                .compile_one_pass();
         }
     }
 
@@ -2473,6 +2900,16 @@ impl Compiler {
             let at = r.data_offset as usize;
             self.data[at..at + 8].copy_from_slice(&(target as u64).to_le_bytes());
         }
+        for r in &mut self.tls_data_relocs {
+            let Some(&(old, _, new)) = moves.iter().find(|m| m.0 == r.target_anchor as i64) else {
+                continue;
+            };
+            let target = r.target_offset as i64 - old + new;
+            r.target_offset = target as u64;
+            r.target_anchor = new as u64;
+            let at = r.data_offset as usize;
+            self.tls_data[at..at + 8].copy_from_slice(&(target as u64).to_le_bytes());
+        }
         for s in &mut self.symbols {
             s.relocated_from = None;
         }
@@ -2495,6 +2932,8 @@ impl Compiler {
                 parse_start.elapsed().as_micros()
             );
         }
+        #[cfg(feature = "codegen_test")]
+        let post_start = std::time::Instant::now();
         // Trampolines must land before the code-reloc resolve
         // pass: every static-init function-pointer site that
         // names a libc symbol references its trampoline by
@@ -2523,14 +2962,28 @@ impl Compiler {
             let mut imports: alloc::vec::Vec<(usize, String)> = alloc::vec::Vec::new();
             let mut next_pc = self.next_ent_pc + 1;
             for sym in self.symbols.iter_mut() {
-                if sym.class != Token::Fun as i64
-                    || sym.defined_here
-                    || sym.linkage != Linkage::External
-                {
+                // `is_fun_entity`: a scoped function declaration keeps
+                // its entity on the slot after the name unbinds; it
+                // still needs an import placeholder for its calls.
+                if !sym.is_fun_entity() || sym.defined_here || sym.linkage != Linkage::External {
                     continue;
                 }
                 imports.push((next_pc, sym.link_name().into()));
                 sym.val = next_pc as i64;
+                next_pc += 1;
+            }
+            // C99 6.2.2p2: an inline definition's identifier keeps
+            // external linkage, so `&f` must denote the program's one
+            // definition. The body carries `inline_body_name`, so the
+            // identifier is free to take an import placeholder; `val`
+            // keeps the real ent_pc and direct calls stay local. An
+            // entry nothing references emits no symbol.
+            for sym in self.symbols.iter_mut() {
+                if !sym.is_fun_entity() || sym.inline_body_name.is_none() {
+                    continue;
+                }
+                imports.push((next_pc, sym.link_name().into()));
+                sym.inline_addr_pc = Some(next_pc as i64);
                 next_pc += 1;
             }
             // C99 6.7.1 + 6.9.2: an `extern T x;` / `extern T
@@ -2586,6 +3039,31 @@ impl Compiler {
                 self.data_reloc_sym_idx.push(sym_idx);
             }
             self.extern_data_relocs = still_extern;
+            // Same rewrite for a `_Thread_local` slot: only the segment the
+            // slot lives in differs.
+            let mut still_extern = alloc::vec::Vec::new();
+            for r in core::mem::take(&mut self.tls_extern_data_relocs) {
+                let defined = self.symbols.iter().position(|s| {
+                    s.class == Token::Glo as i64
+                        && s.defined_here
+                        && !s.is_thread_local
+                        && s.link_name() == r.symbol_name
+                });
+                let Some(sym_idx) = defined else {
+                    still_extern.push(r);
+                    continue;
+                };
+                let target = self.symbols[sym_idx].val + r.addend;
+                let off = r.data_offset as usize;
+                self.tls_data[off..off + 8].copy_from_slice(&(target as u64).to_le_bytes());
+                self.tls_data_relocs.push(crate::c5::program::DataReloc {
+                    data_offset: r.data_offset,
+                    target_offset: target as u64,
+                    target_anchor: self.symbols[sym_idx].val as u64,
+                });
+                self.tls_data_reloc_sym_idx.push(sym_idx);
+            }
+            self.tls_extern_data_relocs = still_extern;
             self.rebase_relocated_globals();
             // Record each defined object's byte size for the object
             // writers' symbol tables; the writers have no type layout.
@@ -2617,7 +3095,17 @@ impl Compiler {
             // row whose source symbol is an extern function so
             // the ET_REL writer can identify it as a cross-TU
             // reference. Local code_relocs already carry the
-            // function's ent_pc and keep it.
+            // function's ent_pc and keep it. An inline definition's
+            // address takes the same route through `inline_addr_pc`:
+            // the slot must hold the program's definition, not this
+            // unit's body (C99 6.2.2p2).
+            let addr_pc = |sym: &crate::c5::symbol::Symbol| -> Option<u64> {
+                if let Some(pc) = sym.inline_addr_pc {
+                    return Some(pc as u64);
+                }
+                (sym.is_fun_entity() && !sym.defined_here && sym.linkage == Linkage::External)
+                    .then_some(sym.val as u64)
+            };
             for (reloc, &sym_idx) in self
                 .code_relocs
                 .iter_mut()
@@ -2626,31 +3114,58 @@ impl Compiler {
                 if sym_idx == usize::MAX || sym_idx >= self.symbols.len() {
                     continue;
                 }
-                let sym = &self.symbols[sym_idx];
-                if sym.class == Token::Fun as i64
-                    && !sym.defined_here
-                    && sym.linkage == Linkage::External
-                {
-                    reloc.target_ent_pc = sym.val as u64;
+                if let Some(pc) = addr_pc(&self.symbols[sym_idx]) {
+                    reloc.target_ent_pc = pc;
+                }
+            }
+            for (reloc, &sym_idx) in self
+                .tls_code_relocs
+                .iter_mut()
+                .zip(self.tls_code_reloc_sym_idx.iter())
+            {
+                if sym_idx == usize::MAX || sym_idx >= self.symbols.len() {
+                    continue;
+                }
+                if let Some(pc) = addr_pc(&self.symbols[sym_idx]) {
+                    reloc.target_ent_pc = pc;
                 }
             }
             imports
         };
         let (entry_pc, dllmain_pc, resolved_entry_name) = self.resolve_entry_and_dllmain_pcs()?;
         let exports = self.resolve_exports()?;
-        // `.set name, target` aliases from file-scope asm; `.weak name` in
-        // the unit selects the weak binding (either order, either statement).
+        #[cfg(feature = "codegen_test")]
+        if std::env::var("BADC_TIME_PASSES").is_ok() {
+            eprintln!(
+                "pass: compiler post-parse (trampolines, relocs, imports, exports) -- {}us",
+                post_start.elapsed().as_micros()
+            );
+        }
+        // `.set name, target` aliases from file-scope asm. The binding follows
+        // the unit's `.globl` / `.weak` directives, in either order and from
+        // either statement, so the object writer settles it.
         let mut function_aliases = self.function_aliases;
-        for (name, target) in self.asm_sym_sets {
-            let weak = self.asm_weak_names.contains(&name);
-            function_aliases.push(crate::c5::program::FunctionAlias { name, target, weak });
+        for (name, target, addend) in self.asm_sym_sets {
+            function_aliases.push(crate::c5::program::FunctionAlias {
+                name,
+                target,
+                bind: crate::c5::program::AliasBind::Assigned,
+                addend,
+            });
         }
         Ok(Program {
+            target: self.target,
             data: self.data,
             file_asm: self.file_asm,
             asm_weak_names: self.asm_weak_names,
-            asm_hidden_names: self.asm_hidden_names,
+            asm_global_names: self.asm_global_names,
+            asm_visibility: self.asm_visibility,
+            asm_unit: self.asm_unit,
+            asm_file_names: self.asm_file_names,
+            asm_idents: self.asm_idents,
             data_align: self.data_align,
+            data_ro_len: 0,
+            data_relro_len: 0,
             data_object_starts: self.data_object_starts,
             const_data_ranges: self.const_data_ranges,
             data_pad_ranges: self.data_pad_ranges,
@@ -2663,6 +3178,9 @@ impl Compiler {
             data_relocs: self.data_relocs,
             extern_data_relocs: self.extern_data_relocs,
             code_relocs: self.code_relocs,
+            tls_data_relocs: self.tls_data_relocs,
+            tls_extern_data_relocs: self.tls_extern_data_relocs,
+            tls_code_relocs: self.tls_code_relocs,
             dylibs: self.dylibs,
             dllmain_pc,
             source_files: self.source_files,

@@ -10,6 +10,8 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#0x1
+               	brk	#0x1
+               	brk	#0x1
 
 <main>:
                	str	x19, [sp, #-0x20]!
@@ -21,9 +23,9 @@ Disassembly of section .text:
                	yield
                	yield
                	yield
-               	add	x0, x1, #0x1
-               	sxtw	x1, w0
-               	cmp	x1, #0x4
+               	sxtw	x0, w0
+               	add	x0, x0, #0x1
+               	cmp	w0, #0x4
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x10]

@@ -9,6 +9,21 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <__c5_lazy_stream>:
                	pushq	%rbp
@@ -28,14 +43,10 @@ Disassembly of section .text:
                	xorq	%rdi, %rdi
                	leaq	<rip>, %rcx
                	movq	%rcx, (%rax)
-               	leaq	-0x18(%rbp), %rax
                	leaq	<rip>, %rcx
                	movq	%rcx, 0x8(%rax)
-               	leaq	-0x18(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	movq	%rcx, 0x10(%rax)
-               	leaq	-0x18(%rbp), %rax
-               	movq	0x10(%rax), %rsi
+               	leaq	<rip>, %rsi
+               	movq	%rsi, 0x10(%rax)
                	xorl	%eax, %eax
                	callq	<addr>
                	testq	%rax, %rax
@@ -59,12 +70,8 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	movq	%rax, %rbx
-               	movslq	%ebx, %rax
-               	cmpq	$-0x7fffffff, %rax      # imm = 0x80000001
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
+               	cmpl	$0x80000001, %ebx       # imm = 0x80000001
+               	je	<addr>
                	leaq	<rip>, %rax
                	movl	$0x28, %r12d
                	movl	%r12d, (%rax)
@@ -77,12 +84,8 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
-               	movslq	%ebx, %rax
-               	cmpq	$-0x7fffffff, %rax      # imm = 0x80000001
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
+               	cmpl	$0x80000001, %ebx       # imm = 0x80000001
+               	je	<addr>
                	leaq	<rip>, %rax
                	movl	$0x29, %ebx
                	movl	%ebx, (%rax)

@@ -74,6 +74,7 @@ const DEAD_BRANCH_NEEDS_OPTIMIZE: &[&str] = &[
     "range_guard_field_reload.c",
     "zero_fill_narrow_member_guard.c",
     "range_implied_dispatch_dead_arm.c",
+    "range_minmax_constant_p_sign.c",
     "scoped_state_loop_dead_arm.c",
 ];
 
@@ -83,15 +84,18 @@ const DEAD_BRANCH_NEEDS_OPTIMIZE: &[&str] = &[
 /// lower these recognized asm intrinsics on the foreign target so the
 /// fixtures compile everywhere.)
 const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
+    ("x86_simd_intrinsics.c", "linux-aarch64"), // x86 SIMD intrinsic surface
     ("file_scope_asm_a64_relocs.c", "linux-x64"), // aarch64 stp/adrp file-scope section
     ("file_scope_asm_a64_label_diff_operand.c", "linux-x64"), // aarch64 prfm/adr file-scope section
-    ("cacheflush_asm.c", "linux-x64"),            // aarch64 cache-ops / barriers
-    ("atomic128_ldaxp_stlxp.c", "linux-x64"),     // aarch64 128-bit ldaxp/stlxp
-    ("atomic128_ldst.c", "linux-x64"),            // aarch64 128-bit ldp/stp, ldxp/stxp
-    ("atomic128_cmpxchg_llsc.c", "linux-x64"),    // aarch64 128-bit ldxp/stxp CAS (generic encoder)
-    ("inline_asm_a64_dp.c", "linux-x64"),         // aarch64 mul/csel (x86 mul is 1-operand)
+    ("cacheflush_asm.c", "linux-x64"),          // aarch64 cache-ops / barriers
+    ("atomic128_ldaxp_stlxp.c", "linux-x64"),   // aarch64 128-bit ldaxp/stlxp
+    ("atomic128_ldst.c", "linux-x64"),          // aarch64 128-bit ldp/stp, ldxp/stxp
+    ("atomic128_cmpxchg_llsc.c", "linux-x64"),  // aarch64 128-bit ldxp/stxp CAS (generic encoder)
+    ("inline_asm_a64_dp.c", "linux-x64"),       // aarch64 mul/csel (x86 mul is 1-operand)
+    ("inline_asm_a64_sym_reloc.c", "linux-x64"), // aarch64 adrp/:lo12: symbol operands
     ("inline_asm_a64_sp_operand.c", "linux-x64"), // aarch64 sp-operand add/sub
-    ("inline_asm_a64_labels.c", "linux-x64"),     // aarch64 local-label branches
+    ("inline_asm_a64_labels.c", "linux-x64"),   // aarch64 local-label branches
+    ("inline_asm_a64_section_branches.c", "linux-x64"), // aarch64 branches into a pushed section
     ("inline_asm_a64_label_directive.c", "linux-x64"), // aarch64 label sharing a directive statement
     ("asm_goto_immediate_operand_no_frame.c", "linux-x64"), // aarch64 asm goto + .align 3
     ("inline_asm_a64_barriers.c", "linux-x64"),        // aarch64 dmb/dsb/isb/clrex
@@ -104,6 +108,7 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("inline_asm_fixed_reg_output_width.c", "linux-aarch64"), // x86-64 rdtsc / fixed-reg outputs
     ("inline_asm_memory_operand.c", "linux-aarch64"),  // x86-64 lock cmpxchg/xadd
     ("inline_asm_x64_catalogue.c", "linux-aarch64"),   // x86-64 neg/not/xchg/rol/adc
+    ("inline_asm_x64_stream_branches.c", "linux-aarch64"), // x86-64 stream-branch relaxation
     ("inline_asm_x64_paren_disp.c", "linux-aarch64"),  // x86-64 rip-relative label address
     ("inline_asm_x64_seg_prefix_wrpkru.c", "linux-aarch64"), // x86-64 segment prefix / wrpkru
     ("inline_asm_x64_crc32.c", "linux-aarch64"),       // x86-64 SSE4.2 crc32
@@ -132,12 +137,14 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("inline_asm_x64_sib_nobase.c", "linux-aarch64"), // x86-64 no-base scaled-index memory operands
     ("inline_asm_x64_port_dx.c", "linux-aarch64"),    // x86-64 `(%dx)` port in/out
     ("inline_asm_x64_c_mem.c", "linux-aarch64"),      // x86-64 `%c` RIP-relative memory forms
+    ("inline_asm_x64_riprel_addr_const.c", "linux-aarch64"), // x86-64 `%c` RIP-relative address constants
     ("inline_asm_x64_seg_c_percpu.c", "linux-aarch64"), // x86-64 `%%gs:` percpu accessor shapes
-    ("inline_asm_x64_sym_riprel.c", "linux-aarch64"), // x86-64 sym(%rip) displacement forms
-    ("inline_asm_x64_align.c", "linux-aarch64"),      // x86-64 `.align` in the code stream
-    ("cpuid_partial_outputs.c", "linux-aarch64"),     // x86-64 cpuid
+    ("inline_asm_x64_sym_riprel.c", "linux-aarch64"),   // x86-64 sym(%rip) displacement forms
+    ("inline_asm_x64_align.c", "linux-aarch64"),        // x86-64 `.align` in the code stream
+    ("cpuid_partial_outputs.c", "linux-aarch64"),       // x86-64 cpuid
+    ("cpuid_xgetbv_output_width.c", "linux-aarch64"),   // x86-64 cpuid / xgetbv output widths
     ("inline_asm_x64_flag_outputs.c", "linux-aarch64"), // x86-64 `=@cc` flag outputs
-    ("inline_asm_x64_string_ops.c", "linux-aarch64"), // x86-64 string primitives / prefixes
+    ("inline_asm_x64_string_ops.c", "linux-aarch64"),   // x86-64 string primitives / prefixes
     ("inline_asm_x64_system_ext.c", "linux-aarch64"), // x86-64 invpcid/invvpid/invlpga/cmpxchg16b/fldl/fstpl/mxcsr/ljmp/fs-gs push
     ("inline_asm_x64_port_io.c", "linux-aarch64"),    // x86-64 string port-I/O (ins / outs)
     ("inline_asm_a64_comments.c", "linux-x64"),       // aarch64 comment syntax
@@ -159,6 +166,19 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
 const SMOKE_TARGETS: &[&str] = &["linux-aarch64", "linux-x64"];
 
 /// Absolute path of `tests/fixtures/c`.
+/// The flags a fixture pins for itself in a leading
+/// `// snapshot-flags: ...` line, the same directive
+/// `scripts/snapshots.py` reads. Empty when the fixture pins none.
+fn snapshot_flags(fixture: &std::path::Path) -> Vec<String> {
+    let Ok(text) = std::fs::read_to_string(fixture) else {
+        return Vec::new();
+    };
+    text.lines()
+        .find_map(|l| l.trim_start().strip_prefix("// snapshot-flags:"))
+        .map(|rest| rest.split_whitespace().map(str::to_string).collect())
+        .unwrap_or_default()
+}
+
 fn fixtures_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
@@ -297,6 +317,13 @@ fn every_fixture_compiles_standalone_for_linux() {
         .expect("read tests/fixtures/c")
         .filter_map(|e| e.ok().map(|e| e.path()))
         .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("c"))
+        // A hidden file is not a fixture; macOS sync tooling plants
+        // AppleDouble `._*.c` companions next to the real ones.
+        .filter(|p| {
+            p.file_name()
+                .and_then(|s| s.to_str())
+                .is_some_and(|n| !n.starts_with('.'))
+        })
         .collect();
     entries.sort();
     assert!(
@@ -305,7 +332,7 @@ fn every_fixture_compiles_standalone_for_linux() {
         fixtures_dir.display()
     );
 
-    let tmp_root = std::env::temp_dir().join("badc-cli-smoke");
+    let tmp_root = std::env::temp_dir().join(format!("badc-cli-smoke-{}", std::process::id()));
     let _ = std::fs::create_dir_all(&tmp_root);
 
     let mut failures: Vec<String> = Vec::new();
@@ -313,6 +340,15 @@ fn every_fixture_compiles_standalone_for_linux() {
     for fixture in &entries {
         let name = fixture.file_name().unwrap().to_str().unwrap();
         if COMPILE_SKIPLIST.contains(&name) || DEAD_BRANCH_NEEDS_OPTIMIZE.contains(&name) {
+            continue;
+        }
+        // A fixture states the flags it is compiled under in the same
+        // `snapshot-flags:` directive the snapshot generator reads, so
+        // one declaration drives both and neither can drift. `-c` names
+        // a unit that has no `main` to link, which this sweep cannot
+        // build; those stay on the skiplist.
+        let flags = snapshot_flags(fixture);
+        if flags.iter().any(|f| f == "-c") {
             continue;
         }
         for target in SMOKE_TARGETS.iter().copied() {
@@ -324,6 +360,7 @@ fn every_fixture_compiles_standalone_for_linux() {
             let out = tmp_root.join(format!("{stem}-{target}"));
             let status = Command::new(badc)
                 .arg(format!("--target={target}"))
+                .args(&flags)
                 .arg("-o")
                 .arg(&out)
                 .arg(fixture)
@@ -343,6 +380,7 @@ fn every_fixture_compiles_standalone_for_linux() {
         }
     }
 
+    let _ = std::fs::remove_dir_all(&tmp_root);
     if !failures.is_empty() {
         panic!(
             "{} of {} fixture-compilation attempts failed:\n  {}",
@@ -386,6 +424,9 @@ const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
     ("sys_addr_in_static_init.c", 42),
     ("variadic_libc_fnptr_static_init.c", 0),
     ("forward_fn_ptr_in_static_init.c", 0),
+    ("attributed_aggregate_align_floor.c", 0),
+    ("string_concat_encoding_prefix.c", 0),
+    ("utf8_string_prefix_ucn.c", 0),
     ("overaligned_data_placement.c", 0),
     ("overaligned_type_placement.c", 0),
     ("page_multiple_alignment.c", 0),
@@ -398,13 +439,16 @@ const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_section_label.c", 42),
     ("attribute_weak_alias.c", 0),
     ("weak_definition_not_inlined.c", 42),
+    ("weak_alias_call_not_inlined.c", 42),
     ("weak_extern_data_address.c", 0),
     ("tentative_array_definition.c", 0),
     ("tentative_deferred_array_grows.c", 0),
     ("thread_local_basic.c", 0),
     ("thread_local_gnu.c", 0),
     ("thread_local_initializer.c", 0),
+    ("thread_local_address_init.c", 0),
     ("thread_local_per_thread.c", 0),
+    ("thread_local_address_per_thread.c", 0),
     ("switch_jump_table_dense.c", 0),
     ("switch_jump_table_sparse_kept.c", 0),
     ("computed_goto_static_table.c", 0),
@@ -982,6 +1026,40 @@ fn installed_overlay_overrides_embedded() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+// An implicit `~/.badc/lib/runtime.c` does not shadow the runtime a
+// source build carries, on the same terms as the header overlay: a stale
+// `--install` would otherwise change every link made on that host.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn implicit_home_runtime_does_not_shadow_embedded() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-implicit-rt-{}", std::process::id()));
+    let home = dir.join("home");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(home.join(".badc/lib")).expect("create temp home");
+    std::fs::write(
+        home.join(".badc/lib/runtime.c"),
+        "this is not valid C @@@\n",
+    )
+    .expect("write installed runtime.c");
+    std::fs::write(dir.join("h.c"), "int main(void){ return 0; }\n").expect("write source");
+    let out = Command::new(badc)
+        .env("HOME", &home)
+        .env_remove("BADC_HOME")
+        .arg(dir.join("h.c"))
+        .arg("-o")
+        .arg(dir.join("h"))
+        .current_dir(&dir)
+        .output()
+        .expect("run badc");
+    assert!(
+        out.status.success(),
+        "the embedded runtime should have been used: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 // The include search path must not depend on the working directory: a
 // build system that runs the compiler from a project root whose
 // `./include` holds that project's own headers would otherwise have them
@@ -1240,5 +1318,169 @@ fn jobs_object_bytes_match_sequential_and_are_stable() {
         assert_eq!(s, p1, "`-j8` object for {name} differs from sequential");
         assert_eq!(p1, p2, "`-j8` object for {name} not stable across runs");
     }
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// The host's own target triple, for the tests that execute what they
+/// build. Unlike [`host_smoke_target`] this covers macOS, whose Mach-O
+/// output is the only coverage that format's link path gets here.
+fn host_native_target() -> Option<&'static str> {
+    match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("linux", "x86_64") => Some("linux-x64"),
+        ("linux", "aarch64") => Some("linux-aarch64"),
+        ("macos", "aarch64") => Some("macos-aarch64"),
+        _ => None,
+    }
+}
+
+/// The x86 kernel names the guard's register and symbol without naming
+/// the form, because gcc's x86 default for `-mstack-protector-guard=` is
+/// `tls`. Requiring the form stopped the defconfig build at the first
+/// unit. aarch64 has no such default and still requires it.
+#[test]
+fn the_x86_guard_form_defaults_the_way_gcc_does() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let root = std::env::temp_dir().join(format!("badc-ssp-guard-{}", std::process::id()));
+    std::fs::create_dir_all(&root).expect("create dir");
+    let src = root.join("g.c");
+    std::fs::write(
+        &src,
+        "int f(int i){ char b[24]; b[0]=(char)i; return b[0]; }\n",
+    )
+    .expect("write source");
+    let obj = root.join("g.o");
+    let compile = |args: &[&str]| {
+        std::process::Command::new(badc)
+            .args(args)
+            .arg("-fstack-protector-strong")
+            .arg("-c")
+            .arg("-o")
+            .arg(&obj)
+            .arg(&src)
+            .output()
+            .expect("run badc")
+    };
+    // The SMP kernel's own pair, with no `-mstack-protector-guard=`.
+    let out = compile(&[
+        "--target=linux-x64",
+        "-mstack-protector-guard-reg=gs",
+        "-mstack-protector-guard-symbol=__ref_stack_chk_guard",
+    ]);
+    assert!(
+        out.status.success(),
+        "the x86 guard register alone must select the tls form: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    // The uniprocessor branch of the same Makefile still names its form.
+    let out = compile(&["--target=linux-x64", "-mstack-protector-guard=global"]);
+    assert!(out.status.success(), "`global` must stay accepted");
+    // aarch64 has no default form, so naming only the register is an error.
+    let out = compile(&[
+        "--target=linux-aarch64",
+        "-mstack-protector-guard-reg=sp_el0",
+    ]);
+    assert!(
+        !out.status.success(),
+        "aarch64 must still require the guard form"
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// A protected image has to behave two ways: unchanged when nothing
+/// overflows, and stopped at `__stack_chk_fail` when a frame is smashed.
+/// The first is the fixture, run under every mode at both optimization
+/// levels; the second overruns a local array by enough to reach past the
+/// canary and asserts the process dies by signal rather than returning
+/// through the overwritten address.
+#[test]
+fn stack_protector_canary_holds_and_catches_a_smashed_frame() {
+    let Some(target) = host_native_target() else {
+        return;
+    };
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let root = std::env::temp_dir().join(format!("badc-ssp-run-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&root);
+
+    // `strong` is the mode the kernel selects, so it is the one run at
+    // both optimization levels; the rest cover their own selection at one.
+    for (mode, opt) in [
+        ("-fno-stack-protector", &[][..]),
+        ("-fstack-protector", &[][..]),
+        ("-fstack-protector-strong", &[][..]),
+        ("-fstack-protector-strong", &["-O"][..]),
+        ("-fstack-protector-all", &["-O"][..]),
+    ] {
+        {
+            let out = root.join("canary");
+            let built = Command::new(badc)
+                .arg(format!("--target={target}"))
+                .arg(mode)
+                .args(opt)
+                .arg("-o")
+                .arg(&out)
+                .arg(fixtures_dir().join("stack_protector_canary.c"))
+                .output()
+                .expect("run badc");
+            assert!(
+                built.status.success(),
+                "{mode} {opt:?}: build failed -- {}",
+                String::from_utf8_lossy(&built.stderr)
+            );
+            let run = Command::new(&out).output().expect("run the image");
+            assert_eq!(
+                run.status.code(),
+                Some(0),
+                "{mode} {opt:?}: the protected image must behave as the plain one"
+            );
+        }
+    }
+
+    // The overflow is passed at run time so no constant-folding path can
+    // see it; `smash` overruns `b` by 48 bytes, past the canary region and
+    // into the saved frame pointer and return address.
+    let src = root.join("smash.c");
+    std::fs::write(
+        &src,
+        "#include <stdio.h>\n\
+         #include <string.h>\n\
+         static void smash(const char *s) { char b[16]; strcpy(b, s); printf(\"%s\", b); }\n\
+         int main(int argc, char **argv) {\n\
+         \tchar big[64];\n\
+         \tmemset(big, 'A', sizeof big);\n\
+         \tbig[sizeof big - 1] = 0;\n\
+         \tsmash(argc > 1 ? big : \"ok\");\n\
+         \treturn 0;\n\
+         }\n",
+    )
+    .expect("write the smashing source");
+    let out = root.join("smash");
+    let built = Command::new(badc)
+        .arg(format!("--target={target}"))
+        .arg("-fstack-protector-strong")
+        .arg("-o")
+        .arg(&out)
+        .arg(&src)
+        .output()
+        .expect("run badc");
+    assert!(
+        built.status.success(),
+        "smash build failed -- {}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+    let clean = Command::new(&out).output().expect("run the image");
+    assert_eq!(
+        clean.status.code(),
+        Some(0),
+        "no overflow, no check failure"
+    );
+    let smashed = Command::new(&out)
+        .arg("overflow")
+        .output()
+        .expect("run the image");
+    assert_eq!(
+        smashed.status.code(),
+        None,
+        "a smashed frame must reach __stack_chk_fail, which does not return"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }

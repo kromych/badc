@@ -69,13 +69,18 @@ pub(crate) fn compile_function_to_bytes(
             let mut tls_index_fixups: Vec<super::TlsIndexFixup> = Vec::new();
             let mut macho_tlv_fixups: Vec<super::MachoTlvFixup> = Vec::new();
             let mut macho_tlv_descriptors: Vec<super::MachoTlvDescriptor> = Vec::new();
+            let mut asm_text_labels: Vec<super::AsmTextLabel> = Vec::new();
             // Single-unit in-memory emit: TLS accesses keep the baked
             // offset, so the recorded fixups are unused here.
             let mut elf_tpoff_fixups: Vec<super::ElfTpoffFixup> = Vec::new();
-            let mut asm_sections = super::emit_common::AsmSectionSink::default();
+            let mut asm_sections = crate::c5::asm::AsmSectionSink::default();
             let mut asm_extern_call_sites = Vec::new();
+            let mut asm_sym_fixups: Vec<super::AsmSymFixup> = Vec::new();
+            let mut asm_section_text_refs: Vec<super::AsmSectionTextRef> = Vec::new();
             let mut label_relocs = Vec::new();
+            let mut rodata = super::RodataBuild::default();
             let mut text_align: usize = 16;
+            let mut text_data_ranges: Vec<(usize, usize)> = Vec::new();
             let ok = {
                 let mut cx = super::emit_common::EmitCtx {
                     code: &mut code,
@@ -90,8 +95,11 @@ pub(crate) fn compile_function_to_bytes(
                     prologue_native: &mut prologue_native,
                     asm_sections: &mut asm_sections,
                     asm_extern_call_sites: &mut asm_extern_call_sites,
+                    asm_sym_fixups: &mut asm_sym_fixups,
                     text_align: &mut text_align,
                     label_relocs: &mut label_relocs,
+                    text_data_ranges: &mut text_data_ranges,
+                    canary_frame_bytes: &mut alloc::collections::BTreeMap::new(),
                 };
                 super::aarch64::emit::emit_function(
                     func,
@@ -106,9 +114,16 @@ pub(crate) fn compile_function_to_bytes(
                     &mut macho_tlv_fixups,
                     &mut macho_tlv_descriptors,
                     &alloc::collections::BTreeMap::new(),
+                    &alloc::collections::BTreeMap::new(),
+                    &mut asm_text_labels,
+                    &mut asm_section_text_refs,
+                    &mut None,
                     false,
+                    false,
+                    &mut rodata,
                     false,
                     super::super::Hardening::NONE,
+                    super::super::StackProtect::OFF,
                 )
             };
             if !ok {
@@ -120,7 +135,11 @@ pub(crate) fn compile_function_to_bytes(
                 + pending_func_fixups.len()
                 + tls_index_fixups.len()
                 + macho_tlv_fixups.len()
-                + macho_tlv_descriptors.len();
+                + macho_tlv_descriptors.len()
+                + asm_text_labels.len()
+                + asm_section_text_refs.len()
+                + asm_sym_fixups.len()
+                + rodata.addr_fixups.len();
             if outer != 0 {
                 return Err(format!(
                     "ssa_native: function produces {outer} cross-function fixup(s); only self-contained functions are supported",
@@ -147,13 +166,15 @@ pub(crate) fn compile_function_to_bytes(
             // Single-unit in-memory emit: TLS accesses keep the baked
             // offset, so the recorded fixups are unused here.
             let mut elf_tpoff_fixups: Vec<super::ElfTpoffFixup> = Vec::new();
-            let mut asm_sections = super::emit_common::AsmSectionSink::default();
+            let mut asm_sections = crate::c5::asm::AsmSectionSink::default();
             let mut asm_section_text_refs: Vec<super::AsmSectionTextRef> = Vec::new();
             let mut asm_text_abs_refs: Vec<super::AsmTextAbsRef> = Vec::new();
             let mut asm_text_labels: Vec<super::AsmTextLabel> = Vec::new();
             let mut asm_extern_call_sites = Vec::new();
+            let mut asm_sym_fixups: Vec<super::AsmSymFixup> = Vec::new();
             let mut label_relocs = Vec::new();
             let mut text_align: usize = 16;
+            let mut text_data_ranges: Vec<(usize, usize)> = Vec::new();
             // The JIT single-function path builds no PE; the unwind
             // descriptor is discarded.
             let mut fn_unwind: Vec<super::FnUnwind> = Vec::new();
@@ -172,8 +193,11 @@ pub(crate) fn compile_function_to_bytes(
                     prologue_native: &mut prologue_native,
                     asm_sections: &mut asm_sections,
                     asm_extern_call_sites: &mut asm_extern_call_sites,
+                    asm_sym_fixups: &mut asm_sym_fixups,
                     text_align: &mut text_align,
                     label_relocs: &mut label_relocs,
+                    text_data_ranges: &mut text_data_ranges,
+                    canary_frame_bytes: &mut alloc::collections::BTreeMap::new(),
                 };
                 super::x86_64::emit::emit_function(
                     func,
@@ -201,6 +225,7 @@ pub(crate) fn compile_function_to_bytes(
                     &mut rodata,
                     false,
                     super::super::Hardening::NONE,
+                    super::super::StackProtect::OFF,
                 )
             };
             if !ok {
@@ -343,7 +368,9 @@ mod tests {
             .unwrap_or_else(|e| panic!("max2 aarch64: {e}"));
         // Two return blocks => at least two `ret` (0xd65f03c0) words.
         let ret_count = bytes
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .filter(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]) == 0xd65f03c0)
             .count();
         assert!(

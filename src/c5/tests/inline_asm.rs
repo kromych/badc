@@ -344,6 +344,53 @@ fn x86_seg_qualified_memory_operand_rides_a_segment_prefix() {
 // Emits a native image, so it needs `native-emit`.
 #[cfg(feature = "native-emit")]
 #[test]
+fn x86_function_body_asm_takes_the_address_size_prefix() {
+    use crate::{NativeOptions, Target};
+    // A 32-bit base or index in a function-body template addresses 32 bits and
+    // takes the `67` prefix, as it does in file-scope and `.s` asm. The
+    // expected run is what GNU as 2.46.1 emits for the same statements.
+    let src = "void f(void){ __asm__ volatile(\
+               \"movl 2(%%eax), %%ebx\\n\\t\"\
+               \"movl (%%eax,%%ecx,4), %%ebx\\n\\t\"\
+               \"movl (,%%ecx,4), %%ebx\\n\\t\"\
+               \"movl 2(%%r8d), %%ebx\\n\\t\"\
+               \"movw 2(%%eax), %%bx\\n\\t\"\
+               \"movq 2(%%eax), %%rbx\\n\\t\"\
+               \"movl 2(%%rax), %%ebx\" \
+               ::: \"memory\", \"rbx\", \"rcx\"); } \
+               int main(void){ return 0; }";
+    let image = crate::Compiler::with_options(
+        alloc::string::String::from(src),
+        Target::LinuxX64,
+        crate::CompileOptions::default(),
+    )
+    .compile()
+    .and_then(|p| {
+        crate::c5::object::emit_native_single_tu_for_test(
+            &p,
+            Target::LinuxX64,
+            NativeOptions::default(),
+        )
+    })
+    .expect("emit");
+    let want: &[u8] = &[
+        0x67, 0x8B, 0x58, 0x02, // movl 2(%eax), %ebx
+        0x67, 0x8B, 0x1C, 0x88, // movl (%eax,%ecx,4), %ebx
+        0x67, 0x8B, 0x1C, 0x8D, 0x00, 0x00, 0x00, 0x00, // movl (,%ecx,4), %ebx
+        0x67, 0x41, 0x8B, 0x58, 0x02, // movl 2(%r8d), %ebx
+        0x67, 0x66, 0x8B, 0x58, 0x02, // movw 2(%eax), %bx
+        0x67, 0x48, 0x8B, 0x58, 0x02, // movq 2(%eax), %rbx
+        0x8B, 0x58, 0x02, // movl 2(%rax), %ebx -- mode default, no prefix
+    ];
+    assert!(
+        image.windows(want.len()).any(|w| w == want),
+        "function-body asm must encode a 32-bit base the way GNU as does"
+    );
+}
+
+// Emits a native image, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
 fn x86_c_operand_memory_reference_is_never_an_immediate() {
     use crate::{NativeOptions, Target};
     // A bare `%c` / `%P` operand is a memory reference in AT&T syntax. Taking
@@ -953,6 +1000,217 @@ fn inline_asm_global_directive_declares_an_undefined_symbol() {
     }
 }
 
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn aarch64_function_body_symbol_operands_relocate() {
+    use crate::c5::linker::relocatable::EtSymRef;
+    use crate::c5::object::elf_reloc_types::{
+        R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_PREL_LO21, R_AARCH64_ADR_PREL_PG_HI21,
+        R_AARCH64_LDST8_ABS_LO12_NC, R_AARCH64_LDST32_ABS_LO12_NC, R_AARCH64_MOVW_UABS_G0_NC,
+        R_AARCH64_MOVW_UABS_G1,
+    };
+    // Each admitted operand shape, one instruction per site: `adrp`, the
+    // sized `:lo12:` load/store immediates, the `add :lo12:` form, a
+    // symbol addend, `movz`/`movk` `:abs_gN:`, and `adr` of a function.
+    // The rows match GNU as 2.46.1 for the same template: a static
+    // resolves section-relative, an external-linkage or undefined name
+    // keeps its own symbol.
+    let src = "static int s_arr[4] = {1, 2, 3, 4};\n\
+               int g_obj;\n\
+               extern int e_obj;\n\
+               __attribute__((used)) static int helper(void) { return 7; }\n\
+               long f(void) {\n\
+                 long a, b, c, d, e, g;\n\
+                 __asm__(\"adrp %x0, s_arr\" : \"=r\"(a));\n\
+                 __asm__(\"ldr %w0, [%x0, :lo12:s_arr + 8]\" : \"=r\"(b));\n\
+                 __asm__(\"add %x0, %x0, :lo12:s_arr\" : \"=r\"(c));\n\
+                 __asm__(\"movz %x0, :abs_g1:e_obj\\n\\tmovk %x0, :abs_g0_nc:e_obj\" : \"=r\"(d));\n\
+                 __asm__(\"ldrb %w0, [%x0, :lo12:g_obj]\" : \"=r\"(e));\n\
+                 __asm__(\"adr %x0, helper\" : \"=r\"(g));\n\
+                 return a + b + c + d + e + g;\n\
+               }\n";
+    let o = asm_obj(src, crate::Target::LinuxAarch64);
+    let text_idx = o
+        .sections
+        .iter()
+        .position(|s| s.name == ".text")
+        .expect(".text");
+    let data_idx = o
+        .sections
+        .iter()
+        .position(|s| s.name == ".data")
+        .expect(".data");
+    let s_arr = o
+        .symbols
+        .iter()
+        .find(|s| s.name == "s_arr")
+        .expect("local `s_arr` symbol")
+        .value as i64;
+    // (rtype, target name or owning section, addend) per row, in site order.
+    let rows: alloc::vec::Vec<(u32, alloc::string::String, i64)> = o.sections[text_idx]
+        .relocs
+        .iter()
+        .map(|r| {
+            let sym = &o.symbols[r.sym as usize];
+            let who = if sym.name.is_empty() {
+                match sym.sec {
+                    EtSymRef::Section(i) => o.sections[i].name.clone(),
+                    _ => alloc::string::String::new(),
+                }
+            } else {
+                sym.name.clone()
+            };
+            (r.rtype, who, r.addend)
+        })
+        .collect();
+    let data = o.sections[data_idx].name.clone();
+    let expect = [
+        (R_AARCH64_ADR_PREL_PG_HI21, data.as_str(), s_arr),
+        (R_AARCH64_LDST32_ABS_LO12_NC, data.as_str(), s_arr + 8),
+        (R_AARCH64_ADD_ABS_LO12_NC, data.as_str(), s_arr),
+        (R_AARCH64_MOVW_UABS_G1, "e_obj", 0),
+        (R_AARCH64_MOVW_UABS_G0_NC, "e_obj", 0),
+        (R_AARCH64_LDST8_ABS_LO12_NC, "g_obj", 0),
+        (R_AARCH64_ADR_PREL_LO21, "helper", 0),
+    ];
+    assert_eq!(rows.len(), expect.len(), "rows: {rows:?}");
+    for (row, want) in rows.iter().zip(expect.iter()) {
+        assert_eq!((row.0, row.1.as_str(), row.2), *want, "rows: {rows:?}");
+    }
+    // The undefined extern keeps a symbol entry; the defined global its own.
+    assert!(
+        o.symbols
+            .iter()
+            .any(|s| s.name == "e_obj" && matches!(s.sec, EtSymRef::Undef))
+    );
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn x86_64_riprel_const_operand_takes_any_address_constant() {
+    use crate::c5::linker::relocatable::EtSymRef;
+    use crate::c5::object::elf_reloc_types::R_X86_64_PC32;
+    // `arch/x86/include/asm/asm.h`'s `rip_rel_ptr` names its `i`-class
+    // operand under `%c`. The operand is a C99 6.6p9 address constant --
+    // the address of a function or of a static-storage object, reached
+    // through casts between object-pointer and integer types of the same
+    // width. GNU as 2.46.1 assembles each site as
+    // `leaq <symbol>(%rip), %reg`: a same-unit definition resolves
+    // section-relative, a cross-TU name keeps its own symbol.
+    let src = "extern int e_fn(void);\n\
+               __attribute__((used)) static int s_fn(void) { return 1; }\n\
+               static struct { char pad[16]; int v; } obj;\n\
+               #define REL(x) ({ void *p_;\\\n\
+                 __asm__(\"leaq %c1(%%rip), %0\" : \"=r\"(p_) : \"i\"((void *)(x)));\\\n\
+                 p_; })\n\
+               void *a(void) { return REL((unsigned long)&s_fn); }\n\
+               void *b(void) { return REL((unsigned long)e_fn); }\n\
+               void *c(void) { return REL((unsigned long)&obj.v); }\n";
+    let o = asm_obj(src, crate::Target::LinuxX64);
+    let text_idx = o
+        .sections
+        .iter()
+        .position(|s| s.name == ".text")
+        .expect(".text");
+    let bss_idx = o
+        .sections
+        .iter()
+        .position(|s| s.name == ".bss")
+        .expect(".bss");
+    let obj_off = o
+        .symbols
+        .iter()
+        .find(|s| s.name == "obj")
+        .expect("local `obj` symbol")
+        .value as i64;
+    // The `leaq` sites carry a `%c` operand each; every other row in
+    // `.text` belongs to the operand's own value materialisation.
+    let rows: alloc::vec::Vec<(u32, alloc::string::String, i64)> = o.sections[text_idx]
+        .relocs
+        .iter()
+        .map(|r| {
+            let sym = &o.symbols[r.sym as usize];
+            let who = if sym.name.is_empty() {
+                match sym.sec {
+                    EtSymRef::Section(i) => o.sections[i].name.clone(),
+                    _ => alloc::string::String::new(),
+                }
+            } else {
+                sym.name.clone()
+            };
+            (r.rtype, who, r.addend)
+        })
+        .collect();
+    let text = o.sections[text_idx].name.clone();
+    let bss = o.sections[bss_idx].name.clone();
+    for want in [
+        (R_X86_64_PC32, text.as_str(), -4),
+        (R_X86_64_PC32, "e_fn", -4),
+        (R_X86_64_PC32, bss.as_str(), obj_off + 16 - 4),
+    ] {
+        assert!(
+            rows.iter()
+                .any(|r| (r.0, r.1.as_str(), r.2) == (want.0, want.1, want.2)),
+            "missing {want:?} in {rows:?}"
+        );
+    }
+    // A cast that narrows drops the high half, so the value is no
+    // longer the address and the operand is refused.
+    let narrowed = "static int obj;\n\
+                    void *a(void) { void *p;\n\
+                      __asm__(\"leaq %c1(%%rip), %0\" : \"=r\"(p) : \"i\"((void *)(unsigned)&obj));\n\
+                      return p; }\n";
+    let copts = crate::CompileOptions {
+        no_entry_point: true,
+        ..Default::default()
+    };
+    let program =
+        crate::Compiler::with_options(narrowed.to_string(), crate::Target::LinuxX64, copts)
+            .compile()
+            .expect("compile");
+    let opts = crate::NativeOptions {
+        output_kind: crate::OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let err = crate::emit_native_with_options(&program, crate::Target::LinuxX64, opts)
+        .err()
+        .map(|e| e.to_string())
+        .unwrap_or_default();
+    assert!(err.contains("not a constant or address"), "{err}");
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn aarch64_symbol_operand_layout_expression_is_refused() {
+    use crate::{NativeOptions, OutputKind, emit_native_with_options};
+    // A label-difference addend has no value before a section layout;
+    // the function-body path refuses it rather than encode a wrong one.
+    let src = "static int s;\n\
+               long f(void) { long v;\n\
+                 __asm__(\"1:\\n\\t2:\\n\\tadrp %x0, s + (2b - 1b)\" : \"=r\"(v));\n\
+                 return v; }\n";
+    let copts = crate::CompileOptions {
+        no_entry_point: true,
+        ..Default::default()
+    };
+    let program =
+        crate::Compiler::with_options(src.to_string(), crate::Target::LinuxAarch64, copts)
+            .compile()
+            .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let err = emit_native_with_options(&program, crate::Target::LinuxAarch64, opts)
+        .err()
+        .map(|e| e.to_string())
+        .unwrap_or_default();
+    assert!(err.contains("needs a section layout"), "{err}");
+}
+
 // Emits a native image, so it needs `native-emit`.
 #[cfg(feature = "native-emit")]
 #[test]
@@ -1032,6 +1290,114 @@ fn inline_asm_global_directive_binds_a_code_stream_label() {
     assert!(
         e.contains("outside a section needs a constant size"),
         "expected the location-counter diagnostic, got {e:?}"
+    );
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn x86_branch_to_a_weak_template_label_keeps_its_relocation() {
+    use crate::c5::object::elf_reloc_types::R_X86_64_PLT32;
+    const STB_WEAK: u8 = 2;
+    // A weak definition never satisfies a branch in place: the link may
+    // bind another one. GNU as 2.46.1 for the stream this template pastes
+    // keeps `e9 00000000` / `0f 85 00000000` with `R_X86_64_PLT32 wk - 4`
+    // on each field; a `.globl`-declared target resolves against its
+    // definition here with no relocation, as the section path resolves it.
+    // The `if` gives the function a relaxable branch of its own, so the
+    // body re-emit re-records the rows instead of duplicating them.
+    let src = "void f(int x) { if (x) { __asm__ volatile(\
+               \"jmp wk\\n\\tjne wk\\n\\t.weak wk\\nwk:\\n\\tnop\" :: \"r\"(x) : \"cc\"); } }\n\
+               void g(void) { __asm__ volatile(\"jmp gl\\n\\t.globl gl\\ngl:\\n\\tnop\"); }\n\
+               int main(void) { return 0; }";
+    let o = asm_obj(src, crate::Target::LinuxX64);
+    let text = o
+        .sections
+        .iter()
+        .find(|s| s.name == ".text")
+        .expect(".text");
+    let mut wk: alloc::vec::Vec<_> = text
+        .relocs
+        .iter()
+        .filter(|r| o.symbols[r.sym as usize].name == "wk")
+        .collect();
+    wk.sort_by_key(|r| r.offset);
+    assert_eq!(wk.len(), 2, "one row per branch: {:?}", text.relocs);
+    for r in &wk {
+        assert_eq!((r.rtype, r.addend), (R_X86_64_PLT32, -4));
+        let at = r.offset as usize;
+        assert_eq!(&text.bytes[at..at + 4], [0, 0, 0, 0], "field is the link's");
+    }
+    assert_eq!(text.bytes[wk[0].offset as usize - 1], 0xe9, "rel32 jmp");
+    assert_eq!(
+        &text.bytes[wk[1].offset as usize - 2..wk[1].offset as usize],
+        [0x0f, 0x85],
+        "rel32 jne"
+    );
+    assert!(
+        !text
+            .relocs
+            .iter()
+            .any(|r| o.symbols[r.sym as usize].name == "gl"),
+        "a global definition satisfies the branch in place"
+    );
+    let s = o.symbols.iter().find(|s| s.name == "wk").expect("wk");
+    assert_eq!(s.binding, STB_WEAK, "the definition stays weak");
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn x86_template_stream_branches_relax_to_rel8() {
+    let text_of = |src: &str| {
+        let o = asm_obj(src, crate::Target::LinuxX64);
+        let t = o
+            .sections
+            .iter()
+            .find(|s| s.name == ".text")
+            .expect(".text");
+        assert!(t.relocs.is_empty(), "in-stream targets resolve in place");
+        t.bytes.clone()
+    };
+    // GNU as 2.46.1 for the stream this template pastes settles the
+    // in-reach pair on the rel8 forms -- `eb 01` over the nop, `75 fc`
+    // back over the `inc` -- and holds the branch whose 130-byte `.skip`
+    // pushes the target out of the byte's reach on `e9 82 00 00 00`.
+    let t = text_of(
+        "void f(void) { __asm__ volatile(\
+         \"jmp 1f\\n\\tnop\\n1:\\n\\tinc %eax\\n\\tjne 1b\\n\\t\" \
+         \"jmp 2f\\n\\t.skip 130\\n2:\\n\\tnop\" ::: \"eax\", \"cc\"); }\n\
+         int main(void) { return 0; }",
+    );
+    let seq = [
+        0xeb, 0x01, 0x90, 0xff, 0xc0, 0x75, 0xfc, 0xe9, 0x82, 0x00, 0x00, 0x00,
+    ];
+    assert!(
+        t.windows(seq.len()).any(|w| w == seq),
+        "expected the relaxed pair and the held long form in {t:x?}"
+    );
+    // Lengthening cascades: the first branch reaches only while the second
+    // stays short, so one round lengthens the second and the next round the
+    // first. GNU as 2.46.1 settles the same stream on both long forms,
+    // `e9 81 00 00 00` then `e9 80 00 00 00`.
+    let t = text_of(
+        "void g(void) { __asm__ volatile(\
+         \"jmp 2f\\n\\tjmp 3f\\n\\t.skip 124\\n2:\\n\\t.skip 4\\n3:\\n\\tnop\"); }\n\
+         int main(void) { return 0; }",
+    );
+    let seq = [0xe9, 0x81, 0, 0, 0, 0xe9, 0x80, 0, 0, 0];
+    assert!(
+        t.windows(seq.len()).any(|w| w == seq),
+        "expected both long forms in {t:x?}"
+    );
+    // The byte's exact reach: a 127-byte gap still takes `eb 7f`.
+    let t = text_of(
+        "void h(void) { __asm__ volatile(\"jmp 1f\\n\\t.skip 127\\n1:\\n\\tnop\"); }\n\
+         int main(void) { return 0; }",
+    );
+    assert!(
+        t.windows(2).any(|w| w == [0xeb, 0x7f]),
+        "expected `eb 7f` in {t:x?}"
     );
 }
 
@@ -1122,5 +1488,705 @@ fn two_outputs_on_one_fixed_register_are_rejected() {
             e.contains("two outputs bound to one fixed register"),
             "expected the duplicate-output diagnostic, got {e:?}"
         );
+    }
+}
+
+#[test]
+fn operand_wider_than_a_general_register_is_diagnosed() {
+    // A 16-byte integer bound to a single-register constraint needs a
+    // register pair (gcc 16 allocates an even/odd pair on aarch64 and
+    // renders `%N` as its low register), which no constraint here models;
+    // one register would carry only part of the value, in either
+    // direction. TODO: allocate a register pair instead of rejecting.
+    let err = |target: crate::Target, body: &str| -> alloc::string::String {
+        let src = alloc::format!(
+            "int main(void){{ unsigned __int128 v = 5; (void)v; {body} return 0; }}"
+        );
+        crate::Compiler::with_options(src, target, crate::CompileOptions::default())
+            .compile()
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_default()
+    };
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        for body in [
+            "__asm__(\"# %0\" :: \"r\"(v));",
+            "__asm__(\"# %0\" : \"=r\"(v));",
+            "__asm__(\"# %0\" : \"+r\"(v));",
+        ] {
+            let e = err(target, body);
+            assert!(
+                e.contains("16-byte operand") && e.contains("exceeds a general register"),
+                "{target:?} {body}: {e:?}"
+            );
+        }
+    }
+    // The specific-register letters bind one register just the same.
+    for body in [
+        "__asm__(\"# %0\" :: \"a\"(v));",
+        "__asm__(\"# %0\" :: \"A\"(v));",
+        "__asm__(\"# %0\" : \"=d\"(v));",
+    ] {
+        let e = err(crate::Target::LinuxX64, body);
+        assert!(
+            e.contains("16-byte operand") && e.contains("exceeds a general register"),
+            "{body}: {e:?}"
+        );
+    }
+}
+
+#[test]
+fn wide_operand_memory_and_split_spellings_stay_accepted() {
+    // The workable spellings for a 16-byte value: the object through a
+    // memory operand (its address), and the halves through 8-byte
+    // register operands via a union.
+    let src = "typedef union { unsigned __int128 v; \
+                    struct { unsigned long long lo, hi; } s; } u128u; \
+        int main(void) { u128u u; u.v = 5; unsigned long long r; \
+            __asm__(\"# %0 %1 %2\" : \"=r\"(r) : \"r\"(u.s.lo), \"r\"(u.s.hi)); \
+            __asm__(\"# %0\" :: \"m\"(u.v)); \
+            return (int)r & 0; }";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        crate::Compiler::with_options(src.to_string(), target, crate::CompileOptions::default())
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+    }
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn aarch64_named_label_in_a_code_stream_defines_a_symbol() {
+    use crate::c5::linker::object::NativeSymSection;
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    // GNU as makes a named label in an asm code stream a definition of the
+    // unit: a `.text` NOTYPE symbol at the label's offset, local unless a
+    // directive on the name rebinds it. A `.L`-prefixed name is
+    // assembler-local and reaches no symbol table. Goldens from GNU as 2.46.1
+    // (aarch64).
+    let src = "\
+        void f(void) { __asm__ volatile(\"plain:\\n\\tnop\\n\\t.Lhidden:\\n\\tnop\"); }\n\
+        void g(void) { __asm__ volatile(\".globl gl\\n\\tgl:\\n\\tnop\"); }\n\
+        void h(void) { __asm__ volatile(\".weak wk\\n\\twk:\\n\\tnop\"); }\n\
+        void i(void) { __asm__ volatile(\".globl fx\\n\\t.type fx,%function\\n\\tfx:\\n\\tnop\"); }\n";
+    let program = crate::Compiler::with_options(
+        src.to_string(),
+        Target::LinuxAarch64,
+        crate::CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let sym = |n: &str| obj.symbols.iter().find(|s| s.name == n);
+    // (binding, type): STB_LOCAL / GLOBAL / WEAK, STT_NOTYPE / FUNC.
+    for (name, bind, kind) in [
+        ("plain", 0u8, 0u8),
+        ("gl", 1, 0),
+        ("wk", 2, 0),
+        ("fx", 1, 2),
+    ] {
+        let s = sym(name).unwrap_or_else(|| panic!("`{name}` must be defined"));
+        assert_eq!(s.binding, bind, "`{name}` binding");
+        assert_eq!(s.kind, kind, "`{name}` type");
+        assert!(
+            matches!(s.section, NativeSymSection::Text),
+            "`{name}` must be defined in `.text`: {:?}",
+            s.section
+        );
+    }
+    assert!(
+        sym(".Lhidden").is_none(),
+        "a `.L`-prefixed label is assembler-local and defines no symbol"
+    );
+    assert_eq!(
+        sym("plain").unwrap().value,
+        sym("f").expect("f").value,
+        "`plain:` stands at the offset it was written at"
+    );
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn aarch64_branch_to_a_named_label_resolves_in_the_code_stream() {
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    // A branch whose target the same template defines resolves to a
+    // displacement and carries no relocation, as GNU as does; `b` back one
+    // word encodes 0x17FFFFFF.
+    let src = "void f(void) { __asm__ volatile(\"lp:\\n\\tnop\\n\\tb lp\"); }\n";
+    let program = crate::Compiler::with_options(
+        src.to_string(),
+        Target::LinuxAarch64,
+        crate::CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let lp = obj.symbols.iter().find(|s| s.name == "lp").expect("lp");
+    let at = lp.value as usize + 4;
+    let word = u32::from_le_bytes([
+        obj.text[at],
+        obj.text[at + 1],
+        obj.text[at + 2],
+        obj.text[at + 3],
+    ]);
+    assert_eq!(word, 0x17FF_FFFF, "`b lp` must encode the in-stream branch");
+    assert!(
+        !obj.text_relocs.iter().any(|r| r.offset == at as u64),
+        "a branch to a template label carries no relocation"
+    );
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn a_duplicate_named_label_in_a_code_stream_is_rejected() {
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    // GNU as rejects a second definition of a name, within one template and
+    // across the unit's templates alike; both targets must agree.
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        for src in [
+            "void f(void) { __asm__ volatile(\"dup:\\n\\tnop\\n\\tdup:\\n\\tnop\"); }\n",
+            "void f(void) { __asm__ volatile(\"dup:\\n\\tnop\"); \
+                __asm__ volatile(\"dup:\\n\\tnop\"); }\n",
+        ] {
+            let program = crate::Compiler::with_options(
+                src.to_string(),
+                target,
+                crate::CompileOptions::default().with_no_entry_point(true),
+            )
+            .compile()
+            .expect("compile");
+            let opts = NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..Default::default()
+            };
+            let e = emit_native_with_options(&program, target, opts)
+                .err()
+                .unwrap_or_else(|| panic!("{target:?}: a duplicate definition must be rejected"));
+            assert!(
+                alloc::format!("{e}").contains("`dup` is already defined"),
+                "{target:?}: {e}"
+            );
+        }
+    }
+}
+
+/// The bytes and relocations of one section of a compiled object.
+#[cfg(feature = "native-emit")]
+fn asm_section(
+    src: &str,
+    name: &str,
+) -> (
+    alloc::vec::Vec<u8>,
+    alloc::vec::Vec<(u64, u32, alloc::string::String)>,
+) {
+    let o = asm_obj(src, crate::Target::LinuxAarch64);
+    let s = o
+        .sections
+        .iter()
+        .find(|s| s.name == name)
+        .unwrap_or_else(|| panic!("section `{name}` emitted"));
+    let relocs = s
+        .relocs
+        .iter()
+        .map(|r| (r.offset, r.rtype, o.symbols[r.sym as usize].name.clone()))
+        .collect();
+    (s.bytes.clone(), relocs)
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn aarch64_pushsection_assembles_instructions_in_both_positions() {
+    use crate::c5::object::elf_reloc_types::{
+        R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_CALL26,
+    };
+    // A pushed executable section holding instructions, at file scope and in a
+    // function body. GNU as 2.46.1 for the same statements emits 24 bytes --
+    // `nop`, `mov x0, x1`, `b 1b` resolved in place, `bl other`, `adrp x2, g`,
+    // `add x2, x2, :lo12:g` -- with three relocations at 0x0c, 0x10 and 0x14.
+    let body = ".pushsection .text.alt,\\\"ax\\\"\\n\
+                1:\\n\\tnop\\n\\tmov x0, x1\\n\\tb 1b\\n\\tbl other\\n\
+                \\tadrp x2, g\\n\\tadd x2, x2, :lo12:g\\n\\t.popsection";
+    let want: alloc::vec::Vec<u8> = [
+        0xd503201fu32, // nop
+        0xaa0103e0,    // mov x0, x1
+        0x17fffffe,    // b 1b
+        0x94000000,    // bl other
+        0x90000002,    // adrp x2, g
+        0x91000042,    // add x2, x2, :lo12:g
+    ]
+    .iter()
+    .flat_map(|w| w.to_le_bytes())
+    .collect();
+    let want_relocs = [
+        (0x0cu64, R_AARCH64_CALL26, "other"),
+        (0x10, R_AARCH64_ADR_PREL_PG_HI21, "g"),
+        (0x14, R_AARCH64_ADD_ABS_LO12_NC, "g"),
+    ];
+    for src in [
+        alloc::format!("extern void other(void);\nint g;\n__asm__(\"{body}\");\n"),
+        alloc::format!(
+            "extern void other(void);\nint g;\n\
+             void probe(void) {{ __asm__ volatile(\"{body}\"); }}\n"
+        ),
+    ] {
+        let (bytes, relocs) = asm_section(&src, ".text.alt");
+        assert_eq!(bytes, want, "{src}");
+        let got: alloc::vec::Vec<_> = relocs
+            .iter()
+            .map(|(o, t, n)| (*o, *t, n.as_str()))
+            .collect();
+        assert_eq!(got, want_relocs, "{src}");
+    }
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn aarch64_pushsection_reads_the_enclosing_template_operands() {
+    // A pushed section inside a function body resolves the template's
+    // operands: `%c0` takes the constant, and `%0` takes the register the
+    // enclosing stream was given, so the same statement encodes identically
+    // in both places.
+    let src = "void probe(long v) { __asm__ volatile(\
+               \"mov x9, %0\\n\\t.pushsection .text.alt,\\\"ax\\\"\\n\
+               \\tmov x9, %0\\n\\tmov x0, %c1\\n\\t.popsection\" :: \"r\"(v), \"i\"(7)); }\n";
+    let (alt, _) = asm_section(src, ".text.alt");
+    let (text, _) = asm_section(src, ".text");
+    // `movz x0, #7`, which GNU as 2.46.1 emits for `mov x0, 7`.
+    assert_eq!(&alt[4..8], &0xd28000e0u32.to_le_bytes());
+    assert!(
+        text.windows(4).any(|w| w == &alt[..4]),
+        "the section instruction must use the operand's register"
+    );
+}
+
+/// Relocation target name: the symbol's own name, or the target section's
+/// for an STT_SECTION entry.
+#[cfg(feature = "native-emit")]
+fn reloc_target_name(o: &crate::c5::linker::relocatable::EtRel, sym: u32) -> alloc::string::String {
+    let s = &o.symbols[sym as usize];
+    if s.name.is_empty()
+        && let crate::c5::linker::relocatable::EtSymRef::Section(ci) = s.sec
+    {
+        return o.sections[ci].name.clone();
+    }
+    s.name.clone()
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn aarch64_template_symbol_branches_type_bl_call26_and_b_jump26() {
+    use crate::c5::object::elf_reloc_types::{R_AARCH64_CALL26, R_AARCH64_JUMP26};
+    // GNU as types the imm26 field by the instruction: `bl` takes CALL26,
+    // a plain `b` JUMP26. gcc 14 on this unit emits the same pair, and the
+    // branch to the template's own named label resolves without a reloc.
+    let src = "extern void helper(void);\nextern void other(void);\n\
+               void probe(void) { __asm__ volatile(\
+               \"bl helper\\n\\tb other\\n\\tb past\\npast:\\n\\tnop\" ::: \"x30\"); }\n";
+    let (_, relocs) = asm_section(src, ".text");
+    let branches: alloc::vec::Vec<(u32, &str)> = relocs
+        .iter()
+        .filter(|(_, t, _)| matches!(*t, R_AARCH64_CALL26 | R_AARCH64_JUMP26))
+        .map(|(_, t, n)| (*t, n.as_str()))
+        .collect();
+    assert_eq!(
+        branches,
+        [(R_AARCH64_CALL26, "helper"), (R_AARCH64_JUMP26, "other")]
+    );
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn aarch64_goto_branch_in_a_pushed_section_reaches_the_label_block() {
+    use crate::c5::object::elf_reloc_types::{R_AARCH64_CONDBR19, R_AARCH64_JUMP26};
+    // The `_static_cpu_has` shape on A64: a pushed executable section
+    // branches to an `asm goto` label (`b %l[out]`). The section holds one
+    // `b` word with a zero displacement and a JUMP26 into `.text`; the main
+    // stream reaches the section through its own conditional.
+    let src = "int probe(int x)\n\
+               {\n\
+                   __asm__ goto(\".pushsection .text.cold,\\\"ax\\\"\\n\"\n\
+                                \"cold:\\n\\tb %l[out]\\n\\t\"\n\
+                                \".popsection\\n\\t\"\n\
+                                \"cbz %w0, cold\"\n\
+                                :: \"r\"(x) :: out);\n\
+                   return 1;\n\
+               out:\n\
+                   return 0;\n\
+               }\n";
+    let o = asm_obj(src, crate::Target::LinuxAarch64);
+    let cold = o
+        .sections
+        .iter()
+        .find(|s| s.name == ".text.cold")
+        .expect(".text.cold emitted");
+    assert_eq!(cold.bytes, 0x14000000u32.to_le_bytes(), "`b 0` placeholder");
+    let text_len = o
+        .sections
+        .iter()
+        .find(|s| s.name == ".text")
+        .map(|s| s.bytes.len() as i64)
+        .unwrap();
+    let [r] = cold.relocs.as_slice() else {
+        panic!("one branch reloc, got {:?}", cold.relocs);
+    };
+    assert_eq!(
+        (r.rtype, reloc_target_name(&o, r.sym).as_str()),
+        (R_AARCH64_JUMP26, ".text")
+    );
+    assert!(
+        (0..text_len).contains(&r.addend),
+        "the branch lands in the function's text, got addend {}",
+        r.addend
+    );
+    let text = o.sections.iter().find(|s| s.name == ".text").unwrap();
+    assert!(
+        text.relocs
+            .iter()
+            .any(|r| r.rtype == R_AARCH64_CONDBR19 && reloc_target_name(&o, r.sym) == ".text.cold"),
+        "the conditional relocates into the pushed section"
+    );
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn aarch64_numeric_branch_into_a_pushed_section_relocates_to_it() {
+    use crate::c5::object::elf_reloc_types::{R_AARCH64_CONDBR19, R_AARCH64_JUMP26};
+    // A numeric forward reference whose definition sits in the statement's
+    // pushed section (the `jmp 6f` fixup shape). GNU as puts the two in
+    // different object sections, so each branch relocates against the
+    // section with the label's offset as addend.
+    let src = "void probe(long x)\n\
+               {\n\
+                   __asm__ volatile(\"b 1f\\n\\tcbz %0, 1f\\n\\t\"\n\
+                                    \".pushsection .text.fix,\\\"ax\\\"\\n\"\n\
+                                    \"\\tnop\\n1:\\tret\\n\\t\"\n\
+                                    \".popsection\" :: \"r\"(x));\n\
+               }\n";
+    let o = asm_obj(src, crate::Target::LinuxAarch64);
+    let text = o.sections.iter().find(|s| s.name == ".text").unwrap();
+    let hits: alloc::vec::Vec<(u32, i64)> = text
+        .relocs
+        .iter()
+        .filter(|r| reloc_target_name(&o, r.sym) == ".text.fix")
+        .map(|r| (r.rtype, r.addend))
+        .collect();
+    assert_eq!(hits, [(R_AARCH64_JUMP26, 4), (R_AARCH64_CONDBR19, 4)]);
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn aarch64_function_body_layout_directives_match_gnu_as() {
+    // `.balign` / `.skip` / `.org` in the main instruction stream. GNU as
+    // 2.46.1 for the same statements in a `.text` body emits 44 bytes: the
+    // `.balign 16` pads with three NOP words, the `.skip` deposits eight
+    // zeros, the instruction after them is already word-aligned, and the
+    // `.org` pads to twelve bytes past the label.
+    let src = "__attribute__((naked)) void probe(void);\n\
+               __attribute__((naked)) void probe(void) { __asm__ volatile(\
+               \"nop\\n\\t.balign 16\\n\\tnop\\n\\t.skip 8\\n\
+               2:\\n\\tnop\\n\\t.org 2b + 12\\n\\tnop\"); }\n";
+    let mut want: alloc::vec::Vec<u8> = alloc::vec::Vec::new();
+    for _ in 0..5 {
+        want.extend_from_slice(&0xd503201fu32.to_le_bytes());
+    }
+    want.resize(28, 0);
+    want.extend_from_slice(&0xd503201fu32.to_le_bytes());
+    want.resize(40, 0);
+    want.extend_from_slice(&0xd503201fu32.to_le_bytes());
+    let (bytes, _) = asm_section(src, ".text");
+    assert_eq!(bytes, want);
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn aarch64_alignment_fill_max_skip_and_zero_match_gnu_as() {
+    // An explicit fill byte, a max skip that drops the alignment, a sub-word
+    // gap after data, and the zero alignment GNU as reads as one. 2.46.1 for
+    // the same statements emits 28 bytes.
+    let src = "__attribute__((naked)) void probe(void);\n\
+               __attribute__((naked)) void probe(void) { __asm__ volatile(\
+               \"nop\\n\\t.balign 16, 0\\n\\tnop\\n\\t.balign 16, , 2\\n\
+               \\t.byte 7\\n\\t.balign 8\\n\\t.align 0\\n\\t.balign 0\\n\\tnop\"); }\n";
+    let mut want: alloc::vec::Vec<u8> = 0xd503201fu32.to_le_bytes().to_vec();
+    want.resize(16, 0);
+    want.extend_from_slice(&0xd503201fu32.to_le_bytes());
+    want.push(7);
+    want.resize(24, 0);
+    want.extend_from_slice(&0xd503201fu32.to_le_bytes());
+    let (bytes, _) = asm_section(src, ".text");
+    assert_eq!(bytes, want);
+}
+
+/// The alignment item a template parser makes of `tmpl`, or `None` when the
+/// parse rejects it or reads it as something other than a layout directive.
+fn stream_align_item(tmpl: &str, aarch64: bool) -> Option<crate::c5::asm::AsmSectionItem> {
+    let b = tmpl.as_bytes();
+    if aarch64 {
+        crate::c5::codegen::aarch64::asm::parse_template(b)
+            .ok()?
+            .first()?
+            .layout
+            .clone()
+    } else {
+        crate::c5::codegen::x86_64::asm::parse_template(b)
+            .ok()?
+            .first()?
+            .layout
+            .clone()
+    }
+}
+
+#[test]
+fn alignment_directive_family_reads_one_grammar_everywhere() {
+    // The section engine, the x86-64 template parser and the AArch64 template
+    // parser have to admit the same alignment directives and read the same
+    // item out of them; a form one accepts and another rejects, or reads
+    // differently, is the defect the shared parse exists to rule out.
+    use crate::c5::asm::parse_stream_layout_item;
+    let ok = [
+        ".balign 16",
+        ".balign 16, 0xff",
+        ".balign 16, 0xff, 3",
+        ".balign 0",
+        ".balign 2b-1b",
+        ".balign (2b-1b)*2",
+        ".balignw 16, 0x1234",
+        ".balignl 16, 0x12345678",
+        ".balignw 16",
+        ".balignl 16",
+        ".p2align 4",
+        ".p2align 4,,7",
+        ".p2align 4, 0x90, 7",
+        ".p2align 2b-1b",
+        ".p2alignw 4, 0x1234",
+        ".p2alignl 4, 0x12345678",
+        ".align 0",
+        ".align 2b-1b",
+    ];
+    // GNU as has no `w` / `l` spelling of `.align`, rejects a non-power-of-two
+    // byte count and an out-of-range exponent, and takes at most three
+    // operands. A count past the section-offset width has no layout either.
+    let bad = [
+        ".alignw 8",
+        ".alignl 8",
+        ".balign 3",
+        ".balignl 3",
+        ".p2align 13",
+        ".p2alignl 13",
+        ".balign 16, 0xff, 3, 4",
+        ".balign 2b -",
+        ".balign 8589934592",
+    ];
+    for t in ok.iter().chain(bad.iter()) {
+        let (tok, rest) = t.split_once(' ').unwrap_or((t, ""));
+        let want_ok = ok.contains(t);
+        for (aarch64, arch) in [(false, "x86_64"), (true, "aarch64")] {
+            let sec = match parse_stream_layout_item(tok, rest.trim(), aarch64) {
+                Some(Ok(item)) => Some(item),
+                _ => None,
+            };
+            assert_eq!(sec.is_some(), want_ok, "section engine `{t}` ({arch})");
+            assert_eq!(
+                stream_align_item(t, aarch64),
+                sec,
+                "template vs section engine `{t}` ({arch})"
+            );
+        }
+    }
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn alignment_fill_width_family_matches_gnu_as() {
+    // `.balignw` / `.balignl` / `.p2alignw` / `.p2alignl` repeat a 2- or
+    // 4-byte little-endian fill over the gap, truncating a wider value; with
+    // no fill they pad like the unsuffixed spelling. GNU as 2.46.1 emits
+    // these bytes for the same statements.
+    let sec = |body: &str| {
+        let src = alloc::format!("__asm__(\".section .t,\\\"a\\\"\\n\" \"{body}\");\n");
+        asm_section(&src, ".t").0
+    };
+    let cases: &[(&str, &[u8])] = &[
+        (
+            ".byte 0x11,0x22,0x33,0x44\\n .balignl 16, 0x12345678\\n .byte 0xbb\\n",
+            &[
+                0x11, 0x22, 0x33, 0x44, 0x78, 0x56, 0x34, 0x12, 0x78, 0x56, 0x34, 0x12, 0x78, 0x56,
+                0x34, 0x12, 0xbb,
+            ],
+        ),
+        (
+            ".byte 0x11,0x22\\n .balignw 8, 0x1234\\n .byte 0xbb\\n",
+            &[0x11, 0x22, 0x34, 0x12, 0x34, 0x12, 0x34, 0x12, 0xbb],
+        ),
+        (
+            ".byte 0x11,0x22,0x33,0x44\\n .p2alignw 4, 0x1234\\n .byte 0xbb\\n",
+            &[
+                0x11, 0x22, 0x33, 0x44, 0x34, 0x12, 0x34, 0x12, 0x34, 0x12, 0x34, 0x12, 0x34, 0x12,
+                0x34, 0x12, 0xbb,
+            ],
+        ),
+        // A fill wider than the unit keeps the low bytes.
+        (
+            ".byte 0x11,0x22,0x33,0x44\\n .balignl 8, 0x123456789\\n .byte 0xbb\\n",
+            &[0x11, 0x22, 0x33, 0x44, 0x89, 0x67, 0x45, 0x23, 0xbb],
+        ),
+        (
+            ".byte 0x11,0x22,0x33,0x44\\n .balignw 8, 0x12345\\n .byte 0xbb\\n",
+            &[0x11, 0x22, 0x33, 0x44, 0x45, 0x23, 0x45, 0x23, 0xbb],
+        ),
+        // No fill operand: the section default, as for `.balign` itself.
+        (
+            ".byte 0x11,0x22,0x33,0x44\\n .balignl 8\\n .byte 0xbb\\n",
+            &[0x11, 0x22, 0x33, 0x44, 0, 0, 0, 0, 0xbb],
+        ),
+        // A max skip drops the padding, so the gap width never comes up.
+        (
+            ".byte 0x11,0x22,0x33\\n .balignl 16, 0x12345678, 2\\n .byte 0xbb\\n",
+            &[0x11, 0x22, 0x33, 0xbb],
+        ),
+    ];
+    for (body, want) in cases {
+        assert_eq!(&sec(body)[..], *want, "`{body}`");
+    }
+}
+
+#[cfg(feature = "native-emit")]
+#[test]
+fn alignment_fill_width_rejects_a_partial_unit() {
+    // GNU as errors when the padding is not a whole number of fill units.
+    for (d, w) in [(".balignl 16, 0x12345678", 4), (".p2alignw 4, 0x1234", 2)] {
+        let src = alloc::format!(
+            "__asm__(\".section .t,\\\"a\\\"\\n\" \" .byte 0x11\\n {d}\\n .byte 0xbb\\n\");\n"
+        );
+        let e = alloc::format!(
+            "{:?}",
+            crate::Compiler::with_target(src, crate::Target::LinuxAarch64)
+                .compile()
+                .err()
+        );
+        assert!(e.contains(&alloc::format!("not a multiple of {w}")), "{e}");
+    }
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn alignment_over_a_label_difference_matches_gnu_as() {
+    // A backward label difference is a constant where the directive stands,
+    // so it is an alignment operand like any other. GNU as 2.46.1 emits these
+    // bytes; the padding is the section's default fill, which is the AArch64
+    // NOP only for a gap of whole instructions.
+    let sec = |body: &str, flags: &str| {
+        let src = alloc::format!("__asm__(\".section .t,\\\"{flags}\\\"\\n\" \"{body}\");\n");
+        asm_section(&src, ".t").0
+    };
+    let head = " 1: .byte 0x11,0x22,0x33,0x44\\n 2:\\n .byte 0xaa\\n";
+    let cases: &[(&str, &str, &[u8])] = &[
+        // `2b-1b` is 4: three bytes of padding to the next multiple.
+        (
+            ".balign 2b-1b",
+            "a",
+            &[0x11, 0x22, 0x33, 0x44, 0xaa, 0, 0, 0, 0xbb],
+        ),
+        (
+            ".balign (2b-1b)",
+            "a",
+            &[0x11, 0x22, 0x33, 0x44, 0xaa, 0, 0, 0, 0xbb],
+        ),
+        // The expression is the whole GNU as grammar, not just a difference.
+        (
+            ".balign (2b-1b)*2",
+            "a",
+            &[0x11, 0x22, 0x33, 0x44, 0xaa, 0, 0, 0, 0xbb],
+        ),
+        (
+            ".balign 2b-1b, 0x55",
+            "a",
+            &[0x11, 0x22, 0x33, 0x44, 0xaa, 0x55, 0x55, 0x55, 0xbb],
+        ),
+        // `.p2align 4` is a 16-byte boundary: eleven bytes of padding, whose
+        // whole instructions are NOPs in an executable section.
+        (
+            ".p2align 2b-1b",
+            "ax",
+            &[
+                0x11, 0x22, 0x33, 0x44, 0xaa, 0, 0, 0, 0x1f, 0x20, 0x03, 0xd5, 0x1f, 0x20, 0x03,
+                0xd5, 0xbb,
+            ],
+        ),
+        // `.align`'s operand is an exponent on AArch64, so this is 16 too.
+        (
+            ".align 2b-1b",
+            "ax",
+            &[
+                0x11, 0x22, 0x33, 0x44, 0xaa, 0, 0, 0, 0x1f, 0x20, 0x03, 0xd5, 0x1f, 0x20, 0x03,
+                0xd5, 0xbb,
+            ],
+        ),
+    ];
+    for (d, flags, want) in cases {
+        let body = alloc::format!("{head} {d}\\n .byte 0xbb\\n");
+        assert_eq!(&sec(&body, flags)[..], *want, "`{d}`");
+    }
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn alignment_over_labels_settles_after_a_deferred_fill_count() {
+    // A first measuring round takes an unresolved `.skip` count as zero
+    // length, which moves the offsets an alignment operand reads. Here that
+    // makes `8b-7b` three in the first round and four in the second, so the
+    // operand's range is judged only once the layout has settled.
+    let src = "__asm__(\".section .t,\\\"a\\\"\\n\"\n\
+               \" 7: .byte 0x11,0x22,0x33\\n .skip 4f-3f\\n 8:\\n\"\n\
+               \" .byte 0xaa\\n .balign 8b-7b\\n .byte 0xbb\\n\"\n\
+               \" 3: .byte 0x99\\n 4:\\n\");\n";
+    assert_eq!(
+        asm_section(src, ".t").0,
+        [0x11, 0x22, 0x33, 0, 0xaa, 0, 0, 0, 0xbb, 0x99]
+    );
+}
+
+#[cfg(feature = "native-emit")]
+#[test]
+fn alignment_over_a_forward_label_difference_is_rejected() {
+    // GNU as reduces an alignment operand where the directive stands, so a
+    // definition placed after it has no value there and the directive is an
+    // error rather than a layout the assembler iterates towards.
+    for d in [".balign 4f-3f", ".p2align 4f-3f", ".align 4f-3f"] {
+        let src = alloc::format!(
+            "__asm__(\".section .t,\\\"a\\\"\\n\" \" .byte 0xaa\\n {d}\\n\
+             \\n .byte 0xbb\\n 3: .byte 0,0,0,0\\n 4:\\n\");\n"
+        );
+        let e = alloc::format!(
+            "{:?}",
+            crate::Compiler::with_target(src, crate::Target::LinuxAarch64)
+                .compile()
+                .err()
+        );
+        assert!(e.contains("is not constant where it stands"), "`{d}`: {e}");
     }
 }

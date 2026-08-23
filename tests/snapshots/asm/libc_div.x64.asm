@@ -9,6 +9,21 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <rti>:
                	pushq	%rbp
@@ -58,21 +73,16 @@ Disassembly of section .text:
                	idivq	%rcx
                	movq	%rax, %rdx
                	popq	%rax
-               	pushq	%rax
-               	pushq	%rdx
-               	cqto
-               	idivq	%rcx
-               	movq	%rdx, %rcx
-               	popq	%rdx
-               	popq	%rax
-               	movslq	%edx, %rax
-               	cmpq	$0x3, %rax
+               	imulq	%rdx, %rcx
+               	movq	%rcx, %r10
+               	movq	%rax, %rcx
+               	subq	%r10, %rcx
+               	cmpl	$0x3, %edx
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movslq	%ecx, %rax
-               	cmpq	$0x2, %rax
+               	cmpl	$0x2, %ecx
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -87,43 +97,34 @@ Disassembly of section .text:
                	movq	%rax, %rbx
                	movl	$0x5, %edi
                	callq	<addr>
-               	movq	%rax, %rcx
-               	movslq	%ebx, %rax
-               	movslq	%ecx, %rdx
+               	movslq	%ebx, %rcx
+               	movslq	%eax, %rdx
                	movq	%rdx, %r10
-               	pushq	%rax
                	pushq	%rdx
+               	movq	%rcx, %rax
                	cqto
                	idivq	%r10
-               	movq	%rax, %rcx
                	popq	%rdx
-               	popq	%rax
-               	movq	%rdx, %r10
-               	pushq	%rax
-               	cqto
-               	idivq	%r10
-               	popq	%rax
-               	movslq	%ecx, %rax
-               	cmpq	$-0x3, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	imulq	%rax, %rdx
+               	subq	%rdx, %rcx
+               	cmpl	$-0x3, %eax
+               	setne	%dl
+               	movzbq	%dl, %rdx
+               	testq	%rdx, %rdx
                	jne	<addr>
-               	movslq	%edx, %rax
-               	cmpq	$-0x2, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	cmpl	$-0x2, %ecx
+               	setne	%dl
+               	movzbq	%dl, %rdx
+               	testq	%rdx, %rdx
                	je	<addr>
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	leaq	(%rcx,%rcx,4), %rax
-               	addq	%rdx, %rax
-               	movslq	%eax, %rax
-               	cmpq	$-0x11, %rax
+               	leaq	(%rax,%rax,4), %rax
+               	addq	%rcx, %rax
+               	cmpl	$-0x11, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	movq	(%rsp), %rbx
@@ -144,12 +145,9 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	popq	%rdx
                	popq	%rax
-               	movq	%rax, %r10
-               	pushq	%rax
-               	movq	%rbx, %rax
-               	cqto
-               	idivq	%r10
-               	popq	%rax
+               	imulq	%rcx, %rax
+               	movq	%rbx, %rdx
+               	subq	%rax, %rdx
                	cmpq	$0xe, %rcx
                	setne	%al
                	movzbq	%al, %rax
@@ -179,12 +177,9 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	popq	%rdx
                	popq	%rax
-               	movq	%rax, %r10
-               	pushq	%rax
-               	movq	%rbx, %rax
-               	cqto
-               	idivq	%r10
-               	popq	%rax
+               	imulq	%rcx, %rax
+               	movq	%rbx, %rdx
+               	subq	%rax, %rdx
                	cmpq	$0x14d, %rcx            # imm = 0x14D
                	setne	%al
                	movzbq	%al, %rax

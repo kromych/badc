@@ -58,6 +58,8 @@ POSIX directory API (`DIR` at quickjs-libc.c:2744; `<dirent.h>` is
 entirely `#ifndef _WIN32`), then `struct _utimbuf` (quickjs-libc.c:2910;
 badc keeps it in `<sys/utime.h>`, which `<utime.h>` does not pull in).
 
-`HAVE_CLOSEFROM` stays off because badc's `<unistd.h>` does not declare
-`closefrom`; upstream gates the same define on a compile probe, so this
-matches what upstream would detect.
+`HAVE_CLOSEFROM` follows the target: badc's `<unistd.h>` declares
+`closefrom` on the Linux targets, where glibc 2.34 and later export it,
+and nowhere else -- neither libSystem nor msvcrt has the function.
+Upstream gates the same define on a compile probe, so this matches what
+upstream would detect.

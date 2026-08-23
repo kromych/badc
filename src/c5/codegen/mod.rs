@@ -43,6 +43,8 @@ pub(crate) mod aarch64;
 #[allow(dead_code)]
 pub(crate) mod abi_classify;
 mod jit;
+pub(crate) mod magic;
+pub(crate) mod map_syms;
 pub(crate) mod passes;
 pub(crate) mod ssa;
 pub(crate) mod x86_64;
@@ -141,6 +143,101 @@ impl BinaryFormat {
     }
 }
 
+/// In-memory format of `long double`, fixed per target by the platform
+/// ABI. The compute path holds every `long double` value as binary64
+/// (see doc/std-conformance.md); this kind names the storage format a
+/// declared object uses and the format the call ABI moves.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LongDoubleKind {
+    /// IEEE binary64 -- identical to `double` (macOS/arm64, Windows).
+    F64,
+    /// x87 80-bit extended, stored in a 16-byte object (System V
+    /// x86-64). Bytes 10..16 are padding.
+    X87,
+    /// IEEE binary128 (AAPCS64 ELF).
+    Binary128,
+}
+
+impl LongDoubleKind {
+    /// Object size in bytes.
+    pub fn size(self) -> usize {
+        match self {
+            LongDoubleKind::F64 => 8,
+            LongDoubleKind::X87 | LongDoubleKind::Binary128 => 16,
+        }
+    }
+
+    /// Object alignment in bytes.
+    pub fn align(self) -> usize {
+        self.size()
+    }
+}
+
+/// The integer type `wchar_t` denotes. C99 7.17 leaves both the width
+/// and the signedness to the implementation and each platform ABI fixes
+/// them independently, so the width does not imply the sign: AAPCS64
+/// and the Linux/x86-64 psABI both give the type 4 bytes and disagree
+/// on whether it is signed. Carrying the pair keeps the `<stddef.h>`
+/// typedef, the `__WCHAR_*__` predefines and the type of `L'...'` from
+/// deriving it separately.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WcharType {
+    pub bytes: usize,
+    pub signed: bool,
+}
+
+impl WcharType {
+    /// Spelling of the underlying type, as `__WCHAR_TYPE__` reports it
+    /// and the bundled `<stddef.h>` typedefs it. `ilp32` selects gcc's
+    /// i386 `long int` over `int` at the 4-byte width.
+    pub fn spelling(self, ilp32: bool) -> &'static str {
+        match (self.bytes, self.signed, ilp32) {
+            (2, true, _) => "short",
+            (2, false, _) => "unsigned short",
+            (_, true, true) => "long int",
+            (_, true, false) => "int",
+            (_, false, _) => "unsigned int",
+        }
+    }
+
+    /// Greatest value the type holds.
+    pub fn max(self) -> i64 {
+        let bits = self.bytes * 8;
+        if self.signed {
+            (1i64 << (bits - 1)) - 1
+        } else {
+            (1i64 << bits) - 1
+        }
+    }
+
+    /// Least value the type holds.
+    pub fn min(self) -> i64 {
+        if self.signed { -(self.max() + 1) } else { 0 }
+    }
+
+    /// `__WCHAR_MAX__` / `__WCHAR_MIN__` replacement lists. Each bound
+    /// carries the type the value has after the integer promotions
+    /// (C99 6.3.1.1p2), so a `U` suffix appears only where the promoted
+    /// type is unsigned -- a 2-byte `wchar_t` promotes to `int` and its
+    /// bounds are plain. The signed lower bound is spelled against
+    /// `__WCHAR_MAX__` because `-2147483648` is not a constant of the
+    /// type; gcc spells both the same way.
+    pub fn bound_macros(self) -> (String, String) {
+        let suffix = if self.max() > i32::MAX as i64 {
+            "U"
+        } else {
+            ""
+        };
+        let max = format!("{}{suffix}", self.max());
+        let min = if self.signed {
+            "(-__WCHAR_MAX__ - 1)".to_string()
+        } else {
+            format!("{}{suffix}", self.min())
+        };
+        (max, min)
+    }
+}
+
 impl Target {
     /// Canonical short name for this target. Round-trips through
     /// [`Target::parse`]; used as the value of the preprocessor's
@@ -172,6 +269,19 @@ impl Target {
             self,
             Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64
         )
+    }
+
+    /// Byte order of the target's data accesses. Both instruction sets
+    /// badc emits can run either way; every target it emits for selects
+    /// the little-endian one, and the linker rejects `-EB` input.
+    pub fn is_little_endian(self) -> bool {
+        match self {
+            Target::MacOSAarch64
+            | Target::LinuxAarch64
+            | Target::LinuxX64
+            | Target::WindowsX64
+            | Target::WindowsAarch64 => true,
+        }
     }
 
     /// Whether the target is x86_64 (any OS). Gates the x86 named
@@ -212,6 +322,70 @@ impl Target {
     /// integer.
     pub fn plain_char_signed(self) -> bool {
         !matches!(self, Target::LinuxAarch64)
+    }
+
+    /// The `wchar_t` the target's platform ABI defines. 2 bytes and
+    /// unsigned on Windows, whose wide-string APIs take UTF-16 code
+    /// units, and likewise on any target under `-fshort-wchar`
+    /// (`short_wchar`). At 4 bytes AAPCS64 makes the type unsigned
+    /// while the Linux/x86-64 psABI and Apple's arm64 ABI make it
+    /// signed. Sole source of the type for the lexer's wide literals,
+    /// the `__SIZEOF_WCHAR_T__` / `__WCHAR_TYPE__` / `__WCHAR_MAX__` /
+    /// `__WCHAR_MIN__` predefines, and the `<stddef.h>` typedef that
+    /// keys on them.
+    pub fn wchar_type(self, short_wchar: bool) -> WcharType {
+        if short_wchar || self.is_windows() {
+            WcharType {
+                bytes: 2,
+                signed: false,
+            }
+        } else {
+            WcharType {
+                bytes: 4,
+                signed: !matches!(self, Target::LinuxAarch64),
+            }
+        }
+    }
+
+    /// The `long double` storage format badc gives the type. System V
+    /// x86-64 gives it the x87 80-bit format in a 16-byte object;
+    /// macOS/arm64 and both Windows targets define it as binary64.
+    ///
+    /// AArch64 Linux defines it as IEEE binary128, which badc does not
+    /// yet store: the format has no hardware support there, so a load
+    /// and a store are open-coded conversions the aarch64 emitter does
+    /// not implement. Reporting 16 bytes while storing a binary64 would
+    /// make every foreign reader misdecode the object, so the type
+    /// stays binary64 there -- a uniform divergence
+    /// doc/std-conformance.md records, with the call-site diagnostic
+    /// naming the platform format.
+    /// The `long double` format the target's platform ABI moves across
+    /// a call, when badc does not move it the same way; `None` when the
+    /// two agree. System V x86-64 passes the type in a 16-byte stack
+    /// slot and returns it in `st(0)`, and AAPCS64 passes binary128 in
+    /// a vector register, while badc passes the binary64 it computes
+    /// with in the FP argument bank. Read by the libc-argument
+    /// diagnostic; independent of [`Self::long_double`], which answers
+    /// what a declared object stores.
+    /// TODO: extended-precision long double -- the SysV x87 and AAPCS64
+    /// binary128 argument / return conventions.
+    pub fn platform_long_double_abi(self) -> Option<&'static str> {
+        match self {
+            Target::LinuxX64 => Some("x87 80-bit"),
+            Target::LinuxAarch64 => Some("IEEE binary128"),
+            Target::MacOSAarch64 | Target::WindowsX64 | Target::WindowsAarch64 => None,
+        }
+    }
+
+    /// In-memory format a declared `long double` object takes.
+    pub fn long_double(self) -> LongDoubleKind {
+        match self {
+            Target::LinuxX64 => LongDoubleKind::X87,
+            Target::LinuxAarch64 => LongDoubleKind::Binary128,
+            Target::MacOSAarch64 | Target::WindowsX64 | Target::WindowsAarch64 => {
+                LongDoubleKind::F64
+            }
+        }
     }
 
     /// Default target -- used when callers (mostly tests) construct a
@@ -358,8 +532,14 @@ pub(crate) enum ArgPlacement {
     /// integer or FP register; the emitter loads the k-th slot from
     /// `[arg_addr + 8*k]`. C99 aggregates pass at most two GPRs
     /// (System V eightbytes) or four FP registers (AAPCS64 HFA), so
-    /// four slots suffice and the placement stays `Copy`.
-    StructRegs { regs: [ClassReg; 4], n: u8 },
+    /// four slots suffice and the placement stays `Copy`. `align` is
+    /// the aggregate's own alignment, the bound on the width of an
+    /// access against it under [`NativeOptions::strict_align`].
+    StructRegs {
+        regs: [ClassReg; 4],
+        n: u8,
+        align: u32,
+    },
     /// An aggregate passed by an implicit reference: the caller
     /// copies it to a temporary and passes the pointer in this
     /// integer register (index into `Abi::int_arg_regs`).
@@ -369,8 +549,10 @@ pub(crate) enum ArgPlacement {
     StructByRefStack(u32),
     /// An aggregate passed wholly on the outgoing-args stack: the
     /// caller copies `size` bytes to `[sp + off]` (System V MEMORY
-    /// class, or a register-bank-exhausted small aggregate).
-    StructStack { off: u32, size: u32 },
+    /// class, or a register-bank-exhausted small aggregate). `align`
+    /// bounds the copy's transfer width as in [`Self::StructRegs`];
+    /// the destination stack slot is 8-aligned.
+    StructStack { off: u32, size: u32, align: u32 },
 }
 
 /// One register slot of an [`ArgPlacement::StructRegs`]: the
@@ -429,12 +611,14 @@ pub(super) fn plan_call_args(
 /// struct-aware planner. `class` comes from
 /// [`abi_classify::classify_aggregate`]; `size` is the aggregate's
 /// byte size (needed for the stack reservation when it is passed by
-/// memory or by an implicit-reference copy).
+/// memory or by an implicit-reference copy); `align` is its own
+/// alignment, which the placement carries to the marshalling site.
 #[derive(Clone)]
 #[allow(dead_code)] // constructed by the per-arch emit's struct path
 pub(crate) struct ArgAgg {
     pub class: abi_classify::AggClass,
     pub size: u32,
+    pub align: u32,
 }
 
 /// Struct-aware [`plan_call_args`]. `aggs[i]` is `Some` when
@@ -473,6 +657,7 @@ pub(super) fn plan_call_args_aggs(
                 placements.push(ArgPlacement::StructStack {
                     off,
                     size: agg.size,
+                    align: agg.align,
                 });
                 continue;
             }
@@ -493,13 +678,18 @@ pub(super) fn plan_call_args_aggs(
                         reg: abi.int_arg_regs[i],
                         is_fp: false,
                     };
-                    ArgPlacement::StructRegs { regs, n: 1 }
+                    ArgPlacement::StructRegs {
+                        regs,
+                        n: 1,
+                        align: agg.align,
+                    }
                 } else {
                     let off = stack_used;
                     stack_used += aligned;
                     ArgPlacement::StructStack {
                         off,
                         size: agg.size,
+                        align: agg.align,
                     }
                 };
                 placements.push(placement);
@@ -540,6 +730,7 @@ pub(super) fn plan_call_args_aggs(
                         ArgPlacement::StructRegs {
                             regs,
                             n: need as u8,
+                            align: agg.align,
                         }
                     } else {
                         int_idx = int_max;
@@ -548,6 +739,7 @@ pub(super) fn plan_call_args_aggs(
                         ArgPlacement::StructStack {
                             off,
                             size: agg.size,
+                            align: agg.align,
                         }
                     }
                 };
@@ -585,7 +777,11 @@ pub(super) fn plan_call_args_aggs(
                             };
                             n += 1;
                         }
-                        ArgPlacement::StructRegs { regs, n }
+                        ArgPlacement::StructRegs {
+                            regs,
+                            n,
+                            align: agg.align,
+                        }
                     } else {
                         // The aggregate spills to the stack. AAPCS64
                         // 6.8.2 then exhausts the matching register file
@@ -606,6 +802,7 @@ pub(super) fn plan_call_args_aggs(
                         ArgPlacement::StructStack {
                             off,
                             size: agg.size,
+                            align: agg.align,
                         }
                     }
                 }
@@ -626,6 +823,7 @@ pub(super) fn plan_call_args_aggs(
                     ArgPlacement::StructStack {
                         off,
                         size: agg.size,
+                        align: agg.align,
                     }
                 }
                 AggClass::ReturnIndirect => {
@@ -636,6 +834,7 @@ pub(super) fn plan_call_args_aggs(
                     ArgPlacement::StructStack {
                         off,
                         size: agg.size,
+                        align: agg.align,
                     }
                 }
             };
@@ -1003,6 +1202,24 @@ pub(crate) struct ResolvedDylib {
     pub path: String,
 }
 
+impl ResolvedDylib {
+    /// The target's C runtime library, for code paths that need one
+    /// when no `#pragma dylib` is in scope: the legacy-object link
+    /// fallback and the Mach-O TLV libSystem anchor.
+    pub fn runtime_default(target: Target) -> ResolvedDylib {
+        let (name, path) = match target {
+            Target::MacOSAarch64 => ("libSystem", "/usr/lib/libSystem.B.dylib"),
+            Target::LinuxAarch64 => ("libc", "/lib/ld-linux-aarch64.so.1"),
+            Target::LinuxX64 => ("libc", "/lib64/ld-linux-x86-64.so.2"),
+            Target::WindowsX64 | Target::WindowsAarch64 => ("msvcrt", "msvcrt.dll"),
+        };
+        ResolvedDylib {
+            name: name.to_string(),
+            path: path.to_string(),
+        }
+    }
+}
+
 /// The full set of imports a single compilation needs, derived from
 /// the SSA walk + the `#pragma binding` table. Each
 /// [`ResolvedImport`]'s position in `imports` is also its GOT / IAT
@@ -1100,6 +1317,27 @@ impl ResolvedImports {
             param_types: b.param_types.clone(),
         });
         Ok(())
+    }
+
+    /// Add a dylib no import references, for images that depend on a
+    /// loader-resolved symbol outside the binding table. Prefers an
+    /// in-scope `#pragma dylib` spec whose path contains `fragment`;
+    /// falls back to the target's runtime dylib. No-op when a matching
+    /// dylib is already listed.
+    pub fn ensure_dylib(&mut self, fragment: &str, program: &Program, target: Target) {
+        if self.dylibs.iter().any(|d| d.path.contains(fragment)) {
+            return;
+        }
+        let dylib = program
+            .dylibs
+            .iter()
+            .find(|s| s.path.contains(fragment))
+            .map(|s| ResolvedDylib {
+                name: s.name.clone(),
+                path: s.path.clone(),
+            })
+            .unwrap_or_else(|| ResolvedDylib::runtime_default(target));
+        self.dylibs.push(dylib);
     }
 
     /// Collect every libc binding the program reaches for and
@@ -1343,7 +1581,7 @@ pub(crate) enum DynamicExportSection {
     /// Byte offset within [`Build::text`].
     Text,
     /// Byte offset within the merged data-byte space
-    /// `[read-only prefix][writable data][zero-fill tail]`: the same
+    /// `[read-only prefix][relro][writable data][zero-fill tail]`: the same
     /// space [`DataFixup`] addresses, so an offset at or past
     /// `Build::data.len()` names a `.bss` byte.
     Data,
@@ -1386,10 +1624,30 @@ pub(crate) struct EmittedFinalReloc {
     pub addend: i64,
 }
 
+/// A C-identifier-named input section the merge grouped across units,
+/// for a writer that gives it an output section of its own. `offset`
+/// is into `Build::data`, or into the zero-fill region when `bss`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NamedSection {
+    pub name: String,
+    pub offset: u64,
+    pub size: u64,
+    pub align: u64,
+    /// Zero-fill: no file bytes.
+    pub bss: bool,
+    /// Loader-writable, as the data and relro families are.
+    pub write: bool,
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct Build {
     /// Machine code, ready to be placed in `__TEXT,__text`.
     pub text: Vec<u8>,
+    /// Named sections a writer can emit in their own right. Only the
+    /// merged link path fills this; the ELF writer consumes it, and
+    /// the Mach-O and PE writers still fold the bytes into the family
+    /// segment they belong to.
+    pub named_sections: Vec<NamedSection>,
     /// `--emit-relocs` records; empty unless the link requested them.
     pub emitted_relocs: Vec<EmittedFinalReloc>,
     /// Data-import copy relocations resolved against the merged symbol
@@ -1409,6 +1667,12 @@ pub(crate) struct Build {
     /// without write permission; the rest stays writable. Zero when
     /// the producer segregated nothing.
     pub data_ro_len: usize,
+    /// End of the relro region: `data[data_ro_len..data_relro_len]`
+    /// is read-only storage with loader-written slots. The ELF image
+    /// writer covers it by `PT_GNU_RELRO`; writers without such a
+    /// mechanism keep it writable. Equals [`Self::data_ro_len`] when
+    /// the producer segregated no such region.
+    pub data_relro_len: usize,
     /// Base alignment `data` requires in the image, at least 8.
     /// Raised past 8 only by linked foreign sections with a larger
     /// sh_addralign (e.g. `.rodata.cst16`); the writers place the
@@ -1444,6 +1708,11 @@ pub(crate) struct Build {
     /// left for a load-of-data-address sequence. The writer patches it
     /// with the page-relative address of `__data + data_offset`.
     pub data_fixups: Vec<DataFixup>,
+    /// Sites naming the GOT base. Populated only by the multi-object
+    /// synthesizer, from a reference to `_GLOBAL_OFFSET_TABLE_`; the
+    /// ELF writer resolves them against the `.got` it lays out and the
+    /// other container writers reject them.
+    pub got_base_fixups: Vec<GotBaseFixup>,
     /// Read-only data the emit produced (switch dispatch tables) with
     /// its code-reference and slot fixups. See [`RodataBuild`].
     pub rodata: RodataBuild,
@@ -1451,6 +1720,14 @@ pub(crate) struct Build {
     /// Populated only by the multi-object synthesizer; see
     /// [`DataPcRelReloc`].
     pub data_pcrel_relocs: Vec<DataPcRelReloc>,
+    /// Object-link pc-relative fields in `Build::text` targeting the
+    /// data-byte space. Populated only by the multi-object
+    /// synthesizer; see [`TextPcRelReloc`].
+    pub text_pcrel_relocs: Vec<TextPcRelReloc>,
+    /// Object-link absolute fields in `Build::text`. Populated only by
+    /// the multi-object synthesizer, and only for an output format
+    /// that rebases an executable section; see [`TextAbsReloc`].
+    pub text_abs_relocs: Vec<TextAbsReloc>,
     /// Each entry records an `adrp + add` placeholder pair the codegen
     /// left for a function-pointer literal. The writer patches it with
     /// the page-relative address of `__text + target_native_offset`.
@@ -1466,6 +1743,14 @@ pub(crate) struct Build {
     /// lowering (= emission) order. The DWARF builder iterates
     /// this to produce one `Subprog` per function.
     pub func_ent_pcs: Vec<usize>,
+    /// Byte offset just past each function's last instruction, parallel to
+    /// [`Self::func_ent_pcs`]. The next entry's start is not the same
+    /// number under [`NativeOptions::min_function_alignment`], which puts
+    /// fill between the two; a symbol's size and a DWARF subprogram's
+    /// high PC take this instead. Empty for producers that record no ends
+    /// (the linker's synthesized build, test fixtures), where the next
+    /// function's start stands in as before.
+    pub func_ends: Vec<usize>,
     /// Source-level function names parallel to `func_ent_pcs`,
     /// populated from `FunctionSsa::name` during the per-arch
     /// emit loop. Empty entries surface for archive-reloaded
@@ -1584,6 +1869,13 @@ pub(crate) struct Build {
     /// `pc_to_native` and patches the slot to the runtime
     /// code address.
     pub code_relocs: Vec<crate::c5::program::CodeReloc>,
+    /// Address-constant initializers of `_Thread_local` objects; mirrors of
+    /// [`Program::tls_data_relocs`] / `tls_extern_data_relocs` /
+    /// `tls_code_relocs`. Slots are `tls_data` offsets, so the per-format
+    /// writer sites them against the TLS template rather than `.data`.
+    pub tls_data_relocs: Vec<crate::c5::program::DataReloc>,
+    pub tls_extern_data_relocs: Vec<crate::c5::program::ExternDataReloc>,
+    pub tls_code_relocs: Vec<crate::c5::program::CodeReloc>,
     /// Data slots holding a `&&label` address, filled by native emit
     /// once each owning function's block layout is final.
     pub label_relocs: Vec<LabelReloc>,
@@ -1608,12 +1900,15 @@ pub(crate) struct Build {
     /// on this to pick filetype, entry-point machinery, and
     /// export-table layout.
     pub output_kind: OutputKind,
-    /// Mirror of [`NativeOptions::pic`]. The relocatable writer reads it
-    /// to place `const` storage whose initializer carries a relocation:
-    /// `.rodata` without it (the absolute relocations resolve at link
-    /// time), `.data.rel.ro` with it (the load-time fixup needs a
-    /// writable page until the relocation is applied).
-    pub pic: bool,
+    /// [`NativeOptions::pic`] or [`NativeOptions::pic_link`]. The
+    /// relocatable writer reads it to place `const` storage whose
+    /// initializer carries a relocation: `.rodata` without it (the
+    /// relocation resolves at link time and nothing writes the storage
+    /// afterwards), `.data.rel.ro` with it (the load-time fixup needs a
+    /// writable page until the relocation is applied). Keeping the two
+    /// apart lets `.rodata` stay pure, so the pure `const` objects of
+    /// the same unit hold the read-only prefix.
+    pub pic_link: bool,
     /// Mirror of [`NativeOptions::code_model`]. The relocatable writer
     /// reads it to pick the external-address form; see [`CodeModel`].
     pub code_model: CodeModel,
@@ -1635,12 +1930,11 @@ pub(crate) struct Build {
     /// `IMAGE_OPTIONAL_HEADER64::AddressOfEntryPoint` at the
     /// user's body via `pc_to_native[pc]`.
     pub dllmain_pc: Option<usize>,
-    /// Mirror of [`NativeOptions::debug_info`]. The per-format
-    /// writers gate DWARF section emission on this -- when
-    /// `false`, no `.debug_*` sections appear in the output
-    /// image. Defaults to `true` for `Build::default()`
-    /// so existing tests that build a `Build` by hand keep
-    /// debug info enabled.
+    /// Mirror of [`NativeOptions::debug_info`], assigned in
+    /// `lower_for`. The per-format writers gate DWARF section
+    /// emission on this -- when `false`, no `.debug_*` sections
+    /// appear in the output image. `Build::default()` derives
+    /// `false`.
     pub debug_info: bool,
     /// Pre-baked merged DWARF byte streams. Set by the
     /// multi-TU link synthesizer (`synth_build.rs`) so the
@@ -1706,13 +2000,18 @@ pub(crate) struct Build {
     /// directives. The relocatable ELF writer appends one section per
     /// entry; the executable writers do not map them (TODO: alloc
     /// sections in direct executables).
-    pub asm_sections: Vec<ssa::emit_common::AsmSection>,
+    pub asm_sections: Vec<crate::c5::asm::AsmSection>,
     /// Per-function map from a declared local's original frame slot to the
     /// new slot it was coalesced onto, keyed by `ent_pc`. The slot-coalescing
     /// pass compacts the frame regardless of debug info; the debug-info
     /// emitter consults this so a surviving local's `DW_OP_fbreg` location
     /// uses its post-coalesce offset. Slots coalesced onto shared storage are
     /// recorded in `promoted_local_slots` (empty location) instead.
+    /// Bytes the stack-protector region added to each protected function's
+    /// frame, by `ent_pc`. Every local slot sits that much lower, so the
+    /// debug-info emitter subtracts it from the slot's frame offset. Absent
+    /// for a function with no canary.
+    pub canary_frame_bytes: alloc::collections::BTreeMap<usize, u32>,
     pub coalesced_slot_remap:
         alloc::collections::BTreeMap<usize, alloc::collections::BTreeMap<i64, i64>>,
     /// Per-function x86_64 Win64 unwind descriptors, in emission
@@ -1737,11 +2036,36 @@ pub(crate) struct Build {
     /// Each is a definition the unit owns, so the writers emit a local
     /// `.text` symbol and bind a C reference to the same name against it.
     pub asm_text_labels: Vec<AsmTextLabel>,
+    /// Function-body inline-asm symbol-operand sites (aarch64). The
+    /// relocatable writer emits one `R_AARCH64_*` row per entry; the
+    /// single-image and JIT paths patch each site in place.
+    pub asm_sym_fixups: Vec<AsmSymFixup>,
     /// Symbol directives inline-asm templates carried outside any section
     /// (`.globl` / `.local` / `.weak` / `.type` / `.size`). GNU as scopes
     /// them to the unit; the writers apply each to the definition the unit
     /// holds, or emit an undefined symbol when it holds none.
-    pub asm_sym_decls: Vec<ssa::emit_common::AsmSymDecl>,
+    pub asm_sym_decls: Vec<crate::c5::asm::AsmSymDecl>,
+    /// `(offset, len)` of every run of data placed in `text`, ascending: an
+    /// aarch64 jump table, a function-body inline-asm data directive. The
+    /// rest of the stream is instructions, so the AArch64 mapping symbols
+    /// follow from this.
+    pub text_data_ranges: Vec<(usize, usize)>,
+}
+
+impl Build {
+    /// Byte offset just past function `i`'s last instruction. Read from
+    /// [`Self::func_ends`] when the producer recorded one; otherwise the
+    /// next function's entry offset stands in, which is the same number
+    /// when nothing pads between them.
+    pub(crate) fn func_code_end(&self, i: usize) -> usize {
+        if let Some(&end) = self.func_ends.get(i) {
+            return end;
+        }
+        self.func_ent_pcs
+            .get(i + 1)
+            .and_then(|&next| self.pc_to_native.get(next).copied())
+            .unwrap_or(self.text.len())
+    }
 }
 
 /// A named label an inline-asm template defines in the emitted code stream
@@ -1860,6 +2184,19 @@ pub(crate) struct GotFixup {
     pub is_data_load: bool,
 }
 
+/// A site holding the GOT base plus `got_offset`, the value
+/// `_GLOBAL_OFFSET_TABLE_` names. Same encoding shapes as
+/// [`DataFixup`]; the writer supplies the table's runtime address.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct GotBaseFixup {
+    /// Byte offset within `Build::text` of the relocated instruction.
+    pub instr_offset: usize,
+    /// Byte offset from the table's base.
+    pub got_offset: i64,
+    /// Fields of the reference this record covers.
+    pub part: AddrPart,
+}
+
 /// Relocation for `Inst::ImmData`: the codegen emits an
 /// `adrp + add` placeholder pair to materialize the address into
 /// the VM accumulator, and the writer patches it once it knows where
@@ -1895,6 +2232,29 @@ pub(crate) struct AsmSectionTextRef {
     /// The field holds the label's absolute address (a `$LABEL` immediate)
     /// rather than a PC-relative displacement. x86_64 only.
     pub absolute: bool,
+    /// Field flavor: `Data` is the x86_64 rel32 / abs32 field; an aarch64
+    /// branch or `adr` carries the instruction-field kind, which selects
+    /// the `R_AARCH64_*` type and the in-place patch.
+    pub kind: crate::c5::asm::AsmRelocKind,
+}
+
+/// Relocation for a function-body inline-asm instruction whose operand
+/// names a symbol (`adrp x0, sym`, `ldr w0, [x0, :lo12:sym]`). One record
+/// covers one instruction word in `Build::text`; `kind` is the section
+/// encoder's field flavor, so the relocatable writer emits the same
+/// `R_AARCH64_*` row for either path. The emitter resolves an
+/// internal-linkage data name to its offset (`AsmSectionTarget::Data`) and
+/// leaves every other name symbolic. aarch64-only; the x86_64 function-body
+/// path records its RIP-relative symbol operands as [`UserExternDataRef`] /
+/// [`DataFixup`].
+#[derive(Debug, Clone)]
+pub(crate) struct AsmSymFixup {
+    /// Byte offset within `Build::text` of the instruction word.
+    pub instr_offset: usize,
+    pub kind: crate::c5::asm::AsmRelocKind,
+    /// Only the `Data` and `Symbol` arms are produced.
+    pub target: crate::c5::asm::AsmSectionTarget,
+    pub addend: i64,
 }
 
 /// Relocation for an inline-asm instruction taking a template-local label's
@@ -2008,6 +2368,50 @@ pub(crate) struct DataPcRelReloc {
     pub target_in_data: bool,
     /// Slot width in bytes: 4 or 8.
     pub width: u8,
+}
+
+/// Text-sited counterpart of [`DataPcRelReloc`]: a plain 4- or 8-byte
+/// field inside `Build::text` (an assembler `value - .` record in a
+/// pushed executable section) whose final value is
+/// `target_vaddr - site_vaddr`, the target in the data-byte space.
+/// Produced by the multi-object synthesizer from parked pc-relative
+/// data-word relocations; text-target ones resolve during the merge.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct TextPcRelReloc {
+    /// Byte offset of the field within `Build::text`.
+    pub site_text_offset: u64,
+    /// Target byte offset within the data-byte space (zero-fill tail
+    /// included), `S + A` of the source relocation.
+    pub target_data_offset: u64,
+    /// Field width in bytes: 4 or 8.
+    pub width: u8,
+}
+
+/// A plain N-byte field inside `Build::text` holding `S + A` as a
+/// runtime address (`movq $sym, %rax` from an object assembler, a
+/// `.quad sym` word in an executable section). The merge parks these
+/// because only the writer knows where the image loads; the writer
+/// stores the address and records whatever base relocation its format
+/// needs so a slide keeps the field correct.
+///
+/// Produced by the multi-object synthesizer, and only for a format
+/// that rebases an executable section -- an image the loader places at
+/// an address of its own with no relocation against executable
+/// sections has no value to write, and the synthesizer declines the
+/// reference instead.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct TextAbsReloc {
+    /// Byte offset of the field within `Build::text`.
+    pub site_text_offset: u64,
+    /// Target byte offset: within `Build::text` when `target_in_text`
+    /// is set, else within the data-byte space (zero-fill tail
+    /// included). `S + A` of the source relocation.
+    pub target_offset: u64,
+    pub target_in_text: bool,
+    /// ELF relocation type of the source site. badc's relocatable
+    /// format is ELF ET_REL on every target, so this names the field's
+    /// width and overflow rule through the one relocation table.
+    pub rtype: u32,
 }
 
 // TLS relocations don't need a writer-time fixup type for Linux:
@@ -2144,10 +2548,9 @@ pub(crate) struct RelocCallSite {
     /// symbol the call reaches for.
     pub import_index: usize,
     /// `true` for tail-jumps (`b` / `jmp rel32`), `false` for
-    /// calls (`bl` / `call rel32`). The relocation type is the
-    /// same on each arch -- the link bit / opcode prefix lives
-    /// in the placeholder bytes the codegen already emitted.
-    #[allow(dead_code)]
+    /// calls (`bl` / `call rel32`). x86_64 uses `R_X86_64_PLT32`
+    /// for both; aarch64 types the field `R_AARCH64_JUMP26` /
+    /// `R_AARCH64_CALL26` as GNU as does.
     pub is_tail: bool,
     /// `true` for an address-of site (`lea` rip-relative on
     /// x86_64, `adrp + add` on aarch64) materializing the import's
@@ -2248,6 +2651,10 @@ pub struct Hardening {
     /// `-mbranch-protection=bti`: AArch64 BTI landing pads at function
     /// entries and at indirect-branch targets (Arm ARM D24.2.2).
     pub bti: bool,
+    /// `-mbranch-protection=pac-ret`: AArch64 return-address signing.
+    /// A function that spills the link register signs it against sp on
+    /// entry (`paciasp`) and authenticates it before `ret` (`autiasp`).
+    pub pac_ret: bool,
     /// `-fcf-protection=branch`: x86_64 indirect-branch tracking. An
     /// `endbr64` opens every function and every indirect-branch target,
     /// which is the only instruction CET permits an indirect transfer to
@@ -2281,6 +2688,7 @@ impl Hardening {
         sls_return: false,
         sls_indirect_jmp: false,
         bti: false,
+        pac_ret: false,
         cf_protection_branch: false,
     };
 }
@@ -2300,6 +2708,210 @@ pub enum IndirectBranch {
     /// kernel's vDSO).
     ThunkInline,
 }
+
+/// `-fstack-protector*`: which functions get a stack canary. The per-
+/// function decision reads [`crate::c5::ir::SspFacts`], which the front
+/// end records from the declared automatic objects.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum StackProtector {
+    /// `-fno-stack-protector`: no function is protected.
+    #[default]
+    Off,
+    /// `-fstack-protector`: a function holding a character array of at
+    /// least [`StackProtect::buffer_size`] bytes (directly or as an
+    /// aggregate member), or one that calls `alloca` / declares a
+    /// variable-length array.
+    Basic,
+    /// `-fstack-protector-strong`: the above, plus a function holding an
+    /// array of any element type, an aggregate with an array member, or
+    /// an automatic object whose address the body takes.
+    Strong,
+    /// `-fstack-protector-all`: every function that has a frame.
+    All,
+}
+
+/// `-mstack-protector-guard=`: where the canary value is read from.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum StackGuard {
+    /// The target's C-library ABI: `%fs:0x28` on Linux/x86-64, the
+    /// `__stack_chk_guard` object on every other target.
+    #[default]
+    Abi,
+    /// `global`: the `__stack_chk_guard` object, or the
+    /// `-mstack-protector-guard-symbol=` name when one is given.
+    Global,
+    /// `tls` (x86-64): thread storage reached through a segment
+    /// register. With a guard symbol the reference is `%seg:sym(%rip)`;
+    /// without one it is `%seg:offset`.
+    Tls { seg: GuardSeg, offset: i32 },
+    /// `sysreg` (aarch64): `mrs` the system register whose `mrs`/`msr`
+    /// selector field is `sysreg`, then load `offset` bytes above the
+    /// value it yields.
+    Sysreg { sysreg: u16, offset: i32 },
+}
+
+/// Segment register a `tls` stack guard is read through
+/// (`-mstack-protector-guard-reg=`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum GuardSeg {
+    /// `%fs`, the System V x86-64 thread pointer.
+    #[default]
+    Fs,
+    /// `%gs`, which the Linux kernel uses for its per-CPU base.
+    Gs,
+}
+
+/// Guard object name for `-mstack-protector-guard-symbol=`. Held inline
+/// so [`NativeOptions`] stays `Copy` and const-constructible; a name
+/// longer than [`Self::CAP`] is rejected by [`Self::new`] rather than
+/// truncated.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct GuardSymbol {
+    name: [u8; Self::CAP],
+    len: u8,
+}
+
+impl Default for GuardSymbol {
+    fn default() -> Self {
+        Self::NONE
+    }
+}
+
+impl GuardSymbol {
+    /// Bytes a guard object name may occupy.
+    pub const CAP: usize = 63;
+    /// No name: the guard is reached by the form the mode implies.
+    pub const NONE: Self = Self {
+        name: [0; Self::CAP],
+        len: 0,
+    };
+
+    /// `None` when `name` does not fit; the caller reports it.
+    pub fn new(name: &str) -> Option<Self> {
+        if name.is_empty() || name.len() > Self::CAP {
+            return None;
+        }
+        let mut out = Self::NONE;
+        out.name[..name.len()].copy_from_slice(name.as_bytes());
+        out.len = name.len() as u8;
+        Some(out)
+    }
+
+    /// The name, empty when none was given.
+    pub fn as_str(&self) -> &str {
+        // Only `new` writes the buffer, and it copies from a `&str`.
+        core::str::from_utf8(&self.name[..self.len as usize]).unwrap_or("")
+    }
+
+    /// True when no name was given.
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+}
+
+impl core::fmt::Debug for GuardSymbol {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::fmt::Debug::fmt(self.as_str(), f)
+    }
+}
+
+/// The `-fstack-protector*` / `-mstack-protector-guard*` configuration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StackProtect {
+    /// Which functions are protected.
+    pub mode: StackProtector,
+    /// `--param ssp-buffer-size=`: least character-array size, in bytes,
+    /// that makes a function eligible under [`StackProtector::Basic`].
+    /// gcc's default is 8.
+    pub buffer_size: u32,
+    /// Where the canary value is read from.
+    pub guard: StackGuard,
+    /// `-mstack-protector-guard-symbol=`: the object holding the guard.
+    /// Empty selects the plain offset form of [`StackGuard::Tls`] and
+    /// `__stack_chk_guard` for [`StackGuard::Global`].
+    pub guard_symbol: GuardSymbol,
+}
+
+impl Default for StackProtect {
+    fn default() -> Self {
+        Self::OFF
+    }
+}
+
+impl StackProtect {
+    /// Every function unprotected, which is what a build with no
+    /// `-fstack-protector*` flag gets.
+    pub const OFF: Self = Self {
+        mode: StackProtector::Off,
+        buffer_size: DEFAULT_SSP_BUFFER_SIZE,
+        guard: StackGuard::Abi,
+        guard_symbol: GuardSymbol::NONE,
+    };
+
+    /// Replace [`StackGuard::Abi`] with the target's own form, so the
+    /// emitters see a concrete one. Linux/x86-64 keeps the canary in the
+    /// thread control block at [`SYSV_TLS_GUARD_OFFSET`]; every other
+    /// target reads the C library's `__stack_chk_guard` object.
+    pub(crate) fn resolved_for(self, target: Target) -> Self {
+        if self.guard != StackGuard::Abi {
+            return self;
+        }
+        let guard = match target {
+            Target::LinuxX64 => StackGuard::Tls {
+                seg: GuardSeg::Fs,
+                offset: SYSV_TLS_GUARD_OFFSET,
+            },
+            _ => StackGuard::Global,
+        };
+        Self { guard, ..self }
+    }
+
+    /// True when `facts` make the function eligible under the selected
+    /// mode. `has_frame` is false for a function the lowering leaves
+    /// frameless, which only [`StackProtector::All`] still protects.
+    pub(crate) fn protects(&self, facts: crate::c5::ir::SspFacts, has_frame: bool) -> bool {
+        match self.mode {
+            StackProtector::Off => false,
+            StackProtector::All => true,
+            StackProtector::Strong => {
+                has_frame
+                    && (facts.has_array
+                        || facts.addr_taken
+                        || facts.dynamic_alloca
+                        || facts.char_array_bytes >= self.buffer_size)
+            }
+            StackProtector::Basic => {
+                has_frame && (facts.dynamic_alloca || facts.char_array_bytes >= self.buffer_size)
+            }
+        }
+    }
+}
+
+/// `mrs` / `msr` selector field of the AArch64 system register `name`, for
+/// `-mstack-protector-guard-reg=`. `None` when the architecture has no such
+/// register, which the driver reports.
+pub fn stack_guard_sysreg(name: &str) -> Option<u16> {
+    aarch64::asm::sysreg_field(name)
+}
+
+/// gcc's `--param ssp-buffer-size=` default.
+pub const DEFAULT_SSP_BUFFER_SIZE: u32 = 8;
+
+/// Byte offset of the canary within the System V x86-64 thread control
+/// block, which glibc and musl both honour.
+pub const SYSV_TLS_GUARD_OFFSET: i32 = 0x28;
+
+/// The object a `global` stack guard is read from, and the name
+/// `-mstack-protector-guard-symbol=` overrides.
+pub(crate) const STACK_GUARD_SYMBOL: &str = "__stack_chk_guard";
+
+/// The handler a failed canary check branches to (System V ABI).
+pub(crate) const STACK_CHK_FAIL_SYMBOL: &str = "__stack_chk_fail";
+
+/// Bytes the protected frame reserves above its locals for the canary.
+/// One 8-byte slot at `fp - 8`, padded to the 16-byte frame granule so
+/// every region below keeps its alignment.
+pub(crate) const CANARY_REGION_BYTES: u32 = 16;
 
 /// User-controllable knobs for the native lowering pass. Distinct
 /// from [`TargetOptions`] (which encodes platform ABI -- not user
@@ -2360,8 +2972,16 @@ pub struct NativeOptions {
     /// byte-moving lowerings (aggregate copy, by-value aggregate argument
     /// and return marshalling) then cap their transfer width at the
     /// alignment the operand types guarantee instead of using 8-byte
-    /// units. See [`access_chunk`].
+    /// units, and a register-passed eightbyte or HFA member composes
+    /// from accesses of that width. See [`access_chunk`] and
+    /// [`access_pieces`].
     pub strict_align: bool,
+    /// Whether a switch may dispatch through a jump table
+    /// (`-fno-jump-tables` clears it). Cleared, a dense switch lowers
+    /// to the compare tree a sparse one gets, so no indirect branch is
+    /// taken and no table reaches the image -- what retpoline and
+    /// indirect-branch-tracking kernel configurations require.
+    pub jump_tables: bool,
     /// Position-independent relocatable output (`-fPIC` / `-fpic`).
     /// A switch table then emits in the label-difference form the
     /// final images use -- no absolute relocation reaches the object,
@@ -2371,6 +2991,17 @@ pub struct NativeOptions {
     /// targets directly, which unwind-data discovery requires. Final
     /// images are position-independent either way.
     pub pic: bool,
+    /// The object is compiled for a link that applies its relocations
+    /// after mapping -- every image this toolchain writes does (ELF
+    /// `ET_DYN`, PE base relocations, Mach-O dyld rebases). `const`
+    /// storage carrying a relocation then goes to `.data.rel.ro`
+    /// instead of `.rodata`, so the linker places only that storage in
+    /// the re-protected region and leaves the unit's pure `const`
+    /// objects in the read-only prefix. [`Self::pic`] implies it;
+    /// unlike `pic` it does not change the switch-table form. A `-c`
+    /// object for a link that resolves the relocation statically
+    /// leaves it clear and keeps such storage in `.rodata`.
+    pub pic_link: bool,
     /// Code model (`-mcmodel=`); see [`CodeModel`]. Like [`Self::pic`]
     /// it chooses the `-c` object's relocation shapes; final images are
     /// unaffected.
@@ -2378,12 +3009,36 @@ pub struct NativeOptions {
     /// Speculative-execution mitigations (the `-m` hardening flags).
     /// Default is every field off; see [`Hardening`].
     pub hardening: Hardening,
+    /// Stack-canary configuration (`-fstack-protector*` /
+    /// `-mstack-protector-guard*`); see [`StackProtect`].
+    pub stack_protect: StackProtect,
     /// ELF class of a relocatable object (`-m32` / `-m16` on an
     /// assembly unit). An ELFCLASS32 x86 object is an i386 object:
     /// `EM_386`, `SHT_REL` relocation tables whose addend lives in
     /// the relocated field, and the `R_386_*` type numbers. Final
     /// images are unaffected.
     pub elf_class: ElfClass,
+    /// Least alignment every function's entry gets in `.text`
+    /// (`-fmin-function-alignment=N` / `-falign-functions=N`). 1 is the
+    /// default and pads nothing, which is what a function packed against
+    /// its predecessor gets. A larger value fills the gap with the
+    /// target's NOP encoding and raises [`Build::text_align`] to match,
+    /// so the alignment holds absolutely once the section is placed --
+    /// what `CONFIG_FUNCTION_ALIGNMENT` states. A symbol's `st_size`
+    /// covers its code only; the fill belongs to no function.
+    pub min_function_alignment: u32,
+}
+
+/// Fill `code` with `nop` up to a multiple of `align`, for the gap ahead
+/// of a function entry under [`NativeOptions::min_function_alignment`].
+/// `align` is a power of two and `nop.len()` divides it, so the fill is
+/// whole instructions: the gap is unreachable (the preceding function
+/// returns) but decodes, which unwind-metadata generators reading `.text`
+/// as an instruction stream require.
+pub(crate) fn pad_to_alignment(code: &mut Vec<u8>, align: usize, nop: &[u8]) {
+    while !code.len().is_multiple_of(align) {
+        code.extend_from_slice(nop);
+    }
 }
 
 /// x86-64 psABI code model (`-mcmodel=`). Chooses how a relocatable
@@ -2414,14 +3069,51 @@ pub(crate) fn access_chunk(align: u32, strict_align: bool, max: u32) -> u32 {
     if !strict_align {
         return max;
     }
-    // A non-power-of-two alignment guarantees only the power of two
-    // below it.
-    let usable = if align == 0 {
+    pow2_align(align).min(max)
+}
+
+/// Largest power of two dividing `align` -- the only alignment a
+/// non-power-of-two one guarantees (address 12 is 4-aligned, not
+/// 8-aligned). Zero means nothing is guaranteed beyond a byte.
+fn pow2_align(align: u32) -> u32 {
+    if align == 0 {
         1
     } else {
-        1u32 << (u32::BITS - 1 - align.leading_zeros())
-    };
-    usable.min(max)
+        1u32 << align.trailing_zeros().min(31)
+    }
+}
+
+/// Alignment storage that is `base`-aligned guarantees at byte offset
+/// `off`: the largest power of two dividing both.
+pub(crate) fn offset_align(base: u32, off: i64) -> u32 {
+    let base = pow2_align(base);
+    if off == 0 {
+        return base;
+    }
+    base.min(1u32 << off.unsigned_abs().trailing_zeros().min(31))
+}
+
+/// Widest access a `width`-byte transfer at byte offset `off` into
+/// storage of alignment `align` may use. Equals `width` whenever the
+/// address already satisfies it, so a caller can test for narrowing
+/// with `access_unit(..) < width`.
+pub(crate) fn access_unit(off: u32, width: u32, align: u32, strict_align: bool) -> u32 {
+    access_chunk(offset_align(align, off as i64), strict_align, width)
+}
+
+/// Offset and width of each naturally aligned access a `width`-byte
+/// transfer at `off` decomposes into over storage of alignment
+/// `align`. Yields the single `(off, width)` access when no narrowing
+/// applies, so the unbounded lowering is unchanged. Pieces run from
+/// least to most significant byte; `width` must be a power of two.
+pub(crate) fn access_pieces(
+    off: u32,
+    width: u32,
+    align: u32,
+    strict_align: bool,
+) -> impl Iterator<Item = (u32, u32)> + Clone {
+    let unit = access_unit(off, width, align, strict_align);
+    (0..width / unit).map(move |i| (off + i * unit, unit))
 }
 
 /// Distinguishes "produce an executable" from "produce a
@@ -2474,10 +3166,14 @@ impl NativeOptions {
             bss_segregate: true,
             no_fp_regs: false,
             strict_align: false,
+            jump_tables: true,
             pic: false,
+            pic_link: false,
             code_model: CodeModel::Small,
             elf_class: ElfClass::Elf64,
             hardening: Hardening::NONE,
+            stack_protect: StackProtect::OFF,
+            min_function_alignment: 1,
         }
     }
 
@@ -2592,6 +3288,18 @@ pub(crate) fn lower_for_with_prebuilt(
     // and pulling in an unused libc reference would surface
     // a "no `#pragma binding(libc::exit, ...)`" error on
     // sources that legitimately don't include `<stdlib.h>`.
+    // A canary's failure branch names `__stack_chk_fail`, which only the
+    // relocatable writer records a relocation for. Every path the driver
+    // takes compiles to relocatable objects and links them; the single-TU
+    // image writers and the JIT have no relocation to resolve, so refuse
+    // rather than emit a call with a zero displacement.
+    if options.stack_protect.mode != StackProtector::Off
+        && options.output_kind != OutputKind::Relocatable
+    {
+        return Err(C5Error::Compile(alloc::format!(
+            "error: `-fstack-protector*` needs relocatable output: the canary's              failure branch names `{STACK_CHK_FAIL_SYMBOL}`, which only a              relocatable object can relocate"
+        )));
+    }
     let is_shared = options.output_kind == OutputKind::SharedLibrary;
     // Only force-include libc `exit` when the user
     // already declared a binding for it (typically via
@@ -2612,23 +3320,18 @@ pub(crate) fn lower_for_with_prebuilt(
     {
         imports.force_include_by_name("exit", program)?;
     }
-    // macOS arm64 with `_Thread_local` globals needs libSystem
-    // loaded so dyld can bind `__tlv_bootstrap` for the TLV
-    // descriptors. The bind opcode the writer emits names
-    // libSystem by ordinal (the position of the libSystem
-    // LC_LOAD_DYLIB in the load-command stream); when the
-    // program doesn't call any libc function the resolver
-    // wouldn't otherwise pull libSystem in, so we force one
-    // libSystem-resident symbol -- `exit`, which the prelude
-    // always declares -- to keep the dylib in scope. The
-    // forced binding is harmless for programs that never call
-    // exit themselves.
+    // macOS arm64 `_Thread_local`: each TLV descriptor's getter slot
+    // is bound to libSystem's `__tlv_bootstrap` by dylib ordinal, so
+    // the dylib list must carry libSystem even when the program calls
+    // no libc function. A dylib entry needs no symbol binding in
+    // scope, so this holds for sources that include no header at all;
+    // relocatable objects record the list for the linker.
     if matches!(target, Target::MacOSAarch64) && !program.tls_data.is_empty() {
-        imports.force_include_by_name("exit", program)?;
+        imports.ensure_dylib("libSystem", program, target);
     }
     // Linux aarch64 long-double libc returns. AAPCS64 returns
-    // binary128 in v0 (full Q register); c5 stores `long double`
-    // in an 8-byte FP64 slot, so any libc call whose prototype is
+    // binary128 in v0 (full Q register); the c5 compute path carries
+    // the value as binary64, so any libc call whose prototype is
     // `long double f(...)` needs a `__trunctfdf2` follow-up that
     // truncates v0 to d0 before the c5 accumulator reads it. Force
     // the binding in if any in-scope binding carries
@@ -2653,21 +3356,25 @@ pub(crate) fn lower_for_with_prebuilt(
     }
     build.imports = imports;
     build.abi = target.abi();
+    // The emitters build their per-function `Abi` from the same pair,
+    // so the recorded one has to carry the mitigations too: the object
+    // writer reads it to decide what the image may claim.
+    build.abi.hardening = options.hardening;
+    build.abi.stack_protect = options.stack_protect;
     build.data_relocs = program.data_relocs.clone();
     build.extern_data_relocs = program.extern_data_relocs.clone();
     build.code_relocs = program.code_relocs.clone();
+    build.tls_data_relocs = program.tls_data_relocs.clone();
+    build.tls_extern_data_relocs = program.tls_extern_data_relocs.clone();
+    build.tls_code_relocs = program.tls_code_relocs.clone();
+    if options.output_kind != OutputKind::Relocatable {
+        bind_code_reloc_aliases(program, &mut build.code_relocs);
+        bind_code_reloc_aliases(program, &mut build.tls_code_relocs);
+    }
     build.exports = program.exports.clone();
     build.output_kind = options.output_kind;
     build.dllmain_pc = program.dllmain_pc;
     build.debug_info = options.debug_info;
-    // A relocatable object keeps `.text` instruction-pure -- external
-    // tooling decodes the section as one instruction stream -- so the
-    // fingerprint rides a `.comment` section there (the ET_REL
-    // writer emits it) and the multi-object synthesizer re-appends
-    // the in-text form to the final image.
-    if options.output_kind != OutputKind::Relocatable {
-        append_build_info(&mut build);
-    }
     Ok(build)
 }
 
@@ -2676,7 +3383,7 @@ pub(crate) fn lower_for_with_prebuilt(
 /// validation and the object emission both run this so an instruction is
 /// diagnosed and encoded the same way.
 pub(crate) fn encode_file_asm_section_code(
-    blocks: &mut [ssa::emit_common::AsmSectionBlock],
+    blocks: &mut [crate::c5::asm::AsmSectionBlock],
     target: Target,
     class: ElfClass,
 ) -> Result<(), alloc::string::String> {
@@ -2759,11 +3466,11 @@ pub(crate) fn reloc_callee_ctx(
     };
     let section_of: alloc::collections::BTreeMap<&str, &str> = defined_funcs()
         .filter(|s| s.section_name.is_some())
-        .map(|s| (s.link_name(), s.section_name.as_deref().unwrap_or("")))
+        .map(|s| (s.def_link_name(), s.section_name.as_deref().unwrap_or("")))
         .collect();
     let weak_names: alloc::collections::BTreeSet<&str> = defined_funcs()
         .filter(|s| s.is_weak)
-        .map(|s| s.link_name())
+        .map(|s| s.def_link_name())
         .collect();
     if section_of.is_empty() && weak_names.is_empty() {
         return empty;
@@ -2794,28 +3501,23 @@ pub(crate) fn reloc_callee_ctx(
     ctx
 }
 
-/// Append the [`crate::OUTPUT_MARKER`] to the tail of
-/// `Build::text`. The bytes never get executed -- the entry
-/// point is at `build.entry_offset` and every function ends
-/// with a return -- so this is purely a `strings(1)`-friendly
-/// fingerprint that says which badc version emitted the binary.
-/// The marker is the release version only, with no git state, so
-/// the same source/flags/target produce identical output bytes
-/// regardless of the build environment.
-///
-/// The marker is NUL-terminated and appended immediately after the
-/// last instruction with no alignment pad. A pad would be 0-3 bytes
-/// of `0x00` whose length tracks where the final instruction happens
-/// to end, so a disassembler walking to the marker decodes it as a
-/// trailing instruction that shifts on any earlier code-size change --
-/// which churns the `tests/snapshots` disassembly for cosmetic
-/// reasons. Appending flush keeps the marker's start at the code end,
-/// so disassembly stops exactly at the last real instruction.
-fn append_build_info(build: &mut Build) {
-    build
-        .text
-        .extend_from_slice(crate::OUTPUT_MARKER.as_bytes());
-    build.text.push(0);
+/// Bind data-slot function addresses carrying an import placeholder a
+/// function alias of this unit resolves; see
+/// [`ssa::shadow::alias_import_bindings`]. Final-image outputs only --
+/// a relocatable object emits the by-name relocation instead.
+pub(crate) fn bind_code_reloc_aliases(
+    program: &Program,
+    code_relocs: &mut [crate::c5::program::CodeReloc],
+) {
+    let map = ssa::shadow::alias_import_bindings(program);
+    if map.is_empty() {
+        return;
+    }
+    for r in code_relocs {
+        if let Some(&t) = map.get(&(r.target_ent_pc as usize)) {
+            r.target_ent_pc = t as u64;
+        }
+    }
 }
 
 /// Per-target ABI knobs that affect lowering, not just the final
@@ -2911,6 +3613,10 @@ pub(crate) struct Abi {
     /// Per-run (from [`NativeOptions::hardening`]), not a `Target::abi`
     /// row property; see [`Hardening`].
     pub hardening: Hardening,
+    /// Stack-canary configuration. Per-run (from
+    /// [`NativeOptions::stack_protect`]), not a `Target::abi` row
+    /// property; see [`StackProtect`].
+    pub stack_protect: StackProtect,
 }
 
 impl Abi {
@@ -2993,6 +3699,7 @@ impl Target {
                 no_fp_varargs: false,
                 strict_align: false,
                 hardening: Hardening::NONE,
+                stack_protect: StackProtect::OFF,
             },
             Target::LinuxAarch64 => Abi {
                 arch: Arch::Aarch64,
@@ -3005,6 +3712,7 @@ impl Target {
                 no_fp_varargs: false,
                 strict_align: false,
                 hardening: Hardening::NONE,
+                stack_protect: StackProtect::OFF,
             },
             Target::LinuxX64 => Abi {
                 arch: Arch::X86_64,
@@ -3017,6 +3725,7 @@ impl Target {
                 no_fp_varargs: false,
                 strict_align: false,
                 hardening: Hardening::NONE,
+                stack_protect: StackProtect::OFF,
             },
             Target::WindowsX64 => Abi {
                 arch: Arch::X86_64,
@@ -3029,6 +3738,7 @@ impl Target {
                 no_fp_varargs: false,
                 strict_align: false,
                 hardening: Hardening::NONE,
+                stack_protect: StackProtect::OFF,
             },
             Target::WindowsAarch64 => Abi {
                 arch: Arch::Aarch64,
@@ -3041,6 +3751,7 @@ impl Target {
                 no_fp_varargs: false,
                 strict_align: false,
                 hardening: Hardening::NONE,
+                stack_protect: StackProtect::OFF,
             },
         }
     }
@@ -3055,6 +3766,37 @@ impl Target {
             Target::WindowsX64 | Target::WindowsAarch64 => 4,
             Target::MacOSAarch64 | Target::LinuxAarch64 | Target::LinuxX64 => 8,
         }
+    }
+}
+
+#[cfg(test)]
+mod access_bound_tests {
+    use super::{access_pieces, access_unit, offset_align};
+
+    #[test]
+    fn pieces_cover_the_transfer_at_the_proven_alignment() {
+        let pieces = |off, width, align| -> alloc::vec::Vec<(u32, u32)> {
+            access_pieces(off, width, align, true).collect()
+        };
+        assert_eq!(pieces(0, 8, 8), alloc::vec![(0, 8)]);
+        assert_eq!(pieces(0, 8, 4), alloc::vec![(0, 4), (4, 4)]);
+        assert_eq!(
+            pieces(8, 8, 2),
+            alloc::vec![(8, 2), (10, 2), (12, 2), (14, 2)]
+        );
+        assert_eq!(pieces(4, 4, 8), alloc::vec![(4, 4)]);
+        // An 8-aligned base advanced by 4 guarantees only 4.
+        assert_eq!(pieces(4, 8, 8).len(), 2);
+        // A non-power-of-two alignment guarantees the power of two below.
+        assert_eq!(access_unit(0, 8, 12, true), 4);
+        // Without the flag the transfer stays whole whatever the offset.
+        assert_eq!(
+            access_pieces(1, 8, 1, false).collect::<alloc::vec::Vec<_>>(),
+            alloc::vec![(1, 8)]
+        );
+        assert_eq!(offset_align(8, 0), 8);
+        assert_eq!(offset_align(8, 12), 4);
+        assert_eq!(offset_align(1, 8), 1);
     }
 }
 
@@ -3074,6 +3816,7 @@ mod abi_plan_tests {
         let gp = ArgAgg {
             class: AggClass::Regs(alloc::vec![RegClass::Integer, RegClass::Integer]),
             size: 16,
+            align: 8,
         };
         // five int scalars, a 2-eightbyte GP aggregate that can't fit the
         // one remaining int reg, then one int scalar.
@@ -3095,6 +3838,7 @@ mod abi_plan_tests {
         let hfa = ArgAgg {
             class: AggClass::Regs(alloc::vec![RegClass::Sse; 4]),
             size: 16,
+            align: 4,
         };
         // five FP scalars, a 4-float HFA that can't fit the remaining FP
         // regs, then one int scalar that the integer file must still hold.

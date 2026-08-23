@@ -9,6 +9,21 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <var_sum>:
                	pushq	%rbp
@@ -41,8 +56,8 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	movq	%rax, %rcx
                	jmp	<addr>
-               	leaq	-0x18(%rbp), %rsi
-               	movq	%rsi, %r11
+               	leaq	-0x18(%rbp), %rdx
+               	movq	%rdx, %r11
                	movl	(%r11), %r10d
                	cmpq	$0x30, %r10
                	jae	<addr>
@@ -51,13 +66,13 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	0x8(%r11), %r10
                	addq	$0x8, 0x8(%r11)
-               	movq	%r10, %rsi
-               	movq	(%rsi), %rsi
-               	addq	%rsi, %rcx
-               	leaq	0x1(%rdx), %rax
-               	movslq	%eax, %rdx
-               	movslq	-0xd0(%rbp), %rsi
-               	cmpq	%rsi, %rdx
+               	movq	%r10, %rdx
+               	movq	(%rdx), %rdx
+               	addq	%rdx, %rcx
+               	movslq	%eax, %rax
+               	incq	%rax
+               	movslq	-0xd0(%rbp), %rdx
+               	cmpl	%edx, %eax
                	jl	<addr>
                	leaq	-0x18(%rbp), %rax
                	movq	%rcx, %rax
@@ -93,7 +108,6 @@ Disassembly of section .text:
                	movq	%r10, 0x8(%rax)
                	leaq	-0xd0(%rbp), %r10
                	movq	%r10, 0x10(%rax)
-               	leaq	-0x18(%rbp), %rax
                	movq	%rax, %r11
                	movl	(%r11), %r10d
                	cmpq	$0x30, %r10

@@ -10,6 +10,8 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#0x1
+               	brk	#0x1
+               	brk	#0x1
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
@@ -23,38 +25,33 @@ Disassembly of section .text:
                	fmov	d16, x1
                	sub	x17, x29, #0x10
                	str	d16, [x17]
-               	mov	x1, #0x40980000         // =1083703296
-               	fmov	s16, w1
+               	mov	x2, #0x40980000         // =1083703296
+               	fmov	s16, w2
                	sub	x17, x29, #0x8
                	str	s16, [x17]
                	sub	x16, x29, #0x18
                	ldr	s0, [x16]
                	fmov	s17, w0
                	fcmp	s0, s17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x16, x29, #0x10
                	ldr	d0, [x16]
-               	mov	x0, #0x4004000000000000 // =4612811918334230528
-               	fmov	d17, x0
+               	fmov	d17, x1
                	fcmp	d0, d17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x16, x29, #0x8
                	ldr	s0, [x16]
-               	mov	x0, #0x40980000         // =1083703296
-               	fmov	s17, w0
+               	fmov	s17, w2
                	fcmp	s0, s17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
@@ -71,8 +68,7 @@ Disassembly of section .text:
                	mov	x0, #0x4008000000000000 // =4613937818241073152
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

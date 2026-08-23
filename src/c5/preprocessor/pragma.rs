@@ -8,6 +8,16 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 impl Preprocessor {
+    /// The intrinsic `#pragma intrinsic(name)` binds `name` to, or `None`
+    /// when badc has none for this target or `-fno-builtin` has made the
+    /// library spelling opaque.
+    fn registered_intrinsic(&self, name: &str) -> Option<i64> {
+        if self.no_builtin {
+            return None;
+        }
+        builtins::intrinsic_id(name, self.target)
+    }
+
     /// Process C99 6.10.9 `_Pragma` operators in already-macro-expanded
     /// text. `_Pragma ( string-literal )` is destringized (the optional
     /// `L` prefix and the surrounding quotes are removed, `\"` becomes
@@ -125,6 +135,24 @@ impl Preprocessor {
             }
             _ => args,
         };
+        // Record the directives feeding the side outputs the compile
+        // consumes, so a reused pass can replay them in order.
+        if self.reuse.is_some()
+            && [
+                "dylib(",
+                "binding(",
+                "export(",
+                "intrinsic(",
+                "entrypoint(",
+                "subsystem(",
+            ]
+            .iter()
+            .any(|p| args.starts_with(p))
+        {
+            let rec = self.reuse.as_deref_mut().expect("checked above");
+            rec.pragma_events
+                .push((args.to_string(), line_no, filename.to_string()));
+        }
         if let Some(inner) = args
             .strip_prefix("dylib(")
             .and_then(|s| s.strip_suffix(')'))
@@ -498,11 +526,11 @@ impl Preprocessor {
                         ),
                     )));
                 }
-                if let Some(id) = builtins::intrinsic_id(name, self.target) {
+                if let Some(id) = self.registered_intrinsic(name) {
                     self.intrinsics.insert(name.to_string(), id);
                 }
             } else if is_ident(item) {
-                if let Some(id) = builtins::intrinsic_id(item, self.target) {
+                if let Some(id) = self.registered_intrinsic(item) {
                     self.intrinsics.insert(item.to_string(), id);
                 }
             } else {

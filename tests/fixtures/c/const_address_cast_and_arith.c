@@ -28,6 +28,17 @@ static void *tbl[] = {
     (T *)&structs[0] + 2,                // pointer cast strides by the struct
 };
 
+// Negative offsets: the addend keeps its sign through every relocation
+// consumer (C99 6.6 address constant minus an integer constant). `words`
+// is wholly zero and lands in the zero-fill region, `g` is file-backed,
+// so both region attributions are exercised.
+static unsigned long before_words1  = (unsigned long)&words - 1;
+static unsigned long before_words16 = (unsigned long)&words - 16;
+static unsigned long before_ints4   = (unsigned long)&ints - 4;
+static unsigned long before_g8      = (unsigned long)&g - 8;
+static unsigned long mid_back       = (unsigned long)&words[4] - 8;
+static T *two_back = (T *)&structs[2] - 2;
+
 // Integer-typed casts: the sum is a byte count past the address.
 static unsigned long end_words  = (unsigned long)&words + sizeof(words);
 static unsigned long end_words2 = (unsigned long)words + sizeof(words);
@@ -58,5 +69,14 @@ int main(void) {
     if (commuted != one_past) return 15;
     if (signed_cast != one_past) return 16;
     if (via_char != one_past) return 17;
+
+    if ((unsigned long)&words - before_words1 != 1) return 18;
+    if ((unsigned long)&words - before_words16 != 16) return 19;
+    if ((unsigned long)&ints - before_ints4 != 4) return 20;
+    if ((unsigned long)&g - before_g8 != 8) return 21;
+    // Byte-computed expectation: `long` is four bytes on the Windows
+    // targets, so an element-computed one would bake in LP64.
+    if (mid_back != (unsigned long)((char *)&words[4] - 8)) return 22;
+    if (two_back != &structs[0]) return 23;
     return 0;
 }

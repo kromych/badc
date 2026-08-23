@@ -25,7 +25,8 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use super::super::super::ir::AsmRegSize;
-use super::super::ssa::emit_common::data_directive_width;
+use crate::c5::asm::AsmSectionItem;
+use crate::c5::asm::data_directive_width;
 
 /// Base mnemonic of a template instruction (AT&T size suffix folded
 /// out into [`AsmInsn::suffix`]).
@@ -45,6 +46,8 @@ pub(crate) enum Mnemonic {
     Bswap,
     Rdtscp,
     Rdtsc,
+    Cpuid,
+    Xgetbv,
     Nop,
     /// Port input `in al/ax/eax, dx` (variable-port form). The
     /// accumulator and DX are implicit; the operands' `a`/`d`
@@ -105,12 +108,23 @@ pub(crate) enum Mnemonic {
         w: bool,
         store: bool,
     },
-    /// A packed shift by immediate `<op> $imm8, %xmm`, encoded as
-    /// `66 [REX] 0F <opcode> /digit ib`: the op rides ModRM.reg as an opcode
-    /// extension, the (source = destination) xmm sits in r/m.
+    /// A sign-mask extract `<op> %xmm_src, %r32_dst` encoded as `<prefix>
+    /// [REX] 0F <opcode> /r`, with the general register in ModRM.reg and the
+    /// vector in r/m. Covers pmovmskb and movmsk{ps,pd}.
+    SseSignMask {
+        prefix: u8,
+        opcode: u8,
+    },
+    /// A packed shift `<op> $imm8, %xmm` encoded as `66 [REX] 0F <opcode>
+    /// /digit ib`: the op rides ModRM.reg as an opcode extension, the
+    /// (source = destination) xmm sits in r/m. `var_opcode`, where the shift
+    /// has a variable-count member, encodes `<op> %xmm_count, %xmm` as
+    /// `66 [REX] 0F <var_opcode> /r`; `pslldq` / `psrldq` have no such member
+    /// and leave it absent.
     SseShiftImm {
         opcode: u8,
         digit: u8,
+        var_opcode: Option<u8>,
     },
     /// A 3-operand VEX (AVX) op `<v-op> %{x,y}mm_src2, %{x,y}mm_src1,
     /// %{x,y}mm_dst`, encoded `VEX(vvvv=src1, L=ymm, W=w, pp) <map> <opcode>
@@ -175,9 +189,16 @@ pub(crate) enum Mnemonic {
     /// A VEX packed shift by immediate `v-op $imm8, %src, %dst`, encoded
     /// `VEX(vvvv=dst, L, pp=66, 0F) <opcode> /digit ib`: the destination rides
     /// VEX.vvvv, the opcode extension ModRM.reg, and the source ModRM.rm.
+    /// `var_opcode`, where the shift has a variable-count member, encodes
+    /// `v-op %xmm_count, %src, %dst` as the ordinary 3-operand VEX
+    /// `VEX(vvvv=src, L, pp=66, 0F) <var_opcode> ModRM(reg=dst, rm=count)`.
+    /// The count is `xmm/m128` at every destination width, so `L` follows the
+    /// destination and source alone. `vpslldq` / `vpsrldq` have no such
+    /// member and leave it absent.
     VexShiftImm {
         opcode: u8,
         digit: u8,
+        var_opcode: Option<u8>,
     },
     /// An operandless VEX form (`vzeroupper` / `vzeroall`): `VEX(L) 0F 77`.
     VexNullary {
@@ -216,6 +237,27 @@ pub(crate) enum Mnemonic {
         map: u8,
         opcode: u8,
         w: bool,
+    },
+    /// A VEX-encoded opmask instruction (the `k*` set except `kmov*`): every
+    /// operand is an opmask register, with the destination in ModRM.reg, the
+    /// r/m source last in AT&T order, and src1 in VEX.vvvv where `vvvv` is
+    /// set (the 3-operand forms, which also set VEX.L). The width letter of
+    /// the mnemonic fixes `pp` and `w`; `imm` is the shifts' trailing byte.
+    MaskOp {
+        pp: u8,
+        map: u8,
+        w: bool,
+        opcode: u8,
+        l: u8,
+        vvvv: bool,
+        imm: bool,
+    },
+    /// `kmov{b,w,d,q}`: an opmask move. The opcode and prefix follow the
+    /// operand pair -- 90/91 between opmask and opmask / memory, 92/93
+    /// between opmask and a 32/64-bit general register -- so only the width
+    /// the size letter names rides the variant.
+    Kmov {
+        width: u8,
     },
     /// An EVEX-encoded (AVX-512) op. The form carries the opcode fields, the
     /// operand arrangement, the memory tuple type that fixes the compressed
@@ -327,16 +369,6 @@ pub(crate) enum Mnemonic {
     /// expression text is carried in [`AsmInsn::sym_exprs`] and the fill byte
     /// in [`AsmInsn::bytes`].
     Skip,
-    /// `.align n` / `.p2align e` / `.balign n` inside the code stream: pad to
-    /// an alignment boundary. `n` is the resolved byte alignment, `fill` the
-    /// pad byte (the target NOP when absent), `max` the most bytes the pad may
-    /// add. The boundary is section-relative, as in GNU as; the emitter caps
-    /// `n` at the `.text` section alignment so the boundary holds absolutely.
-    Align {
-        n: u32,
-        fill: Option<u8>,
-        max: Option<u32>,
-    },
     /// A general-purpose / system mnemonic recognized straight from the
     /// catalogue, not one of the bespoke forms above. The string is the
     /// catalogue mnemonic; [`encode`] routes it through the table encoder with
@@ -468,10 +500,6 @@ pub(crate) enum AsmMemBase {
     Ref(u8),
 }
 
-/// Label numbers at and above this mark are interned named labels
-/// (`name:` definitions); below it, GNU-as numeric locals (`1:`).
-pub(crate) const NAMED_LABEL_BASE: u32 = 1 << 31;
-
 /// One instruction of a parsed template, in AT&T operand order.
 #[derive(Debug, Clone)]
 pub(crate) struct AsmInsn {
@@ -480,6 +508,9 @@ pub(crate) struct AsmInsn {
     /// Segment-override prefix byte (0x64 `%%fs:`, 0x65 `%%gs:`) written on
     /// the instruction's memory operand; emitted before the opcode.
     pub seg: Option<u8>,
+    /// REX byte of a `rex[.WRXB]` prefix leading the instruction on its own
+    /// statement; merged into the instruction's own REX byte.
+    pub rex: Option<u8>,
     pub operands: Vec<AsmOpnd>,
     /// Literal bytes for a [`Mnemonic::RawBytes`] piece; empty otherwise.
     pub bytes: Vec<u8>,
@@ -493,6 +524,10 @@ pub(crate) struct AsmInsn {
     /// A local-label definition `N:` at this point; the emitter records the
     /// code offset it stands at. Such a piece carries no mnemonic operands.
     pub label_def: Option<u32>,
+    /// A layout directive, which moves the location counter instead of
+    /// encoding: the section engine's parse of it, laid down by the emitter.
+    /// The piece carries no mnemonic.
+    pub layout: Option<AsmSectionItem>,
 }
 
 /// A resolved operand: a concrete register (with its access size) or an
@@ -747,6 +782,8 @@ pub(crate) const YMM_BASE: u8 = 96;
 /// ZMM registers (AVX-512 512-bit) occupy `ZMM_BASE..ZMM_BASE+32`; only EVEX
 /// encodes them.
 pub(crate) const ZMM_BASE: u8 = 136;
+/// Opmask registers `k0`..`k7` occupy `MASK_BASE..MASK_BASE+8`.
+pub(crate) const MASK_BASE: u8 = 168;
 /// Control / debug / segment registers occupy the ranges below; each is
 /// marked so it never collides with the 0..16 GPRs or the MMX marks.
 const CR_BASE: u8 = 24;
@@ -759,11 +796,35 @@ const SEG_BASE: u8 = 48;
 /// The number of an opmask register `kN`. Opmasks are deliberately absent from
 /// [`reg_by_name`]: under a single `%` their spelling collides with GCC's
 /// `%k<N>` operand modifier, which selects the 32-bit form of operand N and is
-/// what kernel inline asm means by it. They reach the encoder only through the
-/// `{%kN}` write-mask decorator, which is parsed as a decorator.
+/// what kernel inline asm means by it. In extended asm they reach the encoder
+/// as `%%kN` operands and through the `{%kN}` write-mask decorator; only the
+/// file-scope parse, where basic asm makes a single `%` a register sigil,
+/// reads `%kN` as a register.
 fn mask_by_name(name: &str) -> Option<u8> {
     let rest = name.strip_prefix('k')?;
     rest.parse::<u8>().ok().filter(|&i| i < 8)
+}
+
+/// Whether a register number names an opmask register.
+pub(crate) fn is_mask_reg(reg: u8) -> bool {
+    (MASK_BASE..MASK_BASE + 8).contains(&reg)
+}
+
+/// The opmask number of a resolved operand, or `None`.
+pub(crate) fn mask_reg_num(c: &Concrete) -> Option<u8> {
+    match *c {
+        Concrete::Reg { reg, .. } if is_mask_reg(reg) => Some(reg - MASK_BASE),
+        _ => None,
+    }
+}
+
+/// Operand for an opmask register named in a template. The size marker is
+/// unused: the mnemonic's width letter fixes the operation width.
+fn mask_reg_operand(name: &str) -> Option<AsmOpnd> {
+    mask_by_name(name).map(|k| AsmOpnd::Reg {
+        reg: MASK_BASE + k,
+        size: AsmRegSize::Quad,
+    })
 }
 
 /// Assign an x86 register number to each register operand of an
@@ -904,7 +965,7 @@ fn string_op(name: &str) -> Option<Mnemonic> {
     Some(Mnemonic::StringOp { opcode, opw })
 }
 
-fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
+pub(crate) fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
     // The flag / general-register stack pushes and the interrupt / far return
     // spell their operand size in the mnemonic and take no operands; the
     // catalogue is generated for long mode and carries only some of the
@@ -927,6 +988,8 @@ fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
         "bswap" => Mnemonic::Bswap,
         "rdtscp" => Mnemonic::Rdtscp,
         "rdtsc" => Mnemonic::Rdtsc,
+        "cpuid" => Mnemonic::Cpuid,
+        "xgetbv" => Mnemonic::Xgetbv,
         "nop" => Mnemonic::Nop,
         "in" => Mnemonic::In,
         "out" => Mnemonic::Out,
@@ -1065,14 +1128,64 @@ fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
         "inc" => Mnemonic::Inc,
         "dec" => Mnemonic::Dec,
         _ => {
-            return string_op(name)
+            return rex_prefix_byte(name)
+                .map(Mnemonic::Prefix)
+                .or_else(|| string_op(name))
                 .or_else(|| sse2_op(name))
                 .or_else(|| sse_mov(name))
                 .or_else(|| sse_imm(name))
                 .or_else(|| vex_op(name))
+                .or_else(|| mask_op(name))
                 .or_else(|| super::evex::op(name).map(Mnemonic::Evex));
         }
     })
+}
+
+/// The REX byte of the `rex[.WRXB]` prefix spelling. The letters name the
+/// bits of `0100WRXB` and appear in that order, each at most once, as GNU as
+/// spells them.
+fn rex_prefix_byte(name: &str) -> Option<u8> {
+    let rest = name.strip_prefix("rex")?;
+    if rest.is_empty() {
+        return Some(0x40);
+    }
+    let letters = rest.strip_prefix('.').filter(|l| !l.is_empty())?;
+    let (mut bits, mut next) = (0x40u8, 0usize);
+    for c in letters.bytes() {
+        let i = b"WRXB"
+            .iter()
+            .position(|&w| w == c.to_ascii_uppercase())
+            .filter(|&i| i >= next)?;
+        bits |= 1 << (3 - i);
+        next = i + 1;
+    }
+    Some(bits)
+}
+
+/// Merge an explicit REX prefix into the instruction encoded from `at`: the
+/// bits join the instruction's own REX byte, which follows the legacy
+/// prefixes and precedes the opcode, as GNU as merges them. A VEX / EVEX
+/// encoding carries the same bits in its own prefix and admits no REX byte.
+pub(crate) fn splice_rex(code: &mut Vec<u8>, at: usize, rex: u8) -> Result<(), String> {
+    let mut i = at;
+    while i < code.len()
+        && matches!(
+            code[i],
+            0x66 | 0x67 | 0xF0 | 0xF2 | 0xF3 | 0x26 | 0x2E | 0x36 | 0x3E | 0x64 | 0x65
+        )
+    {
+        i += 1;
+    }
+    match code.get(i) {
+        Some(&b) if (0x40..=0x4F).contains(&b) => code[i] = b | (rex & 0x0F),
+        Some(0xC4 | 0xC5 | 0x62) => {
+            return Err(String::from(
+                "inline asm: a `rex` prefix is invalid with a VEX / EVEX instruction",
+            ));
+        }
+        _ => code.insert(i, rex),
+    }
+    Ok(())
 }
 
 /// SSE2 two-xmm register ops as `(name, mandatory-prefix, 0F-opcode)`; a zero
@@ -1096,6 +1209,7 @@ fn sse2_op(name: &str) -> Option<Mnemonic> {
         ("pminsb", 0x66, 0x38), ("pminsd", 0x66, 0x39), ("pminuw", 0x66, 0x3A),
         ("pminud", 0x66, 0x3B), ("pmaxsb", 0x66, 0x3C), ("pmaxsd", 0x66, 0x3D),
         ("pmaxuw", 0x66, 0x3E), ("pmaxud", 0x66, 0x3F), ("pmulld", 0x66, 0x40),
+        ("ptest", 0x66, 0x17),
         ("aesimc", 0x66, 0xDB), ("aesenc", 0x66, 0xDC), ("aesenclast", 0x66, 0xDD),
         ("aesdec", 0x66, 0xDE), ("aesdeclast", 0x66, 0xDF),
         ("sha1nexte", 0, 0xC8), ("sha1msg1", 0, 0xC9), ("sha1msg2", 0, 0xCA),
@@ -1115,7 +1229,8 @@ fn sse2_op(name: &str) -> Option<Mnemonic> {
         ("paddb", 0x66, 0xFC), ("paddw", 0x66, 0xFD), ("paddd", 0x66, 0xFE), ("paddq", 0x66, 0xD4),
         ("psubb", 0x66, 0xF8), ("psubw", 0x66, 0xF9), ("psubd", 0x66, 0xFA), ("psubq", 0x66, 0xFB),
         ("pmullw", 0x66, 0xD5), ("pmuludq", 0x66, 0xF4), ("pmaddwd", 0x66, 0xF5), ("pmulhw", 0x66, 0xE5),
-        ("pcmpeqb", 0x66, 0x74), ("pcmpeqw", 0x66, 0x75), ("pcmpeqd", 0x66, 0x76), ("pcmpgtd", 0x66, 0x66),
+        ("pcmpeqb", 0x66, 0x74), ("pcmpeqw", 0x66, 0x75), ("pcmpeqd", 0x66, 0x76),
+        ("pcmpgtb", 0x66, 0x64), ("pcmpgtw", 0x66, 0x65), ("pcmpgtd", 0x66, 0x66),
         ("pminub", 0x66, 0xDA), ("pmaxub", 0x66, 0xDE),
         ("packsswb", 0x66, 0x63), ("packssdw", 0x66, 0x6B), ("packuswb", 0x66, 0x67),
         ("punpcklbw", 0x66, 0x60), ("punpcklwd", 0x66, 0x61), ("punpckldq", 0x66, 0x62),
@@ -1221,6 +1336,9 @@ fn sse_imm(name: &str) -> Option<Mnemonic> {
         ("pinsrq", 0x66, 3, 0x22, true, false),
         ("pextrb", 0x66, 3, 0x14, false, true), ("pextrd", 0x66, 3, 0x16, false, true),
         ("pextrq", 0x66, 3, 0x16, true, true), ("extractps", 0x66, 3, 0x17, false, true),
+        // The word element pair takes the 0F map: the general register is
+        // ModRM.reg for the extract and ModRM.r/m for the insert.
+        ("pextrw", 0x66, 1, 0xC5, false, false), ("pinsrw", 0x66, 1, 0xC4, false, false),
     ];
     if let Some(&(_, prefix, map, opcode, w, store)) = IMMS.iter().find(|r| r.0 == name) {
         return Some(Mnemonic::SseRmImm {
@@ -1231,17 +1349,30 @@ fn sse_imm(name: &str) -> Option<Mnemonic> {
             store,
         });
     }
+    // The sign-mask extracts, `(name, prefix, opcode)`.
     #[rustfmt::skip]
-    const SHIFTS: &[(&str, u8, u8)] = &[
-        ("psllw", 0x71, 6), ("pslld", 0x72, 6), ("psllq", 0x73, 6),
-        ("psrlw", 0x71, 2), ("psrld", 0x72, 2), ("psrlq", 0x73, 2),
-        ("psraw", 0x71, 4), ("psrad", 0x72, 4),
-        ("pslldq", 0x73, 7), ("psrldq", 0x73, 3),
+    const MASKS: &[(&str, u8, u8)] = &[
+        ("pmovmskb", 0x66, 0xD7), ("movmskps", 0, 0x50), ("movmskpd", 0x66, 0x50),
+    ];
+    if let Some(&(_, prefix, opcode)) = MASKS.iter().find(|(n, _, _)| *n == name) {
+        return Some(Mnemonic::SseSignMask { prefix, opcode });
+    }
+    // `(name, immediate opcode, /digit, variable-count opcode)`.
+    #[rustfmt::skip]
+    const SHIFTS: &[(&str, u8, u8, Option<u8>)] = &[
+        ("psllw", 0x71, 6, Some(0xF1)), ("pslld", 0x72, 6, Some(0xF2)), ("psllq", 0x73, 6, Some(0xF3)),
+        ("psrlw", 0x71, 2, Some(0xD1)), ("psrld", 0x72, 2, Some(0xD2)), ("psrlq", 0x73, 2, Some(0xD3)),
+        ("psraw", 0x71, 4, Some(0xE1)), ("psrad", 0x72, 4, Some(0xE2)),
+        ("pslldq", 0x73, 7, None), ("psrldq", 0x73, 3, None),
     ];
     SHIFTS
         .iter()
-        .find(|(n, _, _)| *n == name)
-        .map(|&(_, opcode, digit)| Mnemonic::SseShiftImm { opcode, digit })
+        .find(|(n, _, _, _)| *n == name)
+        .map(|&(_, opcode, digit, var_opcode)| Mnemonic::SseShiftImm {
+            opcode,
+            digit,
+            var_opcode,
+        })
 }
 
 /// 3-operand VEX (AVX) ops as `(name, pp, 0F-opcode)`, where `pp` selects the
@@ -1277,17 +1408,22 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
             vvvv_first,
         });
     }
-    // VEX packed shifts by immediate as `(name, opcode, /digit)`; the
-    // destination rides VEX.vvvv, so they are their own shape.
+    // VEX packed shifts as `(name, immediate opcode, /digit, variable-count
+    // opcode)`; the immediate form puts the destination in VEX.vvvv, so they
+    // are their own shape.
     #[rustfmt::skip]
-    const SHIFTS: &[(&str, u8, u8)] = &[
-        ("vpsllw", 0x71, 6), ("vpslld", 0x72, 6), ("vpsllq", 0x73, 6),
-        ("vpsrlw", 0x71, 2), ("vpsrld", 0x72, 2), ("vpsrlq", 0x73, 2),
-        ("vpsraw", 0x71, 4), ("vpsrad", 0x72, 4),
-        ("vpslldq", 0x73, 7), ("vpsrldq", 0x73, 3),
+    const SHIFTS: &[(&str, u8, u8, Option<u8>)] = &[
+        ("vpsllw", 0x71, 6, Some(0xF1)), ("vpslld", 0x72, 6, Some(0xF2)), ("vpsllq", 0x73, 6, Some(0xF3)),
+        ("vpsrlw", 0x71, 2, Some(0xD1)), ("vpsrld", 0x72, 2, Some(0xD2)), ("vpsrlq", 0x73, 2, Some(0xD3)),
+        ("vpsraw", 0x71, 4, Some(0xE1)), ("vpsrad", 0x72, 4, Some(0xE2)),
+        ("vpslldq", 0x73, 7, None), ("vpsrldq", 0x73, 3, None),
     ];
-    if let Some(&(_, opcode, digit)) = SHIFTS.iter().find(|(n, _, _)| *n == name) {
-        return Some(Mnemonic::VexShiftImm { opcode, digit });
+    if let Some(&(_, opcode, digit, var_opcode)) = SHIFTS.iter().find(|(n, _, _, _)| *n == name) {
+        return Some(Mnemonic::VexShiftImm {
+            opcode,
+            digit,
+            var_opcode,
+        });
     }
     if let "vmovd" | "vmovq" = name {
         return Some(Mnemonic::VexMovd { w: name == "vmovq" });
@@ -1329,6 +1465,14 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
         "vpbroadcastw" => Some((1, 2, 0x79)),
         "vpbroadcastd" => Some((1, 2, 0x58)),
         "vpbroadcastq" => Some((1, 2, 0x59)),
+        // Packed integer absolute value (0F38, 66); VEX.L follows the
+        // destination as for the broadcasts.
+        "vpabsb" => Some((1, 2, 0x1C)),
+        "vpabsw" => Some((1, 2, 0x1D)),
+        "vpabsd" => Some((1, 2, 0x1E)),
+        // Both operands are sources; the second AT&T one is ModRM.reg and
+        // fixes VEX.L, as for the single-source ops above.
+        "vptest" => Some((1, 2, 0x17)),
         _ => None,
     };
     if let Some((pp, map, opcode)) = two {
@@ -1358,10 +1502,12 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
             mem_only: false,
         });
     }
-    // The 128-bit lane broadcasts (0F38, 66).
+    // The 128-bit lane broadcasts and the non-temporal load (0F38, 66), all
+    // memory-source only.
     if let Some(opcode) = match name {
         "vbroadcastf128" => Some(0x1Au8),
         "vbroadcasti128" => Some(0x5A),
+        "vmovntdqa" => Some(0x2A),
         _ => None,
     } {
         return Some(Mnemonic::Vex2 {
@@ -1387,10 +1533,12 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
         ("vpaddb", 1, 0xFC), ("vpaddw", 1, 0xFD), ("vpaddd", 1, 0xFE), ("vpaddq", 1, 0xD4),
         ("vpsubb", 1, 0xF8), ("vpsubw", 1, 0xF9), ("vpsubd", 1, 0xFA), ("vpsubq", 1, 0xFB),
         ("vpand", 1, 0xDB), ("vpandn", 1, 0xDF), ("vpor", 1, 0xEB), ("vpxor", 1, 0xEF),
-        ("vpcmpeqd", 1, 0x76), ("vpcmpgtd", 1, 0x66),
+        ("vpcmpeqb", 1, 0x74), ("vpcmpeqw", 1, 0x75), ("vpcmpeqd", 1, 0x76),
+        ("vpcmpgtb", 1, 0x64), ("vpcmpgtw", 1, 0x65), ("vpcmpgtd", 1, 0x66),
         ("vpunpckldq", 1, 0x62), ("vpunpckhdq", 1, 0x6A),
         ("vpunpcklqdq", 1, 0x6C), ("vpunpckhqdq", 1, 0x6D),
-        ("vpmullw", 1, 0xD5), ("vpmaddwd", 1, 0xF5),
+        ("vpmullw", 1, 0xD5), ("vpmaddwd", 1, 0xF5), ("vpmulhw", 1, 0xE5),
+        ("vpmuludq", 1, 0xF4),
         // Scalar single (0xF3) / double (0xF2).
         ("vaddss", 2, 0x58), ("vsubss", 2, 0x5C), ("vmulss", 2, 0x59), ("vdivss", 2, 0x5E),
         ("vaddsd", 3, 0x58), ("vsubsd", 3, 0x5C), ("vmulsd", 3, 0x59), ("vdivsd", 3, 0x5E),
@@ -1528,11 +1676,95 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
     })
 }
 
+/// The opmask-register instruction set (VEX-encoded, SDM "KADDW" .. "KXORW"
+/// pages). The width letter fixes the prefix selections: on the 0F map the
+/// byte and dword forms take 0x66 and the dword and qword forms VEX.W; the
+/// shifts pair the widths per opcode on the 0F3A map under a constant 0x66.
+fn mask_op(name: &str) -> Option<Mnemonic> {
+    let width = |letter: &str| match letter {
+        "b" => Some(1u8),
+        "w" => Some(2),
+        "d" => Some(4),
+        "q" => Some(8),
+        _ => None,
+    };
+    if let Some(rest) = name.strip_prefix("kmov") {
+        return Some(Mnemonic::Kmov {
+            width: width(rest)?,
+        });
+    }
+    if let Some(rest) = name.strip_prefix("kshift") {
+        let (base, rest) = match rest.split_at_checked(1)? {
+            ("l", r) => (0x32u8, r),
+            ("r", r) => (0x30, r),
+            _ => return None,
+        };
+        let w = width(rest)?;
+        return Some(Mnemonic::MaskOp {
+            pp: 1,
+            map: 3,
+            w: matches!(w, 2 | 8),
+            opcode: base + u8::from(matches!(w, 4 | 8)),
+            l: 0,
+            vvvv: false,
+            imm: true,
+        });
+    }
+    // The unpacks spell a width pair; each is its own row.
+    let m = |pp, w, l, opcode| {
+        Some(Mnemonic::MaskOp {
+            pp,
+            map: 1,
+            w,
+            opcode,
+            l,
+            vvvv: l == 1,
+            imm: false,
+        })
+    };
+    if let Some(v) = match name {
+        "kunpckbw" => m(1, false, 1, 0x4B),
+        "kunpckwd" => m(0, false, 1, 0x4B),
+        "kunpckdq" => m(0, true, 1, 0x4B),
+        _ => None,
+    } {
+        return Some(v);
+    }
+    // 0F-map families as `(base, opcode, 3-operand)`; the 3-operand forms
+    // set VEX.L.
+    const OPS: &[(&str, u8, bool)] = &[
+        ("kand", 0x41, true),
+        ("kandn", 0x42, true),
+        ("kor", 0x45, true),
+        ("kxnor", 0x46, true),
+        ("kxor", 0x47, true),
+        ("kadd", 0x4A, true),
+        ("knot", 0x44, false),
+        ("kortest", 0x98, false),
+        ("ktest", 0x99, false),
+    ];
+    let (base, letter) = name.split_at_checked(name.len().checked_sub(1)?)?;
+    let &(_, opcode, three) = OPS.iter().find(|r| r.0 == base)?;
+    let w = width(letter)?;
+    m(
+        u8::from(matches!(w, 1 | 4)),
+        matches!(w, 4 | 8),
+        u8::from(three),
+        opcode,
+    )
+}
+
 /// If `movq src, dst` involves an XMM register, encode the SSE quadword move and
 /// return true; otherwise (a plain GP move) return false. The forms: GP64<->xmm
 /// (66 REX.W 0F 6E/7E), xmm<->xmm and mem->xmm load (F3 0F 7E), xmm->mem store
 /// (66 0F D6). The xmm is always ModRM.reg; the other operand is r/m.
-fn movq_xmm(code: &mut Vec<u8>, src: Concrete, dst: Concrete) -> bool {
+fn movq_xmm(
+    code: &mut Vec<u8>,
+    mode: super::table::Mode,
+    addr: u8,
+    src: Concrete,
+    dst: Concrete,
+) -> Result<bool, String> {
     let xmm = |c: &Concrete| match c {
         Concrete::Reg { reg, .. } if (XMM_BASE..XMM_BASE + 16).contains(reg) => {
             Some(*reg - XMM_BASE)
@@ -1566,35 +1798,45 @@ fn movq_xmm(code: &mut Vec<u8>, src: Concrete, dst: Concrete) -> bool {
         }
         // mem -> xmm (load).
         (None, Some(d), ref m, _) if MemRm::of(m).is_some() => {
-            let Some(mr) = MemRm::of(m) else { return false };
+            let Some(mr) = MemRm::of(m) else {
+                return Ok(false);
+            };
             code.push(0xF3);
             if d >= 8 || mr.rex_x() || mr.rex_b() {
                 code.push(rex(false, d >= 8, mr.rex_x(), mr.rex_b()));
             }
             code.extend_from_slice(&[0x0F, 0x7E]);
-            mr.emit(code, d & 7);
+            mr.emit(code, mode, addr, d & 7)?;
         }
         // xmm -> mem (store).
         (Some(s), None, _, ref m) if MemRm::of(m).is_some() => {
-            let Some(mr) = MemRm::of(m) else { return false };
+            let Some(mr) = MemRm::of(m) else {
+                return Ok(false);
+            };
             code.push(0x66);
             if s >= 8 || mr.rex_x() || mr.rex_b() {
                 code.push(rex(false, s >= 8, mr.rex_x(), mr.rex_b()));
             }
             code.extend_from_slice(&[0x0F, 0xD6]);
-            mr.emit(code, s & 7);
+            mr.emit(code, mode, addr, s & 7)?;
         }
         // No xmm operand: a plain GP move.
-        _ => return false,
+        _ => return Ok(false),
     }
-    true
+    Ok(true)
 }
 
 /// If `movq src, dst` involves an MMX register, encode the MMX quadword move
 /// and return true. The forms: mm<->mm and mem->mm load (0F 6F), mm->mem
 /// store (0F 7F), GP64<->mm (REX.W 0F 6E/7E). The mm register is always
 /// ModRM.reg; the other operand is r/m.
-fn movq_mmx(code: &mut Vec<u8>, src: Concrete, dst: Concrete) -> bool {
+fn movq_mmx(
+    code: &mut Vec<u8>,
+    mode: super::table::Mode,
+    addr: u8,
+    src: Concrete,
+    dst: Concrete,
+) -> Result<bool, String> {
     let mm = |c: &Concrete| match c {
         Concrete::Reg { reg, .. } if (MMX_BASE..MMX_BASE + 8).contains(reg) => {
             Some(*reg - MMX_BASE)
@@ -1608,20 +1850,24 @@ fn movq_mmx(code: &mut Vec<u8>, src: Concrete, dst: Concrete) -> bool {
             code.push(modrm_reg(d, s));
         }
         (None, Some(d), ref m, _) if MemRm::of(m).is_some() => {
-            let Some(mr) = MemRm::of(m) else { return false };
+            let Some(mr) = MemRm::of(m) else {
+                return Ok(false);
+            };
             if mr.rex_x() || mr.rex_b() {
                 code.push(rex(false, false, mr.rex_x(), mr.rex_b()));
             }
             code.extend_from_slice(&[0x0F, 0x6F]);
-            mr.emit(code, d);
+            mr.emit(code, mode, addr, d)?;
         }
         (Some(s), None, _, ref m) if MemRm::of(m).is_some() => {
-            let Some(mr) = MemRm::of(m) else { return false };
+            let Some(mr) = MemRm::of(m) else {
+                return Ok(false);
+            };
             if mr.rex_x() || mr.rex_b() {
                 code.push(rex(false, false, mr.rex_x(), mr.rex_b()));
             }
             code.extend_from_slice(&[0x0F, 0x7F]);
-            mr.emit(code, s);
+            mr.emit(code, mode, addr, s)?;
         }
         (None, Some(d), Concrete::Reg { reg: g, .. }, _) if g < MMX_BASE => {
             code.push(rex(true, false, false, g >= 8));
@@ -1633,9 +1879,9 @@ fn movq_mmx(code: &mut Vec<u8>, src: Concrete, dst: Concrete) -> bool {
             code.extend_from_slice(&[0x0F, 0x7E]);
             code.push(modrm_reg(s, g & 7));
         }
-        _ => return false,
+        _ => return Ok(false),
     }
-    true
+    Ok(true)
 }
 
 /// The catalogue mnemonic matching `name`, as a `'static` string, or `None`.
@@ -1648,16 +1894,42 @@ fn table_mnemonic(name: &str) -> Option<&'static str> {
     forms.get(start).map(|f| f.mnemonic).filter(|&m| m == name)
 }
 
+/// The lower-case spelling of a mnemonic token, or `None` when the token is
+/// already the spelling to resolve. GNU as matches mnemonics without regard to
+/// case; symbol names are case-sensitive, so a token is folded only when it is
+/// not a mnemonic as written and the folded spelling is one.
+pub(crate) fn fold_mnemonic_case(tok: &str) -> Option<alloc::string::String> {
+    if !tok.bytes().any(|c| c.is_ascii_uppercase()) || split_mnemonic_exact(tok).is_some() {
+        return None;
+    }
+    let lower = tok.to_ascii_lowercase();
+    split_mnemonic_exact(&lower).is_some().then_some(lower)
+}
+
+/// Resolve a mnemonic token to its base form plus any AT&T size suffix,
+/// folding case as GNU as does.
+fn split_mnemonic(tok: &str) -> Option<(Mnemonic, Option<AsmRegSize>)> {
+    match split_mnemonic_exact(tok) {
+        Some(m) => Some(m),
+        None => split_mnemonic_exact(&fold_mnemonic_case(tok)?),
+    }
+}
+
 /// Resolve a mnemonic token to its base form plus any AT&T size suffix.
 /// A trailing `b`/`w`/`l`/`q` is a suffix only when the token is not a
 /// mnemonic as written (so `shl` stays `shl`, but `bswapl` is
 /// `bswap` + long). A token that is not a bespoke mnemonic but names a
 /// catalogue instruction resolves to [`Mnemonic::Table`].
-fn split_mnemonic(tok: &str) -> Option<(Mnemonic, Option<AsmRegSize>)> {
+fn split_mnemonic_exact(tok: &str) -> Option<(Mnemonic, Option<AsmRegSize>)> {
     if let Some(m) = mnemonic_by_name(tok) {
         return Some((m, None));
     }
-    if let Some(name) = table_mnemonic(tok) {
+    // AT&T reads the size letter on a stack op as a suffix of `push` / `pop`.
+    // The catalogue also carries Intel's own `pushw` spelling (its imm16 row
+    // only), which must not swallow the suffix, so these skip the whole-name
+    // match and take the split below.
+    let att_suffixed = matches!(tok, "pushw" | "pushl" | "pushq" | "popw" | "popl" | "popq");
+    if !att_suffixed && let Some(name) = table_mnemonic(tok) {
         return Some((Mnemonic::Table(name), None));
     }
     // Unsuffixed flag push / pop: in 64-bit mode the operand size defaults to
@@ -1671,9 +1943,22 @@ fn split_mnemonic(tok: &str) -> Option<(Mnemonic, Option<AsmRegSize>)> {
         // `ud2` with a byte suffix.
         "ud2a" => Some("ud2"),
         "ud2b" => Some("ud1"),
+        // Flag aliases of the `loop` conditionals.
+        "loopz" => Some("loope"),
+        "loopnz" => Some("loopne"),
         _ => None,
     } {
         return Some((Mnemonic::Table(table_mnemonic(sized)?), None));
+    }
+    // The narrower counter widths of the `E3 rel8` branch. The catalogue row
+    // is `jrcxz`; these differ from it only by the address-size prefix, which
+    // the encoder selects from the mode, so they carry no row of their own.
+    if let Some(name) = match tok {
+        "jcxz" => Some("jcxz"),
+        "jecxz" => Some("jecxz"),
+        _ => None,
+    } {
+        return Some((Mnemonic::Table(name), None));
     }
     // AT&T zero/sign-extending moves; the second width letter is the
     // operation width, the first rides the mnemonic to the r/m operand.
@@ -1710,8 +1995,9 @@ fn split_mnemonic(tok: &str) -> Option<(Mnemonic, Option<AsmRegSize>)> {
     if let Some(m) = mnemonic_by_name(base) {
         // A string primitive carries its size in its own name, so a further
         // suffix does not apply: `movsbl` is a sign-extending move, not
-        // `movsb` widened to long.
-        if matches!(m, Mnemonic::StringOp { .. }) {
+        // `movsb` widened to long. A prefix has no operand to size, so a
+        // suffixed spelling of one (`rex.BW`, `lockw`) is no mnemonic.
+        if matches!(m, Mnemonic::StringOp { .. } | Mnemonic::Prefix(_)) {
             return None;
         }
         return Some((m, suffix));
@@ -1741,8 +2027,10 @@ fn parse_label_ref(tok: &str, labels: &[&str]) -> Option<(u32, bool)> {
 
 /// Parse one operand token (already trimmed). `labels` is the template's
 /// named-label intern table (from the definition pre-scan); a bare token
-/// matching an entry is a local-label reference, not a symbol.
-fn parse_operand(tok: &str, labels: &[&str]) -> Result<AsmOpnd, String> {
+/// matching an entry is a local-label reference, not a symbol. `file_scope`
+/// selects the basic-asm reading of a single `%`, where `%kN` is an opmask
+/// register rather than GCC's operand modifier.
+fn parse_operand(tok: &str, labels: &[&str], file_scope: bool) -> Result<AsmOpnd, String> {
     // A leading `*` is AT&T's indirect-branch marker (`jmp *%rax`,
     // `call *8(%rbx)`); the operand kind alone selects the encoding.
     let tok = tok.strip_prefix('*').unwrap_or(tok);
@@ -1779,6 +2067,7 @@ fn parse_operand(tok: &str, labels: &[&str]) -> Result<AsmOpnd, String> {
     }
     if let Some(rest) = tok.strip_prefix("%%") {
         return named_reg_operand(rest)
+            .or_else(|| mask_reg_operand(rest))
             .ok_or_else(|| format!("inline asm: unknown register `{tok}`"));
     }
     if bytes.first() == Some(&b'%') {
@@ -1786,8 +2075,13 @@ fn parse_operand(tok: &str, labels: &[&str]) -> Result<AsmOpnd, String> {
         // A single `%` before a register name is an explicit register. GCC
         // uses this in *basic* asm (no operand list); extended asm spells it
         // `%%reg`. Operand references (`%0`, `%w1`) are never register names,
-        // so trying the register table first is unambiguous.
+        // so trying the register table first is unambiguous -- except for
+        // `%k0`..`%k7`, which extended asm reads as the operand modifier and
+        // only basic asm reads as opmask registers.
         if let Some(op) = named_reg_operand(body) {
+            return Ok(op);
+        }
+        if file_scope && let Some(op) = mask_reg_operand(body) {
             return Ok(op);
         }
         // `%lK`: an `asm goto` label-list reference.
@@ -2087,8 +2381,8 @@ fn parse_mem_operand(prefix: &str, inner: &str, labels: &[&str]) -> Option<AsmOp
     } else {
         i32::try_from(parse_int(prefix)?).ok()?
     };
-    // An operand-reference base `%N` or an explicit 64-bit base register
-    // (32-bit bases need the 0x67 prefix, not modelled).
+    // An operand-reference base `%N` or an explicit base register at the
+    // width it was written; the width selects the instruction's address size.
     Some(AsmOpnd::Mem {
         base: parse_mem_base(inner)?,
         index: None,
@@ -2110,16 +2404,16 @@ fn strip_outer_parens(s: &str) -> &str {
 
 /// Parse a decimal or `0x`-hex integer, optionally signed.
 fn parse_int(s: &str) -> Option<i64> {
-    crate::c5::codegen::ssa::emit_common::eval_const_expr(s.trim())
+    crate::c5::asm::eval_const_expr(s.trim())
 }
 
-/// The symbolic displacement expression of an operand, or `None` when the
-/// text holds no symbol: an integer constant, a register name, a template
-/// label reference (which has its own operand forms), or an operand
-/// reference. Anything else the assembler's expression grammar accepts and
-/// that names at least one symbol is returned as written; the section engine
-/// evaluates it once the layout is known, folding a same-section difference
-/// and relocating what is left.
+/// The location expression of an operand, or `None` when the text holds no
+/// location: an integer constant, a register name, a lone template label
+/// reference (which has its own operand forms), or an operand reference.
+/// Anything else the assembler's expression grammar accepts and that names
+/// at least one symbol or template label is returned as written; the
+/// evaluator resolves it once the layout is known, folding a same-section
+/// difference and relocating what is left.
 fn sym_disp_expr<'a>(prefix: &'a str, labels: &[&str]) -> Option<&'a str> {
     let prefix = prefix.trim();
     // `%` in a displacement is a register or an operand reference, never a
@@ -2127,21 +2421,27 @@ fn sym_disp_expr<'a>(prefix: &'a str, labels: &[&str]) -> Option<&'a str> {
     if prefix.is_empty()
         || prefix.contains('%')
         || parse_int(prefix).is_some()
-        || parse_label_ref(prefix, labels).is_some()
+        // A lone label reference has its own operand forms, parenthesized
+        // (`lea (2f)(%rip)`) as much as bare.
+        || parse_label_ref(strip_outer_parens(prefix), labels).is_some()
     {
         return None;
     }
     let named = core::cell::Cell::new(false);
     let resolve = |t: &str| {
-        named.set(named.get() || super::super::ssa::emit_common::is_asm_symbol_template(t));
-        Some(super::super::ssa::emit_common::AsmExprLeaf::Abs(0))
+        named.set(
+            named.get()
+                || crate::c5::asm::is_asm_symbol_template(t)
+                || parse_label_ref(t, labels).is_some(),
+        );
+        Some(crate::c5::asm::AsmExprLeaf::Abs(0))
     };
-    let ctx = super::super::ssa::emit_common::AsmExprCtx {
+    let ctx = crate::c5::asm::AsmExprCtx {
         resolve: &resolve,
         const_of: &|_| None,
         lax_div: true,
     };
-    super::super::ssa::emit_common::eval_asm_value(prefix, &ctx).ok()?;
+    crate::c5::asm::eval_asm_value(prefix, &ctx).ok()?;
     named.get().then_some(prefix)
 }
 
@@ -2197,20 +2497,15 @@ fn parse_sym_mem<'a>(tok: &'a str, labels: &[&str], expr: u8) -> Option<(&'a str
     Some((sym, opnd))
 }
 
-/// Parse a `.align` / `.p2align` / `.balign` directive body to a byte
-/// alignment, pad byte, and max-skip. On x86 `.align` / `.balign` take a byte
-/// count; `.p2align` takes a power-of-two exponent. `None` for a malformed or
-/// out-of-range spec.
-fn parse_align_directive(name: &str, rest: &str) -> Option<(u32, Option<u8>, Option<u32>)> {
-    let (spec, fill, max) = super::super::ssa::emit_common::parse_align_operands(rest.trim())?;
-    let n = match name {
-        ".p2align" => (0..=12).contains(&spec).then(|| 1u32 << spec)?,
-        ".align" | ".balign" => u32::try_from(spec)
-            .ok()
-            .filter(|&n| n > 0 && n <= 4096 && n.is_power_of_two())?,
-        _ => return None,
-    };
-    Some((n, fill, max))
+/// Parse an alignment directive body through the grammar the section engine
+/// reads, so a template and a named section admit the same forms. On x86
+/// `.align` takes a byte count.
+fn parse_align_directive(name: &str, rest: &str) -> Result<AsmSectionItem, String> {
+    match crate::c5::asm::parse_stream_layout_item(name, rest.trim(), false) {
+        Some(Ok(item @ AsmSectionItem::Align { .. })) => Ok(item),
+        Some(Err(e)) => Err(e),
+        _ => Err(format!("inline asm: bad alignment `{rest}`")),
+    }
 }
 
 /// Literal machine bytes for a raw-byte template piece, or `None` when the
@@ -2223,21 +2518,18 @@ fn parse_align_directive(name: &str, rest: &str) -> Option<(u32, Option<u8>, Opt
 ///
 /// The bare form reads its tokens as hexadecimal (so `90` is `0x90`); the
 /// directive form reads C-style integer constants (`0x`-prefixed or decimal).
-fn parse_raw_bytes(piece: &str) -> Option<Result<Vec<u8>, String>> {
+/// A directive with an argument that is not constant is not a raw-byte piece;
+/// its values resolve at emit time.
+fn parse_raw_bytes(piece: &str) -> Option<Vec<u8>> {
     let width = data_directive_width(piece.split_whitespace().next()?);
     if let Some(w) = width {
-        let args = piece[piece.find(char::is_whitespace).unwrap()..].trim();
+        let args = piece[piece.find(char::is_whitespace)?..].trim();
         let mut out = Vec::new();
         for a in args.split(',') {
-            let a = a.trim();
-            let Some(v) = parse_int(a) else {
-                return Some(Err(format!(
-                    "inline asm: bad `.byte`-directive value `{a}`"
-                )));
-            };
+            let v = parse_int(a.trim())?;
             out.extend_from_slice(&(v as u64).to_le_bytes()[..w]);
         }
-        return Some(Ok(out));
+        return Some(out);
     }
     // Bare hex-byte run: every whitespace-delimited token must be exactly two
     // hex digits, so a normal mnemonic (letters) is never mistaken for one.
@@ -2251,58 +2543,31 @@ fn parse_raw_bytes(piece: &str) -> Option<Result<Vec<u8>, String>> {
             .iter()
             .map(|t| u8::from_str_radix(t, 16).unwrap())
             .collect();
-        return Some(Ok(bytes));
+        return Some(bytes);
     }
     None
 }
 
-/// Split a leading `name:` / `N:` local-label definition off `piece`,
-/// returning the label text and the remainder. Names use the assembler
-/// identifier charset (`.` and `$` included); a `%`-prefixed token (a
-/// segment override like `%fs:0x0`) never matches.
-fn split_label_def(piece: &str) -> Option<(&str, &str)> {
-    let colon = piece.find(':')?;
-    if colon == 0 {
-        return None;
-    }
-    let name = &piece.as_bytes()[..colon];
-    let ident = |c: u8| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'.' | b'$');
-    let named = !name[0].is_ascii_digit() && ident(name[0]) && name.iter().all(|&c| ident(c));
-    if named || name.iter().all(u8::is_ascii_digit) {
-        Some((&piece[..colon], &piece[colon + 1..]))
-    } else {
-        None
-    }
-}
+pub(crate) use crate::c5::asm::{NAMED_LABEL_BASE, scan_label_names, split_label_def};
 
-/// Named local labels defined in the template's code text, in definition
-/// order (the intern order the `NAMED_LABEL_BASE + index` label numbers
-/// use). Shared with the emitter's section materialization so a section
-/// reference resolves a name to the same number.
-pub(crate) fn scan_label_names(text: &str) -> Vec<&str> {
-    let mut names: Vec<&str> = Vec::new();
-    for piece in super::ssa::emit_common::split_asm_statements(text) {
-        let mut p = piece.trim();
-        while let Some((name, rest)) = split_label_def(p) {
-            if !name.as_bytes()[0].is_ascii_digit() && !names.contains(&name) {
-                names.push(name);
-            }
-            p = rest.trim();
-        }
-    }
-    names
-}
-
-/// Parse an AT&T inline-asm template into its instruction sequence.
+/// Parse an AT&T extended-asm template into its instruction sequence.
 /// Instructions are separated by `;` or newlines; operands by commas.
 pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
+    parse_template_in(tmpl, false)
+}
+
+/// Parse file-scope / section-unit asm text. Basic asm has no operand list,
+/// so `%kN` is an opmask register there; everything else parses as
+/// [`parse_template`] parses it.
+pub(crate) fn parse_file_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
+    parse_template_in(tmpl, true)
+}
+
+fn parse_template_in(tmpl: &[u8], file_scope: bool) -> Result<Vec<AsmInsn>, String> {
     let text =
         core::str::from_utf8(tmpl).map_err(|_| String::from("inline asm: non-UTF8 template"))?;
     let stripped;
-    let text = match super::super::ssa::emit_common::strip_asm_comments(
-        text,
-        super::super::ssa::emit_common::AsmComments::X86,
-    ) {
+    let text = match crate::c5::asm::strip_asm_comments(text, crate::c5::asm::AsmComments::X86) {
         Some(t) => {
             stripped = t;
             stripped.as_str()
@@ -2310,7 +2575,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
         None => text,
     };
     let expanded;
-    let text = match super::super::ssa::emit_common::expand_template_uniq(text) {
+    let text = match crate::c5::asm::expand_template_uniq(text) {
         Some(t) => {
             expanded = t;
             expanded.as_str()
@@ -2320,8 +2585,11 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
     // Pre-scan the label definitions so operand parsing can tell a local
     // label from a symbol; named labels intern in definition order.
     let names = scan_label_names(text);
+    if let Some(dup) = crate::c5::asm::duplicate_label_name(text) {
+        return Err(format!("inline asm: symbol `{dup}` is already defined"));
+    }
     let mut insns = Vec::new();
-    for piece in super::ssa::emit_common::split_asm_statements(text) {
+    for piece in crate::c5::asm::split_asm_statements(text) {
         let mut piece = piece.trim();
         if piece.is_empty() {
             continue;
@@ -2344,10 +2612,12 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 mnemonic: Mnemonic::RawBytes,
                 suffix: None,
                 seg: None,
+                rex: None,
                 operands: Vec::new(),
                 bytes: Vec::new(),
                 sym_exprs: Vec::new(),
                 label_def: Some(num),
+                layout: None,
             });
             piece = rest.trim();
         }
@@ -2360,30 +2630,42 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
         if piece.starts_with(".cfi_") {
             continue;
         }
-        // A `.byte`-family directive whose arguments reference operands
-        // (`.long %c0`) resolves its values at emit time.
-        if let Some((tok, rest)) = piece
-            .split_once(char::is_whitespace)
-            .filter(|(_, r)| r.contains('%'))
+        // A `.byte`-family directive whose arguments are not all constant:
+        // an operand reference (`.long %c0`) or an expression over template
+        // labels (`.byte 662b-661b`) resolves its value at emit time.
+        if let Some((tok, rest)) = piece.split_once(char::is_whitespace)
             && let Some(w) = data_directive_width(tok)
+            && parse_raw_bytes(piece).is_none()
         {
             let mut operands = Vec::new();
+            let mut sym_exprs = Vec::new();
             for a in rest.split(',') {
                 // Directive arguments are bare integers, not `$`-prefixed.
                 let a = a.trim();
                 operands.push(match parse_int(a) {
                     Some(v) => AsmOpnd::Imm(v),
-                    None => parse_operand(a, &names)?,
+                    None if a.contains('%') => parse_operand(a, &names, file_scope)?,
+                    None => {
+                        let expr = sym_disp_expr(a, &names).ok_or_else(|| {
+                            format!("inline asm: bad `{tok}`-directive value `{a}`")
+                        })?;
+                        let idx = u8::try_from(sym_exprs.len())
+                            .map_err(|_| String::from("inline asm: too many symbol operands"))?;
+                        sym_exprs.push(String::from(expr));
+                        AsmOpnd::ImmSym { expr: idx }
+                    }
                 });
             }
             insns.push(AsmInsn {
                 mnemonic: Mnemonic::Data(w as u8),
                 suffix: None,
                 seg: None,
+                rex: None,
                 operands,
                 bytes: Vec::new(),
-                sym_exprs: Vec::new(),
+                sym_exprs,
                 label_def: None,
+                layout: None,
             });
             continue;
         }
@@ -2394,10 +2676,12 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 mnemonic: Mnemonic::RawBytes,
                 suffix: None,
                 seg: None,
+                rex: None,
                 operands: Vec::new(),
-                bytes: bytes?,
+                bytes,
                 sym_exprs: Vec::new(),
                 label_def: None,
+                layout: None,
             });
             continue;
         }
@@ -2408,39 +2692,39 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
         if let Some((dir, rest)) = piece
             .split_once(char::is_whitespace)
             .or(Some((piece, "")))
-            .filter(|(d, _)| super::super::ssa::emit_common::is_fill_directive(d))
+            .filter(|(d, _)| crate::c5::asm::is_fill_directive(d))
         {
-            let (count_expr, unit, value) =
-                super::super::ssa::emit_common::parse_fill_operands(dir, rest.trim())?;
+            let (count_expr, unit, value) = crate::c5::asm::parse_fill_operands(dir, rest.trim())?;
             insns.push(AsmInsn {
                 mnemonic: Mnemonic::Skip,
                 suffix: None,
                 seg: None,
+                rex: None,
                 operands: Vec::new(),
                 bytes: (value as u64).to_le_bytes()[..unit as usize].to_vec(),
                 sym_exprs: alloc::vec![String::from(count_expr)],
                 label_def: None,
+                layout: None,
             });
             continue;
         }
-        // `.align n` / `.p2align e` / `.balign n` inside the code stream pad to
-        // an alignment boundary (a `.pushsection` block handles these on its own
-        // path).
+        // The alignment directives inside the code stream pad to an alignment
+        // boundary (a `.pushsection` block handles these on its own path).
         let (dir_tok, dir_rest) = match piece.split_once(char::is_whitespace) {
             Some((t, r)) => (t, r.trim()),
             None => (piece, ""),
         };
-        if matches!(dir_tok, ".align" | ".p2align" | ".balign") {
-            let (n, fill, max) = parse_align_directive(dir_tok, dir_rest)
-                .ok_or_else(|| format!("inline asm: bad alignment `{piece}`"))?;
+        if crate::c5::asm::align_directive(dir_tok).is_some() {
             insns.push(AsmInsn {
-                mnemonic: Mnemonic::Align { n, fill, max },
+                mnemonic: Mnemonic::RawBytes,
                 suffix: None,
                 seg: None,
+                rex: None,
                 operands: Vec::new(),
                 bytes: Vec::new(),
                 sym_exprs: Vec::new(),
                 label_def: None,
+                layout: Some(parse_align_directive(dir_tok, dir_rest)?),
             });
             continue;
         }
@@ -2453,35 +2737,50 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
         // A prefix may lead the instruction it applies to on the same
         // statement (`rep stosw`, `lock xaddl ...`) as well as stand alone
         // (`repe; cmpsb`). Emit each leading prefix as its own entry and
-        // carry on with the rest of the statement.
+        // carry on with the rest of the statement. A REX prefix is the
+        // exception: leading an instruction it merges into that
+        // instruction's own REX byte, as GNU as merges it, and only a
+        // statement of its own deposits a byte.
+        let mut rex = None;
         while !rest.is_empty()
             && let Some((Mnemonic::Prefix(b), None)) = split_mnemonic(mnem_tok)
         {
-            insns.push(AsmInsn {
-                mnemonic: Mnemonic::Prefix(b),
-                suffix: None,
-                seg: None,
-                operands: Vec::new(),
-                bytes: Vec::new(),
-                sym_exprs: Vec::new(),
-                label_def: None,
-            });
+            if (0x40..=0x4F).contains(&b) {
+                rex = Some(rex.unwrap_or(0x40u8) | b);
+            } else {
+                insns.push(AsmInsn {
+                    mnemonic: Mnemonic::Prefix(b),
+                    suffix: None,
+                    seg: None,
+                    rex: None,
+                    operands: Vec::new(),
+                    bytes: Vec::new(),
+                    sym_exprs: Vec::new(),
+                    label_def: None,
+                    layout: None,
+                });
+            }
             (mnem_tok, rest) = match rest.find(char::is_whitespace) {
                 Some(p) => (&rest[..p], rest[p..].trim()),
                 None => (rest, ""),
             };
         }
+        // The rest of the statement reads the mnemonic as text (the direct
+        // branches below), so resolve its case once here.
+        let folded = fold_mnemonic_case(mnem_tok);
+        let mnem_tok = folded.as_deref().unwrap_or(mnem_tok);
         let (mnemonic, suffix) = split_mnemonic(mnem_tok)
             .ok_or_else(|| format!("inline asm: unsupported instruction `{mnem_tok}`"))?;
-        // A direct `call` / `jmp` / `jcc` to a symbol name is a symbol
-        // reference (basic-asm `call schedule`); the target is resolved to a
-        // rel32 by a relocation, not parsed as a register / immediate /
-        // memory operand. A name the template defines as a label resolves
-        // locally instead. The name may embed operand references (`call
-        // __get_user_%c0`), which are substituted at emit time, so the text
-        // is kept verbatim here.
+        // A direct `call` / `jmp` / `jcc` to a symbol name or to an expression
+        // over symbols and labels (`call schedule`, `jmp sym + 4`) is a symbol
+        // reference; the target is resolved to a rel32 by a relocation, not
+        // parsed as a register / immediate / memory operand. A name the
+        // template defines as a label resolves locally instead. The name may
+        // embed operand references (`call __get_user_%c0`), which are
+        // substituted at emit time, so the text is kept verbatim here.
         let is_symbol_target = !rest.is_empty()
-            && super::super::ssa::emit_common::is_asm_symbol_template(rest)
+            && (crate::c5::asm::is_asm_symbol_template(rest)
+                || crate::c5::asm::is_asm_branch_expr(rest))
             && reg_by_name(rest).is_none()
             && !names.contains(&rest);
         if (matches!(
@@ -2495,10 +2794,12 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 mnemonic,
                 suffix,
                 seg: None,
+                rex,
                 operands: Vec::new(),
                 bytes: Vec::new(),
                 sym_exprs: alloc::vec![alloc::string::String::from(rest)],
                 label_def: None,
+                layout: None,
             });
             continue;
         }
@@ -2534,8 +2835,13 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 };
                 // AT&T's indirect-branch marker `*` selects no encoding of
                 // its own -- the operand kind does -- so it is stripped
-                // before the operand forms are matched.
-                let tok = tok.strip_prefix('*').unwrap_or(tok);
+                // before the operand forms are matched. It does decide how
+                // a bare address reads: `jmp 0x1234` branches there,
+                // `jmp *0x1234` through the word stored there.
+                let (tok, indirect) = match tok.strip_prefix('*') {
+                    Some(rest) => (rest, true),
+                    None => (tok, false),
+                };
                 let next = u8::try_from(sym_exprs.len())
                     .map_err(|_| String::from("inline asm: too many symbol operands"))?;
                 // `$expr`: a symbol expression the instruction takes as an
@@ -2561,7 +2867,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 // absolute memory reference without the `$` an immediate
                 // carries. The literal form is the whole address; a symbol
                 // form takes a relocation in the displacement field.
-                if !takes_bare_address(mnem_tok) && !tok.starts_with('%') {
+                if (indirect || !takes_bare_address(mnem_tok)) && !tok.starts_with('%') {
                     if let Some(v) = parse_int(tok)
                         && let Ok(disp) = i32::try_from(v)
                     {
@@ -2579,7 +2885,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 }
                 // A bare `%cN` / `%PN` dereferences, except where the
                 // instruction consumes the value as an address.
-                operands.push(match parse_operand(tok, &names)? {
+                operands.push(match parse_operand(tok, &names, file_scope)? {
                     AsmOpnd::RefConst { idx, symbolic } if !takes_bare_address(mnem_tok) => {
                         AsmOpnd::AbsMemRef { idx, symbolic }
                     }
@@ -2592,10 +2898,12 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
             mnemonic,
             suffix,
             seg,
+            rex,
             operands,
             bytes: Vec::new(),
             sym_exprs,
             label_def: None,
+            layout: None,
         });
     }
     Ok(insns)
@@ -2630,8 +2938,10 @@ fn strip_evex_decorators<'a>(op: &'a str, decor: &mut EvexDecor) -> Result<&'a s
         let (head, group) = (body[..at].trim_end(), &body[at + 1..]);
         match group {
             "z" => decor.zeroing = true,
-            _ if group.starts_with("%k") => {
-                let Some(k) = mask_by_name(&group[1..]) else {
+            // `{%kN}` or, in extended asm, the escaped `{%%kN}`.
+            _ if group.starts_with("%k") || group.starts_with("%%k") => {
+                let name = group.strip_prefix("%%").unwrap_or(&group[1..]);
+                let Some(k) = mask_by_name(name) else {
                     return Err(format!("inline asm: `{{{group}}}` names no mask register"));
                 };
                 if k == 0 {
@@ -2673,22 +2983,36 @@ fn resolve_evex(
     operands: &[AsmOpnd],
     decor: EvexDecor,
 ) -> Result<Mnemonic, String> {
+    // An opmask operand of a vector instruction (a compare or test
+    // destination, a mask <-> vector move) has only an EVEX form; the `k*`
+    // set itself is VEX-encoded and keeps its own arms.
+    let native_mask = matches!(mnemonic, Mnemonic::MaskOp { .. } | Mnemonic::Kmov { .. });
     let evex_reg = operands.iter().any(|o| match *o {
-        AsmOpnd::Reg { reg, .. } => super::evex::reg_needs_evex(reg),
+        AsmOpnd::Reg { reg, .. } => {
+            super::evex::reg_needs_evex(reg) || (!native_mask && is_mask_reg(reg))
+        }
         _ => false,
     });
     // The VEX packed shift by immediate reads its source from a register only;
-    // AVX-512 added the memory-source form.
-    let evex_only_operand = matches!(mnemonic, Mnemonic::VexShiftImm { .. })
-        && operands.iter().any(|o| {
-            matches!(
-                o,
-                AsmOpnd::Mem { .. }
-                    | AsmOpnd::AbsMem { .. }
-                    | AsmOpnd::IndexMem { .. }
-                    | AsmOpnd::SymMem { .. }
-            )
-        });
+    // AVX-512 added the memory-source form. The count of a variable-count
+    // shift is the one memory position VEX does encode, so memory there keeps
+    // the VEX form.
+    let is_mem = |o: &AsmOpnd| {
+        matches!(
+            o,
+            AsmOpnd::Mem { .. }
+                | AsmOpnd::AbsMem { .. }
+                | AsmOpnd::IndexMem { .. }
+                | AsmOpnd::SymMem { .. }
+        )
+    };
+    let evex_only_operand = match mnemonic {
+        Mnemonic::VexShiftImm { var_opcode, .. } => {
+            let count_mem = operands.first().is_some_and(&is_mem);
+            operands.iter().any(is_mem) && !(var_opcode.is_some() && count_mem)
+        }
+        _ => false,
+    };
     let mut f = match mnemonic {
         Mnemonic::Evex(f) => f,
         _ if evex_reg || evex_only_operand || decor.any() => {
@@ -2813,16 +3137,17 @@ fn modrm_mem(code: &mut Vec<u8>, reg: u8, base: u8, disp: i32, n: i32) {
 }
 
 /// The r/m addressing of a memory operand for the arms below: `disp(%base)`,
-/// the scaled-index forms, and the RIP-relative one.
+/// the scaled-index forms, the RIP-relative one, and the absolute address.
 #[derive(Clone, Copy)]
 pub(super) struct MemRm {
-    /// Base register, or `None` for a RIP-relative or base-less reference.
+    /// Base register, or `None` for a RIP-relative, absolute, or base-less
+    /// scaled-index reference.
     base: Option<u8>,
     /// Scaled index register and its scale.
     index: Option<(u8, u8)>,
     disp: i32,
-    /// A base-less reference is RIP-relative without an index and an absolute
-    /// SIB (base=101, mod=00) with one.
+    /// A reference with no base and no index is RIP-relative when set and an
+    /// absolute address otherwise.
     riprel: bool,
 }
 
@@ -2855,6 +3180,12 @@ impl MemRm {
                 disp,
                 riprel: true,
             }),
+            Concrete::AbsMem { disp, .. } => Some(MemRm {
+                base: None,
+                index: None,
+                disp,
+                riprel: false,
+            }),
             _ => None,
         }
     }
@@ -2869,22 +3200,53 @@ impl MemRm {
         self.index.is_some_and(|(i, _)| i >= 8)
     }
 
-    /// Emit the ModR/M (plus SIB / displacement) with ModRM.reg = `reg`.
-    /// RIP-relative is mod=00, r/m=101 with a disp32.
-    fn emit(self, code: &mut Vec<u8>, reg: u8) {
-        self.emit_scaled(code, reg, 1);
+    /// Emit the ModR/M (plus SIB / displacement) with ModRM.reg = `reg` at
+    /// address size `addr`, routing a 16-bit address through the fixed
+    /// base / index pairs. RIP-relative is mod=00, r/m=101 with a disp32; an
+    /// absolute address is mod=00, r/m=110 with a disp16 at the 16-bit
+    /// address size and mod=00, r/m=101 with a disp32 outside long mode,
+    /// where that encoding is not RIP-relative.
+    fn emit(
+        self,
+        code: &mut Vec<u8>,
+        mode: super::table::Mode,
+        addr: u8,
+        reg: u8,
+    ) -> Result<(), String> {
+        if addr == 2 {
+            if self.riprel {
+                return Err(String::from(
+                    "inline asm: RIP-relative addressing exists only in 64-bit mode",
+                ));
+            }
+            let (bytes, n) = super::table::modrm_mem16(reg, self.base, self.index, self.disp)?;
+            code.extend_from_slice(&bytes[..n]);
+        } else if (self.base, self.index, self.riprel) == (None, None, false)
+            && mode != super::table::Mode::Bits64
+        {
+            code.push(((reg & 7) << 3) | 5);
+            code.extend_from_slice(&self.disp.to_le_bytes());
+        } else {
+            self.emit_scaled(code, reg, 1);
+        }
+        Ok(())
     }
 
     /// As [`MemRm::emit`], with `n` the EVEX disp8 scale (see [`disp8_of`]).
-    /// RIP-relative takes a disp32 whatever the tuple type, so `n` does not
-    /// reach it.
+    /// RIP-relative and the long-mode absolute form (mod=00, r/m=100, SIB
+    /// base=101 index=100) take a disp32 whatever the tuple type, so `n` does
+    /// not reach them.
     pub(super) fn emit_scaled(self, code: &mut Vec<u8>, reg: u8, n: i32) {
         match (self.base, self.index) {
             (Some(base), None) => modrm_mem(code, reg, base, self.disp, n),
             (base, Some((index, scale))) => modrm_sib(code, reg, base, index, scale, self.disp, n),
             (None, None) => {
-                debug_assert!(self.riprel);
-                code.push(((reg & 7) << 3) | 5);
+                if self.riprel {
+                    code.push(((reg & 7) << 3) | 5);
+                } else {
+                    code.push(((reg & 7) << 3) | 4);
+                    code.push(0x25);
+                }
                 code.extend_from_slice(&self.disp.to_le_bytes());
             }
         }
@@ -2982,6 +3344,8 @@ fn to_table(
         M::Dec => "dec",
         M::Rdtsc => "rdtsc",
         M::Rdtscp => "rdtscp",
+        M::Cpuid => "cpuid",
+        M::Xgetbv => "xgetbv",
         M::Nop => "nop",
         M::Cli => "cli",
         M::Sti => "sti",
@@ -3005,6 +3369,8 @@ fn to_table(
     let tops: Vec<Opnd> = match mnemonic {
         M::Rdtsc
         | M::Rdtscp
+        | M::Cpuid
+        | M::Xgetbv
         | M::Nop
         | M::Cli
         | M::Sti
@@ -3136,28 +3502,6 @@ fn table_opnd(c: &Concrete) -> super::table::Opnd {
     }
 }
 
-/// Re-read a catalogue mnemonic that matched as written (`suffix` is `None`)
-/// as an AT&T base plus size suffix, for the case where the two spellings name
-/// different form sets. Yields the base name, its width, and the operands, or
-/// `None` when the token does not split into another catalogue mnemonic.
-fn retry_as_suffixed(
-    name: &str,
-    suffix: Option<AsmRegSize>,
-    ops: &[Concrete],
-) -> Option<(&'static str, Option<u8>, Vec<super::table::Opnd>)> {
-    if suffix.is_some() {
-        return None;
-    }
-    let (base, size) = match name.as_bytes().last()? {
-        b'b' => (&name[..name.len() - 1], AsmRegSize::Byte),
-        b'w' => (&name[..name.len() - 1], AsmRegSize::Word),
-        b'l' => (&name[..name.len() - 1], AsmRegSize::Long),
-        b'q' => (&name[..name.len() - 1], AsmRegSize::Quad),
-        _ => return None,
-    };
-    to_table_generic(table_mnemonic(base)?, Some(size), ops)
-}
-
 /// Bytes an encoding places after its immediate field. x86 puts the immediate
 /// last, save for the direct far branch, whose 16-bit selector trails the
 /// offset. The emitter needs it to settle a symbol immediate's field width by
@@ -3169,16 +3513,46 @@ pub(crate) fn imm_field_tail(mnemonic: Mnemonic) -> usize {
     }
 }
 
-/// Encode one resolved instruction into `code`. Operands are in AT&T
-/// order. Returns an error for an unsupported mnemonic / operand form.
+/// Address size of an instruction's memory operand in bytes: the width of the
+/// base or index register it names, or the mode default when the operand names
+/// no register or the register comes from a template operand (always 64-bit).
+/// `encode_in` emits the `67` prefix when this differs from the mode default.
+pub(crate) fn addr_size(insn: &AsmInsn, mode: super::table::Mode) -> u8 {
+    let of = |b: AsmMemBase| match b {
+        AsmMemBase::Reg { size, .. } => Some(size.bytes()),
+        AsmMemBase::Ref(_) => None,
+    };
+    insn.operands
+        .iter()
+        .find_map(|o| match *o {
+            AsmOpnd::Mem { base, index, .. } | AsmOpnd::SymMem { base, index, .. } => {
+                of(base).or_else(|| index.and_then(of))
+            }
+            AsmOpnd::IndexMem { index, .. } => of(index),
+            _ => None,
+        })
+        .unwrap_or_else(|| mode.addrsize())
+}
+
+/// Encode one resolved instruction into `code` in 64-bit mode. Operands are in
+/// AT&T order; `addr` is the address size in bytes the memory operand was
+/// written at, from [`addr_size`]. Returns an error for an unsupported
+/// mnemonic / operand form.
 pub(crate) fn encode(
     code: &mut Vec<u8>,
+    addr: u8,
     mnemonic: Mnemonic,
     suffix: Option<AsmRegSize>,
     ops: &[Concrete],
 ) -> Result<(), String> {
-    let mode = super::table::Mode::Bits64;
-    encode_in(code, mode, mode.addrsize(), mnemonic, suffix, ops)
+    encode_in(
+        code,
+        super::table::Mode::Bits64,
+        addr,
+        mnemonic,
+        suffix,
+        ops,
+    )
 }
 
 /// `mov` between the accumulator and an absolute address: the `A0`..`A3`
@@ -3271,27 +3645,8 @@ pub(crate) fn encode_in(
         // it to the catalogue enum at this one boundary.
         let mnem = super::table::Mnem::from_name(name)
             .ok_or_else(|| format!("inline asm: unknown catalogue mnemonic `{name}`"))?;
-        match super::table::encode_in(mode, addr, mnem, width, &tops) {
-            Ok(bytes) => {
-                code.extend_from_slice(&bytes);
-                return Ok(());
-            }
-            // A catalogue name matched as written may still be an AT&T
-            // suffixed spelling of a shorter one whose forms differ: the
-            // Intel-syntax `pushw` covers only the imm16 row, while AT&T
-            // `pushw %ax` is `push` at word width. Retry that reading before
-            // reporting the operands unencodable.
-            Err(e) => match retry_as_suffixed(name, suffix, ops) {
-                Some((base, w, btops)) => {
-                    let bm = super::table::Mnem::from_name(base).ok_or_else(|| {
-                        format!("inline asm: unknown catalogue mnemonic `{base}`")
-                    })?;
-                    code.extend_from_slice(&super::table::encode_in(mode, addr, bm, w, &btops)?);
-                    return Ok(());
-                }
-                None => return Err(e),
-            },
-        }
+        code.extend_from_slice(&super::table::encode_in(mode, addr, mnem, width, &tops)?);
+        return Ok(());
     }
     let at = code.len();
     encode_bespoke(code, mode, addr, mnemonic, suffix, ops)?;
@@ -3329,6 +3684,19 @@ fn encode_bespoke(
     suffix: Option<AsmRegSize>,
     ops: &[Concrete],
 ) -> Result<(), String> {
+    // Address-size prefix: `67` selects the non-default address size, ahead
+    // of any operand-size prefix an arm emits. A form with no memory operand
+    // addresses nothing and takes none.
+    if addr != mode.addrsize()
+        && ops.iter().any(|o| {
+            matches!(
+                o,
+                Concrete::Mem { .. } | Concrete::AbsMem { .. } | Concrete::IndexMem { .. }
+            )
+        })
+    {
+        code.push(0x67);
+    }
     match mnemonic {
         // Raw bytes carry their payload on the `AsmInsn`, not in `ops`; the
         // caller emits them directly and never routes them here.
@@ -3409,7 +3777,7 @@ fn encode_bespoke(
             code.extend_from_slice(&[0x0F, 0x38, opcode]);
             match rm {
                 Ok(reg) => code.push(modrm_reg(acc, reg)),
-                Err(mr) => mr.emit(code, acc),
+                Err(mr) => mr.emit(code, mode, addr, acc)?,
             }
             Ok(())
         }
@@ -3460,7 +3828,7 @@ fn encode_bespoke(
                 code.push(rex(rex_w, false, mr.rex_x(), mr.rex_b()));
             }
             code.push(opcode);
-            mr.emit(code, ext);
+            mr.emit(code, mode, addr, ext)?;
             Ok(())
         }
         Mnemonic::FarBranch { ext, far, opw } => {
@@ -3507,7 +3875,7 @@ fn encode_bespoke(
                 code.push(rex(rex_w, false, mr.rex_x(), mr.rex_b()));
             }
             code.push(0xFF);
-            mr.emit(code, ext);
+            mr.emit(code, mode, addr, ext)?;
             Ok(())
         }
         Mnemonic::MemExt0F { opcode, ext, rex_w } => {
@@ -3521,7 +3889,7 @@ fn encode_bespoke(
             }
             code.push(0x0F);
             code.push(opcode);
-            mr.emit(code, ext);
+            mr.emit(code, mode, addr, ext)?;
             Ok(())
         }
         Mnemonic::InvMem { opcode } => {
@@ -3545,7 +3913,7 @@ fn encode_bespoke(
                 code.push(rex(false, gpr >= 8, mr.rex_x(), mr.rex_b()));
             }
             code.extend_from_slice(&[0x0F, 0x38, opcode]);
-            mr.emit(code, gpr & 7);
+            mr.emit(code, mode, addr, gpr & 7)?;
             Ok(())
         }
         Mnemonic::SizedNullary { opcode, opw, stack } => {
@@ -3554,12 +3922,37 @@ fn encode_bespoke(
             } else {
                 mode.opsize()
             };
+            // `lret $imm` is the far return's CA iw form; the other members
+            // take no operands.
+            let imm = match (opcode, ops) {
+                (_, []) => None,
+                (0xCB, [Concrete::Imm(v)]) => Some(*v),
+                (0xCB, _) => {
+                    return Err(String::from(
+                        "inline asm: `lret` takes an immediate or no operand",
+                    ));
+                }
+                _ => {
+                    return Err(String::from("inline asm: this mnemonic takes no operands"));
+                }
+            };
             match opw.unwrap_or(dflt) {
                 w if w == dflt => {}
                 8 => code.push(rex(true, false, false, false)),
                 _ => code.push(0x66),
             }
-            code.push(opcode);
+            match imm {
+                None => code.push(opcode),
+                Some(v) => {
+                    if !(-0x8000..=0xffff).contains(&v) {
+                        return Err(format!(
+                            "inline asm: far return immediate `{v}` does not fit 16 bits"
+                        ));
+                    }
+                    code.push(0xCA);
+                    code.extend_from_slice(&(v as u16).to_le_bytes());
+                }
+            }
             Ok(())
         }
         Mnemonic::Int => {
@@ -3617,9 +4010,35 @@ fn encode_bespoke(
                         code.push(rex(false, v_field >= 8, mr.rex_x(), mr.rex_b()));
                     }
                     code.extend_from_slice(&[0x0F, opcode]);
-                    mr.emit(code, v_field & 7);
+                    mr.emit(code, mode, addr, v_field & 7)?;
                 }
             }
+            Ok(())
+        }
+        Mnemonic::SseSignMask { prefix, opcode } => {
+            // `<op> %xmm_src, %r32_dst`: <prefix> [REX] 0F <opcode> /r, with
+            // the general register in ModRM.reg and the vector in r/m. A high
+            // general register sets REX.R, a high vector REX.B.
+            let [src, dst] = two(ops)?;
+            let (Concrete::Reg { reg: d, .. }, Concrete::Reg { reg: s, .. }) = (dst, src) else {
+                return Err(String::from(
+                    "inline asm: this SSE op takes a vector source and a general register",
+                ));
+            };
+            if !(XMM_BASE..XMM_BASE + 16).contains(&s) || d >= XMM_BASE {
+                return Err(String::from(
+                    "inline asm: this SSE op takes a vector source and a general register",
+                ));
+            }
+            let s = s - XMM_BASE;
+            if prefix != 0 {
+                code.push(prefix);
+            }
+            if d >= 8 || s >= 8 {
+                code.push(rex(false, d >= 8, false, s >= 8));
+            }
+            code.extend_from_slice(&[0x0F, opcode]);
+            code.push(modrm_reg(d & 7, s & 7));
             Ok(())
         }
         Mnemonic::Sse2Rr {
@@ -3670,7 +4089,7 @@ fn encode_bespoke(
                     }
                     escape(code);
                     code.push(opcode);
-                    mr.emit(code, d & 7);
+                    mr.emit(code, mode, addr, d & 7)?;
                 }
                 (None, None) => {
                     return Err(String::from(
@@ -3724,7 +4143,7 @@ fn encode_bespoke(
                         code.push(rex(false, dn >= 8, mr.rex_x(), mr.rex_b()));
                     }
                     opcode(code, op);
-                    mr.emit(code, dn & 7);
+                    mr.emit(code, mode, addr, dn & 7)?;
                 }
                 (Some(sn), _, None, Some(mr)) => {
                     let op = dir(store_op, "store")?;
@@ -3732,7 +4151,7 @@ fn encode_bespoke(
                         code.push(rex(false, sn >= 8, mr.rex_x(), mr.rex_b()));
                     }
                     opcode(code, op);
-                    mr.emit(code, sn & 7);
+                    mr.emit(code, mode, addr, sn & 7)?;
                 }
                 _ => {
                     return Err(String::from(
@@ -3767,7 +4186,12 @@ fn encode_bespoke(
                 return Err(String::from("inline asm: SSE immediate expected"));
             };
             let (vector, other) = if store { (src, dst) } else { (dst, src) };
-            let Some(v) = xmm(vector) else {
+            // ModRM.reg holds the vector operand, or a general register for
+            // the `0F C5` word extract, whose r/m holds the vector.
+            let Some(v) = xmm(vector).or(match vector {
+                Concrete::Reg { reg, .. } if *reg < 16 => Some(*reg),
+                _ => None,
+            }) else {
                 return Err(String::from(
                     "inline asm: this SSE op's vector operand must be an XMM register",
                 ));
@@ -3804,7 +4228,7 @@ fn encode_bespoke(
                     }
                     escape(code);
                     code.push(opcode);
-                    mr.emit(code, v & 7);
+                    mr.emit(code, mode, addr, v & 7)?;
                 }
                 (None, None) => {
                     return Err(String::from(
@@ -3815,7 +4239,11 @@ fn encode_bespoke(
             code.push(*ib as u8);
             Ok(())
         }
-        Mnemonic::SseShiftImm { opcode, digit } => {
+        Mnemonic::SseShiftImm {
+            opcode,
+            digit,
+            var_opcode,
+        } => {
             // `<op> $imm, %xmm`: 66 [REX.B] 0F <opcode> /digit ib. The opcode
             // extension `digit` rides ModRM.reg, the xmm sits in r/m.
             let xmm = |c: &Concrete| match c {
@@ -3827,11 +4255,36 @@ fn encode_bespoke(
             let [imm, reg] = ops else {
                 return Err(String::from("inline asm: packed shift needs $imm, %xmm"));
             };
-            let Concrete::Imm(ib) = imm else {
-                return Err(String::from("inline asm: packed shift immediate expected"));
-            };
             let Some(r) = xmm(reg) else {
                 return Err(String::from("inline asm: packed shift operand must be xmm"));
+            };
+            // `<op> %xmm_count, %xmm`: 66 [REX] 0F <var_opcode> /r, the
+            // destination in ModRM.reg and the count in r/m.
+            let Concrete::Imm(ib) = imm else {
+                let Some(var) = var_opcode else {
+                    return Err(String::from("inline asm: packed shift immediate expected"));
+                };
+                let (reg_count, mem_count) = (xmm(imm), MemRm::of(imm));
+                let (x, b) = match (reg_count, &mem_count) {
+                    (Some(c), _) => (false, c >= 8),
+                    (None, Some(mr)) => (mr.rex_x(), mr.rex_b()),
+                    (None, None) => {
+                        return Err(String::from(
+                            "inline asm: packed shift count must be an immediate, xmm or memory",
+                        ));
+                    }
+                };
+                code.push(0x66);
+                if r >= 8 || x || b {
+                    code.push(rex(false, r >= 8, x, b));
+                }
+                code.extend_from_slice(&[0x0F, var]);
+                match (reg_count, mem_count) {
+                    (Some(c), _) => code.push(modrm_reg(r & 7, c & 7)),
+                    (None, Some(mr)) => mr.emit(code, mode, addr, r & 7)?,
+                    (None, None) => unreachable!("checked above"),
+                }
+                return Ok(());
             };
             code.push(0x66);
             if r >= 8 {
@@ -3840,6 +4293,113 @@ fn encode_bespoke(
             code.extend_from_slice(&[0x0F, opcode]);
             code.push(modrm_reg(digit, r & 7));
             code.push(*ib as u8);
+            Ok(())
+        }
+        Mnemonic::MaskOp {
+            pp,
+            map,
+            w,
+            opcode,
+            l,
+            vvvv,
+            imm,
+        } => {
+            let bad =
+                || String::from("inline asm: an opmask instruction takes `%k0`..`%k7` operands");
+            let (ib, rest) = match (imm, ops) {
+                (true, [Concrete::Imm(v), rest @ ..]) => (Some(*v as u8), rest),
+                (true, _) => {
+                    return Err(String::from(
+                        "inline asm: an opmask shift takes an immediate count",
+                    ));
+                }
+                (false, _) => (None, ops),
+            };
+            let (src2, src1, dst) = match (vvvv, rest) {
+                (true, [s2, s1, d]) => (s2, Some(s1), d),
+                (false, [s, d]) => (s, None, d),
+                _ => return Err(String::from("inline asm: opmask operand count")),
+            };
+            let (Some(rm), Some(reg)) = (mask_reg_num(src2), mask_reg_num(dst)) else {
+                return Err(bad());
+            };
+            let v = match src1 {
+                Some(o) => mask_reg_num(o).ok_or_else(bad)?,
+                None => 0,
+            };
+            emit_vex(code, false, false, false, map, w, v, l, pp);
+            code.push(opcode);
+            code.push(modrm_reg(reg, rm));
+            code.extend(ib);
+            Ok(())
+        }
+        Mnemonic::Kmov { width } => {
+            let [src, dst] = two(ops)?;
+            // Prefix selections: `(pp, w)` of the opmask / memory pair
+            // (90 load, 91 store) and of the general-register pair (92 in,
+            // 93 out). The general register is 32-bit except under `kmovq`.
+            let (kpp, kw) = (u8::from(matches!(width, 1 | 4)), width >= 4);
+            let gpp = match width {
+                1 => 1,
+                2 => 0,
+                _ => 3,
+            };
+            let gw = width == 8;
+            let gpr = |c: &Concrete| match *c {
+                Concrete::Reg { reg, size } if reg < MMX_BASE => Some((reg, size)),
+                _ => None,
+            };
+            let gsize = if width == 8 {
+                AsmRegSize::Quad
+            } else {
+                AsmRegSize::Long
+            };
+            let check = |s: AsmRegSize| {
+                (s == gsize).then_some(()).ok_or_else(|| {
+                    format!(
+                        "inline asm: `kmov` takes a {}-bit general register",
+                        gsize.bytes() * 8
+                    )
+                })
+            };
+            match (mask_reg_num(&src), mask_reg_num(&dst)) {
+                (Some(s), Some(d)) => {
+                    emit_vex(code, false, false, false, 1, kw, 0, 0, kpp);
+                    code.extend([0x90, modrm_reg(d, s)]);
+                }
+                (None, Some(d)) => {
+                    if let Some((g, size)) = gpr(&src) {
+                        check(size)?;
+                        emit_vex(code, false, false, g >= 8, 1, gw, 0, 0, gpp);
+                        code.extend([0x92, modrm_reg(d, g)]);
+                    } else {
+                        let mr = MemRm::of(&src)
+                            .ok_or_else(|| String::from("inline asm: bad `kmov` source operand"))?;
+                        emit_vex(code, false, mr.rex_x(), mr.rex_b(), 1, kw, 0, 0, kpp);
+                        code.push(0x90);
+                        mr.emit(code, mode, addr, d)?;
+                    }
+                }
+                (Some(s), None) => {
+                    if let Some((g, size)) = gpr(&dst) {
+                        check(size)?;
+                        emit_vex(code, g >= 8, false, false, 1, gw, 0, 0, gpp);
+                        code.extend([0x93, modrm_reg(g, s)]);
+                    } else {
+                        let mr = MemRm::of(&dst).ok_or_else(|| {
+                            String::from("inline asm: bad `kmov` destination operand")
+                        })?;
+                        emit_vex(code, false, mr.rex_x(), mr.rex_b(), 1, kw, 0, 0, kpp);
+                        code.push(0x91);
+                        mr.emit(code, mode, addr, s)?;
+                    }
+                }
+                (None, None) => {
+                    return Err(String::from(
+                        "inline asm: `kmov` needs an opmask register operand",
+                    ));
+                }
+            }
             Ok(())
         }
         Mnemonic::Vex { pp, map, w, opcode } => {
@@ -3870,7 +4430,7 @@ fn encode_bespoke(
                     let l = u8::from(dy || s1y);
                     emit_vex(code, d >= 8, mr.rex_x(), mr.rex_b(), map, w, s1, l, pp);
                     code.push(opcode);
-                    mr.emit(code, d & 7);
+                    mr.emit(code, mode, addr, d & 7)?;
                 }
             }
             Ok(())
@@ -3921,7 +4481,7 @@ fn encode_bespoke(
                         let pp = if w { 2 } else { 1 };
                         vex(code, d >= 8, mr.rex_x(), mr.rex_b(), pp, false);
                         code.push(if w { 0x7E } else { 0x6E });
-                        mr.emit(code, d & 7);
+                        mr.emit(code, mode, addr, d & 7)?;
                     }
                 },
                 (Some(s), None) => match gpr(&dst) {
@@ -3934,7 +4494,7 @@ fn encode_bespoke(
                         let mr = MemRm::of(&dst).ok_or(BAD_VMOV_OPND)?;
                         vex(code, s >= 8, mr.rex_x(), mr.rex_b(), 1, false);
                         code.push(if w { 0xD6 } else { 0x7E });
-                        mr.emit(code, s & 7);
+                        mr.emit(code, mode, addr, s & 7)?;
                     }
                 },
                 _ => {
@@ -3998,7 +4558,7 @@ fn encode_bespoke(
                             pp,
                         );
                         code.push(load_op);
-                        mr.emit(code, d & 7);
+                        mr.emit(code, mode, addr, d & 7)?;
                     }
                 }
             } else if let (Some((s, sy)), Some(mr)) = (vec_reg(&src), MemRm::of(&dst)) {
@@ -4015,7 +4575,7 @@ fn encode_bespoke(
                     pp,
                 );
                 code.push(store_op);
-                mr.emit(code, s & 7);
+                mr.emit(code, mode, addr, s & 7)?;
             } else {
                 return Err(String::from("inline asm: unsupported VEX move operands"));
             }
@@ -4072,7 +4632,7 @@ fn encode_bespoke(
                         pp,
                     );
                     code.push(opcode);
-                    mr.emit(code, d & 7);
+                    mr.emit(code, mode, addr, d & 7)?;
                 }
             }
             Ok(())
@@ -4127,7 +4687,7 @@ fn encode_bespoke(
                     let l = u8::from(dy || s1y || leady);
                     emit_vex(code, d >= 8, mr.rex_x(), mr.rex_b(), map, false, s1, l, pp);
                     code.push(opcode);
-                    mr.emit(code, d & 7);
+                    mr.emit(code, mode, addr, d & 7)?;
                 }
             }
             code.push(tail);
@@ -4184,13 +4744,17 @@ fn encode_bespoke(
                         pp,
                     );
                     code.push(opcode);
-                    mr.emit(code, r & 7);
+                    mr.emit(code, mode, addr, r & 7)?;
                 }
             }
             code.push(*ib as u8);
             Ok(())
         }
-        Mnemonic::VexShiftImm { opcode, digit } => {
+        Mnemonic::VexShiftImm {
+            opcode,
+            digit,
+            var_opcode,
+        } => {
             // `v-op $imm, %src, %dst`: VEX(vvvv=dst, L, pp=66, 0F) <opcode>
             // /digit ib. The destination rides VEX.vvvv, the opcode extension
             // ModRM.reg, and the source ModRM.rm.
@@ -4199,15 +4763,43 @@ fn encode_bespoke(
                     "inline asm: VEX packed shift needs $imm, %src, %dst",
                 ));
             };
-            let Concrete::Imm(ib) = imm else {
-                return Err(String::from(
-                    "inline asm: VEX packed shift immediate expected",
-                ));
-            };
             let (Some((d, dy)), Some((s, sy))) = (vec_reg(dst), vec_reg(src)) else {
                 return Err(String::from(
                     "inline asm: VEX packed shift operands must be xmm/ymm",
                 ));
+            };
+            // `v-op %xmm_count, %src, %dst`: the count is xmm/m128 whatever
+            // the destination width, so it takes ModRM.rm and the source
+            // VEX.vvvv, and L follows destination and source.
+            let Concrete::Imm(ib) = imm else {
+                let Some(var) = var_opcode else {
+                    return Err(String::from(
+                        "inline asm: VEX packed shift immediate expected",
+                    ));
+                };
+                let l = u8::from(dy || sy);
+                match vec_reg(imm) {
+                    Some((c, false)) => {
+                        emit_vex(code, d >= 8, false, c >= 8, 1, false, s, l, 1);
+                        code.push(var);
+                        code.push(modrm_reg(d & 7, c & 7));
+                    }
+                    Some(_) => {
+                        return Err(String::from("inline asm: VEX packed shift count is xmm"));
+                    }
+                    None => {
+                        let Some(mr) = MemRm::of(imm) else {
+                            return Err(String::from(
+                                "inline asm: VEX packed shift count must be an immediate, \
+                                 xmm or memory",
+                            ));
+                        };
+                        emit_vex(code, d >= 8, mr.rex_x(), mr.rex_b(), 1, false, s, l, 1);
+                        code.push(var);
+                        mr.emit(code, mode, addr, d & 7)?;
+                    }
+                }
+                return Ok(());
             };
             emit_vex(
                 code,
@@ -4263,7 +4855,7 @@ fn encode_bespoke(
                     };
                     emit_vex(code, s >= 8, mr.rex_x(), mr.rex_b(), map, w, 0, 0, 1);
                     code.push(opcode);
-                    mr.emit(code, s & 7);
+                    mr.emit(code, mode, addr, s & 7)?;
                 }
             }
             code.push(*ib as u8);
@@ -4295,7 +4887,7 @@ fn encode_bespoke(
                     };
                     emit_vex(code, d >= 8, mr.rex_x(), mr.rex_b(), map, w, s1, 0, 1);
                     code.push(opcode);
-                    mr.emit(code, d & 7);
+                    mr.emit(code, mode, addr, d & 7)?;
                 }
             }
             code.push(*ib as u8);
@@ -4364,7 +4956,7 @@ fn encode_bespoke(
                     };
                     emit_vex(code, dn >= 8, mr.rex_x(), mr.rex_b(), map, w, vvvv, 0, pp);
                     code.push(opcode);
-                    mr.emit(code, dn & 7);
+                    mr.emit(code, mode, addr, dn & 7)?;
                 }
             }
             if let Some(Concrete::Imm(v)) = ib {
@@ -4464,7 +5056,7 @@ fn encode_bespoke(
             let [src, dst] = two(ops)?;
             // `movq` with an XMM operand is the SSE quadword move, with an
             // MMX operand the MMX quadword move; neither is a GP mov.
-            if movq_xmm(code, src, dst) || movq_mmx(code, src, dst) {
+            if movq_xmm(code, mode, addr, src, dst)? || movq_mmx(code, mode, addr, src, dst)? {
                 return Ok(());
             }
             {
@@ -4500,14 +5092,11 @@ fn encode_bespoke(
                     if kind == b's'
                         && let Some(mr) = MemRm::of(&other)
                     {
-                        if addr != mode.addrsize() {
-                            code.push(0x67);
-                        }
                         if mr.rex_x() || mr.rex_b() {
                             code.push(rex(false, false, mr.rex_x(), mr.rex_b()));
                         }
                         code.push(if spec_is_src { 0x8C } else { 0x8E });
-                        mr.emit(code, spec_idx);
+                        mr.emit(code, mode, addr, spec_idx)?;
                         return Ok(());
                     }
                     let (gp, gp_size) = as_reg(other)?;
@@ -4517,8 +5106,18 @@ fn encode_bespoke(
                         ));
                     }
                     if kind == b's' {
-                        // 8C stores a segment selector to r/m, 8E loads one.
-                        prefix_rex(code, mode, gp_size, spec_idx, gp);
+                        // 8C stores a selector to r/m, 8E loads one. Both move
+                        // 16 bits, so REX.W adds nothing; 8E's source width is
+                        // the opcode's, so only 8C takes an operand-size prefix.
+                        if spec_is_src
+                            && !matches!(gp_size, AsmRegSize::Byte | AsmRegSize::Quad)
+                            && gp_size.bytes() != mode.opsize()
+                        {
+                            code.push(0x66);
+                        }
+                        if gp >= 8 {
+                            code.push(rex(false, false, false, true));
+                        }
                         code.push(if spec_is_src { 0x8C } else { 0x8E });
                     } else {
                         // Control / debug moves are inherently 64-bit; REX.W is
@@ -4646,7 +5245,7 @@ mod tests {
 
     fn enc(m: Mnemonic, suffix: Option<AsmRegSize>, ops: &[Concrete]) -> Vec<u8> {
         let mut c = Vec::new();
-        encode(&mut c, m, suffix, ops).unwrap();
+        encode(&mut c, 8, m, suffix, ops).unwrap();
         c
     }
 
@@ -4663,9 +5262,15 @@ mod tests {
 
     /// Parse a template of explicit-operand instructions (no `%N` refs),
     /// resolve them the way the emitter does (memory width from the suffix,
-    /// else a GP register operand, else quad), and encode. For templates
-    /// whose expected bytes are byte-verified against clang.
+    /// else a GP register operand, else the mode's default operand size), and
+    /// encode. For templates whose expected bytes are byte-verified against
+    /// clang.
     pub(super) fn asm_bytes(tmpl: &[u8]) -> Vec<u8> {
+        mode_asm_bytes(super::super::table::Mode::Bits64, tmpl).unwrap()
+    }
+
+    /// As [`asm_bytes`], encoded in `mode`, returning the encode error.
+    fn mode_asm_bytes(mode: super::super::table::Mode, tmpl: &[u8]) -> Result<Vec<u8>, String> {
         let mut out = Vec::new();
         for insn in parse_template(tmpl).unwrap() {
             let mem_size = insn.suffix.or_else(|| {
@@ -4675,6 +5280,7 @@ mod tests {
                     _ => None,
                 })
             });
+            let default_size = AsmRegSize::from_width(mode.stack_opsize());
             let reg_of = |b: AsmMemBase| match b {
                 AsmMemBase::Reg { num, .. } => num,
                 AsmMemBase::Ref(_) => panic!("explicit-register template expected"),
@@ -4695,21 +5301,32 @@ mod tests {
                         index: index.map(reg_of),
                         scale,
                         disp,
-                        size: mem_size.unwrap_or(AsmRegSize::Quad),
+                        size: mem_size.unwrap_or(default_size),
                     },
                     AsmOpnd::AbsMem { disp, .. } => Concrete::AbsMem {
                         disp,
-                        size: mem_size.unwrap_or(AsmRegSize::Quad),
+                        size: mem_size.unwrap_or(default_size),
                     },
                     other => panic!("unexpected operand {other:?}"),
                 })
                 .collect();
+            let at = out.len();
             if let Some(seg) = insn.seg {
                 out.push(seg);
             }
-            encode(&mut out, insn.mnemonic, insn.suffix, &ops).unwrap();
+            encode_in(
+                &mut out,
+                mode,
+                addr_size(&insn, mode),
+                insn.mnemonic,
+                insn.suffix,
+                &ops,
+            )?;
+            if let Some(rex) = insn.rex {
+                splice_rex(&mut out, at, rex).unwrap();
+            }
         }
-        out
+        Ok(out)
     }
 
     /// One operandless template encoded in `mode`, for the forms whose width
@@ -4827,6 +5444,75 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    /// The stack-adjusting returns (`ret $imm` C2 iw, `lret` / `retf` `$imm`
+    /// CA iw) and the bespoke single-memory-operand forms over an absolute
+    /// address. Bytes measured with GNU as 2.46 under each `.code` directive.
+    #[test]
+    fn ret_imm_and_absolute_memory_forms_match_gnu_as() {
+        use super::super::table::Mode::{Bits16, Bits32, Bits64};
+        #[rustfmt::skip]
+        let cases: &[(super::super::table::Mode, &[u8], &[u8])] = &[
+            (Bits64, b"ret $8",            &[0xC2, 0x08, 0x00]),
+            (Bits64, b"retw $8",           &[0x66, 0xC2, 0x08, 0x00]),
+            (Bits64, b"retq $8",           &[0xC2, 0x08, 0x00]),
+            (Bits64, b"ret $-2",           &[0xC2, 0xFE, 0xFF]),
+            (Bits64, b"ret $65535",        &[0xC2, 0xFF, 0xFF]),
+            (Bits64, b"lret $8",           &[0xCA, 0x08, 0x00]),
+            (Bits64, b"lretw $8",          &[0x66, 0xCA, 0x08, 0x00]),
+            (Bits64, b"lretl $8",          &[0xCA, 0x08, 0x00]),
+            (Bits64, b"lretq $8",          &[0x48, 0xCA, 0x08, 0x00]),
+            (Bits64, b"retf $8",           &[0xCA, 0x08, 0x00]),
+            (Bits16, b"ret $2",            &[0xC2, 0x02, 0x00]),
+            (Bits16, b"retl $2",           &[0x66, 0xC2, 0x02, 0x00]),
+            (Bits16, b"lret $2",           &[0xCA, 0x02, 0x00]),
+            (Bits16, b"lretw $2",          &[0xCA, 0x02, 0x00]),
+            (Bits16, b"lretl $2",          &[0x66, 0xCA, 0x02, 0x00]),
+            (Bits32, b"ret $2",            &[0xC2, 0x02, 0x00]),
+            (Bits32, b"retw $2",           &[0x66, 0xC2, 0x02, 0x00]),
+            (Bits32, b"lret $2",           &[0xCA, 0x02, 0x00]),
+            (Bits32, b"lretw $2",          &[0x66, 0xCA, 0x02, 0x00]),
+            (Bits16, b"ljmp *0x1234",      &[0xFF, 0x2E, 0x34, 0x12]),
+            (Bits16, b"ljmpw *0x1234",     &[0xFF, 0x2E, 0x34, 0x12]),
+            (Bits16, b"ljmpl *0x1234",     &[0x66, 0xFF, 0x2E, 0x34, 0x12]),
+            (Bits16, b"lcall *0x1234",     &[0xFF, 0x1E, 0x34, 0x12]),
+            (Bits32, b"ljmp *0x1234",      &[0xFF, 0x2D, 0x34, 0x12, 0x00, 0x00]),
+            (Bits64, b"ljmp *0x1234",      &[0xFF, 0x2C, 0x25, 0x34, 0x12, 0x00, 0x00]),
+            (Bits64, b"lcall *0x1234",     &[0xFF, 0x1C, 0x25, 0x34, 0x12, 0x00, 0x00]),
+            (Bits16, b"fnstcw 0x469",      &[0xD9, 0x3E, 0x69, 0x04]),
+            (Bits16, b"fnstsw 0x469",      &[0xDD, 0x3E, 0x69, 0x04]),
+            (Bits16, b"fldl 0x1234",       &[0xDD, 0x06, 0x34, 0x12]),
+            (Bits32, b"fnstcw 0x469",      &[0xD9, 0x3D, 0x69, 0x04, 0x00, 0x00]),
+            (Bits32, b"ldmxcsr 0x1234",    &[0x0F, 0xAE, 0x15, 0x34, 0x12, 0x00, 0x00]),
+            (Bits64, b"fnstcw 0x469",      &[0xD9, 0x3C, 0x25, 0x69, 0x04, 0x00, 0x00]),
+            (Bits64, b"fldl 0x1234",       &[0xDD, 0x04, 0x25, 0x34, 0x12, 0x00, 0x00]),
+            (Bits64, b"fstpl 0x1234",      &[0xDD, 0x1C, 0x25, 0x34, 0x12, 0x00, 0x00]),
+            (Bits64, b"ldmxcsr 0x1234",    &[0x0F, 0xAE, 0x14, 0x25, 0x34, 0x12, 0x00, 0x00]),
+            (Bits64, b"stmxcsr 0x1234",    &[0x0F, 0xAE, 0x1C, 0x25, 0x34, 0x12, 0x00, 0x00]),
+            (Bits64, b"cmpxchg16b 0x1234", &[0x48, 0x0F, 0xC7, 0x0C, 0x25, 0x34, 0x12, 0x00, 0x00]),
+            (Bits64, b"invpcid 0x1234, %%rax",
+                     &[0x66, 0x0F, 0x38, 0x82, 0x04, 0x25, 0x34, 0x12, 0x00, 0x00]),
+        ];
+        for (mode, tmpl, want) in cases {
+            let got = mode_asm_bytes(*mode, tmpl).unwrap();
+            assert_eq!(
+                got.as_slice(),
+                *want,
+                "{mode:?} {}",
+                core::str::from_utf8(tmpl).unwrap()
+            );
+        }
+        // The 16-bit immediate field bounds the value, as GNU as enforces;
+        // the other sized-nullary forms take no operands at all.
+        for (mode, tmpl) in [
+            (Bits64, b"ret $65536".as_slice()),
+            (Bits64, b"lret $65536"),
+            (Bits64, b"iret $8"),
+            (Bits64, b"pushf $8"),
+        ] {
+            assert!(mode_asm_bytes(mode, tmpl).is_err(), "{tmpl:?}");
+        }
     }
 
     #[test]
@@ -5187,36 +5873,68 @@ mod tests {
     #[test]
     fn align_directives() {
         // `.align` / `.balign` take a byte count on x86; `.p2align` an
-        // exponent. Fill and max-skip operands carry through.
-        let insns = parse_template(b"nop\n\t.align 8\n\tnop").unwrap();
-        assert_eq!(
-            insns[1].mnemonic,
-            Mnemonic::Align {
-                n: 8,
-                fill: None,
-                max: None
-            }
-        );
-        let insns = parse_template(b".p2align 4,,7").unwrap();
-        assert_eq!(
-            insns[0].mnemonic,
-            Mnemonic::Align {
-                n: 16,
-                fill: None,
-                max: Some(7)
-            }
-        );
-        let insns = parse_template(b".balign 16, 0x90").unwrap();
-        assert_eq!(
-            insns[0].mnemonic,
-            Mnemonic::Align {
-                n: 16,
-                fill: Some(0x90),
-                max: None
-            }
-        );
-        // A non-power-of-two byte count is rejected.
-        assert!(parse_template(b".align 3").is_err());
+        // exponent. Fill and max-skip operands carry through, and the `w` /
+        // `l` spellings widen the fill unit without changing the alignment
+        // operand's convention.
+        use crate::c5::asm::AsmSectionItem;
+        use crate::c5::asm::{AlignFill, AlignSpec};
+        let align = |n: u32, fill, max| {
+            Some(AsmSectionItem::Align {
+                spec: AlignSpec::Bytes(n),
+                fill,
+                max,
+                nops: crate::c5::asm::AlignNops::X86,
+            })
+        };
+        let fill = |value: u32, width: u8| Some(AlignFill { value, width });
+        let cases: &[(&[u8], Option<AsmSectionItem>)] = &[
+            (b".align 8", align(8, None, None)),
+            (b".p2align 4,,7", align(16, None, Some(7))),
+            (b".balign 16, 0x90", align(16, fill(0x90, 1), None)),
+            (
+                b".p2alignl 4, 0x12345678",
+                align(16, fill(0x12345678, 4), None),
+            ),
+            (
+                b".balignw 16, 0x1234, 3",
+                align(16, fill(0x1234, 2), Some(3)),
+            ),
+            // A zero count is an alignment of one, which moves nothing.
+            (b".align 0", align(1, None, None)),
+            (b".balign 0", align(1, None, None)),
+        ];
+        for (tmpl, want) in cases {
+            let insns = parse_template(tmpl).unwrap();
+            assert_eq!(
+                &insns[0].layout,
+                want,
+                "template {}",
+                core::str::from_utf8(tmpl).unwrap()
+            );
+        }
+        // An operand over labels is kept for the emitter to settle where the
+        // directive stands.
+        let insns = parse_template(b"nop\n\t1:\n\t.balign 1b-.").unwrap();
+        assert!(matches!(
+            insns.last().unwrap().layout,
+            Some(AsmSectionItem::Align {
+                spec: AlignSpec::Expr { pow2: false, .. },
+                ..
+            })
+        ));
+        // A non-power-of-two byte count is rejected, and GNU as has no
+        // `.alignw` / `.alignl`.
+        for t in [
+            b".align 3".as_slice(),
+            b".alignl 8".as_slice(),
+            b".alignw 8".as_slice(),
+        ] {
+            assert!(
+                parse_template(t).is_err(),
+                "{}",
+                core::str::from_utf8(t).unwrap()
+            );
+        }
     }
 
     #[test]
@@ -5292,7 +6010,7 @@ mod tests {
             [0x66, 0x41, 0x0F, 0x6E, 0xD9]
         ); // movd %r9d,%xmm3 -> REX.B
         // A non-xmm operand pair is rejected.
-        assert!(encode(&mut Vec::new(), sse(0x66, 0xEF), None, &[gp(0), gp(1)]).is_err());
+        assert!(encode(&mut Vec::new(), 8, sse(0x66, 0xEF), None, &[gp(0), gp(1)]).is_err());
         // The prefix byte selects the variant: 0xF2/0xF3 scalar, 0x66 packed
         // double, and a zero prefix the no-prefix packed single (no leading
         // byte).
@@ -5482,8 +6200,8 @@ mod tests {
         ); // movntpd %xmm1,(%rax)
         // A direction the instruction does not have is rejected, not encoded
         // as the other one.
-        assert!(encode(&mut Vec::new(), nt("movntdqa"), None, &[xmm(1), mem(0)]).is_err());
-        assert!(encode(&mut Vec::new(), nt("movntdq"), None, &[mem(0), xmm(1)]).is_err());
+        assert!(encode(&mut Vec::new(), 8, nt("movntdqa"), None, &[xmm(1), mem(0)]).is_err());
+        assert!(encode(&mut Vec::new(), 8, nt("movntdq"), None, &[mem(0), xmm(1)]).is_err());
     }
 
     #[test]
@@ -5542,7 +6260,8 @@ mod tests {
             enc(
                 Mnemonic::SseShiftImm {
                     opcode: 0x72,
-                    digit: 6
+                    digit: 6,
+                    var_opcode: Some(0xF2),
                 },
                 None,
                 &[imm(3), xmm(0)]
@@ -5553,7 +6272,8 @@ mod tests {
             enc(
                 Mnemonic::SseShiftImm {
                     opcode: 0x73,
-                    digit: 3
+                    digit: 3,
+                    var_opcode: None,
                 },
                 None,
                 &[imm(8), xmm(1)]
@@ -5564,7 +6284,8 @@ mod tests {
             enc(
                 Mnemonic::SseShiftImm {
                     opcode: 0x72,
-                    digit: 6
+                    digit: 6,
+                    var_opcode: Some(0xF2),
                 },
                 None,
                 &[imm(3), xmm(11)]
@@ -5626,7 +6347,8 @@ mod tests {
             sse_imm("psllq"),
             Some(Mnemonic::SseShiftImm {
                 opcode: 0x73,
-                digit: 6
+                digit: 6,
+                var_opcode: Some(0xF3),
             })
         );
         assert_eq!(sse_imm("not_an_op"), None);
@@ -6395,6 +7117,7 @@ mod tests {
         assert!(
             encode(
                 &mut c,
+                8,
                 vex_op("vpblendvb").unwrap(),
                 None,
                 &[Concrete::Imm(0x30), xmm(2), xmm(1), xmm(0)]
@@ -6404,6 +7127,7 @@ mod tests {
         assert!(
             encode(
                 &mut c,
+                8,
                 vex_op("vpblendvb").unwrap(),
                 None,
                 &[xmm(2), xmm(1), xmm(0)]
@@ -6454,6 +7178,7 @@ mod tests {
         assert!(
             encode(
                 &mut c,
+                8,
                 vex_op("vbroadcasti128").unwrap(),
                 None,
                 &[xmm(1), ymm(0)]
@@ -6499,10 +7224,127 @@ mod tests {
         );
     }
 
+    /// The SSE / AVX rows the distribution-configuration kernel names:
+    /// `lib/raid6/{sse2,avx2,avx512}.c`, `arch/x86/crypto/camellia-aesni-avx*`,
+    /// `arch/x86/crypto/aes-gcm-{aesni,vaes-avx2}-x86_64.S`,
+    /// `lib/crypto/x86/{nh-avx2,poly1305-x86_64-cryptogams}.S`,
+    /// `lib/crc/x86/crc16-msb-pclmul.S` and
+    /// `net/netfilter/nft_set_pipapo_avx2.c`. Bytes measured with GNU as
+    /// 2.46.1.
+    #[test]
+    fn kernel_simd_rows() {
+        #[rustfmt::skip]
+        let cases: &[(&[u8], &[u8])] = &[
+            (b"pcmpgtb %%xmm1, %%xmm0", &[0x66, 0x0F, 0x64, 0xC1]),
+            (b"pcmpgtb 16(%%rsi), %%xmm9", &[0x66, 0x44, 0x0F, 0x64, 0x4E, 0x10]),
+            (b"pcmpgtw %%xmm3, %%xmm12", &[0x66, 0x44, 0x0F, 0x65, 0xE3]),
+            (b"ptest %%xmm0, %%xmm4", &[0x66, 0x0F, 0x38, 0x17, 0xE0]),
+            (b"ptest (%%rdi), %%xmm11", &[0x66, 0x44, 0x0F, 0x38, 0x17, 0x1F]),
+            (b"vpcmpgtb %%xmm11, %%xmm12, %%xmm13", &[0xC4, 0x41, 0x19, 0x64, 0xEB]),
+            (b"vpcmpgtb %%ymm11, %%ymm12, %%ymm13", &[0xC4, 0x41, 0x1D, 0x64, 0xEB]),
+            (b"vpcmpgtw %%xmm1, %%xmm2, %%xmm3", &[0xC5, 0xE9, 0x65, 0xD9]),
+            (b"vpcmpeqb %%ymm0, %%ymm1, %%ymm2", &[0xC5, 0xF5, 0x74, 0xD0]),
+            (b"vpcmpeqw %%xmm0, %%xmm1, %%xmm2", &[0xC5, 0xF1, 0x75, 0xD0]),
+            (b"vpmuludq %%ymm12, %%ymm8, %%ymm8", &[0xC4, 0x41, 0x3D, 0xF4, 0xC4]),
+            (b"vpmuludq %%xmm5, %%xmm14, %%xmm10", &[0xC5, 0x09, 0xF4, 0xD5]),
+            (b"vpmulhw %%xmm5, %%xmm14, %%xmm10", &[0xC5, 0x09, 0xE5, 0xD5]),
+            (b"vptest %%xmm1, %%xmm0", &[0xC4, 0xE2, 0x79, 0x17, 0xC1]),
+            (b"vptest %%ymm1, %%ymm0", &[0xC4, 0xE2, 0x7D, 0x17, 0xC1]),
+            (b"vptest (%%rax), %%ymm3", &[0xC4, 0xE2, 0x7D, 0x17, 0x18]),
+            (b"vmovntdqa (%%rsi), %%ymm0", &[0xC4, 0xE2, 0x7D, 0x2A, 0x06]),
+            (b"vmovntdqa 32(%%rdi), %%xmm3", &[0xC4, 0xE2, 0x79, 0x2A, 0x5F, 0x20]),
+            (b"vmovntdqa (%%r11), %%ymm12", &[0xC4, 0x42, 0x7D, 0x2A, 0x23]),
+            // The word element pair takes the 0F map, with the general
+            // register in ModRM.reg for the extract and in r/m for the insert.
+            (b"pextrw $3, %%xmm0, %%eax", &[0x66, 0x0F, 0xC5, 0xC0, 0x03]),
+            (b"pextrw $7, %%xmm9, %%r10d", &[0x66, 0x45, 0x0F, 0xC5, 0xD1, 0x07]),
+            (b"pinsrw $2, %%eax, %%xmm3", &[0x66, 0x0F, 0xC4, 0xD8, 0x02]),
+            (b"pinsrw $5, %%r11d, %%xmm12", &[0x66, 0x45, 0x0F, 0xC4, 0xE3, 0x05]),
+        ];
+        for (tmpl, want) in cases {
+            assert_eq!(
+                asm_bytes(tmpl),
+                *want,
+                "{}",
+                core::str::from_utf8(tmpl).unwrap()
+            );
+        }
+    }
+
+    /// The sign-mask extracts: the general register is ModRM.reg and the
+    /// vector r/m, so a high general register sets REX.R and a high vector
+    /// REX.B. Bytes from `llvm-mc --triple=x86_64 --show-encoding`.
+    #[test]
+    fn sign_mask_rows() {
+        #[rustfmt::skip]
+        let cases: &[(&[u8], &[u8])] = &[
+            (b"pmovmskb %%xmm0, %%eax", &[0x66, 0x0F, 0xD7, 0xC0]),
+            (b"pmovmskb %%xmm14, %%r11d", &[0x66, 0x45, 0x0F, 0xD7, 0xDE]),
+            (b"movmskps %%xmm3, %%ecx", &[0x0F, 0x50, 0xCB]),
+            (b"movmskpd %%xmm9, %%r8d", &[0x66, 0x45, 0x0F, 0x50, 0xC1]),
+        ];
+        for (tmpl, want) in cases {
+            assert_eq!(
+                asm_bytes(tmpl),
+                *want,
+                "{}",
+                core::str::from_utf8(tmpl).unwrap()
+            );
+        }
+    }
+
+    /// The rows the instruction-set database omits or spells with an explicit
+    /// ModRM byte: SGX's leaf dispatch (`arch/x86/kernel/cpu/sgx/*.c`,
+    /// `arch/x86/entry/vdso/vdso64/vsgx.S`) and the shadow-stack stores
+    /// (`arch/x86/kernel/shstk.c`). Bytes measured with GNU as 2.46.1.
+    #[test]
+    fn sgx_and_shadow_stack_rows() {
+        #[rustfmt::skip]
+        let cases: &[(&[u8], &[u8])] = &[
+            (b"encls", &[0x0F, 0x01, 0xCF]),
+            (b"enclu", &[0x0F, 0x01, 0xD7]),
+            (b"enclv", &[0x0F, 0x01, 0xC0]),
+            (b"wrssd %%eax, (%%rdi)", &[0x0F, 0x38, 0xF6, 0x07]),
+            (b"wrssq %%rax, 8(%%rdi)", &[0x48, 0x0F, 0x38, 0xF6, 0x47, 0x08]),
+            (b"wrussd %%r10d, (%%rbx)", &[0x66, 0x44, 0x0F, 0x38, 0xF5, 0x13]),
+            (b"aadd %%eax, (%%rdi)", &[0x0F, 0x38, 0xFC, 0x07]),
+            (b"aand %%rax, (%%rdi)", &[0x66, 0x48, 0x0F, 0x38, 0xFC, 0x07]),
+            (b"movrs (%%rsi), %%rax", &[0x48, 0x0F, 0x38, 0x8B, 0x06]),
+        ];
+        for (tmpl, want) in cases {
+            assert_eq!(
+                asm_bytes(tmpl),
+                *want,
+                "{}",
+                core::str::from_utf8(tmpl).unwrap()
+            );
+        }
+    }
+
+    /// GNU as matches mnemonics without regard to case;
+    /// `arch/x86/kernel/ftrace_64.S` writes `CALL`. A token that is not a
+    /// mnemonic in either case stays unresolved.
+    #[test]
+    fn mnemonic_case_is_folded() {
+        assert_eq!(asm_bytes(b"NOP"), [0x90]);
+        assert_eq!(asm_bytes(b"RET"), [0xC3]);
+        assert_eq!(asm_bytes(b"MOVQ %%rax, %%rbx"), [0x48, 0x89, 0xC3]);
+        assert_eq!(
+            asm_bytes(b"PTEST %%xmm1, %%xmm0"),
+            [0x66, 0x0F, 0x38, 0x17, 0xC1]
+        );
+        // A direct branch to a symbol keeps that shape through the fold.
+        let insns = parse_template(b"CALL .Ldo_rebalance").unwrap();
+        assert_eq!(insns.len(), 1);
+        assert_eq!(insns[0].sym_exprs, [String::from(".Ldo_rebalance")]);
+        assert!(parse_template(b"ANNOTATE type=2").is_err());
+    }
+
     /// `mov %seg, r/m16` (8C) and `mov r/m16, %seg` (8E). A memory operand is
     /// 16-bit by opcode, so it takes no operand-size prefix; a 32-bit base
-    /// adds the address-size prefix, and a register destination keeps the
-    /// width its name spells. Bytes measured with GNU as 2.46.1.
+    /// adds the address-size prefix, and an 8C register destination keeps the
+    /// width its name spells. Neither direction takes REX.W, and 8E takes no
+    /// operand-size prefix. Bytes measured with GNU as 2.46.1.
     #[test]
     fn segment_register_moves() {
         let sreg = |n: u8| Concrete::Reg {
@@ -6543,10 +7385,64 @@ mod tests {
         );
         // movw 4(%rax), %ds loads the selector.
         assert_eq!(e(8, &[mem(0, None, 1, 4), sreg(3)]), [0x8E, 0x58, 0x04]);
-        // The register forms: the destination width alone selects 0x66.
+        // The register forms: the 8C destination width alone selects 0x66.
         let mov = |ops: &[Concrete]| enc(Mnemonic::Mov, None, ops);
         assert_eq!(mov(&[sreg(3), gp(0, AsmRegSize::Word)]), [0x66, 0x8C, 0xD8]);
         assert_eq!(mov(&[sreg(1), gp(0, AsmRegSize::Long)]), [0x8C, 0xC8]);
+        // mov %ds, %rax / mov %rax, %ds: a 64-bit GPR encodes as the 32-bit
+        // one, the opcode moving 16 bits and zero-extending.
+        assert_eq!(mov(&[sreg(3), gp(0, AsmRegSize::Quad)]), [0x8C, 0xD8]);
+        assert_eq!(mov(&[gp(0, AsmRegSize::Quad), sreg(3)]), [0x8E, 0xD8]);
+        // mov %ax, %ds / mov %eax, %ds: 8E reads 16 bits whatever the name.
+        assert_eq!(mov(&[gp(0, AsmRegSize::Word), sreg(3)]), [0x8E, 0xD8]);
+        assert_eq!(mov(&[gp(0, AsmRegSize::Long), sreg(3)]), [0x8E, 0xD8]);
+        // A high GPR takes REX.B in both directions; %r8w keeps 8C's 0x66.
+        assert_eq!(mov(&[sreg(4), gp(8, AsmRegSize::Quad)]), [0x41, 0x8C, 0xE0]);
+        assert_eq!(mov(&[sreg(4), gp(8, AsmRegSize::Long)]), [0x41, 0x8C, 0xE0]);
+        assert_eq!(
+            mov(&[sreg(4), gp(8, AsmRegSize::Word)]),
+            [0x66, 0x41, 0x8C, 0xE0]
+        );
+        assert_eq!(mov(&[gp(8, AsmRegSize::Quad), sreg(4)]), [0x41, 0x8E, 0xE0]);
+        assert_eq!(mov(&[gp(8, AsmRegSize::Word), sreg(4)]), [0x41, 0x8E, 0xE0]);
+    }
+
+    /// A 32-bit base or index takes the `67` address-size prefix in 64-bit
+    /// mode, ahead of the operand-size prefix and REX. Bytes measured with
+    /// GNU as 2.46.1.
+    #[test]
+    fn address_size_prefix_follows_the_base_register_width() {
+        let gas: &[(&[u8], &[u8])] = &[
+            (b"movl 2(%eax), %ebx", &[0x67, 0x8B, 0x58, 0x02]),
+            (b"movl (%eax), %ebx", &[0x67, 0x8B, 0x18]),
+            (b"movl (%eax,%ecx,4), %ebx", &[0x67, 0x8B, 0x1C, 0x88]),
+            (
+                b"movl 8(%eax,%ecx,8), %ebx",
+                &[0x67, 0x8B, 0x5C, 0xC8, 0x08],
+            ),
+            (b"movl 2(%r8d), %ebx", &[0x67, 0x41, 0x8B, 0x58, 0x02]),
+            (b"movl (%r8d,%r9d,2), %ebx", &[0x67, 0x43, 0x8B, 0x1C, 0x48]),
+            (b"movl 2(%esp), %ebx", &[0x67, 0x8B, 0x5C, 0x24, 0x02]),
+            (b"movl 2(%ebp), %ebx", &[0x67, 0x8B, 0x5D, 0x02]),
+            (b"movq 2(%eax), %rbx", &[0x67, 0x48, 0x8B, 0x58, 0x02]),
+            (b"movw 2(%eax), %bx", &[0x67, 0x66, 0x8B, 0x58, 0x02]),
+            (b"movb 2(%eax), %bl", &[0x67, 0x8A, 0x58, 0x02]),
+            (b"leal 4(%eax), %ebx", &[0x67, 0x8D, 0x58, 0x04]),
+            (b"addl $1, 2(%eax)", &[0x67, 0x83, 0x40, 0x02, 0x01]),
+            (b"movl %ebx, 2(%eax)", &[0x67, 0x89, 0x58, 0x02]),
+            (b"movl %gs:2(%eax), %ebx", &[0x65, 0x67, 0x8B, 0x58, 0x02]),
+            // A 64-bit base is the mode default and takes no prefix.
+            (b"movl 2(%rax), %ebx", &[0x8B, 0x58, 0x02]),
+            (b"movl (%rax,%rcx,4), %ebx", &[0x8B, 0x1C, 0x88]),
+        ];
+        for (text, want) in gas {
+            assert_eq!(
+                asm_bytes(text),
+                *want,
+                "{}",
+                core::str::from_utf8(text).unwrap()
+            );
+        }
     }
 }
 
@@ -6642,7 +7538,11 @@ mod string_and_prefix_tests {
         assert_eq!(asm_bytes(b"lcallw *8(%rbx)"), [0x66, 0xFF, 0x5B, 0x08]);
         assert_eq!(asm_bytes(b"lcall *(%rax)"), [0xFF, 0x18]);
         assert_eq!(asm_bytes(b"lcalll *(%rax)"), [0xFF, 0x18]);
+        // The `q` spelling is LLVM's, which its disassembler also prints;
+        // GNU as has no far-branch `q` suffix and writes the same encoding
+        // `rex.W lcall`. Both are accepted.
         assert_eq!(asm_bytes(b"lcallq *(%rax)"), [0x48, 0xFF, 0x18]);
+        assert_eq!(asm_bytes(b"rex.W lcall *(%rax)"), [0x48, 0xFF, 0x18]);
         // x87 load / store-and-pop of a 64-bit float (DD /0, DD /3).
         assert_eq!(asm_bytes(b"fldl (%rax)"), [0xDD, 0x00]);
         assert_eq!(asm_bytes(b"fldl 8(%rbx)"), [0xDD, 0x43, 0x08]);
@@ -6651,10 +7551,46 @@ mod string_and_prefix_tests {
         assert_eq!(asm_bytes(b"fstpl 8(%rbx)"), [0xDD, 0x5B, 0x08]);
         assert_eq!(asm_bytes(b"fstpl (%r14)"), [0x41, 0xDD, 0x1E]);
         // Far indirect jump (FF /5); the AT&T suffix sets the operand size.
+        // `ljmpq` is LLVM's spelling of the 64-bit offset form, kept beside
+        // GNU as's `rex.W ljmp`.
         assert_eq!(asm_bytes(b"ljmpl *(%rax)"), [0xFF, 0x28]);
         assert_eq!(asm_bytes(b"ljmpq *(%rax)"), [0x48, 0xFF, 0x28]);
+        assert_eq!(asm_bytes(b"rex.W ljmp *(%rax)"), [0x48, 0xFF, 0x28]);
         assert_eq!(asm_bytes(b"ljmpl *(%r13)"), [0x41, 0xFF, 0x6D, 0x00]);
         assert_eq!(asm_bytes(b"ljmpw *(%rax)"), [0x66, 0xFF, 0x28]);
+    }
+
+    /// The `rex[.WRXB]` prefix. Leading an instruction on one statement its
+    /// bits merge into that instruction's own REX byte; a statement of its
+    /// own deposits the byte and the next instruction encodes independently.
+    /// The letters name the bits in W, R, X, B order. Bytes measured with
+    /// GNU as 2.46.1.
+    #[test]
+    fn rex_prefix_forms_match_gnu_as() {
+        assert_eq!(asm_bytes(b"rex.W ljmp *(%rax)"), [0x48, 0xFF, 0x28]);
+        // The prefix's B joins the instruction's own REX, so one byte
+        // carries both and the operand register is extended.
+        assert_eq!(asm_bytes(b"rex.WB ljmp *(%rax)"), [0x49, 0xFF, 0x28]);
+        assert_eq!(asm_bytes(b"rex.W ljmp *(%r13)"), [0x49, 0xFF, 0x6D, 0x00]);
+        assert_eq!(asm_bytes(b"rex ljmp *(%rax)"), [0x40, 0xFF, 0x28]);
+        assert_eq!(asm_bytes(b"rex.R ljmp *(%rax)"), [0x44, 0xFF, 0x28]);
+        assert_eq!(asm_bytes(b"rex.W nop"), [0x48, 0x90]);
+        assert_eq!(asm_bytes(b"rex.wb nop"), [0x49, 0x90]);
+        // Standalone, and so unmerged: the `ljmp` keeps its own REX.B.
+        assert_eq!(
+            asm_bytes(b"rex.W; ljmp *(%r13)"),
+            [0x48, 0x41, 0xFF, 0x6D, 0x00]
+        );
+        // The prefix rides behind the mandatory and size prefixes, where the
+        // instruction's own REX sits.
+        assert_eq!(
+            asm_bytes(b"rex.B movsd (%rax), %xmm0"),
+            [0xF2, 0x41, 0x0F, 0x10, 0x00]
+        );
+        // Letters out of order name no prefix.
+        assert!(split_mnemonic("rex.BW").is_none());
+        assert!(split_mnemonic("rex.WW").is_none());
+        assert!(split_mnemonic("rex.").is_none());
     }
 
     /// System / SSE-control / invalidation memory forms on the 0F and 0F38
@@ -6729,6 +7665,7 @@ mod string_and_prefix_tests {
             let mut c = Vec::new();
             encode(
                 &mut c,
+                8,
                 m,
                 sfx,
                 &[Concrete::Reg {

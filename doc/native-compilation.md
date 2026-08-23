@@ -242,6 +242,43 @@ For kernel and firmware work the driver accepts the shapes those builds
 require: `-mcmodel=small|kernel|tiny`, `-mno-sse` / `-mgeneral-regs-only`
 (keep codegen off the FP/SIMD register file), `-mstrict-align`,
 `-fPIC`/`-fpic`/`-fPIE`/`-fpie`, `-mindirect-branch=` and `-mfunction-return=`
-(retpolines), `-mharden-sls=`, `-fcf-protection=branch` (`endbr64`), and
-`-mbranch-protection=bti`. Options badc does not implement are rejected rather
-than accepted and ignored, so a configure-time probe gets a truthful answer.
+(retpolines), `-mharden-sls=`, `-fcf-protection=branch` (`endbr64`),
+`-mbranch-protection=none|bti|pac-ret|standard`, and the stack-protector
+family below. Options badc does not implement are rejected rather than
+accepted and ignored, so a configure-time probe gets a truthful answer.
+
+`-fstack-protector`, `-fstack-protector-strong` and `-fstack-protector-all`
+select which functions carry a stack canary; `-fno-stack-protector` (the
+default) selects none. The per-function rule is gcc's, read off the declared
+automatic objects: a character array of at least `--param ssp-buffer-size=`
+bytes (default 8) or a call to `alloca` for the plain form, plus any array,
+any aggregate with an array member, and any object whose address the body
+takes for `strong`. The canary occupies the frame's topmost slot, between
+the locals and the saved return address; the prologue stores the guard there
+and every return path -- including a tail call's teardown -- reloads it,
+compares, and calls `__stack_chk_fail` on a mismatch.
+
+`-mstack-protector-guard=global|tls|sysreg` says where the guard value comes
+from, with `-mstack-protector-guard-reg=`, `-mstack-protector-guard-offset=`
+and `-mstack-protector-guard-symbol=` as its operands. The default follows
+the target: `%fs:0x28` on Linux/x86-64, the C library's `__stack_chk_guard`
+object elsewhere. `tls` is the x86-64 segment-relative form the kernel
+selects (`-mstack-protector-guard=tls -mstack-protector-guard-reg=gs
+-mstack-protector-guard-symbol=__ref_stack_chk_guard`); `sysreg` is the
+aarch64 form that reads a per-task offset above a system register
+(`-mstack-protector-guard-reg=sp_el0 -mstack-protector-guard-offset=N`).
+The family needs relocatable output -- the failure branch is a relocation
+against `__stack_chk_fail` -- so `--jit` and `--interp` reject it, as do the
+Windows targets, whose C library exports neither symbol.
+
+`pac-ret` signs the return address of every function that stores the link
+register: `paciasp` ahead of the prologue, `autiasp` after the last teardown
+instruction of each epilogue, where sp -- the signing modifier -- holds its
+function-entry value again. A frameless leaf never stores the link register and
+is left alone. `standard` is `bti+pac-ret`; a signed function opens with
+`paciasp`, which is itself a landing pad for the branch types a function entry
+is reached with, so it takes no separate `BTI C`. An aarch64 object built with
+either claims the matching bits in a `.note.gnu.property`
+`GNU_PROPERTY_AARCH64_FEATURE_1_AND` word. The linker intersects that word
+across inputs, so the compiler sets a bit only where it emitted the
+instructions.

@@ -3,6 +3,10 @@
 // pty.h -- Linux pseudo-terminal helpers (libutil). macOS exposes the
 // same set through <util.h>.
 
+// glibc's <pty.h> includes <termios.h>, so a program that reaches the
+// pty helpers through this header alone still sees `struct termios`.
+#include <termios.h>
+
 #ifdef __linux__
 #pragma dylib(libutil, "libutil.so.1")
 #pragma binding(libutil::openpty,   "openpty")

@@ -98,21 +98,23 @@ fn overaligned_text(src: &str, target: crate::c5::Target) -> Vec<u8> {
 }
 
 #[test]
-fn overaligned_automatic_realigns_at_the_16_byte_boundary() {
-    // 16 is the narrowest boundary the 8-byte frame slots cannot place, so it
-    // realigns like the wider ones: `and rsp, -16` is 48 83 E4 F0, and
-    // `and sp, x16, #-16` is the word 0x927CEE1F.
+fn overaligned_automatic_at_16_stays_on_the_static_frame() {
+    // 16 is met at a static frame offset: the frame base is 16-aligned and
+    // every frame region a 16-byte multiple, so no realigning prologue is
+    // emitted (`and rsp, -16` is 48 83 E4 F0; `and sp, x16, #-16` is the
+    // word 0x927CEE1F). gcc and clang place a 16-aligned automatic the same
+    // way on both targets, relying on the ABI's sp-at-call alignment.
     use crate::c5::Target;
     let src = overaligned_source_at(16);
     let x64 = overaligned_text(&src, Target::LinuxX64);
     assert!(
-        x64.windows(4).any(|w| w == [0x48, 0x83, 0xE4, 0xF0]),
-        "x86_64 realigning prologue `and rsp, -0x10` not emitted"
+        !x64.windows(4).any(|w| w == [0x48, 0x83, 0xE4, 0xF0]),
+        "16-aligned automatic must not emit the x86_64 realigning prologue"
     );
     let a64 = overaligned_text(&src, Target::LinuxAarch64);
     assert!(
-        a64.windows(4).any(|w| w == [0x1F, 0xEE, 0x7C, 0x92]),
-        "aarch64 realigning prologue `and sp, x16, #-16` not emitted"
+        !a64.windows(4).any(|w| w == [0x1F, 0xEE, 0x7C, 0x92]),
+        "16-aligned automatic must not emit the aarch64 realigning prologue"
     );
 }
 
@@ -208,8 +210,10 @@ unsigned long two_reads(void) {
     let obj = parse_native_elf(&bytes).expect("parse ET_REL");
     let words: alloc::vec::Vec<u32> = obj
         .text
-        .chunks_exact(4)
-        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| u32::from_le_bytes(*c))
         .collect();
     // Rt (bits 4:0) is allocator-chosen; the sysreg field is fixed.
     let has_mrs = |base: u32| words.iter().any(|&w| w & 0xFFFF_FFE0 == base);
@@ -252,8 +256,10 @@ int main(void) { inst_neg_zero(); inst_neg_one(); return 0; }
     let obj = parse_native_elf(&bytes).expect("parse ET_REL");
     let words: alloc::vec::Vec<u32> = obj
         .text
-        .chunks_exact(4)
-        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| u32::from_le_bytes(*c))
         .collect();
     assert!(
         words.contains(&0xd500_409f),
@@ -306,8 +312,10 @@ int lse_fetch(int i, atomic_t *v) {
     let obj = parse_native_elf(&bytes).expect("parse ET_REL");
     let words: alloc::vec::Vec<u32> = obj
         .text
-        .chunks_exact(4)
-        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| u32::from_le_bytes(*c))
         .collect();
     // Rs (bits 20:16), Rt (bits 4:0) and Rn (bits 9:5) are allocator-chosen.
     let stadd_mask = !((0x1Fu32 << 16) | (0x1F << 5));
@@ -364,8 +372,10 @@ int main(void) { unsigned int u = 0; return futex_op(1, &u); }
     let obj = parse_native_elf(&bytes).expect("parse ET_REL");
     let words: alloc::vec::Vec<u32> = obj
         .text
-        .chunks_exact(4)
-        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| u32::from_le_bytes(*c))
         .collect();
     // Rn (bits 9:5) is the allocator-chosen address register.
     let rn_mask = !(0x1Fu32 << 5);
@@ -414,8 +424,10 @@ int main(void) { unsigned long v = 0; return (int)load_zeropad(&v); }
     let obj = parse_native_elf(&bytes).expect("parse ET_REL");
     let words: alloc::vec::Vec<u32> = obj
         .text
-        .chunks_exact(4)
-        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| u32::from_le_bytes(*c))
         .collect();
     // Rn (bits 9:5) and Rt (bits 4:0) are allocator-chosen.
     let ldr_mask = !((0x1Fu32 << 5) | 0x1F);
@@ -453,8 +465,10 @@ int main(void) { unsigned t = 0, f[2] = {1, 2}; store2(&t, f); return 0; }
     let obj = parse_native_elf(&bytes).expect("parse ET_REL");
     let words: alloc::vec::Vec<u32> = obj
         .text
-        .chunks_exact(4)
-        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| u32::from_le_bytes(*c))
         .collect();
     // Rn (bits 9:5) and Rt (bits 4:0) are allocator-chosen.
     let str_mask = !((0x1Fu32 << 5) | 0x1F);
@@ -488,8 +502,10 @@ int main(void) { nop_pad(); return 0; }
     let obj = parse_native_elf(&bytes).expect("parse ET_REL");
     let nops = obj
         .text
-        .chunks_exact(4)
-        .filter(|c| u32::from_le_bytes((*c).try_into().unwrap()) == 0xd503_201f)
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .filter(|c| u32::from_le_bytes(**c) == 0xd503_201f)
         .count();
     assert!(nops >= 8, "`.rept 8` must expand to 8 nops: found {nops}");
 }
@@ -528,8 +544,10 @@ void spin(void) { __asm__ volatile("b ."); }
     let obj = parse_native_elf(&bytes).expect("parse ET_REL");
     let words: alloc::vec::Vec<u32> = obj
         .text
-        .chunks_exact(4)
-        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| u32::from_le_bytes(*c))
         .collect();
     // CBNZ Rt (bits 4:0) is allocator-chosen; the rest is the 64-bit
     // branch-to-self word with imm19 == 0.
@@ -1480,14 +1498,13 @@ int main(void) { return 0; }
 }
 
 #[test]
-fn file_scope_asm_set_rejects_a_location_value() {
+fn file_scope_asm_set_takes_a_location_value() {
     // A `.set` whose value is a location rather than an absolute (`. + 4`)
-    // gives GNU as a section-relative symbol, and a field referencing it takes
-    // a relocation against the section. badc's section symbols are absolute
-    // values, so such an assignment is diagnosed rather than emitted as an
-    // offset that would be wrong once the section is placed.
-    // TODO location-valued section symbols.
-    use crate::c5::Target;
+    // gives GNU as a section-relative symbol, and a field referencing it
+    // takes a relocation against the section. Verified against gas 2.46:
+    // `locptr` local at `.rodata.locval + 6`, the `.long` relocated there.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let src = r#"asm(".pushsection .rodata.locval, \"a\"\n"
     ".globl locbase\n"
     "locbase:\n"
@@ -1497,12 +1514,33 @@ fn file_scope_asm_set_rejects_a_location_value() {
     ".popsection\n");
 int main(void) { return 0; }
 "#;
-    let err = Compiler::with_target(src.to_string(), Target::LinuxX64)
+    let program = Compiler::with_target(src.to_string(), Target::LinuxX64)
         .compile()
-        .expect_err("a location-valued `.set` is not an absolute value");
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let sym = obj
+        .symbols
+        .iter()
+        .find(|s| s.name == "locptr")
+        .expect("`locptr` must be defined");
+    // The section reads as `RelRo`: read-only payload whose own field the
+    // loader relocates.
     assert!(
-        format!("{err:?}").contains("location"),
-        "diagnostic must name the location value: {err:?}"
+        matches!(
+            sym.section,
+            crate::c5::linker::object::NativeSymSection::RelRo
+        ),
+        "`locptr` must be defined in its read-only section: {:?}",
+        sym.section
+    );
+    assert_eq!(
+        sym.value, 6,
+        "`.set locptr, . + 4` defines a label 4 past the assignment"
     );
 }
 
@@ -1700,14 +1738,16 @@ fn static_fnptr_table_read_by_live_code_keeps_callee() {
 
 #[test]
 fn asm_named_statics_survive_dce() {
-    // A static function named only inside a live function's asm
-    // template and a static object named only in file-scope asm are
-    // referenced by the emitted sections; both must survive.
+    // A static function named in a live function's asm template and a
+    // static object named only in file-scope asm are referenced by the
+    // emitted sections; both must survive. The name has to sit in operand
+    // position: a statement's leading token is a mnemonic, and `//` opens
+    // an aarch64 comment, so neither spelling is a reference.
     let src = "\
         static int asm_fn(int x) { return x + 2; }\n\
         static long asm_blob[2] = { 0x1122334455667788L, 0 };\n\
         asm(\".pushsection .keepme,\\\"a\\\"\\n.quad asm_blob\\n.popsection\");\n\
-        void keep(void) { __asm__ volatile(\"// asm_fn\" ::: \"memory\"); }\n";
+        void keep(void) { __asm__ volatile(\"bl asm_fn\" ::: \"memory\"); }\n";
     let bytes = reloc_tu(src, crate::c5::Target::LinuxAarch64, false);
     assert!(
         bytes.windows(6).any(|w| w == b"asm_fn"),
@@ -1718,6 +1758,30 @@ fn asm_named_statics_survive_dce() {
         bytes.windows(8).any(|w| w == pat),
         "static named in file-scope asm must keep its bytes"
     );
+}
+
+#[test]
+fn noinline_holds_a_body_out_of_line() {
+    // `noinline` holds a body out of line whatever the inliner would
+    // otherwise do, so the callee keeps its own definition instead of being
+    // spliced into its only caller. A plain `inline` static of the same
+    // shape is spliced and dead-stripped, which is what the request
+    // suppresses.
+    let src = "\
+        static __attribute__((noinline)) int held_out_of_line(int x) { return x + 1; }\n\
+        static inline int spliced_away(int x) { return x + 2; }\n\
+        int caller(int x) { return held_out_of_line(x) + spliced_away(x); }\n";
+    for target in [crate::c5::Target::LinuxAarch64, crate::c5::Target::LinuxX64] {
+        let bytes = reloc_tu(src, target, true);
+        assert!(
+            bytes.windows(16).any(|w| w == b"held_out_of_line"),
+            "a noinline callee must keep its definition on {target:?}"
+        );
+        assert!(
+            !bytes.windows(12).any(|w| w == b"spliced_away"),
+            "a plain inline static of the same shape is spliced on {target:?}"
+        );
+    }
 }
 
 #[test]
@@ -1833,6 +1897,44 @@ fn dead_block_static_pointer_array_drops_with_literals() {
         obj.data_relocs.is_empty(),
         "a dead table's pointer relocations must drop"
     );
+}
+
+#[test]
+fn block_static_struct_array_extent_matches_reservation() {
+    // A deferred-size block-scope struct array reserves exactly
+    // `count * sizeof(elem)` bytes, which is not a multiple of 8 here.
+    // The emission record must claim that extent and no more: an
+    // extent rounded past the reservation runs the `.rodata` carve
+    // into the neighbouring object or into the padding the packed
+    // layout records ahead of the aligned global.
+    let src = "\
+        struct pair { char c[3]; };\n\
+        int use(const void *);\n\
+        int f(void) {\n\
+            static const struct pair xs[] = { {\"a\"}, {\"b\"}, {\"c\"} };\n\
+            return use(xs);\n\
+        }\n\
+        int g(void) {\n\
+            static const char msg[] = \"carve stays intact\";\n\
+            return use(msg);\n\
+        }\n\
+        static int aligned_tail __attribute__((aligned(64))) = 0x11223344;\n\
+        int h(void) { return use(&aligned_tail); }\n";
+    for target in [crate::c5::Target::LinuxAarch64, crate::c5::Target::LinuxX64] {
+        let bytes = reloc_tu(src, target, true);
+        assert!(
+            bytes.windows(9).any(|w| w == b"a\0\0b\0\0c\0\0"),
+            "the struct array's elements must survive contiguously"
+        );
+        assert!(
+            bytes.windows(18).any(|w| w == b"carve stays intact"),
+            "the neighbouring carved object must keep its bytes"
+        );
+        assert!(
+            bytes.windows(4).any(|w| w == 0x11223344u32.to_le_bytes()),
+            "the aligned global past the padding must keep its value"
+        );
+    }
 }
 
 #[test]
@@ -2314,6 +2416,111 @@ fn asm_main_stream_reference_binds_label_in_pushed_section() {
 }
 
 #[test]
+fn asm_label_difference_in_a_function_body_stream() {
+    // A difference of two template labels is an absolute value wherever the
+    // operand grammar takes one, including the main instruction stream of a
+    // function-body asm -- the position a `.pushsection` does not cover. The
+    // field width follows GNU as: a backward difference is a value when the
+    // instruction is assembled and takes the narrow field, a forward one
+    // keeps the wide field the encoding chose. Bytes from GNU as 2.46.1 for
+    // the same template.
+    use crate::c5::Target;
+    use crate::c5::linker::parse_native_elf;
+    let src = r#"
+        void f(void) {
+            __asm__ volatile(
+                "661:\n\t"
+                "nop\n\t"
+                "nop\n"
+                "662:\n\t"
+                ".byte 662b-661b\n\t"
+                ".short 662b-661b\n\t"
+                ".long 662b-661b\n\t"
+                ".quad 662b-661b\n\t"
+                ".byte 664f-663f\n"
+                "663:\n\t"
+                "subl $(662b - 661b), %%ebp\n\t"
+                "subl $(664f - 663b), %%ebp\n\t"
+                "movl (662b - 661b)(%%rax), %%ebx\n\t"
+                "movl (664f - 663b)(%%rax), %%ecx\n\t"
+                "nop\n"
+                "664:\n\t"
+                "nop\n"
+                ::: "memory");
+        }
+    "#;
+    let obj = parse_native_elf(&reloc_tu(src, Target::LinuxX64, false)).expect("parse ET_REL");
+    let want: &[u8] = &[
+        0x90, 0x90, // the two nops the labels bracket
+        0x02, // .byte  662b-661b
+        0x02, 0x00, // .short
+        0x02, 0x00, 0x00, 0x00, // .long
+        0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // .quad
+        0x13, // .byte 664f-663f: 19 bytes of instructions follow
+        0x83, 0xed, 0x02, // subl $2, %ebp             imm8, backward
+        0x81, 0xed, 0x13, 0x00, 0x00, 0x00, // subl $19, %ebp   imm32, forward
+        0x8b, 0x58, 0x02, // movl 2(%rax), %ebx        disp8, backward
+        0x8b, 0x88, 0x13, 0x00, 0x00, 0x00, // movl 19(%rax), %ecx  disp32, forward
+        0x90, 0x90,
+    ];
+    assert!(
+        obj.text.windows(want.len()).any(|w| w == want),
+        "template bytes not found in .text: {:02x?}",
+        obj.text
+    );
+}
+
+#[test]
+fn asm_label_difference_in_an_aarch64_function_body_stream() {
+    // The AArch64 form of the same rule: a data directive's value and an
+    // instruction's immediate both take the difference, forward or backward.
+    // The immediate field is the encoding's either way, so only the value
+    // waits on the layout. Bytes from GNU as 2.46.1 for the same template.
+    use crate::c5::Target;
+    use crate::c5::linker::parse_native_elf;
+    let src = r#"
+        void f(void) {
+            __asm__ volatile(
+                "661:\n\t"
+                "nop\n\t"
+                "nop\n"
+                "662:\n\t"
+                ".byte 662b-661b\n\t"
+                ".short 662b-661b\n\t"
+                ".word 662b-661b\n\t"
+                ".long 662b-661b\n\t"
+                ".quad 662b-661b\n\t"
+                ".byte 664f-663f\n"
+                "663:\n\t"
+                "add x0, x0, #(662b - 661b)\n\t"
+                "mov w1, #(664f - 663b)\n\t"
+                "nop\n"
+                "664:\n\t"
+                "nop\n"
+                ::: "memory");
+        }
+    "#;
+    let obj = parse_native_elf(&reloc_tu(src, Target::LinuxAarch64, false)).expect("parse ET_REL");
+    let want: &[u8] = &[
+        0x1f, 0x20, 0x03, 0xd5, 0x1f, 0x20, 0x03, 0xd5, // the two bracketed nops
+        0x08, // .byte  662b-661b
+        0x08, 0x00, // .short
+        0x08, 0x00, 0x00, 0x00, // .word: four bytes on AArch64
+        0x08, 0x00, 0x00, 0x00, // .long
+        0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // .quad
+        0x0c, // .byte 664f-663f: three instructions follow
+        0x00, 0x20, 0x00, 0x91, // add x0, x0, #8    backward
+        0x81, 0x01, 0x80, 0x52, // mov w1, #12       forward
+        0x1f, 0x20, 0x03, 0xd5, 0x1f, 0x20, 0x03, 0xd5,
+    ];
+    assert!(
+        obj.text.windows(want.len()).any(|w| w == want),
+        "template bytes not found in .text: {:02x?}",
+        obj.text
+    );
+}
+
+#[test]
 fn asm_label_address_immediate_relocates_absolute() {
     // `pushq $1f` pushes the address of a template-local label as an absolute
     // immediate: gas encodes it as `68 <imm32>` (push imm32, never the imm8
@@ -2667,6 +2874,38 @@ fn file_scope_asm_assembles_instructions_in_rodata() {
 }
 
 #[test]
+fn file_scope_asm_ignores_debug_line_directives() {
+    // `.file` / `.loc` name a source location for the debug line table and
+    // deposit no bytes; the kernel's hand-written crypto units lead with
+    // `.file`. Written case-folded, as GNU as matches directives and mnemonics.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"asm(
+        ".file \"twofish-x86_64-asm.S\"\n"
+        ".text\n"
+        "tf:\n"
+        "\t.loc 1 42 0\n"
+        "\tRET\n");
+    "#;
+    let program = Compiler::with_options(
+        src.to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    assert!(
+        bytes.windows(1).any(|w| w == [0xc3]),
+        "the body must assemble past the debug-line directives"
+    );
+}
+
+#[test]
 fn file_scope_asm_assembles_a_trampoline_body() {
     // A file-scope asm that defines a whole function in the default section --
     // `.global`/`.type` (a forward reference, before the label) then a label,
@@ -2833,15 +3072,17 @@ fn file_scope_asm_symbol_riprel_displacement_relocates_pc32() {
         0x48, 0x8b, 0x0d, 0, 0, 0, 0,
         0x48, 0x8d, 0x15, 0, 0, 0, 0,
     ];
+    // The relocated `.rodata` joins the relro stream: the template is
+    // read-only at runtime once the link resolves the fields.
     let base = obj
-        .data
+        .relro
         .windows(template.len())
         .position(|w| w == template)
         .expect("the template instructions must encode byte-identically to gas");
     // (field offset within the template, addend).
     for (field, addend) in [(4, 3), (12, -4), (19, -4), (26, 4), (33, -12)] {
         let r = obj
-            .data_relocs
+            .relro_relocs
             .iter()
             .find(|r| r.offset == (base + field) as u64)
             .unwrap_or_else(|| panic!("disp32 at template offset {field} must carry a reloc"));
@@ -2908,7 +3149,7 @@ fn asm_data_directive_quoted_symbol_matches_bare() {
             .3;
         assert_eq!(rela.len(), 2 * 24, "{target:?}: two relocations");
         let symbols = elf_symbols(&bytes);
-        for (k, r) in rela.chunks_exact(24).enumerate() {
+        for (k, r) in rela.as_chunks::<24>().0.iter().enumerate() {
             let r_offset = u64::from_le_bytes(r[0..8].try_into().unwrap());
             let r_info = u64::from_le_bytes(r[8..16].try_into().unwrap());
             let r_addend = i64::from_le_bytes(r[16..24].try_into().unwrap());
@@ -3047,6 +3288,264 @@ fn elf_section_bytes(bytes: &[u8], want: &[u8]) -> alloc::vec::Vec<u8> {
         .unwrap_or_default()
 }
 
+#[test]
+fn file_scope_asm_reference_to_global_or_weak_keeps_its_relocation() {
+    // GNU as resolves a same-section PC-relative reference in place for a
+    // name local to the unit, and for any non-weak name on a relaxable
+    // branch, which it settles while relaxing. Every other reference keeps
+    // its relocation so the link binds the definition that wins: PC32 for a
+    // data-class reference (`lea`), PLT32 for `call`, PC8 for a rel8-only
+    // branch (`loop`), which has no relaxable form. Measured against GNU as
+    // 2.46.1 on the same source.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+asm(".text\n"
+    ".weak wsym\n"
+    "wsym: ret\n"
+    ".globl gsym\n"
+    "gsym: ret\n"
+    ".globl user\n"
+    "user:\n\t"
+    "lea wsym(%rip), %rax\n\t"
+    "call wsym\n\t"
+    "jmp gsym\n\t"
+    "jne gsym\n\t"
+    "loop gsym\n"
+    "1:\tjmp 1b\n");
+int main(void) { return 0; }
+"#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    const R_X86_64_PC32: u32 = 2;
+    const R_X86_64_PLT32: u32 = 4;
+    const R_X86_64_PC8: u32 = 15;
+    let got: alloc::vec::Vec<(&str, u32, i64)> = obj
+        .text_relocs
+        .iter()
+        .map(|r| (obj.symbols[r.sym_idx].name.as_str(), r.rtype, r.addend))
+        .filter(|(n, _, _)| matches!(*n, "wsym" | "gsym"))
+        .collect();
+    assert_eq!(
+        got,
+        [
+            ("wsym", R_X86_64_PC32, -4),
+            ("wsym", R_X86_64_PLT32, -4),
+            ("gsym", R_X86_64_PC8, -1),
+        ],
+    );
+    // The `call` keeps the long form with a zeroed field; the relaxable
+    // branches to `gsym` and the numeric-label jump resolve in place.
+    let t = &obj.text;
+    assert!(t.windows(5).any(|w| w == [0xe8, 0, 0, 0, 0]), "{t:02x?}");
+    assert!(
+        !t.windows(6).any(|w| w == [0x0f, 0x85, 0, 0, 0, 0]),
+        "{t:02x?}"
+    );
+    let fold = t.windows(2).position(|w| w == [0xeb, 0xfe]).expect("eb fe");
+    assert!(!obj.text_relocs.iter().any(|r| r.offset == fold as u64 + 1));
+}
+
+#[test]
+fn aarch64_asm_branch_to_global_or_weak_keeps_its_relocation() {
+    // The same rule on AArch64: `bl` / `b` to a `.globl` or `.weak` name
+    // defined in the same section keep CALL26 / JUMP26 relocations; a
+    // numeric label is local and its branch word resolves in place.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+asm(".text\n"
+    ".globl gsym\n"
+    "gsym: ret\n"
+    ".weak wsym\n"
+    "wsym: nop\n"
+    ".globl user\n"
+    "user:\n\t"
+    "bl gsym\n\t"
+    "b gsym\n\t"
+    "bl wsym\n"
+    "1:\tb 1b\n");
+int main(void) { return 0; }
+"#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxAarch64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    const R_AARCH64_JUMP26: u32 = 282;
+    const R_AARCH64_CALL26: u32 = 283;
+    let got: alloc::vec::Vec<(&str, u32, i64)> = obj
+        .text_relocs
+        .iter()
+        .map(|r| (obj.symbols[r.sym_idx].name.as_str(), r.rtype, r.addend))
+        .filter(|(n, _, _)| matches!(*n, "wsym" | "gsym"))
+        .collect();
+    assert_eq!(
+        got,
+        [
+            ("gsym", R_AARCH64_CALL26, 0),
+            ("gsym", R_AARCH64_JUMP26, 0),
+            ("wsym", R_AARCH64_CALL26, 0),
+        ],
+    );
+    // `b 1b` folds to `b .` (0x14000000) and carries no relocation.
+    let fold = obj
+        .text
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .enumerate()
+        .any(|(i, w)| {
+            *w == [0, 0, 0, 0x14] && !obj.text_relocs.iter().any(|r| r.offset == 4 * i as u64)
+        });
+    assert!(fold, "{:02x?}", obj.text);
+}
+
+#[test]
+fn i386_asm_branch_to_global_keeps_a_pc32_relocation() {
+    // The i386 boot shape, through the standalone assembler driver: the
+    // unit defines `.globl memcpy` and branches to it. GNU as 2.46.1 emits
+    // `R_386_PC32 memcpy` for the `call` (REL, the -4 addend lives in the
+    // field) and relaxes the `jmp` in place, the same split as in long
+    // mode; the numeric label resolves in place too.
+    use crate::c5::linker::parse_lds_object;
+    use crate::c5::{
+        CompileOptions, ElfClass, NativeOptions, OutputKind, Target, emit_native_with_options,
+    };
+    let src = "\t.code32\n\
+               \t.text\n\
+               \t.globl memcpy\n\
+               memcpy: ret\n\
+               \t.globl user\n\
+               user:\n\
+               \tcall memcpy\n\
+               \tjmp memcpy\n\
+               1:\tjmp 1b\n";
+    let copts = CompileOptions::default()
+        .with_no_entry_point(true)
+        .with_elf_class(ElfClass::Elf32);
+    let program = Compiler::assemble(src, Target::LinuxX64, copts).expect("assemble");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        elf_class: ElfClass::Elf32,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_lds_object("a.o", bytes).expect("parse ET_REL");
+    const EM_386: u16 = 3;
+    const R_386_PC32: u32 = 2;
+    assert_eq!(obj.machine, EM_386);
+    // The writer emits its fixed empty `.text` first; the assembled unit's
+    // bytes live in the asm-section `.text` after it.
+    let text = obj
+        .sections
+        .iter()
+        .find(|s| s.name == ".text" && s.size != 0)
+        .expect(".text");
+    let got: alloc::vec::Vec<(&str, u32, i64)> = text
+        .relocs
+        .iter()
+        .map(|r| (obj.symbols[r.sym as usize].name.as_str(), r.rtype, r.addend))
+        .collect();
+    assert_eq!(got, [("memcpy", R_386_PC32, -4)]);
+    let t = &obj.bytes[text.data_off..text.data_off + text.size as usize];
+    assert!(t.windows(5).any(|w| w == [0xe8, 0xfc, 0xff, 0xff, 0xff]));
+    assert!(t.windows(2).any(|w| w == [0xeb, 0xf8]), "{t:02x?}");
+    assert!(t.windows(2).any(|w| w == [0xeb, 0xfe]), "{t:02x?}");
+}
+
+/// The section named `name` with a non-empty body: the writer emits its
+/// fixed empty `.text` ahead of an assembled unit's sections.
+fn nonempty_section(
+    sections: &[(String, u32, u64, alloc::vec::Vec<u8>)],
+    name: &str,
+) -> alloc::vec::Vec<u8> {
+    sections
+        .iter()
+        .find(|(n, _, _, b)| n == name && !b.is_empty())
+        .unwrap_or_else(|| panic!("{name} missing"))
+        .3
+        .clone()
+}
+
+#[test]
+fn assembler_macro_register_arguments_separate_on_whitespace() {
+    // The `arch/x86/entry` CR3-switch shape: a keyword invocation binds two
+    // registers, and the body forwards them to a nested macro as positional
+    // arguments separated by whitespace. Each `%`-led operand is its own
+    // argument (`\a \b` is two), so the inner body encodes; binding both to
+    // one parameter produced `mov %cr3, %r8 %r9`, which no source spells.
+    // Bytes measured with GNU as 2.46.1.
+    use crate::c5::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = ".macro switch_scratch scratch_reg:req scratch_reg2:req\n\
+               \tmov\t%cr3, \\scratch_reg\n\
+               \tmovq\t\\scratch_reg, \\scratch_reg2\n\
+               \tmov\t\\scratch_reg, %cr3\n\
+               .endm\n\
+               .macro switch_nostack scratch_reg:req scratch_reg2:req\n\
+               \tswitch_scratch \\scratch_reg \\scratch_reg2\n\
+               .endm\n\
+               \t.text\n\
+               \tswitch_nostack scratch_reg=%r8 scratch_reg2=%r9\n";
+    let copts = CompileOptions::default().with_no_entry_point(true);
+    let program = Compiler::assemble(src, Target::LinuxX64, copts).expect("assemble");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let text = nonempty_section(&elf_sections(&bytes), ".text");
+    assert_eq!(
+        text,
+        [
+            0x41, 0x0F, 0x20, 0xD8, 0x4D, 0x89, 0xC1, 0x41, 0x0F, 0x22, 0xD8
+        ],
+        "{text:02x?}"
+    );
+}
+
+#[test]
+fn assembler_macro_invocation_in_a_substituted_argument_expands() {
+    // The `arch/x86/lib/retpoline.S` ANNOTATE shape: one quoted argument
+    // carries a `;`-separated instruction sequence, and the expansion is
+    // re-scanned, so the embedded keyword invocation is recognized as a
+    // macro rather than reaching the encoder as `annotate type=2`. Bytes
+    // measured with GNU as 2.46.1.
+    use crate::c5::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = ".macro annotate type\n\
+               \t.pushsection .note.ann, \"a\"\n\
+               \t.byte \\type\n\
+               \t.popsection\n\
+               .endm\n\
+               .macro alt insn:req\n\
+               \t\\insn\n\
+               .endm\n\
+               \t.text\n\
+               \talt \"lfence; annotate type=2; jmp *%r11\"\n";
+    let copts = CompileOptions::default().with_no_entry_point(true);
+    let program = Compiler::assemble(src, Target::LinuxX64, copts).expect("assemble");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let sections = elf_sections(&bytes);
+    let text = nonempty_section(&sections, ".text");
+    assert_eq!(text, [0x0F, 0xAE, 0xE8, 0x41, 0xFF, 0xE3], "{text:02x?}");
+    assert_eq!(nonempty_section(&sections, ".note.ann"), [0x02]);
+}
+
 /// `sh_flags` of the first section named `want` in an ELF64 object, or 0.
 fn elf_section_flags(bytes: &[u8], want: &[u8]) -> u64 {
     let u16a = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
@@ -3148,6 +3647,34 @@ fn thread_local_storage_round_trips_through_et_rel() {
         obj.tls_data.starts_with(&7i32.to_le_bytes()),
         "initialised TLS byte image must round-trip; got {:?}",
         obj.tls_data,
+    );
+}
+
+#[test]
+fn thread_local_macho_relocatable_records_libsystem() {
+    // macOS arm64 `_Thread_local` with no binding in scope: the TLV
+    // anchor adds libSystem to the dylib list -- it must not require
+    // an `exit` (or any) `#pragma binding`. The ET_REL `.badc.dylibs`
+    // note carries the path the linker's `__tlv_bootstrap` ordinal
+    // lookup matches on.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::new(alloc::string::String::from(
+        "_Thread_local int t = 5;\nint main(void) { return t; }\n",
+    ))
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::MacOSAarch64, opts)
+        .expect("`_Thread_local` must emit a Mach-O-target object without any binding in scope");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    assert!(
+        obj.dylibs.iter().any(|d| d.contains("libSystem")),
+        "TLV-bearing objects must record libSystem for the linker: {:?}",
+        obj.dylibs
     );
 }
 
@@ -3822,6 +4349,51 @@ fn macho_executable_exports_globals_through_dyld_info_trie() {
     );
 }
 
+/// An address-constant `_Thread_local` initializer round-trips through
+/// ET_REL as a `.rela.tdata` absolute-64 relocation (the shape gcc
+/// emits) and the linker resolves it against the merged `.data`.
+#[test]
+fn thread_local_address_initializer_survives_the_object_round_trip() {
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    use crate::c5::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::with_options(
+        "static int g = 7;\n\
+         __thread int *p = &g;\n\
+         int deref(void) { return *p; }\n"
+            .to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    assert_eq!(
+        program.tls_data_relocs.len(),
+        1,
+        "the template must carry one address-constant relocation"
+    );
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    assert_eq!(
+        obj.tls_relocs.len(),
+        1,
+        "`.rela.tdata` must survive the ET_REL round trip"
+    );
+    assert_eq!(
+        obj.tls_relocs[0].offset, 0,
+        "the slot is the template's own"
+    );
+    let merged = link_native_objects(&[obj]).expect("link");
+    assert_eq!(
+        merged.tls_abs_relocs.len(),
+        1,
+        "the merged image must keep the template relocation"
+    );
+}
+
 #[test]
 fn thread_local_in_elf_shared_library_is_a_link_error() {
     // The emitted `_Thread_local` sequences use the local-exec TLS
@@ -4079,7 +4651,7 @@ fn win64_dll_without_imports_leaves_import_and_iat_dirs_empty() {
             .compile()
             .expect("compile");
         let dll = emit_native_with_options_named(
-            &program,
+            program.clone(),
             target,
             NativeOptions::new().with_shared_library(),
             Some("noimports.dll"),
@@ -4390,12 +4962,13 @@ fn inline_linkage_follows_c99_6_7_4p7() {
         sym.binding
     }
 
-    // Plain `inline`, no other declaration: internal linkage (local).
+    // Plain `inline`, no other declaration: internal linkage (local),
+    // under the private body name the identifier is split from.
     assert_eq!(
         binding_of(
             "inline int f(int x) { return x + 1; }\n\
              int main(void) { return f(41) == 42 ? 0 : 1; }\n",
-            "f",
+            "f.inline",
         ),
         STB_LOCAL,
         "plain inline-only definition must be local"
@@ -4552,9 +5125,9 @@ fn cpuid_read_write_a_constraint_supplies_leaf_x86_64() {
 #[test]
 fn cpuid_partial_outputs_with_clobbers_x86_64() {
     // A `cpuid` with one output operand and the other implicit outputs
-    // listed as clobbers (a common max-leaf probe) lowers to the same
-    // intrinsic; the clobbered registers store to scratch slots and the
-    // absent `c` input defaults to subleaf 0.
+    // listed as clobbers (a common max-leaf probe): the clobbered
+    // registers are saved around the statement and no subleaf input is
+    // required.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let program = Compiler::new(
         "static unsigned leaf_max(void) {\n\
@@ -4579,24 +5152,30 @@ fn cpuid_partial_outputs_with_clobbers_x86_64() {
 }
 
 #[test]
-fn cpuid_uncovered_implicit_output_rejected() {
-    // An implicit output register that is neither an output operand nor
-    // a clobber is rejected: the instruction overwrites it behind the
-    // register allocator's back.
-    let err = Compiler::new(
+fn cpuid_uncovered_implicit_output_accepted() {
+    // An implicit output register that is neither an output operand nor a
+    // clobber is the user's contract violation, not a parse error: GCC
+    // accepts the statement, so the generic extended-asm path does too.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::new(
         "static unsigned leaf_max(void) {\n\
          unsigned m;\n\
          __asm__ volatile(\"cpuid\" : \"=a\"(m) : \"a\"(0));\n\
          return m;\n\
          }\n\
-         int main(void){ return (int)leaf_max(); }\n"
+         int main(void){ return (int)(leaf_max() & 0); }\n"
             .to_string(),
     )
     .compile()
-    .expect_err("cpuid with uncovered implicit outputs must be rejected");
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
     assert!(
-        format!("{err}").contains("output operand or a clobber"),
-        "{err}"
+        bytes.windows(2).any(|w| w == [0x0F, 0xA2]),
+        "cpuid opcode (0F A2) must be emitted for the clobber-free form"
     );
 }
 
@@ -4702,6 +5281,59 @@ fn assembler_local_labels_stay_out_of_the_symbol_table() {
     }
 }
 
+/// A hand-built one-unit [`NativeObject`] with only the fields the
+/// resolution tests below exercise populated.
+fn minimal_native_object(
+    machine: crate::c5::linker::NativeMachine,
+    text: Vec<u8>,
+    data: Vec<u8>,
+    symbols: Vec<crate::c5::linker::object::NativeSymbol>,
+    text_relocs: Vec<crate::c5::linker::object::NativeReloc>,
+    data_relocs: Vec<crate::c5::linker::object::NativeReloc>,
+) -> crate::c5::linker::NativeObject {
+    crate::c5::linker::NativeObject {
+        source: alloc::string::String::new(),
+        sections: alloc::vec::Vec::new(),
+        discarded: alloc::vec::Vec::new(),
+        text_align: 16,
+        rodata: Vec::new(),
+        rodata_align: 8,
+        relro: Vec::new(),
+        relro_align: 1,
+        relro_relocs: Vec::new(),
+        machine,
+        text,
+        data,
+        data_align: 8,
+        bss_size: 0,
+        bss_align: 1,
+        tls_data: alloc::vec::Vec::new(),
+        tls_relocs: alloc::vec::Vec::new(),
+        tls_bss_size: 0,
+        symbols,
+        text_relocs,
+        data_relocs,
+        init_funcs: alloc::vec::Vec::new(),
+        dylibs: alloc::vec::Vec::new(),
+        import_dylib_map: alloc::vec::Vec::new(),
+        exports: alloc::vec::Vec::new(),
+        tls_index_fixups: alloc::vec::Vec::new(),
+        macho_tlv_descriptors: alloc::vec::Vec::new(),
+        macho_tlv_fixups: alloc::vec::Vec::new(),
+        tls_symbols: alloc::vec::Vec::new(),
+        macho_tlv_descriptor_syms: alloc::vec::Vec::new(),
+        elf_tpoff_fixups: alloc::vec::Vec::new(),
+        copy_relocs: alloc::vec::Vec::new(),
+        prologue_ends: alloc::vec::Vec::new(),
+        debug_info: alloc::vec::Vec::new(),
+        debug_abbrev: alloc::vec::Vec::new(),
+        debug_line: alloc::vec::Vec::new(),
+        debug_str: alloc::vec::Vec::new(),
+        debug_info_relocs: alloc::vec::Vec::new(),
+        debug_line_relocs: alloc::vec::Vec::new(),
+    }
+}
+
 #[test]
 fn unrouted_weak_undef_resolves_to_zero() {
     // ELF behavior: a weak reference nothing on the link line
@@ -4733,43 +5365,14 @@ fn unrouted_weak_undef_resolves_to_zero() {
               data: alloc::vec::Vec<u8>,
               text_relocs: alloc::vec::Vec<NativeReloc>,
               data_relocs: alloc::vec::Vec<NativeReloc>| {
-        crate::c5::linker::NativeObject {
-            source: alloc::string::String::new(),
-            sections: alloc::vec::Vec::new(),
-            discarded: alloc::vec::Vec::new(),
-            text_align: 16,
-            rodata: Vec::new(),
-            rodata_align: 8,
+        minimal_native_object(
             machine,
             text,
             data,
-            data_align: 8,
-            bss_size: 0,
-            bss_align: 1,
-            tls_data: alloc::vec::Vec::new(),
-            tls_bss_size: 0,
-            symbols: alloc::vec![null_sym(), weak_undef()],
+            alloc::vec![null_sym(), weak_undef()],
             text_relocs,
             data_relocs,
-            init_funcs: alloc::vec::Vec::new(),
-            dylibs: alloc::vec::Vec::new(),
-            import_dylib_map: alloc::vec::Vec::new(),
-            exports: alloc::vec::Vec::new(),
-            tls_index_fixups: alloc::vec::Vec::new(),
-            macho_tlv_descriptors: alloc::vec::Vec::new(),
-            macho_tlv_fixups: alloc::vec::Vec::new(),
-            tls_symbols: alloc::vec::Vec::new(),
-            macho_tlv_descriptor_syms: alloc::vec::Vec::new(),
-            elf_tpoff_fixups: alloc::vec::Vec::new(),
-            copy_relocs: alloc::vec::Vec::new(),
-            prologue_ends: alloc::vec::Vec::new(),
-            debug_info: alloc::vec::Vec::new(),
-            debug_abbrev: alloc::vec::Vec::new(),
-            debug_line: alloc::vec::Vec::new(),
-            debug_str: alloc::vec::Vec::new(),
-            debug_info_relocs: alloc::vec::Vec::new(),
-            debug_line_relocs: alloc::vec::Vec::new(),
-        }
+        )
     };
 
     // x86_64: `lea rax, [rip+hook]` (R_X86_64_PC32) then `call hook`
@@ -4859,6 +5462,74 @@ fn unrouted_weak_undef_resolves_to_zero() {
     assert_eq!(word(8), 0xd503_201f, "bl becomes a nop");
 }
 
+#[test]
+fn weak_undef_binds_against_a_shared_library_export() {
+    // The zero resolution above applies only when nothing on the link
+    // line supplies the name. With a `-l` shared library exporting it,
+    // the weak reference binds as a load-time import like a strong one
+    // -- both the call site and a `.data` pointer slot.
+    use crate::c5::linker::object::{NativeReloc, NativeSymbol};
+    use crate::c5::linker::{
+        NativeMachine, NativeSymSection, SharedLibrary, link_native_objects_with_shared_libs,
+    };
+    let sym = |name: &str, binding: u8| NativeSymbol {
+        name: name.to_string(),
+        section: NativeSymSection::Undef,
+        value: 0,
+        size: 0,
+        binding,
+        kind: 0,
+        visibility: 0,
+    };
+    let obj = minimal_native_object(
+        NativeMachine::X86_64,
+        alloc::vec![0xE8, 0, 0, 0, 0], // call rel32
+        alloc::vec![0u8; 8],
+        alloc::vec![sym("", 0), sym("hook", 2)],
+        alloc::vec![NativeReloc {
+            offset: 1,
+            sym_idx: 1,
+            rtype: 4, // R_X86_64_PLT32
+            addend: -4,
+        }],
+        alloc::vec![NativeReloc {
+            offset: 0,
+            sym_idx: 1,
+            rtype: 1, // R_X86_64_64
+            addend: 0,
+        }],
+    );
+    let lib = SharedLibrary {
+        soname: "libhook.so.1".to_string(),
+        machine: NativeMachine::X86_64,
+        exports: core::iter::once("hook".to_string()).collect(),
+        data_exports: Default::default(),
+    };
+    let merged = link_native_objects_with_shared_libs(&[obj], false, &[lib])
+        .expect("weak ref against a shared library links");
+    assert_eq!(merged.imports, alloc::vec!["hook".to_string()]);
+    assert!(merged.flat_imports.contains("hook"));
+    assert_eq!(merged.dylibs, alloc::vec!["libhook.so.1".to_string()]);
+    assert_eq!(
+        merged.text[0], 0xE8,
+        "the call survives for the PLT pass instead of a nop rewrite"
+    );
+    assert!(
+        merged
+            .pending_imports
+            .iter()
+            .any(|p| p.import_index == 0 && p.text_offset == 1),
+        "the call site is recorded against the import",
+    );
+    assert!(
+        merged
+            .data_import_refs
+            .iter()
+            .any(|&(off, idx)| off == 0 && idx == 0),
+        "the pointer slot is recorded against the import, not zeroed",
+    );
+}
+
 /// `adrp x0, blob` paired with each low-12 addressing form the
 /// AArch64 ELF ABI defines, and the relocation type that patches the
 /// second instruction of each pair.
@@ -4932,11 +5603,15 @@ fn aarch64_data_ref_object_ex(
         text_align: 16,
         rodata: alloc::vec::Vec::new(),
         rodata_align: 8,
+        relro: Vec::new(),
+        relro_align: 1,
+        relro_relocs: Vec::new(),
         data: alloc::vec![0u8; data_len],
         data_align: 0x1000,
         bss_size: 0,
         bss_align: 1,
         tls_data: alloc::vec::Vec::new(),
+        tls_relocs: alloc::vec::Vec::new(),
         tls_bss_size: 0,
         prologue_ends: alloc::vec::Vec::new(),
         symbols: alloc::vec![NativeSymbol {
@@ -5181,11 +5856,15 @@ fn blank_aarch64_object() -> crate::c5::linker::NativeObject {
         text_align: 16,
         rodata: alloc::vec::Vec::new(),
         rodata_align: 8,
+        relro: Vec::new(),
+        relro_align: 1,
+        relro_relocs: Vec::new(),
         data: alloc::vec::Vec::new(),
         data_align: 8,
         bss_size: 0,
         bss_align: 1,
         tls_data: alloc::vec::Vec::new(),
+        tls_relocs: alloc::vec::Vec::new(),
         tls_bss_size: 0,
         prologue_ends: alloc::vec::Vec::new(),
         symbols: alloc::vec::Vec::new(),
@@ -5854,9 +6533,10 @@ fn alignas_places_objects_at_requested_alignment() {
         big.section,
         big.value
     );
-    // An automatic object's own request is placed from 16 up, in the
-    // prologue-realigned region (the overaligned_automatic fixtures check the
-    // resulting addresses at run time).
+    // An automatic object's own request is placed from 16 up: exactly 16 at
+    // a static frame offset, above 16 in the prologue-realigned region (the
+    // overaligned_automatic fixtures check the resulting addresses at run
+    // time).
     assert!(
         Compiler::new("int main(void) { _Alignas(16) char buf[8]; return buf[0]; }\n".to_string())
             .compile()
@@ -5885,6 +6565,93 @@ fn alignas_places_objects_at_requested_alignment() {
         .compile()
         .is_ok(),
         "a struct member's aligned(16) request must be honored"
+    );
+}
+
+#[test]
+fn variable_aligned_sets_where_alignas_only_raises() {
+    // GNU practice: `__attribute__((aligned(N)))` on a variable sets that
+    // object's alignment, replacing the one its type declares, so it may
+    // lower it. C11 6.7.5p4 makes the same request spelled `_Alignas` a
+    // constraint violation when it is weaker than the type requires.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let unit = |src: &str| {
+        Compiler::with_options(
+            src.to_string(),
+            Target::LinuxX64,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+    };
+    let unit_align = |src: &str| -> usize {
+        let program = unit(src).expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        parse_native_elf(&bytes).expect("parse ET_REL").data_align
+    };
+    let cell = "struct __attribute__((aligned(64))) cell { char c[64]; };\n";
+    assert_eq!(
+        unit_align(&format!(
+            "{cell}struct cell lowered __attribute__((aligned(16)));\n\
+             int use_it(void) {{ return lowered.c[0]; }}\n"
+        )),
+        16,
+        "a variable `aligned(16)` must place at 16, not at the type's 64"
+    );
+    assert_eq!(
+        unit_align(&format!(
+            "{cell}struct cell plain;\n\
+             int use_it(void) {{ return plain.c[0]; }}\n"
+        )),
+        64,
+        "without a variable request the type's own alignment stands"
+    );
+    // `__alignof__` reports the object's set alignment; the type keeps its
+    // own. The `[N ? 1 : -1]` probe fails to compile when the value differs.
+    for probe in [
+        "struct cell v __attribute__((aligned(16)));\nchar p[__alignof__(v) == 16 ? 1 : -1];\n",
+        "char p[__alignof__(struct cell) == 64 ? 1 : -1];\n",
+        "int x __attribute__((aligned(1)));\nchar p[__alignof__(x) == 1 ? 1 : -1];\n",
+        "_Alignas(64) struct cell v;\nchar p[__alignof__(v) == 64 ? 1 : -1];\n",
+        "_Alignas(128) struct cell v;\nchar p[__alignof__(v) == 128 ? 1 : -1];\n",
+    ] {
+        assert!(
+            unit(&format!("{cell}{probe}")).is_ok(),
+            "must compile: {probe}"
+        );
+    }
+    // An `_Alignas` weaker than the declared type's alignment is rejected,
+    // where the GNU spelling of the same request is accepted.
+    for src in [
+        "_Alignas(16) struct cell weak;\n",
+        "_Alignas(1) int narrow;\n",
+        "int f(void) { _Alignas(16) struct cell weak; return weak.c[0]; }\n",
+    ] {
+        assert!(
+            unit(&format!("{cell}{src}")).is_err(),
+            "`_Alignas` below the type's alignment must be diagnosed: {src}"
+        );
+    }
+    // Automatic storage takes the set alignment too: a type aligned past
+    // what a frame can realise is placeable once the variable lowers it.
+    let wide = "struct __attribute__((aligned(8192))) page { char c[8192]; };\n";
+    assert!(
+        unit(&format!(
+            "{wide}int f(void) {{ struct page p __attribute__((aligned(16))); return p.c[0]; }}\n"
+        ))
+        .is_ok(),
+        "a lowered automatic must be placed, not rejected at the type's alignment"
+    );
+    assert!(
+        unit(&format!(
+            "{wide}int f(void) {{ struct page p; return p.c[0]; }}\n"
+        ))
+        .is_err(),
+        "the type's own alignment still exceeds what a frame can align to"
     );
 }
 
@@ -6510,6 +7277,65 @@ fn weak_alias_used_bindings_in_relocatable() {
     let gda = find("gdata_alias");
     assert_eq!(gda.value, gd.value, "data alias shares the target's offset");
     assert_eq!(gda.binding, 1, "non-weak alias binds STB_GLOBAL");
+}
+
+#[test]
+fn interposable_call_keeps_relocation_under_optimize() {
+    // An interposable definition -- a weak alias or a plain weak
+    // function -- may be replaced by a strong definition at link time,
+    // so a call through the interposable name stays out of line under
+    // -O and relocates against that name, never against the target's
+    // body. A call naming the (strong) target directly still inlines.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    const R_X86_64_PLT32: u32 = 4;
+    const R_AARCH64_CALL26: u32 = 283;
+    const STB_WEAK: u8 = 2;
+    let src = "int real_fn(void) { return 41; }\n\
+               int alias_fn(void) __attribute__((weak, alias(\"real_fn\")));\n\
+               int caller(void) { return alias_fn() + 1; }\n\
+               int direct(void) { return real_fn() + 1; }\n\
+               __attribute__((weak)) int weak_fn(void) { return 7; }\n\
+               int wcaller(void) { return weak_fn() + 1; }\n";
+    for (target, call_rtype) in [
+        (Target::LinuxX64, R_X86_64_PLT32),
+        (Target::LinuxAarch64, R_AARCH64_CALL26),
+    ] {
+        let program = Compiler::with_options(
+            String::from(src),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            optimize: true,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+        for name in ["alias_fn", "weak_fn"] {
+            let syms: Vec<_> = obj.symbols.iter().filter(|s| s.name == name).collect();
+            assert_eq!(syms.len(), 1, "one `{name}` entry, no UNDEF duplicate");
+            assert_eq!(syms[0].binding, STB_WEAK, "`{name}` binds STB_WEAK");
+            let call = obj
+                .text_relocs
+                .iter()
+                .find(|r| obj.symbols[r.sym_idx].name == name && r.rtype == call_rtype);
+            assert!(
+                call.is_some(),
+                "the call through `{name}` must keep a call relocation ({target:?})"
+            );
+        }
+        assert!(
+            !obj.text_relocs
+                .iter()
+                .any(|r| obj.symbols[r.sym_idx].name == "real_fn"),
+            "the direct call to the strong target inlines; no relocation names it"
+        );
+    }
 }
 
 #[test]
@@ -7139,7 +7965,9 @@ fn elf_symbols(bytes: &[u8]) -> alloc::vec::Vec<(String, u8, u16, u64, u64)> {
         .unwrap()
         .3;
     symtab
-        .chunks_exact(24)
+        .as_chunks::<24>()
+        .0
+        .iter()
         .map(|e| {
             let st_name = u32::from_le_bytes(e[0..4].try_into().unwrap()) as usize;
             let end = strtab[st_name..].iter().position(|&b| b == 0).unwrap();
@@ -7252,7 +8080,7 @@ fn file_scope_asm_numeric_labels_bind_per_definition() {
         // bytes 1, 2, 3, 4 sit at 0, 1, 2, 3). The labels are local and
         // untyped, so each reduces to the section symbol and the
         // per-instance binding rides the addend.
-        for (i, r) in rela.chunks_exact(24).enumerate() {
+        for (i, r) in rela.as_chunks::<24>().0.iter().enumerate() {
             let r_info = u64::from_le_bytes(r[8..16].try_into().unwrap());
             let r_addend = i64::from_le_bytes(r[16..24].try_into().unwrap());
             let (name, info, shndx, _, _) = &symbols[(r_info >> 32) as usize];
@@ -7272,7 +8100,8 @@ fn file_scope_asm_weak_and_set_emit_weak_symbols() {
     // `.set alias, target` + `.weak alias` is a weak alias of a function
     // in the unit (the conditional-syscall shape): FUNC, WEAK, the
     // target's value and size. `.weak` on a section label binds the label
-    // weak; `.weak` of an undefined name yields a weak UNDEF entry.
+    // weak; `.weak` of a name the unit neither defines nor references
+    // yields no entry at all, as GNU as 2.46.1 emits none for one.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let src = "\
         long ni_syscall(void) { return -38; }\n\
@@ -7312,9 +8141,10 @@ fn file_scope_asm_weak_and_set_emit_weak_symbols() {
         let marker = by_name("weak_marker");
         assert_eq!(marker.1 >> 4, STB_WEAK, "{target:?}: weak label binding");
         assert_ne!(marker.2, 0, "{target:?}: weak label is defined");
-        let hook = by_name("optional_hook");
-        assert_eq!(hook.1 >> 4, STB_WEAK, "{target:?}: weak undef binding");
-        assert_eq!(hook.2, 0, "{target:?}: weak undef is SHN_UNDEF");
+        assert!(
+            !symbols.iter().any(|s| s.0 == "optional_hook"),
+            "{target:?}: an unreferenced undefined `.weak` gets no entry"
+        );
     }
 }
 
@@ -7380,7 +8210,7 @@ fn file_scope_asm_incbin_embeds_file_bytes() {
     // cwd-independent). A missing file is a compile error naming the path.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let payload = b"\x00\x01binary\xffpayload";
-    let path = std::env::temp_dir().join("badc_incbin_test.bin");
+    let path = super::unique_temp_path("badc-incbin", "payload", ".bin");
     std::fs::write(&path, payload).expect("write payload");
     let src = alloc::format!(
         "asm(\".pushsection .blob,\\\"a\\\"\\n\"\n\
@@ -7407,6 +8237,7 @@ fn file_scope_asm_incbin_embeds_file_bytes() {
         expect.push(0xa5);
         assert_eq!(blob, &expect, "{target:?}: spliced bytes");
     }
+    let _ = std::fs::remove_file(&path);
     let missing = "asm(\".pushsection .blob,\\\"a\\\"\\n.incbin \\\"badc_no_such_payload.bin\\\"\\n.popsection\");";
     let err = Compiler::new(String::from(missing))
         .compile()
@@ -8036,6 +8867,148 @@ fn asm_section_org_pads_to_label_plus_operand() {
 }
 
 #[test]
+fn asm_hidden_and_reloc_directives_reach_the_object() {
+    // `.hidden` sets STV_HIDDEN in `st_other`; `.reloc offset, TYPE, sym +
+    // addend` places a relocation of the named type at a section-relative
+    // offset with no field to derive it from. The nVHE hyp relocation table
+    // is built entirely out of the latter.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    const STV_HIDDEN: u8 = 2;
+    for (target, rtype, spelling) in [
+        (Target::LinuxX64, 2u32, "R_X86_64_PC32"),
+        (Target::LinuxAarch64, 261u32, "R_AARCH64_PREL32"),
+    ] {
+        let src = alloc::format!(
+            "__asm__(\
+             \".globl vis_sym\\n\"\
+             \".hidden vis_sym\\n\"\
+             \".pushsection .hyprel,\\\"a\\\"\\n\"\
+             \"vis_sym:\\n\"\
+             \"\\t.word 0\\n\"\
+             \"\\t.word 0\\n\"\
+             \"\\t.reloc 0, {spelling}, vis_sym + 0xde0\\n\"\
+             \".popsection\\n\");\n\
+             int main(void) {{ return 0; }}\n"
+        );
+        let program = Compiler::with_target(src, target)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        assert_eq!(
+            elf_symbol_st_other(&bytes, "vis_sym"),
+            STV_HIDDEN,
+            "{target:?}: `.hidden` visibility"
+        );
+        let sections = elf_sections(&bytes);
+        let rela = &sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".rela.hyprel")
+            .unwrap_or_else(|| panic!("{target:?}: .rela.hyprel missing"))
+            .3;
+        assert_eq!(rela.len(), 24, "{target:?}: one relocation");
+        let r_offset = u64::from_le_bytes(rela[0..8].try_into().unwrap());
+        let r_info = u64::from_le_bytes(rela[8..16].try_into().unwrap());
+        let r_addend = i64::from_le_bytes(rela[16..24].try_into().unwrap());
+        assert_eq!(r_offset, 0, "{target:?}: `.reloc` offset");
+        assert_eq!(r_info as u32, rtype, "{target:?}: named relocation type");
+        assert_eq!(r_addend, 0xde0, "{target:?}: `.reloc` addend");
+        assert_eq!(
+            elf_symbols(&bytes)[(r_info >> 32) as usize].0,
+            "vis_sym",
+            "{target:?}: `.reloc` target symbol"
+        );
+    }
+}
+
+#[test]
+fn asm_visibility_directives_set_st_other() {
+    // `.hidden` / `.internal` / `.protected` each name an `st_other`
+    // visibility; a name no directive covers keeps STV_DEFAULT. The values are
+    // what GNU as 2.46.1 writes for the same directives.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let cases = [
+        ("vh", ".hidden", 2u8),
+        ("vi", ".internal", 1),
+        ("vp", ".protected", 3),
+    ];
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let mut src = alloc::string::String::from(
+            "__asm__(\".pushsection .vis,\\\"a\\\"\\n.globl vd\\nvd:\\n\\t.word 0\\n",
+        );
+        for (name, dir, _) in cases {
+            src.push_str(&alloc::format!(
+                ".globl {name}\\n{dir} {name}\\n{name}:\\n\\t.word 0\\n"
+            ));
+        }
+        src.push_str(".popsection\\n\");\nint main(void) { return 0; }\n");
+        let program = Compiler::with_target(src, target)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        for (name, dir, stv) in cases {
+            assert_eq!(
+                elf_symbol_st_other(&bytes, name),
+                stv,
+                "{target:?}: `{dir}` visibility"
+            );
+        }
+        assert_eq!(
+            elf_symbol_st_other(&bytes, "vd"),
+            0,
+            "{target:?}: no directive keeps STV_DEFAULT"
+        );
+    }
+}
+
+#[test]
+fn asm_section_org_fills_with_the_named_byte() {
+    // `.org new-lc, fill` pads with `fill` rather than zero, and the origin
+    // may be a label, a constant or the location counter. The kernel's FRED
+    // and PVH entry pages pad with 0xcc and 0 this way.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "void a(void) { __asm__ volatile(\
+        \".pushsection .otab,\\\"aw\\\"\\n\"\
+        \"2:\\t.byte 1\\n\"\
+        \"\\t.org 2b + 4, 0xcc\\n\"\
+        \"\\t.byte 2\\n\"\
+        \"\\t.org 12, 0x90\\n\"\
+        \"\\t.byte 3\\n\"\
+        \"\\t.org . + 3, 0xaa\\n\"\
+        \".popsection\\n\"); }\n\
+        int main(void) { a(); return 0; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let sec = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".otab")
+            .unwrap_or_else(|| panic!("{target:?}: .otab missing"));
+        assert_eq!(
+            sec.3,
+            vec![
+                1, 0xcc, 0xcc, 0xcc, // .byte 1 then `.org 2b + 4, 0xcc`
+                2, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, // then `.org 12, 0x90`
+                3, 0xaa, 0xaa, 0xaa, // then `.org . + 3, 0xaa`
+            ],
+            "{target:?}"
+        );
+    }
+}
+
+#[test]
 fn inline_asm_label_glued_section_directive_balances() {
     // A section directive may follow a label on the same line in the code
     // stream (`1:\t.pushsection ...`): GNU as treats the label and the
@@ -8353,6 +9326,430 @@ fn asm_section_operand_extern_symbol_relocates_to_symbol() {
     }
 }
 
+/// `(sh_addr, body)` of the named section in a final ELF image.
+fn elf_image_section(bytes: &[u8], name: &str) -> Option<(u64, alloc::vec::Vec<u8>)> {
+    let u16le = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap()) as usize;
+    let u32le = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
+    let u64le = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let shoff = u64le(0x28) as usize;
+    let shentsize = u16le(0x3A);
+    let shnum = u16le(0x3C);
+    let strtab_off = u64le(shoff + u16le(0x3E) * shentsize + 0x18) as usize;
+    for i in 0..shnum {
+        let sh = shoff + i * shentsize;
+        let name_off = strtab_off + u32le(sh);
+        let end = bytes[name_off..].iter().position(|&b| b == 0)? + name_off;
+        if &bytes[name_off..end] != name.as_bytes() {
+            continue;
+        }
+        let addr = u64le(sh + 0x10);
+        let off = u64le(sh + 0x18) as usize;
+        let size = u64le(sh + 0x20) as usize;
+        return Some((addr, bytes[off..off + size].to_vec()));
+    }
+    None
+}
+
+/// Self-link the operand-symbol section shape and return
+/// `(image, merged)` for the field-value checks below.
+fn self_link_operand_symbol_shape(
+    target: crate::c5::Target,
+    flags: &str,
+) -> (alloc::vec::Vec<u8>, crate::c5::linker::MergedNative) {
+    use crate::c5::linker::{
+        emit_aarch64_plt, emit_x86_64_plt, link_native_objects, parse_native_elf,
+        write_native_image_from_merged,
+    };
+    use crate::c5::{NativeOptions, OutputKind, emit_native_with_options};
+    let src = alloc::format!(
+        "struct sk {{ int x; }};\n\
+         struct sk key = {{ 42 }};\n\
+         int probe(void) {{\n\
+             __asm__ volatile(\n\
+                 \"1:\\tnop\\n\"\n\
+                 \".pushsection .optab,\\\"{flags}\\\"\\n\"\n\
+                 \".balign 8\\n\"\n\
+                 \".globl optab\\n\"\n\
+                 \"optab:\\n\"\n\
+                 \".ascii \\\"OpTaB9mk\\\"\\n\"\n\
+                 \".long %c0 - .\\n\"\n\
+                 \".long 0\\n\"\n\
+                 \".quad %c1 + %c2 - .\\n\"\n\
+                 \".popsection\\n\" : : \"i\"(\"probe9.c\"), \"i\"(&key), \"i\"(4));\n\
+             return 0;\n\
+         }}\n\
+         int main(void) {{ return probe(); }}\n"
+    );
+    let program = Compiler::with_target(src.to_string(), target)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let mut merged = link_native_objects(core::slice::from_ref(&obj)).expect("link");
+    let plt = match target {
+        crate::c5::Target::LinuxAarch64 => emit_aarch64_plt(&mut merged).expect("plt"),
+        _ => emit_x86_64_plt(&mut merged).expect("plt"),
+    };
+    let image = write_native_image_from_merged(
+        &merged,
+        &plt,
+        "main",
+        None,
+        OutputKind::Executable,
+        target,
+        None,
+    )
+    .expect("write executable");
+    (image, merged)
+}
+
+#[test]
+fn asm_section_operand_symbol_self_link_matches_ld() {
+    // Self-linked counterpart of `asm_section_operand_symbol_relocates_to_data`:
+    // the fields of the writable `.optab` fold into the merged data stream and
+    // must resolve to the values GNU ld produces from the same object --
+    // `S + A - P` against the operand string and `&key + 4`. The merge used to
+    // patch these pc-relative words as 8-byte absolutes, corrupting the fields.
+    use crate::c5::Target;
+    use crate::c5::linker::NativeSymSection;
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let (image, merged) = self_link_operand_symbol_shape(target, "aw");
+        let optab = merged.defined.get("optab").expect("optab in merged");
+        assert!(
+            matches!(optab.section, NativeSymSection::Data),
+            "{target:?}: writable .optab joins the data stream"
+        );
+        let key = merged.defined.get("key").expect("key in merged");
+        let ro_len = merged.data_ro_len as u64;
+        let (rodata_addr, rodata) = elf_image_section(&image, ".rodata").expect("image .rodata");
+        let (data_addr, data) = elf_image_section(&image, ".data").expect("image .data");
+        let addr_of = |off: u64| {
+            if off < ro_len {
+                rodata_addr + off
+            } else {
+                data_addr + (off - ro_len)
+            }
+        };
+        let str_pos = rodata
+            .windows(9)
+            .position(|w| w == b"probe9.c\0")
+            .expect("operand string in image .rodata") as u64;
+        let str_vaddr = rodata_addr + str_pos;
+        let body_at = |off: u64| (off - ro_len) as usize;
+        assert_eq!(
+            &data[body_at(optab.value)..body_at(optab.value) + 8],
+            b"OpTaB9mk",
+            "{target:?}: the section payload survives the merge"
+        );
+        let l_off = optab.value + 8;
+        let q_off = optab.value + 16;
+        let field_l =
+            i32::from_le_bytes(data[body_at(l_off)..body_at(l_off) + 4].try_into().unwrap()) as i64;
+        let field_q =
+            i64::from_le_bytes(data[body_at(q_off)..body_at(q_off) + 8].try_into().unwrap());
+        assert_ne!(field_l, 0, "{target:?}: `.long %c0 - .` left unresolved");
+        assert_eq!(
+            addr_of(l_off) as i64 + field_l,
+            str_vaddr as i64,
+            "{target:?}: `.long %c0 - .` reaches the operand string"
+        );
+        assert_eq!(
+            &data[body_at(l_off + 4)..body_at(l_off + 8)],
+            &[0u8; 4],
+            "{target:?}: the `.long 0` spacer is untouched"
+        );
+        let key_vaddr = addr_of(key.value) as i64;
+        assert_eq!(
+            addr_of(q_off) as i64 + field_q,
+            key_vaddr + 4,
+            "{target:?}: `.quad %c1 + %c2 - .` reaches key + 4"
+        );
+        assert_ne!(
+            addr_of(q_off) as i64 + field_q,
+            key_vaddr,
+            "{target:?}: the `+ %c2` operand addend must not be dropped"
+        );
+    }
+}
+
+#[test]
+fn asm_section_operand_symbol_in_exec_section_self_links() {
+    // Same fields inside an executable `.optab` (`"ax"`): the section joins
+    // the merged text, the data-target pc-relative words park, and the image
+    // writer resolves each plain field to `S + A - P` -- GNU ld's values.
+    // These used to be declined as unsupported relocations.
+    use crate::c5::Target;
+    use crate::c5::linker::NativeSymSection;
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let (image, merged) = self_link_operand_symbol_shape(target, "ax");
+        let optab = merged.defined.get("optab").expect("optab in merged");
+        assert!(
+            matches!(optab.section, NativeSymSection::Text),
+            "{target:?}: executable .optab joins the text stream"
+        );
+        let key = merged.defined.get("key").expect("key in merged");
+        let ro_len = merged.data_ro_len as u64;
+        let (rodata_addr, rodata) = elf_image_section(&image, ".rodata").expect("image .rodata");
+        let (data_addr, _) = elf_image_section(&image, ".data").expect("image .data");
+        let (text_addr, text) = elf_image_section(&image, ".text").expect("image .text");
+        let str_pos = rodata
+            .windows(9)
+            .position(|w| w == b"probe9.c\0")
+            .expect("operand string in image .rodata") as u64;
+        let str_vaddr = rodata_addr + str_pos;
+        // The section's leading marker locates the fields in the image
+        // text independently of the writer's start-stub placement.
+        let marker = text
+            .windows(8)
+            .position(|w| w == b"OpTaB9mk")
+            .expect("section payload in image .text");
+        let l_idx = marker + 8;
+        let q_idx = marker + 16;
+        let field_l = i32::from_le_bytes(text[l_idx..l_idx + 4].try_into().unwrap()) as i64;
+        let field_q = i64::from_le_bytes(text[q_idx..q_idx + 8].try_into().unwrap());
+        assert_ne!(field_l, 0, "{target:?}: `.long %c0 - .` left unresolved");
+        assert_eq!(
+            (text_addr + l_idx as u64) as i64 + field_l,
+            str_vaddr as i64,
+            "{target:?}: `.long %c0 - .` reaches the operand string"
+        );
+        assert_eq!(
+            &text[l_idx + 4..l_idx + 8],
+            &[0u8; 4],
+            "{target:?}: the `.long 0` spacer is untouched"
+        );
+        let key_vaddr = (data_addr + (key.value - ro_len)) as i64;
+        assert_eq!(
+            (text_addr + q_idx as u64) as i64 + field_q,
+            key_vaddr + 4,
+            "{target:?}: `.quad %c1 + %c2 - .` reaches key + 4"
+        );
+        assert_ne!(
+            (text_addr + q_idx as u64) as i64 + field_q,
+            key_vaddr,
+            "{target:?}: the `+ %c2` operand addend must not be dropped"
+        );
+    }
+}
+
+/// Sections of a final PE image as `(name, rva, virtual size, body)`,
+/// plus the image base and the `.reloc` entries as
+/// `(page_rva + in-page offset, type)`.
+struct PeImage {
+    image_base: u64,
+    sections: alloc::vec::Vec<(alloc::string::String, u32, u32, alloc::vec::Vec<u8>)>,
+    base_relocs: alloc::vec::Vec<(u32, u16)>,
+}
+
+impl PeImage {
+    fn parse(bytes: &[u8]) -> Self {
+        let u16le = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap());
+        let u32le = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+        let pe = u32le(0x3c) as usize;
+        assert_eq!(&bytes[pe..pe + 4], b"PE\0\0");
+        let nsec = u16le(pe + 6) as usize;
+        let opt = pe + 24;
+        let image_base = u64::from_le_bytes(bytes[opt + 24..opt + 32].try_into().unwrap());
+        let sect = opt + u16le(pe + 20) as usize;
+        let mut sections = alloc::vec::Vec::new();
+        for i in 0..nsec {
+            let o = sect + i * 40;
+            let end = bytes[o..o + 8].iter().position(|&b| b == 0).unwrap_or(8);
+            let name = core::str::from_utf8(&bytes[o..o + end]).unwrap().into();
+            let (vsize, rva) = (u32le(o + 8), u32le(o + 12));
+            let (rawsz, rawptr) = (u32le(o + 16) as usize, u32le(o + 20) as usize);
+            sections.push((name, rva, vsize, bytes[rawptr..rawptr + rawsz].to_vec()));
+        }
+        // Data directory entry 5 is the base-relocation table.
+        let (reloc_rva, reloc_size) = (u32le(opt + 112 + 5 * 8), u32le(opt + 112 + 5 * 8 + 4));
+        let mut base_relocs = alloc::vec::Vec::new();
+        if reloc_size != 0 {
+            let blob = sections
+                .iter()
+                .find(|(_, rva, _, _)| *rva == reloc_rva)
+                .map(|(_, _, _, body)| body.clone())
+                .expect(".reloc section");
+            let mut off = 0usize;
+            while off + 8 <= reloc_size as usize {
+                let page = u32::from_le_bytes(blob[off..off + 4].try_into().unwrap());
+                let size = u32::from_le_bytes(blob[off + 4..off + 8].try_into().unwrap()) as usize;
+                assert!(size >= 8, "malformed .reloc block");
+                for j in 0..(size - 8) / 2 {
+                    let e = u16::from_le_bytes(
+                        blob[off + 8 + j * 2..off + 10 + j * 2].try_into().unwrap(),
+                    );
+                    base_relocs.push((page + (e & 0xfff) as u32, e >> 12));
+                }
+                off += size;
+            }
+        }
+        PeImage {
+            image_base,
+            sections,
+            base_relocs,
+        }
+    }
+
+    fn section(&self, name: &str) -> (u32, &[u8]) {
+        self.sections
+            .iter()
+            .find(|(n, _, _, _)| n == name)
+            .map(|(_, rva, _, body)| (*rva, body.as_slice()))
+            .unwrap_or_else(|| panic!("no `{name}` section"))
+    }
+}
+
+/// Self-link a source carrying absolute words in an executable
+/// inline-asm section and return the image bytes. The PE entry stub
+/// calls into a runtime a single self-linked object does not carry, so
+/// the Windows targets take the library output kind, whose image the
+/// same writer produces without a stub.
+fn self_link_text_absolute_shape(
+    target: crate::c5::Target,
+    words: &str,
+) -> Result<(alloc::vec::Vec<u8>, crate::c5::linker::MergedNative), crate::c5::error::C5Error> {
+    use crate::c5::linker::{
+        emit_aarch64_plt, emit_x86_64_plt, link_native_objects, parse_native_elf,
+        write_native_image_from_merged,
+    };
+    use crate::c5::{NativeOptions, OutputKind, emit_native_with_options};
+    let src = alloc::format!(
+        "struct sk {{ int x; }};\n\
+         struct sk key = {{ 42 }};\n\
+         int probe(void) {{\n\
+             __asm__ volatile(\n\
+                 \"1:\\tnop\\n\"\n\
+                 \".pushsection .optab,\\\"ax\\\"\\n\"\n\
+                 \".balign 8\\n\"\n\
+                 \".ascii \\\"OpTaB9mk\\\"\\n\"\n\
+                 \"{words}\"\n\
+                 \".popsection\\n\" : : \"i\"(&key));\n\
+             return 0;\n\
+         }}\n\
+         int main(void) {{ return probe(); }}\n"
+    );
+    let program = Compiler::with_target(src, target)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let mut merged = link_native_objects(core::slice::from_ref(&obj)).expect("link");
+    let plt = match target {
+        crate::c5::Target::LinuxAarch64 | crate::c5::Target::WindowsAarch64 => {
+            emit_aarch64_plt(&mut merged).expect("plt")
+        }
+        _ => emit_x86_64_plt(&mut merged).expect("plt"),
+    };
+    let output_kind = if target.is_windows() {
+        OutputKind::SharedLibrary
+    } else {
+        OutputKind::Executable
+    };
+    let shared_name = target.is_windows().then_some("optab.dll");
+    let image = write_native_image_from_merged(
+        &merged,
+        &plt,
+        "main",
+        None,
+        output_kind,
+        target,
+        shared_name,
+    )?;
+    Ok((image, merged))
+}
+
+#[test]
+fn text_absolute_field_self_links_into_a_pe_image() {
+    // A `.quad sym` word inside an executable section holds `S + A` as
+    // a runtime address. The merge parks it -- only the writer knows
+    // where the image loads -- and the synthesizer had no carrier for
+    // a plain field, so it was declined as an unsupported relocation
+    // where GNU ld resolves the same object. PE rebases every section
+    // through `.reloc`, so each field takes its preferred VA plus one
+    // `IMAGE_REL_BASED_DIR64` entry.
+    use crate::c5::Target;
+    const IMAGE_REL_BASED_DIR64: u16 = 10;
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        let (image, merged) = self_link_text_absolute_shape(target, ".quad %c0\\n\\t.quad 1b\\n")
+            .expect("write PE image");
+        let pe = PeImage::parse(&image);
+        let (text_rva, text) = pe.section(".text");
+        let (data_rva, _) = pe.section(".data");
+        let marker = text
+            .windows(8)
+            .position(|w| w == b"OpTaB9mk")
+            .expect("section payload in image .text");
+        let quad = |i: usize| u64::from_le_bytes(text[i..i + 8].try_into().unwrap());
+        // `key` is writable, so its merged data offset sits past the
+        // read-only prefix the writer places in `.rdata`.
+        let key = merged.defined.get("key").expect("key in merged");
+        let key_rva = data_rva as u64 + (key.value - merged.data_ro_len as u64);
+        assert_eq!(
+            quad(marker + 8),
+            pe.image_base + key_rva,
+            "{target:?}: `.quad %c0` must hold the preferred VA of `key`"
+        );
+        // `1b` labels the `nop` the template emits ahead of the pushed
+        // section, so the second word points back into `.text`.
+        let label = quad(marker + 16);
+        assert!(
+            label >= pe.image_base + text_rva as u64
+                && label < pe.image_base + text_rva as u64 + text.len() as u64,
+            "{target:?}: `.quad 1b` must hold a `.text` VA, got {label:#x}"
+        );
+        for i in [8usize, 16] {
+            let site = text_rva + (marker + i) as u32;
+            assert!(
+                pe.base_relocs.contains(&(site, IMAGE_REL_BASED_DIR64)),
+                "{target:?}: no DIR64 base relocation for the field at .text+{:#x}; \
+                 entries: {:?}",
+                marker + i,
+                pe.base_relocs
+            );
+        }
+    }
+}
+
+#[test]
+fn narrow_text_absolute_field_reports_truncation() {
+    // The same field at four bytes: the image base puts every address
+    // past 2^32, so `R_X86_64_32` cannot hold one. The writer reports
+    // it rather than storing the low half, as `write_abs_field` does on
+    // the ET_EXEC path.
+    let err = self_link_text_absolute_shape(crate::c5::Target::WindowsX64, ".long %c0\\n")
+        .err()
+        .map(|e| e.to_string())
+        .unwrap_or_default();
+    assert!(err.contains("relocation truncated to fit"), "{err}");
+}
+
+#[test]
+fn text_absolute_field_stays_refused_in_a_position_independent_image() {
+    // The ELF writer sets ET_DYN: the loader picks the base and ELF
+    // admits no relocation against an executable section, so `S + A`
+    // has no value to write. The reference is declined at the
+    // synthesizer, naming the output kind as GNU ld does.
+    use crate::c5::Target;
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let err = self_link_text_absolute_shape(target, ".quad %c0\\n")
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_default();
+        assert!(
+            err.contains("can not be used when making a position-independent executable"),
+            "{target:?}: {err}"
+        );
+    }
+}
+
 #[test]
 fn asm_section_pcrel_extern_with_addend_relocates_like_gas() {
     // A static-call trampoline emits `jmp.d32 func` as section data:
@@ -8576,8 +9973,10 @@ fn aarch64_asm_replacement_branch_resolves_to_in_region_label() {
         .expect(".text missing")
         .3;
     let words: alloc::vec::Vec<u32> = text
-        .chunks_exact(4)
-        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| u32::from_le_bytes(*c))
         .collect();
     // The region is `b 1f; nop; 1: nop`; the branch resolves to +2 words.
     assert!(
@@ -8643,8 +10042,10 @@ fn aarch64_asm_replacement_branch_to_symbol_relocates_out_of_line() {
         0x9400_0000
     );
     let ret = text
-        .chunks_exact(4)
-        .position(|c| u32::from_le_bytes(c.try_into().unwrap()) == 0xd65f_03c0)
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .position(|c| u32::from_le_bytes(*c) == 0xd65f_03c0)
         .expect("ret present");
     assert!(off > ret * 4, "replacement branch is not out of line");
 }
@@ -8686,8 +10087,10 @@ fn aarch64_clobbered_callee_saved_register_is_saved_around_the_block() {
         .expect(".text missing")
         .3;
     let words: alloc::vec::Vec<u32> = text
-        .chunks_exact(4)
-        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| u32::from_le_bytes(*c))
         .collect();
     let template = words
         .iter()
@@ -8738,8 +10141,10 @@ fn aarch64_fixed_operand_outside_the_pool_is_saved_and_restored() {
         .expect(".text missing")
         .3;
     let words: alloc::vec::Vec<u32> = text
-        .chunks_exact(4)
-        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| u32::from_le_bytes(*c))
         .collect();
     // x30 is stored to the operand frame before the template and reloaded
     // after it: `str x30, [sp, #imm]` / `ldr x30, [sp, #imm]` (0xf90*/0xf94*
@@ -8794,8 +10199,10 @@ fn aarch64_file_scope_section_assembles_instructions() {
         .expect(".text.stub missing")
         .3;
     let words: alloc::vec::Vec<u32> = sec
-        .chunks_exact(4)
-        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| u32::from_le_bytes(*c))
         .collect();
     // mov x10, x30 / mov x30, x9 / ret x10, as the reference assembler encodes
     // them (orr Xd, xzr, Xm; ret Xn).
@@ -8838,8 +10245,10 @@ fn aarch64_asm_replacement_goto_branch_targets_label_block() {
         .expect(".text missing")
         .3;
     let words: alloc::vec::Vec<u32> = text
-        .chunks_exact(4)
-        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| u32::from_le_bytes(*c))
         .collect();
     // `return 1;` lowers the l_yes block to `mov x0, #1`.
     let lyes = words
@@ -8925,6 +10334,69 @@ fn asm_goto_branch_and_section_field_name_one_address() {
             "{target:?}: the template branch and the section field name different addresses"
         );
     }
+}
+
+#[test]
+fn aarch64_framed_asm_goto_branch_and_section_field_share_the_trampoline() {
+    // The same patching contract with exit work pending: a register operand
+    // forces a save the label edge must restore, so the template branch
+    // leaves through the restore trampoline -- and the section field must
+    // name that same address, or a patched-in branch would skip the restores.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "static int probe(int b) {\n\
+             __asm__ goto(\"1:\\tb %l[l_yes]\\n\"\n\
+                 \".pushsection .jt,\\\"aw\\\"\\n\"\n\
+                 \".balign 8\\n\"\n\
+                 \".long 1b - .\\n\"\n\
+                 \".long %l[l_yes] - .\\n\"\n\
+                 \".popsection\\n\" : : \"r\"(b) : : l_yes);\n\
+             return 0;\n\
+         l_yes:\n\
+             return 1;\n\
+         }\n\
+         int main(void) { return probe(1); }\n";
+    let program = Compiler::with_target(String::from(src), Target::LinuxAarch64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let sections = elf_sections(&bytes);
+    let text = &sections
+        .iter()
+        .find(|(n, _, _, _)| n == ".text")
+        .expect(".text missing")
+        .3;
+    let rela = &sections
+        .iter()
+        .find(|(n, _, _, _)| n == ".rela.jt")
+        .expect(".rela.jt missing")
+        .3;
+    assert_eq!(rela.len(), 2 * 24, "two `.long` relocs");
+    let addend = |k: usize| i64::from_le_bytes(rela[k * 24 + 16..k * 24 + 24].try_into().unwrap());
+    let (code_off, label_off) = (addend(0) as usize, addend(1));
+    let w = u32::from_le_bytes(text[code_off..code_off + 4].try_into().unwrap());
+    assert_eq!(w & 0xfc00_0000, 0x1400_0000, "`1b` holds a `b`");
+    let off = ((w & 0x03ff_ffff) << 6) as i32 >> 6;
+    let reached = code_off as i64 + off as i64 * 4;
+    assert_eq!(
+        reached, label_off,
+        "the template branch and the section field name different addresses"
+    );
+    // The shared address is the trampoline (a region reload off sp), not the
+    // label block.
+    let t = u32::from_le_bytes(
+        text[label_off as usize..label_off as usize + 4]
+            .try_into()
+            .unwrap(),
+    );
+    assert_eq!(
+        t & 0xFFC0_03E0,
+        0xF940_03E0,
+        "the shared address opens with the region reload: {t:08x}"
+    );
 }
 
 #[test]
@@ -9466,7 +10938,7 @@ fn x86_alternative_replacement_goto_branch_relocates_to_block() {
     // Find the reloc at byte offset `off` in a `.rela.*` body; return
     // `(r_info, r_addend)`.
     let at = |rela: &[u8], off: u64| -> (u64, i64) {
-        for b in rela.chunks_exact(24) {
+        for b in rela.as_chunks::<24>().0.iter() {
             if u64::from_le_bytes(b[0..8].try_into().unwrap()) == off {
                 return (
                     u64::from_le_bytes(b[8..16].try_into().unwrap()),
@@ -9572,7 +11044,7 @@ fn x86_static_cpu_has_memory_operand_replacement_encodes_and_relocates() {
     // The `testb` disp32 reloc: at byte offset 2, PC32 against `cap`, addend
     // `2 - 5 = -3` (GNU as: `cap - 3`).
     let at = |off: u64| -> (u64, i64) {
-        for b in rela.chunks_exact(24) {
+        for b in rela.as_chunks::<24>().0.iter() {
             if u64::from_le_bytes(b[0..8].try_into().unwrap()) == off {
                 return (
                     u64::from_le_bytes(b[8..16].try_into().unwrap()),
@@ -10311,8 +11783,8 @@ fn undefined_weak_reference_in_single_tu_image_reads_as_null() {
             _ => {
                 // `adrp xd, #0` (0x90000000 | rd) and `bl #0` (0x94000000)
                 // are the aarch64 unresolved-placeholder shapes.
-                for word in bytes.chunks_exact(4) {
-                    let w = u32::from_le_bytes(word.try_into().unwrap());
+                for word in bytes.as_chunks::<4>().0.iter() {
+                    let w = u32::from_le_bytes(*word);
                     assert_ne!(w & 0xFFFF_FFE0, 0x9000_0000, "{target:?}: `adrp xd, #0`");
                     assert_ne!(w, 0x9400_0000, "{target:?}: `bl #0`");
                 }
@@ -10495,6 +11967,187 @@ fn inline_asm_branch_to_undefined_symbol_emits_a_call_relocation() {
 /// The same inline-asm branch in a single-TU final image has no link
 /// step to bind it, so an undefined non-weak target is a diagnostic
 /// rather than a placeholder that faults at run time.
+/// The GOT base is linker-defined, not an import: hand-written PIC
+/// names `_GLOBAL_OFFSET_TABLE_` to compute it, so the reference
+/// resolves against the image's own `.got` and the symbol table
+/// carries the sizeless local OBJECT bfd gives it.
+#[cfg(feature = "native-emit")]
+#[test]
+fn inline_asm_reads_the_got_base() {
+    use crate::c5::linker::{
+        emit_aarch64_plt, emit_x86_64_plt, link_native_objects, parse_native_elf,
+        write_native_image_from_merged,
+    };
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        // The import gives the image a GOT to name; without one there
+        // is no table and bfd defines no symbol either.
+        let src = if target == Target::LinuxX64 {
+            "#pragma dylib(libc, \"libc.so.6\")\n\
+             #pragma binding(libc::printf, \"printf\")\n\
+             int printf(const char *, ...);\n\
+             int main(void) { void *g; __asm__(\"leaq _GLOBAL_OFFSET_TABLE_(%%rip), %0\" \
+             : \"=r\"(g)); return g == 0 ? printf(\"\") : 0; }\n"
+        } else {
+            "#pragma dylib(libc, \"libc.so.6\")\n\
+             #pragma binding(libc::printf, \"printf\")\n\
+             int printf(const char *, ...);\n\
+             int main(void) { void *g; __asm__(\"adrp %0, _GLOBAL_OFFSET_TABLE_\\n\\t\
+             add %0, %0, :lo12:_GLOBAL_OFFSET_TABLE_\" : \"=r\"(g)); \
+             return g == 0 ? printf(\"\") : 0; }\n"
+        };
+        let program =
+            Compiler::with_options(src.to_string(), target, crate::CompileOptions::default())
+                .compile()
+                .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let obj_bytes = emit_native_with_options(&program, target, opts).expect("emit object");
+        let obj = parse_native_elf(&obj_bytes).expect("parse ET_REL");
+        let mut merged = link_native_objects(&[obj]).expect("the GOT base is defined by the link");
+        let plt = if target == Target::LinuxX64 {
+            emit_x86_64_plt(&mut merged)
+        } else {
+            emit_aarch64_plt(&mut merged)
+        }
+        .expect("plt");
+        let image = write_native_image_from_merged(
+            &merged,
+            &plt,
+            "main",
+            None,
+            OutputKind::Executable,
+            target,
+            None,
+        )
+        .expect("write executable");
+        let sections = elf_sections(&image);
+        let rows: alloc::vec::Vec<_> = elf_symbols(&image)
+            .into_iter()
+            .filter(|(n, _, _, _, _)| n == "_GLOBAL_OFFSET_TABLE_")
+            .collect();
+        assert_eq!(rows.len(), 1, "{target:?}: one GOT base entry");
+        let (_, info, shndx, value, size) = rows[0].clone();
+        // STB_LOCAL << 4 is zero, so the info byte is the type alone.
+        assert_eq!(info, 1, "{target:?}: local OBJECT");
+        assert_eq!(size, 0, "{target:?}: sizeless");
+        let home = &sections[shndx as usize].0;
+        assert_eq!(home, ".got", "{target:?}: the entry names the GOT");
+        assert!(value != 0, "{target:?}: the entry carries an address");
+    }
+}
+
+/// The library's single-TU image path resolves the GOT base like the
+/// link path: the writer holds the table's address either way, so the
+/// finalizer parks the site as a GOT-base fixup instead of reporting
+/// the name undefined. Checks the patched operand against the image's
+/// own `.got`, not just the symbol table entry.
+#[cfg(feature = "native-emit")]
+#[test]
+fn single_tu_image_resolves_the_got_base() {
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        // The import gives the image a GOT to name; without one there
+        // is no table and the symbol table carries no entry either.
+        let src = if target == Target::LinuxX64 {
+            "#pragma dylib(libc, \"libc.so.6\")\n\
+             #pragma binding(libc::printf, \"printf\")\n\
+             int printf(const char *, ...);\n\
+             int main(void) { void *g; __asm__(\"leaq _GLOBAL_OFFSET_TABLE_(%%rip), %0\" \
+             : \"=r\"(g)); return g == 0 ? printf(\"\") : 0; }\n"
+        } else {
+            "#pragma dylib(libc, \"libc.so.6\")\n\
+             #pragma binding(libc::printf, \"printf\")\n\
+             int printf(const char *, ...);\n\
+             int main(void) { void *g; __asm__(\"adrp %0, _GLOBAL_OFFSET_TABLE_\\n\\t\
+             add %0, %0, :lo12:_GLOBAL_OFFSET_TABLE_\" : \"=r\"(g)); \
+             return g == 0 ? printf(\"\") : 0; }\n"
+        };
+        let program =
+            Compiler::with_options(src.to_string(), target, crate::CompileOptions::default())
+                .compile()
+                .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Executable,
+            ..Default::default()
+        };
+        let image = emit_native_with_options(&program, target, opts)
+            .expect("the single-TU image path resolves the GOT base");
+        let sections = elf_sections(&image);
+        // `elf_sections` carries no address; the checks below need one.
+        let sec_addr = |want: &str| -> u64 {
+            let u16le = |o: usize| u16::from_le_bytes(image[o..o + 2].try_into().unwrap()) as usize;
+            let u32le = |o: usize| u32::from_le_bytes(image[o..o + 4].try_into().unwrap()) as usize;
+            let u64le = |o: usize| u64::from_le_bytes(image[o..o + 8].try_into().unwrap());
+            let shoff = u64le(0x28) as usize;
+            let (shentsize, shnum, shstrndx) = (u16le(0x3A), u16le(0x3C), u16le(0x3E));
+            let strtab = u64le(shoff + shstrndx * shentsize + 0x18) as usize;
+            for i in 0..shnum {
+                let sh = shoff + i * shentsize;
+                let n = strtab + u32le(sh);
+                let end = image[n..].iter().position(|&b| b == 0).unwrap() + n;
+                if &image[n..end] == want.as_bytes() {
+                    return u64le(sh + 0x10);
+                }
+            }
+            panic!("{target:?}: no section `{want}`");
+        };
+        let got_addr = sec_addr(".got");
+        assert!(got_addr != 0, "{target:?}: the GOT has an address");
+
+        let rows: alloc::vec::Vec<_> = elf_symbols(&image)
+            .into_iter()
+            .filter(|(n, _, _, _, _)| n == "_GLOBAL_OFFSET_TABLE_")
+            .collect();
+        assert_eq!(rows.len(), 1, "{target:?}: one GOT base entry");
+        let (_, info, shndx, value, size) = rows[0].clone();
+        // STB_LOCAL << 4 is zero, so the info byte is the type alone.
+        assert_eq!(info, 1, "{target:?}: local OBJECT");
+        assert_eq!(size, 0, "{target:?}: sizeless");
+        assert_eq!(
+            &sections[shndx as usize].0, ".got",
+            "{target:?}: the entry names the GOT"
+        );
+        assert_eq!(value, got_addr, "{target:?}: the entry is the GOT base");
+
+        // The reference site itself must hold the GOT's address, which
+        // is what a bare symbol-table entry does not prove.
+        let text_addr = sec_addr(".text");
+        let text_bytes = &sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".text")
+            .unwrap_or_else(|| panic!("{target:?}: no .text"))
+            .3;
+        let found = if target == Target::LinuxX64 {
+            // `lea r64, [rip+disp32]`: REX.W 8D, modrm mod=00 rm=101.
+            (0..text_bytes.len().saturating_sub(7)).any(|i| {
+                text_bytes[i] & 0xF8 == 0x48
+                    && text_bytes[i + 1] == 0x8D
+                    && text_bytes[i + 2] & 0xC7 == 0x05
+                    && {
+                        let d = i32::from_le_bytes(text_bytes[i + 3..i + 7].try_into().unwrap());
+                        (text_addr + i as u64 + 7).wrapping_add_signed(d as i64) == got_addr
+                    }
+            })
+        } else {
+            // `adrp`: the page of the target, relative to the page of
+            // the instruction.
+            (0..text_bytes.len().saturating_sub(4)).step_by(4).any(|i| {
+                let w = u32::from_le_bytes(text_bytes[i..i + 4].try_into().unwrap());
+                w & 0x9F00_0000 == 0x9000_0000 && {
+                    let imm = (((w >> 3) & 0x001F_FFFC) | ((w >> 29) & 3)) as i32;
+                    let imm = ((imm << 11) >> 11) as i64;
+                    ((text_addr + i as u64) & !0xFFF).wrapping_add_signed(imm << 12)
+                        == got_addr & !0xFFF
+                }
+            })
+        };
+        assert!(found, "{target:?}: no site holds the GOT base address");
+    }
+}
+
 #[cfg(feature = "native-emit")]
 #[test]
 fn inline_asm_branch_to_undefined_symbol_in_final_image_is_diagnosed() {
@@ -10977,7 +12630,9 @@ int main(void) { return 0; }
                 .iter()
                 .find(|(n, _, _, _)| n == sec)
                 .map_or(0, |s| {
-                    s.3.chunks_exact(24)
+                    s.3.as_chunks::<24>()
+                        .0
+                        .iter()
                         .filter(|r| {
                             let ty = u32::from_le_bytes(r[8..12].try_into().unwrap());
                             // CALL26 / PLT32+PC32 call forms.
@@ -11034,8 +12689,10 @@ int main(void) { return 0; }
             .find(|(n, _, _, _)| n == ".rodata")
             .unwrap_or_else(|| panic!("{target:?}: .rodata missing"));
         let words: Vec<u32> =
-            ro.3.chunks_exact(4)
-                .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+            ro.3.as_chunks::<4>()
+                .0
+                .iter()
+                .map(|c| u32::from_le_bytes(*c))
                 .collect();
         for want in [0x300u32, 0x340] {
             assert!(
@@ -11238,8 +12895,8 @@ fn asm_address_constraint_renders_as_a_memory_reference() {
         "void pl(const void *p) { __asm__ volatile(\"prfm pldl1keep, %a0\\n\" : : \"p\" (p)); }\nint main(void) { return 0; }\n",
         Target::LinuxAarch64,
     );
-    let found = a64.chunks_exact(4).any(|w| {
-        let w = u32::from_le_bytes(w.try_into().unwrap());
+    let found = a64.as_chunks::<4>().0.iter().any(|w| {
+        let w = u32::from_le_bytes(*w);
         w & 0xFFFF_FC1F == 0xF980_0000
     });
     assert!(found, "aarch64: `prfm pldl1keep, [Xn]` not encoded");
@@ -11291,8 +12948,10 @@ fn asm_prfm_accepts_a_bare_q_operand_reference() {
         .expect(".text")
         .3;
     let words = || {
-        text.chunks_exact(4)
-            .map(|w| u32::from_le_bytes(w.try_into().unwrap()))
+        text.as_chunks::<4>()
+            .0
+            .iter()
+            .map(|w| u32::from_le_bytes(*w))
     };
     // prfm pstl1strm, [Xn]: base-register form, zero offset, prfop 0x11.
     let prfm = words()
@@ -11606,43 +13265,50 @@ fn c_reference_binds_to_an_asm_defined_label_in_the_same_unit() {
         unsigned long a(void) { return (unsigned long)&fn_in_section; }\n\
         unsigned long b(void) { return (unsigned long)&plain_text_fn; }\n\
         unsigned long c(void) { return (unsigned long)&label_in_text; }\n";
-    let program = Compiler::with_options(
-        src.to_string(),
-        Target::LinuxX64,
-        CompileOptions::default().with_no_entry_point(true),
-    )
-    .compile()
-    .expect("compile");
-    let opts = NativeOptions {
-        output_kind: OutputKind::Relocatable,
-        ..Default::default()
-    };
-    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
-    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
-    for name in ["fn_in_section", "plain_text_fn", "label_in_text"] {
-        let hits: alloc::vec::Vec<&crate::c5::linker::object::NativeSymbol> =
-            obj.symbols.iter().filter(|s| s.name == name).collect();
-        assert_eq!(
-            hits.len(),
-            1,
-            "`{name}` must surface as one symbol, not a definition plus an \
-             undefined twin: {hits:?}"
-        );
-        assert_eq!(
-            hits[0].binding, 0,
-            "`{name}` has no `.globl`, so it is local"
-        );
-        assert!(
-            matches!(hits[0].section, NativeSymSection::Text),
-            "`{name}` must be defined in the unit's code, not undefined: {:?}",
-            hits[0].section
-        );
-        // The C reference relocates against that definition.
-        let idx = obj.symbols.iter().position(|s| s.name == name).unwrap();
-        assert!(
-            obj.text_relocs.iter().any(|r| r.sym_idx == idx),
-            "the C reference to `{name}` must relocate against the in-unit definition"
-        );
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_options(
+            src.to_string(),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+        for name in ["fn_in_section", "plain_text_fn", "label_in_text"] {
+            let hits: alloc::vec::Vec<&crate::c5::linker::object::NativeSymbol> =
+                obj.symbols.iter().filter(|s| s.name == name).collect();
+            assert_eq!(
+                hits.len(),
+                1,
+                "{target:?}: `{name}` must surface as one symbol, not a definition plus an \
+                 undefined twin: {hits:?}"
+            );
+            assert_eq!(
+                hits[0].binding, 0,
+                "{target:?}: `{name}` has no `.globl`, so it is local"
+            );
+            assert!(
+                matches!(hits[0].section, NativeSymSection::Text),
+                "{target:?}: `{name}` must be defined in the unit's code, not undefined: {:?}",
+                hits[0].section
+            );
+            // The C reference relocates to that definition: against the
+            // symbol, or -- as GNU as does for a local `.text` label -- against
+            // the section with the definition's offset as the addend.
+            let idx = obj.symbols.iter().position(|s| s.name == name).unwrap();
+            let value = hits[0].value as i64;
+            assert!(
+                obj.text_relocs
+                    .iter()
+                    .any(|r| r.sym_idx == idx || r.addend == value),
+                "{target:?}: the C reference to `{name}` must relocate to the in-unit definition"
+            );
+        }
     }
 }
 
@@ -11807,7 +13473,9 @@ fn asm_section_local_label_reloc_reduces_to_section_symbol() {
 /// Section name, symbol binding, value and size for every named data
 /// object in a `-c` object, keyed by symbol name.
 #[cfg(feature = "native-emit")]
-fn elf_data_objects(bytes: &[u8]) -> alloc::collections::BTreeMap<String, (String, u8, u64, u64)> {
+pub(super) fn elf_data_objects(
+    bytes: &[u8],
+) -> alloc::collections::BTreeMap<String, (String, u8, u64, u64)> {
     const STT_OBJECT: u8 = 1;
     let sections = elf_sections(bytes);
     elf_symbols(bytes)
@@ -12002,6 +13670,258 @@ fn relocated_const_storage_follows_the_pic_model() {
     }
 }
 
+/// ELF64 program headers of an image: `(p_type, p_flags, p_offset,
+/// p_vaddr, p_filesz, p_memsz)`.
+#[cfg(feature = "native-emit")]
+fn elf_phdrs(bytes: &[u8]) -> alloc::vec::Vec<(u32, u32, u64, u64, u64, u64)> {
+    let phoff = u64::from_le_bytes(bytes[0x20..0x28].try_into().unwrap()) as usize;
+    let phentsize = u16::from_le_bytes(bytes[0x36..0x38].try_into().unwrap()) as usize;
+    let phnum = u16::from_le_bytes(bytes[0x38..0x3a].try_into().unwrap()) as usize;
+    (0..phnum)
+        .map(|i| {
+            let b = phoff + i * phentsize;
+            let f = |o: usize| u64::from_le_bytes(bytes[b + o..b + o + 8].try_into().unwrap());
+            (
+                u32::from_le_bytes(bytes[b..b + 4].try_into().unwrap()),
+                u32::from_le_bytes(bytes[b + 4..b + 8].try_into().unwrap()),
+                f(0x08),
+                f(0x10),
+                f(0x20),
+                f(0x28),
+            )
+        })
+        .collect()
+}
+
+#[test]
+#[cfg(feature = "native-emit")]
+fn relro_stream_separates_relocated_const_from_read_only() {
+    // Two units: one whose `.rodata` carries no relocation, one whose
+    // `.rodata` holds a relocated initializer. The clean unit's const
+    // content stays in the PF_R load; the relocated unit's joins the
+    // relro region at the head of the RW segment, covered together
+    // with `.dynamic` and `.got` by PT_GNU_RELRO, whose end falls on
+    // the max-page boundary so the loader's re-protection holds under
+    // every runtime page size.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::{
+        NativeMachine, link_native_objects, parse_native_elf, write_native_image_from_merged,
+    };
+    use crate::c5::{
+        NativeOptions, OutputKind, Target, emit_aarch64_plt, emit_native_with_options,
+        emit_x86_64_plt,
+    };
+    const PT_LOAD: u32 = 1;
+    const PT_DYNAMIC: u32 = 2;
+    const PT_GNU_RELRO: u32 = 0x6474_E552;
+    const PF_W: u32 = 2;
+    const PF_R: u32 = 4;
+    let src_clean = "const char clean_tab[16] = \"CLEANTBLCLEANTB\";\n";
+    let src_mixed = "\
+        extern const char clean_tab[16];\n\
+        static int probe(void) { return 1; }\n\
+        struct ops { int (*p)(void); const char *n; };\n\
+        const struct ops mixer = { probe, \"MXOPNAME\" };\n\
+        const char mixed_tab[16] = \"MIXEDTBLMIXEDTB\";\n\
+        int wglob = 5;\n\
+        int main(void) { return mixer.p() + mixed_tab[0] + clean_tab[0] + wglob; }\n";
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    for target in [crate::c5::Target::LinuxX64, crate::c5::Target::LinuxAarch64] {
+        let unit = |src: &str, entry: bool| {
+            let copts = if entry {
+                CompileOptions::default()
+            } else {
+                CompileOptions::default().with_no_entry_point(true)
+            };
+            let program = Compiler::with_options(String::from(src), target, copts)
+                .compile()
+                .expect("compile");
+            let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+            parse_native_elf(&bytes).expect("parse")
+        };
+        let mut merged =
+            link_native_objects(&[unit(src_clean, false), unit(src_mixed, true)]).expect("link");
+        let ro_len = merged.data_ro_len as u64;
+        let relro_len = merged.data_relro_len as u64;
+        assert!(
+            ro_len < relro_len && relro_len <= merged.data.len() as u64,
+            "{target:?}: relro region must sit between the prefix and the writable data"
+        );
+        let sym = |n: &str| merged.defined[n].value;
+        assert!(
+            sym("clean_tab") < ro_len,
+            "{target:?}: clean const stays RO"
+        );
+        for n in ["mixer", "mixed_tab"] {
+            assert!(
+                (ro_len..relro_len).contains(&sym(n)),
+                "{target:?}: relocated unit's const `{n}` joins the relro region"
+            );
+        }
+        assert!(
+            sym("wglob") >= relro_len,
+            "{target:?}: writable data past relro"
+        );
+        let plt = match merged.machine {
+            NativeMachine::Aarch64 => emit_aarch64_plt(&mut merged),
+            NativeMachine::X86_64 => emit_x86_64_plt(&mut merged),
+        }
+        .expect("plt");
+        let image = write_native_image_from_merged(
+            &merged,
+            &plt,
+            "main",
+            None,
+            OutputKind::Executable,
+            target,
+            None,
+        )
+        .expect("write executable");
+        let phdrs = elf_phdrs(&image);
+        let (_, _, relro_off, relro_vaddr, relro_filesz, relro_memsz) = *phdrs
+            .iter()
+            .find(|p| p.0 == PT_GNU_RELRO)
+            .expect("image carries PT_GNU_RELRO");
+        assert_eq!(
+            relro_filesz, relro_memsz,
+            "{target:?}: relro is file-backed"
+        );
+        let seg = match target {
+            Target::LinuxAarch64 => 0x1_0000u64,
+            _ => 0x1000u64,
+        };
+        assert_eq!(
+            (relro_vaddr + relro_memsz) % seg,
+            0,
+            "{target:?}: relro end must fall on the max-page boundary"
+        );
+        let (_, _, rw_off, rw_vaddr, rw_filesz, _) = *phdrs
+            .iter()
+            .find(|p| p.0 == PT_LOAD && p.1 & PF_W != 0)
+            .expect("RW load");
+        assert_eq!((relro_off, relro_vaddr), (rw_off, rw_vaddr), "{target:?}");
+        assert!(
+            relro_filesz <= rw_filesz,
+            "{target:?}: relro within the RW load"
+        );
+        let (_, _, dyn_off, _, dyn_filesz, _) = *phdrs
+            .iter()
+            .find(|p| p.0 == PT_DYNAMIC)
+            .expect("PT_DYNAMIC");
+        assert!(
+            dyn_off >= relro_off && dyn_off + dyn_filesz <= relro_off + relro_filesz,
+            "{target:?}: .dynamic inside the relro span"
+        );
+        let contains = |lo: usize, len: usize, needle: &[u8]| {
+            image[lo..lo + len]
+                .windows(needle.len())
+                .any(|w| w == needle)
+        };
+        let (_, _, ro_off, _, ro_filesz, _) = *phdrs
+            .iter()
+            .find(|p| p.0 == PT_LOAD && p.1 == PF_R)
+            .expect("PF_R load");
+        assert!(
+            contains(ro_off as usize, ro_filesz as usize, b"CLEANTBL"),
+            "{target:?}: clean const table in the PF_R load"
+        );
+        assert!(
+            !contains(ro_off as usize, ro_filesz as usize, b"MIXEDTBL"),
+            "{target:?}: relocated unit's const out of the PF_R load"
+        );
+        assert!(
+            contains(relro_off as usize, relro_filesz as usize, b"MIXEDTBL"),
+            "{target:?}: relocated unit's const inside the relro span"
+        );
+        assert!(
+            !contains(
+                (rw_off + relro_filesz) as usize,
+                (rw_filesz - relro_filesz) as usize,
+                b"MIXEDTBL"
+            ),
+            "{target:?}: relro content out of the writable remainder"
+        );
+        let (relro_addr, relro_sec) =
+            elf_image_section(&image, ".data.rel.ro").expect(".data.rel.ro section");
+        assert!(
+            relro_sec.windows(8).any(|w| w == b"MIXEDTBL"),
+            "{target:?}: .data.rel.ro carries the relocated const"
+        );
+        assert!(
+            relro_addr >= relro_vaddr
+                && relro_addr + relro_sec.len() as u64 <= relro_vaddr + relro_memsz,
+            "{target:?}: .data.rel.ro within the PT_GNU_RELRO span"
+        );
+        let (data_addr, _) = elf_image_section(&image, ".data").expect(".data section");
+        assert!(
+            data_addr >= relro_vaddr + relro_memsz,
+            "{target:?}: writable .data starts past the relro span"
+        );
+    }
+}
+
+#[test]
+#[cfg(feature = "native-emit")]
+fn relro_segment_covers_dynamic_and_got_without_relro_content() {
+    // With no relocated const anywhere the relro stream is empty, but
+    // PT_GNU_RELRO still protects `.dynamic` and `.got`, as ld does.
+    use crate::c5::linker::{
+        NativeMachine, link_native_objects, parse_native_elf, write_native_image_from_merged,
+    };
+    use crate::c5::{
+        NativeOptions, OutputKind, emit_aarch64_plt, emit_native_with_options, emit_x86_64_plt,
+    };
+    const PT_DYNAMIC: u32 = 2;
+    const PT_GNU_RELRO: u32 = 0x6474_E552;
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    for target in [crate::c5::Target::LinuxX64, crate::c5::Target::LinuxAarch64] {
+        let program = Compiler::with_target("int main(void){return 0;}".to_string(), target)
+            .compile()
+            .expect("compile");
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let mut merged =
+            link_native_objects(&[parse_native_elf(&bytes).expect("parse")]).expect("link");
+        assert_eq!(
+            merged.data_ro_len, merged.data_relro_len,
+            "{target:?}: no relocated const, empty relro stream"
+        );
+        let plt = match merged.machine {
+            NativeMachine::Aarch64 => emit_aarch64_plt(&mut merged),
+            NativeMachine::X86_64 => emit_x86_64_plt(&mut merged),
+        }
+        .expect("plt");
+        let image = write_native_image_from_merged(
+            &merged,
+            &plt,
+            "main",
+            None,
+            OutputKind::Executable,
+            target,
+            None,
+        )
+        .expect("write executable");
+        let phdrs = elf_phdrs(&image);
+        let (_, _, relro_off, _, relro_filesz, _) = *phdrs
+            .iter()
+            .find(|p| p.0 == PT_GNU_RELRO)
+            .expect("image carries PT_GNU_RELRO");
+        let (_, _, dyn_off, _, dyn_filesz, _) = *phdrs
+            .iter()
+            .find(|p| p.0 == PT_DYNAMIC)
+            .expect("PT_DYNAMIC");
+        assert!(
+            dyn_off >= relro_off && dyn_off + dyn_filesz <= relro_off + relro_filesz,
+            "{target:?}: .dynamic inside the relro span"
+        );
+    }
+}
+
 #[test]
 #[cfg(feature = "native-emit")]
 fn label_addr_table_is_relocated_read_only_data() {
@@ -12057,7 +13977,9 @@ fn label_addr_table_is_relocated_read_only_data() {
             );
             let rela = sec_of(&alloc::format!(".rela{sec}")).3.clone();
             let hits = rela
-                .chunks_exact(24)
+                .as_chunks::<24>()
+                .0
+                .iter()
                 .filter(|e| {
                     let r_offset = u64::from_le_bytes(e[0..8].try_into().unwrap());
                     let r_info = u64::from_le_bytes(e[8..16].try_into().unwrap());
@@ -12107,7 +14029,9 @@ fn label_addr_table_is_relocated_read_only_data() {
                 .unwrap_or_else(|| panic!("{target:?}: no `{sec}` section symbol"));
             sec_of(".rela.text")
                 .3
-                .chunks_exact(24)
+                .as_chunks::<24>()
+                .0
+                .iter()
                 .filter(|e| {
                     let r_info = u64::from_le_bytes(e[8..16].try_into().unwrap());
                     (r_info >> 32) as usize == idx
@@ -12517,4 +14441,670 @@ fn link_map_reports_contributions_symbols_and_archive_members() {
             "liba.a(archmem.o)".to_string()
         ]
     );
+}
+
+/// Mapping symbols of an aarch64 `-c` object as `(section, offset, name)`,
+/// in section then offset order.
+fn mapping_symbols(bytes: &[u8]) -> alloc::vec::Vec<(String, u64, String)> {
+    let sections = elf_sections(bytes);
+    let mut out: alloc::vec::Vec<(String, u64, String)> = elf_symbols(bytes)
+        .into_iter()
+        .filter(|(n, ..)| n == "$x" || n == "$d")
+        .map(|(n, info, shndx, value, size)| {
+            // The ABI fixes the binding and type: STB_LOCAL, STT_NOTYPE,
+            // and no extent.
+            assert_eq!(info, 0, "{n} is not STB_LOCAL / STT_NOTYPE");
+            assert_eq!(size, 0, "{n} carries a size");
+            (sections[shndx as usize].0.clone(), value, n)
+        })
+        .collect();
+    out.sort();
+    out
+}
+
+/// `-c` object bytes for an assembled unit.
+fn asm_reloc_tu(src: &str, target: crate::c5::Target) -> alloc::vec::Vec<u8> {
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::{NativeOptions, OutputKind, emit_native_with_options};
+    let copts = CompileOptions {
+        no_entry_point: true,
+        gnu: true,
+        asm_source: true,
+        ..Default::default()
+    };
+    let program = Compiler::assemble(src, target, copts).expect("assemble");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    emit_native_with_options(&program, target, opts).expect("emit")
+}
+
+#[test]
+fn aarch64_assembled_shapes_carry_the_mapping_symbols_gnu_as_emits() {
+    // `$x` opens a run of A64 instructions and `$d` a run of data, each
+    // reaching the next mapping symbol or the end of its section. Every
+    // expectation below was read off `as` (binutils 2.46) for the same
+    // input. x86_64 has no mapping symbols, so a unit of it carries none.
+    use crate::c5::Target;
+    /// A shape: what it is, its source, and the mapping symbols GNU as
+    /// gives it as `(section, offset, name)`.
+    type Shape = (
+        &'static str,
+        &'static str,
+        &'static [(&'static str, u64, &'static str)],
+    );
+    let shapes: &[Shape] = &[
+        (
+            "a function alone",
+            ".text\n.globl f\nf:\n\tmov w0, #1\n\tret\n",
+            &[(".text", 0, "$x")],
+        ),
+        (
+            "a function and its literal pool",
+            ".text\nf:\n\tret\n\t.word 0xdeadbeef\n\t.word 1\n\tnop\n\tret\n",
+            &[(".text", 0, "$x"), (".text", 4, "$d"), (".text", 12, "$x")],
+        ),
+        (
+            "a data-only section",
+            ".section .ro,\"a\",@progbits\n\t.word 7\n",
+            &[],
+        ),
+        (
+            "a data-only section placed at an alignment",
+            ".section .ro,\"a\",@progbits\n\t.align 3\n\t.word 7\n",
+            &[(".ro", 0, "$d")],
+        ),
+        (
+            "a data-only executable section, whose bytes a disassembler \
+             would otherwise decode as instructions",
+            ".section .xd,\"ax\",@progbits\n\t.word 7\n",
+            &[(".xd", 0, "$d")],
+        ),
+        (
+            "a data-only executable section filled without content",
+            ".section .xd,\"ax\",@progbits\n\t.skip 16\n",
+            &[(".xd", 0, "$d")],
+        ),
+        (
+            "a `.text` carrying only data",
+            ".text\n\t.word 7\n",
+            &[(".text", 0, "$d")],
+        ),
+        (
+            "a writable data-only section, which GNU as leaves bare",
+            ".data\n\t.word 7\n",
+            &[],
+        ),
+        (
+            "alternating runs",
+            ".section .mix,\"ax\",@progbits\n\tnop\n\t.word 1\n\tnop\n\t.word 2\n\tret\n",
+            &[
+                (".mix", 0, "$x"),
+                (".mix", 4, "$d"),
+                (".mix", 8, "$x"),
+                (".mix", 12, "$d"),
+                (".mix", 16, "$x"),
+            ],
+        ),
+        (
+            "an empty section",
+            ".section .empty,\"ax\",@progbits\n.text\n\tnop\n",
+            &[(".text", 0, "$x")],
+        ),
+        (
+            "a section that opens with data",
+            ".section .df,\"ax\",@progbits\n\t.word 5\n\tnop\n",
+            &[(".df", 0, "$d"), (".df", 4, "$x")],
+        ),
+        (
+            "alignment padding filled with instructions",
+            ".text\n\tnop\n\t.align 4\n\tret\n",
+            &[(".text", 0, "$x")],
+        ),
+        (
+            "instructions in a section that is not executable",
+            ".section .idmap.text,\"a\",@progbits\n\tnop\n\tnop\n\t.balign 4\n\tnop\n\
+             \t.balign 16\n\tnop\n",
+            &[
+                (".idmap.text", 0, "$x"),
+                (".idmap.text", 8, "$x"),
+                (".idmap.text", 12, "$d"),
+                (".idmap.text", 16, "$x"),
+            ],
+        ),
+        (
+            "a `.org` gap, which GNU as leaves inside the run around it",
+            ".section .o1,\"ax\",@progbits\nS:\n\tnop\n\t.org S + 32\n\tret\n",
+            &[(".o1", 0, "$x")],
+        ),
+        (
+            "`.inst`, whose bytes are an instruction",
+            ".text\n\tnop\n\t.inst 0xd503201f\n\tret\n",
+            &[(".text", 0, "$x")],
+        ),
+    ];
+    for (what, src, want) in shapes {
+        let want: alloc::vec::Vec<(String, u64, String)> = want
+            .iter()
+            .map(|&(s, o, n)| (String::from(s), o, String::from(n)))
+            .collect();
+        let got = mapping_symbols(&asm_reloc_tu(src, Target::LinuxAarch64));
+        assert_eq!(got, want, "aarch64 mapping symbols for {what}");
+    }
+    assert!(
+        mapping_symbols(&asm_reloc_tu(".text\n\tnop\n", Target::LinuxX64)).is_empty(),
+        "x86_64 carries mapping symbols"
+    );
+}
+
+#[test]
+fn aarch64_mapping_symbols_open_on_the_class_not_the_frag() {
+    // GNU as opens a run at a frag boundary, so it emits a start where the
+    // class is unchanged and it classifies padding by the frag that follows
+    // rather than by the bytes. badc opens a run only where the class
+    // changes, and classifies the bytes. The bytes and relocations are
+    // identical; what the difference is worth was measured with GNU objdump
+    // 2.46.1 and llvm-objdump against `as` (binutils 2.46.1). A redundant
+    // start gives every byte the same class either way. For the `.ltorg`
+    // padding both disassemblers decode gas's as `udf` and badc's as data.
+    // In a section that is not executable only `llvm-objdump -D` reads the
+    // symbol at all, and there gas's placement decodes the first data byte
+    // as an instruction.
+    use crate::c5::Target;
+    /// A shape, its source, badc's mapping symbols, and gas's.
+    type Shape = (
+        &'static str,
+        &'static str,
+        &'static [(&'static str, u64, &'static str)],
+        &'static [(&'static str, u64, &'static str)],
+    );
+    let shapes: &[Shape] = &[
+        (
+            "alignment padding after data, which gas opens a second data run for",
+            ".text\n\t.byte 9\n\tnop\n",
+            &[(".text", 0, "$d"), (".text", 4, "$x")],
+            &[(".text", 0, "$d"), (".text", 1, "$d"), (".text", 4, "$x")],
+        ),
+        (
+            "a `.skip 0`, which gas reopens the instruction run after",
+            ".text\n\tnop\n\t.skip 0\n\tnop\n",
+            &[(".text", 0, "$x")],
+            &[(".text", 0, "$x"), (".text", 4, "$x")],
+        ),
+        (
+            "leading data in a section that is not executable, which gas \
+             opens at the alignment frag rather than at the data",
+            ".section .ro,\"a\",@progbits\n\t.byte 9\n\t.balign 4\n\t.word 7\n",
+            &[(".ro", 0, "$d")],
+            &[(".ro", 1, "$d")],
+        ),
+        (
+            "a `.ltorg` pool's alignment padding, which gas leaves in the \
+             instruction run it pads out of",
+            ".text\n\tldr x0, =0x123456789abcdef\n\t.ltorg\n",
+            &[(".text", 0, "$x"), (".text", 4, "$d")],
+            &[(".text", 0, "$x"), (".text", 8, "$d")],
+        ),
+    ];
+    for (what, src, want, gas) in shapes {
+        let want: alloc::vec::Vec<(String, u64, String)> = want
+            .iter()
+            .map(|&(s, o, n)| (String::from(s), o, String::from(n)))
+            .collect();
+        let gas: alloc::vec::Vec<(String, u64, String)> = gas
+            .iter()
+            .map(|&(s, o, n)| (String::from(s), o, String::from(n)))
+            .collect();
+        let got = mapping_symbols(&asm_reloc_tu(src, Target::LinuxAarch64));
+        assert_eq!(got, want, "aarch64 mapping symbols for {what}");
+        assert_ne!(
+            got, gas,
+            "the divergence from GNU as for {what} is deliberate"
+        );
+    }
+}
+
+#[test]
+fn aarch64_code_section_alignment_matches_gnu_as() {
+    // GNU as pads a code section's alignment gap with the sub-word
+    // remainder as zeros and the rest as whole NOPs, and brings the
+    // location counter to the instruction boundary before an instruction
+    // whose section is in the data mapping state. Labels keep the offsets
+    // they were written at; an alignment directive, `.org` and a dropped
+    // max skip leave the counter where they put it, so an instruction
+    // after one of those is not realigned. An alignment of one moves
+    // nothing. A section that is not executable pads with zeros only and
+    // never realigns. Every expectation was read off `as` (binutils 2.46)
+    // for the same input.
+    use crate::c5::Target;
+    const NOP: &str = "1f2003d5";
+    /// A shape: what it is, its source, the section it lays out, that
+    /// section's bytes and alignment, the value of `after`, and the
+    /// mapping symbols.
+    type Shape = (
+        &'static str,
+        &'static str,
+        &'static str,
+        String,
+        u64,
+        u64,
+        &'static [(u64, &'static str)],
+    );
+    let shapes: alloc::vec::Vec<Shape> = alloc::vec![
+        (
+            "an odd `.skip` before an instruction",
+            ".text\nstart:\n\t.skip 3\nafter:\n\tnop\n",
+            ".text",
+            alloc::format!("00000000{NOP}"),
+            4,
+            3,
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+        (
+            "a sub-word `.byte` run before an instruction",
+            ".text\nstart:\n\t.byte 0x11,0x22,0x33\nafter:\n\tnop\n",
+            ".text",
+            alloc::format!("11223300{NOP}"),
+            4,
+            3,
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+        (
+            "a sub-word string before an instruction",
+            ".text\nstart:\n\t.ascii \"abc\"\nafter:\n\tnop\n",
+            ".text",
+            alloc::format!("61626300{NOP}"),
+            4,
+            3,
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+        (
+            "`.balign` over a sub-word remainder",
+            ".text\nstart:\n\t.byte 0x11\n\t.balign 16\nafter:\n\tnop\n",
+            ".text",
+            alloc::format!("11000000{NOP}{NOP}{NOP}{NOP}"),
+            16,
+            16,
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+        (
+            "`.balign` whose gap is whole instructions",
+            ".text\nstart:\n\tnop\n\t.balign 8\nafter:\n\tnop\n",
+            ".text",
+            alloc::format!("{NOP}{NOP}{NOP}"),
+            8,
+            8,
+            &[(0, "$x")][..],
+        ),
+        (
+            "`.balign` past a five-byte remainder",
+            ".text\nstart:\n\tnop\n\t.byte 0x11\n\t.balign 8\nafter:\n\tnop\n",
+            ".text",
+            alloc::format!("{NOP}11000000{NOP}"),
+            8,
+            8,
+            &[(0, "$x"), (4, "$d"), (8, "$x")][..],
+        ),
+        (
+            "an explicit fill, repeated over the whole gap",
+            ".text\nstart:\n\t.byte 0x11\n\t.balign 4, 0xcc\nafter:\n\tnop\n",
+            ".text",
+            alloc::format!("11cccccc{NOP}"),
+            4,
+            4,
+            &[(0, "$d"), (1, "$x")][..],
+        ),
+        (
+            "`.align`, a power-of-two exponent on AArch64",
+            ".text\nstart:\n\t.byte 0x11\n\t.align 4\nafter:\n\tnop\n",
+            ".text",
+            alloc::format!("11000000{NOP}{NOP}{NOP}{NOP}"),
+            16,
+            16,
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+        (
+            "`.p2align` over a sub-word remainder",
+            ".text\nstart:\n\t.byte 0x11,0x22,0x33\n\t.p2align 2\nafter:\n\tnop\n",
+            ".text",
+            alloc::format!("11223300{NOP}"),
+            4,
+            4,
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+        (
+            "`.balign 2`, which leaves the instruction unaligned",
+            ".text\nstart:\n\t.byte 0x11\n\t.balign 2\nafter:\n\tnop\n",
+            ".text",
+            alloc::format!("1100{NOP}"),
+            4,
+            2,
+            &[(0, "$d"), (2, "$x")][..],
+        ),
+        (
+            "`.balign 1`, which moves nothing",
+            ".text\nstart:\n\t.byte 0x11\n\t.balign 1\nafter:\n\tnop\n",
+            ".text",
+            alloc::format!("11000000{NOP}"),
+            4,
+            1,
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+        (
+            "`.org`, which leaves the counter where it put it",
+            ".text\nstart:\n\tnop\n\t.org 7\nafter:\n\tnop\n",
+            ".text",
+            alloc::format!("{NOP}000000{NOP}"),
+            4,
+            7,
+            &[(0, "$x")][..],
+        ),
+        (
+            "a max skip that drops the padding but keeps the alignment",
+            ".text\nstart:\n\t.byte 0x11\n\t.balign 16, , 2\nafter:\n\tnop\n",
+            ".text",
+            alloc::format!("11{NOP}"),
+            16,
+            1,
+            &[(0, "$d"), (1, "$x")][..],
+        ),
+        (
+            "an instruction in a section that is not executable",
+            ".section .nx,\"aw\",@progbits\nstart:\n\t.byte 0x11\nafter:\n\tnop\n",
+            ".nx",
+            alloc::format!("11{NOP}"),
+            4,
+            1,
+            &[(0, "$d"), (1, "$x")][..],
+        ),
+        (
+            "alignment padding in a section that is not executable",
+            ".section .nx,\"aw\",@progbits\nstart:\n\t.skip 1\n\t.balign 8\nafter:\n\tnop\n",
+            ".nx",
+            alloc::format!("0000000000000000{NOP}"),
+            8,
+            8,
+            &[(0, "$d"), (8, "$x")][..],
+        ),
+        (
+            "a sub-word `.byte` run in a pushed section",
+            ".text\n\t.pushsection .ps,\"ax\",@progbits\nstart:\n\t.byte 0x11\nafter:\n\tnop\n\
+             \t.popsection\n",
+            ".ps",
+            alloc::format!("11000000{NOP}"),
+            4,
+            1,
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+        (
+            "a `.short` in a pushed section",
+            ".text\n\t.pushsection .ps,\"ax\",@progbits\nstart:\n\t.short 0x1234\nafter:\n\tnop\n\
+             \t.popsection\n",
+            ".ps",
+            alloc::format!("34120000{NOP}"),
+            4,
+            2,
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+        (
+            "a pushed section whose data run ends it, which GNU as leaves short",
+            ".text\n\t.pushsection .ps,\"ax\",@progbits\nstart:\n\tnop\nafter:\n\t.byte 0x11\n\
+             \t.popsection\n",
+            ".ps",
+            alloc::format!("{NOP}11"),
+            4,
+            4,
+            &[(0, "$x"), (4, "$d")][..],
+        ),
+    ];
+    // A unit keeps the compiled `.text` and the assembled one in separate
+    // headers of the same name; the assembled bytes are in the later.
+    let laid_out = |obj: &[u8], name: &str| -> alloc::vec::Vec<u8> {
+        elf_sections(obj)
+            .into_iter()
+            .rfind(|(n, ..)| n == name)
+            .map(|(.., b)| b)
+            .unwrap_or_default()
+    };
+    for (what, src, sec, hex, align, after, maps) in shapes {
+        let obj = asm_reloc_tu(src, Target::LinuxAarch64);
+        let want: alloc::vec::Vec<u8> = (0..hex.len() / 2)
+            .map(|i| u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16).unwrap())
+            .collect();
+        assert_eq!(laid_out(&obj, sec), want, "{sec} bytes for {what}");
+        let (sections, syms) = elf_layout(&obj);
+        assert_eq!(sections[sec].1, align, "{sec} sh_addralign for {what}");
+        assert_eq!(syms["after"].1, after, "`after` for {what}");
+        assert_eq!(syms["start"].1, 0, "`start` for {what}");
+        let got: alloc::vec::Vec<(u64, String)> = mapping_symbols(&obj)
+            .into_iter()
+            .filter(|(s, ..)| s == sec)
+            .map(|(_, o, n)| (o, n))
+            .collect();
+        let want_maps: alloc::vec::Vec<(u64, String)> =
+            maps.iter().map(|&(o, n)| (o, String::from(n))).collect();
+        assert_eq!(got, want_maps, "{sec} mapping symbols for {what}");
+    }
+}
+
+#[test]
+fn aarch64_function_body_asm_realigns_after_data_like_gnu_as() {
+    // A function-body `asm` main stream lays its bytes into `.text`, an
+    // executable section, so GNU as's mapping rule applies there as it does
+    // to a pushed section: an instruction after a sub-word data run brings
+    // the counter to the instruction boundary first, the gap pads with
+    // zeros, and the padding belongs to the data run. The block's exit work
+    // is instructions, so a template ending in data pads too. Every
+    // expectation is the byte string `as` lays down for the same statement.
+    use crate::c5::Target;
+    const NOP: &str = "1f2003d5";
+    /// A shape: what it is, the template, the bytes it lays down, and the
+    /// `.text` mapping symbols.
+    type Shape = (
+        &'static str,
+        &'static str,
+        String,
+        &'static [(u64, &'static str)],
+    );
+    let shapes: alloc::vec::Vec<Shape> = alloc::vec![
+        (
+            "a one-byte run before an instruction",
+            ".byte 1\\n\\tnop",
+            alloc::format!("01000000{NOP}"),
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+        (
+            "a two-byte run before an instruction",
+            ".byte 1,2\\n\\tnop",
+            alloc::format!("01020000{NOP}"),
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+        (
+            "a three-byte run before an instruction",
+            ".byte 1,2,3\\n\\tnop",
+            alloc::format!("01020300{NOP}"),
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+        (
+            "a whole-word run, which needs no padding",
+            ".byte 1,2,3,4\\n\\tnop",
+            alloc::format!("01020304{NOP}"),
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+        (
+            "a `.short` before an instruction",
+            ".short 0x1234\\n\\tnop",
+            alloc::format!("34120000{NOP}"),
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+        (
+            "a `.short` run past a word boundary",
+            ".short 0x1234,0x5678,0x9abc\\n\\tnop",
+            alloc::format!("34127856bc9a0000{NOP}"),
+            &[(0, "$d"), (8, "$x")][..],
+        ),
+        (
+            "a `.long`, which is already aligned",
+            ".long 0x11223344\\n\\tnop",
+            alloc::format!("44332211{NOP}"),
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+        (
+            "a data run at the start of the template",
+            ".byte 1,2,3\\n\\tnop\\n\\tnop",
+            alloc::format!("01020300{NOP}{NOP}"),
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+        (
+            "data after an instruction",
+            "nop\\n\\t.byte 1\\n\\tnop",
+            alloc::format!("{NOP}01000000{NOP}"),
+            &[(0, "$x"), (4, "$d"), (8, "$x")][..],
+        ),
+        (
+            "data with no instruction after it",
+            "nop\\n\\t.byte 1",
+            alloc::format!("{NOP}01000000"),
+            &[(0, "$x"), (4, "$d"), (8, "$x")][..],
+        ),
+        (
+            "`.inst`, whose bytes are an instruction",
+            ".byte 1\\n\\t.inst 0xd503201f\\n\\tnop",
+            alloc::format!("01000000{NOP}{NOP}"),
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+        (
+            "two data runs",
+            ".byte 1\\n\\tnop\\n\\t.byte 1,2\\n\\tnop",
+            alloc::format!("01000000{NOP}01020000{NOP}"),
+            &[(0, "$d"), (4, "$x"), (8, "$d"), (12, "$x")][..],
+        ),
+        (
+            "a forward branch over the padding",
+            ".byte 1\\n\\tb 1f\\n1:\\n\\tnop",
+            alloc::format!("0100000001000014{NOP}"),
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+    ];
+    for (what, tmpl, hex, maps) in shapes {
+        let src = alloc::format!("void f(void){{ __asm__ volatile(\"{tmpl}\"); }}\n");
+        let obj = reloc_tu(&src, Target::LinuxAarch64, false);
+        let text = elf_sections(&obj)
+            .into_iter()
+            .find(|(n, ..)| n == ".text")
+            .map(|(.., b)| b)
+            .expect(".text");
+        let (_, syms) = elf_layout(&obj);
+        let at = syms["f"].1 as usize;
+        let want: alloc::vec::Vec<u8> = (0..hex.len() / 2)
+            .map(|i| u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16).unwrap())
+            .collect();
+        assert_eq!(&text[at..at + want.len()], &want[..], "bytes for {what}");
+        let got: alloc::vec::Vec<(u64, String)> = mapping_symbols(&obj)
+            .into_iter()
+            .filter(|(s, ..)| s == ".text")
+            .map(|(_, o, n)| (o, n))
+            .collect();
+        let want_maps: alloc::vec::Vec<(u64, String)> =
+            maps.iter().map(|&(o, n)| (o, String::from(n))).collect();
+        assert_eq!(got, want_maps, "mapping symbols for {what}");
+    }
+    // The ALTERNATIVE replacement is a second stream of the same statement,
+    // appended to `.text` after the function body, and takes the same rule.
+    let src = "void f(void){ __asm__ volatile(\"nop\\n.subsection 1\\n\
+               .byte 1\\n\\tnop\\n.previous\\n\"); }\n";
+    let obj = reloc_tu(src, Target::LinuxAarch64, false);
+    let text = elf_sections(&obj)
+        .into_iter()
+        .find(|(n, ..)| n == ".text")
+        .map(|(.., b)| b)
+        .expect(".text");
+    assert_eq!(
+        &text[text.len() - 8..],
+        &[0x01, 0, 0, 0, 0x1f, 0x20, 0x03, 0xd5],
+        "the replacement region did not realign after its data run"
+    );
+    let region = text.len() - 8;
+    let got: alloc::vec::Vec<(u64, String)> = mapping_symbols(&obj)
+        .into_iter()
+        .filter(|(s, o, _)| s == ".text" && *o as usize >= region)
+        .map(|(_, o, n)| (o, n))
+        .collect();
+    assert_eq!(
+        got,
+        alloc::vec![
+            (region as u64, String::from("$d")),
+            (region as u64 + 4, String::from("$x")),
+        ],
+        "replacement region mapping symbols"
+    );
+    // A label inside the data run keeps the unaligned offset it was written
+    // at, so a branch to it has no encoding -- the error GNU as reports.
+    let src = "void f(void){ __asm__ volatile(\".byte 1\\n1:\\n\\tnop\\n\\tb 1b\"); }\n";
+    let err = crate::Compiler::with_options(
+        String::from(src),
+        Target::LinuxAarch64,
+        crate::c5::compiler::CompileOptions {
+            no_entry_point: true,
+            gnu: true,
+            ..Default::default()
+        },
+    )
+    .compile()
+    .ok()
+    .and_then(|p| {
+        crate::c5::emit_native_with_options(
+            &p,
+            Target::LinuxAarch64,
+            crate::c5::NativeOptions {
+                output_kind: crate::c5::OutputKind::Relocatable,
+                ..Default::default()
+            },
+        )
+        .err()
+    })
+    .map(|e| alloc::format!("{e}"))
+    .unwrap_or_default();
+    assert!(
+        err.contains("not word-aligned"),
+        "branch into a data run was accepted: {err}"
+    );
+}
+
+#[test]
+fn aarch64_compiled_objects_mark_their_code_and_data() {
+    // A compiled unit: `.text` is code throughout, so it carries `$x` at 0
+    // and nothing else, and each non-empty allocatable data section opens
+    // with `$d` and stays data. A switch jump table is read-only data, so
+    // it lands in `.rodata` and leaves no `$d` run in code; gcc -O2 places
+    // it the same way. A data run embedded in code is marked where it does
+    // occur -- an inline-asm `.byte` run, covered above.
+    use crate::c5::Target;
+    let mut src = String::from("int g(int x){switch(x){");
+    for i in 1..25 {
+        src.push_str(&alloc::format!("case {i}:return {};", i * 7));
+    }
+    src.push_str("default:return 0;}}\nconst int t[4]={1,2,3,4};\nint d[4]={5,6,7,8};\n");
+    let got = mapping_symbols(&reloc_tu(&src, Target::LinuxAarch64, true));
+    let of = |want: &str| -> alloc::vec::Vec<(u64, String)> {
+        got.iter()
+            .filter(|(s, ..)| s == want)
+            .map(|(_, off, kind)| (*off, kind.clone()))
+            .collect()
+    };
+    // One `$x` at 0 and no second entry: a jump table emitted inline would
+    // show as a `$d` run with `$x` past it.
+    assert_eq!(
+        of(".text"),
+        alloc::vec![(0, String::from("$x"))],
+        "expected .text to be code throughout, got {got:?}"
+    );
+    for want in [".data", ".rodata"] {
+        assert_eq!(
+            of(want),
+            alloc::vec![(0, String::from("$d"))],
+            "expected {want} to be data throughout, got {got:?}"
+        );
+    }
 }

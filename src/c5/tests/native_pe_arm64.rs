@@ -151,7 +151,7 @@ fn build_and_run_with_options(
         Err(e) => return RunOutcome::BuildError(format!("emit_native: {e}")),
     };
 
-    let path = unique_temp_path("badc-pe-arm64-test", stem);
+    let path = super::unique_temp_path("badc-pe-arm64-test", stem, ".exe");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");
@@ -184,14 +184,6 @@ fn build_and_run_with_options(
         }
         Err(e) => panic!("could not exec PE binary: {e}"),
     }
-}
-
-fn unique_temp_path(prefix: &str, stem: &str) -> PathBuf {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let pid = std::process::id();
-    std::env::temp_dir().join(format!("{prefix}-{pid}-{n}-{stem}.exe"))
 }
 
 fn assert_exit(src: &str, stem: &str, args: &[&str], expected: i32) {
@@ -470,7 +462,7 @@ int main(void) {\n\
         "expected a TEB-indexed `add x?, x16, #imm12` with a link-patched non-zero offset"
     );
 
-    let path = unique_temp_path("badc-pe-arm64-test", "cross_unit_tls");
+    let path = super::unique_temp_path("badc-pe-arm64-test", "cross_unit_tls", ".exe");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");
@@ -578,7 +570,7 @@ int main(void) {\n\
         "expected a TEB-indexed `add x?, x16, #imm12` with imm12 >= 16 (definer rebased past the pad)"
     );
 
-    let path = unique_temp_path("badc-pe-arm64-test", "cross_unit_tls_rebased");
+    let path = super::unique_temp_path("badc-pe-arm64-test", "cross_unit_tls_rebased", ".exe");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");
@@ -622,13 +614,11 @@ fn fixture_parity() {
         eprintln!("skip fixture_parity: no PE runner on this host");
         return;
     }
-    let mut failures: Vec<String> = Vec::new();
-    for (name, expected) in NATIVE_PE_ARM64_FIXTURES {
+    let failures = super::parity_failures(NATIVE_PE_ARM64_FIXTURES, |name, expected| {
         let outcome = build_and_run_fixture(name);
-        if !outcome.matches(*expected) {
-            failures.push(format!("{name}: expected {expected}, got {outcome:?}"));
-        }
-    }
+        (!outcome.matches(*expected))
+            .then(|| format!("{name}: expected {expected}, got {outcome:?}"))
+    });
     assert!(
         failures.is_empty(),
         "{} of {} PE/aarch64 fixtures regressed:\n  {}",
@@ -645,13 +635,11 @@ fn fixture_parity_native_optimized() {
         return;
     }
     let opts = NativeOptions::new().with_optimize();
-    let mut failures: Vec<String> = Vec::new();
-    for (name, expected) in NATIVE_PE_ARM64_FIXTURES {
+    let failures = super::parity_failures(NATIVE_PE_ARM64_FIXTURES, |name, expected| {
         let outcome = build_and_run_fixture_with_options(name, opts, "-O");
-        if !outcome.matches(*expected) {
-            failures.push(format!("{name} (-O): expected {expected}, got {outcome:?}"));
-        }
-    }
+        (!outcome.matches(*expected))
+            .then(|| format!("{name} (-O): expected {expected}, got {outcome:?}"))
+    });
     assert!(
         failures.is_empty(),
         "{} of {} PE/aarch64 fixtures regressed under -O:\n  {}",
@@ -745,7 +733,7 @@ fn dll_export_load_unload_reload_cycle() {
     // export-directory Name pointer at load and rejects a DLL emitted
     // without one (ERROR_INVALID_PARAMETER); wine tolerates it.
     let dll_bytes = super::super::object::emit_native_with_options_named(
-        &dll_prog,
+        dll_prog,
         Target::WindowsAarch64,
         NativeOptions::new().with_shared_library(),
         Some(&dll_name),

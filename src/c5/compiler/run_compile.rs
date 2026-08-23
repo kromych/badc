@@ -180,6 +180,16 @@ impl Compiler {
             .map_err(|m| self.compile_err(m))
     }
 
+    /// Record a `.set` alias of the unit, a later assignment to the same name
+    /// winning as in GNU as.
+    fn set_alias(sets: &mut Vec<(String, String, i64)>, name: &str, target: &str, addend: i64) {
+        let e = (String::from(name), String::from(target), addend);
+        match sets.iter_mut().find(|(n, _, _)| n == name) {
+            Some(slot) => *slot = e,
+            None => sets.push(e),
+        }
+    }
+
     /// Run one GNU-as source unit through the section-directive engine and
     /// record it for the object writers. `globl_shortcut` routes a stream of
     /// nothing but `.globl` at C symbols, which only a translation unit has.
@@ -191,18 +201,17 @@ impl Compiler {
         text: &str,
         globl_shortcut: bool,
     ) -> Result<(), String> {
-        use crate::c5::codegen::ssa::emit_common as engine;
         // Comment stripping, GNU as macro expansion, and the per-definition
         // rename of redefined numeric labels, once; the stored text is the
         // prepared form so the codegen materialization sees the same
         // statements the validation below does.
         let aarch64 = self.target.is_aarch64();
         let comments = if aarch64 {
-            engine::AsmComments::A64
+            crate::c5::asm::AsmComments::A64
         } else {
-            engine::AsmComments::X86
+            crate::c5::asm::AsmComments::X86
         };
-        let prepared = engine::prepare_file_asm_text(text, comments)?;
+        let prepared = crate::c5::asm::prepare_file_asm_text(text, comments)?;
         let text = prepared.as_str();
         // The stream outside pushed sections is either linkage directives only
         // (`.globl name`, applied to a C symbol) or a trampoline body (labels +
@@ -211,22 +220,22 @@ impl Compiler {
         // The probe runs the function-scope extractor, which rejects forms
         // only the file-scope one accepts (`.text` switches, `.subsection`),
         // so its error falls through to the file-scope parse.
-        let mut blocks = match engine::extract_asm_sections(text, aarch64) {
+        let mut blocks = match crate::c5::asm::extract_asm_sections(text, aarch64) {
             Ok(Some(ex)) if globl_shortcut && ex.is_linkage_only() => {
                 for name in ex.globl_names() {
                     self.pending_asm_globl.push(name.into());
                 }
                 ex.blocks
             }
-            _ => engine::extract_file_scope_asm_sections(text, aarch64)?,
+            _ => crate::c5::asm::extract_file_scope_asm_sections(text, aarch64)?,
         };
         for b in &blocks {
             for item in &b.items {
                 match item {
-                    engine::AsmSectionItem::Data { values, .. }
-                        if values
-                            .iter()
-                            .any(|v| matches!(v, engine::AsmSectionValue::OperandConst(_))) =>
+                    crate::c5::asm::AsmSectionItem::Data { values, .. }
+                        if values.iter().any(|v| {
+                            matches!(v, crate::c5::asm::AsmSectionValue::OperandConst(_))
+                        }) =>
                     {
                         return Err(
                             "operand reference in file-scope asm (no operands at file scope)"
@@ -237,22 +246,38 @@ impl Compiler {
                     // symbol weak wherever it is defined; `.set name, target`
                     // is an object-level alias emitted at the target's
                     // definition.
-                    engine::AsmSectionItem::Weak(name) => {
+                    crate::c5::asm::AsmSectionItem::Weak(name) => {
                         if !self.asm_weak_names.contains(name) {
                             self.asm_weak_names.push(name.clone());
                         }
                     }
-                    engine::AsmSectionItem::Hidden(name) => {
-                        if !self.asm_hidden_names.contains(name) {
-                            self.asm_hidden_names.push(name.clone());
+                    crate::c5::asm::AsmSectionItem::Global(name) => {
+                        if !self.asm_global_names.contains(name) {
+                            self.asm_global_names.push(name.clone());
                         }
                     }
-                    engine::AsmSectionItem::SymSet { name, target } => {
-                        // A later assignment to the same name wins, as in
-                        // GNU as.
-                        match self.asm_sym_sets.iter_mut().find(|(n, _)| n == name) {
-                            Some(e) => e.1 = target.clone(),
-                            None => self.asm_sym_sets.push((name.clone(), target.clone())),
+                    crate::c5::asm::AsmSectionItem::Visibility { name, vis } => {
+                        match self.asm_visibility.iter_mut().find(|(n, _)| n == name) {
+                            Some(e) => e.1 = *vis,
+                            None => self.asm_visibility.push((name.clone(), *vis)),
+                        }
+                    }
+                    crate::c5::asm::AsmSectionItem::File(name) => {
+                        self.asm_file_names.push(name.clone());
+                    }
+                    crate::c5::asm::AsmSectionItem::Ident(s) => {
+                        self.asm_idents.push(s.clone());
+                    }
+                    crate::c5::asm::AsmSectionItem::SymSet { name, target } => {
+                        Self::set_alias(&mut self.asm_sym_sets, name, target, 0);
+                    }
+                    // `.set name, sym + k` names the same alias at an offset.
+                    // A target this unit's layout places defines the name as
+                    // a label of the owning section instead; the object
+                    // writer drops the alias record there.
+                    crate::c5::asm::AsmSectionItem::SetExpr { name, expr } => {
+                        if let Some((target, addend)) = crate::c5::asm::asm_sym_offset_expr(expr) {
+                            Self::set_alias(&mut self.asm_sym_sets, name, target, addend);
                         }
                     }
                     _ => {}
@@ -266,7 +291,7 @@ impl Compiler {
         // so a template resolves the labels its predecessors defined, matching
         // the codegen materialization, which shares one sink per unit.
         crate::c5::codegen::encode_file_asm_section_code(&mut blocks, self.target, self.elf_class)?;
-        engine::materialize_asm_sections(
+        crate::c5::asm::materialize_asm_sections(
             &blocks,
             &|_| None,
             &|_| None,
@@ -321,6 +346,7 @@ impl Compiler {
             // Reset the const carrier so a prior declaration's `const`
             // base does not leak onto this iteration's declarators.
             self.pending.base_is_const = false;
+            let _ = self.take_base_spelling();
             // Storage-class prefixes -- can appear in any order
             // and any combination before the type. C lets you
             // mix `static extern` (silly but legal in some
@@ -350,6 +376,7 @@ impl Compiler {
             self.pending.attr_thread_local = false;
             self.pending.attr_dllexport = false;
             self.pending.attr_align = 0;
+            self.pending.attr_alignas = 0;
             self.pending.type_align = 0;
             self.pending.attr_vector_size = 0;
             self.pending.attr_constructor = false;
@@ -416,6 +443,8 @@ impl Compiler {
                     // `const` is recorded out-of-band for value folding.
                     qual_bits |= self.lex_qualifier_bits();
                     self.pending.base_is_const |= self.lex_is_const_qual();
+                    self.pending.spell_base_restrict |= self.lex_is_restrict_qual();
+                    self.pending.spell_base_const |= self.lex_is_const_qual();
                     self.next()?;
                 } else {
                     break;
@@ -462,6 +491,7 @@ impl Compiler {
                 // Typedef-name as base type at file scope: `Foo bar;`
                 // where `Foo` was bound by a prior `typedef`.
                 bt = self.symbols[self.lex.curr_id_idx].type_;
+                self.pending.spell_base_typedef = Some(self.lex.curr_id_idx as u32);
                 // Carry the typedef's fn-ptr lineage forward so a
                 // declarator like `fn_t fp` (no leading `*`) still
                 // gets `Symbol::fn_ptr_indirection = 1`. The
@@ -470,6 +500,8 @@ impl Compiler {
                 let typedef_fpi = self.symbols[self.lex.curr_id_idx].fn_ptr_indirection;
                 if typedef_fpi > 0 {
                     self.pending.fn_ptr_indirection = Some(typedef_fpi);
+                    self.pending.fn_ptr_ret_indirection =
+                        self.symbols[self.lex.curr_id_idx].fn_ptr_ret_indirection;
                     self.pending.base_is_function_type =
                         self.symbols[self.lex.curr_id_idx].is_function_type;
                     // A function-pointer typedef records the pointed-to
@@ -549,6 +581,8 @@ impl Compiler {
                 }
                 qual_bits |= self.lex_qualifier_bits();
                 self.pending.base_is_const |= self.lex_is_const_qual();
+                self.pending.spell_base_restrict |= self.lex_is_restrict_qual();
+                self.pending.spell_base_const |= self.lex_is_const_qual();
                 self.next()?;
             }
             // `__attribute__((vector_size(N)))` rebuilds the base type into a
@@ -589,6 +623,8 @@ impl Compiler {
                 } else if self.lex.tk == Token::TypeQual {
                     qual_bits |= self.lex_qualifier_bits();
                     self.pending.base_is_const |= self.lex_is_const_qual();
+                    self.pending.spell_base_restrict |= self.lex_is_restrict_qual();
+                    self.pending.spell_base_const |= self.lex_is_const_qual();
                     self.next()?;
                 } else if self.lex.tk == Token::Attribute
                     || (self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'['))
@@ -599,6 +635,7 @@ impl Compiler {
                 }
             }
             bt = apply_qual_bits(bt, qual_bits);
+            let base_spelling = self.take_base_spelling();
 
             // A function-pointer typedef base type contributes its lineage
             // to every declarator in the list (`fn_t a, b;`). The
@@ -607,6 +644,7 @@ impl Compiler {
             // first declarator keeps the lineage and a call through a later
             // one defaults its result type to int.
             let base_fn_ptr_indirection = self.pending.fn_ptr_indirection;
+            let base_fn_ptr_ret_indirection = self.pending.fn_ptr_ret_indirection;
             let base_is_function_type = self.pending.base_is_function_type;
             let base_typedef_fn_proto = self.pending.typedef_fn_proto;
             let base_fn_ptr_param_types = self.pending.fn_ptr_param_types.clone();
@@ -623,6 +661,7 @@ impl Compiler {
                 }
                 declarator_count += 1;
                 self.pending.fn_ptr_indirection = base_fn_ptr_indirection;
+                self.pending.fn_ptr_ret_indirection = base_fn_ptr_ret_indirection;
                 self.pending.base_is_function_type = base_is_function_type;
                 self.pending.typedef_fn_proto = base_typedef_fn_proto;
                 self.pending.fn_ptr_param_types = base_fn_ptr_param_types.clone();
@@ -685,6 +724,8 @@ impl Compiler {
                 // recorded, and store it on the symbol so a later
                 // identifier load can seed the chain-depth tracker.
                 let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
+                let fn_ptr_ret_indirection =
+                    core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
                 // A typedef whose alias is an array contributes its
                 // dimension when the declarator did not supply
                 // one. The multi-dim composition rule (`arr_t
@@ -748,6 +789,7 @@ impl Compiler {
                     || (self.pending.base_is_const && !super::types::is_pointer_ty(ty));
                 if fn_ptr_indirection > 0 {
                     self.symbols[id_idx].fn_ptr_indirection = fn_ptr_indirection;
+                    self.symbols[id_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
                 }
                 // Inherit a variadic function-pointer prototype onto the
                 // bound declarator so an indirect call through it knows
@@ -894,6 +936,7 @@ impl Compiler {
                     self.symbols[id_idx].type_align = alias_align;
                     if typedef_fpi > 0 {
                         self.symbols[id_idx].fn_ptr_indirection = typedef_fpi;
+                        self.symbols[id_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
                     }
                     // The `typedef RET NAME(args)` / `typedef RET (*NAME)(args)`
                     // spellings parse their own list; an alias of an existing
@@ -1002,6 +1045,10 @@ impl Compiler {
                 let prior_params = self.symbols[id_idx].params.clone();
                 let prior_is_variadic = self.symbols[id_idx].is_variadic;
                 self.symbols[id_idx].type_ = ty;
+                // Covers both branches below: for an object the spelling
+                // is the object's, for a function it is the return
+                // type's.
+                self.symbols[id_idx].decl_spelling = self.decl_spelling(base_spelling);
                 // An explicit return type replaces the implicit-`int`
                 // default (Sys binding without a prior prototype).
                 self.symbols[id_idx].implicit_return_int = false;
@@ -1219,13 +1266,21 @@ impl Compiler {
                         // `alias("target")` on a bodyless declarator: the
                         // declared name becomes an additional symbol for a
                         // function already defined in this unit, and calls
-                        // through it resolve to the target's entry.
+                        // through it resolve to the target's entry. A weak
+                        // alias is interposable -- a strong definition in
+                        // another object replaces it at link time -- so it
+                        // never binds here; the unit-end resolver keeps its
+                        // references symbolic.
                         if let Some(target) = self.pending.attr_alias.take() {
-                            let tgt = self.symbols.iter().position(|s| {
-                                s.link_name() == target
-                                    && s.class == Token::Fun as i64
-                                    && s.defined_here
-                            });
+                            let tgt = (!self.symbols[id_idx].is_weak)
+                                .then(|| {
+                                    self.symbols.iter().position(|s| {
+                                        s.link_name() == target
+                                            && s.class == Token::Fun as i64
+                                            && s.defined_here
+                                    })
+                                })
+                                .flatten();
                             let Some(tgt) = tgt else {
                                 // The target may be defined later in the unit;
                                 // retry once the unit is complete.
@@ -1244,9 +1299,14 @@ impl Compiler {
                             self.symbols[id_idx].defined_here = true;
                             self.symbols[id_idx].is_alias = true;
                             let name = self.symbols[id_idx].link_name().into();
-                            let weak = self.symbols[id_idx].is_weak;
+                            let bind = alias_bind(&self.symbols[id_idx]);
                             self.function_aliases
-                                .push(crate::c5::program::FunctionAlias { name, target, weak });
+                                .push(crate::c5::program::FunctionAlias {
+                                    name,
+                                    target,
+                                    bind,
+                                    addend: 0,
+                                });
                         }
                         // Function prototype, not a definition. C99 6.7
                         // permits several declarators in one declaration,
@@ -1384,7 +1444,7 @@ impl Compiler {
                     self.labels.clear();
                     self.unresolved_gotos.clear();
                     self.local_label_scopes.clear();
-                    self.local_label_seq = 0;
+                    self.func_local_addr_taken = false;
                     self.uses_alloca_in_current_fn = false;
                     self.func_vla_decls = 0;
                     self.ast_reset();
@@ -1415,21 +1475,19 @@ impl Compiler {
                     self.symbols[id_idx].is_extern_decl = false;
 
                     // `__attribute__((constructor))` / `((destructor))` on
-                    // this definition: record it so the emit path lowers it
-                    // into `.init_array` / `.fini_array` and the VM / JIT run
-                    // it around `main`. The pending flags were set by the
-                    // leading or trailing attribute specifier.
-                    if self.pending.attr_constructor || self.pending.attr_destructor {
-                        let is_destructor = self.pending.attr_destructor;
+                    // any declaration of this name: record it so the emit
+                    // path lowers it into `.init_array` / `.fini_array` and
+                    // the VM / JIT run it around `main`. The symbol carries
+                    // the merged attributes, so a prototype-only attribute
+                    // reaches this definition.
+                    if self.symbols[id_idx].is_constructor || self.symbols[id_idx].is_destructor {
+                        let is_destructor = self.symbols[id_idx].is_destructor;
                         self.init_funcs.push(crate::c5::program::InitFunc {
                             name: self.symbols[id_idx].name.clone(),
                             ent_pc,
-                            priority: self.pending.attr_init_priority,
+                            priority: self.symbols[id_idx].init_priority,
                             is_destructor,
                         });
-                        self.pending.attr_constructor = false;
-                        self.pending.attr_destructor = false;
-                        self.pending.attr_init_priority = None;
                     }
 
                     // Struct-value parameters: the caller pushed
@@ -1453,7 +1511,7 @@ impl Compiler {
                         let slots = self.slots_of_type(pty);
                         let param_val = self.symbols[idx].val;
                         let local_val = self.reserve_slots(slots);
-                        if slots > 1 {
+                        if slots >= 1 {
                             self.multi_cell_temps.push((local_val, slots));
                         }
                         // dst = &local
@@ -1540,7 +1598,7 @@ impl Compiler {
                     self.cleanup_scopes.push(alloc::vec::Vec::new());
                     // GCC local labels declared by the body's top-level
                     // block; see `Compiler::resolve_label_name`.
-                    self.local_label_scopes.push(alloc::vec::Vec::new());
+                    self.local_label_scopes.open();
                     let mut at_block_start = true;
                     while self.lex.tk != '}' {
                         if self.lex.tk == Token::LocalLabel {
@@ -1584,13 +1642,10 @@ impl Compiler {
                             // keyword, so dispatch it here (the nested
                             // blocks reach the same handler through
                             // parse_block_stmt).
-                            self.parse_block_typedef(None)?;
+                            self.parse_block_typedef()?;
                         } else if self.lex_is_type_start() {
                             let item_before = self.ast_stmts_snapshot();
-                            self.parse_local_decl(
-                                leading_maybe_unused,
-                                &mut super::locals::DeclScope::FunctionBody,
-                            )?;
+                            self.parse_local_decl(leading_maybe_unused)?;
                             let item_after = self.ast.stmts.len();
                             // Skip any statement-expression sub-statements
                             // interleaved by an initializer; they are
@@ -1639,7 +1694,7 @@ impl Compiler {
                     }
                     self.cleanup_scopes.pop();
                     self.tag_scopes.pop();
-                    self.local_label_scopes.pop();
+                    self.local_label_scopes.close();
                     // Wrap the function's top-level stmts into a
                     // Compound and pin it as `ast.body` so the
                     // walker has a single tree root to descend
@@ -1728,7 +1783,7 @@ impl Compiler {
                     self.current_func_returns_void = false;
 
                     for name in &self.unresolved_gotos {
-                        if !self.labels.iter().any(|n| n == name) {
+                        if !self.label_is_defined(name) {
                             return Err(self.compile_err(format!(
                                 "unresolved label: {}",
                                 super::emit::label_display_name(name)
@@ -1789,6 +1844,7 @@ impl Compiler {
                                 } else {
                                     sym.array_dims.clone()
                                 },
+                                decl_spelling: sym.decl_spelling,
                             });
                         }
                     }
@@ -1806,27 +1862,43 @@ impl Compiler {
                     for i in core::mem::take(&mut self.pending_block_static_syms) {
                         self.symbols[i].owner_ent_pc = Some(ent_pc as u64);
                     }
-                    // Record declared multi-cell locals (aggregates and
-                    // multi-cell scalars) for slot coalescing. A declared
-                    // local at frame slot `fp_slot` (most-negative cell)
-                    // occupying `cells` 8-byte cells covers
-                    // `fp_slot ..= fp_slot + cells - 1`; the interior cells
-                    // carry no direct slot reference, so the pass must
-                    // reserve them. Computed from the per-function variable
-                    // list assembled just above (`local_storage_slots`
-                    // mirrors the parser's reservation). Patches the
-                    // `FinishedFunction` pushed by `ast_finish_function`.
-                    // A struct-by-value parameter keeps its body-visible copy
-                    // in a negative slot too (C99 6.5.2.2 + the host ABI), so
-                    // `fp_slot < 0` -- not `!is_parameter` -- selects every
-                    // local that needs its interior cells reserved.
+                    // Record declared aggregate locals (any cell count) and
+                    // multi-cell scalars. A declared local at frame slot
+                    // `fp_slot` (most-negative cell) occupying `cells` 8-byte
+                    // cells covers `fp_slot ..= fp_slot + cells - 1`; slot
+                    // coalescing reserves the interior cells, which carry no
+                    // direct slot reference, and the scalar promotion reads
+                    // the list as its candidate set -- a one-cell aggregate's
+                    // members are split targets like any other's. Computed
+                    // from the per-function variable list assembled just
+                    // above (`local_storage_slots` mirrors the parser's
+                    // reservation). Patches the `FinishedFunction` pushed by
+                    // `ast_finish_function`. A struct-by-value parameter
+                    // keeps its body-visible copy in a negative slot too
+                    // (C99 6.5.2.2 + the host ABI), so `fp_slot < 0` -- not
+                    // `!is_parameter` -- selects every such local.
                     let mut multi_cell: Vec<(i64, i64)> = Vec::new();
+                    // Stack-protector classification of the same declared
+                    // objects: what the `-fstack-protector*` modes select on.
+                    let mut ssp = crate::c5::ir::SspFacts {
+                        addr_taken: self.func_local_addr_taken,
+                        dynamic_alloca: self.uses_alloca_in_current_fn,
+                        ..Default::default()
+                    };
                     for v in &self.variables[vars_start..] {
                         if v.fp_slot < 0 {
                             let cells = self.local_storage_slots(v.type_tag, v.array_size as i64);
-                            if cells > 1 {
+                            let aggregate = is_struct_value_ty(v.type_tag) || v.array_size > 0;
+                            if cells > 1 || (cells == 1 && aggregate) {
                                 multi_cell.push((v.fp_slot, cells));
                             }
+                            ssp.merge(super::types::ssp_classify(
+                                &self.structs,
+                                v.type_tag,
+                                v.array_size as i64,
+                                v.array_dims.len() > 1,
+                                &|t| self.size_of_type(t),
+                            ));
                         }
                     }
                     // Multi-cell temporaries the parser allocated without a
@@ -1834,21 +1906,25 @@ impl Compiler {
                     // literals); these never appear in the variable list.
                     multi_cell.extend_from_slice(&self.multi_cell_temps);
                     let over_aligned = core::mem::take(&mut self.func_over_aligned);
-                    // C11 6.7.5 + C99 6.7.6.2: the over-aligned region is
-                    // reserved by moving sp in the prologue, which `alloca` and
-                    // a variable-length array also do, so the two cannot share
-                    // a frame. Diagnosed here, where both facts are known, so
-                    // the combination reads as a source-level rejection rather
+                    // C11 6.7.5 + C99 6.7.6.2: an alignment above 16 is met by
+                    // realigning sp in the prologue, which `alloca` and a
+                    // variable-length array preclude (both move sp). Exactly 16
+                    // is met at a static frame offset and coexists with both.
+                    // Diagnosed here, where both facts are known, so the
+                    // combination reads as a source-level rejection rather
                     // than reaching the walker's internal error.
-                    if !over_aligned.is_empty() && self.uses_alloca_in_current_fn {
+                    if over_aligned.iter().any(|&(_, align, _)| align > 16)
+                        && self.uses_alloca_in_current_fn
+                    {
                         return Err(self.compile_err(
-                            "an over-aligned automatic object cannot share a function \
+                            "an automatic object aligned above 16 cannot share a function \
                              with `alloca` or a variable-length array; use static storage",
                         ));
                     }
                     if let Some(ff) = self.finished_functions.last_mut() {
                         ff.multi_cell_slots = multi_cell;
                         ff.over_aligned_slots = over_aligned;
+                        ff.ssp = ssp;
                     }
                     // Collect unused-parameter and unused-local
                     // diagnostics for the function's top-level
@@ -2003,6 +2079,7 @@ impl Compiler {
                     // the supported maximum is a diagnostic, never a silent
                     // drop.
                     let req_align = core::mem::take(&mut self.pending.attr_align);
+                    let alignas_align = core::mem::take(&mut self.pending.attr_alignas);
                     if req_align > 8 && !(req_align as usize).is_power_of_two() {
                         return Err(self.compile_err(format!(
                             "requested alignment {req_align} is not a power of two"
@@ -2029,10 +2106,20 @@ impl Compiler {
                     } else {
                         base_type_align.max(0) as usize
                     };
-                    let want_align = core::cmp::max(
-                        core::cmp::max(req_align.max(0) as usize, self.align_of_type(ty)),
-                        type_align,
-                    );
+                    self.check_alignas_not_weaker(ty, alignas_align)?;
+                    // A variable-level GNU `aligned(N)` sets the placement,
+                    // replacing what the type asks for; the type's
+                    // attribute-free alignment stays a floor. `_Alignas`
+                    // only raises.
+                    let gnu_set = req_align > alignas_align;
+                    let want_align = if gnu_set {
+                        core::cmp::max(req_align as usize, self.unattributed_align_of(ty))
+                    } else {
+                        core::cmp::max(
+                            core::cmp::max(req_align.max(0) as usize, self.align_of_type(ty)),
+                            type_align,
+                        )
+                    };
                     // Declarations of one object combine to the strictest
                     // alignment (C11 6.7.5, GNU attribute practice): an
                     // attribute-free redeclaration must not lower the
@@ -2045,12 +2132,12 @@ impl Compiler {
                     // value, else raises the natural alignment; the typedef
                     // value alone stands as given (it may lower). Distinct
                     // from the placement above, which never lowers.
-                    let obj_align = if req_align > 0 && type_align > 0 {
-                        req_align
-                    } else if req_align > 0 {
-                        req_align.max(self.align_of_type(ty) as i64)
-                    } else {
+                    let obj_align = if req_align == 0 {
                         type_align as i64
+                    } else if gnu_set || type_align > 0 {
+                        req_align
+                    } else {
+                        req_align.max(self.align_of_type(ty) as i64)
                     };
                     self.symbols[id_idx].type_align =
                         self.symbols[id_idx].type_align.max(obj_align);
@@ -2121,6 +2208,15 @@ impl Compiler {
                         // `defined_here = true` is set at each
                         // alloc site so the field tracks every
                         // path that produces real bytes.
+
+                        // C99 6.9.2p3: the type of a definition must not be
+                        // incomplete. A tentative definition's tag may be
+                        // completed further on in the unit, so the check runs
+                        // once the unit is parsed.
+                        if let Some(sid) = self.incomplete_aggregate_tag(ty) {
+                            self.pending_incomplete_objects
+                                .push((id_idx, sid, signature_line));
+                        }
                     }
                     // Deferred-size array global: the dimension
                     // comes from the initializer and storage is
@@ -2273,20 +2369,35 @@ impl Compiler {
                             // Multi-dimensional struct array `T xs[][M]... = {
                             // ... }`: fill the rows below the deferred outer
                             // dimension through the shared struct-array walker
-                            // (designators at every level).
+                            // (designators at every level). The pre-scan counts
+                            // each top-level entry as a row, but an entry after
+                            // a chained designator resumes mid-row (C99
+                            // 6.7.8p17), so the walker's extent is the real
+                            // outer count (p22).
                             if inner_dim > 1 {
                                 let mut dims = alloc::vec::Vec::new();
                                 dims.push(count);
                                 dims.extend_from_slice(&self.symbols[id_idx].array_dims[1..]);
-                                self.collect_struct_array_entries(ty, off, &dims)?;
-                                let total = count * inner_dim;
+                                let high = self.collect_struct_array_entries(ty, off, &dims)?;
+                                let rows = (high + inner_dim - 1) / inner_dim;
+                                if rows < count
+                                    && self.data.len() as i64
+                                        == off + count * inner_dim * elem_size as i64
+                                {
+                                    self.truncate_data(
+                                        (off + rows * inner_dim * elem_size as i64) as usize,
+                                    );
+                                    self.symbols[id_idx].reserved_data_bytes =
+                                        rows * inner_dim * elem_size as i64;
+                                }
+                                let total = rows * inner_dim;
                                 self.symbols[id_idx].array_size = total;
                                 self.symbols[id_idx].is_zero_len_array = total == 0;
                                 self.reserve_zero_length_array_slot(id_idx);
                                 if let Some(first) = self.symbols[id_idx].array_dims.first_mut()
                                     && *first == 0
                                 {
-                                    *first = count;
+                                    *first = rows;
                                 }
                                 while !self.data.len().is_multiple_of(8) {
                                     self.data.push(0);
@@ -2371,7 +2482,7 @@ impl Compiler {
                             fresh
                         };
                         self.symbols[id_idx].val = off;
-                        self.write_array_init_into_data(off, ty, &elements);
+                        self.write_array_init_into_data(off, ty, &elements)?;
                         self.symbols[id_idx].has_initializer = true;
                         self.symbols[id_idx].defined_here = true;
                     } else {
@@ -2532,18 +2643,14 @@ impl Compiler {
                                         "array `_Thread_local` initialisers are not supported",
                                     ));
                                 }
-                                // Known-size struct array: write each
-                                // brace-list element into the pre-
-                                // allocated slot. Missing trailing
-                                // entries stay zero-init.
-                                let elem_size = self.size_of_type(ty);
-                                let sid = struct_id_of(ty);
-                                // A multi-dimensional array (`T xs[A][B]`) has an
-                                // element that is itself an array of structs; each
-                                // top-level group spans the inner dimensions.
+                                // Known-size struct array: the shared
+                                // struct-array walker fills the brace list
+                                // into the pre-allocated slot (designators
+                                // at every level, positional resume at the
+                                // designated rank, C99 6.7.8p17); missing
+                                // trailing entries stay zero-init.
                                 let inner_dims = self.inner_dims_of(id_idx);
                                 let inner_product: i64 = inner_dims.iter().product::<i64>().max(1);
-                                let group_stride = elem_size as i64 * inner_product;
                                 let group_count = array_size / inner_product;
                                 if self.lex.tk != '{' {
                                     return Err(
@@ -2551,178 +2658,11 @@ impl Compiler {
                                     );
                                 }
                                 self.next()?;
-                                let mut idx: i64 = 0;
-                                while self.lex.tk != '}' {
-                                    // C99 6.7.8p7 array designator on a
-                                    // struct-array element: `[N] = {field, ...}`
-                                    // jumps the cursor and writes the brace list
-                                    // there. The GCC range form `[lo ... hi] = v`
-                                    // writes the same value to every element in
-                                    // [lo, hi].
-                                    let mut range_hi: Option<i64> = None;
-                                    if self.lex.tk == Token::Brak {
-                                        self.next()?;
-                                        let desig =
-                                            self.parse_constant_int_folding_const_objects()?;
-                                        if self.lex.tk == Token::Ellipsis {
-                                            self.next()?;
-                                            let hi =
-                                                self.parse_constant_int_folding_const_objects()?;
-                                            if hi < desig || hi >= array_size {
-                                                return Err(self.compile_err(format!(
-                                                    "array designator range [{desig} ... {hi}] out of bounds [0, {array_size})"
-                                                )));
-                                            }
-                                            range_hi = Some(hi);
-                                        }
-                                        if desig < 0 || desig >= array_size {
-                                            return Err(self.compile_err(format!(
-                                                "array designator index {desig} out of bounds [0, {array_size})"
-                                            )));
-                                        }
-                                        if self.lex.tk != ']' {
-                                            return Err(self.compile_err(
-                                                "`]` expected after array designator index",
-                                            ));
-                                        }
-                                        self.next()?;
-                                        if self.lex.tk == Token::Brak {
-                                            // C99 6.7.8p6 multi-dimensional element
-                                            // designator `[i][j]... = { ... }`:
-                                            // index every dimension down to a
-                                            // single element. Each subscript scales
-                                            // by the product of the dimensions below
-                                            // it (the outer `desig` by
-                                            // `inner_product`).
-                                            if range_hi.is_some() {
-                                                return Err(self.compile_err(
-                                                    "`[lo ... hi]` range cannot combine with a multi-dimensional designator",
-                                                ));
-                                            }
-                                            if desig >= group_count {
-                                                return Err(self.compile_err(format!(
-                                                    "array designator index {desig} out of bounds [0, {group_count})"
-                                                )));
-                                            }
-                                            let mut elem = desig * inner_product;
-                                            let mut d = 0usize;
-                                            while self.lex.tk == Token::Brak {
-                                                self.next()?; // `[`
-                                                let n = self
-                                                    .parse_constant_int_folding_const_objects()?;
-                                                if self.lex.tk != ']' {
-                                                    return Err(self.compile_err(
-                                                        "`]` expected after array designator index",
-                                                    ));
-                                                }
-                                                self.next()?; // `]`
-                                                if d >= inner_dims.len()
-                                                    || n < 0
-                                                    || n >= inner_dims[d]
-                                                {
-                                                    return Err(self.compile_err(format!(
-                                                        "array designator index {n} out of bounds"
-                                                    )));
-                                                }
-                                                let scale: i64 = inner_dims
-                                                    .iter()
-                                                    .skip(d + 1)
-                                                    .product::<i64>()
-                                                    .max(1);
-                                                elem += n * scale;
-                                                d += 1;
-                                            }
-                                            if d != inner_dims.len() {
-                                                return Err(self.compile_err(
-                                                    "multi-dimensional `[i][j]` designator must index every dimension",
-                                                ));
-                                            }
-                                            let here = var_offset + elem * elem_size as i64;
-                                            if self.lex.tk == Token::Dot {
-                                                // `[i][j].field = v` field override.
-                                                self.fill_element_field_designator(sid, ty, here)?;
-                                            } else {
-                                                if self.lex.tk != Token::Assign {
-                                                    return Err(self.compile_err(
-                                                        "`=` expected after `[i][j]` designator",
-                                                    ));
-                                                }
-                                                self.next()?;
-                                                self.init_struct_array_element(sid, here)?;
-                                            }
-                                            idx = desig + 1;
-                                            self.accept(',')?;
-                                            continue;
-                                        }
-                                        if self.lex.tk == Token::Dot {
-                                            // C99 6.7.8p7 compound designator
-                                            // `[N].field... = v`: override one
-                                            // field of an already-filled element.
-                                            if range_hi.is_some() {
-                                                return Err(self.compile_err(
-                                                    "`[lo ... hi]` range cannot combine with a `.field` sub-designator",
-                                                ));
-                                            }
-                                            let here = var_offset + desig * group_stride;
-                                            self.fill_element_field_designator(sid, ty, here)?;
-                                            idx = desig + 1;
-                                            self.accept(',')?;
-                                            continue;
-                                        }
-                                        if self.lex.tk != Token::Assign {
-                                            return Err(self.compile_err(
-                                                "`=` expected after `[N]` designator",
-                                            ));
-                                        }
-                                        self.next()?;
-                                        idx = desig;
-                                    }
-                                    let last = range_hi.unwrap_or(idx);
-                                    if last >= group_count {
-                                        return Err(self.compile_err(format!(
-                                            "too many initializers for `{}`",
-                                            self.symbols[id_idx].name
-                                        )));
-                                    }
-                                    // A range re-parses the value for each element
-                                    // (from a snapshot at its start) so the value's
-                                    // own relocations register at each element's
-                                    // offset. The last element leaves the cursor
-                                    // past the value for the next designator.
-                                    let value_snap = range_hi.map(|_| self.lex.snapshot());
-                                    let mut k = idx;
-                                    loop {
-                                        if let Some(snap) = value_snap {
-                                            self.restore_lex(snap);
-                                        }
-                                        let here = var_offset + k * group_stride;
-                                        // A multi-dimensional element is an
-                                        // array of structs, never a compound
-                                        // literal.
-                                        if inner_dims.is_empty() {
-                                            self.init_struct_array_element(sid, here)?;
-                                        } else if self.lex.tk == '{' {
-                                            self.collect_struct_array_data(ty, here, &inner_dims)?;
-                                        } else {
-                                            // C99 6.7.9p20: a row whose braces are
-                                            // elided takes its elements from this
-                                            // list and leaves the rest.
-                                            self.collect_struct_array_entries_braced(
-                                                ty,
-                                                here,
-                                                &inner_dims,
-                                                false,
-                                            )?;
-                                        }
-                                        if k >= last {
-                                            break;
-                                        }
-                                        k += 1;
-                                    }
-                                    idx = last + 1;
-                                    self.accept(',')?;
-                                }
-                                self.next()?; // consume `}`
+                                let mut full_dims =
+                                    alloc::vec::Vec::with_capacity(inner_dims.len() + 1);
+                                full_dims.push(group_count);
+                                full_dims.extend_from_slice(&inner_dims);
+                                self.collect_struct_array_entries(ty, var_offset, &full_dims)?;
                                 for _ in 0..array_cl_parens {
                                     self.accept(')')?;
                                 }
@@ -2743,7 +2683,7 @@ impl Compiler {
                                         array_size
                                     )));
                                 }
-                                self.write_array_init_into_data(var_offset, ty, &elements);
+                                self.write_array_init_into_data(var_offset, ty, &elements)?;
                                 for _ in 0..array_cl_parens {
                                     self.accept(')')?;
                                 }
@@ -2780,11 +2720,27 @@ impl Compiler {
             self.next()?;
         }
         self.resolve_pending_aliases()?;
+        self.check_incomplete_definitions()?;
         // Before the asm `.globl` sweep: that directive is an explicit
         // request to export the name and outranks the inline model.
         self.resolve_inline_linkage();
         self.resolve_file_scope_asm_globl();
         self.warn_unused_static_functions();
+        Ok(())
+    }
+
+    /// C99 6.9.2p3: a file-scope definition whose aggregate tag the unit
+    /// never completes has no storage size. The declarator's own line is
+    /// reported, not the end of the unit.
+    fn check_incomplete_definitions(&mut self) -> Result<(), C5Error> {
+        for (id_idx, sid, line) in core::mem::take(&mut self.pending_incomplete_objects) {
+            if !self.structs[sid].is_complete {
+                let name = self.symbols[id_idx].name.clone();
+                return Err(
+                    self.compile_err_at(line, format!("object `{name}` has incomplete type"))
+                );
+            }
+        }
         Ok(())
     }
 
@@ -2803,14 +2759,15 @@ impl Compiler {
 
     /// Bind aliases whose target had not been defined when the declarator was
     /// parsed. The target must be defined in this unit: an alias to an
-    /// undefined symbol has no address to share.
+    /// undefined symbol has no address to share. A weak function alias is
+    /// interposable, so its references never bind to the target's body:
+    /// the symbol stays an external reference (the extern-import pass
+    /// routes it by name) while the alias record still emits the weak
+    /// definition at the target's address.
     fn resolve_pending_aliases(&mut self) -> Result<(), C5Error> {
         for (id_idx, target, is_object) in core::mem::take(&mut self.pending_aliases) {
             let want = if is_object { Token::Glo } else { Token::Fun } as i64;
-            let tgt = self
-                .symbols
-                .iter()
-                .position(|s| s.link_name() == target && s.class == want && s.defined_here);
+            let tgt = self.resolved_alias_target(&target, want);
             let Some(tgt) = tgt else {
                 let kind = if is_object { "an object" } else { "a function" };
                 return Err(self.compile_err(format!(
@@ -2818,6 +2775,17 @@ impl Compiler {
                 )));
             };
             self.symbols[tgt].was_referenced = true;
+            if !is_object && self.symbols[id_idx].is_weak {
+                let name = self.symbols[id_idx].link_name().into();
+                self.function_aliases
+                    .push(crate::c5::program::FunctionAlias {
+                        name,
+                        target,
+                        bind: crate::c5::program::AliasBind::Weak,
+                        addend: 0,
+                    });
+                continue;
+            }
             self.symbols[id_idx].val = self.symbols[tgt].val;
             self.symbols[id_idx].defined_here = true;
             self.symbols[id_idx].is_extern_decl = false;
@@ -2825,12 +2793,40 @@ impl Compiler {
                 self.symbols[id_idx].array_size = self.symbols[tgt].array_size;
             } else {
                 let name = self.symbols[id_idx].link_name().into();
-                let weak = self.symbols[id_idx].is_weak;
+                let bind = alias_bind(&self.symbols[id_idx]);
                 self.function_aliases
-                    .push(crate::c5::program::FunctionAlias { name, target, weak });
+                    .push(crate::c5::program::FunctionAlias {
+                        name,
+                        target,
+                        bind,
+                        addend: 0,
+                    });
             }
         }
         Ok(())
+    }
+
+    /// Symbol index the alias target `name` resolves to: a defined symbol
+    /// of class `want`, following function-alias records so an alias whose
+    /// target is itself an (unbound weak) alias reaches the chain's
+    /// defined end.
+    fn resolved_alias_target(&self, name: &str, want: i64) -> Option<usize> {
+        let mut name = name;
+        for _ in 0..=self.function_aliases.len() {
+            if let Some(i) = self
+                .symbols
+                .iter()
+                .position(|s| s.link_name() == name && s.class == want && s.defined_here)
+            {
+                return Some(i);
+            }
+            name = &self
+                .function_aliases
+                .iter()
+                .find(|a| a.name == name)?
+                .target;
+        }
+        None
     }
 
     /// Settle every function's inline linkage once the unit's last
@@ -2850,8 +2846,19 @@ impl Compiler {
     /// copy rather than to an undefined symbol. C99 6.7.4p6 states that
     /// choice outright ("provides an alternative to an external
     /// definition, which a translator may use to implement any call to
-    /// the function in the same translation unit"); under GNU89 it is
-    /// narrower than gcc, which leaves an external reference instead.
+    /// the function in the same translation unit"); gcc leaves an
+    /// external reference instead, which it can because it inlines an
+    /// `always_inline` body at every optimization level. badc's inliner
+    /// runs only under `-O` and declines a body its candidate filter
+    /// rejects, so the copy is what keeps those calls resolvable.
+    ///
+    /// That licence covers calls, not the address. The name keeps
+    /// external linkage, so C99 6.2.2p2 requires `&f` to denote one
+    /// function program-wide. The body is therefore emitted under
+    /// `Symbol::inline_body_name`, a name no C identifier can spell, and
+    /// the identifier stays an undefined external reference that every
+    /// address site relocates against. A unit that only calls the
+    /// function needs no such reference and links as before.
     fn resolve_inline_linkage(&mut self) {
         use crate::c5::symbol::{Linkage, inline_definition};
         let model = self.inline_model;
@@ -2870,6 +2877,11 @@ impl Compiler {
             } else {
                 Linkage::External
             };
+            // `.` cannot occur in a C identifier, so the body name
+            // collides with nothing the source can declare.
+            if sym.is_inline_definition && sym.defined_here {
+                sym.inline_body_name = Some(alloc::format!("{}.inline", sym.link_name()));
+            }
         }
     }
 
@@ -2917,16 +2929,27 @@ impl Compiler {
         }
     }
 
-    /// Move the `weak` / `used` / `visibility` / `section("name")` attribute
-    /// carriers collected for the current declarator onto its symbol. Shared
-    /// by the function and file-scope-object paths; the object writers read
-    /// the fields off the symbol.
+    /// Move the `weak` / `used` / `constructor` / `destructor` /
+    /// `visibility` / `section("name")` attribute carriers collected for
+    /// the current declarator onto its symbol. Shared by the function and
+    /// file-scope-object paths; the object writers and the body-open
+    /// `InitFunc` registration read the fields off the symbol, so an
+    /// attribute written on a prototype reaches the later definition.
     pub(super) fn apply_symbol_attributes(&mut self, id_idx: usize) {
         if self.pending.attr_weak {
             self.symbols[id_idx].is_weak = true;
         }
         if self.pending.attr_used {
             self.symbols[id_idx].is_used = true;
+        }
+        if self.pending.attr_constructor {
+            self.symbols[id_idx].is_constructor = true;
+        }
+        if self.pending.attr_destructor {
+            self.symbols[id_idx].is_destructor = true;
+        }
+        if let Some(p) = self.pending.attr_init_priority {
+            self.symbols[id_idx].init_priority = Some(p);
         }
         // Sticky like the rest: `gnu_inline` on any declaration selects
         // the GNU89 model for the name, whichever side of the declarator
@@ -2946,5 +2969,18 @@ impl Compiler {
         if let Some(sec) = self.pending.attr_section.take() {
             self.symbols[id_idx].section_name = Some(sec);
         }
+    }
+}
+
+/// Binding a `__attribute__((alias))` declarator's symbol takes: its own
+/// linkage, `__attribute__((weak))` overriding.
+fn alias_bind(sym: &crate::c5::symbol::Symbol) -> crate::c5::program::AliasBind {
+    use crate::c5::program::AliasBind;
+    if sym.is_weak {
+        AliasBind::Weak
+    } else if sym.linkage == crate::c5::symbol::Linkage::Internal {
+        AliasBind::Local
+    } else {
+        AliasBind::Global
     }
 }

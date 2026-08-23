@@ -35,14 +35,28 @@ pub(super) fn embedded_header(name: &str) -> Option<&'static str> {
 }
 
 /// Header names whose contents are part of the compiler implementation:
-/// intrinsic wrappers built on badc's own inline-asm encoders. Another
-/// compiler's copy of such a header is written against that compiler's
-/// builtins and can never compile here, so when a build line puts a foreign
-/// toolchain's private include directory on the search path (kernel-style
-/// `-isystem $(cc -print-file-name=include)` folded into `-I`), these names
-/// must still resolve to the embedded copy. Ordinary headers keep the usual
-/// order (`-I` shadows the embedded set, as it does in gcc and clang).
-pub(super) const COMPILER_OWNED_HEADERS: &[&str] = &["arm_neon.h"];
+/// the `__builtin_*` thunks every unit is given, and intrinsic wrappers
+/// built on badc's own inline-asm encoders. Another compiler's copy of such
+/// a header is written against that compiler's builtins and can never
+/// compile here, so when a build line puts a foreign toolchain's private
+/// include directory on the search path (kernel-style `-isystem
+/// $(cc -print-file-name=include)` folded into `-I`), these names must still
+/// resolve to the embedded copy. They are also the set `-nostdinc` keeps:
+/// that flag withdraws the standard library headers, as it does in gcc,
+/// and leaves the compiler's own facilities in place. Ordinary headers keep
+/// the usual order (`-I` shadows the embedded set, as it does in gcc and
+/// clang).
+pub(super) const COMPILER_OWNED_HEADERS: &[&str] = &[
+    "_builtins.h",
+    "arm_neon.h",
+    "x86intrin.h",
+    "immintrin.h",
+    "xmmintrin.h",
+    "emmintrin.h",
+    "tmmintrin.h",
+    "smmintrin.h",
+    "wmmintrin.h",
+];
 
 /// Whether `name` is a compiler-owned intrinsic header.
 pub(super) fn compiler_owned_header(name: &str) -> bool {
@@ -67,6 +81,34 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         include_str!("../../libc/include/_builtins.h"),
     ),
     ("arm_neon.h", include_str!("../../libc/include/arm_neon.h")),
+    (
+        "x86intrin.h",
+        include_str!("../../libc/include/x86intrin.h"),
+    ),
+    (
+        "immintrin.h",
+        include_str!("../../libc/include/immintrin.h"),
+    ),
+    (
+        "xmmintrin.h",
+        include_str!("../../libc/include/xmmintrin.h"),
+    ),
+    (
+        "emmintrin.h",
+        include_str!("../../libc/include/emmintrin.h"),
+    ),
+    (
+        "tmmintrin.h",
+        include_str!("../../libc/include/tmmintrin.h"),
+    ),
+    (
+        "smmintrin.h",
+        include_str!("../../libc/include/smmintrin.h"),
+    ),
+    (
+        "wmmintrin.h",
+        include_str!("../../libc/include/wmmintrin.h"),
+    ),
     ("stdalign.h", include_str!("../../libc/include/stdalign.h")),
     ("stddef.h", include_str!("../../libc/include/stddef.h")),
     ("stdint.h", include_str!("../../libc/include/stdint.h")),
@@ -185,6 +227,30 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         include_str!("../../libc/include/CoreFoundation/CoreFoundation.h"),
     ),
     (
+        "CommonCrypto/CommonCryptoError.h",
+        include_str!("../../libc/include/CommonCrypto/CommonCryptoError.h"),
+    ),
+    (
+        "CommonCrypto/CommonRandom.h",
+        include_str!("../../libc/include/CommonCrypto/CommonRandom.h"),
+    ),
+    (
+        "CoreVideo/CoreVideo.h",
+        include_str!("../../libc/include/CoreVideo/CoreVideo.h"),
+    ),
+    (
+        "CoreVideo/CVBase.h",
+        include_str!("../../libc/include/CoreVideo/CVBase.h"),
+    ),
+    (
+        "CoreVideo/CVReturn.h",
+        include_str!("../../libc/include/CoreVideo/CVReturn.h"),
+    ),
+    (
+        "CoreVideo/CVHostTime.h",
+        include_str!("../../libc/include/CoreVideo/CVHostTime.h"),
+    ),
+    (
         "SystemConfiguration/SCDynamicStoreCopySpecific.h",
         include_str!("../../libc/include/SystemConfiguration/SCDynamicStoreCopySpecific.h"),
     ),
@@ -218,6 +284,28 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         "mach/task.h",
         include_str!("../../libc/include/mach/task.h"),
     ),
+    (
+        "mach/vm_statistics.h",
+        include_str!("../../libc/include/mach/vm_statistics.h"),
+    ),
+    (
+        "mach/machine.h",
+        include_str!("../../libc/include/mach/machine.h"),
+    ),
+    (
+        "mach/vm_prot.h",
+        include_str!("../../libc/include/mach/vm_prot.h"),
+    ),
+    (
+        "mach/vm_region.h",
+        include_str!("../../libc/include/mach/vm_region.h"),
+    ),
+    (
+        "mach/mach_vm.h",
+        include_str!("../../libc/include/mach/mach_vm.h"),
+    ),
+    ("libproc.h", include_str!("../../libc/include/libproc.h")),
+    ("sys/proc.h", include_str!("../../libc/include/sys/proc.h")),
     ("sysexits.h", include_str!("../../libc/include/sysexits.h")),
     (
         "sys/sys_domain.h",
@@ -234,6 +322,14 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     (
         "mach-o/loader.h",
         include_str!("../../libc/include/mach-o/loader.h"),
+    ),
+    (
+        "mach-o/fat.h",
+        include_str!("../../libc/include/mach-o/fat.h"),
+    ),
+    (
+        "mach-o/nlist.h",
+        include_str!("../../libc/include/mach-o/nlist.h"),
     ),
     ("sys/stat.h", include_str!("../../libc/include/sys/stat.h")),
     ("sys/mman.h", include_str!("../../libc/include/sys/mman.h")),
@@ -500,13 +596,12 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("memory.h", include_str!("../../libc/include/memory.h")),
 ];
 
-// Build-time-generated `&[(name, header)]` sorted by name. Produced
+// Build-time-generated `&[(name, headers)]` sorted by name. Produced
 // by `build.rs`'s `emit_binding_to_header_index`, which walks
 // `libc/include/*.h` once per build and harvests every
 // `#pragma binding(<dylib>::<name>, ...)` local symbol plus every
-// file-scope function-prototype identifier. First-occurrence-wins
-// per name in lexicographic header order; a duplicate declaration
-// in a second header is silently dropped.
+// file-scope function-prototype identifier. Each name's headers are
+// in priority-then-lexicographic scan order.
 include!(concat!(env!("OUT_DIR"), "/binding_to_header.rs"));
 
 /// Look up a function name in the build-time-generated index and
@@ -517,10 +612,19 @@ include!(concat!(env!("OUT_DIR"), "/binding_to_header.rs"));
 /// the auto-include retry (force-include the header naming the
 /// missing symbol, then re-compile).
 pub(super) fn header_declaring(name: &str) -> Option<&'static str> {
+    headers_declaring(name).first().copied()
+}
+
+/// Every header declaring `name`, in scan order -- the conventional
+/// home first. A name can be bound to different libraries in
+/// different headers (`_exit` to msvcrt in `<stdlib.h>`, to the C
+/// library in `<unistd.h>`), so a caller resolving a binding for one
+/// target has to see them all.
+pub(super) fn headers_declaring(name: &str) -> &'static [&'static str] {
     BINDING_TO_HEADER
         .binary_search_by_key(&name, |&(n, _)| n)
         .ok()
-        .map(|i| BINDING_TO_HEADER[i].1)
+        .map_or(&[], |i| BINDING_TO_HEADER[i].1)
 }
 
 #[cfg(test)]

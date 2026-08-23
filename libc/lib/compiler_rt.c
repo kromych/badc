@@ -17,17 +17,20 @@
 // side (0 for relaxed/release, 2 for acquire/acq_rel).
 //
 // glibc non-shared wrappers: glibc keeps a few entry points only in the
-// static `libc_nonshared.a` (atexit, at_quick_exit, pthread_atfork,
-// __stack_chk_fail_local), each a thin wrapper over a symbol that IS in the
-// shared `libc.so`. Providing them here lets badc self-link a glibc program
-// against the shared library alone, with no host static archive.
+// static `libc_nonshared.a` (atexit, at_quick_exit, pthread_atfork), each a
+// thin wrapper over a symbol that IS in the shared `libc.so`. Providing them
+// here lets badc self-link a glibc program against the shared library alone,
+// with no host static archive. The stack-protector members of that archive
+// are in `stack_protector.c`, so a protected image does not carry these.
 
 #ifdef __aarch64__
 
 typedef unsigned char __bcrt_u8;
 typedef unsigned short __bcrt_u16;
 typedef unsigned int __bcrt_u32;
-typedef unsigned long __bcrt_u64;
+// `long` is 4 bytes on Windows LLP64, which would give every `*8_*`
+// helper a 4-byte operand; `long long` is 8 on every target.
+typedef unsigned long long __bcrt_u64;
 
 #define BCRT_LDADD(sz, T, ord, mo) \
     T __aarch64_ldadd##sz##_##ord(T v, T *p) { return __atomic_fetch_add(p, v, mo); }
@@ -89,8 +92,6 @@ extern int __cxa_at_quick_exit(void (*func)(void *), void *dso);
 #pragma binding(libc::__register_atfork, "__register_atfork")
 extern int __register_atfork(void (*prepare)(void), void (*parent)(void),
                              void (*child)(void), void *dso);
-#pragma binding(libc::__stack_chk_fail, "__stack_chk_fail")
-extern void __stack_chk_fail(void);
 
 // dso == 0 registers the handler against the main program; exit() runs the
 // whole chain, matching the executable case the runtime already relies on.
@@ -106,9 +107,5 @@ int pthread_atfork(void (*prepare)(void), void (*parent)(void),
                    void (*child)(void)) {
     return __register_atfork(prepare, parent, child, 0);
 }
-
-// The stack-protector epilogue calls the local alias so PIC code reaches the
-// handler without a PLT hop; forward it to the shared entry point.
-void __stack_chk_fail_local(void) { __stack_chk_fail(); }
 
 #endif // __linux__

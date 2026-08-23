@@ -23,27 +23,66 @@ system-provided temporary directory for one-off tests, binaries and archives you
 
 Configure Git hooks using `./scripts/install_hooks.py`.
 
-There are local boxes available via ssh. CI may hang due to miscompiles and SIGSEGV's,
-and costs money. Be frugal. Before any `git push`, the following must pass on the local
+There are local boxes available via ssh, plus the macOS host itself, which is a lane
+(`--box NAME=macos`) rather than a driver only: macOS is the matrix's only Mach-O and
+only SDK-libc target. CI may hang due to miscompiles and SIGSEGV's, and costs money.
+Be frugal. Before any `git push`, the following must pass on the local
 boxes using `./scripts/validate_local_boxes.py`:
 
   * `cargo test`
-  * `cargo test --release --lib` (release exercises the JIT + native fixture-parity paths that debug builds skip)
+  * `cargo test --release` over all test targets (release exercises the JIT + native
+    fixture-parity paths that debug builds skip; the integration suites under
+    `tests/` are part of the gate)
   * the same run again under the register-pressure caps (`BADC_MAX_GPR=2
-    BADC_MAX_FPR=2`, `--features "codegen_test full"`), as CI's pressure matrix does
+    BADC_MAX_FPR=2`, `--features "codegen_test full"`), as CI's pressure matrix
+    does -- on the Linux lanes, the only ones CI's matrix covers
   * the gating demos, enumerated in `GATING_DEMOS` in the script -- sqlite3, lua,
     miniz, monocypher, stb, tweetnacl, quickjs, raylib, curl, libmill, libdill,
-    coroutines, nasm
-  * the kernel step: `demos/linux/verify.py --linker badc --no-boot` over the
-    pinned `defconfig` release, on each Linux lane
+    coroutines, nasm, qemu, edk2, bearssl, bzip2, kissfft, gui_hello, nt_loader,
+    tinycc, chibicc, tcl. Each entry names the lane kinds it runs on, and
+    `scripts/run_demos.py` runs the lane's set concurrently. `--demo-jobs`
+    bounds how many run at a time, never which ones run; the runner prints
+    its roster and its width.
+  * the snapshot-drift check on every Linux lane: regenerate
+    `tests/snapshots/` and fail on drift, as CI's `snapshots clean` job does.
+    It needs `llvm-objdump` -- the committed snapshots were disassembled with
+    it and GNU objdump's text does not match -- and fails the step when it is
+    absent rather than downgrading the check. The macOS host regenerates after
+    every commit through the post-commit hook, so it carries no lane step.
+    Skip with `--no-snapshots`.
+  * the kernel step: `demos/linux/verify.py --linker badc` over the pinned
+    `defconfig` release, on each Linux lane -- compile, link and boot. The
+    boots are the ones CI runs, four plus a displacement probe per distinct
+    displacement, under the box's own `qemu-system-<arch>`; nothing else is
+    needed to reach them, since both machines take the emulator's `-kernel`
+    loader and no firmware from elsewhere. Without them the step covers only
+    what is decided at the vmlinux link, and an image that compiles and links
+    clean and then prints nothing on the console has reached CI while this
+    board was green on all five lanes. A box with no emulator for its own
+    architecture keeps the compile + link cover and reports it as a note in
+    the closing summary, so a lane that did not boot does not read as one
+    that did.
+
+The macOS lane runs in the working tree with no transport, and runs the build,
+the release test suite and the POSIX demo set. It skips the kernel step (that
+corpus is Linux-only), the pressure rerun and the clippy step (CI runs both on
+Linux only, and the pre-push hook lints on this host already).
+
+Out of `GATING_DEMOS` by measurement, and covered by CI instead: `demos/kernel`,
+`demos/yasm` and `demos/python`; the script records the measurement behind each.
+`demos/qemu` gates its build, self-link and run, not its boot: the boot consumes
+the firmware CI's `ovmf` lane publishes as an artifact.
 
 The script is the contract; this list describes it and has to be updated with it.
 
 The kernel step's corpus is `defconfig` on the pinned release -- the tree CI's
 `kernel` job builds. The vendored minimal configs under `demos/linux/configs/`
 are not a substitute: they compile a third to a half as many units and have passed
-while defconfig-only regressions reached the branch. `--no-kernel` skips the
-step; a push whose local run skipped it has no kernel cover.
+while defconfig-only regressions reached the branch. The build costs 4.5-11 min
+per Linux lane and the boots 12 s (aarch64, eight emulator starts) to 26 s
+(x86_64, five) on top of it, measured on the boxes over an image that boots; an
+image that does not boot ends each boot at the 90 s cap instead. `--no-kernel`
+skips the step; a push whose local run skipped it has no kernel cover.
 
 ## Debugging
 

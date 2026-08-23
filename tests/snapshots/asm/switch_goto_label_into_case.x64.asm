@@ -9,21 +9,35 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <classify>:
-               	movslq	%edi, %rdi
-               	cmpq	$0x3, %rdi
+               	cmpl	$0x3, %edi
                	jl	<addr>
-               	cmpq	$0x4, %rdi
+               	cmpl	$0x4, %edi
                	jl	<addr>
-               	cmpq	$0x4, %rdi
+               	cmpl	$0x4, %edi
                	je	<addr>
-               	cmpq	$0x5, %rdi
+               	cmpl	$0x5, %edi
                	setge	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	je	<addr>
-               	cmpq	$0x8, %rdi
+               	cmpl	$0x8, %edi
                	setle	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -34,11 +48,11 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	jmp	<addr>
-               	cmpq	$0x2, %rdi
+               	cmpl	$0x2, %edi
                	jl	<addr>
                	movl	$0x14, %eax
                	retq
-               	cmpq	$0x1, %rdi
+               	cmpl	$0x1, %edi
                	jne	<addr>
                	movl	$0xa, %eax
                	retq
@@ -47,16 +61,16 @@ Disassembly of section .text:
                	movl	$0xa, %eax
                	movl	$0x14, %eax
                	movl	$0x1e, %eax
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
+               	movl	$0x1, %ecx
+               	movq	%rcx, %rdx
                	movl	$0x1e, %eax
-               	movl	$0x1, %eax
-               	movl	$0x1e, %eax
-               	movl	$0x1, %eax
-               	movl	$0x1e, %eax
-               	movl	$0x1, %eax
-               	movl	$0x1e, %eax
+               	movq	%rax, %rcx
+               	movl	$0x1, %ecx
                	xorq	%rax, %rax
-               	xorq	%rax, %rax
-               	xorq	%rax, %rax
-               	xorq	%rax, %rax
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
                	xorq	%rax, %rax
                	retq

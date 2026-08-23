@@ -9,21 +9,28 @@ Disassembly of section .text:
                	movl	$<entry_off>, %esi
                	callq	<addr>
                	ud2
-
-<capture>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	leaq	<rip>, %rcx
-               	xorq	%rax, %rax
-               	movq	0x8(%rbp), %rdx
-               	movq	%rdx, (%rcx)
-               	popq	%rbp
-               	retq
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	callq	<addr>
+               	leaq	<rip>, %rax
+               	movq	0x8(%rbp), %rcx
+               	movq	%rcx, (%rax)
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	testq	%rax, %rax

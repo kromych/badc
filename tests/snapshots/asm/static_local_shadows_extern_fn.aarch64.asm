@@ -10,14 +10,15 @@ Disassembly of section .text:
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#0x1
+               	brk	#0x1
+               	brk	#0x1
 
 <driver>:
                	mov	x1, x0
-               	sxtw	x1, w1
                	mov	x0, #0x0                // =0
-               	cmp	x1, #0x2
+               	cmp	w1, #0x2
                	b.lt	<addr>
-               	cmp	x1, #0x2
+               	cmp	w1, #0x2
                	b.eq	<addr>
                	sxtw	x0, w0
                	ret
@@ -26,7 +27,7 @@ Disassembly of section .text:
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
                	b	<addr>
-               	cmp	x1, #0x1
+               	cmp	w1, #0x1
                	b.eq	<addr>
                	b	<addr>
                	mov	x0, #0x2a               // =42

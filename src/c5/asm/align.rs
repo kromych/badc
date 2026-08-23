@@ -321,6 +321,11 @@ pub(crate) const X86_NOPS: [&[u8]; 11] = [
     ],
 ];
 
+/// Maximal-length NOPs GNU as lays in one alignment gap before it jumps over
+/// the padding instead. The threshold is on the count, so the byte gap it
+/// falls at is this times the longest NOP.
+pub(crate) const X86_MAX_NOPS: usize = 7;
+
 /// Fill an x86-64 executable alignment gap with multi-byte NOPs, as GNU as
 /// does: the sub-maximal remainder first, then maximal-length NOPs.
 ///
@@ -331,6 +336,10 @@ pub(crate) const X86_NOPS: [&[u8]; 11] = [
 /// scheme. An alignment directive's own fill does not establish a
 /// boundary, so consecutive alignments after data each take the leading
 /// byte.
+///
+/// A gap needing more than [`X86_MAX_NOPS`] maximal NOPs opens with a jump
+/// over the rest, so falling through the padding costs one branch instead of
+/// the whole run.
 pub(crate) fn push_x86_exec_align_fill(
     out: &mut alloc::vec::Vec<u8>,
     gap: usize,
@@ -341,12 +350,36 @@ pub(crate) fn push_x86_exec_align_fill(
         out.extend_from_slice(X86_NOPS[0]);
         gap -= 1;
     }
+    if gap / X86_NOPS.len() > X86_MAX_NOPS {
+        gap -= push_x86_pad_jump(out, gap);
+    }
     let rem = gap % X86_NOPS.len();
     if rem > 0 {
         out.extend_from_slice(X86_NOPS[rem - 1]);
     }
     for _ in 0..gap / X86_NOPS.len() {
         out.extend_from_slice(X86_NOPS[X86_NOPS.len() - 1]);
+    }
+}
+
+/// Lay a jump over the remaining `gap` bytes of alignment padding and report
+/// the bytes it took. GNU as takes the `rel8` form while the distance past it
+/// fits a signed byte and the `rel32` form otherwise; a distance neither
+/// reaches leaves the gap to the NOPs.
+fn push_x86_pad_jump(out: &mut alloc::vec::Vec<u8>, gap: usize) -> usize {
+    const JMP_REL8: u8 = 0xeb;
+    const JMP_REL32: u8 = 0xe9;
+    if let Ok(disp) = i8::try_from(gap as i64 - 2) {
+        out.extend_from_slice(&[JMP_REL8, disp as u8]);
+        return 2;
+    }
+    match i32::try_from(gap as i64 - 5) {
+        Ok(disp) => {
+            out.push(JMP_REL32);
+            out.extend_from_slice(&disp.to_le_bytes());
+            5
+        }
+        Err(_) => 0,
     }
 }
 

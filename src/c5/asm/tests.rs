@@ -453,6 +453,61 @@ const GAS_ALIGN_FILL: &[(usize, &[u8], &[u8])] = &[
     ),
 ];
 
+/// GNU as output for an 88-byte x86-64 alignment gap after an instruction:
+/// the first gap over seven maximal NOPs, so the first one jumped over.
+const GAS_ALIGN_FILL_88: &[u8] = &[
+    0xeb, 0x56, 0x66, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00, 0x66, 0x66, 0x2e, 0x0f, 0x1f,
+    0x84, 0x00, 0x00, 0x00, 0x00, 0x00, 0x66, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x66, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00, 0x66, 0x66, 0x2e, 0x0f,
+    0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00, 0x66, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x66, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00, 0x66, 0x66, 0x2e,
+    0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00,
+];
+
+/// The jump GNU as opens a wide x86-64 alignment gap with, as `(gap, jump)`:
+/// the `rel8` form up to the last displacement it reaches, the `rel32` form
+/// past it. Measured the same way as [`GAS_ALIGN_FILL`].
+const GAS_ALIGN_JUMP: &[(usize, &[u8])] = &[
+    (88, &[0xeb, 0x56]),
+    (89, &[0xeb, 0x57]),
+    (129, &[0xeb, 0x7f]),
+    (130, &[0xe9, 0x7d, 0x00, 0x00, 0x00]),
+    (260, &[0xe9, 0xff, 0x00, 0x00, 0x00]),
+];
+
+#[test]
+fn x86_exec_align_fill_jumps_over_a_wide_gap_like_gnu_as() {
+    let fill = |gap: usize, after_insn: bool| {
+        let mut out = alloc::vec::Vec::new();
+        push_x86_exec_align_fill(&mut out, gap, after_insn);
+        out
+    };
+    assert_eq!(fill(GAS_ALIGN_FILL_88.len(), true), GAS_ALIGN_FILL_88);
+    // The widest gap the NOP count still covers takes no jump.
+    let last_plain = X86_NOPS.len() * (X86_MAX_NOPS + 1) - 1;
+    assert_ne!(fill(last_plain, true)[0], GAS_ALIGN_JUMP[0].1[0]);
+    for &(gap, jump) in GAS_ALIGN_JUMP {
+        let got = fill(gap, true);
+        assert_eq!(got.len(), gap);
+        assert_eq!(
+            &got[..jump.len()],
+            jump,
+            "gap {gap}: jump differs from GNU as"
+        );
+        // The jump's displacement reaches the byte past the padding.
+        let disp = match jump.len() {
+            2 => jump[1] as usize,
+            _ => u32::from_le_bytes(jump[1..].try_into().unwrap()) as usize,
+        };
+        assert_eq!(disp + jump.len(), gap);
+        // A gap opening after data takes the leading one-byte NOP first, and
+        // the rest of the gap decides the jump.
+        let after_data = fill(gap + 1, false);
+        assert_eq!(after_data[0], X86_NOPS[0][0]);
+        assert_eq!(&after_data[1..], &got[..]);
+    }
+}
+
 #[test]
 fn x86_exec_align_fill_matches_gnu_as() {
     for &(gap, data_fill, insn_fill) in GAS_ALIGN_FILL {

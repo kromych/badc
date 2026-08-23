@@ -9,6 +9,7 @@
 //! surface, so callers name `crate::c5::asm::<item>` throughout.
 
 mod align;
+mod directive;
 mod expr;
 mod gas;
 mod section;
@@ -17,6 +18,7 @@ mod template;
 mod text;
 
 pub(crate) use align::*;
+pub(crate) use directive::*;
 pub(crate) use expr::*;
 pub(crate) use gas::*;
 pub(crate) use section::*;

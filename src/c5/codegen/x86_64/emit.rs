@@ -8479,7 +8479,7 @@ fn emit_inline_asm_once(
         }
     };
     let text = gas.as_deref().unwrap_or(text);
-    let mut extracted = match super::ssa::emit_common::extract_asm_sections(text, false) {
+    let mut extracted = match crate::c5::asm::extract_asm_sections(text, false) {
         Ok(e) => e,
         Err(m) => {
             bail_msg(&m);

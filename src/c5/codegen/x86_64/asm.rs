@@ -2678,10 +2678,9 @@ fn parse_template_in(tmpl: &[u8], file_scope: bool) -> Result<Vec<AsmInsn>, Stri
         if let Some((dir, rest)) = piece
             .split_once(char::is_whitespace)
             .or(Some((piece, "")))
-            .filter(|(d, _)| super::super::ssa::emit_common::is_fill_directive(d))
+            .filter(|(d, _)| crate::c5::asm::is_fill_directive(d))
         {
-            let (count_expr, unit, value) =
-                super::super::ssa::emit_common::parse_fill_operands(dir, rest.trim())?;
+            let (count_expr, unit, value) = crate::c5::asm::parse_fill_operands(dir, rest.trim())?;
             insns.push(AsmInsn {
                 mnemonic: Mnemonic::Skip,
                 suffix: None,

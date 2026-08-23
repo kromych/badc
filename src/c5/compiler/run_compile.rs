@@ -221,14 +221,14 @@ impl Compiler {
         // The probe runs the function-scope extractor, which rejects forms
         // only the file-scope one accepts (`.text` switches, `.subsection`),
         // so its error falls through to the file-scope parse.
-        let mut blocks = match engine::extract_asm_sections(text, aarch64) {
+        let mut blocks = match crate::c5::asm::extract_asm_sections(text, aarch64) {
             Ok(Some(ex)) if globl_shortcut && ex.is_linkage_only() => {
                 for name in ex.globl_names() {
                     self.pending_asm_globl.push(name.into());
                 }
                 ex.blocks
             }
-            _ => engine::extract_file_scope_asm_sections(text, aarch64)?,
+            _ => crate::c5::asm::extract_file_scope_asm_sections(text, aarch64)?,
         };
         for b in &blocks {
             for item in &b.items {

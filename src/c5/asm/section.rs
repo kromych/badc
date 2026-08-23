@@ -6,9 +6,6 @@
 use super::*;
 use crate::c5::codegen::map_syms::{MapClass, MapMarks};
 use crate::c5::codegen::ssa::cfi;
-// Assembler code still held by the SSA emit substrate; folds in as the
-// remaining groups move over.
-use crate::c5::codegen::ssa::emit_common::value_fits_width;
 
 // ------------------------------------------------------------------
 // In-template assembler sections: `.pushsection` / `.section` data

@@ -3420,7 +3420,7 @@ fn emit_inline_asm_aarch64(
     // (below), out of the main sequence's fall-through path.
     let (main_text, deferred_text) = crate::c5::asm::split_asm_subsections(text);
     let text = main_text.as_str();
-    let extracted = match super::ssa::emit_common::extract_asm_sections(text, true) {
+    let extracted = match crate::c5::asm::extract_asm_sections(text, true) {
         Ok(e) => e,
         Err(m) => {
             bail_msg(&m);
@@ -11462,9 +11462,8 @@ mod tests {
     /// relocation; `adrp` / `:lo12:` / `bl ext` keep theirs.
     #[test]
     fn file_scope_a64_symbol_relocs_match_gnu_as() {
-        use super::super::ssa::emit_common::{
-            extract_file_scope_asm_sections, materialize_asm_sections,
-        };
+        use super::super::ssa::emit_common::materialize_asm_sections;
+        use crate::c5::asm::extract_file_scope_asm_sections;
         use crate::c5::asm::{AsmRelocKind, AsmSectionTarget};
         let text = ".pushsection .t,\"ax\"\nf1:\n1:\ncbz x0, 2f\nb 1b\n2:\nb.eq 1b\n\
                     tbz x0, #3, 1b\nadr x1, 2b\nldr x2, 2b\nadrp x3, ext_obj\n\
@@ -11534,9 +11533,8 @@ mod tests {
     /// of the element insert / duplicate / extract forms.
     #[test]
     fn file_scope_a64_simd_match_gnu_as() {
-        use super::super::ssa::emit_common::{
-            extract_file_scope_asm_sections, materialize_asm_sections,
-        };
+        use super::super::ssa::emit_common::materialize_asm_sections;
+        use crate::c5::asm::extract_file_scope_asm_sections;
         let text = ".pushsection .t,\"ax\"\n\
                     bsl v1.16b, v2.16b, v3.16b\n\
                     bit v1.16b, v2.16b, v3.16b\n\
@@ -11665,9 +11663,8 @@ mod tests {
     /// `orr`, whose W-register write does the widening.
     #[test]
     fn file_scope_a64_dup_rbit_uxtw_match_gnu_as() {
-        use super::super::ssa::emit_common::{
-            extract_file_scope_asm_sections, materialize_asm_sections,
-        };
+        use super::super::ssa::emit_common::materialize_asm_sections;
+        use crate::c5::asm::extract_file_scope_asm_sections;
         let text = ".pushsection .t,\"ax\"\n\
                     dup v12.4s, v14.s[0]\n\
                     dup v0.4s, v0.s[3]\n\
@@ -11726,9 +11723,8 @@ mod tests {
     /// rather than the immediate field.
     #[test]
     fn file_scope_a64_hash_lo12_matches_gnu_as() {
-        use super::super::ssa::emit_common::{
-            extract_file_scope_asm_sections, materialize_asm_sections,
-        };
+        use super::super::ssa::emit_common::materialize_asm_sections;
+        use crate::c5::asm::extract_file_scope_asm_sections;
         use crate::c5::asm::{AsmRelocKind, AsmSectionTarget};
         let text = ".pushsection .t,\"ax\"\n\
                     add x1, x2, #:lo12:sym\n\
@@ -11781,9 +11777,8 @@ mod tests {
     /// `:abs_g` cases below.
     #[cfg(test)]
     fn materialize_one_section(text: &str) -> Result<AsmSectionSink, alloc::string::String> {
-        use super::super::ssa::emit_common::{
-            extract_file_scope_asm_sections, materialize_asm_sections,
-        };
+        use super::super::ssa::emit_common::materialize_asm_sections;
+        use crate::c5::asm::extract_file_scope_asm_sections;
         let mut blocks = extract_file_scope_asm_sections(text, true).unwrap();
         encode_a64_file_asm_section_code(&mut blocks)?;
         let mut sink = AsmSectionSink::default();
@@ -12223,9 +12218,8 @@ mod tests {
     /// too; all match `as` byte for byte.
     #[test]
     fn file_scope_a64_negative_addsub_imm_matches_gnu_as() {
-        use super::super::ssa::emit_common::{
-            extract_file_scope_asm_sections, materialize_asm_sections,
-        };
+        use super::super::ssa::emit_common::materialize_asm_sections;
+        use crate::c5::asm::extract_file_scope_asm_sections;
         let text = ".pushsection .t,\"ax\"\n\
                     cmp w4, #48 - (4 << 4)\n\
                     cmp x0, #-16\n\
@@ -12282,9 +12276,8 @@ mod tests {
     /// destination / size / source fields are each pinned.
     #[test]
     fn file_scope_a64_mops_match_gnu_as() {
-        use super::super::ssa::emit_common::{
-            extract_file_scope_asm_sections, materialize_asm_sections,
-        };
+        use super::super::ssa::emit_common::materialize_asm_sections;
+        use crate::c5::asm::extract_file_scope_asm_sections;
         let text = ".pushsection .t,\"ax\"\n\
                     cpyfp [x1]!, [x2]!, x3!\n\
                     cpyfprt [x4]!, [x8]!, x16!\n\
@@ -12351,10 +12344,9 @@ mod tests {
     /// stream first, the subsection-1 content appended after.
     #[test]
     fn file_scope_a64_subsection_org_rept_match_gnu_as() {
-        use super::super::ssa::emit_common::{
-            extract_file_scope_asm_sections, materialize_asm_sections, prepare_file_asm_text,
-        };
+        use super::super::ssa::emit_common::{materialize_asm_sections, prepare_file_asm_text};
         use crate::c5::asm::AsmComments;
+        use crate::c5::asm::extract_file_scope_asm_sections;
         let text = ".text\nf:\n661:\nnop\nnop\n662:\n.subsection 1\n663:\nmov x1, #2\nmov x2, #3\n\
                     664:\n.previous\n.org . - (664b-663b) + (662b-661b)\n\
                     .org . - (662b-661b) + (664b-663b)\n\
@@ -12402,10 +12394,9 @@ mod tests {
 
     /// Expand, extract, encode and materialize one file-scope asm text.
     fn a64_file_asm_sink_result(text: &str) -> Result<AsmSectionSink, alloc::string::String> {
-        use super::super::ssa::emit_common::{
-            extract_file_scope_asm_sections, materialize_asm_sections, prepare_file_asm_text,
-        };
+        use super::super::ssa::emit_common::{materialize_asm_sections, prepare_file_asm_text};
         use crate::c5::asm::AsmComments;
+        use crate::c5::asm::extract_file_scope_asm_sections;
         let text = prepare_file_asm_text(text, AsmComments::A64)?;
         let mut blocks = extract_file_scope_asm_sections(&text, true)?;
         encode_a64_file_asm_section_code(&mut blocks)?;

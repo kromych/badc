@@ -875,6 +875,14 @@ pub(crate) fn enc_mrs_tpidr_el0(rt: Reg) -> u32 {
     0xD53B_D040 | (rt.0 as u32)
 }
 
+/// `MRS <Xt>, <systemreg>`, where `field` is the register's `mrs`/`msr`
+/// selector packed as `op0<<14 | op1<<11 | CRn<<7 | CRm<<3 | op2` (the
+/// form [`crate::c5::codegen::stack_guard_sysreg`] returns). The
+/// instruction carries the low 15 bits of the field at bits 19..5.
+pub(crate) fn enc_mrs(rt: Reg, field: u16) -> u32 {
+    0xD530_0000 | ((u32::from(field) & 0x7FFF) << 5) | (rt.0 as u32)
+}
+
 /// `LDR <Dt>, [<Xn|SP>, #imm]` -- 64-bit unsigned-offset FP/SIMD
 /// load. The offset is byte-addressed but encoded as `imm/8`; the
 /// caller passes raw bytes (a multiple of 8, up to 32760).
@@ -1825,6 +1833,8 @@ pub(crate) fn lower(
     // offset are recorded separately so the emitter rewrites the location.
     let mut promoted_local_slots: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>> =
         prebuilt_promoted;
+    let mut canary_frame_bytes: alloc::collections::BTreeMap<usize, u32> =
+        alloc::collections::BTreeMap::new();
     let mut coalesced_slot_remap: alloc::collections::BTreeMap<
         usize,
         alloc::collections::BTreeMap<i64, i64>,
@@ -2276,6 +2286,7 @@ pub(crate) fn lower(
                 text_align: &mut text_align,
                 label_relocs: &mut label_relocs,
                 text_data_ranges: &mut text_data_ranges,
+                canary_frame_bytes: &mut canary_frame_bytes,
             };
             #[cfg(feature = "std")]
             let _ = super::ssa::emit_common::take_bail();
@@ -2301,6 +2312,7 @@ pub(crate) fn lower(
                 &mut rodata,
                 native.output_kind == super::OutputKind::Relocatable && !native.pic,
                 native.hardening,
+                native.stack_protect.resolved_for(target),
             )
         };
         if !ok {
@@ -2552,6 +2564,7 @@ pub(crate) fn lower(
         func_prologue_native,
         promoted_local_slots,
         coalesced_slot_remap,
+        canary_frame_bytes,
         // x86_64-only Win64 unwind; the aarch64 PE writer uses packed
         // RUNTIME_FUNCTIONs and consults no per-function descriptor.
         fn_unwind: Vec::new(),

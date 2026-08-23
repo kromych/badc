@@ -109,6 +109,11 @@ pub(crate) struct Frame {
     pub realign_align: u32,
     /// Byte size of the realigned region, a multiple of 16.
     pub realign_region_bytes: u32,
+    /// Bytes reserved directly below the frame base for the stack-protector
+    /// canary, 0 when the function is unprotected. Counted in `frame_bytes`
+    /// and in `alloc_spill_base`; every local slot sits below the region, so
+    /// the canary is between the locals and the saved return address.
+    pub canary_bytes: u32,
     /// rbp-relative byte offset (negative) of the over-aligned region when the
     /// region alignment is exactly 16, or 0 when none. rbp and every frame
     /// region above it are 16-byte multiples, so the region base is 16-aligned
@@ -118,8 +123,13 @@ pub(crate) struct Frame {
 }
 
 fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Frame {
-    let (locals_bytes, alloc_spill_bytes, saved_gpr_bytes) =
+    let (declared_locals_bytes, alloc_spill_bytes, saved_gpr_bytes) =
         super::ssa::emit_common::compute_frame_base(func, alloc);
+    // The canary region joins the top of the locals region, so every offset
+    // measured down from rbp shifts by it and no other region formula changes.
+    let canary_bytes =
+        super::ssa::emit_common::canary_bytes(func, declared_locals_bytes, abi.stack_protect);
+    let locals_bytes = declared_locals_bytes + canary_bytes;
     // System V variadic callees reserve the 176-byte register save
     // area (System V AMD64 3.5.7) at the bottom of the frame. It is
     // added to `frame_bytes` only; `alloc_spill_base` (and thus the
@@ -161,7 +171,7 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Fra
     // bytes, the same decision `compute_frame_base` makes for the locals
     // region (`locals_bytes` is 0 exactly when no local access survives).
     let region_bytes = func.realign_region_bytes.max(0) as u32;
-    let static_region_bytes = if func.frame_align == 16 && locals_bytes > 0 {
+    let static_region_bytes = if func.frame_align == 16 && declared_locals_bytes > 0 {
         region_bytes
     } else {
         0
@@ -201,6 +211,7 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Fra
     Frame {
         frame_bytes,
         alloc_spill_base: locals_bytes,
+        canary_bytes,
         param_spill_bytes,
         param_cell_stride,
         va_reg_save_off,
@@ -1706,6 +1717,7 @@ pub(crate) fn emit_function(
     rodata: &mut super::RodataBuild,
     abs_jump_tables: bool,
     hardening: super::Hardening,
+    stack_protect: super::StackProtect,
 ) -> bool {
     // The bundled emit output arrives in `cx`; recreate the per-field names as
     // disjoint reborrows so the body below (including the per-`Inst` `cx` it
@@ -1726,6 +1738,7 @@ pub(crate) fn emit_function(
     let text_align = &mut *cx.text_align;
     let label_relocs = &mut *cx.label_relocs;
     let text_data_ranges = &mut *cx.text_data_ranges;
+    let canary_frame_bytes = &mut *cx.canary_frame_bytes;
     let snapshot = code.len();
     let fixups_snapshot = fixups.len();
     let plt_call_fixups_snapshot = plt_call_fixups.len();
@@ -1771,6 +1784,7 @@ pub(crate) fn emit_function(
         a.no_fp_varargs = no_fp_regs;
         a.strict_align = strict_align;
         a.hardening = hardening;
+        a.stack_protect = stack_protect;
         a
     };
     if let Some(bytes) = super::ssa::emit_common::locals_bytes_over_limit(func) {
@@ -1778,6 +1792,9 @@ pub(crate) fn emit_function(
         return false;
     }
     let frame = compute_frame(func, alloc, abi);
+    if frame.canary_bytes > 0 {
+        canary_frame_bytes.insert(func.ent_pc, frame.canary_bytes);
+    }
     if frame.frame_bytes > super::ssa::emit_common::MAX_FRAME_BYTES {
         bail_msg(&super::ssa::emit_common::frame_too_large_msg(
             frame.frame_bytes as i64,
@@ -1820,7 +1837,15 @@ pub(crate) fn emit_function(
         if abi.hardening.cf_protection_branch {
             super::encode::emit_endbr64(code);
         }
-        emit_prologue(code, func, alloc, frame, abi, snapshot)
+        emit_prologue(
+            code,
+            func,
+            alloc,
+            frame,
+            abi,
+            snapshot,
+            user_extern_data_refs,
+        )
     };
     uw.begin = snapshot as u32;
     super::ssa::emit_common::record_post_prologue_pc(func, prologue_native, code.len());
@@ -2103,6 +2128,7 @@ pub(crate) fn emit_function(
                         text_align: &mut *text_align,
                         label_relocs: &mut *label_relocs,
                         text_data_ranges: &mut *text_data_ranges,
+                        canary_frame_bytes: &mut *canary_frame_bytes,
                     };
                     let fcx = FnCtx {
                         func,
@@ -2190,11 +2216,22 @@ pub(crate) fn emit_function(
                             fixups,
                             func,
                             fp_arg_mask,
+                            asm_extern_call_sites,
+                            user_extern_data_refs,
                         ) {
                             bail_rollback!();
                         }
                     } else {
-                        emit_return(code, v, alloc, frame, func, abi, asm_extern_call_sites)
+                        emit_return(
+                            code,
+                            v,
+                            alloc,
+                            frame,
+                            func,
+                            abi,
+                            asm_extern_call_sites,
+                            user_extern_data_refs,
+                        )
                     }
                 }
                 Terminator::Jmp(t) => {
@@ -2885,6 +2922,7 @@ fn emit_prologue(
     frame: Frame,
     abi: super::Abi,
     func_start: usize,
+    extern_data_refs: &mut Vec<super::UserExternDataRef>,
 ) -> super::FnUnwind {
     let mut uw = super::FnUnwind {
         param_spill_bytes: frame.param_spill_bytes,
@@ -3073,6 +3111,10 @@ fn emit_prologue(
     save_callee_saved(code, alloc, frame);
     emit_struct_param_scatter(code, func, frame, abi);
     emit_struct_stack_param_copy(code, func, frame, abi);
+    // After the parameter marshalling, which uses the same scratch, and
+    // before the realign: the slot is rbp-relative, so the rsp move that
+    // follows does not reach it.
+    emit_canary_store(code, frame, abi, extern_data_refs);
     // C11 6.7.5: reserve the over-aligned objects' region below the static
     // frame and align rsp down into it. Done last, after the callee-saved
     // stores (which stay at rbp-frame_bytes, where the epilogue's
@@ -3387,8 +3429,11 @@ fn emit_inst(
                 // prologue stored the cell from the pristine argument
                 // register before any body instruction ran.
                 if param_from_home.get(i).copied().unwrap_or(false) {
-                    let home_off =
-                        c5_slot_to_fp_offset(*idx as i64 + 2, frame.param_cell_stride) as i32;
+                    let home_off = c5_slot_to_fp_offset(
+                        *idx as i64 + 2,
+                        frame.param_cell_stride,
+                        frame.canary_bytes,
+                    ) as i32;
                     let load = |code: &mut Vec<u8>, r: Reg| {
                         if matches!(kind, LoadKind::F32) {
                             emit_movss_xmm_mem(code, r, Reg::RBP, home_off);
@@ -3422,7 +3467,9 @@ fn emit_inst(
                 return true;
             }
             let from_home = param_from_home.get(i).copied().unwrap_or(false);
-            let home_off = c5_slot_to_fp_offset(*idx as i64 + 2, frame.param_cell_stride) as i32;
+            let home_off =
+                c5_slot_to_fp_offset(*idx as i64 + 2, frame.param_cell_stride, frame.canary_bytes)
+                    as i32;
             // The incoming integer register comes from the plan, not the
             // absolute parameter index: a floating-point parameter
             // earlier in the list consumes an FP register and does not
@@ -4037,7 +4084,7 @@ fn local_slot_off(off: i64, func: &FunctionSsa, frame: Frame, abi: super::Abi) -
             }
         }
     } else {
-        c5_slot_to_fp_offset(off, frame.param_cell_stride)
+        c5_slot_to_fp_offset(off, frame.param_cell_stride, frame.canary_bytes)
     }
 }
 
@@ -11587,6 +11634,8 @@ fn emit_tail_call(
     fixups: &mut Vec<Fixup>,
     func: &FunctionSsa,
     fp_arg_mask: u32,
+    extern_sites: &mut Vec<super::UserExternCallSite>,
+    extern_data_refs: &mut Vec<super::UserExternDataRef>,
 ) -> bool {
     debug_assert!(
         !frame.dynamic_sp,
@@ -11625,6 +11674,7 @@ fn emit_tail_call(
     // staging (the callee's own `ret` carries the value back). The
     // marshalled args ride caller-saved arg registers, disjoint from the
     // callee-saved GPRs and the non-volatile xmm scratch restored here.
+    emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
     restore_callee_saved(code, alloc, frame);
     if !is_full_leaf(func, frame, alloc, abi) {
         if frame.frame_bytes > 0 {
@@ -11658,6 +11708,7 @@ fn emit_return(
     func: &FunctionSsa,
     abi: super::Abi,
     extern_sites: &mut Vec<super::UserExternCallSite>,
+    extern_data_refs: &mut Vec<super::UserExternDataRef>,
 ) {
     // Staging through rcx is needed only when the return value
     // itself lives in a callee-saved register the epilogue is about
@@ -11747,7 +11798,15 @@ fn emit_return(
                 int_i += 1;
             }
         }
-        emit_epilogue_ret(code, func, frame, alloc, abi, extern_sites);
+        emit_epilogue_ret(
+            code,
+            func,
+            frame,
+            alloc,
+            abi,
+            extern_sites,
+            extern_data_refs,
+        );
         return;
     }
     // A floating-point scalar return rides xmm0 (C99 6.2.5p10). The
@@ -11827,7 +11886,15 @@ fn emit_return(
     // AMD64 / Win64: scalar floating returns in xmm0). The receiving
     // call site is FP-classed (`Inst::Call::fp_return`) and reads
     // xmm0, so no rax mirror is emitted.
-    emit_epilogue_ret(code, func, frame, alloc, abi, extern_sites);
+    emit_epilogue_ret(
+        code,
+        func,
+        frame,
+        alloc,
+        abi,
+        extern_sites,
+        extern_data_refs,
+    );
 }
 
 /// Frame teardown + `ret` (callee-saved restores already ran): drop
@@ -11845,7 +11912,9 @@ fn emit_epilogue_ret(
     alloc: &Allocation,
     abi: super::Abi,
     extern_sites: &mut Vec<super::UserExternCallSite>,
+    extern_data_refs: &mut Vec<super::UserExternDataRef>,
 ) {
+    emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
     if !is_full_leaf(func, frame, alloc, abi) {
         if frame.frame_bytes > 0 {
             emit_add_rsp_imm32(code, frame.frame_bytes);
@@ -11863,6 +11932,120 @@ fn emit_epilogue_ret(
 /// Branch to a symbol this unit does not define: `E8`/`E9 rel32` with a
 /// zero displacement plus the by-name call site the writer turns into a
 /// relocation against an undefined symbol.
+/// Scratch for the stack-protector sequences. r11 is caller-saved, is
+/// neither ABI's argument or return register, and carries no live value at
+/// the end of the prologue or at any point a return path is taken.
+const CANARY_SCRATCH: Reg = Reg::R11;
+
+/// Leave the guard value in `rd`. `-mstack-protector-guard=tls` reads
+/// thread storage through a segment override -- at a fixed offset, or at a
+/// named object's PC-relative address when a guard symbol is given. The
+/// `global` form reads the object the target's C library exports.
+fn emit_load_stack_guard(
+    code: &mut Vec<u8>,
+    rd: Reg,
+    abi: super::Abi,
+    extern_data_refs: &mut Vec<super::UserExternDataRef>,
+) {
+    let ssp = abi.stack_protect;
+    let symbol = ssp.guard_symbol.as_str();
+    let super::StackGuard::Tls { seg, offset } = ssp.guard else {
+        // `global`: the writer turns the `lea` into a GOT load of the
+        // object's address, so a second load reaches its contents.
+        let name = if symbol.is_empty() {
+            super::STACK_GUARD_SYMBOL
+        } else {
+            symbol
+        };
+        extern_data_refs.push(super::UserExternDataRef {
+            instr_offset: code.len(),
+            symbol_name: name.into(),
+            direct_pcrel: None,
+        });
+        super::encode::emit_lea_r_rip32(code, rd, 0);
+        emit_mov_r_mem(code, rd, rd, 0);
+        return;
+    };
+    let prefix = match seg {
+        super::GuardSeg::Fs => 0x64,
+        super::GuardSeg::Gs => 0x65,
+    };
+    code.push(prefix);
+    code.push(if rd.high() { 0x4C } else { 0x48 });
+    code.push(0x8B);
+    if symbol.is_empty() {
+        // `mov rd, seg:offset`: mod=00 r/m=100 (SIB) with base=101,
+        // index=100 -- the disp32-only addressing form.
+        code.push(0x04 | (rd.lo() << 3));
+        code.push(0x25);
+        code.extend_from_slice(&offset.to_le_bytes());
+        return;
+    }
+    // `mov rd, seg:sym(%rip)`: mod=00 r/m=101. The named object supplies
+    // the whole address, so the displacement carries only the -4 that
+    // measures it from the end of the instruction. The relocation is
+    // anchored at the REX byte, three bytes ahead of the displacement.
+    let instr_offset = code.len() - 2;
+    code.push(0x05 | (rd.lo() << 3));
+    code.extend_from_slice(&0i32.to_le_bytes());
+    extern_data_refs.push(super::UserExternDataRef {
+        instr_offset,
+        symbol_name: symbol.into(),
+        direct_pcrel: Some(-4),
+    });
+}
+
+/// Prologue half of the stack protector: store the guard into the canary
+/// slot at `[rbp - 8]`, above every local and below the saved rbp, then
+/// clear the scratch so the guard value does not outlive the store.
+fn emit_canary_store(
+    code: &mut Vec<u8>,
+    frame: Frame,
+    abi: super::Abi,
+    extern_data_refs: &mut Vec<super::UserExternDataRef>,
+) {
+    if frame.canary_bytes == 0 {
+        return;
+    }
+    emit_load_stack_guard(code, CANARY_SCRATCH, abi, extern_data_refs);
+    emit_mov_mem_r(
+        code,
+        Reg::RBP,
+        super::ssa::emit_common::CANARY_SLOT_OFF,
+        CANARY_SCRATCH,
+    );
+    emit_rr(code, Mnem::Xor, 8, CANARY_SCRATCH, CANARY_SCRATCH);
+}
+
+/// Epilogue half: compare the canary slot against the guard and call
+/// `__stack_chk_fail` when they differ. Emitted on every path that leaves
+/// the frame, ahead of the teardown, while rbp still addresses the slot.
+fn emit_canary_check(
+    code: &mut Vec<u8>,
+    frame: Frame,
+    abi: super::Abi,
+    extern_sites: &mut Vec<super::UserExternCallSite>,
+    extern_data_refs: &mut Vec<super::UserExternDataRef>,
+) {
+    if frame.canary_bytes == 0 {
+        return;
+    }
+    emit_load_stack_guard(code, CANARY_SCRATCH, abi, extern_data_refs);
+    emit_rm(
+        code,
+        Mnem::Cmp,
+        8,
+        CANARY_SCRATCH,
+        Reg::RBP,
+        super::ssa::emit_common::CANARY_SLOT_OFF,
+    );
+    super::encode::emit_jcc_rel8(code, Cc::E, 0);
+    let rel8_at = code.len() - 1;
+    emit_extern_branch(code, extern_sites, super::STACK_CHK_FAIL_SYMBOL, true);
+    code[rel8_at] = (code.len() - rel8_at - 1) as u8;
+    emit_rr(code, Mnem::Xor, 8, CANARY_SCRATCH, CANARY_SCRATCH);
+}
+
 fn emit_extern_branch(
     code: &mut Vec<u8>,
     extern_sites: &mut Vec<super::UserExternCallSite>,

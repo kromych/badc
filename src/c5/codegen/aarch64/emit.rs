@@ -86,6 +86,11 @@ pub(crate) struct Frame {
     /// Byte stride between adjacent parameter cells: 16 for the c5 cdecl cell,
     /// 8 for a host variadic callee's contiguous argument region.
     pub param_cell_stride: i64,
+    /// Bytes reserved directly below the frame base for the stack-protector
+    /// canary, 0 when the function is unprotected. Counted in `frame_bytes`
+    /// and in `alloc_spill_base`; every local slot sits below the region, so
+    /// the canary is between the locals and the saved return address.
+    pub canary_bytes: u32,
     /// Whether the function clobbers (and therefore saves) x19.
     pub uses_x19: bool,
     /// AAPCS64 variadic callee reads named parameters from the register save
@@ -128,8 +133,13 @@ pub(crate) struct Frame {
 }
 
 fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi, target: Target) -> Frame {
-    let (locals_bytes, alloc_spill_bytes, saved_gpr_bytes) =
+    let (declared_locals_bytes, alloc_spill_bytes, saved_gpr_bytes) =
         super::ssa::emit_common::compute_frame_base(func, alloc);
+    // The canary region joins the top of the locals region, so every offset
+    // measured down from fp shifts by it and no other region formula changes.
+    let canary_bytes =
+        super::ssa::emit_common::canary_bytes(func, declared_locals_bytes, abi.stack_protect);
+    let locals_bytes = declared_locals_bytes + canary_bytes;
     let saved_fpr_bytes = super::ssa::emit_common::slots16(alloc.fp_used.len() as u32);
     // Reserve the x19 slot only when the function actually
     // clobbers x19; the prologue / epilogue's store / load already
@@ -151,7 +161,7 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi, target
     // `compute_frame_base` makes for the locals region (`locals_bytes` is 0
     // exactly when no local access survives).
     let region_bytes = func.realign_region_bytes.max(0) as u32;
-    let static_region_bytes = if func.frame_align == 16 && locals_bytes > 0 {
+    let static_region_bytes = if func.frame_align == 16 && declared_locals_bytes > 0 {
         region_bytes
     } else {
         0
@@ -197,6 +207,7 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi, target
     Frame {
         frame_bytes,
         alloc_spill_base: locals_bytes,
+        canary_bytes,
         uses_x19,
         param_spill_bytes,
         param_cell_stride,
@@ -891,6 +902,7 @@ pub(crate) fn emit_function(
     rodata: &mut super::RodataBuild,
     abs_jump_tables: bool,
     hardening: super::Hardening,
+    stack_protect: super::StackProtect,
 ) -> bool {
     // The bundled emit output arrives in `cx`; recreate the per-field names as
     // disjoint reborrows so the body below (including the per-`Inst` `cx` it
@@ -911,11 +923,13 @@ pub(crate) fn emit_function(
     let text_align = &mut *cx.text_align;
     let label_relocs = &mut *cx.label_relocs;
     let text_data_ranges = &mut *cx.text_data_ranges;
+    let canary_frame_bytes = &mut *cx.canary_frame_bytes;
     let abi = {
         let mut a = target.abi();
         a.no_fp_varargs = no_fp_regs;
         a.strict_align = strict_align;
         a.hardening = hardening;
+        a.stack_protect = stack_protect;
         a
     };
     if let Some(bytes) = super::ssa::emit_common::locals_bytes_over_limit(func) {
@@ -923,6 +937,9 @@ pub(crate) fn emit_function(
         return false;
     }
     let frame = compute_frame(func, alloc, abi, target);
+    if frame.canary_bytes > 0 {
+        canary_frame_bytes.insert(func.ent_pc, frame.canary_bytes);
+    }
     if frame.frame_bytes > super::ssa::emit_common::MAX_FRAME_BYTES {
         bail_msg(&super::ssa::emit_common::frame_too_large_msg(
             frame.frame_bytes as i64,
@@ -972,7 +989,7 @@ pub(crate) fn emit_function(
         } else if abi.hardening.bti {
             emit(code, super::encode::BTI_C);
         }
-        emit_prologue(code, func, alloc, frame, abi);
+        emit_prologue(code, func, alloc, frame, abi, user_extern_data_refs);
     }
     super::ssa::emit_common::record_post_prologue_pc(func, prologue_native, code.len());
 
@@ -1309,6 +1326,7 @@ pub(crate) fn emit_function(
                     text_align: &mut *text_align,
                     label_relocs: &mut *label_relocs,
                     text_data_ranges: &mut *text_data_ranges,
+                    canary_frame_bytes: &mut *canary_frame_bytes,
                 };
                 let fcx = FnCtx {
                     func,
@@ -1419,7 +1437,17 @@ pub(crate) fn emit_function(
             // A naked function's inline-asm body provides its own return (eret);
             // emit no epilogue for the synthetic return.
             Terminator::Return(_) if func.is_naked => {}
-            Terminator::Return(v) => emit_return(code, v, alloc, frame, &scratch, func, abi),
+            Terminator::Return(v) => emit_return(
+                code,
+                v,
+                alloc,
+                frame,
+                &scratch,
+                func,
+                abi,
+                asm_extern_call_sites,
+                user_extern_data_refs,
+            ),
             Terminator::Jmp(t) => {
                 // Fall through when the target is the next block in
                 // layout rather than emitting a branch to it.
@@ -2148,6 +2176,7 @@ fn emit_prologue(
     alloc: &Allocation,
     frame: Frame,
     abi: super::Abi,
+    extern_data_refs: &mut Vec<super::UserExternDataRef>,
 ) {
     // Windows-on-ARM64 variadic gr-save area (Microsoft ARM64 calling
     // convention). The caller passes the first eight arguments (named
@@ -2184,6 +2213,7 @@ fn emit_prologue(
         // never a full leaf (`param_spill_bytes != 0`), so the frame
         // record always follows.
         emit_frame_and_saves(code, alloc, frame);
+        emit_canary_store(code, frame, abi, extern_data_refs);
         return;
     }
     // AAPCS64 variadic register save area (AAPCS64 Appendix B). Reserve
@@ -2226,6 +2256,7 @@ fn emit_prologue(
             }
         }
         emit_frame_and_saves(code, alloc, frame);
+        emit_canary_store(code, frame, abi, extern_data_refs);
         return;
     }
     // Host-arg-reg spill for non-variadic functions: spill each
@@ -2353,6 +2384,9 @@ fn emit_prologue(
     // the objects live at [sp + region_off]. Reserving before aligning keeps
     // the AND's descent inside bytes the reservation already claimed, so the
     // region cannot overlap the frame.
+    // Before the realign: the slot is fp-relative, so the sp move that
+    // follows does not reach it.
+    emit_canary_store(code, frame, abi, extern_data_refs);
     if frame.realign_align > 0 {
         emit_realign_sp(code, frame);
     }
@@ -2586,6 +2620,128 @@ fn emit_prologue_saved_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame
         }
     }
     debug_assert!(!alloc_pending, "frame fold requested with no callee save");
+}
+
+/// Scratch pair for the stack-protector sequences. x16 / x17 are the
+/// emitter's reserved scratch, outside the allocator's pool and never an
+/// argument or result register, so they are free at the end of the
+/// prologue and on every return path.
+const CANARY_SCRATCH: Reg = Reg(16);
+const CANARY_SCRATCH2: Reg = Reg(17);
+
+/// Leave the guard value in `rd`. `-mstack-protector-guard=sysreg` reads
+/// it at a byte offset above a system register's value; the `global` form
+/// reads the object the target's C library exports, whose address the
+/// writer resolves directly or through the GOT.
+fn emit_load_stack_guard(
+    code: &mut Vec<u8>,
+    rd: Reg,
+    abi: super::Abi,
+    extern_data_refs: &mut Vec<super::UserExternDataRef>,
+) {
+    let ssp = abi.stack_protect;
+    if let super::StackGuard::Sysreg { sysreg, offset } = ssp.guard {
+        emit(code, super::encode::enc_mrs(rd, sysreg));
+        emit_guard_load_at_offset(code, rd, rd, offset);
+        return;
+    }
+    let symbol = ssp.guard_symbol.as_str();
+    let name = if symbol.is_empty() {
+        super::STACK_GUARD_SYMBOL
+    } else {
+        symbol
+    };
+    extern_data_refs.push(super::UserExternDataRef {
+        instr_offset: code.len(),
+        symbol_name: name.into(),
+        direct_pcrel: None,
+    });
+    emit(code, enc_adrp(rd, 0));
+    emit(code, enc_add_imm(rd, rd, 0));
+    emit(code, enc_ldr_imm(rd, rd, 0));
+}
+
+/// `ldr rd, [rn, #off]` for a guard offset of either sign: the scaled
+/// unsigned-offset form when it fits, the unscaled signed form otherwise,
+/// and an explicit address computation past both ranges, which takes
+/// [`CANARY_SCRATCH2`].
+fn emit_guard_load_at_offset(code: &mut Vec<u8>, rd: Reg, rn: Reg, off: i32) {
+    if (0..=32760).contains(&off) && off % 8 == 0 {
+        emit(code, enc_ldr_imm(rd, rn, off as u32));
+    } else if (-256..256).contains(&off) {
+        emit(code, super::encode::enc_ldur(rd, rn, off));
+    } else {
+        super::encode::load_imm64(code, CANARY_SCRATCH2, off as i64 as u64);
+        emit(
+            code,
+            super::encode::enc_add_reg(CANARY_SCRATCH2, rn, CANARY_SCRATCH2),
+        );
+        emit(code, enc_ldr_imm(rd, CANARY_SCRATCH2, 0));
+    }
+}
+
+/// Prologue half of the stack protector: store the guard into the canary
+/// slot at `[fp - 8]`, above every local and below the saved fp/lr, then
+/// clear the scratch so the guard value does not outlive the store.
+fn emit_canary_store(
+    code: &mut Vec<u8>,
+    frame: Frame,
+    abi: super::Abi,
+    extern_data_refs: &mut Vec<super::UserExternDataRef>,
+) {
+    if frame.canary_bytes == 0 {
+        return;
+    }
+    emit_load_stack_guard(code, CANARY_SCRATCH, abi, extern_data_refs);
+    emit(
+        code,
+        super::encode::enc_stur(
+            CANARY_SCRATCH,
+            Reg(29),
+            super::ssa::emit_common::CANARY_SLOT_OFF,
+        ),
+    );
+    emit(code, enc_movz(CANARY_SCRATCH, 0, 0));
+}
+
+/// Epilogue half: compare the canary slot against the guard and call
+/// `__stack_chk_fail` when they differ. Emitted on every path that leaves
+/// the frame, ahead of the teardown, while fp still addresses the slot.
+fn emit_canary_check(
+    code: &mut Vec<u8>,
+    frame: Frame,
+    abi: super::Abi,
+    extern_sites: &mut Vec<super::UserExternCallSite>,
+    extern_data_refs: &mut Vec<super::UserExternDataRef>,
+) {
+    if frame.canary_bytes == 0 {
+        return;
+    }
+    emit_load_stack_guard(code, CANARY_SCRATCH, abi, extern_data_refs);
+    emit(
+        code,
+        super::encode::enc_ldur(
+            CANARY_SCRATCH2,
+            Reg(29),
+            super::ssa::emit_common::CANARY_SLOT_OFF,
+        ),
+    );
+    emit(
+        code,
+        super::encode::enc_cmp_reg(CANARY_SCRATCH, CANARY_SCRATCH2),
+    );
+    // Two instructions ahead: over the `bl` to the handler.
+    emit(code, super::encode::enc_b_cond(super::encode::Cond::Eq, 2));
+    extern_sites.push(super::UserExternCallSite {
+        instr_offset: code.len(),
+        symbol_name: super::STACK_CHK_FAIL_SYMBOL.into(),
+        is_tail: false,
+    });
+    emit(code, super::encode::enc_bl(0));
+    // Both scratch registers held the guard value; neither may reach the
+    // caller with it.
+    emit(code, enc_movz(CANARY_SCRATCH, 0, 0));
+    emit(code, enc_movz(CANARY_SCRATCH2, 0, 0));
 }
 
 /// Re-establish `sp = fp - frame_bytes` in a dynamic-sp frame before
@@ -7993,7 +8149,7 @@ fn local_slot_off(off: i64, frame: Frame) -> i64 {
             }
         }
     } else {
-        c5_slot_to_fp_offset(off, frame.param_cell_stride)
+        c5_slot_to_fp_offset(off, frame.param_cell_stride, frame.canary_bytes)
     }
 }
 
@@ -10472,6 +10628,7 @@ fn marshal_args(
 }
 
 /// Emit the function epilogue + `ret` for a Return terminator.
+#[allow(clippy::too_many_arguments)]
 fn emit_return(
     code: &mut Vec<u8>,
     value: u32,
@@ -10480,6 +10637,8 @@ fn emit_return(
     scratch: &ScratchPool,
     func: &FunctionSsa,
     abi: super::Abi,
+    extern_sites: &mut Vec<super::UserExternCallSite>,
+    extern_data_refs: &mut Vec<super::UserExternDataRef>,
 ) {
     // Host-ABI aggregate return (AAPCS64 6.9). `value` is the
     // struct's address. An aggregate of at most 16 bytes returns its
@@ -10635,6 +10794,7 @@ fn emit_return(
         emit(code, enc_ret(Reg(30)));
         return;
     }
+    emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
     // A dynamic-sp frame re-establishes `sp = fp - frame_bytes` first,
     // so the sp-relative restores below read the prologue-time
     // addresses regardless of the body's alloca moves.
@@ -12783,6 +12943,7 @@ mod tests {
                 text_align: &mut text_align,
                 label_relocs: &mut label_relocs,
                 text_data_ranges: &mut text_data_ranges,
+                canary_frame_bytes: &mut alloc::collections::BTreeMap::new(),
             };
             emit_function(
                 &func,
@@ -12806,6 +12967,7 @@ mod tests {
                 &mut super::super::RodataBuild::default(),
                 false,
                 super::super::Hardening::NONE,
+                super::super::StackProtect::OFF,
             )
         };
         assert!(
@@ -13075,6 +13237,7 @@ mod tests {
                 text_align: &mut text_align,
                 label_relocs: &mut label_relocs,
                 text_data_ranges: &mut text_data_ranges,
+                canary_frame_bytes: &mut alloc::collections::BTreeMap::new(),
             };
             emit_function(
                 &func,
@@ -13098,6 +13261,7 @@ mod tests {
                 &mut super::super::RodataBuild::default(),
                 false,
                 super::super::Hardening::NONE,
+                super::super::StackProtect::OFF,
             )
         };
         assert!(ok, "binop handler should cover Add + Shl + Shr");
@@ -13163,6 +13327,7 @@ mod tests {
                 text_align: &mut text_align,
                 label_relocs: &mut label_relocs,
                 text_data_ranges: &mut text_data_ranges,
+                canary_frame_bytes: &mut alloc::collections::BTreeMap::new(),
             };
             emit_function(
                 &func,
@@ -13186,6 +13351,7 @@ mod tests {
                 &mut super::super::RodataBuild::default(),
                 false,
                 super::super::Hardening::NONE,
+                super::super::StackProtect::OFF,
             )
         };
         assert!(

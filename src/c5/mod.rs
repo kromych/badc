@@ -36,8 +36,9 @@ pub use object::elf_class::ElfClass;
 pub use object::{emit_native, emit_native_with_options, emit_native_with_options_owned};
 pub use {
     codegen::{
-        BinaryFormat, CodeModel, Hardening, IndirectBranch, NativeOptions, OutputKind, Target,
-        jit_run, jit_run_with_options,
+        BinaryFormat, CodeModel, DEFAULT_SSP_BUFFER_SIZE, GuardSeg, GuardSymbol, Hardening,
+        IndirectBranch, NativeOptions, OutputKind, SYSV_TLS_GUARD_OFFSET, StackGuard, StackProtect,
+        StackProtector, Target, jit_run, jit_run_with_options, stack_guard_sysreg,
     },
     compiler::{CompileOptions, Compiler, StructDef, StructField},
     depfile::{escape as dep_escape, prerequisites as dep_prerequisites, render as dep_render},

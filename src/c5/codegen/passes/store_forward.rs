@@ -549,6 +549,7 @@ mod tests {
             ent_pc: 0,
             end_pc: 0,
             locals: 0,
+            ssp: crate::c5::ir::SspFacts::default(),
             n_params: 2,
             is_variadic: false,
             is_inline: false,

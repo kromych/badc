@@ -9024,3 +9024,332 @@ fn integer_multiply_contracts_into_madd_msub_aarch64() {
     assert_eq!(madd, 2, "one MADD per `c + a*b` at each width");
     assert_eq!(mul, 0, "the contracted products leave no MUL behind");
 }
+
+// ---- Stack protector (`-fstack-protector*`) ----
+
+/// One unit per shape the `-fstack-protector*` modes distinguish. The
+/// expected sets below are the ones gcc 14 produces at `-O0` for the same
+/// source on `x86_64-linux` and `aarch64-linux`.
+const SSP_SHAPES_SRC: &str = "\
+    void snk(void *);\n\
+    int g(int *);\n\
+    struct A { int n; char buf[4]; };\n\
+    struct T { int a, b; };\n\
+    int c7(int i) { char b[7]; b[0] = (char)i; return b[0]; }\n\
+    int c8(int i) { char b[8]; b[0] = (char)i; return b[0]; }\n\
+    int i2(int i) { int a[2]; a[0] = i; return a[0]; }\n\
+    int addr(int i) { int x = i; return g(&x); }\n\
+    int arrmem(int i) { struct A s; s.n = i; return s.n; }\n\
+    int noarr(int i) { struct T t; t.a = i; t.b = i; return t.a + t.b; }\n\
+    int scal(int i) { int x = i * 3; return x + 1; }\n\
+    int leaf(int i) { return i + 1; }\n";
+
+/// Compile `src` to a relocatable object under `ssp`.
+fn emit_ssp(src: &str, target: crate::Target, ssp: crate::StackProtect) -> alloc::vec::Vec<u8> {
+    use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
+    let prog = crate::Compiler::with_options(
+        alloc::string::String::from(src),
+        target,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile: {e}"));
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        stack_protect: ssp,
+        ..NativeOptions::default()
+    };
+    emit_native_with_options(&prog, target, opts).unwrap_or_else(|e| panic!("emit: {e}"))
+}
+
+/// Names of the functions in `obj` whose body branches to `symbol`, sorted.
+fn functions_calling(obj: &[u8], symbol: &str) -> alloc::vec::Vec<alloc::string::String> {
+    let (_, funcs) = elf_text_align_and_funcs(obj);
+    let mut out: alloc::vec::Vec<alloc::string::String> = text_relocs(obj)
+        .into_iter()
+        .filter(|(_, name, _)| name == symbol)
+        .filter_map(|(off, _, _)| {
+            funcs
+                .iter()
+                .find(|(_, value, size)| off >= *value && off < value + size)
+                .map(|(name, _, _)| name.clone())
+        })
+        .collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// Every `.rela.text` entry as `(r_offset, symbol name, r_addend)`,
+/// whatever its type -- the branch-only view is `x64_branch_relocs`.
+fn text_relocs(obj: &[u8]) -> alloc::vec::Vec<(u64, alloc::string::String, i64)> {
+    let sections = elf_section_bodies(obj);
+    let body = |n: &str| {
+        sections
+            .iter()
+            .find(|(name, _)| name == n)
+            .map(|(_, b)| b.clone())
+            .unwrap_or_default()
+    };
+    let (rela, symtab, strtab) = (body(".rela.text"), body(".symtab"), body(".strtab"));
+    rela.as_chunks::<24>()
+        .0
+        .iter()
+        .map(|e| {
+            let r_offset = u64::from_le_bytes(e[0..8].try_into().unwrap());
+            let r_info = u64::from_le_bytes(e[8..16].try_into().unwrap());
+            let r_addend = i64::from_le_bytes(e[16..24].try_into().unwrap());
+            let sym = (r_info >> 32) as usize;
+            let name_off =
+                u32::from_le_bytes(symtab[sym * 24..sym * 24 + 4].try_into().unwrap()) as usize;
+            let end = strtab[name_off..].iter().position(|&b| b == 0).unwrap() + name_off;
+            (
+                r_offset,
+                alloc::string::String::from_utf8_lossy(&strtab[name_off..end]).into_owned(),
+                r_addend,
+            )
+        })
+        .collect()
+}
+
+#[test]
+#[cfg(feature = "full")]
+fn stack_protector_modes_select_the_shapes_gcc_selects() {
+    use crate::{StackProtect, StackProtector, Target};
+    let expect = |mode, want: &[&str]| {
+        for target in [Target::LinuxX64, Target::LinuxAarch64] {
+            let obj = emit_ssp(
+                SSP_SHAPES_SRC,
+                target,
+                StackProtect {
+                    mode,
+                    ..StackProtect::OFF
+                },
+            );
+            let got = functions_calling(&obj, "__stack_chk_fail");
+            assert_eq!(
+                got,
+                want.iter()
+                    .map(|s| (*s).into())
+                    .collect::<alloc::vec::Vec<alloc::string::String>>(),
+                "{target:?} {mode:?}"
+            );
+        }
+    };
+    expect(StackProtector::Off, &[]);
+    // A character array of at least `ssp-buffer-size` (8) bytes only.
+    expect(StackProtector::Basic, &["c8"]);
+    // Plus any array, any aggregate with an array member, and any local
+    // whose address the body takes.
+    expect(
+        StackProtector::Strong,
+        &["addr", "arrmem", "c7", "c8", "i2"],
+    );
+    expect(
+        StackProtector::All,
+        &["addr", "arrmem", "c7", "c8", "i2", "leaf", "noarr", "scal"],
+    );
+}
+
+#[test]
+#[cfg(feature = "full")]
+fn ssp_buffer_size_moves_the_character_array_threshold() {
+    use crate::{StackProtect, StackProtector, Target};
+    let at = |n: u32| {
+        functions_calling(
+            &emit_ssp(
+                SSP_SHAPES_SRC,
+                Target::LinuxX64,
+                StackProtect {
+                    mode: StackProtector::Basic,
+                    buffer_size: n,
+                    ..StackProtect::OFF
+                },
+            ),
+            "__stack_chk_fail",
+        )
+    };
+    assert_eq!(
+        at(8),
+        ["c8"],
+        "the default threshold takes the 8-byte array"
+    );
+    assert_eq!(at(7), ["c7", "c8"], "a lower threshold takes both");
+    assert!(at(9).is_empty(), "a higher threshold takes neither");
+}
+
+#[test]
+#[cfg(feature = "full")]
+fn stack_protector_off_leaves_the_object_unchanged() {
+    use crate::{StackProtect, Target};
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        assert_eq!(
+            emit_ssp(SSP_SHAPES_SRC, target, StackProtect::OFF),
+            emit_ssp(SSP_SHAPES_SRC, target, StackProtect::default()),
+            "{target:?}: the default is off and emits the unprotected object"
+        );
+    }
+}
+
+#[test]
+#[cfg(feature = "full")]
+fn stack_protector_checks_every_return_path() {
+    use crate::{StackProtect, StackProtector, Target};
+    // Three source-level returns over one frame that holds an array.
+    let src = "int f(int i) { char b[16]; b[0] = (char)i;\n\
+               if (i == 1) return b[0];\n\
+               if (i == 2) return b[0] + 1;\n\
+               return b[0] + 2; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let obj = emit_ssp(
+            src,
+            target,
+            StackProtect {
+                mode: StackProtector::Strong,
+                ..StackProtect::OFF
+            },
+        );
+        let calls = text_relocs(&obj)
+            .into_iter()
+            .filter(|(_, n, _)| n == "__stack_chk_fail")
+            .count();
+        assert_eq!(calls, 3, "{target:?}: one check per return path");
+    }
+}
+
+#[test]
+#[cfg(feature = "full")]
+fn stack_protector_canary_sits_between_the_locals_and_the_return_address() {
+    use crate::{StackProtect, StackProtector, Target};
+    // A single character array, so every frame byte below the canary
+    // belongs to it. The store the prologue makes is the topmost frame
+    // access; the array's own accesses are all below it.
+    let src = "void snk(void *); void f(void) { char b[32]; snk(b); }\n";
+    let ssp = StackProtect {
+        mode: StackProtector::Strong,
+        ..StackProtect::OFF
+    };
+    // x86-64: `mov %r11, -0x8(%rbp)` is REX.WB 89 /r with mod=01,
+    // reg=r11, rm=rbp and an 8-bit displacement of -8.
+    let x64 = elf_text(&emit_ssp(src, Target::LinuxX64, ssp));
+    assert!(
+        x64.windows(4).any(|w| w == [0x4C, 0x89, 0x5D, 0xF8]),
+        "the canary store addresses [rbp - 8]"
+    );
+    // No other frame access reaches above `[rbp - 16]`: the canary
+    // region is the topmost object in the frame.
+    assert!(
+        !x64.windows(3)
+            .any(|w| w[0] == 0x8D && w[1] & 0xC7 == 0x45 && (w[2] as i8) > -16),
+        "no `lea` names a frame byte inside the canary region"
+    );
+    // aarch64: `stur x16, [x29, #-8]` -- the unscaled signed form with
+    // imm9 = -8, Rn = x29, Rt = x16.
+    let a64 = elf_text(&emit_ssp(src, Target::LinuxAarch64, ssp));
+    let stur_canary = 0xF800_0000u32 | ((-8i32 as u32 & 0x1FF) << 12) | (29 << 5) | 16;
+    assert!(
+        a64.as_chunks::<4>()
+            .0
+            .iter()
+            .any(|w| u32::from_le_bytes(*w) == stur_canary),
+        "the canary store addresses [x29, #-8]"
+    );
+}
+
+#[test]
+#[cfg(feature = "full")]
+fn stack_guard_forms_reach_the_object() {
+    use crate::{GuardSeg, GuardSymbol, StackGuard, StackProtect, StackProtector, Target};
+    let src = "void snk(void *); void f(void) { char b[32]; snk(b); }\n";
+    let base = StackProtect {
+        mode: StackProtector::Strong,
+        ..StackProtect::OFF
+    };
+    // Linux/x86-64's ABI form: the canary lives in the thread control
+    // block at %fs:0x28, which needs no symbol at all.
+    let abi = emit_ssp(src, Target::LinuxX64, base);
+    assert!(
+        elf_text(&abi)
+            .windows(9)
+            .any(|w| w == [0x64, 0x4C, 0x8B, 0x1C, 0x25, 0x28, 0x00, 0x00, 0x00]),
+        "the default guard is `mov %fs:0x28, %r11`"
+    );
+    assert!(
+        !text_relocs(&abi)
+            .iter()
+            .any(|(_, n, _)| n == "__stack_chk_guard"),
+        "the thread-block form names no guard object"
+    );
+    // The kernel's x86-64 form: a %gs-relative reference to a named
+    // object, relocated PC-relative like any other RIP-relative access.
+    let tls_sym = emit_ssp(
+        src,
+        Target::LinuxX64,
+        StackProtect {
+            guard: StackGuard::Tls {
+                seg: GuardSeg::Gs,
+                offset: 0,
+            },
+            guard_symbol: GuardSymbol::new("__ref_stack_chk_guard").unwrap(),
+            ..base
+        },
+    );
+    let refs: alloc::vec::Vec<_> = text_relocs(&tls_sym)
+        .into_iter()
+        .filter(|(_, n, _)| n == "__ref_stack_chk_guard")
+        .collect();
+    assert_eq!(
+        refs.len(),
+        2,
+        "one guard read in the prologue, one at the return"
+    );
+    for (off, _, addend) in &refs {
+        assert_eq!(
+            *addend, -4,
+            "the displacement measures from the instruction end"
+        );
+        // The relocated displacement follows the segment prefix, the
+        // REX byte, the opcode and the ModRM byte.
+        assert_eq!(elf_text(&tls_sym)[*off as usize - 4], 0x65, "%gs prefix");
+    }
+    // aarch64's ABI form: the C library's `__stack_chk_guard` object.
+    let global = emit_ssp(src, Target::LinuxAarch64, base);
+    assert_eq!(
+        text_relocs(&global)
+            .iter()
+            .filter(|(_, n, _)| n == "__stack_chk_guard")
+            .count(),
+        4,
+        "an adrp + add pair per guard read"
+    );
+    // The kernel's aarch64 form: `mrs xN, <sysreg>` then a load at the
+    // per-task offset, naming no symbol.
+    let sysreg = emit_ssp(
+        src,
+        Target::LinuxAarch64,
+        StackProtect {
+            guard: StackGuard::Sysreg {
+                sysreg: crate::stack_guard_sysreg("sp_el0").expect("sp_el0"),
+                offset: 1360,
+            },
+            ..base
+        },
+    );
+    let a64 = elf_text(&sysreg);
+    let mrs_sp_el0 = 0xD538_4100u32 | 16;
+    assert_eq!(
+        a64.as_chunks::<4>()
+            .0
+            .iter()
+            .filter(|w| u32::from_le_bytes(**w) == mrs_sp_el0)
+            .count(),
+        2,
+        "one `mrs x16, sp_el0` per guard read"
+    );
+    assert!(
+        !text_relocs(&sysreg)
+            .iter()
+            .any(|(_, n, _)| n == "__stack_chk_guard"),
+        "the system-register form names no guard object"
+    );
+}

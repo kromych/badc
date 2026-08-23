@@ -117,11 +117,12 @@ pub mod c5;
 
 #[allow(unused_imports)]
 pub use c5::{
-    BinaryFormat, C5Error, CodeModel, CompileOptions, Compiler, ElfClass, Hardening, Host,
-    IncludeOrigin, IncludeRecord, IncludeStatus, IndirectBranch, NativeOptions, OutputKind,
-    Overwrite, PredefinedKind, PredefinedSymbol, Program, Target, Trace, VariableInfo, Vm,
-    dep_escape, dep_prerequisites, dep_render, embedded_headers, jit_run, jit_run_with_options,
-    predefined_symbols,
+    BinaryFormat, C5Error, CodeModel, CompileOptions, Compiler, DEFAULT_SSP_BUFFER_SIZE, ElfClass,
+    GuardSeg, GuardSymbol, Hardening, Host, IncludeOrigin, IncludeRecord, IncludeStatus,
+    IndirectBranch, NativeOptions, OutputKind, Overwrite, PredefinedKind, PredefinedSymbol,
+    Program, SYSV_TLS_GUARD_OFFSET, StackGuard, StackProtect, StackProtector, Target, Trace,
+    VariableInfo, Vm, dep_escape, dep_prerequisites, dep_render, embedded_headers, jit_run,
+    jit_run_with_options, predefined_symbols, stack_guard_sysreg,
 };
 #[cfg(feature = "native-emit")]
 pub use c5::{emit_native, emit_native_with_options, emit_native_with_options_owned};

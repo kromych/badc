@@ -165,6 +165,7 @@ impl SsaBuilder {
             ent_pc,
             end_pc: ent_pc,
             locals: 0,
+            ssp: crate::c5::ir::SspFacts::default(),
             n_params,
             is_variadic,
             is_inline: false,
@@ -252,6 +253,12 @@ impl SsaBuilder {
         self.func.over_aligned = placed;
         self.func.frame_align = align;
         self.func.realign_region_bytes = region_bytes;
+    }
+
+    /// Record the front end's stack-protector classification of the
+    /// function's declared automatic objects.
+    pub(crate) fn set_ssp(&mut self, ssp: crate::c5::ir::SspFacts) {
+        self.func.ssp = ssp;
     }
 
     /// Set the source-level function name. Codegen consumers use

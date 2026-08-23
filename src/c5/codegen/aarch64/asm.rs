@@ -180,7 +180,7 @@ pub(crate) enum MemBase {
 /// `s<op0>_<op1>_c<CRn>_c<CRm>_<op2>` spelling that names any register.
 /// `field = op0<<14 | op1<<11 | CRn<<7 | CRm<<3 | op2` (op0 is the full two
 /// bits; the generic spelling reaches op0 0/1, named registers use 2/3).
-pub(super) fn sysreg_field(name: &str) -> Option<u16> {
+pub(crate) fn sysreg_field(name: &str) -> Option<u16> {
     // Register names are case-insensitive in the architecture; normalize before
     // matching either the named table or the generic spelling.
     let lower = name.to_ascii_lowercase();

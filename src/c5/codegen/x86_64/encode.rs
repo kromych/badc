@@ -1910,6 +1910,8 @@ pub(crate) fn lower(
     // offset are recorded separately so the emitter rewrites the location.
     let mut promoted_local_slots: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>> =
         prebuilt_promoted;
+    let mut canary_frame_bytes: alloc::collections::BTreeMap<usize, u32> =
+        alloc::collections::BTreeMap::new();
     let mut coalesced_slot_remap: alloc::collections::BTreeMap<
         usize,
         alloc::collections::BTreeMap<i64, i64>,
@@ -2374,6 +2376,7 @@ pub(crate) fn lower(
                 text_align: &mut text_align,
                 label_relocs: &mut label_relocs,
                 text_data_ranges: &mut text_data_ranges,
+                canary_frame_bytes: &mut canary_frame_bytes,
             };
             #[cfg(feature = "std")]
             let _ = super::ssa::emit_common::take_bail();
@@ -2401,6 +2404,7 @@ pub(crate) fn lower(
                 &mut rodata,
                 native.output_kind == super::OutputKind::Relocatable && !native.pic,
                 native.hardening,
+                native.stack_protect.resolved_for(target),
             )
         };
         #[cfg(feature = "std")]
@@ -2666,6 +2670,7 @@ pub(crate) fn lower(
         func_prologue_native,
         promoted_local_slots,
         coalesced_slot_remap,
+        canary_frame_bytes,
         fn_unwind,
         reloc_call_sites,
         user_extern_call_sites,

@@ -799,6 +799,10 @@ pub(crate) struct FinishedFunction {
     /// into `FunctionSsa::over_aligned` + `frame_align`. Empty when every
     /// automatic object fits the frame slots.
     pub over_aligned_slots: alloc::vec::Vec<(i64, i64, i64)>,
+    /// Stack-protector classification of the declared automatic objects;
+    /// the walker copies it onto `FunctionSsa::ssp`. See
+    /// [`crate::c5::ir::SspFacts`].
+    pub ssp: crate::c5::ir::SspFacts,
     /// `&&label` elements of this function's static initializers, as
     /// data slots awaiting a label address. The walk resolves each
     /// label to its basic block and seeds
@@ -1218,6 +1222,7 @@ impl crate::c5::layout::DataOffsets for FinishedFunction {
             alloca_top_slot: _,
             multi_cell_slots: _,
             over_aligned_slots: _,
+            ssp: _,
             label_data_slots,
             name: _,
         } = self;

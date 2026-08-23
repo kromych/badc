@@ -2007,6 +2007,11 @@ pub(crate) struct Build {
     /// emitter consults this so a surviving local's `DW_OP_fbreg` location
     /// uses its post-coalesce offset. Slots coalesced onto shared storage are
     /// recorded in `promoted_local_slots` (empty location) instead.
+    /// Bytes the stack-protector region added to each protected function's
+    /// frame, by `ent_pc`. Every local slot sits that much lower, so the
+    /// debug-info emitter subtracts it from the slot's frame offset. Absent
+    /// for a function with no canary.
+    pub canary_frame_bytes: alloc::collections::BTreeMap<usize, u32>,
     pub coalesced_slot_remap:
         alloc::collections::BTreeMap<usize, alloc::collections::BTreeMap<i64, i64>>,
     /// Per-function x86_64 Win64 unwind descriptors, in emission
@@ -2704,6 +2709,210 @@ pub enum IndirectBranch {
     ThunkInline,
 }
 
+/// `-fstack-protector*`: which functions get a stack canary. The per-
+/// function decision reads [`crate::c5::ir::SspFacts`], which the front
+/// end records from the declared automatic objects.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum StackProtector {
+    /// `-fno-stack-protector`: no function is protected.
+    #[default]
+    Off,
+    /// `-fstack-protector`: a function holding a character array of at
+    /// least [`StackProtect::buffer_size`] bytes (directly or as an
+    /// aggregate member), or one that calls `alloca` / declares a
+    /// variable-length array.
+    Basic,
+    /// `-fstack-protector-strong`: the above, plus a function holding an
+    /// array of any element type, an aggregate with an array member, or
+    /// an automatic object whose address the body takes.
+    Strong,
+    /// `-fstack-protector-all`: every function that has a frame.
+    All,
+}
+
+/// `-mstack-protector-guard=`: where the canary value is read from.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum StackGuard {
+    /// The target's C-library ABI: `%fs:0x28` on Linux/x86-64, the
+    /// `__stack_chk_guard` object on every other target.
+    #[default]
+    Abi,
+    /// `global`: the `__stack_chk_guard` object, or the
+    /// `-mstack-protector-guard-symbol=` name when one is given.
+    Global,
+    /// `tls` (x86-64): thread storage reached through a segment
+    /// register. With a guard symbol the reference is `%seg:sym(%rip)`;
+    /// without one it is `%seg:offset`.
+    Tls { seg: GuardSeg, offset: i32 },
+    /// `sysreg` (aarch64): `mrs` the system register whose `mrs`/`msr`
+    /// selector field is `sysreg`, then load `offset` bytes above the
+    /// value it yields.
+    Sysreg { sysreg: u16, offset: i32 },
+}
+
+/// Segment register a `tls` stack guard is read through
+/// (`-mstack-protector-guard-reg=`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum GuardSeg {
+    /// `%fs`, the System V x86-64 thread pointer.
+    #[default]
+    Fs,
+    /// `%gs`, which the Linux kernel uses for its per-CPU base.
+    Gs,
+}
+
+/// Guard object name for `-mstack-protector-guard-symbol=`. Held inline
+/// so [`NativeOptions`] stays `Copy` and const-constructible; a name
+/// longer than [`Self::CAP`] is rejected by [`Self::new`] rather than
+/// truncated.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct GuardSymbol {
+    name: [u8; Self::CAP],
+    len: u8,
+}
+
+impl Default for GuardSymbol {
+    fn default() -> Self {
+        Self::NONE
+    }
+}
+
+impl GuardSymbol {
+    /// Bytes a guard object name may occupy.
+    pub const CAP: usize = 63;
+    /// No name: the guard is reached by the form the mode implies.
+    pub const NONE: Self = Self {
+        name: [0; Self::CAP],
+        len: 0,
+    };
+
+    /// `None` when `name` does not fit; the caller reports it.
+    pub fn new(name: &str) -> Option<Self> {
+        if name.is_empty() || name.len() > Self::CAP {
+            return None;
+        }
+        let mut out = Self::NONE;
+        out.name[..name.len()].copy_from_slice(name.as_bytes());
+        out.len = name.len() as u8;
+        Some(out)
+    }
+
+    /// The name, empty when none was given.
+    pub fn as_str(&self) -> &str {
+        // Only `new` writes the buffer, and it copies from a `&str`.
+        core::str::from_utf8(&self.name[..self.len as usize]).unwrap_or("")
+    }
+
+    /// True when no name was given.
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+}
+
+impl core::fmt::Debug for GuardSymbol {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::fmt::Debug::fmt(self.as_str(), f)
+    }
+}
+
+/// The `-fstack-protector*` / `-mstack-protector-guard*` configuration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StackProtect {
+    /// Which functions are protected.
+    pub mode: StackProtector,
+    /// `--param ssp-buffer-size=`: least character-array size, in bytes,
+    /// that makes a function eligible under [`StackProtector::Basic`].
+    /// gcc's default is 8.
+    pub buffer_size: u32,
+    /// Where the canary value is read from.
+    pub guard: StackGuard,
+    /// `-mstack-protector-guard-symbol=`: the object holding the guard.
+    /// Empty selects the plain offset form of [`StackGuard::Tls`] and
+    /// `__stack_chk_guard` for [`StackGuard::Global`].
+    pub guard_symbol: GuardSymbol,
+}
+
+impl Default for StackProtect {
+    fn default() -> Self {
+        Self::OFF
+    }
+}
+
+impl StackProtect {
+    /// Every function unprotected, which is what a build with no
+    /// `-fstack-protector*` flag gets.
+    pub const OFF: Self = Self {
+        mode: StackProtector::Off,
+        buffer_size: DEFAULT_SSP_BUFFER_SIZE,
+        guard: StackGuard::Abi,
+        guard_symbol: GuardSymbol::NONE,
+    };
+
+    /// Replace [`StackGuard::Abi`] with the target's own form, so the
+    /// emitters see a concrete one. Linux/x86-64 keeps the canary in the
+    /// thread control block at [`SYSV_TLS_GUARD_OFFSET`]; every other
+    /// target reads the C library's `__stack_chk_guard` object.
+    pub(crate) fn resolved_for(self, target: Target) -> Self {
+        if self.guard != StackGuard::Abi {
+            return self;
+        }
+        let guard = match target {
+            Target::LinuxX64 => StackGuard::Tls {
+                seg: GuardSeg::Fs,
+                offset: SYSV_TLS_GUARD_OFFSET,
+            },
+            _ => StackGuard::Global,
+        };
+        Self { guard, ..self }
+    }
+
+    /// True when `facts` make the function eligible under the selected
+    /// mode. `has_frame` is false for a function the lowering leaves
+    /// frameless, which only [`StackProtector::All`] still protects.
+    pub(crate) fn protects(&self, facts: crate::c5::ir::SspFacts, has_frame: bool) -> bool {
+        match self.mode {
+            StackProtector::Off => false,
+            StackProtector::All => true,
+            StackProtector::Strong => {
+                has_frame
+                    && (facts.has_array
+                        || facts.addr_taken
+                        || facts.dynamic_alloca
+                        || facts.char_array_bytes >= self.buffer_size)
+            }
+            StackProtector::Basic => {
+                has_frame && (facts.dynamic_alloca || facts.char_array_bytes >= self.buffer_size)
+            }
+        }
+    }
+}
+
+/// `mrs` / `msr` selector field of the AArch64 system register `name`, for
+/// `-mstack-protector-guard-reg=`. `None` when the architecture has no such
+/// register, which the driver reports.
+pub fn stack_guard_sysreg(name: &str) -> Option<u16> {
+    aarch64::asm::sysreg_field(name)
+}
+
+/// gcc's `--param ssp-buffer-size=` default.
+pub const DEFAULT_SSP_BUFFER_SIZE: u32 = 8;
+
+/// Byte offset of the canary within the System V x86-64 thread control
+/// block, which glibc and musl both honour.
+pub const SYSV_TLS_GUARD_OFFSET: i32 = 0x28;
+
+/// The object a `global` stack guard is read from, and the name
+/// `-mstack-protector-guard-symbol=` overrides.
+pub(crate) const STACK_GUARD_SYMBOL: &str = "__stack_chk_guard";
+
+/// The handler a failed canary check branches to (System V ABI).
+pub(crate) const STACK_CHK_FAIL_SYMBOL: &str = "__stack_chk_fail";
+
+/// Bytes the protected frame reserves above its locals for the canary.
+/// One 8-byte slot at `fp - 8`, padded to the 16-byte frame granule so
+/// every region below keeps its alignment.
+pub(crate) const CANARY_REGION_BYTES: u32 = 16;
+
 /// User-controllable knobs for the native lowering pass. Distinct
 /// from [`TargetOptions`] (which encodes platform ABI -- not user
 /// choosable). Threaded through [`emit_native_with_options`],
@@ -2800,6 +3009,9 @@ pub struct NativeOptions {
     /// Speculative-execution mitigations (the `-m` hardening flags).
     /// Default is every field off; see [`Hardening`].
     pub hardening: Hardening,
+    /// Stack-canary configuration (`-fstack-protector*` /
+    /// `-mstack-protector-guard*`); see [`StackProtect`].
+    pub stack_protect: StackProtect,
     /// ELF class of a relocatable object (`-m32` / `-m16` on an
     /// assembly unit). An ELFCLASS32 x86 object is an i386 object:
     /// `EM_386`, `SHT_REL` relocation tables whose addend lives in
@@ -2960,6 +3172,7 @@ impl NativeOptions {
             code_model: CodeModel::Small,
             elf_class: ElfClass::Elf64,
             hardening: Hardening::NONE,
+            stack_protect: StackProtect::OFF,
             min_function_alignment: 1,
         }
     }
@@ -3075,6 +3288,18 @@ pub(crate) fn lower_for_with_prebuilt(
     // and pulling in an unused libc reference would surface
     // a "no `#pragma binding(libc::exit, ...)`" error on
     // sources that legitimately don't include `<stdlib.h>`.
+    // A canary's failure branch names `__stack_chk_fail`, which only the
+    // relocatable writer records a relocation for. Every path the driver
+    // takes compiles to relocatable objects and links them; the single-TU
+    // image writers and the JIT have no relocation to resolve, so refuse
+    // rather than emit a call with a zero displacement.
+    if options.stack_protect.mode != StackProtector::Off
+        && options.output_kind != OutputKind::Relocatable
+    {
+        return Err(C5Error::Compile(alloc::format!(
+            "error: `-fstack-protector*` needs relocatable output: the canary's              failure branch names `{STACK_CHK_FAIL_SYMBOL}`, which only a              relocatable object can relocate"
+        )));
+    }
     let is_shared = options.output_kind == OutputKind::SharedLibrary;
     // Only force-include libc `exit` when the user
     // already declared a binding for it (typically via
@@ -3135,6 +3360,7 @@ pub(crate) fn lower_for_with_prebuilt(
     // so the recorded one has to carry the mitigations too: the object
     // writer reads it to decide what the image may claim.
     build.abi.hardening = options.hardening;
+    build.abi.stack_protect = options.stack_protect;
     build.data_relocs = program.data_relocs.clone();
     build.extern_data_relocs = program.extern_data_relocs.clone();
     build.code_relocs = program.code_relocs.clone();
@@ -3387,6 +3613,10 @@ pub(crate) struct Abi {
     /// Per-run (from [`NativeOptions::hardening`]), not a `Target::abi`
     /// row property; see [`Hardening`].
     pub hardening: Hardening,
+    /// Stack-canary configuration. Per-run (from
+    /// [`NativeOptions::stack_protect`]), not a `Target::abi` row
+    /// property; see [`StackProtect`].
+    pub stack_protect: StackProtect,
 }
 
 impl Abi {
@@ -3469,6 +3699,7 @@ impl Target {
                 no_fp_varargs: false,
                 strict_align: false,
                 hardening: Hardening::NONE,
+                stack_protect: StackProtect::OFF,
             },
             Target::LinuxAarch64 => Abi {
                 arch: Arch::Aarch64,
@@ -3481,6 +3712,7 @@ impl Target {
                 no_fp_varargs: false,
                 strict_align: false,
                 hardening: Hardening::NONE,
+                stack_protect: StackProtect::OFF,
             },
             Target::LinuxX64 => Abi {
                 arch: Arch::X86_64,
@@ -3493,6 +3725,7 @@ impl Target {
                 no_fp_varargs: false,
                 strict_align: false,
                 hardening: Hardening::NONE,
+                stack_protect: StackProtect::OFF,
             },
             Target::WindowsX64 => Abi {
                 arch: Arch::X86_64,
@@ -3505,6 +3738,7 @@ impl Target {
                 no_fp_varargs: false,
                 strict_align: false,
                 hardening: Hardening::NONE,
+                stack_protect: StackProtect::OFF,
             },
             Target::WindowsAarch64 => Abi {
                 arch: Arch::Aarch64,
@@ -3517,6 +3751,7 @@ impl Target {
                 no_fp_varargs: false,
                 strict_align: false,
                 hardening: Hardening::NONE,
+                stack_protect: StackProtect::OFF,
             },
         }
     }

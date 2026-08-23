@@ -68,6 +68,7 @@ pub(super) fn insert(func: &mut FunctionSsa, ins: &[Insertion]) -> (Rewrite, Und
         ent_pc: _,
         end_pc: _,
         locals: _,
+        ssp: _,
         n_params: _,
         is_variadic: _,
         is_inline: _,

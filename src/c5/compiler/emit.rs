@@ -1062,6 +1062,7 @@ impl Compiler {
             // not yet collected at this point).
             multi_cell_slots: alloc::vec::Vec::new(),
             over_aligned_slots: alloc::vec::Vec::new(),
+            ssp: crate::c5::ir::SspFacts::default(),
             label_data_slots: core::mem::take(&mut self.pending_label_relocs),
         };
         self.in_function_body = false;
@@ -1841,12 +1842,31 @@ impl Compiler {
         let Some(child) = self.ast_acc.take() else {
             return;
         };
+        if op == super::super::ast::UnOp::AddrOf && self.expr_roots_at_local(child) {
+            self.func_local_addr_taken = true;
+        }
         let pos = self.ast_src_pos();
         let ty = self.ty;
         let id = self
             .ast
             .push_expr(super::super::ast::Expr::Unary { op, child, ty }, pos);
         self.ast_acc = Some(id);
+    }
+
+    /// True when `id` designates one of this function's automatic objects:
+    /// an identifier bound to a negative frame slot, or a member, element
+    /// or cast of one. `&expr` over such a chain materializes a frame
+    /// address, which is what `-fstack-protector-strong` selects on. A
+    /// dereference roots elsewhere and does not count.
+    fn expr_roots_at_local(&self, id: super::super::ast::ExprId) -> bool {
+        use super::super::ast::Expr;
+        match self.ast.expr(id) {
+            Expr::Ident { class, val, .. } => *class == Token::Loc as i64 && *val < 0,
+            Expr::Member { obj, .. } => self.expr_roots_at_local(*obj),
+            Expr::Index { array, .. } => self.expr_roots_at_local(*array),
+            Expr::Cast { child, .. } => self.expr_roots_at_local(*child),
+            _ => false,
+        }
     }
 
     /// Helper for the scalar-store arms: pops the lvalue

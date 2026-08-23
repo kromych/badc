@@ -1444,6 +1444,7 @@ impl Compiler {
                     self.labels.clear();
                     self.unresolved_gotos.clear();
                     self.local_label_scopes.clear();
+                    self.func_local_addr_taken = false;
                     self.uses_alloca_in_current_fn = false;
                     self.func_vla_decls = 0;
                     self.ast_reset();
@@ -1877,6 +1878,13 @@ impl Compiler {
                     // (C99 6.5.2.2 + the host ABI), so `fp_slot < 0` -- not
                     // `!is_parameter` -- selects every such local.
                     let mut multi_cell: Vec<(i64, i64)> = Vec::new();
+                    // Stack-protector classification of the same declared
+                    // objects: what the `-fstack-protector*` modes select on.
+                    let mut ssp = crate::c5::ir::SspFacts {
+                        addr_taken: self.func_local_addr_taken,
+                        dynamic_alloca: self.uses_alloca_in_current_fn,
+                        ..Default::default()
+                    };
                     for v in &self.variables[vars_start..] {
                         if v.fp_slot < 0 {
                             let cells = self.local_storage_slots(v.type_tag, v.array_size as i64);
@@ -1884,6 +1892,13 @@ impl Compiler {
                             if cells > 1 || (cells == 1 && aggregate) {
                                 multi_cell.push((v.fp_slot, cells));
                             }
+                            ssp.merge(super::types::ssp_classify(
+                                &self.structs,
+                                v.type_tag,
+                                v.array_size as i64,
+                                v.array_dims.len() > 1,
+                                &|t| self.size_of_type(t),
+                            ));
                         }
                     }
                     // Multi-cell temporaries the parser allocated without a
@@ -1909,6 +1924,7 @@ impl Compiler {
                     if let Some(ff) = self.finished_functions.last_mut() {
                         ff.multi_cell_slots = multi_cell;
                         ff.over_aligned_slots = over_aligned;
+                        ff.ssp = ssp;
                     }
                     // Collect unused-parameter and unused-local
                     // diagnostics for the function's top-level

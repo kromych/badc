@@ -767,6 +767,7 @@ fn collect_subprograms(
         // function-body close, indexed by the Ent's ent_pc
         // so a simple equality check groups them.
         let function_bc_pc = ent_pc as u64;
+        let canary_shift = build.canary_frame_bytes.get(&ent_pc).copied().unwrap_or(0) as i64;
         let variables = program
             .variables
             .iter()
@@ -795,7 +796,15 @@ fn collect_subprograms(
                     // TODO: an over-aligned automatic lives in the frame's
                     // over-aligned region, not at this slot offset; its
                     // location needs the per-function region base.
-                    fp_byte_offset: if eff >= 2 { (eff - 1) * 16 } else { eff * 8 },
+                    fp_byte_offset: if eff >= 2 {
+                        (eff - 1) * 16
+                    } else {
+                        // A protected frame reserves its canary region at the
+                        // top of the locals, so every local slot sits that
+                        // much lower; parameter cells are above the frame
+                        // base and keep their offsets.
+                        eff * 8 - canary_shift
+                    },
                     promoted: build
                         .promoted_local_slots
                         .get(&ent_pc)

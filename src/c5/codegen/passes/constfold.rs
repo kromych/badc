@@ -851,6 +851,7 @@ mod tests {
             ent_pc: 0,
             end_pc: 0,
             locals: 0,
+            ssp: crate::c5::ir::SspFacts::default(),
             has_returns_twice_call: false,
             did_unroll: false,
             did_inline: false,

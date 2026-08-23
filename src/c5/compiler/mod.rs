@@ -1555,6 +1555,13 @@ pub struct Compiler {
     /// function.
     func_over_aligned: alloc::vec::Vec<(i64, i64, i64)>,
 
+    /// True once the current function has applied the address-of operator
+    /// to one of its automatic objects, directly or through a member,
+    /// element or cast of one. Feeds
+    /// [`crate::c5::ir::SspFacts::addr_taken`], which
+    /// `-fstack-protector-strong` reads. Reset per function.
+    func_local_addr_taken: bool,
+
     /// True once the current function has emitted at least one
     /// alloca intrinsic. Drives the function-end backpatch that
     /// grows the function's local count to include the alloca
@@ -2527,6 +2534,7 @@ impl Compiler {
             max_loc_offs: 0,
             multi_cell_temps: alloc::vec::Vec::new(),
             func_over_aligned: alloc::vec::Vec::new(),
+            func_local_addr_taken: false,
             uses_alloca_in_current_fn: false,
             func_vla_decls: 0,
             stmt_expr_arena_ranges: Vec::new(),

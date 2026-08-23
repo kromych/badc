@@ -467,6 +467,76 @@ pub(crate) fn is_struct_value_ty(ty: i64) -> bool {
     is_struct_ty(ty) && struct_ptr_depth(ty) == 0
 }
 
+/// True when `ty` is a character type (C99 6.2.5p3: `char`, `signed
+/// char`, `unsigned char`) rather than a pointer to one. The `-fstack-
+/// protector` buffer-size rule applies to arrays of these only.
+pub(crate) fn is_char_value_ty(ty: i64) -> bool {
+    strip_unsigned(ty) == Ty::Char as i64
+}
+
+/// What an automatic object of type `ty` -- an array of `array_size`
+/// elements when that is non-zero, `multi_dim` when the declaration had
+/// more than one dimension -- contributes to the function's stack-protector
+/// classification. `elem_size` gives the byte size of `ty`; the caller owns
+/// the target-dependent sizing. Mirrors gcc's `stack_protect_classify_type`:
+/// an array whose element type is a character type counts by its byte
+/// extent, an array of anything else counts as an array, and an aggregate
+/// contributes whatever its members do. A multidimensional array's element
+/// type is the inner array, not the character type, so it counts as an
+/// array only -- gcc classifies it the same way.
+pub(crate) fn ssp_classify(
+    structs: &[super::StructDef],
+    ty: i64,
+    array_size: i64,
+    multi_dim: bool,
+    elem_size: &dyn Fn(i64) -> usize,
+) -> crate::c5::ir::SspFacts {
+    // A struct cannot contain itself by value, so the walk terminates; the
+    // bound only keeps a malformed table from recursing without end.
+    fn walk(
+        structs: &[super::StructDef],
+        ty: i64,
+        array_size: i64,
+        multi_dim: bool,
+        elem_size: &dyn Fn(i64) -> usize,
+        depth: u32,
+        out: &mut crate::c5::ir::SspFacts,
+    ) {
+        if depth > 16 {
+            return;
+        }
+        if array_size > 0 {
+            out.has_array = true;
+            if is_char_value_ty(ty) && !multi_dim {
+                let bytes = (elem_size(ty) as i64).saturating_mul(array_size);
+                out.char_array_bytes = out
+                    .char_array_bytes
+                    .max(bytes.clamp(0, u32::MAX as i64) as u32);
+            }
+        }
+        if !is_struct_value_ty(ty) {
+            return;
+        }
+        let Some(def) = structs.get(struct_id_of(ty)) else {
+            return;
+        };
+        for f in &def.fields {
+            walk(
+                structs,
+                f.ty,
+                f.array_size,
+                f.array_dims.len() > 1,
+                elem_size,
+                depth + 1,
+                out,
+            );
+        }
+    }
+    let mut out = crate::c5::ir::SspFacts::default();
+    walk(structs, ty, array_size, multi_dim, elem_size, 0, &mut out);
+    out
+}
+
 pub(super) fn struct_ty_for(id: usize) -> i64 {
     STRUCT_BASE + (id as i64) * STRUCT_STRIDE
 }

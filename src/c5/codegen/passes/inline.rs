@@ -2942,6 +2942,13 @@ fn splice_multi_block(
         ent_pc: original.ent_pc,
         end_pc: original.end_pc,
         locals: merged_locals,
+        // The caller's frame now holds the callee's automatic objects, so it
+        // inherits their stack-protector classification.
+        ssp: {
+            let mut s = original.ssp;
+            s.merge(callee.ssp);
+            s
+        },
         n_params: original.n_params,
         is_variadic: original.is_variadic,
         is_inline: original.is_inline,

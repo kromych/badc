@@ -46,6 +46,11 @@ pub(crate) struct EmitCtx<'a> {
     /// in ascending order. Everything else in the stream is instructions,
     /// so this is what the AArch64 mapping symbols mark.
     pub(crate) text_data_ranges: &'a mut alloc::vec::Vec<(usize, usize)>,
+    /// Bytes the stack-protector region added to each protected function's
+    /// frame, by `ent_pc`. Every local slot sits that much lower, so the
+    /// debug-info emitter subtracts it from the slot's frame offset.
+    /// Absent for a function with no canary.
+    pub(crate) canary_frame_bytes: &'a mut alloc::collections::BTreeMap<usize, u32>,
 }
 
 /// Round `n` up to the next 16-byte multiple. AAPCS64, SysV
@@ -856,13 +861,38 @@ pub(crate) fn take_bail() -> Option<alloc::string::String> {
 /// prologue's cell allocation and this offset must use the same
 /// stride; passing `Frame::param_cell_stride` keeps them in
 /// agreement. At stride 16 the result equals `(off - 1) * 16`.
-pub(crate) fn c5_slot_to_fp_offset(off: i64, param_stride: i64) -> i64 {
+/// `canary_bytes` is the size of the stack-protector region the frame
+/// reserves directly below the frame base; every local slot sits below it,
+/// so the canary is between the locals and the saved return address.
+/// Parameter cells live above the frame base and are unaffected.
+pub(crate) fn c5_slot_to_fp_offset(off: i64, param_stride: i64, canary_bytes: u32) -> i64 {
     if off >= 2 {
         16 + (off - 2) * param_stride
     } else {
-        off * 8
+        off * 8 - canary_bytes as i64
     }
 }
+
+/// Bytes the stack-protector region adds to the frame. `locals_bytes` is
+/// the declared-locals region size `compute_frame_base` returned, which is
+/// zero when no local access survives -- there is then nothing in the frame
+/// for a canary to guard, and only `-fstack-protector-all` still asks for
+/// one. A naked function emits no prologue and can carry no canary.
+pub(crate) fn canary_bytes(
+    func: &super::super::ir::FunctionSsa,
+    locals_bytes: u32,
+    ssp: super::super::StackProtect,
+) -> u32 {
+    let has_frame = locals_bytes > 0 || uses_dynamic_alloca(func);
+    if func.is_naked || !ssp.protects(func.ssp, has_frame) {
+        return 0;
+    }
+    super::super::CANARY_REGION_BYTES
+}
+
+/// Frame-base-relative byte offset of the canary slot: the topmost 8 bytes
+/// of the reserved region, directly below the saved frame pointer.
+pub(crate) const CANARY_SLOT_OFF: i32 = -8;
 
 /// SP-relative byte offset of an allocator spill slot. The
 /// caller passes the frame's `frame_bytes` and `alloc_spill_base`

@@ -1497,6 +1497,10 @@ pub(crate) struct FunctionSsa {
     /// whose constant-trip loops turned array subscripts into constant
     /// offsets. False for every function the unroll pass left unchanged.
     pub did_unroll: bool,
+    /// Stack-protector classification of the declared automatic objects;
+    /// see [`SspFacts`]. Recorded by the front end, applied against the
+    /// selected `-fstack-protector*` mode by the per-arch lowering.
+    pub ssp: SspFacts,
     /// True once `passes::inline` spliced a callee into this function.
     /// Set by the inliner; read post-inline to gate a mem2reg re-run to
     /// callers that received an inline. A relocated callee local can land
@@ -1504,6 +1508,37 @@ pub(crate) struct FunctionSsa {
     /// saw (the slot did not exist then), so the re-run promotes it. False
     /// for every function the inliner left unchanged.
     pub did_inline: bool,
+}
+
+/// What a function's declared automatic objects say about its exposure to
+/// a stack buffer overflow. Mirrors gcc's `stack_protect_classify_type` /
+/// `stack_protect_decl_p`: the facts are source-level, so a function keeps
+/// the protection its declarations ask for whatever the optimizer later
+/// does with the storage.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SspFacts {
+    /// Bytes in the largest character array reachable from a declared
+    /// automatic object, directly or through an aggregate member.
+    pub char_array_bytes: u32,
+    /// A declared automatic object is an array of any element type, or an
+    /// aggregate with an array member at any depth.
+    pub has_array: bool,
+    /// The body takes the address of a declared automatic object.
+    pub addr_taken: bool,
+    /// The body calls `alloca` or declares a variable-length array, so its
+    /// frame holds storage no declaration bounds.
+    pub dynamic_alloca: bool,
+}
+
+impl SspFacts {
+    /// Fold `other`'s facts in, for a body that absorbed another's locals
+    /// (function inlining).
+    pub fn merge(&mut self, other: SspFacts) {
+        self.char_array_bytes = self.char_array_bytes.max(other.char_array_bytes);
+        self.has_array |= other.has_array;
+        self.addr_taken |= other.addr_taken;
+        self.dynamic_alloca |= other.dynamic_alloca;
+    }
 }
 
 impl FunctionSsa {
@@ -1624,6 +1659,7 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             ent_pc: _,
             end_pc: _,
             locals: _,
+            ssp: _,
             n_params: _,
             is_variadic: _,
             is_inline: _,

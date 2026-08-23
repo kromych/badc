@@ -3371,7 +3371,7 @@ fn emit_inline_asm_aarch64(
             Some(super::super::ir::Inst::Imm(v)) => Some(*v),
             // An unpromoted function (a computed goto opts out of mem2reg)
             // leaves an `"i"` constant operand a load of a constant local.
-            _ => super::ssa::emit_common::asm_operand_local_const(func, arg),
+            _ => crate::c5::asm::asm_operand_local_const(func, arg),
         }
     };
     let gas_subst = |tok: &str| -> Option<String> {
@@ -4403,11 +4403,9 @@ fn emit_inline_asm_aarch64(
         // where `%c0` is `&sym`) relocates against the data image, resolved
         // like the operand's own `ImmData` lowering.
         let operand_sym = |idx: u8| -> Option<(crate::c5::asm::AsmSectionTarget, i64)> {
-            super::ssa::emit_common::asm_operand_data_target(
-                &func.insts,
-                *args.get(idx as usize)?,
-                &|vid| extern_data_names.get(&vid).cloned(),
-            )
+            crate::c5::asm::asm_operand_data_target(&func.insts, *args.get(idx as usize)?, &|vid| {
+                extern_data_names.get(&vid).cloned()
+            })
         };
         // An `asm goto` label operand (`.long %l0 - .`) resolves through
         // `goto_block` to the row's block index. Its text offset is not final

@@ -6937,7 +6937,7 @@ fn asm_riprel_target(
     extern_code_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     arg: u32,
 ) -> Option<AsmRipSym> {
-    use super::ssa::emit_common::{asm_operand_code_base, asm_operand_data_target};
+    use crate::c5::asm::{asm_operand_code_base, asm_operand_data_target};
     if let Some((target, addend)) =
         asm_operand_data_target(&func.insts, arg, &|v| extern_data_names.get(&v).cloned())
     {
@@ -7008,7 +7008,7 @@ fn encode_x86_asm_section_code(
             Some(Inst::ImmCode(pc)) => entpc2name
                 .get(pc)
                 .map(|n| AsmSectionTarget::Symbol(alloc::string::String::from(*n))),
-            _ => super::ssa::emit_common::asm_operand_data_target(&func.insts, arg, &|v| {
+            _ => crate::c5::asm::asm_operand_data_target(&func.insts, arg, &|v| {
                 extern_data_names.get(&v).cloned()
             })
             .map(|(t, _)| t),
@@ -7025,7 +7025,7 @@ fn encode_x86_asm_section_code(
     // target and the constant byte offset added to it.
     let addr_of = |idx: u8| -> Option<(AsmSectionTarget, i64)> {
         let arg = *args.get(idx as usize)?;
-        super::ssa::emit_common::asm_operand_data_target(&func.insts, arg, &|v| {
+        crate::c5::asm::asm_operand_data_target(&func.insts, arg, &|v| {
             extern_data_names.get(&v).cloned()
         })
     };
@@ -8434,7 +8434,7 @@ fn emit_inline_asm_once(
             Some(Inst::Imm(v)) => Some(*v),
             // An unpromoted function (a computed goto opts out of mem2reg)
             // leaves an `"i"` constant operand a load of a constant local.
-            _ => super::ssa::emit_common::asm_operand_local_const(func, arg),
+            _ => crate::c5::asm::asm_operand_local_const(func, arg),
         }
     };
     let gas_subst = |tok: &str| -> Option<alloc::string::String> {
@@ -8692,7 +8692,7 @@ fn emit_inline_asm_once(
             Some(Inst::Imm(v)) => Some(*v),
             // An unpromoted function (a computed goto opts out of mem2reg)
             // leaves an `"i"` constant operand a load of a constant local.
-            _ => super::ssa::emit_common::asm_operand_local_const(func, arg),
+            _ => crate::c5::asm::asm_operand_local_const(func, arg),
         }
     };
     // Section-label offsets, so a `.skip` in the main stream can size its
@@ -9775,11 +9775,9 @@ fn emit_inline_asm_once(
         // where `%c0` is `&sym` or a string literal) relocates against the
         // data image, resolved like the operand's own `ImmData` lowering.
         let operand_sym = |idx: u8| -> Option<(crate::c5::asm::AsmSectionTarget, i64)> {
-            super::ssa::emit_common::asm_operand_data_target(
-                &func.insts,
-                *args.get(idx as usize)?,
-                &|vid| extern_data_names.get(&vid).cloned(),
-            )
+            crate::c5::asm::asm_operand_data_target(&func.insts, *args.get(idx as usize)?, &|vid| {
+                extern_data_names.get(&vid).cloned()
+            })
         };
         // An `asm goto` label operand (`.long %l0 - .`): the goto row's block
         // index. Its text offset is not final here; the reloc carries the

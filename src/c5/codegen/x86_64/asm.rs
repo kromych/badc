@@ -108,6 +108,13 @@ pub(crate) enum Mnemonic {
         w: bool,
         store: bool,
     },
+    /// A sign-mask extract `<op> %xmm_src, %r32_dst` encoded as `<prefix>
+    /// [REX] 0F <opcode> /r`, with the general register in ModRM.reg and the
+    /// vector in r/m. Covers pmovmskb and movmsk{ps,pd}.
+    SseSignMask {
+        prefix: u8,
+        opcode: u8,
+    },
     /// A packed shift `<op> $imm8, %xmm` encoded as `66 [REX] 0F <opcode>
     /// /digit ib`: the op rides ModRM.reg as an opcode extension, the
     /// (source = destination) xmm sits in r/m. `var_opcode`, where the shift
@@ -1341,6 +1348,14 @@ fn sse_imm(name: &str) -> Option<Mnemonic> {
             w,
             store,
         });
+    }
+    // The sign-mask extracts, `(name, prefix, opcode)`.
+    #[rustfmt::skip]
+    const MASKS: &[(&str, u8, u8)] = &[
+        ("pmovmskb", 0x66, 0xD7), ("movmskps", 0, 0x50), ("movmskpd", 0x66, 0x50),
+    ];
+    if let Some(&(_, prefix, opcode)) = MASKS.iter().find(|(n, _, _)| *n == name) {
+        return Some(Mnemonic::SseSignMask { prefix, opcode });
     }
     // `(name, immediate opcode, /digit, variable-count opcode)`.
     #[rustfmt::skip]
@@ -3998,6 +4013,32 @@ fn encode_bespoke(
                     mr.emit(code, mode, addr, v_field & 7)?;
                 }
             }
+            Ok(())
+        }
+        Mnemonic::SseSignMask { prefix, opcode } => {
+            // `<op> %xmm_src, %r32_dst`: <prefix> [REX] 0F <opcode> /r, with
+            // the general register in ModRM.reg and the vector in r/m. A high
+            // general register sets REX.R, a high vector REX.B.
+            let [src, dst] = two(ops)?;
+            let (Concrete::Reg { reg: d, .. }, Concrete::Reg { reg: s, .. }) = (dst, src) else {
+                return Err(String::from(
+                    "inline asm: this SSE op takes a vector source and a general register",
+                ));
+            };
+            if !(XMM_BASE..XMM_BASE + 16).contains(&s) || d >= XMM_BASE {
+                return Err(String::from(
+                    "inline asm: this SSE op takes a vector source and a general register",
+                ));
+            }
+            let s = s - XMM_BASE;
+            if prefix != 0 {
+                code.push(prefix);
+            }
+            if d >= 8 || s >= 8 {
+                code.push(rex(false, d >= 8, false, s >= 8));
+            }
+            code.extend_from_slice(&[0x0F, opcode]);
+            code.push(modrm_reg(d & 7, s & 7));
             Ok(())
         }
         Mnemonic::Sse2Rr {
@@ -7219,6 +7260,28 @@ mod tests {
             (b"pextrw $7, %%xmm9, %%r10d", &[0x66, 0x45, 0x0F, 0xC5, 0xD1, 0x07]),
             (b"pinsrw $2, %%eax, %%xmm3", &[0x66, 0x0F, 0xC4, 0xD8, 0x02]),
             (b"pinsrw $5, %%r11d, %%xmm12", &[0x66, 0x45, 0x0F, 0xC4, 0xE3, 0x05]),
+        ];
+        for (tmpl, want) in cases {
+            assert_eq!(
+                asm_bytes(tmpl),
+                *want,
+                "{}",
+                core::str::from_utf8(tmpl).unwrap()
+            );
+        }
+    }
+
+    /// The sign-mask extracts: the general register is ModRM.reg and the
+    /// vector r/m, so a high general register sets REX.R and a high vector
+    /// REX.B. Bytes from `llvm-mc --triple=x86_64 --show-encoding`.
+    #[test]
+    fn sign_mask_rows() {
+        #[rustfmt::skip]
+        let cases: &[(&[u8], &[u8])] = &[
+            (b"pmovmskb %%xmm0, %%eax", &[0x66, 0x0F, 0xD7, 0xC0]),
+            (b"pmovmskb %%xmm14, %%r11d", &[0x66, 0x45, 0x0F, 0xD7, 0xDE]),
+            (b"movmskps %%xmm3, %%ecx", &[0x0F, 0x50, 0xCB]),
+            (b"movmskpd %%xmm9, %%r8d", &[0x66, 0x45, 0x0F, 0x50, 0xC1]),
         ];
         for (tmpl, want) in cases {
             assert_eq!(

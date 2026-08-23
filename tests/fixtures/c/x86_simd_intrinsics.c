@@ -245,8 +245,266 @@ int main(void) {
         }
     }
 
+    /* `set` fills from the highest lane down, `setr` from lane zero up:
+    ** the same argument list must produce reversed vectors. */
+    {
+        static const unsigned char up[16] = {0, 0, 1, 0, 2, 0, 3, 0, 4, 0, 5, 0, 6, 0, 7, 0};
+        static const unsigned char down[16] = {7, 0, 6, 0, 5, 0, 4, 0, 3, 0, 2, 0, 1, 0, 0, 0};
+        static const unsigned char bytes[16] = {0, 1, 2,  3,  4,  5,  6,  7,
+                                                8, 9, 10, 11, 12, 13, 14, 15};
+        static const unsigned char rbytes[16] = {15, 14, 13, 12, 11, 10, 9, 8,
+                                                 7,  6,  5,  4,  3,  2,  1, 0};
+        if (!same(_mm_setr_epi16(0, 1, 2, 3, 4, 5, 6, 7), up)) {
+            return 33;
+        }
+        if (!same(_mm_set_epi16(0, 1, 2, 3, 4, 5, 6, 7), down)) {
+            return 34;
+        }
+        if (!same(_mm_setr_epi8(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15), bytes)) {
+            return 35;
+        }
+        if (!same(_mm_set_epi8(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15), rbytes)) {
+            return 36;
+        }
+    }
+    _mm_storeu_si128((__m128i *)lanes, _mm_setr_epi32(1, 2, 3, 4));
+    if (lanes[0] != 1 || lanes[3] != 4) {
+        return 37;
+    }
+    _mm_storeu_si128((__m128i *)lanes, _mm_set1_epi32(0x11223344));
+    if (lanes[0] != 0x11223344u || lanes[3] != 0x11223344u) {
+        return 38;
+    }
+    _mm_storeu_si128((__m128i *)lanes, _mm_set1_epi16(0x1234));
+    if (lanes[0] != 0x12341234u || lanes[3] != 0x12341234u) {
+        return 39;
+    }
+    _mm_storeu_si128((__m128i *)lanes, _mm_set1_epi8(0x5a));
+    if (lanes[0] != 0x5a5a5a5au || lanes[3] != 0x5a5a5a5au) {
+        return 40;
+    }
+    _mm_storeu_si128((__m128i *)lanes, _mm_set1_epi64x(0x0123456789abcdefLL));
+    if (lanes[0] != 0x89abcdefu || lanes[1] != 0x01234567u || lanes[3] != 0x01234567u) {
+        return 41;
+    }
+
+    /* Byte and word arithmetic wraps within its own lane. */
+    a = _mm_set1_epi8((char)0xff);
+    b = _mm_set1_epi8(1);
+    _mm_storeu_si128((__m128i *)lanes, _mm_add_epi8(a, b));
+    if (lanes[0] != 0 || lanes[3] != 0) {
+        return 42;
+    }
+    _mm_storeu_si128((__m128i *)lanes, _mm_sub_epi8(_mm_setzero_si128(), b));
+    if (lanes[0] != 0xffffffffu) {
+        return 43;
+    }
+    a = _mm_set1_epi16((short)0xffff);
+    _mm_storeu_si128((__m128i *)lanes, _mm_add_epi16(a, _mm_set1_epi16(1)));
+    if (lanes[0] != 0) {
+        return 44;
+    }
+    _mm_storeu_si128((__m128i *)lanes, _mm_sub_epi16(_mm_setzero_si128(), _mm_set1_epi16(1)));
+    if (lanes[0] != 0xffffffffu) {
+        return 45;
+    }
+    _mm_storeu_si128((__m128i *)lanes, _mm_sub_epi32(_mm_set1_epi32(5), _mm_set1_epi32(7)));
+    if (lanes[0] != 0xfffffffeu) {
+        return 46;
+    }
+
+    /* The word product's halves, and the multiply-add pairs. */
+    _mm_storeu_si128((__m128i *)lanes, _mm_mullo_epi16(_mm_set1_epi16(0x1234), _mm_set1_epi16(3)));
+    if (lanes[0] != 0x369c369cu) {
+        return 47;
+    }
+    _mm_storeu_si128((__m128i *)lanes, _mm_mulhi_epi16(_mm_set1_epi16(-4096), _mm_set1_epi16(16)));
+    if (lanes[0] != 0xffffffffu) {
+        return 48;
+    }
+    _mm_storeu_si128((__m128i *)lanes, _mm_mulhi_epi16(_mm_set1_epi16(4096), _mm_set1_epi16(16)));
+    if (lanes[0] != 0x00010001u) {
+        return 49;
+    }
+    /* Each doubleword is a[2i]*b[2i] + a[2i+1]*b[2i+1]. */
+    a = _mm_setr_epi16(1, 2, 3, 4, 5, 6, 7, 8);
+    _mm_storeu_si128((__m128i *)lanes, _mm_madd_epi16(a, _mm_set1_epi16(-2)));
+    if (lanes[0] != (unsigned int)-6 || lanes[3] != (unsigned int)-30) {
+        return 50;
+    }
+
+    /* Saturating packs: the first operand fills the low half. */
+    _mm_storeu_si128((__m128i *)buf, _mm_packs_epi16(_mm_set1_epi16(300), _mm_set1_epi16(-300)));
+    if (buf[0] != 0x7f || buf[7] != 0x7f || buf[8] != 0x80 || buf[15] != 0x80) {
+        return 51;
+    }
+    _mm_storeu_si128((__m128i *)buf, _mm_packus_epi16(_mm_set1_epi16(300), _mm_set1_epi16(-5)));
+    if (buf[0] != 0xff || buf[7] != 0xff || buf[8] != 0 || buf[15] != 0) {
+        return 52;
+    }
+    _mm_storeu_si128((__m128i *)buf,
+                     _mm_packs_epi32(_mm_set1_epi32(70000), _mm_set1_epi32(-70000)));
+    if (buf[0] != 0xff || buf[1] != 0x7f || buf[8] != 0x00 || buf[9] != 0x80) {
+        return 53;
+    }
+
+    /* Interleaves take alternate lanes from each half. */
+    a = _mm_setr_epi8(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
+    _mm_storeu_si128((__m128i *)buf, _mm_unpacklo_epi8(a, _mm_setzero_si128()));
+    if (buf[0] != 0 || buf[1] != 0 || buf[2] != 1 || buf[14] != 7 || buf[15] != 0) {
+        return 54;
+    }
+    _mm_storeu_si128((__m128i *)buf, _mm_unpackhi_epi8(a, _mm_setzero_si128()));
+    if (buf[0] != 8 || buf[1] != 0 || buf[14] != 15 || buf[15] != 0) {
+        return 55;
+    }
+    _mm_storeu_si128((__m128i *)buf, _mm_unpacklo_epi16(a, _mm_setzero_si128()));
+    if (buf[0] != 0 || buf[1] != 1 || buf[2] != 0 || buf[3] != 0 || buf[4] != 2) {
+        return 56;
+    }
+    _mm_storeu_si128((__m128i *)buf, _mm_unpackhi_epi16(a, _mm_setzero_si128()));
+    if (buf[0] != 8 || buf[1] != 9 || buf[2] != 0 || buf[4] != 10) {
+        return 57;
+    }
+    a = _mm_setr_epi32(1, 2, 3, 4);
+    b = _mm_setr_epi32(5, 6, 7, 8);
+    _mm_storeu_si128((__m128i *)lanes, _mm_unpacklo_epi32(a, b));
+    if (lanes[0] != 1 || lanes[1] != 5 || lanes[2] != 2 || lanes[3] != 6) {
+        return 58;
+    }
+    _mm_storeu_si128((__m128i *)lanes, _mm_unpackhi_epi32(a, b));
+    if (lanes[0] != 3 || lanes[1] != 7 || lanes[2] != 4 || lanes[3] != 8) {
+        return 59;
+    }
+    _mm_storeu_si128((__m128i *)lanes, _mm_unpackhi_epi64(a, b));
+    if (lanes[0] != 3 || lanes[1] != 4 || lanes[2] != 7 || lanes[3] != 8) {
+        return 60;
+    }
+
+    /* The arithmetic shift propagates the sign; a count at or past the
+    ** lane width leaves every bit equal to it. */
+    _mm_storeu_si128((__m128i *)lanes, _mm_srai_epi16(_mm_set1_epi16(-16), 2));
+    if (lanes[0] != 0xfffcfffcu) {
+        return 61;
+    }
+    _mm_storeu_si128((__m128i *)lanes, _mm_srai_epi16(_mm_set1_epi16(-16), 32));
+    if (lanes[0] != 0xffffffffu) {
+        return 62;
+    }
+    _mm_storeu_si128((__m128i *)lanes, _mm_srai_epi32(_mm_set1_epi32(-16), 2));
+    if (lanes[0] != 0xfffffffcu) {
+        return 63;
+    }
+    i = 3;
+    _mm_storeu_si128((__m128i *)lanes, _mm_srai_epi32(_mm_set1_epi32(-64), i));
+    if (lanes[0] != 0xfffffff8u) {
+        return 64;
+    }
+
+    /* The byte-granular right shift moves the whole register. */
+    a = _mm_setr_epi8(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
+    _mm_storeu_si128((__m128i *)buf, _mm_srli_si128(a, 3));
+    if (buf[0] != 3 || buf[12] != 15 || buf[13] != 0 || buf[15] != 0) {
+        return 65;
+    }
+
+    /* Word insert, and the byte sign-bit mask. */
+    _mm_storeu_si128((__m128i *)buf, _mm_insert_epi16(a, 0xbeef, 2));
+    if (buf[4] != 0xef || buf[5] != 0xbe || buf[6] != 6) {
+        return 66;
+    }
+    if (_mm_movemask_epi8(_mm_set1_epi8((char)0x80)) != 0xffff) {
+        return 67;
+    }
+    if (_mm_movemask_epi8(_mm_setzero_si128()) != 0) {
+        return 68;
+    }
+    if (_mm_movemask_epi8(_mm_setr_epi8((char)0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                        (char)0x80)) != 0x8001) {
+        return 69;
+    }
+
+    /* Complement-and, and the signed lane compares. */
+    _mm_storeu_si128((__m128i *)lanes, _mm_andnot_si128(_mm_set1_epi8(0x0f), _mm_set1_epi8(0x33)));
+    if (lanes[0] != 0x30303030u) {
+        return 70;
+    }
+    _mm_storeu_si128((__m128i *)lanes, _mm_cmpeq_epi8(a, a));
+    if (lanes[0] != 0xffffffffu || lanes[3] != 0xffffffffu) {
+        return 71;
+    }
+    _mm_storeu_si128((__m128i *)lanes, _mm_cmpeq_epi16(_mm_set1_epi16(7), _mm_set1_epi16(8)));
+    if (lanes[0] != 0) {
+        return 72;
+    }
+    _mm_storeu_si128((__m128i *)lanes, _mm_cmpeq_epi32(_mm_set1_epi32(7), _mm_set1_epi32(7)));
+    if (lanes[0] != 0xffffffffu) {
+        return 73;
+    }
+    _mm_storeu_si128((__m128i *)lanes, _mm_cmpgt_epi16(_mm_set1_epi16(-1), _mm_set1_epi16(-2)));
+    if (lanes[0] != 0xffffffffu) {
+        return 74;
+    }
+    _mm_storeu_si128((__m128i *)lanes, _mm_cmplt_epi32(_mm_set1_epi32(-2), _mm_set1_epi32(-1)));
+    if (lanes[0] != 0xffffffffu) {
+        return 75;
+    }
+
+    /* The quadword transfers move exactly eight bytes; the doubleword
+    ** conversions move exactly four. */
+    for (i = 0; i < 16; i++) {
+        buf[i] = (unsigned char)(i + 1);
+    }
+    _mm_storeu_si128((__m128i *)lanes, _mm_loadl_epi64((const __m128i *)buf));
+    if (lanes[0] != 0x04030201u || lanes[1] != 0x08070605u || lanes[2] != 0 || lanes[3] != 0) {
+        return 76;
+    }
+    for (i = 0; i < 16; i++) {
+        buf[i] = 0xee;
+    }
+    _mm_storel_epi64((__m128i *)buf, _mm_setr_epi32(1, 2, 3, 4));
+    if (buf[0] != 1 || buf[4] != 2 || buf[8] != 0xee) {
+        return 77;
+    }
+    {
+        /* The aligned pair takes an address the ABI can guarantee. */
+        static unsigned int aligned[4] __attribute__((__aligned__(16)));
+        _mm_store_si128((__m128i *)aligned, a);
+        _mm_storeu_si128((__m128i *)buf, _mm_load_si128((const __m128i *)aligned));
+        for (i = 0; i < 16; i++) {
+            if (buf[i] != (unsigned char)i) {
+                return 78;
+            }
+        }
+    }
+    if (_mm_cvtsi128_si32(_mm_cvtsi32_si128(0x0a0b0c0d)) != 0x0a0b0c0d) {
+        return 79;
+    }
+    _mm_storeu_si128((__m128i *)lanes, _mm_cvtsi32_si128(-1));
+    if (lanes[0] != 0xffffffffu || lanes[1] != 0 || lanes[3] != 0) {
+        return 80;
+    }
+
+    /* The unaligned vector type reads at any address. */
+    {
+        unsigned char wide[24];
+        __m128i u;
+        for (i = 0; i < 24; i++) {
+            wide[i] = (unsigned char)(i + 1);
+        }
+        u = *(__m128i_u *)(wide + 3);
+        _mm_storeu_si128((__m128i *)buf, u);
+        if (buf[0] != 4 || buf[15] != 19) {
+            return 81;
+        }
+        *(__m128i_u *)(wide + 5) = _mm_setzero_si128();
+        if (wide[4] != 5 || wide[5] != 0 || wide[20] != 0 || wide[21] != 22) {
+            return 82;
+        }
+    }
+
     if (!aes128_known_answer()) {
-        return 32;
+        return 83;
     }
     return 0;
 }

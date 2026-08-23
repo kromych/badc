@@ -65,21 +65,42 @@ fn transfers_use_unaligned_moves() {
 #[cfg(feature = "full")]
 #[test]
 fn sse2_packed_ops_emit_their_instruction() {
-    // pxor  %xmm14, %xmm15   66 45 0f ef fe
-    // paddd %xmm14, %xmm15   66 45 0f fe fe
-    // paddq %xmm14, %xmm15   66 45 0f d4 fe
-    // psubq %xmm14, %xmm15   66 45 0f fb fe
-    // pand  %xmm14, %xmm15   66 45 0f db fe
-    // por   %xmm14, %xmm15   66 45 0f eb fe
-    // punpcklqdq %xmm14, %xmm15   66 45 0f 6c fe
+    // Every two-operand form is `<op> %xmm14, %xmm15`, so the encodings
+    // differ only in the opcode byte: pxor is 66 45 0f ef fe, paddd
+    // 66 45 0f fe fe, and so on down the table.
     for (builtin, opcode) in [
         ("pxor128", 0xefu8),
+        ("pand128", 0xdb),
+        ("pandn128", 0xdf),
+        ("por128", 0xeb),
+        ("paddb128", 0xfc),
+        ("paddw128", 0xfd),
         ("paddd128", 0xfe),
         ("paddq128", 0xd4),
+        ("psubb128", 0xf8),
+        ("psubw128", 0xf9),
+        ("psubd128", 0xfa),
         ("psubq128", 0xfb),
-        ("pand128", 0xdb),
-        ("por128", 0xeb),
+        ("pmullw128", 0xd5),
+        ("pmulhw128", 0xe5),
+        ("pmaddwd128", 0xf5),
+        ("pcmpeqb128", 0x74),
+        ("pcmpeqw128", 0x75),
+        ("pcmpeqd128", 0x76),
+        ("pcmpgtb128", 0x64),
+        ("pcmpgtw128", 0x65),
+        ("pcmpgtd128", 0x66),
+        ("packsswb128", 0x63),
+        ("packssdw128", 0x6b),
+        ("packuswb128", 0x67),
+        ("punpcklbw128", 0x60),
+        ("punpcklwd128", 0x61),
+        ("punpckldq128", 0x62),
         ("punpcklqdq128", 0x6c),
+        ("punpckhbw128", 0x68),
+        ("punpckhwd128", 0x69),
+        ("punpckhdq128", 0x6a),
+        ("punpckhqdq128", 0x6d),
     ] {
         assert_emits(
             &format!(
@@ -107,6 +128,8 @@ fn shifts_take_the_immediate_form_for_a_constant_count() {
         ("psrlwi128", 0x71, 0xd7, 3),
         ("psrldi128", 0x72, 0xd7, 7),
         ("psrlqi128", 0x73, 0xd7, 9),
+        ("psrawi128", 0x71, 0xe7, 3),
+        ("psradi128", 0x72, 0xe7, 7),
     ] {
         assert_emits(
             &format!("__m128i f(__m128i a) {{ return __builtin_ia32_{builtin}(a, {count}); }}"),
@@ -114,12 +137,18 @@ fn shifts_take_the_immediate_form_for_a_constant_count() {
             builtin,
         );
     }
-    // The byte-granular shift counts bytes while the builtin takes bits:
+    // The byte-granular shifts count bytes while their builtins take bits:
     // pslldq $0x4, %xmm15   66 41 0f 73 ff 04
+    // psrldq $0x4, %xmm15   66 41 0f 73 df 04
     assert_emits(
         "__m128i f(__m128i a) { return __builtin_ia32_pslldqi128(a, 32); }",
         &[0x66, 0x41, 0x0f, 0x73, 0xff, 0x04],
         "pslldqi128",
+    );
+    assert_emits(
+        "__m128i f(__m128i a) { return __builtin_ia32_psrldqi128(a, 32); }",
+        &[0x66, 0x41, 0x0f, 0x73, 0xdf, 0x04],
+        "psrldqi128",
     );
 }
 
@@ -131,6 +160,12 @@ fn a_runtime_shift_count_takes_the_register_form() {
         "__m128i f(__m128i a, int n) { return __builtin_ia32_psrlqi128(a, n); }",
         &[0x66, 0x45, 0x0f, 0xd3, 0xfe],
         "psrlq register count",
+    );
+    // psraw %xmm14, %xmm15   66 45 0f e1 fe
+    assert_emits(
+        "__m128i f(__m128i a, int n) { return __builtin_ia32_psrawi128(a, n); }",
+        &[0x66, 0x45, 0x0f, 0xe1, 0xfe],
+        "psraw register count",
     );
 }
 
@@ -178,9 +213,11 @@ fn element_access_uses_the_extract_and_insert_instructions() {
     if std::env::var_os("BADC_MAX_GPR").is_some() || std::env::var_os("BADC_MAX_FPR").is_some() {
         return;
     }
-    // pextrw $0x3, %xmm14, %r11d        66 45 0f c5 de 03
-    // pextrd $0x2, %xmm14, %r11d        66 45 0f 3a 16 f3 02
-    // pinsrd $0x1, %edx, %xmm15         66 44 0f 3a 22 fa 01
+    // pextrw   $0x3, %xmm14, %r11d      66 45 0f c5 de 03
+    // pextrd   $0x2, %xmm14, %r11d      66 45 0f 3a 16 f3 02
+    // pinsrd   $0x1, %edx, %xmm15       66 44 0f 3a 22 fa 01
+    // pinsrw   $0x2, %edx, %xmm15       66 44 0f c4 fa 02
+    // pmovmskb %xmm14, %r11d            66 45 0f d7 de
     assert_emits(
         "int f(__m128i a) { return __builtin_ia32_vec_ext_v8hi(a, 3); }",
         &[0x66, 0x45, 0x0f, 0xc5, 0xde, 0x03],
@@ -195,6 +232,17 @@ fn element_access_uses_the_extract_and_insert_instructions() {
         "__m128i f(__m128i a, int x) { return __builtin_ia32_vec_set_v4si(a, x, 1); }",
         &[0x66, 0x44, 0x0f, 0x3a, 0x22, 0xfa, 0x01],
         "pinsrd",
+    );
+    // The word insert reads a 32-bit register, as the instruction does.
+    assert_emits(
+        "__m128i f(__m128i a, int x) { return __builtin_ia32_vec_set_v8hi(a, x, 2); }",
+        &[0x66, 0x44, 0x0f, 0xc4, 0xfa, 0x02],
+        "pinsrw",
+    );
+    assert_emits(
+        "int f(__m128i a) { return __builtin_ia32_pmovmskb128(a); }",
+        &[0x66, 0x45, 0x0f, 0xd7, 0xde],
+        "pmovmskb",
     );
     // pcmpeqq %xmm14, %xmm15   66 45 0f 38 29 fe
     assert_emits(
@@ -276,6 +324,12 @@ fn the_bundled_headers_reach_the_instructions() {
              v = _mm_xor_si128(v, k);\n\
              v = _mm_shuffle_epi32(v, _MM_SHUFFLE(0, 3, 2, 1));\n\
              v = _mm_slli_epi32(v, 5);\n\
+             v = _mm_srai_epi16(v, 3);\n\
+             v = _mm_srli_si128(v, 2);\n\
+             v = _mm_madd_epi16(v, k);\n\
+             v = _mm_packus_epi16(v, k);\n\
+             v = _mm_unpacklo_epi8(v, k);\n\
+             v = _mm_insert_epi16(v, _mm_movemask_epi8(k), 3);\n\
              v = _mm_aesenc_si128(v, k);\n\
              v = _mm_clmulepi64_si128(v, k, 0x10);\n\
              return _mm_shuffle_epi8(v, k);\n\
@@ -294,6 +348,12 @@ fn the_bundled_headers_reach_the_instructions() {
         (&[0x66u8, 0x45, 0x0f, 0xef, 0xfe][..], "pxor"),
         (&[0x66, 0x45, 0x0f, 0x70, 0xfe, 0x39][..], "pshufd"),
         (&[0x66, 0x41, 0x0f, 0x72, 0xf7, 0x05][..], "pslld $5"),
+        (&[0x66, 0x41, 0x0f, 0x71, 0xe7, 0x03][..], "psraw $3"),
+        (&[0x66, 0x41, 0x0f, 0x73, 0xdf, 0x02][..], "psrldq $2"),
+        (&[0x66, 0x45, 0x0f, 0xf5, 0xfe][..], "pmaddwd"),
+        (&[0x66, 0x45, 0x0f, 0x67, 0xfe][..], "packuswb"),
+        (&[0x66, 0x45, 0x0f, 0x60, 0xfe][..], "punpcklbw"),
+        (&[0x66, 0x45, 0x0f, 0xd7, 0xde][..], "pmovmskb"),
         (&[0x66, 0x45, 0x0f, 0x38, 0xdc, 0xfe][..], "aesenc"),
         (&[0x66, 0x45, 0x0f, 0x3a, 0x44, 0xfe, 0x10][..], "pclmulqdq"),
         (&[0x66, 0x45, 0x0f, 0x38, 0x00, 0xfe][..], "pshufb"),
@@ -303,6 +363,30 @@ fn the_bundled_headers_reach_the_instructions() {
             "{what}: expected encoding {needle:02x?} not in the emitted code"
         );
     }
+}
+
+/// The interpreter reads the same table as the emit, including the
+/// shift whose constant count rides the node instead of an operand.
+#[test]
+fn the_interpreter_runs_the_builtins() {
+    let src = format!(
+        "{VEC}int main(void) {{ \
+             short lanes[8]; \
+             __m128i a = (__m128i)(__v8hi){{-16, -16, -16, -16, -16, -16, -16, -16}}; \
+             __builtin_ia32_storedqu((char *)lanes, __builtin_ia32_psrawi128((__v8hi)a, 2)); \
+             if (lanes[0] != -4 || lanes[7] != -4) {{ return 1; }} \
+             __builtin_ia32_storedqu((char *)lanes, \
+                 __builtin_ia32_punpcklwd128((__v8hi)a, (__v8hi)a)); \
+             if (lanes[0] != -16 || lanes[1] != -16) {{ return 2; }} \
+             return __builtin_ia32_pmovmskb128((__v16qi)a) == 0xffff ? 0 : 3; \
+         }}"
+    );
+    let program = super::compile_str_bare_for(&src, crate::Target::LinuxX64);
+    assert_eq!(
+        super::Vm::new(program).run().expect("interpreted run"),
+        0,
+        "the interpreter must agree with the instruction"
+    );
 }
 
 // ------------------------------------------------------------------
@@ -415,6 +499,20 @@ fn lane_arithmetic_and_logic_match_the_instruction() {
     // A quadword compare sets all bits of the equal lane.
     let eq = x86_simd::eval(Sem::CmpEq(8), &a, &a, 0, 0);
     assert_eq!(eq, [0xffu8; 16]);
+    // The complement-and takes the first operand complemented.
+    assert_eq!(
+        x86_simd::eval(Sem::AndNot, &[0x0f; 16], &[0x33; 16], 0, 0),
+        [0x30u8; 16]
+    );
+    // A signed compare orders the negative lane below the positive one.
+    let neg = v([0xff, 0xff, 0xff, 0xff, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    let gt = x86_simd::eval(Sem::CmpGt(4), &one, &neg, 0, 0);
+    assert_eq!(&gt[..4], &[0xff, 0xff, 0xff, 0xff]);
+    let gt = x86_simd::eval(Sem::CmpGt(4), &neg, &one, 0, 0);
+    assert_eq!(&gt[..4], &[0, 0, 0, 0]);
+    // The byte compare is per byte, not per doubleword.
+    let gt = x86_simd::eval(Sem::CmpGt(1), &b, &a, 0, 0);
+    assert_eq!(&gt[..5], &[0xff, 0, 0, 0, 0xff]);
 }
 
 #[test]
@@ -461,9 +559,140 @@ fn shuffles_select_the_lanes_the_immediate_names() {
     let x = v([1, 1, 1, 1, 1, 1, 1, 1, 9, 9, 9, 9, 9, 9, 9, 9]);
     let y = v([2, 2, 2, 2, 2, 2, 2, 2, 8, 8, 8, 8, 8, 8, 8, 8]);
     assert_eq!(
-        x86_simd::eval(Sem::UnpackLoQ, &x, &y, 0, 0),
+        x86_simd::eval(Sem::UnpackLo(8), &x, &y, 0, 0),
         v([1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2])
     );
+    assert_eq!(
+        x86_simd::eval(Sem::UnpackHi(8), &x, &y, 0, 0),
+        v([9, 9, 9, 9, 9, 9, 9, 9, 8, 8, 8, 8, 8, 8, 8, 8])
+    );
+}
+
+/// The interleaves take alternate lanes from the named half of each
+/// operand, the first operand's lane first.
+#[test]
+fn interleaves_alternate_the_lanes_of_one_half() {
+    let a = v([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+    let b = v([
+        0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x8d, 0x8e,
+        0x8f,
+    ]);
+    let lo = x86_simd::eval(Sem::UnpackLo(1), &a, &b, 0, 0);
+    assert_eq!(&lo[..6], &[0, 0x80, 1, 0x81, 2, 0x82]);
+    let hi = x86_simd::eval(Sem::UnpackHi(1), &a, &b, 0, 0);
+    assert_eq!(&hi[..6], &[8, 0x88, 9, 0x89, 10, 0x8a]);
+    let lo = x86_simd::eval(Sem::UnpackLo(2), &a, &b, 0, 0);
+    assert_eq!(&lo[..8], &[0, 1, 0x80, 0x81, 2, 3, 0x82, 0x83]);
+    let hi = x86_simd::eval(Sem::UnpackHi(4), &a, &b, 0, 0);
+    assert_eq!(&hi[..8], &[8, 9, 10, 11, 0x88, 0x89, 0x8a, 0x8b]);
+}
+
+/// The packs saturate each source lane into one of half the width, the
+/// first operand's lanes filling the low half of the result.
+#[test]
+fn packs_saturate_into_the_narrower_lane() {
+    // 300 saturates to 0x7f signed and 0xff unsigned; -300 to 0x80 and 0.
+    let a = v([
+        0x2c, 0x01, 0x2c, 0x01, 0x2c, 0x01, 0x2c, 0x01, 0x2c, 0x01, 0x2c, 0x01, 0x2c, 0x01, 0x2c,
+        0x01,
+    ]);
+    let b = v([
+        0xd4, 0xfe, 0xd4, 0xfe, 0xd4, 0xfe, 0xd4, 0xfe, 0xd4, 0xfe, 0xd4, 0xfe, 0xd4, 0xfe, 0xd4,
+        0xfe,
+    ]);
+    let s = x86_simd::eval(Sem::PackSigned(2), &a, &b, 0, 0);
+    assert_eq!(&s[..8], &[0x7f; 8]);
+    assert_eq!(&s[8..], &[0x80; 8]);
+    let u = x86_simd::eval(Sem::PackUnsigned(2), &a, &b, 0, 0);
+    assert_eq!(&u[..8], &[0xff; 8]);
+    assert_eq!(&u[8..], &[0; 8]);
+    // A doubleword source saturates into a word: 70000 -> 0x7fff.
+    let big = v([
+        0x70, 0x11, 0x01, 0x00, 0x70, 0x11, 0x01, 0x00, 0x70, 0x11, 0x01, 0x00, 0x70, 0x11, 0x01,
+        0x00,
+    ]);
+    let d = x86_simd::eval(Sem::PackSigned(4), &big, &big, 0, 0);
+    assert_eq!(&d[..4], &[0xff, 0x7f, 0xff, 0x7f]);
+    // A lane already in range passes through.
+    let small = v([7, 0, 0, 0, 7, 0, 0, 0, 7, 0, 0, 0, 7, 0, 0, 0]);
+    let p = x86_simd::eval(Sem::PackSigned(4), &small, &small, 0, 0);
+    assert_eq!(p, v([7, 0, 7, 0, 7, 0, 7, 0, 7, 0, 7, 0, 7, 0, 7, 0]));
+}
+
+/// The word products: `pmullw` keeps the low half, `pmulhw` the high
+/// half of the signed product, and `pmaddwd` sums adjacent pairs.
+#[test]
+fn word_products_split_and_sum() {
+    let a = v([
+        0x34, 0x12, 0x00, 0x10, 0x00, 0xf0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    ]);
+    let three = v([3, 0, 3, 0, 3, 0, 3, 0, 3, 0, 3, 0, 3, 0, 3, 0]);
+    let lo = x86_simd::eval(Sem::MulLo(2), &a, &three, 0, 0);
+    // 0x1234 * 3 = 0x369c; 0x1000 * 3 = 0x3000.
+    assert_eq!(&lo[..4], &[0x9c, 0x36, 0x00, 0x30]);
+    let hi = x86_simd::eval(Sem::MulHi(2), &a, &three, 0, 0);
+    // 0x1234 * 3 fits in a word, so the high half is zero; -4096 * 3 =
+    // -12288, whose high half is the sign.
+    assert_eq!(&hi[..2], &[0, 0]);
+    assert_eq!(&hi[4..6], &[0xff, 0xff]);
+    // Each doubleword is a[2i]*b[2i] + a[2i+1]*b[2i+1]: 0x1234*3 +
+    // 0x1000*3 = 0x669c.
+    let madd = x86_simd::eval(Sem::MulAddWords, &a, &three, 0, 0);
+    assert_eq!(&madd[..4], &[0x9c, 0x66, 0, 0]);
+    // The signed extreme wraps within the doubleword, as the
+    // instruction does: (-32768 * -32768) * 2 = 2^31.
+    let m = v([0x00, 0x80, 0x00, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    let w = x86_simd::eval(Sem::MulAddWords, &m, &m, 0, 0);
+    assert_eq!(&w[..4], &[0x00, 0x00, 0x00, 0x80]);
+}
+
+/// The arithmetic shift propagates the sign, and a count at or past the
+/// lane width leaves every bit equal to it.
+#[test]
+fn the_arithmetic_shift_propagates_the_sign() {
+    let neg = v([
+        0xf0, 0xff, 0xf0, 0xff, 0xf0, 0xff, 0xf0, 0xff, 0, 0, 0, 0, 0, 0, 0, 0,
+    ]);
+    let r = x86_simd::eval(Sem::Sar(2), &neg, &[0; 16], 0, 2);
+    assert_eq!(&r[..4], &[0xfc, 0xff, 0xfc, 0xff]);
+    assert_eq!(&r[8..10], &[0, 0]);
+    let r = x86_simd::eval(Sem::Sar(2), &neg, &[0; 16], 0, 99);
+    assert_eq!(&r[..4], &[0xff, 0xff, 0xff, 0xff]);
+    // The same bytes as doublewords: 0xfff0fff0 >> 4 = 0xffff0fff.
+    let r = x86_simd::eval(Sem::Sar(4), &neg, &[0; 16], 0, 4);
+    assert_eq!(&r[..4], &[0xff, 0x0f, 0xff, 0xff]);
+    // The unsigned shift of the same lanes does not.
+    let r = x86_simd::eval(Sem::Shr(2), &neg, &[0; 16], 0, 2);
+    assert_eq!(&r[..2], &[0xfc, 0x3f]);
+}
+
+/// The byte-granular shifts move the whole register, zero-filling.
+#[test]
+fn the_whole_register_shifts_fill_with_zero() {
+    let a = v([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+    assert_eq!(
+        x86_simd::eval(Sem::ShrBytes, &a, &[0; 16], 0, 3),
+        v([3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 0, 0])
+    );
+    assert_eq!(
+        x86_simd::eval(Sem::ShrBytes, &a, &[0; 16], 0, 16),
+        [0u8; 16]
+    );
+    assert_eq!(
+        x86_simd::eval(Sem::ShrBytes, &a, &[0; 16], 0, 255),
+        [0u8; 16]
+    );
+}
+
+/// The byte sign bits, lane `i` at bit `i`.
+#[test]
+fn the_sign_mask_reads_one_bit_per_byte() {
+    assert_eq!(x86_simd::eval_movemask(&[0x80; 16]), 0xffff);
+    assert_eq!(x86_simd::eval_movemask(&[0x7f; 16]), 0);
+    let mut a = [0u8; 16];
+    a[0] = 0x80;
+    a[15] = 0xff;
+    assert_eq!(x86_simd::eval_movemask(&a), 0x8001);
 }
 
 #[test]

@@ -344,12 +344,22 @@ header takes its standard-C path for the GNU features badc lacks.
 - On x86 targets, the SIMD intrinsic headers `<xmmintrin.h>`,
   `<emmintrin.h>`, `<tmmintrin.h>`, `<smmintrin.h>`, `<wmmintrin.h>` and
   `<immintrin.h>`, reached through `<x86intrin.h>`. They are
-  compiler-owned and carry a subset of SSE2 / SSSE3 / SSE4.1 / AES-NI /
-  PCLMUL / RDRAND: each operation lowers to the instruction the SDM
-  documents for it, over `__builtin_ia32_*` builtins with gcc's names. An
-  operation outside the subset is absent rather than emulated, so a unit
-  needing one fails at the undeclared name. The forms whose last operand
-  the instruction encodes as `imm8` are macros, as gcc's are without `-O`.
+  compiler-owned and carry the SSE2 integer core plus a subset of SSSE3 /
+  SSE4.1 / AES-NI / PCLMUL / RDRAND: each operation lowers to the
+  instruction the SDM documents for it, over `__builtin_ia32_*` builtins
+  with gcc's names. The SSE2 integer set covers the lane arithmetic,
+  logic and compares, the packs and interleaves, the shifts, the
+  shuffles, the element accesses and the sign mask, plus `__m128i_u` and
+  the composition intrinsics (`_mm_set*`, `_mm_setr*`, `_mm_cvtsi*`, the
+  casts) the header builds over the vector extension. Not carried: the
+  packed-single and packed-double operations, the saturating and
+  averaging integer arithmetic, the min / max / absolute-difference
+  family, the shifts whose count is a vector rather than an integer, the
+  non-temporal transfers, and everything above SSE4.1 (AVX, AVX2,
+  AVX-512, FMA). An operation outside the subset is
+  absent rather than emulated, so a unit needing one fails at the
+  undeclared name. The forms whose last operand the instruction encodes
+  as `imm8` are macros, as gcc's are without `-O`.
 
 ### c5-specific
 

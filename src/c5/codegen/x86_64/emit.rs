@@ -10278,13 +10278,35 @@ fn emit_x86_simd(
             let Some(x) = operand(code, 2, SCRATCH_R10) else {
                 return fail("x86 simd: value operand has no place");
             };
+            // Every `pinsr` narrower than a quadword reads a 32-bit
+            // register and uses the low lanes of it.
+            let size = int_size(row.int_width.max(4));
+            if !insn(code, row.mnem, &[imm8, gpr(x, size), xmm(DST)]) {
+                return false;
+            }
+        }
+        Form::MoveMask => {
+            let Some(a) = operand(code, 1, SCRATCH_R10) else {
+                return fail("x86 simd: operand 1 has no place");
+            };
+            if !load128(code, SRC, a) {
+                return false;
+            }
             if !insn(
                 code,
                 row.mnem,
-                &[imm8, gpr(x, int_size(row.int_width)), xmm(DST)],
+                &[xmm(SRC), gpr(SCRATCH_R11, AsmRegSize::Long)],
             ) {
                 return false;
             }
+            let Some(d) = operand(code, 0, SCRATCH_R10) else {
+                return fail("x86 simd: destination has no place");
+            };
+            return insn(
+                code,
+                "mov",
+                &[gpr(SCRATCH_R11, AsmRegSize::Long), at(d, AsmRegSize::Long)],
+            );
         }
         Form::RdRand => {
             let size = int_size(row.int_width);

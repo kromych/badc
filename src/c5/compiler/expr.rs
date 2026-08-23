@@ -461,7 +461,12 @@ impl Compiler {
         // pointer for the transfer and rdrand forms, an integer otherwise.
         for (i, &ty) in arg_tys.iter().enumerate() {
             let wants_vector = match row.form {
-                Form::V | Form::VI | Form::Shift | Form::Extract | Form::Insert => i == 0,
+                Form::V
+                | Form::VI
+                | Form::Shift
+                | Form::Extract
+                | Form::Insert
+                | Form::MoveMask => i == 0,
                 Form::Vv | Form::VvI => i < 2,
                 Form::Store => i == 1,
                 Form::Load | Form::RdRand => false,
@@ -495,10 +500,14 @@ impl Compiler {
             imm = Some(n as u8);
             args.truncate(last);
         } else if row.form == Form::Shift {
-            // The byte-granular shift encodes a byte count while its
-            // builtin takes bits, as gcc's does; it has no register-count
+            // The byte-granular shifts encode a byte count while their
+            // builtins take bits, as gcc's do; they have no register-count
             // form, so the operand must be constant.
-            let bits_per_unit = if row.sem == Sem::ShlBytes { 8 } else { 1 };
+            let bits_per_unit = if matches!(row.sem, Sem::ShlBytes | Sem::ShrBytes) {
+                8
+            } else {
+                1
+            };
             match self.expr_const_int(args[1]) {
                 Some(n) if (0..=255 * bits_per_unit).contains(&n) => {
                     imm = Some((n / bits_per_unit) as u8);

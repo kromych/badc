@@ -2328,6 +2328,7 @@ fn run_inline_asm(
             | Mnemonic::SseMov { .. }
             | Mnemonic::SseRmImm { .. }
             | Mnemonic::SseShiftImm { .. }
+            | Mnemonic::SseSignMask { .. }
             | Mnemonic::Vex { .. }
             | Mnemonic::VexMov { .. }
             | Mnemonic::VexMovd { .. }
@@ -2659,10 +2660,14 @@ fn run_x86_simd(
         v.copy_from_slice(mem.read_bytes(addr, 16)?);
         Ok(v)
     };
+    // The destination plus the sources, less what the node carries as an
+    // immediate: the folded `imm8` and a constant shift count.
     let want = if row.form == Form::Store {
         2
     } else {
-        row.form.arity() + 1 - usize::from(row.form.takes_imm())
+        row.form.arity() + 1
+            - usize::from(row.form.takes_imm())
+            - usize::from(row.form == Form::Shift && imm.is_some())
     };
     if args.len() < want {
         return Err(C5Error::Runtime(format!(
@@ -2704,6 +2709,11 @@ fn run_x86_simd(
         Form::Extract => {
             let a = read(mem, reg(1))?;
             let x = x86_simd::eval_extract(&a, row.int_width, imm8);
+            mem.write_bytes(reg(0), &(x as i64).to_le_bytes())?;
+        }
+        Form::MoveMask => {
+            let a = read(mem, reg(1))?;
+            let x = x86_simd::eval_movemask(&a);
             mem.write_bytes(reg(0), &(x as i64).to_le_bytes())?;
         }
         Form::Insert => {

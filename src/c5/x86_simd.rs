@@ -29,6 +29,8 @@ pub(crate) enum Form {
     Extract,
     /// `v128 = v128 with lane imm8 replaced by an int operand`.
     Insert,
+    /// `int = the sign bits of the byte lanes of v128`.
+    MoveMask,
     /// `int = carry`, the random value stored through the pointer operand.
     RdRand,
 }
@@ -38,14 +40,36 @@ pub(crate) enum Form {
 pub(crate) enum Sem {
     Add(u8),
     Sub(u8),
+    /// Low half of the lane-wise product.
+    MulLo(u8),
+    /// High half of the lane-wise signed product.
+    MulHi(u8),
+    /// Signed products of adjacent word pairs, summed into doublewords.
+    MulAddWords,
     And,
+    AndNot,
     Or,
     Xor,
     CmpEq(u8),
+    /// Signed lane comparison.
+    CmpGt(u8),
     Shl(u8),
     Shr(u8),
+    /// Arithmetic (sign-propagating) right shift.
+    Sar(u8),
     /// Left shift of the whole register by a byte count.
     ShlBytes,
+    /// Right shift of the whole register by a byte count.
+    ShrBytes,
+    /// Saturating pack of signed lanes into signed lanes of half the width,
+    /// the first operand's lanes first.
+    PackSigned(u8),
+    /// Saturating pack of signed lanes into unsigned lanes of half the width.
+    PackUnsigned(u8),
+    /// Interleave the lanes of the low half of each operand.
+    UnpackLo(u8),
+    /// Interleave the lanes of the high half of each operand.
+    UnpackHi(u8),
     /// Doubleword shuffle by an immediate selector.
     ShufD,
     /// Word shuffle of the high / low quad, the other quad copied.
@@ -55,8 +79,6 @@ pub(crate) enum Sem {
     ShufB,
     /// Double-precision element select from two sources.
     ShufPd,
-    /// Interleave the low quads.
-    UnpackLoQ,
     /// Carry-less multiply of the selected quads.
     ClMul,
     AesEnc,
@@ -96,28 +118,59 @@ const fn op(name: &'static str, mnem: &'static str, form: Form, sem: Sem, int_wi
 #[rustfmt::skip]
 pub(crate) const OPS: &[SimdOp] = &[
     // SSE2 packed integer arithmetic and logic.
+    op("__builtin_ia32_paddb128", "paddb", Form::Vv, Sem::Add(1), 0),
+    op("__builtin_ia32_paddw128", "paddw", Form::Vv, Sem::Add(2), 0),
     op("__builtin_ia32_paddd128", "paddd", Form::Vv, Sem::Add(4), 0),
     op("__builtin_ia32_paddq128", "paddq", Form::Vv, Sem::Add(8), 0),
+    op("__builtin_ia32_psubb128", "psubb", Form::Vv, Sem::Sub(1), 0),
+    op("__builtin_ia32_psubw128", "psubw", Form::Vv, Sem::Sub(2), 0),
+    op("__builtin_ia32_psubd128", "psubd", Form::Vv, Sem::Sub(4), 0),
     op("__builtin_ia32_psubq128", "psubq", Form::Vv, Sem::Sub(8), 0),
+    op("__builtin_ia32_pmullw128", "pmullw", Form::Vv, Sem::MulLo(2), 0),
+    op("__builtin_ia32_pmulhw128", "pmulhw", Form::Vv, Sem::MulHi(2), 0),
+    op("__builtin_ia32_pmaddwd128", "pmaddwd", Form::Vv, Sem::MulAddWords, 0),
     op("__builtin_ia32_pand128", "pand", Form::Vv, Sem::And, 0),
+    op("__builtin_ia32_pandn128", "pandn", Form::Vv, Sem::AndNot, 0),
     op("__builtin_ia32_por128", "por", Form::Vv, Sem::Or, 0),
     op("__builtin_ia32_pxor128", "pxor", Form::Vv, Sem::Xor, 0),
-    op("__builtin_ia32_punpcklqdq128", "punpcklqdq", Form::Vv, Sem::UnpackLoQ, 0),
-    // SSE2 shifts. The `i` forms take a count in bits; `pslldqi128` counts
-    // bits too and the header divides by 8, as gcc's does.
+    op("__builtin_ia32_pcmpeqb128", "pcmpeqb", Form::Vv, Sem::CmpEq(1), 0),
+    op("__builtin_ia32_pcmpeqw128", "pcmpeqw", Form::Vv, Sem::CmpEq(2), 0),
+    op("__builtin_ia32_pcmpeqd128", "pcmpeqd", Form::Vv, Sem::CmpEq(4), 0),
+    op("__builtin_ia32_pcmpgtb128", "pcmpgtb", Form::Vv, Sem::CmpGt(1), 0),
+    op("__builtin_ia32_pcmpgtw128", "pcmpgtw", Form::Vv, Sem::CmpGt(2), 0),
+    op("__builtin_ia32_pcmpgtd128", "pcmpgtd", Form::Vv, Sem::CmpGt(4), 0),
+    // SSE2 pack and interleave.
+    op("__builtin_ia32_packsswb128", "packsswb", Form::Vv, Sem::PackSigned(2), 0),
+    op("__builtin_ia32_packssdw128", "packssdw", Form::Vv, Sem::PackSigned(4), 0),
+    op("__builtin_ia32_packuswb128", "packuswb", Form::Vv, Sem::PackUnsigned(2), 0),
+    op("__builtin_ia32_punpcklbw128", "punpcklbw", Form::Vv, Sem::UnpackLo(1), 0),
+    op("__builtin_ia32_punpcklwd128", "punpcklwd", Form::Vv, Sem::UnpackLo(2), 0),
+    op("__builtin_ia32_punpckldq128", "punpckldq", Form::Vv, Sem::UnpackLo(4), 0),
+    op("__builtin_ia32_punpcklqdq128", "punpcklqdq", Form::Vv, Sem::UnpackLo(8), 0),
+    op("__builtin_ia32_punpckhbw128", "punpckhbw", Form::Vv, Sem::UnpackHi(1), 0),
+    op("__builtin_ia32_punpckhwd128", "punpckhwd", Form::Vv, Sem::UnpackHi(2), 0),
+    op("__builtin_ia32_punpckhdq128", "punpckhdq", Form::Vv, Sem::UnpackHi(4), 0),
+    op("__builtin_ia32_punpckhqdq128", "punpckhqdq", Form::Vv, Sem::UnpackHi(8), 0),
+    // SSE2 shifts. The `i` forms take a count in bits; the byte-granular
+    // pair counts bits too and the header divides by 8, as gcc's does.
     op("__builtin_ia32_psllwi128", "psllw", Form::Shift, Sem::Shl(2), 4),
     op("__builtin_ia32_pslldi128", "pslld", Form::Shift, Sem::Shl(4), 4),
     op("__builtin_ia32_psllqi128", "psllq", Form::Shift, Sem::Shl(8), 4),
     op("__builtin_ia32_psrlwi128", "psrlw", Form::Shift, Sem::Shr(2), 4),
     op("__builtin_ia32_psrldi128", "psrld", Form::Shift, Sem::Shr(4), 4),
     op("__builtin_ia32_psrlqi128", "psrlq", Form::Shift, Sem::Shr(8), 4),
+    op("__builtin_ia32_psrawi128", "psraw", Form::Shift, Sem::Sar(2), 4),
+    op("__builtin_ia32_psradi128", "psrad", Form::Shift, Sem::Sar(4), 4),
     op("__builtin_ia32_pslldqi128", "pslldq", Form::Shift, Sem::ShlBytes, 4),
+    op("__builtin_ia32_psrldqi128", "psrldq", Form::Shift, Sem::ShrBytes, 4),
     // SSE2 shuffles and element access.
     op("__builtin_ia32_pshufd", "pshufd", Form::VI, Sem::ShufD, 0),
     op("__builtin_ia32_pshufhw", "pshufhw", Form::VI, Sem::ShufHi, 0),
     op("__builtin_ia32_pshuflw", "pshuflw", Form::VI, Sem::ShufLo, 0),
     op("__builtin_ia32_shufpd", "shufpd", Form::VvI, Sem::ShufPd, 0),
     op("__builtin_ia32_vec_ext_v8hi", "pextrw", Form::Extract, Sem::Move, 2),
+    op("__builtin_ia32_vec_set_v8hi", "pinsrw", Form::Insert, Sem::Move, 2),
+    op("__builtin_ia32_pmovmskb128", "pmovmskb", Form::MoveMask, Sem::Move, 4),
     // SSE2 unaligned 128-bit transfers.
     op("__builtin_ia32_loaddqu", "movdqu", Form::Load, Sem::Move, 0),
     op("__builtin_ia32_storedqu", "movdqu", Form::Store, Sem::Move, 0),
@@ -155,7 +208,7 @@ impl Form {
     /// Number of source operands the builtin call takes.
     pub(crate) fn arity(self) -> usize {
         match self {
-            Form::V | Form::Load | Form::RdRand => 1,
+            Form::V | Form::Load | Form::MoveMask | Form::RdRand => 1,
             Form::Vv | Form::VI | Form::Shift | Form::Store | Form::Extract => 2,
             Form::VvI | Form::Insert => 3,
         }
@@ -199,6 +252,17 @@ fn mask(width: u8) -> u64 {
         u64::MAX
     } else {
         (1u64 << (8 * width as u32)) - 1
+    }
+}
+
+/// Lane `i`, sign-extended from its width.
+fn slane(v: &[u8; 16], width: u8, i: usize) -> i64 {
+    let bits = 8 * width as u32;
+    let x = lane(v, width, i);
+    if bits >= 64 {
+        x as i64
+    } else {
+        (x << (64 - bits)) as i64 >> (64 - bits)
     }
 }
 
@@ -351,7 +415,8 @@ fn clmul(a: u64, b: u64) -> (u64, u64) {
 
 /// Evaluate one 128-bit-result builtin. `imm` is the encoded immediate (0
 /// for the forms that take none) and `count` the shift count in the units
-/// the instruction takes: bits for the lane shifts, bytes for `pslldq`.
+/// the instruction takes: bits for the lane shifts, bytes for the
+/// whole-register pair.
 pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) -> [u8; 16] {
     let mut o = [0u8; 16];
     match sem {
@@ -367,9 +432,33 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
                 set_lane(&mut o, w, i, x);
             }
         }
+        Sem::MulLo(w) => {
+            for i in 0..16 / w as usize {
+                let x = lane(a, w, i).wrapping_mul(lane(b, w, i)) & mask(w);
+                set_lane(&mut o, w, i, x);
+            }
+        }
+        Sem::MulHi(w) => {
+            for i in 0..16 / w as usize {
+                let x = (slane(a, w, i) * slane(b, w, i)) >> (8 * w as u32);
+                set_lane(&mut o, w, i, x as u64 & mask(w));
+            }
+        }
+        Sem::MulAddWords => {
+            for i in 0..4 {
+                let lo = slane(a, 2, 2 * i) * slane(b, 2, 2 * i);
+                let hi = slane(a, 2, 2 * i + 1) * slane(b, 2, 2 * i + 1);
+                set_lane(&mut o, 4, i, (lo + hi) as u64 & mask(4));
+            }
+        }
         Sem::And => {
             for i in 0..16 {
                 o[i] = a[i] & b[i];
+            }
+        }
+        Sem::AndNot => {
+            for i in 0..16 {
+                o[i] = !a[i] & b[i];
             }
         }
         Sem::Or => {
@@ -382,6 +471,12 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
             for i in 0..16 / w as usize {
                 let eq = lane(a, w, i) == lane(b, w, i);
                 set_lane(&mut o, w, i, if eq { mask(w) } else { 0 });
+            }
+        }
+        Sem::CmpGt(w) => {
+            for i in 0..16 / w as usize {
+                let gt = slane(a, w, i) > slane(b, w, i);
+                set_lane(&mut o, w, i, if gt { mask(w) } else { 0 });
             }
         }
         Sem::Shl(w) => {
@@ -404,9 +499,48 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
                 set_lane(&mut o, w, i, x);
             }
         }
+        Sem::Sar(w) => {
+            let n = count.min(8 * w as u64 - 1) as u32;
+            for i in 0..16 / w as usize {
+                let x = (slane(a, w, i) >> n) as u64 & mask(w);
+                set_lane(&mut o, w, i, x);
+            }
+        }
         Sem::ShlBytes => {
             let n = (count as usize).min(16);
             o[n..].copy_from_slice(&a[..16 - n]);
+        }
+        Sem::ShrBytes => {
+            let n = (count as usize).min(16);
+            o[..16 - n].copy_from_slice(&a[n..]);
+        }
+        Sem::PackSigned(w) | Sem::PackUnsigned(w) => {
+            let half = w / 2;
+            let bits = 8 * half as u32;
+            let (lo, hi) = if matches!(sem, Sem::PackSigned(_)) {
+                (-(1i64 << (bits - 1)), (1i64 << (bits - 1)) - 1)
+            } else {
+                (0, (1i64 << bits) - 1)
+            };
+            let lanes = 16 / w as usize;
+            for i in 0..lanes {
+                let x = slane(a, w, i).clamp(lo, hi);
+                set_lane(&mut o, half, i, x as u64 & mask(half));
+                let y = slane(b, w, i).clamp(lo, hi);
+                set_lane(&mut o, half, lanes + i, y as u64 & mask(half));
+            }
+        }
+        Sem::UnpackLo(w) | Sem::UnpackHi(w) => {
+            let lanes = 16 / w as usize;
+            let base = if matches!(sem, Sem::UnpackHi(_)) {
+                lanes / 2
+            } else {
+                0
+            };
+            for i in 0..lanes / 2 {
+                set_lane(&mut o, w, 2 * i, lane(a, w, base + i));
+                set_lane(&mut o, w, 2 * i + 1, lane(b, w, base + i));
+            }
         }
         Sem::ShufD => {
             for i in 0..4 {
@@ -444,10 +578,6 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
         Sem::ShufPd => {
             set_lane(&mut o, 8, 0, lane(a, 8, (imm & 1) as usize));
             set_lane(&mut o, 8, 1, lane(b, 8, ((imm >> 1) & 1) as usize));
-        }
-        Sem::UnpackLoQ => {
-            set_lane(&mut o, 8, 0, lane(a, 8, 0));
-            set_lane(&mut o, 8, 1, lane(b, 8, 0));
         }
         Sem::ClMul => {
             let x = lane(a, 8, ((imm & 1) != 0) as usize);
@@ -490,6 +620,15 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
 pub(crate) fn eval_extract(a: &[u8; 16], width: u8, imm: u8) -> u64 {
     let lanes = 16 / width as usize;
     lane(a, width, imm as usize % lanes)
+}
+
+/// `Form::MoveMask`: the sign bit of each byte lane, lane `i` at bit `i`.
+pub(crate) fn eval_movemask(a: &[u8; 16]) -> u64 {
+    let mut m = 0u64;
+    for (i, &byte) in a.iter().enumerate() {
+        m |= ((byte >> 7) as u64) << i;
+    }
+    m
 }
 
 /// `Form::Insert`: `a` with the selected lane replaced.

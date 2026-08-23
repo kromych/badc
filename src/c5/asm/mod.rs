@@ -19,6 +19,9 @@ mod sink;
 mod template;
 mod text;
 
+#[cfg(test)]
+mod tests;
+
 pub(crate) use align::*;
 pub(crate) use directive::*;
 pub(crate) use expr::*;

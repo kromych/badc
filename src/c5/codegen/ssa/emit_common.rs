@@ -2,8 +2,8 @@
 //! pieces of the per-arch lowering that are pure math or pure
 //! formatting -- the shape that doesn't depend on a particular
 //! ABI or instruction encoding -- so the per-arch modules
-//! (`ssa_emit_x86_64.rs`, `ssa_emit_aarch64.rs`) don't carry
-//! parallel copies.
+//! (`x86_64/emit.rs`, `aarch64/emit.rs`) don't carry parallel
+//! copies. The assembler this file used to hold is `c5::asm`.
 
 /// Mutable emit output the two backends thread identically through their
 /// per-instruction lowering: the machine-code buffer and the relocation/fixup

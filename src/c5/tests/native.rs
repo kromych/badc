@@ -235,7 +235,7 @@ fn link_run_capture(src: &str, stem: &str) -> (i32, String) {
     }
     set_executable(&path);
     codesign(&path);
-    let output = Command::new(&path).output().expect("exec produced binary");
+    let output = super::output_when_not_busy(|| Command::new(&path));
     let _ = std::fs::remove_file(&path);
     let code = output.status.code().unwrap_or(-1);
     (code, String::from_utf8_lossy(&output.stdout).into_owned())
@@ -945,7 +945,7 @@ fn string_extensions_join_the_macos_link() {
     std::fs::write(&path, &bytes).expect("write temp file");
     set_executable(&path);
     codesign(&path);
-    let output = Command::new(&path).output().expect("exec native binary");
+    let output = super::output_when_not_busy(|| Command::new(&path));
     let _ = std::fs::remove_file(&path);
     assert_eq!(
         output.status.code(),
@@ -976,7 +976,7 @@ fn unistd_extensions_join_the_macos_link() {
     std::fs::write(&path, &bytes).expect("write temp file");
     set_executable(&path);
     codesign(&path);
-    let output = Command::new(&path).output().expect("exec native binary");
+    let output = super::output_when_not_busy(|| Command::new(&path));
     let _ = std::fs::remove_file(&path);
     assert_eq!(
         output.status.code(),

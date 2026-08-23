@@ -1058,11 +1058,12 @@ fn frame_past_the_immediate_reach_runs() {
         f.sync_all().expect("sync temp file");
     }
     set_executable(&path);
-    let output = Command::new("sh")
-        .arg("-c")
-        .arg(format!("ulimit -s 65536 && exec {}", path.display()))
-        .output()
-        .expect("run under a raised stack limit");
+    let output = super::output_when_not_busy(|| {
+        let mut c = Command::new("sh");
+        c.arg("-c")
+            .arg(format!("ulimit -s 65536 && exec {}", path.display()));
+        c
+    });
     let meta = std::fs::metadata(&path).map(|m| m.len());
     let _ = std::fs::remove_file(&path);
     // The shell's own failure codes are indistinguishable from the

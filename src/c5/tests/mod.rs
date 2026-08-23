@@ -90,6 +90,43 @@ pub fn unique_temp_path(prefix: &str, stem: &str, ext: &str) -> PathBuf {
     std::env::temp_dir().join(format!("{prefix}-{pid}-{n}-{stem}{ext}"))
 }
 
+/// Run a just-written image, retrying while the kernel reports it busy.
+///
+/// `exec` fails with `ETXTBSY` while any process holds the file open for
+/// writing. The writer here closes it first, so the holder is another
+/// test's `fork`: a child inherits every descriptor, and `O_CLOEXEC`
+/// drops the inherited copy at its `exec`, not at the `fork`. A loaded
+/// machine widens that window, which is why it surfaces on a shared
+/// runner and not on an idle box. `sh` reports the condition as 126.
+/// Reached only where a shell mediates the exec (the aarch64 ELF tests)
+/// and on Mach-O; the x86-64 ELF tests carry their own errno-26 retry.
+#[allow(dead_code)]
+pub fn output_when_not_busy(build: impl Fn() -> std::process::Command) -> std::process::Output {
+    let mut waited = std::time::Duration::ZERO;
+    let mut delay = std::time::Duration::from_millis(5);
+    loop {
+        let spent = waited >= std::time::Duration::from_secs(5);
+        // Direct exec reports the condition as errno 26; a shell in
+        // between reports it as 126 with the message on stderr.
+        let busy = match build().output() {
+            Ok(out) => {
+                let busy = out.status.code() == Some(126)
+                    && String::from_utf8_lossy(&out.stderr).contains("Text file busy");
+                if !busy || spent {
+                    return out;
+                }
+                true
+            }
+            Err(e) if e.raw_os_error() == Some(26) && !spent => true,
+            Err(e) => panic!("run the produced image: {e}"),
+        };
+        debug_assert!(busy);
+        std::thread::sleep(delay);
+        waited += delay;
+        delay = (delay * 2).min(std::time::Duration::from_millis(250));
+    }
+}
+
 /// Fixtures built and run at once, summed over every whole-corpus parity
 /// test -- `cargo test` schedules those in parallel, so a per-test width
 /// would multiply by the number live. The floor is what the serial loops

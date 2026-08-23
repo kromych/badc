@@ -1185,7 +1185,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
     };
     // `%=` expands to a per-instance number (shared helper).
     let expanded;
-    let text = match emit_common::expand_template_uniq(text) {
+    let text = match crate::c5::asm::expand_template_uniq(text) {
         Some(t) => {
             expanded = t;
             expanded.as_str()
@@ -1268,8 +1268,8 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
         // `.word` always takes this path: its element is 4 bytes on AArch64,
         // where the shared raw-byte reader lays down the 2-byte default.
         if let Some((tok, rest)) = piece.split_once(char::is_whitespace)
-            && emit_common::data_directive_width(tok).is_some()
-            && (tok == ".word" || emit_common::parse_raw_template(piece.as_bytes()).is_none())
+            && crate::c5::asm::data_directive_width(tok).is_some()
+            && (tok == ".word" || crate::c5::asm::parse_raw_template(piece.as_bytes()).is_none())
         {
             let mut operands = Vec::new();
             for a in split_operands(rest) {
@@ -1293,10 +1293,10 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
         // directive of constants keeps its keyword in the mnemonic field so
         // the emitter classifies its bytes as it does the operand-referencing
         // form; a bare machine-byte run carries no keyword.
-        if let Some(bytes) = emit_common::parse_raw_template(piece.as_bytes()) {
+        if let Some(bytes) = crate::c5::asm::parse_raw_template(piece.as_bytes()) {
             let tok = piece.split_whitespace().next().unwrap_or_default();
             insns.push(AsmInsnA64 {
-                mnemonic: match emit_common::data_directive_width(tok) {
+                mnemonic: match crate::c5::asm::data_directive_width(tok) {
                     Some(_) => String::from(tok),
                     None => String::new(),
                 },
@@ -1560,7 +1560,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
         if matches!(mnem, "bl" | "b") {
             let is_symbol_target = !rest.is_empty()
                 && label_num(rest).is_none()
-                && super::super::ssa::emit_common::is_asm_symbol_template(rest)
+                && crate::c5::asm::is_asm_symbol_template(rest)
                 && parse_reg(rest).is_none();
             if is_symbol_target {
                 insns.push(AsmInsnA64 {

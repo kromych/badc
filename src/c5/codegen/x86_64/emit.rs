@@ -8408,7 +8408,7 @@ fn emit_inline_asm_once(
     };
     let stripped = crate::c5::asm::strip_asm_comments(raw_text, crate::c5::asm::AsmComments::X86);
     let raw_text = stripped.as_deref().unwrap_or(raw_text);
-    let expanded = super::ssa::emit_common::expand_template_uniq(raw_text);
+    let expanded = crate::c5::asm::expand_template_uniq(raw_text);
     let text = expanded.as_deref().unwrap_or(raw_text);
     // Rename any numeric label defined more than once in one asm instance to
     // per-definition unique names, so the code and section resolvers below see
@@ -9047,9 +9047,9 @@ fn emit_inline_asm_once(
                 matches!(insn.mnemonic, super::asm::Mnemonic::Table(n) if n.starts_with("call"));
             // The name may embed operand references; substituting them first
             // is what makes `__get_user_%c0` name `__get_user_4`.
-            let name = match super::super::ssa::emit_common::resolve_asm_symbol_target(
+            let name = match crate::c5::asm::resolve_asm_symbol_target(
                 name,
-                &super::super::ssa::emit_common::X64_SYMBOL_SUBST,
+                &crate::c5::asm::X64_SYMBOL_SUBST,
                 &const_of,
             ) {
                 Ok(n) => n,

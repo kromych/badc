@@ -3,9 +3,6 @@
 //! the inline-asm templates run before parsing.
 
 use super::*;
-// Assembler code still held by the SSA emit substrate; folds in as the
-// remaining groups move over.
-use crate::c5::codegen::ssa::emit_common::{next_asm_instance, parse_raw_int};
 
 /// Peel the labels leading a statement from the rest of it. GNU as lets any
 /// number of labels share a statement with the directive or instruction that

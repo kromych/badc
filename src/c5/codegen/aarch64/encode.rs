@@ -1736,8 +1736,8 @@ pub(crate) fn lower(
     mode: super::LowerMode,
 ) -> Result<Build, C5Error> {
     // Asm label numbering restarts per lowering; see
-    // `emit_common::reset_asm_instance`.
-    super::ssa::emit_common::reset_asm_instance();
+    // `crate::c5::asm::reset_asm_instance`.
+    crate::c5::asm::reset_asm_instance();
     let mut code = Vec::new();
     let mut func_ent_pcs: Vec<usize> = Vec::new();
     let mut func_ends: Vec<usize> = Vec::new();

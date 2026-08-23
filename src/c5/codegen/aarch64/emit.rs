@@ -3152,8 +3152,8 @@ fn encode_deferred_asm_region(
                 map_state = super::ssa::emit_common::step_map_state(item, map_state, true);
                 continue;
             }
-            let class = super::ssa::emit_common::data_directive_class(&insn.mnemonic)
-                .unwrap_or(MapClass::Code);
+            let class =
+                crate::c5::asm::data_directive_class(&insn.mnemonic).unwrap_or(MapClass::Code);
             if class == MapClass::Code {
                 a64_align_asm_stream(&mut bytes, &mut data_ranges, &mut map_state);
             }
@@ -3345,7 +3345,7 @@ fn emit_inline_asm_aarch64(
     };
     let stripped = crate::c5::asm::strip_asm_comments(raw_text, crate::c5::asm::AsmComments::A64);
     let raw_text = stripped.as_deref().unwrap_or(raw_text);
-    let expanded = super::ssa::emit_common::expand_template_uniq(raw_text);
+    let expanded = crate::c5::asm::expand_template_uniq(raw_text);
     let text = expanded.as_deref().unwrap_or(raw_text);
     let reduced = match super::ssa::emit_common::strip_asm_conditionals(text) {
         Ok(r) => r,
@@ -3923,8 +3923,7 @@ fn emit_inline_asm_aarch64(
         // Every item but a data directive lays down instructions: a raw-byte
         // piece the parser encoded itself (`msr`, the barriers, the system
         // ops), `.inst`, and an assembled mnemonic.
-        let class = super::super::ssa::emit_common::data_directive_class(&insn.mnemonic)
-            .unwrap_or(MapClass::Code);
+        let class = crate::c5::asm::data_directive_class(&insn.mnemonic).unwrap_or(MapClass::Code);
         if class == MapClass::Code {
             a64_align_asm_stream(code, text_data_ranges, &mut map_state);
         }
@@ -3939,7 +3938,7 @@ fn emit_inline_asm_aarch64(
         // A data directive with operand references (`.long %c0`): each
         // argument must resolve to a compile-time constant, emitted
         // little-endian at the directive width.
-        if let Some(w) = super::super::ssa::emit_common::data_directive_width(&insn.mnemonic) {
+        if let Some(w) = crate::c5::asm::data_directive_width(&insn.mnemonic) {
             // `.word` is target-dependent: 4 bytes on AArch64.
             let w = if insn.mnemonic == ".word" { 4 } else { w };
             if class == MapClass::Data {
@@ -3993,9 +3992,9 @@ fn emit_inline_asm_aarch64(
             };
             // The name may embed operand references; substituting them first
             // is what makes `__get_user_%c0` name `__get_user_4`.
-            let name = match super::super::ssa::emit_common::resolve_asm_symbol_target(
+            let name = match crate::c5::asm::resolve_asm_symbol_target(
                 name,
-                &super::super::ssa::emit_common::A64_SYMBOL_SUBST,
+                &crate::c5::asm::A64_SYMBOL_SUBST,
                 &const_of,
             ) {
                 Ok(n) => n,
@@ -4339,9 +4338,9 @@ fn emit_inline_asm_aarch64(
         // A replacement branch names its target the same way a main-stream one
         // does, operand references included (`bl __get_user_%c0`).
         let sym_name = |name: &str| -> Result<String, String> {
-            super::super::ssa::emit_common::resolve_asm_symbol_target(
+            crate::c5::asm::resolve_asm_symbol_target(
                 name,
-                &super::super::ssa::emit_common::A64_SYMBOL_SUBST,
+                &crate::c5::asm::A64_SYMBOL_SUBST,
                 &const_of,
             )
         };
@@ -11252,7 +11251,7 @@ fn assign_a64_literal_pools(
     for (pos, &bi) in order.iter().enumerate() {
         last_of.insert(section_key(&blocks[bi]), pos);
     }
-    let uniq = super::ssa::emit_common::next_asm_instance();
+    let uniq = crate::c5::asm::next_asm_instance();
     let mut seq = 0u32;
     let mut pending: alloc::collections::BTreeMap<alloc::string::String, Vec<AsmPoolEntry>> =
         alloc::collections::BTreeMap::new();

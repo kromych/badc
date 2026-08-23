@@ -25,7 +25,8 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use super::super::super::ir::AsmRegSize;
-use super::super::ssa::emit_common::{AsmSectionItem, data_directive_width};
+use super::super::ssa::emit_common::AsmSectionItem;
+use crate::c5::asm::data_directive_width;
 
 /// Base mnemonic of a template instruction (AT&T size suffix folded
 /// out into [`AsmInsn::suffix`]).
@@ -2415,7 +2416,7 @@ fn sym_disp_expr<'a>(prefix: &'a str, labels: &[&str]) -> Option<&'a str> {
     let resolve = |t: &str| {
         named.set(
             named.get()
-                || super::super::ssa::emit_common::is_asm_symbol_template(t)
+                || crate::c5::asm::is_asm_symbol_template(t)
                 || parse_label_ref(t, labels).is_some(),
         );
         Some(crate::c5::asm::AsmExprLeaf::Abs(0))
@@ -2560,7 +2561,7 @@ fn parse_template_in(tmpl: &[u8], file_scope: bool) -> Result<Vec<AsmInsn>, Stri
         None => text,
     };
     let expanded;
-    let text = match super::super::ssa::emit_common::expand_template_uniq(text) {
+    let text = match crate::c5::asm::expand_template_uniq(text) {
         Some(t) => {
             expanded = t;
             expanded.as_str()
@@ -2765,8 +2766,8 @@ fn parse_template_in(tmpl: &[u8], file_scope: bool) -> Result<Vec<AsmInsn>, Stri
         // embed operand references (`call __get_user_%c0`), which are
         // substituted at emit time, so the text is kept verbatim here.
         let is_symbol_target = !rest.is_empty()
-            && (super::super::ssa::emit_common::is_asm_symbol_template(rest)
-                || super::super::ssa::emit_common::is_asm_branch_expr(rest))
+            && (crate::c5::asm::is_asm_symbol_template(rest)
+                || crate::c5::asm::is_asm_branch_expr(rest))
             && reg_by_name(rest).is_none()
             && !names.contains(&rest);
         if (matches!(

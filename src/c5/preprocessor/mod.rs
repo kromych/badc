@@ -1125,13 +1125,13 @@ impl Preprocessor {
         // rather than on the version (`__atomic_*`, `asm goto`,
         // `_Static_assert`, `_Generic`, `__has_attribute`,
         // `__builtin_*_overflow`) are backed too.
-        // 4.4 is the first version badc cannot honor: it documents
-        // per-function `__attribute__((target(...)))` and the x86
-        // intrinsic header family, and real code turns its SSE2 / SSSE3 /
-        // SSE4.1 / AES-NI / PCLMUL / RDRAND paths on at `__GNUC__ >= 4.4`.
-        // badc parses the target attribute without interpreting it and
-        // lowers no `__m128i` intrinsic, so a 4.4 claim selects code it
-        // cannot compile. Raise the claim once those are lowered.
+        // The two things 4.4 adds that real code selects on the version
+        // are now backed: per-function `__attribute__((target(...)))` and
+        // the x86 intrinsic header family, over the SSE2 / SSSE3 /
+        // SSE4.1 / AES-NI / PCLMUL / RDRAND subset the headers carry.
+        // TODO: raise the claim, which needs the forced-claim measurement
+        // over a corpus at each rung between 4.4 and the chosen version,
+        // not just at the intrinsic surface.
         let mut compat = crate::GNU_COMPAT_VERSION.split('.');
         for name in ["__GNUC__", "__GNUC_MINOR__", "__GNUC_PATCHLEVEL__"] {
             let component = compat.next().expect("GNU_COMPAT_VERSION is x.y.z");

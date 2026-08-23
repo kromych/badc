@@ -1235,6 +1235,7 @@ fn build_debug_info(
             // DW_OP_reg<fp> byte. ULEB128 length(1) + opcode.
             write_uleb128(&mut body, 1);
             body.push(frame_base_op);
+            let canary_shift = build.canary_frame_bytes.get(&ent_pc).copied().unwrap_or(0) as i64;
             for &(v, type_id) in &vars {
                 let type_off = type_offsets[type_id];
                 // Slot coalescing may have moved this local onto a new
@@ -1247,7 +1248,7 @@ fn build_debug_info(
                     .and_then(|m| m.get(&v.fp_slot))
                     .copied()
                     .unwrap_or(v.fp_slot);
-                let fp_byte_offset = fp_byte_offset_for_slot(eff);
+                let fp_byte_offset = fp_byte_offset_for_slot(eff, canary_shift);
                 let abbrev = if v.is_parameter {
                     ABBREV_FORMAL_PARAMETER
                 } else {
@@ -2370,9 +2371,15 @@ fn build_type_die(catalog: &mut TypeCatalog, node: &TypeNode, strs: &mut StrPool
 /// (slot < 0) stride by 8 bytes; parameters (slot >= 2) stride
 /// by 16 bytes starting at `(slot - 1) * 16` so slot 2 lands at
 /// +16. Slots 0..2 are the saved-fp / saved-ret area and don't
-/// carry user-visible values.
-fn fp_byte_offset_for_slot(slot: i64) -> i64 {
-    if slot >= 2 { (slot - 1) * 16 } else { slot * 8 }
+/// carry user-visible values. `canary_shift` is the stack-protector
+/// region a protected frame reserves below the frame base; every local
+/// slot sits that much lower, and the parameter cells above it do not.
+fn fp_byte_offset_for_slot(slot: i64, canary_shift: i64) -> i64 {
+    if slot >= 2 {
+        (slot - 1) * 16
+    } else {
+        slot * 8 - canary_shift
+    }
 }
 
 /// Wire-form attributes for a DWARF base_type DIE.

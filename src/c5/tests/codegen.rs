@@ -9353,3 +9353,51 @@ fn stack_guard_forms_reach_the_object() {
         "the system-register form names no guard object"
     );
 }
+
+#[test]
+#[cfg(feature = "full")]
+fn stack_protector_moves_the_debug_info_frame_offsets_with_the_locals() {
+    use crate::{
+        CompileOptions, NativeOptions, OutputKind, StackProtect, StackProtector, Target,
+        emit_native_with_options,
+    };
+    // One local, a 32-byte array at the top of the locals region: its
+    // `DW_OP_fbreg` operand is -32 unprotected and -48 once the canary
+    // region sits above it. Both fit one SLEB128 byte, so the location
+    // expression is `uleb(2) DW_OP_fbreg sleb(off)` either way.
+    let src = "void snk(void *);\nvoid f(void) { char b[32]; snk(b); }\n";
+    let emit = |ssp: StackProtect| {
+        let prog = crate::Compiler::with_options(
+            alloc::string::String::from(src),
+            Target::LinuxX64,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            debug_info: true,
+            stack_protect: ssp,
+            ..NativeOptions::default()
+        };
+        let obj = emit_native_with_options(&prog, Target::LinuxX64, opts).expect("emit");
+        elf_section_bodies(&obj)
+            .into_iter()
+            .find(|(name, _)| name == ".debug_info")
+            .map(|(_, b)| b)
+            .expect(".debug_info")
+    };
+    const DW_OP_FBREG: u8 = 0x91;
+    let has = |info: &[u8], sleb: u8| info.windows(3).any(|w| w == [2, DW_OP_FBREG, sleb]);
+    let plain = emit(StackProtect::OFF);
+    assert!(has(&plain, 0x60), "unprotected: DW_OP_fbreg -32");
+    let guarded = emit(StackProtect {
+        mode: StackProtector::Strong,
+        ..StackProtect::OFF
+    });
+    assert!(has(&guarded, 0x50), "protected: DW_OP_fbreg -48");
+    assert!(
+        !has(&guarded, 0x60),
+        "the unprotected offset must not survive: it names the canary region"
+    );
+}

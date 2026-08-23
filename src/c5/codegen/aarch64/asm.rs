@@ -622,23 +622,7 @@ fn parse_vec_list(tok: &str) -> Option<(u8, u8, u8, bool)> {
 /// (`(1 << 16)`, `4 * 0`). Operand references do not appear here, so the
 /// expression resolver yields None for them.
 fn parse_int(s: &str) -> Option<i64> {
-    let s = s.trim();
-    let (neg, digits) = match s.strip_prefix('-') {
-        Some(r) => (true, r.trim_start()),
-        None => (false, s),
-    };
-    let v = if let Some(h) = digits
-        .strip_prefix("0x")
-        .or_else(|| digits.strip_prefix("0X"))
-    {
-        i64::from_str_radix(h, 16).ok()
-    } else {
-        digits.parse::<i64>().ok()
-    };
-    match v {
-        Some(v) => Some(if neg { -v } else { v }),
-        None => crate::c5::asm::eval_const_expr_ops(s, &|_| None),
-    }
+    crate::c5::asm::eval_const_expr(s.trim())
 }
 
 /// Split an operand list on commas, but not commas inside `[...]` (a memory
@@ -1922,6 +1906,25 @@ mod tests {
                 forward: true
             }]
         );
+    }
+
+    #[test]
+    fn immediate_literal_radices() {
+        // GNU as radix rules: a leading `0` with more digits is octal, `0x`
+        // hex, `0b` binary, and a `u`/`l` suffix is dropped.
+        let insns =
+            parse_template(b"brk #010; brk #10; brk #0x10; brk #0b101; brk #0; brk #10L").unwrap();
+        let imm = |i: usize| insns[i].operands[0].clone();
+        assert_eq!(imm(0), AsmOpndA64::Imm(8));
+        assert_eq!(imm(1), AsmOpndA64::Imm(10));
+        assert_eq!(imm(2), AsmOpndA64::Imm(16));
+        assert_eq!(imm(3), AsmOpndA64::Imm(5));
+        assert_eq!(imm(4), AsmOpndA64::Imm(0));
+        assert_eq!(imm(5), AsmOpndA64::Imm(10));
+        // Signs and constant expressions still fold.
+        let insns = parse_template(b"movz x0, #(1 << 4); brk #-010 + 010").unwrap();
+        assert_eq!(insns[0].operands[1], AsmOpndA64::Imm(16));
+        assert_eq!(insns[1].operands[0], AsmOpndA64::Imm(0));
     }
 
     #[test]

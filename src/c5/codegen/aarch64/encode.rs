@@ -1748,7 +1748,7 @@ pub(crate) fn lower(
     let mut asm_sections = crate::c5::asm::AsmSectionSink::default();
     // File-scope asm section blocks precede the per-function ones
     // (`.align` takes a power-of-two exponent on aarch64).
-    super::ssa::emit_common::materialize_file_asm(
+    crate::c5::asm::materialize_file_asm(
         &program.file_asm,
         true,
         crate::c5::asm::AsmComments::A64,

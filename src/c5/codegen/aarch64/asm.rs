@@ -19,8 +19,6 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use super::super::ssa::emit_common;
-
 /// One symbolic operand of a template instruction.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum AsmOpndA64 {
@@ -1250,7 +1248,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
             Some((t, r)) => (t, r.trim()),
             None => (piece, ""),
         };
-        if let Some(item) = emit_common::parse_stream_layout_item(dir_tok, dir_rest, true) {
+        if let Some(item) = crate::c5::asm::parse_stream_layout_item(dir_tok, dir_rest, true) {
             insns.push(AsmInsnA64 {
                 mnemonic: String::from(dir_tok),
                 operands: Vec::new(),

@@ -201,7 +201,6 @@ impl Compiler {
         text: &str,
         globl_shortcut: bool,
     ) -> Result<(), String> {
-        use crate::c5::codegen::ssa::emit_common as engine;
         // Comment stripping, GNU as macro expansion, and the per-definition
         // rename of redefined numeric labels, once; the stored text is the
         // prepared form so the codegen materialization sees the same
@@ -212,7 +211,7 @@ impl Compiler {
         } else {
             crate::c5::asm::AsmComments::X86
         };
-        let prepared = engine::prepare_file_asm_text(text, comments)?;
+        let prepared = crate::c5::asm::prepare_file_asm_text(text, comments)?;
         let text = prepared.as_str();
         // The stream outside pushed sections is either linkage directives only
         // (`.globl name`, applied to a C symbol) or a trampoline body (labels +
@@ -292,7 +291,7 @@ impl Compiler {
         // so a template resolves the labels its predecessors defined, matching
         // the codegen materialization, which shares one sink per unit.
         crate::c5::codegen::encode_file_asm_section_code(&mut blocks, self.target, self.elf_class)?;
-        engine::materialize_asm_sections(
+        crate::c5::asm::materialize_asm_sections(
             &blocks,
             &|_| None,
             &|_| None,

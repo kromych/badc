@@ -1963,7 +1963,7 @@ fn alignment_directive_family_reads_one_grammar_everywhere() {
     // parser have to admit the same alignment directives and read the same
     // item out of them; a form one accepts and another rejects, or reads
     // differently, is the defect the shared parse exists to rule out.
-    use crate::c5::codegen::ssa::emit_common::parse_stream_layout_item;
+    use crate::c5::asm::parse_stream_layout_item;
     let ok = [
         ".balign 16",
         ".balign 16, 0xff",

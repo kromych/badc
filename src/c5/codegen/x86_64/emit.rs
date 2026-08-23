@@ -7030,7 +7030,7 @@ fn encode_x86_asm_section_code(
         })
     };
     let mut mode = super::table::Mode::Bits64;
-    let mut fold = super::ssa::emit_common::AsmParseFold::default();
+    let mut fold = crate::c5::asm::AsmParseFold::default();
     for b in blocks.iter_mut() {
         fold.enter_block(&*b);
         for item in b.items.iter_mut() {
@@ -7100,7 +7100,7 @@ pub(crate) fn encode_x86_file_asm_section_code(
         }
         Ok(())
     }
-    let mut fold = super::ssa::emit_common::AsmParseFold::default();
+    let mut fold = crate::c5::asm::AsmParseFold::default();
     for b in blocks.iter_mut() {
         fold.enter_block(&*b);
         for item in b.items.iter_mut() {
@@ -8199,7 +8199,7 @@ fn template_expr_value(
     at: usize,
     label_defs: &[(u32, usize)],
     names: &[&str],
-    measure: &super::ssa::emit_common::SectionLabelOffsets,
+    measure: &crate::c5::asm::SectionLabelOffsets,
 ) -> Option<i64> {
     let resolve = |name: &str| -> Option<i64> {
         // A bare decimal is an integer literal; a GNU as numeric label is
@@ -8487,7 +8487,7 @@ fn emit_inline_asm_once(
         }
     };
     if let Some(ex) = &extracted {
-        if let Err(m) = super::ssa::emit_common::reject_unit_symbol_items(&ex.blocks) {
+        if let Err(m) = crate::c5::asm::reject_unit_symbol_items(&ex.blocks) {
             bail_msg(&m);
             return false;
         }
@@ -8543,7 +8543,7 @@ fn emit_inline_asm_once(
     // in-stream definition of one does not satisfy a branch in place, since
     // the link may bind another definition, so the field keeps a relocation
     // against the name, as GNU as keeps it.
-    let weak_names = super::ssa::emit_common::asm_weak_only_names(section_blocks, asm_sections);
+    let weak_names = crate::c5::asm::asm_weak_only_names(section_blocks, asm_sections);
     let weak_target_name = |num: u32| -> Option<alloc::string::String> {
         let idx = num.checked_sub(super::asm::NAMED_LABEL_BASE)?;
         let name = *code_label_names.get(idx as usize)?;
@@ -8701,7 +8701,7 @@ fn emit_inline_asm_once(
     // Measured against the sink the sections merge into below, so this and
     // the materialization settle every branch form the same way and a
     // replacement length means the same to both.
-    let section_measure = match super::ssa::emit_common::measure_asm_section_offsets(
+    let section_measure = match crate::c5::asm::measure_asm_section_offsets(
         section_blocks,
         &const_of,
         false,
@@ -9786,7 +9786,7 @@ fn emit_inline_asm_once(
             let ctx = goto_ctx.as_ref()?;
             ctx.row.get(1 + idx as usize).copied()
         };
-        let defined = match super::ssa::emit_common::materialize_asm_sections(
+        let defined = match crate::c5::asm::materialize_asm_sections(
             section_blocks,
             &|idx| const_of(idx),
             &label_off,
@@ -12111,10 +12111,10 @@ mod code_mode_tests {
     /// is folded away here as GNU as folds it. Offsets are within the
     /// concatenated sections, in section order.
     fn assemble_relocs(text: &str) -> (Vec<u8>, Vec<Reloc>) {
-        use super::super::ssa::emit_common::{materialize_file_asm, prepare_file_asm_text};
         use crate::c5::asm::AsmComments;
         use crate::c5::asm::AsmSectionSink;
         use crate::c5::asm::AsmSectionTarget;
+        use crate::c5::asm::{materialize_file_asm, prepare_file_asm_text};
         // The driver prepares the template (comment stripping, GNU as macro
         // and equate expansion) before the section parse reads it.
         let text = prepare_file_asm_text(text, AsmComments::X86).expect("prepares");
@@ -12150,9 +12150,9 @@ mod code_mode_tests {
     /// The diagnostic a stream the assembler rejects produces, from encoding
     /// or from the layout the sections materialize against.
     fn assemble_err(text: &str) -> alloc::string::String {
-        use super::super::ssa::emit_common::{materialize_file_asm, prepare_file_asm_text};
         use crate::c5::asm::AsmComments;
         use crate::c5::asm::AsmSectionSink;
+        use crate::c5::asm::{materialize_file_asm, prepare_file_asm_text};
         let text = prepare_file_asm_text(text, AsmComments::X86).expect("prepares");
         let mut sink = AsmSectionSink::default();
         materialize_file_asm(

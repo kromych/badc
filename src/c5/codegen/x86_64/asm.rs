@@ -2486,8 +2486,7 @@ fn parse_sym_mem<'a>(tok: &'a str, labels: &[&str], expr: u8) -> Option<(&'a str
 /// reads, so a template and a named section admit the same forms. On x86
 /// `.align` takes a byte count.
 fn parse_align_directive(name: &str, rest: &str) -> Result<AsmSectionItem, String> {
-    use super::super::ssa::emit_common as ec;
-    match ec::parse_stream_layout_item(name, rest.trim(), false) {
+    match crate::c5::asm::parse_stream_layout_item(name, rest.trim(), false) {
         Some(Ok(item @ AsmSectionItem::Align { .. })) => Ok(item),
         Some(Err(e)) => Err(e),
         _ => Err(format!("inline asm: bad alignment `{rest}`")),

@@ -4099,6 +4099,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("c11_atomic_specifier.c", 0),
     ("c11_atomic_ops.c", 0),
     ("inline_asm_hint.c", 0),
+    ("asm_empty_barrier.c", 0),
     ("compound_assign_int_fp.c", 0),
     ("signal_sig_t.c", 0),
     ("math_classify.c", 0),

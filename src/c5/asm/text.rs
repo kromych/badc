@@ -407,21 +407,26 @@ pub(crate) fn strip_asm_comments(text: &str, syntax: AsmComments) -> Option<allo
     Some(out)
 }
 
-/// True when an extended-asm statement lowers to no machine code or data:
-/// after comment stripping the template holds only whitespace and statement
-/// separators, and no operand is a flag output (`=@cc` materializes a
-/// `setcc` even with an empty template). Such a statement writes no
-/// register and reads no operand, so the operand staging -- register
-/// saves, captures, input loads, output store-backs -- is dead and the
-/// frame scratch region it would use is not reserved. The IR instruction
-/// itself stays: it still orders memory accesses. The per-arch scratch
-/// sizing and emitters share this so the region and the staging agree.
+/// True when an extended-asm statement moves no value and lowers to no
+/// machine code: it has no output, and after comment stripping the
+/// template holds only whitespace and statement separators. Its operand
+/// staging -- register saves, captures, input loads, output store-backs
+/// -- is then dead and the frame scratch region it would use is not
+/// reserved. The IR instruction stays: it still orders memory accesses.
+/// The per-arch scratch sizing and emitters share this so the region and
+/// the staging agree.
+///
+/// Operand placement is the statement's effect, not the template's: an
+/// input tied to an output (`"0"`, or naming the same fixed register) is
+/// loaded into the output's register and that register is stored back to
+/// the output object, so the object takes the input's value even from an
+/// empty template -- the `RELOC_HIDE` idiom. `Bound` names a register
+/// with no object behind it, and `Flags` materializes a `setcc`.
 pub(crate) fn asm_statement_is_noop(asm: &crate::c5::ir::AsmBlock, syntax: AsmComments) -> bool {
-    if asm
-        .operands
-        .iter()
-        .any(|op| matches!(op.constraint, crate::c5::ir::AsmConstraint::Flags(_)))
-    {
+    if asm.operands.iter().any(|op| {
+        matches!(op.constraint, crate::c5::ir::AsmConstraint::Flags(_))
+            || (op.is_output && !matches!(op.constraint, crate::c5::ir::AsmConstraint::Bound(_)))
+    }) {
         return false;
     }
     let Ok(raw) = core::str::from_utf8(&asm.template) else {
@@ -689,5 +694,26 @@ mod asm_noop_tests {
             &block("", &[AsmConstraint::Flags(4)]),
             AsmComments::X86
         ));
+    }
+
+    /// An output carries a value out of the statement, so the staging
+    /// stands even with an empty template: `"=r"(o) : "0"(i)` has to
+    /// leave `i` in `o`. A `Bound` output names a register with no
+    /// object behind it and keeps the elision.
+    #[test]
+    fn outputs_are_not_noop() {
+        let mut b = block("", &[AsmConstraint::Reg, AsmConstraint::Match(0)]);
+        b.operands[0].is_output = true;
+        assert!(!asm_statement_is_noop(&b, AsmComments::X86));
+        assert!(!asm_statement_is_noop(&b, AsmComments::A64));
+
+        let mut rw = block("", &[AsmConstraint::Reg]);
+        rw.operands[0].is_output = true;
+        rw.operands[0].is_rw = true;
+        assert!(!asm_statement_is_noop(&rw, AsmComments::X86));
+
+        let mut bound = block("", &[AsmConstraint::Bound(4)]);
+        bound.operands[0].is_output = true;
+        assert!(asm_statement_is_noop(&bound, AsmComments::X86));
     }
 }

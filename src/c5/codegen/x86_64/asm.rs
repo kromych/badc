@@ -2701,7 +2701,7 @@ fn parse_template_in(tmpl: &[u8], file_scope: bool) -> Result<Vec<AsmInsn>, Stri
             Some((t, r)) => (t, r.trim()),
             None => (piece, ""),
         };
-        if super::super::ssa::emit_common::align_directive(dir_tok).is_some() {
+        if crate::c5::asm::align_directive(dir_tok).is_some() {
             insns.push(AsmInsn {
                 mnemonic: Mnemonic::RawBytes,
                 suffix: None,
@@ -5838,7 +5838,7 @@ mod tests {
         // `l` spellings widen the fill unit without changing the alignment
         // operand's convention.
         use crate::c5::asm::AsmSectionItem;
-        use crate::c5::codegen::ssa::emit_common::{AlignFill, AlignSpec};
+        use crate::c5::asm::{AlignFill, AlignSpec};
         let align = |n: u32, fill, max| {
             Some(AsmSectionItem::Align {
                 spec: AlignSpec::Bytes(n),

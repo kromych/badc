@@ -8,6 +8,7 @@
 //! The submodules are an internal split; the module re-exports their
 //! surface, so callers name `crate::c5::asm::<item>` throughout.
 
+mod align;
 mod expr;
 mod gas;
 mod section;
@@ -15,6 +16,7 @@ mod sink;
 mod template;
 mod text;
 
+pub(crate) use align::*;
 pub(crate) use expr::*;
 pub(crate) use gas::*;
 pub(crate) use section::*;

@@ -1964,7 +1964,7 @@ mod tests {
     #[test]
     fn parse_layout_directives_in_stream() {
         use crate::c5::asm::AsmSectionItem as I;
-        use emit_common::{AlignFill, AlignSpec};
+        use crate::c5::asm::{AlignFill, AlignSpec};
         // `.align` takes a power-of-two exponent on AArch64, and the `w` / `l`
         // spellings widen the fill unit without changing that convention; the
         // fill family and `.org` carry their operands to the emitter

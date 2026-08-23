@@ -3140,7 +3140,7 @@ fn encode_deferred_asm_region(
                         .rfind(|&&(n, _)| n == num)
                         .map(|&(_, off)| off as i64)
                 };
-                let resolved = super::ssa::emit_common::resolve_align_item(item, &resolve)?;
+                let resolved = crate::c5::asm::resolve_align_item(item, &resolve)?;
                 let item = resolved.as_ref().unwrap_or(item);
                 super::ssa::emit_common::push_a64_stream_layout(
                     item,
@@ -3282,14 +3282,13 @@ fn a64_align_asm_stream(
     text_data_ranges: &mut Vec<(usize, usize)>,
     state: &mut Option<super::super::map_syms::MapClass>,
 ) {
-    let gap = super::super::ssa::emit_common::insn_align_gap(code.len() as i64, *state, true, true)
-        as usize;
+    let gap = crate::c5::asm::insn_align_gap(code.len() as i64, *state, true, true) as usize;
     *state = Some(super::super::map_syms::MapClass::Code);
     if gap == 0 {
         return;
     }
     text_data_ranges.push((code.len(), gap));
-    super::super::ssa::emit_common::push_a64_exec_align_fill(code, gap);
+    crate::c5::asm::push_a64_exec_align_fill(code, gap);
 }
 
 /// Lower an `Inst::InlineAsm` (GCC extended asm) on AArch64. Assigns each
@@ -3896,7 +3895,7 @@ fn emit_inline_asm_aarch64(
                     .rfind(|&&(n, _)| n == num)
                     .map(|&(_, off)| off as i64)
             };
-            let resolved = match super::ssa::emit_common::resolve_align_item(item, &resolve) {
+            let resolved = match crate::c5::asm::resolve_align_item(item, &resolve) {
                 Ok(r) => r,
                 Err(m) => {
                     bail_msg(&m);

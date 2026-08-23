@@ -8754,9 +8754,9 @@ fn emit_inline_asm_once(
                 Err(e) => return fail(&e),
             };
             *text_align = (*text_align).max(n as usize);
-            let gap = super::ssa::emit_common::align_gap(at as i64, n as i64, *max) as usize;
+            let gap = crate::c5::asm::align_gap(at as i64, n as i64, *max) as usize;
             if let Err(e) =
-                super::ssa::emit_common::push_align_fill(code, gap, *fill, true, false, after_insn)
+                crate::c5::asm::push_align_fill(code, gap, *fill, true, false, after_insn)
             {
                 return fail(&e);
             }

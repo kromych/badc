@@ -284,7 +284,7 @@ fn fold_asm_sections(
     target: Target,
 ) -> Result<alloc::collections::BTreeMap<String, AsmLabelPlacement>, C5Error> {
     use crate::c5::asm::AsmSectionTarget;
-    use crate::c5::codegen::ssa::emit_common::align_fill_pattern;
+    use crate::c5::asm::align_fill_pattern;
     if build.output_kind == OutputKind::Relocatable {
         return Ok(alloc::collections::BTreeMap::new());
     }

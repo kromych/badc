@@ -2480,7 +2480,7 @@ pub(crate) fn emit_function(
     // Rewrite `asm goto` section fields (`.long %l0 - .`) to the label
     // block's now-final text offset. Scoped to this function's contribution
     // via the entry snapshot; only this pass's relocs survived the loop.
-    super::ssa::emit_common::resolve_asm_goto_relocs(
+    crate::c5::asm::resolve_asm_goto_relocs(
         asm_sections.relocs_mut(),
         &body_asm_sections,
         &|bid| block_offsets[bid as usize],
@@ -8290,7 +8290,7 @@ fn emit_inline_asm(
     name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
     extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     extern_code_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
-    asm_sections: &mut super::ssa::emit_common::AsmSectionSink,
+    asm_sections: &mut crate::c5::asm::AsmSectionSink,
     asm_extern_call_sites: &mut Vec<super::UserExternCallSite>,
     asm_sym_fixups: &mut Vec<super::AsmSymFixup>,
     data_fixups: &mut Vec<DataFixup>,
@@ -8377,7 +8377,7 @@ fn emit_inline_asm_once(
     name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
     extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     extern_code_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
-    asm_sections: &mut super::ssa::emit_common::AsmSectionSink,
+    asm_sections: &mut crate::c5::asm::AsmSectionSink,
     asm_extern_call_sites: &mut Vec<super::UserExternCallSite>,
     asm_sym_fixups: &mut Vec<super::AsmSymFixup>,
     data_fixups: &mut Vec<DataFixup>,
@@ -12113,10 +12113,9 @@ mod code_mode_tests {
     /// is folded away here as GNU as folds it. Offsets are within the
     /// concatenated sections, in section order.
     fn assemble_relocs(text: &str) -> (Vec<u8>, Vec<Reloc>) {
-        use super::super::ssa::emit_common::{
-            AsmSectionSink, materialize_file_asm, prepare_file_asm_text,
-        };
+        use super::super::ssa::emit_common::{materialize_file_asm, prepare_file_asm_text};
         use crate::c5::asm::AsmComments;
+        use crate::c5::asm::AsmSectionSink;
         use crate::c5::asm::AsmSectionTarget;
         // The driver prepares the template (comment stripping, GNU as macro
         // and equate expansion) before the section parse reads it.
@@ -12153,10 +12152,9 @@ mod code_mode_tests {
     /// The diagnostic a stream the assembler rejects produces, from encoding
     /// or from the layout the sections materialize against.
     fn assemble_err(text: &str) -> alloc::string::String {
-        use super::super::ssa::emit_common::{
-            AsmSectionSink, materialize_file_asm, prepare_file_asm_text,
-        };
+        use super::super::ssa::emit_common::{materialize_file_asm, prepare_file_asm_text};
         use crate::c5::asm::AsmComments;
+        use crate::c5::asm::AsmSectionSink;
         let text = prepare_file_asm_text(text, AsmComments::X86).expect("prepares");
         let mut sink = AsmSectionSink::default();
         materialize_file_asm(

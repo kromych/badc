@@ -11,11 +11,13 @@
 mod expr;
 mod gas;
 mod section;
+mod sink;
 mod template;
 mod text;
 
 pub(crate) use expr::*;
 pub(crate) use gas::*;
 pub(crate) use section::*;
+pub(crate) use sink::*;
 pub(crate) use template::*;
 pub(crate) use text::*;

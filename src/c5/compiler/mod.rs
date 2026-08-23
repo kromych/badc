@@ -1690,7 +1690,7 @@ pub struct Compiler {
     /// template into, in source order. Per unit, as the codegen sink is:
     /// a location expression may reach a label an earlier template
     /// defined (`.size name, .-name` split across two `asm()`).
-    pub(super) asm_validate_sink: crate::c5::codegen::ssa::emit_common::AsmSectionSink,
+    pub(super) asm_validate_sink: crate::c5::asm::AsmSectionSink,
 
     /// Include resolutions recorded by the preprocessor when
     /// [`CompileOptions::track_includes`] was set. Empty otherwise.

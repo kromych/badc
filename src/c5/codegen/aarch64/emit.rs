@@ -1756,7 +1756,7 @@ pub(crate) fn emit_function(
     // Rewrite `asm goto` section fields (`.long %l0 - .`) to the label
     // block's now-final text offset. Scoped to this function's contribution
     // via the entry snapshot; only this pass's relocs survived the loop.
-    super::ssa::emit_common::resolve_asm_goto_relocs(
+    crate::c5::asm::resolve_asm_goto_relocs(
         asm_sections.relocs_mut(),
         &asm_sections_snapshot,
         &|bid| block_offsets[bid as usize],
@@ -1796,7 +1796,7 @@ pub(crate) fn emit_function(
             }
         }
     }
-    super::ssa::emit_common::resolve_asm_deferred_relocs(
+    crate::c5::asm::resolve_asm_deferred_relocs(
         asm_sections.relocs_mut(),
         &asm_sections_snapshot,
         &|idx| deferred_bases[idx as usize],
@@ -3312,7 +3312,7 @@ fn emit_inline_asm_aarch64(
     name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
     extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     data_sym_offsets: &alloc::collections::BTreeMap<alloc::string::String, i64>,
-    asm_sections: &mut super::ssa::emit_common::AsmSectionSink,
+    asm_sections: &mut crate::c5::asm::AsmSectionSink,
     asm_extern_call_sites: &mut Vec<super::UserExternCallSite>,
     asm_sym_fixups: &mut Vec<super::AsmSymFixup>,
     deferred_regions: &mut Vec<DeferredAsmRegion>,
@@ -10949,7 +10949,7 @@ fn a64_section_operand_layout(
         &sized,
         &|_| None,
         true,
-        &super::ssa::emit_common::AsmSectionSink::default(),
+        &crate::c5::asm::AsmSectionSink::default(),
     )
     .map(Some)
 }
@@ -11453,9 +11453,9 @@ mod asm_scratch_tests {
 
 #[cfg(test)]
 mod tests {
-    use super::super::ssa::emit_common::AsmSectionSink;
     use super::*;
     use crate::Compiler;
+    use crate::c5::asm::AsmSectionSink;
 
     /// File-scope section instructions referencing symbols encode to the
     /// words and relocations GNU as emits (byte-verified against `as`):

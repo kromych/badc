@@ -1837,7 +1837,7 @@ pub(crate) fn lower(
         alloc::collections::BTreeMap::new();
     let mut fn_unwind: Vec<super::FnUnwind> = Vec::new();
     let mut ssa_line_rows: Vec<(usize, u32, u32)> = Vec::new();
-    let mut asm_sections = super::ssa::emit_common::AsmSectionSink::default();
+    let mut asm_sections = crate::c5::asm::AsmSectionSink::default();
     // File-scope asm section blocks precede the per-function ones
     // (`.align` takes a byte count on x86-64 ELF).
     super::ssa::emit_common::materialize_file_asm(

@@ -7053,6 +7053,7 @@ fn encode_x86_asm_section_code(
                     &refs,
                 )?;
             }
+            note_x86_align_mode(item, mode);
             fold.note_item(item, &imm_of);
         }
     }
@@ -7098,6 +7099,7 @@ pub(crate) fn encode_x86_file_asm_section_code(
             } else if let AsmSectionItem::Code(text) = it {
                 *it = encode_one_x86_section_insn(text, mode, operand_target, goto_block, refs)?;
             }
+            note_x86_align_mode(it, *mode);
         }
         Ok(())
     }
@@ -7134,10 +7136,23 @@ pub(crate) fn encode_x86_file_asm_section_code(
                     &refs,
                 )?;
             }
+            note_x86_align_mode(item, mode);
             fold.note_item(item, &imm_of);
         }
     }
     Ok(())
+}
+
+/// Record on an alignment directive the encoding mode it stands in, which
+/// selects the no-op forms its default fill takes.
+fn note_x86_align_mode(item: &mut crate::c5::asm::AsmSectionItem, mode: super::table::Mode) {
+    if let crate::c5::asm::AsmSectionItem::Align { nops, .. } = item {
+        *nops = if mode == super::table::Mode::Bits16 {
+            crate::c5::asm::AlignNops::X86Bits16
+        } else {
+            crate::c5::asm::AlignNops::X86
+        };
+    }
 }
 
 /// Opcode of a branch whose displacement field is rel8 only.
@@ -8745,7 +8760,13 @@ fn emit_inline_asm_once(
         //
         // An operand over template labels resolves against the definitions
         // already emitted, as GNU as resolves one where the directive stands.
-        if let Some(crate::c5::asm::AsmSectionItem::Align { spec, fill, max }) = &insn.layout {
+        if let Some(crate::c5::asm::AsmSectionItem::Align {
+            spec,
+            fill,
+            max,
+            nops,
+        }) = &insn.layout
+        {
             let at = code.len();
             let n = match spec.bytes(&|name| {
                 crate::c5::asm::template_label_offset(name, at, &label_defs, &code_label_names)
@@ -8757,7 +8778,7 @@ fn emit_inline_asm_once(
             *text_align = (*text_align).max(n as usize);
             let gap = crate::c5::asm::align_gap(at as i64, n as i64, *max) as usize;
             if let Err(e) =
-                crate::c5::asm::push_align_fill(code, gap, *fill, true, false, after_insn)
+                crate::c5::asm::push_align_fill(code, gap, *fill, true, *nops, after_insn)
             {
                 return fail(&e);
             }
@@ -12656,6 +12677,21 @@ mod code_mode_tests {
         assert_eq!(
             assemble(".code16\n.section \"a\",\"ax\"\nmovl %eax, %ebx\n"),
             [0x66, 0x89, 0xc3]
+        );
+    }
+
+    /// The mode also selects the no-op forms alignment padding takes: a
+    /// 32-bit no-op decodes to a shorter instruction under 16-bit addressing,
+    /// leaving its tail bytes to run as whatever they decode to. GNU as bytes
+    /// for the same source: a 7-byte gap in each mode.
+    #[test]
+    fn code_directives_select_the_alignment_nops() {
+        assert_eq!(
+            assemble(".code16\nnop\n.balign 8\nret\n.code64\n.balign 16\nret\n"),
+            [
+                0x90, 0x89, 0xf6, 0x2e, 0x8d, 0xb4, 0x00, 0x00, 0xc3, 0x0f, 0x1f, 0x80, 0x00, 0x00,
+                0x00, 0x00, 0xc3
+            ]
         );
     }
 

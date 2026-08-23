@@ -1974,6 +1974,7 @@ mod tests {
             spec: AlignSpec::Bytes(n),
             fill,
             max,
+            nops: crate::c5::asm::AlignNops::A64,
         };
         let fill = |value: u32, width: u8| Some(AlignFill { value, width });
         let cases: &[(&[u8], I)] = &[

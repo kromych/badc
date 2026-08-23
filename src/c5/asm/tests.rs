@@ -279,6 +279,7 @@ fn an_alignment_of_one_leaves_the_mapping_state_alone() {
         spec: AlignSpec::Bytes(n),
         fill: None,
         max: None,
+        nops: AlignNops::X86,
     };
     let (one, two) = (item(1), item(2));
     for exec in [false, true] {
@@ -475,11 +476,113 @@ const GAS_ALIGN_JUMP: &[(usize, &[u8])] = &[
     (260, &[0xe9, 0xff, 0x00, 0x00, 0x00]),
 ];
 
+/// GNU as output for a `.code16` executable-section alignment gap of 1..=16
+/// bytes, in the same columns as [`GAS_ALIGN_FILL`] and measured the same
+/// way. The 16-bit no-op forms run to five bytes and only two maximal ones
+/// are laid before the padding is jumped over, so the jump appears at 15.
+const GAS_ALIGN_FILL_16: &[(usize, &[u8], &[u8])] = &[
+    (1, &[0x90], &[0x90]),
+    (2, &[0x90, 0x90], &[0x89, 0xf6]),
+    (3, &[0x90, 0x89, 0xf6], &[0x8d, 0x74, 0x00]),
+    (4, &[0x90, 0x8d, 0x74, 0x00], &[0x8d, 0xb4, 0x00, 0x00]),
+    (
+        5,
+        &[0x90, 0x8d, 0xb4, 0x00, 0x00],
+        &[0x2e, 0x8d, 0xb4, 0x00, 0x00],
+    ),
+    (
+        6,
+        &[0x90, 0x2e, 0x8d, 0xb4, 0x00, 0x00],
+        &[0x90, 0x2e, 0x8d, 0xb4, 0x00, 0x00],
+    ),
+    (
+        7,
+        &[0x90, 0x90, 0x2e, 0x8d, 0xb4, 0x00, 0x00],
+        &[0x89, 0xf6, 0x2e, 0x8d, 0xb4, 0x00, 0x00],
+    ),
+    (
+        10,
+        &[0x90, 0x8d, 0xb4, 0x00, 0x00, 0x2e, 0x8d, 0xb4, 0x00, 0x00],
+        &[0x2e, 0x8d, 0xb4, 0x00, 0x00, 0x2e, 0x8d, 0xb4, 0x00, 0x00],
+    ),
+    (
+        14,
+        &[
+            0x90, 0x8d, 0x74, 0x00, 0x2e, 0x8d, 0xb4, 0x00, 0x00, 0x2e, 0x8d, 0xb4, 0x00, 0x00,
+        ],
+        &[
+            0x8d, 0xb4, 0x00, 0x00, 0x2e, 0x8d, 0xb4, 0x00, 0x00, 0x2e, 0x8d, 0xb4, 0x00, 0x00,
+        ],
+    ),
+    (
+        15,
+        &[
+            0x90, 0x8d, 0xb4, 0x00, 0x00, 0x2e, 0x8d, 0xb4, 0x00, 0x00, 0x2e, 0x8d, 0xb4, 0x00,
+            0x00,
+        ],
+        &[
+            0xeb, 0x0d, 0x8d, 0x74, 0x00, 0x2e, 0x8d, 0xb4, 0x00, 0x00, 0x2e, 0x8d, 0xb4, 0x00,
+            0x00,
+        ],
+    ),
+    (
+        16,
+        &[
+            0x90, 0xeb, 0x0d, 0x8d, 0x74, 0x00, 0x2e, 0x8d, 0xb4, 0x00, 0x00, 0x2e, 0x8d, 0xb4,
+            0x00, 0x00,
+        ],
+        &[
+            0xeb, 0x0e, 0x8d, 0xb4, 0x00, 0x00, 0x2e, 0x8d, 0xb4, 0x00, 0x00, 0x2e, 0x8d, 0xb4,
+            0x00, 0x00,
+        ],
+    ),
+];
+
+/// The jump GNU as opens a wide `.code16` alignment gap with. Past the `rel8`
+/// range the 32-bit displacement takes the operand-size prefix, so the jump
+/// is six bytes rather than five.
+const GAS_ALIGN_JUMP_16: &[(usize, &[u8])] = &[
+    (15, &[0xeb, 0x0d]),
+    (129, &[0xeb, 0x7f]),
+    (130, &[0x66, 0xe9, 0x7c, 0x00, 0x00, 0x00]),
+    (260, &[0x66, 0xe9, 0xfe, 0x00, 0x00, 0x00]),
+];
+
+#[test]
+fn code16_exec_align_fill_matches_gnu_as() {
+    let fill = |gap: usize, after_insn: bool| {
+        let mut out = alloc::vec::Vec::new();
+        push_x86_exec_align_fill(&mut out, gap, after_insn, AlignNops::X86Bits16);
+        out
+    };
+    for &(gap, data_fill, insn_fill) in GAS_ALIGN_FILL_16 {
+        for (after_insn, want) in [(false, data_fill), (true, insn_fill)] {
+            assert_eq!(
+                fill(gap, after_insn),
+                want,
+                "gap {gap}, after_insn {after_insn}: fill differs from GNU as"
+            );
+        }
+    }
+    for &(gap, jump) in GAS_ALIGN_JUMP_16 {
+        let got = fill(gap, true);
+        assert_eq!(got.len(), gap);
+        assert_eq!(
+            &got[..jump.len()],
+            jump,
+            "gap {gap}: jump differs from GNU as"
+        );
+    }
+    // The widest gap the 16-bit NOP count still covers takes no jump.
+    let last_plain = X86_NOPS_16.len() * (X86_MAX_NOPS_16 + 1) - 1;
+    assert_ne!(fill(last_plain, true)[0], GAS_ALIGN_JUMP_16[0].1[0]);
+}
+
 #[test]
 fn x86_exec_align_fill_jumps_over_a_wide_gap_like_gnu_as() {
     let fill = |gap: usize, after_insn: bool| {
         let mut out = alloc::vec::Vec::new();
-        push_x86_exec_align_fill(&mut out, gap, after_insn);
+        push_x86_exec_align_fill(&mut out, gap, after_insn, AlignNops::X86);
         out
     };
     assert_eq!(fill(GAS_ALIGN_FILL_88.len(), true), GAS_ALIGN_FILL_88);
@@ -513,7 +616,7 @@ fn x86_exec_align_fill_matches_gnu_as() {
     for &(gap, data_fill, insn_fill) in GAS_ALIGN_FILL {
         for (after_insn, want) in [(false, data_fill), (true, insn_fill)] {
             let mut got = alloc::vec::Vec::new();
-            push_x86_exec_align_fill(&mut got, gap, after_insn);
+            push_x86_exec_align_fill(&mut got, gap, after_insn, AlignNops::X86);
             assert_eq!(
                 got, want,
                 "gap {gap}, after_insn {after_insn}: fill differs from GNU as"
@@ -525,9 +628,9 @@ fn x86_exec_align_fill_matches_gnu_as() {
     for gap in 1..=63usize {
         for after_insn in [false, true] {
             let mut small = alloc::vec::Vec::new();
-            push_x86_exec_align_fill(&mut small, gap, after_insn);
+            push_x86_exec_align_fill(&mut small, gap, after_insn, AlignNops::X86);
             let mut large = alloc::vec::Vec::new();
-            push_x86_exec_align_fill(&mut large, gap + X86_NOPS.len(), after_insn);
+            push_x86_exec_align_fill(&mut large, gap + X86_NOPS.len(), after_insn, AlignNops::X86);
             assert_eq!(small.len(), gap);
             assert_eq!(large.len(), gap + X86_NOPS.len());
             assert_eq!(

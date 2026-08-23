@@ -6,6 +6,55 @@
 use super::*;
 use crate::c5::codegen::map_syms::MapClass;
 
+/// The no-op forms an executable alignment gap's default fill takes: the
+/// target's, and on x86 the encoding mode the directive stands in. `.code32`
+/// and `.code64` share one set; the 16-bit forms are their own, since a
+/// 32-bit no-op decodes to a different length under 16-bit addressing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum AlignNops {
+    #[default]
+    X86,
+    X86Bits16,
+    A64,
+}
+
+impl AlignNops {
+    /// The set a target starts in, before any encoding-mode directive.
+    pub(crate) fn of_target(is_aarch64: bool) -> Self {
+        if is_aarch64 {
+            AlignNops::A64
+        } else {
+            AlignNops::X86
+        }
+    }
+
+    /// The x86 no-op forms by length: index `n - 1` holds the `n`-byte form.
+    fn x86_forms(self) -> &'static [&'static [u8]] {
+        match self {
+            AlignNops::X86Bits16 => &X86_NOPS_16,
+            _ => &X86_NOPS,
+        }
+    }
+
+    /// Maximal-length no-ops GNU as lays in one gap before it jumps over the
+    /// padding instead.
+    fn x86_max_nops(self) -> usize {
+        match self {
+            AlignNops::X86Bits16 => X86_MAX_NOPS_16,
+            _ => X86_MAX_NOPS,
+        }
+    }
+
+    /// Opcode of the jump over padding whose displacement is 32-bit. In
+    /// 16-bit mode the operand-size prefix selects that width.
+    fn x86_jmp_rel32(self) -> &'static [u8] {
+        match self {
+            AlignNops::X86Bits16 => &[0x66, 0xe9],
+            _ => &[0xe9],
+        }
+    }
+}
+
 /// How a target reads an alignment directive's first operand.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum AlignKind {
@@ -116,6 +165,7 @@ pub(crate) fn resolve_align_item(
         spec: spec @ AlignSpec::Expr { .. },
         fill,
         max,
+        nops,
     } = item
     else {
         return Ok(None);
@@ -124,6 +174,7 @@ pub(crate) fn resolve_align_item(
         spec: AlignSpec::Bytes(spec.bytes(resolve)?),
         fill: *fill,
         max: *max,
+        nops: *nops,
     }))
 }
 
@@ -183,7 +234,12 @@ pub(crate) fn parse_align_item(
         },
         None => return Err(bad()),
     };
-    Ok(AsmSectionItem::Align { spec, fill, max })
+    Ok(AsmSectionItem::Align {
+        spec,
+        fill,
+        max,
+        nops: AlignNops::of_target(is_aarch64),
+    })
 }
 
 /// Bytes needed to advance `at` to the next multiple of `align`, or zero when
@@ -206,13 +262,13 @@ pub(crate) fn align_gap(at: i64, align: i64, max: Option<u32>) -> i64 {
 pub(crate) fn align_fill_pattern(
     fill: Option<AlignFill>,
     exec: bool,
-    aarch64: bool,
+    nops: AlignNops,
 ) -> ([u8; 4], usize) {
-    match (fill, exec, aarch64) {
+    match (fill, exec, nops) {
         (Some(f), _, _) => (f.value.to_le_bytes(), f.width as usize),
         (None, false, _) => ([0, 0, 0, 0], 1),
-        (None, true, false) => ([0x90, 0, 0, 0], 1),
-        (None, true, true) => (A64_NOP, A64_NOP.len()),
+        (None, true, AlignNops::A64) => (A64_NOP, A64_NOP.len()),
+        (None, true, _) => ([X86_NOP_OPCODE, 0, 0, 0], 1),
     }
 }
 
@@ -230,7 +286,7 @@ pub(crate) fn push_align_fill(
     gap: usize,
     fill: Option<AlignFill>,
     exec: bool,
-    aarch64: bool,
+    nops: AlignNops,
     after_insn: bool,
 ) -> Result<(usize, MapClass), alloc::string::String> {
     if let Some(f) = fill
@@ -241,6 +297,7 @@ pub(crate) fn push_align_fill(
             f.width
         ));
     }
+    let aarch64 = nops == AlignNops::A64;
     // The sub-word remainder of an AArch64 code gap is data and the whole
     // words are NOPs.
     if fill.is_none() && exec && aarch64 {
@@ -248,10 +305,10 @@ pub(crate) fn push_align_fill(
     }
     let nop_fill = fill.is_none_or(|f| f.is_x86_nop());
     if nop_fill && exec && !aarch64 {
-        push_x86_exec_align_fill(out, gap, after_insn);
+        push_x86_exec_align_fill(out, gap, after_insn, nops);
         return Ok((0, MapClass::Code));
     }
-    let (pat, plen) = align_fill_pattern(fill, exec, aarch64);
+    let (pat, plen) = align_fill_pattern(fill, exec, nops);
     for _ in 0..gap {
         out.push(pat[out.len() % plen]);
     }
@@ -321,12 +378,25 @@ pub(crate) const X86_NOPS: [&[u8]; 11] = [
     ],
 ];
 
+/// The 16-bit no-op of each length GNU as pads a `.code16` executable
+/// alignment gap with, lengths 1..=5.
+pub(crate) const X86_NOPS_16: [&[u8]; 5] = [
+    &[0x90],
+    &[0x89, 0xf6],
+    &[0x8d, 0x74, 0x00],
+    &[0x8d, 0xb4, 0x00, 0x00],
+    &[0x2e, 0x8d, 0xb4, 0x00, 0x00],
+];
+
 /// Maximal-length NOPs GNU as lays in one alignment gap before it jumps over
 /// the padding instead. The threshold is on the count, so the byte gap it
-/// falls at is this times the longest NOP.
+/// falls at is this times the longest NOP of the mode's set.
 pub(crate) const X86_MAX_NOPS: usize = 7;
 
-/// Fill an x86-64 executable alignment gap with multi-byte NOPs, as GNU as
+/// The same count under the 16-bit no-op forms.
+pub(crate) const X86_MAX_NOPS_16: usize = 2;
+
+/// Fill an x86 executable alignment gap with multi-byte NOPs, as GNU as
 /// does: the sub-maximal remainder first, then maximal-length NOPs.
 ///
 /// `after_insn` reports whether the byte before the gap came from an
@@ -344,40 +414,43 @@ pub(crate) fn push_x86_exec_align_fill(
     out: &mut alloc::vec::Vec<u8>,
     gap: usize,
     after_insn: bool,
+    nops: AlignNops,
 ) {
+    let forms = nops.x86_forms();
     let mut gap = gap;
     if !after_insn && gap > 0 {
-        out.extend_from_slice(X86_NOPS[0]);
+        out.extend_from_slice(forms[0]);
         gap -= 1;
     }
-    if gap / X86_NOPS.len() > X86_MAX_NOPS {
-        gap -= push_x86_pad_jump(out, gap);
+    if gap / forms.len() > nops.x86_max_nops() {
+        gap -= push_x86_pad_jump(out, gap, nops);
     }
-    let rem = gap % X86_NOPS.len();
+    let rem = gap % forms.len();
     if rem > 0 {
-        out.extend_from_slice(X86_NOPS[rem - 1]);
+        out.extend_from_slice(forms[rem - 1]);
     }
-    for _ in 0..gap / X86_NOPS.len() {
-        out.extend_from_slice(X86_NOPS[X86_NOPS.len() - 1]);
+    for _ in 0..gap / forms.len() {
+        out.extend_from_slice(forms[forms.len() - 1]);
     }
 }
 
 /// Lay a jump over the remaining `gap` bytes of alignment padding and report
 /// the bytes it took. GNU as takes the `rel8` form while the distance past it
-/// fits a signed byte and the `rel32` form otherwise; a distance neither
-/// reaches leaves the gap to the NOPs.
-fn push_x86_pad_jump(out: &mut alloc::vec::Vec<u8>, gap: usize) -> usize {
+/// fits a signed byte and the 32-bit-displacement form otherwise; a distance
+/// neither reaches leaves the gap to the NOPs.
+fn push_x86_pad_jump(out: &mut alloc::vec::Vec<u8>, gap: usize, nops: AlignNops) -> usize {
     const JMP_REL8: u8 = 0xeb;
-    const JMP_REL32: u8 = 0xe9;
     if let Ok(disp) = i8::try_from(gap as i64 - 2) {
         out.extend_from_slice(&[JMP_REL8, disp as u8]);
         return 2;
     }
-    match i32::try_from(gap as i64 - 5) {
+    let opcode = nops.x86_jmp_rel32();
+    let len = opcode.len() + 4;
+    match i32::try_from(gap as i64 - len as i64) {
         Ok(disp) => {
-            out.push(JMP_REL32);
+            out.extend_from_slice(opcode);
             out.extend_from_slice(&disp.to_le_bytes());
-            5
+            len
         }
         Err(_) => 0,
     }

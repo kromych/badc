@@ -82,10 +82,13 @@ pub(crate) enum AsmSectionItem {
     /// unit; `None` selects the default (the target NOP in an executable
     /// section, zero otherwise). `max` is the GNU as maximum skip: the
     /// alignment is dropped when it would need more than `max` bytes.
+    /// `nops` is the no-op set the default fill takes, which on x86 the
+    /// encoding mode in effect where the directive stands selects.
     Align {
         spec: AlignSpec,
         fill: Option<AlignFill>,
         max: Option<u32>,
+        nops: AlignNops,
     },
     /// `.org n[, fill]`: pad to section offset `n` with `fill`, zero by
     /// default.

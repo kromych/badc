@@ -534,7 +534,7 @@ pub(crate) fn push_a64_stream_layout(
     ) -> Result<u32, alloc::string::String> {
         let at = out.len();
         let gap = align_gap(at as i64, n as i64, max) as usize;
-        let (lead, _) = push_align_fill(out, gap, fill, true, true, false)?;
+        let (lead, _) = push_align_fill(out, gap, fill, true, AlignNops::A64, false)?;
         if lead > 0 {
             data.push((at, lead));
         }
@@ -555,9 +555,9 @@ pub(crate) fn push_a64_stream_layout(
         Ok(1)
     }
     match item {
-        AsmSectionItem::Align { spec, fill, max } => {
-            align(out, data, spec.bytes(resolve)?, *fill, *max)
-        }
+        AsmSectionItem::Align {
+            spec, fill, max, ..
+        } => align(out, data, spec.bytes(resolve)?, *fill, *max),
         AsmSectionItem::Fill { count, unit, value } => {
             let n = eval_fill_count_with(count, at as i64, const_of, resolve).ok_or_else(|| {
                 alloc::format!("inline asm: fill count `{count}` is not a constant expression")
@@ -1134,6 +1134,7 @@ fn measure_round_inner(
                         spec: AlignSpec::Bytes(1),
                         fill: None,
                         max: None,
+                        nops: AlignNops::default(),
                     })
                 }
             };
@@ -1510,6 +1511,7 @@ pub(crate) fn materialize_asm_sections(
                     spec: AlignSpec::Expr { text, .. },
                     fill,
                     max,
+                    nops,
                 } => {
                     let n = measured.align_of((bi, ii)).ok_or_else(|| {
                         alloc::format!("inline asm: alignment `{text}` was not measured")
@@ -1518,6 +1520,7 @@ pub(crate) fn materialize_asm_sections(
                         spec: AlignSpec::Bytes(n),
                         fill: *fill,
                         max: *max,
+                        nops: *nops,
                     };
                     &resolved
                 }
@@ -1543,7 +1546,12 @@ pub(crate) fn materialize_asm_sections(
                     spec: AlignSpec::Bytes(n),
                     ..
                 } if *n <= 1 => {}
-                AsmSectionItem::Align { spec, fill, max } => {
+                AsmSectionItem::Align {
+                    spec,
+                    fill,
+                    max,
+                    nops,
+                } => {
                     let n = spec.bytes(&|_| None)?;
                     let gap = align_gap(sec.bytes.len() as i64, n as i64, None) as usize;
                     // GNU as records the requested alignment on the section
@@ -1556,7 +1564,7 @@ pub(crate) fn materialize_asm_sections(
                             gap,
                             *fill,
                             exec,
-                            align_is_p2,
+                            *nops,
                             sec.after_insn,
                         )?;
                         if lead > 0 {

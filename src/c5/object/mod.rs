@@ -373,7 +373,8 @@ fn fold_asm_sections(
                 AsmLabelPlacement::Data(at)
             } else {
                 let align = s.align.max(1) as usize;
-                let (pat, plen) = align_fill_pattern(None, true, is_a64);
+                let (pat, plen) =
+                    align_fill_pattern(None, true, crate::c5::asm::AlignNops::of_target(is_a64));
                 while !build.text.len().is_multiple_of(align) {
                     build.text.push(pat[build.text.len() % plen]);
                 }

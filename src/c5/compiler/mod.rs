@@ -1364,6 +1364,110 @@ pub(super) struct LabelState {
     defined: bool,
 }
 
+/// One `__label__` binding: the key its name interns under, and the
+/// block-nesting depth of the declaring block.
+struct LocalLabelBinding {
+    key: String,
+    depth: usize,
+}
+
+/// GCC `__label__` bindings for the blocks open in the current
+/// function, keyed by the name's symbol-table index -- the lexer
+/// interns one entry per spelling, so a name is a `usize` here.
+/// Declaring, resolving and closing a block each cost one map probe
+/// per name rather than a scan of the declaring block's list.
+#[derive(Default)]
+pub(super) struct LocalLabelScopes {
+    /// Per name, the bindings currently in scope, innermost last: a
+    /// declaration pushes, its block's exit pops. `last()` is the
+    /// binding a reference resolves to, so an inner declaration
+    /// shadows an outer one.
+    active: hashbrown::HashMap<usize, Vec<LocalLabelBinding>>,
+    /// Per open block, the names it declared, so its exit pops exactly
+    /// its own bindings.
+    declared: Vec<Vec<usize>>,
+    /// Makes each declaration's key unique within the function, which
+    /// keeps two sibling blocks declaring one name apart.
+    seq: u32,
+}
+
+impl LocalLabelScopes {
+    /// Drop every binding. Called at each function start.
+    fn clear(&mut self) {
+        self.active.clear();
+        self.declared.clear();
+        self.seq = 0;
+    }
+
+    fn open(&mut self) {
+        self.declared.push(Vec::new());
+    }
+
+    fn close(&mut self) {
+        for idx in self.declared.pop().unwrap_or_default() {
+            if let hashbrown::hash_map::Entry::Occupied(mut e) = self.active.entry(idx) {
+                e.get_mut().pop();
+                if e.get().is_empty() {
+                    e.remove();
+                }
+            }
+        }
+    }
+
+    /// Bind the name at symbol index `idx` in the innermost open block
+    /// and return its key. `None` when that block already declares the
+    /// name, which gcc rejects.
+    fn declare(&mut self, idx: usize, name: &str) -> Option<String> {
+        let depth = self.declared.len();
+        if self.innermost(idx).is_some_and(|b| b.depth == depth) {
+            return None;
+        }
+        let key = format!("{name}#{}", self.seq);
+        self.seq += 1;
+        self.active.entry(idx).or_default().push(LocalLabelBinding {
+            key: key.clone(),
+            depth,
+        });
+        self.declared
+            .last_mut()
+            .expect("a block scope is open while parsing its `__label__` declaration")
+            .push(idx);
+        Some(key)
+    }
+
+    /// The key the name at symbol index `idx` resolves to, or `None`
+    /// when no open block declares it (a function-scoped label).
+    fn resolve(&self, idx: usize) -> Option<&str> {
+        self.innermost(idx).map(|b| b.key.as_str())
+    }
+
+    fn innermost(&self, idx: usize) -> Option<&LocalLabelBinding> {
+        let found = self.active.get(&idx).and_then(|s| s.last());
+        note_local_label_lookup(usize::from(found.is_some()), self.active.len());
+        found
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Label lookups, `__label__` bindings those lookups examined, and
+    /// bindings that were in scope at them. Read by the scaling test,
+    /// which bounds the second against the first and the third.
+    pub(crate) static LOCAL_LABEL_LOOKUP: core::cell::Cell<(usize, usize, usize)> =
+        const { core::cell::Cell::new((0, 0, 0)) };
+}
+
+#[cfg(test)]
+fn note_local_label_lookup(examined: usize, in_scope: usize) {
+    LOCAL_LABEL_LOOKUP.with(|c| {
+        let (n, e, s) = c.get();
+        c.set((n + 1, e + examined, s + in_scope));
+    });
+}
+
+#[cfg(not(test))]
+fn note_local_label_lookup(_examined: usize, _in_scope: usize) {}
+
 /// Single-pass C compiler. Holds the lexer, the symbol table, and the
 /// codegen scaffolding. `compile(self)` consumes the compiler and produces
 /// a [`Program`] ready for the VM.
@@ -1625,16 +1729,11 @@ pub struct Compiler {
     /// against `labels` at function end; an unresolved entry is
     /// a compile error.
     unresolved_gotos: Vec<String>,
-    /// One entry per open block, holding that block's `__label__`
-    /// declarations as (source name, unique key). A label name is
-    /// resolved by scanning the stack from the innermost block out,
-    /// so an inner declaration shadows an outer one and two sibling
-    /// blocks declaring the same name get distinct keys. Cleared at
-    /// every function start.
-    local_label_scopes: Vec<Vec<(String, String)>>,
-    /// Counter making each `__label__` declaration's key unique
-    /// within the function.
-    local_label_seq: u32,
+    /// GCC `__label__` bindings of the open blocks: an inner
+    /// declaration shadows an outer one and two sibling blocks
+    /// declaring the same name get distinct keys. Cleared at every
+    /// function start.
+    local_label_scopes: LocalLabelScopes,
     /// Per nested `switch` body: drained at switch close. The
     /// AST emitter records each case's constant on its `Stmt::Case`
     /// node; this stack is the parser-side depth tracker that
@@ -2454,8 +2553,7 @@ impl Compiler {
             nest_depth: 0,
             labels: hashbrown::HashMap::new(),
             unresolved_gotos: Vec::new(),
-            local_label_scopes: Vec::new(),
-            local_label_seq: 0,
+            local_label_scopes: LocalLabelScopes::default(),
             switch_cases: Vec::new(),
             switch_defaults: Vec::new(),
             structs: Vec::new(),

@@ -1116,6 +1116,41 @@ fn stmt_expr_goto_label_value() {
 }
 
 #[test]
+fn local_label_shadowing_branches_to_the_innermost_declaration() {
+    // An inner `__label__ l` shadows the enclosing one, and the outer
+    // binding is back in scope at the inner block's `}`. Each `goto`
+    // skips the addend guarding the label it must not reach, so a
+    // mis-bound branch changes the result.
+    let src = "
+        int main(void) {
+            __label__ l;
+            int acc = 0;
+            { __label__ l; if (acc == 0) goto l; acc += 100; l: acc += 2; }
+            if (acc == 2) goto l;
+            acc += 1000;
+            l: acc += 4;
+            return acc;
+        }
+    ";
+    assert_eq!(run_str(src), 6);
+}
+
+#[test]
+fn local_labels_of_two_sibling_blocks_stay_separate() {
+    // Each block's `l` is its own label, so neither `goto` can reach
+    // the other block's.
+    let src = "
+        int main(void) {
+            int acc = 0;
+            { __label__ l; if (acc == 0) goto l; acc += 10; l: acc += 1; }
+            { __label__ l; if (acc == 1) goto l; acc += 20; l: acc += 2; }
+            return acc;
+        }
+    ";
+    assert_eq!(run_str(src), 3);
+}
+
+#[test]
 fn stmt_expr_pointer_arith_arrow() {
     // A statement expression ending in pointer arithmetic keeps the pointer
     // result type (C99 6.5.6p8), so `({ ...; p - 1; })->field` resolves the
@@ -6349,6 +6384,57 @@ fn initializer_cost_is_linear_in_element_count() {
     assert!(
         large < small * 32.0,
         "initializer cost grew {:.1}x for 16x the elements ({small:.3e}s -> {large:.3e}s)",
+        large / small
+    );
+}
+
+/// One block declaring `n` `__label__` names, each defined and reached
+/// by a `goto`. The shape that exercises the declaration bookkeeping
+/// and the reference resolution together.
+#[cfg(not(debug_assertions))]
+fn local_label_unit(n: usize) -> String {
+    let mut s = String::from("int main(void) {\n__label__ L0");
+    for i in 1..n {
+        s.push_str(&format!(", L{i}"));
+    }
+    s.push_str(";\nint acc = 0;\ngoto L0;\n");
+    for i in 0..n - 1 {
+        s.push_str(&format!("L{i}: acc++; goto L{};\n", i + 1));
+    }
+    s.push_str(&format!("L{}: return acc;\n}}\n", n - 1));
+    s
+}
+
+#[test]
+#[cfg(not(debug_assertions))]
+fn local_label_parse_cost_is_linear_in_declaration_count() {
+    // End-to-end cover for the same property the lookup-count test
+    // asserts, independent of that instrumentation: `__label__` parse
+    // must cost per name rather than per name pair.
+    //
+    // The span is 16x the names; the smaller point carries the fixed
+    // per-compile cost, so linear growth reads under 16x. Measured here,
+    // the keyed bindings ran 7.2x and the per-block scan they replaced
+    // ran 135x, so 32x separates them with better than 4x margin on
+    // either side. The metric is the ratio rather than either time, so
+    // a loaded box scales both ends.
+    fn once(src: &str) -> f64 {
+        let t = std::time::Instant::now();
+        let _ = compile_str(src);
+        t.elapsed().as_secs_f64()
+    }
+    let units = [local_label_unit(800), local_label_unit(12800)];
+    let mut best = [f64::MAX; 2];
+    for _ in 0..3 {
+        for (b, u) in best.iter_mut().zip(units.iter()) {
+            *b = b.min(once(u));
+        }
+    }
+    let (small, large) = (best[0], best[1]);
+    assert!(small > 0.0, "no measurable parse cost to compare");
+    assert!(
+        large < small * 32.0,
+        "`__label__` parse grew {:.1}x for 16x the names ({small:.3e}s -> {large:.3e}s)",
         large / small
     );
 }

@@ -1714,21 +1714,18 @@ impl Compiler {
             .push_stmt(super::super::ast::Stmt::Default { body }, pos)
     }
 
-    /// Map a label name as written to the key it interns under. A name
-    /// declared `__label__` by an open block resolves to that block's
-    /// unique key, innermost first; any other name is function-scoped
-    /// and keys under itself. Every label consumer (`label:`, `goto`,
-    /// `&&label`, the `asm goto` label list) resolves through here, so
-    /// the block-scoped and function-scoped name spaces stay disjoint.
-    pub(super) fn resolve_label_name(&self, name: &str) -> alloc::string::String {
-        for scope in self.local_label_scopes.iter().rev() {
-            for (declared, key) in scope.iter().rev() {
-                if declared == name {
-                    return key.clone();
-                }
-            }
+    /// Map the label name at symbol index `idx` to the key it interns
+    /// under. A name declared `__label__` by an open block resolves to
+    /// that block's unique key, innermost first; any other name is
+    /// function-scoped and keys under itself. Every label consumer
+    /// (`label:`, `goto`, `&&label`, the `asm goto` label list)
+    /// resolves through here, so the block-scoped and function-scoped
+    /// name spaces stay disjoint.
+    pub(super) fn resolve_label_name(&self, idx: usize) -> alloc::string::String {
+        match self.local_label_scopes.resolve(idx) {
+            Some(key) => alloc::string::String::from(key),
+            None => self.symbols[idx].name.clone(),
         }
-        alloc::string::String::from(name)
     }
 
     /// AST label slot for `name`, allocating one on first mention.
@@ -1771,7 +1768,7 @@ impl Compiler {
         if self.lex.tk != Token::Id {
             return Err(self.compile_err("label name expected after `&&`"));
         }
-        let name = self.resolve_label_name(&self.symbols[self.lex.curr_id_idx].name.clone());
+        let name = self.resolve_label_name(self.lex.curr_id_idx);
         self.next()?;
         if !self.label_is_defined(&name) {
             self.unresolved_gotos.push(name.clone());

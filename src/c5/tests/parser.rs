@@ -691,6 +691,41 @@ fn duplicate_local_label_declaration() {
 }
 
 #[test]
+fn duplicate_local_label_declaration_far_apart_in_one_block() {
+    // The duplicate is against the whole declaring block, not a recent
+    // window of it: the two `l`s are separated by 400 other names.
+    let n = 200;
+    let mut src = alloc::string::String::from("int main() { __label__ l");
+    for i in 0..n {
+        src.push_str(&alloc::format!(", a{i}, b{i}"));
+    }
+    src.push_str("; __label__ l; goto l; l: return 0; }");
+    expect_compile_error(&src, "duplicate local label declaration `l`");
+}
+
+#[test]
+fn local_label_and_function_scoped_label_share_a_name() {
+    // The two name spaces are disjoint: the block's `l` is its own
+    // label, and the function-scoped `l` defined outside it is another.
+    expect_compiles(
+        "int main() { { __label__ l; goto l; l: ; } goto l; l: return 0; }",
+        "a `__label__` and a function-scoped label of the same name",
+    );
+}
+
+#[test]
+fn local_label_declaration_reopens_an_outer_name_on_block_exit() {
+    // The inner block's binding is undone at its `}`, so the second
+    // sibling block redeclares the name rather than colliding with the
+    // first, and the trailing `goto` reaches the outer declaration.
+    expect_compiles(
+        "int main() { __label__ l; { __label__ l; goto l; l: ; } \
+         { __label__ l; goto l; l: ; } goto l; l: return 0; }",
+        "a `__label__` name rebound by each of two sibling blocks",
+    );
+}
+
+#[test]
 fn local_label_declaration_after_a_statement() {
     expect_compile_error(
         "int main() { int x = 0; __label__ l; goto l; l: return x; }",
@@ -717,8 +752,8 @@ fn address_of_undefined_label() {
 }
 
 // The label table is keyed by name, so its size does not change what a
-// label diagnostic names or where it points. The two cases below run
-// wide enough that a table-order dependency would show.
+// label diagnostic names or where it points. The two diagnostic cases
+// below run wide enough that a table-order dependency would show.
 
 #[test]
 fn duplicate_label_is_reported_at_its_second_definition() {
@@ -750,6 +785,50 @@ fn the_first_undefined_goto_target_is_the_one_reported() {
     expect_compile_error(
         &src,
         &alloc::format!(":{}: error: unresolved label: M0", 3 * n + 3),
+    );
+}
+
+#[test]
+fn local_label_lookup_cost_is_independent_of_declaration_count() {
+    // A block's `__label__` declarations are keyed by the name's
+    // symbol-table index, so a declaration and a reference each examine
+    // one binding whatever the block declares. Measured in bindings
+    // examined, so the claim holds exactly rather than to within timer
+    // noise; the control below is what the per-block scan this replaced
+    // would have examined at the same lookups.
+    fn unit(decls: usize) -> alloc::string::String {
+        let mut src = alloc::string::String::from("int main(void) {\n__label__ L0");
+        for i in 1..decls {
+            src.push_str(&alloc::format!(", L{i}"));
+        }
+        src.push_str(";\ngoto L0;\n");
+        for i in 0..decls - 1 {
+            src.push_str(&alloc::format!("L{i}: goto L{};\n", i + 1));
+        }
+        src.push_str(&alloc::format!("L{}: return 0;\n}}\n", decls - 1));
+        src
+    }
+    let once = |decls: usize| -> (usize, usize, usize) {
+        let src = unit(decls);
+        crate::c5::compiler::LOCAL_LABEL_LOOKUP.with(|c| c.set((0, 0, 0)));
+        assert!(Compiler::new(src).compile().is_ok());
+        crate::c5::compiler::LOCAL_LABEL_LOOKUP.with(|c| c.get())
+    };
+    let (small_n, small_examined, small_scope) = once(50);
+    let (large_n, large_examined, large_scope) = once(1600);
+    assert!(small_n > 0 && large_n > 0, "no label lookups to compare");
+    assert!(
+        small_examined <= small_n && large_examined <= large_n,
+        "a label lookup examined more than one binding \
+         ({small_examined}/{small_n}, {large_examined}/{large_n}); \
+         resolution is scanning the declaring block again",
+    );
+    assert!(
+        large_scope / large_n >= (small_scope / small_n) * 8,
+        "32x the declarations no longer grow what a per-block scan would \
+         examine per lookup ({} -> {}); the bound above proves nothing",
+        small_scope / small_n,
+        large_scope / large_n,
     );
 }
 

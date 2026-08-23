@@ -727,21 +727,12 @@ impl Compiler {
             if self.lex.tk != Token::Id {
                 return Err(self.compile_err("label name expected in `__label__` declaration"));
             }
-            let name = self.symbols[self.lex.curr_id_idx].name.clone();
+            let idx = self.lex.curr_id_idx;
+            let name = self.symbols[idx].name.clone();
             self.next()?;
-            let scope = self
-                .local_label_scopes
-                .last()
-                .expect("a block scope is open while parsing its `__label__` declaration");
-            if scope.iter().any(|(declared, _)| declared == &name) {
+            if self.local_label_scopes.declare(idx, &name).is_none() {
                 return Err(self.compile_err(format!("duplicate local label declaration `{name}`")));
             }
-            let key = format!("{name}#{}", self.local_label_seq);
-            self.local_label_seq += 1;
-            self.local_label_scopes
-                .last_mut()
-                .expect("a block scope is open while parsing its `__label__` declaration")
-                .push((name, key));
             if self.lex.tk == ',' {
                 self.next()?;
                 continue;
@@ -767,7 +758,7 @@ impl Compiler {
         self.tag_scopes.push(alloc::vec::Vec::new());
         // GCC local labels declared by this block; see
         // `Compiler::resolve_label_name`.
-        self.local_label_scopes.push(alloc::vec::Vec::new());
+        self.local_label_scopes.open();
         self.block_scopes.push(Vec::new());
 
         let mut top_level_ids: alloc::vec::Vec<super::super::ast::StmtId> = alloc::vec::Vec::new();
@@ -953,7 +944,7 @@ impl Compiler {
         // `self.structs` stays reachable by id for any reference the
         // outer scope already holds.
         self.tag_scopes.pop();
-        self.local_label_scopes.pop();
+        self.local_label_scopes.close();
         Ok((block_id, value_item))
     }
 
@@ -1367,12 +1358,13 @@ impl Compiler {
                     self.truncate_data(data_base);
                     return Err(self.compile_err("inline asm goto: label identifier expected"));
                 }
-                let name = self.symbols[self.lex.curr_id_idx].name.clone();
+                let idx = self.lex.curr_id_idx;
+                let name = self.symbols[idx].name.clone();
                 self.next()?;
                 // `label_names` stays the name as written: the template
                 // references it as `%l[name]`. Only the binding resolves
                 // through the local-label scopes.
-                let key = self.resolve_label_name(&name);
+                let key = self.resolve_label_name(idx);
                 if !self.label_is_defined(&key) {
                     self.unresolved_gotos.push(key.clone());
                 }
@@ -2674,7 +2666,7 @@ impl Compiler {
             self.skip_balanced_parens_after_open()?;
         }
         if self.lex.tk == Token::Id && self.lex.peek_after_whitespace(b':') {
-            let name = self.resolve_label_name(&self.symbols[self.lex.curr_id_idx].name.clone());
+            let name = self.resolve_label_name(self.lex.curr_id_idx);
             // C99 6.8.1p3: a label name must be unique within its
             // function (constraint), and a `__label__` name within the
             // block that declares it. Two labeled statements with the
@@ -2904,8 +2896,7 @@ impl Compiler {
                 if self.lex.tk != Token::Id {
                     return Err(self.compile_err("expected identifier after goto"));
                 }
-                let target_name =
-                    self.resolve_label_name(&self.symbols[self.lex.curr_id_idx].name.clone());
+                let target_name = self.resolve_label_name(self.lex.curr_id_idx);
                 self.next()?;
 
                 self.flush_pending_stores();

@@ -1444,7 +1444,6 @@ impl Compiler {
                     self.labels.clear();
                     self.unresolved_gotos.clear();
                     self.local_label_scopes.clear();
-                    self.local_label_seq = 0;
                     self.uses_alloca_in_current_fn = false;
                     self.func_vla_decls = 0;
                     self.ast_reset();
@@ -1598,7 +1597,7 @@ impl Compiler {
                     self.cleanup_scopes.push(alloc::vec::Vec::new());
                     // GCC local labels declared by the body's top-level
                     // block; see `Compiler::resolve_label_name`.
-                    self.local_label_scopes.push(alloc::vec::Vec::new());
+                    self.local_label_scopes.open();
                     let mut at_block_start = true;
                     while self.lex.tk != '}' {
                         if self.lex.tk == Token::LocalLabel {
@@ -1694,7 +1693,7 @@ impl Compiler {
                     }
                     self.cleanup_scopes.pop();
                     self.tag_scopes.pop();
-                    self.local_label_scopes.pop();
+                    self.local_label_scopes.close();
                     // Wrap the function's top-level stmts into a
                     // Compound and pin it as `ast.body` so the
                     // walker has a single tree root to descend

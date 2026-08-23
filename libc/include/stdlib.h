@@ -468,8 +468,8 @@ static inline void __clear_cache(void *__begin, void *__end) {
 #pragma binding(libgcc_s::__clear_cache, "__clear_cache")
 void __clear_cache(void *__begin, void *__end);
 /* AAPCS64 returns `long double` (IEEE binary128) in v0 as a
-** single 128-bit Q register. c5 stores `long double` in an
-** 8-byte FP64 slot, so callers of Linux C library functions that return
+** single 128-bit Q register. The c5 compute path carries the value as
+** binary64, so callers of Linux C library functions that return
 ** `long double` (strtold, ldexpl, ...) need an explicit
 ** truncation pass after the call -- otherwise the c5 accumulator
 ** reads the low 64 bits of v0, which are zero for every power-

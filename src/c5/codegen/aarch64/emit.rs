@@ -2044,6 +2044,26 @@ impl ScratchPool {
     }
 }
 
+/// The d-register an FP result lands in: the allocator's, or a scratch
+/// outside its pool when the value spills.
+fn fp_or_spill_dst(dst: Place) -> Option<u8> {
+    match dst {
+        Place::FpReg(r) => Some(r),
+        Place::Spill(_) => Some(SCRATCH_FP0),
+        _ => None,
+    }
+}
+
+/// An address register the binary128 sequences can hold across their
+/// borrow of the narrow-access pool.
+fn addr_outside_borrows(code: &mut Vec<u8>, rn: Reg, scratch: &ScratchPool) -> Reg {
+    if !NARROW_BORROW.contains(&rn.0) {
+        return rn;
+    }
+    emit_mov_reg(code, scratch.primary, rn);
+    scratch.primary
+}
+
 /// Store a word through sp to take the fault, if the stack ends here, on
 /// the page the allocation just entered. `xzr` is always readable and the
 /// store sets no flags, so the probe is usable at any point in the
@@ -6530,8 +6550,8 @@ fn emit_call_ext(
     // ret's to main's caller and main's epilogue never runs.
     emit(code, enc_bl(0));
     // AAPCS64 returns `long double` (IEEE binary128) in v0 as a
-    // single 128-bit Q register. c5 stores `long double` in an
-    // 8-byte FP64 slot, so a `long double` libc return needs a
+    // single 128-bit Q register. The c5 compute path carries the
+    // value as binary64, so a `long double` libc return needs a
     // truncation pass before it becomes the c5 accumulator. The
     // libgcc helper `__trunctfdf2` takes binary128 in v0 and
     // returns FP64 in d0; the codegen pre-includes it on
@@ -7097,7 +7117,7 @@ fn enc_load_unit(width: u32, rt: Reg, base: Reg, off: u32) -> u32 {
 /// when one access suffices -- the only case in which `dst` may alias
 /// `base`.
 #[allow(clippy::too_many_arguments)]
-fn emit_agg_load_int(
+pub(super) fn emit_agg_load_int(
     code: &mut Vec<u8>,
     dst: Reg,
     base: Reg,
@@ -7175,7 +7195,7 @@ fn narrow_bound(align: u8, abi: super::Abi) -> Option<u32> {
 
 /// Zero-extending store of the low `width` bytes (8, 4, 2 or 1) of
 /// `rt` to `[base + off]`.
-fn enc_store_unit(width: u32, rt: Reg, base: Reg, off: u32) -> u32 {
+pub(super) fn enc_store_unit(width: u32, rt: Reg, base: Reg, off: u32) -> u32 {
     match width {
         8 => enc_str_imm(rt, base, off),
         4 => super::encode::enc_str32_imm(rt, base, off),
@@ -7188,7 +7208,7 @@ fn enc_store_unit(width: u32, rt: Reg, base: Reg, off: u32) -> u32 {
 /// piece temp. They sit in the allocator's pool, so each is saved and
 /// restored across the sequence; nothing between the save and the
 /// restore addresses `sp`. Mirrors the reservation `emit_mcpy` makes.
-const NARROW_BORROW: [u8; 7] = [9, 10, 11, 12, 13, 14, 15];
+pub(super) const NARROW_BORROW: [u8; 7] = [9, 10, 11, 12, 13, 14, 15];
 
 /// The first `N` borrow registers distinct from every register in
 /// `avoid`. The pool is larger than any caller's avoid set, so the
@@ -8343,6 +8363,18 @@ fn emit_load(
         }
         return true;
     }
+    if let LoadKind::F128 = kind {
+        let Some(dd) = fp_or_spill_dst(dst) else {
+            bail_msg("Load F128: dst not fp reg / spill");
+            return false;
+        };
+        let base = addr_outside_borrows(code, rn, scratch);
+        super::binary128::emit_narrow_load(code, dd, base, disp, bound);
+        if let Place::Spill(slot) = dst {
+            emit_spill_str_d_auto(code, frame, dd, spill_off(frame, slot));
+        }
+        return true;
+    }
     if let LoadKind::F64 = kind {
         // `double` lvalue: a single 8-byte FP load into a d-reg.
         let dd = match dst {
@@ -8447,6 +8479,20 @@ fn emit_load_local(
         if let Place::Spill(slot) = dst {
             let sp_off = spill_off(frame, slot);
             emit_spill_str_d_auto(code, frame, dd, sp_off);
+        }
+        return true;
+    }
+    if matches!(kind, LoadKind::F128) {
+        let Some(dd) = fp_or_spill_dst(dst) else {
+            bail_msg("LoadLocal F128: dst not fp reg / spill");
+            return false;
+        };
+        if !emit_local_addr(code, Place::IntReg(scratch.primary.0), off, func, frame) {
+            return false;
+        }
+        super::binary128::emit_narrow_load(code, dd, scratch.primary, 0, None);
+        if let Place::Spill(slot) = dst {
+            emit_spill_str_d_auto(code, frame, dd, spill_off(frame, slot));
         }
         return true;
     }
@@ -8633,6 +8679,29 @@ fn emit_store_local(
         }
         return true;
     }
+    if matches!(kind, StoreKind::F128) {
+        let value_place = alloc
+            .places
+            .get(value as usize)
+            .copied()
+            .unwrap_or(Place::None);
+        let Some(dn) = materialize_fp(code, value_place, SCRATCH_FP0, frame) else {
+            bail_msg("StoreLocal F128: value not fp reg / spill / int reg");
+            return false;
+        };
+        if !emit_local_addr(code, Place::IntReg(scratch.secondary.0), off, func, frame) {
+            return false;
+        }
+        super::binary128::emit_widen_store(code, dn, scratch.secondary, 0, None);
+        match dst {
+            Place::FpReg(r) if r != dn => emit(code, super::encode::enc_fmov_d_d(r, dn)),
+            Place::Spill(slot) => {
+                emit_spill_str_d_auto(code, frame, dn, spill_off(frame, slot));
+            }
+            _ => {}
+        }
+        return true;
+    }
     if matches!(kind, StoreKind::F64) {
         // `double` local store: a single 8-byte FP store; no narrow.
         let value_place = alloc
@@ -8778,7 +8847,10 @@ fn emit_load_indexed(
     frame: Frame,
     scratch: &ScratchPool,
 ) -> bool {
-    if matches!(kind, LoadKind::F32 | LoadKind::F64) {
+    if matches!(
+        kind,
+        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128
+    ) {
         bail_msg("LoadIndexed: FP not implemented");
         return false;
     }
@@ -8848,7 +8920,10 @@ fn emit_store_indexed(
     frame: Frame,
     scratch: &ScratchPool,
 ) -> bool {
-    if matches!(kind, StoreKind::F32 | StoreKind::F64) {
+    if matches!(
+        kind,
+        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128
+    ) {
         bail_msg("StoreIndexed: FP not implemented");
         return false;
     }
@@ -9055,6 +9130,22 @@ fn emit_store(
         } else if let Place::Spill(slot) = dst {
             let sp_off = spill_off(frame, slot);
             emit_spill_str_d_auto(code, frame, dn, sp_off);
+        }
+        return true;
+    }
+    if let StoreKind::F128 = kind {
+        let Some(dn) = materialize_fp(code, value_place, SCRATCH_FP0, frame) else {
+            bail_msg("Store F128: value not fp reg / spill / int reg");
+            return false;
+        };
+        let base = addr_outside_borrows(code, rn, scratch);
+        super::binary128::emit_widen_store(code, dn, base, disp, bound);
+        if let Some(rd) = fp_reg(dst) {
+            if rd != dn {
+                emit(code, super::encode::enc_fmov_d_d(rd, dn));
+            }
+        } else if let Place::Spill(slot) = dst {
+            emit_spill_str_d_auto(code, frame, dn, spill_off(frame, slot));
         }
         return true;
     }

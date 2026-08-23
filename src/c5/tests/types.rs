@@ -917,9 +917,8 @@ fn a_named_address_space_on_the_pointee_is_named_in_the_diagnostic() {
 
 /// `long double`'s layout follows the target ABI: System V x86-64
 /// gives it the x87 80-bit format in a 16-byte object at 16-byte
-/// alignment; macOS/arm64 and both Windows targets define it as
-/// binary64. AArch64 Linux defines binary128, which badc does not yet
-/// store (doc/std-conformance.md records the divergence).
+/// alignment and AAPCS64 ELF gives it IEEE binary128, also 16/16;
+/// macOS/arm64 and both Windows targets define it as binary64.
 #[test]
 fn long_double_layout_follows_the_target_abi() {
     use super::Vm;
@@ -940,7 +939,7 @@ fn long_double_layout_follows_the_target_abi() {
                  + 1000000000 * (int)(sizeof(struct S) / 16); }";
     for (t, width) in [
         (Target::LinuxX64, 16),
-        (Target::LinuxAarch64, 8),
+        (Target::LinuxAarch64, 16),
         (Target::MacOSAarch64, 8),
         (Target::WindowsX64, 8),
         (Target::WindowsAarch64, 8),
@@ -999,12 +998,40 @@ fn long_double_storage_round_trips_through_its_abi_format() {
         0x80 + 0xff + 0x3f,
         "a static initializer stores the x87 encoding"
     );
+    // binary128 keeps the leading bit implicit, so 1.0 is exponent
+    // 0x3fff over a zero significand: only the top two bytes are set.
+    let image128 = "int main(void){ long double x = 1.0L;\n\
+                    unsigned char *b = (unsigned char *)&x; int i, s = 0;\n\
+                    for (i = 0; i < 14; i++) s += b[i];\n\
+                    return s * 1000 + b[15] + b[14]; }";
+    let global128 = "long double g = 1.0L;\n\
+                     int main(void){ unsigned char *b = (unsigned char *)&g;\n\
+                     int i, s = 0; for (i = 0; i < 14; i++) s += b[i];\n\
+                     return s * 1000 + b[15] + b[14]; }";
+    for (src, what) in [(image128, "an automatic"), (global128, "a static")] {
+        assert_eq!(
+            run(src, Target::LinuxAarch64),
+            0x3f + 0xff,
+            "linux-aarch64: {what} object stores the binary128 encoding"
+        );
+    }
+    // 2^-1074 is subnormal in binary64 and normal in binary128, so the
+    // widening normalizes it: exponent 16383 - 1074 = 0x3bcd.
+    let sub = "int main(void){ double d = 5e-324; long double x = d;\n\
+               unsigned char *b = (unsigned char *)&x; int i, s = 0;\n\
+               for (i = 0; i < 14; i++) s += b[i];\n\
+               return s * 100000 + b[15] * 256 + b[14]; }";
+    assert_eq!(
+        run(sub, Target::LinuxAarch64),
+        0x3b * 256 + 0xcd,
+        "linux-aarch64: a binary64 subnormal widens to a normal binary128"
+    );
 }
 
-/// `long double` keeps `double`'s 53-bit significand, so a value needing
-/// more than 53 bits does not round-trip. The platform types on both
-/// Linux targets do (x87 80-bit has 64, binary128 has 113), which is why
-/// the layout divergence is observable and documented rather than silent.
+/// `long double` keeps `double`'s 53-bit significand through the compute
+/// path, so a value needing more than 53 bits does not round-trip even
+/// where the stored object could hold it (x87 80-bit has 64 significand
+/// bits, binary128 has 113). doc/std-conformance.md records the limit.
 #[test]
 fn long_double_carries_only_the_binary64_significand() {
     let probe = "int main(void){ unsigned long long u = (1ULL<<53)+1ULL;\n\

@@ -553,6 +553,11 @@ pub(crate) fn enc_rorv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     enc_rrr(0x9AC0_2C00, rd, rn, rm)
 }
 
+/// `CLZ <Xd>, <Xn>` -- count leading zero bits; 64 for a zero source.
+pub(crate) fn enc_clz(rd: Reg, rn: Reg) -> u32 {
+    0xDAC0_1000 | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
 /// `ROR <Xd>, <Xs>, #<shift>` -- bit-rotate-right by constant. Encoded
 /// as the EXTR alias `EXTR Xd, Xs, Xs, #shift`.
 pub(crate) fn enc_ror_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {

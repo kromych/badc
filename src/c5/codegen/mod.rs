@@ -377,14 +377,14 @@ impl Target {
         }
     }
 
-    /// TODO: extended-precision long double -- binary128 on AAPCS64.
+    /// In-memory format a declared `long double` object takes.
     pub fn long_double(self) -> LongDoubleKind {
         match self {
             Target::LinuxX64 => LongDoubleKind::X87,
-            Target::LinuxAarch64
-            | Target::MacOSAarch64
-            | Target::WindowsX64
-            | Target::WindowsAarch64 => LongDoubleKind::F64,
+            Target::LinuxAarch64 => LongDoubleKind::Binary128,
+            Target::MacOSAarch64 | Target::WindowsX64 | Target::WindowsAarch64 => {
+                LongDoubleKind::F64
+            }
         }
     }
 
@@ -3105,8 +3105,8 @@ pub(crate) fn lower_for_with_prebuilt(
         imports.ensure_dylib("libSystem", program, target);
     }
     // Linux aarch64 long-double libc returns. AAPCS64 returns
-    // binary128 in v0 (full Q register); c5 stores `long double`
-    // in an 8-byte FP64 slot, so any libc call whose prototype is
+    // binary128 in v0 (full Q register); the c5 compute path carries
+    // the value as binary64, so any libc call whose prototype is
     // `long double f(...)` needs a `__trunctfdf2` follow-up that
     // truncates v0 to d0 before the c5 accumulator reads it. Force
     // the binding in if any in-scope binding carries

@@ -59,6 +59,13 @@ fn store_width(kind: StoreKind) -> u8 {
     }
 }
 
+/// The transfer unit an emit's scaled displacement field is expressed
+/// in. A 16-byte `long double` object moves as two 8-byte halves, so
+/// its displacement scales by 8 and reaches half as far.
+fn disp_unit(w: u8) -> i64 {
+    if w == 16 { 8 } else { w as i64 }
+}
+
 /// [`load_width`] restricted to the integer kinds, `None` for the
 /// floating kinds (the indexed emit handles integers only).
 fn int_load_width(kind: LoadKind) -> Option<u8> {
@@ -72,7 +79,7 @@ fn int_load_width(kind: LoadKind) -> Option<u8> {
 /// emit and the narrowing-store rewrite apply to integer values only.
 fn int_store_width(kind: StoreKind) -> Option<u8> {
     match kind {
-        StoreKind::F32 | StoreKind::F64 => None,
+        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 => None,
         k => Some(store_width(k)),
     }
 }
@@ -267,7 +274,11 @@ fn foldable_displaced_addresses(
             if w == 0 || w == 0xff || valid.get(&p).copied().unwrap_or(0) != total {
                 return None;
             }
-            let reach = if bounded.contains(&p) { 1 } else { w as i64 };
+            let reach = if bounded.contains(&p) {
+                1
+            } else {
+                disp_unit(w)
+            };
             if c % (w as i64) != 0 || c + (w as i64) > reach * 4096 {
                 return None;
             }

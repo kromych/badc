@@ -551,7 +551,7 @@ fn type_size_predefines_match_the_layout_engine() {
     );
     for (t, wchar, ld) in [
         (Target::LinuxX64, "int = 4", 16),
-        (Target::LinuxAarch64, "unsigned int = 4", 8),
+        (Target::LinuxAarch64, "unsigned int = 4", 16),
         (Target::MacOSAarch64, "int = 4", 8),
         (Target::WindowsX64, "unsigned short = 2", 8),
         (Target::WindowsAarch64, "unsigned short = 2", 8),
@@ -611,8 +611,8 @@ fn short_wchar_moves_the_wchar_predefines() {
 /// `__LDBL_*` spellings third-party headers test directly. `float` is
 /// binary32 and `double` binary64 everywhere; the LDBL row describes
 /// the storage format badc gives the type per target: x87 80-bit on
-/// linux-x64, matching gcc there, and binary64 elsewhere -- including
-/// AArch64 Linux, whose binary128 badc does not yet store.
+/// linux-x64 and IEEE binary128 on linux-aarch64, matching gcc on
+/// both, and binary64 on the targets whose ABI defines it that way.
 /// `__DECIMAL_DIG__` follows the widest format (5.2.4.2.2p11).
 #[test]
 fn float_characteristic_predefines_describe_the_target_formats() {
@@ -627,7 +627,7 @@ fn float_characteristic_predefines_describe_the_target_formats() {
     );
     for (t, ldbl, decimal, is_dbl) in [
         (Target::LinuxX64, "ldbl 64 18 16384 .", 21, false),
-        (Target::LinuxAarch64, "ldbl 53 15 1024 .", 17, true),
+        (Target::LinuxAarch64, "ldbl 113 33 16384 .", 36, false),
         (Target::MacOSAarch64, "ldbl 53 15 1024 .", 17, true),
         (Target::WindowsX64, "ldbl 53 15 1024 .", 17, true),
         (Target::WindowsAarch64, "ldbl 53 15 1024 .", 17, true),

@@ -3,6 +3,7 @@
 //! reference it as `aarch64::<item>` regardless of the internal split.
 
 pub(crate) mod asm;
+mod binary128;
 pub(crate) mod emit;
 pub(crate) mod encode;
 mod isa_a64_table;

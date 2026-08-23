@@ -41,23 +41,19 @@ per target:
 | target          | platform `long double` | badc stores    | size / align |
 |-----------------|------------------------|----------------|--------------|
 | linux-x64       | x87 80-bit             | x87 80-bit     | 16 / 16      |
-| linux-aarch64   | IEEE binary128         | IEEE binary64  | 8 / 8        |
+| linux-aarch64   | IEEE binary128         | IEEE binary128 | 16 / 16      |
 | macos-aarch64   | IEEE binary64          | IEEE binary64  | 8 / 8        |
 | windows-x64     | IEEE binary64          | IEEE binary64  | 8 / 8        |
 | windows-aarch64 | IEEE binary64          | IEEE binary64  | 8 / 8        |
 
-An object therefore has the platform's layout and encoding on four of
-the five targets, so a struct, an array, or a `.data` object shared with
-code built by the platform toolchain agrees byte for byte. On linux-x64
-a load converts the stored 80-bit value to binary64 (`fld`/`fstp`) and a
-store converts back exactly, matching the hardware conversions bit for
-bit including the noncanonical encodings.
-
-AArch64 Linux is the exception: its binary128 has no hardware support
-there and badc has no open-coded conversion for it, so the type stays
-binary64. Reporting 16 bytes while storing a binary64 in the low half
-would make every foreign reader misdecode the object, which is worse
-than a uniform documented width. TODO: extended-precision `long double`.
+An object therefore has the platform's layout and encoding on every
+target, so a struct, an array, or a `.data` object shared with code
+built by the platform toolchain agrees byte for byte. A load converts
+the stored value to binary64 and a store converts back exactly: on
+linux-x64 through `fld`/`fstp`, matching the hardware conversions bit
+for bit including the noncanonical encodings; on linux-aarch64, which
+has no quad-precision unit, through open-coded integer sequences that
+match gcc's `__extenddftf2` / `__trunctfdf2` bit for bit.
 
 Two consequences remain on both Linux targets:
 
@@ -84,9 +80,9 @@ Two consequences remain on both Linux targets:
   round-trip to FP64 precision.
 
 The remaining work is the argument / return conventions (a MEMORY-class
-16-byte stack slot and an `st(0)` return on System V, a Q-register pair
-on AAPCS64), extended-precision arithmetic, and the AAPCS64 binary128
-storage format. TODO: extended-precision `long double`.
+16-byte stack slot and an `st(0)` return on System V, a Q register on
+AAPCS64) and extended-precision arithmetic. TODO: extended-precision
+`long double`.
 
 Byte order is little-endian on every target: `__BYTE_ORDER__` expands to
 `__ORDER_LITTLE_ENDIAN__` and `__LITTLE_ENDIAN__` is defined.

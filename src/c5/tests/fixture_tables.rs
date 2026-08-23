@@ -68,6 +68,9 @@
 /// pointers resolve to native offsets via `FuncFixup`, so fixtures
 /// that exercise those paths run end-to-end.
 pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
+    // A declared `long double` object takes the target ABI's storage
+    // format, and the compute path's binary64 round-trips through it.
+    ("long_double_abi_storage.c", 0),
     ("anon_bitfield_reserves_bits.c", 0),
     ("attribute_mode.c", 0),
     ("flex_array_only_member.c", 0),
@@ -1095,6 +1098,9 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
 /// stay in sync because both backends should faithfully execute the
 /// same fixtures; if they drift, one of them has a bug.
 pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
+    // A declared `long double` object takes the target ABI's storage
+    // format, and the compute path's binary64 round-trips through it.
+    ("long_double_abi_storage.c", 0),
     ("anon_bitfield_reserves_bits.c", 0),
     ("attribute_mode.c", 0),
     ("flex_array_only_member.c", 0),
@@ -1830,6 +1836,9 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
 ];
 
 pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
+    // A declared `long double` object takes the target ABI's storage
+    // format, and the compute path's binary64 round-trips through it.
+    ("long_double_abi_storage.c", 0),
     ("anon_bitfield_reserves_bits.c", 0),
     ("strength_reduce_magic_divmod.c", 0),
     ("attribute_mode.c", 0),
@@ -3554,6 +3563,9 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
 ];
 
 pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
+    // A declared `long double` object takes the target ABI's storage
+    // format, and the compute path's binary64 round-trips through it.
+    ("long_double_abi_storage.c", 0),
     // A by-value aggregate argument in value form (the callee's declared
     // parameter list not in scope) must bind an address to the spliced
     // body's parameter cell. Native-only: the SSA interpreter's own call

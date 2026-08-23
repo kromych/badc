@@ -5086,6 +5086,15 @@ fn divmod_pair_shared_quotient() {
 }
 
 #[test]
+fn mul_add_contraction() {
+    // An integer multiply feeding an add or a subtract contracts into
+    // one multiply-accumulate; the results match the pair at both
+    // widths, signed and unsigned, and where the product has a second
+    // reader or the operands spill.
+    assert_eq!(run_fixture("mul_add_contraction.c"), 0);
+}
+
+#[test]
 fn tailcall_return_extension() {
     // int-returning tail callee under an unsigned-returning caller:
     // the widened value must zero-extend (bit 31 set).

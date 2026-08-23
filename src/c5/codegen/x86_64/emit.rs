@@ -3776,6 +3776,12 @@ fn emit_inst(
             alloc,
             frame,
         ),
+        Inst::MulAdd {
+            a,
+            b,
+            c,
+            neg_product,
+        } => emit_mul_add(code, dst, v, *a, *b, *c, *neg_product, alloc, frame),
         Inst::Extend { value, kind } => emit_extend(code, dst, *value, *kind, alloc, frame),
         Inst::Bswap { value, width } => emit_bswap(code, dst, *value, *width, alloc, frame),
         Inst::Copy { value, is_fp } => emit_copy(code, dst, *value, *is_fp, alloc, frame),
@@ -4825,6 +4831,98 @@ fn emit_fma(
         (true, true, true) => emit_vfnmsub231ss(code, dd, a14, b15),
     }
     fp_spill_dst_to_slot(code, dst, dd, frame);
+    true
+}
+
+/// `Inst::MulAdd { a, b, c, neg_product }` -- x86-64 has no
+/// three-operand integer multiply-accumulate, so the node lowers back
+/// to the `imul` plus `add` / `sub` pair. The two-operand `imul`
+/// overwrites its destination, which cannot be `rd` (still to receive
+/// `c`), so the product forms in a multiplicand's own register when
+/// this instruction is that value's last reader -- the register the
+/// allocator would have given the separate product -- and in
+/// `SCRATCH_R11` otherwise. Both multiplicands are consumed before `c`
+/// is staged, so `rd` may hold either of them.
+#[allow(clippy::too_many_arguments)]
+fn emit_mul_add(
+    code: &mut Vec<u8>,
+    dst: Place,
+    v: super::super::ir::ValueId,
+    a: u32,
+    b: u32,
+    c: u32,
+    neg_product: bool,
+    alloc: &Allocation,
+    frame: Frame,
+) -> bool {
+    let Some(rd) = int_or_spill_dst(dst) else {
+        return fail("MulAdd: dst not int reg / spill");
+    };
+    let (pa, pb, pc) = (place_of(alloc, a), place_of(alloc, b), place_of(alloc, c));
+    let dies_here = |val: u32| alloc.last_use.get(val as usize).copied() == Some(v);
+    // `c + a*b` with the addend elsewhere can multiply into the
+    // destination and add in place; `c - a*b` needs the destination
+    // for the addend, so its product goes to a multiplicand's own
+    // register when this instruction is that value's last reader, and
+    // to the fixed scratch otherwise.
+    let into_dst = !neg_product && pc != Place::IntReg(rd.0);
+    let (rp, other) = if into_dst && pb == Place::IntReg(rd.0) {
+        (rd, pa)
+    } else if into_dst {
+        let Some(ra) = materialize_int(code, pa, rd, frame) else {
+            return fail("MulAdd: a not int reg / spill");
+        };
+        if ra.0 != rd.0 {
+            emit_mov_rr(code, rd, ra);
+        }
+        (rd, pb)
+    } else if let Some(pair) =
+        [(a, pa, pb), (b, pb, pa)]
+            .into_iter()
+            .find_map(|(val, place, other)| match place {
+                Place::IntReg(r) if dies_here(val) && r != rd.0 && pc != Place::IntReg(r) => {
+                    Some((Reg(r), other))
+                }
+                _ => None,
+            })
+    {
+        pair
+    } else {
+        let Some(ra) = materialize_int(code, pa, SCRATCH_R11, frame) else {
+            return fail("MulAdd: a not int reg / spill");
+        };
+        if ra.0 != SCRATCH_R11.0 {
+            emit_mov_rr(code, SCRATCH_R11, ra);
+        }
+        (SCRATCH_R11, pb)
+    };
+    let Some(rm) = materialize_int(code, other, SCRATCH_R10, frame) else {
+        return fail("MulAdd: multiplicand not int reg / spill");
+    };
+    emit_rr(code, Mnem::Imul, 8, rp, rm);
+    // With the product in the destination the addend joins it there,
+    // and a spilled addend reloads into the scratch that path left
+    // free; otherwise the destination takes the addend first. Either
+    // way the multiplicands are already consumed.
+    let landing = if rp.0 == rd.0 { SCRATCH_R11 } else { rd };
+    let Some(rc) = materialize_int(code, pc, landing, frame) else {
+        return fail("MulAdd: c not int reg / spill");
+    };
+    if rp.0 == rd.0 {
+        emit_rr(code, Mnem::Add, 8, rd, rc);
+    } else {
+        if rc.0 != rd.0 {
+            emit_mov_rr(code, rd, rc);
+        }
+        emit_rr(
+            code,
+            if neg_product { Mnem::Sub } else { Mnem::Add },
+            8,
+            rd,
+            rp,
+        );
+    }
+    spill_dst_to_slot(code, dst, rd, frame);
     true
 }
 
@@ -11737,6 +11835,199 @@ mod scratch_picker_tests {
         let rd = Reg(7);
         let operands = [Reg(0), Reg(1), Reg(2), Reg(8), Reg(9)];
         assert_eq!(pick_caller_saved_scratch(rd, &operands), None);
+    }
+}
+
+#[cfg(test)]
+mod mul_add_tests {
+    use super::*;
+    use alloc::vec::Vec;
+
+    /// `(dst, src)` of the sole `imul r64, r/m64` (REX.W 0F AF /r).
+    fn imul_regs(code: &[u8]) -> (u8, u8) {
+        for i in 0..code.len().saturating_sub(3) {
+            if code[i] & 0xF8 == 0x48 && code[i + 1] == 0x0f && code[i + 2] == 0xaf {
+                return rex_modrm(code[i], code[i + 3]);
+            }
+        }
+        panic!("no imul in {code:02x?}");
+    }
+
+    /// `(src, dst)` of an ALU `r/m64, r64` form (REX.W <op> /r), which
+    /// is how the pair's `add` (01) and `sub` (29) encode.
+    fn alu_regs(code: &[u8], opcode: u8) -> (u8, u8) {
+        for i in 0..code.len().saturating_sub(2) {
+            if code[i] & 0xF8 == 0x48 && code[i + 1] == opcode && code[i + 2] >= 0xc0 {
+                return rex_modrm(code[i], code[i + 2]);
+            }
+        }
+        panic!("no {opcode:02x} form in {code:02x?}");
+    }
+
+    /// ModR/M register-direct fields widened by the REX prefix, as
+    /// `(reg, rm)`.
+    fn rex_modrm(rex: u8, modrm: u8) -> (u8, u8) {
+        (
+            ((modrm >> 3) & 7) | ((rex >> 2) & 1) << 3,
+            (modrm & 7) | ((rex & 1) << 3),
+        )
+    }
+
+    /// Lower one `MulAdd` with the places the caller pins. `a_dies`
+    /// makes this instruction the last reader of `a`; `b` always
+    /// outlives it.
+    fn lower(
+        neg_product: bool,
+        dst: Place,
+        pa: Place,
+        pb: Place,
+        pc: Place,
+        a_dies: bool,
+    ) -> Vec<u8> {
+        let target = Target::LinuxX64;
+        let program = crate::Compiler::with_target(
+            "long long f(long long a, long long b, long long c){ return c - a*b; } \
+             int main(void){ return 0; }"
+                .into(),
+            target,
+        )
+        .compile()
+        .expect("compile");
+        let mut funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        crate::c5::codegen::passes::mul_add::run(&mut funcs);
+        let func = funcs
+            .into_iter()
+            .find(|f| {
+                f.insts
+                    .iter()
+                    .any(|i| matches!(i, crate::c5::ir::Inst::MulAdd { .. }))
+            })
+            .expect("a function with a MulAdd");
+        let (v, a, b, c) = func
+            .insts
+            .iter()
+            .enumerate()
+            .find_map(|(v, i)| match i {
+                crate::c5::ir::Inst::MulAdd { a, b, c, .. } => {
+                    Some((v as crate::c5::ir::ValueId, *a, *b, *c))
+                }
+                _ => None,
+            })
+            .expect("MulAdd operands");
+        let mut alloc = super::super::ssa::reg_alloc::allocate(&func, target);
+        alloc.places[a as usize] = pa;
+        alloc.places[b as usize] = pb;
+        alloc.places[c as usize] = pc;
+        alloc.places[v as usize] = dst;
+        alloc.last_use[a as usize] = if a_dies { v } else { v + 1 };
+        alloc.last_use[b as usize] = v + 1;
+        alloc.spill_count = alloc.spill_count.max(4);
+        let frame = compute_frame(&func, &alloc, target.abi());
+        let mut code = Vec::new();
+        assert!(
+            emit_mul_add(&mut code, dst, v, a, b, c, neg_product, &alloc, frame),
+            "emit_mul_add bailed",
+        );
+        code
+    }
+
+    /// `c + a*b` with the addend outside the destination multiplies
+    /// straight into the destination: no staging through the fixed
+    /// scratch, and the add reads the addend's own register.
+    #[test]
+    fn add_form_multiplies_into_the_destination() {
+        let code = lower(
+            false,
+            Place::IntReg(3),
+            Place::IntReg(0),
+            Place::IntReg(1),
+            Place::IntReg(2),
+            false,
+        );
+        assert_eq!(imul_regs(&code).0, 3, "product lands in rd: {code:02x?}");
+        assert_eq!(alu_regs(&code, 0x01), (2, 3), "add rd, c: {code:02x?}");
+    }
+
+    /// `c - a*b` keeps the destination for the addend, so the product
+    /// takes a multiplicand's own register when this instruction is
+    /// that value's last reader.
+    #[test]
+    fn sub_form_reuses_a_dying_multiplicand() {
+        let dst = Place::IntReg(3);
+        let code = lower(
+            true,
+            dst,
+            Place::IntReg(0),
+            Place::IntReg(1),
+            Place::IntReg(2),
+            true,
+        );
+        let (product, _) = imul_regs(&code);
+        assert_eq!(product, 0, "product reuses the dying operand: {code:02x?}");
+        assert_eq!(
+            alu_regs(&code, 0x29),
+            (0, 3),
+            "sub rd, product: {code:02x?}"
+        );
+    }
+
+    /// With both multiplicands live past the instruction the product
+    /// has to go to the fixed scratch, which no allocator value uses.
+    #[test]
+    fn sub_form_falls_back_to_the_fixed_scratch() {
+        let code = lower(
+            true,
+            Place::IntReg(3),
+            Place::IntReg(0),
+            Place::IntReg(1),
+            Place::IntReg(2),
+            false,
+        );
+        let (product, _) = imul_regs(&code);
+        assert_eq!(product, SCRATCH_R11.0, "product in r11: {code:02x?}");
+        assert_eq!(alu_regs(&code, 0x29), (SCRATCH_R11.0, 3), "sub rd, r11");
+    }
+
+    /// The add form with a spilled destination multiplies into the
+    /// scratch the destination borrows, so the spilled addend must
+    /// reload somewhere else or the product is lost.
+    #[test]
+    fn add_form_spilled_destination_keeps_the_product() {
+        let code = lower(
+            false,
+            Place::Spill(3),
+            Place::Spill(0),
+            Place::Spill(1),
+            Place::Spill(2),
+            false,
+        );
+        let (product, _) = imul_regs(&code);
+        let (addend, dst) = alu_regs(&code, 0x01);
+        assert_eq!(product, dst, "the product is the add's destination");
+        assert_ne!(addend, product, "the addend reload spared the product");
+    }
+
+    /// A spilled destination routes through the other fixed scratch
+    /// and stores; the product still avoids the addend's register.
+    #[test]
+    fn spilled_destination_stores_the_result() {
+        let code = lower(
+            true,
+            Place::Spill(3),
+            Place::Spill(0),
+            Place::Spill(1),
+            Place::Spill(2),
+            false,
+        );
+        let (product, _) = imul_regs(&code);
+        assert_eq!(product, SCRATCH_R11.0, "product in r11: {code:02x?}");
+        assert_eq!(
+            alu_regs(&code, 0x29),
+            (SCRATCH_R11.0, SCRATCH_R10.0),
+            "sub r10, r11: {code:02x?}",
+        );
     }
 }
 

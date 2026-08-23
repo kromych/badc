@@ -1677,6 +1677,7 @@ fn result_kind(inst: &Inst) -> ResultKind {
         },
         Fneg(_) => ResultKind::Fp,
         Fma { .. } => ResultKind::Fp,
+        MulAdd { .. } => ResultKind::Int,
         Extend { .. } => ResultKind::Int,
         Bswap { .. } => ResultKind::Int,
         FpCast { kind, .. } => match kind {

@@ -520,15 +520,21 @@ pub(crate) fn enc_udiv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     enc_rrr(0x9AC0_0800, rd, rn, rm)
 }
 
+/// Four-register multiply-accumulate encoding shared by MADD / MSUB.
+fn enc_mul_acc(base: u32, rd: Reg, rn: Reg, rm: Reg, ra: Reg) -> u32 {
+    base | ((rm.0 as u32) << 16) | ((ra.0 as u32) << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
 /// `MSUB <Xd>, <Xn>, <Xm>, <Xa>` -- `Xd = Xa - (Xn * Xm)`. The
 /// AArch64 idiom for `mod` is `sdiv q, a, b ; msub r, q, b, a`,
 /// which yields `r = a - (a/b)*b`.
 pub(crate) fn enc_msub(rd: Reg, rn: Reg, rm: Reg, ra: Reg) -> u32 {
-    0x9B00_8000
-        | ((rm.0 as u32) << 16)
-        | ((ra.0 as u32) << 10)
-        | ((rn.0 as u32) << 5)
-        | (rd.0 as u32)
+    enc_mul_acc(0x9B00_8000, rd, rn, rm, ra)
+}
+
+/// `MADD <Xd>, <Xn>, <Xm>, <Xa>` -- `Xd = Xa + (Xn * Xm)`.
+pub(crate) fn enc_madd(rd: Reg, rn: Reg, rm: Reg, ra: Reg) -> u32 {
+    enc_mul_acc(0x9B00_0000, rd, rn, rm, ra)
 }
 
 /// `LSLV <Xd>, <Xn>, <Xm>` -- variable left shift, masking the shift
@@ -2091,6 +2097,14 @@ pub(crate) fn lower(
         super::ssa::emit_common::time_pass("passes::store_forward::run (aarch64)", || {
             crate::c5::codegen::passes::store_forward::run(&mut ssa_funcs);
         });
+        // Contract an integer multiply into the add / sub that reads it
+        // (aarch64 madd / msub). After the index fold and the store
+        // forwarding, whose address matching reads the `base + index *
+        // scale` shape a fused node would hide, and after the divide
+        // pairing, which is what leaves `n - q*d` behind.
+        super::ssa::emit_common::time_pass("passes::mul_add::run (aarch64)", || {
+            crate::c5::codegen::passes::mul_add::run(&mut ssa_funcs);
+        });
         // Rewrite `CallIndirect`-of-`ImmCode` pairs the passes since the
         // inline run exposed -- the post-inline promotions and the
         // forwarding above turn function-pointer cell reads into
@@ -2989,6 +3003,7 @@ mod tests {
         assert_eq!(enc_smulh(r(0), r(1), r(2)), 0x9B42_7C20);
         assert_eq!(enc_umulh(r(0), r(1), r(2)), 0x9BC2_7C20);
         assert_eq!(enc_msub(r(0), r(1), r(2), r(3)), 0x9B02_8C20);
+        assert_eq!(enc_madd(r(0), r(1), r(2), r(3)), 0x9B02_0C20);
         assert_eq!(enc_lslv(r(0), r(1), r(2)), 0x9AC2_2020);
         assert_eq!(enc_asrv(r(0), r(1), r(2)), 0x9AC2_2820);
         assert_eq!(enc_lsrv(r(0), r(1), r(2)), 0x9AC2_2420);

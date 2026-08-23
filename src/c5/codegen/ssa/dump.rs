@@ -199,6 +199,12 @@ fn fmt_inst(inst: &Inst) -> String {
         } => format!(
             "Fma {{ a=v{a}, b=v{b}, c=v{c}, neg_product={neg_product}, neg_addend={neg_addend} }}"
         ),
+        MulAdd {
+            a,
+            b,
+            c,
+            neg_product,
+        } => format!("MulAdd {{ a=v{a}, b=v{b}, c=v{c}, neg_product={neg_product} }}"),
         Extend { value, kind } => {
             format!("Extend {{ value=v{value}, kind={} }}", fmt_load_kind(*kind))
         }

@@ -68,8 +68,7 @@ Disassembly of section .text:
                	str	w7, [x1, x3, lsl #2]
                	ldrsw	x6, [x6]
                	ldrsw	x4, [x8]
-               	mul	x4, x6, x4
-               	add	x2, x2, x4
+               	madd	x2, x6, x4, x2
                	sxtw	x2, w2
                	add	x0, x3, #0x1
                	cmp	w0, #0x8

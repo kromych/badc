@@ -179,24 +179,23 @@ Disassembly of section .text:
                	mov	x2, x22
                	bl	<addr>
                	add	x5, x23, x0
-               	mov	x0, #0x0                // =0
+               	mov	x1, #0x0                // =0
                	mov	x3, #0x3                // =3
                	b	<addr>
-               	sxtw	x1, w0
-               	add	x2, x1, #0x3e8
-               	mul	x4, x20, x1
+               	sxtw	x0, w1
+               	add	x2, x0, #0x3e8
+               	madd	x2, x20, x0, x2
+               	sub	x4, x20, x0
                	add	x2, x2, x4
-               	sub	x4, x20, x1
-               	add	x2, x2, x4
-               	eor	x4, x20, x1
+               	eor	x4, x20, x0
                	add	x4, x2, x4
-               	mul	x2, x1, x3
+               	mul	x2, x0, x3
                	sxtw	x2, w2
                	add	x2, x2, #0x3e8
                	add	x2, x4, x2
                	add	x21, x21, x2
-               	add	x0, x1, #0x1
-               	cmp	w0, w22
+               	add	x1, x0, #0x1
+               	cmp	w1, w22
                	b.lt	<addr>
                	cmp	x5, x21
                	b.ne	<addr>

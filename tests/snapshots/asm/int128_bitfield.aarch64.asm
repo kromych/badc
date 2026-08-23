@@ -1593,14 +1593,12 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
                	udiv	x2, x3, x6
-               	mul	x0, x2, x6
-               	sub	x3, x3, x0
+               	msub	x3, x2, x6, x3
                	mov	x5, #0x0                // =0
                	mov	x0, x5
                	b	<addr>
                	udiv	x3, x4, x7
-               	mul	x0, x3, x7
-               	sub	x4, x4, x0
+               	msub	x4, x3, x7, x4
                	mov	x5, x2
                	mov	x0, x2
                	b	<addr>

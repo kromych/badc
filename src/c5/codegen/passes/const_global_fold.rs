@@ -493,6 +493,7 @@ pub(crate) fn fold_template_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) ->
                 | Inst::BinopI { .. }
                 | Inst::Fneg(_)
                 | Inst::Fma { .. }
+                | Inst::MulAdd { .. }
                 | Inst::Extend { .. }
                 | Inst::Bswap { .. }
                 | Inst::FpCast { .. }

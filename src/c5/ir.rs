@@ -213,6 +213,18 @@ pub(crate) enum Inst {
         neg_product: bool,
         neg_addend: bool,
     },
+    /// Integer multiply-accumulate: `c + (neg_product ? -(a*b) : a*b)`,
+    /// computed in 64 bits. Produced by `mul_add` from an `Add` / `Sub`
+    /// whose single-use operand is a `Mul`; two's-complement multiply
+    /// and add are exact modulo 2^64, so the fused form equals the
+    /// pair bit for bit. Lowers to one `madd` / `msub` on AArch64 and
+    /// to `imul` plus `add` / `sub` on x86-64.
+    MulAdd {
+        a: ValueId,
+        b: ValueId,
+        c: ValueId,
+        neg_product: bool,
+    },
     /// Sign-extend the low bytes of `value` to 64 bits: discard the
     /// bits above `kind`'s width and replicate the sign bit, the fused
     /// `trunc; sext` that lowers to one `sxtb`/`sxth`/`sxtw` (AArch64)
@@ -485,6 +497,7 @@ impl Inst {
                 | Inst::BinopI { .. }
                 | Inst::Fneg(_)
                 | Inst::Fma { .. }
+                | Inst::MulAdd { .. }
                 | Inst::FpCast { .. }
                 | Inst::Extend { .. }
                 | Inst::Bswap { .. }
@@ -515,6 +528,7 @@ impl Inst {
             Inst::BinopI { .. } => "BinopI",
             Inst::Fneg(_) => "Fneg",
             Inst::Fma { .. } => "Fma",
+            Inst::MulAdd { .. } => "MulAdd",
             Inst::Extend { .. } => "Extend",
             Inst::Bswap { .. } => "Bswap",
             Inst::Copy { .. } => "Copy",
@@ -582,7 +596,7 @@ impl Inst {
             }
             Inst::BinopI { lhs, .. } => f(*lhs),
             Inst::Fneg(v) => f(*v),
-            Inst::Fma { a, b, c, .. } => {
+            Inst::Fma { a, b, c, .. } | Inst::MulAdd { a, b, c, .. } => {
                 f(*a);
                 f(*b);
                 f(*c);
@@ -675,7 +689,7 @@ impl Inst {
             }
             Inst::BinopI { lhs, .. } => f(lhs),
             Inst::Fneg(v) => f(v),
-            Inst::Fma { a, b, c, .. } => {
+            Inst::Fma { a, b, c, .. } | Inst::MulAdd { a, b, c, .. } => {
                 f(a);
                 f(b);
                 f(c);
@@ -1566,6 +1580,7 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::BinopI { .. }
             | Inst::Fneg { .. }
             | Inst::Fma { .. }
+            | Inst::MulAdd { .. }
             | Inst::Extend { .. }
             | Inst::Bswap { .. }
             | Inst::Copy { .. }

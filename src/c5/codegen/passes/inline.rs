@@ -997,6 +997,7 @@ fn is_inline_candidate(
             | Inst::Bswap { .. }
             | Inst::Fneg(_)
             | Inst::Fma { .. }
+            | Inst::MulAdd { .. }
             | Inst::FpCast { .. }
             | Inst::Load { .. }
             | Inst::LoadIndexed { .. } => {}
@@ -1766,6 +1767,7 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
         | Inst::BinopI { .. }
         | Inst::Fneg(_)
         | Inst::Fma { .. }
+        | Inst::MulAdd { .. }
         | Inst::Extend { .. }
         | Inst::Bswap { .. }
         | Inst::FpCast { .. }

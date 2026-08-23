@@ -1184,6 +1184,21 @@ fn run_inst<H: Host>(
             frame.regs[v as usize] = round_if_f32(res, frame.func.f32_values.get(v as usize));
             return Ok(());
         }
+        Inst::MulAdd {
+            a,
+            b,
+            c,
+            neg_product,
+        } => {
+            let product = frame.regs[*a as usize].wrapping_mul(frame.regs[*b as usize]);
+            let c = frame.regs[*c as usize];
+            frame.regs[v as usize] = if *neg_product {
+                c.wrapping_sub(product)
+            } else {
+                c.wrapping_add(product)
+            };
+            return Ok(());
+        }
         Inst::Extend { value, kind } => {
             let raw = frame.regs[*value as usize];
             frame.regs[v as usize] = eval::eval_extend(raw, *kind);

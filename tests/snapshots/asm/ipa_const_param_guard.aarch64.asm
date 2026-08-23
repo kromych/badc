@@ -768,11 +768,10 @@ Disassembly of section .text:
                	add	x3, x3, <lo12>
                	b	<addr>
                	sxtw	x2, w0
-               	ldr	x5, [x3, x2, lsl #3]
-               	add	x4, x2, #0x1
-               	sxtw	x4, w4
-               	mul	x4, x5, x4
-               	add	x1, x1, x4
+               	ldr	x4, [x3, x2, lsl #3]
+               	add	x5, x2, #0x1
+               	sxtw	x5, w5
+               	madd	x1, x4, x5, x1
                	add	x0, x2, #0x1
                	cmp	w0, #0xb4
                	b.lt	<addr>

@@ -207,20 +207,19 @@ Disassembly of section .text:
                	str	x10, [x2, #0x28]
                	ldr	x10, [sp], #0x10
                	mov	x0, x2
-               	mov	x5, #0x3                // =3
+               	mov	x6, #0x3                // =3
                	mov	x0, #0x0                // =0
                	mov	x1, x0
                	b	<addr>
-               	mul	x3, x0, x5
-               	add	x4, x3, #0x1
-               	ldr	x6, [x2, x0, lsl #3]
-               	cmp	x6, #0x0
+               	mul	x4, x0, x6
+               	add	x3, x4, #0x1
+               	ldr	x5, [x2, x0, lsl #3]
+               	cmp	x5, #0x0
                	b.le	<addr>
-               	ldr	x6, [x2, x0, lsl #3]
-               	mul	x3, x6, x4
-               	add	x1, x1, x3
+               	ldr	x5, [x2, x0, lsl #3]
+               	madd	x1, x5, x3, x1
                	b	<addr>
-               	sub	x1, x1, x4
+               	sub	x1, x1, x3
                	b	<addr>
                	add	x0, x0, #0x1
                	cmp	x0, #0x6

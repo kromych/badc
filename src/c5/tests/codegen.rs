@@ -8945,3 +8945,48 @@ fn a_goto_chain_reserves_one_block_per_label() {
         "16 more labels must reserve 16 more blocks: {short} -> {long}"
     );
 }
+
+/// An integer multiply whose only reader is an add or a subtract
+/// contracts into AArch64's three-operand multiply-accumulate: `c -
+/// a*b` is one `MSUB` and `c + a*b` one `MADD`. Both the 32- and the
+/// 64-bit source widths lower through the same 64-bit encodings (the
+/// SSA computes in 64 bits and renormalises the declared width), so
+/// each function contributes one fused instruction and no separate
+/// `MUL`.
+#[test]
+fn integer_multiply_contracts_into_madd_msub_aarch64() {
+    use crate::{CompileOptions, Compiler, NativeOptions, Target, emit_native_with_options};
+    let src = "int subi(int a, int b, int c){ return c - a*b; }\n\
+               int addi(int a, int b, int c){ return c + a*b; }\n\
+               long long subl(long long a, long long b, long long c){ return c - a*b; }\n\
+               long long addl(long long a, long long b, long long c){ return c + a*b; }\n\
+               int main(void){ return 0; }";
+    let program = Compiler::with_options(
+        src.to_string(),
+        Target::LinuxAarch64,
+        CompileOptions::default().with_optimize(true),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        optimize: true,
+        ..NativeOptions::default()
+    };
+    let bytes =
+        emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit LinuxAarch64");
+    let words = || {
+        bytes
+            .windows(4)
+            .map(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]))
+    };
+    // MADD / MSUB share the data-processing (3 source) opcode; bit 15
+    // (o0) picks the subtract. MUL is MADD with Ra = XZR.
+    let madd = words()
+        .filter(|w| w & 0xFFE0_8000 == 0x9B00_0000 && (w >> 10) & 0x1f != 31)
+        .count();
+    let msub = words().filter(|w| w & 0xFFE0_8000 == 0x9B00_8000).count();
+    let mul = words().filter(|w| w & 0xFFE0_FC00 == 0x9B00_7C00).count();
+    assert_eq!(msub, 2, "one MSUB per `c - a*b` at each width");
+    assert_eq!(madd, 2, "one MADD per `c + a*b` at each width");
+    assert_eq!(mul, 0, "the contracted products leave no MUL behind");
+}

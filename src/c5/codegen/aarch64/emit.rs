@@ -4923,6 +4923,12 @@ fn emit_inst(
         Inst::Binop { op, lhs, rhs } => {
             emit_binop(code, *op, v, dst, *lhs, *rhs, alloc, frame, scratch)
         }
+        Inst::MulAdd {
+            a,
+            b,
+            c,
+            neg_product,
+        } => emit_mul_add(code, dst, *a, *b, *c, *neg_product, alloc, frame, scratch),
         Inst::BinopI { op, lhs, rhs_imm } => {
             emit_binop_imm(code, *op, v, dst, *lhs, *rhs_imm, alloc, frame, scratch)
         }
@@ -9209,6 +9215,93 @@ fn emit_store(
     true
 }
 
+/// `Inst::MulAdd { a, b, c, neg_product }` -- one `madd` / `msub`.
+/// The instruction reads all three sources before writing the
+/// destination, so `rd` may alias any of them. A spilled operand
+/// reloads into a register of its own: the two scratch registers,
+/// plus `rd` when the allocator gave the result one -- a third
+/// landing spot the reload only reaches when all three operands
+/// spilled, which leaves `rd` holding nothing. A spilled result has
+/// no third register to offer, so that combination falls back to the
+/// `mul` / `sub` pair the contraction replaced.
+#[allow(clippy::too_many_arguments)]
+fn emit_mul_add(
+    code: &mut Vec<u8>,
+    dst: Place,
+    a: u32,
+    b: u32,
+    c: u32,
+    neg_product: bool,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    let (rd, spill_to) = match dst {
+        Place::IntReg(r) => (Reg(r), None),
+        Place::Spill(slot) => (scratch.primary, Some(slot)),
+        _ => return false,
+    };
+    let place = |val: u32| {
+        alloc
+            .places
+            .get(val as usize)
+            .copied()
+            .unwrap_or(Place::None)
+    };
+    let (pa, pb, pc) = (place(a), place(b), place(c));
+    let spilled = [pa, pb, pc]
+        .iter()
+        .filter(|p| matches!(p, Place::Spill(_)))
+        .count();
+    if spilled == 3 && spill_to.is_some() {
+        let (Some(rn), Some(rm)) = (
+            materialize_int(code, pa, scratch.primary, frame),
+            materialize_int(code, pb, scratch.secondary, frame),
+        ) else {
+            return false;
+        };
+        emit(code, enc_mul(scratch.primary, rn, rm));
+        let Some(ra) = materialize_int(code, pc, scratch.secondary, frame) else {
+            return false;
+        };
+        let word = if neg_product {
+            enc_sub_reg(rd, ra, scratch.primary)
+        } else {
+            enc_add_reg(rd, ra, scratch.primary)
+        };
+        emit(code, word);
+    } else {
+        let mut reloads = [scratch.primary, scratch.secondary, rd].into_iter();
+        let mut operand = |code: &mut Vec<u8>, p: Place| -> Option<Reg> {
+            match p {
+                Place::IntReg(r) => Some(Reg(r)),
+                Place::Spill(_) => materialize_int(code, p, reloads.next()?, frame),
+                _ => None,
+            }
+        };
+        let Some(rn) = operand(code, pa) else {
+            return false;
+        };
+        let Some(rm) = operand(code, pb) else {
+            return false;
+        };
+        let Some(ra) = operand(code, pc) else {
+            return false;
+        };
+        let word = if neg_product {
+            enc_msub(rd, rn, rm, ra)
+        } else {
+            super::encode::enc_madd(rd, rn, rm, ra)
+        };
+        emit(code, word);
+    }
+    if let Some(slot) = spill_to {
+        let sp_off = spill_off(frame, slot);
+        emit_spill_str_x_auto(code, frame, rd, sp_off);
+    }
+    true
+}
+
 #[allow(clippy::too_many_arguments)]
 fn emit_binop(
     code: &mut Vec<u8>,
@@ -12863,6 +12956,106 @@ mod tests {
                 assert_ne!(rt, rn, "store reuses base x{rn} as the value register");
             }
         }
+    }
+
+    /// The contracted multiply-accumulate over `c - a*b`, with the
+    /// operand places the test forces. Returns the emitted words.
+    fn emit_spilled_mul_add(dst: Place) -> Vec<u32> {
+        let target = Target::MacOSAarch64;
+        let program = Compiler::with_target(
+            "long long f(long long a, long long b, long long c){ return c - a*b; } \
+             int main(void){ return 0; }"
+                .into(),
+            target,
+        )
+        .compile()
+        .expect("compile");
+        let mut funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        crate::c5::codegen::passes::mul_add::run(&mut funcs);
+        let func = funcs
+            .into_iter()
+            .find(|f| {
+                f.insts
+                    .iter()
+                    .any(|i| matches!(i, crate::c5::ir::Inst::MulAdd { .. }))
+            })
+            .expect("a function with a MulAdd");
+        let (v, a, b, c) = func
+            .insts
+            .iter()
+            .enumerate()
+            .find_map(|(v, i)| match i {
+                crate::c5::ir::Inst::MulAdd { a, b, c, .. } => {
+                    Some((v as crate::c5::ir::ValueId, *a, *b, *c))
+                }
+                _ => None,
+            })
+            .expect("MulAdd operands");
+        let mut alloc = super::super::ssa::reg_alloc::allocate(&func, target);
+        for (i, operand) in [a, b, c].into_iter().enumerate() {
+            alloc.places[operand as usize] = Place::Spill(i as u32);
+        }
+        alloc.places[v as usize] = dst;
+        alloc.spill_count = alloc.spill_count.max(4);
+        let frame = compute_frame(&func, &alloc, target.abi(), target);
+        let scratch = ScratchPool {
+            primary: Reg(16),
+            secondary: Reg(17),
+        };
+        let mut code = Vec::new();
+        let ok = emit_mul_add(&mut code, dst, a, b, c, true, &alloc, frame, &scratch);
+        assert!(ok, "emit_mul_add bailed");
+        code.as_chunks::<4>()
+            .0
+            .iter()
+            .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+            .collect()
+    }
+
+    /// Three spilled operands and a register result: the reloads take
+    /// the two scratch registers and the result's own, and the fused
+    /// `msub` reads three distinct registers.
+    #[test]
+    fn mul_add_spilled_operands_use_three_registers() {
+        let words = emit_spilled_mul_add(Place::IntReg(5));
+        let msub = words
+            .iter()
+            .copied()
+            .find(|w| w & 0xFFE0_8000 == 0x9B00_8000)
+            .expect("an MSUB word");
+        let (rm, ra, rn) = ((msub >> 16) & 0x1f, (msub >> 10) & 0x1f, (msub >> 5) & 0x1f);
+        assert_eq!(msub & 0x1f, 5, "result register");
+        assert!(
+            rn != rm && rn != ra && rm != ra,
+            "reloads collided: {words:08x?}",
+        );
+    }
+
+    /// A spilled result leaves no third register, so the same node
+    /// falls back to the `mul` / `sub` pair, and the subtract reads the
+    /// addend rather than the product as its left operand.
+    #[test]
+    fn mul_add_spilled_result_falls_back_to_mul_sub() {
+        let words = emit_spilled_mul_add(Place::Spill(3));
+        assert!(
+            !words.iter().any(|w| w & 0xFFE0_8000 == 0x9B00_8000),
+            "no MSUB is encodable here: {words:08x?}",
+        );
+        let mul = words
+            .iter()
+            .copied()
+            .find(|w| w & 0xFFE0_FC00 == 0x9B00_7C00)
+            .expect("a MUL word");
+        let product = mul & 0x1f;
+        let sub = words
+            .iter()
+            .copied()
+            .find(|w| w & 0xFFE0_FC00 == 0xCB00_0000)
+            .expect("a SUB word");
+        assert_eq!((sub >> 16) & 0x1f, product, "subtracts the product");
+        assert_ne!((sub >> 5) & 0x1f, product, "the addend is the left operand");
     }
 
     /// `return 1 + 2;` exercises the Binop + BinopI handlers

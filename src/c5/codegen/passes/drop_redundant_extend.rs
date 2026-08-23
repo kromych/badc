@@ -152,6 +152,9 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
                     observe(&mut hi, &mut work, *value);
                 }
             }
+            // Same low-word rule as the `Mul` / `Add` / `Sub` pair it
+            // contracts: the result's low bytes need only the operands'.
+            Inst::MulAdd { .. } => {}
             Inst::Binop { op, lhs, rhs } => match op {
                 BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::And | BinOp::Or | BinOp::Xor => {}
                 BinOp::Shl => observe(&mut hi, &mut work, *rhs),

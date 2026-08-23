@@ -461,6 +461,7 @@ fn run_one(func: &mut FunctionSsa) {
                 | Inst::BinopI { .. }
                 | Inst::Fneg(_)
                 | Inst::Fma { .. }
+                | Inst::MulAdd { .. }
                 | Inst::Extend { .. }
                 | Inst::Bswap { .. }
                 | Inst::Copy { .. }

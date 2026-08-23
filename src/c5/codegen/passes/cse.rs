@@ -58,6 +58,7 @@ enum Key {
     Fneg(ValueId, bool),
     FpCast(FpCastKind, ValueId, bool),
     Fma(ValueId, ValueId, ValueId, bool, bool, bool),
+    MulAdd(ValueId, ValueId, ValueId, bool),
 }
 
 pub(crate) fn run(funcs: &mut [FunctionSsa], caps: BankCapacity) {
@@ -124,7 +125,7 @@ fn remat_cost(inst: &Inst) -> u32 {
             BinOp::Fadd | BinOp::Fsub | BinOp::Fmul => 3,
             _ => 1,
         },
-        Inst::Fma { .. } | Inst::FpCast { .. } => 3,
+        Inst::Fma { .. } | Inst::MulAdd { .. } | Inst::FpCast { .. } => 3,
         _ => 1,
     }
 }
@@ -547,6 +548,12 @@ fn key_of(inst: &Inst, vn: &[ValueId], is_f32: bool) -> Option<Key> {
             *neg_addend,
             is_f32,
         )),
+        Inst::MulAdd {
+            a,
+            b,
+            c,
+            neg_product,
+        } => Some(Key::MulAdd(r(*a), r(*b), r(*c), *neg_product)),
         _ => None,
     }
 }

@@ -3119,21 +3119,7 @@ impl<'a> Walker<'a> {
             let out = self.bitfield_sign_extend_128(b, bf, masked);
             return self.bitfield_value_form(b, bf, out);
         }
-        let (load_kind, store_kind) = (bitfield_load_kind(bf), bitfield_store_kind(bf));
-        let masked = b.binop_imm(BinOp::And, value, mask_lo);
-        let old = load_place(b, addr, load_kind, seg, vol, align);
-        let cleared = b.binop_imm(
-            BinOp::And,
-            old,
-            !bitfield_mask_halves(bf.bit_width, bf.bit_offset).0,
-        );
-        let shifted = if bf.bit_offset > 0 {
-            b.binop_imm(BinOp::Shl, masked, bf.bit_offset as i64)
-        } else {
-            masked
-        };
-        let combined = b.binop(BinOp::Or, cleared, shifted);
-        store_place(b, addr, combined, store_kind, seg, vol, align);
+        let masked = merge_into_bitfield(b, addr, bf, value, seg, vol, align);
         if bf.signed && w < 64 {
             let up = b.binop_imm(BinOp::Shl, masked, 64 - w);
             b.binop_imm(BinOp::Shr, up, 64 - w)
@@ -3160,7 +3146,16 @@ impl<'a> Walker<'a> {
         let v = self.walk_copy_operand(b, rhs)?;
         // C99 6.3.1.3: a 128-bit source narrows to the field's type,
         // which is its low half -- not the address the value is carried as.
-        Ok(if is128 { b.load(v, LoadKind::I64) } else { v })
+        let v = if is128 { b.load(v, LoadKind::I64) } else { v };
+        // C99 6.5.16.1p2: the value is converted to the type of the left
+        // operand. A floating source needs the 6.3.1.4 conversion here --
+        // the store's mask is an integer operation and cannot express it.
+        let src_ty = expr_ty(self.ast.expr(rhs)).unwrap_or(bf.ty);
+        Ok(if is_floating_scalar(src_ty) {
+            self.convert_scalar_value(b, v, src_ty, bf.ty)
+        } else {
+            v
+        })
     }
 
     /// The field's bits, right-aligned in a 128-bit storage unit and
@@ -7078,25 +7073,52 @@ impl RmwPlace {
                 seg,
                 align,
             } => {
-                // C99 6.7.2.1: load the unit, clear the slice, mask + shift
-                // the new value into place, OR back, store.
                 debug_assert!(bf.unit_size <= 8);
-                let (load_kind, store_kind) = (bitfield_load_kind(bf), bitfield_store_kind(bf));
-                let mask = bitfield_mask_halves(bf.bit_width, 0).0;
-                let clear_mask = !bitfield_mask_halves(bf.bit_width, bf.bit_offset).0;
-                let old = load_place(b, addr, load_kind, seg, vol, align);
-                let cleared = b.binop_imm(BinOp::And, old, clear_mask);
-                let masked = b.binop_imm(BinOp::And, value, mask);
-                let shifted = if bf.bit_offset > 0 {
-                    b.binop_imm(BinOp::Shl, masked, bf.bit_offset as i64)
-                } else {
-                    masked
-                };
-                let combined = b.binop(BinOp::Or, cleared, shifted);
-                store_place(b, addr, combined, store_kind, seg, vol, align);
+                merge_into_bitfield(b, addr, bf, value, seg, vol, align);
             }
         }
     }
+}
+
+/// Merge `value` into the bitfield at `addr` (C99 6.7.2.1): load the
+/// storage unit, clear the field's slice, shift the value into place,
+/// OR, and store the unit back. Returns the value the width mask kept,
+/// right-aligned -- the assignment expression's value per C99 6.5.16p3.
+/// Every narrow bitfield store reaches this: assignment, compound
+/// assignment, increment, and the runtime initializer.
+fn merge_into_bitfield(
+    b: &mut super::super::codegen::ssa::build::SsaBuilder,
+    addr: super::super::ir::ValueId,
+    bf: super::super::ast::BitfieldDesc,
+    value: super::super::ir::ValueId,
+    seg: AsmSeg,
+    vol: bool,
+    align: u8,
+) -> super::super::ir::ValueId {
+    let (load_kind, store_kind) = (bitfield_load_kind(bf), bitfield_store_kind(bf));
+    // C99 6.5.16.1p2 converts the value to the field's declared type.
+    // The width mask below is that conversion for every integer type;
+    // `_Bool` is not, since 6.3.1.2 maps every nonzero value to 1.
+    let value = if is_bool_scalar(bf.ty) {
+        b.binop_imm(BinOp::Ne, value, 0)
+    } else {
+        value
+    };
+    let masked = b.binop_imm(BinOp::And, value, bitfield_mask_halves(bf.bit_width, 0).0);
+    let old = load_place(b, addr, load_kind, seg, vol, align);
+    let cleared = b.binop_imm(
+        BinOp::And,
+        old,
+        !bitfield_mask_halves(bf.bit_width, bf.bit_offset).0,
+    );
+    let shifted = if bf.bit_offset > 0 {
+        b.binop_imm(BinOp::Shl, masked, bf.bit_offset as i64)
+    } else {
+        masked
+    };
+    let combined = b.binop(BinOp::Or, cleared, shifted);
+    store_place(b, addr, combined, store_kind, seg, vol, align);
+    masked
 }
 
 /// A bitfield's slice mask as the low and high halves of a 128-bit

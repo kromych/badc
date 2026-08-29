@@ -5170,6 +5170,7 @@ impl Compiler {
                         // where a signed 1-bit field reads its set bit
                         // back as -1.
                         signed: !is_unsigned_ty(field.ty) && !is_bool_ty(field.ty),
+                        ty: field_ty,
                     };
                     let bf_field_off = field.offset as i64;
                     // The AST node carries the access's own type, which

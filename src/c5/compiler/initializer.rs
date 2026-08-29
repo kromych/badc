@@ -41,7 +41,7 @@ use super::AnonMember;
 use super::Compiler;
 use super::const_expr::ConstVal;
 use super::types::{
-    is_pointer_ty, is_struct_ty, is_struct_value_ty, is_unsigned_ty, narrow_const_int,
+    is_bool_ty, is_pointer_ty, is_struct_ty, is_struct_value_ty, is_unsigned_ty, narrow_const_int,
     strip_unsigned, struct_id_of, struct_ptr_depth,
 };
 
@@ -452,6 +452,19 @@ impl Compiler {
         let is_float = stripped == Ty::Float as i64;
         let is_double = stripped == Ty::Double as i64;
         if !is_float && !is_double {
+            // C99 6.3.1.2: a scalar converted to `_Bool` is 0 when it
+            // compares equal to 0 and 1 otherwise -- not its low bit,
+            // and for a floating source not its truncation either
+            // (`(_Bool)0.5` is 1). A relocation carries an object
+            // address, which is never null.
+            if is_bool_ty(elem_ty) && !is_pointer_ty(elem_ty) {
+                let nonzero = match reloc {
+                    InitElemReloc::Float64Bits => f64::from_bits(value as u64) != 0.0,
+                    InitElemReloc::None => value != 0,
+                    _ => true,
+                };
+                return i128::from(nonzero);
+            }
             // A floating constant initializing an integer element
             // converts to the integer value (C99 6.3.1.4, truncation
             // toward zero); without this the raw IEEE-754 bit pattern
@@ -3796,7 +3809,12 @@ impl Compiler {
             // brace list each rewrite the entire unit. Merge
             // the bitfield's bits into the existing storage
             // unit instead.
-            let (value, _reloc) = self.parse_constant_init_value()?;
+            let (value, reloc) = self.parse_constant_init_value()?;
+            // C99 6.7.9p11 initializes as if by assignment, so the value
+            // converts to the member's declared type first. The mask
+            // below expresses that for an integer field but not for a
+            // floating source (C99 6.3.1.4) or a `_Bool` field (6.3.1.2).
+            let value = self.to_storage_bits(value, reloc, field.ty);
             // C99 6.7.2.1p11: the bitfield's addressable storage
             // unit width is determined by the declared base type;
             // the RMW span must match `bit_unit_size` so it does
@@ -4004,7 +4022,10 @@ impl Compiler {
                     bit_offset: field.bit_offset as u8,
                     bit_width: field.bit_width as u8,
                     unit_size: field.bit_unit_size,
-                    signed: !is_unsigned_ty(field.ty),
+                    // C99 6.2.5p2: `_Bool` holds only 0 or 1, so a
+                    // `_Bool` field is unsigned even at width 1.
+                    signed: !is_unsigned_ty(field.ty) && !is_bool_ty(field.ty),
+                    ty: field.ty,
                 })
             } else {
                 None

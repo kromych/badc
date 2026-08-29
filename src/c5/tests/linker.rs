@@ -829,6 +829,41 @@ fn parenthesized_bitfield_lvalue_assigns_as_a_store() {
 }
 
 #[test]
+fn bool_bitfield_store_converts_before_masking() {
+    // C99 6.5.16.1p2 + 6.3.1.2: the value assigned to a `_Bool` bitfield
+    // converts to `_Bool` first, so `p->flag = x & 4` stores 1 for every
+    // x with bit 2 set. Masking the raw value to the field's width
+    // instead makes `(x & 4) & 1` a constant 0, which the folder then
+    // turns into an unconditional clear of the field.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let text_of = |body: &str| -> alloc::vec::Vec<u8> {
+        let src = alloc::format!(
+            "struct s {{ _Bool a:1; _Bool b:1; unsigned c:6; }};\n             void set_b(struct s *p, unsigned x){{ {body} }}\n             int main(void){{ return 0; }}\n"
+        );
+        let program = Compiler::with_target(src, Target::LinuxX64)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        parse_native_elf(&bytes).expect("parse ET_REL").text
+    };
+    let implicit = text_of("p->b = x & 4;");
+    assert_eq!(
+        implicit,
+        text_of("p->b = (x & 4) != 0;"),
+        "an implicit conversion to a `_Bool` bitfield must emit what the          explicit `!= 0` does"
+    );
+    assert_ne!(
+        implicit, text_of("p->b = 0;"),
+        "`p->b = x & 4` must not fold to an unconditional clear"
+    );
+}
+
+#[test]
 fn parenthesized_bitfield_lvalue_post_inc_and_compound_assign() {
     // C99 6.5.1p5 / 6.5.2.4 / 6.5.16.2: `(p->f)++` and `(p->f) OP= v` on a
     // parenthesized bitfield lvalue must emit the same object as the

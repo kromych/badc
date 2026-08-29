@@ -209,6 +209,12 @@ pub(crate) struct BitfieldDesc {
     /// 6.7.2.1p10 says the read sign-extends through the top of
     /// the storage word.
     pub signed: bool,
+    /// The member's declared type. C99 6.5.16.1p2 converts an assigned
+    /// value to it before the store; for every integer type that
+    /// conversion is the width truncation the store already performs,
+    /// but `_Bool` (6.3.1.2) and a floating source (6.3.1.4) are not
+    /// expressible as a mask.
+    pub ty: i64,
 }
 
 impl BitfieldDesc {

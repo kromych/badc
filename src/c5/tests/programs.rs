@@ -5836,6 +5836,17 @@ fn bool_bitfield_zero_extends() {
 }
 
 #[test]
+fn bool_bitfield_assign_normalizes() {
+    // C99 6.5.16.1p2 + 6.3.1.2: a value assigned to a `_Bool` bitfield
+    // converts to `_Bool` (zero / nonzero) before the store, not by
+    // truncation to the field's width. Masking alone folded
+    // `flag = x & 4` to a constant 0 for a field at bit 0 or 1, which
+    // is the kernel's `data->allow_reinit = flags &
+    // PERCPU_REF_ALLOW_REINIT`.
+    assert_eq!(run_fixture("bool_bitfield_assign_normalizes.c"), 0);
+}
+
+#[test]
 fn return_narrows_to_type_width() {
     // C99 6.8.6.4 / 6.3.1.1: a sub-64-bit integer return is narrowed to
     // its declared type in the result register -- zero-extend when

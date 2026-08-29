@@ -1122,18 +1122,33 @@ impl<'a> Walker<'a> {
         let (elem_ty, lanes) = self.vector_lanes(ty);
         let size = self.struct_size(ty);
         let elem_size = size / lanes;
-        let lane_op = vector_lane_binop(op, elem_ty);
-        let lk = load_kind_for(elem_ty, self.target);
+        // A comparison loads at the operand element type (float or
+        // unsigned included) and stores 0 / -1 at the result's signed
+        // element; the parser fixed the opcode flavour from the operands.
+        let is_cmp = is_vector_compare_op(op);
+        let src_elem_ty = if is_cmp {
+            let vec = if lhs_vec { lhs } else { rhs };
+            let vty = expr_ty(self.ast.expr(vec)).unwrap_or(ty);
+            self.vector_lanes(vty).0
+        } else {
+            elem_ty
+        };
+        let lane_op = if is_cmp {
+            op
+        } else {
+            vector_lane_binop(op, elem_ty)
+        };
+        let lk = load_kind_for(src_elem_ty, self.target);
         let sk = store_kind_for(elem_ty, self.target);
         let lv = if lhs_vec {
             self.walk_copy_operand(b, lhs)?
         } else {
-            self.vector_broadcast_operand(b, lhs, elem_ty)?
+            self.vector_broadcast_operand(b, lhs, src_elem_ty)?
         };
         let rv = if rhs_vec {
             self.walk_copy_operand(b, rhs)?
         } else {
-            self.vector_broadcast_operand(b, rhs, elem_ty)?
+            self.vector_broadcast_operand(b, rhs, src_elem_ty)?
         };
         let slot = b.alloc_synthetic_struct(size);
         let dst = b.local_addr(slot);
@@ -1152,7 +1167,11 @@ impl<'a> Walker<'a> {
                 rv
             };
             let mut r = b.binop(lane_op, a, c);
-            if b.is_f32(a) && b.is_f32(c) {
+            if is_cmp {
+                // The scalar compare yields 0 / 1; the lane holds 0 / -1.
+                let z = b.imm(0);
+                r = b.binop(BinOp::Sub, z, r);
+            } else if b.is_f32(a) && b.is_f32(c) {
                 r = b.mark_f32(r);
             }
             let da = lane_addr(b, dst, off);
@@ -7173,6 +7192,30 @@ fn vector_lane_binop(op: BinOp, elem_ty: i64) -> BinOp {
             other => other,
         }
     }
+}
+
+/// The comparison opcodes the GCC vector extension lowers element-wise.
+fn is_vector_compare_op(op: BinOp) -> bool {
+    use BinOp as B;
+    matches!(
+        op,
+        B::Eq
+            | B::Ne
+            | B::Lt
+            | B::Gt
+            | B::Le
+            | B::Ge
+            | B::Ult
+            | B::Ugt
+            | B::Ule
+            | B::Uge
+            | B::Feq
+            | B::Fne
+            | B::Flt
+            | B::Fgt
+            | B::Fle
+            | B::Fge
+    )
 }
 
 /// Integer store kind for a `width`-byte access.

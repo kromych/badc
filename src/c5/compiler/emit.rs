@@ -1810,7 +1810,11 @@ impl Compiler {
         // operand type here (it retags after the emit, since the flavour
         // pick reads both operand types), so stamp the result type here
         // rather than leaving consumers to infer it from the operands.
-        let ty = if crate::c5::ast::walk::is_comparison_op(op) {
+        // The GCC vector extension is the exception: a vector comparison
+        // yields a vector, and its arm sets `self.ty` to it before this.
+        let ty = if crate::c5::ast::walk::is_comparison_op(op)
+            && !super::types::is_vector_ty(&self.structs, self.ty)
+        {
             super::super::token::Ty::Int as i64
         } else {
             self.ty

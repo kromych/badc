@@ -155,18 +155,21 @@ fn expect_vector_error(body: &str, needle: &str) {
 }
 
 #[test]
-fn vector_relational_operators_are_rejected() {
-    // The GCC vector extension defines the relational and equality operators
-    // over vectors, yielding an integer vector of 0 / -1 per lane. That result
-    // type is not lowered, so both spellings reject rather than operating on
-    // the operand's address.
+fn vector_comparison_operand_mismatches_are_rejected() {
+    // The comparisons take the arithmetic operand rule: same byte width
+    // and element width and kind, or a broadcast scalar. A mismatched
+    // pair rejects with the operator's name.
     expect_vector_error(
-        "int main(void) { i32x4 r = i4 < i4; return r[0]; }",
-        "invalid operands to binary operator (aggregate type)",
+        "int main(void) { u8x8 q = h; return (a == q)[0]; }",
+        "invalid operands to binary `==`",
     );
     expect_vector_error(
-        "int main(void) { i32x4 r = i4 == i4; return r[0]; }",
-        "invalid operands to binary operator (aggregate type)",
+        "int main(void) { return (i4 < e)[0]; }",
+        "invalid operands to binary `<`",
+    );
+    expect_vector_error(
+        "int main(void) { return (a > u4)[0]; }",
+        "invalid operands to binary `>`",
     );
 }
 

@@ -896,10 +896,16 @@ impl Compiler {
     /// silently operating on the operand's address. Called by each
     /// value-computing binary branch after both operand types are known.
     fn reject_aggregate_binop(&self, lhs_ty: i64, rhs_ty: i64, op: &str) -> Result<(), C5Error> {
-        // GCC vector extension: the element-wise operators take a vector
-        // operand pair or a vector against a broadcast scalar. The relational
-        // and logical operators, and every other aggregate operand, reject.
+        // GCC vector extension: the element-wise operators and the
+        // comparisons take a vector operand pair or a vector against a
+        // broadcast scalar. The logical operators, and every other
+        // aggregate operand, reject.
         if self.vector_binop_ty(lhs_ty, rhs_ty, op).is_some() {
+            return Ok(());
+        }
+        if matches!(op, "==" | "!=" | "<" | ">" | "<=" | ">=")
+            && self.vector_binop_ty(lhs_ty, rhs_ty, "+").is_some()
+        {
             return Ok(());
         }
         // The GCC 128-bit integer shares the aggregate layout machinery
@@ -919,8 +925,8 @@ impl Compiler {
     /// two vectors of the same byte width and the same element width and
     /// kind, or a vector against a scalar that broadcasts to every lane.
     /// `% & | ^ << >>` need integer elements, and an integer-element vector
-    /// does not take a floating scalar. The relational and equality operators
-    /// are not lowered and are excluded so they keep rejecting.
+    /// does not take a floating scalar. The comparisons share the operand
+    /// rule through [`Self::vector_compare_ty`].
     fn vector_binop_ty(&self, lhs_ty: i64, rhs_ty: i64, op: &str) -> Option<i64> {
         if !matches!(
             op,
@@ -962,6 +968,59 @@ impl Compiler {
             return None;
         }
         Some(vec_ty)
+    }
+
+    /// Result type of a GCC vector-extension comparison, or `None` when
+    /// the operand pair is not one. The operand rule is the arithmetic
+    /// one; the result is a vector of the same byte width whose elements
+    /// are the signed integer type of the operands' element width, each
+    /// lane 0 or -1 (gcc 16, measured).
+    fn vector_compare_ty(&mut self, lhs_ty: i64, rhs_ty: i64) -> Option<i64> {
+        let vec_ty = self.vector_binop_ty(lhs_ty, rhs_ty, "+")?;
+        let elem_ty = self.structs[struct_id_of(vec_ty)].fields[0].ty;
+        let signed = match self.size_of_type(elem_ty) {
+            1 => Ty::Char as i64,
+            2 => Ty::Short as i64,
+            4 => Ty::Int as i64,
+            _ => Ty::LongLong as i64,
+        };
+        let bytes = self.structs[struct_id_of(vec_ty)].size as i64;
+        Some(self.make_vector_type(signed, bytes))
+    }
+
+    /// Comparison opcode flavour for a vector operand pair: floating by
+    /// the element type; between two integer vectors unsigned when either
+    /// element is (6.3.1.8 common type, as gcc compares); against a
+    /// broadcast scalar the vector's element decides, since the scalar
+    /// converts to it first.
+    fn vector_compare_op(
+        &self,
+        lhs_ty: i64,
+        rhs_ty: i64,
+        signed_op: super::super::ir::BinOp,
+        unsigned_op: super::super::ir::BinOp,
+        fp_op: super::super::ir::BinOp,
+    ) -> super::super::ir::BinOp {
+        let lhs_vec = is_vector_ty(&self.structs, lhs_ty);
+        let rhs_vec = is_vector_ty(&self.structs, rhs_ty);
+        let elem_of = |ty: i64| {
+            if is_vector_ty(&self.structs, ty) {
+                self.structs[struct_id_of(ty)].fields[0].ty
+            } else {
+                ty
+            }
+        };
+        let (le, re) = (elem_of(lhs_ty), elem_of(rhs_ty));
+        let vec_elem = if lhs_vec { le } else { re };
+        if is_floating_scalar(vec_elem) {
+            return fp_op;
+        }
+        let unsigned = if lhs_vec && rhs_vec {
+            is_unsigned_ty(le) || is_unsigned_ty(re)
+        } else {
+            is_unsigned_ty(vec_elem)
+        };
+        if unsigned { unsigned_op } else { signed_op }
     }
 
     /// Opcode for `E1 op= E2` given the operand types. C99 6.5.16.2p3:
@@ -3373,9 +3432,11 @@ impl Compiler {
                 && self.lex.tk >= Token::Lor as i64
                 && self.lex.tk <= Token::ModOp as i64
                 // GCC vector extension: a vector LHS with an element-wise
-                // operator reaches the per-operator branch, which checks the
-                // RHS. The relational and logical operators still reject.
-                && !(is_vector_ty(&self.structs, t) && is_vector_binop_token(self.lex.tk.raw()))
+                // operator (comparisons included) reaches the per-operator
+                // branch, which checks the RHS. The logical operators reject.
+                && !(is_vector_ty(&self.structs, t)
+                    && (is_vector_binop_token(self.lex.tk.raw())
+                        || is_vector_compare_token(self.lex.tk.raw())))
                 // The GCC 128-bit integer is an integer type; the
                 // per-operator branch below routes it to the walker's
                 // half-pair expansion.
@@ -4215,13 +4276,19 @@ impl Compiler {
                 self.ast_psh();
                 self.expr(Token::LtOp as i64)?;
                 self.reject_aggregate_binop(t, self.ty, name)?;
-                if is_floating_scalar(t) || is_floating_scalar(self.ty) {
+                if let Some(vty) = self.vector_compare_ty(t, self.ty) {
+                    let base = if invert { B::Ne } else { B::Eq };
+                    let op = self.vector_compare_op(t, self.ty, base, base, fp_op);
+                    self.ty = vty;
+                    self.ast_binop(op);
+                } else if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, name)?;
                     self.ast_binop(fp_op);
+                    self.ty = Ty::Int as i64;
                 } else {
                     self.emit_eq_with_common_width(t, invert);
+                    self.ty = Ty::Int as i64;
                 }
-                self.ty = Ty::Int as i64;
             } else if let Some(cmp) = Cmp::from_tok(self.lex.tk) {
                 // All four relational ops share the same emit shape;
                 // see `Cmp::ops` for the per-flavour op picks.
@@ -4230,21 +4297,27 @@ impl Compiler {
                 self.ast_psh();
                 self.expr(Token::ShlOp as i64)?;
                 self.reject_aggregate_binop(t, self.ty, name)?;
-                if is_floating_scalar(t) || is_floating_scalar(self.ty) {
-                    self.require_both_float(t, name)?;
-                    self.ast_binop(fp_op);
-                } else if is_pointer_ty(t)
-                    || is_pointer_ty(self.ty)
-                    || is_unsigned_ty(self.arith_common_ty(t, self.ty))
-                {
-                    // Addresses order by unsigned magnitude: the common-type
-                    // rule does not apply to pointers, and a signed compare
-                    // misorders any address with bit 63 set.
-                    self.ast_binop(unsigned_op);
+                if let Some(vty) = self.vector_compare_ty(t, self.ty) {
+                    let op = self.vector_compare_op(t, self.ty, signed_op, unsigned_op, fp_op);
+                    self.ty = vty;
+                    self.ast_binop(op);
                 } else {
-                    self.ast_binop(signed_op);
+                    if is_floating_scalar(t) || is_floating_scalar(self.ty) {
+                        self.require_both_float(t, name)?;
+                        self.ast_binop(fp_op);
+                    } else if is_pointer_ty(t)
+                        || is_pointer_ty(self.ty)
+                        || is_unsigned_ty(self.arith_common_ty(t, self.ty))
+                    {
+                        // Addresses order by unsigned magnitude: the common-type
+                        // rule does not apply to pointers, and a signed compare
+                        // misorders any address with bit 63 set.
+                        self.ast_binop(unsigned_op);
+                    } else {
+                        self.ast_binop(signed_op);
+                    }
+                    self.ty = Ty::Int as i64;
                 }
-                self.ty = Ty::Int as i64;
             } else if self.lex.tk == Token::ShlOp {
                 self.next()?;
                 self.ast_psh();
@@ -5846,6 +5919,20 @@ fn vector_binop_entry(tk: i64) -> Option<&'static (Token, &'static str, super::s
 
 fn is_vector_binop_token(tk: i64) -> bool {
     vector_binop_entry(tk).is_some()
+}
+
+/// The comparison tokens the GCC vector extension lowers element-wise.
+fn is_vector_compare_token(tk: i64) -> bool {
+    [
+        Token::EqOp,
+        Token::NeOp,
+        Token::LtOp,
+        Token::GtOp,
+        Token::LeOp,
+        Token::GeOp,
+    ]
+    .iter()
+    .any(|t| *t as i64 == tk)
 }
 
 fn vector_binop_name(tk: i64) -> &'static str {

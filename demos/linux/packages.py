@@ -9,7 +9,10 @@ validates the rebooted system: the package scriptlets (depmod, initramfs
 generation, boot-loader entry) and the running kernel (systemd reaches
 multi-user, udev-bound devices, on-demand module loads, dmesg, disk and
 network I/O). A stock-kernel baseline is captured from the same image before
-the install, so every measurement has a reference.
+the install, so every measurement has a reference. `--exercise` adds a stage
+after those probes that drives what the boot does not reach -- the crypto
+implementations, every built module, the kunit suites, and the filesystem and
+block stack under a verified stress load (exercise.py).
 
     python3 demos/linux/packages.py --arch x86_64 \
         --tarball <linux-7.1.6.tar.xz> --config <corpus .config> \
@@ -57,6 +60,7 @@ import urllib.request
 from pathlib import Path
 
 import diags
+import exercise
 
 LINUX_DIR = Path(__file__).resolve().parent
 REPO_ROOT = LINUX_DIR.parents[1]
@@ -231,12 +235,10 @@ AARCH64_FIRMWARE = [
 
 DEB_TOOL_RPMS = ["dpkg", "dpkg-dev", "dpkg-perl", "debhelper", "libmd"]
 
-# Patterns whose presence in dmesg fails the gate outright, and patterns
-# that are only compared against the stock baseline.
-DMESG_SEVERE = re.compile(
-    r"BUG:|Oops|Call [Tt]race|general protection|"
-    r"Unable to handle kernel|kernel NULL pointer|UBSAN:|KASAN:")
-DMESG_WARN = re.compile(r"WARNING:")
+# The dmesg severity vocabulary is the exercise stage's: both the boot
+# probes and the stage judge a kernel log by the same patterns.
+DMESG_SEVERE = exercise.DMESG_SEVERE
+DMESG_WARN = exercise.DMESG_WARN
 
 # badc's one-line identification: `badc <version> (gcc-compatible, GNU C
 # <v>)`. It is both the `--version` first line the kernel records as
@@ -969,6 +971,7 @@ class VM:
         self.console = args.workdir / f"console-{args.arch}.log"
         self.pidfile = args.workdir / f"vm-{args.arch}.pid"
         self.key = args.workdir / "vm-key"
+        self.spares: list[Path] = []
 
     def start(self) -> None:
         args, arch = self.args, self.arch
@@ -1004,17 +1007,20 @@ class VM:
         run(cmd, check=True, timeout=60)
 
     def disk_args(self) -> list[str]:
-        """The system disk and the cloud-init seed on `--vm-disk-bus`."""
+        """The system disk, the cloud-init seed and any spare disks the
+        exercise stage asked for, all on `--vm-disk-bus`."""
         bus = self.args.vm_disk_bus
         drives = [("d0", f"format=qcow2,file={self.disk}", "hd"),
                   ("d1", f"format=raw,readonly=on,file={self.seed}", "cd")]
+        drives += [(f"d{i + 2}", f"format=qcow2,file={p}", "hd")
+                   for i, p in enumerate(self.spares)]
         if bus == "virtio":
             return [a for _, spec, _ in drives for a in ("-drive", f"if=virtio,{spec}")]
         out: list[str] = []
         # The firmware boots the system disk first on every bus; without the
         # index SeaBIOS probes the emulated controllers in its own order and
         # may try the seed image first.
-        boot = ["bootindex=0", ""]
+        boot = ["bootindex=0", *[""] * (len(drives) - 1)]
         if bus == "nvme":
             for i, (did, spec, _) in enumerate(drives):
                 out += ["-drive", f"if=none,id={did},{spec}",
@@ -1282,6 +1288,13 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
          "-F", "qcow2", str(disk), args.vm_disk], check=True)
 
     vm = VM(args, arch, disk, seed, accel)
+    if args.exercise:
+        for i in range(args.exercise_spares):
+            spare = args.workdir / f"spare-{args.arch}-{i}.qcow2"
+            spare.unlink(missing_ok=True)
+            run(["qemu-img", "create", "-q", "-f", "qcow2", str(spare),
+                 exercise.SPARE_SIZE], check=True)
+            vm.spares.append(spare)
     vm.start()
     result: dict = {"image": image.name, "image_sha256": arch["image"]["sha256"],
                     "accel": accel, "cpu": vm.cpu, "ssh_port": args.ssh_port,
@@ -1438,6 +1451,10 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
         if after != "0":
             failures.append(f"kernel tainted after module loads: {after}")
 
+        if args.exercise:
+            result["exercise"] = exercise.run(args, vm, arch, args.release,
+                                              failures, log)
+
         # Sweep for cores produced under the badc kernel (services, udev,
         # modprobe). A kernel-side oops/panic leaves no userspace core; the
         # qemu console log is that record and is kept regardless.
@@ -1456,7 +1473,30 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
 
 # --- main -------------------------------------------------------------------
 
+def self_test() -> int:
+    assert names_badc("badc 0.1 (gcc-compatible, GNU C 15.0.0)")
+    assert not names_badc("gcc (GCC) 15.0.0")
+    assert not names_badc("")
+    text = clear_foreign_files(
+        'CONFIG_INITRAMFS_SOURCE="/x/y"\nCONFIG_MODULE_SIG_KEY="/k.pem"\n'
+        'CONFIG_LOCALVERSION="-badc"\n')
+    assert 'CONFIG_INITRAMFS_SOURCE=""' in text
+    assert 'CONFIG_MODULE_SIG_KEY="certs/signing_key.pem"' in text
+    assert 'CONFIG_LOCALVERSION="-badc"' in text
+    for name in ARCHES:
+        arch = resolve_arch(name, None)
+        assert arch["pkg"] in PACKAGERS and "sha256" in arch["image"]
+        assert arch["qemu"].endswith(name)
+    assert resolve_arch("x86_64", "fedora")["pkg"] == "rpm"
+    assert set(DISK_BUSES) >= {"virtio", "nvme"} and "virtio-net-pci" in NICS
+    exercise.self_test()
+    print("linux packages: self-test ok", flush=True)
+    return 0
+
+
 def main() -> int:
+    if sys.argv[1:] == ["--self-test"]:
+        return self_test()
     ap = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -1552,6 +1592,7 @@ def main() -> int:
                     help="seconds for the package install, which regenerates "
                          "the initramfs and is the longest single step")
     ap.add_argument("--qemu-args", default="")
+    exercise.add_arguments(ap)
     ap.add_argument("--workdir", type=Path,
                     default=Path.cwd() / "packages-out")
     ap.add_argument("--report", type=Path)
@@ -1579,6 +1620,9 @@ def main() -> int:
     lock.flush()
     if not args.ssh_port:
         args.ssh_port = free_port()
+    if args.exercise and args.vm_mem < exercise.EXERCISE_VM_MEM:
+        log(f"--exercise: raising --vm-mem to {exercise.EXERCISE_VM_MEM}")
+        args.vm_mem = exercise.EXERCISE_VM_MEM
     args.badc = Path(args.badc).resolve()
     args.manifest = args.workdir / f"manifest-{args.arch}.txt"
     args.ld_manifest = args.workdir / f"ld-manifest-{args.arch}.txt"

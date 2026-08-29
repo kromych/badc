@@ -66,6 +66,7 @@ jobs:
           python3 demos/linux/kaslr.py
           python3 demos/linux/verify.py --self-test
           python3 demos/linux/layout.py --self-test
+          python3 demos/linux/packages.py --self-test
           python3 scripts/snapshots.py --self-test
           python3 scripts/validate_local_boxes.py --self-test
       # Sources and docs are ASCII-only. Smart quotes / em dashes /

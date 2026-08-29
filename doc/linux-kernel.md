@@ -67,6 +67,29 @@ badc. The run also checks an untainted kernel, a clean dmesg, and
 disk/network I/O, against a baseline taken from the image's stock kernel in the
 same userspace.
 
+**Exercised.** Booting reaches a few dozen of the several thousand modules a
+distribution kernel ships. `packages.py --exercise` runs a stage inside the
+booted badc kernel that drives the rest. Every crypto implementation the
+kernel registers is checked through AF_ALG by its driver name -- so an
+arch-optimized path is a subject on its own -- against hashlib where the
+standard library implements the algorithm and against the generic
+implementation registered under the same name otherwise; where the
+configuration keeps `CONFIG_CRYPTO_SELFTESTS`, the registration self-tests and
+a `tcrypt` mode sweep run as well. Every built module is loaded once and
+classified, with absent hardware counted apart from a fault, a hang, a missing
+symbol or an oops taint bit. Filesystems are built on loop devices over sparse
+files at both 512- and 4096-byte logical block sizes, stressed by parallel
+write, churn, tree-copy and `O_DIRECT` jobs, then verified: file content is
+checked against digests taken from a tmpfs seed rather than from the
+filesystem, after dropping the caches and remounting, and each instance ends
+with its own check-only fsck. The matrix includes the checksum-heavy
+configurations on purpose -- btrfs with crc32c, xxhash, sha256 and blake2,
+btrfs with zstd compression, ext4 and xfs with metadata checksums, LUKS2
+dm-crypt and md raid1 -- because they route file data through the same kernel
+crypto and compression code, where a miscompile shows up as corrupted data
+rather than as a message in dmesg. The kunit suites run where the
+configuration builds them.
+
 ## What is not badc's
 
 **Assembly.** Partly badc's. `badc -c foo.S -o foo.o` assembles a unit

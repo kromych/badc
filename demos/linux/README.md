@@ -751,6 +751,127 @@ not its debug info. The provisioned prefix is stamped with a digest of the rpm
 file names `dnf` resolves the tool set to, so a prefix built against a package
 set the mirror has moved past is rebuilt rather than reused.
 
+### Exercising the booted kernel (`--exercise`)
+
+Booting proves the kernel reaches userspace over one storage and one network
+path. A distribution kernel ships several thousand modules and the boot loads
+a few dozen. `--exercise` adds a stage that runs after the boot probes, inside
+the badc kernel, and drives the code the boot never reaches. Its steps are
+data -- a name, the guest work and the rule that reads the outcome -- so the
+set extends without touching the driver; each step lands in the report under
+`vm.exercise` and a failing one appends to the run's `failures`.
+`--exercise-steps` selects a subset of `crypto,modules,kunit,fs,dmesg`.
+
+`crypto` loads every module under the kernel's `crypto/`, `arch/*/crypto/` and
+`lib/crypto/` trees, forces the registration self-tests when the configuration
+keeps them (`CONFIG_CRYPTO_SELFTESTS`, plus a `tcrypt` mode sweep -- tcrypt
+returns an error on completion by design, so its verdict comes from dmesg),
+scans the whole kernel log for testmgr's own verdicts -- a built-in algorithm
+is tested when it registers, which is during the boot, before the stage runs --
+and then checks the implementations against references. The check reaches each
+registered implementation through AF_ALG *by its driver name*, so `sha256-avx2`
+and `sha256-generic` are separate subjects rather than whichever the priority
+ordering would select. Hashes are compared against hashlib where the standard
+library implements the algorithm; the remaining hashes, the skciphers and the
+AEADs are compared against the generic implementation registered under the same
+algorithm name, with a decrypt round trip on top. This is the step that carries
+the coverage on most configurations: `CONFIG_CRYPTO_SELFTESTS` depends on
+`CONFIG_EXPERT`, so Ubuntu 26.04 and the tree's own `defconfig` both leave the
+in-kernel tests out, and `tcrypt` with them. It is also finer than they are: a
+self-test failure names an algorithm, a mismatch here names the implementation
+and the reference it disagreed with.
+
+`modules` loads every module in the kernel's module tree once, one at a time
+under a per-module timeout, and classifies each outcome. A module that
+declines because the hardware is absent is expected and counted; a module that
+faults, hangs, fails on a missing symbol or sets the oops or machine-check
+taint bit is a finding. Modules already loaded when the sweep starts are never
+unloaded, so the sweep cannot take the network or the root disk down; the test
+suites are left to the `kunit` step, since a suite loaded here runs a second
+time and collides with its own boot-time registrations; the rest are pruned
+every 250 loads, which bounds memory and exercises the module exit
+paths. The report carries the counts -- built, attempted, loaded, refused,
+failed hard, still resident -- and the taint word on both sides of the sweep,
+with the refusals named by errno and the hard failures by module.
+`--exercise-modules N` strides evenly over the sorted module list instead of
+loading all of it, keeping every subsystem prefix represented.
+
+`kunit` loads the in-kernel suites and reads their KTAP output from debugfs and
+dmesg, failing on any `not ok`. It records a skip when the configuration has no
+`CONFIG_KUNIT`; the Ubuntu 26.04 configuration does not set it. A kernel that
+also sets `CONFIG_KUNIT_FAULT_TEST` oopses on purpose during that suite, which
+the dmesg gate then reports; leave it off for a gate run.
+
+`fs` is a stress test over the block stack, not a smoke test. Each instance
+puts a filesystem on a loop device over a sparse file -- which also exercises
+`loop.ko` -- with the loop's logical block size varied between 512 and 4096
+across instances, because the sector-size paths are distinct code. Four
+concurrent instances of each job kind then run for `--exercise-fs-seconds`:
+rotating-block `dd` writes with `conv=fsync`, small-file
+create/rename/hardlink/unlink churn, a tree copy with `find`/`grep` sweeps and
+`rm -rf`, sparse writes with `O_DIRECT` reads, and one `fsstress` or `fio` job
+when the image has either. The writers hold back above 80% full: a filesystem
+the jobs drive to ENOSPC can end the instance unmountable -- ntfs3 cannot
+extend `$MFT` once it is full -- and that says nothing about the kernel. Data is verified rather than assumed: a file set is
+written from a seed held in tmpfs, its digests are computed from that seed and
+never from the filesystem, and
+after the workload the caches are dropped, the filesystem is unmounted and
+mounted again, and every digest is checked. Silent corruption is what a
+codegen defect on a copy or checksum path produces, and no dmesg scan reports
+it. Each instance ends with the filesystem's own check-only fsck, where a
+non-clean result is a hard failure.
+
+The matrix covers ext4 (4096- and 512-byte logical blocks), xfs, f2fs, vfat,
+exfat, ntfs3, udf, and squashfs, erofs and iso9660 as read-only images built
+from a staging tree. It deliberately includes the checksum-heavy
+configurations, which route file data through the same kernel crypto code the
+crypto step tests directly: btrfs with `--csum crc32c`, `--csum xxhash`,
+`--csum sha256` and `--csum blake2`, a btrfs instance with
+`compress-force=zstd`, and ext4 and xfs with metadata checksums on. dm-crypt
+adds two LUKS2 instances (`aes-xts-plain64` and `aes-cbc-essiv:sha256`) and md
+adds a raid1 instance
+over the stage's two spare disks. An instance the running kernel has no
+option for, or whose `mkfs` is missing or refuses, is recorded as a skip with
+the reason rather than as a failure; a tool killed by a signal is a failure
+instead, since a crashed `mkfs`, `cryptsetup` or `mdadm` is evidence rather
+than a missing feature; `--exercise-tools auto` first installs the
+missing tools from the guest's own package mirror, and `skip` leaves the image
+as it is.
+
+The stage stops at the first kernel fault: once a task's kernel log carries an
+oops or a BUG, the tasks after it record a skip naming that fault instead of
+running. Nothing the kernel reports afterwards is attributable to the work that
+provoked it, and a wedged subsystem turns the remaining tasks into timeouts --
+one that faulted here left a `mount` dead with interrupts disabled and the
+global `sync` in the next instance blocked behind it. `--exercise-steps` and
+`--exercise-fs` are how a run deliberately continues past a known fault.
+
+`dmesg` is one consolidated severity scan over everything the stage produced.
+The stage runs a `dmesg` follower into a file for its whole duration, because
+the sweep produces far more lines than the ring buffer holds and a wrapped ring
+drops exactly the early fault the sweep is looking for. The existing core-dump
+sweep runs after the stage, so a userspace core produced by it is collected
+too.
+
+The stage is opt-in and is not part of the push gate: it costs minutes, and
+the report carries the wall-clock of every task and every step so the default
+set can be tuned against measurement. On the x86_64 box (KVM, 2 vCPUs, 4 GiB
+guest), against the Ubuntu 26.04 image and against a badc-built kernel
+installed into it:
+
+| step | cost | what it covered |
+|---|---|---|
+| `crypto` | 2-3 s | 53 to 153 algorithms registered, 39 to 54 implementations checked through AF_ALG; a 10-mode `tcrypt` sweep adds 1.5 s where `CONFIG_CRYPTO_SELFTESTS` is on |
+| `modules` | 130 ms per module | ~15 min extrapolated over Ubuntu's ~6800-module tree; `--exercise-modules N` bounds it |
+| `kunit` | 1 s | 171 cases from `kunit_test` and `kunit_example_test`; a skip where `CONFIG_KUNIT` is off |
+| `fs` | 420-590 s for 18 instances | 2 s (erofs) to 39 s (LUKS aes-cbc-essiv) each at `--exercise-fs-seconds 15`, the upper figure with a kernel build running alongside |
+| `dmesg` | 1 s | one scan over the stage's whole kernel log |
+
+The stage attaches `--exercise-spares` thin qcow2 disks (2 by default) after
+the system disk and the seed, on the same bus; the system disk keeps its bus
+and its `bootindex=0`. It also raises `--vm-mem` to 4096 when it is lower,
+since the sweep holds every loaded module resident between prunes.
+
 ### The distribution's own configuration (`--config from-vm`)
 
 `defconfig` is the tree's answer to what a kernel should contain; a

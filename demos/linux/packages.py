@@ -734,6 +734,17 @@ def phase_package(args, arch, tree) -> list[Path]:
     return out
 
 
+def readelf_bin() -> str:
+    """`readelf`, resolved also through Homebrew's binutils on a macOS
+    host, where the SDK ships none and the kbuild PATH is per-run."""
+    found = shutil.which("readelf")
+    if found:
+        return found
+    brew = Path(shutil.which("brew") or "/opt/homebrew/bin/brew").resolve().parents[1]
+    cand = brew / "opt/binutils/bin/readelf"
+    return str(cand) if cand.is_file() else "readelf"
+
+
 def assert_module_producer(tree: Path, failures: list[str]) -> dict:
     """Every packaged module must carry badc's `.comment` producer string.
 
@@ -747,7 +758,7 @@ def assert_module_producer(tree: Path, failures: list[str]) -> dict:
         return {}
     checked, bad = 0, []
     for m in mods:
-        r = run(["readelf", "-p", ".comment", str(m)])
+        r = run([readelf_bin(), "-p", ".comment", str(m)])
         if r.returncode != 0:
             continue
         checked += 1

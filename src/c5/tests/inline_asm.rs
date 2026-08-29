@@ -891,7 +891,8 @@ fn x86_register_or_immediate_operand_takes_a_constant_as_the_immediate() {
             alloc::format!("long f(long v) {{ {body} return v; }} int main(void) {{ return 0; }}");
         x64_image(&src, false)
     };
-    let cases: &[(&str, &[u8], Option<(usize, u8)>)] = &[
+    type Case<'a> = (&'a str, &'a [u8], Option<(usize, u8)>);
+    let cases: &[Case] = &[
         // movl $0x80000040, %r8d
         (
             "__asm__ volatile(\"movl %0, %%r8d\" : : \"g\"(0x80000040UL) : \"r8\");",

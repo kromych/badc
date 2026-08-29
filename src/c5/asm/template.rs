@@ -160,9 +160,9 @@ pub(crate) fn expand_size_suffix_refs(
     while let Some(p) = rest.find('%') {
         out.push_str(&rest[..p]);
         let after = &rest[p + 1..];
-        if after.starts_with('%') {
+        if let Some(r) = after.strip_prefix('%') {
             out.push_str("%%");
-            rest = &after[1..];
+            rest = r;
             continue;
         }
         match split_operand_ref(after) {

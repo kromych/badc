@@ -256,7 +256,6 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi, target
 /// Derived from [`asm_save_masks`], which the emitter also saves from,
 /// so the region always covers the emitted layout.
 fn asm_scratch_bytes(func: &FunctionSsa, fixed: super::FixedRegs) -> u32 {
-    use super::super::ir::AsmConstraint;
     let mut max = 0u32;
     for inst in &func.insts {
         let Inst::InlineAsm { asm, args } = inst else {

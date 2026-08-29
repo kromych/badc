@@ -819,6 +819,27 @@ def ensure_image(args, arch) -> Path:
     return dst
 
 
+def require_case_sensitive(workdir: Path) -> None:
+    """The tree carries header pairs that differ only in case
+    (`netfilter_ipv4/ipt_ECN.h` and `ipt_ecn.h`, the `xt_DSCP.h` /
+    `xt_dscp.h` family), so extracting it on a case-insensitive
+    filesystem -- a macOS APFS volume in its default format -- keeps one
+    of each pair and the build then fails on a missing member rather
+    than on the filesystem."""
+    a, b = workdir / ".case-probe-A", workdir / ".case-probe-a"
+    a.write_text("A")
+    try:
+        distinct = not b.exists()
+    finally:
+        a.unlink(missing_ok=True)
+    if not distinct:
+        die(f"{workdir} is on a case-insensitive filesystem; the kernel "
+            f"tree needs a case-sensitive one (on macOS: a volume formatted "
+            f"as Case-sensitive APFS, or a sparse image created with "
+            f"`hdiutil create -fs 'Case-sensitive APFS' -size 40g -volname "
+            f"kernel kernel.sparseimage` and attached)")
+
+
 def free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
@@ -1524,6 +1545,7 @@ def main() -> int:
         die(f"unknown phases: {sorted(unknown)}")
     args.workdir = args.workdir.resolve()
     args.workdir.mkdir(parents=True, exist_ok=True)
+    require_case_sensitive(args.workdir)
     # Held for the process lifetime: the tree, the packages and the vm disk
     # all live in the workdir, so two runs sharing one would corrupt both.
     lock = (args.workdir / "lock").open("w")

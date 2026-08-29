@@ -516,6 +516,14 @@ the target instead -- the rpm's `%post` runs `depmod` directly, the deb's
 `postinst` reaches it through `/etc/kernel/postinst.d` -- so the missing host
 `depmod` costs nothing.
 
+The tree must sit on a case-sensitive filesystem: it carries header pairs
+that differ only in case (`netfilter_ipv4/ipt_ECN.h` and `ipt_ecn.h`, the
+`xt_DSCP.h` / `xt_dscp.h` family), and a macOS volume in APFS's default
+format keeps one of each pair at extraction, after which the build fails on
+a missing struct member rather than on the filesystem. `packages.py` probes
+its workdir and refuses a case-insensitive one, naming the `hdiutil` sparse
+image that provides a case-sensitive volume without repartitioning.
+
 `packages.py` runs here too and sets that environment itself on a macOS
 host: `ARCH`, `CROSS_COMPILE` (derived from `--real-cc`, which defaults to
 the musl-cross `<arch>-linux-musl-gcc` for `--arch` there, as `--real-ld`

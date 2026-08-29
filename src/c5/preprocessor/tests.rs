@@ -764,6 +764,21 @@ fn pragma_operator_once_marks_file() {
 }
 
 #[test]
+fn variadic_stringize_keeps_the_source_spacing() {
+    // C99 6.10.3.2p2: the stringized spelling keeps the argument tokens
+    // as written -- a space only where the source had one. gcc 16:
+    // S(kvm-amd,kvm-intel) is "kvm-amd,kvm-intel", S1(one, two ,three)
+    // is "one, two ,three".
+    let out = process(
+        "#define S1(x...) #x\n#define S(x...) S1(x)\n\
+         const char *a = S(kvm-amd,kvm-intel);\n\
+         const char *b = S1(one, two ,three);\n",
+    );
+    assert!(out.contains("\"kvm-amd,kvm-intel\""), "{out}");
+    assert!(out.contains("\"one, two ,three\""), "{out}");
+}
+
+#[test]
 fn pragma_operator_via_macro_stringize() {
     // The operand can be produced by the `#x` stringize feeding the
     // operator (`_Pragma(#x)`), the common `DO_PRAGMA` idiom.

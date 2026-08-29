@@ -65,6 +65,7 @@ jobs:
         run: |
           python3 demos/linux/kaslr.py
           python3 demos/linux/verify.py --self-test
+          python3 demos/linux/layout.py --self-test
           python3 scripts/snapshots.py --self-test
           python3 scripts/validate_local_boxes.py --self-test
       # Sources and docs are ASCII-only. Smart quotes / em dashes /
@@ -1719,7 +1720,9 @@ jobs:
       - name: install kernel build deps + the emulator's shared libraries
         # No qemu-system-* package: the only emulator on this runner is the one
         # the qemu lane built, so the boot cannot silently use a distro build.
-        run: ./scripts/apt_resilient_install.sh flex bison bc libelf-dev libssl-dev libglib2.0-dev zlib1g-dev libfdt-dev llvm
+        # llvm carries llvm-dwarfdump and gdb answers the layout step's
+        # --cross-check; neither is in the runner image.
+        run: ./scripts/apt_resilient_install.sh flex bison bc libelf-dev libssl-dev libglib2.0-dev zlib1g-dev libfdt-dev llvm gdb
       - name: fetch the badc-built emulator (qemu lane, -O0)
         uses: actions/download-artifact@v4
         with:
@@ -1777,6 +1780,11 @@ jobs:
       # member offsets compared through the DWARF both emit. A layout that
       # differs is an ABI defect between vmlinux and the modules sharing the
       # type, and it corrupts memory rather than failing to load.
+      #
+      # The gate built through buildcc.py, so every .cmd file in the tree
+      # records that shim as the compiler; the reference leg substitutes the
+      # target's gcc for it, the same compiler the gate's shim falls back to.
+      # The step fails before compiling anything if that compiler is absent.
       - name: compare type layouts through DWARF (gcc vs badc, strided replay)
         timeout-minutes: 15
         run: |

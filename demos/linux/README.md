@@ -1005,12 +1005,25 @@ Three input modes:
 * `--ref-tree` / `--badc-tree` compares `vmlinux` plus every `.ko` both
   trees built, paired by tree-relative path.
 * `--replay --tree` compiles each unit of one tree twice -- the recorded
-  Kbuild command plus `-gdwarf-4`, and badc's flag set plus `-g` -- and
+  Kbuild arguments plus `-gdwarf-4`, and badc's flag set plus `-g` -- and
   compares per unit. Both sides then run the same preprocessor surface over
   the same sources by construction, and the corpus is every translation
   unit rather than the types that reached `vmlinux`. Objects already in the
   scratch directory are reused, so a re-run costs only the extraction and an
   interrupted run resumes.
+
+  A tree `verify.py` built records `buildcc.py` as `$(CC)` in every `.cmd`
+  file, and that shim is not a compiler: replaying it runs badc on both
+  legs, or nothing at all when `$BADC` is unset. The reference leg therefore
+  substitutes `--real-cc` for the recorded driver, defaulting to
+  `$BADC_REAL_CC` or the target's `gcc` -- the compiler the shim itself
+  falls back to. The recorded arguments are that compiler's own surface,
+  since the shim rewrites for badc internally and leaves the `cc-option`
+  probes to the reference compiler. A tree the reference compiler built
+  keeps its recorded driver. When the tree records a shim and no reference
+  compiler resolves, the run stops before compiling anything and says which
+  shim, how many units and which compiler it looked for; it does not report
+  an empty comparison. `--report` is written on that path too.
 
 Reported per aggregate: total size, and per member the byte offset, size,
 bit offset and bit width. Comparison is on those facts only; member type
@@ -1050,8 +1063,10 @@ That validates the reader and demonstrates that a debugger consumes badc's
 DWARF at all. It costs about 2 ms per type, which is why it samples rather
 than extracts.
 
-`--self-test` checks the DWARF parse and the differ against a synthetic dump
-and needs no toolchain, tree or kernel.
+`--self-test` checks the DWARF parse and the differ against a synthetic dump,
+the recorded-driver split and the reference compiler it resolves, and that a
+run stopped by a precondition still writes its `--report`. It needs no
+toolchain, tree or kernel, and runs in CI's script harness self-tests.
 
 ### What badc's DWARF carries
 

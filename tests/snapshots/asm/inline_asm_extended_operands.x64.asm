@@ -43,8 +43,7 @@ Disassembly of section .text:
                	movq	-0x28(%rbp), %r10
                	movq	(%r10), %rax
                	movq	-0x20(%rbp), %rbx
-               	movq	-0x18(%rbp), %rcx
-               	shldq	%cl, %rbx, %rax
+               	shldq	$0xc, %rbx, %rax
                	movq	-0x28(%rbp), %r10
                	movq	%rax, (%r10)
                	movq	-0x40(%rbp), %rax
@@ -71,8 +70,7 @@ Disassembly of section .text:
                	movq	-0x28(%rbp), %r10
                	movq	(%r10), %rax
                	movq	-0x20(%rbp), %rbx
-               	movq	-0x18(%rbp), %rcx
-               	shrdq	%cl, %rbx, %rax
+               	shrdq	$0x14, %rbx, %rax
                	movq	-0x28(%rbp), %r10
                	movq	%rax, (%r10)
                	movq	-0x40(%rbp), %rax

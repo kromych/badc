@@ -93,17 +93,32 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
 
-<main>:
+<check_local>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	callq	<addr>
-               	movq	%rax, %rcx
-               	movslq	%ecx, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	popq	%rbp
-               	retq
-               	leaq	<rip>, %rax
+               	subq	$0x40, %rsp
+               	leaq	-0x38(%rbp), %rcx
+               	xorq	%rdx, %rdx
+               	movq	%rdx, (%rcx)
+               	movq	%rdx, 0x8(%rcx)
+               	movq	%rdx, 0x10(%rcx)
+               	movq	%rdx, 0x18(%rcx)
+               	leaq	-0x18(%rbp), %rax
+               	movq	%rdx, (%rax)
+               	movq	%rdx, 0x8(%rax)
+               	leaq	-0x8(%rbp), %rdx
+               	leaq	<rip>, %rsi
+               	pushq	%rax
+               	movq	(%rsi), %rax
+               	movq	%rax, (%rdx)
+               	popq	%rax
+               	movq	%rdx, %rsi
+               	movq	%rdx, (%rax)
+               	movl	$0x5, %edx
+               	movl	%edx, 0x8(%rax)
+               	movq	%rax, (%rcx)
+               	movl	$0x6, %edx
+               	movl	%edx, 0x8(%rcx)
                	movq	(%rax), %rcx
                	movslq	(%rcx), %rcx
                	cmpl	$0xb, %ecx
@@ -119,7 +134,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0xa, %eax
-               	movslq	%eax, %rax
+               	addq	$0x40, %rsp
                	popq	%rbp
                	retq
                	movslq	0x8(%rax), %rax
@@ -132,9 +147,28 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0xb, %eax
-               	jmp	<addr>
+               	addq	$0x40, %rsp
+               	popq	%rbp
+               	retq
                	xorq	%rax, %rax
                	movq	%rax, %rcx
+               	addq	$0x40, %rsp
+               	popq	%rbp
+               	retq
                	jmp	<addr>
                	jmp	<addr>
-               	jmp	<addr>
+
+<main>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	callq	<addr>
+               	movq	%rax, %rcx
+               	movslq	%ecx, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	popq	%rbp
+               	retq
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	popq	%rbp
+               	retq

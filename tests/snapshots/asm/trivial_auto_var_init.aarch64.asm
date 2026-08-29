@@ -338,12 +338,6 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x0, #0x0                // =0
                	stur	w0, [x29, #-0x8]
-               	sub	x0, x29, #0x8
-               	ldrsw	x0, [x0]
-               	mov	w0, w0
-               	cmp	w0, #0x0
-               	cset	x0, ne
-               	sxtw	x0, w0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

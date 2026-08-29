@@ -28,41 +28,12 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x1, [x0, #0x30]
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	cmp	x1, x2
-               	b.eq	<addr>
-               	mov	x0, #0x5                // =5
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	ldr	x1, [x0, #0x30]
-               	ldr	w1, [x1, #0x8]
-               	mov	x17, #0x5               // =5
-               	eor	x1, x1, x17
-               	mov	w1, w1
-               	cbz	x1, <addr>
-               	mov	x0, #0x6                // =6
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	ldr	d0, [x0, #0x38]
                	mov	x1, #0x3fe0000000000000 // =4602678819172646912
                	fmov	d17, x1
                	fcmp	d0, d17
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	ldr	x0, [x0, #0x20]
-               	ldrb	w0, [x0]
-               	mov	x17, #0x74              // =116
-               	eor	x0, x0, x17
-               	mov	w0, w0
-               	cbz	x0, <addr>
-               	mov	x0, #0x8                // =8
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

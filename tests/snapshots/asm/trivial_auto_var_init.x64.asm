@@ -343,13 +343,6 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	xorq	%rax, %rax
                	movl	%eax, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	movslq	(%rax), %rax
-               	movl	%eax, %eax
-               	testl	%eax, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	movslq	%eax, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq

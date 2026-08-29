@@ -2719,6 +2719,7 @@ impl Compiler {
         // unary `*`, which would mis-apply the decay no-op and drop the
         // load an assignment lvalue needs.
         self.pending.fn_ptr_chain_depth = -1;
+        self.pending.fn_ptr_depth_is_array_elem = false;
         // GNU statement attributes: an attribute specifier at statement
         // position appertains to the statement that follows, and
         // `__attribute__((fallthrough));` -- what `<linux/compiler_attributes.h>`

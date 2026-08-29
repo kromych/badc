@@ -2599,6 +2599,7 @@ impl Compiler {
                     let fpi = self.symbols[id_idx].fn_ptr_indirection;
                     if fpi > 0 {
                         self.pending.fn_ptr_chain_depth = fpi - 1;
+                        self.pending.fn_ptr_depth_is_array_elem = true;
                     }
                     if fpi > 0 || !self.symbols[id_idx].params.is_empty() {
                         self.pending.indirect_callee_params =
@@ -3432,6 +3433,7 @@ impl Compiler {
                 self.ty = ety;
             } else {
                 let pre_inc_lvalue = self.ast_acc;
+                let fn_ptr_step = self.value_is_function_pointer();
                 self.rewrite_trailing_load_as_psh()
                     .ok_or_else(|| self.compile_err("bad lvalue in pre-increment"))?;
                 // ++/-- reads the prior value and stores a new one.
@@ -3455,11 +3457,15 @@ impl Compiler {
                 // seeded into the stride snapshot when the operand was
                 // loaded (the operand was parsed via a nested `expr()`,
                 // so it sits in `end_of_expr_stride`).
-                let step = self.pointer_to_array_arith_stride(
-                    self.pending.end_of_expr_stride,
-                    self.ty,
-                    self.pointee_step(self.ty),
-                );
+                let step = if fn_ptr_step {
+                    1
+                } else {
+                    self.pointer_to_array_arith_stride(
+                        self.pending.end_of_expr_stride,
+                        self.ty,
+                        self.pointee_step(self.ty),
+                    )
+                };
                 self.emit_imm(step);
                 self.ast_binop(if t == Token::Inc as i64 {
                     super::super::ir::BinOp::Add
@@ -4012,6 +4018,7 @@ impl Compiler {
                     continue;
                 }
                 self.next()?;
+                let lhs_fn_ptr = self.value_is_function_pointer();
                 // Rewrite the trailing load into a Psh so the
                 // address sits on the c5 stack across the compound
                 // op; the helper hands back the matching reload op
@@ -4057,7 +4064,7 @@ impl Compiler {
                 {
                     let elem_ty = lhs_ty - Ty::Ptr as i64;
                     let elem_size = self.size_of_type(elem_ty) as i64;
-                    if elem_size > 1 {
+                    if !lhs_fn_ptr && elem_size > 1 {
                         self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, elem_size);
                     }
                 }
@@ -4465,9 +4472,15 @@ impl Compiler {
                 // re-seeds it after this op so chained pointer-to-array
                 // arithmetic (`p + i - 1`) keeps the array size.
                 let lhs_stride = self.pending.index_stride;
+                // A function pointer strides one byte per unit, so the
+                // operand's fn-pointer lineage has to be read before the
+                // RHS parse overwrites it.
+                let lhs_fn_ptr = self.value_is_function_pointer();
                 let mut carry_stride: i64 = 0;
                 self.ast_psh();
                 self.expr(Token::MulOp as i64)?;
+                let rhs_fn_ptr = self.value_is_function_pointer();
+                let fn_ptr_arith = lhs_fn_ptr || rhs_fn_ptr;
                 self.reject_aggregate_binop(t, self.ty, "+")?;
                 if let Some(vty) = self.vector_binop_ty(t, self.ty, "+") {
                     self.ty = vty;
@@ -4489,7 +4502,7 @@ impl Compiler {
                     // need to set the result type to ptr.
                     let rhs_ty = self.ty;
                     let lhs_ty = t;
-                    if self.is_ptr_scaling_nontrivial(rhs_ty) {
+                    if !fn_ptr_arith && self.is_ptr_scaling_nontrivial(rhs_ty) {
                         // Snapshot the AST operands before the
                         // pointer-scaling sequence: lhs (int) sits
                         // on the parser-side vstack, rhs (ptr) is
@@ -4567,7 +4580,7 @@ impl Compiler {
                     }
                 } else {
                     let rhs_ty = self.ty;
-                    if self.is_ptr_scaling_nontrivial(t) {
+                    if !fn_ptr_arith && self.is_ptr_scaling_nontrivial(t) {
                         let scale =
                             self.pointer_to_array_arith_stride(lhs_stride, t, self.pointee_size(t));
                         if scale > self.pointee_size(t) {
@@ -4599,9 +4612,12 @@ impl Compiler {
             } else if self.lex.tk == Token::SubOp {
                 self.next()?;
                 let lhs_stride = self.pending.index_stride;
+                let lhs_fn_ptr = self.value_is_function_pointer();
                 let mut carry_stride: i64 = 0;
                 self.ast_psh();
                 self.expr(Token::MulOp as i64)?;
+                let rhs_fn_ptr = self.value_is_function_pointer();
+                let fn_ptr_arith = lhs_fn_ptr || rhs_fn_ptr;
                 self.reject_aggregate_binop(t, self.ty, "-")?;
                 if let Some(vty) = self.vector_binop_ty(t, self.ty, "-") {
                     self.ty = vty;
@@ -4623,12 +4639,12 @@ impl Compiler {
                     // in `p - q` reads this node), not the operand pointer.
                     self.ty = Ty::Int as i64;
                     self.ast_binop(crate::c5::ir::BinOp::Sub);
-                    if self.is_ptr_scaling_nontrivial(t) {
+                    if !fn_ptr_arith && self.is_ptr_scaling_nontrivial(t) {
                         let scale =
                             self.pointer_to_array_arith_stride(lhs_stride, t, self.pointee_size(t));
                         self.emit_binop_with_imm(crate::c5::ir::BinOp::Div, scale);
                     }
-                } else if self.is_ptr_scaling_nontrivial(t) {
+                } else if !fn_ptr_arith && self.is_ptr_scaling_nontrivial(t) {
                     let scale =
                         self.pointer_to_array_arith_stride(lhs_stride, t, self.pointee_size(t));
                     if scale > self.pointee_size(t) {
@@ -4829,6 +4845,7 @@ impl Compiler {
                     continue;
                 }
                 let post_inc_lvalue = self.ast_acc;
+                let fn_ptr_step = self.value_is_function_pointer();
                 self.rewrite_trailing_load_as_psh()
                     .ok_or_else(|| self.compile_err("bad lvalue in post-increment"))?;
                 // Post ++/-- reads the prior value and stores a
@@ -4846,7 +4863,7 @@ impl Compiler {
                 }
                 self.mark_emit_other();
                 self.ast_psh();
-                self.emit_imm(self.pointee_step(self.ty));
+                self.emit_imm(if fn_ptr_step { 1 } else { self.pointee_step(self.ty) });
                 self.ast_binop(if self.lex.tk == Token::Inc {
                     super::super::ir::BinOp::Add
                 } else {
@@ -4859,11 +4876,15 @@ impl Compiler {
                 // into the stride snapshot at the operand load (which
                 // sits in the current scope's `index_stride` for a
                 // postfix operand).
-                let post_step = self.pointer_to_array_arith_stride(
-                    self.pending.index_stride,
-                    self.ty,
-                    self.pointee_step(self.ty),
-                );
+                let post_step = if fn_ptr_step {
+                    1
+                } else {
+                    self.pointer_to_array_arith_stride(
+                        self.pending.index_stride,
+                        self.ty,
+                        self.pointee_step(self.ty),
+                    )
+                };
                 self.emit_imm(post_step);
                 self.ast_binop(if self.lex.tk == Token::Inc {
                     super::super::ir::BinOp::Sub

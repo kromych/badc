@@ -642,6 +642,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("stmt_expr_scope_exit_value.c", 0),
     ("int_times_double_into_local.c", 0),
     ("ptr_diff_plus_ptr.c", 0),
+    ("fn_ptr_arith_byte_stride.c", 0),
     ("anonymous_aggregates.c", 0),
     ("unnamed_field_tagged_type.c", 0),
     ("const_strlen_literal.c", 0),

@@ -1091,6 +1091,13 @@ pub(in crate::c5::compiler) struct Pending {
     /// the call-site fallback can't fire).
     pub fn_ptr_chain_depth: i64,
 
+    /// True when `fn_ptr_chain_depth` describes an array's *element*
+    /// rather than the value in hand: an array of function pointers
+    /// decays to a pointer to one, and the decay seeds the depth from
+    /// the element so `(*arr[i])(...)` still sees the 6.3.2.1p4 no-op.
+    /// Cleared with `fn_ptr_chain_depth`.
+    pub fn_ptr_depth_is_array_elem: bool,
+
     /// Symbol index of the Token::Loc whose value was loaded by
     /// the most recently emitted scalar load (`LoadKind::I64` /
     /// `LoadKind::U8` / `LoadKind::I16` / `LoadKind::I32`, or the fused local-load
@@ -1463,6 +1470,7 @@ impl Default for Pending {
             // `-1` means "not in a fn-ptr-tracked chain"; see field
             // docs above.
             fn_ptr_chain_depth: -1,
+            fn_ptr_depth_is_array_elem: false,
             last_loaded_local: None,
             last_loaded_local_prior_was_read: false,
             last_loaded_local_prior_pending: Vec::new(),

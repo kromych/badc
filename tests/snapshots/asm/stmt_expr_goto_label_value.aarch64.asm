@@ -182,12 +182,7 @@ Disassembly of section .text:
                	mov	x0, x4
                	sub	x3, x29, #0x10
                	mov	x2, #0x1                // =1
-               	ldr	x0, [x3, #0x8]
-               	mov	x17, #0xfe00            // =65024
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	and	x0, x0, x17
+               	mov	x0, #0x0                // =0
                	b	<addr>
                	add	x1, x2, #0x1
                	lsl	x0, x1, #6

@@ -319,16 +319,16 @@ fn ent_pc=6 n_params=0 variadic=false locals=4
     terminator Jmp(b42)   (exit_acc=v156)
   block 55  start_pc=0
     v124 LocalAddr(-2)                                    -> x0
-    v125 Load { addr=v124, disp=0, kind=I64 }             -> x1
-    v126 Extend { value=v125, kind=I32 }                  -> x1
+    v125 Imm(0)                                           -> x0
+    v126 Imm(0)                                           -> x0
     v127 InlineAsm { template="testl %0, %0; jnz %l0", ops=1, args=[v126] } -> -
     terminator AsmGoto { table=5 }   [b56, b57]
   block 56  start_pc=0
-    v128 LocalAddr(-2)                                    -> x1
-    v129 Load { addr=v124, disp=0, kind=I64 }             -> x1
-    v130 LocalAddr(-2)                                    -> x0
-    v131 BinopI { op=add, lhs=v130, rhs_imm=8 }           -> x2
-    v132 Load { addr=v130, disp=8, kind=I64 }             -> x0
+    v128 LocalAddr(-2)                                    -> x0
+    v129 Load { addr=v128, disp=0, kind=I64 }             -> x1
+    v130 LocalAddr(-2)                                    -> x2
+    v131 BinopI { op=add, lhs=v128, rhs_imm=8 }           -> x2
+    v132 Load { addr=v128, disp=8, kind=I64 }             -> x0
     v133 Binop { op=add, lhs=v129, rhs=v132 }             -> x0
     v134 Extend { value=v133, kind=I32 }                  -> x0
     v135 Extend { value=v134, kind=I32 }                  -> x1

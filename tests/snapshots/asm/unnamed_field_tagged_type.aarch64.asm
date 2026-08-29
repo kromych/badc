@@ -272,13 +272,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x30
-               	ldrsw	x1, [x0, #0x8]
-               	cmp	w1, #0xd
-               	b.eq	<addr>
-               	mov	x0, #0x39               // =57
-               	add	sp, sp, #0x90
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	add	x0, x0, #0x10
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
@@ -304,13 +297,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x18
-               	ldrsw	x1, [x0, #0x8]
-               	cmp	w1, #0x18
-               	b.eq	<addr>
-               	mov	x0, #0x3b               // =59
-               	add	sp, sp, #0x90
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	add	x0, x0, #0x10
                	adrp	x1, <page>
                	add	x1, x1, <lo12>

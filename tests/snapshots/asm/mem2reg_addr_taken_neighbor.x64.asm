@@ -29,20 +29,19 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	xorq	%rdx, %rdx
-               	movl	%edx, -0x8(%rbp)
+               	xorq	%rcx, %rcx
+               	movl	%ecx, -0x8(%rbp)
                	movq	%rdi, %rax
                	shlq	%rax
-               	leaq	-0x8(%rbp), %rcx
-               	movslq	(%rcx), %rdx
-               	addq	%rax, %rdx
-               	movl	%edx, (%rcx)
-               	movslq	%edx, %rdx
-               	addq	%rax, %rdx
-               	movl	%edx, (%rcx)
-               	movslq	%edx, %rdx
-               	addq	%rdx, %rax
-               	movl	%eax, (%rcx)
+               	leaq	-0x8(%rbp), %rdx
+               	leaq	(%rax), %rcx
+               	movl	%ecx, (%rdx)
+               	movslq	%ecx, %rcx
+               	addq	%rax, %rcx
+               	movl	%ecx, (%rdx)
+               	movslq	%ecx, %rcx
+               	addq	%rcx, %rax
+               	movl	%eax, (%rdx)
                	movslq	-0x8(%rbp), %rax
                	addq	$0x10, %rsp
                	popq	%rbp
@@ -55,8 +54,7 @@ Disassembly of section .text:
                	xorq	%rcx, %rcx
                	movl	%ecx, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rax
-               	movslq	(%rax), %rcx
-               	addq	$0xe, %rcx
+               	movl	$0xe, %ecx
                	movl	%ecx, (%rax)
                	movslq	%ecx, %rcx
                	addq	$0xe, %rcx

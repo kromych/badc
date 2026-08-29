@@ -112,38 +112,27 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x10
-               	ldrb	w2, [x0, #0x8]
-               	cmp	w2, #0x0
-               	cset	x1, ne
-               	cbnz	x2, <addr>
-               	ldrb	w1, [x0, #0xb]
-               	cmp	w1, #0x0
-               	cset	x1, ne
-               	cbz	x1, <addr>
-               	mov	x0, #0x5                // =5
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	ldrsw	x2, [x0, #0xc]
-               	add	x1, x5, #0x6
-               	cmp	w2, w1
-               	cset	x1, ne
-               	cbnz	x1, <addr>
-               	ldrsw	x1, [x0]
+               	mov	x2, #0x0                // =0
+               	mov	x0, x2
+               	sub	x1, x29, #0x10
+               	ldrsw	x3, [x1, #0xc]
+               	add	x0, x5, #0x6
+               	cmp	w3, w0
+               	cset	x0, ne
+               	cbnz	x0, <addr>
+               	ldrsw	x1, [x1]
                	add	x0, x5, #0x4
                	cmp	w1, w0
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	cset	x0, ne
+               	cbz	x0, <addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x0                // =0
+               	mov	x0, x2
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>
                	b	<addr>
                	b	<addr>
                	b	<addr>

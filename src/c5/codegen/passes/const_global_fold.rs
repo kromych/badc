@@ -426,7 +426,7 @@ fn store_width(kind: crate::c5::ir::StoreKind) -> i64 {
 }
 
 /// What fills a tracked frame range.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum Filled {
     /// The data-segment image at this offset, byte for byte.
     Template(i64),
@@ -454,6 +454,200 @@ impl Filled {
     }
 }
 
+/// Frame byte range `lo` -> (`hi`, what fills it): the block state of
+/// [`fold_template_loads`].
+type State = BTreeMap<i64, (i64, Filled)>;
+
+/// Ranges both states agree on: the overlap of entries whose fill
+/// matches at every shared byte.
+fn meet(a: &State, b: &State) -> State {
+    let mut out = State::new();
+    for (&alo, &(ahi, af)) in a {
+        for (&blo, &(bhi, bf)) in b.range(..ahi) {
+            if bhi <= alo {
+                continue;
+            }
+            let lo = alo.max(blo);
+            let fill = af.advanced(lo - alo);
+            if fill == bf.advanced(lo - blo) {
+                out.insert(lo, (ahi.min(bhi), fill));
+            }
+        }
+    }
+    out
+}
+
+/// Walk block `b` from `state`: tracked writes update the state, and
+/// with `fold` set, each load the state resolves rewrites to the
+/// initializer's value. Returns whether any load folded.
+fn walk_block(
+    func: &mut FunctionSsa,
+    cd: &ConstData<'_>,
+    ext: &BTreeSet<u32>,
+    state: &mut State,
+    b: usize,
+    fold: bool,
+    deferred: &mut Vec<(ValueId, Folded)>,
+) -> bool {
+    let mut changed = false;
+    // A write covers part of a tracked range; what it does not reach
+    // still holds what the range says, so the remainder is kept.
+    let kill = |state: &mut State, lo: i64, hi: i64| {
+        let hit: Vec<(i64, (i64, Filled))> = state
+            .range(..hi)
+            .filter(|entry| entry.1.0 > lo)
+            .map(|(&s_lo, &v)| (s_lo, v))
+            .collect();
+        for (s_lo, (s_hi, src)) in hit {
+            state.remove(&s_lo);
+            if s_lo < lo {
+                state.insert(s_lo, (lo, src));
+            }
+            if s_hi > hi {
+                state.insert(hi, (s_hi, src.advanced(hi - s_lo)));
+            }
+        }
+    };
+    for i in func.blocks[b].inst_range.clone() {
+        let idx = i as usize;
+        match &func.insts[idx] {
+            Inst::Mcpy { dst, src, size, .. } => {
+                let size = *size;
+                match frame_addr(func, *dst, 0) {
+                    Some(lo) => {
+                        kill(state, lo, lo + size);
+                        if let Some(s) = data_addr(func, ext, *src, 0) {
+                            state.insert(lo, (lo + size, Filled::Template(s)));
+                        }
+                    }
+                    None => state.clear(),
+                }
+            }
+            Inst::Store {
+                addr,
+                disp,
+                value,
+                kind,
+                volatile,
+                ..
+            } => {
+                let (zero, w) = (
+                    !*volatile && matches!(func.insts.get(*value as usize), Some(Inst::Imm(0))),
+                    store_width(*kind),
+                );
+                match frame_addr(func, *addr, *disp as i64) {
+                    Some(a) => {
+                        kill(state, a, a + w);
+                        // The zero fill that replaces an all-zero
+                        // template writes the same bytes the copy did.
+                        if zero {
+                            state.insert(a, (a + w, Filled::Zero));
+                        }
+                    }
+                    None => state.clear(),
+                }
+            }
+            Inst::StoreLocal {
+                off,
+                value,
+                kind,
+                volatile,
+            } => {
+                let a = off.wrapping_mul(8);
+                let w = store_width(*kind);
+                kill(state, a, a + w);
+                if !*volatile && matches!(func.insts.get(*value as usize), Some(Inst::Imm(0))) {
+                    state.insert(a, (a + w, Filled::Zero));
+                }
+            }
+            Inst::Load {
+                addr,
+                disp,
+                kind,
+                volatile: false,
+                ..
+            } if fold => {
+                let (kind, Some(w)) = (*kind, int_width(*kind)) else {
+                    continue;
+                };
+                let Some(a) = frame_addr(func, *addr, *disp as i64) else {
+                    continue;
+                };
+                let Some((&lo, &(hi, src))) = state.range(..=a).next_back() else {
+                    continue;
+                };
+                if a + w > hi {
+                    continue;
+                }
+                let Some(value) = src.read(cd, a - lo, w) else {
+                    continue;
+                };
+                match Folded::of(value, kind) {
+                    Folded::Imm(v) => {
+                        func.insts[idx] = Inst::Imm(v);
+                        changed = true;
+                    }
+                    f => deferred.push((i, f)),
+                }
+            }
+            Inst::LoadLocal {
+                off,
+                kind,
+                volatile: false,
+            } if fold => {
+                let (kind, Some(w)) = (*kind, int_width(*kind)) else {
+                    continue;
+                };
+                let a = off.wrapping_mul(8);
+                let Some((&lo, &(hi, src))) = state.range(..=a).next_back() else {
+                    continue;
+                };
+                if a + w > hi {
+                    continue;
+                }
+                let Some(value) = src.read(cd, a - lo, w) else {
+                    continue;
+                };
+                match Folded::of(value, kind) {
+                    Folded::Imm(v) => {
+                        func.insts[idx] = Inst::Imm(v);
+                        changed = true;
+                    }
+                    f => deferred.push((i, f)),
+                }
+            }
+            // Pure value producers and reads neither write nor
+            // invalidate.
+            Inst::Imm(_)
+            | Inst::ImmData(_)
+            | Inst::ImmCode(_)
+            | Inst::ImmExtCode(_)
+            | Inst::BlockAddr(_)
+            | Inst::LocalAddr(_)
+            | Inst::TlsAddr(_)
+            | Inst::Load { .. }
+            | Inst::LoadLocal { .. }
+            | Inst::LoadIndexed { .. }
+            | Inst::SegLoad { .. }
+            | Inst::Binop { .. }
+            | Inst::BinopI { .. }
+            | Inst::Fneg(_)
+            | Inst::Fma { .. }
+            | Inst::MulAdd { .. }
+            | Inst::Extend { .. }
+            | Inst::Bswap { .. }
+            | Inst::FpCast { .. }
+            | Inst::ParamRef { .. }
+            | Inst::Phi { .. } => {}
+            // Calls, atomics, asm, indexed / segment stores,
+            // intrinsics, alloca bookkeeping: may write memory the
+            // walk does not model.
+            _ => state.clear(),
+        }
+    }
+    changed
+}
+
 /// Fold loads of a local whose covering write is known. An `Mcpy` from
 /// resolvable data leaves those bytes in the slot, so the load reads the
 /// source image under the same const rules as [`fold_loads`] -- which
@@ -461,20 +655,24 @@ impl Filled {
 /// aggregate local is filled from, the shape a byte-level layout
 /// assertion probes. A store of zero leaves zero, which is the same
 /// initializer once the all-zero template is stored rather than copied.
-/// State is per block, keyed by frame byte ranges, inherited over an
-/// unconditional single-predecessor edge; a tracked write kills what it
-/// overlaps and any instruction that can write memory unpredictably
-/// clears it.
+/// Block input is the intersection of the predecessors' exit states -- a
+/// forward must-analysis iterated to a fixed point in reverse post-order,
+/// where a predecessor without a computed exit contributes nothing yet;
+/// loads then rewrite in one sweep from the converged inputs.
 pub(crate) fn fold_template_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) -> bool {
-    use alloc::collections::BTreeMap;
     use alloc::vec;
-    // Predecessor sets, for the single-pred inheritance.
+
     let nblocks = func.blocks.len();
-    let mut preds: Vec<Vec<u32>> = vec![Vec::new(); nblocks];
+    // An address rewrite renumbers the tape, so it waits for the sweep.
+    let mut deferred: Vec<(ValueId, Folded)> = Vec::new();
+    if nblocks == 0 {
+        return false;
+    }
+    let mut succs: Vec<Vec<u32>> = vec![Vec::new(); nblocks];
     for (b, blk) in func.blocks.iter().enumerate() {
         let mut edge = |t: u32| {
-            if let Some(p) = preds.get_mut(t as usize) {
-                p.push(b as u32);
+            if (t as usize) < nblocks {
+                succs[b].push(t);
             }
         };
         match &blk.terminator {
@@ -510,172 +708,77 @@ pub(crate) fn fold_template_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) ->
             Terminator::Return(_) | Terminator::TailExt(_) | Terminator::Unreachable => {}
         }
     }
-    // Frame range lo -> (hi, what fills it).
-    type State = BTreeMap<i64, (i64, Filled)>;
-    let mut exit_states: Vec<Option<State>> = vec![None; nblocks];
-    let ext = extern_imm_data(func);
-    let mut changed = false;
-    // An address rewrite may renumber the tape, so it waits for the walk.
-    let mut deferred: Vec<(ValueId, Folded)> = Vec::new();
-    for b in 0..nblocks {
-        let mut state: State = match preds[b].as_slice() {
-            [p] if (*p as usize) < b
-                && matches!(
-                    func.blocks[*p as usize].terminator,
-                    Terminator::Jmp(t) | Terminator::FallThrough(t) if t as usize == b
-                ) =>
-            {
-                exit_states[*p as usize].clone().unwrap_or_default()
-            }
-            _ => State::new(),
-        };
-        // A write covers part of a tracked range; what it does not reach
-        // still holds what the range says, so the remainder is kept.
-        let kill = |state: &mut State, lo: i64, hi: i64| {
-            let hit: Vec<(i64, (i64, Filled))> = state
-                .range(..hi)
-                .filter(|entry| entry.1.0 > lo)
-                .map(|(&s_lo, &v)| (s_lo, v))
-                .collect();
-            for (s_lo, (s_hi, src)) in hit {
-                state.remove(&s_lo);
-                if s_lo < lo {
-                    state.insert(s_lo, (lo, src));
-                }
-                if s_hi > hi {
-                    state.insert(hi, (s_hi, src.advanced(hi - s_lo)));
-                }
-            }
-        };
-        for i in func.blocks[b].inst_range.clone() {
-            let idx = i as usize;
-            match &func.insts[idx] {
-                Inst::Mcpy { dst, src, size, .. } => {
-                    let size = *size;
-                    match frame_addr(func, *dst, 0) {
-                        Some(lo) => {
-                            kill(&mut state, lo, lo + size);
-                            if let Some(s) = data_addr(func, &ext, *src, 0) {
-                                state.insert(lo, (lo + size, Filled::Template(s)));
-                            }
-                        }
-                        None => state.clear(),
-                    }
-                }
-                Inst::Store {
-                    addr,
-                    disp,
-                    value,
-                    kind,
-                    volatile,
-                    ..
-                } => {
-                    let (zero, w) = (
-                        !*volatile && matches!(func.insts.get(*value as usize), Some(Inst::Imm(0))),
-                        store_width(*kind),
-                    );
-                    match frame_addr(func, *addr, *disp as i64) {
-                        Some(a) => {
-                            kill(&mut state, a, a + w);
-                            // The zero fill that replaces an all-zero
-                            // template writes the same bytes the copy did.
-                            if zero {
-                                state.insert(a, (a + w, Filled::Zero));
-                            }
-                        }
-                        None => state.clear(),
-                    }
-                }
-                Inst::StoreLocal { off, kind, .. } => {
-                    let a = off.wrapping_mul(8);
-                    kill(&mut state, a, a + store_width(*kind));
-                }
-                Inst::Load {
-                    addr,
-                    disp,
-                    kind,
-                    volatile: false,
-                    ..
-                } => {
-                    let (kind, Some(w)) = (*kind, int_width(*kind)) else {
-                        continue;
-                    };
-                    let Some(a) = frame_addr(func, *addr, *disp as i64) else {
-                        continue;
-                    };
-                    let Some((&lo, &(hi, src))) = state.range(..=a).next_back() else {
-                        continue;
-                    };
-                    if a + w > hi {
-                        continue;
-                    }
-                    let Some(value) = src.read(cd, a - lo, w) else {
-                        continue;
-                    };
-                    match Folded::of(value, kind) {
-                        Folded::Imm(v) => {
-                            func.insts[idx] = Inst::Imm(v);
-                            changed = true;
-                        }
-                        f => deferred.push((i, f)),
-                    }
-                }
-                Inst::LoadLocal {
-                    off,
-                    kind,
-                    volatile: false,
-                } => {
-                    let (kind, Some(w)) = (*kind, int_width(*kind)) else {
-                        continue;
-                    };
-                    let a = off.wrapping_mul(8);
-                    let Some((&lo, &(hi, src))) = state.range(..=a).next_back() else {
-                        continue;
-                    };
-                    if a + w > hi {
-                        continue;
-                    }
-                    let Some(value) = src.read(cd, a - lo, w) else {
-                        continue;
-                    };
-                    match Folded::of(value, kind) {
-                        Folded::Imm(v) => {
-                            func.insts[idx] = Inst::Imm(v);
-                            changed = true;
-                        }
-                        f => deferred.push((i, f)),
-                    }
-                }
-                // Pure value producers and reads neither write nor
-                // invalidate.
-                Inst::Imm(_)
-                | Inst::ImmData(_)
-                | Inst::ImmCode(_)
-                | Inst::ImmExtCode(_)
-                | Inst::BlockAddr(_)
-                | Inst::LocalAddr(_)
-                | Inst::TlsAddr(_)
-                | Inst::Load { .. }
-                | Inst::LoadLocal { .. }
-                | Inst::LoadIndexed { .. }
-                | Inst::SegLoad { .. }
-                | Inst::Binop { .. }
-                | Inst::BinopI { .. }
-                | Inst::Fneg(_)
-                | Inst::Fma { .. }
-                | Inst::MulAdd { .. }
-                | Inst::Extend { .. }
-                | Inst::Bswap { .. }
-                | Inst::FpCast { .. }
-                | Inst::ParamRef { .. }
-                | Inst::Phi { .. } => {}
-                // Calls, atomics, asm, indexed / segment stores,
-                // intrinsics, alloca bookkeeping: may write memory the
-                // walk does not model.
-                _ => state.clear(),
-            }
+    let mut preds: Vec<Vec<u32>> = vec![Vec::new(); nblocks];
+    for (b, ss) in succs.iter().enumerate() {
+        for &s in ss {
+            preds[s as usize].push(b as u32);
         }
-        exit_states[b] = Some(state);
+    }
+    // Reverse post-order from the entry; an unreachable block stays out
+    // of the walk and keeps its loads.
+    let mut order: Vec<u32> = Vec::with_capacity(nblocks);
+    let mut seen = vec![false; nblocks];
+    let mut stack: Vec<(u32, usize)> = vec![(0, 0)];
+    seen[0] = true;
+    loop {
+        let Some(&(b, i)) = stack.last() else { break };
+        if let Some(&s) = succs[b as usize].get(i) {
+            stack.last_mut().expect("nonempty").1 += 1;
+            if !seen[s as usize] {
+                seen[s as usize] = true;
+                stack.push((s, 0));
+            }
+        } else {
+            order.push(b);
+            stack.pop();
+        }
+    }
+    order.reverse();
+    let ext = extern_imm_data(func);
+    let mut in_states: Vec<Option<State>> = vec![None; nblocks];
+    let mut exit_states: Vec<Option<State>> = vec![None; nblocks];
+    // Exits start unknown and only shrink: the first computed value
+    // replaces unknown, and later rounds meet in more predecessors, so
+    // each productive round shrinks at least one exit. The bound covers
+    // the longest acyclic chain; an overrun folds nothing.
+    let mut rounds = nblocks + 2;
+    loop {
+        let mut changed_any = false;
+        for &b in &order {
+            let bs = b as usize;
+            let mut input: Option<State> = (bs == 0).then(State::new);
+            for &p in &preds[bs] {
+                let Some(pe) = exit_states[p as usize].as_ref() else {
+                    continue;
+                };
+                input = Some(match input.take() {
+                    None => pe.clone(),
+                    Some(cur) => meet(&cur, pe),
+                });
+            }
+            let mut st = input.clone().unwrap_or_default();
+            walk_block(func, cd, &ext, &mut st, bs, false, &mut deferred);
+            if exit_states[bs].as_ref() != Some(&st) {
+                exit_states[bs] = Some(st);
+                changed_any = true;
+            }
+            in_states[bs] = input;
+        }
+        if !changed_any {
+            break;
+        }
+        rounds -= 1;
+        if rounds == 0 {
+            return false;
+        }
+    }
+    let mut changed = false;
+    for &b in &order {
+        let bs = b as usize;
+        let mut st = in_states[bs].take().unwrap_or_default();
+        if walk_block(func, cd, &ext, &mut st, bs, true, &mut deferred) {
+            changed = true;
+        }
     }
     apply(func, &mut deferred) || changed
 }

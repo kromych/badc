@@ -52,14 +52,14 @@ fn ent_pc=1 n_params=1 variadic=false locals=5
     v16  Store { addr=v3, disp=16, value=v15, kind=I64 }  -> -
     v17  StoreLocal { off=-4, value=v4, kind=I32 }        -> -
     v18  StoreLocal { off=-5, value=v4, kind=I32 }        -> -
-    v19  LocalAddr(-3)                                    -> x2
-    v20  LoadLocal { off=2, kind=I64 }                    -> x2
-    v21  Extend { value=v4, kind=I32 }                    -> x1
-    v22  BinopI { op=add, lhs=v21, rhs_imm=1 }            -> x6
+    v19  LocalAddr(-3)                                    -> x1
+    v20  LoadLocal { off=2, kind=I64 }                    -> x1
+    v21  Imm(0)                                           -> x2
+    v22  Imm(1)                                           -> x2
     v23  StoreLocal { off=-5, value=v22, kind=I32 }       -> -
-    v24  BinopI { op=shl, lhs=v21, rhs_imm=2 }            -> x6
-    v25  Binop { op=add, lhs=v20, rhs=v24 }               -> x6
-    v26  LoadIndexed { base=v20, index=v21, scale=4, kind=I32 } -> x1
+    v24  Imm(0)                                           -> x2
+    v25  BinopI { op=add, lhs=v20, rhs_imm=0 }            -> x1
+    v26  Load { addr=v25, disp=0, kind=I32 }              -> x1
     v27  BinopI { op=shl, lhs=v26, rhs_imm=3 }            -> x2
     v28  Binop { op=add, lhs=v3, rhs=v27 }                -> x2
     v29  LoadIndexed { base=v3, index=v26, scale=8, kind=I64 } -> x1

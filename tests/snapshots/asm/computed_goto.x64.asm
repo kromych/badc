@@ -79,11 +79,11 @@ Disassembly of section .text:
                	movq	%rdx, 0x10(%rax)
                	movl	%ecx, -0x20(%rbp)
                	movl	%ecx, -0x28(%rbp)
-               	movq	0x10(%rbp), %rdx
-               	movslq	%ecx, %rcx
-               	leaq	0x1(%rcx), %rsi
-               	movl	%esi, -0x28(%rbp)
-               	movslq	(%rdx,%rcx,4), %rcx
+               	movq	0x10(%rbp), %rcx
+               	movl	$0x1, %edx
+               	movl	%edx, -0x28(%rbp)
+               	addq	$0x0, %rcx
+               	movslq	(%rcx), %rcx
                	movq	(%rax,%rcx,8), %rcx
                	jmpq	*%rcx
                	movslq	-0x20(%rbp), %rdi

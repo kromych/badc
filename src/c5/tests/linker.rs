@@ -7194,6 +7194,223 @@ fn later_address_escape_folds_assert_call_at_o() {
         assert!(
             has(b"compiletime_assert_33"),
             "{shape}: without -O the reference stays, as with gcc -O0"
+fn const_array_copy_member_folds_assert_calls_at_o() {
+    // The kernel's CHECK_PACKED_FIELDS shape: an element of a const
+    // static array copied whole into a local -- directly and through a
+    // pointer holding the array's address -- with member loads of the
+    // copy guarding calls to undefined error-attributed externs, one
+    // statement-expression block per unrolled index. At -O the copy's
+    // bytes are the initializer's, so every guard folds and the calls
+    // never reach the object; the copy from a mutable array keeps its
+    // call at every level.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::new(alloc::format!(
+        "{TEST_PRELUDE}\
+         struct pf {{ unsigned char startbit, endbit, offset, size; }};\n\
+         static const struct pf fields[] =\n\
+             {{ {{ 63, 61, 0, 1 }}, {{ 60, 52, 1, 2 }}, {{ 51, 28, 3, 4 }} }};\n\
+         static struct pf mut_fields[] = {{ {{ 7, 5, 0, 3 }} }};\n\
+         extern void ct_order_0(void) __attribute__((__noreturn__, __error__(\"o0\")));\n\
+         extern void ct_size_0(void) __attribute__((__noreturn__, __error__(\"s0\")));\n\
+         extern void ct_order_1(void) __attribute__((__noreturn__, __error__(\"o1\")));\n\
+         extern void ct_size_1(void) __attribute__((__noreturn__, __error__(\"s1\")));\n\
+         extern void ct_order_2(void) __attribute__((__noreturn__, __error__(\"o2\")));\n\
+         extern void ct_size_2(void) __attribute__((__noreturn__, __error__(\"s2\")));\n\
+         extern void ct_kept_mut(void) __attribute__((__error__(\"m\")));\n\
+         int check(void) {{\n\
+             int r = 0;\n\
+             ({{ struct pf __f = fields[0];\n\
+                do {{ if (!(!(__f.startbit < __f.endbit))) ct_order_0(); }} while (0);\n\
+                do {{ if (!(!(__f.size != 1 && __f.size != 2 && __f.size != 4 && __f.size != 8)))\n\
+                    ct_size_0(); }} while (0);\n\
+                r += __f.offset; }});\n\
+             ({{ typeof(&(fields)[0]) _f = (fields);\n\
+                typeof(_f[0]) __f = _f[1];\n\
+                do {{ if (!(!(__f.startbit < __f.endbit))) ct_order_1(); }} while (0);\n\
+                do {{ if (!(!(__f.size != 1 && __f.size != 2 && __f.size != 4 && __f.size != 8)))\n\
+                    ct_size_1(); }} while (0);\n\
+                r += __f.offset; }});\n\
+             ({{ typeof(&(fields)[0]) _f = (fields);\n\
+                typeof(_f[0]) __f = _f[2];\n\
+                do {{ if (!(!(__f.startbit < __f.endbit))) ct_order_2(); }} while (0);\n\
+                do {{ if (!(!(__f.size != 1 && __f.size != 2 && __f.size != 4 && __f.size != 8)))\n\
+                    ct_size_2(); }} while (0);\n\
+                r += __f.offset; }});\n\
+             ({{ struct pf __f = mut_fields[0];\n\
+                do {{ if (!(!(__f.size != 1 && __f.size != 2 && __f.size != 4 && __f.size != 8)))\n\
+                    ct_kept_mut(); }} while (0);\n\
+                r += __f.offset; }});\n\
+             return r;\n\
+         }}\n\
+         int main(void) {{ return check() - 4; }}\n"
+    ))
+    .compile()
+    .expect("compile");
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            optimize: true,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit -O");
+        let has = |name: &[u8]| bytes.windows(name.len()).any(|w| w == name);
+        assert!(has(b"check"), "{target:?}: the live function must survive");
+        for sym in [
+            b"ct_order_0".as_slice(),
+            b"ct_size_0",
+            b"ct_order_1",
+            b"ct_size_1",
+            b"ct_order_2",
+            b"ct_size_2",
+        ] {
+            assert!(
+                !has(sym),
+                "{target:?}: a guard on a const element copy must fold away at -O"
+            );
+        }
+        assert!(
+            !has(b"rt_"),
+            "{target:?}: no runtime helper is expected in this shape"
+        );
+        assert!(
+            has(b"ct_kept_mut"),
+            "{target:?}: a copy from a mutable array must keep its call"
+        );
+    }
+    // Without -O the template fold does not run, as gcc -O0 keeps the
+    // references.
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit -O0");
+    let has = |name: &[u8]| bytes.windows(name.len()).any(|w| w == name);
+    assert!(
+        has(b"ct_order_0") && has(b"ct_size_2") && has(b"ct_kept_mut"),
+        "without -O the guards keep their references"
+    );
+}
+
+#[test]
+fn asm_template_longer_identifier_keeps_ipa_ranges() {
+    // An asm template referencing a symbol holds its name as a whole
+    // identifier run. `helper_sz` inside the longer `bpf_helper_sz` is
+    // a different symbol, so the template must not mark `helper_sz`
+    // escaping -- its call sites stay the only entries and the sign
+    // canary folds at -O. A template naming `direct_sz` itself does
+    // escape it, so that canary survives.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let body = |err: &str| {
+        alloc::format!(
+            "long acc = 0;\n\
+             if (!(__builtin_constant_p((long long)(p) >= 0) && ((long long)(p) >= 0)))\n\
+                 {err}();\n\
+             acc += work(p, 1); acc += work(acc, 2); acc += work(acc, 3);\n\
+             acc += work(acc, 4); acc += work(acc, 5); acc += work(acc, 6);\n\
+             acc += work(acc, 7); acc += work(acc, 8); acc += work(acc, 9);\n\
+             acc += work(acc, 10); acc += work(acc, 11); acc += work(acc, 12);\n\
+             acc += work(acc, 13); acc += work(acc, 14); acc += work(acc, 15);\n\
+             acc += work(acc, 16); acc += work(acc, 17); acc += work(acc, 18);\n\
+             return acc;\n"
+        )
+    };
+    let program = Compiler::new(alloc::format!(
+        "{TEST_PRELUDE}\
+         extern void run_sign_folded(void);\n\
+         extern void run_sign_kept(void);\n\
+         extern long work(long, long);\n\
+         static long helper_sz(long p) {{ {} }}\n\
+         static long direct_sz(long p) {{ {} }}\n\
+         long bpf_helper_sz(unsigned v) {{\n\
+             __asm__ volatile (\"nop /* bpf_helper_sz */\" ::: \"memory\");\n\
+             return helper_sz(v);\n\
+         }}\n\
+         long bpf_direct_sz(unsigned v) {{\n\
+             __asm__ volatile (\"nop /* direct_sz */\" ::: \"memory\");\n\
+             return direct_sz(v);\n\
+         }}\n\
+         int main(void) {{ return (int)(bpf_helper_sz(3) + bpf_direct_sz(4)); }}\n",
+        body("run_sign_folded"),
+        body("run_sign_kept"),
+    ))
+    .compile()
+    .expect("compile");
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            optimize: true,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit -O");
+        let has = |name: &[u8]| bytes.windows(name.len()).any(|w| w == name);
+        assert!(
+            !has(b"run_sign_folded"),
+            "{target:?}: a longer identifier containing the name is not a reference to it"
+        );
+        assert!(
+            has(b"run_sign_kept"),
+            "{target:?}: a template naming the function escapes it"
+        );
+    }
+}
+
+#[test]
+fn minmax_signedness_check_folds_for_signed_operands_at_o() {
+    // The kernel's min()/max() signedness probe on two runtime signed
+    // operands: each side's class is 2 plus a deferred
+    // `__builtin_constant_p`, staged through a local, and 2 & 2 is
+    // nonzero whatever the probes resolve to, so the guard folds at -O
+    // once the resolved zeros forward through the staging slot. With
+    // one unsigned 64-bit operand the classes are disjoint and the
+    // call must survive, as gcc keeps it.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let check = |x: &str, y: &str, err: &str| {
+        alloc::format!(
+            "do {{ if (!(!(!(\n\
+               ((((typeof({x}))(-1)) < ((typeof({x}))1))\n\
+                  ? (2 + (__builtin_constant_p((long long)({x}) >= 0) && ((long long)({x}) >= 0)))\n\
+                  : (1 + 2 * (sizeof({x}) < 4)))\n\
+               & ((((typeof({y}))(-1)) < ((typeof({y}))1))\n\
+                  ? (2 + (__builtin_constant_p((long long)({y}) >= 0) && ((long long)({y}) >= 0)))\n\
+                  : (1 + 2 * (sizeof({y}) < 4)))\n\
+             )))) {err}(); }} while (0);\n"
+        )
+    };
+    let program = Compiler::new(alloc::format!(
+        "{TEST_PRELUDE}\
+         extern void both_signed_folded(void);\n\
+         extern void mixed_sign_kept(void);\n\
+         long kmin(long a, long b) {{\n\
+             return ({{ long __x = a; long __y = b;\n\
+                        {}\
+                        __x < __y ? __x : __y; }});\n\
+         }}\n\
+         unsigned long kmin_mixed(long a, unsigned long b) {{\n\
+             return ({{ long __x = a; unsigned long __y = b;\n\
+                        {}\
+                        (unsigned long)__x < __y ? (unsigned long)__x : __y; }});\n\
+         }}\n\
+         int main(void) {{ return (int)(kmin(5, 3) + kmin_mixed(1, 2) - 4); }}\n",
+        check("__x", "__y", "both_signed_folded"),
+        check("__x", "__y", "mixed_sign_kept"),
+    ))
+    .compile()
+    .expect("compile");
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            optimize: true,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit -O");
+        let has = |name: &[u8]| bytes.windows(name.len()).any(|w| w == name);
+        assert!(
+            !has(b"both_signed_folded"),
+            "{target:?}: two signed operands share class 2, so the guard is dead at -O"
+        );
+        assert!(
+            has(b"mixed_sign_kept"),
+            "{target:?}: a signed/unsigned-64 pair has disjoint classes"
         );
     }
 }

@@ -135,9 +135,7 @@ Disassembly of section .text:
                	fcmp	d0, d17
                	cset	x1, ne
                	cbnz	x1, <addr>
-               	ldrsw	x1, [x0, #0x10]
-               	cmp	w1, #0x2a
-               	cset	x1, ne
+               	mov	x1, #0x0                // =0
                	cbz	x1, <addr>
                	mov	x0, #0x7                // =7
                	add	sp, sp, #0x20
@@ -155,15 +153,13 @@ Disassembly of section .text:
                	ldr	x10, [sp], #0x10
                	mov	x1, x0
                	ldr	d0, [x0]
-               	mov	x1, #0x4018000000000000 // =4618441417868443648
-               	fmov	d17, x1
+               	mov	x0, #0x4018000000000000 // =4618441417868443648
+               	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x1, ne
-               	cbnz	x1, <addr>
-               	ldrsw	x0, [x0, #0x10]
-               	cmp	w0, #0x2c
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	cset	x0, ne
+               	cbnz	x0, <addr>
+               	mov	x0, #0x0                // =0
+               	cbz	x0, <addr>
                	mov	x0, #0x8                // =8
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

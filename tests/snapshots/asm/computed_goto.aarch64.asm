@@ -56,11 +56,11 @@ Disassembly of section .text:
                	str	x2, [x0, #0x10]
                	stur	w1, [x29, #-0x20]
                	stur	w1, [x29, #-0x28]
-               	ldur	x2, [x29, #0x10]
-               	sxtw	x1, w1
-               	add	x3, x1, #0x1
-               	stur	w3, [x29, #-0x28]
-               	ldrsw	x1, [x2, x1, lsl #2]
+               	ldur	x1, [x29, #0x10]
+               	mov	x2, #0x1                // =1
+               	stur	w2, [x29, #-0x28]
+               	add	x1, x1, #0x0
+               	ldrsw	x1, [x1]
                	ldr	x1, [x0, x1, lsl #3]
                	br	x1
                	ldursw	x4, [x29, #-0x20]

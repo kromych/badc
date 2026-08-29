@@ -6,15 +6,15 @@ fn ent_pc=0 n_params=1 variadic=false locals=2
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
     v2   StoreLocal { off=2, value=v1, kind=I64 }         -> -
-    v3   Imm(0)                                           -> x1
+    v3   Imm(0)                                           -> x0
     v4   StoreLocal { off=-1, value=v3, kind=I32 }        -> -
     v5   StoreLocal { off=-2, value=v3, kind=I32 }        -> -
     v6   ImmData(32)                                      -> x0
-    v7   LoadLocal { off=2, kind=I64 }                    -> x2
-    v8   Extend { value=v3, kind=I32 }                    -> x1
-    v9   BinopI { op=add, lhs=v8, rhs_imm=1 }             -> x2
+    v7   LoadLocal { off=2, kind=I64 }                    -> x1
+    v8   Imm(0)                                           -> x1
+    v9   Imm(1)                                           -> x1
     v10  StoreLocal { off=-2, value=v9, kind=I32 }        -> -
-    v11  Binop { op=add, lhs=v1, rhs=v8 }                 -> x1
+    v11  BinopI { op=add, lhs=v1, rhs_imm=0 }             -> x1
     v12  Load { addr=v11, disp=0, kind=U8 }               -> x1
     v13  BinopI { op=shl, lhs=v12, rhs_imm=3 }            -> x2
     v14  Binop { op=add, lhs=v6, rhs=v13 }                -> x2
@@ -91,15 +91,15 @@ fn ent_pc=1 n_params=1 variadic=false locals=2
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
     v2   StoreLocal { off=2, value=v1, kind=I64 }         -> -
-    v3   Imm(0)                                           -> x1
+    v3   Imm(0)                                           -> x0
     v4   StoreLocal { off=-1, value=v3, kind=I32 }        -> -
     v5   StoreLocal { off=-2, value=v3, kind=I32 }        -> -
     v6   ImmData(64)                                      -> x0
-    v7   LoadLocal { off=2, kind=I64 }                    -> x2
-    v8   Extend { value=v3, kind=I32 }                    -> x1
-    v9   BinopI { op=add, lhs=v8, rhs_imm=1 }             -> x2
+    v7   LoadLocal { off=2, kind=I64 }                    -> x1
+    v8   Imm(0)                                           -> x1
+    v9   Imm(1)                                           -> x1
     v10  StoreLocal { off=-2, value=v9, kind=I32 }        -> -
-    v11  Binop { op=add, lhs=v1, rhs=v8 }                 -> x1
+    v11  BinopI { op=add, lhs=v1, rhs_imm=0 }             -> x1
     v12  Load { addr=v11, disp=0, kind=U8 }               -> x1
     v13  BinopI { op=shl, lhs=v12, rhs_imm=3 }            -> x2
     v14  Binop { op=add, lhs=v6, rhs=v13 }                -> x2
@@ -176,15 +176,15 @@ fn ent_pc=2 n_params=1 variadic=false locals=2
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
     v2   StoreLocal { off=2, value=v1, kind=I64 }         -> -
-    v3   Imm(0)                                           -> x1
+    v3   Imm(0)                                           -> x0
     v4   StoreLocal { off=-1, value=v3, kind=I32 }        -> -
     v5   StoreLocal { off=-2, value=v3, kind=I32 }        -> -
     v6   ImmData(96)                                      -> x0
-    v7   LoadLocal { off=2, kind=I64 }                    -> x2
-    v8   Extend { value=v3, kind=I32 }                    -> x1
-    v9   BinopI { op=add, lhs=v8, rhs_imm=1 }             -> x2
+    v7   LoadLocal { off=2, kind=I64 }                    -> x1
+    v8   Imm(0)                                           -> x1
+    v9   Imm(1)                                           -> x1
     v10  StoreLocal { off=-2, value=v9, kind=I32 }        -> -
-    v11  Binop { op=add, lhs=v1, rhs=v8 }                 -> x1
+    v11  BinopI { op=add, lhs=v1, rhs_imm=0 }             -> x1
     v12  Load { addr=v11, disp=0, kind=U8 }               -> x1
     v13  BinopI { op=shl, lhs=v12, rhs_imm=3 }            -> x2
     v14  Binop { op=add, lhs=v6, rhs=v13 }                -> x2

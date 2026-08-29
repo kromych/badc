@@ -1795,13 +1795,10 @@ fn build_debug_info(
         body.push(frame_base_breg);
         body.push(0);
 
-        // Variable / formal_parameter children. Order parameters
-        // first; lldb's frame-variable ordering matches
-        // declaration order, and c5's single-pass capture lands
-        // them sorted on `fp_byte_offset` after the split.
-        let mut sorted: Vec<&SubprogVar> = s.variables.iter().collect();
-        sorted.sort_by_key(|v| (!v.is_parameter, v.fp_byte_offset));
-        for v in sorted {
+        // Variable / formal_parameter children, in capture order: the
+        // frontend records parameters first, in declaration order
+        // (DWARF 5 3.3.4), then the locals.
+        for v in &s.variables {
             let abbrev = if v.is_parameter {
                 ABBREV_FORMAL_PARAMETER
             } else {

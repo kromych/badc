@@ -1821,9 +1821,22 @@ impl Compiler {
                     let bound = self.take_scope_bound();
                     // `variables` accumulates over the whole unit; this
                     // function owns exactly the entries appended from here on.
+                    // Parameters go first, in declaration order (DWARF 5
+                    // 3.3.4): `bound` is symbol-table order, which follows
+                    // name interning across the unit, not the prototype.
                     let vars_start = self.variables.len();
-                    for &bi in &bound {
-                        let i = bi as usize;
+                    let capture_order: alloc::vec::Vec<usize> = params
+                        .indices
+                        .iter()
+                        .copied()
+                        .chain(
+                            bound
+                                .iter()
+                                .map(|&bi| bi as usize)
+                                .filter(|i| !param_set.contains(i)),
+                        )
+                        .collect();
+                    for i in capture_order {
                         let sym = &self.symbols[i];
                         if sym.class == Token::Loc as i64
                             && sym.val != 0

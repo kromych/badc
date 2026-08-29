@@ -1329,3 +1329,47 @@ fn a_qualified_typedef_wraps_the_alias() {
         c.offset
     );
 }
+
+/// DWARF 4/5 3.3.4: formal-parameter DIEs appear in declaration order.
+/// pahole builds each function's BTF prototype from that child order,
+/// and the kernel's BTF encoding tags arena kfunc arguments by
+/// position, so a scrambled order miscompiles vmlinux BTF. The capture
+/// walk used to follow symbol-table order -- name-interning order
+/// across the unit -- so `first` below plants low symbol ids on the
+/// names `second` reuses.
+#[test]
+fn formal_parameters_keep_declaration_order() {
+    let u = compile_unit(
+        "param-order",
+        "void first(int flags, int node_id) { int map = flags + node_id; (void)map; }\n\
+         long second(void *p__map, void *addr__ign, unsigned page_cnt, int node_id,\n\
+                     unsigned long flags) {\n\
+             void *map = p__map;\n\
+             return (long)map + (long)addr__ign + page_cnt + node_id + (long)flags;\n\
+         }\n",
+    );
+    let sub = u.named(DW_TAG_SUBPROGRAM, "second");
+    let kids = u.children(sub);
+    let params: Vec<_> = kids
+        .iter()
+        .filter(|d| d.tag == DW_TAG_FORMAL_PARAMETER)
+        .map(|d| d.name().unwrap())
+        .collect();
+    assert_eq!(
+        params,
+        ["p__map", "addr__ign", "page_cnt", "node_id", "flags"],
+        "formal parameters follow declaration order"
+    );
+    let last_param = kids
+        .iter()
+        .rposition(|d| d.tag == DW_TAG_FORMAL_PARAMETER)
+        .unwrap();
+    let first_var = kids
+        .iter()
+        .position(|d| d.tag == DW_TAG_VARIABLE)
+        .expect("local `map` has a variable DIE");
+    assert!(
+        last_param < first_var,
+        "parameter DIEs precede variable DIEs"
+    );
+}

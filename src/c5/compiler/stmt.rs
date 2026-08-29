@@ -1688,7 +1688,7 @@ impl Compiler {
         // value in and the output value out, like a matching constraint).
         // Two outputs cannot both leave a value in one register.
         let fixed_reg = |op: &AsmOperand| match op.constraint {
-            AsmConstraint::Fixed(r) | AsmConstraint::RegOrImm(r) => Some(r),
+            AsmConstraint::Fixed(r) | AsmConstraint::RegOrImm { reg: Some(r), .. } => Some(r),
             _ => None,
         };
         for (i, a) in operands.iter().enumerate() {
@@ -1707,7 +1707,9 @@ impl Compiler {
             // A `Bound` operand is deliberately excluded: preserving the
             // register the asm was asked to see and affect would defeat
             // the binding.
-            if let AsmConstraint::Fixed(r) | AsmConstraint::RegOrImm(r) = op.constraint {
+            if let AsmConstraint::Fixed(r) | AsmConstraint::RegOrImm { reg: Some(r), .. } =
+                op.constraint
+            {
                 clobber_regs |= 1 << r;
             }
         }
@@ -2001,6 +2003,13 @@ impl Compiler {
             .find(|&c| c == 'L' || Self::X86_IMM_CONSTRAINTS.iter().any(|&(l, ..)| l == c))
     }
 
+    /// True when the constant `v` takes the immediate arm `letter` of an
+    /// x86 register-or-immediate constraint: `i` / `n` admit any constant,
+    /// a range letter its range.
+    pub(crate) fn x86_imm_alternative_accepts(letter: char, v: i64) -> bool {
+        matches!(letter, 'i' | 'n') || Self::x86_imm_constraint_accepts(letter, v)
+    }
+
     /// True when `v` satisfies the x86 immediate constraint `letter`.
     pub(crate) fn x86_imm_constraint_accepts(letter: char, v: i64) -> bool {
         if letter == 'L' {
@@ -2059,6 +2068,11 @@ impl Compiler {
         Self::aarch64_movz_imm(x, is64)
             || Self::aarch64_movz_imm(!x & mask, is64)
             || super::super::codegen::aarch64::table::encode_logical_imm(x, is64).is_some()
+    }
+
+    /// The AArch64 counterpart of [`Self::x86_imm_alternative_accepts`].
+    pub(crate) fn aarch64_imm_alternative_accepts(letter: char, v: i64) -> bool {
+        matches!(letter, 'i' | 'n') || Self::aarch64_imm_constraint_accepts(letter, v)
     }
 
     /// True when `v` satisfies the AArch64 immediate constraint `letter`
@@ -2161,13 +2175,19 @@ impl Compiler {
                 _ => return None,
             })
         };
-        // `i` / `n` take any integer constant; the range-restricted letters
-        // additionally bound its value, which the operand site checks once
-        // the constant is in hand. The letters are target-specific: x86 and
-        // aarch64 each give `I`..`N` their own ranges.
-        let has_imm = body.contains(['i', 'n'])
-            || (is_x86 && Self::x86_imm_constraint_letter(body).is_some())
-            || (!is_x86 && Self::aarch64_imm_constraint_letter(body).is_some());
+        // `i` / `n` (and the immediate arm of `g`) take any integer
+        // constant; the range-restricted letters additionally bound its
+        // value, which the operand site checks once the constant is in
+        // hand. The letters are target-specific: x86 and aarch64 each give
+        // `I`..`N` their own ranges.
+        let imm_letter = if body.contains(['i', 'n', 'g']) {
+            Some('i')
+        } else if is_x86 {
+            Self::x86_imm_constraint_letter(body)
+        } else {
+            Self::aarch64_imm_constraint_letter(body)
+        };
+        let has_imm = imm_letter.is_some();
         // A memory-only constraint (`m`, `=m`, `+m`): the operand is accessed
         // through a memory reference. `g` / `rm` also permit memory but prefer
         // a register, which the register path below handles.
@@ -2186,10 +2206,17 @@ impl Compiler {
         let has_general = body.contains(['r', 'q', 'g']);
         let has_reg = has_general || body.contains('m');
         // A specific-register letter (possibly combined with `i` as in
-        // `ci`: the value takes that register, or an immediate).
+        // `ci`: the value takes that register, or an immediate). Only an
+        // input can be an immediate.
         if !has_general && let Some(reg) = body.chars().find_map(fixed) {
-            if has_imm {
-                return Some((AsmConstraint::RegOrImm(reg), is_rw));
+            if let Some(imm) = imm_letter.filter(|_| !is_output) {
+                return Some((
+                    AsmConstraint::RegOrImm {
+                        reg: Some(reg),
+                        imm,
+                    },
+                    is_rw,
+                ));
             }
             return Some((AsmConstraint::Fixed(reg), is_rw));
         }
@@ -2201,6 +2228,9 @@ impl Compiler {
             return Some((AsmConstraint::Fp, is_rw));
         }
         if has_reg {
+            if let Some(imm) = imm_letter.filter(|_| has_general && !is_output) {
+                return Some((AsmConstraint::RegOrImm { reg: None, imm }, is_rw));
+            }
             return Some((AsmConstraint::Reg, is_rw));
         }
         if has_imm && !is_output {

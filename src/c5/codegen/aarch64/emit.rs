@@ -259,7 +259,7 @@ fn asm_scratch_bytes(func: &FunctionSsa, fixed: super::FixedRegs) -> u32 {
     use super::super::ir::AsmConstraint;
     let mut max = 0u32;
     for inst in &func.insts {
-        let Inst::InlineAsm { asm, .. } = inst else {
+        let Inst::InlineAsm { asm, args } = inst else {
             continue;
         };
         // A no-op statement emits no staging (`emit_inline_asm_aarch64`),
@@ -271,17 +271,14 @@ fn asm_scratch_bytes(func: &FunctionSsa, fixed: super::FixedRegs) -> u32 {
             &asm.operands,
             asm.clobber_regs | fixed.gpr,
             asm.clobber_fp_regs | fixed.fpr,
+            &|i| args.get(i).and_then(|&a| crate::c5::asm::asm_operand_const(func, a)),
         ) else {
             continue;
         };
         let Ok((used, fp_used)) = asm_save_masks(asm, &op_reg, fixed) else {
             continue;
         };
-        let n_cap = asm
-            .operands
-            .iter()
-            .filter(|o| !matches!(o.constraint, AsmConstraint::Imm))
-            .count() as u32;
+        let n_cap = op_reg.iter().flatten().count() as u32;
         max = max.max((n_cap + used.count_ones() + fp_used.count_ones()) * 8);
     }
     (max + 15) & !15
@@ -3529,17 +3526,6 @@ fn emit_inline_asm_aarch64(
     // Assign operand registers before the GNU-as macro pass so it can
     // substitute each reference to its register name -- the same register the
     // operand capture and write-back below use.
-    let op_reg = match assign_operand_regs(
-        &asm.operands,
-        asm.clobber_regs | frame.fixed_regs.gpr,
-        asm.clobber_fp_regs | frame.fixed_regs.fpr,
-    ) {
-        Ok(r) => r,
-        Err(m) => {
-            bail_msg(&m);
-            return false;
-        }
-    };
     // The constant value of an `i`-class operand reference, if any.
     let const_of = |idx: u8| -> Option<i64> {
         crate::c5::asm::asm_operand_const(func, *args.get(idx as usize)?)
@@ -3549,6 +3535,18 @@ fn emit_inline_asm_aarch64(
             || String::from("past the operand list"),
             |&a| crate::c5::asm::asm_operand_form(func, a),
         )
+    };
+    let op_reg = match assign_operand_regs(
+        &asm.operands,
+        asm.clobber_regs | frame.fixed_regs.gpr,
+        asm.clobber_fp_regs | frame.fixed_regs.fpr,
+        &|i| const_of(i as u8),
+    ) {
+        Ok(r) => r,
+        Err(m) => {
+            bail_msg(&m);
+            return false;
+        }
     };
     let gas_subst = |tok: &str| -> Option<String> {
         let body = tok.strip_prefix('%')?;
@@ -3647,19 +3645,15 @@ fn emit_inline_asm_aarch64(
     let n = asm.operands.len();
     let n_saved = save_list.len();
     let n_fp_saved = fp_save_list.len();
-    // An immediate-only operand is substituted into the template text and
-    // has no runtime storage, so it takes no capture slot. Keeping the
+    // An immediate operand is substituted into the template text and has
+    // no runtime storage, so it takes no capture slot. Keeping the
     // region empty for a template whose only operands are immediates
     // matters beyond the saved bytes: the region is released on the paths
     // out of the template, and an `asm goto` label reached by a branch
     // planted at run time -- a jump-label or alternative patch site, whose
     // `%l` is a data reference rather than a branch in the template --
     // bypasses every one of them.
-    let needs_cap: Vec<bool> = asm
-        .operands
-        .iter()
-        .map(|o| !matches!(o.constraint, AsmConstraint::Imm))
-        .collect();
+    let needs_cap: Vec<bool> = op_reg.iter().map(Option::is_some).collect();
     let mut cap_slot: Vec<usize> = alloc::vec![0; n];
     let mut n_cap = 0usize;
     for (i, &c) in needs_cap.iter().enumerate() {
@@ -3864,9 +3858,12 @@ fn emit_inline_asm_aarch64(
             },
             AsmOpndA64::Ref { idx, is64 } => {
                 let Some(r) = resolve_ref(idx) else {
-                    // An immediate-only operand has no register; a bare `%N`
-                    // uses its compile-time constant value.
-                    if matches!(asm.operands[idx as usize].constraint, AsmConstraint::Imm) {
+                    // An immediate operand has no register; a bare `%N` uses
+                    // its compile-time constant value.
+                    if matches!(
+                        asm.operands[idx as usize].constraint,
+                        AsmConstraint::Imm | AsmConstraint::RegOrImm { .. }
+                    ) {
                         return match const_of(idx) {
                             Some(v) => Ok(Opnd::Imm(v)),
                             None => Err(alloc::format!(

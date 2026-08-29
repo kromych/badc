@@ -143,6 +143,48 @@ pub(crate) fn resolve_asm_symbol_target(
     Ok(out)
 }
 
+/// Expand every `%z<N>` reference to the operand-size suffix of operand N,
+/// the letter GCC prints into a mnemonic (`shr%z1` on a 32-bit operand is
+/// `shrl`). `suffix_of` yields the suffix for an operand's width, `None`
+/// when the width has no suffix. Returns `None` when the template carries
+/// no such reference.
+pub(crate) fn expand_size_suffix_refs(
+    text: &str,
+    suffix_of: &dyn Fn(u8) -> Option<&'static str>,
+) -> Result<Option<alloc::string::String>, alloc::string::String> {
+    if !text.contains("%z") {
+        return Ok(None);
+    }
+    let mut out = alloc::string::String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(p) = rest.find('%') {
+        out.push_str(&rest[..p]);
+        let after = &rest[p + 1..];
+        if after.starts_with('%') {
+            out.push_str("%%");
+            rest = &after[1..];
+            continue;
+        }
+        match split_operand_ref(after) {
+            Some((Some(b'z'), idx, tail)) => {
+                let Some(suffix) = suffix_of(idx) else {
+                    return Err(alloc::format!(
+                        "inline asm: `%z{idx}` names no operand with an operand-size suffix"
+                    ));
+                };
+                out.push_str(suffix);
+                rest = tail;
+            }
+            _ => {
+                out.push('%');
+                rest = after;
+            }
+        }
+    }
+    out.push_str(rest);
+    Ok(Some(out))
+}
+
 // Numbering behind the `%=` template escape and the two asm-label
 // uniquifiers. `reset_asm_instance` restarts it at the head of every
 // lowering, so the names an object carries are a function of the program
@@ -296,6 +338,52 @@ fn parse_raw_piece(piece: &str) -> Option<alloc::vec::Vec<u8>> {
 
 pub(crate) fn parse_raw_int(s: &str) -> Option<i64> {
     eval_const_expr(s)
+}
+
+#[cfg(test)]
+mod size_suffix_tests {
+    use super::expand_size_suffix_refs;
+
+    fn x86_suffix(idx: u8) -> Option<&'static str> {
+        [Some("b"), Some("w"), Some("l"), Some("q"), None]
+            .get(idx as usize)
+            .copied()
+            .flatten()
+    }
+
+    #[test]
+    fn size_suffix_references_expand_to_the_operand_letter() {
+        let expanded = expand_size_suffix_refs("shr%z2 %2\n\tadd%z0 $1, %0", &x86_suffix)
+            .unwrap()
+            .unwrap();
+        assert_eq!(expanded, "shrl %2\n\taddb $1, %0");
+        // `%%` is the literal-percent escape: a `zmm` register keeps its name,
+        // and other references are left to the parser.
+        let text = "vmovdqa64 %%zmm0, (%1); mov %k1, %w3";
+        assert_eq!(
+            expand_size_suffix_refs(text, &x86_suffix)
+                .unwrap()
+                .as_deref(),
+            Some(text)
+        );
+        assert!(
+            expand_size_suffix_refs("shr %0", &x86_suffix)
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn size_suffix_reference_without_a_suffix_is_diagnosed() {
+        // Operand 4 has no suffix (a 16-byte operand), operand 9 does not exist.
+        for text in ["shr%z4 %4", "shr%z9 %0"] {
+            let err = expand_size_suffix_refs(text, &x86_suffix).unwrap_err();
+            assert!(
+                err.contains("names no operand with an operand-size suffix"),
+                "{err}"
+            );
+        }
+    }
 }
 
 #[cfg(test)]

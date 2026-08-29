@@ -26,13 +26,42 @@ fn register_alternative_wins_over_memory() {
             "output `{c}` should take the register alternative"
         );
     }
-    for c in ["rm", "qm", "g", "ri", "rn"] {
+    for c in ["rm", "qm", "mr"] {
         assert_eq!(
             inp(c).map(|(k, _)| k),
             Some(AsmConstraint::Reg),
             "input `{c}` should take the register alternative"
         );
     }
+}
+
+#[test]
+fn register_or_immediate_alternatives_keep_the_immediate_arm() {
+    // An input offering a general register and an immediate is decided at
+    // the operand: a constant prints as the immediate, anything else takes
+    // a register. `g` carries the immediate arm, as GCC defines it.
+    for c in ["g", "ri", "rn", "gi", "rmi"] {
+        assert_eq!(
+            inp(c).map(|(k, _)| k),
+            Some(AsmConstraint::RegOrImm {
+                reg: None,
+                imm: 'i'
+            }),
+            "input `{c}` should keep the immediate arm"
+        );
+    }
+    // A specific register alongside the immediate keeps the register.
+    assert_eq!(
+        inp("ci").map(|(k, _)| k),
+        Some(AsmConstraint::RegOrImm {
+            reg: Some(1),
+            imm: 'i'
+        })
+    );
+    // An output is never an immediate.
+    assert_eq!(out("=g").map(|(k, _)| k), Some(AsmConstraint::Reg));
+    assert_eq!(out("+ri").map(|(k, _)| k), Some(AsmConstraint::Reg));
+    assert_eq!(out("=ai").map(|(k, _)| k), Some(AsmConstraint::Fixed(0)));
 }
 
 #[test]
@@ -557,13 +586,20 @@ fn x86_range_immediate_constraints_are_immediates() {
     // x86 leaves `P` undefined within the machine-dependent `I`..`P`
     // band, so it stays unrecognized (GCC and clang both reject it).
     assert_eq!(inp("P").map(|(k, _)| k), None);
-    // A register alternative alongside the letter wins: the operand can
-    // be loaded, so no value restriction applies.
-    for c in ["Ir", "rI", "Jr", "Kr", "Nr"] {
+    // A register alternative alongside the letter lifts the value
+    // restriction: a constant outside the range is loaded into the
+    // register, one inside prints as the immediate.
+    for (c, imm) in [
+        ("Ir", 'I'),
+        ("rI", 'I'),
+        ("Jr", 'J'),
+        ("Kr", 'K'),
+        ("Nr", 'N'),
+    ] {
         assert_eq!(
             inp(c).map(|(k, _)| k),
-            Some(AsmConstraint::Reg),
-            "`{c}` should take the register alternative"
+            Some(AsmConstraint::RegOrImm { reg: None, imm }),
+            "`{c}` should keep both alternatives"
         );
     }
     // aarch64 gives `I`..`N` its own immediate meanings (different ranges,
@@ -696,6 +732,251 @@ fn x86_immediate_constraint_out_of_range_is_diagnosed() {
     assert!(e.contains("unsupported constraint `P`"), "{e}");
 }
 
+/// Emit `src` for x86_64 and return the image bytes.
+#[cfg(feature = "native-emit")]
+fn x64_image(src: &str, optimize: bool) -> alloc::vec::Vec<u8> {
+    use crate::{NativeOptions, Target};
+    let program = crate::Compiler::with_options(
+        src.to_string(),
+        Target::LinuxX64,
+        crate::CompileOptions::default().with_optimize(optimize),
+    )
+    .compile()
+    .expect("compile");
+    crate::c5::object::emit_native_single_tu_for_test(
+        &program,
+        Target::LinuxX64,
+        NativeOptions {
+            optimize,
+            ..NativeOptions::default()
+        },
+    )
+    .expect("emit")
+}
+
+/// True when `bytes` holds `want`, comparing the ModRM byte at `modrm`'s
+/// position under its mask only: an operand's register is
+/// allocation-dependent, so the r/m field (mask `0xF8`), the reg field
+/// (`0xC7`) or both (`0xC0`) are left free.
+#[cfg(feature = "native-emit")]
+fn has_encoding(bytes: &[u8], want: &[u8], modrm: Option<(usize, u8)>) -> bool {
+    bytes.windows(want.len()).any(|w| {
+        w.iter()
+            .zip(want)
+            .enumerate()
+            .all(|(i, (&b, &x))| match modrm {
+                Some((at, mask)) if at == i => b & mask == x,
+                _ => b == x,
+            })
+    })
+}
+
+// Emits a native image, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn x86_size_suffix_modifier_prints_the_operand_width() {
+    // `%zN` prints the AT&T size suffix of operand N into the mnemonic,
+    // as GCC does: `b` / `w` / `l` / `q` for a 1 / 2 / 4 / 8-byte operand,
+    // a memory operand taking the width of the object it names. Byte
+    // sequences from `llvm-mc -show-encoding`; the register / base field
+    // is allocation-dependent.
+    let emit = |ty: &str, body: &str| -> alloc::vec::Vec<u8> {
+        let src = alloc::format!(
+            "{ty} f({ty} v, {ty} *p) {{ {body} return v + *p; }} int main(void) {{ return 0; }}"
+        );
+        x64_image(&src, false)
+    };
+    let reg = "__asm__(\"shr%z0 $3, %0\" : \"+r\"(v));";
+    let mem = "__asm__(\"shr%z0 $3, %0\" : \"+m\"(*p));";
+    let cases: &[(&str, &str, &[u8], usize)] = &[
+        ("unsigned char", reg, &[0xC0, 0xE8, 0x03], 1),
+        ("unsigned short", reg, &[0x66, 0xC1, 0xE8, 0x03], 2),
+        ("unsigned", reg, &[0xC1, 0xE8, 0x03], 1),
+        ("unsigned long", reg, &[0x48, 0xC1, 0xE8, 0x03], 2),
+        ("unsigned char", mem, &[0xC0, 0x28, 0x03], 1),
+        ("unsigned short", mem, &[0x66, 0xC1, 0x28, 0x03], 2),
+        ("unsigned", mem, &[0xC1, 0x28, 0x03], 1),
+        ("unsigned long", mem, &[0x48, 0xC1, 0x28, 0x03], 2),
+    ];
+    for &(ty, body, want, modrm_at) in cases {
+        let bytes = emit(ty, body);
+        assert!(
+            has_encoding(&bytes, want, Some((modrm_at, 0xF8))),
+            "`{ty}`: `{body}` did not encode as {want:02x?}"
+        );
+    }
+    // The kernel's carry-chain shape: a byte object in memory, a pointer
+    // in rdx, and a 64-bit register operand -- `shrb (%r)`, `inc %rdx`,
+    // `rcrq %r`.
+    let src = "unsigned long f(unsigned char *acks, unsigned long extracted) { \
+         __asm__(\" shr%z1 %1\\n inc %0\\n rcr%z2 %2\\n\" \
+         : \"+d\"(acks), \"+m\"(*(acks)), \"+rm\"(extracted)); \
+         return extracted; } int main(void) { return 0; }";
+    let bytes = x64_image(src, false);
+    assert!(
+        has_encoding(&bytes, &[0xD0, 0x28], Some((1, 0xF8))),
+        "shrb (%r)"
+    );
+    assert!(has_encoding(&bytes, &[0x48, 0xFF, 0xC2], None), "inc %rdx");
+    assert!(
+        has_encoding(&bytes, &[0x48, 0xD1, 0xD8], Some((2, 0xF8))),
+        "rcrq %r"
+    );
+    // A reference past the operand list is diagnosed.
+    let src = "int f(int v) { __asm__(\"shr%z3 $1, %0\" : \"+r\"(v)); return v; } \
+         int main(void) { return 0; }";
+    let program = crate::Compiler::with_options(
+        src.to_string(),
+        crate::Target::LinuxX64,
+        crate::CompileOptions::default(),
+    )
+    .compile()
+    .expect("compile");
+    let err = crate::c5::object::emit_native_single_tu_for_test(
+        &program,
+        crate::Target::LinuxX64,
+        crate::NativeOptions::default(),
+    )
+    .expect_err("`%z3` names no operand");
+    let msg = alloc::format!("{err}");
+    assert!(msg.contains("`%z3` names no operand"), "{msg}");
+}
+
+// Emits a native image, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn x86_high_byte_modifier_names_the_legacy_high_register() {
+    // `%hN` names the high byte of operand N's register: `movb %dh, %al`
+    // is `88 f0`. Only rax / rcx / rdx / rbx have one; an operand held
+    // elsewhere is diagnosed rather than misnamed.
+    let src = "unsigned f(unsigned v) { unsigned r; \
+         __asm__(\"movb %h1, %b0\" : \"=a\"(r) : \"d\"(v)); return r; } \
+         int main(void) { return 0; }";
+    let bytes = x64_image(src, false);
+    assert!(has_encoding(&bytes, &[0x88, 0xF0], None), "movb %dh, %al");
+    let src = "unsigned f(unsigned v) { unsigned r; \
+         __asm__(\"movb %h1, %b0\" : \"=a\"(r) : \"S\"(v)); return r; } \
+         int main(void) { return 0; }";
+    let program = crate::Compiler::with_options(
+        src.to_string(),
+        crate::Target::LinuxX64,
+        crate::CompileOptions::default(),
+    )
+    .compile()
+    .expect("compile");
+    let err = crate::c5::object::emit_native_single_tu_for_test(
+        &program,
+        crate::Target::LinuxX64,
+        crate::NativeOptions::default(),
+    )
+    .expect_err("rsi has no high byte");
+    let msg = alloc::format!("{err}");
+    assert!(
+        msg.contains("`%h1` needs its operand in rax, rcx, rdx or rbx"),
+        "{msg}"
+    );
+}
+
+// Emits a native image, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn x86_register_or_immediate_operand_takes_a_constant_as_the_immediate() {
+    // A constant under a constraint with an immediate arm prints as the
+    // immediate, as GCC prints it; a value the arm does not admit -- a
+    // non-constant, or a constant outside a range letter -- takes the
+    // register. `rm` has no immediate arm and keeps the register for a
+    // constant. Byte sequences from `llvm-mc -show-encoding`.
+    let emit = |body: &str| -> alloc::vec::Vec<u8> {
+        let src =
+            alloc::format!("long f(long v) {{ {body} return v; }} int main(void) {{ return 0; }}");
+        x64_image(&src, false)
+    };
+    let cases: &[(&str, &[u8], Option<(usize, u8)>)] = &[
+        // movl $0x80000040, %r8d
+        (
+            "__asm__ volatile(\"movl %0, %%r8d\" : : \"g\"(0x80000040UL) : \"r8\");",
+            &[0x41, 0xB8, 0x40, 0x00, 0x00, 0x80],
+            None,
+        ),
+        // movl $-7, %r8d
+        (
+            "__asm__ volatile(\"movl %0, %%r8d\" : : \"g\"(-7) : \"r8\");",
+            &[0x41, 0xB8, 0xF9, 0xFF, 0xFF, 0xFF],
+            None,
+        ),
+        // movq $11, %r8
+        (
+            "__asm__ volatile(\"movq %0, %%r8\" : : \"ci\"(11L) : \"r8\");",
+            &[0x49, 0xC7, 0xC0, 0x0B, 0x00, 0x00, 0x00],
+            None,
+        ),
+        // movq %rcx, %r8: `ci` with a non-constant keeps rcx
+        (
+            "__asm__ volatile(\"movq %0, %%r8\" : : \"ci\"(v) : \"r8\");",
+            &[0x49, 0x89, 0xC8],
+            None,
+        ),
+        // movq %r, %r8: `ri` with a non-constant, `rm` with a constant
+        (
+            "__asm__ volatile(\"movq %0, %%r8\" : : \"ri\"(v) : \"r8\");",
+            &[0x49, 0x89, 0xC0],
+            Some((2, 0xC7)),
+        ),
+        (
+            "__asm__ volatile(\"movq %0, %%r8\" : : \"rm\"(9L) : \"r8\");",
+            &[0x49, 0x89, 0xC0],
+            Some((2, 0xC7)),
+        ),
+        // addq $3, %r: 3 is within `I`
+        (
+            "__asm__(\"add %1, %0\" : \"+r\"(v) : \"rI\"(3));",
+            &[0x48, 0x83, 0xC0, 0x03],
+            Some((2, 0xF8)),
+        ),
+        // addq %r, %r: 40 is outside `I`, so it is loaded
+        (
+            "__asm__(\"add %1, %0\" : \"+r\"(v) : \"rI\"(40L));",
+            &[0x48, 0x01, 0xC0],
+            Some((2, 0xC0)),
+        ),
+    ];
+    for &(body, want, modrm) in cases {
+        let bytes = emit(body);
+        assert!(
+            has_encoding(&bytes, want, modrm),
+            "`{body}` did not encode as {want:02x?}"
+        );
+    }
+    // The `rm` constant must not have become an immediate move.
+    let bytes = emit("__asm__ volatile(\"movq %0, %%r8\" : : \"rm\"(9L) : \"r8\");");
+    assert!(
+        !has_encoding(&bytes, &[0x49, 0xC7, 0xC0, 0x09, 0x00, 0x00, 0x00], None),
+        "`rm` has no immediate arm"
+    );
+}
+
+// Emits a native image, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn x86_register_or_immediate_operand_folds_an_inlined_constant() {
+    // The constant reaches the operand through an inlined parameter, so
+    // it is known only after the optimization passes: `-O` on a hypercall
+    // wrapper prints `movl $0x80000040, %r8d`.
+    let src = "static inline long hcall(unsigned long id) { long r; \
+         __asm__ volatile(\"movl %1, %%r8d\\n\\tvmcall\" : \"=a\"(r) : \"g\"(id) \
+         : \"r8\", \"memory\"); return r; } \
+         long f(void) { return hcall(0x80000040UL); } int main(void) { return 0; }";
+    let bytes = x64_image(src, true);
+    assert!(
+        has_encoding(
+            &bytes,
+            &[0x41, 0xB8, 0x40, 0x00, 0x00, 0x80, 0x0F, 0x01, 0xC1],
+            None
+        ),
+        "movl $0x80000040, %r8d; vmcall"
+    );
+}
+
 #[test]
 fn aarch64_immediate_constraints_classify_and_combine() {
     let a64 = |c: &str| crate::Compiler::parse_asm_constraint(c, false, 0, false).map(|(k, _)| k);
@@ -704,10 +985,15 @@ fn aarch64_immediate_constraints_classify_and_combine() {
     for c in ["I", "J", "K", "L", "M", "N"] {
         assert_eq!(a64(c), Some(AsmConstraint::Imm), "`{c}` on aarch64");
     }
-    // A register alternative alongside the letter wins: the operand can be
-    // loaded, so no value restriction applies.
-    for c in ["rI", "Ir", "rL", "Nr"] {
-        assert_eq!(a64(c), Some(AsmConstraint::Reg), "`{c}` on aarch64");
+    // A register alternative alongside the letter lifts the value
+    // restriction: a constant outside the range is loaded into the
+    // register, one inside prints as the immediate.
+    for (c, imm) in [("rI", 'I'), ("Ir", 'I'), ("rL", 'L'), ("Nr", 'N')] {
+        assert_eq!(
+            a64(c),
+            Some(AsmConstraint::RegOrImm { reg: None, imm }),
+            "`{c}` on aarch64"
+        );
     }
     // A multi-letter `U` / `D` / `v` class embeds these letters without being
     // an immediate and must not be misread as one.

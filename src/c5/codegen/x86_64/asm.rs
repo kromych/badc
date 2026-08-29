@@ -403,6 +403,9 @@ pub(crate) enum AsmOpnd {
     Reg { reg: u8, size: AsmRegSize },
     /// `%ah` / `%ch` / `%dh` / `%bh`, held as the ModRM field value 4..8.
     HighReg(u8),
+    /// `%hN`: the high byte of operand N's register, which must be one of
+    /// the four legacy byte-addressable registers.
+    HighRef(u8),
     /// `$imm`: a literal immediate.
     Imm(i64),
     /// `disp(%%reg)` / `disp(%N)`: an explicit memory reference written in
@@ -590,7 +593,7 @@ pub(crate) enum Concrete {
 pub(crate) fn check_operand_refs(insns: &[AsmInsn], n_operands: usize) -> Result<(), String> {
     for insn in insns {
         for o in &insn.operands {
-            if let AsmOpnd::Ref { idx, .. } = *o
+            if let AsmOpnd::Ref { idx, .. } | AsmOpnd::HighRef(idx) = *o
                 && idx as usize >= n_operands
             {
                 return Err(alloc::format!(
@@ -667,6 +670,35 @@ pub(crate) fn gpr_att_name(num: u8, width: u8) -> Option<&'static str> {
         _ => return None,
     };
     table.get(num as usize).copied()
+}
+
+/// AT&T operand-size suffix of a `width`-byte integer operand, the letter
+/// a `%z` reference prints. `None` for a width with no suffix.
+pub(crate) fn att_size_suffix(width: u8) -> Option<&'static str> {
+    Some(match width {
+        1 => "b",
+        2 => "w",
+        4 => "l",
+        8 => "q",
+        _ => return None,
+    })
+}
+
+/// Resolve a `%h` reference: the high byte of operand `idx`'s register,
+/// which must be one of rax / rcx / rdx / rbx.
+pub(crate) fn resolve_high_ref(
+    idx: u8,
+    operands: &[crate::c5::ir::AsmOperand],
+    op_reg: &[Option<u8>],
+) -> Result<Concrete, String> {
+    use crate::c5::ir::AsmConstraint as C;
+    operands
+        .get(idx as usize)
+        .filter(|op| !matches!(op.constraint, C::Fp | C::Mem))
+        .and_then(|_| op_reg.get(idx as usize).copied().flatten())
+        .filter(|&r| r < 4)
+        .map(|r| Concrete::HighReg(r + 4))
+        .ok_or_else(|| format!("inline asm: `%h{idx}` needs its operand in rax, rcx, rdx or rbx"))
 }
 
 const BAD_VMOV_OPND: &str = "inline asm: `vmovd`/`vmovq` operand must be a \
@@ -842,24 +874,35 @@ fn mask_reg_operand(name: &str) -> Option<AsmOpnd> {
 /// Assign an x86 register number to each register operand of an
 /// extended-asm statement, per its constraint. Returns a vector
 /// parallel to `operands`: `Some(reg)` for a register operand, `None`
-/// for a pure immediate. Fixed and matching constraints take their
-/// required register; `r` operands take free registers from a fixed
-/// pool (never r10 / r11, which the emitter reserves as bridge scratch,
-/// nor rsp / rbp, nor any GP register named in the clobber list).
+/// for an immediate. Fixed and matching constraints take their required
+/// register; `r` operands take free registers from a fixed pool (never
+/// r10 / r11, which the emitter reserves as bridge scratch, nor rsp /
+/// rbp, nor any GP register named in the clobber list). A
+/// register-or-immediate operand is the immediate when `const_of` yields
+/// a constant its immediate class admits, and takes no register then.
 /// Shared by the emitter and the interpreter so both resolve the
 /// template's `%N` references to the same registers.
 pub(crate) fn assign_operand_regs(
     operands: &[crate::c5::ir::AsmOperand],
     clobber_regs: u32,
     clobber_fp_regs: u32,
+    const_of: &dyn Fn(usize) -> Option<i64>,
 ) -> Result<Vec<Option<u8>>, String> {
     use crate::c5::ir::AsmConstraint as C;
     let mut assigned: Vec<Option<u8>> = alloc::vec![None; operands.len()];
     let mut used = [false; 16];
+    let takes_imm = |i: usize, imm: char| {
+        const_of(i).is_some_and(|v| crate::Compiler::x86_imm_alternative_accepts(imm, v))
+    };
     // Fixed / bound / register-or-immediate operands take their named
     // register.
     for (i, op) in operands.iter().enumerate() {
-        if let C::Fixed(r) | C::Bound(r) | C::RegOrImm(r) = op.constraint {
+        let named = match op.constraint {
+            C::Fixed(r) | C::Bound(r) => Some(r),
+            C::RegOrImm { reg: Some(r), imm } if !takes_imm(i, imm) => Some(r),
+            _ => None,
+        };
+        if let Some(r) = named {
             assigned[i] = Some(r);
             used[r as usize] = true;
         }
@@ -882,7 +925,12 @@ pub(crate) fn assign_operand_regs(
     // addressed through, and the emitter's own bridge scratch).
     let pool = [0u8, 3, 1, 2, 6, 7, 8, 9, 12, 13, 14, 15];
     for (i, op) in operands.iter().enumerate() {
-        if matches!(op.constraint, C::Reg | C::Mem | C::Flags(_)) {
+        let pooled = match op.constraint {
+            C::Reg | C::Mem | C::Flags(_) => true,
+            C::RegOrImm { reg: None, imm } => !takes_imm(i, imm),
+            _ => false,
+        };
+        if pooled {
             let r = pool
                 .iter()
                 .copied()
@@ -2146,6 +2194,16 @@ fn parse_operand(tok: &str, labels: &[&str], file_scope: bool) -> Result<AsmOpnd
                 scale: 1,
                 disp: 0,
             });
+        }
+        // `%hN`: the high byte of operand N's register.
+        if let Some(digits) = body.strip_prefix('h')
+            && !digits.is_empty()
+            && digits.bytes().all(|c| c.is_ascii_digit())
+        {
+            let idx: u8 = digits
+                .parse()
+                .map_err(|_| format!("inline asm: bad operand reference `{tok}`"))?;
+            return Ok(AsmOpnd::HighRef(idx));
         }
         // `%N` or `%<size>N`. A leading size modifier is a single
         // letter b/w/k/q before the operand digits.
@@ -6584,11 +6642,11 @@ mod tests {
         // `x` operands take xmm0, xmm1, ... from a file independent of the GPRs,
         // so a mixed GP + xmm operand list assigns each from its own pool.
         let ops = [op(C::Reg), op(C::Fp), op(C::Reg), op(C::Fp)];
-        let a = assign_operand_regs(&ops, 0, 0).unwrap();
+        let a = assign_operand_regs(&ops, 0, 0, &|_| None).unwrap();
         assert_eq!(a, [Some(0), Some(0), Some(3), Some(1)]); // rax, xmm0, rbx, xmm1
         // An xmm named in the clobber list is skipped: xmm0 clobbered pushes the
         // first `x` operand onto xmm1.
-        let a = assign_operand_regs(&[op(C::Fp), op(C::Fp)], 0, 1 << 0).unwrap();
+        let a = assign_operand_regs(&[op(C::Fp), op(C::Fp)], 0, 1 << 0, &|_| None).unwrap();
         assert_eq!(a, [Some(1), Some(2)]);
     }
 
@@ -6608,7 +6666,7 @@ mod tests {
         // reusing a clobbered register.
         let clob = (1 << 0) | (1 << 3) | (1 << 1) | (1 << 2);
         let gp = [op(C::Reg), op(C::Reg), op(C::Reg)];
-        let a = assign_operand_regs(&gp, clob, 0).unwrap();
+        let a = assign_operand_regs(&gp, clob, 0, &|_| None).unwrap();
         assert_eq!(a, [Some(6), Some(7), Some(8)]);
         // An asm that calls out clobbers the caller-saved bank
         // (rax rcx rdx rsi rdi r8 r9); its `r` operands then take the
@@ -6618,14 +6676,47 @@ mod tests {
             .iter()
             .fold(0u32, |m, &r| m | (1 << r));
         let five = [op(C::Reg), op(C::Reg), op(C::Reg), op(C::Reg), op(C::Reg)];
-        let a = assign_operand_regs(&five, caller_saved, 0).unwrap();
+        let a = assign_operand_regs(&five, caller_saved, 0, &|_| None).unwrap();
         assert_eq!(a, [Some(3), Some(12), Some(13), Some(14), Some(15)]);
         // A clobber list covering every pool register leaves nothing to assign;
         // reject rather than reuse a clobbered register.
         let all = [0u8, 3, 1, 2, 6, 7, 8, 9, 12, 13, 14, 15]
             .iter()
             .fold(0u32, |m, &r| m | (1 << r));
-        assert!(assign_operand_regs(&[op(C::Reg)], all, 0).is_err());
+        assert!(assign_operand_regs(&[op(C::Reg)], all, 0, &|_| None).is_err());
+    }
+
+    #[test]
+    fn register_or_immediate_operands_take_a_register_only_without_a_constant() {
+        use crate::c5::ir::{AsmConstraint as C, AsmOperand, AsmSeg};
+        let op = |constraint: C| AsmOperand {
+            constraint,
+            is_output: false,
+            is_rw: false,
+            width: 8,
+            seg: AsmSeg::None,
+        };
+        let any = C::RegOrImm {
+            reg: None,
+            imm: 'i',
+        };
+        let rcx = C::RegOrImm {
+            reg: Some(1),
+            imm: 'i',
+        };
+        let shift = C::RegOrImm {
+            reg: None,
+            imm: 'I',
+        };
+        let ops = [op(any), op(rcx), op(shift), op(shift), op(C::Reg)];
+        // Every value a constant: operands 0..2 are immediates, 3 is outside
+        // the `I` range and is loaded, 4 is a register operand.
+        let consts = [Some(5), Some(7), Some(3), Some(40), Some(0)];
+        let a = assign_operand_regs(&ops, 0, 0, &|i| consts[i]).unwrap();
+        assert_eq!(a, [None, None, None, Some(0), Some(3)]);
+        // No constants: the named register and the pool.
+        let a = assign_operand_regs(&ops, 0, 0, &|_| None).unwrap();
+        assert_eq!(a, [Some(0), Some(1), Some(3), Some(2), Some(6)]);
     }
 
     #[test]

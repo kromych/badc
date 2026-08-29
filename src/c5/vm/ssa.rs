@@ -2205,7 +2205,19 @@ fn run_inline_asm(
     use crate::c5::codegen::x86_64::asm::{AsmOpnd, Mnemonic, parse_template};
     use crate::c5::ir::AsmRegSize;
 
-    let insns = parse_template(&asm.template).map_err(C5Error::Runtime)?;
+    // `%zN` prints operand N's size suffix into its mnemonic, as the
+    // native lowering resolves it before parsing.
+    let text = core::str::from_utf8(&asm.template).map_err(|_| {
+        C5Error::Runtime(alloc::string::String::from("inline asm: non-UTF8 template"))
+    })?;
+    let sized = crate::c5::asm::expand_size_suffix_refs(text, &|idx| {
+        asm.operands
+            .get(idx as usize)
+            .and_then(|op| crate::c5::codegen::x86_64::asm::att_size_suffix(op.width))
+    })
+    .map_err(C5Error::Runtime)?;
+    let insns =
+        parse_template(sized.as_deref().unwrap_or(text).as_bytes()).map_err(C5Error::Runtime)?;
     // An `asm goto` label branch transfers control between blocks,
     // which this per-instruction evaluator cannot model.
     if insns.iter().any(|i| {
@@ -2247,6 +2259,7 @@ fn run_inline_asm(
         &asm.operands,
         asm.clobber_regs,
         asm.clobber_fp_regs,
+        &|i| args.get(i).and_then(|&a| crate::c5::asm::asm_operand_const(frame.func, a)),
     )
     .map_err(C5Error::Runtime)?;
     // The interpreter models only the 16 GPRs; an `x` (xmm) operand carries a
@@ -2304,6 +2317,10 @@ fn run_inline_asm(
             AsmOpnd::Reg { size, .. } => (0, size),
             // The high byte of one of the first four GPRs.
             AsmOpnd::HighReg(n) => ((xregs[n as usize - 4] >> 8) & 0xff, AsmRegSize::Byte),
+            AsmOpnd::HighRef(idx) => match op_reg[idx as usize] {
+                Some(r) if r < 4 => ((xregs[r as usize] >> 8) & 0xff, AsmRegSize::Byte),
+                _ => (0, AsmRegSize::Byte),
+            },
             AsmOpnd::Ref { idx, size } => {
                 let sz = size.unwrap_or(AsmRegSize::from_width(asm.operands[idx as usize].width));
                 match op_reg[idx as usize] {
@@ -2342,6 +2359,7 @@ fn run_inline_asm(
             // A high-byte write updates bits 8..16 of its GPR, which the
             // model's whole-register slots do not express: no-op.
             AsmOpnd::HighReg(_)
+            | AsmOpnd::HighRef(_)
             | AsmOpnd::Imm(_)
             | AsmOpnd::RefConst { .. }
             | AsmOpnd::Label { .. }

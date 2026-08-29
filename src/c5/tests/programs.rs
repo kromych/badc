@@ -6088,6 +6088,13 @@ fn inline_asm_extended_operands_fixture() {
 }
 
 #[test]
+fn inline_asm_x64_operand_modifiers_fixture() {
+    // `%z` / `%h` and the immediate arm of a register-or-immediate
+    // constraint, with a portable fallback.
+    assert_eq!(run_fixture("inline_asm_x64_operand_modifiers.c"), 42);
+}
+
+#[test]
 fn extern_typeof_redeclaration_merges() {
     // `extern typeof(f) f;` (and the object form) after or before the
     // definition is a redeclaration, not a duplicate definition; an

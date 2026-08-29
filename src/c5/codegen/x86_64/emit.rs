@@ -254,6 +254,7 @@ fn asm_scratch_bytes(func: &FunctionSsa, fixed: super::FixedRegs) -> u32 {
             &asm.operands,
             asm.clobber_regs | fixed.gpr,
             asm.clobber_fp_regs | fixed.fpr,
+            &|i| args.get(i).and_then(|&a| crate::c5::asm::asm_operand_const(func, a)),
         ) else {
             continue;
         };
@@ -6979,6 +6980,7 @@ fn asm_mem_size(
     modifier.or(insn.suffix).or_else(|| {
         insn.operands.iter().find_map(|o| match *o {
             AsmOpnd::Reg { reg, size } if reg < super::asm::XMM_BASE => Some(size),
+            AsmOpnd::HighReg(_) | AsmOpnd::HighRef(_) => Some(AsmRegSize::Byte),
             AsmOpnd::Ref { idx, size }
                 if op_reg.get(idx as usize).copied().flatten().is_some()
                     && !matches!(
@@ -7786,6 +7788,13 @@ fn encode_one_x86_section_insn(
             }
             AsmOpnd::Reg { reg, size } => concrete.push(Concrete::Reg { reg, size }),
             AsmOpnd::HighReg(n) => concrete.push(Concrete::HighReg(n)),
+            AsmOpnd::HighRef(idx) => {
+                concrete.push(super::asm::resolve_high_ref(
+                    idx,
+                    refs.operands,
+                    refs.op_reg,
+                )?);
+            }
             AsmOpnd::Ref { idx, size } => {
                 // A memory-constraint (`m`) operand holds its address in the
                 // assigned register; `%N` is the register-indirect reference
@@ -8545,7 +8554,7 @@ fn emit_inline_asm_once(
     mut goto_ctx: Option<AsmGotoCtx<'_>>,
     long_sites: &mut alloc::collections::BTreeSet<usize>,
 ) -> bool {
-    use super::super::ir::{AsmConstraint, AsmRegSize, AsmSeg, Inst};
+    use super::super::ir::{AsmConstraint, AsmRegSize, AsmSeg};
     use super::asm::{AsmOpnd, Concrete};
     // A statement that lowers to nothing keeps only its IR-level ordering
     // effect; the operand staging around zero bytes of code is dead, and
@@ -8568,6 +8577,24 @@ fn emit_inline_asm_once(
     // single-definition labels.
     let multidef = crate::c5::asm::rewrite_multidef_local_labels(text);
     let text = multidef.as_deref().unwrap_or(text);
+    // `%zN` prints operand N's size suffix into its mnemonic; the parser
+    // reads the resolved mnemonic.
+    let sized = match crate::c5::asm::expand_size_suffix_refs(text, &|idx| {
+        asm.operands
+            .get(idx as usize)
+            .and_then(|op| super::asm::att_size_suffix(op.width))
+    }) {
+        Ok(s) => s,
+        Err(m) => {
+            bail_msg(&m);
+            return false;
+        }
+    };
+    let text = sized.as_deref().unwrap_or(text);
+    // The constant value of an `i`-class operand reference, if any.
+    let const_of = |idx: u8| -> Option<i64> {
+        crate::c5::asm::asm_operand_const(func, *args.get(idx as usize)?)
+    };
     // The operand register assignment is needed both for the code stream and,
     // ahead of it, for the GNU-as macro pass and a replacement instruction that
     // references a template operand (`popcntl %1, %0`); compute it once, first.
@@ -8575,6 +8602,7 @@ fn emit_inline_asm_once(
         &asm.operands,
         asm.clobber_regs | frame.fixed_regs.gpr,
         asm.clobber_fp_regs | frame.fixed_regs.fpr,
+        &|i| const_of(i as u8),
     ) {
         Ok(r) => r,
         Err(m) => {
@@ -8585,9 +8613,6 @@ fn emit_inline_asm_once(
     // Expand any GNU-as macro directives (`.macro` / `.irp` / `.ifc` / `.set` /
     // `.if`) before section extraction, substituting each register operand to
     // its assigned AT&T name so the macro's register-name comparisons resolve.
-    let const_of = |idx: u8| -> Option<i64> {
-        crate::c5::asm::asm_operand_const(func, *args.get(idx as usize)?)
-    };
     let gas_subst = |tok: &str| -> Option<alloc::string::String> {
         let body = tok.strip_prefix('%')?;
         let (modifier, digits) = match body.as_bytes().first() {
@@ -8613,6 +8638,9 @@ fn emit_inline_asm_once(
             return None;
         }
         let r = op_reg.get(idx as usize).copied().flatten()?;
+        if modifier == Some(b'h') {
+            return (r < 4).then(|| alloc::format!("%{}", super::asm::GPR_HB[r as usize]));
+        }
         let width = match modifier {
             Some(b'b') => 1,
             Some(b'w') => 2,
@@ -9278,6 +9306,12 @@ fn emit_inline_asm_once(
             let c = match *o {
                 AsmOpnd::Imm(val) => Concrete::Imm(val),
                 AsmOpnd::HighReg(n) => Concrete::HighReg(n),
+                AsmOpnd::HighRef(idx) => {
+                    match super::asm::resolve_high_ref(idx, &asm.operands, &op_reg) {
+                        Ok(c) => c,
+                        Err(m) => return fail(&m),
+                    }
+                }
                 // `%cN` / `%PN` with a compile-time constant (the address
                 // case was handled above): a bare immediate.
                 AsmOpnd::RefConst { idx, .. } => match const_of(idx) {
@@ -9393,11 +9427,11 @@ fn emit_inline_asm_once(
                             reg: r,
                             size: size.unwrap_or(AsmRegSize::from_width(width)),
                         },
-                        // A `%N` naming an immediate-only operand: use its
+                        // A `%N` naming an operand with no register: its
                         // constant value.
-                        None => match func.insts.get(args[idx as usize] as usize) {
-                            Some(Inst::Imm(v)) => Concrete::Imm(*v),
-                            _ => return fail("inline asm: non-constant immediate operand"),
+                        None => match const_of(idx) {
+                            Some(v) => Concrete::Imm(v),
+                            None => return fail("inline asm: non-constant immediate operand"),
                         },
                     }
                 }

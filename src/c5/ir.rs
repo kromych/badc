@@ -976,10 +976,12 @@ pub(crate) enum AsmConstraint {
     /// Matching constraint (`"0".."9"`): shares the register assigned to
     /// the operand at that index (an earlier output).
     Match(u8),
-    /// Immediate-or-register (`ci`): a compile-time-constant operand is
-    /// used as an immediate, otherwise the value is loaded into the
-    /// register of the given class.
-    RegOrImm(u8),
+    /// Register-or-immediate (`g`, `ri`, `rI`, `ci`): an input whose value
+    /// is a constant the immediate class `imm` admits (`i` / `n` admit any
+    /// constant, a range letter its range) prints as that immediate;
+    /// otherwise the value is loaded into a register -- the architectural
+    /// register `reg` names, or any allocatable one when `None`.
+    RegOrImm { reg: Option<u8>, imm: char },
     /// Immediate-only (`i`, `n`).
     Imm,
     /// A memory operand (`m`, `=m`, `+m`): the operand argument is the

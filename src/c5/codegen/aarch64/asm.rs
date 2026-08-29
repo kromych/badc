@@ -1600,10 +1600,16 @@ pub(crate) fn assign_operand_regs(
     operands: &[crate::c5::ir::AsmOperand],
     clobber_regs: u32,
     clobber_fp_regs: u32,
+    const_of: &dyn Fn(usize) -> Option<i64>,
 ) -> Result<Vec<Option<u8>>, String> {
     use crate::c5::ir::AsmConstraint as C;
     let mut assigned: Vec<Option<u8>> = alloc::vec![None; operands.len()];
     let mut used = [false; 32];
+    // A register-or-immediate operand is the immediate when its value is a
+    // constant the immediate class admits, and takes no register then.
+    let takes_imm = |i: usize, imm: char| {
+        const_of(i).is_some_and(|v| crate::Compiler::aarch64_imm_alternative_accepts(imm, v))
+    };
     // Fixed constraints (register-asm variables) own their register;
     // assign them before the clobber marks, whose bits include the
     // fixed operands' own registers. Operands may share one register --
@@ -1634,7 +1640,12 @@ pub(crate) fn assign_operand_regs(
     // x0..x15 are the allocatable pool; x16/x17 are the emitter's scratch.
     let pool: [u8; 16] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
     for (i, op) in operands.iter().enumerate() {
-        if matches!(op.constraint, C::Reg | C::Mem | C::MemBase) {
+        let pooled = match op.constraint {
+            C::Reg | C::Mem | C::MemBase => true,
+            C::RegOrImm { reg: None, imm } => !takes_imm(i, imm),
+            _ => false,
+        };
+        if pooled {
             let r = pool
                 .iter()
                 .copied()
@@ -1670,10 +1681,10 @@ pub(crate) fn assign_operand_regs(
             assigned[i] = Some(r);
         }
     }
-    // The register-or-immediate class letters are x86-specific and do
-    // not occur in AArch64 templates; reject rather than mis-assign.
+    // The register-class letters are x86-specific and do not occur in
+    // AArch64 templates; reject rather than mis-assign.
     for op in operands {
-        if matches!(op.constraint, C::RegOrImm(_)) {
+        if matches!(op.constraint, C::RegOrImm { reg: Some(_), .. }) {
             return Err(String::from(
                 "inline asm: register-class-letter constraint not supported on AArch64",
             ));
@@ -1803,14 +1814,14 @@ mod tests {
         };
         // With x0 and x2 clobbered, three GP operands take x1, x3, x4.
         let gp = [op(C::Reg), op(C::Reg), op(C::Reg)];
-        let a = assign_operand_regs(&gp, (1 << 0) | (1 << 2), 0).unwrap();
+        let a = assign_operand_regs(&gp, (1 << 0) | (1 << 2), 0, &|_| None).unwrap();
         assert_eq!(a, [Some(1), Some(3), Some(4)]);
         // An FP (d0) clobber pushes a `w` operand off d0 onto d1.
-        let a = assign_operand_regs(&[op(C::Fp)], 0, 1 << 0).unwrap();
+        let a = assign_operand_regs(&[op(C::Fp)], 0, 1 << 0, &|_| None).unwrap();
         assert_eq!(a, [Some(1)]);
         // No clobbers: the base assignment is unchanged.
         assert_eq!(
-            assign_operand_regs(&gp, 0, 0).unwrap(),
+            assign_operand_regs(&gp, 0, 0, &|_| None).unwrap(),
             [Some(0), Some(1), Some(2)]
         );
     }
@@ -2813,7 +2824,7 @@ mod tests {
             op(C::Reg, false, false),
         ];
         assert_eq!(
-            assign_operand_regs(&ops, 0, 0).unwrap(),
+            assign_operand_regs(&ops, 0, 0, &|_| None).unwrap(),
             [Some(0), Some(1), Some(2), Some(3)]
         );
     }
@@ -2834,7 +2845,7 @@ mod tests {
             op(AsmConstraint::Fixed(9), false),
             op(AsmConstraint::Reg, false),
         ];
-        let assigned = assign_operand_regs(&ops, 0, 0).unwrap();
+        let assigned = assign_operand_regs(&ops, 0, 0, &|_| None).unwrap();
         assert_eq!(assigned[0], Some(9));
         assert_ne!(assigned[1], Some(9));
         // An output and an input pinned to one register share it: the
@@ -2844,11 +2855,11 @@ mod tests {
             op(AsmConstraint::Fixed(0), false),
         ];
         assert_eq!(
-            assign_operand_regs(&pair, 0, 0).unwrap(),
+            assign_operand_regs(&pair, 0, 0, &|_| None).unwrap(),
             [Some(0), Some(0)]
         );
         // x16/x17 (emit scratch) and beyond are rejected.
         let hi = [op(AsmConstraint::Fixed(16), false)];
-        assert!(assign_operand_regs(&hi, 0, 0).is_err());
+        assert!(assign_operand_regs(&hi, 0, 0, &|_| None).is_err());
     }
 }

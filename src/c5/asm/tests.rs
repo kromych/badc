@@ -2504,8 +2504,7 @@ fn section_arguments_carry_the_entry_size_and_the_link() {
     let mut sink = AsmSectionSink::default();
     materialize_asm_sections(
         &blocks,
-        &|_| None,
-        &|_| None,
+        &AsmOperandResolver::NONE,
         &|_| None,
         &|_| None,
         false,

@@ -476,11 +476,11 @@ fn data_object_starts(program: &Program) -> Vec<i64> {
 /// (by ent_pc) and data objects (intervals over the sorted union of
 /// `data_object_starts` and the named-global offsets; an unrecorded
 /// start glues an object to its predecessor, kept conservatively).
-/// Roots: external-linkage / `used` / alias / named-section
-/// definitions, constructors / destructors, exports, the entry, names
-/// spelled in file-scope asm, and the NULL guard. Edges: a live
-/// function keeps its callees, address-taken functions, addressed
-/// data, and symbols named in its asm templates; a live data object
+/// Roots: external-linkage / `used` / alias definitions, constructors
+/// / destructors, exports, the entry, names spelled in file-scope asm,
+/// and the NULL guard. A section attribute is placement, not a root.
+/// Edges: a live function keeps its callees, address-taken functions,
+/// addressed data, and symbols named in its asm templates; a live object
 /// keeps its relocation targets. A relocation in a dead object keeps
 /// nothing -- neither its target nor an extern undefined reference
 /// reaches the emitted object. `assume_data_live` pre-marks all data
@@ -558,15 +558,16 @@ pub(crate) fn compute_live_sets(
     let mut data_live = alloc::vec![false; n];
     let mut work: alloc::vec::Vec<Node> = alloc::vec::Vec::new();
     // A block-scope static exists only in an emitted instance of its
-    // function, so its `used` / `section` intent keeps it only while
-    // the owner survives: an edge from the owner, not a root.
+    // function, so its `used` intent keeps it only while the owner
+    // survives: an edge from the owner, not a root.
     let mut owner_deps: BTreeMap<usize, alloc::vec::Vec<usize>> = BTreeMap::new();
 
     for s in &program.symbols {
-        // A named section does not retain a function (gcc parity: the
-        // section-attributed `static inline` helpers headers pull in
-        // are dropped when unreferenced; a kept one is still placed in
-        // its section). `used` and alias do.
+        // A named section retains neither a function nor an object (gcc
+        // parity: a section attribute selects placement, only `used`
+        // asks for the definition to be emitted unreferenced). A kept
+        // definition is still placed in its section. `used` and alias
+        // retain.
         if s.class == Token::Fun as i64
             && (matches!(s.linkage, Linkage::External) || s.is_used || s.is_alias)
             && by_ent.contains_key(&(s.val as usize))
@@ -577,7 +578,7 @@ pub(crate) fn compute_live_sets(
             && s.defined_here
             && !s.is_thread_local
             && (0..data_len).contains(&s.val)
-            && (matches!(s.linkage, Linkage::External) || s.is_used || s.section_name.is_some())
+            && (matches!(s.linkage, Linkage::External) || s.is_used)
         {
             match s.owner_ent_pc {
                 Some(pc) => owner_deps

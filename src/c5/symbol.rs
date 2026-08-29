@@ -527,8 +527,8 @@ pub(crate) struct Symbol {
     /// emission record (the persistent `name.N` symbol; the scoped
     /// binding itself is restored at function exit). A block-scope
     /// static exists only in an emitted instance of its function, so
-    /// static DCE honors `is_used` / `section_name` on such a record
-    /// only while the owner survives. `None` for file-scope symbols.
+    /// static DCE honors `is_used` on such a record only while the
+    /// owner survives. `None` for file-scope symbols.
     pub owner_ent_pc: Option<u64>,
 
     /// Index of the emission record while this slot's live binding is a

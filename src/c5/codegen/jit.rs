@@ -125,6 +125,7 @@ mod jit_impl {
     use super::super::super::error::C5Error;
     use super::super::super::program::Program;
     use super::super::Target;
+    use super::super::ssa::shadow;
     use super::super::{AddrPart, Build, GotFixup, NativeOptions, ResolvedImport, ResolvedImports};
     use super::super::{aarch64, x86_64};
     use super::host_target;
@@ -296,6 +297,13 @@ mod jit_impl {
         options: NativeOptions,
     ) -> Result<i32, C5Error> {
         let target = host_target()?;
+        // Lower the compacted image, as every other lowering consumer
+        // does: the static DCE drops functions only a dead data object
+        // reaches, so an uncompacted `.data` keeps relocations against
+        // functions this build never emits. `segregate` is false --
+        // the data region is one flat mapping with no zero-fill tail.
+        let compacted = shadow::compact_program_data(program, target, false, options.optimize)?;
+        let program = &compacted.program;
         let mut build = lower_for_jit(program, target, options)?;
 
         // Undefined extern functions: the lowering partitioned each

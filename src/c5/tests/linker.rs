@@ -1785,10 +1785,13 @@ fn noinline_holds_a_body_out_of_line() {
 }
 
 #[test]
-fn used_and_section_statics_survive_dce() {
-    // `__attribute__((used))` and named-section placement keep an
-    // otherwise unreferenced internal definition: their consumers
-    // resolve only at link time (kernel-style section protocols).
+fn used_retains_a_static_and_a_named_section_does_not() {
+    // `__attribute__((used))` asks for an otherwise unreferenced
+    // internal definition to be emitted; a section attribute only says
+    // where a definition that is emitted goes. gcc parity, and the same
+    // rule for data and functions: a section protocol that needs its
+    // entry at link time spells `used` (the kernel's `__used
+    // __section(...)` tables), and one that does not gets dropped.
     let src = "\
         static long used_obj __attribute__((used)) = 0x2233445566778899L;\n\
         static long sect_obj __attribute__((section(\".keep2\"))) = 0x33445566778899aaL;\n\
@@ -1802,14 +1805,11 @@ fn used_and_section_statics_survive_dce() {
         "used-attributed static data must survive"
     );
     assert!(
-        bytes
+        !bytes
             .windows(8)
             .any(|w| w == 0x33445566778899aau64.to_le_bytes()),
-        "named-section static data must survive"
+        "unreferenced section-only static data must drop"
     );
-    // gcc parity: a named section alone does not retain a function
-    // (`static inline` helpers headers pull in are section-attributed
-    // wholesale via `__init`-style macros).
     assert!(
         !bytes.windows(7).any(|w| w == b"sect_fn"),
         "unreferenced section-only static function must drop"

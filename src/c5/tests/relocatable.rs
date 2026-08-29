@@ -287,6 +287,51 @@ fn locals_kept_per_object() {
 }
 
 #[test]
+fn unreferenced_section_static_drops_its_whole_cascade() {
+    // A section attribute selects placement, not retention (gcc parity),
+    // so an unreferenced section-attributed static drops and the sweep
+    // cascades: the static function only its initializer named goes with
+    // it, and with that function goes its reference to a symbol this unit
+    // never defines. The kernel earlycon table takes this shape in a
+    // module build, where the declaration keeps the section and loses
+    // `used`. `used`, an ordinary reference, and a name spelled in an asm
+    // template each still pin their definition.
+    let a = compile_obj(
+        "struct e { const char *n; int (*s)(int); };\n\
+         int builtin_only(int);\n\
+         static int dead_setup(int v) { return builtin_only(v); }\n\
+         static const struct e dead_tbl __attribute__((unused))\n\
+           __attribute__((section(\"__earlycon_table\"))) = { \"d\", dead_setup };\n\
+         static int used_setup(int v) { return v + 1; }\n\
+         static const struct e used_tbl __attribute__((used))\n\
+           __attribute__((section(\"__earlycon_table\"))) = { \"u\", used_setup };\n\
+         static int live_counter = 3;\n\
+         static int asm_only = 9;\n\
+         int reach(int i) { __asm__(\"lea asm_only(%rip), %rax\");\n\
+           live_counter += i; return live_counter; }\n",
+        "a.o",
+    );
+    let mentioned = |n: &str| a.symbols.iter().any(|s| s.name == n);
+    let defined = |n: &str| {
+        a.symbols
+            .iter()
+            .any(|s| s.name == n && s.sec != EtSymRef::Undef)
+    };
+
+    assert!(!mentioned("dead_tbl"), "unreferenced section table kept");
+    assert!(!mentioned("dead_setup"), "table's callee kept");
+    assert!(
+        !mentioned("builtin_only"),
+        "dropped cascade left an undefined reference"
+    );
+
+    assert!(defined("used_tbl"), "`used` object dropped");
+    assert!(defined("used_setup"), "`used` object's callee dropped");
+    assert!(defined("live_counter"), "referenced static dropped");
+    assert!(defined("asm_only"), "asm-template-named static dropped");
+}
+
+#[test]
 fn block_static_shadowing_extern_keeps_per_instance_objects() {
     // Same-named block-scope statics across sibling scopes and functions,
     // shadowing a file-scope `extern` of the name (the kernel's or51132.c

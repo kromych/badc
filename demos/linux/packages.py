@@ -297,9 +297,11 @@ def run(cmd, cwd=None, env=None, timeout=None, capture=True, check=False):
                            stdin=subprocess.DEVNULL,
                            capture_output=capture)
     except subprocess.TimeoutExpired as e:
+        def text_of(b) -> str:
+            return b.decode(errors="replace") if isinstance(b, bytes) else b or ""
         r = subprocess.CompletedProcess(
-            cmd, 124, e.stdout or "",
-            (e.stderr or "") + f"\ntimed out after {timeout}s")
+            cmd, 124, text_of(e.stdout),
+            text_of(e.stderr) + f"\ntimed out after {timeout}s")
     if check and r.returncode != 0:
         tail = (r.stderr or r.stdout or "").strip().splitlines()[-8:]
         die(f"{' '.join(map(str, cmd))} exited {r.returncode}\n" +

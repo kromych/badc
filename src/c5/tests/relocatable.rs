@@ -287,6 +287,60 @@ fn locals_kept_per_object() {
 }
 
 #[test]
+fn block_static_shadowing_extern_keeps_per_instance_objects() {
+    // Same-named block-scope statics across sibling scopes and functions,
+    // shadowing a file-scope `extern` of the name (the kernel's or51132.c
+    // against `sections.h`): each static is a defined local object and no
+    // reference resolves to the extern unless the extern itself is named.
+    let base = "extern char _data[];\n\
+                extern int sink(const unsigned char *p, int n);\n\
+                int f(int k) {\n\
+                    if (k) { static const unsigned char _data[] = {1, 2}; return sink(_data, 2); }\n\
+                    { static const unsigned char _data[] = {3, 4, 5}; return sink(_data, 3); }\n\
+                }\n\
+                int g(void) {\n\
+                    static const unsigned char _data[] = {6};\n\
+                    static const unsigned char *p = _data;\n\
+                    static const unsigned char *tab[] = {_data, &_data[0]};\n\
+                    return sink(p, 1) + sink(tab[1], 1);\n\
+                }\n";
+    let count = |a: &EtRel| {
+        let defined = a
+            .symbols
+            .iter()
+            .filter(|s| {
+                s.name.starts_with("_data.")
+                    && s.binding == 0
+                    && matches!(s.sec, EtSymRef::Section(_))
+            })
+            .count();
+        let undef = a
+            .symbols
+            .iter()
+            .filter(|s| s.name == "_data" && matches!(s.sec, EtSymRef::Undef))
+            .count();
+        (defined, undef)
+    };
+    for target in ["x64", "aarch64"] {
+        let a = match target {
+            "x64" => compile_obj(base, "a.o"),
+            _ => compile_obj_aarch64(base, "a.o"),
+        };
+        // One defined local object per declaration, zero undefined `_data`.
+        assert_eq!(count(&a), (3, 0), "{target}");
+        assert!(!a.symbols.iter().any(|s| s.name == "_data"), "{target}");
+    }
+    // A genuine reference to the file-scope extern coexists with the
+    // shadowing statics: exactly one undefined `_data` row, defined
+    // objects unchanged.
+    let with_ref = alloc::format!(
+        "{base}int h(void) {{ return sink((const unsigned char *)_data, 1); }}\n"
+    );
+    let b = compile_obj(&with_ref, "b.o");
+    assert_eq!(count(&b), (3, 1));
+}
+
+#[test]
 fn discard_all_converts_local_relocs_to_section_relative() {
     use crate::c5::linker::relocatable::DiscardLocals;
     let a = compile_obj(

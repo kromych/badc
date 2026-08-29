@@ -809,6 +809,8 @@ impl Compiler {
         // The inner binding records its own folded const value, if any.
         s.h_const_object_value = s.const_object_value;
         s.const_object_value = None;
+        s.h_static_local_record = s.static_local_record;
+        s.static_local_record = None;
     }
 
     /// Inverse of [`Self::shadow_symbol`]: restore the saved outer
@@ -825,6 +827,7 @@ impl Compiler {
             sym.class = 0;
             sym.is_scope_bound = false;
             sym.block_extern_active = false;
+            sym.static_local_record = sym.h_static_local_record;
             return;
         }
         sym.class = sym.h_class;
@@ -846,6 +849,7 @@ impl Compiler {
         sym.is_global_register = sym.h_is_global_register;
         sym.asm_name = sym.h_asm_name.take();
         sym.const_object_value = sym.h_const_object_value;
+        sym.static_local_record = sym.h_static_local_record;
         sym.is_scope_bound = false;
         sym.block_extern_active = false;
         // The register-asm binding belongs to the block-scope local
@@ -878,6 +882,7 @@ impl Compiler {
             && sym.is_global_register == sym.h_is_global_register
             && sym.asm_name == sym.h_asm_name
             && sym.const_object_value == sym.h_const_object_value
+            && sym.static_local_record == sym.h_static_local_record
             && !sym.is_scope_bound
             && !sym.block_extern_active
     }
@@ -1147,6 +1152,14 @@ impl Compiler {
         // by name / same-TU offset regardless of the class restored at
         // block exit. Record it for the walker.
         let block_extern = class == Token::Glo as i64 && s.block_extern_active;
+        // A reference to a block-scope static resolves against its
+        // emission record: the slot's binding is restored at scope exit,
+        // so walk-time re-resolution through the slot would see whatever
+        // file-scope binding the name has (C99 6.2.1p4 shadowing).
+        let sym = match s.static_local_record {
+            Some(r) if class == Token::Glo as i64 && !s.block_extern_active => r,
+            _ => sym,
+        };
         let id = self.ast.push_expr(
             Expr::Ident {
                 sym,

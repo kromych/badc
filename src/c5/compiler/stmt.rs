@@ -69,6 +69,7 @@ pub(super) struct BlockShadow {
     asm_register: Option<crate::c5::symbol::AsmRegister>,
     is_global_register: bool,
     const_object_value: Option<crate::c5::symbol::ConstObjectValue>,
+    static_local_record: Option<u32>,
 }
 
 impl Compiler {
@@ -82,7 +83,7 @@ impl Compiler {
         let s = &self.symbols[idx];
         let (inner_array_size, array_dims) =
             prior.unwrap_or_else(|| (s.inner_array_size, s.array_dims.clone()));
-        BlockShadow {
+        let shadow = BlockShadow {
             idx,
             class: s.class,
             type_: s.type_,
@@ -102,7 +103,12 @@ impl Compiler {
             asm_register: s.asm_register,
             is_global_register: s.is_global_register,
             const_object_value: s.const_object_value,
-        }
+            static_local_record: s.static_local_record,
+        };
+        // The inner binding is not (yet) a block-scope static; its own
+        // promotion re-sets the record.
+        self.symbols[idx].static_local_record = None;
+        shadow
     }
 
     /// Restore a binding saved by [`Self::capture_block_shadow`], reverting
@@ -116,6 +122,7 @@ impl Compiler {
         if s.scoped_fn_decl && s.class == Token::Fun as i64 && b.class == 0 {
             s.class = 0;
             s.block_extern_active = false;
+            s.static_local_record = b.static_local_record;
             return;
         }
         s.class = b.class;
@@ -136,6 +143,7 @@ impl Compiler {
         s.asm_register = b.asm_register;
         s.is_global_register = b.is_global_register;
         s.const_object_value = b.const_object_value;
+        s.static_local_record = b.static_local_record;
         s.block_extern_active = false;
     }
 

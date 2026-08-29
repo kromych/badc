@@ -515,6 +515,15 @@ pub(crate) struct Symbol {
     /// only while the owner survives. `None` for file-scope symbols.
     pub owner_ent_pc: Option<u64>,
 
+    /// Index of the emission record while this slot's live binding is a
+    /// block-scope static. Reference-capture sites resolve the name to
+    /// the record, whose state outlives the scope-exit restore of the
+    /// slot (which may bring back a same-named file-scope `extern`).
+    /// Set at the promotion, cleared when the binding's scope exits.
+    pub static_local_record: Option<u32>,
+    /// Shadow slot for `static_local_record` at function-body scope.
+    pub h_static_local_record: Option<u32>,
+
     /// True for the synthetic internal symbol of an anonymous compound
     /// literal staged in the data segment. Its initializer bytes are
     /// final at parse time, so a constant subscript of the literal may
@@ -819,6 +828,8 @@ impl crate::c5::layout::DataOffsets for Symbol {
             is_scope_bound: _,
             scoped_fn_decl: _,
             owner_ent_pc: _, // code address space
+            static_local_record: _,
+            h_static_local_record: _, // scope-restore shadow
             is_compound_literal: _,
             was_referenced: _,
             was_read: _,

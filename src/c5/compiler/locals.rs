@@ -773,24 +773,41 @@ impl Compiler {
         self.next_block_static_id += 1;
         let hash = crate::c5::lexer::hash_name(name.as_bytes());
         let record_idx = self.symbols.len();
+        let src = &self.symbols[loc_idx];
         self.symbols.push(crate::c5::symbol::Symbol {
             name,
             token: Token::Id as i64,
             class: Token::Glo as i64,
             type_: ty,
-            val: self.symbols[loc_idx].val,
+            val: src.val,
             array_size: final_array,
             is_zero_len_array: zero_len,
             reserved_data_bytes: reserved,
             fam_init_bytes: fam_tail,
-            data_align: self.symbols[loc_idx].data_align,
+            data_align: src.data_align,
             linkage: crate::c5::symbol::Linkage::Internal,
             defined_here: true,
             has_initializer: true,
-            runtime_initialized: self.symbols[loc_idx].runtime_initialized,
-            storage_is_const: self.symbols[loc_idx].storage_is_const,
+            runtime_initialized: src.runtime_initialized,
+            storage_is_const: src.storage_is_const,
+            // Declaration shape and debug facts, so an `Expr::Ident`
+            // routed to the record reads what the binding declared.
+            params: src.params.clone(),
+            is_variadic: src.is_variadic,
+            fn_ptr_indirection: src.fn_ptr_indirection,
+            fn_ptr_ret_indirection: src.fn_ptr_ret_indirection,
+            inner_array_size: src.inner_array_size,
+            array_dims: src.array_dims.clone(),
+            type_align: src.type_align,
+            is_const_qualified: src.is_const_qualified,
+            const_object_value: src.const_object_value,
+            decl_spelling: src.decl_spelling,
+            decl_line: src.decl_line,
+            decl_file: src.decl_file,
+            decl_in_main_source: src.decl_in_main_source,
             ..Default::default()
         });
+        self.symbols[loc_idx].static_local_record = Some(record_idx as u32);
         self.symbol_index.record(hash);
         self.apply_symbol_attributes(record_idx);
         self.pending_block_static_syms.push(record_idx);

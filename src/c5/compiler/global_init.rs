@@ -122,6 +122,11 @@ impl Compiler {
     ) -> Result<(), C5Error> {
         // `is_thread_local` is the slot's storage, not the target's.
         self.reject_thread_local_addr_const(target_idx)?;
+        // A block-scope static's address anchors to its emission record;
+        // the binding slot is restored at scope exit (see `ast_emit_ident`).
+        let target_idx = self.symbols[target_idx]
+            .static_local_record
+            .map_or(target_idx, |r| r as usize);
         self.symbols[target_idx].was_referenced = true;
         if !is_thread_local {
             self.note_init_reloc(var_offset as usize);

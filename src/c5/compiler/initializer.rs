@@ -237,6 +237,10 @@ impl Compiler {
                 if let Some(sym_idx) = src_sym {
                     self.reject_thread_local_addr_const(sym_idx)?;
                 }
+                // A block-scope static's address anchors to its emission
+                // record (see `emit_addr_reloc`).
+                let src_sym = src_sym
+                    .map(|i| self.symbols[i].static_local_record.map_or(i, |r| r as usize));
                 self.note_init_reloc(here);
                 // A target defined in another unit (`extern T x;` with no
                 // definition here) resolves by name at link time, not

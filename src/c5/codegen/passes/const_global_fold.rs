@@ -720,8 +720,7 @@ pub(crate) fn fold_template_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) ->
     let mut seen = vec![false; nblocks];
     let mut stack: Vec<(u32, usize)> = vec![(0, 0)];
     seen[0] = true;
-    loop {
-        let Some(&(b, i)) = stack.last() else { break };
+    while let Some(&(b, i)) = stack.last() {
         if let Some(&s) = succs[b as usize].get(i) {
             stack.last_mut().expect("nonempty").1 += 1;
             if !seen[s as usize] {

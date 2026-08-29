@@ -4449,7 +4449,10 @@ impl<'a> Walker<'a> {
                         // integer slot, or the marshal moves only its 4-byte
                         // form into the low half and the f64 read sees noise in
                         // the high half.
-                        if expr_ty(self.ast.expr(*a)).map(is_float_ty).unwrap_or(false) {
+                        if arg_value_ty(self.ast.expr(*a))
+                            .map(is_float_ty)
+                            .unwrap_or(false)
+                        {
                             let widened = b.fp_widen_to_f64(v);
                             let slot = b.alloc_synthetic_local();
                             b.store_local(slot, widened, super::super::ir::StoreKind::I64);
@@ -4535,7 +4538,7 @@ impl<'a> Walker<'a> {
                     // A by-value aggregate argument is copied by the
                     // callee through the generic space.
                     arg_vals.push(self.walk_copy_operand(b, *a)?);
-                    if expr_ty(self.ast.expr(*a))
+                    if arg_value_ty(self.ast.expr(*a))
                         .map(is_floating_scalar)
                         .unwrap_or(false)
                         && i < 32
@@ -4610,7 +4613,7 @@ impl<'a> Walker<'a> {
                                 let agg_ty = if i < nparams {
                                     Some(self.symbols[*sym as usize].params[i])
                                 } else {
-                                    match expr_ty(self.ast.expr(args[i])) {
+                                    match arg_value_ty(self.ast.expr(args[i])) {
                                         Some(aty)
                                             if is_struct_value_ty(aty)
                                                 && self.struct_size(aty) <= 8 =>
@@ -4665,7 +4668,7 @@ impl<'a> Walker<'a> {
                                 if i < fixed_args {
                                     continue;
                                 }
-                                let arg_is_fp = expr_ty(self.ast.expr(*a))
+                                let arg_is_fp = arg_value_ty(self.ast.expr(*a))
                                     .map(is_floating_scalar)
                                     .unwrap_or(false);
                                 if arg_is_fp {
@@ -4732,7 +4735,7 @@ impl<'a> Walker<'a> {
                                 if i < fixed_args {
                                     continue;
                                 }
-                                let arg_is_fp = expr_ty(self.ast.expr(*a))
+                                let arg_is_fp = arg_value_ty(self.ast.expr(*a))
                                     .map(is_floating_scalar)
                                     .unwrap_or(false);
                                 if arg_is_fp {
@@ -4804,7 +4807,7 @@ impl<'a> Walker<'a> {
                             callee_variadic || (fp_arg_mask != 0 && eff_fp_arg_mask == 0);
                         let call_fp_arg_mask = if force_int {
                             for (i, a) in args.iter().enumerate() {
-                                let arg_is_fp = expr_ty(self.ast.expr(*a))
+                                let arg_is_fp = arg_value_ty(self.ast.expr(*a))
                                     .map(is_floating_scalar)
                                     .unwrap_or(false);
                                 if arg_is_fp {
@@ -4908,7 +4911,7 @@ impl<'a> Walker<'a> {
                             let arg_ty = if i < nparams {
                                 self.symbols[*sym as usize].params[i]
                             } else {
-                                match expr_ty(self.ast.expr(args[i])) {
+                                match arg_value_ty(self.ast.expr(args[i])) {
                                     Some(t) => t,
                                     None => continue,
                                 }
@@ -5044,7 +5047,7 @@ impl<'a> Walker<'a> {
                     if callee_variadic && i >= callee_fixed {
                         continue;
                     }
-                    let Some(aty) = expr_ty(self.ast.expr(args[i])) else {
+                    let Some(aty) = arg_value_ty(self.ast.expr(args[i])) else {
                         continue;
                     };
                     if !(is_struct_value_ty(aty)) {
@@ -5090,7 +5093,7 @@ impl<'a> Walker<'a> {
                     // pattern and reloaded through an integer slot so it is not
                     // passed as its 4-byte form in the low half of the slot.
                     for i in 0..arg_vals.len() {
-                        if expr_ty(self.ast.expr(args[i]))
+                        if arg_value_ty(self.ast.expr(args[i]))
                             .map(is_float_ty)
                             .unwrap_or(false)
                         {
@@ -5140,7 +5143,7 @@ impl<'a> Walker<'a> {
                         if i < callee_fixed {
                             continue;
                         }
-                        let arg_is_fp = expr_ty(self.ast.expr(*a))
+                        let arg_is_fp = arg_value_ty(self.ast.expr(*a))
                             .map(is_floating_scalar)
                             .unwrap_or(false);
                         if arg_is_fp {
@@ -5183,7 +5186,7 @@ impl<'a> Walker<'a> {
                         if i < callee_fixed {
                             continue;
                         }
-                        let arg_is_fp = expr_ty(self.ast.expr(*a))
+                        let arg_is_fp = arg_value_ty(self.ast.expr(*a))
                             .map(is_floating_scalar)
                             .unwrap_or(false);
                         if arg_is_fp {
@@ -5239,7 +5242,7 @@ impl<'a> Walker<'a> {
                 let call_fp_arg_mask =
                     if force_int_indirect || (fp_arg_mask != 0 && eff_fp_arg_mask == 0) {
                         for (i, a) in args.iter().enumerate() {
-                            let arg_is_fp = expr_ty(self.ast.expr(*a))
+                            let arg_is_fp = arg_value_ty(self.ast.expr(*a))
                                 .map(is_floating_scalar)
                                 .unwrap_or(false);
                             if arg_is_fp {
@@ -7574,6 +7577,22 @@ pub(crate) fn expr_ty(e: &Expr) -> Option<i64> {
         }
         // An asm statement carries no value type.
         Expr::InlineAsm(_) => None,
+    }
+}
+
+/// The type an expression contributes as a call argument (C99
+/// 6.5.2.2p6/p7: the argument's converted type). An array-typed
+/// compound literal decays to a pointer to its first element (C99
+/// 6.3.2.1p3); its element type must not classify the argument as a
+/// by-value aggregate or as a floating-point scalar. `Expr::Ident`
+/// and `Expr::Member` already carry the decayed type. Other shapes
+/// keep [`expr_ty`].
+pub(crate) fn arg_value_ty(e: &Expr) -> Option<i64> {
+    match e {
+        Expr::CompoundLiteral { ty, array_size, .. } if *array_size != 0 => {
+            Some(*ty + crate::c5::token::Ty::Ptr as i64)
+        }
+        _ => expr_ty(e),
     }
 }
 

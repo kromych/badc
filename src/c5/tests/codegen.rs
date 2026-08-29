@@ -9644,3 +9644,68 @@ fn stack_protector_moves_the_debug_info_frame_offsets_with_the_locals() {
         "the unprotected offset must not survive: it names the canary region"
     );
 }
+
+/// C99 6.5.2.2p7: a call argument is converted as if by assignment,
+/// so `&(T){...}` is a pointer and the callee receives the literal
+/// object's address. Classifying the argument by the compound-literal
+/// slot backing it instead of by its type tagged it as a by-value
+/// aggregate through a function pointer: the emitter loaded the
+/// literal's eightbytes into the argument registers and shifted every
+/// later argument up one. A by-value literal argument keeps its tag.
+#[test]
+fn address_of_compound_literal_argument_stays_a_scalar_pointer() {
+    use crate::c5::ir::Inst;
+    use crate::{Compiler, Target};
+    const SRC: &str = "typedef struct { unsigned long a, b; } g; \
+         int by_addr(int (*fp)(void *, const g *, void **), void *h, void **o) \
+         { return fp(h, &(g){ 1, 2 }, o); } \
+         int by_value(int (*fv)(void *, g, void **), void *h, void **o) \
+         { return fv(h, (g){ 1, 2 }, o); } \
+         int main(void){ return 0; }";
+    for target in [Target::LinuxAarch64, Target::LinuxX64] {
+        let program = Compiler::with_target(SRC.to_string(), target)
+            .compile()
+            .expect("compile");
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let idx = |name: &str| {
+            funcs
+                .iter()
+                .position(|f| f.name == name)
+                .unwrap_or_else(|| panic!("{name}: not produced"))
+        };
+        // Argument list and whether argument 2 carries a by-value
+        // aggregate tag.
+        let shape = |i: usize| -> (alloc::vec::Vec<u32>, bool) {
+            funcs[i]
+                .insts
+                .iter()
+                .find_map(|inst| match inst {
+                    Inst::CallIndirect { args, arg_aggs, .. } => {
+                        Some((args.clone(), matches!(arg_aggs.get(1), Some(Some(_)))))
+                    }
+                    _ => None,
+                })
+                .expect("indirect call")
+        };
+        let by_addr = idx("by_addr");
+        let (args, tagged) = shape(by_addr);
+        assert_eq!(args.len(), 3, "{target:?}: by_addr argument count");
+        assert!(
+            !tagged,
+            "{target:?}: `&(g){{...}}` must not be tagged as a by-value aggregate"
+        );
+        assert!(
+            matches!(funcs[by_addr].insts[args[1] as usize], Inst::LocalAddr(_)),
+            "{target:?}: argument 2 must be the literal slot's address, got {:?}",
+            funcs[by_addr].insts[args[1] as usize]
+        );
+        let (args, tagged) = shape(idx("by_value"));
+        assert_eq!(args.len(), 3, "{target:?}: by_value argument count");
+        assert!(
+            tagged,
+            "{target:?}: a by-value struct literal argument keeps its aggregate tag"
+        );
+    }
+}

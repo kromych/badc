@@ -3160,8 +3160,11 @@ impl Compiler {
                 // a struct lvalue is its rvalue, leaving the value
                 // unchanged. Limit the wrap to the lvalue forms
                 // `walk_expr_lvalue` handles; a struct rvalue with no
-                // lvalue (compound literal, call result) keeps the
-                // address-as-value representation and its struct type.
+                // lvalue (a call result) keeps the address-as-value
+                // representation and its struct type. A compound
+                // literal is an lvalue (C99 6.5.2.5p4) and is wrapped,
+                // so a consumer (e.g. the call-argument classifiers)
+                // types `&(T){...}` as a pointer, not a by-value `T`.
                 let wrappable = match self.ast_acc {
                     Some(id) => matches!(
                         self.ast.expr(id),
@@ -3169,6 +3172,7 @@ impl Compiler {
                             | super::super::ast::Expr::Member { .. }
                             | super::super::ast::Expr::Index { .. }
                             | super::super::ast::Expr::Binary { .. }
+                            | super::super::ast::Expr::CompoundLiteral { .. }
                             | super::super::ast::Expr::Unary {
                                 op: super::super::ast::UnOp::Deref,
                                 ..

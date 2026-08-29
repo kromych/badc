@@ -333,9 +333,8 @@ fn block_static_shadowing_extern_keeps_per_instance_objects() {
     // A genuine reference to the file-scope extern coexists with the
     // shadowing statics: exactly one undefined `_data` row, defined
     // objects unchanged.
-    let with_ref = alloc::format!(
-        "{base}int h(void) {{ return sink((const unsigned char *)_data, 1); }}\n"
-    );
+    let with_ref =
+        alloc::format!("{base}int h(void) {{ return sink((const unsigned char *)_data, 1); }}\n");
     let b = compile_obj(&with_ref, "b.o");
     assert_eq!(count(&b), (3, 1));
 }

@@ -2492,13 +2492,21 @@ fn section_arguments_carry_the_entry_size_and_the_link() {
     let block = |n: &str| blocks.iter().find(|b| b.name == n).expect(n);
     let insn = block(".discard.annotate_insn");
     assert_eq!(
-        (insn.flags.as_str(), insn.sh_type.as_deref(), insn.entsize, insn.link.as_deref()),
+        (
+            insn.flags.as_str(),
+            insn.sh_type.as_deref(),
+            insn.entsize,
+            insn.link.as_deref()
+        ),
         ("M", Some("progbits"), 8, None)
     );
     let strings = block(".rodata.str1.1");
     assert_eq!((strings.flags.as_str(), strings.entsize), ("aMS", 1));
     let hot = block(".text.hot");
-    assert_eq!((hot.flags.as_str(), hot.link.as_deref()), ("axo", Some(".text")));
+    assert_eq!(
+        (hot.flags.as_str(), hot.link.as_deref()),
+        ("axo", Some(".text"))
+    );
     let nosize = block(".nosize");
     assert_eq!((nosize.flags.as_str(), nosize.entsize), ("a", 0));
     let mut sink = AsmSectionSink::default();

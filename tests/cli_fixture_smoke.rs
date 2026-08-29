@@ -2093,16 +2093,32 @@ fn mcpu_extensions_gate_the_feature_macros() {
     .expect("write source");
     let obj = root.join("aes.o");
     let ok = Command::new(badc)
-        .args(["--gnu", "-q", "-c", "--target=linux-aarch64", "-mcpu=generic+crypto"])
+        .args([
+            "--gnu",
+            "-q",
+            "-c",
+            "--target=linux-aarch64",
+            "-mcpu=generic+crypto",
+        ])
         .arg(&src)
         .arg("-o")
         .arg(&obj)
         .output()
         .expect("run badc");
-    assert!(ok.status.success(), "{}", String::from_utf8_lossy(&ok.stderr));
+    assert!(
+        ok.status.success(),
+        "{}",
+        String::from_utf8_lossy(&ok.stderr)
+    );
     for (args, want) in [
-        (&["-c", "--target=linux-aarch64", "-mcpu=generic+bogus"][..], "extension `bogus`"),
-        (&["-c", "--target=linux-x64", "-mcpu=generic"][..], "AArch64"),
+        (
+            &["-c", "--target=linux-aarch64", "-mcpu=generic+bogus"][..],
+            "extension `bogus`",
+        ),
+        (
+            &["-c", "--target=linux-x64", "-mcpu=generic"][..],
+            "AArch64",
+        ),
     ] {
         let out = Command::new(badc)
             .args(args)
@@ -2111,11 +2127,13 @@ fn mcpu_extensions_gate_the_feature_macros() {
             .output()
             .expect("run badc");
         let err = String::from_utf8_lossy(&out.stderr);
-        assert!(!out.status.success() && err.contains(want), "{args:?}: {err}");
+        assert!(
+            !out.status.success() && err.contains(want),
+            "{args:?}: {err}"
+        );
     }
     let _ = std::fs::remove_dir_all(&root);
 }
-
 
 /// The profiling options are refused where gcc has none, by name.
 #[test]

@@ -2259,7 +2259,10 @@ fn run_inline_asm(
         &asm.operands,
         asm.clobber_regs,
         asm.clobber_fp_regs,
-        &|i| args.get(i).and_then(|&a| crate::c5::asm::asm_operand_const(frame.func, a)),
+        &|i| {
+            args.get(i)
+                .and_then(|&a| crate::c5::asm::asm_operand_const(frame.func, a))
+        },
     )
     .map_err(C5Error::Runtime)?;
     // The interpreter models only the 16 GPRs; an `x` (xmm) operand carries a

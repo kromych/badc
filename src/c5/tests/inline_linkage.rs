@@ -282,7 +282,11 @@ fn ordinary_definition_after_an_extern_inline_body_is_the_external_one() {
                int g(int x) { return f(x); }\n";
     for model in [Model::C99, Model::Gnu89] {
         for optimize in [false, true] {
-            assert_eq!(probe(src, model, optimize), Sym::External, "{model:?} -O={optimize}");
+            assert_eq!(
+                probe(src, model, optimize),
+                Sym::External,
+                "{model:?} -O={optimize}"
+            );
         }
     }
 }

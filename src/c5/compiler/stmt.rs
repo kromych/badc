@@ -447,8 +447,7 @@ impl Compiler {
             if let Some(m) = self.pending.attr_mode.take() {
                 ty = self.apply_mode_to_type(ty, m)?;
             }
-            let declarator_transparent =
-                core::mem::take(&mut self.pending.attr_transparent_union);
+            let declarator_transparent = core::mem::take(&mut self.pending.attr_transparent_union);
             let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
             let fn_ptr_ret_indirection = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
             let bare_fn_type = core::mem::take(&mut self.pending.bare_function_type_declarator);

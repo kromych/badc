@@ -2000,12 +2000,13 @@ impl Compiler {
                                 Self::transparent_union_member(&self.structs, want, self.ty, zero);
                             if tu_member.is_none()
                                 && let Some(m) = Self::type_warning_with_flags(
-                                &self.structs,
-                                want,
-                                self.ty,
-                                zero,
-                                untyped,
-                            ) {
+                                    &self.structs,
+                                    want,
+                                    self.ty,
+                                    zero,
+                                    untyped,
+                                )
+                            {
                                 let got = self.ty;
                                 let want_s = format_type(want, &self.structs);
                                 let got_s = format_type(got, &self.structs);

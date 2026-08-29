@@ -876,8 +876,13 @@ fn transparent_union_attribute_is_ignored_without_a_covering_first_member() {
         .count();
     assert!(
         ignored == 2
-            && p.warnings.iter().any(|w| w.contains("in argument 1 of `t`"))
-            && !p.warnings.iter().any(|w| w.contains("in argument 1 of `u`")),
+            && p.warnings
+                .iter()
+                .any(|w| w.contains("in argument 1 of `t`"))
+            && !p
+                .warnings
+                .iter()
+                .any(|w| w.contains("in argument 1 of `u`")),
         "got: {:?}",
         p.warnings
     );

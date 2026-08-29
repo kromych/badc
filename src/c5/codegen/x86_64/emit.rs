@@ -254,7 +254,10 @@ fn asm_scratch_bytes(func: &FunctionSsa, fixed: super::FixedRegs) -> u32 {
             &asm.operands,
             asm.clobber_regs | fixed.gpr,
             asm.clobber_fp_regs | fixed.fpr,
-            &|i| args.get(i).and_then(|&a| crate::c5::asm::asm_operand_const(func, a)),
+            &|i| {
+                args.get(i)
+                    .and_then(|&a| crate::c5::asm::asm_operand_const(func, a))
+            },
         ) else {
             continue;
         };

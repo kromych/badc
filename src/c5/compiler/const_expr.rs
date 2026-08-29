@@ -1845,7 +1845,10 @@ impl Compiler {
     /// On the `)` closing a type name an array typedef completed: whether
     /// a `{` follows, which makes it a compound literal of the array type
     /// rather than a cast. The lexer position is unchanged on return.
-    pub(super) fn at_typedef_array_literal(&mut self, name: &ConstTypeName) -> Result<bool, C5Error> {
+    pub(super) fn at_typedef_array_literal(
+        &mut self,
+        name: &ConstTypeName,
+    ) -> Result<bool, C5Error> {
         if name.base_dims.is_empty() || self.lex.tk != ')' {
             return Ok(false);
         }

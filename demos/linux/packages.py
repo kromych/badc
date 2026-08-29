@@ -1255,8 +1255,11 @@ def probes(vm: VM) -> dict:
     # SCSI disk driver alone names no controller, so the chain is what a
     # storage model is checked against.
     out["disk_driver"] = vm.ssh(
-        "d=/sys/class/block/$(lsblk -no PKNAME $(findmnt -no SOURCE /) | head -1)"
-        "/device; c=''; while [ \"$(readlink -f $d)\" != / ]; do "
+        "src=$(findmnt -no SOURCE / | sed 's/\\[.*//'); "
+        "dev=$(lsblk -no PKNAME \"$src\" | head -1); "
+        "[ -n \"$dev\" ] || dev=$(basename \"$src\"); "
+        "d=/sys/class/block/$dev/device; c=''; for _ in $(seq 16); do "
+        "r=$(readlink -f $d) || break; [ \"$r\" = / ] && break; "
         "[ -e $d/driver ] && c=\"$c $(basename $(readlink -f $d/driver))\"; "
         "d=$d/..; done; echo $c").stdout.strip()
     disk = vm.ssh(

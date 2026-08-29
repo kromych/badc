@@ -93,6 +93,11 @@ pub(crate) struct Frame {
     pub canary_bytes: u32,
     /// Whether the function clobbers (and therefore saves) x19.
     pub uses_x19: bool,
+    /// Registers `-ffixed-` keeps out of every scratch pick.
+    pub fixed_regs: super::FixedRegs,
+    /// The FP scratch d-registers, outside the allocator's banks; see
+    /// `RegBanks::fp_scratch`.
+    pub fp_scratch: [u8; super::ssa::reg_alloc::FP_SCRATCH_COUNT],
     /// AAPCS64 variadic callee reads named parameters from the register save
     /// area rather than cdecl cells.
     pub va_named_redirect: bool,
@@ -173,7 +178,7 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi, target
     let asm_bytes = if func.is_naked {
         0
     } else {
-        asm_scratch_bytes(func)
+        asm_scratch_bytes(func, abi.fixed_regs)
     };
     let frame_bytes = locals_bytes
         + alloc_spill_bytes
@@ -209,6 +214,8 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi, target
         alloc_spill_base: locals_bytes,
         canary_bytes,
         uses_x19,
+        fixed_regs: abi.fixed_regs,
+        fp_scratch: alloc.fp_scratch,
         param_spill_bytes,
         param_cell_stride,
         va_named_redirect: aarch64_host_variadic_callee(func, abi),
@@ -248,7 +255,7 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi, target
 /// needs: 8 per operand capture and 8 per saved GP / FP register.
 /// Derived from [`asm_save_masks`], which the emitter also saves from,
 /// so the region always covers the emitted layout.
-fn asm_scratch_bytes(func: &FunctionSsa) -> u32 {
+fn asm_scratch_bytes(func: &FunctionSsa, fixed: super::FixedRegs) -> u32 {
     use super::super::ir::AsmConstraint;
     let mut max = 0u32;
     for inst in &func.insts {
@@ -260,12 +267,14 @@ fn asm_scratch_bytes(func: &FunctionSsa) -> u32 {
         if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::A64) {
             continue;
         }
-        let Ok(op_reg) =
-            super::asm::assign_operand_regs(&asm.operands, asm.clobber_regs, asm.clobber_fp_regs)
-        else {
+        let Ok(op_reg) = super::asm::assign_operand_regs(
+            &asm.operands,
+            asm.clobber_regs | fixed.gpr,
+            asm.clobber_fp_regs | fixed.fpr,
+        ) else {
             continue;
         };
-        let Ok((used, fp_used)) = asm_save_masks(asm, &op_reg) else {
+        let Ok((used, fp_used)) = asm_save_masks(asm, &op_reg, fixed) else {
             continue;
         };
         let n_cap = asm
@@ -281,10 +290,13 @@ fn asm_scratch_bytes(func: &FunctionSsa) -> u32 {
 /// The GP / FP register masks an inline-asm statement saves around its
 /// template: the clobber list (minus the emitter's x16/x17 scratch and
 /// bit 31) plus every operand register. `w` operands must be a double
-/// or a 16-byte vector (the SSA model's only FP shapes).
+/// or a 16-byte vector (the SSA model's only FP shapes). A `-ffixed-`
+/// register holds nothing of the compiler's, so it is never saved: a
+/// write the template makes to it stays, as under gcc.
 fn asm_save_masks(
     asm: &super::super::ir::AsmBlock,
     op_reg: &[Option<u8>],
+    fixed: super::FixedRegs,
 ) -> Result<(u32, u32), alloc::string::String> {
     use super::super::ir::AsmConstraint;
     let mut used: u32 = asm.clobber_regs & 0x7FFF_FFFF & !0x0003_0000;
@@ -302,7 +314,7 @@ fn asm_save_masks(
             used |= 1 << r;
         }
     }
-    Ok((used, fp_used))
+    Ok((used & !fixed.gpr, fp_used & !fixed.fpr))
 }
 
 /// Bytes the Windows-on-ARM64 variadic prologue reserves above the
@@ -904,6 +916,7 @@ pub(crate) fn emit_function(
     hardening: super::Hardening,
     stack_protect: super::StackProtect,
     entry: super::FunctionEntry,
+    fixed_regs: super::FixedRegs,
 ) -> bool {
     // The bundled emit output arrives in `cx`; recreate the per-field names as
     // disjoint reborrows so the body below (including the per-`Inst` `cx` it
@@ -932,6 +945,7 @@ pub(crate) fn emit_function(
         a.strict_align = strict_align;
         a.hardening = hardening;
         a.stack_protect = stack_protect;
+        a.fixed_regs = fixed_regs;
         a
     };
     if let Some(bytes) = super::ssa::emit_common::locals_bytes_over_limit(func) {
@@ -939,6 +953,10 @@ pub(crate) fn emit_function(
         return false;
     }
     let frame = compute_frame(func, alloc, abi, target);
+    if let Some(why) = super::ssa::reg_alloc::fp_scratch_shortfall(func, frame.fp_scratch) {
+        bail_msg(why);
+        return false;
+    }
     if frame.canary_bytes > 0 {
         canary_frame_bytes.insert(func.ent_pc, frame.canary_bytes);
     }
@@ -1113,7 +1131,7 @@ pub(crate) fn emit_function(
     // the FP bank when one parameter's home d-register is a later
     // parameter's incoming argument register -- the per-inst `fmov dst,
     // arg` then clobbers that source before it is read. Schedule the FP
-    // parameters as an FP parallel copy with d16 / d17 cycle-breaking
+    // parameters as an FP parallel copy with the FP scratch breaking cycles
     // (mirroring the integer batch); the per-inst path handles any not
     // placed here (stack-passed, dead, or a non-permutation home set).
     {
@@ -2058,18 +2076,6 @@ struct ScratchPool {
     secondary: Reg,
 }
 
-/// FP scratch d-registers for reloading spilled / int-carried FP
-/// operands. The allocator's FP pool is d0..d15, so d16 / d17 are
-/// never assigned to a value; an int-to-FP `fmov` into one cannot
-/// clobber an operand the same instruction still reads. They are
-/// AAPCS64 caller-saved, used only within a single instruction's
-/// lowering, so they need no prologue save.
-const SCRATCH_FP0: u8 = 16;
-const SCRATCH_FP1: u8 = 17;
-/// Third FP scratch for the three-input fused multiply-add. d18 sits
-/// outside the allocator's d0..d15 pool, like d16 / d17.
-const SCRATCH_FP2: u8 = 18;
-
 impl ScratchPool {
     fn new() -> Self {
         Self {
@@ -2081,10 +2087,10 @@ impl ScratchPool {
 
 /// The d-register an FP result lands in: the allocator's, or a scratch
 /// outside its pool when the value spills.
-fn fp_or_spill_dst(dst: Place) -> Option<u8> {
+fn fp_or_spill_dst(dst: Place, frame: Frame) -> Option<u8> {
     match dst {
         Place::FpReg(r) => Some(r),
-        Place::Spill(_) => Some(SCRATCH_FP0),
+        Place::Spill(_) => Some(frame.fp_scratch[0]),
         _ => None,
     }
 }
@@ -3523,7 +3529,11 @@ fn emit_inline_asm_aarch64(
     // Assign operand registers before the GNU-as macro pass so it can
     // substitute each reference to its register name -- the same register the
     // operand capture and write-back below use.
-    let op_reg = match assign_operand_regs(&asm.operands, asm.clobber_regs, asm.clobber_fp_regs) {
+    let op_reg = match assign_operand_regs(
+        &asm.operands,
+        asm.clobber_regs | frame.fixed_regs.gpr,
+        asm.clobber_fp_regs | frame.fixed_regs.fpr,
+    ) {
         Ok(r) => r,
         Err(m) => {
             bail_msg(&m);
@@ -3624,7 +3634,7 @@ fn emit_inline_asm_aarch64(
     // across it. `w` operands and FP clobbers are in the independent d0..d7
     // file and are saved separately. `asm_save_masks` is shared with the
     // frame-region sizing in `compute_frame`.
-    let (used_mask, fp_used_mask) = match asm_save_masks(asm, &op_reg) {
+    let (used_mask, fp_used_mask) = match asm_save_masks(asm, &op_reg, frame.fixed_regs) {
         Ok(m) => m,
         Err(m) => {
             bail_msg(&m);
@@ -5212,17 +5222,24 @@ fn emit_inst(
             // C99 6.3.1.8: negation of a `float` is single-precision;
             // the result's f32 marker mirrors the operand's.
             let is_f32 = alloc.is_f32(v);
-            let dn = match materialize_fp_for(code, *src, src_place, SCRATCH_FP0, frame, alloc) {
+            let dn = match materialize_fp_for(
+                code,
+                *src,
+                src_place,
+                frame.fp_scratch[0],
+                frame,
+                alloc,
+            ) {
                 Some(r) => r,
                 None => return false,
             };
             let dd = match dst {
                 Place::FpReg(r) => r,
                 // Stage a spilled result through a reserved scratch
-                // d-reg outside the allocator's d0..d15 pool; d0 may
+                // d-reg outside the allocator's banks; d0 may
                 // hold a live value the caller still needs. The source
-                // may already occupy SCRATCH_FP0, so use SCRATCH_FP1.
-                Place::Spill(_) => SCRATCH_FP1,
+                // may already occupy the first FP scratch, so use the second FP scratch.
+                Place::Spill(_) => frame.fp_scratch[1],
                 _ => return false,
             };
             if is_f32 {
@@ -5262,21 +5279,24 @@ fn emit_inst(
                 .copied()
                 .unwrap_or(Place::None);
             // Each operand resolves to its own d-reg or, when spilled, a
-            // dedicated scratch outside the d0..d15 pool (d16 / d17 / d18).
-            let da = match materialize_fp_for(code, *a, a_place, SCRATCH_FP0, frame, alloc) {
+            // dedicated scratch outside the allocator's banks.
+            let da = match materialize_fp_for(code, *a, a_place, frame.fp_scratch[0], frame, alloc)
+            {
                 Some(r) => r,
                 None => return false,
             };
-            let dm = match materialize_fp_for(code, *b, b_place, SCRATCH_FP1, frame, alloc) {
+            let dm = match materialize_fp_for(code, *b, b_place, frame.fp_scratch[1], frame, alloc)
+            {
                 Some(r) => r,
                 None => return false,
             };
-            let dc = match materialize_fp_for(code, *c, c_place, SCRATCH_FP2, frame, alloc) {
+            let dc = match materialize_fp_for(code, *c, c_place, frame.fp_scratch[2], frame, alloc)
+            {
                 Some(r) => r,
                 None => return false,
             };
-            // A spilled result writes into SCRATCH_FP2 and stores after.
-            // d18 is free unless `c` was itself spilled into it, in which
+            // A spilled result writes into the third FP scratch and stores after.
+            // The third scratch is free unless `c` was itself spilled into it, in which
             // case the FMADD reads Da before writing Dd so the alias is
             // harmless. It must NOT reuse `dc` directly: when `c` lives
             // in an allocated register that register may hold a value
@@ -5284,7 +5304,7 @@ fn emit_inst(
             // operand reused as the addend across several fused ops).
             let dd = match dst {
                 Place::FpReg(r) => r,
-                Place::Spill(_) => SCRATCH_FP2,
+                Place::Spill(_) => frame.fp_scratch[2],
                 _ => return false,
             };
             emit(
@@ -5320,9 +5340,9 @@ fn emit_inst(
                     let dd = match dst {
                         Place::FpReg(r) => r,
                         // Stage a spilled result through a reserved scratch
-                        // d-reg outside the allocator's d0..d15 pool; d0
+                        // d-reg outside the allocator's banks; d0
                         // may hold a live value the caller still needs.
-                        Place::Spill(_) => SCRATCH_FP0,
+                        Place::Spill(_) => frame.fp_scratch[0],
                         _ => return false,
                     };
                     // C99 6.3.1.4: when the result is `float`, convert the
@@ -5349,12 +5369,12 @@ fn emit_inst(
                     // view when it is f32-marked.
                     let src_f32 = alloc.is_f32(*value);
                     let dn = if src_f32 {
-                        match materialize_fp_f32(code, src_place, SCRATCH_FP0, frame) {
+                        match materialize_fp_f32(code, src_place, frame.fp_scratch[0], frame) {
                             Some(r) => r,
                             None => return false,
                         }
                     } else {
-                        match materialize_fp(code, src_place, SCRATCH_FP0, frame) {
+                        match materialize_fp(code, src_place, frame.fp_scratch[0], frame) {
                             Some(r) => r,
                             None => return false,
                         }
@@ -5384,13 +5404,13 @@ fn emit_inst(
                 // an s-reg and the f64 result written as a d-reg (and
                 // vice versa) with no separate move.
                 FpCastKind::F32ToF64 => {
-                    let dn = match materialize_fp_f32(code, src_place, SCRATCH_FP0, frame) {
+                    let dn = match materialize_fp_f32(code, src_place, frame.fp_scratch[0], frame) {
                         Some(r) => r,
                         None => return false,
                     };
                     let dd = match dst {
                         Place::FpReg(r) => r,
-                        Place::Spill(_) => SCRATCH_FP0,
+                        Place::Spill(_) => frame.fp_scratch[0],
                         _ => return false,
                     };
                     emit(code, enc_fcvt_d_s(dd, dn));
@@ -5401,13 +5421,13 @@ fn emit_inst(
                     true
                 }
                 FpCastKind::F64ToF32 => {
-                    let dn = match materialize_fp(code, src_place, SCRATCH_FP0, frame) {
+                    let dn = match materialize_fp(code, src_place, frame.fp_scratch[0], frame) {
                         Some(r) => r,
                         None => return false,
                     };
                     let dd = match dst {
                         Place::FpReg(r) => r,
-                        Place::Spill(_) => SCRATCH_FP0,
+                        Place::Spill(_) => frame.fp_scratch[0],
                         _ => return false,
                     };
                     emit(code, enc_fcvt_s_d(dd, dn));
@@ -6507,13 +6527,20 @@ fn emit_intrinsic(
                 .copied()
                 .unwrap_or(Place::None);
             let is_f32 = alloc.is_f32(v);
-            let dn = match materialize_fp_for(code, args[0], src_place, SCRATCH_FP0, frame, alloc) {
+            let dn = match materialize_fp_for(
+                code,
+                args[0],
+                src_place,
+                frame.fp_scratch[0],
+                frame,
+                alloc,
+            ) {
                 Some(r) => r,
                 None => return false,
             };
             let dd = match dst {
                 Place::FpReg(r) => r,
-                Place::Spill(_) => SCRATCH_FP1,
+                Place::Spill(_) => frame.fp_scratch[1],
                 _ => return false,
             };
             use super::encode::{
@@ -7151,7 +7178,7 @@ fn emit_call_indirect(
     let free_target_reg = TARGET_SCRATCH_CANDIDATES
         .iter()
         .copied()
-        .find(|r| !arg_source_regs.contains(r))
+        .find(|&r| !arg_source_regs.contains(&r) && !abi.fixed_regs.has_gpr(r))
         .map(Reg);
     // Host ABI through a function pointer, for variadic and
     // non-variadic callees alike: `marshal_args` places the named
@@ -8394,7 +8421,7 @@ fn emit_copy(
     if is_fp {
         let dd = match dst {
             Place::FpReg(r) => r,
-            Place::Spill(_) => SCRATCH_FP0,
+            Place::Spill(_) => frame.fp_scratch[0],
             _ => {
                 bail_msg("Copy: dst not fp reg / spill");
                 return false;
@@ -8515,9 +8542,9 @@ fn emit_load(
         let dd = match dst {
             Place::FpReg(r) => r,
             // A spilled f32 / f64 stages through a reserved scratch
-            // d-reg outside the allocator's d0..d15 pool; d0 may hold a
+            // d-reg outside the allocator's banks; d0 may hold a
             // live value the caller still needs.
-            Place::Spill(_) => SCRATCH_FP0,
+            Place::Spill(_) => frame.fp_scratch[0],
             _ => {
                 bail_msg("Load F32: dst not fp reg / spill");
                 return false;
@@ -8537,7 +8564,7 @@ fn emit_load(
         return true;
     }
     if let LoadKind::F128 = kind {
-        let Some(dd) = fp_or_spill_dst(dst) else {
+        let Some(dd) = fp_or_spill_dst(dst, frame) else {
             bail_msg("Load F128: dst not fp reg / spill");
             return false;
         };
@@ -8552,7 +8579,7 @@ fn emit_load(
         // `double` lvalue: a single 8-byte FP load into a d-reg.
         let dd = match dst {
             Place::FpReg(r) => r,
-            Place::Spill(_) => SCRATCH_FP0,
+            Place::Spill(_) => frame.fp_scratch[0],
             _ => {
                 bail_msg("Load F64: dst not fp reg / spill");
                 return false;
@@ -8625,9 +8652,9 @@ fn emit_load_local(
         let dd = match dst {
             Place::FpReg(r) => r,
             // Stage a spilled load through a reserved scratch d-reg
-            // outside the allocator's d0..d15 pool; d0 may hold a
+            // outside the allocator's banks; d0 may hold a
             // live value the caller still needs.
-            Place::Spill(_) => SCRATCH_FP0,
+            Place::Spill(_) => frame.fp_scratch[0],
             _ => {
                 bail_msg("LoadLocal F32: dst not fp reg / spill");
                 return false;
@@ -8656,7 +8683,7 @@ fn emit_load_local(
         return true;
     }
     if matches!(kind, LoadKind::F128) {
-        let Some(dd) = fp_or_spill_dst(dst) else {
+        let Some(dd) = fp_or_spill_dst(dst, frame) else {
             bail_msg("LoadLocal F128: dst not fp reg / spill");
             return false;
         };
@@ -8673,7 +8700,7 @@ fn emit_load_local(
         // `double` local: a single 8-byte FP load; no widen.
         let dd = match dst {
             Place::FpReg(r) => r,
-            Place::Spill(_) => SCRATCH_FP0,
+            Place::Spill(_) => frame.fp_scratch[0],
             _ => {
                 bail_msg("LoadLocal F64: dst not fp reg / spill");
                 return false;
@@ -8801,7 +8828,7 @@ fn emit_store_local(
             }
         };
         if alloc.is_f32(value) {
-            let sn = match materialize_fp_f32(code, value_place, SCRATCH_FP0, frame) {
+            let sn = match materialize_fp_f32(code, value_place, frame.fp_scratch[0], frame) {
                 Some(r) => r,
                 None => {
                     bail_msg("StoreLocal F32: value not fp reg / spill");
@@ -8820,8 +8847,8 @@ fn emit_store_local(
             }
             return true;
         }
-        // Wider f64 value: narrow into SCRATCH_FP1 (outside the d0..d15
-        // pool) so an allocator-held source d-reg whose f64 value is
+        // Wider f64 value: narrow into the second FP scratch (outside the
+        // allocator's banks) so an allocator-held source d-reg whose f64 value is
         // still live is not clobbered by the S-view write.
         let dn = match value_place {
             Place::FpReg(r) => r,
@@ -8830,16 +8857,16 @@ fn emit_store_local(
                     Some(r) => r,
                     None => return false,
                 };
-                emit(code, enc_fmov_x_to_d(SCRATCH_FP0, rs));
-                SCRATCH_FP0
+                emit(code, enc_fmov_x_to_d(frame.fp_scratch[0], rs));
+                frame.fp_scratch[0]
             }
             Place::None => {
                 bail_msg("StoreLocal F32: value None");
                 return false;
             }
         };
-        emit(code, super::encode::enc_fcvt_s_d(SCRATCH_FP1, dn));
-        if !store_to_slot(code, SCRATCH_FP1) {
+        emit(code, super::encode::enc_fcvt_s_d(frame.fp_scratch[1], dn));
+        if !store_to_slot(code, frame.fp_scratch[1]) {
             return false;
         }
         if let Some(rd) = fp_reg(dst) {
@@ -8858,7 +8885,7 @@ fn emit_store_local(
             .get(value as usize)
             .copied()
             .unwrap_or(Place::None);
-        let Some(dn) = materialize_fp(code, value_place, SCRATCH_FP0, frame) else {
+        let Some(dn) = materialize_fp(code, value_place, frame.fp_scratch[0], frame) else {
             bail_msg("StoreLocal F128: value not fp reg / spill / int reg");
             return false;
         };
@@ -8882,7 +8909,7 @@ fn emit_store_local(
             .get(value as usize)
             .copied()
             .unwrap_or(Place::None);
-        let Some(dn) = materialize_fp(code, value_place, SCRATCH_FP0, frame) else {
+        let Some(dn) = materialize_fp(code, value_place, frame.fp_scratch[0], frame) else {
             bail_msg("StoreLocal F64: value not fp reg / spill / int reg");
             return false;
         };
@@ -9242,7 +9269,7 @@ fn emit_store(
         // assigned to a `float` lvalue the walker didn't pre-narrow) is
         // narrowed via `fcvt Sd, Dn` first.
         if alloc.is_f32(value) {
-            let sn = match materialize_fp_f32(code, value_place, SCRATCH_FP0, frame) {
+            let sn = match materialize_fp_f32(code, value_place, frame.fp_scratch[0], frame) {
                 Some(r) => r,
                 None => return false,
             };
@@ -9276,24 +9303,27 @@ fn emit_store(
                     Some(r) => r,
                     None => return false,
                 };
-                emit(code, enc_fmov_x_to_d(SCRATCH_FP0, rs));
-                SCRATCH_FP0
+                emit(code, enc_fmov_x_to_d(frame.fp_scratch[0], rs));
+                frame.fp_scratch[0]
             }
             Place::None => return false,
         };
-        // Narrow into SCRATCH_FP1 (d17, outside the allocator's d0..d15
-        // pool) so dn -- which may be an allocator-held d-reg whose f64
+        // Narrow into the second FP scratch (outside the allocator's
+        // banks) so dn -- which may be an allocator-held d-reg whose f64
         // value is still live across this store -- is not clobbered.
         // `fcvt Sd, Dn` writes the S view and zeroes the rest of the
         // V register, so narrowing in place over a pooled register
         // would destroy a value the surrounding code still reads.
-        emit(code, enc_fcvt_s_d(SCRATCH_FP1, dn));
+        emit(code, enc_fcvt_s_d(frame.fp_scratch[1], dn));
         match bound {
             Some(a) => {
-                emit(code, enc_fmov_d_to_x(scratch.secondary, SCRATCH_FP1));
+                emit(
+                    code,
+                    enc_fmov_d_to_x(scratch.secondary, frame.fp_scratch[1]),
+                );
                 emit_narrow_store(code, scratch.secondary, rn, disp, 4, a);
             }
-            None => emit(code, enc_str_s_imm(SCRATCH_FP1, rn, disp)),
+            None => emit(code, enc_str_s_imm(frame.fp_scratch[1], rn, disp)),
         }
         if let Some(rd) = fp_reg(dst) {
             if rd != dn {
@@ -9307,7 +9337,7 @@ fn emit_store(
         return true;
     }
     if let StoreKind::F128 = kind {
-        let Some(dn) = materialize_fp(code, value_place, SCRATCH_FP0, frame) else {
+        let Some(dn) = materialize_fp(code, value_place, frame.fp_scratch[0], frame) else {
             bail_msg("Store F128: value not fp reg / spill / int reg");
             return false;
         };
@@ -9324,7 +9354,7 @@ fn emit_store(
     }
     if let StoreKind::F64 = kind {
         // `double` lvalue store: a single 8-byte FP store; no narrow.
-        let Some(dn) = materialize_fp(code, value_place, SCRATCH_FP0, frame) else {
+        let Some(dn) = materialize_fp(code, value_place, frame.fp_scratch[0], frame) else {
             return false;
         };
         match bound {
@@ -9501,22 +9531,22 @@ fn emit_binop(
         // the result's width. A `float op float` result is f32 and the
         // operands are themselves f32; a `double` result is f64.
         let is_f32 = alloc.is_f32(v);
-        let dn = match materialize_fp_for(code, lhs, lhs_place, SCRATCH_FP0, frame, alloc) {
+        let dn = match materialize_fp_for(code, lhs, lhs_place, frame.fp_scratch[0], frame, alloc) {
             Some(r) => r,
             None => return false,
         };
-        let dm = match materialize_fp_for(code, rhs, rhs_place, SCRATCH_FP1, frame, alloc) {
+        let dm = match materialize_fp_for(code, rhs, rhs_place, frame.fp_scratch[1], frame, alloc) {
             Some(r) => r,
             None => return false,
         };
         let dd = match dst {
             Place::FpReg(r) => r,
             // Stage a spilled result through a reserved scratch d-reg
-            // outside the allocator's d0..d15 pool; d0 may hold a live
+            // outside the allocator's banks; d0 may hold a live
             // value the caller still needs. `arith` reads dn / dm
-            // before writing dd, so reusing SCRATCH_FP0 (a possible
+            // before writing dd, so reusing the first FP scratch (a possible
             // operand source) is safe.
-            Place::Spill(_) => SCRATCH_FP0,
+            Place::Spill(_) => frame.fp_scratch[0],
             _ => return false,
         };
         let word = if is_f32 {
@@ -9547,11 +9577,11 @@ fn emit_binop(
         // The compare width follows the operands' precision: two f32
         // operands use `fcmp Sn, Sm`, else `fcmp Dn, Dm`.
         let is_f32 = alloc.is_f32(lhs) || alloc.is_f32(rhs);
-        let dn = match materialize_fp_for(code, lhs, lhs_place, SCRATCH_FP0, frame, alloc) {
+        let dn = match materialize_fp_for(code, lhs, lhs_place, frame.fp_scratch[0], frame, alloc) {
             Some(r) => r,
             None => return false,
         };
-        let dm = match materialize_fp_for(code, rhs, rhs_place, SCRATCH_FP1, frame, alloc) {
+        let dm = match materialize_fp_for(code, rhs, rhs_place, frame.fp_scratch[1], frame, alloc) {
             Some(r) => r,
             None => return false,
         };
@@ -10174,7 +10204,7 @@ fn emit_phi_predecessor_moves(
     scratch: &ScratchPool,
     frame: Frame,
 ) -> bool {
-    // d16 / d17 are reserved FP scratch outside the allocator's d0..d15 pool;
+    // The FP scratch pair sits outside the allocator's banks;
     // `scratch.primary` / `secondary` are the reserved integer scratch.
     super::ssa::emit_common::emit_phi_predecessor_moves(
         &super::ssa::emit_common::Aarch64Backend,
@@ -10185,8 +10215,8 @@ fn emit_phi_predecessor_moves(
         frame,
         scratch.primary.0,
         scratch.secondary.0,
-        17,
-        16,
+        frame.fp_scratch[1],
+        frame.fp_scratch[0],
     )
 }
 
@@ -10438,7 +10468,7 @@ fn marshal_args(
     // successive FP args in d0, d1, ...), so the d-to-d moves form a
     // parallel copy. Schedule those first so every d-register source
     // is consumed before any Spill / IntReg source materialises into
-    // its target d-register. SCRATCH_FP1 breaks any cycle and lies
+    // its target d-register. the second FP scratch breaks any cycle and lies
     // outside the allocator's d-register pool.
     let mut fp_moves: Vec<(u8, u8)> = Vec::new();
     for (i, &placement) in plan.placements.iter().enumerate() {
@@ -10449,7 +10479,7 @@ fn marshal_args(
             fp_moves.push((s, r));
         }
     }
-    schedule_dreg_moves(code, &mut fp_moves, SCRATCH_FP1);
+    schedule_dreg_moves(code, &mut fp_moves, frame.fp_scratch[1]);
     for (i, &placement) in plan.placements.iter().enumerate() {
         if let super::ArgPlacement::FpReg(r) = placement {
             let ap = arg_place(i);
@@ -11634,9 +11664,15 @@ mod asm_scratch_tests {
     /// with one instruction reserves the operand's save + capture slots.
     #[test]
     fn noop_template_needs_no_scratch() {
-        assert_eq!(asm_scratch_bytes(&asm_func("")), 0);
-        assert_eq!(asm_scratch_bytes(&asm_func("// note ;")), 0);
-        assert!(asm_scratch_bytes(&asm_func("nop")) > 0);
+        assert_eq!(
+            asm_scratch_bytes(&asm_func(""), crate::c5::codegen::FixedRegs::NONE),
+            0
+        );
+        assert_eq!(
+            asm_scratch_bytes(&asm_func("// note ;"), crate::c5::codegen::FixedRegs::NONE),
+            0
+        );
+        assert!(asm_scratch_bytes(&asm_func("nop"), crate::c5::codegen::FixedRegs::NONE) > 0);
     }
 }
 
@@ -12918,7 +12954,11 @@ mod tests {
             crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
                 .expect("produce_ssa_funcs");
         let main = funcs.into_iter().next().expect("at least one function");
-        let alloc = super::super::ssa::reg_alloc::allocate(&main, target);
+        let alloc = super::super::ssa::reg_alloc::allocate(
+            &main,
+            target,
+            crate::c5::codegen::FixedRegs::NONE,
+        );
         (main, alloc)
     }
 
@@ -13002,6 +13042,7 @@ mod tests {
                 super::super::Hardening::NONE,
                 super::super::StackProtect::OFF,
                 super::super::FunctionEntry::default(),
+                super::super::FixedRegs::NONE,
             )
         };
         assert!(
@@ -13067,7 +13108,11 @@ mod tests {
                 _ => None,
             })
             .expect("StoreIndexed operands");
-        let mut alloc = super::super::ssa::reg_alloc::allocate(&func, target);
+        let mut alloc = super::super::ssa::reg_alloc::allocate(
+            &func,
+            target,
+            crate::c5::codegen::FixedRegs::NONE,
+        );
         alloc.places[base as usize] = Place::Spill(0);
         alloc.places[index as usize] = Place::Spill(1);
         alloc.places[value as usize] = Place::Spill(2);
@@ -13153,7 +13198,11 @@ mod tests {
                 _ => None,
             })
             .expect("MulAdd operands");
-        let mut alloc = super::super::ssa::reg_alloc::allocate(&func, target);
+        let mut alloc = super::super::ssa::reg_alloc::allocate(
+            &func,
+            target,
+            crate::c5::codegen::FixedRegs::NONE,
+        );
         for (i, operand) in [a, b, c].into_iter().enumerate() {
             alloc.places[operand as usize] = Place::Spill(i as u32);
         }
@@ -13298,6 +13347,7 @@ mod tests {
                 super::super::Hardening::NONE,
                 super::super::StackProtect::OFF,
                 super::super::FunctionEntry::default(),
+                super::super::FixedRegs::NONE,
             )
         };
         assert!(ok, "binop handler should cover Add + Shl + Shr");
@@ -13390,6 +13440,7 @@ mod tests {
                 super::super::Hardening::NONE,
                 super::super::StackProtect::OFF,
                 super::super::FunctionEntry::default(),
+                super::super::FixedRegs::NONE,
             )
         };
         assert!(

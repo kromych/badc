@@ -2175,7 +2175,7 @@ fn always_inline_large_struct_return_folds_on_both_return_conventions() {
             !obj.symbols.iter().any(|s| s.name == "mk_state"),
             "{target:?}: the inlined callee must not keep an out-of-line body"
         );
-        if usable_gpr_count(target) >= STATE_FIELDS {
+        if usable_gpr_count(target, crate::FixedRegs::NONE) >= STATE_FIELDS {
             assert!(
                 !obj.symbols.iter().any(|s| s.name == "bug"),
                 "{target:?}: the folded guard must leave no reference to `bug`"

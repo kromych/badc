@@ -2900,6 +2900,116 @@ pub fn stack_guard_sysreg(name: &str) -> Option<u16> {
     aarch64::asm::sysreg_field(name)
 }
 
+/// Registers `-ffixed-REG` keeps out of the allocator, one bit per
+/// architectural number: `gpr` over the general file, `fpr` over the
+/// floating-point / SIMD file. The ABI still passes arguments and
+/// results through a reserved register; only the allocator's own
+/// choices, the emitters' scratch picks and the inline-asm operand
+/// pools exclude it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct FixedRegs {
+    pub gpr: u32,
+    pub fpr: u32,
+}
+
+impl FixedRegs {
+    /// No register reserved.
+    pub const NONE: Self = Self { gpr: 0, fpr: 0 };
+
+    pub const fn has_gpr(self, r: u8) -> bool {
+        r < 32 && self.gpr & (1 << r) != 0
+    }
+
+    pub const fn has_fpr(self, r: u8) -> bool {
+        r < 32 && self.fpr & (1 << r) != 0
+    }
+
+    pub fn is_empty(self) -> bool {
+        self == Self::NONE
+    }
+
+    /// Add the register `reg` names.
+    pub fn insert(&mut self, reg: FixedReg) {
+        match reg {
+            FixedReg::Gpr(r) => self.gpr |= 1 << r,
+            FixedReg::Fpr(r) => self.fpr |= 1 << r,
+        }
+    }
+}
+
+/// A register `-ffixed-REG` may name, by file and architectural number.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FixedReg {
+    Gpr(u8),
+    Fpr(u8),
+}
+
+/// Resolve the operand of `-ffixed-REG` on `target`. Every architectural
+/// spelling of a register names it: `x9` / `w9` and `q16` / `v16` / `d16`
+/// / `s16` / `h16` / `b16` on AArch64, `rax` / `eax` / `ax` / `al` and
+/// `r8` / `r8d` / `r8w` / `r8b` on x86-64. The stack and frame pointers,
+/// the AArch64 link register and the registers the code generator keeps
+/// as its own scratch are refused; an unknown name is reported by name.
+pub fn fixed_register(target: Target, name: &str) -> Result<FixedReg, String> {
+    let refuse = |what: &str| {
+        Err(alloc::format!(
+            "`-ffixed-{name}`: {what} cannot be reserved"
+        ))
+    };
+    let unknown = || Err(alloc::format!("`-ffixed-{name}`: unknown register name"));
+    if target.is_aarch64() {
+        // gcc's `rN` alias and the `fp` / `lr` names spell x registers.
+        let canonical: alloc::string::String = match name {
+            "fp" => "x29".into(),
+            "lr" => "x30".into(),
+            _ => match name.strip_prefix('r') {
+                Some(rest) if !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit()) => {
+                    alloc::format!("x{rest}")
+                }
+                _ => name.into(),
+            },
+        };
+        if matches!(canonical.as_str(), "xzr" | "wzr") {
+            return unknown();
+        }
+        let Some((is_fp, num)) = aarch64::asm::clobber_reg_name(&canonical) else {
+            return unknown();
+        };
+        if is_fp {
+            return Ok(FixedReg::Fpr(num));
+        }
+        match num {
+            31 => refuse("the stack pointer"),
+            29 => refuse("the frame pointer"),
+            30 => refuse("the link register"),
+            16 | 17 | 19 => refuse("the code generator's scratch register"),
+            _ => Ok(FixedReg::Gpr(num)),
+        }
+    } else {
+        use x86_64::asm::{XMM_BASE, YMM_BASE, high_byte_reg_by_name, reg_by_name};
+        let num = match reg_by_name(name) {
+            Some((r, _)) if r < 16 => r,
+            Some((r, _)) if (XMM_BASE..XMM_BASE + 32).contains(&r) => {
+                return Ok(FixedReg::Fpr(r - XMM_BASE));
+            }
+            Some((r, _)) if (YMM_BASE..YMM_BASE + 32).contains(&r) => {
+                return Ok(FixedReg::Fpr(r - YMM_BASE));
+            }
+            _ => match high_byte_reg_by_name(name) {
+                // The ModRM field of `ah`..`bh` is the register number plus 4.
+                Some(field) => field - 4,
+                None => return unknown(),
+            },
+        };
+        match num {
+            4 => refuse("the stack pointer"),
+            5 => refuse("the frame pointer"),
+            10 | 11 => refuse("the code generator's scratch register"),
+            _ => Ok(FixedReg::Gpr(num)),
+        }
+    }
+}
+
 /// gcc's `--param ssp-buffer-size=` default.
 pub const DEFAULT_SSP_BUFFER_SIZE: u32 = 8;
 
@@ -3018,6 +3128,9 @@ pub struct NativeOptions {
     /// Stack-canary configuration (`-fstack-protector*` /
     /// `-mstack-protector-guard*`); see [`StackProtect`].
     pub stack_protect: StackProtect,
+    /// Registers `-ffixed-REG` keeps out of the allocator; see
+    /// [`FixedRegs`].
+    pub fixed_regs: FixedRegs,
     /// ELF class of a relocatable object (`-m32` / `-m16` on an
     /// assembly unit). An ELFCLASS32 x86 object is an i386 object:
     /// `EM_386`, `SHT_REL` relocation tables whose addend lives in
@@ -3284,6 +3397,7 @@ impl NativeOptions {
             elf_class: ElfClass::Elf64,
             hardening: Hardening::NONE,
             stack_protect: StackProtect::OFF,
+            fixed_regs: FixedRegs::NONE,
             min_function_alignment: 1,
             patchable_function_entry: PatchableEntry::NONE,
             profiling: Profiling::OFF,
@@ -3764,6 +3878,9 @@ pub(crate) struct Abi {
     /// A frame in every function, for `-pg`'s `mcount` form: the callee
     /// reads the return address through rbp.
     pub mcount_frame: bool,
+    /// Registers the emitters may not pick as scratch or inline-asm
+    /// operands. Per-run (from [`NativeOptions::fixed_regs`]).
+    pub fixed_regs: FixedRegs,
 }
 
 impl Abi {
@@ -3848,6 +3965,7 @@ impl Target {
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
                 mcount_frame: false,
+                fixed_regs: FixedRegs::NONE,
             },
             Target::LinuxAarch64 => Abi {
                 arch: Arch::Aarch64,
@@ -3862,6 +3980,7 @@ impl Target {
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
                 mcount_frame: false,
+                fixed_regs: FixedRegs::NONE,
             },
             Target::LinuxX64 => Abi {
                 arch: Arch::X86_64,
@@ -3876,6 +3995,7 @@ impl Target {
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
                 mcount_frame: false,
+                fixed_regs: FixedRegs::NONE,
             },
             Target::WindowsX64 => Abi {
                 arch: Arch::X86_64,
@@ -3890,6 +4010,7 @@ impl Target {
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
                 mcount_frame: false,
+                fixed_regs: FixedRegs::NONE,
             },
             Target::WindowsAarch64 => Abi {
                 arch: Arch::Aarch64,
@@ -3904,6 +4025,7 @@ impl Target {
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
                 mcount_frame: false,
+                fixed_regs: FixedRegs::NONE,
             },
         }
     }

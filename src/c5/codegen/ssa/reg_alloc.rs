@@ -39,7 +39,7 @@ use core::cmp::Reverse;
 use super::super::ir::{
     BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId,
 };
-use super::Target;
+use super::{FixedRegs, Target};
 
 /// Where the allocator placed an SSA value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -101,9 +101,12 @@ pub(crate) struct Allocation {
     /// values the emit pass lowers (dead-pure values are skipped and
     /// write nothing). The prologue saves exactly this list.
     pub gpr_used: Vec<u8>,
-    /// FP counterpart of `gpr_used` (plus, on Win64, the fixed xmm
-    /// scratch the body touches).
+    /// FP counterpart of `gpr_used`, plus the callee-saved FP scratch
+    /// the body touches.
     pub fp_used: Vec<u8>,
+    /// The emit pass's FP scratch registers for this compilation; see
+    /// [`RegBanks::fp_scratch`].
+    pub fp_scratch: [u8; FP_SCRATCH_COUNT],
     /// Number of consumers of each value. Used by the emit pass to
     /// skip pure-with-no-uses insts (dead-code elimination). A value
     /// with zero uses and no side effects produces no machine code.
@@ -176,35 +179,121 @@ impl Allocation {
     }
 }
 
-/// Set of available registers for the host target. The emit pass
-/// keys off this to map allocator indices to encoding bits.
+/// Floating-point scratch registers the emit pass needs: two operand
+/// reloads, and a third for the fused multiply-add.
+pub(crate) const FP_SCRATCH_COUNT: usize = 3;
+/// `RegBanks::fp_scratch` entry left when `-ffixed-` reserved every
+/// candidate; a function that needs it is refused at the emit.
+pub(crate) const NO_FP_SCRATCH: u8 = u8::MAX;
+
+/// Registers the allocator may hand out for one compilation: the
+/// target's banks minus the `-ffixed-` reservations. The emit pass keys
+/// off this to map allocator indices to encoding bits.
 #[derive(Debug, Clone)]
 pub(crate) struct RegBanks {
     /// Callee-saved GPRs available for general use (excluding
     /// fp, lr, sp, scratch).
-    pub callee_gprs: &'static [u8],
+    pub callee_gprs: Vec<u8>,
     /// Caller-saved GPRs available. Live ranges that cross a
     /// call instruction must NOT be assigned here -- the
     /// allocator spills them to memory instead.
-    pub caller_gprs: &'static [u8],
+    pub caller_gprs: Vec<u8>,
     /// Callee-saved FP regs the allocator may use. AAPCS64 marks
     /// d8..d15 callee-saved. SysV AMD64 marks no xmm callee-saved.
     /// Win64 marks xmm6..xmm15 non-volatile, but the x86_64
     /// prologue/epilogue emit no FP save/restore, so this bank is
     /// left empty there as well; both x86_64 ABIs force every
     /// live-across-call FP value to memory.
-    pub callee_fprs: &'static [u8],
+    pub callee_fprs: Vec<u8>,
     /// Caller-saved FP regs (d0..d7 on aarch64; xmm0..xmm15 on
     /// x86_64).
-    pub caller_fprs: &'static [u8],
+    pub caller_fprs: Vec<u8>,
+    /// FP registers the emit pass writes within one instruction's
+    /// lowering, outside every bank; see [`FP_SCRATCH_COUNT`].
+    pub fp_scratch: [u8; FP_SCRATCH_COUNT],
 }
 
 impl RegBanks {
+    /// The banks with nothing reserved.
+    pub fn for_target(target: Target) -> Self {
+        Self::new(target, FixedRegs::NONE)
+    }
+
+    /// The target's banks minus `fixed`. The FP scratch takes the first
+    /// unreserved candidates of the target's row; when fewer than
+    /// [`FP_SCRATCH_COUNT`] remain it takes the callee-saved FP bank's
+    /// tail out of the bank, and the prologue saves what the body
+    /// touches ([`fp_scratch_demand`]). What is still missing is
+    /// [`NO_FP_SCRATCH`].
+    pub fn new(target: Target, fixed: FixedRegs) -> Self {
+        let rows = Rows::for_target(target);
+        let keep = |bank: &[u8], reserved: fn(FixedRegs, u8) -> bool| -> Vec<u8> {
+            bank.iter()
+                .copied()
+                .filter(|&r| !reserved(fixed, r))
+                .collect()
+        };
+        let mut callee_fprs = keep(rows.callee_fprs, FixedRegs::has_fpr);
+        let mut fp_scratch = [NO_FP_SCRATCH; FP_SCRATCH_COUNT];
+        let mut n = 0usize;
+        for r in rows
+            .fp_scratch
+            .iter()
+            .copied()
+            .filter(|&r| !fixed.has_fpr(r))
+        {
+            if n == FP_SCRATCH_COUNT {
+                break;
+            }
+            fp_scratch[n] = r;
+            n += 1;
+        }
+        while n < FP_SCRATCH_COUNT {
+            let Some(r) = callee_fprs.pop() else { break };
+            fp_scratch[n] = r;
+            n += 1;
+        }
+        Self {
+            callee_gprs: keep(rows.callee_gprs, FixedRegs::has_gpr),
+            caller_gprs: keep(rows.caller_gprs, FixedRegs::has_gpr),
+            callee_fprs,
+            caller_fprs: keep(rows.caller_fprs, FixedRegs::has_fpr),
+            fp_scratch,
+        }
+    }
+}
+
+/// True when the target's ABI requires a callee to preserve FP register
+/// `r`: d8..d15 under AAPCS64, xmm6..xmm15 under Win64, none under
+/// System V.
+pub(crate) fn fp_callee_saved(target: Target, r: u8) -> bool {
+    match target {
+        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
+            (8..=15).contains(&r)
+        }
+        Target::WindowsX64 => (6..=15).contains(&r),
+        Target::LinuxX64 => false,
+    }
+}
+
+/// The target's full register banks.
+struct Rows {
+    callee_gprs: &'static [u8],
+    caller_gprs: &'static [u8],
+    callee_fprs: &'static [u8],
+    caller_fprs: &'static [u8],
+    /// FP scratch candidates in preference order: the registers the
+    /// default configuration uses, then every other register outside
+    /// the banks.
+    fp_scratch: &'static [u8],
+}
+
+impl Rows {
     /// Pick the register set for the target. Concrete register
     /// numbers match the per-arch encoders' Reg(N) constants;
     /// the allocator only needs the IDs to record placement
     /// decisions.
-    pub fn for_target(target: Target) -> Self {
+    fn for_target(target: Target) -> Self {
         match target {
             Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => Self {
                 // AAPCS64 caller-saved (volatile) registers: x0..x7
@@ -225,6 +314,11 @@ impl RegBanks {
                 caller_gprs: &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
                 callee_fprs: &[8, 9, 10, 11, 12, 13, 14, 15],
                 caller_fprs: &[0, 1, 2, 3, 4, 5, 6, 7],
+                // d16..d18 are the emit pass's scratch; d19..d31 are the
+                // other caller-saved registers outside the banks.
+                fp_scratch: &[
+                    16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
+                ],
             },
             Target::LinuxX64 => Self {
                 // System V x86_64. Callee-saved: rbx, r12, r13, r14,
@@ -244,6 +338,9 @@ impl RegBanks {
                 caller_gprs: &[0, 1, 2, 6, 7, 8, 9],
                 callee_fprs: &[],
                 caller_fprs: &[0, 1, 2, 3, 4, 5, 6, 7],
+                // xmm14 / xmm15 / xmm13 are the emit pass's scratch;
+                // xmm8..xmm12 are the other registers outside the banks.
+                fp_scratch: &[14, 15, 13, 8, 9, 10, 11, 12],
             },
             Target::WindowsX64 => Self {
                 // Win64 callee-saved GPRs: rbx, rsi, rdi, r12, r13, r14,
@@ -268,6 +365,9 @@ impl RegBanks {
                 // volatile set per the x64 calling convention.
                 callee_fprs: &[],
                 caller_fprs: &[0, 1, 2, 3, 4, 5],
+                // xmm6..xmm15 are non-volatile and outside the banks; the
+                // prologue saves the scratch the body touches.
+                fp_scratch: &[14, 15, 13, 6, 7, 8, 9, 10, 11, 12],
             },
         }
     }
@@ -280,8 +380,8 @@ impl RegBanks {
 /// loop-carried values than the file holds spills them back to the frame
 /// at a net loss, so an array whose element count would overflow the file
 /// stays memory-resident.
-pub(crate) fn usable_gpr_count(target: Target) -> usize {
-    let banks = RegBanks::for_target(target);
+pub(crate) fn usable_gpr_count(target: Target, fixed: FixedRegs) -> usize {
+    let banks = RegBanks::new(target, fixed);
     let (max_gpr, _) = pool_size_limits();
     (banks.caller_gprs.len() + banks.callee_gprs.len()).min(max_gpr)
 }
@@ -296,18 +396,18 @@ pub(crate) struct BankCapacity {
     pub callee: [u32; 2],
 }
 
-pub(crate) fn bank_capacity(target: Target) -> BankCapacity {
-    let banks = RegBanks::for_target(target);
+pub(crate) fn bank_capacity(target: Target, fixed: FixedRegs) -> BankCapacity {
+    let banks = RegBanks::new(target, fixed);
     let (max_gpr, max_fpr) = pool_size_limits();
     let cap = |bank: &[u8], max: usize| bank.len().min(max) as u32;
     BankCapacity {
         total: [
-            cap(banks.callee_gprs, max_gpr) + cap(banks.caller_gprs, max_gpr),
-            cap(banks.callee_fprs, max_fpr) + cap(banks.caller_fprs, max_fpr),
+            cap(&banks.callee_gprs, max_gpr) + cap(&banks.caller_gprs, max_gpr),
+            cap(&banks.callee_fprs, max_fpr) + cap(&banks.caller_fprs, max_fpr),
         ],
         callee: [
-            cap(banks.callee_gprs, max_gpr),
-            cap(banks.callee_fprs, max_fpr),
+            cap(&banks.callee_gprs, max_gpr),
+            cap(&banks.callee_fprs, max_fpr),
         ],
     }
 }
@@ -366,53 +466,62 @@ pub(crate) fn function_clobbers_scratch(
     }
 }
 
-/// Win64 non-volatile xmm registers the x86_64 emit pass uses as fixed
-/// FP scratch and must preserve. The handlers stage spilled FP
-/// destinations and materialised operands through xmm14, break FP move
-/// cycles / build fneg-fabs sign masks / narrow f64->f32 through xmm15,
-/// and the FMA lowering uses xmm13 as a third operand slot. All three
-/// sit in the Win64 callee-saved range (xmm6..xmm15), so a function that
-/// performs any FP work must save and restore the caller's value -- a
-/// foreign (clang/cl) caller holding a live value there across a call
-/// into c5 code would otherwise see it corrupted. The check keys on the
-/// presence of any FP-classed value: every xmm14/15 use materialises or
-/// produces an FP value, so an FP scratch use implies such an
-/// instruction. SysV marks every xmm volatile, so this applies to Win64
-/// only.
-fn function_clobbers_xmm_scratch(func: &FunctionSsa) -> Vec<u8> {
-    // Tail-call forwarders jmp out with no epilogue, so a saved xmm could
-    // never be restored; they touch no FP scratch either.
+/// Which entries of `RegBanks::fp_scratch` the body can write. The
+/// handlers stage spilled FP destinations and materialised operands
+/// through the first, break FP move cycles / build sign masks / narrow
+/// f64->f32 through the second, and the FMA lowering uses the third as
+/// its accumulator slot. Every use of the first two materialises or
+/// produces an FP value, so any FP-classed value implies the demand.
+/// A scratch the target's ABI marks callee-saved (Win64 xmm6..xmm15, or
+/// the AAPCS64 d8..d15 tail taken under `-ffixed-`) then joins the
+/// prologue's save list, so a foreign caller holding a live value there
+/// across a call into this code does not see it corrupted.
+pub(crate) fn fp_scratch_demand(func: &FunctionSsa) -> [bool; FP_SCRATCH_COUNT] {
+    // Tail-call forwarders jmp out with no epilogue, so a saved register
+    // could never be restored; they touch no FP scratch either.
     if func
         .blocks
         .iter()
         .any(|b| matches!(b.terminator, Terminator::TailExt(_)))
     {
-        return Vec::new();
+        return [false; FP_SCRATCH_COUNT];
     }
     let simd = func.insts.iter().any(|i| matches!(i, Inst::X86Simd { .. }));
-    if !simd && !func.insts.iter().any(produces_fp_result) {
-        return Vec::new();
-    }
-    let mut regs = alloc::vec![14u8, 15u8];
-    if func.insts.iter().any(|i| matches!(i, Inst::Fma { .. })) {
-        regs.push(13);
-    }
-    regs
+    let fp_work = simd || func.insts.iter().any(produces_fp_result);
+    let fma = func.insts.iter().any(|i| matches!(i, Inst::Fma { .. }));
+    [fp_work, fp_work, fma]
 }
 
-pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
+/// Why `func` cannot be emitted with `fp_scratch`: an entry it needs
+/// ([`fp_scratch_demand`]) is [`NO_FP_SCRATCH`]. `None` when it can.
+pub(crate) fn fp_scratch_shortfall(
+    func: &FunctionSsa,
+    fp_scratch: [u8; FP_SCRATCH_COUNT],
+) -> Option<&'static str> {
+    let demand = fp_scratch_demand(func);
+    (0..FP_SCRATCH_COUNT)
+        .any(|i| demand[i] && fp_scratch[i] == NO_FP_SCRATCH)
+        .then_some(
+            "`-ffixed-` leaves no floating-point scratch register for the \
+             function's floating-point work",
+        )
+}
+
+pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> Allocation {
     let n_insts = func.insts.len();
     let mut places: Vec<Place> = vec![Place::None; n_insts];
     let mut hints: Vec<Option<u8>> = vec![None; n_insts];
     populate_return_hints(func, target, &mut hints);
     populate_param_ref_hints(func, target, &mut hints);
     populate_phi_hints(func, &mut hints);
+    let banks = RegBanks::new(target, fixed);
     if n_insts == 0 {
         return Allocation {
             places,
             spill_count: 0,
             gpr_used: Vec::new(),
             fp_used: Vec::new(),
+            fp_scratch: banks.fp_scratch,
             use_counts: Vec::new(),
             last_use: Vec::new(),
             sxtw_source: Vec::new(),
@@ -425,7 +534,6 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         };
     }
 
-    let banks = RegBanks::for_target(target);
     // Phi class union-find: every phi result and its incoming sources
     // join one equivalence class. The allocator places the first-
     // allocated member of a class, then routes every other member to
@@ -858,26 +966,27 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         .into_iter()
         .filter(|r| banks.callee_fprs.contains(r))
         .collect();
-    // The x86_64 writer borrows xmm13/14/15 as fixed FP scratch. They are
-    // volatile under System V but callee-saved under Win64, so a Win64
-    // function that performs FP work must preserve the caller's value.
-    // They sit outside `callee_fprs` (never allocator values), so the
-    // filter above drops them; list the ones the body touches here so the
-    // prologue / epilogue's FP-save loop preserves them, mirroring the
-    // r13 GPR handling above.
-    if matches!(target, Target::WindowsX64) {
-        for r in function_clobbers_xmm_scratch(func) {
-            if !fp_used_callee.contains(&r) {
-                fp_used_callee.push(r);
-            }
+    // The FP scratch sits outside `callee_fprs` (never an allocator
+    // value), so the filter above drops it; a callee-saved scratch the
+    // body touches joins the list here so the prologue / epilogue's
+    // FP-save loop preserves it, mirroring the r13 GPR handling above.
+    let demand = fp_scratch_demand(func);
+    for (i, &r) in banks.fp_scratch.iter().enumerate() {
+        if demand[i]
+            && r != NO_FP_SCRATCH
+            && fp_callee_saved(target, r)
+            && !fp_used_callee.contains(&r)
+        {
+            fp_used_callee.push(r);
         }
     }
     #[cfg(feature = "codegen_test")]
-    verify_allocation(func, &places, target, &liveness);
+    verify_allocation(func, &places, &banks, &liveness);
 
     Allocation {
         places,
         spill_count,
+        fp_scratch: banks.fp_scratch,
         gpr_used: gpr_used_callee,
         fp_used: fp_used_callee,
         use_counts,
@@ -927,13 +1036,12 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
 fn verify_allocation(
     func: &FunctionSsa,
     places: &[Place],
-    target: Target,
+    banks: &RegBanks,
     liveness: &super::liveness::Liveness,
 ) {
     if std::env::var("BADC_VERIFY_ALLOC").is_err() {
         return;
     }
-    let banks = RegBanks::for_target(target);
     let report = |msg: alloc::string::String| {
         eprintln!(
             "VERIFY-VIOLATION fn={} ent_pc={}: {msg}",
@@ -1368,9 +1476,9 @@ pub(crate) fn color_graph(
         // single value still has a non-empty palette to spill out of.
         let cap = if c.is_fp { max_fpr } else { max_gpr };
         let (callee_full, caller_full) = if c.is_fp {
-            (banks.callee_fprs, banks.caller_fprs)
+            (&banks.callee_fprs[..], &banks.caller_fprs[..])
         } else {
-            (banks.callee_gprs, banks.caller_gprs)
+            (&banks.callee_gprs[..], &banks.caller_gprs[..])
         };
         let callee = &callee_full[..callee_full.len().min(cap)];
         let caller = &caller_full[..caller_full.len().min(cap)];
@@ -2458,11 +2566,16 @@ mod tests {
     // two caller-saved integer registers, no FP.
     fn tiny_banks() -> RegBanks {
         RegBanks {
-            callee_gprs: &[20, 21],
-            caller_gprs: &[0, 1],
-            callee_fprs: &[],
-            caller_fprs: &[],
+            callee_gprs: vec![20, 21],
+            caller_gprs: vec![0, 1],
+            callee_fprs: Vec::new(),
+            caller_fprs: Vec::new(),
+            fp_scratch: [NO_FP_SCRATCH; FP_SCRATCH_COUNT],
         }
+    }
+
+    fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
+        super::allocate(func, target, FixedRegs::NONE)
     }
 
     fn int_node(must_callee: bool, hint: Option<u8>) -> Option<NodeConstraints> {
@@ -2559,7 +2672,7 @@ int main(void) { return 0; }
 
     #[test]
     fn win64_fp_function_saves_nonvolatile_xmm_scratch() {
-        // The x86_64 emit pass uses xmm14/15 (and xmm13 for FMA) as fixed
+        // The x86_64 emit pass uses xmm14/15 (and xmm13 for FMA) as its default
         // FP scratch; they are non-volatile under Win64, so a function
         // that performs FP work must report them in `fp_used` for the
         // prologue/epilogue to preserve. System V marks every xmm

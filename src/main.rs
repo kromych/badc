@@ -261,6 +261,17 @@ Compile knobs:
                            section.
   -mnop-mcount             Put a NOP of the call's width in each -pg
                            call's place.
+  -ffixed-REG              Keep register REG out of the allocator, so no
+                           compiler-chosen value lives in it. Any
+                           architectural spelling names it (x9 / w9,
+                           q16 / v16 / d16 / s16; rax / eax / ax / al,
+                           r8 / r8d / r8w / r8b, xmm5). The ABI still
+                           passes arguments and results through it, and
+                           an inline-asm operand, clobber or `register`
+                           variable may still name it. The stack and
+                           frame pointers, the AArch64 link register and
+                           the code generator's own scratch registers
+                           (x16, x17, x19; r10, r11) are refused.
   -fstack-protector        Give a stack canary to every function holding
                            a character array of at least --param
                            ssp-buffer-size= bytes (default 8), or calling
@@ -697,6 +708,8 @@ fn run() {
     // diagnostic for a `.c` source under it names.
     let mut code_model_flag: Option<String> = None;
     let mut mno_fp_regs = false;
+    // `-ffixed-REG` operands, resolved against the target once it is known.
+    let mut fixed_reg_names: Vec<String> = Vec::new();
     let mut mstrict_align = false;
     let mut fpic = false;
     // `-fno-pic` / `-fno-pie`, tracked apart from `fpic` because the
@@ -1086,6 +1099,15 @@ fn run() {
             // (OS kernels) run with that register file trapped, so any
             // access faults; see `NativeOptions::no_fp_regs`.
             "-mno-sse" | "-mgeneral-regs-only" => mno_fp_regs = true,
+            // Keep a register out of the allocator; see `NativeOptions::fixed_regs`.
+            s if s.starts_with("-ffixed-") => {
+                let name = &s["-ffixed-".len()..];
+                if name.is_empty() {
+                    eprint_diagnostic("badc: error: `-ffixed-` requires a register name");
+                    std::process::exit(1);
+                }
+                fixed_reg_names.push(name.to_string());
+            }
             // Keep every compiler-generated memory access naturally
             // aligned for its width. Code that runs with the MMU off
             // sees Device-typed memory, where an unaligned access
@@ -1822,6 +1844,17 @@ fn run() {
             std::process::exit(1);
         }
     };
+
+    let mut fixed_regs = badc::FixedRegs::NONE;
+    for name in &fixed_reg_names {
+        match badc::fixed_register(target, name) {
+            Ok(reg) => fixed_regs.insert(reg),
+            Err(e) => {
+                eprint_diagnostic(format!("badc: error: {e}"));
+                std::process::exit(1);
+            }
+        }
+    }
 
     // The host's implicit system include path, probed after the bundled
     // headers so a hosted native build resolves third-party headers
@@ -2560,6 +2593,7 @@ fn run() {
         if mode == Mode::Jit {
             // The JIT lowers for the host; --target plays no part.
             let mut jit_opts = NativeOptions::new().with_inline_cap(inline_cap);
+            jit_opts.fixed_regs = fixed_regs;
             if optimize_flag {
                 jit_opts = jit_opts.with_optimize();
             }
@@ -2736,6 +2770,7 @@ fn run() {
         reloc_opts.code_model = code_model;
         reloc_opts.hardening = hardening;
         reloc_opts.stack_protect = stack_protect;
+        reloc_opts.fixed_regs = fixed_regs;
         reloc_opts.elf_class = object_elf_class;
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
@@ -3470,6 +3505,7 @@ fn run() {
         reloc_opts.code_model = code_model;
         reloc_opts.hardening = hardening;
         reloc_opts.stack_protect = stack_protect;
+        reloc_opts.fixed_regs = fixed_regs;
         reloc_opts.elf_class = object_elf_class;
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
@@ -3612,6 +3648,7 @@ fn run() {
         reloc_opts.code_model = code_model;
         reloc_opts.hardening = hardening;
         reloc_opts.stack_protect = stack_protect;
+        reloc_opts.fixed_regs = fixed_regs;
         reloc_opts.elf_class = object_elf_class;
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();

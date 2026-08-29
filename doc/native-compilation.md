@@ -247,6 +247,21 @@ require: `-mcmodel=small|kernel|tiny`, `-mno-sse` / `-mgeneral-regs-only`
 family below. Options badc does not implement are rejected rather than
 accepted and ignored, so a configure-time probe gets a truthful answer.
 
+`-ffixed-REG` keeps a register out of the allocator, so no compiler-chosen
+value lives in it -- what the kernel asks for the shadow-call-stack register
+(`-ffixed-x18`) and for the NEON registers a unit keeps guest or caller state
+in (`-ffixed-q16` .. `-ffixed-q31`). Every architectural spelling names the
+register (`x9` / `w9`, `q16` / `v16` / `d16` / `s16`, `rax` / `eax` / `ax` /
+`al`, `r8` / `r8d` / `r8w` / `r8b`, `xmm5`). The ABI still passes arguments
+and results through a reserved register, and an inline-asm operand, clobber
+or `register` variable may still name it; the code generator's own scratch
+picks avoid it, and an FP scratch it would have used moves to another
+register outside the allocator's banks, into the callee-saved bank's tail
+when none is left there. The stack and frame pointers, the AArch64 link
+register and the scratch registers the code generator cannot give up (x16,
+x17, x19; r10, r11) are refused, as is a reservation that leaves a function
+with floating-point work no scratch register at all.
+
 `-fstack-protector`, `-fstack-protector-strong` and `-fstack-protector-all`
 select which functions carry a stack canary; `-fno-stack-protector` (the
 default) selects none. The per-function rule is gcc's, read off the declared

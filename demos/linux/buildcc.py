@@ -213,6 +213,12 @@ FORWARD_PREFIX = (
     # an initializer is zeroed where its storage is established. badc
     # validates the value and implements all three.
     "-ftrivial-auto-var-init=",
+    # A reserved register. badc keeps it out of its allocator and its own
+    # scratch picks, and refuses a name it cannot honour (the stack and frame
+    # pointers, its scratch registers), so the unit fails rather than
+    # compiling with the register in use. x18, the shadow-call-stack
+    # register, is outside badc's aarch64 pool on every target already.
+    "-ffixed-",
     *HARDENING_PREFIX,
 )
 
@@ -277,10 +283,6 @@ IGNORE_EXACT = {
     # Debug-info detail. badc emits one DWARF form per construct, so these
     # change nothing outside the .debug_* sections.
     "-fno-var-tracking", "-femit-struct-debug-baseonly",
-    # aarch64 reserves x18 in badc's register pool on every target, so the
-    # shadow-call-stack register is never allocated. Any other -ffixed- is
-    # unlisted and fails the unit.
-    "-ffixed-x18",
     # badc's aarch64 targets are little-endian LP64 only; -mbig-endian and
     # -mabi=ilp32 are unlisted and fail the unit rather than being assumed.
     "-mlittle-endian", "-mabi=lp64",
@@ -659,14 +661,18 @@ def _self_test() -> int:
     for flag in ("-Wall", "-Werror=return-type", "-Wno-sign-compare",
                  "-fno-strict-aliasing", "-mno-red-zone", "-falign-loops=1",
                  "-march=x86-64", "-mregparm=3", "-Wl,-r", "-mlittle-endian",
-                 "-mabi=lp64", "-ffixed-x18", "-fno-optimize-sibling-calls",
+                 "-mabi=lp64", "-fno-optimize-sibling-calls",
                  "-fzero-init-padding-bits=all"):
         r = rewrite([flag])
         assert r == Rewritten([], [], []), (flag, r)
     # A target property badc does not implement is not assumed satisfied
     # because its opposite is: only the spelling that holds is listed.
-    for flag in ("-mbig-endian", "-mabi=ilp32", "-ffixed-x9"):
+    for flag in ("-mbig-endian", "-mabi=ilp32"):
         assert rewrite([flag]).unknown == [flag], flag
+    # Every reserved register reaches badc, which honours it or fails the
+    # unit; the shim no longer decides which spellings it can drop.
+    for flag in ("-ffixed-x18", "-ffixed-x9", "-ffixed-q16", "-ffixed-r12"):
+        assert rewrite([flag]) == Rewritten([flag], [], []), flag
     assert rewrite(["-fno-PIE", "-Wa,-mrelax-relocations=no"]).argv == \
         ["-fno-PIE", "-Wa,-mrelax-relocations=no"]
     # The plain-char selection reaches badc: the kernel passes it on every

@@ -120,6 +120,11 @@ pub(crate) struct Frame {
     /// with no rsp move; its bytes are counted in `frame_bytes` and the
     /// objects live at `[rbp + align_region_off + region_off]`.
     pub align_region_off: i64,
+    /// Registers `-ffixed-` keeps out of every scratch pick.
+    pub fixed_regs: super::FixedRegs,
+    /// The FP scratch xmm registers, outside the allocator's banks; see
+    /// `RegBanks::fp_scratch`.
+    pub fp_scratch: [u8; super::ssa::reg_alloc::FP_SCRATCH_COUNT],
 }
 
 fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Frame {
@@ -157,7 +162,7 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Fra
     // Inline-asm scratch, directly below the va save area (or the spill
     // region when there is none) and above the rsp-addressed saved
     // registers. Sized for the largest block in the function.
-    let asm_bytes = asm_scratch_bytes(func);
+    let asm_bytes = asm_scratch_bytes(func, abi.fixed_regs);
     let asm_scratch_off = if asm_bytes > 0 {
         -((locals_bytes + alloc_spill_bytes + va_save_bytes + asm_bytes) as i32)
     } else {
@@ -212,6 +217,8 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Fra
         frame_bytes,
         alloc_spill_base: locals_bytes,
         canary_bytes,
+        fixed_regs: abi.fixed_regs,
+        fp_scratch: alloc.fp_scratch,
         param_spill_bytes,
         param_cell_stride,
         va_reg_save_off,
@@ -232,7 +239,7 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Fra
 /// Bytes of frame scratch the function's largest inline-asm block needs:
 /// 16 per saved xmm, 8 per saved GP register, 8 per operand capture.
 /// Mirrors the save-list computation in [`emit_inline_asm`].
-fn asm_scratch_bytes(func: &FunctionSsa) -> u32 {
+fn asm_scratch_bytes(func: &FunctionSsa, fixed: super::FixedRegs) -> u32 {
     let mut max = 0u32;
     for inst in &func.insts {
         let Inst::InlineAsm { asm, args } = inst else {
@@ -243,12 +250,14 @@ fn asm_scratch_bytes(func: &FunctionSsa) -> u32 {
         if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::X86) {
             continue;
         }
-        let Ok(op_reg) =
-            super::asm::assign_operand_regs(&asm.operands, asm.clobber_regs, asm.clobber_fp_regs)
-        else {
+        let Ok(op_reg) = super::asm::assign_operand_regs(
+            &asm.operands,
+            asm.clobber_regs | fixed.gpr,
+            asm.clobber_fp_regs | fixed.fpr,
+        ) else {
             continue;
         };
-        let Ok((used, fp_used, _)) = asm_save_masks_and_stage(asm, &op_reg) else {
+        let Ok((used, fp_used, _)) = asm_save_masks_and_stage(asm, &op_reg, fixed) else {
             continue;
         };
         let bytes = fp_used.count_ones() * 16 + used.count_ones() * 8 + args.len() as u32 * 8;
@@ -266,10 +275,13 @@ fn asm_scratch_bytes(func: &FunctionSsa) -> u32 {
 /// clobbered non-operand register (already saved), then a free
 /// allocator-visible register, added to the save mask. Sizing
 /// (`asm_scratch_bytes`) and emission (`emit_inline_asm`) share this so
-/// the frame region always covers the emitted save list.
+/// the frame region always covers the emitted save list. A `-ffixed-`
+/// register holds nothing of the compiler's, so it is neither the stage
+/// nor saved: a write the template makes to it stays, as under gcc.
 fn asm_save_masks_and_stage(
     asm: &super::super::ir::AsmBlock,
     op_reg: &[Option<u8>],
+    fixed: super::FixedRegs,
 ) -> Result<(u32, u32, Reg), alloc::string::String> {
     use super::super::ir::AsmConstraint;
     let mut used = asm.clobber_regs;
@@ -294,7 +306,7 @@ fn asm_save_masks_and_stage(
     // are free even unclobbered. A free allocator-visible register may
     // hold a live value, so it is the last resort and joins the save
     // list.
-    let free = |r: u8| operand_gp & (1 << r) == 0;
+    let free = |r: u8| operand_gp & (1 << r) == 0 && !fixed.has_gpr(r);
     let stage = [10u8, 11]
         .into_iter()
         .find(|&r| free(r))
@@ -311,7 +323,7 @@ fn asm_save_masks_and_stage(
     if stage != 10 && stage != 11 && asm.clobber_regs & (1 << stage) == 0 {
         used |= 1 << stage;
     }
-    Ok((used, fp_used, Reg(stage)))
+    Ok((used & !fixed.gpr, fp_used & !fixed.fpr, Reg(stage)))
 }
 
 /// True when the function is a variadic c5 callee compiled for the
@@ -388,9 +400,13 @@ const CALLER_SAVED_INT_SCRATCHES: &[u8] = &[0, 1, 2, 8, 9];
 /// return). Used by emit handlers that need an intra-instruction
 /// scratch (BinopI immediate-materialise, VaArg staging, alloca
 /// bookkeeping, ...).
-fn pick_caller_saved_scratch(rd: Reg, operand_regs: &[Reg]) -> Option<Reg> {
+fn pick_caller_saved_scratch(
+    rd: Reg,
+    operand_regs: &[Reg],
+    fixed: super::FixedRegs,
+) -> Option<Reg> {
     for cand in CALLER_SAVED_INT_SCRATCHES {
-        if *cand == rd.0 {
+        if *cand == rd.0 || fixed.has_gpr(*cand) {
             continue;
         }
         if operand_regs.iter().any(|r| r.0 == *cand) {
@@ -412,6 +428,7 @@ fn pick_caller_saved_scratch_live_aware(
     operand_regs: &[Reg],
     pc: u32,
     alloc: &Allocation,
+    fixed: super::FixedRegs,
 ) -> Option<Reg> {
     let mut live: alloc::vec::Vec<Reg> = alloc::vec::Vec::with_capacity(operand_regs.len() + 4);
     live.extend_from_slice(operand_regs);
@@ -425,7 +442,7 @@ fn pick_caller_saved_scratch_live_aware(
             live.push(Reg(*r));
         }
     }
-    pick_caller_saved_scratch(rd, &live)
+    pick_caller_saved_scratch(rd, &live, fixed)
 }
 
 /// Total bytes the prologue allocates between the return
@@ -797,18 +814,6 @@ const SCRATCH_RDX: Reg = Reg(2);
 /// reserving it forces no prologue save.
 const SCRATCH_R11: Reg = Reg(11);
 
-/// Scratch XMM registers for FP handlers. The SSA allocator's
-/// caller_fprs pool covers `xmm0..xmm7` and callee_fprs is empty
-/// on SysV (no callee-saved xmm), so any allocator-held FP value
-/// lives in xmm0..xmm7. xmm14 / xmm15 sit outside both banks and
-/// stay free as primary / secondary scratches.
-const SCRATCH_XMM14: Reg = Reg(14);
-const SCRATCH_XMM15: Reg = Reg(15);
-/// Third FP scratch for the three-input fused multiply-add, holding a
-/// spilled accumulator. xmm13 is outside the allocator's xmm0..xmm7
-/// pool, like xmm14 / xmm15.
-const SCRATCH_XMM13: Reg = Reg(13);
-
 /// Extract the FP reg from a `Place`, or `None` if it's not an
 /// xmm register.
 fn fp_reg(place: Place) -> Option<Reg> {
@@ -816,13 +821,13 @@ fn fp_reg(place: Place) -> Option<Reg> {
 }
 
 /// Pick the working xmm a single-result FP-producing handler writes
-/// into: the allocator's chosen reg for `FpReg`, or `SCRATCH_XMM14`
+/// into: the allocator's chosen reg for `FpReg`, or the first FP scratch
 /// for `Spill`. Other place kinds (`IntReg`, `None`) are not legal
 /// for the FP handlers.
-fn fp_or_spill_dst(dst: Place) -> Option<Reg> {
+fn fp_or_spill_dst(dst: Place, frame: Frame) -> Option<Reg> {
     match dst {
         Place::FpReg(r) => Some(Reg(r)),
-        Place::Spill(_) => Some(SCRATCH_XMM14),
+        Place::Spill(_) => Some(Reg(frame.fp_scratch[0])),
         _ => None,
     }
 }
@@ -1149,7 +1154,7 @@ fn emit_phi_predecessor_moves(
     alloc: &Allocation,
     frame: Frame,
 ) -> bool {
-    // r10 / r11 (int) and xmm15 / xmm14 (fp) are reserved scratch outside the
+    // r10 / r11 (int) and the FP scratch pair are reserved scratch outside the
     // allocator's banks, so they hold no value live across the terminator.
     super::ssa::emit_common::emit_phi_predecessor_moves(
         &super::ssa::emit_common::X64Backend,
@@ -1160,8 +1165,8 @@ fn emit_phi_predecessor_moves(
         frame,
         SCRATCH_R10.0,
         SCRATCH_R11.0,
-        SCRATCH_XMM15.0,
-        SCRATCH_XMM14.0,
+        frame.fp_scratch[1],
+        frame.fp_scratch[0],
     )
 }
 
@@ -1461,7 +1466,7 @@ fn marshal_args(
     // argument source is consumed before any Spill / IntReg source
     // materialises into its target xmm -- otherwise a Spill load into
     // xmmN would overwrite a value another argument still reads from
-    // xmmN. SCRATCH_XMM15 breaks any cycle and lies outside the
+    // xmmN. the second FP scratch breaks any cycle and lies outside the
     // allocator's xmm pool.
     let mut fp_moves: Vec<(u8, u8)> = Vec::new();
     for (i, &placement) in plan.placements.iter().enumerate() {
@@ -1472,7 +1477,7 @@ fn marshal_args(
             fp_moves.push((s, r));
         }
     }
-    schedule_xmm_reg_moves(code, &mut fp_moves, SCRATCH_XMM15);
+    schedule_xmm_reg_moves(code, &mut fp_moves, Reg(frame.fp_scratch[1]));
     for (i, &placement) in plan.placements.iter().enumerate() {
         if let super::ArgPlacement::FpReg(r) = placement {
             match arg_place(i) {
@@ -1719,6 +1724,7 @@ pub(crate) fn emit_function(
     hardening: super::Hardening,
     stack_protect: super::StackProtect,
     entry: super::FunctionEntry,
+    fixed_regs: super::FixedRegs,
 ) -> bool {
     // The bundled emit output arrives in `cx`; recreate the per-field names as
     // disjoint reborrows so the body below (including the per-`Inst` `cx` it
@@ -1790,6 +1796,7 @@ pub(crate) fn emit_function(
         a.hardening = hardening;
         a.stack_protect = stack_protect;
         a.mcount_frame = entry.profile.is_some_and(|call| call.after_prologue);
+        a.fixed_regs = fixed_regs;
         a
     };
     if let Some(bytes) = super::ssa::emit_common::locals_bytes_over_limit(func) {
@@ -1797,6 +1804,10 @@ pub(crate) fn emit_function(
         return false;
     }
     let frame = compute_frame(func, alloc, abi);
+    if let Some(why) = super::ssa::reg_alloc::fp_scratch_shortfall(func, frame.fp_scratch) {
+        bail_msg(why);
+        return false;
+    }
     if frame.canary_bytes > 0 {
         canary_frame_bytes.insert(func.ent_pc, frame.canary_bytes);
     }
@@ -3128,7 +3139,7 @@ fn emit_prologue(
     // The allocator's FP register pool (`callee_fprs`) is empty for both
     // SysV and Win64, so it never assigns an SSA value to a non-volatile
     // xmm. The only non-volatile xmm exposure is the emit pass's fixed
-    // FP scratch (xmm13/14/15), which the allocator lists in `fp_used`
+    // FP scratch, which the allocator lists in `fp_used`
     // for Win64 functions that perform FP work. Save those at the bottom
     // of the frame (lowest addresses) with the full 128-bit `movups`,
     // since the caller's value may occupy the upper lanes. SysV leaves
@@ -3469,8 +3480,8 @@ fn emit_inst(
                     match dst {
                         Place::FpReg(r) => load(code, Reg(r)),
                         Place::Spill(_) => {
-                            load(code, SCRATCH_XMM14);
-                            fp_spill_dst_to_slot(code, dst, SCRATCH_XMM14, frame);
+                            load(code, Reg(frame.fp_scratch[0]));
+                            fp_spill_dst_to_slot(code, dst, Reg(frame.fp_scratch[0]), frame);
                         }
                         _ => return fail("ParamRef: FP param dst not fp reg / spill"),
                     }
@@ -4197,7 +4208,7 @@ fn emit_load_fp_mem(
     bound: Option<u32>,
     site: &str,
 ) -> bool {
-    let Some(dd) = fp_or_spill_dst(dst) else {
+    let Some(dd) = fp_or_spill_dst(dst, frame) else {
         return fail(&alloc::format!("{site}: dst not fp reg / spill"));
     };
     if matches!(kind, LoadKind::F80 | LoadKind::F128) {
@@ -4249,7 +4260,7 @@ fn emit_load_fp_mem(
 /// FP store `*(f32/f64*)[base + disp] = value`. A single-precision
 /// value (C99 6.3.1.8) writes directly via `movss`; a wider f64 value
 /// (a `double` assigned to a `float` the walker didn't pre-narrow)
-/// narrows via `cvtsd2ss` into SCRATCH_XMM15 first so `dn` (which may
+/// narrows via `cvtsd2ss` into the second FP scratch first so `dn` (which may
 /// be an allocator-held xmm the result Place expects) survives.
 /// `movsd` covers the 8-byte `double` store. The stored value also
 /// feeds `dst` per the c5 store-leaves-value rule (C99 6.5.16p3).
@@ -4267,7 +4278,7 @@ fn emit_store_fp_mem(
     bound: Option<u32>,
     site: &str,
 ) -> bool {
-    let Some(dn) = materialize_fp(code, value_place, SCRATCH_XMM14, frame) else {
+    let Some(dn) = materialize_fp(code, value_place, Reg(frame.fp_scratch[0]), frame) else {
         return fail(&alloc::format!(
             "{site}: value not fp reg / spill / int reg"
         ));
@@ -4303,8 +4314,8 @@ fn emit_store_fp_mem(
         let src = if value_is_f32 {
             dn
         } else {
-            emit_cvtsd2ss(code, SCRATCH_XMM15, dn);
-            SCRATCH_XMM15
+            emit_cvtsd2ss(code, Reg(frame.fp_scratch[1]), dn);
+            Reg(frame.fp_scratch[1])
         };
         match bound {
             Some(a) => narrowed(code, src, 4, a),
@@ -4777,7 +4788,7 @@ fn emit_copy(
 ) -> bool {
     let src_place = place_of(alloc, value);
     if is_fp {
-        let Some(dd) = fp_or_spill_dst(dst) else {
+        let Some(dd) = fp_or_spill_dst(dst, frame) else {
             return fail("Copy: dst not fp reg / spill");
         };
         let Some(dn) = materialize_fp(code, src_place, dd, frame) else {
@@ -4864,23 +4875,23 @@ fn emit_fma(
     let a_place = place_of(alloc, a);
     let b_place = place_of(alloc, b);
     let c_place = place_of(alloc, c);
-    let Some(ra) = materialize_fp(code, a_place, SCRATCH_XMM14, frame) else {
+    let Some(ra) = materialize_fp(code, a_place, Reg(frame.fp_scratch[0]), frame) else {
         return fail("Fma: a not fp reg / spill / int reg");
     };
-    if ra.0 != SCRATCH_XMM14.0 {
-        emit_movapd_xmm_xmm(code, SCRATCH_XMM14, ra);
+    if ra.0 != frame.fp_scratch[0] {
+        emit_movapd_xmm_xmm(code, Reg(frame.fp_scratch[0]), ra);
     }
-    let Some(rb) = materialize_fp(code, b_place, SCRATCH_XMM15, frame) else {
+    let Some(rb) = materialize_fp(code, b_place, Reg(frame.fp_scratch[1]), frame) else {
         return fail("Fma: b not fp reg / spill / int reg");
     };
-    if rb.0 != SCRATCH_XMM15.0 {
-        emit_movapd_xmm_xmm(code, SCRATCH_XMM15, rb);
+    if rb.0 != frame.fp_scratch[1] {
+        emit_movapd_xmm_xmm(code, Reg(frame.fp_scratch[1]), rb);
     }
     // The destination also supplies the accumulator. A spilled result
     // routes through a third scratch outside the pool.
     let dd = match dst {
         Place::FpReg(r) => Reg(r),
-        Place::Spill(_) => SCRATCH_XMM13,
+        Place::Spill(_) => Reg(frame.fp_scratch[2]),
         _ => return fail("Fma: dst not fp reg / spill"),
     };
     let Some(rc) = materialize_fp(code, c_place, dd, frame) else {
@@ -4889,7 +4900,7 @@ fn emit_fma(
     if rc.0 != dd.0 {
         emit_movapd_xmm_xmm(code, dd, rc);
     }
-    let (a14, b15) = (SCRATCH_XMM14, SCRATCH_XMM15);
+    let (a14, b15) = (Reg(frame.fp_scratch[0]), Reg(frame.fp_scratch[1]));
     match (neg_product, neg_addend, is_f32) {
         (false, false, false) => emit_vfmadd231sd(code, dd, a14, b15),
         (false, true, false) => emit_vfmsub231sd(code, dd, a14, b15),
@@ -4999,7 +5010,7 @@ fn emit_mul_add(
 /// `Inst::Fneg(v)` -- flip the IEEE 754 sign bit. For a `double`
 /// the mask is `1 << 63`; for a single-precision value (C99 6.3.1.8)
 /// the mask is `1 << 31`, flipping the sign bit of the f32 held in
-/// the low dword. Builds the mask on the fly into `SCRATCH_XMM15`
+/// the low dword. Builds the mask on the fly into the second FP scratch
 /// (movq xmm, r10 after loading the immediate into r10) and xors in
 /// place.
 fn emit_fneg(
@@ -5011,7 +5022,7 @@ fn emit_fneg(
     frame: Frame,
 ) -> bool {
     let src_place = place_of(alloc, value);
-    let Some(dd) = fp_or_spill_dst(dst) else {
+    let Some(dd) = fp_or_spill_dst(dst, frame) else {
         return fail("Fneg: dst not fp reg / spill");
     };
     let Some(dn) = materialize_fp(code, src_place, dd, frame) else {
@@ -5021,7 +5032,7 @@ fn emit_fneg(
         emit_movapd_xmm_xmm(code, dd, dn);
     }
     // Build the sign-bit mask in an integer scratch and transfer to
-    // SCRATCH_XMM15, then xorpd in place. r10 is reserved outside both
+    // the second FP scratch, then xorpd in place. r10 is reserved outside both
     // allocator banks and holds nothing live on this path (Fneg reads
     // only its FP `value`), so the mask load clobbers no allocator
     // value.
@@ -5032,8 +5043,8 @@ fn emit_fneg(
         i64::MIN
     };
     emit_mov_r_imm64(code, scratch_int, mask);
-    emit_movq_xmm_r(code, SCRATCH_XMM15, scratch_int);
-    emit_xorpd(code, dd, SCRATCH_XMM15);
+    emit_movq_xmm_r(code, Reg(frame.fp_scratch[1]), scratch_int);
+    emit_xorpd(code, dd, Reg(frame.fp_scratch[1]));
     fp_spill_dst_to_slot(code, dst, dd, frame);
     true
 }
@@ -5042,7 +5053,7 @@ fn emit_fneg(
 /// single hardware instruction. `sqrt` uses `SQRTSD` / `SQRTSS`; `fabs`
 /// clears the IEEE 754 sign bit by AND-ing with the inverted-sign mask
 /// (C99 7.12.7), built in an integer scratch and transferred to
-/// SCRATCH_XMM15, mirroring `emit_fneg`.
+/// the second FP scratch, mirroring `emit_fneg`.
 fn emit_fp_unary(
     code: &mut Vec<u8>,
     dst: Place,
@@ -5055,7 +5066,7 @@ fn emit_fp_unary(
     use super::super::op::Intrinsic as I;
     use super::encode::{emit_andpd, emit_roundsd, emit_roundss, emit_sqrtsd, emit_sqrtss};
     let src_place = place_of(alloc, value);
-    let Some(dd) = fp_or_spill_dst(dst) else {
+    let Some(dd) = fp_or_spill_dst(dst, frame) else {
         return fail("fp_unary: dst not fp reg / spill");
     };
     let Some(dn) = materialize_fp(code, src_place, dd, frame) else {
@@ -5076,8 +5087,8 @@ fn emit_fp_unary(
             }
             let mask: i64 = if is_f32 { 0x7fff_ffff } else { i64::MAX };
             emit_mov_r_imm64(code, SCRATCH_R10, mask);
-            emit_movq_xmm_r(code, SCRATCH_XMM15, SCRATCH_R10);
-            emit_andpd(code, dd, SCRATCH_XMM15);
+            emit_movq_xmm_r(code, Reg(frame.fp_scratch[1]), SCRATCH_R10);
+            emit_andpd(code, dd, Reg(frame.fp_scratch[1]));
         }
         I::Floor | I::Floorf | I::Ceil | I::Ceilf | I::Trunc | I::Truncf => {
             // ROUNDSD/ROUNDSS rounding-mode immediate, with bit 3 set to
@@ -5120,7 +5131,7 @@ fn emit_fp_cast(
             let Some(rn) = materialize_int(code, src_place, SCRATCH_R10, frame) else {
                 return fail("FpCast IntToFp: value not int reg / spill");
             };
-            let Some(dd) = fp_or_spill_dst(dst) else {
+            let Some(dd) = fp_or_spill_dst(dst, frame) else {
                 return fail("FpCast IntToFp: dst not fp reg / spill");
             };
             // Break the false dependency `cvtsi2*` carries on the
@@ -5146,7 +5157,7 @@ fn emit_fp_cast(
             let Some(src) = materialize_int(code, src_place, SCRATCH_R10, frame) else {
                 return fail("FpCast UIntToFp: value not int reg / spill");
             };
-            let Some(dd) = fp_or_spill_dst(dst) else {
+            let Some(dd) = fp_or_spill_dst(dst, frame) else {
                 return fail("FpCast UIntToFp: dst not fp reg / spill");
             };
             // Modifiable scratch copies so a live source register is not
@@ -5188,7 +5199,7 @@ fn emit_fp_cast(
             true
         }
         FpCastKind::FpToInt => {
-            let Some(dn) = materialize_fp(code, src_place, SCRATCH_XMM14, frame) else {
+            let Some(dn) = materialize_fp(code, src_place, Reg(frame.fp_scratch[0]), frame) else {
                 return fail("FpCast FpToInt: value not fp reg / spill / int reg");
             };
             let Some(rd) = int_or_spill_dst(dst) else {
@@ -5211,7 +5222,8 @@ fn emit_fp_cast(
             // indefinite. Compare with 2^63: below it the signed
             // truncate is exact; at or above, subtract 2^63, truncate
             // the in-range remainder, and set bit 63.
-            let Some(src_xmm) = materialize_fp(code, src_place, SCRATCH_XMM14, frame) else {
+            let Some(src_xmm) = materialize_fp(code, src_place, Reg(frame.fp_scratch[0]), frame)
+            else {
                 return fail("FpCast UFpToInt: value not fp reg / spill / int reg");
             };
             let Some(rd) = int_or_spill_dst(dst) else {
@@ -5219,9 +5231,9 @@ fn emit_fp_cast(
             };
             // Modifiable copy so the `subsd` below cannot clobber a
             // live source xmm.
-            let dn = SCRATCH_XMM14;
+            let dn = Reg(frame.fp_scratch[0]);
             emit_movapd_xmm_xmm(code, dn, src_xmm);
-            let two63 = SCRATCH_XMM15;
+            let two63 = Reg(frame.fp_scratch[1]);
             emit_mov_r_imm64(code, SCRATCH_R11, 0x43E0000000000000u64 as i64);
             emit_movq_xmm_r(code, two63, SCRATCH_R11);
             emit_ucomisd(code, dn, two63);
@@ -5246,10 +5258,10 @@ fn emit_fp_cast(
         // low dword of the xmm; `cvtss2sd` reads it, `cvtsd2ss` writes
         // it, so both are register-to-register with no separate move.
         FpCastKind::F32ToF64 => {
-            let Some(dn) = materialize_fp(code, src_place, SCRATCH_XMM14, frame) else {
+            let Some(dn) = materialize_fp(code, src_place, Reg(frame.fp_scratch[0]), frame) else {
                 return fail("FpCast F32ToF64: value not fp reg / spill / int reg");
             };
-            let Some(dd) = fp_or_spill_dst(dst) else {
+            let Some(dd) = fp_or_spill_dst(dst, frame) else {
                 return fail("FpCast F32ToF64: dst not fp reg / spill");
             };
             emit_cvtss2sd(code, dd, dn);
@@ -5257,10 +5269,10 @@ fn emit_fp_cast(
             true
         }
         FpCastKind::F64ToF32 => {
-            let Some(dn) = materialize_fp(code, src_place, SCRATCH_XMM14, frame) else {
+            let Some(dn) = materialize_fp(code, src_place, Reg(frame.fp_scratch[0]), frame) else {
                 return fail("FpCast F64ToF32: value not fp reg / spill / int reg");
             };
-            let Some(dd) = fp_or_spill_dst(dst) else {
+            let Some(dd) = fp_or_spill_dst(dst, frame) else {
                 return fail("FpCast F64ToF32: dst not fp reg / spill");
             };
             emit_cvtsd2ss(code, dd, dn);
@@ -5289,17 +5301,17 @@ fn emit_binop(
     // rhs to the same xmm as dst; `materialize_fp` returns an
     // `FpReg` source in place without copying, so staging lhs into
     // dst would then clobber rhs. Capture rhs first, forcing a copy
-    // into `SCRATCH_XMM15` when it aliases dst.
+    // into the second FP scratch when it aliases dst.
     if let Some(arith) = fp_arith_enc_for(op, alloc.is_f32(v)) {
-        let Some(dd) = fp_or_spill_dst(dst) else {
+        let Some(dd) = fp_or_spill_dst(dst, frame) else {
             return fail("Fbinop: dst not fp reg / spill");
         };
         let dm = match rhs_place {
             Place::FpReg(r) if r == dd.0 => {
-                emit_movapd_xmm_xmm(code, SCRATCH_XMM15, dd);
-                SCRATCH_XMM15
+                emit_movapd_xmm_xmm(code, Reg(frame.fp_scratch[1]), dd);
+                Reg(frame.fp_scratch[1])
             }
-            _ => match materialize_fp(code, rhs_place, SCRATCH_XMM15, frame) {
+            _ => match materialize_fp(code, rhs_place, Reg(frame.fp_scratch[1]), frame) {
                 Some(r) => r,
                 None => return fail("Fbinop: rhs not fp reg / spill / int reg"),
             },
@@ -5322,10 +5334,10 @@ fn emit_binop(
     // / `setne` paths get an explicit AND-with-`setnp` /
     // OR-with-`setp` fixup.
     if let Some((cc, nan_fix)) = fp_compare_cc(op) {
-        let Some(dn) = materialize_fp(code, lhs_place, SCRATCH_XMM14, frame) else {
+        let Some(dn) = materialize_fp(code, lhs_place, Reg(frame.fp_scratch[0]), frame) else {
             return fail("Fcmp: lhs not fp reg / spill / int reg");
         };
-        let Some(dm) = materialize_fp(code, rhs_place, SCRATCH_XMM15, frame) else {
+        let Some(dm) = materialize_fp(code, rhs_place, Reg(frame.fp_scratch[1]), frame) else {
             return fail("Fcmp: rhs not fp reg / spill / int reg");
         };
         // When a fused branch reads the flags, `Flt` / `Fle` compare
@@ -5840,12 +5852,14 @@ fn emit_shift_by_count_reg(
     // `def < v < last_use` pc-interval test is not a liveness test: a
     // value carried around a loop back edge is live at the shift while
     // the shift's pc lies outside the interval.
+    // A `-ffixed-rcx` holds a value of the program's, preserved the same way.
     let _ = v;
     let rcx_holds_live = count_reg.map(|r| r.0).unwrap_or(u8::MAX) != Reg::RCX.0
-        && alloc
-            .places
-            .iter()
-            .any(|p| matches!(p, Place::IntReg(r) if *r == Reg::RCX.0));
+        && (frame.fixed_regs.has_gpr(Reg::RCX.0)
+            || alloc
+                .places
+                .iter()
+                .any(|p| matches!(p, Place::IntReg(r) if *r == Reg::RCX.0)));
     if rcx_holds_live {
         emit_push_r(code, Reg::RCX);
     }
@@ -6743,7 +6757,7 @@ fn emit_call_indirect(
     // the marshal's reserved scratch r10 / r11, so a pick never aliases
     // it. When everything is blocked the `else` branch below spills the
     // target to the stack.
-    let target_scratch = pick_caller_saved_scratch(Reg(0xff), &blocked);
+    let target_scratch = pick_caller_saved_scratch(Reg(0xff), &blocked, abi.fixed_regs);
     // System V AMD64 3.2.3: a variadic call passes the XMM-argument
     // count in `al`. Computed from the plan and emitted after the
     // marshal (which never writes rax, blocked above for the target).
@@ -8504,15 +8518,17 @@ fn emit_inline_asm_once(
     // The operand register assignment is needed both for the code stream and,
     // ahead of it, for the GNU-as macro pass and a replacement instruction that
     // references a template operand (`popcntl %1, %0`); compute it once, first.
-    let op_reg =
-        match super::asm::assign_operand_regs(&asm.operands, asm.clobber_regs, asm.clobber_fp_regs)
-        {
-            Ok(r) => r,
-            Err(m) => {
-                bail_msg(&m);
-                return false;
-            }
-        };
+    let op_reg = match super::asm::assign_operand_regs(
+        &asm.operands,
+        asm.clobber_regs | frame.fixed_regs.gpr,
+        asm.clobber_fp_regs | frame.fixed_regs.fpr,
+    ) {
+        Ok(r) => r,
+        Err(m) => {
+            bail_msg(&m);
+            return false;
+        }
+    };
     // Expand any GNU-as macro directives (`.macro` / `.irp` / `.ifc` / `.set` /
     // `.if`) before section extraction, substituting each register operand to
     // its assigned AT&T name so the macro's register-name comparisons resolve.
@@ -8653,7 +8669,7 @@ fn emit_inline_asm_once(
     // save to 8-byte scratch slots; `x` (xmm) operands and FP clobbers live
     // in the independent XMM file and take 16-byte slots. `stage` carries
     // the capture / load / store-back sequences below.
-    let (used, fp_used, stage) = match asm_save_masks_and_stage(asm, &op_reg) {
+    let (used, fp_used, stage) = match asm_save_masks_and_stage(asm, &op_reg, frame.fixed_regs) {
         Ok(t) => t,
         Err(m) => {
             bail_msg(&m);
@@ -10130,8 +10146,8 @@ fn emit_x86_simd(
     use super::asm::{Concrete, XMM_BASE};
     use crate::c5::ir::AsmRegSize;
     use crate::c5::x86_simd::{self, Form};
-    const DST: u8 = SCRATCH_XMM15.0;
-    const SRC: u8 = SCRATCH_XMM14.0;
+    let dst_x: u8 = frame.fp_scratch[1];
+    let src_x: u8 = frame.fp_scratch[0];
     let row = x86_simd::get(op);
     // An operand's value (an address for the 128-bit and pointer operands),
     // in its own register or loaded into `scratch`.
@@ -10193,19 +10209,19 @@ fn emit_x86_simd(
             let Some(a) = operand(code, 1, SCRATCH_R10) else {
                 return fail("x86 simd: operand 1 has no place");
             };
-            if !load128(code, DST, a) {
+            if !load128(code, dst_x, a) {
                 return false;
             }
             let Some(b) = operand(code, 2, SCRATCH_R10) else {
                 return fail("x86 simd: operand 2 has no place");
             };
-            if !load128(code, SRC, b) {
+            if !load128(code, src_x, b) {
                 return false;
             }
             let ok = if row.form == Form::Vv {
-                insn(code, row.mnem, &[xmm(SRC), xmm(DST)])
+                insn(code, row.mnem, &[xmm(src_x), xmm(dst_x)])
             } else {
-                insn(code, row.mnem, &[imm8, xmm(SRC), xmm(DST)])
+                insn(code, row.mnem, &[imm8, xmm(src_x), xmm(dst_x)])
             };
             if !ok {
                 return false;
@@ -10215,13 +10231,13 @@ fn emit_x86_simd(
             let Some(a) = operand(code, 1, SCRATCH_R10) else {
                 return fail("x86 simd: operand 1 has no place");
             };
-            if !load128(code, SRC, a) {
+            if !load128(code, src_x, a) {
                 return false;
             }
             let ok = if row.form == Form::V {
-                insn(code, row.mnem, &[xmm(SRC), xmm(DST)])
+                insn(code, row.mnem, &[xmm(src_x), xmm(dst_x)])
             } else {
-                insn(code, row.mnem, &[imm8, xmm(SRC), xmm(DST)])
+                insn(code, row.mnem, &[imm8, xmm(src_x), xmm(dst_x)])
             };
             if !ok {
                 return false;
@@ -10231,17 +10247,17 @@ fn emit_x86_simd(
             let Some(a) = operand(code, 1, SCRATCH_R10) else {
                 return fail("x86 simd: operand 1 has no place");
             };
-            if !load128(code, DST, a) {
+            if !load128(code, dst_x, a) {
                 return false;
             }
             let ok = match imm {
-                Some(_) => insn(code, row.mnem, &[imm8, xmm(DST)]),
+                Some(_) => insn(code, row.mnem, &[imm8, xmm(dst_x)]),
                 None => {
                     let Some(c) = operand(code, 2, SCRATCH_R10) else {
                         return fail("x86 simd: shift count has no place");
                     };
-                    super::encode::emit_movq_xmm_r(code, Reg(SRC), c);
-                    insn(code, row.mnem, &[xmm(SRC), xmm(DST)])
+                    super::encode::emit_movq_xmm_r(code, Reg(src_x), c);
+                    insn(code, row.mnem, &[xmm(src_x), xmm(dst_x)])
                 }
             };
             if !ok {
@@ -10252,7 +10268,7 @@ fn emit_x86_simd(
             let Some(p) = operand(code, 1, SCRATCH_R10) else {
                 return fail("x86 simd: pointer operand has no place");
             };
-            if !load128(code, DST, p) {
+            if !load128(code, dst_x, p) {
                 return false;
             }
         }
@@ -10260,19 +10276,19 @@ fn emit_x86_simd(
             let Some(a) = operand(code, 1, SCRATCH_R10) else {
                 return fail("x86 simd: source operand has no place");
             };
-            if !load128(code, DST, a) {
+            if !load128(code, dst_x, a) {
                 return false;
             }
             let Some(p) = operand(code, 0, SCRATCH_R10) else {
                 return fail("x86 simd: pointer operand has no place");
             };
-            return store128(code, p, DST);
+            return store128(code, p, dst_x);
         }
         Form::Extract => {
             let Some(a) = operand(code, 1, SCRATCH_R10) else {
                 return fail("x86 simd: operand 1 has no place");
             };
-            if !load128(code, SRC, a) {
+            if !load128(code, src_x, a) {
                 return false;
             }
             // `pextrw` zero-extends into the 32-bit register; `pextrd`
@@ -10280,7 +10296,7 @@ fn emit_x86_simd(
             if !insn(
                 code,
                 row.mnem,
-                &[imm8, xmm(SRC), gpr(SCRATCH_R11, AsmRegSize::Long)],
+                &[imm8, xmm(src_x), gpr(SCRATCH_R11, AsmRegSize::Long)],
             ) {
                 return false;
             }
@@ -10297,7 +10313,7 @@ fn emit_x86_simd(
             let Some(a) = operand(code, 1, SCRATCH_R10) else {
                 return fail("x86 simd: operand 1 has no place");
             };
-            if !load128(code, DST, a) {
+            if !load128(code, dst_x, a) {
                 return false;
             }
             let Some(x) = operand(code, 2, SCRATCH_R10) else {
@@ -10306,7 +10322,7 @@ fn emit_x86_simd(
             // Every `pinsr` narrower than a quadword reads a 32-bit
             // register and uses the low lanes of it.
             let size = int_size(row.int_width.max(4));
-            if !insn(code, row.mnem, &[imm8, gpr(x, size), xmm(DST)]) {
+            if !insn(code, row.mnem, &[imm8, gpr(x, size), xmm(dst_x)]) {
                 return false;
             }
         }
@@ -10314,13 +10330,13 @@ fn emit_x86_simd(
             let Some(a) = operand(code, 1, SCRATCH_R10) else {
                 return fail("x86 simd: operand 1 has no place");
             };
-            if !load128(code, SRC, a) {
+            if !load128(code, src_x, a) {
                 return false;
             }
             if !insn(
                 code,
                 row.mnem,
-                &[xmm(SRC), gpr(SCRATCH_R11, AsmRegSize::Long)],
+                &[xmm(src_x), gpr(SCRATCH_R11, AsmRegSize::Long)],
             ) {
                 return false;
             }
@@ -10368,7 +10384,7 @@ fn emit_x86_simd(
         return fail("x86 simd: destination has no place");
     };
     if row.form.returns_vector() {
-        store128(code, d, DST)
+        store128(code, d, dst_x)
     } else {
         true
     }
@@ -11911,10 +11927,10 @@ fn emit_return(
         false
     };
     if return_is_fp {
-        // SCRATCH_XMM14 is outside the allocator's pool, so a
+        // the first FP scratch is outside the allocator's pool, so a
         // spilled f64 lands there without clobbering an
         // allocator-held xmm.
-        if let Some(dn) = materialize_fp(code, return_place, SCRATCH_XMM14, frame)
+        if let Some(dn) = materialize_fp(code, return_place, Reg(frame.fp_scratch[0]), frame)
             && dn.0 != Reg::XMM0.0
         {
             emit_movapd_xmm_xmm(code, Reg::XMM0, dn);
@@ -12279,9 +12295,18 @@ mod asm_scratch_tests {
     /// with one instruction reserves the operand's save + capture slots.
     #[test]
     fn noop_template_needs_no_scratch() {
-        assert_eq!(asm_scratch_bytes(&asm_func("")), 0);
-        assert_eq!(asm_scratch_bytes(&asm_func("/* note */ ;")), 0);
-        assert!(asm_scratch_bytes(&asm_func("nop")) > 0);
+        assert_eq!(
+            asm_scratch_bytes(&asm_func(""), crate::c5::codegen::FixedRegs::NONE),
+            0
+        );
+        assert_eq!(
+            asm_scratch_bytes(
+                &asm_func("/* note */ ;"),
+                crate::c5::codegen::FixedRegs::NONE
+            ),
+            0
+        );
+        assert!(asm_scratch_bytes(&asm_func("nop"), crate::c5::codegen::FixedRegs::NONE) > 0);
     }
 }
 
@@ -12294,20 +12319,29 @@ mod scratch_picker_tests {
         // rd = rdi (outside the pool) and no operands: the helper
         // returns the first preference (rax) per the
         // CALLER_SAVED_INT_SCRATCHES ordering [0, 1, 2, 8, 9].
-        assert_eq!(pick_caller_saved_scratch(Reg(7), &[]), Some(Reg(0)));
+        assert_eq!(
+            pick_caller_saved_scratch(Reg(7), &[], crate::c5::codegen::FixedRegs::NONE),
+            Some(Reg(0))
+        );
     }
 
     #[test]
     fn pick_skips_rd() {
         // rd = rax forces the helper past the first preference;
         // the next entry (rcx) wins.
-        assert_eq!(pick_caller_saved_scratch(Reg(0), &[]), Some(Reg(1)));
+        assert_eq!(
+            pick_caller_saved_scratch(Reg(0), &[], crate::c5::codegen::FixedRegs::NONE),
+            Some(Reg(1))
+        );
     }
 
     #[test]
     fn pick_skips_operand_regs() {
         // rd = rax, operands hold rcx (1) -> rdx (2) wins.
-        assert_eq!(pick_caller_saved_scratch(Reg(0), &[Reg(1)]), Some(Reg(2)));
+        assert_eq!(
+            pick_caller_saved_scratch(Reg(0), &[Reg(1)], crate::c5::codegen::FixedRegs::NONE),
+            Some(Reg(2))
+        );
     }
 
     #[test]
@@ -12319,7 +12353,10 @@ mod scratch_picker_tests {
         // scratch register.
         let rd = Reg(0);
         let operands = [Reg(1), Reg(2), Reg(8), Reg(9)];
-        assert_eq!(pick_caller_saved_scratch(rd, &operands), None);
+        assert_eq!(
+            pick_caller_saved_scratch(rd, &operands, crate::c5::codegen::FixedRegs::NONE),
+            None
+        );
     }
 
     #[test]
@@ -12329,7 +12366,10 @@ mod scratch_picker_tests {
         // must return None.
         let rd = Reg(7);
         let operands = [Reg(0), Reg(1), Reg(2), Reg(8), Reg(9)];
-        assert_eq!(pick_caller_saved_scratch(rd, &operands), None);
+        assert_eq!(
+            pick_caller_saved_scratch(rd, &operands, crate::c5::codegen::FixedRegs::NONE),
+            None
+        );
     }
 }
 
@@ -12411,7 +12451,11 @@ mod mul_add_tests {
                 _ => None,
             })
             .expect("MulAdd operands");
-        let mut alloc = super::super::ssa::reg_alloc::allocate(&func, target);
+        let mut alloc = super::super::ssa::reg_alloc::allocate(
+            &func,
+            target,
+            crate::c5::codegen::FixedRegs::NONE,
+        );
         alloc.places[a as usize] = pa;
         alloc.places[b as usize] = pb;
         alloc.places[c as usize] = pc;

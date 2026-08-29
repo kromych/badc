@@ -1972,7 +1972,7 @@ pub(crate) fn lower(
         // re-run mem2reg to promote them to SSA values; see encode.rs's
         // matching block on x86_64.
         super::ssa::emit_common::time_pass("passes::sroa::run (aarch64)", || {
-            let usable_gpr = super::ssa::reg_alloc::usable_gpr_count(target);
+            let usable_gpr = super::ssa::reg_alloc::usable_gpr_count(target, native.fixed_regs);
             // What each function does with its pointer parameters, so a
             // call taking an object's address gives up only the fields
             // it can reach. Derived once over the whole unit, and only
@@ -2095,7 +2095,7 @@ pub(crate) fn lower(
         // addresses the fold would have turned into displacements; the
         // canonical bases then feed store forwarding.
         super::ssa::emit_common::time_pass("passes::cse::run (aarch64)", || {
-            let caps = super::ssa::reg_alloc::bank_capacity(target);
+            let caps = super::ssa::reg_alloc::bank_capacity(target, native.fixed_regs);
             crate::c5::codegen::passes::cse::run(&mut ssa_funcs, caps);
         });
         // Rebuild the single modulo where the builder's split quotient
@@ -2188,9 +2188,9 @@ pub(crate) fn lower(
                 .iter_mut()
                 .map(|f| {
                     if native.optimize {
-                        super::ssa::licm::allocate_hoisted(f, target)
+                        super::ssa::licm::allocate_hoisted(f, target, native.fixed_regs)
                     } else {
-                        super::ssa::reg_alloc::allocate(f, target)
+                        super::ssa::reg_alloc::allocate(f, target, native.fixed_regs)
                     }
                 })
                 .collect()
@@ -2335,6 +2335,7 @@ pub(crate) fn lower(
                 native.hardening,
                 native.stack_protect.resolved_for(target),
                 entry,
+                native.fixed_regs,
             )
         };
         if !ok {

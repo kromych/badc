@@ -28,6 +28,8 @@ mod codegen;
 mod deferred;
 #[cfg(feature = "full")]
 mod dwarf;
+#[cfg(feature = "full")]
+mod fixed_regs;
 mod fixture_tables;
 mod frame_slot_fuzz;
 mod inline_asm;

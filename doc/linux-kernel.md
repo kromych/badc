@@ -187,6 +187,11 @@ every function its NOP area, aligned as the function is, and a
 `__patchable_function_entries` record linked to the function's text section;
 on x86_64 `-pg -mfentry -mrecord-mcount` gives it the `call __fentry__` at
 the symbol and the `__mcount_loc` entry, the forms gcc emits.
+Every `-ffixed-REG` reaches badc as written: the shadow-call-stack register
+`-ffixed-x18` of the aarch64 build, and the `-ffixed-q16` .. `-ffixed-q31`
+set a NEON unit passes to keep the compiler off the registers it holds state
+in. badc keeps the register out of its allocator and its own scratch picks,
+and fails the unit on a name it cannot honour.
 
 ## Where the numbers come from
 

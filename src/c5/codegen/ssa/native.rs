@@ -41,7 +41,7 @@ pub(crate) fn compile_function_to_bytes(
     func: &FunctionSsa,
     target: Target,
 ) -> Result<Vec<u8>, String> {
-    let alloc = super::reg_alloc::allocate(func, target);
+    let alloc = super::reg_alloc::allocate(func, target, crate::c5::codegen::FixedRegs::NONE);
     let imports = ResolvedImports::default();
     let variadic_targets: BTreeSet<usize> = BTreeSet::new();
     // Single-function compile: no same-image callees are resolvable,
@@ -126,6 +126,7 @@ pub(crate) fn compile_function_to_bytes(
                     super::super::Hardening::NONE,
                     super::super::StackProtect::OFF,
                     super::super::FunctionEntry::default(),
+                    super::super::FixedRegs::NONE,
                 )
             };
             if !ok {
@@ -230,6 +231,7 @@ pub(crate) fn compile_function_to_bytes(
                     super::super::Hardening::NONE,
                     super::super::StackProtect::OFF,
                     super::super::FunctionEntry::default(),
+                    super::super::FixedRegs::NONE,
                 )
             };
             if !ok {

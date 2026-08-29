@@ -7194,6 +7194,11 @@ fn later_address_escape_folds_assert_call_at_o() {
         assert!(
             has(b"compiletime_assert_33"),
             "{shape}: without -O the reference stays, as with gcc -O0"
+        );
+    }
+}
+
+#[test]
 fn const_array_copy_member_folds_assert_calls_at_o() {
     // The kernel's CHECK_PACKED_FIELDS shape: an element of a const
     // static array copied whole into a local -- directly and through a

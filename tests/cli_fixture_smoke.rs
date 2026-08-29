@@ -1816,6 +1816,7 @@ int main(void) {
 /// Disassemble `obj` with the first of `llvm-objdump` / `objdump` on PATH
 /// that decodes it. `None` when neither is installed or neither decodes
 /// the object's architecture.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn disassemble(obj: &std::path::Path) -> Option<String> {
     for tool in ["llvm-objdump", "objdump"] {
         let Ok(out) = Command::new(tool)
@@ -1837,6 +1838,7 @@ fn disassemble(obj: &std::path::Path) -> Option<String> {
 /// `func`. Operands are split at every character outside `[A-Za-z0-9_]`,
 /// so `%r12d`, `v16.2d` and `[x20, #8]` each yield their register as a
 /// token.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn register_mentions(dis: &str, func: &str, names: &[&str]) -> (usize, usize) {
     let mut in_func = false;
     let (mut total, mut hits) = (0usize, 0usize);

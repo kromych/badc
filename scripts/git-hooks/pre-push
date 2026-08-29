@@ -3,7 +3,8 @@
 CI jobs locally and reject non-ASCII bytes in tracked source files.
 
 `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings` with
-and without `--features full`, and `cargo build --no-default-features
+and without `--features full`, `cargo check --all-features --lib`
+(the only build of the `codegen_test` paths), and `cargo build --no-default-features
 --lib` run here, each matching its CI counterpart's profile. A
 failure aborts the push so a rebase or fix can land first. The ASCII
 check guards against zero-width / homoglyph characters slipping into
@@ -230,9 +231,19 @@ def main() -> int:
     # paths excluded), which mostly catches missing `alloc::*` /
     # `core::*` imports in code that compiles fine under default
     # features.
-    return run(
+    rc = run(
         "cargo build --no-default-features --lib",
         ["cargo", "build", "--no-default-features", "--lib"],
+        root,
+    )
+    if rc != 0:
+        return rc
+    # The `feature combos` job's `--all-features` step, and the gate the
+    # pressure matrix depends on: `full` does not imply `codegen_test`,
+    # so code behind it compiles nowhere else in this hook.
+    return run(
+        "cargo check --all-features --lib",
+        ["cargo", "check", "--locked", "--all-features", "--lib"],
         root,
     )
 

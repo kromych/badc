@@ -1379,7 +1379,13 @@ pub fn link_native_objects_with_shared_libs<'a>(
         .iter()
         .flat_map(|o| o.copy_relocs.iter().map(|(local, _host)| local.as_str()))
         .collect();
-    // Import indices an input symbol table typed `STT_OBJECT`. The
+    // Names any unit references as data through an undefined symbol;
+    // the symbol table types every undefined reference STT_NOTYPE.
+    let extern_data_names: hashbrown::HashSet<&str> = objs
+        .iter()
+        .flat_map(|o| o.extern_data_names.iter().map(|n| n.as_str()))
+        .collect();
+    // Import indices the note channel names as data references. The
     // writer republishes the type on the undefined dynamic symbol.
     let mut object_imports: alloc::collections::BTreeSet<usize> =
         alloc::collections::BTreeSet::new();
@@ -1613,12 +1619,13 @@ pub fn link_native_objects_with_shared_libs<'a>(
                         // kind is the reference toolchain's
                         // discriminator and survives here because an
                         // unresolvable GOT reference stays unrelaxed;
-                        // the symbol type covers the direct
+                        // the note channel covers the direct
                         // page-relative pair the aarch64 codegen uses
-                        // for extern data.
+                        // for extern data, which no relocation kind
+                        // separates from a function's address.
                         let slot_load = is_data_binding
                             || is_got_reloc(reloc.rtype)
-                            || sym.kind == super::object::STT_OBJECT;
+                            || extern_data_names.contains(sym.name.as_str());
                         // STB_WEAK = 2. An unresolved weak reference with
                         // no dylib routing resolves to address 0 (C
                         // practice; ELF leaves the symbol 0 so the
@@ -1665,7 +1672,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
                             flat_imports.insert(sym.name.clone());
                         }
                         let idx = record_import(&sym.name, &mut imports, &mut import_idx_for_name);
-                        if sym.kind == super::object::STT_OBJECT {
+                        if extern_data_names.contains(sym.name.as_str()) {
                             object_imports.insert(idx);
                         }
                         pending_imports.push(PendingImportReloc {
@@ -4300,6 +4307,7 @@ mod tests {
             elf_tpoff_fixups: alloc::vec::Vec::new(),
             copy_relocs: alloc::vec::Vec::new(),
             prologue_ends: alloc::vec::Vec::new(),
+            extern_data_names: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),
@@ -4466,6 +4474,7 @@ mod tests {
             elf_tpoff_fixups: alloc::vec::Vec::new(),
             copy_relocs: alloc::vec::Vec::new(),
             prologue_ends: alloc::vec::Vec::new(),
+            extern_data_names: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),
@@ -4555,6 +4564,7 @@ mod tests {
             elf_tpoff_fixups: alloc::vec::Vec::new(),
             copy_relocs: alloc::vec::Vec::new(),
             prologue_ends: alloc::vec::Vec::new(),
+            extern_data_names: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),
@@ -4615,6 +4625,7 @@ mod tests {
             elf_tpoff_fixups: alloc::vec::Vec::new(),
             copy_relocs: alloc::vec::Vec::new(),
             prologue_ends: alloc::vec::Vec::new(),
+            extern_data_names: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),
@@ -4687,6 +4698,7 @@ mod tests {
                 elf_tpoff_fixups: alloc::vec::Vec::new(),
                 copy_relocs: alloc::vec::Vec::new(),
                 prologue_ends: alloc::vec::Vec::new(),
+                extern_data_names: alloc::vec::Vec::new(),
                 debug_info: alloc::vec::Vec::new(),
                 debug_abbrev: alloc::vec::Vec::new(),
                 debug_line: alloc::vec::Vec::new(),
@@ -4866,6 +4878,7 @@ mod tests {
             elf_tpoff_fixups: alloc::vec::Vec::new(),
             copy_relocs: alloc::vec::Vec::new(),
             prologue_ends: alloc::vec::Vec::new(),
+            extern_data_names: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),
@@ -4953,6 +4966,7 @@ mod tests {
             elf_tpoff_fixups: alloc::vec::Vec::new(),
             copy_relocs: alloc::vec::Vec::new(),
             prologue_ends: alloc::vec::Vec::new(),
+            extern_data_names: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),

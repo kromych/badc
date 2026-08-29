@@ -165,6 +165,12 @@ const NT_BADC_ELF_TPOFF: u32 = 10;
 // `MergedNative::prologue_ends`, which the merged-image DWARF frame
 // writer needs to place the post-prologue CFA rule.
 const NT_BADC_PROLOGUE_END: u32 = 11;
+// Names this unit references as data through an undefined symbol, desc
+// a NUL-separated name list. Every undefined reference is typed
+// STT_NOTYPE as gcc types its own, so the data/code distinction the
+// linker needs to bind an import to a slot rather than a call stub
+// rides here instead of the symbol type.
+const NT_BADC_EXTERN_DATA: u32 = 12;
 /// Output section for `const`-qualified file-scope storage the
 /// declaration did not place by name.
 const RODATA_SECTION: &str = ".rodata";
@@ -2983,15 +2989,17 @@ pub(super) fn write_relocatable(
         });
     }
 
-    // Cross-TU user-data imports: STB_GLOBAL + STT_OBJECT +
-    // SHN_UNDEF. The linker resolves these against the matching
-    // defined-data globals emitted by sibling units (above).
+    // Cross-TU user-data imports: STB_GLOBAL + STT_NOTYPE + SHN_UNDEF,
+    // untyped as gcc emits extern references. A linker adopts a typed
+    // UNDEF onto an untyped definition, so STT_OBJECT here would retype
+    // an assembly code label and objdump would render its range as
+    // data; NT_BADC_EXTERN_DATA carries the distinction instead.
     let mut user_extern_data_sym_idx: Vec<usize> = Vec::with_capacity(user_extern_data_names.len());
     for (i, name) in user_extern_data_names.iter().enumerate() {
         user_extern_data_sym_idx.push(symbols.len());
         symbols.push(Elf64Sym {
             st_name: name_offs[user_extern_data_names_start + i],
-            st_info: pack_sym_info(bind_for(name), STT_OBJECT),
+            st_info: pack_sym_info(bind_for(name), STT_NOTYPE),
             st_other: vis_for(name),
             st_shndx: SHN_UNDEF,
             ..Default::default()
@@ -4135,6 +4143,7 @@ pub(super) fn write_relocatable(
         &defined_tls_globals,
         &build.elf_tpoff_fixups,
         &prologue_end_pairs,
+        &user_extern_data_names,
     );
     let fixed_dropped = [
         (SHIDX_TEXT, text_shadowed),
@@ -4993,6 +5002,8 @@ fn pack_sym_info(bind: u8, ty: u8) -> u8 {
 ///   NT_BADC_EXPORTS       -- NUL-separated `#pragma export` names.
 ///   NT_BADC_PROLOGUE_END  -- (u64 entry, u64 post-prologue) `.text`
 ///                            offset pairs.
+///   NT_BADC_EXTERN_DATA   -- NUL-separated names referenced as data
+///                            through an undefined symbol.
 /// All records share the namesz="badc\0" namespace; the parser
 /// distinguishes by `type`. Each note is independently padded to
 /// the 4-byte ELF gABI boundary. Every record is omitted when it
@@ -5051,6 +5062,7 @@ fn build_badc_note(
     tls_symbols: &[(&str, i64, u64)],
     elf_tpoff_fixups: &[super::ElfTpoffFixup],
     prologue_ends: &[(u64, u64)],
+    extern_data_names: &[&str],
 ) -> Vec<u8> {
     let mut out: Vec<u8> = Vec::new();
     let name = b"badc\0";
@@ -5269,6 +5281,24 @@ fn build_badc_note(
         out.extend_from_slice(&(name.len() as u32).to_le_bytes());
         out.extend_from_slice(&(desc.len() as u32).to_le_bytes());
         out.extend_from_slice(&NT_BADC_COPY_RELOC.to_le_bytes());
+        out.extend_from_slice(name);
+        crate::c5::layout::pad_to_align(&mut out, 4);
+        out.extend_from_slice(&desc);
+        crate::c5::layout::pad_to_align(&mut out, 4);
+    }
+
+    // Record 12: names referenced as data through an undefined symbol,
+    // NUL-separated. Typed STT_NOTYPE in the symbol table like every
+    // other undefined reference, so the distinction lives only here.
+    if !extern_data_names.is_empty() {
+        let mut desc: Vec<u8> = Vec::new();
+        for n in extern_data_names {
+            desc.extend_from_slice(n.as_bytes());
+            desc.push(0);
+        }
+        out.extend_from_slice(&(name.len() as u32).to_le_bytes());
+        out.extend_from_slice(&(desc.len() as u32).to_le_bytes());
+        out.extend_from_slice(&NT_BADC_EXTERN_DATA.to_le_bytes());
         out.extend_from_slice(name);
         crate::c5::layout::pad_to_align(&mut out, 4);
         out.extend_from_slice(&desc);

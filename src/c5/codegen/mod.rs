@@ -2593,8 +2593,11 @@ pub(crate) struct UserExternCallSite {
 /// `lea` rip-rel (x86_64) shape as [`DataFixup`], but the
 /// target is a named symbol defined in another TU rather than
 /// a local `.data` byte offset. The writer emits one undefined
-/// `STT_OBJECT STB_GLOBAL` symbol per unique name and one reloc
-/// per ref pointing at that symbol.
+/// `STT_NOTYPE STB_GLOBAL` symbol per unique name (untyped, as
+/// gcc emits extern references) and one reloc per ref pointing
+/// at that symbol; the name also enters the unit's
+/// `NT_BADC_EXTERN_DATA` note so the linker keeps the data/code
+/// distinction the symbol type no longer carries.
 #[derive(Debug, Clone)]
 #[allow(dead_code)] // consumed only by the std-only elf_reloc writer
 pub(crate) struct UserExternDataRef {

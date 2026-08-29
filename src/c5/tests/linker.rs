@@ -5325,6 +5325,7 @@ fn minimal_native_object(
         elf_tpoff_fixups: alloc::vec::Vec::new(),
         copy_relocs: alloc::vec::Vec::new(),
         prologue_ends: alloc::vec::Vec::new(),
+        extern_data_names: alloc::vec::Vec::new(),
         debug_info: alloc::vec::Vec::new(),
         debug_abbrev: alloc::vec::Vec::new(),
         debug_line: alloc::vec::Vec::new(),
@@ -5614,6 +5615,7 @@ fn aarch64_data_ref_object_ex(
         tls_relocs: alloc::vec::Vec::new(),
         tls_bss_size: 0,
         prologue_ends: alloc::vec::Vec::new(),
+        extern_data_names: alloc::vec::Vec::new(),
         symbols: alloc::vec![NativeSymbol {
             name: String::new(),
             section: NativeSymSection::Undef,
@@ -5867,6 +5869,7 @@ fn blank_aarch64_object() -> crate::c5::linker::NativeObject {
         tls_relocs: alloc::vec::Vec::new(),
         tls_bss_size: 0,
         prologue_ends: alloc::vec::Vec::new(),
+        extern_data_names: alloc::vec::Vec::new(),
         symbols: alloc::vec::Vec::new(),
         text_relocs: alloc::vec::Vec::new(),
         data_relocs: alloc::vec::Vec::new(),

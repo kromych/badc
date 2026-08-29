@@ -1185,7 +1185,7 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
     let mut globals: HashMap<String, GState> = HashMap::new();
     // GNU ld adopts a definite symbol type from any occurrence when
     // the winning entry is STT_NOTYPE (an assembler definition typed
-    // by a C reference, e.g. `extern const char x[]`).
+    // by an explicit `.type` on a reference in another unit).
     let mut kind_hint: HashMap<String, u8> = HashMap::new();
     let vis_rank = |v: u8| -> u8 { [0u8, 3, 2, 1][(v & 3) as usize] };
     let merge_other = |a: u8, b: u8| -> u8 {

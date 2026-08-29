@@ -4303,6 +4303,75 @@ fn internal_linkage_data_objects_are_named_by_local_symbols() {
     }
 }
 
+/// gcc emits every undefined reference untyped -- an extern array, an
+/// address-taken function and a plain call all reach `.symtab` as
+/// `STT_NOTYPE` `SHN_UNDEF`, only `extern _Thread_local` is typed
+/// (`STT_TLS`). A linker adopts a typed UNDEF onto an untyped
+/// definition, so `STT_OBJECT` on a reference to an assembly code
+/// label retypes it in the linked image and objdump renders the
+/// label's range as data; the kernel's x86 decoder posttest rejects
+/// an image linked so. The distinction rides the vendor note.
+#[test]
+fn undefined_references_stay_untyped() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    const STT_NOTYPE: u8 = 0;
+    const STT_TLS: u8 = 6;
+    let src = "extern char ext_array[];\n\
+               extern void ext_fn_addr(void);\n\
+               extern void ext_fn_call(void);\n\
+               extern _Thread_local int ext_tls;\n\
+               unsigned long f(void) {\n\
+                   ext_fn_call();\n\
+                   return (unsigned long)ext_array + (unsigned long)ext_fn_addr\n\
+                       + (unsigned long)ext_tls;\n\
+               }\n\
+               int main(void) { return (int)f(); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_target(src.to_string(), target)
+            .compile()
+            .expect("compile");
+        let obj = emit_native_with_options(
+            &program,
+            target,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..NativeOptions::new()
+            },
+        )
+        .expect("emit relocatable");
+        let records = elf64_symbol_records(&obj);
+        for (name, want) in [
+            ("ext_array", STT_NOTYPE),
+            ("ext_fn_addr", STT_NOTYPE),
+            ("ext_fn_call", STT_NOTYPE),
+            ("ext_tls", STT_TLS),
+        ] {
+            let hits: alloc::vec::Vec<_> = records.iter().filter(|(n, ..)| n == name).collect();
+            assert_eq!(
+                hits.len(),
+                1,
+                "{target:?}: one `.symtab` entry for `{name}`"
+            );
+            let (_, st_info, st_shndx, _, _) = hits[0];
+            assert_eq!(*st_shndx, 0, "{target:?}: `{name}` is undefined");
+            assert_eq!(st_info & 0xf, want, "{target:?}: `{name}` symbol type");
+        }
+        // The note channel carries what the symbol type no longer does.
+        // It names the sites that materialise an address -- the data
+        // object, and an address-taken function, which shares that
+        // lowering -- and not a call site, which binds to a stub.
+        let parsed = crate::c5::linker::parse_native_object(&obj).expect("parse object");
+        assert!(
+            parsed.extern_data_names.iter().any(|n| n == "ext_array"),
+            "{target:?}: the data reference is named by NT_BADC_EXTERN_DATA"
+        );
+        assert!(
+            !parsed.extern_data_names.iter().any(|n| n == "ext_fn_call"),
+            "{target:?}: a call site is not an address materialisation"
+        );
+    }
+}
+
 /// A `_Bool` returned by a callee defined in another unit is only
 /// defined in the low byte per the psABI; a caller that tests the full
 /// return register (`!f()` / `if (f())`) must mask to the low byte

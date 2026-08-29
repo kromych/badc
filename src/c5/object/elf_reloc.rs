@@ -2262,6 +2262,10 @@ pub(super) fn write_relocatable(
         weak: bool,
         st_type: u8,
         st_size: u64,
+        /// Whether the home section is `SHF_MERGE`. There a section
+        /// symbol's addend is an offset the linker maps through the
+        /// merge table, so a reference cannot reduce to one.
+        merge: bool,
     }
     let weak_names_ref = &weak_names;
     let asm_labels: Vec<AsmLabelSym> = asm_placements
@@ -2270,6 +2274,7 @@ pub(super) fn write_relocatable(
         .flat_map(|(&(e, base), s)| {
             let shndx = carve.shndx[e];
             let sec_sym = carve.sym_idx[e];
+            let merge = carve.table.entries[e].flags & SHF_MERGE != 0;
             s.labels.iter().map(move |l| {
                 // A directive from another statement of the unit reaches this
                 // definition; the defining statement's own wins where both set
@@ -2298,6 +2303,7 @@ pub(super) fn write_relocatable(
                         t => t,
                     }),
                     st_size: l.size.or(d.and_then(|d| d.size)).unwrap_or(0),
+                    merge,
                 }
             })
         })
@@ -2548,12 +2554,17 @@ pub(super) fn write_relocatable(
     // Local inline-asm section labels, still inside the LOCAL block. A
     // `.L`-prefixed local is an assembler temporary: gas keeps it out of
     // `.symtab`, and every reference to one reduces to its section plus
-    // an addend (`asm_label_secref`), so the entry has no reader.
+    // an addend (`asm_label_secref`), so the entry has no reader. One in
+    // a mergeable section keeps its entry, since no reduction covers it.
     for (j, l) in asm_labels.iter().enumerate() {
         if l.global || l.weak {
             continue;
         }
-        if l.name.starts_with(".L") && l.st_type == STT_NOTYPE && !got_ref_names.contains(l.name) {
+        if l.name.starts_with(".L")
+            && l.st_type == STT_NOTYPE
+            && !l.merge
+            && !got_ref_names.contains(l.name)
+        {
             continue;
         }
         asm_label_symidx.insert(l.name, symbols.len() as u32);
@@ -2929,11 +2940,13 @@ pub(super) fn write_relocatable(
     // section+addend form (an unexpected symbol type there aborts
     // their relocation walk). Named globals, weak definitions, and
     // `.type`d function / object labels keep their own symbol -- the
-    // binding and the type are what a reader needs from them.
+    // binding and the type are what a reader needs from them, as does a
+    // label in a mergeable section, whose section-relative addend the
+    // linker would read as a merge-table offset.
     let mut asm_label_secref: alloc::collections::BTreeMap<&str, (u64, i64)> =
         alloc::collections::BTreeMap::new();
     for l in &asm_labels {
-        if l.global || l.weak || l.st_type != STT_NOTYPE || l.shndx == SHN_ABS {
+        if l.global || l.weak || l.st_type != STT_NOTYPE || l.shndx == SHN_ABS || l.merge {
             continue;
         }
         asm_label_secref.insert(l.name, (l.sec_sym, l.value as i64));

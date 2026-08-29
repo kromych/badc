@@ -2358,6 +2358,25 @@ impl<'a> LdsLinker<'a> {
         }
     }
 
+    /// The offset of a section-symbol reference into a merge pool that
+    /// the input section does not cover, which bfd reports as `access
+    /// beyond end of merged section`. Such an addend names no entry and
+    /// resolves to the pool's end.
+    fn merge_offset_out_of_range(&self, oi: usize, r: &RawReloc) -> Option<i64> {
+        if self.merge_of.is_empty() {
+            return None;
+        }
+        let sym = self.objects[oi].symbols.get(r.sym as usize)?;
+        if sym.kind() != STT_SECTION {
+            return None;
+        }
+        let sec = *self.objects[oi].shndx_map.get(&sym.shndx)?;
+        let i = self.insec_index(oi, sec);
+        self.merge_of.get(&i)?;
+        let off = sym.value.wrapping_add(r.addend as u64);
+        (off > self.insec(i).size).then_some(off as i64)
+    }
+
     /// Effective placed size of input section `i` (0 for non-
     /// representative members of a merge pool).
     fn insec_placed_size(&self, i: usize) -> u64 {
@@ -5061,6 +5080,12 @@ impl<'a> LdsLinker<'a> {
                 };
                 let site = (place.off + off) as usize;
                 let p = sec_addr + off;
+                if let Some(bad) = self.merge_offset_out_of_range(id.obj, r) {
+                    let source = self.objects[id.obj].source.clone();
+                    self.warnings.push(format!(
+                        "warning: {source}: access beyond end of merged section ({bad})"
+                    ));
+                }
                 let target = self.resolve_reloc_target(id.obj, r, tolerant, &mut errors);
                 let Some(s_plus_a) = target else { continue };
                 if errors.len() > 40 {
@@ -8605,6 +8630,161 @@ SECTIONS {
         assert_eq!(slot(0), ro.2 + mem + 1);
         assert_eq!(slot(8), ro.2 + mem + 5);
         assert_eq!(slot(16), ro.2 + mem);
+    }
+
+    /// Mergeable constant pools keep the alignment their inputs
+    /// requested, whichever pool an entry lands in, and a named local
+    /// symbol into a section the pool merged away follows its content
+    /// to the surviving entry. `.rodata` opens with an odd-sized
+    /// section so a pool that ignored its alignment would land off a
+    /// 16-byte boundary.
+    #[test]
+    fn merge_pools_keep_the_input_alignment() {
+        let script = parse_linker_script(
+            "SECTIONS { . = 0x1000; .text : { *(.text*) } \
+             .rodata : { *(.rodata) *(.rodata.*) } .data : { *(.data*) } }",
+        )
+        .expect("parses");
+        const K16: &[u8; 16] = b"\x02\x03\x00\x01\x06\x07\x04\x05\x0a\x0b\x08\x09\x0e\x0f\x0c\x0d";
+        const OTHER16: &[u8; 16] =
+            b"\x01\x02\x03\x00\x05\x06\x07\x04\x09\x0a\x0b\x08\x0d\x0e\x0f\x0c";
+        let mut k32 = [0u8; 32];
+        k32[0] = 0xa5;
+        // Symtab of each: null(0), sections(1..=n), then the names below.
+        let a = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                4,
+                &[0u8; 4],
+            )
+            .sec(".rodata", SHT_PROGBITS, SHF_ALLOC, 1, b"odd\0\0")
+            .sec(
+                ".rodata.cst16.k1",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_MERGE,
+                16,
+                K16,
+            )
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0u8; 8])
+            .entsize(2, 16)
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 4)
+            .reloc(3, 0, 3, rt::R_AARCH64_ABS64, 0)
+            .build(EM_AARCH64);
+        // b's k2 holds a's constant, so the pool merges it away; k3 and
+        // the 32-aligned k4 are distinct entries.
+        let b = TestObj::new()
+            .sec(
+                ".rodata.cst16.k2",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_MERGE,
+                16,
+                K16,
+            )
+            .sec(
+                ".rodata.cst16.k3",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_MERGE,
+                16,
+                OTHER16,
+            )
+            .sec(
+                ".rodata.cst32.k4",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_MERGE,
+                32,
+                &k32,
+            )
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0u8; 24])
+            .entsize(0, 16)
+            .entsize(1, 16)
+            .entsize(2, 32)
+            .sym("k2", STB_LOCAL, STT_NOTYPE, 0, 0, 0)
+            .sym("k3", STB_LOCAL, STT_NOTYPE, 1, 0, 0)
+            .sym("k4", STB_LOCAL, STT_NOTYPE, 2, 0, 0)
+            .reloc(3, 0, 5, rt::R_AARCH64_ABS64, 0)
+            .reloc(3, 8, 6, rt::R_AARCH64_ABS64, 0)
+            .reloc(3, 16, 7, rt::R_AARCH64_ABS64, 0)
+            .build(EM_AARCH64);
+        let objs = alloc::vec![
+            parse_lds_object("a.o", a).expect("parses"),
+            parse_lds_object("b.o", b).expect("parses"),
+        ];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        let secs = readelf_sections(&res.image);
+        let data = secs
+            .iter()
+            .filter(|s| s.0 == ".data")
+            .map(|s| s.2)
+            .next()
+            .expect("data");
+        let d_off = section_file_off(&res.image, data);
+        let slot =
+            |k: usize| u64::from_le_bytes(res.image[d_off + k..d_off + k + 8].try_into().unwrap());
+        // a.o's slot comes first, then b.o's three.
+        let (k1, k2, k3, k4) = (slot(0), slot(8), slot(16), slot(24));
+        assert_eq!(k1, k2, "identical constants share one pool entry");
+        assert_ne!(k2, k3, "distinct constants keep separate entries");
+        for (name, addr, align) in [("k1", k1, 16), ("k3", k3, 16), ("k4", k4, 32)] {
+            assert_eq!(
+                addr % align,
+                0,
+                "{name} at 0x{addr:x} is not {align}-aligned"
+            );
+        }
+        let ro = secs.iter().find(|s| s.0 == ".rodata").expect("rodata");
+        let ro_off = section_file_off(&res.image, ro.2);
+        let at = |addr: u64| {
+            let k = ro_off + (addr - ro.2) as usize;
+            &res.image[k..k + 16]
+        };
+        assert_eq!(at(k1), K16, "k1 points at its own constant");
+        assert_eq!(at(k3), OTHER16, "k3 points at its own constant");
+        assert_eq!(at(k4)[0], 0xa5, "k4 points at its own constant");
+    }
+
+    /// A section-symbol reference into a merge pool whose addend is not
+    /// an offset the section covers has no entry to name. bfd reports
+    /// it and resolves to the pool end; the link must say so rather
+    /// than fold the miss into an address.
+    #[test]
+    fn merge_section_symbol_addend_out_of_range_is_reported() {
+        let script = parse_linker_script(
+            "SECTIONS { . = 0x1000; .text : { *(.text*) } .rodata : { *(.rodata*) } .data : { *(.data*) } }",
+        )
+        .expect("parses");
+        let a = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                4,
+                &[0u8; 4],
+            )
+            .sec(
+                ".rodata.cst16.k1",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_MERGE,
+                16,
+                &[0u8; 16],
+            )
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0u8; 8])
+            .entsize(1, 16)
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 4)
+            // Section symbol of `.rodata.cst16.k1` with the pc-relative
+            // -4 an assembler must not reduce a local label to.
+            .reloc(2, 0, 2, rt::R_AARCH64_ABS64, -4)
+            .build(EM_AARCH64);
+        let objs = alloc::vec![parse_lds_object("a.o", a).expect("parses")];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        assert!(
+            res.warnings
+                .iter()
+                .any(|w| w.contains("access beyond end of merged section (-4)")),
+            "no diagnostic, got {:?}",
+            res.warnings
+        );
     }
 
     const DYN_SCRIPT: &str = r#"

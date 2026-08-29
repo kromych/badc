@@ -14772,6 +14772,204 @@ fn asm_reloc_tu(src: &str, target: crate::c5::Target) -> alloc::vec::Vec<u8> {
     emit_native_with_options(&program, target, opts).expect("emit")
 }
 
+/// `(sh_addr, sh_flags, sh_addralign, sh_entsize)` of a named section.
+fn section_header(bytes: &[u8], name: &str) -> (u64, u64, u64, u64) {
+    let u16le = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap()) as usize;
+    let u32le = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+    let u64le = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let shoff = u64le(0x28) as usize;
+    let strtab = u64le(shoff + u16le(0x3E) * 64 + 0x18) as usize;
+    for i in 0..u16le(0x3C) {
+        let sh = shoff + i * 64;
+        let at = strtab + u32le(sh) as usize;
+        let end = bytes[at..].iter().position(|&b| b == 0).unwrap() + at;
+        if &bytes[at..end] == name.as_bytes() {
+            return (
+                u64le(sh + 0x10),
+                u64le(sh + 0x08),
+                u64le(sh + 0x30),
+                u64le(sh + 0x38),
+            );
+        }
+    }
+    panic!("no section named {name}");
+}
+
+/// `.rela.text` of a `-c` object as `(offset, symbol name, addend)`.
+/// A section symbol carries no name of its own; it reads as the
+/// section's, the way readelf renders one.
+fn text_relocs(bytes: &[u8]) -> alloc::vec::Vec<(u64, String, i64)> {
+    let sections = elf_sections(bytes);
+    let rela = &sections
+        .iter()
+        .find(|(n, ..)| n == ".rela.text")
+        .expect(".rela.text")
+        .3;
+    let syms = elf_symbols(bytes);
+    rela.as_chunks::<24>()
+        .0
+        .iter()
+        .map(|e| {
+            let info = u64::from_le_bytes(e[8..16].try_into().unwrap());
+            let sym = &syms[(info >> 32) as usize];
+            let name = if sym.0.is_empty() {
+                sections[sym.2 as usize].0.clone()
+            } else {
+                sym.0.clone()
+            };
+            (
+                u64::from_le_bytes(e[0..8].try_into().unwrap()),
+                name,
+                i64::from_le_bytes(e[16..24].try_into().unwrap()),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn mergeable_sections_carry_their_alignment_entsize_and_own_labels() {
+    // `.section name, "aM", @progbits, N` plus `.align A` is how the
+    // kernel's SIMD constants are declared. The object must carry the
+    // alignment and the entry size, and -- because the linker reads a
+    // section symbol's addend as an offset into the merge table -- a
+    // local label in such a section keeps its own symbol instead of
+    // reducing to `section + addend`, which the pc-relative -4 would
+    // turn into an offset no entry covers. gas and clang both do this;
+    // a plain section still takes the reduction. Read off binutils 2.46.
+    use crate::c5::Target;
+    let src = "\
+        .section .rodata.cst16.k1, \"aM\", @progbits, 16\n\
+        .align 16\n\
+        .Lk1:\n\t.quad 1\n\t.quad 2\n\
+        .section .rodata.cst32.k2, \"aM\", @progbits, 32\n\
+        .align 32\n\
+        .Lk2:\n\t.quad 3\n\t.quad 4\n\t.quad 5\n\t.quad 6\n\
+        .section .rodata.plain, \"a\", @progbits\n\
+        .align 16\n\
+        .Lp1:\n\t.quad 7\n\t.quad 8\n\
+        .text\n\
+        .globl f\n\
+        f:\n\
+        \tmovdqa .Lk1(%rip), %xmm0\n\
+        \tmovdqa .Lk2(%rip), %xmm1\n\
+        \tmovdqa .Lp1(%rip), %xmm2\n\
+        \tret\n";
+    let bytes = asm_reloc_tu(src, Target::LinuxX64);
+    const SHF_ALLOC: u64 = 0x2;
+    const SHF_MERGE: u64 = 0x10;
+    for (name, align, entsize, merge) in [
+        (".rodata.cst16.k1", 16u64, 16u64, true),
+        (".rodata.cst32.k2", 32, 32, true),
+        (".rodata.plain", 16, 0, false),
+    ] {
+        let (_, flags, a, e) = section_header(&bytes, name);
+        assert_eq!(a, align, "{name} sh_addralign");
+        assert_eq!(e, entsize, "{name} sh_entsize");
+        assert_eq!(flags & SHF_ALLOC, SHF_ALLOC, "{name} is not SHF_ALLOC");
+        assert_eq!(
+            flags & SHF_MERGE != 0,
+            merge,
+            "{name} SHF_MERGE is not {merge}"
+        );
+    }
+    // A merge section's local label reaches `.symtab`; a plain one's
+    // stays out, its references reduced to the section symbol.
+    let names: alloc::vec::Vec<String> = elf_symbols(&bytes).into_iter().map(|s| s.0).collect();
+    assert!(names.iter().any(|n| n == ".Lk1"), "{names:?}");
+    assert!(names.iter().any(|n| n == ".Lk2"), "{names:?}");
+    assert!(!names.iter().any(|n| n == ".Lp1"), "{names:?}");
+    assert_eq!(
+        text_relocs(&bytes)
+            .into_iter()
+            .map(|(_, n, a)| (n, a))
+            .collect::<alloc::vec::Vec<_>>(),
+        alloc::vec![
+            (String::from(".Lk1"), -4),
+            (String::from(".Lk2"), -4),
+            (String::from(".rodata.plain"), -4),
+        ],
+    );
+}
+
+#[test]
+fn assembled_mergeable_constants_link_to_aligned_addresses() {
+    // End to end over the shape the kernel's SIMD units use: two
+    // assembled objects whose mergeable 16-byte constants the script
+    // link pools. Each `movdqa` must reach a 16-byte-aligned address
+    // holding its own constant, and the two identical constants must
+    // share one entry.
+    use crate::c5::Target;
+    use crate::c5::linker::lds::parse_linker_script;
+    use crate::c5::linker::lds_link::{LdsOptions, link_with_script, parse_lds_object};
+    // `sec` holds `body`, and `f` loads its head. K1 recurs across the
+    // two units, so the pool folds the second copy into the first.
+    const K1: &str = "\t.quad 0x0504070601000302\n\t.quad 0x0D0C0F0E09080B0A\n";
+    const K3: &str = "\t.quad 0x0407060500030201\n\t.quad 0x0C0F0E0D080B0A09\n";
+    let unit = |sec: &str, body: &str, f: &str| {
+        alloc::format!(
+            ".section .rodata.cst16.{sec}, \"aM\", @progbits, 16\n\
+             .align 16\n\
+             .L{sec}:\n{body}\
+             .text\n.globl {f}\n{f}:\n\tmovdqa .L{sec}(%rip), %xmm0\n\tret\n"
+        )
+    };
+    // The odd-sized section comes first, so a pool placed without its
+    // alignment lands five bytes into `.rodata`.
+    let a = alloc::format!(
+        ".section .rodata.pad, \"a\", @progbits\n\t.byte 1,2,3,4,5\n{}",
+        unit("k1", K1, "geta")
+    );
+    let b = unit("k2", K1, "getb") + &unit("k3", K3, "getc");
+    let script = parse_linker_script(
+        "SECTIONS { . = 0x400000; .text : { *(.text*) } . = ALIGN(0x1000); \
+         .rodata : { *(.rodata) *(.rodata.*) } }",
+    )
+    .expect("parses");
+    let objs = alloc::vec![
+        parse_lds_object("a.o", asm_reloc_tu(&a, Target::LinuxX64)).expect("parse a"),
+        parse_lds_object("b.o", asm_reloc_tu(&b, Target::LinuxX64)).expect("parse b"),
+    ];
+    let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+    assert!(res.warnings.is_empty(), "{:?}", res.warnings);
+    let sections = elf_sections(&res.image);
+    let (_, _, _, text) = sections
+        .iter()
+        .find(|(n, ..)| n == ".text")
+        .expect(".text")
+        .clone();
+    let text_addr = section_header(&res.image, ".text").0;
+    let ro_addr = section_header(&res.image, ".rodata").0;
+    let ro = &sections
+        .iter()
+        .find(|(n, ..)| n == ".rodata")
+        .expect(".rodata")
+        .3;
+    // Each `movdqa xmm0, [rip+disp32]` is `66 0f 6f 05 <disp32>`.
+    let targets: alloc::vec::Vec<u64> = text
+        .windows(8)
+        .enumerate()
+        .filter(|(_, w)| w[..4] == [0x66, 0x0f, 0x6f, 0x05])
+        .map(|(k, w)| {
+            let d = i32::from_le_bytes(w[4..8].try_into().unwrap()) as i64;
+            (text_addr + k as u64 + 8).wrapping_add(d as u64)
+        })
+        .collect();
+    assert_eq!(targets.len(), 3, "one load per unit: {targets:x?}");
+    for &t in &targets {
+        assert_eq!(t % 16, 0, "0x{t:x} is not 16-byte aligned");
+    }
+    assert_eq!(targets[0], targets[1], "identical constants share an entry");
+    assert_ne!(targets[1], targets[2], "distinct constants stay apart");
+    let at = |addr: u64| -> &[u8] {
+        let k = (addr - ro_addr) as usize;
+        &ro[k..k + 16]
+    };
+    let k1: [u8; 16] = [2, 3, 0, 1, 6, 7, 4, 5, 10, 11, 8, 9, 14, 15, 12, 13];
+    let k3: [u8; 16] = [1, 2, 3, 0, 5, 6, 7, 4, 9, 10, 11, 8, 13, 14, 15, 12];
+    assert_eq!(at(targets[0]), k1, "geta reaches its constant");
+    assert_eq!(at(targets[2]), k3, "getc reaches its constant");
+}
+
 #[test]
 fn aarch64_assembled_shapes_carry_the_mapping_symbols_gnu_as_emits() {
     // `$x` opens a run of A64 instructions and `$d` a run of data, each

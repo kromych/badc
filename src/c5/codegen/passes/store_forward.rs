@@ -43,7 +43,7 @@
 //! table keyed by slot index, with the same width, volatile, and
 //! distance discipline. A slot reachable only through `LoadLocal` /
 //! `StoreLocal` -- no `LocalAddr`, no volatile access
-//! (`mem2reg::promotable_slots`), and no write through a `FunctionSsa`
+//! (`mem2reg::address_free_slots`), and no write through a `FunctionSsa`
 //! field or call result slot -- has no address value, so no `Store`,
 //! `Mcpy`, or atomic can write it; its entries survive those
 //! instructions and die at another `StoreLocal` to the same slot, at a
@@ -54,7 +54,7 @@
 //! pointer also kills its entries. A volatile access neither forwards
 //! nor seeds on either discipline.
 
-use crate::c5::codegen::ssa::mem2reg::promotable_slots;
+use crate::c5::codegen::ssa::mem2reg::address_free_slots;
 use crate::c5::ir::{FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, ValueId};
 use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
@@ -135,7 +135,7 @@ struct SlotEntry {
 
 /// Slots whose store -> load pairs may forward: reachable only through
 /// `LoadLocal` / `StoreLocal`, so every write is visible in the SSA.
-/// Starts from `mem2reg::promotable_slots` (no `LocalAddr`, no volatile
+/// Starts from `mem2reg::address_free_slots` (no `LocalAddr`, no volatile
 /// access, no alloca slot) and removes the slots the emit writes
 /// through `FunctionSsa` fields or call metadata rather than an
 /// instruction. A function with a runtime-growing frame is skipped
@@ -148,7 +148,7 @@ fn forwardable_slots(func: &FunctionSsa) -> BTreeSet<i64> {
     {
         return BTreeSet::new();
     }
-    let mut slots = promotable_slots(func);
+    let mut slots = address_free_slots(func);
     slots.remove(&func.indirect_result_slot);
     for s in &func.param_local_slots {
         slots.remove(s);

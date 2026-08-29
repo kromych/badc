@@ -53,11 +53,10 @@ Disassembly of section .text:
                	cmpq	%rbx, %r12
                	setb	%al
                	movzbq	%al, %rax
-               	addq	$0x0, %rax
-               	xorq	%rcx, %rcx
-               	movq	%rcx, -0x18(%rbp)
+               	leaq	(%rax), %r13
+               	xorq	%rax, %rax
                	movq	%rax, -0x18(%rbp)
-               	movq	-0x18(%rbp), %r13
+               	movq	%r13, -0x18(%rbp)
                	testq	%r12, %r12
                	setne	%al
                	movzbq	%al, %rax

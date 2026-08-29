@@ -22,31 +22,28 @@ Disassembly of section .text:
                	fmov	d16, x0
                	sub	x17, x29, #0x10
                	str	d16, [x17]
-               	sub	x16, x29, #0x10
-               	ldr	d0, [x16]
+               	fmov	d16, x0
                	fmov	d17, x0
-               	fcmp	d0, d17
+               	fcmp	d16, d17
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x19, [sp], #0x40
                	ret
-               	sub	x16, x29, #0x10
-               	ldr	d0, [x16]
-               	mov	x0, #0x800000000000     // =140737488355328
-               	movk	x0, #0x407f, lsl #48
-               	fmov	d17, x0
-               	fcmp	d0, d17
-               	cset	x0, mi
-               	cbnz	x0, <addr>
-               	sub	x16, x29, #0x10
-               	ldr	d0, [x16]
-               	mov	x0, #0xa00000000000     // =175921860444160
-               	movk	x0, #0x407f, lsl #48
-               	fmov	d17, x0
-               	fcmp	d0, d17
-               	cset	x0, gt
-               	cbz	x0, <addr>
+               	mov	x1, #0x800000000000     // =140737488355328
+               	movk	x1, #0x407f, lsl #48
+               	fmov	d16, x0
+               	fmov	d17, x1
+               	fcmp	d16, d17
+               	cset	x1, mi
+               	cbnz	x1, <addr>
+               	mov	x1, #0xa00000000000     // =175921860444160
+               	movk	x1, #0x407f, lsl #48
+               	fmov	d16, x0
+               	fmov	d17, x1
+               	fcmp	d16, d17
+               	cset	x1, gt
+               	cbz	x1, <addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x19, [sp], #0x40

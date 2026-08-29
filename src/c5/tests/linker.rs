@@ -7132,6 +7132,73 @@ fn constant_p_inline_param_folds_assert_call_at_o() {
 }
 
 #[test]
+fn later_address_escape_folds_assert_call_at_o() {
+    // The build-time-assert idiom `if (!(c)) undefined_fn();` on a
+    // local whose address is taken only after the check. Until the
+    // address is taken no pointer to the local exists, so the check
+    // reads the store above it whatever sits between the two: a call
+    // to a const function, a call to an extern function, or nothing.
+    // gcc 16 -O2 folds the const and the call-free shapes and keeps the
+    // extern-call one (its escape analysis is flow-insensitive); the
+    // ordering argument does not depend on the callee, so all three
+    // fold here. Without -O the reference stays, as with gcc -O0.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let shapes = [
+        (
+            "const call",
+            "static int cfn(int x) __attribute__((const));\n\
+             static int cfn(int x) { return x + 1; }\n",
+            "cfn(6)",
+        ),
+        ("extern call", "extern int efn(int x);\n", "efn(6)"),
+        ("no call", "", "6"),
+    ];
+    for (shape, decls, init) in shapes {
+        let program = Compiler::new(alloc::format!(
+            "{TEST_PRELUDE}\
+             extern void compiletime_assert_33(void) __attribute__((error(\"A\")));\n\
+             {decls}\
+             static __attribute__((noinline)) int probe(void) {{\n\
+                 int init = 32;\n\
+                 int result = {init};\n\
+                 if (!(init >= 32)) compiletime_assert_33();\n\
+                 __asm__ __volatile__(\"\" : : \"r\"(&init) : \"memory\");\n\
+                 __asm__ __volatile__(\"\" : : \"r\"(&result) : \"memory\");\n\
+                 return init + result;\n\
+             }}\n\
+             int main(void) {{ return probe(); }}\n"
+        ))
+        .compile()
+        .expect("compile");
+        for target in [Target::LinuxX64, Target::LinuxAarch64] {
+            let opts = NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                optimize: true,
+                ..Default::default()
+            };
+            let bytes = emit_native_with_options(&program, target, opts).expect("emit -O");
+            let has = |name: &[u8]| bytes.windows(name.len()).any(|w| w == name);
+            assert!(has(b"probe"), "{shape}, {target:?}: probe must survive");
+            assert!(
+                !has(b"compiletime_assert_33"),
+                "{shape}, {target:?}: the assert on a local whose address is taken after \
+                 the check must fold away at -O"
+            );
+        }
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit -O0");
+        let has = |name: &[u8]| bytes.windows(name.len()).any(|w| w == name);
+        assert!(
+            has(b"compiletime_assert_33"),
+            "{shape}: without -O the reference stays, as with gcc -O0"
+        );
+    }
+}
+
+#[test]
 fn interprocedural_param_range_folds_out_of_line_sign_assert() {
     // The signedness canary of a compile-time min()/max(): the guard is
     // true only if the compiler can decide `(long long)p >= 0` at

@@ -128,23 +128,6 @@ Disassembly of section .text:
                	retq
                	leaq	-<rip>, %rax       # <addr>
                	movq	%rax, -0x10(%rbp)
-               	movl	$0x1, %edi
-               	callq	<addr>
-               	cmpl	$0x2, %eax
-               	je	<addr>
-               	movl	$0x2, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
-               	retq
-               	movq	-0x10(%rbp), %rax
-               	movl	$0x2, %edi
-               	callq	*%rax
-               	cmpl	$0x3, %eax
-               	je	<addr>
-               	movl	$0x3, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
-               	retq
                	leaq	-0x10(%rbp), %rax
                	movl	$0x3, %edi
                	movq	(%rax), %rax

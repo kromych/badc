@@ -131,18 +131,6 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x15               // =21
                	stur	w0, [x29, #-0x8]
-               	sxtw	x0, w0
-               	cmp	w0, #0x15
-               	b.eq	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
-               	add	x1, x1, #0x1
-               	str	w1, [x0]
-               	mov	x0, #0xa                // =10
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp], #0x30
-               	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x1, [x0]

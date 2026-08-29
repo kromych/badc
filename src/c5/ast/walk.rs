@@ -6930,8 +6930,8 @@ impl<'a> Walker<'a> {
 /// `StoreLocal`); every other lvalue -- a dereference, an array element,
 /// a struct field, or a float-stored local -- routes through a
 /// materialized address. The slot path takes no `LocalAddr`, so the slot
-/// stays promotable in `promotable_slots`; the address path marks it
-/// address-taken and pins it to memory.
+/// stays promotable; the address path pins it to memory from the point
+/// the address is taken.
 enum RmwPlace {
     Slot(i64),
     /// A materialized address, with the segment override every access

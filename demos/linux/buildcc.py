@@ -213,6 +213,10 @@ FORWARD_PREFIX = (
     # an initializer is zeroed where its storage is established. badc
     # validates the value and implements all three.
     "-ftrivial-auto-var-init=",
+    # AArch64 CPU selection: the crypto/aes/sha2 extensions set the
+    # __ARM_FEATURE_* macros the NEON units gate on; badc validates the
+    # extension list and refuses one it does not implement.
+    "-mcpu=",
     # A reserved register. badc keeps it out of its allocator and its own
     # scratch picks, and refuses a name it cannot honour (the stack and frame
     # pointers, its scratch registers), so the unit fails rather than
@@ -650,6 +654,8 @@ def _self_test() -> int:
     # CONFIG_INIT_STACK_ALL_ZERO's flag reaches badc; the padding flag
     # names what the object already gets and is dropped with that
     # measurement.
+    for flag in ("-mcpu=generic+crypto",):
+        assert rewrite([flag]).argv == [flag], flag
     for flag in ("-ftrivial-auto-var-init=zero",
                  "-ftrivial-auto-var-init=pattern"):
         assert rewrite([flag]).argv == [flag], flag

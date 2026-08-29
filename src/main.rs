@@ -288,6 +288,13 @@ Compile knobs:
   --param ssp-buffer-size=N
                            Least character-array size, in bytes, that
                            -fstack-protector protects a function for.
+  -mcpu=NAME[+ext...]      AArch64 CPU selection. The name picks a
+                           scheduling model badc does not differentiate;
+                           `+crypto` / `+aes` / `+sha2` (and their `no`
+                           forms) set the __ARM_FEATURE_* macros the way
+                           gcc does, with the crypto encodings always
+                           available to inline asm. Another extension is
+                           refused by name.
   -mstack-protector-guard=global|tls|sysreg
                            Where the guard value is read from. The
                            default follows the target: %fs:0x28 on
@@ -671,6 +678,7 @@ fn run() {
     let mut map_path: Option<PathBuf> = None;
     let mut print_map = false;
     let mut target_spec: Option<String> = None;
+    let mut mcpu: Option<String> = None;
     let mut defines: Vec<(String, String)> = Vec::new();
     let mut undefines: Vec<String> = Vec::new();
     let mut include_paths: Vec<String> = Vec::new();
@@ -1113,6 +1121,10 @@ fn run() {
             // sees Device-typed memory, where an unaligned access
             // raises an alignment fault instead of being fixed up;
             // see `NativeOptions::strict_align`.
+            // AArch64 CPU selection. The base name picks a scheduling
+            // model badc does not differentiate; the extensions decide
+            // the feature macros, resolved once the target is known.
+            s if s.starts_with("-mcpu=") => mcpu = Some(s["-mcpu=".len()..].to_string()),
             "-mstrict-align" => mstrict_align = true,
             "-mno-strict-align" => mstrict_align = false,
             // Speculative-execution mitigations, in gcc's spellings. An
@@ -2016,6 +2028,54 @@ fn run() {
              `global` and `tls` guard forms only",
         );
         std::process::exit(1);
+    }
+    if let Some(spec) = &mcpu {
+        if !matches!(
+            target,
+            badc::Target::LinuxAarch64 | badc::Target::MacOSAarch64 | badc::Target::WindowsAarch64
+        ) {
+            eprint_diagnostic(
+                "badc: error: `-mcpu=` names an AArch64 CPU; the x86-64 targets take none",
+            );
+            std::process::exit(1);
+        }
+        // gcc's model, measured: `+crypto` is `+aes+sha2`, `no<ext>`
+        // subtracts, and __ARM_FEATURE_CRYPTO holds only while both do.
+        // The AES and SHA-2 encodings are always in badc's tables; any
+        // other modifier is refused rather than accepted inertly.
+        let mut parts = spec.split('+');
+        if parts.next().unwrap_or("").is_empty() {
+            eprint_diagnostic(format!("badc: error: `-mcpu={spec}` names no CPU"));
+            std::process::exit(1);
+        }
+        let (mut aes, mut sha2) = (false, false);
+        for ext in parts {
+            match ext {
+                "crypto" => (aes, sha2) = (true, true),
+                "nocrypto" => (aes, sha2) = (false, false),
+                "aes" => aes = true,
+                "noaes" => aes = false,
+                "sha2" => sha2 = true,
+                "nosha2" => sha2 = false,
+                other => {
+                    eprint_diagnostic(format!(
+                        "badc: error: `-mcpu=` extension `{other}` is not \
+                         implemented; badc implements `crypto`, `aes`, \
+                         `sha2` and their `no` forms"
+                    ));
+                    std::process::exit(1);
+                }
+            }
+        }
+        for (name, on) in [
+            ("__ARM_FEATURE_AES", aes),
+            ("__ARM_FEATURE_SHA2", sha2),
+            ("__ARM_FEATURE_CRYPTO", aes && sha2),
+        ] {
+            if on && !defines.iter().any(|(n, _)| n == name) {
+                defines.push((name.to_string(), String::from("1")));
+            }
+        }
     }
     if code_model_tiny && target != badc::Target::LinuxAarch64 {
         eprint_diagnostic(

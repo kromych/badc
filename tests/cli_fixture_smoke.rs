@@ -1726,6 +1726,24 @@ fn patchable_entries_and_fentry_calls_run_on_the_native_target() {
         let built = cmd
             .arg("-o")
             .arg(&exe)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            built.status.success(),
+            "{tag}: build failed: {}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        let run = Command::new(&exe).output().expect("run image");
+        assert_eq!(
+            run.status.code(),
+            Some(0),
+            "{tag}: the instrumented image failed"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 /// Sixteen integers and twenty doubles live across calls, more than either
 /// callee-saved bank holds, so at `-O` every register of both banks and the
 /// FP scratch see use; `fpr_leaf` fills the caller-saved FP bank of a
@@ -2043,18 +2061,61 @@ fn ffixed_argument_registers_still_carry_the_call() {
             .expect("run badc");
         assert!(
             built.status.success(),
-            "{tag}: build failed: {}",
+            "{opt:?}: build failed -- {}",
             String::from_utf8_lossy(&built.stderr)
         );
-        let run = Command::new(&exe).output().expect("run image");
+        let run = Command::new(&bin).output().expect("run the image");
         assert_eq!(
             run.status.code(),
             Some(0),
-            "{tag}: the instrumented image failed"
+            "{opt:?}: a function disagreed with its reference"
         );
     }
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// `-mcpu=` sets the AArch64 feature macros the way gcc does and
+/// refuses what badc does not implement: `+crypto` makes the AES
+/// intrinsics compile for linux-aarch64, an unknown extension and an
+/// x86-64 target are refused by name.
+#[test]
+fn mcpu_extensions_gate_the_feature_macros() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let root = std::env::temp_dir().join(format!("badc-mcpu-{}", std::process::id()));
+    std::fs::create_dir_all(&root).expect("create dir");
+    let src = root.join("aes.c");
+    std::fs::write(
+        &src,
+        "#ifndef __ARM_FEATURE_CRYPTO\n#error crypto missing\n#endif\n\
+         #include <arm_neon.h>\n\
+         uint8x16_t r(uint8x16_t s, uint8x16_t k) { return vaesmcq_u8(vaeseq_u8(s, k)); }\n",
+    )
+    .expect("write source");
+    let obj = root.join("aes.o");
+    let ok = Command::new(badc)
+        .args(["--gnu", "-q", "-c", "--target=linux-aarch64", "-mcpu=generic+crypto"])
+        .arg(&src)
+        .arg("-o")
+        .arg(&obj)
+        .output()
+        .expect("run badc");
+    assert!(ok.status.success(), "{}", String::from_utf8_lossy(&ok.stderr));
+    for (args, want) in [
+        (&["-c", "--target=linux-aarch64", "-mcpu=generic+bogus"][..], "extension `bogus`"),
+        (&["-c", "--target=linux-x64", "-mcpu=generic"][..], "AArch64"),
+    ] {
+        let out = Command::new(badc)
+            .args(args)
+            .arg(&src)
+            .args(["-o", "/dev/null"])
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(!out.status.success() && err.contains(want), "{args:?}: {err}");
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 
 /// The profiling options are refused where gcc has none, by name.
 #[test]
@@ -2087,14 +2148,6 @@ fn profiling_options_are_refused_by_name_where_gcc_has_none() {
         assert!(
             stderr.contains(name),
             "{target} {flag}: the diagnostic must name the option: {stderr}"
-            "{opt:?}: build failed -- {}",
-            String::from_utf8_lossy(&built.stderr)
-        );
-        let run = Command::new(&bin).output().expect("run the image");
-        assert_eq!(
-            run.status.code(),
-            Some(0),
-            "{opt:?}: a function disagreed with its reference"
         );
     }
     let _ = std::fs::remove_dir_all(&root);

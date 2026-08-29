@@ -645,6 +645,47 @@ impl Compiler {
         super::super::lexer::resolve_symbol(&mut self.symbols, &mut self.symbol_index, bytes, hash)
     }
 
+    /// Redirect a builtin's library-function binding away from a
+    /// unit-local inline definition of the same name.
+    ///
+    /// `__builtin_<fn>` denotes the library function, which has
+    /// external linkage. An inline definition provides no external
+    /// definition (C99 6.7.4p6), so it is not what the builtin names,
+    /// and the body badc emits for it calls the builtin in turn --
+    /// binding there leaves the body calling itself. A fortified header
+    /// defining `memcmp` as a wrapper over `__builtin_memcmp` is the
+    /// shape that reaches.
+    ///
+    /// The reference goes to the external name through a slot carrying
+    /// only that reference. `.` cannot occur in a C identifier, so the
+    /// slot collides with nothing the source can declare and ordinary
+    /// lookups still find the inline definition; its assembler name is
+    /// the library name, so the call relocates against the one external
+    /// definition the program links.
+    fn builtin_library_symbol(&mut self, idx: usize) -> usize {
+        let sym = &self.symbols[idx];
+        if sym.class != Token::Fun as i64
+            || sym.saw_static_decl
+            || !crate::c5::symbol::inline_definition(sym, self.inline_model)
+        {
+            return idx;
+        }
+        let link_name = sym.link_name().to_string();
+        let (type_, params, is_variadic) = (sym.type_, sym.params.clone(), sym.is_variadic);
+        let slot = self.resolve_symbol_named(&alloc::format!("{link_name}.builtin"));
+        let sym = &mut self.symbols[slot];
+        if sym.class == 0 {
+            sym.class = Token::Fun as i64;
+            sym.type_ = type_;
+            sym.params = params;
+            sym.is_variadic = is_variadic;
+            sym.asm_name = Some(link_name);
+            sym.linkage = crate::c5::symbol::Linkage::External;
+            sym.defined_here = false;
+        }
+        slot
+    }
+
     /// Build the call a declined memory-transfer expansion falls back
     /// to: the library function of the same name, with the arguments
     /// already parsed. An undeclared library name reports the same
@@ -684,6 +725,7 @@ impl Compiler {
                 return Err(self.compile_err(format!("unknown function `{name}`{suggestion}")));
             }
         };
+        let idx = self.builtin_library_symbol(idx);
         self.symbols[idx].was_referenced = true;
         self.flush_pending_stores();
         self.pending.last_emit_was_indirect_call = false;
@@ -1300,6 +1342,7 @@ impl Compiler {
                     );
                     if let Some(fn_name) = alias {
                         id_idx = self.resolve_symbol_named(fn_name);
+                        id_idx = self.builtin_library_symbol(id_idx);
                     }
                 }
                 // C89 6.3.2.2 implicit declaration, restricted to the

@@ -497,3 +497,110 @@ fn an_inline_only_definition_splits_its_body_from_its_identifier() {
     assert_eq!(body.binding, STB_LOCAL, "the body must not be exported");
     assert_ne!(body.section, NativeSymSection::Undef, "the body is defined");
 }
+
+/// Sources shaped like `<linux/fortify-string.h>`: an inline definition
+/// of a library function whose body calls the builtin of the same name
+/// to reach the unfortified one, plus a caller that keeps the body
+/// live. Each row is `(name, definition, caller)`.
+const FORTIFY_WRAPPERS: &[(&str, &str, &str)] = &[
+    (
+        "memcmp",
+        "int memcmp(const void *p, const void *q, unsigned long n)\
+         { return __builtin_memcmp(p, q, n); }\n",
+        "int probe(const void *a, const void *b, unsigned long n)\
+         { return memcmp(a, b, n); }\n",
+    ),
+    (
+        "strcpy",
+        "char *strcpy(char *p, const char *q) { return __builtin_strcpy(p, q); }\n",
+        "char *probe(char *a, const char *b) { return strcpy(a, b); }\n",
+    ),
+    (
+        "memchr",
+        "void *memchr(const void *p, int c, unsigned long n)\
+         { return __builtin_memchr(p, c, n); }\n",
+        "void *probe(const void *a, int c, unsigned long n) { return memchr(a, c, n); }\n",
+    ),
+    (
+        "strncat",
+        "char *strncat(char *p, const char *q, unsigned long n)\
+         { return __builtin_strncat(p, q, n); }\n",
+        "char *probe(char *a, const char *b, unsigned long n) { return strncat(a, b, n); }\n",
+    ),
+    // The memory transfers take the other route to a library call: the
+    // count is not an integer constant expression, so the inline
+    // expansion declines and falls back to the named function.
+    (
+        "memcpy",
+        "void *memcpy(void *p, const void *q, unsigned long n)\
+         { return __builtin_memcpy(p, q, n); }\n",
+        "void *probe(void *a, const void *b, unsigned long n) { return memcpy(a, b, n); }\n",
+    ),
+];
+
+/// A builtin equivalent to a library function reaches that function's
+/// external definition, never a unit-local inline definition of the
+/// same name.
+///
+/// An inline definition provides no external definition (C99 6.7.4p6),
+/// so it is not what `__builtin_<fn>` names, and the body badc emits
+/// for it calls the builtin in turn. Binding the builtin to that body
+/// closes the loop: every `<linux/fortify-string.h>` wrapper the
+/// inliner declined became a body that called itself, and the kernel's
+/// first fortified compare ran the boot stack off its guard page.
+#[test]
+fn builtin_alias_reaches_the_external_definition() {
+    for (name, def, caller) in FORTIFY_WRAPPERS {
+        for model in [Model::C99, Model::Gnu89] {
+            // `extern inline` is the inline-only spelling under GNU89;
+            // a plain `inline` is the C99 one.
+            let src = match model {
+                Model::Gnu89 => alloc::format!("extern __inline__ {def}{caller}"),
+                Model::C99 => alloc::format!("inline {def}{caller}"),
+            };
+            let copts = CompileOptions {
+                no_entry_point: true,
+                gnu: true,
+                gnu89_inline: model == Model::Gnu89,
+                ..Default::default()
+            };
+            let program = Compiler::with_options(src.clone(), Target::LinuxX64, copts)
+                .compile()
+                .unwrap_or_else(|e| panic!("compile {name} under {model:?}: {e:?}"));
+            let opts = NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..Default::default()
+            };
+            let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+            let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+            // The body is emitted, and privately: that is what makes the
+            // call inside it a call, rather than an inlined expansion.
+            let body = alloc::format!("{name}.inline");
+            assert!(
+                obj.symbols
+                    .iter()
+                    .any(|s| s.name == body && s.section != NativeSymSection::Undef),
+                "{name} under {model:?}: expected the private body {body}"
+            );
+            // The builtin's call relocates against the library name,
+            // which this unit does not define. Binding it to the body
+            // instead leaves no reference and no relocation at all.
+            let undef: Vec<usize> = obj
+                .symbols
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.name == *name && s.section == NativeSymSection::Undef)
+                .map(|(i, _)| i)
+                .collect();
+            assert!(
+                !undef.is_empty(),
+                "{name} under {model:?}: expected an undefined reference to {name}, got {:?}",
+                obj.symbols.iter().map(|s| &s.name).collect::<Vec<_>>()
+            );
+            assert!(
+                obj.text_relocs.iter().any(|r| undef.contains(&r.sym_idx)),
+                "{name} under {model:?}: the body must call {name}, not itself"
+            );
+        }
+    }
+}

@@ -788,6 +788,7 @@ impl Compiler {
                 // statement (not a declaration) cannot leak onto the next
                 // declaration; the declaration path re-reads it after this.
                 self.pending.attr_cleanup = None;
+                self.pending.attr_uninitialized = false;
                 self.skip_attribute_specifiers()?;
                 leading_maybe_unused = self.pending.attr_maybe_unused;
                 if self.lex.tk == '}' {

@@ -22,6 +22,7 @@ use super::{C5Error, Compiler, Program, Vm};
 // These modules emit / link native images (via `emit_native*` and the
 // `link_*` helpers below), which require `native-emit` -- pulled in by
 // `full`. The host-only `--features std` build gates them out.
+mod auto_var_init;
 #[cfg(feature = "full")]
 mod codegen;
 mod deferred;

@@ -294,6 +294,26 @@ Compile knobs:
                            Read the guard from NAME instead of
                            __stack_chk_guard. Not combinable with
                            -mstack-protector-guard-offset=.
+  -ftrivial-auto-var-init=uninitialized|zero|pattern
+                           Initialize every automatic object declared
+                           without an initializer -- scalars,
+                           aggregates, arrays and variable-length
+                           arrays -- where its storage is established:
+                           `zero` stores zeros, `pattern` stores the
+                           byte 0xFE over it. `uninitialized` (the
+                           default) leaves it as the frame held it.
+                           __attribute__((uninitialized)) on an object
+                           opts it out. A declaration a `goto` or
+                           `switch` jumps past is not covered, as in
+                           gcc. Diagnostics and the -O promotion of the
+                           object are unchanged.
+  -fzero-init-padding-bits=standard|unions|all
+                           Which automatic initializers zero their
+                           padding. Every value selects what badc
+                           already emits: an aggregate initializer
+                           zero-fills the whole object, padding
+                           included, before storing the members, for
+                           structs and unions alike.
   -fshort-wchar            Give wchar_t an unsigned 16-bit type instead
                            of the target's default, narrowing the
                            elements of L-prefixed string and character
@@ -728,6 +748,9 @@ fn run() {
     let mut strict_flex_arrays: u8 = 0;
     // `-fshort-wchar` -- narrow `wchar_t` to an unsigned 16-bit type.
     let mut short_wchar = false;
+    // `-ftrivial-auto-var-init=` -- what an automatic object declared
+    // without an initializer holds; see `AutoVarInit`.
+    let mut auto_var_init = badc::AutoVarInit::Uninitialized;
     // `-fsigned-char` / `-funsigned-char`; `None` keeps the target ABI's
     // own plain-`char` signedness.
     let mut char_signed: Option<bool> = None;
@@ -1408,6 +1431,40 @@ fn run() {
             // reach the front end rather than be dropped as a no-op.
             "-fshort-wchar" => short_wchar = true,
             "-fno-short-wchar" => short_wchar = false,
+            // gcc `-ftrivial-auto-var-init=`: the front end supplies the
+            // initializer, so every output mode carries it.
+            s if s.starts_with("-ftrivial-auto-var-init=") => {
+                let spec = &s["-ftrivial-auto-var-init=".len()..];
+                auto_var_init = match spec {
+                    "uninitialized" => badc::AutoVarInit::Uninitialized,
+                    "zero" => badc::AutoVarInit::Zero,
+                    "pattern" => badc::AutoVarInit::Pattern,
+                    _ => {
+                        eprint_diagnostic(format!(
+                            "badc: error: unsupported argument `{spec}` to \
+                             `-ftrivial-auto-var-init=` (supported: uninitialized, \
+                             zero, pattern)"
+                        ));
+                        std::process::exit(1);
+                    }
+                };
+            }
+            // gcc `-fzero-init-padding-bits=`: measured on all three
+            // targets at both optimization levels, a partially initialized
+            // automatic struct or union has zero padding whichever value is
+            // named, since the whole object is zero-filled before its
+            // members are stored. The argument is checked and nothing
+            // changes.
+            s if s.starts_with("-fzero-init-padding-bits=") => {
+                let spec = &s["-fzero-init-padding-bits=".len()..];
+                if !matches!(spec, "standard" | "unions" | "all") {
+                    eprint_diagnostic(format!(
+                        "badc: error: unsupported argument `{spec}` to \
+                         `-fzero-init-padding-bits=` (supported: standard, unions, all)"
+                    ));
+                    std::process::exit(1);
+                }
+            }
             // gcc / clang `-fsigned-char` / `-funsigned-char`: C99
             // 6.2.5p15 leaves plain `char`'s signedness to the
             // implementation, and each selects one over the target
@@ -2378,6 +2435,7 @@ fn run() {
                 .with_strict_flex_arrays(strict_flex_arrays)
                 .with_short_wchar(short_wchar)
                 .with_char_signed(char_signed)
+                .with_auto_var_init(auto_var_init)
                 .with_nostdinc(nostdinc)
                 .with_no_builtin(no_builtin)
                 .with_no_builtin_fns(no_builtin_fns.clone())
@@ -2459,6 +2517,7 @@ fn run() {
             .with_strict_flex_arrays(strict_flex_arrays)
             .with_short_wchar(short_wchar)
             .with_char_signed(char_signed)
+            .with_auto_var_init(auto_var_init)
             .with_nostdinc(nostdinc)
             .with_no_builtin(no_builtin)
             .with_no_builtin_fns(no_builtin_fns.clone())
@@ -2574,6 +2633,7 @@ fn run() {
                 .with_strict_flex_arrays(strict_flex_arrays)
                 .with_short_wchar(short_wchar)
                 .with_char_signed(char_signed)
+                .with_auto_var_init(auto_var_init)
                 .with_nostdinc(nostdinc)
                 .with_no_builtin(no_builtin)
                 .with_no_builtin_fns(no_builtin_fns.clone())
@@ -2704,6 +2764,7 @@ fn run() {
             strict_flex_arrays,
             short_wchar,
             char_signed,
+            auto_var_init,
             nostdinc,
             no_builtin,
             no_builtin_fns: &no_builtin_fns,
@@ -2745,6 +2806,7 @@ fn run() {
                 .with_strict_flex_arrays(strict_flex_arrays)
                 .with_short_wchar(short_wchar)
                 .with_char_signed(char_signed)
+                .with_auto_var_init(auto_var_init)
                 .with_nostdinc(nostdinc)
                 .with_no_builtin(no_builtin)
                 .with_no_builtin_fns(no_builtin_fns.clone())
@@ -3427,6 +3489,7 @@ fn run() {
             strict_flex_arrays,
             short_wchar,
             char_signed,
+            auto_var_init,
             nostdinc,
             no_builtin,
             no_builtin_fns: &no_builtin_fns,
@@ -3569,6 +3632,7 @@ fn run() {
             strict_flex_arrays,
             short_wchar,
             char_signed,
+            auto_var_init,
             nostdinc,
             no_builtin,
             no_builtin_fns: &no_builtin_fns,
@@ -4115,6 +4179,7 @@ struct CompileCfg<'a> {
     strict_flex_arrays: u8,
     short_wchar: bool,
     char_signed: Option<bool>,
+    auto_var_init: badc::AutoVarInit,
     nostdinc: bool,
     no_builtin: bool,
     no_builtin_fns: &'a [String],
@@ -4282,6 +4347,7 @@ fn tu_compile_options(
         .with_strict_flex_arrays(cfg.strict_flex_arrays)
         .with_short_wchar(cfg.short_wchar)
         .with_char_signed(cfg.char_signed)
+        .with_auto_var_init(cfg.auto_var_init)
         .with_nostdinc(cfg.nostdinc)
         .with_no_builtin(cfg.no_builtin)
         .with_no_builtin_fns(cfg.no_builtin_fns.to_vec())

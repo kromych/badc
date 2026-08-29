@@ -383,6 +383,7 @@ impl Compiler {
             self.pending.attr_destructor = false;
             self.pending.attr_init_priority = None;
             self.pending.attr_cleanup = None;
+            self.pending.attr_uninitialized = false;
             self.pending.attr_weak = false;
             self.pending.attr_used = false;
             self.pending.attr_visibility = None;
@@ -1624,6 +1625,7 @@ impl Compiler {
                         {
                             self.pending.attr_maybe_unused = false;
                             self.pending.attr_cleanup = None;
+                            self.pending.attr_uninitialized = false;
                             self.skip_attribute_specifiers()?;
                             leading_maybe_unused = self.pending.attr_maybe_unused;
                             if self.lex.tk == '}' {

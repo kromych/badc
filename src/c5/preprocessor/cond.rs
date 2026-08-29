@@ -1210,6 +1210,7 @@ pub(super) fn is_known_attribute(name: &str) -> bool {
     matches!(
         core,
         "cleanup"
+            | "uninitialized"
             | "alias"
             | "naked"
             | "packed"

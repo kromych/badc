@@ -4242,7 +4242,8 @@ impl Compiler {
                 self.data_object_starts.push(src_data_addr as i64);
             }
             self.mark_emit_other();
-            self.pending_local_aggregate_ast = Some(LocalInitPrelude::Zero {
+            self.pending_local_aggregate_ast = Some(LocalInitPrelude::Fill {
+                byte: 0,
                 size_bytes: total_bytes as i64,
             });
             return;

@@ -2722,6 +2722,7 @@ impl<'a> Walker<'a> {
                 ptr_slot,
                 size_slot,
                 dim,
+                fill,
                 ..
             } => {
                 // C99 6.7.6.2: allocate `count * sizeof(elem)` bytes
@@ -2731,6 +2732,7 @@ impl<'a> Walker<'a> {
                 let ptr_slot = *ptr_slot;
                 let size_slot = *size_slot;
                 let dim = *dim;
+                let fill = *fill;
                 let n = self.walk_expr_rvalue(b, dim)?;
                 let bytes = if elem_size == 1 {
                     n
@@ -2743,6 +2745,9 @@ impl<'a> Walker<'a> {
                     alloc::vec![bytes],
                 );
                 b.store_local(ptr_slot, ptr, super::super::ir::StoreKind::I64);
+                if let Some(byte) = fill {
+                    self.fill_loop(b, ptr, bytes, byte);
+                }
                 Ok(())
             }
             super::super::ast::Decl::StaticLocal { .. } => {
@@ -2811,29 +2816,70 @@ impl<'a> Walker<'a> {
         b.mcpy(dst, src, size, offset_align(SLOT_ALIGN, src_data_off));
     }
 
-    /// Store zeros over the first `size` bytes of the local at `slot`,
-    /// in place of copying the all-zero template the parser declined to
-    /// stage. A frame slot is `SLOT_ALIGN`-aligned, so the fill runs in
-    /// whole units down to the tail.
-    fn init_zero(
+    /// Store `byte` over the first `size` bytes of the local at `slot`,
+    /// in place of copying a staged template. A frame slot is
+    /// `SLOT_ALIGN`-aligned, so the fill runs in whole units down to the
+    /// tail; past the inline bound it runs as a loop.
+    fn init_fill(
         &mut self,
         b: &mut super::super::codegen::ssa::build::SsaBuilder,
         slot: i64,
         size: i64,
+        byte: u8,
     ) {
         if size <= 0 {
             return;
         }
         let dst = b.local_addr(slot);
-        let zero = b.imm(0);
+        if super::mem_transfer_accesses(size, SLOT_ALIGN) > super::MAX_MEM_FILL_ACCESSES {
+            let bytes = b.imm(size);
+            self.fill_loop(b, dst, bytes, byte);
+            return;
+        }
         for (off, width) in super::mem_transfer_chunks(size, SLOT_ALIGN) {
             let p = if off == 0 {
                 dst
             } else {
                 b.binop_imm(BinOp::Add, dst, off)
             };
-            b.store(p, zero, store_kind_for_width(width));
+            let v = b.imm(repeat_byte(byte, width));
+            b.store(p, v, store_kind_for_width(width));
         }
+    }
+
+    /// Store `byte` over `bytes` bytes at `dst` with a loop of 8-byte
+    /// stores. The count is rounded up to a multiple of 8: a frame slot
+    /// and an `alloca` allocation are both sized in units of at least
+    /// that and start 8-aligned, so the rounded run stays inside the
+    /// object's own storage. The cursor lives in a synthetic slot the
+    /// `-O` promotion lifts into a register.
+    fn fill_loop(
+        &mut self,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
+        dst: super::super::ir::ValueId,
+        bytes: super::super::ir::ValueId,
+        byte: u8,
+    ) {
+        let cursor = b.alloc_synthetic_local();
+        let rounded = b.binop_imm(BinOp::Add, bytes, 7);
+        let rounded = b.binop_imm(BinOp::And, rounded, -8);
+        let end = b.binop(BinOp::Add, dst, rounded);
+        b.store_local(cursor, dst, StoreKind::I64);
+        let header = b.new_block();
+        let body = b.new_block();
+        let after = b.new_block();
+        b.jmp(header);
+        b.switch_to(header);
+        let p = b.load_local(cursor, LoadKind::I64);
+        let more = b.binop(BinOp::Ult, p, end);
+        b.branch_zero(more, after, body);
+        b.switch_to(body);
+        let v = b.imm(repeat_byte(byte, 8));
+        b.store(p, v, StoreKind::I64);
+        let next = b.binop_imm(BinOp::Add, p, 8);
+        b.store_local(cursor, next, StoreKind::I64);
+        b.jmp(header);
+        b.switch_to(after);
     }
 
     fn emit_local_init(
@@ -2878,8 +2924,8 @@ impl<'a> Walker<'a> {
                 self.init_from_template(b, slot, *src_data_off, *size_bytes);
                 Ok(())
             }
-            super::super::ast::LocalInit::Zero { size_bytes } => {
-                self.init_zero(b, slot, *size_bytes);
+            super::super::ast::LocalInit::Fill { byte, size_bytes } => {
+                self.init_fill(b, slot, *size_bytes, *byte);
                 Ok(())
             }
             super::super::ast::LocalInit::Runtime {
@@ -2893,8 +2939,8 @@ impl<'a> Walker<'a> {
                         src_data_off,
                         size_bytes,
                     }) => self.init_from_template(b, slot, *src_data_off, *size_bytes),
-                    Some(super::super::ast::LocalInitPrelude::Zero { size_bytes }) => {
-                        self.init_zero(b, slot, *size_bytes)
+                    Some(super::super::ast::LocalInitPrelude::Fill { byte, size_bytes }) => {
+                        self.init_fill(b, slot, *size_bytes, *byte)
                     }
                     None => {}
                 }
@@ -7199,6 +7245,16 @@ fn store_place(
             b.seg_store(addr, value, kind, seg, vol);
         }
     }
+}
+
+/// `byte` repeated across `width` bytes, as the immediate a store of
+/// that width takes.
+fn repeat_byte(byte: u8, width: u32) -> i64 {
+    let mut v: u64 = 0;
+    for _ in 0..width {
+        v = (v << 8) | u64::from(byte);
+    }
+    v as i64
 }
 
 /// Mirror of [`load_kind_for`] for stores.

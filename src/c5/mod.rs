@@ -41,7 +41,9 @@ pub use {
         SYSV_TLS_GUARD_OFFSET, StackGuard, StackProtect, StackProtector, Target, jit_run,
         jit_run_with_options, stack_guard_sysreg,
     },
-    compiler::{CompileOptions, Compiler, StructDef, StructField},
+    compiler::{
+        AUTO_VAR_INIT_PATTERN_BYTE, AutoVarInit, CompileOptions, Compiler, StructDef, StructField,
+    },
     depfile::{escape as dep_escape, prerequisites as dep_prerequisites, render as dep_render},
     error::C5Error,
     headers::embedded_headers,

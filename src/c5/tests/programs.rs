@@ -4126,6 +4126,15 @@ fn bitfield_storage_unit_matches_base_type() {
 }
 
 #[test]
+fn partial_initializer_zeroes_the_padding() {
+    // C99 6.7.8p10 requires zero padding for static storage only; an
+    // automatic aggregate initializer zero-fills the whole object before
+    // storing the members, which is what `-fzero-init-padding-bits=all`
+    // names. The fixture dirties the stack first and ORs the padding.
+    assert_eq!(run_fixture("init_padding_zero.c"), 0);
+}
+
+#[test]
 fn integer_literal_suffix_picks_type() {
     // C99 6.4.4.1 paragraph 5: an integer literal's type comes
     // from its suffix. `1ULL` is unsigned long long, not int;

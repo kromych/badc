@@ -271,6 +271,23 @@ The family needs relocatable output -- the failure branch is a relocation
 against `__stack_chk_fail` -- so `--jit` and `--interp` reject it, as do the
 Windows targets, whose C library exports neither symbol.
 
+`-ftrivial-auto-var-init=uninitialized|zero|pattern` (the kernel's
+`CONFIG_INIT_STACK_ALL_ZERO` passes `zero`) initializes every automatic
+object declared without an initializer -- scalars, aggregates, arrays and
+variable-length arrays -- where its storage is established: the value is
+supplied in the front end as an ordinary initializer, so every output mode
+carries it and the `-O` promotion treats it as any written one. `pattern`
+stores the byte `0xFE` gcc stores. A scalar that fits a register takes the
+value as a literal of its own type; anything wider is filled byte-wise,
+unrolled within the inline bound and as a store loop past it, and a
+variable-length array's loop follows its allocation.
+`__attribute__((uninitialized))` opts an object out, as does binding it to a
+register with `asm`; a declaration a `goto` or `switch` jumps past is not
+covered, as in gcc. `-fzero-init-padding-bits=standard|unions|all` is
+accepted with every value and changes nothing: an automatic aggregate
+initializer already zero-fills the whole object, padding included, before it
+stores the members, for structs and unions alike.
+
 `pac-ret` signs the return address of every function that stores the link
 register: `paciasp` ahead of the prologue, `autiasp` after the last teardown
 instruction of each epilogue, where sp -- the signing modifier -- holds its

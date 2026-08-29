@@ -1032,6 +1032,12 @@ enum SlotClass {
 /// A slot with no stores (write-free) is treated as integer-classed;
 /// such a slot is read before any definition and the rename pass
 /// records it in `failed`, leaving it in memory.
+///
+/// TODO: an immediate is integer-classed whatever store kind carries
+/// it, so a `double` slot initialized from a constant (`double d = 0.0;`,
+/// or the value `-ftrivial-auto-var-init` supplies) mixes classes with
+/// its FP stores and stays frame-resident. An FP-classed constant would
+/// let it promote.
 fn slot_class(a: &SlotAccess) -> Option<SlotClass> {
     // A slot written at two FP widths would need a width-changing phi,
     // and one read at two FP widths is a type-pun; keep both in memory.

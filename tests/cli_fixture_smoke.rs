@@ -1408,6 +1408,124 @@ fn host_native_target() -> Option<&'static str> {
     }
 }
 
+/// `-ftrivial-auto-var-init`: the fixture dirties the stack through a
+/// callee and reads every uninitialized object shape back, exiting with
+/// the count of bytes that miss the selected byte. Both values run at
+/// both optimization levels on the host; `=pattern` passes the fixture the
+/// byte it checks against. The unflagged build has to see the stale bytes,
+/// which is what makes a zero exit the stores' doing.
+#[test]
+fn trivial_auto_var_init_fills_every_uninitialized_object() {
+    let Some(target) = host_native_target() else {
+        return;
+    };
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let root = std::env::temp_dir().join(format!("badc-auto-var-init-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&root);
+    let fixture = fixtures_dir().join("trivial_auto_var_init.c");
+    let build = |name: &str, flags: &[&str]| {
+        let out = root.join(name);
+        let built = Command::new(badc)
+            .arg(format!("--target={target}"))
+            .args(flags)
+            .arg("-o")
+            .arg(&out)
+            .arg(&fixture)
+            .output()
+            .expect("run badc");
+        assert!(
+            built.status.success(),
+            "{flags:?}: build failed -- {}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        Command::new(&out)
+            .output()
+            .expect("run the image")
+            .status
+            .code()
+    };
+    for (name, flags) in [
+        ("zero0", &["-ftrivial-auto-var-init=zero"][..]),
+        ("zero1", &["-O", "-ftrivial-auto-var-init=zero"][..]),
+        (
+            "pattern0",
+            &["-ftrivial-auto-var-init=pattern", "-DEXPECT=0xFE"][..],
+        ),
+        (
+            "pattern1",
+            &["-O", "-ftrivial-auto-var-init=pattern", "-DEXPECT=0xFE"][..],
+        ),
+    ] {
+        assert_eq!(
+            build(name, flags),
+            Some(0),
+            "{flags:?}: stale bytes read back"
+        );
+    }
+    assert_ne!(
+        build("none", &[]),
+        Some(0),
+        "the probes must see the stale bytes without the flag"
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// Both flags take their gcc value sets and reject anything else by
+/// name. `-fzero-init-padding-bits=` changes nothing: an automatic
+/// aggregate initializer already zero-fills the object, which
+/// `init_padding_zero.c` locks; every value has to compile a unit.
+#[test]
+fn auto_var_init_and_padding_flags_are_validated_by_name() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let root = std::env::temp_dir().join(format!("badc-auto-var-flags-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&root);
+    let src = root.join("f.c");
+    std::fs::write(
+        &src,
+        "int f(void) { struct { char c; int i; } s = { 1 }; int x; return s.i + x; }\n",
+    )
+    .expect("write source");
+    let compile = |flag: &str| {
+        Command::new(badc)
+            .arg("--target=linux-x64")
+            .arg(flag)
+            .arg("-c")
+            .arg("-o")
+            .arg(root.join("f.o"))
+            .arg(&src)
+            .output()
+            .expect("run badc")
+    };
+    for flag in [
+        "-ftrivial-auto-var-init=uninitialized",
+        "-ftrivial-auto-var-init=zero",
+        "-ftrivial-auto-var-init=pattern",
+        "-fzero-init-padding-bits=standard",
+        "-fzero-init-padding-bits=unions",
+        "-fzero-init-padding-bits=all",
+    ] {
+        let out = compile(flag);
+        assert!(
+            out.status.success(),
+            "{flag}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+    for (flag, name) in [
+        ("-ftrivial-auto-var-init=random", "-ftrivial-auto-var-init="),
+        ("-fzero-init-padding-bits=none", "-fzero-init-padding-bits="),
+    ] {
+        let out = compile(flag);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(!out.status.success(), "{flag} must be rejected");
+        assert!(
+            stderr.contains(name),
+            "{flag}: the rejection names the flag: {stderr}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 /// The x86 kernel names the guard's register and symbol without naming
 /// the form, because gcc's x86 default for `-mstack-protector-guard=` is
 /// `tls`. Requiring the form stopped the defconfig build at the first

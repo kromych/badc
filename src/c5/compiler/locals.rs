@@ -32,7 +32,10 @@ use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::initializer::InitTarget;
-use super::types::{apply_qual_bits, is_pointer_ty, is_struct_value_ty, struct_id_of};
+use super::types::{
+    apply_qual_bits, is_float_ty, is_floating_scalar, is_long_double_ty, is_pointer_ty,
+    is_struct_value_ty, is_vector_ty, struct_id_of,
+};
 
 /// Alignment facts a block-scope declarator carries into its storage
 /// allocation. Produced once per declarator by
@@ -83,8 +86,8 @@ impl Compiler {
                     src_data_off,
                     size_bytes,
                 },
-                Some(super::super::ast::LocalInitPrelude::Zero { size_bytes }) => {
-                    super::super::ast::LocalInit::Zero { size_bytes }
+                Some(super::super::ast::LocalInitPrelude::Fill { byte, size_bytes }) => {
+                    super::super::ast::LocalInit::Fill { byte, size_bytes }
                 }
                 None => super::super::ast::LocalInit::None,
             }
@@ -370,9 +373,10 @@ impl Compiler {
         if self.try_parse_block_fn_prototype(lbt, is_static)? {
             return Ok(());
         }
-        // A leading `cleanup(fn)` applies to every declarator; one written
-        // after a declarator applies to it alone.
+        // A leading `cleanup(fn)` or `uninitialized` applies to every
+        // declarator; one written after a declarator applies to it alone.
         let leading_cleanup = self.pending.attr_cleanup.take();
+        let leading_uninitialized = core::mem::take(&mut self.pending.attr_uninitialized);
         while self.lex.tk != ';' {
             self.pending.fn_ptr_indirection = base_fn_ptr_indirection;
             self.pending.fn_ptr_ret_indirection = base_fn_ptr_ret_indirection;
@@ -441,6 +445,8 @@ impl Compiler {
             let asm_reg = self.parse_register_asm_binding(loc_idx, is_static, is_extern)?;
             // Trailing cleanup wins for this declarator; else the leading one.
             let cleanup_fn = self.pending.attr_cleanup.take().or(leading_cleanup);
+            let uninitialized =
+                core::mem::take(&mut self.pending.attr_uninitialized) || leading_uninitialized;
             if maybe_unused && loc_idx != usize::MAX {
                 self.symbols[loc_idx].maybe_unused = true;
             }
@@ -613,11 +619,18 @@ impl Compiler {
                     self.symbols[loc_idx].const_object_value =
                         self.try_fold_const_object_init(ty)?;
                 }
+                // `-ftrivial-auto-var-init` covers the object unless the
+                // program opted it out or bound it to a register.
+                let fill = if uninitialized || asm_reg.is_some() {
+                    None
+                } else {
+                    self.auto_var_init.fill_byte()
+                };
                 // This declaration can sit inside an enclosing aggregate's
                 // element initializer (an element that is a statement
                 // expression), so keep the carriers reentrant.
                 let saved = self.take_pending_local_carriers();
-                let r = self.allocate_local_with_init(loc_idx, ty, array_size);
+                let r = self.allocate_local_with_init(loc_idx, ty, array_size, fill);
                 if r.is_ok() {
                     self.finalize_local_init(loc_idx);
                 }
@@ -1304,7 +1317,12 @@ impl Compiler {
     /// storage from the per-frame alloca arena. The array is not
     /// promotable and its storage is reclaimed on block exit by the
     /// scope bracket `parse_block_stmt` emits.
-    fn allocate_vla_local(&mut self, loc_idx: usize, elem_ty: i64) -> Result<(), C5Error> {
+    fn allocate_vla_local(
+        &mut self,
+        loc_idx: usize,
+        elem_ty: i64,
+        fill: Option<u8>,
+    ) -> Result<(), C5Error> {
         // C99 6.7.8p3: a VLA declaration may not carry an initializer.
         if self.lex.tk == Token::Assign {
             return Err(self.compile_err("a variable-length array may not have an initializer"));
@@ -1328,7 +1346,15 @@ impl Compiler {
         // The VLA storage comes from the per-frame alloca arena, so the
         // function reserves the arena and its bookkeeping slot.
         self.uses_alloca_in_current_fn = true;
-        self.ast_emit_vla_decl(loc_idx as u32, elem_ty, elem_size, ptr_slot, size_slot, dim);
+        self.ast_emit_vla_decl(super::super::ast::Decl::Vla {
+            sym: loc_idx as u32,
+            elem_ty,
+            elem_size,
+            ptr_slot,
+            size_slot,
+            dim,
+            fill,
+        });
         Ok(())
     }
 
@@ -1531,9 +1557,10 @@ impl Compiler {
         loc_idx: usize,
         ty: i64,
         declared_array_size: i64,
+        fill: Option<u8>,
     ) -> Result<(), C5Error> {
         if declared_array_size == super::VLA_ARRAY_SIZE {
-            return self.allocate_vla_local(loc_idx, ty);
+            return self.allocate_vla_local(loc_idx, ty, fill);
         }
         // C99 6.7.9: an initializer at the declaration site counts
         // as a store from the perspective of the dead-store
@@ -1562,6 +1589,7 @@ impl Compiler {
                 self.symbols[loc_idx].array_size = if zero_len { 0 } else { 1 };
                 self.symbols[loc_idx].is_zero_len_array = zero_len;
                 self.symbols[loc_idx].val = self.reserve_slots(self.local_storage_slots(ty, 1));
+                self.emit_auto_var_fill(loc_idx, ty, true, fill);
                 return Ok(());
             }
             self.next()?;
@@ -2036,8 +2064,67 @@ impl Compiler {
             } else {
                 self.emit_local_init_store(local_val, ty)?;
             }
+        } else {
+            self.emit_auto_var_fill(loc_idx, ty, declared_array_size > 0, fill);
         }
         Ok(())
+    }
+
+    /// Supply the initializer `-ftrivial-auto-var-init` gives an object
+    /// declared without one: `fill` repeated over every byte. A scalar
+    /// that fits a register takes it as a literal of its own type, so the
+    /// slot stays as promotable as under a written initializer; an array,
+    /// an aggregate, a vector or a `long double` wider than f64 takes the
+    /// byte fill of `LocalInit::Fill`.
+    fn emit_auto_var_fill(&mut self, loc_idx: usize, ty: i64, is_array: bool, fill: Option<u8>) {
+        use super::super::ast::{Expr, LocalInitPrelude};
+        let Some(byte) = fill else {
+            return;
+        };
+        let elem_size = self.size_of_type(ty) as i64;
+        let size = if is_array {
+            elem_size * self.symbols[loc_idx].array_size
+        } else {
+            elem_size
+        };
+        if size <= 0 {
+            return;
+        }
+        let repeat =
+            |width: i64| -> u64 { (0..width).fold(0u64, |acc, _| (acc << 8) | u64::from(byte)) };
+        let wide_long_double = is_long_double_ty(ty)
+            && self.target.long_double() != crate::c5::codegen::LongDoubleKind::F64;
+        let scalar = !is_array
+            && size <= 8
+            && !is_struct_value_ty(ty)
+            && !is_vector_ty(&self.structs, ty)
+            && !wide_long_double;
+        if !scalar {
+            self.mark_emit_other();
+            self.pending_local_aggregate_ast = Some(LocalInitPrelude::Fill {
+                byte,
+                size_bytes: size,
+            });
+            return;
+        }
+        let expr = if is_float_ty(ty) {
+            // The walker narrows the f64 image back to f32; a bit pattern
+            // that is a finite f32 round-trips exactly.
+            let bits = (f32::from_bits(repeat(4) as u32) as f64).to_bits();
+            Expr::FloatLit { bits, ty }
+        } else if is_floating_scalar(ty) {
+            Expr::FloatLit {
+                bits: repeat(8),
+                ty,
+            }
+        } else {
+            Expr::IntLit {
+                val: repeat(size) as i64,
+                ty,
+            }
+        };
+        let pos = self.ast_src_pos();
+        self.pending_local_init_ast = Some(self.ast.push_expr(expr, pos));
     }
 
     /// Parse a C99 6.5.2.5 block-scope compound literal `(type){

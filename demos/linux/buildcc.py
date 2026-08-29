@@ -209,6 +209,10 @@ FORWARD_PREFIX = (
     "-fstrict-flex-arrays=",
     # `-fno-builtin`, per library function.
     "-fno-builtin-",
+    # CONFIG_INIT_STACK_ALL_ZERO: every automatic object declared without
+    # an initializer is zeroed where its storage is established. badc
+    # validates the value and implements all three.
+    "-ftrivial-auto-var-init=",
     *HARDENING_PREFIX,
 )
 
@@ -226,11 +230,6 @@ UNSUPPORTED_EXACT = {
 }
 
 UNSUPPORTED_PREFIX = (
-    # badc leaves automatic storage uninitialized, so
-    # CONFIG_INIT_STACK_ALL_ZERO is not in effect.
-    "-ftrivial-auto-var-init=",
-    # badc has no option for what an initializer leaves in padding bits.
-    "-fzero-init-padding-bits=",
     # badc emits no sanitizer instrumentation, so the checks CONFIG_UBSAN
     # asks for -- array bounds and shift-exponent among them -- are absent
     # from a unit built here, and the handlers in lib/ubsan.c stay uncalled.
@@ -321,6 +320,12 @@ IGNORE_PREFIX = (
     # units carry them, and of those only the hand-written assembly reaches
     # badc -- the C ones go to the real compiler -- where neither applies.
     "-mregparm=", "-mpreferred-stack-boundary=",
+    # Padding of a partially initialized automatic aggregate. Measured on
+    # x86_64, aarch64 and the macOS host at -O0 and -O: a struct or union
+    # initializer zero-fills the whole object before storing the members,
+    # so every value of the flag names what the object already gets. badc
+    # validates the value.
+    "-fzero-init-padding-bits=",
 )
 
 
@@ -640,8 +645,13 @@ def _self_test() -> int:
                  "-mstack-protector-guard=sysreg",
                  "-mstack-protector-guard-offset=1360"):
         assert rewrite([flag]).argv == [flag], flag
+    # CONFIG_INIT_STACK_ALL_ZERO's flag reaches badc; the padding flag
+    # names what the object already gets and is dropped with that
+    # measurement.
     for flag in ("-ftrivial-auto-var-init=zero",
-                 "-fasynchronous-unwind-tables"):
+                 "-ftrivial-auto-var-init=pattern"):
+        assert rewrite([flag]).argv == [flag], flag
+    for flag in ("-fasynchronous-unwind-tables",):
         r = rewrite([flag])
         assert r.dropped == [flag] and r.unknown == [], (flag, r)
     # The flexible-array level reaches badc, which implements it.
@@ -649,7 +659,8 @@ def _self_test() -> int:
     for flag in ("-Wall", "-Werror=return-type", "-Wno-sign-compare",
                  "-fno-strict-aliasing", "-mno-red-zone", "-falign-loops=1",
                  "-march=x86-64", "-mregparm=3", "-Wl,-r", "-mlittle-endian",
-                 "-mabi=lp64", "-ffixed-x18", "-fno-optimize-sibling-calls"):
+                 "-mabi=lp64", "-ffixed-x18", "-fno-optimize-sibling-calls",
+                 "-fzero-init-padding-bits=all"):
         r = rewrite([flag])
         assert r == Rewritten([], [], []), (flag, r)
     # A target property badc does not implement is not assumed satisfied

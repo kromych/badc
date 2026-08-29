@@ -473,6 +473,49 @@ pub struct CompileOptions {
     /// the implementation. `None` keeps the target ABI's own choice; see
     /// [`Self::plain_char_signed`], the sole resolution of the pair.
     pub char_signed: Option<bool>,
+    /// `-ftrivial-auto-var-init=`: what an automatic object declared
+    /// without an initializer holds on entry to its scope; see
+    /// [`AutoVarInit`].
+    pub auto_var_init: AutoVarInit,
+}
+
+/// `-ftrivial-auto-var-init=`: the initialization the compiler supplies
+/// for an automatic object the program declares without an initializer
+/// -- scalars, aggregates, arrays and variable-length arrays alike. The
+/// store is emitted where the object's storage is established, so a
+/// declaration reached by a jump past it (C99 6.8.6.1 `goto`, 6.8.4.2
+/// `switch`) is not covered, as in gcc. An object carrying
+/// `__attribute__((uninitialized))` or bound to a register by `asm` opts
+/// out. Diagnostics and the `-O` promotion of the object are unchanged:
+/// the supplied value is an ordinary initializer later stores overwrite.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum AutoVarInit {
+    /// `uninitialized`: the storage holds whatever the frame held.
+    #[default]
+    Uninitialized,
+    /// `zero`: every byte of the object is zero.
+    Zero,
+    /// `pattern`: every byte of the object is
+    /// [`AUTO_VAR_INIT_PATTERN_BYTE`].
+    Pattern,
+}
+
+/// The byte `AutoVarInit::Pattern` repeats over the object. gcc 16
+/// stores `0xFE` for every type on both x86-64 and AArch64 (clang uses
+/// a per-type pattern instead); the value is unlikely to be a valid
+/// pointer or a small count and reads back as a negative integer.
+pub const AUTO_VAR_INIT_PATTERN_BYTE: u8 = 0xFE;
+
+impl AutoVarInit {
+    /// The byte stored over an uninitialized object, `None` when the
+    /// object is left as declared.
+    pub(crate) fn fill_byte(self) -> Option<u8> {
+        match self {
+            Self::Uninitialized => None,
+            Self::Zero => Some(0),
+            Self::Pattern => Some(AUTO_VAR_INIT_PATTERN_BYTE),
+        }
+    }
 }
 
 impl CompileOptions {
@@ -495,6 +538,12 @@ impl CompileOptions {
     /// Narrow `wchar_t` to an unsigned 16-bit type (`-fshort-wchar`).
     pub fn with_short_wchar(mut self, on: bool) -> Self {
         self.short_wchar = on;
+        self
+    }
+    /// Initialize the automatic objects the program leaves
+    /// uninitialized (`-ftrivial-auto-var-init=`).
+    pub fn with_auto_var_init(mut self, mode: AutoVarInit) -> Self {
+        self.auto_var_init = mode;
         self
     }
     /// Take the standard library headers off the `#include` search
@@ -1177,6 +1226,9 @@ pub(in crate::c5::compiler) struct Pending {
     /// feature; this is the GCC/Clang extension that scope-guard and
     /// auto-cleanup idioms rely on).
     pub attr_cleanup: Option<usize>,
+    /// A consumed `__attribute__((uninitialized))`: the declared
+    /// automatic object is left out of `-ftrivial-auto-var-init`.
+    pub attr_uninitialized: bool,
     /// A consumed `__attribute__((weak))`: the declared symbol binds
     /// STB_WEAK in the object's symbol table.
     pub attr_weak: bool,
@@ -1227,6 +1279,7 @@ pub(super) struct DeclSpecifiers {
     attr_patchable_entry: Option<(u32, u32)>,
     attr_no_instrument: bool,
     attr_cleanup: Option<usize>,
+    attr_uninitialized: bool,
     attr_align: i64,
     attr_alignas: i64,
     type_align: i64,
@@ -1248,6 +1301,7 @@ impl Pending {
             attr_patchable_entry: self.attr_patchable_entry.take(),
             attr_no_instrument: core::mem::take(&mut self.attr_no_instrument),
             attr_cleanup: self.attr_cleanup.take(),
+            attr_uninitialized: core::mem::take(&mut self.attr_uninitialized),
             attr_align: core::mem::take(&mut self.attr_align),
             attr_alignas: core::mem::take(&mut self.attr_alignas),
             type_align: core::mem::take(&mut self.type_align),
@@ -1266,6 +1320,7 @@ impl Pending {
         self.attr_patchable_entry = s.attr_patchable_entry;
         self.attr_no_instrument = s.attr_no_instrument;
         self.attr_cleanup = s.attr_cleanup;
+        self.attr_uninitialized = s.attr_uninitialized;
         self.attr_align = s.attr_align;
         self.attr_alignas = s.attr_alignas;
         self.type_align = s.type_align;
@@ -1420,6 +1475,7 @@ impl Default for Pending {
             attr_destructor: false,
             attr_init_priority: None,
             attr_cleanup: None,
+            attr_uninitialized: false,
             attr_weak: false,
             attr_used: false,
             attr_visibility: None,
@@ -2089,6 +2145,9 @@ pub struct Compiler {
     /// auto-include retry never runs, which is when a builtin's
     /// fallback call must bind without a declaration.
     nostdinc: bool,
+    /// Mirror of [`CompileOptions::auto_var_init`]. Read where an
+    /// automatic object without an initializer is bound.
+    auto_var_init: AutoVarInit,
     /// Mirror of [`CompileOptions::elf_class`]: the assembler's
     /// starting code mode.
     elf_class: crate::c5::ElfClass,
@@ -2690,6 +2749,7 @@ impl Compiler {
             export_all_functions: opts.export_all_functions,
             no_builtin: opts.no_builtin,
             nostdinc: opts.nostdinc,
+            auto_var_init: opts.auto_var_init,
             no_builtin_fns: opts.no_builtin_fns.clone(),
             optimize: opts.optimize,
             elf_class: opts.elf_class,

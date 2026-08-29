@@ -15,7 +15,7 @@ Flag rewriting keeps the preprocessor surface (-D/-U/-I/-iquote/-include,
 -isystem folded into -I), the language dialect (-std=), which decides which
 declarations the headers reach, and the code model (-mcmodel=); it drops everything
 else: warnings, optimization, debug, and the gcc hardening set (-mno-red-zone,
--fno-strict-aliasing, -ftrivial-auto-var-init=, -pg, ...) have no badc spelling.
+-fno-strict-aliasing, -fpatchable-function-entry=, -pg, ...) have no badc spelling.
 badc runs with --gnu -q -c --target=<triple>. Kbuild issues relative paths,
 so badc runs with the kernel tree as its working directory.
 

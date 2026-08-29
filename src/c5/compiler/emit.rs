@@ -1385,25 +1385,11 @@ impl Compiler {
     /// walker allocates the runtime-sized storage at this point.
     pub(super) fn ast_emit_vla_decl(
         &mut self,
-        sym: u32,
-        elem_ty: i64,
-        elem_size: i64,
-        ptr_slot: i64,
-        size_slot: i64,
-        dim: super::super::ast::ExprId,
+        decl: super::super::ast::Decl,
     ) -> super::super::ast::StmtId {
+        debug_assert!(matches!(decl, super::super::ast::Decl::Vla { .. }));
         let pos = self.ast_src_pos();
-        let decl_id = self.ast.push_decl(
-            super::super::ast::Decl::Vla {
-                sym,
-                elem_ty,
-                elem_size,
-                ptr_slot,
-                size_slot,
-                dim,
-            },
-            pos,
-        );
+        let decl_id = self.ast.push_decl(decl, pos);
         self.ast
             .push_stmt(super::super::ast::Stmt::Decl(decl_id), pos)
     }

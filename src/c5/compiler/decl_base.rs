@@ -57,6 +57,7 @@ struct AttrFlags {
     weak: bool,
     used: bool,
     no_instrument_function: bool,
+    uninitialized: bool,
 }
 
 impl AttrFlags {
@@ -76,6 +77,7 @@ impl AttrFlags {
         self.weak |= other.weak;
         self.used |= other.used;
         self.no_instrument_function |= other.no_instrument_function;
+        self.uninitialized |= other.uninitialized;
     }
 }
 
@@ -1032,6 +1034,10 @@ impl Compiler {
                 f.used = true;
             } else if n == "no_instrument_function" || n == "__no_instrument_function__" {
                 f.no_instrument_function = true;
+            } else if n == "uninitialized" || n == "__uninitialized__" {
+                // GNU `uninitialized`: the automatic object opts out of
+                // `-ftrivial-auto-var-init`.
+                f.uninitialized = true;
             }
         }
     }
@@ -1409,6 +1415,9 @@ impl Compiler {
         }
         if attrs.used {
             self.pending.attr_used = true;
+        }
+        if attrs.uninitialized {
+            self.pending.attr_uninitialized = true;
         }
         Ok(attrs.packed)
     }

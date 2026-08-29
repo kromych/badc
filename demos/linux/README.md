@@ -91,7 +91,7 @@ level is honored (`-O1` and above become badc `-O`; `-O0` units -- e.g. ones
 that `#error` under `__OPTIMIZE__` -- stay plain), and everything else is
 dropped -- warnings, `-g`/`-std`, and the gcc code-model/hardening set
 (`-mcmodel=kernel`, `-mno-red-zone`, `-fno-strict-aliasing`,
-`-ftrivial-auto-var-init=`, ...) have no badc spelling. Each unit runs as
+`-fpatchable-function-entry=`, ...) have no badc spelling. Each unit runs as
 `badc --gnu -q -c --target=<triple>` from the kernel tree (Kbuild paths are
 relative). Assembly units (`.S`) are out of scope and counted separately, as
 are `.cmd` files that hold no kernel C compile (host tools, linker steps).
@@ -337,16 +337,19 @@ what the shim does not recognize is what let `-fno-jump-tables` reach no
 compiler while every `.o.cmd` recorded it: the probe behind it is
 delegated to the reference compiler, so nothing in the build's own
 artifacts disagreed. On the pinned `defconfig` the unsupported set is
-`-ftrivial-auto-var-init=zero`, `-fzero-init-padding-bits=all` and
 `-fasynchronous-unwind-tables`:
-those properties are not in the built image whatever the configuration
+that property is not in the built image whatever the configuration
 says. The ftrace patch sites are forwarded:
 `-fpatchable-function-entry=N,M` gives every function its NOP area and
 its `__patchable_function_entries` record, and on x86_64 `-pg -mfentry
 -mrecord-mcount` gives it the `__fentry__` call and the `__mcount_loc`
-entry, in the forms gcc emits. `buildcc.py --self-test` checks the
-classification and takes no tree; `verify.py --self-test` runs it, which
-CI does on every push.
+entry, in the forms gcc emits. `-ftrivial-auto-var-init=zero`
+(CONFIG_INIT_STACK_ALL_ZERO) is forwarded and implemented;
+`-fzero-init-padding-bits=all` is dropped with the measurement that an
+automatic aggregate initializer already zero-fills the whole object,
+padding included, before storing the members. `buildcc.py --self-test`
+checks the classification and takes no tree; `verify.py --self-test`
+runs it, which CI does on every push.
 
 Everything else (probes, `-E`, `-S`, links, the host tools under
 `scripts/` and `tools/`) goes to gcc untouched, so the configuration and

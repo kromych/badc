@@ -640,10 +640,13 @@ pub(crate) struct RuntimeInitElement {
 ///   constant. The parser stages the bytes at `src_data_off`
 ///   inside `Program.data`; the walker emits `Inst::Mcpy` to
 ///   copy them into the local's slot.
-/// * `Zero { size_bytes }` -- the same, for a template that is
-///   wholly zero and short enough to store inline. The parser
-///   stages no bytes and the walker emits the stores, so no data
-///   object is emitted for it.
+/// * `Fill { byte, size_bytes }` -- every byte of the object takes
+///   `byte`: the all-zero template of a brace list short enough to
+///   store inline, which stages no bytes and emits no data object, or
+///   the initialization `-ftrivial-auto-var-init` supplies for an
+///   object the program declares without an initializer. The walker
+///   emits unrolled stores within the inline bound and a store loop
+///   past it.
 /// * `Runtime { zero_init, elements }` -- a brace-list
 ///   initializer with at least one non-constant element. C99
 ///   6.7.8p13. `zero_init` is the optional prelude that implements
@@ -658,7 +661,8 @@ pub(crate) enum LocalInit {
         src_data_off: i64,
         size_bytes: i64,
     },
-    Zero {
+    Fill {
+        byte: u8,
         size_bytes: i64,
     },
     Runtime {
@@ -672,7 +676,7 @@ pub(crate) enum LocalInit {
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum LocalInitPrelude {
     Template { src_data_off: i64, size_bytes: i64 },
-    Zero { size_bytes: i64 },
+    Fill { byte: u8, size_bytes: i64 },
 }
 
 /// Declaration node. Captures variable / function declarations
@@ -701,7 +705,8 @@ pub(crate) enum Decl {
     /// that many bytes from the stack via the alloca intrinsic, stores
     /// the base pointer into `ptr_slot`, and the byte count into
     /// `size_slot` (read back by `sizeof`). `elem_ty` carries the
-    /// element type for struct-size remapping.
+    /// element type for struct-size remapping. `fill` is the byte
+    /// `-ftrivial-auto-var-init` stores over the allocation.
     Vla {
         sym: u32,
         elem_ty: i64,
@@ -709,6 +714,7 @@ pub(crate) enum Decl {
         ptr_slot: i64,
         size_slot: i64,
         dim: ExprId,
+        fill: Option<u8>,
     },
     /// Block-scope `static T name [= init];` declaration. C99
     /// 6.2.4p3 (lifetime is whole program) + 6.7.8p4 (init must
@@ -1243,10 +1249,10 @@ fn local_init_offsets(init: &mut LocalInit, f: &mut impl FnMut(&mut i64)) {
             ..
         } => f(src_data_off),
         LocalInit::Runtime {
-            zero_init: Some(LocalInitPrelude::Zero { .. }) | None,
+            zero_init: Some(LocalInitPrelude::Fill { .. }) | None,
             ..
         }
-        | LocalInit::Zero { .. }
+        | LocalInit::Fill { .. }
         | LocalInit::None
         | LocalInit::Scalar(..) => {}
     }

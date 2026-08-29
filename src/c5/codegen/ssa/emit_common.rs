@@ -51,6 +51,8 @@ pub(crate) struct EmitCtx<'a> {
     /// debug-info emitter subtracts it from the slot's frame offset.
     /// Absent for a function with no canary.
     pub(crate) canary_frame_bytes: &'a mut alloc::collections::BTreeMap<usize, u32>,
+    /// Offsets of the `-pg` call sites `-mrecord-mcount` records.
+    pub(crate) mcount_sites: &'a mut alloc::vec::Vec<usize>,
 }
 
 /// Round `n` up to the next 16-byte multiple. AAPCS64, SysV

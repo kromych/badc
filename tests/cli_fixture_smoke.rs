@@ -1486,3 +1486,105 @@ fn stack_protector_canary_holds_and_catches_a_smashed_frame() {
     );
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// `-fpatchable-function-entry=2,1` on the host, with `-pg -mfentry
+/// -mrecord-mcount` on x86-64: the NOP after each symbol and the
+/// `__fentry__` call execute, and the image links only if the records
+/// do. `__fentry__` is file-scope asm because the contract is that it
+/// keeps every register, which a C body does not.
+#[test]
+fn patchable_entries_and_fentry_calls_run_on_the_native_target() {
+    let Some(target) = host_smoke_target() else {
+        return;
+    };
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let root = std::env::temp_dir().join(format!("badc-pfe-run-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&root);
+    let src = root.join("pfe.c");
+    std::fs::write(
+        &src,
+        "long fentry_calls;\n\
+         #ifdef __x86_64__\n\
+         __asm__(\".text\\n.globl __fentry__\\n.type __fentry__, @function\\n\"\n\
+                 \"__fentry__:\\n\\tincq fentry_calls(%rip)\\n\\tret\\n\");\n\
+         #endif\n\
+         __attribute__((noinline)) int add(int a, int b) { return a + b; }\n\
+         __attribute__((noinline)) int mul(int a, int b) { return a * b; }\n\
+         __attribute__((noinline, no_instrument_function)) int sub(int a, int b) { return a - b; }\n\
+         int main(void) {\n\
+             int r = add(2, 3) + mul(4, 5) + sub(30, 5);\n\
+             if (r != 50) return 1;\n\
+         #ifdef __x86_64__\n\
+             /* main, add and mul; sub is not instrumented. */\n\
+             if (fentry_calls != 3) return 2;\n\
+         #endif\n\
+             return 0;\n\
+         }\n",
+    )
+    .expect("write source");
+    let x86 = target == "linux-x64";
+    for (tag, opt) in [("-O0", &[][..]), ("-O", &["-O"][..])] {
+        let exe = root.join(format!("pfe{tag}"));
+        let mut cmd = Command::new(badc);
+        cmd.arg(format!("--target={target}"))
+            .args(opt)
+            .arg("-fpatchable-function-entry=2,1");
+        if x86 {
+            cmd.args(["-pg", "-mfentry", "-mrecord-mcount"]);
+        }
+        let built = cmd
+            .arg("-o")
+            .arg(&exe)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            built.status.success(),
+            "{tag}: build failed: {}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        let run = Command::new(&exe).output().expect("run image");
+        assert_eq!(
+            run.status.code(),
+            Some(0),
+            "{tag}: the instrumented image failed"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// The profiling options are refused where gcc has none, by name.
+#[test]
+fn profiling_options_are_refused_by_name_where_gcc_has_none() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let root = std::env::temp_dir().join(format!("badc-pfe-refuse-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&root);
+    let src = root.join("f.c");
+    std::fs::write(&src, "int f(void) { return 0; }\n").expect("write source");
+    for (target, flag) in [
+        ("linux-aarch64", "-pg"),
+        ("linux-aarch64", "-mfentry"),
+        ("linux-aarch64", "-mrecord-mcount"),
+        ("linux-x64", "-fpatchable-function-entry=1,2"),
+        ("windows-x64", "-fpatchable-function-entry=2,1"),
+        ("macos-aarch64", "-pg"),
+    ] {
+        let out = Command::new(badc)
+            .arg(format!("--target={target}"))
+            .arg(flag)
+            .arg("-c")
+            .arg("-o")
+            .arg(root.join("f.o"))
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(!out.status.success(), "{target} {flag}: must be refused");
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        let name = flag.split('=').next().unwrap_or(flag);
+        assert!(
+            stderr.contains(name),
+            "{target} {flag}: the diagnostic must name the option: {stderr}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}

@@ -235,6 +235,24 @@ Compile knobs:
                            function against its predecessor. A symbol's
                            size covers its instructions only; the fill
                            belongs to no function.
+  -fpatchable-function-entry=N[,M]
+                           Put N NOPs at every function entry, M of them
+                           (default 0) ahead of the symbol, and record
+                           the area's first byte in a per-function
+                           __patchable_function_entries section linked
+                           to the function's text section. A function's
+                           patchable_function_entry attribute replaces
+                           the pair; the alignment above applies to the
+                           area's first byte. ELF targets.
+  -pg                      Call the profiling entry point from every
+                           function not marked no_instrument_function:
+                           __fentry__ at the symbol under -mfentry (the
+                           default), mcount after the prologue under
+                           -mno-fentry. linux-x64 only.
+  -mrecord-mcount          Record every -pg call site in an __mcount_loc
+                           section.
+  -mnop-mcount             Put a NOP of the call's width in each -pg
+                           call's place.
   -fstack-protector        Give a stack canary to every function holding
                            a character array of at least --param
                            ssp-buffer-size= bytes (default 8), or calling
@@ -659,6 +677,10 @@ fn run() {
     let mut fno_pic = false;
     let mut jump_tables = true;
     let mut min_function_alignment: u32 = 1;
+    let mut patchable_function_entry = badc::PatchableEntry::NONE;
+    let mut profiling = badc::Profiling::OFF;
+    // The `-pg` modifiers seen, x86-64 options gcc's aarch64 rejects.
+    let mut mcount_modifiers: Vec<String> = Vec::new();
     let mut code_model = badc::CodeModel::Small;
     let mut code_model_tiny = false;
     let mut hardening = badc::Hardening::NONE;
@@ -1277,6 +1299,38 @@ fn run() {
                     }
                 }
             }
+            // gcc `-fpatchable-function-entry=N[,M]`: N NOPs at every
+            // function entry, M of them ahead of the symbol, recorded per
+            // function in `__patchable_function_entries`.
+            s if s.starts_with("-fpatchable-function-entry=") => {
+                let spec = &s["-fpatchable-function-entry=".len()..];
+                let (n, m) = spec.split_once(',').unwrap_or((spec, "0"));
+                match (n.parse::<u32>(), m.parse::<u32>()) {
+                    (Ok(nops), Ok(before)) if before <= nops => {
+                        patchable_function_entry = badc::PatchableEntry { nops, before };
+                    }
+                    _ => {
+                        eprint_diagnostic(format!(
+                            "badc: error: `-fpatchable-function-entry=` takes `N[,M]` \
+                             with M <= N, got `{spec}`"
+                        ));
+                        std::process::exit(1);
+                    }
+                }
+            }
+            "-pg" => profiling.enabled = true,
+            "-mfentry" | "-mno-fentry" => {
+                profiling.fentry = arg == "-mfentry";
+                mcount_modifiers.push(arg.clone());
+            }
+            "-mrecord-mcount" | "-mno-record-mcount" => {
+                profiling.record_mcount = arg == "-mrecord-mcount";
+                mcount_modifiers.push(arg.clone());
+            }
+            "-mnop-mcount" | "-mno-nop-mcount" => {
+                profiling.nop_mcount = arg == "-mnop-mcount";
+                mcount_modifiers.push(arg.clone());
+            }
             // Code model for `-c` objects; see `CodeModel`. `small` is
             // the default; `kernel` switches external-address
             // materialization to the sign-extended 32-bit absolute form
@@ -1708,6 +1762,40 @@ fn run() {
              `--jit` and `--interp` execute in this process and reach no \
              `__stack_chk_fail`",
         );
+        std::process::exit(1);
+    }
+    // The profiling call and the patchable-entry records are ELF object
+    // contracts: the call names `__fentry__` / `mcount` for the link and
+    // the records are sections of the object.
+    // TODO: the aarch64 `-pg` form and the PE / Mach-O records.
+    let is_elf_target = matches!(target, badc::Target::LinuxX64 | badc::Target::LinuxAarch64);
+    if profiling.enabled && matches!(mode, Mode::Jit | Mode::Interp) {
+        eprint_diagnostic(
+            "badc: error: `-pg` needs a compiled output: `--jit` and `--interp` \
+             execute in this process and reach no `__fentry__`",
+        );
+        std::process::exit(1);
+    }
+    if profiling.enabled && (!is_elf_target || target.is_aarch64()) {
+        eprint_diagnostic(format!(
+            "badc: error: `-pg` is not implemented for {}",
+            target.id_str()
+        ));
+        std::process::exit(1);
+    }
+    if let Some(flag) = mcount_modifiers.first()
+        && target.is_aarch64()
+    {
+        eprint_diagnostic(format!(
+            "badc: error: `{flag}` is an x86-64 option; gcc's aarch64 has none"
+        ));
+        std::process::exit(1);
+    }
+    if patchable_function_entry != badc::PatchableEntry::NONE && !is_elf_target {
+        eprint_diagnostic(format!(
+            "badc: error: `-fpatchable-function-entry=` is not implemented for {}",
+            target.id_str()
+        ));
         std::process::exit(1);
     }
     // The canary sequences name the System V handler and guard object.
@@ -2547,6 +2635,8 @@ fn run() {
         reloc_opts.strict_align = mstrict_align;
         reloc_opts.jump_tables = jump_tables;
         reloc_opts.min_function_alignment = min_function_alignment;
+        reloc_opts.patchable_function_entry = patchable_function_entry;
+        reloc_opts.profiling = profiling;
         reloc_opts.pic = fpic;
         // These objects are linked into an image below, and every image
         // this toolchain writes takes its data relocations at load time
@@ -2651,6 +2741,10 @@ fn run() {
             // guard; every toolchain builds them unprotected, and a canary
             // inside the handler would recurse on a real check failure.
             opts.stack_protect = badc::StackProtect::OFF;
+            // Nor the user's `-pg` call or patchable entries: the crt objects
+            // a toolchain links are built without them.
+            opts.profiling = badc::Profiling::OFF;
+            opts.patchable_function_entry = badc::PatchableEntry::NONE;
             match badc::emit_native_with_options_owned(program, target, opts) {
                 Ok(b) => b,
                 Err(e) => {
@@ -3276,6 +3370,8 @@ fn run() {
         reloc_opts.strict_align = mstrict_align;
         reloc_opts.jump_tables = jump_tables;
         reloc_opts.min_function_alignment = min_function_alignment;
+        reloc_opts.patchable_function_entry = patchable_function_entry;
+        reloc_opts.profiling = profiling;
         reloc_opts.pic = fpic;
         reloc_opts.pic_link = pic_link_default(fno_pic, code_model);
         reloc_opts.code_model = code_model;
@@ -3414,6 +3510,8 @@ fn run() {
         reloc_opts.strict_align = mstrict_align;
         reloc_opts.jump_tables = jump_tables;
         reloc_opts.min_function_alignment = min_function_alignment;
+        reloc_opts.patchable_function_entry = patchable_function_entry;
+        reloc_opts.profiling = profiling;
         reloc_opts.pic = fpic;
         reloc_opts.pic_link = pic_link_default(fno_pic, code_model);
         reloc_opts.code_model = code_model;

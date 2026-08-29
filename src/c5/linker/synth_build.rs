@@ -521,6 +521,8 @@ fn synth_program_and_build(
         // next entry, since the padding an input carries is already in its
         // `.text` bytes.
         func_ends: Vec::new(),
+        patchable_entries: Vec::new(),
+        mcount_sites: Vec::new(),
         func_ent_pcs,
         func_names,
         func_prologue_native,

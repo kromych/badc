@@ -182,6 +182,11 @@ early-boot units running with the MMU off, and `-fPIC`/`-fpic`/`-fPIE`/`-fpie`
 for the EFI-stub island and the boot decompressor, which reject absolute
 relocations; those units take badc's position-independent object form while
 every other unit keeps the absolute form whose relocations the ORC pass reads.
+It forwards the ftrace patch sites: `-fpatchable-function-entry=N,M` gives
+every function its NOP area, aligned as the function is, and a
+`__patchable_function_entries` record linked to the function's text section;
+on x86_64 `-pg -mfentry -mrecord-mcount` gives it the `call __fentry__` at
+the symbol and the `__mcount_loc` entry, the forms gcc emits.
 
 ## Where the numbers come from
 

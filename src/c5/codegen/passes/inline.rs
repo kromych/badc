@@ -2955,6 +2955,8 @@ fn splice_multi_block(
         is_always_inline: original.is_always_inline,
         is_noinline: original.is_noinline,
         section: original.section,
+        patchable_entry: original.patchable_entry,
+        no_instrument: original.no_instrument,
         is_naked: original.is_naked,
         is_weak: original.is_weak,
         is_internal: original.is_internal,

@@ -56,6 +56,7 @@ struct AttrFlags {
     naked: bool,
     weak: bool,
     used: bool,
+    no_instrument_function: bool,
 }
 
 impl AttrFlags {
@@ -74,6 +75,7 @@ impl AttrFlags {
         self.naked |= other.naked;
         self.weak |= other.weak;
         self.used |= other.used;
+        self.no_instrument_function |= other.no_instrument_function;
     }
 }
 
@@ -1025,6 +1027,8 @@ impl Compiler {
                 // GNU `used`: keep the definition in the object even when
                 // nothing in the unit references it.
                 f.used = true;
+            } else if n == "no_instrument_function" || n == "__no_instrument_function__" {
+                f.no_instrument_function = true;
             }
         }
     }
@@ -1158,6 +1162,11 @@ impl Compiler {
                                 self.symbols[self.lex.curr_id_idx].name.as_str(),
                                 "visibility" | "__visibility__"
                             );
+                        let is_patchable_entry = self.lex.tk == Token::Id
+                            && matches!(
+                                self.symbols[self.lex.curr_id_idx].name.as_str(),
+                                "patchable_function_entry" | "__patchable_function_entry__"
+                            );
                         let mut seen = AttrFlags::default();
                         self.note_attribute_name(&mut seen);
                         attrs.merge_names(&seen);
@@ -1214,6 +1223,28 @@ impl Compiler {
                                 return Err(
                                     self.compile_err("`)` expected after `section` operand")
                                 );
+                            }
+                            self.next()?;
+                        } else if is_patchable_entry && self.lex.tk == '(' {
+                            // GCC `patchable_function_entry(N[, M])`: this
+                            // function's NOP area, overriding the option's.
+                            self.next()?; // `(`
+                            let n = self.parse_constant_int()?;
+                            let m = if self.lex.tk == ',' {
+                                self.next()?;
+                                self.parse_constant_int()?
+                            } else {
+                                0
+                            };
+                            if n < 0 || m < 0 || m > n || n > u32::MAX as i64 {
+                                return Err(self
+                                    .compile_err("`patchable_function_entry` takes N >= M >= 0"));
+                            }
+                            self.pending.attr_patchable_entry = Some((n as u32, m as u32));
+                            if self.lex.tk != ')' {
+                                return Err(self.compile_err(
+                                    "`)` expected after `patchable_function_entry` operands",
+                                ));
                             }
                             self.next()?;
                         } else if is_alias && self.lex.tk == '(' {
@@ -1363,6 +1394,9 @@ impl Compiler {
         }
         if attrs.naked {
             self.pending_is_naked = true;
+        }
+        if attrs.no_instrument_function {
+            self.pending.attr_no_instrument = true;
         }
         if let Some(p) = init_priority {
             self.pending.attr_init_priority = Some(p);

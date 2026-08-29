@@ -200,7 +200,7 @@ totals, so the columns still add up.
 
 `--reference cc` compiles each unit with a second compiler as well, on the
 command kbuild recorded. That line carries work badc's rewritten flag set
-does not do (warnings, patchable function entries), so the
+does not do (warnings), so the
 ratio is build cost against build cost rather than pass for pass; a
 per-unit distribution and the units badc is furthest behind on come with it.
 
@@ -338,12 +338,16 @@ compiler while every `.o.cmd` recorded it: the probe behind it is
 delegated to the reference compiler, so nothing in the build's own
 artifacts disagreed. On the pinned `defconfig` the unsupported set is
 `-ftrivial-auto-var-init=zero`,
-`-fzero-init-padding-bits=all`, `-fstrict-flex-arrays=3`,
-`-fpatchable-function-entry=` (x86_64) and
+`-fzero-init-padding-bits=all`, `-fstrict-flex-arrays=3` and
 `-fasynchronous-unwind-tables`:
 those properties are not in the built image whatever the configuration
-says. `buildcc.py --self-test` checks the classification and takes no
-tree; `verify.py --self-test` runs it, which CI does on every push.
+says. The ftrace patch sites are forwarded:
+`-fpatchable-function-entry=N,M` gives every function its NOP area and
+its `__patchable_function_entries` record, and on x86_64 `-pg -mfentry
+-mrecord-mcount` gives it the `__fentry__` call and the `__mcount_loc`
+entry, in the forms gcc emits. `buildcc.py --self-test` checks the
+classification and takes no tree; `verify.py --self-test` runs it, which
+CI does on every push.
 
 Everything else (probes, `-E`, `-S`, links, the host tools under
 `scripts/` and `tools/`) goes to gcc untouched, so the configuration and

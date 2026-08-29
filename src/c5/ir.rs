@@ -1310,6 +1310,11 @@ pub(crate) struct FunctionSsa {
     /// body with one is only spliced into a caller placed identically,
     /// as gcc does.
     pub section: Option<alloc::string::String>,
+    /// `__attribute__((patchable_function_entry(N, M)))`: the NOP area
+    /// this function takes in place of the option's.
+    pub patchable_entry: Option<(u32, u32)>,
+    /// `__attribute__((no_instrument_function))`: no profiling call.
+    pub no_instrument: bool,
     /// Declared parameters, by index, whose value a whole-program
     /// constant reached (`passes::ipa_const_param`). Their incoming
     /// argument register has no reader left, so the entry spill of
@@ -1669,6 +1674,8 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             is_weak: _,
             is_internal: _,
             section: _,
+            patchable_entry: _,
+            no_instrument: _,
             const_params: _,
             insts,
             inst_src: _,

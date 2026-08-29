@@ -1751,6 +1751,12 @@ pub(crate) struct Build {
     /// (the linker's synthesized build, test fixtures), where the next
     /// function's start stands in as before.
     pub func_ends: Vec<usize>,
+    /// `-fpatchable-function-entry` NOP areas, one per function that has
+    /// one, in emission order.
+    pub patchable_entries: Vec<EntryArea>,
+    /// Byte offsets of the profiling call sites `-mrecord-mcount`
+    /// records, in emission order.
+    pub mcount_sites: Vec<usize>,
     /// Source-level function names parallel to `func_ent_pcs`,
     /// populated from `FunctionSsa::name` during the per-arch
     /// emit loop. Empty entries surface for archive-reloaded
@@ -3027,6 +3033,111 @@ pub struct NativeOptions {
     /// what `CONFIG_FUNCTION_ALIGNMENT` states. A symbol's `st_size`
     /// covers its code only; the fill belongs to no function.
     pub min_function_alignment: u32,
+    /// `-fpatchable-function-entry=N,M`: the NOP area at every function
+    /// entry. A function's own `patchable_function_entry` attribute
+    /// replaces it.
+    pub patchable_function_entry: PatchableEntry,
+    /// `-pg` and its x86-64 modifiers.
+    pub profiling: Profiling,
+}
+
+/// `-fpatchable-function-entry=N,M`: `nops` NOPs at a function's entry,
+/// `before` of them ahead of the symbol. The function alignment applies
+/// to the area's first byte; the symbol's size covers the NOPs after it,
+/// which run ahead of the prologue and of any profiling call.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PatchableEntry {
+    pub nops: u32,
+    pub before: u32,
+}
+
+impl PatchableEntry {
+    pub const NONE: Self = Self { nops: 0, before: 0 };
+}
+
+/// `-pg`: a call to the profiling entry point in every function not
+/// marked `no_instrument_function`. The modifiers are x86-64's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Profiling {
+    pub enabled: bool,
+    /// `-mfentry`: `call __fentry__` at the symbol, ahead of the
+    /// prologue. Off, `call mcount` follows the prologue.
+    pub fentry: bool,
+    /// `-mrecord-mcount`: an `__mcount_loc` entry per call site.
+    pub record_mcount: bool,
+    /// `-mnop-mcount`: a NOP of the call's width in the call's place.
+    pub nop_mcount: bool,
+}
+
+impl Profiling {
+    pub const OFF: Self = Self {
+        enabled: false,
+        fentry: true,
+        record_mcount: false,
+        nop_mcount: false,
+    };
+}
+
+/// A function's `-fpatchable-function-entry` NOP area: the index into
+/// [`Build::func_ent_pcs`] and the area's first byte in [`Build::text`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EntryArea {
+    pub func: usize,
+    pub start: usize,
+}
+
+/// The profiling call a function takes under `-pg`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ProfileCall {
+    /// `call mcount` after the prologue; off, `call __fentry__` at the
+    /// symbol ahead of it.
+    pub after_prologue: bool,
+    /// A NOP of the call's width stands in the call's place.
+    pub nop: bool,
+}
+
+impl ProfileCall {
+    pub(crate) fn symbol(self) -> &'static str {
+        if self.after_prologue {
+            "mcount"
+        } else {
+            "__fentry__"
+        }
+    }
+}
+
+/// A function's entry sequence, resolved from the options and the
+/// function's own attributes. The NOPs ahead of the symbol are the
+/// emit loop's; the rest is emitted with the function.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct FunctionEntry {
+    pub nops_before: u32,
+    pub nops_after: u32,
+    pub profile: Option<ProfileCall>,
+}
+
+impl FunctionEntry {
+    pub(crate) fn of(func: &crate::c5::ir::FunctionSsa, native: &NativeOptions) -> Self {
+        let (nops, before) = match func.patchable_entry {
+            Some((n, m)) => (n, m),
+            None => {
+                let area = native.patchable_function_entry;
+                (area.nops, area.before)
+            }
+        };
+        let p = native.profiling;
+        // A naked function's body is its own inline asm, with no frame
+        // for `mcount` to read; the profiling call is not inserted.
+        let profile = (p.enabled && !func.no_instrument && !func.is_naked).then_some(ProfileCall {
+            after_prologue: !p.fentry,
+            nop: p.nop_mcount,
+        });
+        Self {
+            nops_before: before.min(nops),
+            nops_after: nops - before.min(nops),
+            profile,
+        }
+    }
 }
 
 /// Fill `code` with `nop` up to a multiple of `align`, for the gap ahead
@@ -3174,6 +3285,8 @@ impl NativeOptions {
             hardening: Hardening::NONE,
             stack_protect: StackProtect::OFF,
             min_function_alignment: 1,
+            patchable_function_entry: PatchableEntry::NONE,
+            profiling: Profiling::OFF,
         }
     }
 
@@ -3298,6 +3411,37 @@ pub(crate) fn lower_for_with_prebuilt(
     {
         return Err(C5Error::Compile(alloc::format!(
             "error: `-fstack-protector*` needs relocatable output: the canary's              failure branch names `{STACK_CHK_FAIL_SYMBOL}`, which only a              relocatable object can relocate"
+        )));
+    }
+    // The profiling call names `__fentry__` / `mcount` the same way.
+    // TODO: gcc's aarch64 form (`mov x0, x30; bl _mcount` after the
+    // prologue) needs the argument registers kept across the call.
+    if options.profiling.enabled {
+        if options.output_kind != OutputKind::Relocatable {
+            return Err(C5Error::Compile(alloc::string::String::from(
+                "error: `-pg` needs relocatable output: the profiling call names \
+                 `__fentry__` / `mcount`, which only a relocatable object can relocate",
+            )));
+        }
+        if target.is_aarch64() {
+            return Err(C5Error::Compile(alloc::string::String::from(
+                "error: `-pg` is not implemented for aarch64; the kernel's \
+                 `-fpatchable-function-entry=` form is",
+            )));
+        }
+    }
+    // The patchable-entry records are ELF sections. TODO: the PE and
+    // Mach-O forms.
+    if target.binary_format() != BinaryFormat::Elf
+        && (options.patchable_function_entry.nops > 0
+            || program
+                .symbols
+                .iter()
+                .any(|s| s.defined_here && s.patchable_function_entry.is_some_and(|(n, _)| n > 0)))
+    {
+        return Err(C5Error::Compile(alloc::format!(
+            "error: patchable function entries are not implemented for {}",
+            target.binary_format().name()
         )));
     }
     let is_shared = options.output_kind == OutputKind::SharedLibrary;
@@ -3617,6 +3761,9 @@ pub(crate) struct Abi {
     /// [`NativeOptions::stack_protect`]), not a `Target::abi` row
     /// property; see [`StackProtect`].
     pub stack_protect: StackProtect,
+    /// A frame in every function, for `-pg`'s `mcount` form: the callee
+    /// reads the return address through rbp.
+    pub mcount_frame: bool,
 }
 
 impl Abi {
@@ -3700,6 +3847,7 @@ impl Target {
                 strict_align: false,
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
+                mcount_frame: false,
             },
             Target::LinuxAarch64 => Abi {
                 arch: Arch::Aarch64,
@@ -3713,6 +3861,7 @@ impl Target {
                 strict_align: false,
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
+                mcount_frame: false,
             },
             Target::LinuxX64 => Abi {
                 arch: Arch::X86_64,
@@ -3726,6 +3875,7 @@ impl Target {
                 strict_align: false,
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
+                mcount_frame: false,
             },
             Target::WindowsX64 => Abi {
                 arch: Arch::X86_64,
@@ -3739,6 +3889,7 @@ impl Target {
                 strict_align: false,
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
+                mcount_frame: false,
             },
             Target::WindowsAarch64 => Abi {
                 arch: Arch::Aarch64,
@@ -3752,6 +3903,7 @@ impl Target {
                 strict_align: false,
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
+                mcount_frame: false,
             },
         }
     }

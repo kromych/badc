@@ -387,6 +387,8 @@ impl Compiler {
             self.pending.attr_used = false;
             self.pending.attr_visibility = None;
             self.pending.attr_section = None;
+            self.pending.attr_patchable_entry = None;
+            self.pending.attr_no_instrument = false;
             self.pending.attr_alias = None;
             self.pending.saw_register_storage = false;
             self.pending.auto_type_single_declarator = false;
@@ -2968,6 +2970,12 @@ impl Compiler {
         }
         if let Some(sec) = self.pending.attr_section.take() {
             self.symbols[id_idx].section_name = Some(sec);
+        }
+        if let Some(area) = self.pending.attr_patchable_entry.take() {
+            self.symbols[id_idx].patchable_function_entry = Some(area);
+        }
+        if self.pending.attr_no_instrument {
+            self.symbols[id_idx].no_instrument_function = true;
         }
     }
 }

@@ -216,6 +216,8 @@ const SHF_EXECINSTR: u64 = 0x4;
 const SHF_MERGE: u64 = 0x10;
 const SHF_STRINGS: u64 = 0x20;
 const SHF_INFO_LINK: u64 = 0x40;
+/// `SHF_LINK_ORDER` -- sh_link names the section this one is ordered
+/// with and discarded alongside.
 const SHF_LINK_ORDER: u64 = 0x80;
 
 const STB_LOCAL: u8 = 0;
@@ -358,14 +360,20 @@ fn encode_reloc_table(class: ElfClass, table: &[u8]) -> Vec<u8> {
     out
 }
 
-/// One `.init_array` / `.fini_array` section plus its companion
-/// `.rela.*`: a group of constructor / destructor pointers sharing a
-/// priority. The writer appends the pair after the fixed sections.
-struct InitArraySection {
+/// A section appended after the fixed and named sets, with its `.rela`
+/// companion: an `.init_array` / `.fini_array` group, one function's
+/// `__patchable_function_entries`, or `__mcount_loc`. Each holds
+/// zero-filled 8-byte slots the companion binds.
+struct TailSection {
     name: String,
     sh_type: u32,
-    /// Entry count -- each is an 8-byte function pointer, so the
-    /// section's byte size is `count * 8`.
+    flags: u64,
+    align: u64,
+    entsize: u64,
+    /// Nominal index of the section `sh_link` names (`SHF_LINK_ORDER`),
+    /// 0 for none.
+    link: u16,
+    /// Slot count; the section's byte size is `count * 8`.
     count: usize,
     rela: Vec<u8>,
 }
@@ -378,7 +386,7 @@ fn build_init_array_sections(
     init_funcs: &[crate::c5::program::InitFunc],
     func_symidx_by_name: &alloc::collections::BTreeMap<String, u32>,
     rtype_abs64: u32,
-) -> Result<Vec<InitArraySection>, C5Error> {
+) -> Result<Vec<TailSection>, C5Error> {
     if init_funcs.is_empty() {
         return Ok(Vec::new());
     }
@@ -425,18 +433,112 @@ fn build_init_array_sections(
                 },
             );
         }
-        out.push(InitArraySection {
+        out.push(TailSection {
             name,
             sh_type: if is_dtor {
                 SHT_FINI_ARRAY
             } else {
                 SHT_INIT_ARRAY
             },
+            flags: SHF_ALLOC | SHF_WRITE,
+            align: 8,
+            entsize: 8,
+            link: 0,
             count: sym_idxs.len(),
             rela,
         });
     }
     Ok(out)
+}
+
+/// One slot's binding: `R_*_64` against the text section holding
+/// `text_off`, the offset carried as the addend, and that section's
+/// nominal index.
+fn text_slot_rela(
+    slot: usize,
+    text_off: usize,
+    carve: &CarvePlan,
+    text_sym_idx: u64,
+    text_shndx: u16,
+    rtype_abs64: u32,
+) -> (Elf64Rela, u16) {
+    let (sym, addend, shndx) = match carve.map_text(text_off as u64) {
+        Some((e, new_off)) => (carve.sym_idx[e], new_off as i64, carve.shndx[e]),
+        None => (text_sym_idx, text_off as i64, text_shndx),
+    };
+    (
+        Elf64Rela {
+            r_offset: (slot * 8) as u64,
+            r_info: (sym << 32) | rtype_abs64 as u64,
+            r_addend: addend,
+        },
+        shndx,
+    )
+}
+
+/// `-fpatchable-function-entry`'s record per function: one 8-byte slot
+/// in a `__patchable_function_entries` section of its own, `SHF_LINK_ORDER`
+/// on the text section holding the function and relocated to the NOP
+/// area's first byte, so a linker dropping the function drops the
+/// record with it. gcc emits the same shape: writable, allocated,
+/// 8-aligned, one section per function.
+fn build_patchable_entry_sections(
+    build: &Build,
+    carve: &CarvePlan,
+    text_sym_idx: u64,
+    text_shndx: u16,
+    rtype_abs64: u32,
+) -> Vec<TailSection> {
+    build
+        .patchable_entries
+        .iter()
+        .map(|area| {
+            let (rela, link) =
+                text_slot_rela(0, area.start, carve, text_sym_idx, text_shndx, rtype_abs64);
+            let mut bytes = Vec::with_capacity(ELF64_RELA_SIZE);
+            write_struct(&mut bytes, &rela);
+            TailSection {
+                name: String::from("__patchable_function_entries"),
+                sh_type: SHT_PROGBITS,
+                flags: SHF_ALLOC | SHF_WRITE | SHF_LINK_ORDER,
+                align: 8,
+                entsize: 0,
+                link,
+                count: 1,
+                rela: bytes,
+            }
+        })
+        .collect()
+}
+
+/// `-mrecord-mcount`'s `__mcount_loc`: one 8-byte slot per profiling
+/// call site, relocated to the call. Allocated and read-only, unaligned
+/// beyond a byte, as gcc emits it.
+fn build_mcount_loc_section(
+    build: &Build,
+    carve: &CarvePlan,
+    text_sym_idx: u64,
+    text_shndx: u16,
+    rtype_abs64: u32,
+) -> Option<TailSection> {
+    if build.mcount_sites.is_empty() {
+        return None;
+    }
+    let mut rela = Vec::with_capacity(build.mcount_sites.len() * ELF64_RELA_SIZE);
+    for (slot, &site) in build.mcount_sites.iter().enumerate() {
+        let (r, _) = text_slot_rela(slot, site, carve, text_sym_idx, text_shndx, rtype_abs64);
+        write_struct(&mut rela, &r);
+    }
+    Some(TailSection {
+        name: String::from("__mcount_loc"),
+        sh_type: SHT_PROGBITS,
+        flags: SHF_ALLOC,
+        align: 1,
+        entsize: 0,
+        link: 0,
+        count: build.mcount_sites.len(),
+        rela,
+    })
 }
 
 /// Emit a relocatable ELF64 object holding the contents of
@@ -1042,24 +1144,32 @@ pub(super) fn write_relocatable(
         // (group_lo, group_hi) accumulated per section name.
         let mut text_groups: alloc::collections::BTreeMap<&str, (usize, usize)> =
             alloc::collections::BTreeMap::new();
-        for (i, &ent_pc) in build.func_ent_pcs.iter().enumerate() {
+        // A function's first byte: its `-fpatchable-function-entry` NOP
+        // area when it has one, else its symbol.
+        let area_start: alloc::collections::BTreeMap<usize, usize> = build
+            .patchable_entries
+            .iter()
+            .map(|a| (a.func, a.start))
+            .collect();
+        let func_start = |i: usize| -> Option<usize> {
+            if let Some(&start) = area_start.get(&i) {
+                return Some(start);
+            }
+            build
+                .func_ent_pcs
+                .get(i)
+                .and_then(|&pc| build.pc_to_native.get(pc).copied())
+                .filter(|&off| off != usize::MAX)
+        };
+        for i in 0..build.func_ent_pcs.len() {
             let Some(name) = build.func_names.get(i) else {
                 continue;
             };
             let Some(sec) = fn_section.get(name.as_str()) else {
                 continue;
             };
-            let lo = build
-                .pc_to_native
-                .get(ent_pc)
-                .copied()
-                .unwrap_or(usize::MAX);
-            let hi = build
-                .func_ent_pcs
-                .get(i + 1)
-                .and_then(|&next| build.pc_to_native.get(next).copied())
-                .unwrap_or(code_end)
-                .min(code_end);
+            let lo = func_start(i).unwrap_or(usize::MAX);
+            let hi = func_start(i + 1).unwrap_or(code_end).min(code_end);
             if lo == usize::MAX || lo >= hi {
                 continue;
             }
@@ -1069,10 +1179,11 @@ pub(super) fn write_relocatable(
         }
         let internal =
             |msg: String| -> C5Error { C5Error::Compile(crate::c5::error::fmt_internal_err(&msg)) };
+        let text_align = build.text_align.max(16) as u64;
         for (sec, (lo, hi)) in &text_groups {
             let e = carve
                 .table
-                .get_or_insert(sec, SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 16)
+                .get_or_insert(sec, SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, text_align)
                 .map_err(internal)?;
             carve.text_ranges.push(CarveRange {
                 old_lo: *lo as u64,
@@ -3838,8 +3949,22 @@ pub(super) fn write_relocatable(
     // across units; unprioritized entries land in the bare
     // `.init_array` the script places last. Entries sharing a group
     // keep source order.
-    let mut init_sections =
+    let mut tail_sections =
         build_init_array_sections(&program.init_funcs, &func_symidx_by_name, rtype_abs64)?;
+    tail_sections.extend(build_patchable_entry_sections(
+        build,
+        &carve,
+        text_sym_idx,
+        SHIDX_TEXT,
+        rtype_abs64,
+    ));
+    tail_sections.extend(build_mcount_loc_section(
+        build,
+        &carve,
+        text_sym_idx,
+        SHIDX_TEXT,
+        rtype_abs64,
+    ));
     // Every named section's relocation list is settled; a `.rela`
     // companion exists exactly for the entries that carry relocations.
     let named_rela_count = carve
@@ -3912,7 +4037,7 @@ pub(super) fn write_relocatable(
     // empty; an entry means an i386 code generator arrived without the
     // numbering, and `R_X86_64_64` and `R_386_32` share the number 1.
     if class.is32()
-        && !(rela_bytes.is_empty() && rela_data_bytes.is_empty() && init_sections.is_empty())
+        && !(rela_bytes.is_empty() && rela_data_bytes.is_empty() && tail_sections.is_empty())
     {
         return Err(C5Error::Compile(crate::c5::error::fmt_link_err(
             "badc generates no 32-bit machine code; an ELFCLASS32 object carries \
@@ -3939,7 +4064,7 @@ pub(super) fn write_relocatable(
         mark(&mut used, &rela_debug_info_bytes);
         mark(&mut used, &rela_debug_line_bytes);
         mark(&mut used, &rela_tdata_bytes);
-        for s in &init_sections {
+        for s in &tail_sections {
             mark(&mut used, &s.rela);
         }
         for e in &carve.table.entries {
@@ -3972,7 +4097,7 @@ pub(super) fn write_relocatable(
             rewrite(&mut rela_debug_info_bytes);
             rewrite(&mut rela_debug_line_bytes);
             rewrite(&mut rela_tdata_bytes);
-            for s in &mut init_sections {
+            for s in &mut tail_sections {
                 rewrite(&mut s.rela);
             }
             for e in &mut carve.table.entries {
@@ -4081,7 +4206,7 @@ pub(super) fn write_relocatable(
     let num_sections: usize = base_sections - dropped_sections as usize
         + named_section_count
         + named_rela_count
-        + 2 * init_sections.len()
+        + 2 * tail_sections.len()
         + usize::from(comment_body.is_some());
 
     // Section name table. One entry per non-null section, in section
@@ -4140,12 +4265,24 @@ pub(super) fn write_relocatable(
             shstrtab_names.push(format!("{rp}{}", e.name));
         }
     }
-    // `.init_array*` / `.fini_array*` names and their `.rela.*`
-    // companions, appended last so the fixed and TLS indices stay put.
-    let init_names_start = shstrtab_names.len();
-    for s in &init_sections {
-        shstrtab_names.push(s.name.clone());
-        shstrtab_names.push(format!("{rp}{}", s.name));
+    // The tail sections' names and their `.rela` companions', appended
+    // last so the fixed and TLS indices stay put. A name shared by many
+    // (`__patchable_function_entries`) is entered once.
+    let mut tail_name_idx: Vec<(usize, usize)> = Vec::with_capacity(tail_sections.len());
+    {
+        let mut seen: alloc::collections::BTreeMap<String, usize> =
+            alloc::collections::BTreeMap::new();
+        for s in &tail_sections {
+            let mut idx_of = |name: String| -> usize {
+                *seen.entry(name.clone()).or_insert_with(|| {
+                    shstrtab_names.push(name);
+                    shstrtab_names.len() - 1
+                })
+            };
+            let name_idx = idx_of(s.name.clone());
+            let rela_idx = idx_of(format!("{rp}{}", s.name));
+            tail_name_idx.push((name_idx, rela_idx));
+        }
     }
     let comment_name_idx = shstrtab_names.len();
     if comment_body.is_some() {
@@ -4744,24 +4881,29 @@ pub(super) fn write_relocatable(
         });
     }
 
-    // `.init_array` / `.fini_array` groups. Each is a zero-filled array
-    // of 8-byte pointers (the paired `.rela.*` binds each slot to its
-    // function) followed immediately by that `.rela.*` section, whose
-    // `sh_info` names the array it patches. Appended last so every
-    // fixed and TLS section index is unchanged.
-    for (k, s) in init_sections.iter().enumerate() {
+    // The tail sections. Each is a zero-filled array of 8-byte slots
+    // (the paired `.rela` binds each to its target) followed immediately
+    // by that `.rela` section, whose `sh_info` names the array it
+    // patches. Appended last so every fixed and TLS section index is
+    // unchanged.
+    for (k, s) in tail_sections.iter().enumerate() {
         let array_shndx = sh.len() as u32;
-        let arr_off = round_up(out.len() as u64, 8);
+        let arr_off = round_up(out.len() as u64, s.align);
         out.resize(arr_off as usize, 0);
         out.resize(arr_off as usize + s.count * 8, 0);
         sh.push(Elf64Shdr {
-            sh_name: shstrtab_offs[init_names_start + 2 * k],
+            sh_name: shstrtab_offs[tail_name_idx[k].0],
             sh_type: s.sh_type,
-            sh_flags: SHF_ALLOC | SHF_WRITE,
+            sh_flags: s.flags,
             sh_offset: arr_off,
             sh_size: (s.count * 8) as u64,
-            sh_addralign: 8,
-            sh_entsize: 8,
+            sh_link: if s.link == 0 {
+                0
+            } else {
+                shndx_map(s.link) as u32
+            },
+            sh_addralign: s.align,
+            sh_entsize: s.entsize,
             ..Default::default()
         });
         let table = encode_reloc_table(class, &s.rela);
@@ -4769,7 +4911,7 @@ pub(super) fn write_relocatable(
         out.resize(rela_off as usize, 0);
         out.extend_from_slice(&table);
         sh.push(Elf64Shdr {
-            sh_name: shstrtab_offs[init_names_start + 2 * k + 1],
+            sh_name: shstrtab_offs[tail_name_idx[k].1],
             sh_type: reloc_sht(class),
             sh_flags: SHF_INFO_LINK,
             sh_offset: rela_off,
@@ -5837,6 +5979,8 @@ mod tests {
             pc_to_native: Vec::new(),
             func_ent_pcs: Vec::new(),
             func_ends: Vec::new(),
+            patchable_entries: Vec::new(),
+            mcount_sites: Vec::new(),
             func_names: Vec::new(),
             func_prologue_native: alloc::collections::BTreeMap::new(),
             promoted_local_slots: alloc::collections::BTreeMap::new(),

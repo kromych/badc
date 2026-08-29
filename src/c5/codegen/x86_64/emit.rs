@@ -452,7 +452,7 @@ fn pick_caller_saved_scratch_live_aware(
 /// stack untouched, so the function can ret directly with no
 /// stack adjustment.
 fn is_full_leaf(func: &FunctionSsa, frame: Frame, alloc: &Allocation, abi: super::Abi) -> bool {
-    if frame.frame_bytes != 0 || frame.param_spill_bytes != 0 {
+    if frame.frame_bytes != 0 || frame.param_spill_bytes != 0 || abi.mcount_frame {
         return false;
     }
     // A function that realigns rsp for an over-aligned automatic object needs
@@ -1718,6 +1718,7 @@ pub(crate) fn emit_function(
     abs_jump_tables: bool,
     hardening: super::Hardening,
     stack_protect: super::StackProtect,
+    entry: super::FunctionEntry,
 ) -> bool {
     // The bundled emit output arrives in `cx`; recreate the per-field names as
     // disjoint reborrows so the body below (including the per-`Inst` `cx` it
@@ -1739,6 +1740,7 @@ pub(crate) fn emit_function(
     let label_relocs = &mut *cx.label_relocs;
     let text_data_ranges = &mut *cx.text_data_ranges;
     let canary_frame_bytes = &mut *cx.canary_frame_bytes;
+    let mcount_sites = &mut *cx.mcount_sites;
     let snapshot = code.len();
     let fixups_snapshot = fixups.len();
     let plt_call_fixups_snapshot = plt_call_fixups.len();
@@ -1756,11 +1758,13 @@ pub(crate) fn emit_function(
     // merged TLS layout; see `emit_tls_addr`.
     let elf_tpoff_snapshot = elf_tpoff_fixups.len();
     let pending_func_fixups_snapshot = pending_func_fixups.len();
+    let mcount_sites_snapshot = mcount_sites.len();
     // Roll every output buffer back to its pre-function snapshot and
     // bail; the `tls` form also drops the recorded tpoff fixups.
     macro_rules! bail_rollback {
         () => {{
             code.truncate(snapshot);
+            mcount_sites.truncate(mcount_sites_snapshot);
             fixups.truncate(fixups_snapshot);
             plt_call_fixups.truncate(plt_call_fixups_snapshot);
             data_fixups.truncate(data_fixups_snapshot);
@@ -1785,6 +1789,7 @@ pub(crate) fn emit_function(
         a.strict_align = strict_align;
         a.hardening = hardening;
         a.stack_protect = stack_protect;
+        a.mcount_frame = entry.profile.is_some_and(|call| call.after_prologue);
         a
     };
     if let Some(bytes) = super::ssa::emit_common::locals_bytes_over_limit(func) {
@@ -1827,6 +1832,7 @@ pub(crate) fn emit_function(
     // asm) is the entire machine code, so there is no frame to set up or
     // unwind. The matching `Terminator::Return` below emits no epilogue.
     let mut uw = if func.is_naked {
+        code.resize(code.len() + entry.nops_after as usize, 0x90);
         super::FnUnwind::default()
     } else {
         // Indirect-branch tracking: a function entry is reachable by an
@@ -1836,6 +1842,15 @@ pub(crate) fn emit_function(
         // A naked function is excluded -- its body is the whole function.
         if abi.hardening.cf_protection_branch {
             super::encode::emit_endbr64(code);
+        }
+        // The `-fpatchable-function-entry` NOPs after the symbol, then
+        // the `-mfentry` call, both ahead of the prologue as gcc orders
+        // them.
+        code.resize(code.len() + entry.nops_after as usize, 0x90);
+        if let Some(call) = entry.profile
+            && !call.after_prologue
+        {
+            emit_profile_call(code, call, asm_extern_call_sites, mcount_sites);
         }
         emit_prologue(
             code,
@@ -1848,6 +1863,15 @@ pub(crate) fn emit_function(
         )
     };
     uw.begin = snapshot as u32;
+    // `-pg` without `-mfentry`: `call mcount` once the frame stands, so
+    // the callee reads the return address through rbp. It runs ahead of
+    // the parameter placement below, so `mcount` must keep the argument
+    // registers, as the C library's does.
+    if let Some(call) = entry.profile
+        && call.after_prologue
+    {
+        emit_profile_call(code, call, asm_extern_call_sites, mcount_sites);
+    }
     super::ssa::emit_common::record_post_prologue_pc(func, prologue_native, code.len());
 
     // Place the entry `Inst::ParamRef` values from their host argument
@@ -2129,6 +2153,7 @@ pub(crate) fn emit_function(
                         label_relocs: &mut *label_relocs,
                         text_data_ranges: &mut *text_data_ranges,
                         canary_frame_bytes: &mut *canary_frame_bytes,
+                        mcount_sites: &mut *mcount_sites,
                     };
                     let fcx = FnCtx {
                         func,
@@ -12095,6 +12120,23 @@ fn emit_extern_branch(
         super::encode::emit_call_rel32(code, 0);
     } else {
         super::encode::emit_jmp_rel32(code, 0);
+    }
+}
+
+/// The `-pg` call site: `call __fentry__` / `call mcount` relocated by
+/// name, or under `-mnop-mcount` a NOP of the call's width in its place.
+/// `-mrecord-mcount` records the site either way.
+fn emit_profile_call(
+    code: &mut Vec<u8>,
+    call: super::ProfileCall,
+    extern_sites: &mut Vec<super::UserExternCallSite>,
+    mcount_sites: &mut Vec<usize>,
+) {
+    mcount_sites.push(code.len());
+    if call.nop {
+        code.extend_from_slice(&[0x0F, 0x1F, 0x44, 0x00, 0x00]);
+    } else {
+        emit_extern_branch(code, extern_sites, call.symbol(), true);
     }
 }
 

@@ -767,6 +767,8 @@ mod tests {
             is_noinline: false,
             is_naked: false,
             section: None,
+            patchable_entry: None,
+            no_instrument: false,
             is_weak: false,
             is_internal: false,
             const_params: 0,

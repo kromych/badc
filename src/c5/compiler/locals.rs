@@ -316,6 +316,8 @@ impl Compiler {
         self.pending.saw_register_storage = false;
         self.pending.attr_used = false;
         self.pending.attr_section = None;
+        self.pending.attr_patchable_entry = None;
+        self.pending.attr_no_instrument = false;
         self.pending.attr_weak = false;
         self.pending.attr_visibility = None;
         self.pending.attr_constructor = false;

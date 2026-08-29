@@ -903,6 +903,7 @@ pub(crate) fn emit_function(
     abs_jump_tables: bool,
     hardening: super::Hardening,
     stack_protect: super::StackProtect,
+    entry: super::FunctionEntry,
 ) -> bool {
     // The bundled emit output arrives in `cx`; recreate the per-field names as
     // disjoint reborrows so the body below (including the per-`Inst` `cx` it
@@ -924,6 +925,7 @@ pub(crate) fn emit_function(
     let label_relocs = &mut *cx.label_relocs;
     let text_data_ranges = &mut *cx.text_data_ranges;
     let canary_frame_bytes = &mut *cx.canary_frame_bytes;
+    let mcount_sites = &mut *cx.mcount_sites;
     let abi = {
         let mut a = target.abi();
         a.no_fp_varargs = no_fp_regs;
@@ -989,6 +991,13 @@ pub(crate) fn emit_function(
         } else if abi.hardening.bti {
             emit(code, super::encode::BTI_C);
         }
+    }
+    // The `-fpatchable-function-entry` NOPs after the symbol follow the
+    // landing pad and precede the prologue, as gcc orders them.
+    for _ in 0..entry.nops_after {
+        emit(code, super::encode::NOP);
+    }
+    if !func.is_naked {
         emit_prologue(code, func, alloc, frame, abi, user_extern_data_refs);
     }
     super::ssa::emit_common::record_post_prologue_pc(func, prologue_native, code.len());
@@ -1327,6 +1336,7 @@ pub(crate) fn emit_function(
                     label_relocs: &mut *label_relocs,
                     text_data_ranges: &mut *text_data_ranges,
                     canary_frame_bytes: &mut *canary_frame_bytes,
+                    mcount_sites: &mut *mcount_sites,
                 };
                 let fcx = FnCtx {
                     func,
@@ -3433,7 +3443,7 @@ fn template_expr_value(
 /// instructions the caller is about to lay down. The gap is under one
 /// instruction, so the shared fill lays it down as zeros; the padding is
 /// part of the data run it follows.
-fn a64_align_asm_stream(
+pub(super) fn a64_align_asm_stream(
     code: &mut Vec<u8>,
     text_data_ranges: &mut Vec<(usize, usize)>,
     state: &mut Option<super::super::map_syms::MapClass>,
@@ -12966,6 +12976,7 @@ mod tests {
                 label_relocs: &mut label_relocs,
                 text_data_ranges: &mut text_data_ranges,
                 canary_frame_bytes: &mut alloc::collections::BTreeMap::new(),
+                mcount_sites: &mut alloc::vec::Vec::new(),
             };
             emit_function(
                 &func,
@@ -12990,6 +13001,7 @@ mod tests {
                 false,
                 super::super::Hardening::NONE,
                 super::super::StackProtect::OFF,
+                super::super::FunctionEntry::default(),
             )
         };
         assert!(
@@ -13260,6 +13272,7 @@ mod tests {
                 label_relocs: &mut label_relocs,
                 text_data_ranges: &mut text_data_ranges,
                 canary_frame_bytes: &mut alloc::collections::BTreeMap::new(),
+                mcount_sites: &mut alloc::vec::Vec::new(),
             };
             emit_function(
                 &func,
@@ -13284,6 +13297,7 @@ mod tests {
                 false,
                 super::super::Hardening::NONE,
                 super::super::StackProtect::OFF,
+                super::super::FunctionEntry::default(),
             )
         };
         assert!(ok, "binop handler should cover Add + Shl + Shr");
@@ -13350,6 +13364,7 @@ mod tests {
                 label_relocs: &mut label_relocs,
                 text_data_ranges: &mut text_data_ranges,
                 canary_frame_bytes: &mut alloc::collections::BTreeMap::new(),
+                mcount_sites: &mut alloc::vec::Vec::new(),
             };
             emit_function(
                 &func,
@@ -13374,6 +13389,7 @@ mod tests {
                 false,
                 super::super::Hardening::NONE,
                 super::super::StackProtect::OFF,
+                super::super::FunctionEntry::default(),
             )
         };
         assert!(

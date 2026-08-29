@@ -159,6 +159,15 @@ pub(crate) struct Symbol {
     /// `.bss` placement.
     pub section_name: Option<String>,
 
+    /// `__attribute__((patchable_function_entry(N, M)))` seen on any
+    /// declaration of the name: `N` NOPs at the entry, `M` of them ahead
+    /// of the symbol, in place of `-fpatchable-function-entry=`.
+    pub patchable_function_entry: Option<(u32, u32)>,
+
+    /// `__attribute__((no_instrument_function))` seen on any declaration
+    /// of the name: `-pg` emits no profiling call in the body.
+    pub no_instrument_function: bool,
+
     /// `__attribute__((constructor))` seen on any declaration of the
     /// name. Sticky like `is_weak`, so a prototype's attribute reaches
     /// the definition, which registers the `InitFunc` at body open.
@@ -750,6 +759,8 @@ impl crate::c5::layout::DataOffsets for Symbol {
             is_used,
             is_hidden: _,
             section_name,
+            patchable_function_entry: _,
+            no_instrument_function: _,
             is_constructor: _,
             is_destructor: _,
             init_priority: _,

@@ -145,6 +145,12 @@ FORWARD_EXACT = {
     # CR4.OSFXSR on x86_64, CPACR_EL1.FPEN on aarch64) and callers do not
     # maintain the System V `al` convention.
     "-mno-sse", "-mgeneral-regs-only",
+    # ftrace's x86_64 form (CONFIG_FUNCTION_TRACER with
+    # CONFIG_FTRACE_MCOUNT_USE_CC): `call __fentry__` at every function
+    # entry and the `__mcount_loc` table ftrace patches from. Withheld, no
+    # unit built here carries a call to patch. badc rejects the set on
+    # aarch64 as gcc does.
+    "-pg", "-mfentry", "-mrecord-mcount", "-mnop-mcount",
     # wchar_t width. The kernel builds the whole tree with -fshort-wchar and
     # stages L"..." into efi_char16_t (u16) arrays, so a compiler that never
     # sees it lays out the wrong element width.
@@ -193,6 +199,11 @@ FORWARD_PREFIX = (
     # three-function object placed the third at offset 0x61. badc validates
     # the operand.
     "-fmin-function-alignment=",
+    # ftrace patch sites: the NOP area at every function entry and its
+    # `__patchable_function_entries` record (CONFIG_CALL_PADDING on x86_64,
+    # CONFIG_DYNAMIC_FTRACE_WITH_CALL_OPS on arm64). Withheld, the image
+    # has no site for ftrace to patch. badc validates the operands.
+    "-fpatchable-function-entry=",
     # `-fno-builtin`, per library function.
     "-fno-builtin-",
     *HARDENING_PREFIX,
@@ -217,15 +228,6 @@ UNSUPPORTED_PREFIX = (
     "-ftrivial-auto-var-init=",
     # badc has no option for what an initializer leaves in padding bits.
     "-fzero-init-padding-bits=",
-    # badc emits no patch site and no __fentry__ call, so ftrace has nothing
-    # to patch in a unit built here.
-    "-fpatchable-function-entry",
-    # The same gap from the other direction: a distribution config turns
-    # CONFIG_FUNCTION_TRACER on, which asks for an __fentry__ call at every
-    # function entry and a record of the sites. badc emits neither, so a
-    # unit built here contributes nothing to __mcount_loc.
-    "-mrecord-mcount",
-    "-mfentry",
     # Which trailing arrays __builtin_object_size treats as bounded, hence
     # what the FORTIFY_SOURCE checks are computed against.
     "-fstrict-flex-arrays=",
@@ -621,6 +623,11 @@ def _self_test() -> int:
     assert rewrite(["-nostdinc"]).argv == ["-nostdinc"]
     assert rewrite(["-fmin-function-alignment=16"]).argv == \
         ["-fmin-function-alignment=16"]
+    # The ftrace patch sites reach badc verbatim on both architectures.
+    for flag in ("-fpatchable-function-entry=16,16",
+                 "-fpatchable-function-entry=4,2", "-pg", "-mfentry",
+                 "-mrecord-mcount"):
+        assert rewrite([flag]) == Rewritten([flag], [], []), flag
     for flag in ("-fno-builtin", "-ffreestanding", "-fno-builtin-wcslen"):
         assert rewrite([flag]).argv == [flag], flag
     # The stack protector and its guard placement reach badc verbatim; the
@@ -634,7 +641,6 @@ def _self_test() -> int:
                  "-mstack-protector-guard-offset=1360"):
         assert rewrite([flag]).argv == [flag], flag
     for flag in ("-ftrivial-auto-var-init=zero",
-                 "-fpatchable-function-entry=16,16",
                  "-fstrict-flex-arrays=3", "-fasynchronous-unwind-tables"):
         r = rewrite([flag])
         assert r.dropped == [flag] and r.unknown == [], (flag, r)

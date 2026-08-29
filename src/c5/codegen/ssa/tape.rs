@@ -78,6 +78,8 @@ pub(crate) fn insert(func: &mut FunctionSsa, ins: &[Insertion]) -> (Rewrite, Und
         is_weak: _,
         is_internal: _,
         section: _,
+        patchable_entry: _,
+        no_instrument: _,
         const_params: _,
         insts,
         inst_src,

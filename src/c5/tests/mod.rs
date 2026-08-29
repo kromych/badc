@@ -49,6 +49,8 @@ mod native_pe_arm64;
 #[cfg(feature = "full")]
 mod native_pe_x64;
 mod parser;
+#[cfg(feature = "full")]
+mod patchable_entry;
 mod pointer_tracking;
 mod programs;
 #[cfg(feature = "full")]

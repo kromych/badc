@@ -1129,6 +1129,10 @@ pub(in crate::c5::compiler) struct Pending {
     /// A consumed `__attribute__((section("name")))`: the named object
     /// section the declared symbol's bytes go to.
     pub attr_section: Option<alloc::string::String>,
+    /// A consumed `__attribute__((patchable_function_entry(N, M)))`.
+    pub attr_patchable_entry: Option<(u32, u32)>,
+    /// A consumed `__attribute__((no_instrument_function))`.
+    pub attr_no_instrument: bool,
     /// A consumed `__attribute__((alias("target")))`: the declared name
     /// is an additional symbol for `target`.
     pub attr_alias: Option<alloc::string::String>,
@@ -1156,6 +1160,8 @@ pub(super) struct DeclSpecifiers {
     attr_weak: bool,
     attr_visibility: Option<bool>,
     attr_section: Option<alloc::string::String>,
+    attr_patchable_entry: Option<(u32, u32)>,
+    attr_no_instrument: bool,
     attr_cleanup: Option<usize>,
     attr_align: i64,
     attr_alignas: i64,
@@ -1175,6 +1181,8 @@ impl Pending {
             attr_weak: core::mem::take(&mut self.attr_weak),
             attr_visibility: self.attr_visibility.take(),
             attr_section: self.attr_section.take(),
+            attr_patchable_entry: self.attr_patchable_entry.take(),
+            attr_no_instrument: core::mem::take(&mut self.attr_no_instrument),
             attr_cleanup: self.attr_cleanup.take(),
             attr_align: core::mem::take(&mut self.attr_align),
             attr_alignas: core::mem::take(&mut self.attr_alignas),
@@ -1191,6 +1199,8 @@ impl Pending {
         self.attr_weak = s.attr_weak;
         self.attr_visibility = s.attr_visibility;
         self.attr_section = s.attr_section;
+        self.attr_patchable_entry = s.attr_patchable_entry;
+        self.attr_no_instrument = s.attr_no_instrument;
         self.attr_cleanup = s.attr_cleanup;
         self.attr_align = s.attr_align;
         self.attr_alignas = s.attr_alignas;
@@ -1347,6 +1357,8 @@ impl Default for Pending {
             attr_used: false,
             attr_visibility: None,
             attr_section: None,
+            attr_patchable_entry: None,
+            attr_no_instrument: false,
             attr_alias: None,
             saw_register_storage: false,
             auto_type_single_declarator: false,

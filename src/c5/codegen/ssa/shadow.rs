@@ -36,6 +36,28 @@ fn function_sections(
         .collect()
 }
 
+/// `__attribute__((patchable_function_entry(N, M)))` per defined function.
+fn function_patchable_entries(program: &Program) -> alloc::collections::BTreeMap<&str, (u32, u32)> {
+    use crate::c5::token::Token;
+    program
+        .symbols
+        .iter()
+        .filter(|s| s.class == Token::Fun as i64 && s.defined_here)
+        .filter_map(|s| Some((s.def_link_name(), s.patchable_function_entry?)))
+        .collect()
+}
+
+/// Names of defined functions carrying `no_instrument_function`.
+fn no_instrument_function_names(program: &Program) -> alloc::collections::BTreeSet<&str> {
+    use crate::c5::token::Token;
+    program
+        .symbols
+        .iter()
+        .filter(|s| s.class == Token::Fun as i64 && s.defined_here && s.no_instrument_function)
+        .map(|s| s.def_link_name())
+        .collect()
+}
+
 /// Assembler name per function identifier the unit emits under a name
 /// other than the identifier: a GNU asm label, or an inline definition's
 /// private body name. Only renamed entries appear; every other function
@@ -91,6 +113,8 @@ pub(crate) fn walk_program(
     let weak_names = weak_function_names(program);
     let internal_names = internal_function_names(program);
     let sections = function_sections(program);
+    let patchable_entries = function_patchable_entries(program);
+    let no_instrument = no_instrument_function_names(program);
     let renamed = renamed_functions(program);
     let mut out: Vec<FunctionSsa> = Vec::with_capacity(program.finished_functions.len());
     let mut ordered: Vec<usize> = (0..program.finished_functions.len()).collect();
@@ -139,6 +163,8 @@ pub(crate) fn walk_program(
         func.is_weak = weak_names.contains(func.name.as_str());
         func.is_internal = internal_names.contains(func.name.as_str());
         func.section = sections.get(func.name.as_str()).map(|s| (*s).clone());
+        func.patchable_entry = patchable_entries.get(func.name.as_str()).copied();
+        func.no_instrument = no_instrument.contains(func.name.as_str());
         // Seed declared multi-cell extents alongside the synthetic ones the
         // walker recorded. Slot coalescing reserves every interior cell.
         func.multi_cell_slots.extend_from_slice(&f.multi_cell_slots);

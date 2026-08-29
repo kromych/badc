@@ -4245,6 +4245,8 @@ mod tests {
             pc_to_native: Vec::new(),
             func_ent_pcs: Vec::new(),
             func_ends: Vec::new(),
+            patchable_entries: Vec::new(),
+            mcount_sites: Vec::new(),
             func_names: Vec::new(),
             func_prologue_native: alloc::collections::BTreeMap::new(),
             promoted_local_slots: alloc::collections::BTreeMap::new(),

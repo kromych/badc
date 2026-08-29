@@ -100,6 +100,7 @@ pub(crate) fn compile_function_to_bytes(
                     label_relocs: &mut label_relocs,
                     text_data_ranges: &mut text_data_ranges,
                     canary_frame_bytes: &mut alloc::collections::BTreeMap::new(),
+                    mcount_sites: &mut alloc::vec::Vec::new(),
                 };
                 super::aarch64::emit::emit_function(
                     func,
@@ -124,6 +125,7 @@ pub(crate) fn compile_function_to_bytes(
                     false,
                     super::super::Hardening::NONE,
                     super::super::StackProtect::OFF,
+                    super::super::FunctionEntry::default(),
                 )
             };
             if !ok {
@@ -198,6 +200,7 @@ pub(crate) fn compile_function_to_bytes(
                     label_relocs: &mut label_relocs,
                     text_data_ranges: &mut text_data_ranges,
                     canary_frame_bytes: &mut alloc::collections::BTreeMap::new(),
+                    mcount_sites: &mut alloc::vec::Vec::new(),
                 };
                 super::x86_64::emit::emit_function(
                     func,
@@ -226,6 +229,7 @@ pub(crate) fn compile_function_to_bytes(
                     false,
                     super::super::Hardening::NONE,
                     super::super::StackProtect::OFF,
+                    super::super::FunctionEntry::default(),
                 )
             };
             if !ok {

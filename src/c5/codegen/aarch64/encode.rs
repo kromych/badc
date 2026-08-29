@@ -1137,6 +1137,9 @@ pub(crate) const AUTIASP: u32 = 0xD503_23BF;
 /// stripping any other needs `XPACI <Xd>`, which requires FEAT_PAuth.
 pub(crate) const XPACLRI: u32 = 0xD503_20FF;
 
+/// `NOP` (`HINT #0`).
+pub(crate) const NOP: u32 = 0xD503_201F;
+
 /// `BR <Xn>` -- branch (no link) to the address in `Xn`. Used by
 /// the `Terminator::TailExt` lowering to forward control to the
 /// IAT/GOT-resolved libc address without saving a return point:
@@ -1749,6 +1752,8 @@ pub(crate) fn lower(
     let mut code = Vec::new();
     let mut func_ent_pcs: Vec<usize> = Vec::new();
     let mut func_ends: Vec<usize> = Vec::new();
+    let mut patchable_entries: Vec<super::EntryArea> = Vec::new();
+    let mut mcount_sites: Vec<usize> = Vec::new();
     let mut func_names: Vec<alloc::string::String> = Vec::new();
     let mut func_prologue_native: alloc::collections::BTreeMap<usize, usize> =
         alloc::collections::BTreeMap::new();
@@ -2247,9 +2252,24 @@ pub(crate) fn lower(
     text_align = text_align.max(fn_align);
     for (func_ssa, alloc_for) in ssa_funcs.iter().zip(ssa_allocs.iter()) {
         let ent_pc = func_ssa.ent_pc;
-        // `-fmin-function-alignment=N`: the entry starts at a multiple of
-        // N, the gap filled with NOPs (A64 `HINT #0`).
-        super::pad_to_alignment(&mut code, fn_align, &0xd503_201fu32.to_le_bytes());
+        let entry = super::FunctionEntry::of(func_ssa, &native);
+        // A preceding body's inline-asm data may leave the stream off
+        // instruction alignment; the function's first byte pays it.
+        super::emit::a64_align_asm_stream(&mut code, &mut text_data_ranges, &mut text_map_state);
+        // `-fmin-function-alignment=N`: the function's first byte starts
+        // at a multiple of N, the gap filled with NOPs (A64 `HINT #0`).
+        // Under `-fpatchable-function-entry` that byte opens the NOP
+        // area, of which `nops_before` precede the symbol.
+        super::pad_to_alignment(&mut code, fn_align, &super::encode::NOP.to_le_bytes());
+        if entry.nops_before + entry.nops_after > 0 {
+            patchable_entries.push(super::EntryArea {
+                func: func_ent_pcs.len(),
+                start: code.len(),
+            });
+        }
+        for _ in 0..entry.nops_before {
+            code.extend_from_slice(&super::encode::NOP.to_le_bytes());
+        }
         pc_to_native[ent_pc] = code.len();
         func_ent_pcs.push(ent_pc);
         func_names.push(func_ssa.name.clone());
@@ -2287,6 +2307,7 @@ pub(crate) fn lower(
                 label_relocs: &mut label_relocs,
                 text_data_ranges: &mut text_data_ranges,
                 canary_frame_bytes: &mut canary_frame_bytes,
+                mcount_sites: &mut mcount_sites,
             };
             #[cfg(feature = "std")]
             let _ = super::ssa::emit_common::take_bail();
@@ -2313,6 +2334,7 @@ pub(crate) fn lower(
                 native.output_kind == super::OutputKind::Relocatable && !native.pic,
                 native.hardening,
                 native.stack_protect.resolved_for(target),
+                entry,
             )
         };
         if !ok {
@@ -2560,6 +2582,8 @@ pub(crate) fn lower(
         pc_to_native,
         func_ent_pcs,
         func_ends,
+        patchable_entries,
+        mcount_sites,
         func_names,
         func_prologue_native,
         promoted_local_slots,

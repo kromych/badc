@@ -2852,3 +2852,45 @@ fn invalid_universal_character_names_are_diagnosed() {
     .expect("a permitted universal character name encodes as UTF-8");
     assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
 }
+
+/// A static initializer element that does not fold is diagnosed by what
+/// failed: a builtin's non-constant operand is named as such, and only a
+/// name with no declaration is reported undeclared.
+#[test]
+fn static_initializer_diagnostic_names_what_failed() {
+    let msg = |src: &str| match Compiler::new(src.to_string()).compile() {
+        Err(e) => e.to_string(),
+        Ok(_) => panic!("expected a compile error for {src:?}"),
+    };
+    let m = msg(
+        "static int rt; static int x = __builtin_choose_expr(rt, 1, 2); int main(void) { return x; }",
+    );
+    assert!(
+        m.contains("constant integer expected (got identifier `rt`)"),
+        "{m}"
+    );
+    assert!(!m.contains("undeclared"), "{m}");
+    let m = msg("static int x = __builtin_alloca(4); int main(void) { return x; }");
+    assert!(
+        m.contains("constant integer expected (got identifier `__builtin_alloca`)"),
+        "{m}"
+    );
+    assert!(!m.contains("undeclared"), "{m}");
+    expect_compile_error(
+        "static int x = missing; int main(void) { return x; }",
+        "use of undeclared identifier `missing`",
+    );
+    expect_compile_error(
+        "static int x = missing(1); int main(void) { return x; }",
+        "use of undeclared identifier `missing`",
+    );
+    expect_compile_error(
+        "enum e { A = B }; int main(void) { return A; }",
+        "use of undeclared identifier `B`",
+    );
+    // A name a bundled header declares carries the include hint.
+    expect_compile_error(
+        "static int x = getchar(); int main(void) { return x; }",
+        "use of undeclared identifier `getchar` -- try `#include <stdio.h>`",
+    );
+}

@@ -5901,6 +5901,23 @@ fn builtin_constant_p() {
 }
 
 #[test]
+fn builtin_constant_p_value_kinds() {
+    // An object or a symbol-relative address is not a constant value:
+    // an array, a struct, `&global` and a compound literal answer 0 as
+    // gcc does; literals, enum constants, `sizeof` and folded pointer
+    // comparisons answer 1.
+    assert_eq!(run_fixture("builtin_constant_p_value_kinds.c"), 0);
+}
+
+#[test]
+fn builtin_constant_p_selects_choose_expr_arm_in_initializer() {
+    // The kernel's PIN_GROUP shape: an array operand selects the address
+    // arm, whose value carries a relocation; an integer operand selects
+    // the constant arm; a floating arm keeps its value.
+    assert_eq!(run_fixture("builtin_constant_p_choose_expr_init.c"), 0);
+}
+
+#[test]
 fn builtin_constant_p_deferred() {
     // The interpreter runs unoptimized SSA, where the walker answers a
     // non-constant operand 0 directly, so `Intrinsic::ConstantP` never

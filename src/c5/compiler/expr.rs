@@ -680,10 +680,7 @@ impl Compiler {
                 i
             }
             None => {
-                let suggestion = match super::super::headers::header_declaring(name) {
-                    Some(h) => format!(" -- try `#include <{h}>`"),
-                    None => String::new(),
-                };
+                let suggestion = self.include_hint(name);
                 return Err(self.compile_err(format!("unknown function `{name}`{suggestion}")));
             }
         };
@@ -2121,10 +2118,7 @@ impl Compiler {
                         self.ast_acc = None;
                     } else {
                         let name = self.symbols[id_idx].name.clone();
-                        let suggestion = match super::super::headers::header_declaring(&name) {
-                            Some(h) => format!(" -- try `#include <{h}>`"),
-                            None => String::new(),
-                        };
+                        let suggestion = self.include_hint(&name);
                         return Err(
                             self.compile_err(format!("unknown function `{name}`{suggestion}"))
                         );

@@ -461,12 +461,6 @@ impl Compiler {
         Ok(())
     }
 
-    /// GCC `__builtin_constant_p(x)`: an `int`, 1 when the unevaluated
-    /// operand folds to a constant expression. A parse-time constant
-    /// answers 1, which no later phase revises. A non-constant operand
-    /// can still become one after inlining and constant propagation, so
-    /// where deferring is sound it becomes an `Intrinsic::ConstantP` for
-    /// the SSA folds; otherwise the conservative 0 stands.
     /// GCC `__builtin_has_attribute(operand, attribute)`: an `int`
     /// constant. badc does not model the queried attributes on objects or
     /// types, so under its own semantics no operand carries one -- the
@@ -485,6 +479,12 @@ impl Compiler {
         Ok(())
     }
 
+    /// GCC `__builtin_constant_p(x)`: an `int`, 1 when the unevaluated
+    /// operand folds to a constant value. A parse-time constant answers
+    /// 1, which no later phase revises. A non-constant operand can still
+    /// become one after inlining and constant propagation, so where
+    /// deferring is sound it becomes an `Intrinsic::ConstantP` for the
+    /// SSA folds; otherwise the conservative 0 stands.
     pub(super) fn parse_constant_p_builtin(&mut self) -> Result<(), C5Error> {
         // The call dispatch consumed `__builtin_constant_p (`.
         let snap = self.lex.snapshot();

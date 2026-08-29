@@ -1665,10 +1665,7 @@ impl Compiler {
                 // leaf's address and the cast merely retypes it.
                 if !self.post_cast_is_reloc_leaf()? {
                     self.restore_lex(snap);
-                    return match self.parse_const_expr_cond_val()? {
-                        ConstVal::Float(f) => Ok((f.to_bits() as i128, InitElemReloc::Float64Bits)),
-                        v => self.init_scalar_of(v),
-                    };
+                    return self.parse_constant_init_scalar();
                 }
                 // Optional function-pointer abstract declarator
                 // `(*)(args)` after the base type. Same treatment
@@ -1872,13 +1869,21 @@ impl Compiler {
                 self.next()?;
                 return Ok((off as i128, InitElemReloc::Data(None)));
             }
-            // An identifier followed by `(` is a call, not the symbol's
+            // A name with no declaration is either a builtin the constant
+            // evaluator folds (C99 6.6p10) or undeclared; the evaluator
+            // tells the two apart and diagnoses whichever holds. A fold may
+            // select an address constant (`__builtin_choose_expr` over an
+            // array), which carries its relocation.
+            if class == 0 {
+                return self.parse_constant_init_scalar();
+            }
+            // A declared name followed by `(` is a call, not the symbol's
             // address: taking the branches below would consume the name
             // alone and leave the argument list to be misread as further
             // elements. A static initializer admits a call only when it
-            // folds (C99 6.6p10) -- the constant evaluator owns which
-            // builtins do -- so defer to it, and fall through when it
-            // cannot, leaving the diagnostics below to report the shape.
+            // folds (a library function over a literal), so defer to the
+            // evaluator and fall through when it cannot, leaving the
+            // diagnostics below to report the shape.
             if self.lex.peek_after_whitespace(b'(') {
                 let snap = self.lex.snapshot();
                 let data_snap = self.data.len();
@@ -1889,40 +1894,6 @@ impl Compiler {
                 self.restore_lex(snap);
                 self.truncate_data(data_snap);
                 self.pending.const_expr_nonconst = nonconst;
-            }
-            // C99 6.5.1: an identifier must be declared before use. An
-            // undeclared identifier as an initializer element has no
-            // resolvable value, so reject it rather than bind a placeholder
-            // that resolves to a silent zero; name the header that declares
-            // it when one is known. A function referenced before its
-            // definition reaches the `Token::Fun` branch below through its
-            // prototype (C99 6.7p7 -- a prior declaration satisfies the
-            // type), so this rejects only genuinely undeclared names.
-            if class == 0 {
-                // The name may be an implementation builtin folding to an
-                // integer constant expression (C99 6.6p10). That evaluator
-                // owns which builtins fold, so defer rather than keep a
-                // second set here; what it cannot fold is undeclared.
-                let snap = self.lex.snapshot();
-                let data_snap = self.data.len();
-                let nonconst = self.pending.const_expr_nonconst;
-                if let Ok(v) = self.parse_constant_i128() {
-                    return Ok((v, InitElemReloc::None));
-                }
-                self.restore_lex(snap);
-                self.truncate_data(data_snap);
-                self.pending.const_expr_nonconst = nonconst;
-                let name = self.symbols[idx].name.clone();
-                return Err(self.compile_err(
-                    match super::super::headers::header_declaring(&name) {
-                        Some(h) => format!(
-                            "use of undeclared identifier `{name}` in an initializer -- try `#include <{h}>`"
-                        ),
-                        None => {
-                            format!("use of undeclared identifier `{name}` in an initializer")
-                        }
-                    },
-                ));
             }
             if class == Token::Fun as i64 {
                 self.symbols[idx].was_referenced = true;
@@ -2066,17 +2037,19 @@ impl Compiler {
     }
 
     /// A folded constant as an initializer element: a symbol-relative
-    /// address carries its relocation, anything else is a plain value.
+    /// address carries its relocation, a floating value its `f64` bit
+    /// pattern, and an integer is a plain value.
     fn init_scalar_of(&self, v: ConstVal) -> Result<(i128, InitElemReloc), C5Error> {
-        if let ConstVal::Addr(a) = v
-            && a.root.is_symbolic()
-        {
-            return Ok((a.value as i128, Self::init_elem_reloc_of(a)));
+        match v {
+            ConstVal::Addr(a) if a.root.is_symbolic() => {
+                Ok((a.value as i128, Self::init_elem_reloc_of(a)))
+            }
+            ConstVal::Float(f) => Ok((f.to_bits() as i128, InitElemReloc::Float64Bits)),
+            v => Ok((
+                self.require_integer_const(v)?.as_i128(),
+                InitElemReloc::None,
+            )),
         }
-        Ok((
-            self.require_integer_const(v)?.as_i128(),
-            InitElemReloc::None,
-        ))
     }
 
     /// Drain the array-typedef base carriers into the dimension list an

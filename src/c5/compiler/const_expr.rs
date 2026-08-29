@@ -233,6 +233,12 @@ impl ConstVal {
         }
     }
 
+    /// True for a symbol-relative address: fixed at link time, so not
+    /// an integer constant expression and not a constant value.
+    pub(super) fn is_symbolic_addr(self) -> bool {
+        matches!(self, ConstVal::Addr(a) if a.root.is_symbolic())
+    }
+
     /// True if the value is non-zero. Used by `&&`, `||`, `?:`, `!`.
     fn is_truthy(self) -> bool {
         match self {
@@ -513,9 +519,7 @@ impl Compiler {
     /// arithmetic operands. Pointer comparisons and the offsetof form have
     /// already folded to an integer, so only a bare address reaches here.
     pub(super) fn require_integer_const(&self, v: ConstVal) -> Result<ConstVal, C5Error> {
-        if let ConstVal::Addr(a) = v
-            && a.root.is_symbolic()
-        {
+        if v.is_symbolic_addr() {
             return Err(self.compile_err(
                 "address of an object or function is not an integer constant expression",
             ));
@@ -585,23 +589,34 @@ impl Compiler {
         }
     }
 
-    /// Skip a balanced token run up to (not consuming) the next `,` at
-    /// paren/bracket depth 0. The unchosen `__builtin_choose_expr`
-    /// operand in a constant expression is skipped this way -- it need
-    /// not itself be constant.
+    /// Nesting change of the current token: +1 for `(`, `[`, `{`, -1 for
+    /// their closers, 0 otherwise. Braces count so a comma inside a
+    /// compound literal or a statement expression stays in its group.
+    fn bracket_depth_delta(&self) -> i64 {
+        let tk = self.lex.tk;
+        if tk == '(' || tk == Token::Brak || tk == '{' {
+            1
+        } else if tk == ')' || tk == ']' || tk == '}' {
+            -1
+        } else {
+            0
+        }
+    }
+
+    /// Skip a balanced token run up to (not consuming) the next `,` or
+    /// `)` at depth 0. The unchosen `__builtin_choose_expr` operand in a
+    /// constant expression is skipped this way -- it need not itself be
+    /// constant.
     pub(super) fn skip_balanced_to_comma(&mut self) -> Result<(), C5Error> {
         let mut depth: i64 = 0;
         loop {
             if (self.lex.tk == ',' || self.lex.tk == ')') && depth == 0 {
                 return Ok(());
             }
-            if self.lex.tk == '(' || self.lex.tk == Token::Brak {
-                depth += 1;
-            } else if self.lex.tk == ')' || self.lex.tk == ']' {
-                depth -= 1;
-            } else if self.lex.tk == 0 {
+            if self.lex.tk == 0 {
                 return Err(self.compile_err("unterminated `__builtin_choose_expr` operand"));
             }
+            depth += self.bracket_depth_delta();
             self.next()?;
         }
     }
@@ -611,19 +626,14 @@ impl Compiler {
     pub(super) fn skip_balanced_to_close_paren(&mut self) -> Result<(), C5Error> {
         let mut depth: i64 = 0;
         loop {
-            if self.lex.tk == '(' || self.lex.tk == Token::Brak {
-                depth += 1;
-            } else if self.lex.tk == ')' {
-                if depth == 0 {
-                    self.next()?;
-                    return Ok(());
-                }
-                depth -= 1;
-            } else if self.lex.tk == ']' {
-                depth -= 1;
-            } else if self.lex.tk == 0 {
+            if self.lex.tk == ')' && depth == 0 {
+                self.next()?;
+                return Ok(());
+            }
+            if self.lex.tk == 0 {
                 return Err(self.compile_err("unterminated `__builtin_choose_expr` operand"));
             }
+            depth += self.bracket_depth_delta();
             self.next()?;
         }
     }
@@ -656,35 +666,42 @@ impl Compiler {
     fn skip_balanced_group(&mut self) -> Result<(), C5Error> {
         let mut depth: i64 = 0;
         loop {
-            if self.lex.tk == '(' || self.lex.tk == Token::Brak {
-                depth += 1;
-            } else if self.lex.tk == ')' || self.lex.tk == ']' {
-                depth -= 1;
-                if depth == 0 {
-                    self.next()?;
-                    return Ok(());
-                }
-            } else if self.lex.tk == 0 {
+            if self.lex.tk == 0 {
                 return Err(self.compile_err("unterminated operand in constant expression"));
             }
+            depth += self.bracket_depth_delta();
             self.next()?;
+            if depth == 0 {
+                return Ok(());
+            }
         }
     }
 
     /// Evaluate a `__builtin_constant_p(x)` operand: 1 when `x` folds to
-    /// a constant expression, else 0. On entry the opening `(` is
-    /// consumed and the current token is the operand's first; on return
-    /// the closing `)` is consumed. The operand is unevaluated (GCC does
-    /// not emit it), so the fold attempt is discarded and the lexer is
-    /// repositioned past the operand regardless of the outcome; a
-    /// non-constant operand -- including one that would error as a
-    /// constant expression -- reports 0 rather than propagating.
+    /// a constant value, else 0. On entry the opening `(` is consumed and
+    /// the current token is the operand's first; on return the closing
+    /// `)` is consumed. The operand is unevaluated (GCC does not emit
+    /// it): the fold is discarded, the lexer is repositioned past the
+    /// operand, and a fold error reports 0 rather than propagating.
+    /// A symbol-relative address is fixed only at link time and a
+    /// compound literal denotes an object (C99 6.5.2.5p4), so neither is
+    /// a constant value; gcc answers 0 for both and 1 for a string
+    /// literal, which folds here as a plain integer.
     pub(super) fn eval_constant_p_operand(&mut self) -> Result<i64, C5Error> {
         let snap = self.lex.snapshot();
-        let saved_nonconst = self.pending.const_expr_nonconst;
+        let saved = (
+            self.pending.const_expr_nonconst,
+            self.pending.const_expr_compound_literal,
+        );
         self.pending.const_expr_nonconst = false;
-        let is_const = self.parse_const_expr_cond_val().is_ok();
-        self.pending.const_expr_nonconst = saved_nonconst;
+        self.pending.const_expr_compound_literal = false;
+        let folded = self.parse_const_expr_cond_val();
+        let is_const = folded.is_ok_and(|v| !v.is_symbolic_addr())
+            && !self.pending.const_expr_compound_literal;
+        (
+            self.pending.const_expr_nonconst,
+            self.pending.const_expr_compound_literal,
+        ) = saved;
         self.restore_lex(snap);
         self.skip_balanced_to_comma()?;
         if self.lex.tk != ')' {
@@ -2081,6 +2098,7 @@ impl Compiler {
                 if self.lex.tk == Token::Brak || is_typedef_literal {
                     let (off, sym, dims) =
                         self.emit_array_compound_literal_body(target_ty, &base_dims)?;
+                    self.pending.const_expr_compound_literal = true;
                     let elem_size = (self.size_of_type(target_ty) as i64).max(1);
                     let mut base = off;
                     let mut level = 0usize;
@@ -2129,6 +2147,7 @@ impl Compiler {
                 // converted to `T` through the cast fold below.
                 let braced_scalar = self.lex.tk == '{' && !is_struct_value_ty(target_ty);
                 if braced_scalar {
+                    self.pending.const_expr_compound_literal = true;
                     self.next()?;
                 }
                 let v = if braced_scalar {
@@ -2253,6 +2272,9 @@ impl Compiler {
                     ty: Ty::Char as i64,
                 });
             }
+            // TODO: the address folds as a plain integer, so `"abc" + 1`
+            // loses its relocation in a static initializer and counts as
+            // a constant value for `__builtin_constant_p`.
             return Ok(ConstVal::Int {
                 val: addr as i128,
                 ty: Ty::Ptr as i64,
@@ -2396,15 +2418,27 @@ impl Compiler {
             self.skip_unevaluated_operand()?;
             return Ok(ConstVal::int(0));
         }
-        let id_suffix = if self.lex.tk == Token::Id {
-            format!(" `{}`", self.symbols[self.lex.curr_id_idx].name)
-        } else {
-            alloc::string::String::new()
-        };
         self.pending.const_expr_nonconst = true;
+        if self.lex.tk != Token::Id {
+            return Err(self.compile_err(format!(
+                "constant integer expected (got {})",
+                super::super::token::describe(self.lex.tk),
+            )));
+        }
+        // C99 6.5.1: a name with no declaration is an error of its own. A
+        // `__builtin_` spelling is declared by the implementation and only
+        // failed to fold; `__func__` is predefined in a function body.
+        let idx = self.lex.curr_id_idx;
+        let name = self.symbols[idx].name.clone();
+        if self.symbols[idx].class == 0
+            && !name.starts_with("__builtin_")
+            && !self.is_func_name_ident()
+        {
+            let hint = self.include_hint(&name);
+            return Err(self.compile_err(format!("use of undeclared identifier `{name}`{hint}")));
+        }
         Err(self.compile_err(format!(
-            "constant integer expected (got {}{id_suffix})",
-            super::super::token::describe(self.lex.tk),
+            "constant integer expected (got identifier `{name}`)"
         )))
     }
 }

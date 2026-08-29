@@ -415,6 +415,15 @@ impl Compiler {
         self.compile_err_line(self.lex.line, message.as_ref())
     }
 
+    /// The `-- try #include` suffix for a name a bundled header declares;
+    /// empty for any other name.
+    pub(super) fn include_hint(&self, name: &str) -> alloc::string::String {
+        match super::super::headers::header_declaring(name) {
+            Some(h) => alloc::format!(" -- try `#include <{h}>`"),
+            None => alloc::string::String::new(),
+        }
+    }
+
     /// Shared builder: a `<file>:<line>: error: <message>` diagnostic with
     /// the source text of `line` echoed beneath it (the line the number
     /// points at, recovered even when the parser has read past it).

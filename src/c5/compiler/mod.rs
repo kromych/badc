@@ -870,6 +870,10 @@ pub(in crate::c5::compiler) struct Pending {
     /// the array-declarator distinguish a C99 6.7.6.2 VLA dimension from
     /// a genuine constant-expression error that must be diagnosed.
     pub const_expr_nonconst: bool,
+    /// Set by the constant-expression evaluator when a fold consumed a
+    /// compound literal, which denotes an object (C99 6.5.2.5p4) rather
+    /// than a value; `__builtin_constant_p` answers 0 for such an operand.
+    pub const_expr_compound_literal: bool,
     /// Binding-site carrier for a function-pointer typedef's
     /// prototype: `Some((fixed_param_count, is_variadic))` when the
     /// base type was a typedef whose alias is a function-pointer
@@ -1370,6 +1374,7 @@ impl Default for Pending {
             declarator_zero_len_array: false,
             sizeof_vla_size_slot: None,
             const_expr_nonconst: false,
+            const_expr_compound_literal: false,
             typedef_fn_proto: None,
             fn_ptr_param_types: None,
             indirect_callee_params: None,

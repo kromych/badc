@@ -8775,8 +8775,14 @@ fn a64_return_address_strips_the_authentication_code() {
     const LDR_X30_SLOT: u32 = 0xF940_0000 | (1 << 10) | 30;
     const RN_MASK: u32 = 0x1F << 5;
     for (src, level) in [
-        ("void *ra(void) { return __builtin_return_address(0); }\n", 0),
-        ("void *ra(void) { return __builtin_return_address(1); }\n", 1),
+        (
+            "void *ra(void) { return __builtin_return_address(0); }\n",
+            0,
+        ),
+        (
+            "void *ra(void) { return __builtin_return_address(1); }\n",
+            1,
+        ),
     ] {
         for hardening in [crate::Hardening::NONE, PAC_RET_ONLY] {
             let w = a64_pac_words(src, hardening);

@@ -3,12 +3,14 @@
  * instruction over its operands, so a wrapper costs one instruction wherever
  * the optimizer splices it into the caller.
  *
- * Scope: the integer 128-bit subset used by RAID-syndrome / xor kernels
+ * Scope: the integer subset used by RAID-syndrome / xor / AEAD kernels
  * (ld1/st1-class loads and stores, bitwise ops, immediate shifts, dup, the
- * polynomial byte multiply, the single-table byte lookup) plus the FEAT_AES
+ * polynomial byte multiply, table lookups, byte equality, halfword reversal,
+ * the across-lanes minimum, 64-bit lane composition) plus the FEAT_AES
  * surface host crypto acceleration uses (AES single rounds and the 64x64->128
- * carryless multiply). The immediate-shift forms are macros because the shift
- * count must be a template literal.
+ * carryless multiply). The vector typedefs are gcc's `[u]intNxM_t` set for
+ * the 64- and 128-bit widths. The immediate-shift forms are macros because
+ * the shift count must be a template literal.
  *
  * The element typedefs match <stdint.h>; they are repeated here (rather than
  * included) so the header stays usable in freestanding units that define
@@ -34,10 +36,24 @@ typedef unsigned long long uint64_t;
 
 typedef unsigned long long poly64_t;
 
+typedef signed char int8x8_t __attribute__((vector_size(8)));
+typedef short int16x4_t __attribute__((vector_size(8)));
+typedef int int32x2_t __attribute__((vector_size(8)));
+typedef long long int64x1_t __attribute__((vector_size(8)));
+typedef unsigned char uint8x8_t __attribute__((vector_size(8)));
+typedef unsigned short uint16x4_t __attribute__((vector_size(8)));
+typedef unsigned int uint32x2_t __attribute__((vector_size(8)));
+typedef unsigned long long uint64x1_t __attribute__((vector_size(8)));
+
 typedef signed char int8x16_t __attribute__((vector_size(16)));
+typedef short int16x8_t __attribute__((vector_size(16)));
+typedef int int32x4_t __attribute__((vector_size(16)));
+typedef long long int64x2_t __attribute__((vector_size(16)));
 typedef unsigned char uint8x16_t __attribute__((vector_size(16)));
-typedef unsigned char poly8x16_t __attribute__((vector_size(16)));
+typedef unsigned short uint16x8_t __attribute__((vector_size(16)));
+typedef unsigned int uint32x4_t __attribute__((vector_size(16)));
 typedef unsigned long long uint64x2_t __attribute__((vector_size(16)));
+typedef unsigned char poly8x16_t __attribute__((vector_size(16)));
 typedef unsigned long long poly64x2_t __attribute__((vector_size(16)));
 typedef unsigned long long poly128_t __attribute__((vector_size(16)));
 
@@ -97,6 +113,52 @@ static inline poly8x16_t vmulq_p8(poly8x16_t __a, poly8x16_t __b) {
 static inline uint8x16_t vqtbl1q_u8(uint8x16_t __t, uint8x16_t __idx) {
     uint8x16_t __r;
     __asm__("tbl %0.16b, {%1.16b}, %2.16b" : "=w"(__r) : "w"(__t), "w"(__idx));
+    return __r;
+}
+
+/* Byte table lookup with fallback: an out-of-range index byte keeps the
+ * destination byte. */
+static inline uint8x16_t vqtbx1q_u8(uint8x16_t __d, uint8x16_t __t, uint8x16_t __idx) {
+    __asm__("tbx %0.16b, {%1.16b}, %2.16b" : "+w"(__d) : "w"(__t), "w"(__idx));
+    return __d;
+}
+
+/* Per-byte equality: a lane holds 0xff where the bytes are equal, 0 where
+ * they differ. */
+static inline uint8x16_t vceqq_u8(uint8x16_t __a, uint8x16_t __b) {
+    uint8x16_t __r;
+    __asm__("cmeq %0.16b, %1.16b, %2.16b" : "=w"(__r) : "w"(__a), "w"(__b));
+    return __r;
+}
+
+/* Reverse the 16-bit elements within each 32-bit word. */
+static inline uint16x8_t vrev32q_u16(uint16x8_t __a) {
+    uint16x8_t __r;
+    __asm__("rev32 %0.8h, %1.8h" : "=w"(__r) : "w"(__a));
+    return __r;
+}
+
+/* Minimum across the signed byte lanes; the reduction rides a clobbered
+ * register because a `b`-register operand view would need a template
+ * modifier the wrappers here avoid. */
+static inline int8_t vminvq_s8(int8x16_t __a) {
+    int __r;
+    __asm__("sminv b7, %1.16b\n\tsmov %w0, v7.b[0]" : "=r"(__r) : "w"(__a) : "v7");
+    return (int8_t)__r;
+}
+
+/* Single-lane 64-bit vector from a scalar, and the 128-bit concatenation of
+ * two of them, spelled through lane assignment. */
+static inline uint64x1_t vmov_n_u64(uint64_t __a) {
+    uint64x1_t __r;
+    __r[0] = __a;
+    return __r;
+}
+
+static inline uint64x2_t vcombine_u64(uint64x1_t __lo, uint64x1_t __hi) {
+    uint64x2_t __r;
+    __r[0] = __lo[0];
+    __r[1] = __hi[0];
     return __r;
 }
 

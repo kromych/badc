@@ -313,6 +313,73 @@ fn pinned_width(f: &Form) -> bool {
                 .any(|p| matches!(p, OpPat::Reg(W::Wd | W::L | W::Q))))
 }
 
+/// The single width every sized register/memory slot of a form binds, or
+/// `None` when it has no such slot, mixes widths (`movsxd r64, r/m32`), or
+/// leaves the width to the `v` / `y` class. A `mem` slot of unstated size
+/// carries no width and does not take part.
+fn uniform_width(f: &Form) -> Option<u8> {
+    let mut seen = None;
+    for p in f.ops {
+        let w = match *p {
+            OpPat::Reg(w) | OpPat::Rm(w) | OpPat::Mem(w) => w,
+            _ => continue,
+        };
+        let bytes = match w {
+            W::B => 1,
+            W::Wd => 2,
+            W::L => 4,
+            W::Q => 8,
+            W::V | W::Y => return None,
+        };
+        if *seen.get_or_insert(bytes) != bytes {
+            return None;
+        }
+    }
+    seen
+}
+
+/// Whether two forms share an opcode: same map, opcode bytes, `+r` shape,
+/// `ModRM.reg` source and mandatory prefixes. A leading legacy `66` is the
+/// operand-size prefix, not a mandatory one, so it is left out of the
+/// identity: it is what distinguishes the members being compared.
+fn same_opcode(a: &Form, b: &Form) -> bool {
+    let mandatory = |f: &Form| if legacy66(f) { &f.pp[1..] } else { f.pp };
+    a.map == b.map
+        && a.opcode == b.opcode
+        && a.plus_r == b.plus_r
+        && a.reg == b.reg
+        && mandatory(a) == mandatory(b)
+}
+
+/// Whether the catalogue spells a `v` width class out member by member under
+/// this form's opcode, instead of naming the class (`and r/m16, imm16` /
+/// `r/m32, imm32` / `r/m64, imms32`, all `81 /4`). The operand-size prefix
+/// still selects between such members, so the form is operand-sized. The
+/// 16-bit member is what marks the class: a group whose widths are only 32
+/// and 64 is the `y` class, which REX.W alone selects (`ptwrite`), and a width
+/// that really is fixed stands alone under its opcode (`lldt`, `ldmxcsr`).
+fn width_class_spelled_out(f: &Form) -> bool {
+    // The prefix selects between the 16- and 32-bit operand sizes; a byte or
+    // 64-bit width is not a member of that pair, and rejecting it here keeps
+    // the scan off every byte instruction.
+    let Some(w @ (2 | 4)) = uniform_width(f) else {
+        return false;
+    };
+    let forms = super::isa_x86_table::FORMS;
+    let start = forms.partition_point(|g| g.mnem < f.mnem);
+    let group = forms[start..]
+        .iter()
+        .take_while(|g| g.mnem == f.mnem)
+        .chain(FORMS_SUPPLEMENT.iter().filter(|g| g.mnem == f.mnem))
+        .filter(|g| same_opcode(f, g))
+        .filter_map(|g| uniform_width(g));
+    let mut widths = 0u32;
+    for gw in group {
+        widths |= 1 << gw;
+    }
+    widths & (1 << 2) != 0 && widths != (1 << w)
+}
+
 /// Byte size of a form's relative-offset slot. The near-branch group's
 /// displacement follows the operand size, so it is 16-bit outside long mode
 /// unless the operand-size prefix selects 32.
@@ -748,7 +815,10 @@ fn encode_best(
 /// takes a prefixless `MemAny` form beside the register ones. The three that
 /// store into a register (`sldt`, `str`, `smsw`) also write a 32-bit
 /// destination, which is the same encoding without the 0x66 the generated
-/// 16-bit form carries. The stack-adjusting returns `ret imm16` (C2) and
+/// 16-bit form carries. `lea` computes an address at every operand size, but
+/// the generator reads its unsized `mem` operand as carrying no width and
+/// drops the 16-bit destination row, leaving the group without the member
+/// that marks it a width class. The stack-adjusting returns `ret imm16` (C2) and
 /// `retf imm16` (CA) are absent from the generated catalogue; the immediate
 /// is 16-bit at every operand size, so each is one form.
 static FORMS_SUPPLEMENT: &[Form] = &[
@@ -791,6 +861,20 @@ static FORMS_SUPPLEMENT: &[Form] = &[
         rexw: RexW::W0,
         reg: RegField::NoReg,
         rm: 0,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Lea,
+        mnemonic: "lea",
+        ops: &[OpPat::Reg(W::Wd), OpPat::MemAny],
+        pp: &[],
+        map: Map::Legacy,
+        opcode: &[0x8D],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::FromOp(0),
+        rm: 1,
         imm: None,
         imm_op: 255,
     },
@@ -1276,9 +1360,10 @@ fn encode_form(
     }
     // Operand-size prefix: `66` selects the width class member that is not the
     // mode default. A form whose widths are all fixed (lldt r16/m16, in al/dx)
-    // has its operand size baked into the opcode and takes no prefix; a
-    // legacy-map form carrying `66` in `pp` is the 16-bit member of such a
-    // class, so the prefix comes from this rule instead of from `pp`.
+    // has its operand size baked into the opcode and takes no prefix, unless
+    // the catalogue spells the same opcode at another width; a legacy-map form
+    // carrying `66` in `pp` is the 16-bit member of such a class, so the
+    // prefix comes from this rule instead of from `pp`.
     let pp66 = legacy66(f);
     let has_v = f.ops.iter().any(|&p| {
         matches!(
@@ -1304,14 +1389,19 @@ fn encode_form(
     // with no suffix it is the mode default, which the 64-bit exclusion below
     // leaves unprefixed.
     let desc_table = matches!(f.mnem, Mnem::Lgdt | Mnem::Lidt | Mnem::Sgdt | Mnem::Sidt);
+    // The prefix applies only when the operation width differs from the mode
+    // default and is not 64-bit, which REX.W selects; the catalogue scan sits
+    // behind that so it stays off the path every other instruction takes.
+    let selects = fopw != dflt && fopw != 8;
     // A stack-group form with an established width is operand-sized even when
     // no slot carries the `v` class (`push imm8`).
     let sized = has_v
         || pp66
         || desc_table
         || pinned_width(f)
-        || (opw_known && (f.ops.is_empty() || f.rexw == RexW::Default64));
-    if sized && fopw != dflt && fopw != 8 {
+        || (opw_known && (f.ops.is_empty() || f.rexw == RexW::Default64))
+        || (selects && width_class_spelled_out(f));
+    if sized && selects {
         code.push(0x66);
     }
     code.extend_from_slice(if pp66 { &f.pp[1..] } else { f.pp });

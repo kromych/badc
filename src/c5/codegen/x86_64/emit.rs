@@ -13109,6 +13109,75 @@ mod code_mode_tests {
         );
     }
 
+    /// A width class the instruction catalogue spells out member by member
+    /// still takes the operand-size prefix. `and`'s ModRM immediate group is
+    /// written `r/m16, imm16` / `r/m32, imm32` / `r/m64, imms32` rather than
+    /// `rv/mv, immv`, and `lea` reaches the catalogue without its 16-bit
+    /// destination row at all; a 32-bit member of either under `.code16` is
+    /// what the x86 real-mode trampoline runs. A group with no 16-bit member
+    /// is the `y` class, which REX.W alone selects and `66` does not reach.
+    /// Bytes measured with GNU as 2.46.1 for the same source.
+    #[test]
+    fn spelled_out_width_class_takes_the_operand_size_prefix() {
+        for (src, want) in [
+            (
+                ".code16\nandl $0x000f00f0, %ecx\n",
+                &[0x66, 0x81, 0xe1, 0xf0, 0x00, 0x0f, 0x00][..],
+            ),
+            (
+                ".code16\nandl $0x0700a169, %edx\n",
+                &[0x66, 0x81, 0xe2, 0x69, 0xa1, 0x00, 0x07][..],
+            ),
+            (
+                ".code16\nandl $0x12345678, 4(%bx)\n",
+                &[0x66, 0x81, 0x67, 0x04, 0x78, 0x56, 0x34, 0x12][..],
+            ),
+            (
+                ".code16\nandw $0x1234, %cx\n",
+                &[0x81, 0xe1, 0x34, 0x12][..],
+            ),
+            (
+                ".code16\nandw $0x1234, 4(%bx)\n",
+                &[0x81, 0x67, 0x04, 0x34, 0x12][..],
+            ),
+            (".code16\nandl $0x7f, %ecx\n", &[0x66, 0x83, 0xe1, 0x7f][..]),
+            (
+                ".code16\nleal 4(%bx), %eax\n",
+                &[0x66, 0x8d, 0x47, 0x04][..],
+            ),
+            (".code16\nleaw 4(%bx), %ax\n", &[0x8d, 0x47, 0x04][..]),
+            (".code16\nptwrite %eax\n", &[0xf3, 0x0f, 0xae, 0xe0][..]),
+            (
+                ".code32\nandl $0x000f00f0, %ecx\n",
+                &[0x81, 0xe1, 0xf0, 0x00, 0x0f, 0x00][..],
+            ),
+            (
+                ".code32\nandw $0x1234, %cx\n",
+                &[0x66, 0x81, 0xe1, 0x34, 0x12][..],
+            ),
+            (".code32\nleal 4(%ebx), %eax\n", &[0x8d, 0x43, 0x04][..]),
+            (
+                ".code32\nleaw 4(%ebx), %ax\n",
+                &[0x66, 0x8d, 0x43, 0x04][..],
+            ),
+            (".code32\nptwrite %eax\n", &[0xf3, 0x0f, 0xae, 0xe0][..]),
+            (
+                "andq $0x000f00f0, %rcx\n",
+                &[0x48, 0x81, 0xe1, 0xf0, 0x00, 0x0f, 0x00][..],
+            ),
+            (
+                "andl $0x000f00f0, %ecx\n",
+                &[0x81, 0xe1, 0xf0, 0x00, 0x0f, 0x00][..],
+            ),
+            ("leaw 4(%rbx), %ax\n", &[0x66, 0x8d, 0x43, 0x04][..]),
+            ("leal 4(%rbx), %eax\n", &[0x8d, 0x43, 0x04][..]),
+            ("leaq 4(%rbx), %rax\n", &[0x48, 0x8d, 0x43, 0x04][..]),
+            ("ptwrite %eax\n", &[0xf3, 0x0f, 0xae, 0xe0][..]),
+        ] {
+            assert_eq!(assemble(src), want, "{src}");
+        }
+    }
+
     /// GNU as orders the prefixes segment, address size, operand size, then
     /// repeat / lock, whatever the mode.
     #[test]

@@ -117,6 +117,13 @@ CHECK_STEP = "BADC-SELFTEST-STEP"
 # kernel panics once it reaches userspace and the panic notifier prints
 # `Kernel Offset:`. panic=-1 (already on the command line) then ends the boot.
 PROBE_RDINIT = "/nonexistent-kaslr-probe"
+# Processors each boot asks the machine for. Every architecture's
+# `smp_cpus_done` reports how many came online, and the count is the only
+# evidence a boot gives that the secondaries started: a machine whose
+# secondaries never report alive still reaches userspace on the boot CPU, so
+# the markers appear either way.
+SMP_CPUS = 2
+SMP_TOTAL_RE = re.compile(r"Total of (\d+) processors activated")
 
 
 def log(m: str) -> None:
@@ -258,7 +265,7 @@ def boot(args, arch: dict, image: Path, out: Path, rdinit: str,
     ]
     cmd = [
         args.qemu, *machine_args(arch), *args.qemu_args,
-        "-smp", "2", "-m", "1024", "-nographic", "-no-reboot",
+        "-smp", str(SMP_CPUS), "-m", "1024", "-nographic", "-no-reboot",
         "-kernel", str(image),
         "-initrd", str(args.initramfs),
         "-append", " ".join(append),
@@ -286,7 +293,7 @@ def seed_trees(args, arch: dict, plan: list[int | None]) -> dict[int, Path]:
     base = Path(args.workdir) / f"base-{args.arch}.dtb"
     base.unlink(missing_ok=True)
     cmd = [args.qemu, *machine_args(arch, base), *args.qemu_args,
-           "-smp", "2", "-m", "1024", "-nographic"]
+           "-smp", str(SMP_CPUS), "-m", "1024", "-nographic"]
     try:
         subprocess.run(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                        stderr=subprocess.DEVNULL, timeout=args.boot_timeout)
@@ -347,6 +354,17 @@ def banner_failure(banner: str, cc_text: str, badc_ld: bool | None) -> str:
     return ""
 
 
+def smp_failure(text: str, want: int) -> str:
+    """What the console says about processor bringup that contradicts the
+    machine the boot asked for, or "". A count below `want` is a kernel that
+    booted and then ran on fewer cores than it was given."""
+    m = SMP_TOTAL_RE.search(text)
+    if not m:
+        return f"reports no processor count for a {want}-processor machine"
+    got = int(m.group(1))
+    return "" if got == want else f"activated {got} of {want} processors"
+
+
 def _self_test() -> int:
     """Check the banner reading against both lanes' real console text.
 
@@ -374,6 +392,16 @@ def _self_test() -> int:
     assert banner_failure("Linux version 7.1.6 (u@h) (gcc 13.2, GNU ld 2.46) #1",
                           cc, True) == "does not identify badc as the compiler"
     assert banner_failure("", cc, True), "a log with no banner cannot pass"
+
+    # The bringup count, which a boot that reaches userspace on one core of
+    # two still prints.
+    assert smp_failure("[    1.3] smpboot: Total of 2 processors activated (1 "
+                       "BogoMIPS)\n", 2) == ""
+    assert smp_failure("[   31.1] smpboot: Total of 1 processors activated\n",
+                       2) == "activated 1 of 2 processors"
+    assert smp_failure("[    1.3] SMP: Total of 2 processors activated.\n",
+                       2) == ""
+    assert "no processor count" in smp_failure("a quiet console\n", 2)
 
     # A failed build states its cause in the run's own output: the gate runs
     # on remote boxes, where the log path it names is another trip away.
@@ -629,7 +657,8 @@ def main() -> int:
             checked = not args.check_marker or args.check_marker in text
             banner = banner_line(text)
             mismatch = banner_failure(banner, cc_text, badc_ld)
-            ok = booted and checked and not mismatch
+            smp = smp_failure(text, SMP_CPUS)
+            ok = booted and checked and not mismatch and not smp
             tag = f"0x{seed:016x}" if seed is not None else "unpinned"
             # An unpinned boot draws its own displacement, which the probe's
             # does not stand for, so it is left unattributed.
@@ -637,15 +666,18 @@ def main() -> int:
                     if seed is not None else "drawn")
             log(f"boot {i}/{len(plan)}: seed={tag} displacement={disp} "
                 f"marker={'yes' if booted else 'NO'} "
-                f"checks={'yes' if checked else 'NO'} console-lines={lines}")
+                f"checks={'yes' if checked else 'NO'} "
+                f"cpus={'yes' if not smp else 'NO'} console-lines={lines}")
             if i == 1 and banner:
                 log(f"banner: {banner}")
             boots.append({"ok": ok, "booted": booted, "checked": checked,
-                          "lines": lines, "log": str(out), "banner": banner,
-                          "seed": tag, "offset": disp})
+                          "cpus": not smp, "lines": lines, "log": str(out),
+                          "banner": banner, "seed": tag, "offset": disp})
             if booted and checked and mismatch:
                 failures.append(f"boot {i} banner {mismatch}: "
                                 f"{banner!r} (see {out})")
+            elif booted and checked and smp:
+                failures.append(f"boot {i} {smp} (see {out})")
             elif not ok:
                 replay = (f"; replay with --kaslr-seed 0x{seed:016x}"
                           if seed is not None else "")

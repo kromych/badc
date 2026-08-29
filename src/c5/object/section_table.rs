@@ -34,6 +34,10 @@ pub(crate) struct SectionSpec {
     /// SHF_ALLOC|SHF_WRITE for data-like ones.
     pub flags: u64,
     pub align: u64,
+    /// `sh_entsize`, the `M` flag's entry size; 0 when none was given.
+    pub entsize: u64,
+    /// The section `sh_link` names under `SHF_LINK_ORDER`.
+    pub link: Option<String>,
     pub bytes: Vec<u8>,
     pub relas: Vec<SectionRela>,
 }
@@ -83,6 +87,8 @@ impl SectionTable {
             sh_type,
             flags,
             align,
+            entsize: 0,
+            link: None,
             bytes: Vec::new(),
             relas: Vec::new(),
         });

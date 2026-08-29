@@ -2867,3 +2867,63 @@ fn unused_section_symbols_follow_the_target_policy() {
     );
     assert_eq!(count(&a), 3, "aarch64: the three defaults keep theirs");
 }
+
+/// `(name, sh_type, sh_flags, sh_link, sh_entsize)` of every section header
+/// of an ELF64 object.
+fn section_headers64(b: &[u8]) -> Vec<(String, u32, u64, u32, u64)> {
+    let u16at = |o: usize| u16::from_le_bytes([b[o], b[o + 1]]) as usize;
+    let u32at = |o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap());
+    let u64at = |o: usize| u64::from_le_bytes(b[o..o + 8].try_into().unwrap());
+    let shoff = u64at(0x28) as usize;
+    let (shentsize, shnum, shstrndx) = (u16at(0x3a), u16at(0x3c), u16at(0x3e));
+    let strtab = u64at(shoff + shstrndx * shentsize + 0x18) as usize;
+    (0..shnum)
+        .map(|i| {
+            let sh = shoff + i * shentsize;
+            let n = strtab + u32at(sh) as usize;
+            let end = b[n..].iter().position(|&c| c == 0).unwrap();
+            (
+                String::from_utf8_lossy(&b[n..n + end]).into_owned(),
+                u32at(sh + 4),
+                u64at(sh + 8),
+                u32at(sh + 0x28),
+                u64at(sh + 0x38),
+            )
+        })
+        .collect()
+}
+
+/// GNU as keeps the `.previous` slot beside the `.pushsection` stack and
+/// `.popsection` restores what the push saved, so a `.section` /
+/// `.previous` pair bracketing a pushed section returns to the section
+/// before the pair. The kernel's `xen-asm.S` switches to `.init.text`,
+/// expands `UNWIND_HINT` there and returns with `.previous` before
+/// `xen_iret:`; the `ANNOTATE` label after it bound to
+/// `.discard.unwind_hints` and objtool rejected the linked image. The
+/// `.discard.annotate_insn` header carries the `M` flag and the entry size
+/// and `.text.hot` its `o` link, as GNU as 2.46.1 writes them.
+#[test]
+fn previous_after_a_push_pop_pair_and_the_section_attributes_match_gas() {
+    const PC32: u32 = 2;
+    const SHT_PROGBITS: u32 = 1;
+    const SHF_ALLOC_EXEC: u64 = 0x2 | 0x4;
+    const SHF_MERGE: u64 = 0x10;
+    const SHF_LINK_ORDER: u64 = 0x80;
+    let src = "\t.text\n\t.globl f\nf:\n\t.section .init.text,\"ax\"\n\
+               \t.pushsection .discard.unwind_hints\n\t.long 0\n\t.popsection\n\t.previous\n\
+               .Lhere_1:\n\t.pushsection .discard.annotate_insn,\"M\",@progbits,8\n\
+               \t.long .Lhere_1 - ., 1\n\t.popsection\n\tret\n\
+               \t.section .text.hot,\"axo\",@progbits,.text\n\tret\n";
+    let bytes = object_of("prev-after-pop", src);
+    assert_eq!(
+        named_relocs(&bytes, ".rela.discard.annotate_insn"),
+        vec![(0, PC32, ".text".to_string(), 0)]
+    );
+    let headers = section_headers64(&bytes);
+    let header = |name: &str| headers.iter().find(|h| h.0 == name).expect(name);
+    let text = headers.iter().position(|h| h.0 == ".text").unwrap() as u32;
+    let insn = header(".discard.annotate_insn");
+    assert_eq!((insn.1, insn.2, insn.4), (SHT_PROGBITS, SHF_MERGE, 8));
+    let hot = header(".text.hot");
+    assert_eq!((hot.2, hot.3), (SHF_ALLOC_EXEC | SHF_LINK_ORDER, text));
+}

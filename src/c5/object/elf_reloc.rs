@@ -216,6 +216,7 @@ const SHF_EXECINSTR: u64 = 0x4;
 const SHF_MERGE: u64 = 0x10;
 const SHF_STRINGS: u64 = 0x20;
 const SHF_INFO_LINK: u64 = 0x40;
+const SHF_LINK_ORDER: u64 = 0x80;
 
 const STB_LOCAL: u8 = 0;
 const STB_GLOBAL: u8 = 1;
@@ -1282,12 +1283,12 @@ pub(super) fn write_relocatable(
                 b'a' => flags |= SHF_ALLOC,
                 b'w' => flags |= SHF_WRITE,
                 b'x' => flags |= SHF_EXECINSTR,
-                // `M` needs the entsize the directive parser drops and
-                // `S` only qualifies it; both are deduplication hints a
-                // relocatable object may decline. `G` (group) is
-                // dropped with them because the writer emits no
+                b'M' => flags |= SHF_MERGE,
+                b'S' => flags |= SHF_STRINGS,
+                b'o' => flags |= SHF_LINK_ORDER,
+                // `G` (group) is dropped because the writer emits no
                 // `SHT_GROUP` section for the flag to reference.
-                b'M' | b'S' | b'G' => {}
+                b'G' => {}
                 // `T` would make the section thread-local storage,
                 // which the merged TLS block is not built from.
                 b'T' => {
@@ -1324,6 +1325,15 @@ pub(super) fn write_relocatable(
             .table
             .get_or_insert(&s.name, sh_type, flags, align)
             .map_err(|msg| C5Error::Compile(crate::c5::error::fmt_internal_err(&msg)))?;
+        // The first block to give an entry size or an ordering section
+        // sets it, as GNU as keeps a section's first attributes.
+        let ent = &mut carve.table.entries[e];
+        if ent.entsize == 0 {
+            ent.entsize = s.entsize as u64;
+        }
+        if ent.link.is_none() {
+            ent.link = s.link.clone();
+        }
         if sizes.len() <= e {
             sizes.resize(e + 1, 0);
         }
@@ -4656,6 +4666,19 @@ pub(super) fn write_relocatable(
         fold_rel_addends(class, &table, &mut bytes)?;
         e.bytes = bytes;
     }
+    // The index a `SHF_LINK_ORDER` section's `sh_link` names: a named
+    // entry, or one of the fixed sections.
+    let section_index_by_name = |name: &str| -> Option<u32> {
+        if let Some(k) = carve.table.entries.iter().position(|e| e.name == name) {
+            return Some(carve.shndx[k] as u32);
+        }
+        match name {
+            ".text" => Some(SHIDX_TEXT as u32),
+            ".data" => Some(SHIDX_DATA as u32),
+            ".bss" => Some(SHIDX_BSS as u32),
+            _ => None,
+        }
+    };
     for (k, e) in carve.table.entries.iter().enumerate() {
         debug_assert_eq!(sh.len(), carve.shndx[k] as usize);
         // `SHT_NOBITS` contributes no file bytes and needs no file
@@ -4668,13 +4691,24 @@ pub(super) fn write_relocatable(
             out.extend_from_slice(&e.bytes);
             off
         };
+        let sh_link = match e.link.as_deref() {
+            None => 0,
+            Some(l) => section_index_by_name(l).ok_or_else(|| {
+                C5Error::Compile(crate::c5::error::fmt_link_err(&format!(
+                    "inline asm: section `{}` is ordered after `{l}`, which the object does not define",
+                    e.name
+                )))
+            })?,
+        };
         sh.push(Elf64Shdr {
             sh_name: shstrtab_offs[named_names_start + k],
             sh_type: e.sh_type,
             sh_flags: e.flags,
             sh_offset: sec_off,
             sh_size: e.bytes.len() as u64,
+            sh_link,
             sh_addralign: e.align,
+            sh_entsize: e.entsize,
             ..Default::default()
         });
     }

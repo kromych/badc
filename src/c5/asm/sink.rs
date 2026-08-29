@@ -362,6 +362,8 @@ impl AsmSectionSink {
             name: b.name.clone(),
             flags: b.flags.clone(),
             sh_type: b.sh_type.clone(),
+            entsize: b.entsize,
+            link: b.link.clone(),
             bytes: alloc::vec::Vec::new(),
             relocs: alloc::vec::Vec::new(),
             labels: alloc::vec::Vec::new(),

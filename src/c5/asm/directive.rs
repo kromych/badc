@@ -8,9 +8,9 @@ use crate::c5::codegen::ssa::cfi;
 
 /// Split a template into its code text and its section blocks. Returns
 /// `None` when the template has no section directives (the common case).
-/// The section stack starts at the code stream; `.pushsection` pushes a
-/// named section, `.popsection` pops, `.section` replaces the top, and
-/// `.previous` swaps the top two.
+/// The stream starts at the code stream; `.section` switches it,
+/// `.previous` swaps it with the one the last switch left, and
+/// `.pushsection` / `.popsection` save and restore both.
 pub(crate) fn extract_asm_sections(
     text: &str,
     is_aarch64: bool,
@@ -235,19 +235,21 @@ fn extract_asm_sections_impl(
     let mut code = alloc::string::String::with_capacity(text.len());
     let mut sym_items: alloc::vec::Vec<AsmSectionItem> = alloc::vec::Vec::new();
     let mut blocks: alloc::vec::Vec<AsmSectionBlock> = alloc::vec::Vec::new();
-    // Stack of indices into `blocks`; `None` is the code stream. File-scope asm
-    // has no code stream: the base is a `.text` section from the start.
-    let mut stack: alloc::vec::Vec<Option<usize>> = if file_scope {
+    // The current stream (`None` is the code stream; file-scope asm has none
+    // and starts in `.text`), the stream the latest section change left,
+    // which `.previous` swaps in, and the `.pushsection` frames. A frame
+    // holds both as they stood at the push and `.popsection` restores both,
+    // as GNU as does, so a push/pop pair leaves a later `.previous` where the
+    // `.section` before the pair put it.
+    let mut now: Option<usize> = if file_scope {
         blocks.push(parse_section_args(".text")?);
-        alloc::vec![Some(0)]
+        Some(0)
     } else {
-        alloc::vec![None]
+        None
     };
-    // The section left by the most recent change of any kind. GNU as keeps
-    // this slot beside the `.pushsection` stack and `.previous` swaps the two,
-    // so a `.section` / `.previous` pair nested inside a pushed region returns
-    // to the pushed section rather than unwinding the stack.
-    let mut prev_top: Option<Option<usize>> = None;
+    let mut prev: Option<Option<usize>> = None;
+    let mut pushed: alloc::vec::Vec<(Option<usize>, Option<Option<usize>>)> =
+        alloc::vec::Vec::new();
     // Encoding mode over the linear input, and the mode each block was
     // last told about.
     let mut code_mode: Option<&str> = None;
@@ -277,7 +279,7 @@ fn extract_asm_sections_impl(
                     "inline asm: label `{name}` inside `.rept` would be defined repeatedly"
                 ));
             }
-            match *stack.last().unwrap() {
+            match now {
                 None => {
                     code.push_str(name);
                     code.push_str(":\n");
@@ -301,7 +303,7 @@ fn extract_asm_sections_impl(
                     let item = AsmSectionItem::Rept { count, items };
                     match rept_stack.last_mut() {
                         Some((_, outer)) => outer.push(item),
-                        None => match *stack.last().unwrap() {
+                        None => match now {
                             Some(idx) => blocks[idx].items.push(item),
                             None => {
                                 return Err(alloc::string::String::from(
@@ -338,7 +340,7 @@ fn extract_asm_sections_impl(
                 ".endif" => {
                     let item = AsmSectionItem::CondDiag(core::mem::take(arms));
                     cond_arms = None;
-                    match *stack.last().unwrap() {
+                    match now {
                         Some(idx) => blocks[idx].items.push(item),
                         None => {
                             return Err(alloc::string::String::from(
@@ -378,7 +380,7 @@ fn extract_asm_sections_impl(
             }]);
             continue;
         }
-        if matches!(tok, ".rept" | ".rep") && (*stack.last().unwrap()).is_some() {
+        if matches!(tok, ".rept" | ".rep") && now.is_some() {
             rept_stack.push((alloc::string::String::from(rest), alloc::vec::Vec::new()));
             continue;
         }
@@ -387,36 +389,28 @@ fn extract_asm_sections_impl(
                 let block = parse_section_args(rest)?;
                 let idx = blocks.len();
                 blocks.push(block);
-                prev_top = Some(*stack.last().unwrap());
                 if tok == ".pushsection" {
-                    stack.push(Some(idx));
-                } else {
-                    *stack.last_mut().unwrap() = Some(idx);
+                    pushed.push((now, prev));
                 }
+                prev = Some(now);
+                now = Some(idx);
                 continue;
             }
             ".popsection" => {
-                if stack.len() < 2 {
+                let Some(frame) = pushed.pop() else {
                     return Err(alloc::string::String::from(
                         "inline asm: `.popsection` without `.pushsection`",
                     ));
-                }
-                prev_top = Some(*stack.last().unwrap());
-                stack.pop();
+                };
+                (now, prev) = frame;
                 continue;
             }
+            // Before any section change there is nothing to return to, and
+            // GNU as ignores the directive.
             ".previous" => {
-                match prev_top {
-                    Some(p) => {
-                        prev_top = Some(*stack.last().unwrap());
-                        *stack.last_mut().unwrap() = p;
-                    }
-                    // Nothing was left yet. A function-body template starts in
-                    // the code stream, which is where `.previous` returns to;
-                    // file-scope asm has no code stream, so the current
-                    // section stands.
-                    None if !file_scope => stack[0] = None,
-                    None => {}
+                if let Some(p) = prev {
+                    prev = Some(now);
+                    now = p;
                 }
                 continue;
             }
@@ -434,8 +428,8 @@ fn extract_asm_sections_impl(
                         blocks.len() - 1
                     }
                 };
-                prev_top = Some(*stack.last().unwrap());
-                *stack.last_mut().unwrap() = Some(idx);
+                prev = Some(now);
+                now = Some(idx);
                 continue;
             }
             // `.subsection N` switches to the numbered subsection of the
@@ -454,30 +448,20 @@ fn extract_asm_sections_impl(
                     .trim()
                     .parse()
                     .map_err(|_| alloc::format!("inline asm: bad `.subsection` number `{rest}`"))?;
-                let cur = stack
-                    .last()
-                    .unwrap()
-                    .expect("file scope always in a section");
-                let (name, flags, sh_type) = (
-                    blocks[cur].name.clone(),
-                    blocks[cur].flags.clone(),
-                    blocks[cur].sh_type.clone(),
-                );
+                let cur = now.expect("file scope always in a section");
                 blocks.push(AsmSectionBlock {
-                    name,
-                    flags,
-                    sh_type,
                     subsection: n,
                     items: alloc::vec::Vec::new(),
+                    ..blocks[cur].clone_identity()
                 });
                 let idx = blocks.len() - 1;
-                prev_top = Some(Some(cur));
-                *stack.last_mut().unwrap() = Some(idx);
+                prev = Some(now);
+                now = Some(idx);
                 continue;
             }
             _ => {}
         }
-        match *stack.last().unwrap() {
+        match now {
             // A symbol directive names a symbol of the unit, not a location in
             // the stream it sits in, so it leaves the code stream here as it
             // leaves the instruction stream of a section.
@@ -532,34 +516,50 @@ fn is_code_mode_directive(tok: &str) -> bool {
 }
 
 /// Parse the argument list of `.pushsection` / `.section`:
-/// `name[,"flags"[,@type]]`.
+/// `name[,"flags"[,@type][,entsize][,link]]`. The entry size follows when
+/// the flags hold `M` and the ordering section when they hold `o`, in that
+/// order, as GNU as reads them; `M` without an entry size is dropped, as
+/// GNU as drops it.
 fn parse_section_args(rest: &str) -> Result<AsmSectionBlock, alloc::string::String> {
-    let mut parts = rest.split(',').map(str::trim);
+    let bad = |p: &str| alloc::format!("inline asm: bad section argument `{p}`");
+    fn unquote(p: &str) -> Option<&str> {
+        p.strip_prefix('"').and_then(|p| p.strip_suffix('"'))
+    }
+    let mut parts = split_top_commas(rest).into_iter().peekable();
     // The name may be quoted (`.section ".export_symbol","a"`); the quotes
     // are syntax, not part of the section name.
     let name = parts
         .next()
-        .map(|n| {
-            n.strip_prefix('"')
-                .and_then(|n| n.strip_suffix('"'))
-                .unwrap_or(n)
-        })
+        .map(|n| unquote(n).unwrap_or(n))
         .filter(|n| !n.is_empty())
         .ok_or_else(|| alloc::string::String::from("inline asm: section name expected"))?;
     let mut flags = alloc::string::String::new();
-    let mut sh_type = None;
-    for p in parts {
-        if let Some(f) = p.strip_prefix('"').and_then(|p| p.strip_suffix('"')) {
-            flags = alloc::string::String::from(f);
-        } else if let Some(t) = p.strip_prefix('@').or_else(|| p.strip_prefix('%')) {
-            sh_type = Some(alloc::string::String::from(t));
-        } else if parse_raw_int(p).is_some() {
-            // The entsize of a `M`-flagged mergeable section
-            // (`.rodata.str,"aMS",@progbits,1`). The merge/strings flags are
-            // dropped for a relocatable object, so its entsize is too.
-        } else if !p.is_empty() {
-            return Err(alloc::format!("inline asm: bad section argument `{p}`"));
+    if let Some(f) = parts.next_if(|p| p.starts_with('"')) {
+        flags = alloc::string::String::from(unquote(f).ok_or_else(|| bad(f))?);
+    }
+    let sh_type = parts
+        .next_if(|p| p.starts_with(['@', '%', '"']))
+        .map(|t| alloc::string::String::from(unquote(t).unwrap_or(&t[1..])));
+    let mut entsize = 0u32;
+    if flags.contains('M') {
+        if let Some(e) = parts.next() {
+            entsize = eval_const_expr(e)
+                .filter(|v| (0..=u32::MAX as i64).contains(v))
+                .ok_or_else(|| bad(e))? as u32;
         }
+        if entsize == 0 {
+            flags.retain(|c| c != 'M');
+        }
+    }
+    let link = if flags.contains('o') {
+        parts
+            .next()
+            .map(|l| alloc::string::String::from(unquote(l).unwrap_or(l)))
+    } else {
+        None
+    };
+    if let Some(p) = parts.next() {
+        return Err(bad(p));
     }
     if flags.is_empty() {
         flags = alloc::string::String::from(default_section_flags(name));
@@ -568,6 +568,8 @@ fn parse_section_args(rest: &str) -> Result<AsmSectionBlock, alloc::string::Stri
         name: alloc::string::String::from(name),
         flags,
         sh_type,
+        entsize,
+        link,
         subsection: 0,
         items: alloc::vec::Vec::new(),
     })

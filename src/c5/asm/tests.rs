@@ -2452,3 +2452,83 @@ fn sink_labels_span_templates_and_unwind() {
     .unwrap();
     assert_eq!(sized(&sink, "fourth"), Some(12));
 }
+
+/// `.popsection` restores the `.previous` slot saved at the matching
+/// `.pushsection`, so a push/pop pair leaves a later `.previous` where the
+/// `.section` before the pair put it. The kernel's `xen-asm.S` switches to
+/// `.init.text`, expands `UNWIND_HINT` there and returns with `.previous`
+/// before `xen_iret:`. Every binding is GNU as 2.46.1's for the same
+/// source, including the `.previous` with no change to return to, which it
+/// ignores.
+#[test]
+fn popsection_restores_the_previous_slot_the_push_saved() {
+    let text = "first:\n.previous\nstill:\n.section .a,\"a\"\ninit:\n.pushsection .b,\"a\"\n\
+                in_b:\n.pushsection .c,\"a\"\nin_c:\n.popsection\nback_b:\n.previous\n\
+                prev_from_b:\n.popsection\nback_a:\n.previous\nback_text:\n\
+                .pushsection .d,\"a\"\n.byte 1\nbefore_pop:\n.popsection\nafter_pop:\n";
+    let blocks = extract_file_scope_asm_sections(text, false).unwrap();
+    for (label, section) in [
+        ("first", ".text"),
+        ("still", ".text"),
+        ("init", ".a"),
+        ("in_b", ".b"),
+        ("in_c", ".c"),
+        ("back_b", ".b"),
+        ("prev_from_b", ".a"),
+        ("back_a", ".a"),
+        ("back_text", ".text"),
+        ("before_pop", ".d"),
+        ("after_pop", ".text"),
+    ] {
+        assert_eq!(block_of(&blocks, label), section, "{label}");
+    }
+}
+
+/// The same pair in a function-body template returns to the code stream.
+#[test]
+fn previous_after_a_push_pop_pair_returns_to_the_code_stream() {
+    let text = "nop\n.section .fixup,\"ax\"\n.pushsection .x,\"a\"\n.byte 0\n.popsection\n\
+                .previous\nnop\n";
+    let AsmExtract { code, blocks, .. } = extract_asm_sections(text, false).unwrap().unwrap();
+    assert_eq!(code, "nop\nnop\n");
+    assert!(blocks.iter().all(|b| b.name == ".x" || b.items.is_empty()));
+}
+
+/// The `M` flag's entry size and the `o` flag's ordering section are part
+/// of the section's identity and reach the materialized section. `M`
+/// without an entry size is dropped, as GNU as drops it.
+#[test]
+fn section_arguments_carry_the_entry_size_and_the_link() {
+    let text = ".pushsection .discard.annotate_insn,\"M\",@progbits,8\n.long 1\n.popsection\n\
+                .section .rodata.str1.1,\"aMS\",@progbits,1\n.asciz \"x\"\n\
+                .section .text.hot,\"axo\",@progbits,.text\n.byte 0\n\
+                .section .nosize,\"aM\",@progbits\n.byte 0\n";
+    let blocks = extract_file_scope_asm_sections(text, false).unwrap();
+    let block = |n: &str| blocks.iter().find(|b| b.name == n).expect(n);
+    let insn = block(".discard.annotate_insn");
+    assert_eq!(
+        (insn.flags.as_str(), insn.sh_type.as_deref(), insn.entsize, insn.link.as_deref()),
+        ("M", Some("progbits"), 8, None)
+    );
+    let strings = block(".rodata.str1.1");
+    assert_eq!((strings.flags.as_str(), strings.entsize), ("aMS", 1));
+    let hot = block(".text.hot");
+    assert_eq!((hot.flags.as_str(), hot.link.as_deref()), ("axo", Some(".text")));
+    let nosize = block(".nosize");
+    assert_eq!((nosize.flags.as_str(), nosize.entsize), ("a", 0));
+    let mut sink = AsmSectionSink::default();
+    materialize_asm_sections(
+        &blocks,
+        &|_| None,
+        &|_| None,
+        &|_| None,
+        &|_| None,
+        false,
+        &mut sink,
+    )
+    .unwrap();
+    let section = |n: &str| sink.sections().iter().find(|s| s.name == n).expect(n);
+    let insn = section(".discard.annotate_insn");
+    assert_eq!((insn.flags.as_str(), insn.entsize), ("M", 8));
+    assert_eq!(section(".text.hot").link.as_deref(), Some(".text"));
+}

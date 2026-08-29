@@ -1719,7 +1719,7 @@ jobs:
       - name: install kernel build deps + the emulator's shared libraries
         # No qemu-system-* package: the only emulator on this runner is the one
         # the qemu lane built, so the boot cannot silently use a distro build.
-        run: ./scripts/apt_resilient_install.sh flex bison bc libelf-dev libssl-dev libglib2.0-dev zlib1g-dev libfdt-dev
+        run: ./scripts/apt_resilient_install.sh flex bison bc libelf-dev libssl-dev libglib2.0-dev zlib1g-dev libfdt-dev llvm
       - name: fetch the badc-built emulator (qemu lane, -O0)
         uses: actions/download-artifact@v4
         with:
@@ -1772,6 +1772,19 @@ jobs:
             --expect-units ${{ matrix.floor }} --boot-timeout 90 \
             --workdir "$RUNNER_TEMP/verify" \
             --report "$RUNNER_TEMP/verify/verify-${{ matrix.arch }}.json"
+      # Every eighth unit of the tree the gate just built, compiled again by
+      # gcc and by badc with debug info, and every aggregate's size and
+      # member offsets compared through the DWARF both emit. A layout that
+      # differs is an ABI defect between vmlinux and the modules sharing the
+      # type, and it corrupts memory rather than failing to load.
+      - name: compare type layouts through DWARF (gcc vs badc, strided replay)
+        timeout-minutes: 15
+        run: |
+          python demos/linux/layout.py --replay --tree "$KERNEL_TREE" \
+            --arch ${{ matrix.arch }} --badc target/release/badc \
+            --stride 8 --cross-check 20 \
+            --scratch "$RUNNER_TEMP/layout" \
+            --report "$RUNNER_TEMP/verify/layout-${{ matrix.arch }}.json"
       - name: publish the gate result and boot logs
         # Both manifests go up: the per-unit one is the compiling claim's
         # evidence, the per-link one the linking claim's.
@@ -1781,6 +1794,7 @@ jobs:
           name: kernel-verify-${{ matrix.label }}
           path: |
             ${{ runner.temp }}/verify/verify-*.json
+            ${{ runner.temp }}/verify/layout-*.json
             ${{ runner.temp }}/verify/boot-*.log
             ${{ runner.temp }}/verify/probe-*.log
             ${{ runner.temp }}/verify/manifest-*.txt

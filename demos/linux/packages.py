@@ -68,7 +68,9 @@ import _fetch  # noqa: E402
 # distributions: Debian keeps only the last few dated cloud snapshots, so an
 # upstream URL pinned to a snapshot stops resolving within weeks. `upstream`
 # and `upstream_digest` record where each asset came from and the digest the
-# distribution publishes for it, so the mirrored bytes stay auditable.
+# distribution publishes for it, so the mirrored bytes stay auditable. An
+# image the release does not carry yet is fetched from `upstream` and held to
+# the same pinned sha256, so a run never depends on the mirror being complete.
 IMAGE_RELEASE_TAG = "vendor-deps-v1"
 
 # The packaging format and the cloud image are the distribution's, not the
@@ -103,9 +105,44 @@ DISTROS = {
             },
         },
     },
+    "ubuntu": {
+        "pkg": "deb",
+        "images": {
+            "x86_64": {
+                "asset": "ubuntu-26.04-server-cloudimg-amd64.img",
+                "sha256": "8196be9d7958059cb56c6c75c80fdf6cee8a8885bc149ea791d7db1c7ef93035",
+                "upstream": "https://cloud-images.ubuntu.com/releases/26.04/"
+                            "release-20260823/"
+                            "ubuntu-26.04-server-cloudimg-amd64.img",
+                "upstream_digest":
+                    "sha256:8196be9d7958059cb56c6c75c80fdf6cee8a8885bc149ea79"
+                    "1d7db1c7ef93035",
+            },
+            "aarch64": {
+                "asset": "ubuntu-26.04-server-cloudimg-arm64.img",
+                "sha256": "00e2d9f09373125eb9040952ae3b8d5553fe3df8f5004c08838473a1f61b74bf",
+                "upstream": "https://cloud-images.ubuntu.com/releases/26.04/"
+                            "release-20260823/"
+                            "ubuntu-26.04-server-cloudimg-arm64.img",
+                "upstream_digest":
+                    "sha256:00e2d9f09373125eb9040952ae3b8d5553fe3df8f5004c088"
+                    "38473a1f61b74bf",
+            },
+        },
+    },
     "fedora": {
         "pkg": "rpm",
         "images": {
+            "x86_64": {
+                "asset": "Fedora-Cloud-Base-Generic-44-1.7.x86_64.qcow2",
+                "sha256": "28680fe5b371a5a82ebf43a31926e086a168e59949d03969c5093e7071f90b7f",
+                "upstream": "https://dl.fedoraproject.org/pub/fedora/linux/"
+                            "releases/44/Cloud/x86_64/images/"
+                            "Fedora-Cloud-Base-Generic-44-1.7.x86_64.qcow2",
+                "upstream_digest":
+                    "sha256:28680fe5b371a5a82ebf43a31926e086a168e59949d03969c"
+                    "5093e7071f90b7f",
+            },
             "aarch64": {
                 "asset": "Fedora-Cloud-Base-Generic-44-1.7.aarch64.qcow2",
                 "sha256": "55c60a3b80d3616a08705afd0459e75fe9f03c54aba7a46e4002a41a72fa0d5b",
@@ -160,6 +197,28 @@ def resolve_arch(name: str, distro: str | None) -> dict:
     arch["pkg"] = DISTROS[arch["distro"]]["pkg"]
     arch["image"] = images[name]
     return arch
+
+# Storage controllers the guest disks ride on, with the kernel driver the
+# booted system must then show on the root disk's device chain. `virtio` is
+# the paravirtual block device; the rest are emulated controllers -- NVMe,
+# an ICH9 AHCI SATA controller, a MegaRAID SAS and an LSI 53C895A SCSI HBA --
+# whose drivers the badc-built kernel has to bring up itself.
+DISK_BUSES = {
+    "virtio": "virtio_blk",
+    "nvme": "nvme",
+    "ahci": "ahci",
+    "megasas": "megaraid_sas",
+    "lsi53c895a": "sym53c8xx",
+}
+
+# NIC models and the driver the booted system must bind them to.
+NICS = {
+    "virtio-net-pci": "virtio_net",
+    "e1000e": "e1000e",
+    "e1000": "e1000",
+    "rtl8139": "8139cp",
+    "igb": "igb",
+}
 
 # aarch64 EFI firmware, first match wins: (code, vars) pflash pair, or a
 # single -bios image.
@@ -724,7 +783,7 @@ def ensure_image(args, arch) -> Path:
     args.image_cache.mkdir(parents=True, exist_ok=True)
     dst = args.image_cache / spec["asset"]
     _fetch.fetch_and_verify(IMAGE_RELEASE_TAG, spec["asset"], dst,
-                            spec["sha256"], log)
+                            spec["sha256"], log, fallback_url=spec["upstream"])
     return dst
 
 
@@ -864,15 +923,43 @@ class VM:
                "-m", str(args.vm_mem), "-display", "none", "-daemonize",
                "-pidfile", str(self.pidfile),
                "-serial", f"file:{self.console}",
-               "-drive", f"if=virtio,format=qcow2,file={self.disk}",
-               "-drive", f"if=virtio,format=raw,readonly=on,file={self.seed}",
+               *self.disk_args(),
                "-netdev",
                f"user,id=n0,hostfwd=tcp:127.0.0.1:{args.ssh_port}-:22",
-               "-device", "virtio-net-pci,netdev=n0",
+               "-device", f"{args.vm_nic},netdev=n0",
                *shlex.split(args.qemu_args)]
         log(f"qemu ({accel}): {' '.join(cmd)}")
         self.pidfile.unlink(missing_ok=True)
         run(cmd, check=True, timeout=60)
+
+    def disk_args(self) -> list[str]:
+        """The system disk and the cloud-init seed on `--vm-disk-bus`."""
+        bus = self.args.vm_disk_bus
+        drives = [("d0", f"format=qcow2,file={self.disk}", "hd"),
+                  ("d1", f"format=raw,readonly=on,file={self.seed}", "cd")]
+        if bus == "virtio":
+            return [a for _, spec, _ in drives for a in ("-drive", f"if=virtio,{spec}")]
+        out: list[str] = []
+        # The firmware boots the system disk first on every bus; without the
+        # index SeaBIOS probes the emulated controllers in its own order and
+        # may try the seed image first.
+        boot = ["bootindex=0", ""]
+        if bus == "nvme":
+            for i, (did, spec, _) in enumerate(drives):
+                out += ["-drive", f"if=none,id={did},{spec}",
+                        "-device", f"nvme,drive={did},serial=badc{i},{boot[i]}".rstrip(",")]
+            return out
+        if bus == "ahci":
+            out += ["-device", "ahci,id=ctl0"]
+            for i, (did, spec, kind) in enumerate(drives):
+                out += ["-drive", f"if=none,id={did},{spec}",
+                        "-device", f"ide-{kind},drive={did},bus=ctl0.{i},{boot[i]}".rstrip(",")]
+            return out
+        out += ["-device", f"{bus},id=ctl0"]
+        for i, (did, spec, kind) in enumerate(drives):
+            out += ["-drive", f"if=none,id={did},{spec}",
+                    "-device", f"scsi-{kind},drive={did},bus=ctl0.0,scsi-id={i},{boot[i]}".rstrip(",")]
+        return out
 
     def pid(self) -> int | None:
         try:
@@ -1044,6 +1131,24 @@ def analyze_core(core: Path, binp: Path, exe: str, phase: str,
             "badc_built": is_badc, "phase": phase}
 
 
+def grub_entry(vm: VM, release: str) -> str | None:
+    """The `submenu>entry` title path of the grub.cfg entry that loads
+    vmlinuz-<release>, in the form `grub-reboot` takes."""
+    titles: list[str] = []
+    for line in vm.ssh("cat /boot/grub/grub.cfg", sudo=True).stdout.splitlines():
+        s = line.strip()
+        m = re.match(r"(?:submenu|menuentry)\s+'([^']*)'.*\{$", s)
+        if m:
+            titles.append(m.group(1))
+        elif s == "}":
+            if titles:
+                titles.pop()
+        elif (m := re.match(r"linux\S*\s+(\S+)", s)) and m.group(1).endswith(
+                f"/vmlinuz-{release}"):
+            return ">".join(titles)
+    return None
+
+
 def probes(vm: VM) -> dict:
     out: dict = {}
     out["uname"] = vm.ssh("uname -r", check=True).stdout.strip()
@@ -1074,7 +1179,15 @@ def probes(vm: VM) -> dict:
     out["net_driver"] = vm.ssh(
         "ls -l /sys/class/net/*/device/driver 2>/dev/null | "
         "sed 's/.*\\///' | sort -u | tr '\\n' ' '").stdout.strip()
-    out["blk"] = vm.ssh("lsblk -dno NAME,SIZE | tr '\\n' ' '").stdout.strip()
+    out["blk"] = vm.ssh("lsblk -dno NAME,SIZE,TRAN | tr '\\n' ' '").stdout.strip()
+    # Every driver bound between the root disk and the bus it sits on: the
+    # SCSI disk driver alone names no controller, so the chain is what a
+    # storage model is checked against.
+    out["disk_driver"] = vm.ssh(
+        "d=/sys/class/block/$(lsblk -no PKNAME $(findmnt -no SOURCE /) | head -1)"
+        "/device; c=''; while [ \"$(readlink -f $d)\" != / ]; do "
+        "[ -e $d/driver ] && c=\"$c $(basename $(readlink -f $d/driver))\"; "
+        "d=$d/..; done; echo $c").stdout.strip()
     disk = vm.ssh(
         "dd if=/dev/urandom of=io-probe bs=1M count=64 conv=fsync 2>/dev/null"
         " && sha256sum io-probe && sudo sh -c 'echo 3 > /proc/sys/vm/"
@@ -1098,7 +1211,8 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
     vm.start()
     result: dict = {"image": image.name, "image_sha256": arch["image"]["sha256"],
                     "accel": accel, "cpu": vm.cpu, "ssh_port": args.ssh_port,
-                    "vm_cpus": args.vm_cpus, "vm_mem_mb": args.vm_mem}
+                    "vm_cpus": args.vm_cpus, "vm_mem_mb": args.vm_mem,
+                    "disk_bus": args.vm_disk_bus, "nic": args.vm_nic}
     try:
         boot_id = vm.wait_ssh(args.vm_timeout)
         log("stock system up; capturing baseline")
@@ -1151,10 +1265,14 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
             if first.endswith(f"vmlinuz-{args.release}"):
                 result["boot_select"] = "version-sorted default"
             else:
-                vm.ssh("grub-reboot 'Advanced options for Debian GNU/Linux>"
-                       f"Debian GNU/Linux, with Linux {args.release}'",
-                       sudo=True, check=True)
-                result["boot_select"] = "grub-reboot one-shot"
+                entry = grub_entry(vm, args.release)
+                if entry is None:
+                    failures.append(f"no grub.cfg entry loads "
+                                    f"vmlinuz-{args.release}")
+                    return result
+                vm.ssh(f"grub-reboot {shlex.quote(entry)}", sudo=True,
+                       check=True)
+                result["boot_select"] = f"grub-reboot one-shot: {entry}"
 
         log(f"rebooting into {args.release} ({result['boot_select']})")
         vm.reboot(args.vm_timeout, boot_id)
@@ -1209,9 +1327,14 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
             failures.append("disk write/readback failed")
         if not cur["net_route"]:
             failures.append("no default route")
-        if "virtio" not in cur["net_driver"]:
-            failures.append(f"network device not on virtio: "
+        want_nic = NICS[args.vm_nic]
+        if want_nic not in cur["net_driver"].split():
+            failures.append(f"network device not on {want_nic}: "
                             f"{cur['net_driver']!r}")
+        want_disk = DISK_BUSES[args.vm_disk_bus]
+        if want_disk not in cur["disk_driver"].split():
+            failures.append(f"root disk not on {want_disk}: "
+                            f"{cur['disk_driver']!r}")
 
         # Package-scriptlet products: depmod data and the initramfs.
         checks = {
@@ -1334,6 +1457,14 @@ def main() -> int:
                     help="qemu -cpu model (default: host under kvm, max "
                          "under tcg)")
     ap.add_argument("--vm-cpus", type=int, default=2)
+    ap.add_argument("--vm-disk-bus", choices=sorted(DISK_BUSES), default="virtio",
+                    help="storage controller the system disk and the seed are "
+                         "attached through (default: virtio); the booted "
+                         "kernel must drive the root disk with that "
+                         "controller's driver")
+    ap.add_argument("--vm-nic", choices=sorted(NICS), default="virtio-net-pci",
+                    help="NIC model (default: virtio-net-pci); the booted "
+                         "kernel must bind it to that model's driver")
     ap.add_argument("--vm-mem", type=int, default=2048)
     ap.add_argument("--vm-disk", default="12G")
     ap.add_argument("--vm-timeout", type=int, default=900,

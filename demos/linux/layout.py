@@ -799,12 +799,16 @@ def pair_artifacts(ref_tree: Path, badc_tree: Path) -> list[tuple[str, Path, Pat
 
 
 def replay_units(tree: Path, arch: str, badc: Path, scratch: Path,
-                 jobs: int, limit: int, timeout: int) -> list[dict]:
+                 jobs: int, limit: int, timeout: int,
+                 stride: int = 1) -> list[dict]:
     """Compile each kernel C unit with both compilers at debug-info level
-    into `scratch`, returning per-unit object paths."""
+    into `scratch`, returning per-unit object paths. `stride` keeps every
+    Nth unit of the path-sorted corpus, a sample spread over the
+    subsystems rather than a prefix of one; `limit` caps the count."""
     target = sweep.TARGETS[arch]
     scratch.mkdir(parents=True, exist_ok=True)
     units = []
+    seen = 0
     for p in sorted(tree.rglob(".*.o.cmd")):
         if set(p.relative_to(tree).parts) & sweep.SKIP_DIRS:
             continue
@@ -812,8 +816,12 @@ def replay_units(tree: Path, arch: str, badc: Path, scratch: Path,
         if not argv:
             continue
         kind, src = sweep.classify(argv)
-        if kind == "c":
-            units.append((argv, src))
+        if kind != "c":
+            continue
+        seen += 1
+        if (seen - 1) % stride:
+            continue
+        units.append((argv, src))
         if limit and len(units) >= limit:
             break
 
@@ -1170,6 +1178,9 @@ def main(argv: list[str] | None = None) -> int:
                          "--report)")
     ap.add_argument("--limit", type=int, default=0,
                     help="replay at most N units (0: all)")
+    ap.add_argument("--stride", type=int, default=1,
+                    help="replay every Nth unit of the path-sorted corpus "
+                         "(default 1: every unit)")
     ap.add_argument("-j", "--jobs", type=int, default=os.cpu_count() or 4)
     ap.add_argument("--timeout", type=int, default=600,
                     help="seconds per compile in --replay")
@@ -1221,14 +1232,15 @@ def main(argv: list[str] | None = None) -> int:
         }
         log(f"replaying units from {args.tree} (jobs={args.jobs})")
         recs = replay_units(args.tree, args.arch, badc, scratch, args.jobs,
-                            args.limit, args.timeout)
+                            args.limit, args.timeout, max(1, args.stride))
         ok_ref = sum(1 for r in recs if r["ref_obj"])
         ok_badc = sum(1 for r in recs if r["badc_obj"])
         both = [r for r in recs if r["ref_obj"] and r["badc_obj"]]
         log(f"units: {len(recs)}; reference built {ok_ref}; badc built "
             f"{ok_badc}; both {len(both)}")
-        report["replay"] = {"units": len(recs), "ref_built": ok_ref,
-                            "badc_built": ok_badc, "both": len(both)}
+        report["replay"] = {"units": len(recs), "stride": max(1, args.stride),
+                            "ref_built": ok_ref, "badc_built": ok_badc,
+                            "both": len(both)}
         payload = [(r["ref_obj"], r["badc_obj"], dwarfdump) for r in both]
         with ProcessPoolExecutor(max_workers=args.jobs) as pool:
             for i, (rx, bx) in enumerate(

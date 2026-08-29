@@ -674,13 +674,29 @@ a kernel travels in a distribution. It builds the pinned release with badc
 compiling every kernel C unit (the buildcc.py contract: zero fallbacks),
 packages it with the kernel's own targets -- `bindeb-pkg` on x86_64,
 `binrpm-pkg` on aarch64 -- installs the package in a stock cloud image
-(Debian stable on x86_64, Fedora on aarch64) under qemu, and validates the
-reboot: the package scriptlets (depmod, initramfs generation via
-initramfs-tools or dracut, the boot-loader entry), systemd reaching
-multi-user, udev-bound virtio devices, on-demand `modprobe` of packaged
+(Debian stable on x86_64, Fedora on aarch64, or the distribution `--distro`
+names: `debian`, `ubuntu`, `fedora`, each on both architectures) under qemu,
+and validates the reboot: the package scriptlets (depmod, initramfs
+generation via initramfs-tools or dracut, the boot-loader entry), systemd
+reaching multi-user, udev-bound devices, on-demand `modprobe` of packaged
 modules, an untainted kernel, a clean dmesg, and disk/network I/O. Before
 the install the same probes run against the image's stock kernel, so every
 measurement has a baseline from the same userspace.
+
+The devices are chosen, not assumed. `--vm-disk-bus` attaches the system
+disk and the cloud-init seed through `virtio` (the default), an emulated
+`nvme` controller, an `ahci` SATA controller, or a `megasas` / `lsi53c895a`
+SCSI HBA, and `--vm-nic` selects `virtio-net-pci` (the default), `e1000e`,
+`e1000`, `rtl8139` or `igb`. The paravirtual pair exercises two drivers; the
+emulated models exercise the controller drivers a distribution kernel ships
+for real hardware -- `nvme`, `ahci` plus the SCSI disk layer, `megaraid_sas`,
+`sym53c8xx`, `e1000e` -- as compiled by badc. After the reboot the run reads
+the driver chain under the root disk's `/sys/class/block/<dev>/device` and the
+NIC's driver link, and fails unless the selected models' drivers are the ones
+bound; a kernel that fell back to another path, or whose initramfs found no
+driver, is reported rather than passed. The system disk carries
+`bootindex=0` on the emulated buses, because SeaBIOS otherwise probes the
+controllers in its own order and can try the seed image first.
 
 ```sh
 python3 demos/linux/packages.py --arch x86_64 \
@@ -836,7 +852,11 @@ Each architecture's image is a `vendor-deps-v1` release asset pinned by
 sha256, fetched through the same helper as every other vendored archive and
 rejected on mismatch -- in all paths, including a `--image` pointing at a local
 file (`--image-sha256` states the digest of a deliberately different one).
-Without a pin, a red gate is not attributable to a badc change.
+Without a pin, a red gate is not attributable to a badc change. An image the
+release does not carry yet is fetched from the `upstream` URL its table entry
+records and held to the same pinned digest, so adding a distribution needs
+only the entry; mirroring the bytes is a separate step and the run says which
+source it used.
 
 The bytes are the distributions' own, mirrored rather than fetched from them,
 because an upstream URL is not a durable pin: Debian keeps only the last few
@@ -940,8 +960,12 @@ python3 demos/linux/layout.py --arch x86_64 \
     --cross-check 40 --report layout-x86_64.json
 ```
 
-Both trees must carry debug info (`CONFIG_DEBUG_INFO_DWARF4`; badc emits
-DWARF 4) and must hold the same source and the same configuration. The run
+`--stride N` keeps every Nth unit of the path-sorted corpus in `--replay`
+mode, a sample spread over the subsystems; CI's `kernel` job runs the replay
+at stride 8 over the defconfig tree the gate just built, with `--cross-check
+20`, and fails on any differing layout. Both trees must carry debug info
+(`CONFIG_DEBUG_INFO_DWARF4`; badc emits DWARF 4) and must hold the same
+source and the same configuration. The run
 enforces the second part rather than assuming it: it refuses to compare
 unless the two `.config` files agree once the toolchain identification
 symbols -- `CONFIG_CC_VERSION_TEXT`, the `*_VERSION` strings -- are removed,

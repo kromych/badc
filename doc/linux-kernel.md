@@ -55,10 +55,15 @@ byte-identical to GNU ld's. badc's `--version` reports
 linker at the kernel's own floor and deliberately no higher.
 
 **Distribution.** The kernel packages as a `.deb` and an `.rpm` with the
-kernel's own `bindeb-pkg` / `binrpm-pkg` targets, installs into stock Debian 13
-and Fedora 44 cloud images under qemu, and reboots into systemd multi-user with
-udev-bound virtio devices and modules autoloading on demand. `/proc/version`
-names badc. The run also checks an untainted kernel, a clean dmesg, and
+kernel's own `bindeb-pkg` / `binrpm-pkg` targets, installs into stock Debian
+13, Ubuntu 26.04 and Fedora 44 cloud images under qemu, and reboots into
+systemd multi-user with udev-bound devices and modules autoloading on demand.
+The system disk and the NIC ride on the storage controller and NIC model the
+run selects -- the paravirtual pair by default, or an emulated NVMe, AHCI or
+SCSI controller with an e1000e / rtl8139-class NIC, whose drivers the booted
+kernel then has to bring up -- and the run asserts the booted kernel drives
+the root disk and the NIC with those models' drivers. `/proc/version` names
+badc. The run also checks an untainted kernel, a clean dmesg, and
 disk/network I/O, against a baseline taken from the image's stock kernel in the
 same userspace.
 

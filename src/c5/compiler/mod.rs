@@ -3219,9 +3219,11 @@ impl Compiler {
             self.rebase_relocated_globals();
             // Record each defined object's byte size for the object
             // writers' symbol tables; the writers have no type layout.
+            // An alias is sized like any other object: it took its
+            // target's element count when it resolved.
             for i in 0..self.symbols.len() {
                 let s = &self.symbols[i];
-                if s.class != Token::Glo as i64 || !s.defined_here || s.is_alias {
+                if s.class != Token::Glo as i64 || !s.defined_here {
                     continue;
                 }
                 // A staged literal recorded its own reserved extent; its

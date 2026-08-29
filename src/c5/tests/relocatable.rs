@@ -258,6 +258,49 @@ fn asm_label_renames_every_emitted_symbol() {
 }
 
 #[test]
+fn an_internal_linkage_data_alias_names_its_target() {
+    // `static T a __attribute__((alias("t")))` is an additional local name
+    // for `t`'s storage. Linux builds `MODULE_DEVICE_TABLE` out of exactly
+    // this form and modpost reads the device table through the alias
+    // symbol's section, value and size, so dropping it loses every
+    // modalias the module would have carried.
+    const STB_LOCAL: u8 = 0;
+    const STB_GLOBAL: u8 = 1;
+    const STT_OBJECT: u8 = 1;
+    let a = compile_obj(
+        "struct id { unsigned v, d, cls; };\n\
+         static const struct id tbl[] = { { 1, 2, 3 }, { 0, 0, 0 } };\n\
+         int glob[3] = { 4, 5, 6 };\n\
+         static typeof(tbl) tbl_alias __attribute__((used, alias(\"tbl\")));\n\
+         static int glob_alias[3] __attribute__((used, alias(\"glob\")));\n\
+         extern const struct id tbl_ext[] __attribute__((alias(\"tbl\")));\n\
+         const struct id *anchor(void) { return tbl; }\n",
+        "a.o",
+    );
+    let sym = |n: &str| {
+        a.symbols
+            .iter()
+            .find(|s| s.name == n)
+            .unwrap_or_else(|| panic!("`{n}` missing from the symbol table"))
+    };
+    for (alias, target, binding) in [
+        ("tbl_alias", "tbl", STB_LOCAL),
+        ("glob_alias", "glob", STB_LOCAL),
+        ("tbl_ext", "tbl", STB_GLOBAL),
+    ] {
+        let (al, tg) = (sym(alias), sym(target));
+        assert_eq!(al.binding, binding, "{alias} binding");
+        assert_eq!(al.kind, STT_OBJECT, "{alias} type");
+        assert_eq!(al.value, tg.value, "{alias} value");
+        assert_eq!(al.size, tg.size, "{alias} size");
+        assert!(
+            matches!((al.sec, tg.sec), (EtSymRef::Section(i), EtSymRef::Section(j)) if i == j),
+            "{alias} must sit in {target}'s section"
+        );
+    }
+}
+
+#[test]
 fn duplicate_strong_definitions_are_rejected() {
     let a = compile_obj("int dup_val = 1;\n", "a.o");
     let b = compile_obj("int dup_val = 2;\n", "b.o");

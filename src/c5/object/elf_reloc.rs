@@ -2012,12 +2012,13 @@ pub(super) fn write_relocatable(
                     defined_data_globals.push((sym.link_name(), sym.val, size));
                 }
                 // A thread-local's value is a TLS-block offset, which
-                // `DataPlan::map` would read as a `.data` offset. An
-                // alias names another object's storage.
-                Linkage::Internal if sym.is_thread_local && !sym.is_alias => {
+                // `DataPlan::map` would read as a `.data` offset. An alias
+                // carries its target's offset, so it lands in the same list
+                // its own storage class picks, as an external alias does.
+                Linkage::Internal if sym.is_thread_local => {
                     defined_tls_locals.push((sym.link_name(), sym.val, size));
                 }
-                Linkage::Internal if !sym.is_alias => {
+                Linkage::Internal => {
                     defined_data_locals.push((sym.link_name(), sym.val, size));
                 }
                 _ => {}

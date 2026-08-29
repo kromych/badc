@@ -285,6 +285,10 @@ def sha256_of(path: Path) -> str:
 
 
 def run(cmd, cwd=None, env=None, timeout=None, capture=True, check=False):
+    # The executable is looked up on the PATH `env` carries, not the
+    # caller's: a macOS host puts GNU make ahead of the BSD one there.
+    if env is not None and cmd and "/" not in str(cmd[0]):
+        cmd = [shutil.which(str(cmd[0]), path=env.get("PATH")) or cmd[0], *cmd[1:]]
     # A timeout is reported as an exit status, not an exception: every caller
     # already handles a non-zero status, and an escaping TimeoutExpired would
     # end the run without writing the report.
@@ -444,8 +448,36 @@ def phase_tree(args, arch, config: Path | None) -> Path:
 
 # --- build ------------------------------------------------------------------
 
+# What a macOS host has to supply for kbuild, per `demos/linux/README.md`
+# ("Building on macOS"): Homebrew's GNU tools ahead of the BSD ones, the
+# cross binutils for every tool but CC and LD, the SDK gaps `hostcompat/`
+# covers, Homebrew's libcrypto for the signing host tools, and no depmod.
+KBUILD_ARCH = {"x86_64": "x86", "aarch64": "arm64"}
+
+
+def darwin_kbuild_env(args, arch, env: dict) -> None:
+    brew = Path(shutil.which("brew") or "/opt/homebrew/bin/brew").resolve().parents[1]
+    gnubin = [brew / "opt" / t / "libexec/gnubin"
+              for t in ("make", "coreutils", "findutils", "gnu-sed", "grep",
+                        "gawk", "gnu-tar")]
+    env["PATH"] = ":".join([*(str(d) for d in gnubin if d.is_dir()),
+                            env.get("PATH", ""), str(brew / "opt/binutils/bin")])
+    env["ARCH"] = KBUILD_ARCH[args.arch]
+    env["CROSS_COMPILE"] = args.real_cc[:-len("gcc")] if args.real_cc.endswith(
+        "-gcc") else env.get("CROSS_COMPILE", "")
+    hc = LINUX_DIR / "hostcompat"
+    env["HOSTCFLAGS"] = f"-I{hc} -include {hc}/hostcompat.h -D_UUID_T"
+    ssl = brew / "opt/openssl/lib/pkgconfig"
+    if ssl.is_dir():
+        env["PKG_CONFIG_PATH"] = ":".join(
+            [str(ssl), *filter(None, [env.get("PKG_CONFIG_PATH")])])
+    env["DEPMOD"] = "true"
+
+
 def shim_env(args, arch) -> dict:
     env = dict(os.environ)
+    if platform.system() == "Darwin":
+        darwin_kbuild_env(args, arch, env)
     env.update(
         BADC=str(args.badc),
         BADC_REAL_CC=args.real_cc,
@@ -1394,12 +1426,17 @@ def main() -> int:
     ap.add_argument("--badc", type=Path,
                     default=os.environ.get("BADC",
                                            REPO_ROOT / "target/release/badc"))
-    ap.add_argument("--real-cc", default=os.environ.get("BADC_REAL_CC", "gcc"))
+    ap.add_argument("--real-cc", default=os.environ.get("BADC_REAL_CC"),
+                    help="reference compiler for the probes and the assembly "
+                         "units badc declines (default: gcc; on macOS the "
+                         "musl-cross <triple>-gcc for --arch)")
     ap.add_argument("--linker", choices=("reference", "badc"),
                     default="reference",
                     help="linker for the kernel build: the reference `ld`, "
                          "or badc through ldshim.py")
-    ap.add_argument("--real-ld", default=os.environ.get("BADC_LD_REAL", "ld"))
+    ap.add_argument("--real-ld", default=os.environ.get("BADC_LD_REAL"),
+                    help="reference linker (default: ld; on macOS the "
+                         "musl-cross <triple>-ld for --arch)")
     ap.add_argument("--tarball", type=Path,
                     help="pinned kernel source tarball (see setup.py)")
     ap.add_argument("--tarball-url",
@@ -1479,6 +1516,9 @@ def main() -> int:
     args = ap.parse_args()
 
     arch = resolve_arch(args.arch, args.distro)
+    cross = f"{args.arch}-linux-musl-" if platform.system() == "Darwin" else ""
+    args.real_cc = args.real_cc or f"{cross}gcc"
+    args.real_ld = args.real_ld or f"{cross}ld"
     phases = set(args.phases.split(","))
     if unknown := phases - {"config", "tree", "build", "package", "vm"}:
         die(f"unknown phases: {sorted(unknown)}")
@@ -1555,6 +1595,7 @@ def main() -> int:
             die(f"no prepared tree under {args.workdir}; run the tree phase")
         tree = trees[0].parent
     args.release = run(["make", "-s", "kernelrelease"], cwd=tree,
+                       env=shim_env(args, arch),
                        check=True).stdout.strip()
     log(f"kernel {args.release} in {tree}")
     report["release"] = args.release

@@ -471,7 +471,7 @@ What the host has to supply:
 
 ```sh
 brew install make coreutils findutils gnu-sed grep gawk gnu-tar bison flex \
-    musl-cross
+    musl-cross binutils openssl rpm dpkg
 ```
 
 `/usr/bin/make` is GNU Make 3.81 and the tree refuses anything below 4.0, so
@@ -484,7 +484,7 @@ links every kernel unit, and that toolchain answers the `cc-option` /
 assembler declines, and supplies `CROSS_COMPILE=` for `OBJCOPY`, `NM`, `AR`
 and `STRIP`.
 
-Four headers separate the host tools from a macOS SDK, and `hostcompat/`
+Five headers separate the host tools from a macOS SDK, and `hostcompat/`
 carries them. `elf.h` is self-contained: the tree's own uapi ELF header cannot
 stand in, because it defines `ELF64_ST_BIND` in terms of `ELF_ST_BIND` and
 `scripts/mod/modpost.h` defines that back to `ELF64_ST_BIND`. `byteswap.h` and
@@ -494,6 +494,11 @@ reaches the kernel's `struct uuid_t` through `<linux/mod_devicetable.h>` while
 the SDK typedefs `uuid_t` to `unsigned char[16]`, and the SDK's only user of
 its own spelling is `gethostuuid()`. `hostcompat.h` is force-included and
 supplies `O_LARGEFILE` and `copy_file_range()` for `usr/gen_init_cpio.c`.
+`asm-generic/int-ll64.h` is the uapi fixed-width type header that
+`tools/include/uapi/linux/types.h` includes by its system name, which
+`scripts/sign-file` reaches under `CONFIG_MODULE_SIG`; Linux hosts have it
+from their kernel headers, and the tree's own copy includes an
+`<asm/bitsperlong.h>` the SDK lacks and nothing in it uses.
 
 ```sh
 HC=$PWD/demos/linux/hostcompat
@@ -511,13 +516,18 @@ the target instead -- the rpm's `%post` runs `depmod` directly, the deb's
 `postinst` reaches it through `/etc/kernel/postinst.d` -- so the missing host
 `depmod` costs nothing.
 
-`packages.py` runs here too, with the same variables in the environment
-(`shim_env` inherits it) and `readelf` on PATH from Homebrew's binutils,
-placed after `/usr/bin` so its `strip` and `ar` do not shadow Apple's:
+`packages.py` runs here too and sets that environment itself on a macOS
+host: `ARCH`, `CROSS_COMPILE` (derived from `--real-cc`, which defaults to
+the musl-cross `<arch>-linux-musl-gcc` for `--arch` there, as `--real-ld`
+does to its `ld`), `HOSTCFLAGS` with `hostcompat/`, `DEPMOD=true`, the
+`gnubin` directories ahead of the system ones and Homebrew's binutils after
+them -- so `readelf` is found while Apple's `strip` and `ar` keep shadowing
+GNU's -- and `PKG_CONFIG_PATH` pointing at Homebrew's OpenSSL for the
+signing host tools `CONFIG_MODULE_SIG` builds. Every `make` it runs is
+resolved on that PATH, so the system's GNU Make 3.81 is never the one used.
 
 ```sh
-python3 demos/linux/packages.py --arch aarch64 [--distro debian] \
-    --real-cc aarch64-linux-musl-gcc --real-ld aarch64-linux-musl-ld \
+python3 demos/linux/packages.py --arch aarch64 [--distro fedora] \
     --linker badc --tarball <linux-7.1.6.tar.xz>
 ```
 

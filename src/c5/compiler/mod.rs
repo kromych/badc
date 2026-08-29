@@ -162,6 +162,11 @@ pub struct StructDef {
     /// spelling carries a parse-order serial and matches nothing across
     /// translation units.
     pub is_anonymous: bool,
+    /// GNU `transparent_union`: a function parameter of this union type
+    /// accepts an argument compatible with any member and takes it as
+    /// that member. Set only when the attribute is honored
+    /// (`mark_transparent_union`).
+    pub is_transparent_union: bool,
 }
 
 /// One unnamed bit-field of an aggregate (`int :N;`). `before` is the
@@ -1168,6 +1173,10 @@ pub(in crate::c5::compiler) struct Pending {
     /// skip to mark the declared locals so their unused-variable
     /// diagnostics are suppressed.
     pub attr_maybe_unused: bool,
+    /// Side channel from `skip_attribute_specifiers`: true when the most
+    /// recent run named `transparent_union`, false otherwise (every run
+    /// rewrites it). Consumed by the aggregate and typedef paths.
+    pub attr_transparent_union: bool,
     /// Requested object alignment from `_Alignas(N)` /
     /// `__attribute__((aligned(N)))` / `__declspec(align(N))`, 0 when
     /// absent. The declaration parse takes it: file-scope objects
@@ -1463,6 +1472,7 @@ impl Default for Pending {
             last_imm_was_zero: false,
             compound_lit_close_parens: 0,
             attr_maybe_unused: false,
+            attr_transparent_union: false,
             attr_align: 0,
             attr_alignas: 0,
             type_align: 0,

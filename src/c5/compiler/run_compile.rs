@@ -714,6 +714,8 @@ impl Compiler {
                 if let Some(m) = self.pending.attr_mode.take() {
                     ty = self.apply_mode_to_type(ty, m)?;
                 }
+                let declarator_transparent =
+                    core::mem::take(&mut self.pending.attr_transparent_union);
                 // Capture per this declarator before any nested parse can
                 // overwrite it (a later parameter of function type would
                 // re-set it). A bare function-type declarator is a function
@@ -918,6 +920,11 @@ impl Compiler {
                     self.symbols[id_idx].class = Token::Typedef as i64;
                     self.symbols[id_idx].type_ = typedef_ty;
                     self.symbols[id_idx].val = 0;
+                    // `typedef union {...} T __attribute__((transparent_union))`:
+                    // a declarator-position attribute binds to the aliased union.
+                    if declarator_transparent && super::types::is_struct_value_ty(typedef_ty) {
+                        self.mark_transparent_union(super::types::struct_id_of(typedef_ty));
+                    }
                     self.symbols[id_idx].is_void_typedef = declarator_is_bare_void;
                     self.symbols[id_idx].is_enum_typedef = base_is_enum;
                     self.symbols[id_idx].is_function_type = typedef_is_fn_type;

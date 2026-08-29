@@ -121,6 +121,7 @@ impl Compiler {
                     is_vector: false,
                     is_array: false,
                     is_anonymous: false,
+                    is_transparent_union: false,
                 });
                 let id = self.structs.len() - 1;
                 if let Some(scope) = self.tag_scopes.last_mut() {
@@ -662,6 +663,7 @@ impl Compiler {
                 // from raising the aggregate's alignment), independent of
                 // a struct-level `packed`.
                 self.skip_attribute_specifiers()?;
+                self.pending.attr_transparent_union = false;
                 if let Some(m) = self.pending.attr_mode.take() {
                     field_ty = self.apply_mode_to_type(field_ty, m)?;
                 }
@@ -1015,6 +1017,7 @@ impl Compiler {
         if self.skip_attribute_specifiers()? {
             self.repack_struct(struct_id);
         }
+        let transparent = core::mem::take(&mut self.pending.attr_transparent_union);
         let req = self.take_member_align()?;
         if req > 0 {
             let align = self.structs[struct_id].align.max(req as usize);
@@ -1023,7 +1026,43 @@ impl Compiler {
             self.structs[struct_id].explicit_align =
                 self.structs[struct_id].explicit_align.max(req as u32);
         }
+        if transparent {
+            self.mark_transparent_union(struct_id);
+        }
         Ok(())
+    }
+
+    /// Honor or discard a `transparent_union` request on the aggregate.
+    /// GCC honors the attribute only when the union's machine mode is the
+    /// first member's, mirrored here as a non-floating, non-bitfield
+    /// first member whose storage covers every member; otherwise GCC
+    /// warns and ignores it. An incomplete union (a typedef alias of a
+    /// forward declaration) cannot be checked and takes the flag as
+    /// declared.
+    pub(super) fn mark_transparent_union(&mut self, struct_id: usize) {
+        let def = &self.structs[struct_id];
+        if def.is_union && !def.is_complete {
+            self.structs[struct_id].is_transparent_union = true;
+            return;
+        }
+        let n = def.fields.len();
+        let honored = def.is_union
+            && n > 0
+            && def.fields[0].bit_width == 0
+            && !super::types::is_floating_scalar(def.fields[0].ty)
+            && (0..n)
+                .map(|i| self.packed_member_storage(struct_id, i))
+                .max()
+                == Some(self.packed_member_storage(struct_id, 0));
+        if honored {
+            self.structs[struct_id].is_transparent_union = true;
+        } else {
+            let line = self.lex.line;
+            self.warn_at(
+                line,
+                alloc::string::String::from("`transparent_union` attribute ignored"),
+            );
+        }
     }
 
     /// Re-lay a struct's fields with `__attribute__((packed))`

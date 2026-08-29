@@ -1993,7 +1993,13 @@ impl Compiler {
                             let arg_ty = self.ty;
                             let zero = self.last_emit_is_zero();
                             let untyped = self.last_emit_was_indirect_call();
-                            if let Some(m) = Self::type_warning_with_flags(
+                            // A GNU `transparent_union` parameter accepts an
+                            // argument compatible with any member and takes it
+                            // as that member, with no diagnostic.
+                            let tu_member =
+                                Self::transparent_union_member(&self.structs, want, self.ty, zero);
+                            if tu_member.is_none()
+                                && let Some(m) = Self::type_warning_with_flags(
                                 &self.structs,
                                 want,
                                 self.ty,
@@ -2031,7 +2037,38 @@ impl Compiler {
                             // Without this, the integer bit pattern
                             // lands in the GPR-arg register and libm
                             // reads garbage out of the FP register.
-                            self.convert_assign_rhs(want);
+                            if let Some(member_ty) = tu_member {
+                                // Materialize the member into an anonymous
+                                // union object (same staging the arg temps
+                                // use), so every backend passes the argument
+                                // per the aggregate convention -- GCC passes
+                                // it as the union containing the member.
+                                self.convert_assign_rhs(member_ty);
+                                let slots = self.slots_of_type(want);
+                                let off = self.reserve_slots(slots);
+                                if slots >= 1 {
+                                    self.multi_cell_temps.push((off, slots));
+                                }
+                                if let Some(value) = self.ast_acc.take() {
+                                    let init = super::super::ast::LocalInit::Runtime {
+                                        zero_init: None,
+                                        elements: alloc::vec![
+                                            super::super::ast::RuntimeInitElement {
+                                                offset: 0,
+                                                value: super::super::ast::RuntimeInitValue::Expr(
+                                                    value,
+                                                ),
+                                                ty: member_ty,
+                                                bitfield: None,
+                                            }
+                                        ],
+                                    };
+                                    self.ast_emit_compound_literal(off, want, 0, init);
+                                }
+                                self.ty = want;
+                            } else {
+                                self.convert_assign_rhs(want);
+                            }
                             // C99 6.5.2.2p4: the argument is converted to the
                             // declared parameter type. For a Sys (libc) callee
                             // the conversion must happen here -- the import

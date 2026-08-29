@@ -58,6 +58,7 @@ struct AttrFlags {
     used: bool,
     no_instrument_function: bool,
     uninitialized: bool,
+    transparent_union: bool,
 }
 
 impl AttrFlags {
@@ -78,6 +79,7 @@ impl AttrFlags {
         self.used |= other.used;
         self.no_instrument_function |= other.no_instrument_function;
         self.uninitialized |= other.uninitialized;
+        self.transparent_union |= other.transparent_union;
     }
 }
 
@@ -207,6 +209,7 @@ impl Compiler {
         // An attribute may sit between the keyword and the tag
         // (`struct __attribute__((packed)) name`).
         let packed = self.skip_attribute_specifiers()?;
+        let head_transparent = core::mem::take(&mut self.pending.attr_transparent_union);
         let mut anonymous = false;
         let name = if self.lex.tk == Token::Id {
             let n = self.symbols[self.lex.curr_id_idx].name.clone();
@@ -227,6 +230,9 @@ impl Compiler {
             // `struct name { ... } __attribute__((...))`: the attributes
             // follow the body and apply to the aggregate just laid out.
             self.apply_post_body_attributes(id)?;
+            if head_transparent {
+                self.mark_transparent_union(id);
+            }
             id
         } else {
             // A trailing attribute on a tag use without a body
@@ -1038,6 +1044,10 @@ impl Compiler {
                 // GNU `uninitialized`: the automatic object opts out of
                 // `-ftrivial-auto-var-init`.
                 f.uninitialized = true;
+            } else if n == "transparent_union" || n == "__transparent_union__" {
+                // GNU `transparent_union`: parameters of the union type
+                // accept arguments of any member type.
+                f.transparent_union = true;
             }
         }
     }
@@ -1378,6 +1388,9 @@ impl Compiler {
         }
         if attrs.packed {
             self.pending.attr_packed = true;
+        }
+        if attrs.transparent_union {
+            self.pending.attr_transparent_union = true;
         }
         if vector_size > 0 {
             self.pending.attr_vector_size = vector_size;

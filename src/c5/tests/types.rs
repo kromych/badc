@@ -797,23 +797,106 @@ fn well_typed_aggregates_are_untouched_by_the_constraint_check() {
 }
 
 #[test]
-fn union_target_does_not_raise_the_object_mismatch_constraint() {
-    // A union parameter may carry GCC's `transparent_union`, under which
-    // it accepts any member type directly. That attribute is not modelled,
-    // so a union target keeps warning severity instead of rejecting a
-    // call real code makes.
+fn transparent_union_parameter_accepts_member_typed_arguments() {
+    // GCC `transparent_union` (verified against gcc 16): a union
+    // parameter honoring the attribute takes an argument compatible
+    // with any member -- a null pointer constant and the union itself
+    // included -- with no diagnostic.
     let p = compile_str(
         "struct page;\nstruct folio;\n\
          typedef union { struct page **pages; struct folio **folios; } \
          arg_t __attribute__((__transparent_union__));\n\
          void release(arg_t a, int nr);\n\
-         void f(struct page **p, struct folio **q) { release(p, 1); release(q, 1); }\n\
+         void f(struct page **p, struct folio **q, void *v) { release(p, 1); \
+         release(q, 1); release(0, 1); release(v, 1); arg_t a; a.pages = p; release(a, 1); }\n\
+         int main(void) { return 0; }",
+    );
+    assert!(p.warnings.is_empty(), "got: {:?}", p.warnings);
+}
+
+#[test]
+fn transparent_union_attribute_binds_in_every_position() {
+    // The spellings gcc accepts: trailing the typedef declarator,
+    // between the keyword and the body, trailing a tagged body, and
+    // before the tag of a definition.
+    let p = compile_str(
+        "struct page;\n\
+         typedef union { struct page **p; } A __attribute__((transparent_union));\n\
+         typedef union __attribute__((transparent_union)) { struct page **p; } B;\n\
+         union C { struct page **p; } __attribute__((transparent_union));\n\
+         union __attribute__((__transparent_union__)) D { struct page **p; };\n\
+         void fa(A a);\nvoid fb(B b);\nvoid fc(union C c);\nvoid fd(union D d);\n\
+         void use_(struct page **p) { fa(p); fb(p); fc(p); fd(p); }\n\
+         int main(void) { return 0; }",
+    );
+    assert!(p.warnings.is_empty(), "got: {:?}", p.warnings);
+}
+
+#[test]
+fn transparent_union_parameter_still_warns_on_incompatible_arguments() {
+    // Acceptance covers member-compatible arguments only, and only
+    // through a union type honoring the attribute.
+    let p = compile_str(
+        "struct page;\n\
+         typedef union { struct page **pages; } t_arg \
+         __attribute__((transparent_union));\n\
+         typedef union { struct page **pages; } plain_arg;\n\
+         struct other { int x; };\n\
+         void t(t_arg a);\nvoid pl(plain_arg a);\n\
+         void f(int i, struct other o, struct page **p) { t(i); t(o); pl(p); }\n\
+         int main(void) { return 0; }",
+    );
+    let has = |needle: &str| p.warnings.iter().any(|w| w.contains(needle));
+    assert!(
+        has("incompatible struct types in argument 1 of `t`")
+            && has("incompatible struct types in argument 1 of `pl`")
+            && p.warnings.len() == 3,
+        "got: {:?}",
+        p.warnings
+    );
+}
+
+#[test]
+fn transparent_union_attribute_is_ignored_without_a_covering_first_member() {
+    // gcc 16 honors the attribute only when the union's machine mode is
+    // the first member's ({int, long} and a floating-first union get
+    // "attribute ignored"); an ignored union then warns like any other.
+    let p = compile_str(
+        "typedef union { int i; long l; } m_arg __attribute__((transparent_union));\n\
+         typedef union { double d; long l; } f_arg __attribute__((transparent_union));\n\
+         typedef union { long l; double d; } ok_arg __attribute__((transparent_union));\n\
+         void t(m_arg a);\nvoid u(ok_arg a);\n\
+         void f(long l) { t(l); u(l); }\n\
+         int main(void) { return 0; }",
+    );
+    let ignored = p
+        .warnings
+        .iter()
+        .filter(|w| w.contains("`transparent_union` attribute ignored"))
+        .count();
+    assert!(
+        ignored == 2
+            && p.warnings.iter().any(|w| w.contains("in argument 1 of `t`"))
+            && !p.warnings.iter().any(|w| w.contains("in argument 1 of `u`")),
+        "got: {:?}",
+        p.warnings
+    );
+}
+
+#[test]
+fn transparent_union_acceptance_is_argument_only() {
+    // gcc rejects member-typed initializers, assignments and returns of
+    // a transparent union; the acceptance must not reach past call
+    // arguments, so the object mismatch stays rejected.
+    let msg = constraint_error(
+        "struct page;\n\
+         typedef union { struct page **p; } T __attribute__((transparent_union));\n\
+         T g(struct page **p) { T t = p; t = p; return t; }\n\
          int main(void) { return 0; }",
     );
     assert!(
-        !p.warnings.iter().any(|w| w.contains("error:")),
-        "a union parameter must not be rejected, got: {:?}",
-        p.warnings
+        msg.contains("cannot assign non-struct value to a struct"),
+        "got: {msg}"
     );
 }
 

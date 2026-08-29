@@ -73,6 +73,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("long_double_abi_storage.c", 0),
     ("anon_bitfield_reserves_bits.c", 0),
     ("attribute_mode.c", 0),
+    ("transparent_union_call.c", 0),
     ("flex_array_only_member.c", 0),
     ("post_inline_dead_data_repack.c", 0),
     ("post_inline_import_survives_repack.c", 0),
@@ -1122,6 +1123,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("long_double_abi_storage.c", 0),
     ("anon_bitfield_reserves_bits.c", 0),
     ("attribute_mode.c", 0),
+    ("transparent_union_call.c", 0),
     ("flex_array_only_member.c", 0),
     ("post_inline_dead_data_repack.c", 0),
     ("post_inline_import_survives_repack.c", 0),
@@ -1880,6 +1882,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("anon_bitfield_reserves_bits.c", 0),
     ("strength_reduce_magic_divmod.c", 0),
     ("attribute_mode.c", 0),
+    ("transparent_union_call.c", 0),
     ("flex_array_only_member.c", 0),
     ("post_inline_dead_data_repack.c", 0),
     ("post_inline_import_survives_repack.c", 0),
@@ -2607,6 +2610,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
 pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("anon_bitfield_reserves_bits.c", 0),
     ("attribute_mode.c", 0),
+    ("transparent_union_call.c", 0),
     ("flex_array_only_member.c", 0),
     ("vla_basic_sum.c", 0),
     ("vla_runtime_sizeof.c", 0),
@@ -3157,6 +3161,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
 pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("anon_bitfield_reserves_bits.c", 0),
     ("attribute_mode.c", 0),
+    ("transparent_union_call.c", 0),
     ("flex_array_only_member.c", 0),
     ("vla_basic_sum.c", 0),
     ("vla_runtime_sizeof.c", 0),
@@ -3656,6 +3661,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     // path does not model the value form.
     ("anon_bitfield_reserves_bits.c", 0),
     ("attribute_mode.c", 0),
+    ("transparent_union_call.c", 0),
     ("flex_array_only_member.c", 0),
     ("struct_arg_value_form_inline.c", 0),
     ("post_inline_dead_data_repack.c", 0),

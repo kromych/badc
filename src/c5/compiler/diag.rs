@@ -574,8 +574,9 @@ impl Compiler {
             // pointer-shaped mismatches do convert and stay warnings. Two
             // aggregate spellings are excluded because the mismatch would
             // not be the source's fault: a value-form array reflects a
-            // missed 6.3.2.1p3 decay, and a union target may carry
-            // `transparent_union`, under which it accepts any member type.
+            // missed 6.3.2.1p3 decay, and a union target keeps warning
+            // severity (the call-argument path resolves `transparent_union`
+            // acceptance before this reason is reported).
             let def_of = |ty: i64| structs.get(super::types::struct_id_of(ty));
             let is_array_agg = |ty: i64| def_of(ty).is_some_and(|s| s.is_array);
             let object_mismatch = (is_struct_value_ty(declared) || is_struct_value_ty(actual))
@@ -599,6 +600,37 @@ impl Compiler {
             // Both numeric (char vs int) -- c convention, silent.
             (false, false) => None,
         }
+    }
+
+    /// GNU `transparent_union`: a parameter whose type is a union
+    /// honoring the attribute accepts an argument compatible with any
+    /// member (a null pointer constant included, for pointer members).
+    /// Returns the first matching member's type -- the argument converts
+    /// to it, and the honor rule makes its storage the union's -- or
+    /// `None` when the parameter is no transparent union, the argument
+    /// is the union itself, or nothing matches.
+    pub(super) fn transparent_union_member(
+        structs: &[super::StructDef],
+        declared: i64,
+        actual: i64,
+        actual_is_zero_literal: bool,
+    ) -> Option<i64> {
+        let declared = unqualified_object_ty(declared);
+        if !is_struct_value_ty(declared) || declared == unqualified_object_ty(actual) {
+            return None;
+        }
+        let def = structs.get(super::types::struct_id_of(declared))?;
+        if !def.is_union || !def.is_transparent_union {
+            return None;
+        }
+        def.fields
+            .iter()
+            .find(|f| {
+                f.array_size == 0
+                    && f.bit_width == 0
+                    && Self::type_warning(structs, f.ty, actual, actual_is_zero_literal).is_none()
+            })
+            .map(|f| f.ty)
     }
 
     /// Reconcile mixed int/float operands for an arithmetic /

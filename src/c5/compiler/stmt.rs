@@ -447,6 +447,8 @@ impl Compiler {
             if let Some(m) = self.pending.attr_mode.take() {
                 ty = self.apply_mode_to_type(ty, m)?;
             }
+            let declarator_transparent =
+                core::mem::take(&mut self.pending.attr_transparent_union);
             let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
             let fn_ptr_ret_indirection = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
             let bare_fn_type = core::mem::take(&mut self.pending.bare_function_type_declarator);
@@ -492,6 +494,11 @@ impl Compiler {
             self.symbols[id_idx].class = Token::Typedef as i64;
             self.symbols[id_idx].type_ = typedef_ty;
             self.symbols[id_idx].val = 0;
+            // A declarator-position `transparent_union` binds to the
+            // aliased union, as at file scope.
+            if declarator_transparent && super::types::is_struct_value_ty(typedef_ty) {
+                self.mark_transparent_union(super::types::struct_id_of(typedef_ty));
+            }
             // GNU `aligned(N)` type attribute on the alias (its own
             // attribute, else propagated from an aligned typedef base).
             let alias_align = if self.pending.attr_align > 0 {

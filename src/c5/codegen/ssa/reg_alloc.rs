@@ -981,7 +981,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         }
     }
     #[cfg(feature = "codegen_test")]
-    verify_allocation(func, &places, &banks, &liveness);
+    verify_allocation(func, &places, target, &banks, &liveness);
 
     Allocation {
         places,
@@ -1036,6 +1036,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
 fn verify_allocation(
     func: &FunctionSsa,
     places: &[Place],
+    target: Target,
     banks: &RegBanks,
     liveness: &super::liveness::Liveness,
 ) {

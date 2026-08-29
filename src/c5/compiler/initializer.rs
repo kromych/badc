@@ -2086,11 +2086,17 @@ impl Compiler {
         // offsets are computed as `off + i * elem_size`, not from the
         // live `self.data` length. A `[N]` designator can push the count
         // past the positional entry total (C99 6.7.8p22).
-        let (scanned, _) = self.scan_array_init()?;
-        // The scan count tallies leaves, not rows, so it is no floor for
-        // a multi-dim literal.
-        let fallback = if inner_span > 1 { 0 } else { scanned };
-        let rows = self.designated_array_count(fallback, inner_span)?;
+        let rows = if elem_is_struct {
+            // Brace elision folds a run of field values into one
+            // aggregate element, not one per leaf (C99 6.7.8p20).
+            self.struct_array_init_elem_count(struct_id_of(elem_ty))?
+        } else {
+            let (scanned, _) = self.scan_array_init()?;
+            // The scan count tallies leaves, not rows, so it is no floor
+            // for a multi-dim literal.
+            let fallback = if inner_span > 1 { 0 } else { scanned };
+            self.designated_array_count(fallback, inner_span)?
+        };
         let rows = rows.max(dims[0]).max(0);
         let count = (rows * inner_span) as usize;
         let mut full_dims = alloc::vec::Vec::with_capacity(dims.len());

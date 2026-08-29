@@ -1434,6 +1434,64 @@ impl Compiler {
         Ok(walked.map(|_| elems))
     }
 
+    /// Positional element count the brace list at the current `{`
+    /// supplies for an array of `sid`: one per brace group, one per entry
+    /// already of the element type (C99 6.7.8p13), one per
+    /// `struct_flat_init_slots` run of elided field values (6.7.8p20).
+    pub(super) fn struct_array_positional_elem_count(
+        &mut self,
+        sid: usize,
+    ) -> Result<i64, C5Error> {
+        debug_assert!(self.lex.tk == '{');
+        let groups = self.lex.count_top_level_groups_in_array();
+        if groups > 0 {
+            return Ok(groups as i64);
+        }
+        if let Some(n) = self.count_struct_array_init_elems(sid)? {
+            return Ok(n);
+        }
+        let items = self.lex.count_top_level_items_in_array();
+        Ok(items.div_ceil(self.struct_flat_init_slots(sid).max(1)) as i64)
+    }
+
+    /// [`Self::struct_array_positional_elem_count`] extended by an `[N]`
+    /// designator reaching past the positional entries, which sizes a
+    /// deferred outer dimension (C99 6.7.8p22).
+    pub(super) fn struct_array_init_elem_count(&mut self, sid: usize) -> Result<i64, C5Error> {
+        let positional = self.struct_array_positional_elem_count(sid)?;
+        if self.lex.count_top_level_groups_in_array() > 0 {
+            return self.designated_array_count(positional, 1);
+        }
+        Ok(positional)
+    }
+
+    /// Stage the constant image of an array-of-aggregate compound literal
+    /// over `rows` outer elements and Mcpy its `bytes` into frame slot
+    /// `slot`. The block is reserved before the list is parsed: an
+    /// element's string-literal field appends to the data segment and
+    /// would otherwise shift the elements after it. Omitted positions
+    /// keep the zero fill (C99 6.7.8p21).
+    fn stage_struct_array_literal(
+        &mut self,
+        slot: i64,
+        elem_ty: i64,
+        rows: i64,
+        inner_dims: &[i64],
+        bytes: usize,
+    ) -> Result<(), C5Error> {
+        self.align_data_to_8();
+        let staged = self.data.len();
+        for _ in 0..bytes {
+            self.data.push(0);
+        }
+        let mut dims = alloc::vec::Vec::with_capacity(inner_dims.len() + 1);
+        dims.push(rows);
+        dims.extend_from_slice(inner_dims);
+        self.collect_struct_array_data(elem_ty, staged as i64, &dims)?;
+        self.emit_local_array_init(slot, staged, bytes);
+        Ok(())
+    }
+
     /// If the next brace-list entry is an array designator `[N]` or a
     /// GNU range `[lo ... hi]`, consume it and return `(lo, hi, chain)`
     /// (`hi == lo` for the single form). A following `= value` consumes
@@ -1626,25 +1684,7 @@ impl Compiler {
                 // expected offset.
                 let elem_size = self.size_of_type(ty);
                 let sid = struct_id_of(ty);
-                // C99 6.7.8p20 brace elision: with no per-element braces
-                // the flat value list fills consecutive struct elements,
-                // each consuming the struct's slot count.
-                let groups = self.lex.count_top_level_groups_in_array();
-                let count = if groups > 0 {
-                    // `[N]` designators can push the size past the positional
-                    // group count (C99 6.7.8p22); the file-scope path uses the
-                    // same pre-scan.
-                    self.designated_array_count(groups as i64, 1)?
-                } else if let Some(n) = self.count_struct_array_init_elems(sid)? {
-                    // Entries may be element-typed expressions (one
-                    // element each, C99 6.7.8p13) mixed with flat field
-                    // values; count by walking entry types.
-                    n
-                } else {
-                    let items = self.lex.count_top_level_items_in_array();
-                    let slots = self.struct_flat_init_slots(sid).max(1);
-                    items.div_ceil(slots) as i64
-                };
+                let count = self.struct_array_init_elem_count(sid)?;
                 // C99 6.7.8p13: an automatic-storage struct array may
                 // carry non-constant element initializers (`&local`, a
                 // call, an indexed read). The constant stage-into-data +
@@ -2200,23 +2240,36 @@ impl Compiler {
             let elem_size = self.size_of_type(elem_ty);
             let inner_dims = &array_dims[1..];
             let inner_span: i64 = inner_dims.iter().product::<i64>().max(1);
+            // C99 6.5.2.5p3: the literal is an unnamed object with the
+            // initializer semantics of a named one, so an aggregate element
+            // type takes the declaration's struct-array walk, which counts
+            // and fills by element rather than by scalar leaf.
+            let elem_is_aggregate = self.is_traversable_aggregate_ty(elem_ty);
             let count;
+            let rows;
             if array_dims[0] == -1 {
                 if self.lex.tk != '{' {
                     return Err(self.compile_err("`{` expected in compound literal"));
                 }
-                let (scan_count, needs_runtime) = self.scan_array_init()?;
-                // C99 6.7.8p22: designators can push the size past the
-                // positional entry count; brace elision folds a flat run
-                // into one row of the inner span. The scan count tallies
-                // leaves, not rows, so it is no floor for a multi-dim
-                // literal.
-                let fallback = if inner_span > 1 { 0 } else { scan_count };
-                let rows = self.designated_array_count(fallback, inner_span)?;
+                let needs_runtime;
+                if elem_is_aggregate {
+                    rows = self.struct_array_init_elem_count(struct_id_of(elem_ty))?;
+                    needs_runtime = self.struct_init_needs_runtime()?;
+                } else {
+                    let (scan_count, scan_runtime) = self.scan_array_init()?;
+                    // C99 6.7.8p22: designators can push the size past the
+                    // positional entry count; brace elision folds a flat run
+                    // into one row of the inner span. The scan count tallies
+                    // leaves, not rows, so it is no floor for a multi-dim
+                    // literal.
+                    let fallback = if inner_span > 1 { 0 } else { scan_count };
+                    rows = self.designated_array_count(fallback, inner_span)?;
+                    needs_runtime = scan_runtime;
+                }
                 count = rows * inner_span;
                 slot = self.reserve_slots(self.local_storage_slots(elem_ty, count));
+                let full = elem_size * count as usize;
                 if needs_runtime {
-                    let full = elem_size * count as usize;
                     self.align_data_to_8();
                     let zero_off = self.data.len();
                     for _ in 0..full {
@@ -2231,10 +2284,11 @@ impl Compiler {
                         inner_dims,
                         "<compound literal>",
                     )?;
+                } else if elem_is_aggregate {
+                    self.stage_struct_array_literal(slot, elem_ty, rows, inner_dims, full)?;
                 } else {
                     self.pending.init_inner_dims = inner_dims.to_vec();
                     let elements = self.collect_array_initializer(elem_ty)?;
-                    let full = elem_size * count as usize;
                     let (start, packed) = self.pack_initializer_into_data(elem_ty, &elements)?;
                     // C99 6.7.8p21: positions the list leaves out are
                     // zero; pad so the single Mcpy covers the object.
@@ -2249,10 +2303,17 @@ impl Compiler {
                     self.emit_local_array_init(slot, start, total);
                 }
             } else {
-                count = array_dims[0] * inner_span;
+                rows = array_dims[0];
+                count = rows * inner_span;
                 let full = elem_size * count as usize;
                 slot = self.reserve_slots(self.local_storage_slots(elem_ty, count));
-                if self.lex.tk == '{' && self.array_init_needs_runtime()? {
+                let needs_runtime = self.lex.tk == '{'
+                    && if elem_is_aggregate {
+                        self.struct_init_needs_runtime()?
+                    } else {
+                        self.array_init_needs_runtime()?
+                    };
+                if needs_runtime {
                     self.align_data_to_8();
                     let zero_off = self.data.len();
                     for _ in 0..full {
@@ -2267,6 +2328,18 @@ impl Compiler {
                         inner_dims,
                         "<compound literal>",
                     )?;
+                } else if elem_is_aggregate {
+                    if self.lex.tk == '{' {
+                        let supplied = self
+                            .struct_array_positional_elem_count(struct_id_of(elem_ty))?
+                            * inner_span;
+                        if supplied > count {
+                            return Err(self.compile_err(format!(
+                                "too many initializers for compound literal ({supplied} > {count})"
+                            )));
+                        }
+                    }
+                    self.stage_struct_array_literal(slot, elem_ty, rows, inner_dims, full)?;
                 } else {
                     self.pending.init_target_array_size = count;
                     self.pending.init_inner_dims = inner_dims.to_vec();

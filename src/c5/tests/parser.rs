@@ -2658,6 +2658,49 @@ fn multi_dim_compound_literal_dimension_constraints() {
 }
 
 #[test]
+fn struct_array_compound_literal_counts_elements_not_leaves() {
+    // C99 6.5.2.5p3: the literal is an unnamed object initialized by its
+    // brace list, so an array-of-struct bound is measured in elements.
+    // Four leaves fill the two elements of a `[2]` literal, and brace
+    // elision folds a flat run into one element apiece (6.7.8p20).
+    let prog = Compiler::new(
+        "struct s { int a; int b; };\n\
+         int main(void) {\n\
+             const struct s *p = (const struct s[2]){ { 1, 2 }, { 3, 4 } };\n\
+             const struct s *q = (const struct s[]){ 7, 8, 9, 10 };\n\
+             return p[0].a + p[0].b + p[1].a + p[1].b + q[1].b - 20;\n\
+         }"
+        .to_string(),
+    )
+    .compile()
+    .expect("an array-of-struct literal takes one element per brace group");
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+
+    // The excess is counted in elements: three brace groups, and six
+    // elided leaves folding into three elements, both over a bound of 2.
+    expect_compile_error(
+        "struct s { int a; int b; };\n\
+         int main(void) { const struct s *p = (const struct s[2]){ {1,2},{3,4},{5,6} };\n\
+             return p[0].a; }",
+        "too many initializers for compound literal (3 > 2)",
+    );
+    expect_compile_error(
+        "struct s { int a; int b; };\n\
+         int main(void) { const struct s *p = (const struct s[2]){ 1,2,3,4,5,6 };\n\
+             return p[0].a; }",
+        "too many initializers for compound literal (3 > 2)",
+    );
+    // A designator past the bound keeps its own diagnostic, as the named
+    // array declaration reports it.
+    expect_compile_error(
+        "struct s { int a; int b; };\n\
+         int main(void) { const struct s *p = (const struct s[2]){ [5] = {1,2} };\n\
+             return p[0].a; }",
+        "array designator index 5..5 out of bounds [0, 2)",
+    );
+}
+
+#[test]
 fn address_of_a_thread_local_is_not_a_constant_expression() {
     // C11 6.7.9p4: an object with static storage duration is initialized
     // by constant expressions, and a thread-local object's address is not

@@ -204,6 +204,8 @@ FORWARD_PREFIX = (
 # reaches the build's diagnostic summary rather than only the reader of this
 # file.
 UNSUPPORTED_EXACT = {
+    # Calls mcount/__fentry__ on entry; see -mfentry below.
+    "-pg",
     # badc emits no .eh_frame, so the 64-bit vDSO units that ask for unwind
     # tables get none. The negative spelling is already what badc does.
     "-fasynchronous-unwind-tables", "-funwind-tables",
@@ -218,9 +220,25 @@ UNSUPPORTED_PREFIX = (
     # badc emits no patch site and no __fentry__ call, so ftrace has nothing
     # to patch in a unit built here.
     "-fpatchable-function-entry",
+    # The same gap from the other direction: a distribution config turns
+    # CONFIG_FUNCTION_TRACER on, which asks for an __fentry__ call at every
+    # function entry and a record of the sites. badc emits neither, so a
+    # unit built here contributes nothing to __mcount_loc.
+    "-mrecord-mcount",
+    "-mfentry",
     # Which trailing arrays __builtin_object_size treats as bounded, hence
     # what the FORTIFY_SOURCE checks are computed against.
     "-fstrict-flex-arrays=",
+    # badc emits no sanitizer instrumentation, so the checks CONFIG_UBSAN
+    # asks for -- array bounds and shift-exponent among them -- are absent
+    # from a unit built here, and the handlers in lib/ubsan.c stay uncalled.
+    "-fsanitize=", "-fsanitize-trap=",
+    # Both have an observable effect badc does not reproduce, so neither
+    # can be ignored: the first moves a zero-initialized definition out of
+    # .bss into .data, and the second lowers a definition's ELF visibility
+    # so it does not bind outside its own link.
+    "-fno-zero-initialized-in-bss",
+    "-fvisibility=",
 )
 
 # Flags measured to leave badc's object unchanged, with the measurement.
@@ -269,6 +287,18 @@ IGNORE_EXACT = {
     # for, and it addresses nothing below the stack pointer: every function
     # subtracts its frame before using it.
     "-mskip-rax-setup", "-mno-red-zone",
+    # An inliner tuning hint. badc's inliner does not distinguish a callee
+    # by its call count, so declining that heuristic asks for what it
+    # already does; measured to leave the object unchanged.
+    "-fno-inline-functions-called-once",
+    # Instruction-scheduling hints. badc schedules to its own model and
+    # exposes no knob either names, so both ask for what a unit gets.
+    "-fsched-pressure", "-fno-schedule-insns", "-fno-schedule-insns2",
+    # The positive spelling of the SSE baseline. badc's x86-64 backend
+    # emits SSE and SSE2 unconditionally -- they are the psABI baseline --
+    # so a unit re-enabling them for FPU code gets what it already had.
+    # The negative spellings are ignored above for the same reason.
+    "-msse", "-msse2", "-mhard-float",
 }
 
 IGNORE_PREFIX = (

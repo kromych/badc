@@ -796,6 +796,16 @@ impl Compiler {
         s.h_vla_ptr_slot = s.vla_ptr_slot;
         s.h_vla_size_slot = s.vla_size_slot;
         s.h_is_zero_len_array = s.is_zero_len_array;
+        // Storage-shape and linkage-mark fields a block-scope static's
+        // declarator overwrites on the shared slot.
+        s.h_reserved_data_bytes = s.reserved_data_bytes;
+        s.h_fam_init_bytes = s.fam_init_bytes;
+        s.h_data_align = s.data_align;
+        s.h_is_thread_local = s.is_thread_local;
+        s.h_is_const_qualified = s.is_const_qualified;
+        s.h_storage_is_const = s.storage_is_const;
+        s.h_runtime_initialized = s.runtime_initialized;
+        s.h_is_extern_decl = s.is_extern_decl;
         // The inner binding starts unpinned; a `register ... asm("reg")`
         // declarator sets its own binding after this shadow.
         s.h_asm_register = s.asm_register;
@@ -845,6 +855,14 @@ impl Compiler {
         sym.vla_ptr_slot = sym.h_vla_ptr_slot;
         sym.vla_size_slot = sym.h_vla_size_slot;
         sym.is_zero_len_array = sym.h_is_zero_len_array;
+        sym.reserved_data_bytes = sym.h_reserved_data_bytes;
+        sym.fam_init_bytes = sym.h_fam_init_bytes;
+        sym.data_align = sym.h_data_align;
+        sym.is_thread_local = sym.h_is_thread_local;
+        sym.is_const_qualified = sym.h_is_const_qualified;
+        sym.storage_is_const = sym.h_storage_is_const;
+        sym.runtime_initialized = sym.h_runtime_initialized;
+        sym.is_extern_decl = sym.h_is_extern_decl;
         sym.asm_register = sym.h_asm_register;
         sym.is_global_register = sym.h_is_global_register;
         sym.asm_name = sym.h_asm_name.take();
@@ -878,6 +896,14 @@ impl Compiler {
             && sym.vla_ptr_slot == sym.h_vla_ptr_slot
             && sym.vla_size_slot == sym.h_vla_size_slot
             && sym.is_zero_len_array == sym.h_is_zero_len_array
+            && sym.reserved_data_bytes == sym.h_reserved_data_bytes
+            && sym.fam_init_bytes == sym.h_fam_init_bytes
+            && sym.data_align == sym.h_data_align
+            && sym.is_thread_local == sym.h_is_thread_local
+            && sym.is_const_qualified == sym.h_is_const_qualified
+            && sym.storage_is_const == sym.h_storage_is_const
+            && sym.runtime_initialized == sym.h_runtime_initialized
+            && sym.is_extern_decl == sym.h_is_extern_decl
             && sym.asm_register == sym.h_asm_register
             && sym.is_global_register == sym.h_is_global_register
             && sym.asm_name == sym.h_asm_name

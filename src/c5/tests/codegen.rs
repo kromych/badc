@@ -5415,6 +5415,19 @@ fn elf64_section_headers(
         .collect()
 }
 
+/// `(sh_flags, sh_addralign, section index)` of the section named
+/// `name`, read straight from the header table.
+fn elf64_shdr_flags_align(obj: &[u8], name: &str) -> Option<(u64, u64, usize)> {
+    let u16a = |o: usize| u16::from_le_bytes(obj[o..o + 2].try_into().unwrap());
+    let u64a = |o: usize| u64::from_le_bytes(obj[o..o + 8].try_into().unwrap());
+    let shoff = u64a(0x28) as usize;
+    let shentsize = u16a(0x3a) as usize;
+    let names = elf64_section_headers(obj);
+    let idx = names.iter().position(|(n, ..)| n == name)?;
+    let h = shoff + idx * shentsize;
+    Some((u64a(h + 8), u64a(h + 0x30), idx))
+}
+
 /// Full `.symtab` records of an ELF64 object as
 /// `(name, st_info, st_shndx, st_value, st_size)`.
 fn elf64_symbol_records(b: &[u8]) -> alloc::vec::Vec<(alloc::string::String, u8, u16, u64, u64)> {
@@ -5638,6 +5651,144 @@ fn alias_defined_object_referenced_from_asm_binds_to_its_definition() {
                 "{target:?}: asm reference to `{name}` binds to an undefined symbol"
             );
         }
+    }
+}
+
+/// The Linux kernel's `__EXPORT_SYMBOL` emits one `.export_symbol`
+/// record per export through file-scope asm: a `__export_symbol_<name>`
+/// label, the license as `.asciz`, the namespace as adjacent `.ascii`
+/// literals with an explicit NUL, then `.balign 8` and a `.quad <name>`.
+/// modpost pairs each relocation with the nearest label at or below its
+/// offset and requires the relocation's target to be the GLOBAL symbol
+/// named by the label suffix, so the byte layout, the label placement,
+/// and the relocation targets must all match what GNU as produces.
+#[test]
+fn kernel_export_symbol_records_take_the_gas_shape() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    const SRC: &str = "\
+        int plain_sym; \
+        int ns_sym; \
+        asm(\".section \\\".export_symbol\\\",\\\"a\\\" ; __export_symbol_plain_sym: ; .asciz \\\"\\\" ; .ascii \\\"\\\" \\\"\\\\0\\\" ; .balign 8 ; .quad plain_sym ; .previous\"); \
+        asm(\".section \\\".export_symbol\\\",\\\"a\\\" ; __export_symbol_ns_sym: ; .asciz \\\"GPL\\\" ; .ascii \\\"module:\\\" \\\"m_one,m_two\\\" \\\"\\\\0\\\" ; .balign 8 ; .quad ns_sym ; .previous\");";
+    // GNU as 2.44 layout for the same input: record 0 holds two empty
+    // strings and its pointer slot at +8; record 1 starts at +16 with
+    // "GPL\0", the concatenated namespace, padding, and its slot at +40.
+    let mut want = [0u8; 48];
+    want[16..20].copy_from_slice(b"GPL\0");
+    want[20..39].copy_from_slice(b"module:m_one,m_two\0");
+    for (target, reloc_ty) in [(Target::LinuxX64, 1u32), (Target::LinuxAarch64, 257u32)] {
+        let program = Compiler::with_options(
+            SRC.to_string(),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new()
+        };
+        let obj = crate::emit_native_with_options(&program, target, opts)
+            .unwrap_or_else(|e| panic!("emit ({target:?}): {e}"));
+        let sec = elf64_section(&obj, ".export_symbol").expect("export section");
+        assert_eq!(sec, want, "{target:?}: record bytes diverge from gas");
+        let (flags, addralign, sec_idx) =
+            elf64_shdr_flags_align(&obj, ".export_symbol").expect("export header");
+        assert_eq!(flags, 2, "{target:?}: section flags are not SHF_ALLOC");
+        assert_eq!(addralign, 8, "{target:?}: section alignment diverges");
+        let syms = elf64_symbol_records(&obj);
+        for (label, at) in [("__export_symbol_plain_sym", 0u64), ("__export_symbol_ns_sym", 16)] {
+            let (_, info, shndx, value, _) = *syms
+                .iter()
+                .find(|s| s.0 == label)
+                .unwrap_or_else(|| panic!("{target:?}: `{label}` missing"));
+            assert_eq!(info >> 4, 0, "{target:?}: `{label}` is not LOCAL");
+            assert_eq!(info & 0xf, 0, "{target:?}: `{label}` is not NOTYPE");
+            assert_eq!(shndx as usize, sec_idx, "{target:?}: `{label}` section");
+            assert_eq!(value, at, "{target:?}: `{label}` is off its record");
+        }
+        let rela = elf64_section(&obj, ".rela.export_symbol").expect("export relocations");
+        assert_eq!(rela.len(), 48, "{target:?}: expected two RELA entries");
+        for (r, (off, name)) in rela
+            .as_chunks::<24>()
+            .0
+            .iter()
+            .zip([(8u64, "plain_sym"), (40, "ns_sym")])
+        {
+            assert_eq!(
+                u64::from_le_bytes(r[0..8].try_into().unwrap()),
+                off,
+                "{target:?}: `{name}` slot offset"
+            );
+            assert_eq!(
+                u32::from_le_bytes(r[8..12].try_into().unwrap()),
+                reloc_ty,
+                "{target:?}: `{name}` relocation type"
+            );
+            assert_eq!(r[16..24], [0; 8], "{target:?}: `{name}` addend");
+            let sym_idx = u32::from_le_bytes(r[12..16].try_into().unwrap()) as usize;
+            let (target_name, info, shndx, _, _) = &syms[sym_idx];
+            assert_eq!(target_name, name, "{target:?}: relocation target name");
+            assert_eq!(info >> 4, 1, "{target:?}: `{name}` target is not GLOBAL");
+            assert_ne!(*shndx, 0, "{target:?}: `{name}` target is undefined");
+        }
+    }
+}
+
+/// A block-scope static object has no linkage (C99 6.2.2p6): a name
+/// shared with a file-scope `extern` declaration must bind to the
+/// block-scope storage, and the unreferenced extern must not surface
+/// as an undefined symbol or a relocation target.
+#[test]
+fn block_scope_static_shadowing_an_extern_binds_locally() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    const SRC: &str = "\
+        extern unsigned long long cc_mask; \
+        unsigned long pick(unsigned int cc, unsigned long flags) { \
+            static const unsigned long cc_mask[6] = {0x800, 1, 0x40, 0x41, 0x80, 4}; \
+            return flags & cc_mask[cc >> 1]; \
+        }";
+    let mut table = [0u8; 48];
+    for (i, v) in [0x800u64, 1, 0x40, 0x41, 0x80, 4].iter().enumerate() {
+        table[i * 8..i * 8 + 8].copy_from_slice(&v.to_le_bytes());
+    }
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_options(
+            SRC.to_string(),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new()
+        };
+        let obj = crate::emit_native_with_options(&program, target, opts)
+            .unwrap_or_else(|e| panic!("emit ({target:?}): {e}"));
+        let syms = elf64_symbol_records(&obj);
+        for (name, _, shndx, _, _) in &syms {
+            assert!(
+                !(name == "cc_mask" && *shndx == 0),
+                "{target:?}: the shadowed extern surfaced as an undefined symbol"
+            );
+        }
+        for (name, ty, off, size, _) in elf64_section_headers(&obj) {
+            if ty != 4 || !name.starts_with(".rela") {
+                continue;
+            }
+            for r in obj[off as usize..(off + size) as usize].as_chunks::<24>().0 {
+                let sym_idx = u32::from_le_bytes(r[12..16].try_into().unwrap()) as usize;
+                assert_ne!(
+                    syms[sym_idx].0, "cc_mask",
+                    "{target:?}: a reference relocated against the extern"
+                );
+            }
+        }
+        assert!(
+            obj.windows(48).any(|w| w == table),
+            "{target:?}: the block-scope table's storage is missing"
+        );
     }
 }
 

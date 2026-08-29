@@ -66,6 +66,14 @@ pub(super) struct BlockShadow {
     vla_ptr_slot: i64,
     vla_size_slot: i64,
     is_zero_len_array: bool,
+    reserved_data_bytes: i64,
+    fam_init_bytes: i64,
+    data_align: i64,
+    is_thread_local: bool,
+    is_const_qualified: bool,
+    storage_is_const: bool,
+    runtime_initialized: bool,
+    is_extern_decl: bool,
     asm_register: Option<crate::c5::symbol::AsmRegister>,
     is_global_register: bool,
     const_object_value: Option<crate::c5::symbol::ConstObjectValue>,
@@ -100,6 +108,14 @@ impl Compiler {
             vla_ptr_slot: s.vla_ptr_slot,
             vla_size_slot: s.vla_size_slot,
             is_zero_len_array: s.is_zero_len_array,
+            reserved_data_bytes: s.reserved_data_bytes,
+            fam_init_bytes: s.fam_init_bytes,
+            data_align: s.data_align,
+            is_thread_local: s.is_thread_local,
+            is_const_qualified: s.is_const_qualified,
+            storage_is_const: s.storage_is_const,
+            runtime_initialized: s.runtime_initialized,
+            is_extern_decl: s.is_extern_decl,
             asm_register: s.asm_register,
             is_global_register: s.is_global_register,
             const_object_value: s.const_object_value,
@@ -140,6 +156,14 @@ impl Compiler {
         s.vla_ptr_slot = b.vla_ptr_slot;
         s.vla_size_slot = b.vla_size_slot;
         s.is_zero_len_array = b.is_zero_len_array;
+        s.reserved_data_bytes = b.reserved_data_bytes;
+        s.fam_init_bytes = b.fam_init_bytes;
+        s.data_align = b.data_align;
+        s.is_thread_local = b.is_thread_local;
+        s.is_const_qualified = b.is_const_qualified;
+        s.storage_is_const = b.storage_is_const;
+        s.runtime_initialized = b.runtime_initialized;
+        s.is_extern_decl = b.is_extern_decl;
         s.asm_register = b.asm_register;
         s.is_global_register = b.is_global_register;
         s.const_object_value = b.const_object_value;

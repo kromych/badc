@@ -550,6 +550,9 @@ impl Compiler {
                 self.symbols[loc_idx].type_ = ty;
                 self.symbols[loc_idx].decl_spelling = self.decl_spelling(base_spelling);
                 self.symbols[loc_idx].is_thread_local = is_thread_local;
+                // C99 6.2.2p6: the block-scope object has no linkage; an
+                // outer extern declaration's mark must not classify it.
+                self.symbols[loc_idx].is_extern_decl = false;
                 // C99 6.2.4p3: static storage, block scope. The function-body
                 // scope's restore pass is gated on class `Loc`, which a
                 // static local no longer carries, so mark it; a nested block

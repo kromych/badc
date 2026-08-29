@@ -39,6 +39,8 @@ pub(crate) struct Symbol {
     /// reserves one element, so a larger initializer must allocate
     /// fresh storage rather than overrun the following globals.
     pub reserved_data_bytes: i64,
+    /// Shadow slot for `reserved_data_bytes` (see `h_class`).
+    pub h_reserved_data_bytes: i64,
     /// `(previous offset, previous reserved bytes)` when a defining
     /// declaration moved the object out of the storage a tentative
     /// definition had reserved. C99 6.9.2 makes both declarations
@@ -56,6 +58,8 @@ pub(crate) struct Symbol {
     /// recorded size covers the tail and the named-section carve moves
     /// all of it.
     pub fam_init_bytes: i64,
+    /// Shadow slot for `fam_init_bytes` (see `h_class`).
+    pub h_fam_init_bytes: i64,
     pub h_class: i64,
     pub h_type: i64,
     pub h_val: i64,
@@ -101,6 +105,8 @@ pub(crate) struct Symbol {
     /// __thread_data + __thread_vars. The VM treats the slot
     /// like a regular global (single-threaded execution).
     pub is_thread_local: bool,
+    /// Shadow slot for `is_thread_local` (see `h_class`).
+    pub h_is_thread_local: bool,
 
     /// GNU explicit-register variable: `register T name asm("reg")`
     /// binds the local to a machine register. Stack- and frame-pointer
@@ -185,6 +191,8 @@ pub(crate) struct Symbol {
     /// allocation. The relocatable writer lays named sections out with
     /// it; the unified `.data` placement keeps its own 8-byte floor.
     pub data_align: i64,
+    /// Shadow slot for `data_align` (see `h_class`).
+    pub h_data_align: i64,
 
     /// `__attribute__((alias("target")))`: this symbol is an additional
     /// name for its target; `val` carries the target's entry / offset.
@@ -283,6 +291,8 @@ pub(crate) struct Symbol {
     /// back from the object's `.data` storage when this is set, so
     /// `char buf[N * 2 + 1]` is a fixed array rather than a VLA.
     pub is_const_qualified: bool,
+    /// Shadow slot for `is_const_qualified` (see `h_class`).
+    pub h_is_const_qualified: bool,
 
     /// Folded initializer of a block-scope `const`-qualified scalar
     /// arithmetic object with automatic storage. GCC (GNU mode, at -O)
@@ -303,6 +313,8 @@ pub(crate) struct Symbol {
     /// the object's lifetime. The const-global fold reads this to prove a
     /// null comparison of such a member false.
     pub storage_is_const: bool,
+    /// Shadow slot for `storage_is_const` (see `h_class`).
+    pub h_storage_is_const: bool,
 
     /// True once a `Token::Glo` symbol has been seen with an
     /// explicit initializer (`= ...`). Tentative-definition
@@ -319,6 +331,8 @@ pub(crate) struct Symbol {
     /// that is not a link-time constant). A pass reading the image for
     /// the object's value must skip it.
     pub runtime_initialized: bool,
+    /// Shadow slot for `runtime_initialized` (see `h_class`).
+    pub h_runtime_initialized: bool,
 
     /// Number of derefs from this variable's *loaded value* down
     /// to a function-pointer rvalue, plus 1, or 0 if the variable
@@ -438,6 +452,8 @@ pub(crate) struct Symbol {
     /// from a tentative definition that the parser is still
     /// waiting to resolve.
     pub is_extern_decl: bool,
+    /// Shadow slot for `is_extern_decl` (see `h_class`).
+    pub h_is_extern_decl: bool,
 
     /// Per-name census of the file-scope declarations of a function in
     /// the translation unit, sticky across all of them. Each records
@@ -751,9 +767,11 @@ impl crate::c5::layout::DataOffsets for Symbol {
             type_: _,
             val,
             reserved_data_bytes: _, // a byte count, not an offset
+            h_reserved_data_bytes: _, // scope-restore shadow
             relocated_from: _,      // the pre-relocation span, kept for diagnostics
             data_byte_size: _,      // a byte count
             fam_init_bytes: _,      // a byte count
+            h_fam_init_bytes: _,
             h_class: _,
             h_type: _,
             h_val: _, // scope-restore shadow; every scope is unwound before a `Program` exists
@@ -764,6 +782,7 @@ impl crate::c5::layout::DataOffsets for Symbol {
             implicit_return_int: _,
             is_noreturn: _,
             is_thread_local,
+            h_is_thread_local: _,
             asm_register: _,
             h_asm_register: _,
             is_global_register: _,
@@ -780,6 +799,7 @@ impl crate::c5::layout::DataOffsets for Symbol {
             is_destructor: _,
             init_priority: _,
             data_align: _, // an alignment, not an offset
+            h_data_align: _,
             is_alias: _,
             array_size: _,
             h_array_size: _,
@@ -797,11 +817,14 @@ impl crate::c5::layout::DataOffsets for Symbol {
             h_is_zero_len_array: _,
             decl_spelling: _, // debug-info spelling, not an offset
             is_const_qualified: _,
+            h_is_const_qualified: _,
             const_object_value: _,
             h_const_object_value: _, // scope-restore shadow
             storage_is_const: _,
+            h_storage_is_const: _,
             has_initializer: _,
             runtime_initialized: _,
+            h_runtime_initialized: _,
             fn_ptr_indirection: _,
             h_fn_ptr_indirection: _,
             fn_ptr_ret_indirection: _,
@@ -815,6 +838,7 @@ impl crate::c5::layout::DataOffsets for Symbol {
             linkage: _,
             defined_here,
             is_extern_decl: _,
+            h_is_extern_decl: _,
             saw_noninline_decl: _,
             saw_noninline_def: _,
             saw_plain_inline_decl: _,  // linkage model input, not an offset

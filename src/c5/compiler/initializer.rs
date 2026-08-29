@@ -1031,16 +1031,7 @@ impl Compiler {
                 let paren_snap = self.lex.snapshot();
                 self.next()?;
                 if self.lex_is_type_start() {
-                    let base = self.parse_decl_base_type()?;
-                    let _ = core::mem::take(&mut self.pending.typedef_base_array_size);
-                    let mut stars: i64 = 0;
-                    while self.lex.tk == Token::MulOp || self.lex.tk == Token::TypeQual {
-                        if self.lex.tk == Token::MulOp {
-                            stars += 1;
-                        }
-                        self.next()?;
-                    }
-                    let cast_ty = base + stars * (Ty::Ptr as i64);
+                    let cast_ty = self.parse_const_type_name()?.ty;
                     if self.lex.tk == ')' && !is_struct_value_ty(cast_ty) {
                         // The cast retypes the address and so sets the
                         // stride of a following `+ N`: a pointer target
@@ -1525,55 +1516,22 @@ impl Compiler {
             let snap = self.lex.snapshot();
             self.next()?;
             if self.lex_is_type_start() {
-                let mut cast_ty = self.parse_decl_base_type()?;
-                // The cast type is discarded here rather than bound through a
-                // declarator, so clear the function-type side channels it may
-                // have set. A cast to a function-type-typedef pointer
-                // (`(FnT *)expr`) otherwise leaves base_is_function_type set,
-                // and the next pointer declaration absorbs its `*`.
-                self.pending.base_is_function_type = false;
-                self.pending.bare_function_type_declarator = false;
-                self.pending.fn_ptr_indirection = None;
-                self.pending.fn_ptr_ret_indirection = 0;
-                self.pending.typedef_fn_proto = None;
-                self.pending.fn_ptr_param_types = None;
-                let mut cast_ptrs: i64 = 0;
-                while self.lex.tk == Token::MulOp || self.lex.tk == Token::TypeQual {
-                    if self.lex.tk == Token::MulOp {
-                        cast_ty += Ty::Ptr as i64;
-                        cast_ptrs += 1;
-                    }
-                    self.next()?;
-                }
-                let base_dims = self.take_typedef_literal_dims(cast_ptrs);
+                let name = self.parse_const_type_name()?;
+                let cast_ty = name.ty;
                 // C99 6.5.2.5 array-typed compound literal:
                 // `(T[]){...}` / `(T[N]){...}`. The array name decays to a
                 // pointer to its first element, so the literal contributes
                 // an anonymous static array and the element stores its
                 // address. Distinguished from a plain cast by the `[`, or
                 // for an array typedef (`(row){...}`) by the `{` past `)`.
-                if self.lex.tk == Token::Brak {
-                    let (v, reloc, _) = self.parse_array_compound_literal(cast_ty, &base_dims)?;
+                if self.lex.tk == Token::Brak || self.at_typedef_array_literal(&name)? {
+                    let (v, reloc, _) =
+                        self.parse_array_compound_literal(cast_ty, &name.base_dims)?;
                     if let InitElemReloc::Data(Some(sym)) = reloc {
+                        self.symbols[sym].storage_is_const = name.object_is_const;
                         self.reject_automatic_compound_literal(sym)?;
                     }
                     return Ok((v, reloc));
-                }
-                if !base_dims.is_empty() && self.lex.tk == ')' {
-                    let paren_snap = self.lex.snapshot();
-                    let paren_data = self.data.len();
-                    self.next()?;
-                    let is_literal = self.lex.tk == '{';
-                    self.restore_lex(paren_snap);
-                    self.truncate_data(paren_data);
-                    if is_literal {
-                        let (v, reloc, _) =
-                            self.parse_array_compound_literal(cast_ty, &base_dims)?;
-                        if let InitElemReloc::Data(Some(sym)) = reloc {
-                            self.reject_automatic_compound_literal(sym)?;
-                        }
-                        return Ok((v, reloc));
-                    }
                 }
                 // C99 6.5.2.5 scalar-typed compound literal `(T){ v }`: the
                 // brace holds a single value; the result is that value
@@ -1786,10 +1744,7 @@ impl Compiler {
                 let inner_is_cast = self.lex_is_type_start();
                 let mut is_cast_of_string = false;
                 if inner_is_cast {
-                    let _ = self.parse_decl_base_type()?;
-                    while self.lex.tk == Token::MulOp || self.lex.tk == Token::TypeQual {
-                        self.next()?;
-                    }
+                    let _ = self.parse_const_type_name()?;
                     if self.lex.tk == ')' {
                         self.next()?;
                         is_cast_of_string = self.lex.tk == '"';
@@ -2247,6 +2202,29 @@ impl Compiler {
         }
         let sym_idx = self.intern_compound_literal_symbol(off, cl_ty, size as i64);
         self.collect_struct_initializer(struct_id_of(cl_ty), off)?;
+        Ok((off, sym_idx))
+    }
+
+    /// Emit a scalar-typed `(T){ v }` compound-literal body -- entered with
+    /// `tk` on the opening `{` and `cl_ty` an integer, floating or pointer
+    /// type. Reserve an aligned slot in the data segment, intern an
+    /// anonymous internal-linkage symbol for it, and fill it through the
+    /// scalar static-initializer path, which takes the brace pair and
+    /// every constant value form, an address with its relocation
+    /// included. Returns (its data offset, its symbol index).
+    pub(super) fn emit_scalar_compound_literal_body(
+        &mut self,
+        cl_ty: i64,
+    ) -> Result<(i64, usize), C5Error> {
+        self.align_data_to_8();
+        let size = self.size_of_type(cl_ty).max(1);
+        let off = self.data.len() as i64;
+        // The scalar initializer writes whole 8-byte slots.
+        for _ in 0..size.div_ceil(8) * 8 {
+            self.data.push(0);
+        }
+        let sym_idx = self.intern_compound_literal_symbol(off, cl_ty, size as i64);
+        self.parse_global_initializer(cl_ty, off, false)?;
         Ok((off, sym_idx))
     }
 

@@ -2424,6 +2424,45 @@ impl Compiler {
         self.glo_value_read_is_runtime(self.lex.curr_id_idx)
     }
 
+    /// On `(` in an initializer pre-scan: whether it opens a compound
+    /// literal whose object the element keeps a pointer to -- `&(T){...}`,
+    /// or an array literal, which decays to its address (C99 6.3.2.1p3).
+    /// Inside a function body the literal has automatic storage duration
+    /// (6.5.2.5p5), so the aggregate holding its address fills at runtime
+    /// rather than from a staged template; a literal read by value stays
+    /// on the constant path. The lexer position is unchanged on return.
+    fn paren_opens_escaping_literal(&mut self, prev_was_amp: bool) -> Result<bool, C5Error> {
+        let snap = self.lex.snapshot();
+        let staged = self.data.len();
+        self.next()?;
+        let mut escapes = false;
+        if self.lex_is_type_start() {
+            let mut array = false;
+            let mut depth: i64 = 1;
+            while depth > 0 && self.lex.tk != 0 {
+                if self.lex.tk == '(' {
+                    depth += 1;
+                } else if self.lex.tk == ')' {
+                    depth -= 1;
+                    if depth == 0 {
+                        break;
+                    }
+                } else if self.lex.tk == Token::Brak
+                    || (self.is_lex_typedef_name()
+                        && self.symbols[self.lex.curr_id_idx].array_size != 0)
+                {
+                    array = true;
+                }
+                self.next()?;
+            }
+            self.next()?;
+            escapes = self.lex.tk == '{' && (prev_was_amp || array);
+        }
+        self.restore_lex(snap);
+        self.truncate_data(staged);
+        Ok(escapes)
+    }
+
     /// Pre-scan an array initializer's brace list (current token
     /// must be `{`) and return `(element_count, needs_runtime)`.
     /// The count is the number of top-level (comma-separated)
@@ -2454,6 +2493,9 @@ impl Compiler {
                 // A GNU statement expression `({ ... })` element is not a
                 // constant expression (C99 6.6); its `{`/`}` still balance
                 // the depth counter on the following iterations.
+                needs_runtime = true;
+                saw_any = true;
+            } else if self.lex.tk == '(' && self.paren_opens_escaping_literal(prev_was_amp)? {
                 needs_runtime = true;
                 saw_any = true;
             } else if self.lex.tk == '{' {
@@ -2825,6 +2867,9 @@ impl Compiler {
                 // constant expression (C99 6.6), so the aggregate fills at
                 // runtime. Its `{`/`}` still balance the depth counter on the
                 // following iterations.
+                needs_runtime = true;
+                at_entry_start = false;
+            } else if self.lex.tk == '(' && self.paren_opens_escaping_literal(prev_was_amp)? {
                 needs_runtime = true;
                 at_entry_start = false;
             } else if self.lex.tk == '{' {

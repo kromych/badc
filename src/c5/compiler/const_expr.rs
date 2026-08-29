@@ -108,6 +108,19 @@ pub(super) enum ConstRoot {
     Label(super::super::ast::LabelId),
 }
 
+/// A type name inside a constant expression: a cast's operand type or a
+/// compound literal's type.
+pub(super) struct ConstTypeName {
+    pub ty: i64,
+    /// An array typedef's dimensions, when no pointer derivation absorbed
+    /// them into a pointee.
+    pub base_dims: alloc::vec::Vec<i64>,
+    /// The named object's own storage is const-qualified (C99 6.7.3): a
+    /// `const` among the specifiers of a non-pointer type, or one after
+    /// the outermost `*`.
+    pub object_is_const: bool,
+}
+
 impl ConstRoot {
     fn code_or_data(idx: usize, code: bool) -> Self {
         if code {
@@ -1788,6 +1801,63 @@ impl Compiler {
         }
     }
 
+    /// Parse the type name of a cast or compound literal, entered on its
+    /// first token. The enclosing declaration's type carriers are
+    /// detached for the duration: the name's qualifiers and typedef
+    /// dimensions describe it alone, not the declarator being
+    /// initialized.
+    pub(super) fn parse_const_type_name(&mut self) -> Result<ConstTypeName, C5Error> {
+        let outer = self.pending.take_decl_type_carriers();
+        let r = self.parse_const_type_name_inner();
+        self.pending.restore_decl_type_carriers(outer);
+        r
+    }
+
+    fn parse_const_type_name_inner(&mut self) -> Result<ConstTypeName, C5Error> {
+        let mut ty = self.parse_decl_base_type()?;
+        // Consumed as a type name, not bound through a declarator.
+        self.pending.bare_function_type_declarator = false;
+        let base_is_const = self.pending.base_is_const;
+        let mut ptr_levels: i64 = 0;
+        // A `const` after the outermost `*` qualifies the object itself.
+        let mut outer_const = false;
+        while self.lex.tk == Token::MulOp {
+            self.next()?;
+            ty += Ty::Ptr as i64;
+            ptr_levels += 1;
+            outer_const = false;
+            while self.lex.tk == Token::TypeQual {
+                outer_const |= self.lex_is_const_qual();
+                self.next()?;
+            }
+        }
+        while self.lex.tk == Token::TypeQual {
+            self.next()?;
+        }
+        let base_dims = self.take_typedef_literal_dims(ptr_levels);
+        Ok(ConstTypeName {
+            ty,
+            base_dims,
+            object_is_const: outer_const || (base_is_const && ptr_levels == 0),
+        })
+    }
+
+    /// On the `)` closing a type name an array typedef completed: whether
+    /// a `{` follows, which makes it a compound literal of the array type
+    /// rather than a cast. The lexer position is unchanged on return.
+    pub(super) fn at_typedef_array_literal(&mut self, name: &ConstTypeName) -> Result<bool, C5Error> {
+        if name.base_dims.is_empty() || self.lex.tk != ')' {
+            return Ok(false);
+        }
+        let snap = self.lex.snapshot();
+        let staged = self.data.len();
+        self.next()?;
+        let hit = self.lex.tk == '{';
+        self.restore_lex(snap);
+        self.truncate_data(staged);
+        Ok(hit)
+    }
+
     fn parse_const_designation_primary(&mut self) -> Result<ConstDesig, C5Error> {
         let line = self.lex.line;
         if self.lex.tk == Token::AndOp {
@@ -1831,34 +1901,18 @@ impl Compiler {
             self.next()?;
             if self.lex_is_type_start() {
                 // Cast `(T ...*) operand` -- a (usually pointer) rvalue.
-                let mut ty = self.parse_decl_base_type()?;
-                let mut cast_ptrs: i64 = 0;
-                while self.lex.tk == Token::MulOp {
-                    self.next()?;
-                    ty += Ty::Ptr as i64;
-                    cast_ptrs += 1;
-                    while self.lex.tk == Token::TypeQual {
-                        self.next()?;
-                    }
-                }
-                let base_dims = self.take_typedef_literal_dims(cast_ptrs);
+                let name = self.parse_const_type_name()?;
+                let ty = name.ty;
                 // C99 6.5.2.5 array-typed compound literal `(T[]){ ... }`: an
                 // anonymous static array. Its name decays to the address of
                 // the first element, so the object is an lvalue that a
                 // following `[i].member` chain designates -- typed by the
                 // element for one dimension, by the array-aggregate tag for
                 // more so each subscript strides by its row.
-                let is_typedef_literal = !base_dims.is_empty() && self.lex.tk == ')' && {
-                    let snap = self.lex.snapshot();
-                    let staged = self.data.len();
-                    self.next()?;
-                    let hit = self.lex.tk == '{';
-                    self.restore_lex(snap);
-                    self.truncate_data(staged);
-                    hit
-                };
-                if self.lex.tk == Token::Brak || is_typedef_literal {
-                    let (off, sym, dims) = self.emit_array_compound_literal_body(ty, &base_dims)?;
+                if self.lex.tk == Token::Brak || self.at_typedef_array_literal(&name)? {
+                    let (off, sym, dims) =
+                        self.emit_array_compound_literal_body(ty, &name.base_dims)?;
+                    self.symbols[sym].storage_is_const = name.object_is_const;
                     let desig_ty = if dims.len() >= 2 {
                         self.array_agg_type(ty, &dims)
                     } else {
@@ -1871,9 +1925,6 @@ impl Compiler {
                         root: ConstRoot::Data(sym),
                     });
                 }
-                while self.lex.tk == Token::TypeQual {
-                    self.next()?;
-                }
                 if self.lex.tk != ')' {
                     return Err(self.compile_err_at(
                         line,
@@ -1881,11 +1932,18 @@ impl Compiler {
                     ));
                 }
                 self.next()?;
-                // C99 6.5.2.5 struct-typed compound literal `(T){ ... }`: an
-                // anonymous static object, an lvalue whose address is the
-                // constant. A non-brace operand is an ordinary cast.
-                if self.lex.tk == '{' && is_struct_value_ty(ty) {
-                    let (off, sym) = self.emit_compound_literal_body(ty)?;
+                // C99 6.5.2.5 compound literal `(T){ ... }`: an anonymous
+                // static object, an lvalue whose address is the constant. A
+                // struct fills through the aggregate collector, a scalar
+                // through the static-initializer path. A non-brace operand
+                // is an ordinary cast.
+                if self.lex.tk == '{' {
+                    let (off, sym) = if is_struct_value_ty(ty) {
+                        self.emit_compound_literal_body(ty)?
+                    } else {
+                        self.emit_scalar_compound_literal_body(ty)?
+                    };
+                    self.symbols[sym].storage_is_const = name.object_is_const;
                     return Ok(ConstDesig {
                         value: off,
                         ty,
@@ -2059,46 +2117,18 @@ impl Compiler {
             // to `3` at parse time -- the inner `*` produces a float,
             // the cast clamps it back to integer per C99 6.3.1.4.
             if self.lex_is_type_start() {
-                let mut target_ty = self.parse_decl_base_type()?;
-                // The type is consumed as a cast, not bound through a
-                // declarator; drop the declarator side channels it may set.
-                self.pending.base_is_function_type = false;
-                self.pending.bare_function_type_declarator = false;
-                self.pending.fn_ptr_indirection = None;
-                self.pending.fn_ptr_ret_indirection = 0;
-                self.pending.typedef_fn_proto = None;
-                self.pending.fn_ptr_param_types = None;
-                let mut cast_ptrs: i64 = 0;
-                while self.lex.tk == Token::MulOp {
-                    self.next()?;
-                    target_ty += Ty::Ptr as i64;
-                    cast_ptrs += 1;
-                    while self.lex.tk == Token::TypeQual {
-                        self.next()?;
-                    }
-                }
-                while self.lex.tk == Token::TypeQual {
-                    self.next()?;
-                }
-                let base_dims = self.take_typedef_literal_dims(cast_ptrs);
+                let name = self.parse_const_type_name()?;
+                let mut target_ty = name.ty;
                 // C99 6.5.2.5 array-typed compound literal `(T[]){...}` in a
                 // value context: the literal decays to the address of its
                 // anonymous static object. A subscript chain selects a row
                 // per leading index; the final index reads the staged
                 // element back as the constant value.
-                let is_typedef_literal = !base_dims.is_empty() && self.lex.tk == ')' && {
-                    let snap = self.lex.snapshot();
-                    let staged = self.data.len();
-                    self.next()?;
-                    let hit = self.lex.tk == '{';
-                    self.restore_lex(snap);
-                    self.truncate_data(staged);
-                    hit
-                };
-                if self.lex.tk == Token::Brak || is_typedef_literal {
+                if self.lex.tk == Token::Brak || self.at_typedef_array_literal(&name)? {
                     let (off, sym, dims) =
-                        self.emit_array_compound_literal_body(target_ty, &base_dims)?;
+                        self.emit_array_compound_literal_body(target_ty, &name.base_dims)?;
                     self.pending.const_expr_compound_literal = true;
+                    self.symbols[sym].storage_is_const = name.object_is_const;
                     let elem_size = (self.size_of_type(target_ty) as i64).max(1);
                     let mut base = off;
                     let mut level = 0usize;

@@ -5697,7 +5697,10 @@ fn kernel_export_symbol_records_take_the_gas_shape() {
         assert_eq!(flags, 2, "{target:?}: section flags are not SHF_ALLOC");
         assert_eq!(addralign, 8, "{target:?}: section alignment diverges");
         let syms = elf64_symbol_records(&obj);
-        for (label, at) in [("__export_symbol_plain_sym", 0u64), ("__export_symbol_ns_sym", 16)] {
+        for (label, at) in [
+            ("__export_symbol_plain_sym", 0u64),
+            ("__export_symbol_ns_sym", 16),
+        ] {
             let (_, info, shndx, value, _) = *syms
                 .iter()
                 .find(|s| s.0 == label)

@@ -766,11 +766,11 @@ impl crate::c5::layout::DataOffsets for Symbol {
             class,
             type_: _,
             val,
-            reserved_data_bytes: _, // a byte count, not an offset
+            reserved_data_bytes: _,   // a byte count, not an offset
             h_reserved_data_bytes: _, // scope-restore shadow
-            relocated_from: _,      // the pre-relocation span, kept for diagnostics
-            data_byte_size: _,      // a byte count
-            fam_init_bytes: _,      // a byte count
+            relocated_from: _,        // the pre-relocation span, kept for diagnostics
+            data_byte_size: _,        // a byte count
+            fam_init_bytes: _,        // a byte count
             h_fam_init_bytes: _,
             h_class: _,
             h_type: _,

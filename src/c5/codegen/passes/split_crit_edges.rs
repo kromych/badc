@@ -1,15 +1,19 @@
 //! Critical-edge splitting.
 //!
-//! A CFG edge `pred -> succ` is *critical* when `pred` has more than
-//! one successor and `succ` has more than one predecessor. The
-//! per-arch emit places phi-moves for `succ`'s phis at the end of
-//! `pred`, before the conditional branch. Along the alternate
-//! successor's edge, those moves still execute and clobber any
-//! register that is live on the alternate path, a clobber that
-//! surfaces under PHI_PROMOTE.
+//! The per-arch emit places phi-moves for a successor's phis at the
+//! end of the predecessor, before its terminator. A predecessor with
+//! more than one successor therefore runs those moves on every one of
+//! its edges, clobbering whatever register the phi's destination holds
+//! on the paths the phi does not reach.
 //!
-//! The fix: for every critical edge, insert a synthetic empty block
-//! that lives only on that edge. It holds the phi-moves and an
+//! The condition the emit needs is exactly: a block with more than one
+//! successor must have no successor carrying a phi that names it. That
+//! is the classic critical edge -- a phi block has two or more
+//! predecessors -- stated as the property the emit reads, so a phi
+//! reached over a single edge is covered too.
+//!
+//! The fix: for every such edge, insert a synthetic empty block that
+//! lives only on that edge. It holds the phi-moves and an
 //! unconditional jump to the original successor. The pred's
 //! conditional branch now targets the synthetic block, so the moves
 //! execute only when the edge is taken.
@@ -30,55 +34,57 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
     }
 }
 
+/// True when `succ` opens with a phi that names `pred`, i.e. the edge
+/// `pred -> succ` carries predecessor-exit moves. Phis lead a block, so
+/// the scan stops at the first non-phi.
+fn edge_carries_phi_moves(func: &FunctionSsa, pred: BlockId, succ: BlockId) -> bool {
+    for id in func.blocks[succ as usize].inst_range.clone() {
+        let Inst::Phi { incoming, .. } = &func.insts[id as usize] else {
+            break;
+        };
+        if incoming.iter().any(|(b, _)| *b == pred) {
+            return true;
+        }
+    }
+    false
+}
+
 fn run_one(func: &mut FunctionSsa) {
     let n_original = func.blocks.len();
     if n_original == 0 {
         return;
     }
-    // Skip computed-goto functions: inserting split blocks renumbers
-    // block ids, which `Inst::BlockAddr` and computed_goto_targets
-    // reference directly. Such functions carry no phis (mem2reg is
-    // skipped for them), so there are no critical edges to split.
-    // Jump-table functions are NOT skipped: split blocks are appended
-    // (existing ids stay stable) and table entries are retargetable,
-    // so an edge from the dispatcher to a phi-carrying case block is
-    // split like any other -- without it, `emit_phi_predecessor_moves`
-    // would emit every case block's moves at the dispatcher exit.
-    if !func.computed_goto_targets.is_empty() {
-        return;
-    }
-    // Count predecessors per block. Walking terminators is enough.
-    let mut pred_count: Vec<u32> = alloc::vec![0; n_original];
-    for block in &func.blocks {
-        for succ in successors(&block.terminator, &func.jump_tables) {
-            if (succ as usize) < n_original {
-                pred_count[succ as usize] += 1;
-            }
-        }
-    }
     // Splits to apply, deferred so we don't mutate the block list
     // while we walk it. Each entry is `(pred, original_succ)`.
     let mut splits: Vec<(BlockId, BlockId)> = Vec::new();
     for (idx, block) in func.blocks.iter().enumerate().take(n_original) {
+        // An indirect branch reads an address-taken label's own block
+        // address, so its edges cannot be routed through a synthetic
+        // block. `emit_phi_predecessor_moves` refuses a function whose
+        // computed-goto target carries a phi rather than run the moves
+        // on every one of the branch's edges.
+        if matches!(block.terminator, Terminator::GotoIndirect { .. }) {
+            continue;
+        }
         let succs = successors(&block.terminator, &func.jump_tables);
         if succs.len() < 2 {
             continue;
         }
+        let first = splits.len();
         for succ in succs {
             if (succ as usize) >= n_original {
                 continue;
             }
-            if pred_count[succ as usize] <= 1 {
+            // One split per (pred, succ) pair: a `Bz target=S
+            // fall_through=S` names the same successor twice, and both
+            // arms route through the one synthetic block.
+            if splits[first..].iter().any(|&(_, s)| s == succ) {
                 continue;
             }
-            // Skip when the successor has no phis. Without phis the
-            // emit produces no predecessor-exit moves on this edge,
-            // so the clobber-on-alternate-edge hazard cannot fire.
-            let range = func.blocks[succ as usize].inst_range.clone();
-            let has_phi = range
-                .clone()
-                .any(|id| matches!(func.insts[id as usize], Inst::Phi { .. }));
-            if !has_phi {
+            // Skip an edge the emit produces no moves for: without a phi
+            // naming this predecessor there is nothing to run on the
+            // alternate edge.
+            if !edge_carries_phi_moves(func, idx as BlockId, succ) {
                 continue;
             }
             splits.push((idx as BlockId, succ));
@@ -203,10 +209,8 @@ fn successors(term: &Terminator, jump_tables: &[Vec<BlockId>]) -> Vec<BlockId> {
             }
             out
         }
-        // This pass is skipped for functions with a computed goto (its
-        // run() guards on computed_goto_targets), so an indirect branch
-        // never reaches here; its successors live on the function, not
-        // the terminator.
+        // An indirect branch's successors live on the function, not the
+        // terminator; `run_one` skips such a predecessor outright.
         Terminator::GotoIndirect { .. }
         | Terminator::Return(_)
         | Terminator::TailExt(_)
@@ -433,6 +437,212 @@ mod tests {
         );
         run_one(&mut f);
         assert_eq!(f.blocks[3].exit_acc, NO_VALUE);
+    }
+
+    /// A conditional whose merge block carries a phi: the split must happen
+    /// even though the function records an address-taken label. Taking a
+    /// label's address without ever branching to it (the kernel's
+    /// `_THIS_IP_`) leaves `computed_goto_targets` non-empty in a function
+    /// the inliner has already given phis.
+    #[test]
+    fn address_taken_label_does_not_block_the_split() {
+        let mut f = fresh(
+            vec![
+                Inst::Imm(0),
+                Inst::Imm(1),
+                Inst::Phi {
+                    incoming: alloc::vec![(0, 0), (1, 1)],
+                    kind: LoadKind::I64,
+                },
+            ],
+            vec![
+                Block {
+                    start_pc: 0,
+                    inst_range: 0..1,
+                    terminator: Terminator::Bz {
+                        cond: 0,
+                        target: 2,
+                        fall_through: 1,
+                    },
+                    exit_acc: 0,
+                },
+                Block {
+                    start_pc: 0,
+                    inst_range: 1..2,
+                    terminator: Terminator::Jmp(2),
+                    exit_acc: 1,
+                },
+                Block {
+                    start_pc: 0,
+                    inst_range: 2..3,
+                    terminator: Terminator::Return(2),
+                    exit_acc: 2,
+                },
+            ],
+        );
+        f.computed_goto_targets = alloc::vec![1];
+        run_one(&mut f);
+        assert_eq!(f.blocks.len(), 4);
+        assert!(matches!(
+            f.blocks[0].terminator,
+            Terminator::Bz {
+                target: 3,
+                fall_through: 1,
+                ..
+            }
+        ));
+        assert!(matches!(f.blocks[3].terminator, Terminator::Jmp(2)));
+        // The label's block id is what `Inst::BlockAddr` and the target
+        // list name, so the split must leave it alone.
+        assert_eq!(f.computed_goto_targets, alloc::vec![1]);
+        let Inst::Phi { incoming, .. } = &f.insts[2] else {
+            panic!("expected phi");
+        };
+        assert!(incoming.iter().any(|(b, _)| *b == 3));
+        assert!(!incoming.iter().any(|(b, _)| *b == 0));
+    }
+
+    /// The condition is the one the emit reads: a phi naming a
+    /// two-successor predecessor. A single-predecessor successor is split
+    /// too -- its moves would otherwise run on the alternate edge.
+    #[test]
+    fn single_predecessor_phi_edge_is_split() {
+        let mut f = fresh(
+            vec![
+                Inst::Imm(0),
+                Inst::Phi {
+                    incoming: alloc::vec![(0, 0)],
+                    kind: LoadKind::I64,
+                },
+                Inst::Imm(2),
+            ],
+            vec![
+                Block {
+                    start_pc: 0,
+                    inst_range: 0..1,
+                    terminator: Terminator::Bz {
+                        cond: 0,
+                        target: 1,
+                        fall_through: 2,
+                    },
+                    exit_acc: 0,
+                },
+                Block {
+                    start_pc: 0,
+                    inst_range: 1..2,
+                    terminator: Terminator::Return(1),
+                    exit_acc: 1,
+                },
+                Block {
+                    start_pc: 0,
+                    inst_range: 2..3,
+                    terminator: Terminator::Return(2),
+                    exit_acc: 2,
+                },
+            ],
+        );
+        run_one(&mut f);
+        assert_eq!(f.blocks.len(), 4);
+        assert!(matches!(
+            f.blocks[0].terminator,
+            Terminator::Bz {
+                target: 3,
+                fall_through: 2,
+                ..
+            }
+        ));
+        let Inst::Phi { incoming, .. } = &f.insts[1] else {
+            panic!("expected phi");
+        };
+        assert_eq!(incoming.as_slice(), &[(3, 0)]);
+    }
+
+    /// A successor named by both arms takes one synthetic block, and the
+    /// phi's single incoming is renamed once.
+    #[test]
+    fn successor_named_by_both_arms_splits_once() {
+        let mut f = fresh(
+            vec![
+                Inst::Imm(0),
+                Inst::Phi {
+                    incoming: alloc::vec![(0, 0)],
+                    kind: LoadKind::I64,
+                },
+            ],
+            vec![
+                Block {
+                    start_pc: 0,
+                    inst_range: 0..1,
+                    terminator: Terminator::Bz {
+                        cond: 0,
+                        target: 1,
+                        fall_through: 1,
+                    },
+                    exit_acc: 0,
+                },
+                Block {
+                    start_pc: 0,
+                    inst_range: 1..2,
+                    terminator: Terminator::Return(1),
+                    exit_acc: 1,
+                },
+            ],
+        );
+        run_one(&mut f);
+        assert_eq!(f.blocks.len(), 3);
+        assert!(matches!(
+            f.blocks[0].terminator,
+            Terminator::Bz {
+                target: 2,
+                fall_through: 2,
+                ..
+            }
+        ));
+        let Inst::Phi { incoming, .. } = &f.insts[1] else {
+            panic!("expected phi");
+        };
+        assert_eq!(incoming.as_slice(), &[(2, 0)]);
+    }
+
+    /// An indirect branch reads a label's own block address, so its edges
+    /// cannot be routed through a synthetic block. The pass leaves them; the
+    /// emit refuses such a function instead.
+    #[test]
+    fn goto_indirect_predecessor_is_left_alone() {
+        let mut f = fresh(
+            vec![
+                Inst::Imm(0),
+                Inst::Phi {
+                    incoming: alloc::vec![(0, 0)],
+                    kind: LoadKind::I64,
+                },
+                Inst::Imm(2),
+            ],
+            vec![
+                Block {
+                    start_pc: 0,
+                    inst_range: 0..1,
+                    terminator: Terminator::GotoIndirect { target: 0 },
+                    exit_acc: 0,
+                },
+                Block {
+                    start_pc: 0,
+                    inst_range: 1..2,
+                    terminator: Terminator::Return(1),
+                    exit_acc: 1,
+                },
+                Block {
+                    start_pc: 0,
+                    inst_range: 2..3,
+                    terminator: Terminator::Return(2),
+                    exit_acc: 2,
+                },
+            ],
+        );
+        f.computed_goto_targets = alloc::vec![1, 2];
+        let n_before = f.blocks.len();
+        run_one(&mut f);
+        assert_eq!(f.blocks.len(), n_before);
     }
 
     #[test]

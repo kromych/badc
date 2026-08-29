@@ -244,7 +244,6 @@ Disassembly of section .text:
                	setb	%sil
                	movzbq	%sil, %rsi
                	xorq	%rax, %rax
-               	movq	%rax, %rcx
                	testq	%rsi, %rsi
                	je	<addr>
                	cmpq	%rdx, %rcx
@@ -253,7 +252,6 @@ Disassembly of section .text:
                	movslq	%ecx, %rcx
                	jmp	<addr>
                	cmpq	%rcx, %rdx
-               	movq	%rax, %rcx
                	jae	<addr>
                	cmpq	%rsi, %rcx
                	setbe	%cl
@@ -266,4 +264,9 @@ Disassembly of section .text:
                	setbe	%al
                	movzbq	%al, %rax
                	movslq	%eax, %rax
+               	jmp	<addr>
+               	movq	%rax, %rcx
+               	jmp	<addr>
+               	movq	%rax, %rcx
+               	jmp	<addr>
                	jmp	<addr>

@@ -264,14 +264,12 @@ Disassembly of section .text:
                	ret
                	cmp	x0, x1
                	mov	x0, #0x0                // =0
-               	mov	x1, x0
                	b.hs	<addr>
                	cmp	x1, x2
                	cset	x1, ls
                	sxtw	x1, w1
                	b	<addr>
                	cmp	x2, x1
-               	mov	x1, x0
                	b.hs	<addr>
                	cmp	x1, x3
                	cset	x1, ls
@@ -282,4 +280,9 @@ Disassembly of section .text:
                	cmp	x1, x3
                	cset	x0, ls
                	sxtw	x0, w0
+               	b	<addr>
+               	mov	x1, x0
+               	b	<addr>
+               	mov	x1, x0
+               	b	<addr>
                	b	<addr>

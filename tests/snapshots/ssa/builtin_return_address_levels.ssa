@@ -224,36 +224,42 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
   block 26  start_pc=0
     v82  Binop { op=ult, lhs=v36, rhs=v34 }               -> x6
     v83  Imm(0)                                           -> x0
-    terminator Bz { cond=v82, target=b28, fall=b27 }   (exit_acc=v82)
+    terminator Bz { cond=v82, target=b35, fall=b27 }   (exit_acc=v82)
   block 27  start_pc=0
     v84  Binop { op=ule, lhs=v34, rhs=v38 }               -> x1
     terminator Jmp(b28)   (exit_acc=v84)
   block 28  start_pc=0
-    v85  Phi { incoming=[b26:v83, b27:v84], kind=I64 }    -> x1
+    v85  Phi { incoming=[b35:v83, b27:v84], kind=I64 }    -> x1
     v86  Extend { value=v85, kind=I32 }                   -> x1
     terminator Jmp(b11)   (exit_acc=v86)
   block 29  start_pc=0
     v87  Binop { op=ult, lhs=v44, rhs=v42 }               -> x2
     v88  Imm(0)                                           -> x7
-    terminator Bz { cond=v87, target=b31, fall=b30 }   (exit_acc=v87)
+    terminator Bz { cond=v87, target=b36, fall=b30 }   (exit_acc=v87)
   block 30  start_pc=0
     v89  Binop { op=ule, lhs=v42, rhs=v46 }               -> x1
     terminator Jmp(b31)   (exit_acc=v89)
   block 31  start_pc=0
-    v90  Phi { incoming=[b29:v83, b30:v89], kind=I64 }    -> x1
+    v90  Phi { incoming=[b36:v83, b30:v89], kind=I64 }    -> x1
     v91  Extend { value=v90, kind=I32 }                   -> x1
     terminator Jmp(b14)   (exit_acc=v91)
   block 32  start_pc=0
     v92  Binop { op=ult, lhs=v52, rhs=v50 }               -> x2
     v93  Imm(0)                                           -> x7
-    terminator Bz { cond=v92, target=b34, fall=b33 }   (exit_acc=v92)
+    terminator Bz { cond=v92, target=b37, fall=b33 }   (exit_acc=v92)
   block 33  start_pc=0
     v94  Binop { op=ule, lhs=v50, rhs=v54 }               -> x0
     terminator Jmp(b34)   (exit_acc=v94)
   block 34  start_pc=0
-    v95  Phi { incoming=[b32:v83, b33:v94], kind=I64 }    -> x0
+    v95  Phi { incoming=[b37:v83, b33:v94], kind=I64 }    -> x0
     v96  Extend { value=v95, kind=I32 }                   -> x0
     terminator Jmp(b17)   (exit_acc=v96)
+  block 35  start_pc=0
+    terminator Jmp(b28)
+  block 36  start_pc=0
+    terminator Jmp(b31)
+  block 37  start_pc=0
+    terminator Jmp(b34)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

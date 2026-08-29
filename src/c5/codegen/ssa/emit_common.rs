@@ -558,7 +558,27 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
                 fall_through,
                 ..
             } => alloc::vec![target, fall_through],
-            Terminator::GotoIndirect { .. } => func.computed_goto_targets.clone(),
+            Terminator::GotoIndirect { .. } => {
+                // The branch reads an address-taken label's own block
+                // address, so `split_crit_edges` cannot route its edges
+                // through synthetic blocks. With more than one target the
+                // moves emitted here would run on every edge; refuse the
+                // function rather than clobber the alternate paths.
+                let targets = &func.computed_goto_targets;
+                if targets.len() > 1 {
+                    for &t in targets {
+                        for id in func.blocks[t as usize].inst_range.clone() {
+                            let Inst::Phi { incoming, .. } = &func.insts[id as usize] else {
+                                break;
+                            };
+                            if incoming.iter().any(|(p, _)| *p == self_block) {
+                                return false;
+                            }
+                        }
+                    }
+                }
+                targets.clone()
+            }
             Terminator::JumpTable { table, .. } => {
                 // Distinct targets only: entries repeat (holes point at
                 // the default block) but each CFG edge's phi moves are

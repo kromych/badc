@@ -239,6 +239,10 @@ UNSUPPORTED_PREFIX = (
     # so it does not bind outside its own link.
     "-fno-zero-initialized-in-bss",
     "-fvisibility=",
+    # Clears the call-clobbered registers a function used before it returns
+    # (CONFIG_ZERO_CALL_USED_REGS). badc emits no such epilogue.
+    # TODO: implement the register-clearing epilogue and forward the flag.
+    "-fzero-call-used-regs=",
 )
 
 # Flags measured to leave badc's object unchanged, with the measurement.

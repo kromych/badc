@@ -505,29 +505,17 @@ fn typedef_aligned_attribute() {
 #[test]
 fn builtin_return_address() {
     // __builtin_return_address(0) is the caller's return address; native
-    // reads the saved slot at [fp+8], the VM returns a non-zero per-frame
-    // proxy. The fixture returns 0 only when it is non-null.
+    // reads the saved slot at [fp+8], the VM the code position its frame
+    // record holds. The fixture returns 0 only when it is non-null.
     assert_eq!(run_fixture("builtin_return_address.c"), 0);
 }
 
 #[test]
-fn builtin_return_address_rejects_a_non_zero_level() {
+fn frame_builtins_take_a_non_negative_constant_level() {
     // GCC types the operand as the number of frames to walk up and
-    // rejects a non-constant one. Only level 0 is answerable for a
-    // return address: gcc's aarch64 backend returns a constant 0 for a
-    // higher level, and its x86-64 backend yields a stack address once a
-    // caller drops its frame pointer. A diagnostic replaces both wrong
-    // answers.
+    // rejects a non-constant one; a negative level names no frame.
     use crate::c5::Compiler;
     for (src, want) in [
-        (
-            "void *f(void){ return __builtin_return_address(1); }",
-            "supports level 0 only",
-        ),
-        (
-            "void *f(void){ return __builtin_return_address(2 + 3); }",
-            "supports level 0 only",
-        ),
         (
             "void *f(int n){ return __builtin_return_address(n); }",
             "must be an integer constant",
@@ -554,12 +542,14 @@ fn builtin_return_address_rejects_a_non_zero_level() {
             "expected {want:?} for {src:?}, got {msg:?}"
         );
     }
-    // Level 0 compiles, spelled directly or as a constant expression;
-    // a frame-address level above 0 compiles to the chain walk.
+    // Any constant expression compiles: level 0 directly, a level above
+    // 0 to the chain walk.
     for ok in [
         "void *f(void){ return __builtin_return_address(0); } int main(void){return 0;}",
         "void *f(void){ return __builtin_frame_address(0); } int main(void){return 0;}",
         "void *f(void){ return __builtin_return_address(1 - 1); } int main(void){return 0;}",
+        "void *f(void){ return __builtin_return_address(1); } int main(void){return 0;}",
+        "void *f(void){ return __builtin_return_address(2 + 3); } int main(void){return 0;}",
         "void *f(void){ return __builtin_frame_address(1); } int main(void){return 0;}",
         "void *f(void){ return __builtin_frame_address(1 + 2); } int main(void){return 0;}",
     ] {
@@ -576,6 +566,17 @@ fn builtin_frame_address_walks_to_a_callers_frame() {
     // frames that published them; gcc answers identically at -O0 and -O2
     // on linux-x86_64 and linux-aarch64.
     assert_eq!(run_fixture("builtin_frame_address_levels.c"), 0);
+}
+
+#[test]
+fn builtin_return_address_walks_to_a_callers_frame() {
+    // __builtin_return_address(N > 0) reports the return address level 0
+    // reports N calls up, read from the frame record the frame-pointer
+    // walk reaches. The fixture checks three levels against the frames
+    // that published them and against the labels around each call; gcc
+    // answers identically at -O0 on linux-x86_64 and folds a level above
+    // 0 to 0 on linux-aarch64.
+    assert_eq!(run_fixture("builtin_return_address_levels.c"), 0);
 }
 
 #[test]

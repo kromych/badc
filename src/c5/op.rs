@@ -236,12 +236,14 @@ pub enum Intrinsic {
     Atomic128Store = 63,
     Atomic128LoadEx = 64,
     Atomic128StoreEx = 65,
-    /// `__builtin_return_address(0)` -- the current function's return
-    /// address, read from the saved slot just above the frame pointer
-    /// (`[fp + 8]` under both the AAPCS64 and SysV prologues). Takes no
-    /// operand: the parser rejects a level above 0, which gcc's own
-    /// targets answer differently. The interpreter returns a stable
-    /// per-frame proxy.
+    /// `__builtin_return_address` -- the return address a frame record
+    /// holds in the slot just above its saved frame pointer (`[fp + 8]`
+    /// under both the AAPCS64 and SysV prologues). Without an operand
+    /// the record is the current function's (level 0); with one, the
+    /// operand is the frame address a level above 0 walked to, the way
+    /// `FrameAddress` plus that many loads reaches it. The interpreter's
+    /// record holds a code position: the caller's function, block and
+    /// the instruction after the call.
     ReturnAddress = 66,
     /// 128-bit masked store-insert: `*mem = (*mem & ~msk) | val`, built from
     /// an `LDXP` / `BIC` / `ORR` / `STXP` exclusive retry loop. Takes the
@@ -471,9 +473,10 @@ impl Intrinsic {
     /// inlined result of both as the caller's -- the return address, and
     /// the frame, of the function inlined into -- which is what the
     /// spliced read yields. A level above 0 rides the same splice: the
-    /// parser decomposes it into the level-0 intrinsic plus N loads
-    /// through the saved frame pointer, so the walk starts one frame
-    /// higher and still names the frame N calls above the read.
+    /// parser decomposes it into the level-0 frame intrinsic plus N
+    /// loads through the saved frame pointer (and the return-slot read
+    /// of the frame reached), so the walk starts one frame higher and
+    /// still names the frame N calls above the read.
     /// `function_makes_no_calls` counts `Inst::Intrinsic`, so the frame
     /// record the read needs is established in whichever function ends
     /// up holding it.

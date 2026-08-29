@@ -1382,9 +1382,11 @@ impl Compiler {
                     // the intrinsic node is built the result is wrapped
                     // in a load of this type (GCC value semantics).
                     let mut va_arg_result_ty: Option<i64> = None;
-                    // `__builtin_frame_address` level above 0: how many
-                    // saved-frame-pointer loads wrap the intrinsic node.
+                    // A level above 0 of either frame builtin: how many
+                    // saved-frame-pointer loads wrap the intrinsic node, and
+                    // whether the return slot of the frame reached is read.
                     let mut frame_walk_levels: i64 = 0;
+                    let mut walked_return_slot = false;
                     let mut ast_intrinsic_args: alloc::vec::Vec<super::super::ast::ExprId> =
                         alloc::vec::Vec::new();
                     if intrinsic_id == trap_id {
@@ -1612,33 +1614,23 @@ impl Compiler {
                     {
                         // GCC defines the operand as the number of frames to
                         // walk up and requires it to be a constant. Level 0
-                        // reads this function's own frame. Above 0,
-                        // `__builtin_frame_address` walks the saved
-                        // frame-pointer chain; `__builtin_return_address` has
-                        // no single behaviour to reproduce -- gcc's aarch64
-                        // backend folds it to a constant 0 and its x86-64
-                        // backend yields a stack address once a caller drops
-                        // its frame pointer -- so it is rejected. The level is
+                        // reads this function's own frame record. Above 0,
+                        // both walk the saved frame-pointer chain that far,
+                        // and `__builtin_return_address` then reads the
+                        // return slot of the record reached. The level is
                         // consumed at parse time and reaches no operand.
                         self.expr(Token::Assign as i64)?;
                         let level = self.ast_acc.and_then(|a| self.expr_const_int(a));
                         match level {
                             Some(0) => {}
-                            Some(n) if n > 0 && intrinsic_id == frame_address_id => {
+                            Some(n) if n > 0 => {
                                 frame_walk_levels = n;
-                            }
-                            Some(n) if n < 0 => {
-                                return Err(self.compile_err(format!(
-                                    "invalid argument to `{fn_name}`: \
-                                     the level must not be negative, got {n}"
-                                )));
+                                walked_return_slot = intrinsic_id == return_address_id;
                             }
                             Some(n) => {
                                 return Err(self.compile_err(format!(
-                                    "`{fn_name}` supports level 0 only, not {n}: \
-                                     the targets gcc supports disagree on what a \
-                                     caller's return address is, so there is no \
-                                     one behaviour to reproduce"
+                                    "invalid argument to `{fn_name}`: \
+                                     the level must not be negative, got {n}"
                                 )));
                             }
                             None => {
@@ -1740,9 +1732,15 @@ impl Compiler {
                     // source order.
                     let intr_ty = self.ty;
                     let pos = self.ast_src_pos();
+                    // A walked return address starts from the frame address.
+                    let node_kind = if walked_return_slot {
+                        frame_address_id
+                    } else {
+                        intrinsic_id
+                    };
                     let id = self.ast.push_expr(
                         super::super::ast::Expr::Intrinsic {
-                            kind: intrinsic_id,
+                            kind: node_kind,
                             args: ast_intrinsic_args,
                             ty: intr_ty,
                         },
@@ -1764,10 +1762,13 @@ impl Compiler {
                         self.ty = res_ty;
                         self.ast_apply_unary(super::super::ast::UnOp::Deref);
                     }
-                    // `__builtin_frame_address(N)`, N > 0. A frame record
+                    // A level N > 0 of either frame builtin. A frame record
                     // holds the caller's frame pointer at offset 0, so each
                     // level is one load through the level below it. This is
-                    // the sequence gcc emits on both supported targets.
+                    // the sequence gcc emits on both supported targets for
+                    // `__builtin_frame_address`; `__builtin_return_address`
+                    // then reads the return slot of the record reached, which
+                    // the level-0 intrinsic does when given that frame.
                     let void_ptr_ty = (Ty::Char as i64) + (Ty::Ptr as i64);
                     for _ in 0..frame_walk_levels {
                         if let Some(child) = self.ast_acc {
@@ -1776,6 +1777,19 @@ impl Compiler {
                         self.mark_emit_scalar_load();
                         self.ty = void_ptr_ty;
                         self.ast_apply_unary(super::super::ast::UnOp::Deref);
+                    }
+                    if walked_return_slot && let Some(walked) = self.ast_acc {
+                        let pos = self.ast_src_pos();
+                        let id = self.ast.push_expr(
+                            super::super::ast::Expr::Intrinsic {
+                                kind: return_address_id,
+                                args: alloc::vec![walked],
+                                ty: void_ptr_ty,
+                            },
+                            pos,
+                        );
+                        self.ast_acc = Some(id);
+                        self.ty = void_ptr_ty;
                     }
                 } else {
                     // Snapshot the declared signature up front: the per-arg

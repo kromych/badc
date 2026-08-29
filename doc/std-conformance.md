@@ -250,8 +250,8 @@ header takes its standard-C path for the GNU features badc lacks.
   - byte swapping -- `__builtin_bswap16` / `32` / `64`;
   - control -- `__builtin_expect`, `__builtin_unreachable`,
     `__builtin_trap`, `__builtin_prefetch`, `__builtin_assume_aligned`;
-  - frame -- `__builtin_frame_address`, `__builtin_return_address`
-    (level 0 only), `__builtin_alloca`;
+  - frame -- `__builtin_frame_address`, `__builtin_return_address` (any
+    constant level, walking the frame-pointer chain), `__builtin_alloca`;
   - variadics -- `__builtin_va_list`, `__builtin_va_start` / `va_arg` /
     `va_end` / `va_copy`;
   - compile-time queries -- `__builtin_constant_p`,

@@ -161,11 +161,12 @@ fn pac_ret_signed_frames_return_natively() {
     );
 }
 
-/// `__builtin_return_address(0)` stages the slot through x30 so
+/// `__builtin_return_address` stages the slot through x30 so
 /// `xpaclri` can strip it. x30 holds the live link register, so this
 /// pins that the epilogue's reload puts it back: a caller that keeps
 /// running after the read would otherwise return through the loaded
-/// value. Also checks the result carries no authentication bits.
+/// value. Also checks the result carries no authentication bits, at
+/// level 0 and read from a caller's record.
 #[test]
 fn return_address_reads_a_bare_pointer_and_keeps_the_return_path() {
     const SRC: &str = "
@@ -181,6 +182,16 @@ fn return_address_reads_a_bare_pointer_and_keeps_the_return_path() {
             /* A signed pointer sets bits above the 48-bit address range. */
             return ((unsigned long)p >> 48) == 0;
         }
+        /* Level 1 reads the caller's slot, signed under pac-ret since the
+           caller stored its link register; it takes the same strip. */
+        __attribute__((noinline)) void *ra1(void) {
+            return __builtin_return_address(1);
+        }
+        __attribute__((noinline)) int walked_matches_own(void) {
+            void *own = __builtin_return_address(0);
+            void *up = ra1();
+            return canonical(up) && up == own;
+        }
         int main(void) {
             int bad = 0;
             void *a = ra();
@@ -189,6 +200,7 @@ fn return_address_reads_a_bare_pointer_and_keeps_the_return_path() {
             if (!canonical(__builtin_return_address(0))) bad++;
             if (mixed(10) != 11) bad++;
             if (add1(41) != 42) bad++;
+            if (!walked_matches_own()) bad++;
             return bad == 0 ? 42 : bad;
         }
     ";

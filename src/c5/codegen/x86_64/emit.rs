@@ -10924,13 +10924,25 @@ fn emit_intrinsic(
             true
         }
         I::ReturnAddress => {
-            // __builtin_return_address(0): the return address the call
-            // pushed, at [rbp + 8] above the saved rbp. The parser admits
-            // level 0 only, so there is no operand.
+            // __builtin_return_address: the return address a frame record
+            // holds at [fp + 8], above the saved rbp. Without an operand
+            // the record is the current frame's; with one, the frame
+            // address a level above 0 walked to.
             let Some(rd) = int_or_spill_dst(dst) else {
                 return fail("ReturnAddress: dst not int reg / spill");
             };
-            emit_mov_r_mem(code, rd, Reg::RBP, 8);
+            let fp = match args {
+                [] => Reg::RBP,
+                [walked] => {
+                    let Some(r) = int_operand_into_rd(code, place_of(alloc, *walked), rd, frame)
+                    else {
+                        return fail("ReturnAddress: frame not int reg / spill");
+                    };
+                    r
+                }
+                _ => return fail("ReturnAddress: expected at most 1 arg"),
+            };
+            emit_mov_r_mem(code, rd, fp, 8);
             spill_dst_to_slot(code, dst, rd, frame);
             true
         }

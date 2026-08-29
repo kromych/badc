@@ -8764,32 +8764,46 @@ fn a64_pac_ret_skips_a_naked_body() {
 
 #[test]
 fn a64_return_address_strips_the_authentication_code() {
-    // `__builtin_return_address(0)` reads the slot `paciasp` signed, so
-    // the raw load returns a pointer matching no symbol range. `xpaclri`
+    // `__builtin_return_address` reads a slot `paciasp` signed, so the
+    // raw load returns a pointer matching no symbol range. `xpaclri`
     // strips it. gcc and clang emit the hint whatever `-mbranch-protection`
     // selects, since it is a NOP without FEAT_PAuth; match that, and check
-    // the staging register the hint form forces.
+    // the staging register the hint form forces. A level above 0 reads
+    // the slot of the record the walk reached through the same strip.
     const XPACLRI: u32 = 0xD503_20FF;
-    // `ldr x30, [x29, #8]` -- the offset field scales by 8.
-    const LDR_X30_SLOT: u32 = 0xF940_0000 | (1 << 10) | (29 << 5) | 30;
-    const SRC: &str = "void *ra(void) { return __builtin_return_address(0); }\n";
-    for hardening in [crate::Hardening::NONE, PAC_RET_ONLY] {
-        let w = a64_pac_words(SRC, hardening);
-        assert_eq!(
-            w.iter().filter(|&&x| x == XPACLRI).count(),
-            1,
-            "one strip per read, whatever the flag selects"
-        );
-        let at = w
-            .iter()
-            .position(|&x| x == XPACLRI)
-            .expect("xpaclri emitted");
-        // The hint reaches x30 only, so the slot has to load into it.
-        assert_eq!(
-            w[at - 1],
-            LDR_X30_SLOT,
-            "the strip follows `ldr x30, [x29, #8]`"
-        );
+    // `ldr x30, [<Xn>, #8]` -- the offset field scales by 8.
+    const LDR_X30_SLOT: u32 = 0xF940_0000 | (1 << 10) | 30;
+    const RN_MASK: u32 = 0x1F << 5;
+    for (src, level) in [
+        ("void *ra(void) { return __builtin_return_address(0); }\n", 0),
+        ("void *ra(void) { return __builtin_return_address(1); }\n", 1),
+    ] {
+        for hardening in [crate::Hardening::NONE, PAC_RET_ONLY] {
+            let w = a64_pac_words(src, hardening);
+            assert_eq!(
+                w.iter().filter(|&&x| x == XPACLRI).count(),
+                1,
+                "level {level}: one strip per read, whatever the flag selects"
+            );
+            let at = w
+                .iter()
+                .position(|&x| x == XPACLRI)
+                .expect("xpaclri emitted");
+            // The hint reaches x30 only, so the slot has to load into it.
+            let ldr = w[at - 1];
+            assert_eq!(
+                ldr & !RN_MASK,
+                LDR_X30_SLOT,
+                "level {level}: the strip follows `ldr x30, [xN, #8]`"
+            );
+            // Level 0 reads the current record; a walked level reads the
+            // record the loaded frame pointer names.
+            assert_eq!(
+                (ldr & RN_MASK) >> 5 == 29,
+                level == 0,
+                "level {level}: the slot's base register"
+            );
+        }
     }
 }
 

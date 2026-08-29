@@ -6561,9 +6561,10 @@ fn emit_intrinsic(
             true
         }
         I::ReturnAddress => {
-            // __builtin_return_address(0): the saved return address the
-            // AAPCS64 prologue stored at [x29 + 8]. The parser admits
-            // level 0 only, so there is no operand.
+            // __builtin_return_address: the return address a frame record
+            // holds at [fp + 8], where the AAPCS64 prologue saved x30.
+            // Without an operand the record is the current frame's; with
+            // one, the frame address a level above 0 walked to.
             let rd = match dst {
                 Place::IntReg(r) => Reg(r),
                 Place::Spill(_) => Reg(16),
@@ -6572,14 +6573,35 @@ fn emit_intrinsic(
                     return false;
                 }
             };
+            let fp = match args {
+                [] => Reg(29),
+                [walked] => {
+                    let place = alloc
+                        .places
+                        .get(*walked as usize)
+                        .copied()
+                        .unwrap_or(Place::None);
+                    match materialize_int(code, place, scratch.primary, frame) {
+                        Some(r) => r,
+                        None => {
+                            bail_msg("ReturnAddress: frame not int reg / spill");
+                            return false;
+                        }
+                    }
+                }
+                _ => {
+                    bail_msg("ReturnAddress: expected at most 1 arg");
+                    return false;
+                }
+            };
             // Under pac-ret the slot holds a signed pointer, which matches
             // no symbol range. `XPACLRI` strips x30 and no other register,
             // so the value is staged there; the epilogue reloads x30 from
-            // the same slot. Holding the intrinsic keeps the function off
-            // the full-leaf path, so that frame record always exists.
-            // Unconditional, as gcc and clang emit it: the hint is a NOP
-            // without FEAT_PAuth and an unsigned pointer survives it.
-            emit(code, enc_ldr_imm(Reg(30), Reg(29), 8));
+            // the current frame's slot. Holding the intrinsic keeps the
+            // function off the full-leaf path, so that record always
+            // exists. Unconditional, as gcc and clang emit it: the hint is
+            // a NOP without FEAT_PAuth and an unsigned pointer survives it.
+            emit(code, enc_ldr_imm(Reg(30), fp, 8));
             emit(code, super::encode::XPACLRI);
             emit_mov_reg(code, rd, Reg(30));
             spill_local_addr_to_dst(code, dst, rd, frame);

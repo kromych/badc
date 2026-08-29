@@ -140,10 +140,11 @@ pub(crate) enum Mnemonic {
     },
     /// A 2-operand VEX move `v-op %src, %dst` (VEX.vvvv unused). A register or
     /// memory source into a register uses `load_op`; a register into memory uses
-    /// `store_op`. Covers vmovups/vmovaps/vmovdqu/vmovdqa (128/256-bit).
+    /// `store_op`. Covers vmovups/vmovaps/vmovdqu/vmovdqa (128/256-bit). A
+    /// non-temporal store has only one direction, so its `load_op` is absent.
     VexMov {
         pp: u8,
-        load_op: u8,
+        load_op: Option<u8>,
         store_op: u8,
     },
     /// `vmovd` / `vmovq`: the VEX forms of `movd` / `movq`, moving the low
@@ -671,12 +672,23 @@ pub(crate) fn gpr_att_name(num: u8, width: u8) -> Option<&'static str> {
 const BAD_VMOV_OPND: &str = "inline asm: `vmovd`/`vmovq` operand must be a \
 register or memory";
 
+/// A register name as the tables spell it: GNU as reads register names
+/// without regard to case, so an upper-case spelling folds to lower.
+fn fold_reg_case(name: &str) -> alloc::borrow::Cow<'_, str> {
+    if name.bytes().any(|c| c.is_ascii_uppercase()) {
+        alloc::borrow::Cow::Owned(name.to_ascii_lowercase())
+    } else {
+        alloc::borrow::Cow::Borrowed(name)
+    }
+}
+
 /// Operand for a register named in a template, covering both register
 /// classes an 8-bit name can denote.
 fn named_reg_operand(name: &str) -> Option<AsmOpnd> {
-    match reg_by_name(name) {
+    let name = fold_reg_case(name);
+    match reg_by_name(&name) {
         Some((reg, size)) => Some(AsmOpnd::Reg { reg, size }),
-        None => high_byte_reg_by_name(name).map(AsmOpnd::HighReg),
+        None => high_byte_reg_by_name(&name).map(AsmOpnd::HighReg),
     }
 }
 
@@ -821,7 +833,7 @@ pub(crate) fn mask_reg_num(c: &Concrete) -> Option<u8> {
 /// Operand for an opmask register named in a template. The size marker is
 /// unused: the mnemonic's width letter fixes the operation width.
 fn mask_reg_operand(name: &str) -> Option<AsmOpnd> {
-    mask_by_name(name).map(|k| AsmOpnd::Reg {
+    mask_by_name(&fold_reg_case(name)).map(|k| AsmOpnd::Reg {
         reg: MASK_BASE + k,
         size: AsmRegSize::Quad,
     })
@@ -1428,14 +1440,18 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
     if let "vmovd" | "vmovq" = name {
         return Some(Mnemonic::VexMovd { w: name == "vmovq" });
     }
-    // 2-operand VEX moves as `(pp, load-op, store-op)`.
+    // 2-operand VEX moves as `(pp, load-op, store-op)`; the non-temporal
+    // stores have no load direction.
     let mov = match name {
-        "vmovups" => Some((0u8, 0x10u8, 0x11u8)),
-        "vmovupd" => Some((1, 0x10, 0x11)),
-        "vmovaps" => Some((0, 0x28, 0x29)),
-        "vmovapd" => Some((1, 0x28, 0x29)),
-        "vmovdqu" => Some((2, 0x6F, 0x7F)),
-        "vmovdqa" => Some((1, 0x6F, 0x7F)),
+        "vmovups" => Some((0u8, Some(0x10u8), 0x11u8)),
+        "vmovupd" => Some((1, Some(0x10), 0x11)),
+        "vmovaps" => Some((0, Some(0x28), 0x29)),
+        "vmovapd" => Some((1, Some(0x28), 0x29)),
+        "vmovdqu" => Some((2, Some(0x6F), 0x7F)),
+        "vmovdqa" => Some((1, Some(0x6F), 0x7F)),
+        "vmovntdq" => Some((1, None, 0xE7)),
+        "vmovntps" => Some((0, None, 0x2B)),
+        "vmovntpd" => Some((1, None, 0x2B)),
         _ => None,
     };
     if let Some((pp, load_op, store_op)) = mov {
@@ -1561,7 +1577,7 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
         ("vpsllvq", true, 0x47), ("vpsrlvq", true, 0x45),
         ("vpermd", false, 0x36), ("vpermps", false, 0x16), ("vpshufb", false, 0x00),
         ("vpsignb", false, 0x08), ("vpsignw", false, 0x09), ("vpsignd", false, 0x0A),
-        ("vpcmpeqq", false, 0x29), ("vpackusdw", false, 0x2B),
+        ("vpcmpeqq", false, 0x29), ("vpcmpgtq", false, 0x37), ("vpackusdw", false, 0x2B),
         ("vpminsb", false, 0x38), ("vpminsd", false, 0x39),
         ("vpmaxsb", false, 0x3C), ("vpmaxsd", false, 0x3D),
         ("vaesenc", false, 0xDC), ("vaesenclast", false, 0xDD),
@@ -1590,6 +1606,10 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
     let imm3 = match name {
         "vshufps" => Some((0u8, 1u8, 0xC6u8)),
         "vshufpd" => Some((1, 1, 0xC6)),
+        "vcmpps" => Some((0, 1, 0xC2)),
+        "vcmppd" => Some((1, 1, 0xC2)),
+        "vcmpss" => Some((2, 1, 0xC2)),
+        "vcmpsd" => Some((3, 1, 0xC2)),
         "vperm2f128" => Some((1, 3, 0x06)),
         "vperm2i128" => Some((1, 3, 0x46)),
         "vpblendd" => Some((1, 3, 0x02)),
@@ -2249,7 +2269,7 @@ fn parse_mem_base(tok: &str) -> Option<AsmMemBase> {
     if !digits.is_empty() && digits.bytes().all(|c| c.is_ascii_digit()) {
         return Some(AsmMemBase::Ref(digits.parse().ok()?));
     }
-    let (num, size) = reg_by_name(body)?;
+    let (num, size) = reg_by_name(&fold_reg_case(body))?;
     if num >= 16 || size == AsmRegSize::Byte {
         return None;
     }
@@ -4513,6 +4533,11 @@ fn encode_bespoke(
             // 2-operand VEX move (VEX.vvvv = 1111, passed as 0 to `emit_vex`).
             let [src, dst] = two(ops)?;
             if let Some((d, dy)) = vec_reg(&dst) {
+                let Some(load_op) = load_op else {
+                    return Err(String::from(
+                        "inline asm: a non-temporal store takes a memory destination",
+                    ));
+                };
                 // reg-reg or load: the destination register rides ModRM.reg.
                 match &src {
                     _ if vec_reg(&src).is_some() => {
@@ -6730,7 +6755,7 @@ mod tests {
         };
         let vmov = |pp, load_op, store_op| Mnemonic::VexMov {
             pp,
-            load_op,
+            load_op: Some(load_op),
             store_op,
         };
         // vmovdqu %ymm1,%ymm0 (F3, L=1): c5 fe 6f c1.
@@ -6771,7 +6796,7 @@ mod tests {
             vex_op("vmovdqu"),
             Some(Mnemonic::VexMov {
                 pp: 2,
-                load_op: 0x6F,
+                load_op: Some(0x6F),
                 store_op: 0x7F
             })
         );

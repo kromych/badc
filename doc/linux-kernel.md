@@ -77,7 +77,7 @@ expected, so it is measured rather than fatal. At the 7.1.6 `defconfig` pin:
 
 | | assembly units | badc | gas |
 |---|---|---|---|
-| x86_64 | 71 | 60 | 11 |
+| x86_64 | 71 | 71 | 0 |
 | aarch64 | 77 | 71 | 6 |
 
 The x86_64 row moved from 45 of 71 once `-m16` / `-m32` units stopped
@@ -88,17 +88,27 @@ the `ptr16:16` and `ptr16:32` forms), which takes two of the four
 real-mode units it was keeping on gas, and from 56 once an operand took
 an expression over symbols rather than a name: `la57toggle.S`,
 `wakeup_64.S`, `trampoline_64.S` and `head_64.S` are badc's, and both
-AArch64 `hyp-entry.S` units are what took that row from 69.
+AArch64 `hyp-entry.S` units are what took that row from 69. The row is
+71 of 71 as measured by `verify.py --linker badc` on Fedora 44 (GNU as
+2.46.1 behind the fallback): the eleven units the earlier measurement
+left with gas -- AVX `vmovd`, `lsl r64, r64`, `ud1 r64, m`, `ud2a`, the
+high-byte registers `%ah` / `%ch` / `%dh` / `%bh`, the `.hidden` and
+`.reloc` directives, the `ANNOTATE` macros and a malformed
+operand-reference spelling -- assemble, on this tree and on master
+alike. The AVX forms the non-defconfig RAID-6 units spell
+(`lib/raid6/avx2.c`, `avx512.c` and the recovery pair, C units of the
+Fedora configuration) are encoded as well: the non-temporal `vmovntdq`
+in its VEX.256 and EVEX.512 forms, and the upper-case register spelling
+`%Zmm14`.
 
-What keeps a unit with gas, ranked by incidence:
+What keeps an aarch64 unit with gas, ranked by incidence (the earlier
+measurement; the aarch64 row was not re-taken with the x86_64 one):
 
 | units | class |
 |---|---|
-| 5 (x86_64), 3 (aarch64) | Instruction encodings the tables do not carry: AVX `vmovd`, `lsl r64, r64`, `ud1 r64, m`, `ud2a`, the high-byte registers `%ah` / `%ch` / `%dh` / `%bh`, the NEON `str q` / `orr v.2s, #imm` post-index and immediate forms, `sha1c`. |
-| 2 (x86_64), 2 (aarch64) | Directives: `.hidden`, `.reloc`, `.endr` reached without its `.rept`. |
-| 2 (x86_64) | Pseudo-instruction macros (`ANNOTATE`) and a macro-body comment the preprocessor leaves in its output as `/ *`. |
-| 1 (aarch64) | `:abs_g2_s:` over a label: a symbol in a `movz` / `movk` group needs a MOVW relocation the writer does not emit. |
-| 1 (x86_64) | An operand-reference spelling the template preparation leaves malformed (`mov %cr3, %r8 %r9`). |
+| 3 | Instruction encodings the tables do not carry: the NEON `str q` / `orr v.2s, #imm` post-index and immediate forms, `sha1c`. |
+| 2 | Directives: `.hidden`, `.reloc`, `.endr` reached without its `.rept`. |
+| 1 | `:abs_g2_s:` over a label: a symbol in a `movz` / `movk` group needs a MOVW relocation the writer does not emit. |
 
 These figures supersede `tools/probe_asm_units/`'s 46 of 68 and 62 of 77. The
 probe feeds each preprocessed unit through the file-scope `asm` path in

@@ -566,6 +566,28 @@ fn named_group_order(
     v
 }
 
+/// The widest alignment the merged `.bss` answers to: each unit's `.bss`
+/// family, each named zero-fill section, and each common symbol, whose
+/// `st_value` is its alignment.
+fn bss_alignment(objs: &[NativeObject]) -> usize {
+    let units = objs
+        .iter()
+        .map(|o| crate::c5::layout::bss_image_align(o.bss_align));
+    let named = named_group_order(objs, SectionFamily::Bss)
+        .into_iter()
+        .map(|(_, s)| s.align.max(1) as usize);
+    let commons = objs
+        .iter()
+        .flat_map(|o| &o.symbols)
+        .filter(|s| matches!(s.section, NativeSymSection::Common))
+        .map(|s| s.value.max(1) as usize);
+    units
+        .chain(named)
+        .chain(commons)
+        .max()
+        .unwrap_or(crate::c5::layout::BSS_ALIGN_MIN)
+}
+
 /// One grouped name's merged extent. `start` / `end` are offsets in
 /// the merged data stream, or in the zero-fill region when `bss`.
 struct NamedExtent {
@@ -839,6 +861,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
     let mut text: Vec<u8> = Vec::new();
     let mut data: Vec<u8> = Vec::new();
     let mut bss_size: usize = 0;
+    let bss_align = bss_alignment(objs);
     let mut data_align: usize = crate::c5::layout::DATA_ALIGN_MIN;
     let mut rodata_align: usize = crate::c5::layout::DATA_ALIGN_MIN;
     let mut relro_align: usize = crate::c5::layout::DATA_ALIGN_MIN;
@@ -880,8 +903,11 @@ pub fn link_native_objects_with_shared_libs<'a>(
     // One alignment covers the whole data image: the writers place
     // every region from it, and each region starts at a multiple of it
     // so a unit's data base keeps the residue its `sh_addralign` asked
-    // for once the region is placed.
-    data_align = crate::c5::layout::data_image_align(data_align.max(rodata_align).max(relro_align));
+    // for once the region is placed. The bss tail is one more region in
+    // the same offset space, so its alignment counts here too.
+    data_align = crate::c5::layout::data_image_align(
+        data_align.max(rodata_align).max(relro_align).max(bss_align),
+    );
     align_up(&mut data, data_align);
     let data_ro_len = data.len();
     for obj in objs {
@@ -1057,7 +1083,9 @@ pub fn link_native_objects_with_shared_libs<'a>(
 
     // The merged bss region begins at `data.len()` in the unified
     // data-offset space; pad the file image so bss offsets keep their
-    // per-unit alignment residues in the final image.
+    // per-unit alignment residues in the final image. `data_align` covers
+    // the bss alignment, so the padded end and the region boundaries
+    // before it are bss boundaries wherever the writers place the stream.
     if bss_size > 0 {
         align_up(&mut data, crate::c5::layout::bss_image_align(data_align));
     }

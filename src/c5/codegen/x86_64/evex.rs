@@ -85,7 +85,8 @@ pub(crate) enum Shape {
     RvmI,
     /// `op %src, %dst`: dst in ModRM.reg, src in r/m, EVEX.vvvv unused.
     Rm,
-    /// [`Shape::Rm`] with a memory-only source (the sub-vector broadcasts).
+    /// [`Shape::Rm`] with a memory-only source (the sub-vector broadcasts
+    /// and the non-temporal load).
     RmMem,
     /// `op $imm8, %src, %dst`: [`Shape::Rm`] with a trailing byte.
     RmI,
@@ -177,7 +178,8 @@ const fn vmi(w: bool, opcode: u8, digit: u8, tuple: Tuple) -> Form {
     form(Shape::VmI(digit), 1, 1, w, opcode, tuple)
 }
 
-/// A memory-source-only 0F38 form (the sub-vector broadcasts).
+/// A memory-source-only 0F38 form (the sub-vector broadcasts and the
+/// non-temporal load).
 const fn rmmem(w: bool, opcode: u8, tuple: Tuple) -> Form {
     form(Shape::RmMem, 1, 2, w, opcode, tuple)
 }
@@ -212,6 +214,12 @@ const fn mov(pp: u8, w: bool, load: u8, store: u8) -> Form {
         store_op: store,
         ..form(Shape::Mov, pp, 1, w, load, Tuple::FullMem)
     }
+}
+
+/// A non-temporal packed store (0F map): a [`Shape::Mov`] form with no load
+/// direction, which a zero `opcode` marks.
+const fn movnt(pp: u8, w: bool, store: u8) -> Form {
+    mov(pp, w, 0, store)
 }
 
 /// A scalar transfer between a vector register and a general register or
@@ -258,6 +266,10 @@ const TABLE: &[(&str, Form)] = {
     ("vmovdqa32", mov(1, false, 0x6F, 0x7F)), ("vmovdqa64", mov(1, true,  0x6F, 0x7F)),
     ("vmovups",   mov(0, false, 0x10, 0x11)), ("vmovupd",   mov(1, true,  0x10, 0x11)),
     ("vmovaps",   mov(0, false, 0x28, 0x29)), ("vmovapd",   mov(1, true,  0x28, 0x29)),
+    // The non-temporal moves have one direction each: the stores write a
+    // whole vector of memory from a register, `vmovntdqa` loads one.
+    ("vmovntdq", movnt(1, false, 0xE7)), ("vmovntps", movnt(0, false, 0x2B)),
+    ("vmovntpd", movnt(1, true, 0x2B)),  ("vmovntdqa", rmmem(false, 0x2A, FullMem)),
     // `vmovq` has a vector-register pair form under the F3 prefix; `vmovd` has
     // none, so a vector r/m is refused there.
     ("vmovd", movg(false, 0, 0)), ("vmovq", movg(true, 2, 0x7E)),
@@ -538,6 +550,9 @@ pub(crate) fn encode(code: &mut Vec<u8>, f: Form, ops: &[Concrete]) -> Result<()
     // prefix and opcode.
     let mut pp = f.pp;
     let mut opcode = if store { f.store_op } else { f.opcode };
+    if f.shape == Shape::Mov && opcode == 0 {
+        return bad("a non-temporal store takes a memory destination");
+    }
     let rm = if f.krm {
         match mask_reg_num(rm_op) {
             Some(n) => Rm::Reg(n),
@@ -546,7 +561,7 @@ pub(crate) fn encode(code: &mut Vec<u8>, f: Form, ops: &[Concrete]) -> Result<()
     } else {
         match (vreg(rm_op), MemRm::of(rm_op), rm_op) {
             (Some(_), ..) if f.shape == Shape::RmMem => {
-                return bad("a sub-vector broadcast takes a memory source");
+                return bad("this instruction takes a memory source");
             }
             (Some((n, _)), ..) if f.gpr_rm => {
                 if f.alt_op == 0 {

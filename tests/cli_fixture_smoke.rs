@@ -117,6 +117,7 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("inline_asm_x64_cmov.c", "linux-aarch64"),            // x86-64 cmovcc
     ("inline_asm_x64_cdqe.c", "linux-aarch64"),            // x86-64 cdqe
     ("inline_asm_x64_movnti.c", "linux-aarch64"),          // x86-64 movnti/sfence
+    ("inline_asm_x64_raid6_syndrome.c", "linux-aarch64"),  // x86-64 AVX2 / AVX-512 RAID-6 syndrome
     ("inline_asm_x64_clflush.c", "linux-aarch64"),         // x86-64 clflush/prefetch
     ("inline_asm_x64_prefetch.c", "linux-aarch64"),        // x86-64 prefetch hint family
     ("inline_asm_x64_setjmp_label.c", "linux-aarch64"),    // x86-64 asm context switch
@@ -428,6 +429,7 @@ const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
     ("string_concat_encoding_prefix.c", 0),
     ("utf8_string_prefix_ucn.c", 0),
     ("overaligned_data_placement.c", 0),
+    ("overaligned_bss_placement.c", 0),
     ("overaligned_type_placement.c", 0),
     ("page_multiple_alignment.c", 0),
     ("file_scope_asm_decls.c", 0),

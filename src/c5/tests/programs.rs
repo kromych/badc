@@ -882,6 +882,14 @@ fn overaligned_data_placement() {
 }
 
 #[test]
+fn overaligned_bss_placement() {
+    // Zero-initialized objects with an explicit `aligned(N)` land on their
+    // boundary when `.data` asks for less: the merged `.bss` base follows
+    // the widest `.bss` alignment, not the `.data` one.
+    assert_eq!(run_fixture("overaligned_bss_placement.c"), 0);
+}
+
+#[test]
 fn attributed_aggregate_align_floor() {
     // A variable-level `aligned(N)` lower than the type's alignment still
     // places at the members' attribute-free alignment, including where the

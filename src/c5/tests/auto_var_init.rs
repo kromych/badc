@@ -14,6 +14,13 @@ use crate::{
 /// Compile `src` for the host under `mode`. `=pattern` passes the byte the
 /// fixture checks against.
 fn program_for(src: &str, mode: AutoVarInit) -> Program {
+    program_for_target(src, mode, Target::host())
+}
+
+/// `program_for` for an explicit target. The fixture's probes compare
+/// objects against a pattern whose width the target fixes, so the data
+/// model is part of what the flag has to satisfy.
+fn program_for_target(src: &str, mode: AutoVarInit, target: Target) -> Program {
     let mut opts = CompileOptions::default().with_auto_var_init(mode);
     if mode == AutoVarInit::Pattern {
         opts = opts.with_defines(alloc::vec![(
@@ -21,7 +28,7 @@ fn program_for(src: &str, mode: AutoVarInit) -> Program {
             alloc::format!("{AUTO_VAR_INIT_PATTERN_BYTE:#x}"),
         )]);
     }
-    Compiler::with_options(super::with_prelude(src), Target::host(), opts)
+    Compiler::with_options(super::with_prelude(src), target, opts)
         .compile()
         .unwrap_or_else(|e| panic!("compile: {e}"))
 }
@@ -45,6 +52,22 @@ fn zero_fills_every_uninitialized_object_under_the_interpreter() {
 #[test]
 fn pattern_fills_every_uninitialized_object_under_the_interpreter() {
     assert_eq!(vm_exit(fixture_program(AutoVarInit::Pattern)), 0);
+}
+
+/// `long` is 4 bytes on the Windows targets and 8 on the others, so the
+/// fixture runs for both data models rather than for the host's alone.
+#[test]
+fn every_uninitialized_object_is_filled_under_llp64() {
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        for mode in [AutoVarInit::Zero, AutoVarInit::Pattern] {
+            let src = super::load_fixture("trivial_auto_var_init.c");
+            assert_eq!(
+                vm_exit(program_for_target(&src, mode, target)),
+                0,
+                "{target:?} {mode:?}"
+            );
+        }
+    }
 }
 
 /// The runnable fixture and the corpus execute through the JIT on the

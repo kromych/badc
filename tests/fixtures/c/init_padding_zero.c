@@ -16,7 +16,7 @@ struct S {
 
 union U {
     char c;
-    long l;
+    long long l;
 };
 
 struct T {
@@ -47,6 +47,9 @@ __attribute__((noinline)) static unsigned or_bytes(const void *p, const unsigned
 static const unsigned char s_pad[] = {1, 2, 3};
 static const unsigned char u_pad[] = {1, 2, 3, 4, 5, 6, 7};
 static const unsigned char t_pad[] = {1, 2, 3, 9};
+// The union's tail ends at its own size, so the probe length follows
+// `sizeof` rather than the offset table's length.
+#define U_PAD_LEN ((unsigned)(sizeof(union U) - 1))
 
 __attribute__((noinline)) static unsigned struct_const(void) {
     struct S s = {1};
@@ -75,12 +78,12 @@ __attribute__((noinline)) static unsigned struct_empty(void) {
 
 __attribute__((noinline)) static unsigned union_const(void) {
     union U u = {1};
-    return or_bytes(&u, u_pad, sizeof u_pad);
+    return or_bytes(&u, u_pad, U_PAD_LEN);
 }
 
 __attribute__((noinline)) static unsigned union_runtime(int v) {
     union U u = {(char)v};
-    return or_bytes(&u, u_pad, sizeof u_pad);
+    return or_bytes(&u, u_pad, U_PAD_LEN);
 }
 
 __attribute__((noinline)) static unsigned compound_literal(int v) {
@@ -121,6 +124,6 @@ int main(void) {
     dirty();
     acc |= struct_by_value(1);
     acc |= or_bytes(&st, s_pad, sizeof s_pad);
-    acc |= or_bytes(&ut, u_pad, sizeof u_pad);
+    acc |= or_bytes(&ut, u_pad, U_PAD_LEN);
     return (int)acc;
 }

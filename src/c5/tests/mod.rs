@@ -644,6 +644,20 @@ pub fn run_fixture(name: &str) -> i64 {
     run_str(&load_fixture(name))
 }
 
+/// [`run_fixture`] for an explicit target. The interpreter reads the
+/// target's type widths, so a fixture whose result turns on the data
+/// model runs for LP64 and LLP64 alike from any host.
+pub fn run_fixture_for(name: &str, target: crate::Target) -> i64 {
+    Vm::new(
+        Compiler::with_target(with_prelude(&load_fixture(name)), target)
+            .compile()
+            .unwrap(),
+    )
+    .with_pointer_tracking()
+    .run()
+    .unwrap()
+}
+
 /// Compile + run a fixture with `args` exposed to `main(int argc, char **argv)`.
 pub fn run_fixture_with_args<I, S>(name: &str, args: I) -> i64
 where

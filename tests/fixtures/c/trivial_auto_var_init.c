@@ -21,7 +21,11 @@
 #define REP1 ((unsigned char)EXPECT)
 #define REP2 ((unsigned short)(EXPECT * 0x0101u))
 #define REP4 ((unsigned)(EXPECT * 0x01010101u))
-#define REP8 ((unsigned long)EXPECT * 0x0101010101010101ul)
+#define REP8 ((unsigned long long)EXPECT * 0x0101010101010101ull)
+// The pattern narrowed to the width the object under test actually has,
+// so a probe compares against as many bytes as the object holds.
+#define REPL ((unsigned long)REP8)
+#define REPP ((__UINTPTR_TYPE__)REP8)
 
 struct S {
     char c;
@@ -71,18 +75,18 @@ __attribute__((noinline)) static int scalar_char(void) {
 
 __attribute__((noinline)) static int scalar_long(void) {
     long l;
-    return (unsigned long)l != REP8;
+    return (unsigned long)l != REPL;
 }
 
 __attribute__((noinline)) static int scalar_ptr(void) {
     char *p;
-    return (unsigned long)p != REP8;
+    return (__UINTPTR_TYPE__)p != REPP;
 }
 
 __attribute__((noinline)) static int scalar_double(void) {
     union {
         double d;
-        unsigned long u;
+        unsigned long long u;
     } v;
     double d;
     v.d = d;

@@ -3,8 +3,10 @@
 // register-or-immediate constraint (`g`, `ri`, `rI`, `ci`): a constant
 // the class admits reaches the instruction as an immediate, any other
 // value through a register. Each form is gated on __x86_64__ with a
-// portable fallback, so the aarch64 lanes exercise the fallback. Returns
-// 42 when every form computes the expected value.
+// portable fallback, so the aarch64 lanes exercise the fallback. The
+// suffix a form selects follows its operand's width, so the 64-bit arm
+// spells `long long` and covers `q` on LP64 and LLP64 alike. Returns 42
+// when every form computes the expected value.
 
 #if defined(__x86_64__)
 static unsigned char shr8(unsigned char v) {
@@ -19,7 +21,7 @@ static unsigned shr32(unsigned v) {
     __asm__("shr%z0 $1, %0" : "+r"(v));
     return v;
 }
-static unsigned long shr64(unsigned long v) {
+static unsigned long long shr64(unsigned long long v) {
     __asm__("shr%z0 $1, %0" : "+r"(v));
     return v;
 }
@@ -73,7 +75,7 @@ static unsigned short shr16(unsigned short v) {
 static unsigned shr32(unsigned v) {
     return v >> 1;
 }
-static unsigned long shr64(unsigned long v) {
+static unsigned long long shr64(unsigned long long v) {
     return v >> 1;
 }
 static void shr16_mem(unsigned short *p) {
@@ -116,7 +118,7 @@ int main(void) {
     if (shr32(0x80000001u) != 0x40000000u) {
         return 3;
     }
-    if (shr64(0x8000000000000001ul) != 0x4000000000000000ul) {
+    if (shr64(0x8000000000000001ull) != 0x4000000000000000ull) {
         return 4;
     }
     shr16_mem(&m);

@@ -6113,6 +6113,28 @@ fn inline_asm_x64_operand_modifiers_fixture() {
 }
 
 #[test]
+fn inline_asm_x64_operand_modifiers_hold_under_both_data_models() {
+    use crate::Target;
+    // The suffix `%z` selects and the comparisons the fixture makes follow
+    // the operand's width, and `long` is 4 bytes on the Windows targets.
+    // The x86 targets take the asm arm and the aarch64 ones the portable
+    // fallback, so both arms are covered at both widths.
+    for target in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+        Target::MacOSAarch64,
+    ] {
+        assert_eq!(
+            super::run_fixture_for("inline_asm_x64_operand_modifiers.c", target),
+            42,
+            "{target:?}"
+        );
+    }
+}
+
+#[test]
 fn extern_typeof_redeclaration_merges() {
     // `extern typeof(f) f;` (and the object form) after or before the
     // definition is a redeclaration, not a duplicate definition; an

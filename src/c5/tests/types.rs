@@ -859,14 +859,16 @@ fn transparent_union_parameter_still_warns_on_incompatible_arguments() {
 #[test]
 fn transparent_union_attribute_is_ignored_without_a_covering_first_member() {
     // gcc 16 honors the attribute only when the union's machine mode is
-    // the first member's ({int, long} and a floating-first union get
+    // the first member's ({int, long long} and a floating-first union get
     // "attribute ignored"); an ignored union then warns like any other.
+    // `long long` is 64 bits on every target, so the three unions keep the
+    // same mode relation whatever the host's `long` width is.
     let p = compile_str(
-        "typedef union { int i; long l; } m_arg __attribute__((transparent_union));\n\
-         typedef union { double d; long l; } f_arg __attribute__((transparent_union));\n\
-         typedef union { long l; double d; } ok_arg __attribute__((transparent_union));\n\
+        "typedef union { int i; long long l; } m_arg __attribute__((transparent_union));\n\
+         typedef union { double d; long long l; } f_arg __attribute__((transparent_union));\n\
+         typedef union { long long l; double d; } ok_arg __attribute__((transparent_union));\n\
          void t(m_arg a);\nvoid u(ok_arg a);\n\
-         void f(long l) { t(l); u(l); }\n\
+         void f(long long l) { t(l); u(l); }\n\
          int main(void) { return 0; }",
     );
     let ignored = p
@@ -886,6 +888,49 @@ fn transparent_union_attribute_is_ignored_without_a_covering_first_member() {
         "got: {:?}",
         p.warnings
     );
+}
+
+#[test]
+fn transparent_union_honor_rule_follows_the_target_long_width() {
+    use crate::Target;
+    // The mode comparison reads the target's widths, so a union holding a
+    // `long` changes verdict with the data model: {int, long} is 4/8 on
+    // LP64 (ignored) and 4/4 on LLP64 (honored), while {long, double} is
+    // 8/8 on LP64 (honored) and 4/8 on LLP64 (ignored). Either way two of
+    // the three are ignored; which call keeps its argument warning is what
+    // moves.
+    let src = "typedef union { int i; long l; } m_arg __attribute__((transparent_union));\n\
+               typedef union { double d; long l; } f_arg __attribute__((transparent_union));\n\
+               typedef union { long l; double d; } ok_arg __attribute__((transparent_union));\n\
+               void t(m_arg a);\nvoid u(ok_arg a);\n\
+               void f(long l) { t(l); u(l); }\n\
+               int main(void) { return 0; }";
+    for (target, warns, honored) in [
+        (
+            Target::LinuxX64,
+            "in argument 1 of `t`",
+            "in argument 1 of `u`",
+        ),
+        (
+            Target::WindowsX64,
+            "in argument 1 of `u`",
+            "in argument 1 of `t`",
+        ),
+    ] {
+        let p = super::compile_str_bare_for(src, target);
+        let ignored = p
+            .warnings
+            .iter()
+            .filter(|w| w.contains("`transparent_union` attribute ignored"))
+            .count();
+        assert!(
+            ignored == 2
+                && p.warnings.iter().any(|w| w.contains(warns))
+                && !p.warnings.iter().any(|w| w.contains(honored)),
+            "{target:?}: got: {:?}",
+            p.warnings
+        );
+    }
 }
 
 #[test]

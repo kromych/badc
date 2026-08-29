@@ -449,6 +449,11 @@ pub(crate) struct Symbol {
     /// unit's definition is an inline definition; see
     /// [`inline_definition`].
     pub saw_noninline_decl: bool,
+    /// A definition in this unit spelled without `inline`. Under the
+    /// GNU89 model an `extern inline` body is inline-only, and gcc's
+    /// gnu_inline contract lets the same unit provide the ordinary
+    /// definition; that definition is the external one.
+    pub saw_noninline_def: bool,
     pub saw_static_decl: bool,
     pub saw_plain_inline_decl: bool,
     pub saw_extern_inline_decl: bool,
@@ -678,9 +683,10 @@ pub fn inline_definition(sym: &Symbol, model: InlineModel) -> bool {
     let gnu89 = sym.is_gnu_inline || model == InlineModel::Gnu89;
     if gnu89 {
         // GCC's `gnu_inline` contract: `extern inline` is used only for
-        // inlining, and a declaration spelling `inline` without
-        // `extern` cancels that back to a standalone definition.
-        sym.saw_extern_inline_decl && !sym.saw_plain_inline_decl
+        // inlining, a declaration spelling `inline` without `extern`
+        // cancels that back to a standalone definition, and an ordinary
+        // definition in the same unit is the external one.
+        sym.saw_extern_inline_decl && !sym.saw_plain_inline_decl && !sym.saw_noninline_def
     } else {
         // C99 6.7.4p6: every declaration `inline`, none `extern`. A
         // non-inline declaration sets `saw_noninline_decl`, so only the
@@ -801,6 +807,7 @@ impl crate::c5::layout::DataOffsets for Symbol {
             defined_here,
             is_extern_decl: _,
             saw_noninline_decl: _,
+            saw_noninline_def: _,
             saw_plain_inline_decl: _,  // linkage model input, not an offset
             saw_extern_inline_decl: _, // linkage model input, not an offset
             is_gnu_inline: _,          // linkage model selector

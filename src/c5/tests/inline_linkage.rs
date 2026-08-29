@@ -271,6 +271,23 @@ fn c99_inline_model_is_the_default() {
 }
 
 #[test]
+fn ordinary_definition_after_an_extern_inline_body_is_the_external_one() {
+    // gcc's gnu_inline contract: the extern-inline body serves only
+    // inlining, and the same unit may provide the ordinary definition,
+    // which is what the kernel's fortified string helpers do -- an
+    // extern gnu_inline wrapper in the header, the real definition in
+    // the unit. The identifier must bind an external definition.
+    let src = "extern __attribute__((__gnu_inline__)) inline int f(int x) { return x + 1; }\n\
+               int f(int x) { return x + 2; }\n\
+               int g(int x) { return f(x); }\n";
+    for model in [Model::C99, Model::Gnu89] {
+        for optimize in [false, true] {
+            assert_eq!(probe(src, model, optimize), Sym::External, "{model:?} -O={optimize}");
+        }
+    }
+}
+
+#[test]
 fn gnu_inline_attribute_selects_the_gnu89_model_per_function() {
     let n = check_matrix(
         "gnu_inline attribute",

@@ -1471,6 +1471,9 @@ impl Compiler {
                         self.symbols[id_idx].val = ent_pc as i64;
                     }
                     self.symbols[id_idx].defined_here = true;
+                    if !self.pending_saw_inline_specifier {
+                        self.symbols[id_idx].saw_noninline_def = true;
+                    }
                     // A body trumps any earlier `extern T f();`
                     // forward declaration -- the function is now
                     // defined in this translation unit.

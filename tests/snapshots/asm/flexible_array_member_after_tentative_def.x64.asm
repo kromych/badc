@@ -26,29 +26,12 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	leaq	<rip>, %rdx
-               	movq	(%rdx), %rax
                	leaq	<rip>, %rsi
-               	cmpq	%rsi, %rax
+               	xorq	%rax, %rax
+               	movq	%rax, %rcx
+               	movq	0x10(%rsi), %rax
+               	cmpq	$0xb, %rax
                	movl	$0x1, %eax
-               	jne	<addr>
-               	movq	0x8(%rdx), %rcx
-               	leaq	<rip>, %rdi
-               	cmpq	%rdi, %rcx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
-               	jne	<addr>
-               	movq	0x10(%rdx), %rcx
-               	leaq	<rip>, %rdx
-               	cmpq	%rdx, %rcx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	retq
-               	movq	0x10(%rsi), %rcx
-               	cmpq	$0xb, %rcx
                	jne	<addr>
                	leaq	<rip>, %rcx
                	movq	0x10(%rcx), %rcx
@@ -411,9 +394,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	movq	%rax, %rcx
                	jmp	<addr>
                	jmp	<addr>
                	movq	%rax, %rcx

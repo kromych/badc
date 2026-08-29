@@ -56,14 +56,12 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
                	ldrsw	x0, [x0]
                	cmp	w0, #0xa
                	cset	x0, ne
                	cbnz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	x0, [x0, #0x8]
                	ldrsw	x0, [x0]
                	cmp	w0, #0x14
                	cset	x0, ne

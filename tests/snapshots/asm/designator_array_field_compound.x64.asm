@@ -44,48 +44,31 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
-               	leaq	<rip>, %rbx
-               	movq	(%rbx), %rax
-               	callq	*%rax
+               	callq	<addr>
                	cmpl	$0xa, %eax
                	je	<addr>
                	movl	$0x2, %eax
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movq	0x8(%rbx), %rax
-               	callq	*%rax
+               	callq	<addr>
                	cmpl	$0x14, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movq	0x10(%rbx), %rax
-               	callq	*%rax
+               	callq	<addr>
                	cmpl	$0x1e, %eax
                	je	<addr>
                	movl	$0x4, %eax
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movq	0x28(%rbx), %rax
-               	callq	*%rax
+               	callq	<addr>
                	cmpl	$0x3c, %eax
                	je	<addr>
                	movl	$0x5, %eax
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
                	movq	%rax, %rcx
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
                	popq	%rbp
                	retq

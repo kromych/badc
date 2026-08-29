@@ -21,30 +21,8 @@ Disassembly of section .text:
                	mov	x1, x0
                	mov	x1, x0
                	mov	x1, x0
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1]
-               	ldrb	w1, [x1]
-               	mov	x17, #0x6f              // =111
-               	eor	x1, x1, x17
-               	mov	w2, w1
-               	cmp	w2, #0x0
-               	cset	x1, ne
-               	cbnz	x2, <addr>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1, #0x40]
-               	ldrb	w1, [x1]
-               	mov	x17, #0x74              // =116
-               	eor	x1, x1, x17
-               	mov	w1, w1
-               	cmp	w1, #0x0
-               	cset	x1, ne
-               	cbz	x1, <addr>
-               	mov	x0, #0x5                // =5
+               	mov	x1, x0
                	ret
-               	ret
-               	b	<addr>
 
 <opaque>:
                	stp	x29, x30, [sp, #-0x10]!

@@ -37,7 +37,6 @@ Disassembly of section .text:
                	mov	x29, sp
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	x0, [x0, #0x8]
                	add	x1, x0, #0x0
                	ldrsw	x1, [x1]
                	add	x1, x1, #0x0

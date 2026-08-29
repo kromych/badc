@@ -42,11 +42,11 @@ fn ent_pc=13 n_params=0 variadic=false locals=3
   block 6  start_pc=0
     v25  LocalAddr(-2)                                    -> x0
     v26  ImmData(8)                                       -> x1
-    v27  Mcpy { dst=v25, src=v26, size=16, align=8 }      -> x1
-    v28  LocalAddr(-2)                                    -> x1
+    v27  Mcpy { dst=v25, src=v26, size=16, align=8 }      -> x0
+    v28  LocalAddr(-2)                                    -> x0
     v29  Imm(0)                                           -> x3
-    v30  Load { addr=v25, disp=0, kind=I64 }              -> x0
-    v31  CallIndirect { target=v30, args=[v29], callee_variadic=false, fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0
+    v30  ImmCode(ent_pc=14)                               -> x0
+    v31  Call { target_pc=14, args=[v29], fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0
     v32  Binop { op=fne, lhs=v31, rhs=v29 }               -> x0
     terminator Bz { cond=v32, target=b8, fall=b7 }   (exit_acc=v32)
   block 7  start_pc=0

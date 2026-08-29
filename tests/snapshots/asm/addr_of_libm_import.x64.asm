@@ -91,11 +91,9 @@ Disassembly of section .text:
                	movq	0x8(%rcx), %rdx
                	movq	%rdx, 0x8(%rax)
                	popq	%rdx
-               	movq	%rax, %rcx
                	xorq	%rbx, %rbx
-               	movq	(%rax), %rax
                	movq	%rbx, %xmm0
-               	callq	*%rax
+               	callq	<addr>
                	movq	%rbx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>

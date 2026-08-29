@@ -3195,6 +3195,17 @@ fn const_object_array_bound() {
 }
 
 #[test]
+fn const_pointer_object_fold() {
+    // A const-qualified pointer object with static storage duration is
+    // read as its initializer's address: file-scope and block-scope
+    // objects, an aggregate member, an interior and a one-past-the-end
+    // element address, a later-defined extern, a function, and one
+    // whose own address escapes. The object-level cover is in
+    // `relocatable`.
+    assert_eq!(run_fixture("const_pointer_object_fold.c"), 0);
+}
+
+#[test]
 fn block_scope_thread_local() {
     // C11 6.7.1: a block-scope `static _Thread_local` / `static __thread`
     // object has thread storage duration -- placed in the TLS block, one per

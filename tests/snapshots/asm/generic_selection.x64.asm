@@ -66,7 +66,6 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	retq
                	leaq	<rip>, %rax
-               	movq	(%rax), %rax
                	movslq	(%rax), %rax
                	cmpl	$0xa, %eax
                	setne	%al
@@ -74,7 +73,6 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rax
-               	movq	0x8(%rax), %rax
                	movslq	(%rax), %rax
                	cmpl	$0x14, %eax
                	setne	%al

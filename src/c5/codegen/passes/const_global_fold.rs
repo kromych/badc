@@ -6,7 +6,10 @@
 //! object is not a constant expression, C99 6.6):
 //!
 //!   * [`fold_loads`] replaces a non-volatile integer load from the
-//!     object's image with the initializer's value.
+//!     object's image with the initializer's value: the image bytes, or
+//!     for a slot a relocation patches, the address constant (C99 6.6p9)
+//!     the slot receives at link time. A pointer object then has no
+//!     reader left, and the data compaction drops it.
 //!   * [`run`] replaces `load(member) == 0` with `0` and `!= 0` with `1`
 //!     when `member` carries a data relocation: the member holds a
 //!     link-time address, which is never null. The load stays, so any
@@ -16,21 +19,77 @@
 //! the value makes unreachable -- the shape a build-time assertion, or a
 //! call to an `__attribute__((error))` helper, is compiled into.
 
-use alloc::collections::BTreeSet;
+use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 
+use crate::c5::codegen::ssa::tape::{self, Insertion};
 use crate::c5::ir::{BinOp, FunctionSsa, Inst, LoadKind, Terminator, ValueId};
 use crate::c5::program::Program;
+use crate::c5::symbol::Linkage;
 use crate::c5::token::Token;
+
+/// An address constant a relocated slot receives at link time, in the
+/// form the IR materializes it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum AddrConst {
+    /// `disp` bytes past the object at `base` in this unit's data.
+    Data { base: i64, disp: i64 },
+    /// `disp` bytes past another unit's data symbol, by symbol index.
+    Extern { sym: u32, disp: i64 },
+    /// A function, by entry pc.
+    Code(usize),
+}
+
+impl AddrConst {
+    fn disp(self) -> i64 {
+        match self {
+            AddrConst::Data { disp, .. } | AddrConst::Extern { disp, .. } => disp,
+            AddrConst::Code(_) => 0,
+        }
+    }
+
+    fn displaced(self, by: i64) -> Self {
+        match self {
+            AddrConst::Data { base, disp } => AddrConst::Data {
+                base,
+                disp: disp.wrapping_add(by),
+            },
+            AddrConst::Extern { sym, disp } => AddrConst::Extern {
+                sym,
+                disp: disp.wrapping_add(by),
+            },
+            AddrConst::Code(pc) => AddrConst::Code(pc),
+        }
+    }
+
+    /// The base as the walker materializes the same address; an
+    /// `Extern` base also needs the reference-table entry [`bind`] adds.
+    fn base(self) -> Inst {
+        match self {
+            AddrConst::Data { base, .. } => Inst::ImmData(base),
+            AddrConst::Extern { .. } => Inst::ImmData(0),
+            AddrConst::Code(pc) => Inst::ImmCode(pc),
+        }
+    }
+}
+
+/// The value of a byte range of const data: the image bytes, zero-extended
+/// to eight, or the address a relocation patches into the range.
+pub(crate) enum ConstValue {
+    Bytes([u8; 8]),
+    Addr(AddrConst),
+}
 
 /// Const-data view for folding loads of `const` objects: the `[lo, hi)`
 /// byte ranges of const-qualified, defined, initialized static-duration
 /// objects -- scalar, aggregate or array -- whose image already holds
-/// their value, the data-segment offsets a relocation patches (unknown
-/// until link, so never folded), and the data image itself.
+/// their value, the data-segment offsets a relocation patches with the
+/// address each receives, and the data image itself.
 pub(crate) struct ConstData<'a> {
     intervals: Vec<(i64, i64)>,
-    reloc_offsets: Vec<i64>,
+    /// Ascending by offset. `None` marks a slot whose value has no IR
+    /// form: a `&&label`, an unresolvable symbol.
+    relocs: Vec<(i64, Option<AddrConst>)>,
     data: &'a [u8],
 }
 
@@ -62,36 +121,76 @@ impl<'a> ConstData<'a> {
         // `__func__` arrays, and staged local-initializer templates.
         // Nothing can write them; their image is their value.
         intervals.extend(program.const_data_ranges.iter().copied());
-        // Every form of data relocation: a link-time address in this
-        // unit's data, an extern symbol's address, and a function
-        // address. The image bytes under any of them are a placeholder.
-        let mut reloc_offsets: Vec<i64> = program
-            .data_relocs
-            .iter()
-            .map(|r| r.data_offset as i64)
-            .chain(
-                program
-                    .extern_data_relocs
-                    .iter()
-                    .map(|r| r.data_offset as i64),
-            )
-            .chain(program.code_relocs.iter().map(|r| r.data_offset as i64))
-            .collect();
-        reloc_offsets.sort_unstable();
+        let data_len = program.data.len() as i64;
+        // A data symbol's address by link name, as the walker resolves a
+        // reference: this unit's definition, else the extern declaration.
+        let mut by_name: BTreeMap<&str, AddrConst> = BTreeMap::new();
+        for (i, s) in program.symbols.iter().enumerate() {
+            if s.class != Token::Glo as i64 || s.is_thread_local {
+                continue;
+            }
+            if s.defined_here && !s.is_weak && (0..data_len).contains(&s.val) {
+                by_name.insert(
+                    s.link_name(),
+                    AddrConst::Data {
+                        base: s.val,
+                        disp: 0,
+                    },
+                );
+            } else if s.is_extern_decl
+                && s.linkage == Linkage::External
+                && !s.defined_here
+                && s.val == 0
+            {
+                by_name.entry(s.link_name()).or_insert(AddrConst::Extern {
+                    sym: i as u32,
+                    disp: 0,
+                });
+            }
+        }
+        // Every form of data relocation: the slot's value is the address.
+        let mut relocs: Vec<(i64, Option<AddrConst>)> = Vec::new();
+        for r in &program.data_relocs {
+            let (base, target) = (r.target_anchor as i64, r.target_offset as i64);
+            let addr = (0..data_len).contains(&base).then_some(AddrConst::Data {
+                base,
+                disp: target.wrapping_sub(base),
+            });
+            relocs.push((r.data_offset as i64, addr));
+        }
+        for r in &program.extern_data_relocs {
+            let addr = by_name
+                .get(r.symbol_name.as_str())
+                .map(|a| a.displaced(r.addend));
+            relocs.push((r.data_offset as i64, addr));
+        }
+        // A code slot names a body of this unit or an import placeholder
+        // the emitters resolve by name, as `ImmCode` does either way.
+        for r in &program.code_relocs {
+            let pc = r.target_ent_pc as usize;
+            relocs.push((r.data_offset as i64, Some(AddrConst::Code(pc))));
+        }
+        relocs.extend(
+            program
+                .label_data_slots()
+                .map(|(off, _)| (off as i64, None)),
+        );
+        relocs.sort_unstable_by_key(|&(off, _)| off);
         ConstData {
             intervals,
-            reloc_offsets,
+            relocs,
             data: &program.data,
         }
     }
 
-    /// The value of `[off, off + width)`, zero-extended to eight bytes,
-    /// when the whole read sits inside one const interval and overlaps no
-    /// relocation slot. An offset at or past the image end belongs to a
+    /// The value of `[off, off + width)` when the whole read sits inside
+    /// one const interval: the image bytes, zero-extended to eight, when
+    /// it overlaps no relocation slot; the patched address when it is
+    /// exactly one slot. An offset at or past the image end belongs to a
     /// wholly-zero, relocation-free object the data compaction moved to
     /// the `.bss` region, which every writer maps to a zero-filled vaddr
     /// range; its value is zero.
-    fn read(&self, off: i64, width: i64) -> Option<[u8; 8]> {
+    fn read(&self, off: i64, width: i64) -> Option<ConstValue> {
         if !self
             .intervals
             .iter()
@@ -100,19 +199,113 @@ impl<'a> ConstData<'a> {
             return None;
         }
         // A relocation patches 8 bytes at its offset with a link-time
-        // address; any overlap makes the read's value unknown here.
-        let i = self.reloc_offsets.partition_point(|&r| r + 8 <= off);
-        if self.reloc_offsets.get(i).is_some_and(|&r| r < off + width) {
-            return None;
+        // address; a partial read of one has no value here.
+        let i = self.relocs.partition_point(|&(r, _)| r + 8 <= off);
+        if let Some(&(r, addr)) = self.relocs.get(i).filter(|&&(r, _)| r < off + width) {
+            return (r == off && width == 8)
+                .then_some(addr)
+                .flatten()
+                .map(ConstValue::Addr);
         }
         let mut raw = [0u8; 8];
         if off >= self.data.len() as i64 {
-            return Some(raw);
+            return Some(ConstValue::Bytes(raw));
         }
         let bytes = self.data.get(off as usize..(off + width) as usize)?;
         raw[..width as usize].copy_from_slice(bytes);
-        Some(raw)
+        Some(ConstValue::Bytes(raw))
     }
+}
+
+/// What a folded load becomes.
+#[derive(Clone, Copy)]
+enum Folded {
+    Imm(i64),
+    Addr(AddrConst),
+}
+
+impl Folded {
+    /// Every emission target is little-endian; `kind` sets the extension.
+    fn of(value: ConstValue, kind: LoadKind) -> Self {
+        let raw = match value {
+            ConstValue::Addr(a) => return Folded::Addr(a),
+            ConstValue::Bytes(raw) => raw,
+        };
+        let u = u64::from_le_bytes(raw);
+        Folded::Imm(match kind {
+            LoadKind::I8 => u as u8 as i8 as i64,
+            LoadKind::I16 => u as u16 as i16 as i64,
+            LoadKind::I32 => u as u32 as i32 as i64,
+            _ => u as i64,
+        })
+    }
+}
+
+/// Width of an integer load; the FP kinds keep their register class.
+fn int_width(kind: LoadKind) -> Option<i64> {
+    match kind {
+        LoadKind::I8 | LoadKind::U8 => Some(1),
+        LoadKind::I16 | LoadKind::U16 => Some(2),
+        LoadKind::I32 | LoadKind::U32 => Some(4),
+        LoadKind::I64 => Some(8),
+        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => None,
+    }
+}
+
+/// An `Extern` base names its symbol through the reference table.
+fn bind(func: &mut FunctionSsa, v: ValueId, a: AddrConst) {
+    if let AddrConst::Extern { sym, .. } = a {
+        func.extern_imm_data_refs.push((v, sym));
+    }
+}
+
+/// Rewrite each folded load. A displaced address is its base plus an
+/// add; inserting the base ahead of the load renumbers the tape, so the
+/// rewrites go through the remap. Returns whether any load was rewritten.
+fn apply(func: &mut FunctionSsa, folds: &mut [(ValueId, Folded)]) -> bool {
+    if folds.is_empty() {
+        return false;
+    }
+    folds.sort_unstable_by_key(|&(at, _)| at);
+    let ins: Vec<Insertion> = folds
+        .iter()
+        .filter_map(|&(at, f)| match f {
+            Folded::Addr(a) if a.disp() != 0 => Some(Insertion {
+                at,
+                inst: a.base(),
+                is_f32: false,
+            }),
+            _ => None,
+        })
+        .collect();
+    let rewrite = (!ins.is_empty()).then(|| tape::insert(func, &ins).0);
+    let mut bases = rewrite
+        .as_ref()
+        .map_or(&[][..], |r| r.ids.as_slice())
+        .iter();
+    for &(at, f) in folds.iter() {
+        let i = rewrite.as_ref().map_or(at, |r| r.remap[at as usize]);
+        let inst = match f {
+            Folded::Imm(v) => Inst::Imm(v),
+            Folded::Addr(a) if a.disp() == 0 => {
+                bind(func, i, a);
+                a.base()
+            }
+            Folded::Addr(a) => {
+                let base = *bases
+                    .next()
+                    .expect("one inserted base per displaced address");
+                bind(func, base, a);
+                Inst::BinopI {
+                    op: BinOp::Add,
+                    lhs: base,
+                    rhs_imm: a.disp(),
+                }
+            }
+        };
+        func.insts[i as usize] = inst;
+    }
+    true
 }
 
 /// Instruction indices whose `Inst::ImmData` payload is a link-time
@@ -159,51 +352,36 @@ fn data_addr(func: &FunctionSsa, ext: &BTreeSet<u32>, mut v: ValueId, mut off: i
 
 /// Fold non-volatile integer loads from const, initialized data into the
 /// initializer's value (C99 6.7.3: a const object's stored value cannot
-/// be modified, so the image bytes are the object's value for the whole
+/// be modified, so the image is the object's value for the whole
 /// execution). Returns true when any load folded. Runs inside the branch
 /// fold's fixed point so a load whose address becomes constant only
-/// after a phi collapses still folds; all emission targets are
-/// little-endian, so the image decodes with `from_le_bytes`.
+/// after a phi collapses still folds.
 pub(crate) fn fold_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) -> bool {
-    let mut changed = false;
     let ext = extern_imm_data(func);
-    for i in 0..func.insts.len() {
+    let mut folds: Vec<(ValueId, Folded)> = Vec::new();
+    for i in func.blocks.iter().flat_map(|b| b.inst_range.clone()) {
         let Inst::Load {
             addr,
             disp,
             kind,
             volatile: false,
             ..
-        } = func.insts[i]
+        } = func.insts[i as usize]
         else {
             continue;
         };
-        let width = match kind {
-            LoadKind::I8 | LoadKind::U8 => 1i64,
-            LoadKind::I16 | LoadKind::U16 => 2,
-            LoadKind::I32 | LoadKind::U32 => 4,
-            LoadKind::I64 => 8,
-            // The FP kinds keep their register class through the load;
-            // an integer immediate would misclassify them.
-            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => continue,
+        let Some(width) = int_width(kind) else {
+            continue;
         };
         let Some(off) = data_addr(func, &ext, addr, disp as i64) else {
             continue;
         };
-        let Some(raw) = cd.read(off, width) else {
+        let Some(value) = cd.read(off, width) else {
             continue;
         };
-        let u = u64::from_le_bytes(raw);
-        let value = match kind {
-            LoadKind::I8 => u as u8 as i8 as i64,
-            LoadKind::I16 => u as u16 as i16 as i64,
-            LoadKind::I32 => u as u32 as i32 as i64,
-            _ => u as i64,
-        };
-        func.insts[i] = Inst::Imm(value);
-        changed = true;
+        folds.push((i, Folded::of(value, kind)));
     }
-    changed
+    apply(func, &mut folds)
 }
 
 /// Resolve `v` to a frame byte coordinate: `LocalAddr(slot)` addresses
@@ -236,16 +414,6 @@ fn frame_addr(func: &FunctionSsa, mut v: ValueId, mut off: i64) -> Option<i64> {
     None
 }
 
-fn access_width(kind: LoadKind) -> i64 {
-    match kind {
-        LoadKind::I8 | LoadKind::U8 => 1,
-        LoadKind::I16 | LoadKind::U16 => 2,
-        LoadKind::I32 | LoadKind::U32 | LoadKind::F32 => 4,
-        LoadKind::I64 | LoadKind::F64 => 8,
-        LoadKind::F80 | LoadKind::F128 => 16,
-    }
-}
-
 fn store_width(kind: crate::c5::ir::StoreKind) -> i64 {
     use crate::c5::ir::StoreKind;
     match kind {
@@ -268,11 +436,11 @@ enum Filled {
 }
 
 impl Filled {
-    /// The `w` bytes at `off` within the range, zero-extended to eight.
-    fn read(self, cd: &ConstData<'_>, off: i64, w: i64) -> Option<[u8; 8]> {
+    /// The value of the `w` bytes at `off` within the range.
+    fn read(self, cd: &ConstData<'_>, off: i64, w: i64) -> Option<ConstValue> {
         match self {
             Filled::Template(base) => cd.read(base + off, w),
-            Filled::Zero => Some([0u8; 8]),
+            Filled::Zero => Some(ConstValue::Bytes([0u8; 8])),
         }
     }
 
@@ -347,6 +515,8 @@ pub(crate) fn fold_template_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) ->
     let mut exit_states: Vec<Option<State>> = vec![None; nblocks];
     let ext = extern_imm_data(func);
     let mut changed = false;
+    // An address rewrite may renumber the tape, so it waits for the walk.
+    let mut deferred: Vec<(ValueId, Folded)> = Vec::new();
     for b in 0..nblocks {
         let mut state: State = match preds[b].as_slice() {
             [p] if (*p as usize) < b
@@ -426,8 +596,10 @@ pub(crate) fn fold_template_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) ->
                     kind,
                     volatile: false,
                     ..
-                } if !matches!(kind, LoadKind::F32 | LoadKind::F64) => {
-                    let (kind, w) = (*kind, access_width(*kind));
+                } => {
+                    let (kind, Some(w)) = (*kind, int_width(*kind)) else {
+                        continue;
+                    };
                     let Some(a) = frame_addr(func, *addr, *disp as i64) else {
                         continue;
                     };
@@ -437,25 +609,25 @@ pub(crate) fn fold_template_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) ->
                     if a + w > hi {
                         continue;
                     }
-                    let Some(raw) = src.read(cd, a - lo, w) else {
+                    let Some(value) = src.read(cd, a - lo, w) else {
                         continue;
                     };
-                    let u = u64::from_le_bytes(raw);
-                    let value = match kind {
-                        LoadKind::I8 => u as u8 as i8 as i64,
-                        LoadKind::I16 => u as u16 as i16 as i64,
-                        LoadKind::I32 => u as u32 as i32 as i64,
-                        _ => u as i64,
-                    };
-                    func.insts[idx] = Inst::Imm(value);
-                    changed = true;
+                    match Folded::of(value, kind) {
+                        Folded::Imm(v) => {
+                            func.insts[idx] = Inst::Imm(v);
+                            changed = true;
+                        }
+                        f => deferred.push((i, f)),
+                    }
                 }
                 Inst::LoadLocal {
                     off,
                     kind,
                     volatile: false,
-                } if !matches!(kind, LoadKind::F32 | LoadKind::F64) => {
-                    let (kind, w) = (*kind, access_width(*kind));
+                } => {
+                    let (kind, Some(w)) = (*kind, int_width(*kind)) else {
+                        continue;
+                    };
                     let a = off.wrapping_mul(8);
                     let Some((&lo, &(hi, src))) = state.range(..=a).next_back() else {
                         continue;
@@ -463,18 +635,16 @@ pub(crate) fn fold_template_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) ->
                     if a + w > hi {
                         continue;
                     }
-                    let Some(raw) = src.read(cd, a - lo, w) else {
+                    let Some(value) = src.read(cd, a - lo, w) else {
                         continue;
                     };
-                    let u = u64::from_le_bytes(raw);
-                    let value = match kind {
-                        LoadKind::I8 => u as u8 as i8 as i64,
-                        LoadKind::I16 => u as u16 as i16 as i64,
-                        LoadKind::I32 => u as u32 as i32 as i64,
-                        _ => u as i64,
-                    };
-                    func.insts[idx] = Inst::Imm(value);
-                    changed = true;
+                    match Folded::of(value, kind) {
+                        Folded::Imm(v) => {
+                            func.insts[idx] = Inst::Imm(v);
+                            changed = true;
+                        }
+                        f => deferred.push((i, f)),
+                    }
                 }
                 // Pure value producers and reads neither write nor
                 // invalidate.
@@ -507,7 +677,7 @@ pub(crate) fn fold_template_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) ->
         }
         exit_states[b] = Some(state);
     }
-    changed
+    apply(func, &mut deferred) || changed
 }
 
 pub(crate) fn run(funcs: &mut [FunctionSsa], program: &Program) {

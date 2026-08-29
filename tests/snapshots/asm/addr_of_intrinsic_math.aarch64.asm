@@ -125,12 +125,10 @@ Disassembly of section .text:
                	str	x10, [x20, #0x10]
                	ldr	x10, [sp], #0x10
                	mov	x0, x20
-               	ldr	x0, [x20]
                	mov	x21, #0x4022000000000000 // =4621256167635550208
                	fmov	d16, x21
                	fneg	d0, d16
-               	mov	x9, x0
-               	blr	x9
+               	bl	<addr>
                	fmov	d17, x21
                	fcmp	d0, d17
                	b.eq	<addr>

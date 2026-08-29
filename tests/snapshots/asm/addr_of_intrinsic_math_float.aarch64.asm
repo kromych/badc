@@ -125,11 +125,9 @@ Disassembly of section .text:
                	fmov	s16, w23
                	sub	x17, x29, #0x20
                	str	s16, [x17]
-               	ldr	x0, [x20]
                	sub	x16, x29, #0x30
                	ldr	s0, [x16]
-               	mov	x9, x0
-               	blr	x9
+               	bl	<addr>
                	mov	x0, #0x41100000         // =1091567616
                	fmov	s17, w0
                	fcmp	s0, s17

@@ -392,6 +392,43 @@ fn const_object_store_faults() {
     assert_eq!(code, -1, "linked-image const store must die on a signal");
 }
 
+/// A const pointer object initialized with another unit's symbol folds
+/// at `-O` to that symbol's address plus the displacement; the bound
+/// reference the fold records must reach the emitter under the fold's
+/// own value id, with the addend applied.
+#[test]
+fn const_pointer_to_extern_object_folds_across_units() {
+    use crate::{CompileOptions, Program};
+    const UNIT_A: &str = "\
+extern int shared[4];\n\
+static int *const third = &shared[2];\n\
+int main(void) { return *third == 30 ? 0 : 1; }\n";
+    const UNIT_B: &str = "int shared[4] = {10, 20, 30, 40};\n";
+    let compile = |src: &str| -> Program {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::MacOSAarch64, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile: {e}"))
+    };
+    let (a, b) = (compile(UNIT_A), compile(UNIT_B));
+    let bytes = super::link_executable_with_runtime_multi(
+        &[&a, &b],
+        Target::MacOSAarch64,
+        NativeOptions::default().with_optimize(),
+    )
+    .unwrap_or_else(|e| panic!("link: {e}"));
+    let path = super::unique_temp_path("badc-test", "const_ptr_extern_fold", ".bin");
+    {
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+    }
+    set_executable(&path);
+    codesign(&path);
+    let output = super::output_when_not_busy(|| Command::new(&path));
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(output.status.code(), Some(0));
+}
+
 #[test]
 fn bss_segregation_maps_and_zero_fills() {
     // With segregation on, wholly-zero globals leave `__data` for the

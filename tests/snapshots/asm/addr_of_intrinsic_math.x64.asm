@@ -140,14 +140,12 @@ Disassembly of section .text:
                	movq	0x10(%rcx), %rdx
                	movq	%rdx, 0x10(%rax)
                	popq	%rdx
-               	movq	%rax, %rcx
-               	movq	(%rax), %rax
                	movabsq	$0x4022000000000000, %rbx # imm = 0x4022000000000000
                	movq	%rbx, %xmm0
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
-               	callq	*%rax
+               	callq	<addr>
                	movq	%rbx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>

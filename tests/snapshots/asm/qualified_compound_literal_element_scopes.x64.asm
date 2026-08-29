@@ -34,17 +34,8 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	movq	%rax, %rcx
                	movq	%rax, %rcx
-               	leaq	<rip>, %rax
-               	movq	0x8(%rax), %rax
-               	movsbq	(%rax), %rax
-               	cmpl	$0x6b, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0xd, %eax
-               	retq
                	xorq	%rax, %rax
+               	movq	%rax, %rcx
                	retq
 
 <block_static_values>:

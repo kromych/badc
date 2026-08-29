@@ -14,9 +14,8 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x0, [x1]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	ldrh	w1, [x0, #0x4]
                	mov	x17, #0xc2c2            // =49858
                	eor	x1, x1, x17

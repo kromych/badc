@@ -1491,3 +1491,130 @@ fn an_aarch64_instruction_relocation_has_no_implicit_addend() {
     assert!(msg.contains("R_AARCH64_"), "{msg}");
     assert!(!msg.contains("internal compiler error"), "{msg}");
 }
+
+fn compile_pie_optimized(src: &str, target: Target) -> EtRel {
+    let copts = CompileOptions {
+        no_entry_point: true,
+        ..Default::default()
+    };
+    let program = Compiler::with_options(src.to_string(), target, copts)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        optimize: true,
+        pic: true,
+        pic_link: true,
+        ..Default::default()
+    };
+    parse_et_rel(
+        &emit_native_with_options(&program, target, opts).expect("emit"),
+        "pie.o",
+    )
+    .expect("parse")
+}
+
+/// C99 6.7.3p5: a `const` pointer object with static storage duration
+/// holds its initializer's address for the whole execution, so at `-O`
+/// a load from it is the address constant itself and no pointer object,
+/// and no absolute relocation, reaches the object -- the form gcc's
+/// `-fpie` objects take, and the one a consumer that forbids absolute
+/// relocations outside the debug sections (the kernel's EFI stub)
+/// requires. An object whose address escapes stays, with its
+/// relocation.
+#[test]
+fn const_pointer_objects_fold_to_their_address_in_a_pie_object() {
+    use crate::c5::object::elf_reloc_types as rt;
+    const FOLDED: &str = "\
+static const char *const file_scope = \"file scope\";\n\
+static const struct { const char *name; int n; } agg = {\"aggregate\", 7};\n\
+static const int table[4] = {10, 20, 30, 40};\n\
+static const int *const table_end = &table[4];\n\
+extern int ext_arr[8];\n\
+static int *const ext_two = &ext_arr[2];\n\
+static int twice(int v) { return v * 2; }\n\
+static int (*const op)(int) = twice;\n\
+const char *pick(int k) {\n\
+    static const char *const block_scope = \"block scope\";\n\
+    switch (k) {\n\
+    case 1: return file_scope;\n\
+    case 2: return block_scope + 6;\n\
+    case 3: return agg.name;\n\
+    default: return block_scope;\n\
+    }\n\
+}\n\
+const int *end(void) { return table_end; }\n\
+int *ext(void) { return ext_two; }\n\
+int apply(int v) { return op(v) + agg.n; }\n";
+    const ESCAPED: &str = "\
+static const char *const escaped = \"escaped\";\n\
+const char *const *through(void) { return &escaped; }\n";
+    let pointer_objects = [
+        "file_scope",
+        "block_scope",
+        "agg",
+        "table_end",
+        "ext_two",
+        "op",
+    ];
+    for (target, abs) in [
+        (Target::LinuxAarch64, rt::R_AARCH64_ABS64),
+        (Target::LinuxX64, rt::R_X86_64_64),
+    ] {
+        let abs_relocs = |o: &EtRel| -> Vec<(String, u64)> {
+            o.sections
+                .iter()
+                .filter(|s| !s.name.starts_with(".debug"))
+                .flat_map(|s| {
+                    s.relocs
+                        .iter()
+                        .filter(|r| r.rtype == abs)
+                        .map(move |r| (s.name.clone(), r.offset))
+                })
+                .collect()
+        };
+        let obj = compile_pie_optimized(FOLDED, target);
+        assert_eq!(abs_relocs(&obj), Vec::new(), "{target:?}");
+        assert!(
+            !obj.sections.iter().any(|s| s.name == ".data.rel.ro"),
+            "{target:?}: a folded pointer object left in .data.rel.ro"
+        );
+        let left: Vec<&str> = obj
+            .symbols
+            .iter()
+            .map(|s| s.name.as_str())
+            .filter(|n| {
+                pointer_objects
+                    .iter()
+                    .any(|p| n == p || n.strip_prefix(p).is_some_and(|t| t.starts_with('.')))
+            })
+            .collect();
+        assert_eq!(left, Vec::<&str>::new(), "{target:?}");
+        // The extern's address is materialized in code, by name.
+        let ext_arr = obj
+            .symbols
+            .iter()
+            .position(|s| s.name == "ext_arr")
+            .expect("ext_arr stays undefined") as u32;
+        let text = obj
+            .sections
+            .iter()
+            .find(|s| s.name == ".text")
+            .expect(".text");
+        assert!(
+            text.relocs.iter().any(|r| r.sym == ext_arr),
+            "{target:?}: no text relocation against ext_arr"
+        );
+
+        let obj = compile_pie_optimized(ESCAPED, target);
+        assert!(
+            obj.symbols.iter().any(|s| s.name == "escaped"),
+            "{target:?}: an address-taken pointer object must stay"
+        );
+        assert_eq!(
+            abs_relocs(&obj),
+            alloc::vec![(String::from(".data.rel.ro"), 0)],
+            "{target:?}"
+        );
+    }
+}

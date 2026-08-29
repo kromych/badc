@@ -137,9 +137,8 @@ Disassembly of section .text:
                	movl	$0x40066666, %eax       # imm = 0x40066666
                	movq	%rax, %xmm14
                	movss	%xmm14, -0x20(%rbp,%riz)
-               	movq	(%rbx), %rax
                	movss	-0x30(%rbp,%riz), %xmm0
-               	callq	*%rax
+               	callq	<addr>
                	movl	$0x41100000, %eax       # imm = 0x41100000
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0

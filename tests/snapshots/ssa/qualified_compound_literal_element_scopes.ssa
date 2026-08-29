@@ -217,7 +217,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=9
     v168 LoadLocal { off=-8, kind=I64 }                   -> x1
     terminator Jmp(b28)   (exit_acc=v167)
   block 28  start_pc=0
-    v170 ImmData(144)                                     -> x0
+    v170 Imm(0)                                           -> x0
     v171 BinopI { op=add, lhs=v170, rhs_imm=8 }           -> x1
     v172 Imm(0)                                           -> x1
     v173 BinopI { op=add, lhs=v170, rhs_imm=16 }          -> x0
@@ -228,24 +228,21 @@ fn ent_pc=0 n_params=0 variadic=false locals=9
     v178 Imm(0)                                           -> x1
     terminator Jmp(b29)   (exit_acc=v177)
   block 29  start_pc=0
-    v179 ImmData(144)                                     -> x0
-    v180 BinopI { op=add, lhs=v179, rhs_imm=8 }           -> x1
-    v181 Imm(0)                                           -> x1
-    v182 Load { addr=v179, disp=8, kind=I64 }             -> x0
-    v183 Load { addr=v182, disp=0, kind=I8 }              -> x0
-    v184 BinopI { op=ne, lhs=v183, rhs_imm=107 }          -> x0
+    v179 Imm(0)                                           -> x0
+    v180 BinopI { op=add, lhs=v179, rhs_imm=8 }           -> x0
+    v181 Imm(0)                                           -> x0
+    v182 Imm(0)                                           -> x0
+    v183 Imm(107)                                         -> x0
+    v184 Imm(0)                                           -> x0
     v185 Imm(0)                                           -> x1
     terminator Jmp(b30)   (exit_acc=v184)
   block 30  start_pc=0
-    v186 Phi { incoming=[b29:v184], kind=I64 }            -> x0
-    v187 LoadLocal { off=-9, kind=I64 }                   -> x1
-    terminator Bz { cond=v186, target=b32, fall=b31 }   (exit_acc=v186)
+    v186 Phi { incoming=[b29:v184], kind=I64 }            -> x1
+    v187 LoadLocal { off=-9, kind=I64 }                   -> x2
+    terminator Jmp(b31)   (exit_acc=v186)
   block 31  start_pc=0
-    v188 Imm(13)                                          -> x0
-    terminator Return(v188)   (exit_acc=v188)
-  block 32  start_pc=0
-    v189 Imm(0)                                           -> x0
-    terminator Return(v189)   (exit_acc=v189)
+    v189 Imm(0)                                           -> x1
+    terminator Return(v184)   (exit_acc=v184)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=block_static_values
 fn ent_pc=1 n_params=0 variadic=false locals=8
@@ -474,37 +471,37 @@ fn ent_pc=2 n_params=0 variadic=false locals=3
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-1)                                    -> x0
-    v2   ImmData(16)                                      -> x1
+    v2   ImmData(8)                                       -> x1
     v3   Mcpy { dst=v1, src=v2, size=8, align=8 }         -> x1
     v4   LocalAddr(-1)                                    -> x1
-    v5   ImmData(24)                                      -> x1
+    v5   ImmData(16)                                      -> x1
     v6   Mcpy { dst=v1, src=v5, size=8, align=8 }         -> x1
     v7   LocalAddr(-1)                                    -> x1
-    v8   ImmData(32)                                      -> x1
+    v8   ImmData(24)                                      -> x1
     v9   Mcpy { dst=v1, src=v8, size=8, align=8 }         -> x1
     v10  LocalAddr(-1)                                    -> x1
-    v11  ImmData(40)                                      -> x1
+    v11  ImmData(32)                                      -> x1
     v12  Mcpy { dst=v1, src=v11, size=4, align=8 }        -> x1
     v13  LocalAddr(-1)                                    -> x1
-    v14  ImmData(48)                                      -> x1
+    v14  ImmData(40)                                      -> x1
     v15  Mcpy { dst=v1, src=v14, size=4, align=8 }        -> x1
     v16  LocalAddr(-2)                                    -> x1
-    v17  ImmData(56)                                      -> x2
+    v17  ImmData(48)                                      -> x2
     v18  Mcpy { dst=v16, src=v17, size=12, align=8 }      -> x2
     v19  LocalAddr(-2)                                    -> x2
-    v20  ImmData(72)                                      -> x2
+    v20  ImmData(64)                                      -> x2
     v21  Mcpy { dst=v16, src=v20, size=12, align=8 }      -> x2
     v22  LocalAddr(-2)                                    -> x2
-    v23  ImmData(88)                                      -> x2
+    v23  ImmData(80)                                      -> x2
     v24  Mcpy { dst=v16, src=v23, size=16, align=8 }      -> x2
     v25  LocalAddr(-1)                                    -> x2
-    v26  ImmData(104)                                     -> x2
+    v26  ImmData(96)                                      -> x2
     v27  Mcpy { dst=v1, src=v26, size=4, align=8 }        -> x0
     v28  LocalAddr(-2)                                    -> x0
-    v29  ImmData(112)                                     -> x0
+    v29  ImmData(104)                                     -> x0
     v30  Mcpy { dst=v16, src=v29, size=12, align=8 }      -> x0
     v31  LocalAddr(-2)                                    -> x0
-    v32  ImmData(128)                                     -> x0
+    v32  ImmData(120)                                     -> x0
     v33  Mcpy { dst=v16, src=v32, size=12, align=8 }      -> x0
     v34  LocalAddr(-1)                                    -> x0
     v35  Imm(0)                                           -> x0

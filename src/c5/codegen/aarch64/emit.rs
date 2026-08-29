@@ -3542,13 +3542,13 @@ fn emit_inline_asm_aarch64(
     };
     // The constant value of an `i`-class operand reference, if any.
     let const_of = |idx: u8| -> Option<i64> {
-        let arg = *args.get(idx as usize)?;
-        match func.insts.get(arg as usize) {
-            Some(super::super::ir::Inst::Imm(v)) => Some(*v),
-            // An unpromoted function (a computed goto opts out of mem2reg)
-            // leaves an `"i"` constant operand a load of a constant local.
-            _ => crate::c5::asm::asm_operand_local_const(func, arg),
-        }
+        crate::c5::asm::asm_operand_const(func, *args.get(idx as usize)?)
+    };
+    let operand_form = |idx: u8| -> String {
+        args.get(idx as usize).map_or_else(
+            || String::from("past the operand list"),
+            |&a| crate::c5::asm::asm_operand_form(func, a),
+        )
     };
     let gas_subst = |tok: &str| -> Option<String> {
         let body = tok.strip_prefix('%')?;
@@ -3869,8 +3869,10 @@ fn emit_inline_asm_aarch64(
                     if matches!(asm.operands[idx as usize].constraint, AsmConstraint::Imm) {
                         return match const_of(idx) {
                             Some(v) => Ok(Opnd::Imm(v)),
-                            None => Err(String::from(
-                                "aarch64 inline asm: non-constant immediate operand",
+                            None => Err(alloc::format!(
+                                "aarch64 inline asm: non-constant immediate operand `%{idx}`: \
+                                 the operand is {}",
+                                operand_form(idx)
                             )),
                         };
                     }
@@ -4579,9 +4581,14 @@ fn emit_inline_asm_aarch64(
         // where `%c0` is `&sym`) relocates against the data image, resolved
         // like the operand's own `ImmData` lowering.
         let operand_sym = |idx: u8| -> Option<(crate::c5::asm::AsmSectionTarget, i64)> {
-            crate::c5::asm::asm_operand_data_target(&func.insts, *args.get(idx as usize)?, &|vid| {
+            crate::c5::asm::asm_operand_data_target(func, *args.get(idx as usize)?, &|vid| {
                 extern_data_names.get(&vid).cloned()
             })
+        };
+        let resolver = crate::c5::asm::AsmOperandResolver {
+            const_of: &|idx| const_of(idx),
+            symbol_of: &operand_sym,
+            form: &operand_form,
         };
         // An `asm goto` label operand (`.long %l0 - .`) resolves through
         // `goto_block` to the row's block index. Its text offset is not final
@@ -4589,9 +4596,8 @@ fn emit_inline_asm_aarch64(
         // (see resolve_asm_goto_relocs).
         let defined = match crate::c5::asm::materialize_asm_sections(
             &section_blocks,
-            &|idx| const_of(idx),
+            &resolver,
             &label_off,
-            &operand_sym,
             &goto_block,
             true,
             asm_sections,
@@ -11700,8 +11706,7 @@ mod tests {
         let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
-            &|_| None,
-            &|_| None,
+            &crate::c5::asm::AsmOperandResolver::NONE,
             &|_| None,
             &|_| None,
             true,
@@ -11816,8 +11821,7 @@ mod tests {
         let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
-            &|_| None,
-            &|_| None,
+            &crate::c5::asm::AsmOperandResolver::NONE,
             &|_| None,
             &|_| None,
             true,
@@ -11911,8 +11915,7 @@ mod tests {
         let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
-            &|_| None,
-            &|_| None,
+            &crate::c5::asm::AsmOperandResolver::NONE,
             &|_| None,
             &|_| None,
             true,
@@ -11962,8 +11965,7 @@ mod tests {
         let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
-            &|_| None,
-            &|_| None,
+            &crate::c5::asm::AsmOperandResolver::NONE,
             &|_| None,
             &|_| None,
             true,
@@ -12010,8 +12012,7 @@ mod tests {
         let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
-            &|_| None,
-            &|_| None,
+            &crate::c5::asm::AsmOperandResolver::NONE,
             &|_| None,
             &|_| None,
             true,
@@ -12465,8 +12466,7 @@ mod tests {
         let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
-            &|_| None,
-            &|_| None,
+            &crate::c5::asm::AsmOperandResolver::NONE,
             &|_| None,
             &|_| None,
             true,
@@ -12527,8 +12527,7 @@ mod tests {
         let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
-            &|_| None,
-            &|_| None,
+            &crate::c5::asm::AsmOperandResolver::NONE,
             &|_| None,
             &|_| None,
             true,
@@ -12585,8 +12584,7 @@ mod tests {
         let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
-            &|_| None,
-            &|_| None,
+            &crate::c5::asm::AsmOperandResolver::NONE,
             &|_| None,
             &|_| None,
             true,
@@ -12629,8 +12627,7 @@ mod tests {
         let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
-            &|_| None,
-            &|_| None,
+            &crate::c5::asm::AsmOperandResolver::NONE,
             &|_| None,
             &|_| None,
             true,

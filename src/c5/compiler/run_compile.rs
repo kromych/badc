@@ -293,8 +293,7 @@ impl Compiler {
         crate::c5::codegen::encode_file_asm_section_code(&mut blocks, self.target, self.elf_class)?;
         crate::c5::asm::materialize_asm_sections(
             &blocks,
-            &|_| None,
-            &|_| None,
+            &crate::c5::asm::AsmOperandResolver::NONE,
             &|_| None,
             &|_| None,
             aarch64,

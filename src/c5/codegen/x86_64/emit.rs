@@ -7026,7 +7026,7 @@ fn asm_riprel_target(
 ) -> Option<AsmRipSym> {
     use crate::c5::asm::{asm_operand_code_base, asm_operand_data_target};
     if let Some((target, addend)) =
-        asm_operand_data_target(&func.insts, arg, &|v| extern_data_names.get(&v).cloned())
+        asm_operand_data_target(func, arg, &|v| extern_data_names.get(&v).cloned())
     {
         use crate::c5::asm::AsmSectionTarget;
         return Some(match target {
@@ -7040,7 +7040,7 @@ fn asm_riprel_target(
             _ => return None,
         });
     }
-    let (base_vid, ent_pc, offset) = asm_operand_code_base(&func.insts, arg)?;
+    let (base_vid, ent_pc, offset) = asm_operand_code_base(func, arg)?;
     // `name2entpc` holds the unit's own definitions. One of them takes the
     // entry-PC channel, which reaches the emitted body; every other name is
     // cross-TU and relocates by name. The in-unit channel names the entry,
@@ -7054,6 +7054,33 @@ fn asm_riprel_target(
             name: name.clone(),
             offset,
         })
+}
+
+/// Byte offset within `body` of the disp32 field of its symbolic
+/// RIP-relative operand, and the count of bytes trailing the field (an
+/// immediate). Re-encodes with a distinct displacement in that operand,
+/// keeping its form; exactly the field's four bytes differ.
+fn riprel_field(
+    body: &[u8],
+    concrete: &[super::asm::Concrete],
+    addr: u8,
+    insn: &super::asm::AsmInsn,
+) -> Option<(usize, usize)> {
+    let idx = concrete
+        .iter()
+        .position(|c| matches!(c, super::asm::Concrete::RipRel { .. }))?;
+    let super::asm::Concrete::RipRel { size, .. } = concrete[idx] else {
+        return None;
+    };
+    let mut probe = concrete.to_vec();
+    probe[idx] = super::asm::Concrete::RipRel {
+        disp: RIPREL_PROBE_DISP,
+        size,
+    };
+    let mut probe_bytes = alloc::vec::Vec::new();
+    super::asm::encode(&mut probe_bytes, addr, insn.mnemonic, insn.suffix, &probe).ok()?;
+    let (field, width) = differing_run(body, &probe_bytes)?;
+    (width == 4).then(|| (field, body.len() - field - 4))
 }
 
 /// Encode replacement instructions in an executable inline-asm section
@@ -7095,7 +7122,7 @@ fn encode_x86_asm_section_code(
             Some(Inst::ImmCode(pc)) => entpc2name
                 .get(pc)
                 .map(|n| AsmSectionTarget::Symbol(alloc::string::String::from(*n))),
-            _ => crate::c5::asm::asm_operand_data_target(&func.insts, arg, &|v| {
+            _ => crate::c5::asm::asm_operand_data_target(func, arg, &|v| {
                 extern_data_names.get(&v).cloned()
             })
             .map(|(t, _)| t),
@@ -7103,18 +7130,19 @@ fn encode_x86_asm_section_code(
     };
     // A `%N` naming an `i`-class operand with a compile-time constant.
     let imm_of = |idx: u8| -> Option<i64> {
-        match func.insts.get(*args.get(idx as usize)? as usize) {
-            Some(Inst::Imm(v)) => Some(*v),
-            _ => None,
-        }
+        crate::c5::asm::asm_operand_const(func, *args.get(idx as usize)?)
+    };
+    let form = |idx: u8| -> alloc::string::String {
+        args.get(idx as usize).map_or_else(
+            || alloc::string::String::from("past the operand list"),
+            |&a| crate::c5::asm::asm_operand_form(func, a),
+        )
     };
     // A `%a[N]` operand naming a link-time data address (`&global`): its reloc
     // target and the constant byte offset added to it.
     let addr_of = |idx: u8| -> Option<(AsmSectionTarget, i64)> {
         let arg = *args.get(idx as usize)?;
-        crate::c5::asm::asm_operand_data_target(&func.insts, arg, &|v| {
-            extern_data_names.get(&v).cloned()
-        })
+        crate::c5::asm::asm_operand_data_target(func, arg, &|v| extern_data_names.get(&v).cloned())
     };
     let mut mode = super::table::Mode::Bits64;
     let mut fold = crate::c5::asm::AsmParseFold::default();
@@ -7128,6 +7156,7 @@ fn encode_x86_asm_section_code(
                     operands,
                     imm_of: &imm_of,
                     addr_of: &addr_of,
+                    form: &form,
                     fold: &f,
                     file_scope: false,
                 };
@@ -7164,6 +7193,7 @@ pub(crate) fn encode_x86_file_asm_section_code(
     let goto_block = |_: u8| -> Option<u32> { None };
     let imm_of = |_: u8| -> Option<i64> { None };
     let addr_of = |_: u8| -> Option<(AsmSectionTarget, i64)> { None };
+    let form = |_: u8| alloc::string::String::from("not an operand of this statement");
     let mut mode = if class.is32() {
         super::table::Mode::Bits32
     } else {
@@ -7200,6 +7230,7 @@ pub(crate) fn encode_x86_file_asm_section_code(
                     operands: &[],
                     imm_of: &imm_of,
                     addr_of: &addr_of,
+                    form: &form,
                     fold: &none,
                     file_scope: true,
                 };
@@ -7211,6 +7242,7 @@ pub(crate) fn encode_x86_file_asm_section_code(
                     operands: &[],
                     imm_of: &imm_of,
                     addr_of: &addr_of,
+                    form: &form,
                     fold: &f,
                     file_scope: true,
                 };
@@ -7367,6 +7399,8 @@ struct SectionOperandRefs<'a> {
     operands: &'a [super::super::ir::AsmOperand],
     imm_of: &'a dyn Fn(u8) -> Option<i64>,
     addr_of: &'a dyn Fn(u8) -> Option<(crate::c5::asm::AsmSectionTarget, i64)>,
+    /// The form of an operand that is neither a register nor a constant.
+    form: &'a dyn Fn(u8) -> alloc::string::String,
     /// The value an operand expression already has at this point of the
     /// stream, when the walk's [`AsmParseFold`] can prove it is a constant.
     /// A folded immediate or displacement encodes as a literal, taking the
@@ -7782,7 +7816,9 @@ fn encode_one_x86_section_insn(
                     }
                     None => concrete.push(reg_of(idx, size).ok_or_else(|| {
                         alloc::format!(
-                            "inline asm: replacement `{text}` operand `%{idx}` is not a register or constant"
+                            "inline asm: replacement `{text}` operand `%{idx}` is not a register \
+                             or constant: the operand is {}",
+                            (refs.form)(idx)
                         )
                     })?),
                 }
@@ -7829,9 +7865,22 @@ fn encode_one_x86_section_insn(
                         concrete.push(Concrete::RipRel { disp: 0, size });
                     }
                     (None, None) => {
-                        return Err(alloc::format!(
-                            "inline asm: replacement `{text}` memory base is not a register operand"
-                        ));
+                        let AsmMemBase::Ref(bi) = base else {
+                            return Err(alloc::format!(
+                                "inline asm: replacement `{text}` memory base is not a register"
+                            ));
+                        };
+                        let abs = (refs.imm_of)(bi)
+                            .filter(|_| index.is_none())
+                            .and_then(|v| i32::try_from(v.checked_add(disp as i64)?).ok());
+                        let Some(disp) = abs else {
+                            return Err(alloc::format!(
+                                "inline asm: replacement `{text}` memory base `%{bi}` is not a \
+                                 register, a constant or a link-time address: the operand is {}",
+                                (refs.form)(bi)
+                            ));
+                        };
+                        concrete.push(Concrete::AbsMem { disp, size });
                     }
                 }
             }
@@ -7857,7 +7906,9 @@ fn encode_one_x86_section_insn(
                     None => {
                         let (target, off) = (refs.addr_of)(idx).ok_or_else(|| {
                             alloc::format!(
-                                "inline asm: replacement `{text}` `%c`/`%P` operand is not a constant or address"
+                                "inline asm: replacement `{text}` `%c`/`%P` operand is not a \
+                                 constant or address: the operand is {}",
+                                (refs.form)(idx)
                             )
                         })?;
                         if sym_disp.is_some() {
@@ -7904,7 +7955,9 @@ fn encode_one_x86_section_insn(
                     None => {
                         let (target, off) = (refs.addr_of)(idx).ok_or_else(|| {
                             alloc::format!(
-                                "inline asm: replacement `{text}` `%c`/`%P` operand is not a constant or address"
+                                "inline asm: replacement `{text}` `%c`/`%P` operand is not a \
+                                 constant or address: the operand is {}",
+                                (refs.form)(idx)
                             )
                         })?;
                         if sym_disp.is_some() {
@@ -8533,13 +8586,7 @@ fn emit_inline_asm_once(
     // `.if`) before section extraction, substituting each register operand to
     // its assigned AT&T name so the macro's register-name comparisons resolve.
     let const_of = |idx: u8| -> Option<i64> {
-        let arg = *args.get(idx as usize)?;
-        match func.insts.get(arg as usize) {
-            Some(Inst::Imm(v)) => Some(*v),
-            // An unpromoted function (a computed goto opts out of mem2reg)
-            // leaves an `"i"` constant operand a load of a constant local.
-            _ => crate::c5::asm::asm_operand_local_const(func, arg),
-        }
+        crate::c5::asm::asm_operand_const(func, *args.get(idx as usize)?)
     };
     let gas_subst = |tok: &str| -> Option<alloc::string::String> {
         let body = tok.strip_prefix('%')?;
@@ -8791,13 +8838,13 @@ fn emit_inline_asm_once(
     let mut goto_sites: alloc::vec::Vec<(usize, LocalBranchKind, usize)> = alloc::vec::Vec::new();
     // The constant value of an `i`-class operand reference, if any.
     let const_of = |idx: u8| -> Option<i64> {
-        let arg = *args.get(idx as usize)?;
-        match func.insts.get(arg as usize) {
-            Some(Inst::Imm(v)) => Some(*v),
-            // An unpromoted function (a computed goto opts out of mem2reg)
-            // leaves an `"i"` constant operand a load of a constant local.
-            _ => crate::c5::asm::asm_operand_local_const(func, arg),
-        }
+        crate::c5::asm::asm_operand_const(func, *args.get(idx as usize)?)
+    };
+    let operand_form = |idx: u8| -> alloc::string::String {
+        args.get(idx as usize).map_or_else(
+            || alloc::string::String::from("past the operand list"),
+            |&a| crate::c5::asm::asm_operand_form(func, a),
+        )
     };
     // Section-label offsets, so a `.skip` in the main stream can size its
     // padding against the replacement length (`775f - 774f`, both in a
@@ -9235,7 +9282,12 @@ fn emit_inline_asm_once(
                 // case was handled above): a bare immediate.
                 AsmOpnd::RefConst { idx, .. } => match const_of(idx) {
                     Some(v) => Concrete::Imm(v),
-                    None => return fail("inline asm: non-constant `%c`/`%P` operand"),
+                    None => {
+                        return fail(&alloc::format!(
+                            "inline asm: non-constant `%c`/`%P` operand `%{idx}`: the operand is {}",
+                            operand_form(idx)
+                        ));
+                    }
                 },
                 // A bare `%cN` / `%PN` memory reference: a constant addresses
                 // absolutely (the percpu form under a `%%gs:` / `%%fs:`
@@ -9266,9 +9318,11 @@ fn emit_inline_asm_once(
                                 Concrete::RipRel { disp: 0, size }
                             }
                             None => {
-                                return fail(
-                                    "inline asm: `%c`/`%P` memory operand is not a constant or address",
-                                );
+                                return fail(&alloc::format!(
+                                    "inline asm: `%c`/`%P` memory operand `%{idx}` is not a constant \
+                                     or address: the operand is {}",
+                                    operand_form(idx)
+                                ));
                             }
                         },
                     }
@@ -9398,7 +9452,24 @@ fn emit_inline_asm_once(
                             continue;
                         }
                         (None, None) => {
-                            return fail("inline asm: memory base must be a register operand");
+                            let super::asm::AsmMemBase::Ref(bi) = base else {
+                                return fail("inline asm: memory base must be a register");
+                            };
+                            let abs = const_of(bi)
+                                .filter(|_| index.is_none())
+                                .and_then(|v| i32::try_from(v.checked_add(disp as i64)?).ok());
+                            let Some(disp) = abs else {
+                                return fail(&alloc::format!(
+                                    "inline asm: memory base `%{bi}` is not a register, a \
+                                     constant or a link-time address: the operand is {}",
+                                    operand_form(bi)
+                                ));
+                            };
+                            concrete.push(Concrete::AbsMem {
+                                disp,
+                                size: size.unwrap_or(AsmRegSize::Quad),
+                            });
+                            continue;
                         }
                     };
                     let index = match index {
@@ -9472,9 +9543,11 @@ fn emit_inline_asm_once(
                                 Concrete::RipRel { disp: 0, size }
                             }
                             None => {
-                                return fail(
-                                    "inline asm: `%c`/`%P` RIP-relative operand is not a constant or address",
-                                );
+                                return fail(&alloc::format!(
+                                    "inline asm: `%c`/`%P` RIP-relative operand `%{idx}` is not a \
+                                     constant or address: the operand is {}",
+                                    operand_form(idx)
+                                ));
                             }
                         },
                     }
@@ -9634,13 +9707,6 @@ fn emit_inline_asm_once(
             };
             concrete.push(c);
         }
-        // A RIP-relative symbolic operand puts its disp32 at the end of the
-        // instruction; a trailing immediate would displace it, so the reloc
-        // offset below would be wrong. Reject that combination rather than
-        // relocate the wrong bytes.
-        if riprel_reloc.is_some() && concrete.iter().any(|c| matches!(c, Concrete::Imm(_))) {
-            return fail("inline asm: a symbolic RIP-relative operand with an immediate");
-        }
         if abs_label.is_some()
             && concrete
                 .iter()
@@ -9705,28 +9771,32 @@ fn emit_inline_asm_once(
             expr_fixups.push((insn_at, at, 4, text));
         }
         // Record the RIP-relative relocation against the operand's symbol.
-        // The disp32 occupies the last four bytes of the instruction just
-        // encoded; both channels place the reloc at `instr_offset + 3`, so
-        // anchor three bytes before it. gcc's addend is the operand's
-        // constant offset less the 4-byte PC-relative end skew.
+        // Both channels place the reloc at `instr_offset + 3`, so anchor
+        // three bytes before the disp32 field. gcc's addend is the operand's
+        // constant offset less the field's 4-byte PC-relative end skew and
+        // any immediate trailing the field (`testb $imm, sym(%rip)`).
         if let Some((sym, disp)) = riprel_reloc.take() {
-            let instr_offset = code.len() - 4 - 3;
+            let Some((field, trailing)) = riprel_field(&body, &concrete, addr, insn) else {
+                return fail("inline asm: RIP-relative displacement field not found");
+            };
+            let instr_offset = code.len() - (body.len() - field) - 3;
+            let trailing = trailing as i64;
             match sym {
                 AsmRipSym::Extern { name, offset } => {
                     user_extern_data_refs.push(super::UserExternDataRef {
                         instr_offset,
                         symbol_name: name,
-                        direct_pcrel: Some(offset + disp - 4),
+                        direct_pcrel: Some(offset + disp - 4 - trailing),
                     });
                 }
                 AsmRipSym::Local { data_offset } => {
                     data_fixups.push(DataFixup {
                         instr_offset,
-                        data_offset: (data_offset + disp) as u64,
+                        data_offset: (data_offset + disp - trailing) as u64,
                         part: AddrPart::Whole,
                     });
                 }
-                AsmRipSym::Text { ent_pc } if disp == 0 => {
+                AsmRipSym::Text { ent_pc } if disp == 0 && trailing == 0 => {
                     pending_func_fixups.push((instr_offset, ent_pc));
                 }
                 AsmRipSym::Text { .. } => {
@@ -9885,9 +9955,14 @@ fn emit_inline_asm_once(
         // where `%c0` is `&sym` or a string literal) relocates against the
         // data image, resolved like the operand's own `ImmData` lowering.
         let operand_sym = |idx: u8| -> Option<(crate::c5::asm::AsmSectionTarget, i64)> {
-            crate::c5::asm::asm_operand_data_target(&func.insts, *args.get(idx as usize)?, &|vid| {
+            crate::c5::asm::asm_operand_data_target(func, *args.get(idx as usize)?, &|vid| {
                 extern_data_names.get(&vid).cloned()
             })
+        };
+        let resolver = crate::c5::asm::AsmOperandResolver {
+            const_of: &|idx| const_of(idx),
+            symbol_of: &operand_sym,
+            form: &operand_form,
         };
         // An `asm goto` label operand (`.long %l0 - .`): the goto row's block
         // index. Its text offset is not final here; the reloc carries the
@@ -9898,9 +9973,8 @@ fn emit_inline_asm_once(
         };
         let defined = match crate::c5::asm::materialize_asm_sections(
             section_blocks,
-            &|idx| const_of(idx),
+            &resolver,
             &label_off,
-            &operand_sym,
             &goto_block,
             false,
             asm_sections,

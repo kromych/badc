@@ -55,8 +55,7 @@ fn globl_binds_a_label_defined_in_another_section() {
     let mut sink = AsmSectionSink::default();
     materialize_asm_sections(
         &blocks,
-        &|_| None,
-        &|_| None,
+        &AsmOperandResolver::NONE,
         &|_| None,
         &|_| None,
         false,
@@ -84,8 +83,7 @@ fn an_exported_constant_assignment_defines_an_absolute_symbol() {
     let mut sink = AsmSectionSink::default();
     materialize_asm_sections(
         &blocks,
-        &|_| None,
-        &|_| None,
+        &AsmOperandResolver::NONE,
         &|_| None,
         &|_| None,
         false,
@@ -120,9 +118,12 @@ fn extract_and_materialize() {
     let mut sink = AsmSectionSink::default();
     materialize_asm_sections(
         &blocks,
-        &|idx| (idx == 0).then_some(42),
+        &AsmOperandResolver {
+            const_of: &|idx| (idx == 0).then_some(42),
+            symbol_of: &|_| None,
+            form: AsmOperandResolver::NONE.form,
+        },
         &|name| (name == "1b").then_some(LabelLoc::Text(0x40)),
-        &|_| None,
         &|_| None,
         false,
         &mut sink,
@@ -176,8 +177,7 @@ fn align_fill_and_max_skip() {
         let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
-            &|_| None,
-            &|_| None,
+            &AsmOperandResolver::NONE,
             &|_| None,
             &|_| None,
             aarch64,
@@ -765,8 +765,7 @@ fn octa_and_cfi_match_gnu_as() {
     let mut sink = AsmSectionSink::default();
     materialize_asm_sections(
         &blocks,
-        &|_| None,
-        &|_| None,
+        &AsmOperandResolver::NONE,
         &|_| None,
         &|_| None,
         false,
@@ -809,8 +808,7 @@ fn location_valued_expressions_match_gnu_as() {
     let mut sink = AsmSectionSink::default();
     materialize_asm_sections(
         &blocks,
-        &|_| None,
-        &|_| None,
+        &AsmOperandResolver::NONE,
         &|_| None,
         &|_| None,
         false,
@@ -888,8 +886,7 @@ fn location_expression_cross_statement_size() {
         let AsmExtract { blocks, .. } = extract_asm_sections(t, false).unwrap().unwrap();
         materialize_asm_sections(
             &blocks,
-            &|_| None,
-            &|_| None,
+            &AsmOperandResolver::NONE,
             &|_| None,
             &|_| None,
             false,
@@ -1017,8 +1014,11 @@ fn section_operand_constant_expression() {
     let mut sink = AsmSectionSink::default();
     materialize_asm_sections(
         &blocks,
-        &|idx| (idx == 0).then_some(37),
-        &|_| None,
+        &AsmOperandResolver {
+            const_of: &|idx| (idx == 0).then_some(37),
+            symbol_of: &|_| None,
+            form: AsmOperandResolver::NONE.form,
+        },
         &|_| None,
         &|_| None,
         false,
@@ -1030,8 +1030,7 @@ fn section_operand_constant_expression() {
     let mut sink2 = AsmSectionSink::default();
     let err = materialize_asm_sections(
         &blocks,
-        &|_| None,
-        &|_| None,
+        &AsmOperandResolver::NONE,
         &|_| None,
         &|_| None,
         false,
@@ -1068,9 +1067,8 @@ fn section_parenthesised_label_reference() {
     let mut sink = AsmSectionSink::default();
     materialize_asm_sections(
         &blocks,
-        &|_| None,
+        &AsmOperandResolver::NONE,
         &|n| (n == "1b").then_some(LabelLoc::Text(0x40)),
-        &|_| None,
         &|_| None,
         false,
         &mut sink,
@@ -1142,9 +1140,8 @@ fn word_directive_width_is_target_dependent() {
     let mut sink = AsmSectionSink::default();
     materialize_asm_sections(
         &blocks,
-        &|_| None,
+        &AsmOperandResolver::NONE,
         &|n| (n == "1b").then_some(LabelLoc::Text(0)),
-        &|_| None,
         &|_| None,
         true,
         &mut sink,
@@ -1166,13 +1163,12 @@ fn section_label_difference_bytes() {
     let mut sink = AsmSectionSink::default();
     materialize_asm_sections(
         &blocks,
-        &|_| None,
+        &AsmOperandResolver::NONE,
         &|name| match name {
             "1b" => Some(LabelLoc::Text(0)),
             "2b" => Some(LabelLoc::Text(4)),
             _ => None,
         },
-        &|_| None,
         &|_| None,
         false,
         &mut sink,
@@ -1199,8 +1195,7 @@ fn cross_section_label_difference_folds_to_replacement_length() {
     let mut sink = AsmSectionSink::default();
     materialize_asm_sections(
         &blocks,
-        &|_| None,
-        &|_| None,
+        &AsmOperandResolver::NONE,
         &|_| None,
         &|_| None,
         false,
@@ -1233,9 +1228,8 @@ fn cross_section_label_difference_across_sections_is_rejected() {
     let mut sink = AsmSectionSink::default();
     let err = materialize_asm_sections(
         &blocks,
-        &|_| None,
+        &AsmOperandResolver::NONE,
         &|name| (name == "1b").then_some(LabelLoc::Text(0)),
-        &|_| None,
         &|_| None,
         false,
         &mut sink,
@@ -1293,13 +1287,12 @@ fn section_label_difference_overflow_rejected() {
     let mut sink = AsmSectionSink::default();
     let err = materialize_asm_sections(
         &blocks,
-        &|_| None,
+        &AsmOperandResolver::NONE,
         &|name| match name {
             "1b" => Some(LabelLoc::Text(0)),
             "2b" => Some(LabelLoc::Text(256)),
             _ => None,
         },
-        &|_| None,
         &|_| None,
         false,
         &mut sink,
@@ -1478,8 +1471,7 @@ fn section_previous_and_symbols() {
     let mut sink = AsmSectionSink::default();
     materialize_asm_sections(
         &blocks,
-        &|_| None,
-        &|_| None,
+        &AsmOperandResolver::NONE,
         &|_| None,
         &|_| None,
         false,
@@ -1497,8 +1489,7 @@ fn section_previous_and_symbols() {
     let mut sink = AsmSectionSink::default();
     materialize_asm_sections(
         &blocks,
-        &|_| None,
-        &|_| None,
+        &AsmOperandResolver::NONE,
         &|_| None,
         &|_| None,
         false,
@@ -1526,8 +1517,7 @@ fn align_convention_per_arch() {
         let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
-            &|_| None,
-            &|_| None,
+            &AsmOperandResolver::NONE,
             &|_| None,
             &|_| None,
             aarch64,
@@ -1552,8 +1542,7 @@ fn section_labels_become_offsets() {
     let mut sink = AsmSectionSink::default();
     materialize_asm_sections(
         &blocks,
-        &|_| None,
-        &|_| None,
+        &AsmOperandResolver::NONE,
         &|_| None,
         &|_| None,
         false,
@@ -1606,8 +1595,7 @@ fn section_type_and_size_set_symbol_attributes() {
     let mut sink = AsmSectionSink::default();
     materialize_asm_sections(
         &blocks,
-        &|_| None,
-        &|_| None,
+        &AsmOperandResolver::NONE,
         &|_| None,
         &|_| None,
         false,
@@ -1628,8 +1616,7 @@ fn section_type_object_and_bad_forms_rejected() {
         let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
-            &|_| None,
-            &|_| None,
+            &AsmOperandResolver::NONE,
             &|_| None,
             &|_| None,
             false,
@@ -1664,8 +1651,7 @@ fn duplicate_section_label_is_rejected() {
     let mut sink = AsmSectionSink::default();
     let err = materialize_asm_sections(
         &blocks,
-        &|_| None,
-        &|_| None,
+        &AsmOperandResolver::NONE,
         &|_| None,
         &|_| None,
         false,
@@ -1686,8 +1672,7 @@ fn tab_separated_directives_and_trailing_whitespace() {
     let mut sink = AsmSectionSink::default();
     materialize_asm_sections(
         &blocks,
-        &|_| None,
-        &|_| None,
+        &AsmOperandResolver::NONE,
         &|_| None,
         &|_| None,
         false,

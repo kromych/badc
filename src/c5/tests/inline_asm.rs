@@ -955,6 +955,17 @@ fn two_inputs_on_one_fixed_register_are_accepted() {
 /// assert on the symbol table the writers emit.
 #[cfg(feature = "native-emit")]
 fn asm_obj(src: &str, target: crate::Target) -> crate::c5::linker::relocatable::EtRel {
+    let bytes = asm_emit(src, target, false).expect("emit");
+    crate::c5::linker::relocatable::parse_et_rel(&bytes, "a.o").expect("parse")
+}
+
+/// The relocatable object for `src`, or the emit error; `-O` when `optimize`.
+#[cfg(feature = "native-emit")]
+fn asm_emit(
+    src: &str,
+    target: crate::Target,
+    optimize: bool,
+) -> Result<alloc::vec::Vec<u8>, alloc::string::String> {
     use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
     let copts = CompileOptions {
         no_entry_point: true,
@@ -965,10 +976,10 @@ fn asm_obj(src: &str, target: crate::Target) -> crate::c5::linker::relocatable::
         .expect("compile");
     let opts = NativeOptions {
         output_kind: OutputKind::Relocatable,
+        optimize,
         ..Default::default()
     };
-    let bytes = emit_native_with_options(&program, target, opts).expect("emit");
-    crate::c5::linker::relocatable::parse_et_rel(&bytes, "a.o").expect("parse")
+    emit_native_with_options(&program, target, opts).map_err(|e| e.to_string())
 }
 
 // Emits a native image, so it needs `native-emit`.
@@ -2188,5 +2199,205 @@ fn alignment_over_a_forward_label_difference_is_rejected() {
                 .err()
         );
         assert!(e.contains("is not constant where it stands"), "`{d}`: {e}");
+    }
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn i_operand_constant_local_folds_across_a_call() {
+    // The kernel's `WARN` evaluates its format arguments, a call among them,
+    // between the definition of a constant `int __flags` and the asm that
+    // lays `%c[fl]` into `__bug_table`. The parser hands `__flags` the slot
+    // of a variable whose scope has closed; where that one was an asm output
+    // (the per-cpu accessor's `__ptr`), the slot is address-taken, mem2reg
+    // leaves `__flags` in memory, and the operand reaches the asm as a load
+    // with the call between it and its store. gcc folds the field to 0x913.
+    let src = r#"
+struct bug_entry { int addr; int fmt; short line; short flags; };
+int probe(unsigned long long *);
+void report(const char *, ...);
+unsigned long long phys(unsigned long);
+extern int obj;
+int f(void)
+{
+	unsigned long long base = phys((unsigned long)({ unsigned long q;
+		__asm__("" : "=r"(q) : "0"(&obj)); (int *)(q + 8); }));
+	unsigned long long msr;
+	{
+		int flags = (1 << 1) | (9 << 8) | (1 << 0) | (1 << 4);
+		report("%llx", probe(&msr) ? 0xdeadbeefULL : msr);
+		__asm__ volatile("1:\n.pushsection __bug_table,\"aw\"\n"
+			"2:\t.long 1b - .\n\t.long %c[fmt] - .\n\t.short %c[line]\n\t.short %c[fl]\n"
+			"\t.org 2b + %c[size]\n.popsection\n"
+			: : [fmt] "i" ("f.c"), [line] "i" (87), [fl] "i" (flags),
+			    [size] "i" (sizeof(struct bug_entry)));
+	}
+	return (int)base;
+}
+"#;
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let bytes = asm_emit(src, target, true).unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        let o = crate::c5::linker::relocatable::parse_et_rel(&bytes, "a.o").expect("parse");
+        let sec = o
+            .sections
+            .iter()
+            .find(|s| s.name == "__bug_table")
+            .expect("__bug_table");
+        assert_eq!(
+            &sec.bytes[8..12],
+            &[87, 0, 0x13, 0x09],
+            "{target:?}: line, flags"
+        );
+    }
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn x86_inlined_parameter_feeds_immediate_and_address_operands() {
+    use crate::c5::object::elf_reloc_types::R_X86_64_PC32;
+    // `arch/x86/include/asm/cpufeature.h`'s `_static_cpu_has` is an
+    // always-inline function whose parameter feeds every `i` operand: an
+    // immediate (`%[bitnum]`) and, under `%a`, the address of a byte of a
+    // global (`%a[cap_byte]`). gcc 16 and GNU as 2.46 spell the site
+    //     testb $8, boot_cpu_data+17(%rip)
+    // as `f6 05 <rel32> 08` with `R_X86_64_PC32 boot_cpu_data+0xc` (the
+    // immediate follows the displacement), under `-mcmodel=kernel` and
+    // without, and `%a` of an integer constant as the absolute address
+    // `testb $1, 4660` (`f6 04 25 34 12 00 00 01`). The same instruction
+    // in the statement's own stream encodes the same way.
+    let src = r#"
+typedef unsigned short u16;
+struct cpuinfo_x86 { int x86_capability[24]; };
+extern struct cpuinfo_x86 boot_cpu_data;
+static __inline__ __attribute__((__always_inline__)) _Bool has(u16 bit)
+{
+	__asm__ goto("testb %[bitnum], %a[cap_byte]\n"
+		"jmp 6f\n"
+		".pushsection .altinstr_aux,\"ax\"\n"
+		"6:\n"
+		" testb %[bitnum], %a[cap_byte]\n"
+		" testb $1, %a[abs]\n"
+		" jnz %l[t_yes]\n"
+		" jmp %l[t_no]\n"
+		".popsection\n"
+		: : [bitnum] "i" (1 << (bit & 7)),
+		    [cap_byte] "i" (&((const char *)boot_cpu_data.x86_capability)[bit >> 3]),
+		    [abs] "i" (0x1234)
+		: : t_yes, t_no);
+t_yes:
+	return 1;
+t_no:
+	return 0;
+}
+int a(void) { return has(4 * 32 + 11); }
+"#;
+    let bytes = asm_emit(src, crate::Target::LinuxX64, true).expect("emit");
+    let o = crate::c5::linker::relocatable::parse_et_rel(&bytes, "a.o").expect("parse");
+    let pc32_to_cap = |sec: &crate::c5::linker::relocatable::EtSection| {
+        sec.relocs
+            .iter()
+            .find(|r| r.rtype == R_X86_64_PC32 && o.symbols[r.sym as usize].name == "boot_cpu_data")
+            .map(|r| (r.offset, r.addend))
+    };
+    let aux = o
+        .sections
+        .iter()
+        .find(|s| s.name == ".altinstr_aux")
+        .expect(".altinstr_aux");
+    assert_eq!(&aux.bytes[..2], &[0xf6, 0x05], "testb imm8, disp32(%rip)");
+    assert_eq!(aux.bytes[6], 0x08, "immediate 1 << (139 & 7)");
+    assert_eq!(pc32_to_cap(aux), Some((2, 12)), "byte 17 of boot_cpu_data");
+    assert_eq!(
+        &aux.bytes[7..15],
+        &[0xf6, 0x04, 0x25, 0x34, 0x12, 0x00, 0x00, 0x01],
+        "`%a` of an integer constant is the absolute address"
+    );
+    let text = o
+        .sections
+        .iter()
+        .find(|s| s.name == ".text")
+        .expect(".text");
+    let (off, addend) = pc32_to_cap(text).expect("the main-stream site");
+    assert_eq!(addend, 12);
+    let at = off as usize - 2;
+    assert_eq!(&text.bytes[at..at + 2], &[0xf6, 0x05]);
+    assert_eq!(text.bytes[at + 6], 0x08);
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn i_operand_that_is_not_constant_names_its_form() {
+    // An `i` operand the optimizer cannot fold is refused; the diagnostic
+    // says what the operand is, not only what it is not.
+    let section = |v: &str| {
+        alloc::format!(
+            "int g(void); int f(int n) {{ __asm__ volatile(\".pushsection .rodata.x,\\\"a\\\"\\n\
+             .long %c0\\n.popsection\" : : \"i\"({v})); return 0; }}"
+        )
+    };
+    let x86_mem = |v: &str| {
+        alloc::format!(
+            "int g(void); int f(int n) {{ __asm__ volatile(\"movl %c0, %%eax\" : : \"i\"({v}) : \
+             \"eax\"); return 0; }}"
+        )
+    };
+    let x86_addr = |v: &str| {
+        alloc::format!(
+            "int g(void); int f(int n) {{ __asm__ volatile(\"testb $1, %a0\" : : \"i\"({v})); \
+             return 0; }}"
+        )
+    };
+    let x86_aux = |v: &str| {
+        alloc::format!(
+            "int g(void); int f(int n) {{ __asm__ volatile(\".pushsection .altinstr_aux,\\\"ax\\\"\\n\
+             testb %0, (%%rax)\\n.popsection\" : : \"i\"({v})); return 0; }}"
+        )
+    };
+    let a64_imm = |v: &str| {
+        alloc::format!(
+            "int g(void); int f(int n) {{ __asm__ volatile(\"mov x0, %0\" : : \"i\"({v}) : \"x0\"); \
+             return 0; }}"
+        )
+    };
+    let x64 = crate::Target::LinuxX64;
+    let a64 = crate::Target::LinuxAarch64;
+    let cases = [
+        (
+            section("n"),
+            x64,
+            "value `%c0` is neither a constant nor a link-time address: the operand is a function parameter",
+        ),
+        (
+            section("g()"),
+            a64,
+            "value `%c0` is neither a constant nor a link-time address: the operand is a call result",
+        ),
+        (
+            x86_mem("g()"),
+            x64,
+            "`%c`/`%P` memory operand `%0` is not a constant or address: the operand is a call result",
+        ),
+        (
+            x86_addr("g()"),
+            x64,
+            "memory base `%0` is not a register, a constant or a link-time address: the operand is a call result",
+        ),
+        (
+            x86_aux("n"),
+            x64,
+            "operand `%0` is not a register or constant: the operand is a function parameter",
+        ),
+        (
+            a64_imm("g()"),
+            a64,
+            "non-constant immediate operand `%0`: the operand is a call result",
+        ),
+    ];
+    for (src, target, want) in cases {
+        let err = asm_emit(&src, target, true).err().unwrap_or_default();
+        assert!(err.contains(want), "{target:?}: {src}\n{err}");
     }
 }

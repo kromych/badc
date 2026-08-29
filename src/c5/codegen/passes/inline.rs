@@ -3566,7 +3566,11 @@ fn inline_caller(
     // `computed_goto_targets` and the `jump_tables` rows behind a
     // `JumpTable` (switch) or `AsmGoto` terminator on the way out. So any
     // caller shape is spliceable.
+    // Optional splices count toward the per-step cap; a mandatory
+    // (`always_inline`) request is spliced past it, as gcc honours one at
+    // any caller size.
     let mut steps = 0usize;
+    let mut spliced = false;
     // Callees this caller can no longer afford: every splice through this
     // loop relocates the callee's slots into the caller's frame, and the
     // absolute frame bound is enforced here rather than on the round's
@@ -3574,7 +3578,8 @@ fn inline_caller(
     // and a pre-round count cannot see them. A mandatory request is
     // exempt; the probed prologue keeps the result safe.
     let mut unaffordable: BTreeSet<usize> = BTreeSet::new();
-    while steps < MAX_MULTI_BLOCK_SPLICE_STEPS {
+    loop {
+        let optional_open = steps < MAX_MULTI_BLOCK_SPLICE_STEPS;
         let mut hit: Option<(usize, u32, &FunctionSsa, Vec<ValueId>, i64)> = None;
         'find: for (b_idx, block) in caller.blocks.iter().enumerate() {
             for pc in block.inst_range.start..block.inst_range.end {
@@ -3586,6 +3591,7 @@ fn inline_caller(
                     ..
                 } = &caller.insts[pc as usize]
                     && let Some(c) = callees.get(target_pc)
+                    && (optional_open || c.is_always_inline)
                     && !unaffordable.contains(target_pc)
                     && (c.blocks.len() > 1 || facts[target_pc].needs_reloc)
                     // Same argument-count guard as the single-block path;
@@ -3634,9 +3640,12 @@ fn inline_caller(
             ret_slot,
             placement,
         );
-        steps += 1;
+        spliced = true;
+        if !callee.is_always_inline {
+            steps += 1;
+        }
     }
-    any_change || steps > 0
+    any_change || spliced
 }
 
 /// Inline eligible callees across every function in `funcs`. A
@@ -4243,6 +4252,40 @@ mod tests {
                 "always={always}: gate must block exactly the optional frame-growing case"
             );
         }
+    }
+
+    /// The per-step splice cap bounds optional inlining only: a caller
+    /// whose optional sites exhaust every round's cap still has its
+    /// mandatory (`always_inline`) site spliced, wherever it sits.
+    #[test]
+    fn mandatory_site_is_spliced_past_the_cap() {
+        let abi = Target::LinuxX64.abi();
+        let optional_sites = MAX_MULTI_BLOCK_SPLICE_STEPS * INLINE_FIXPOINT_ITERS + 1;
+        let mut caller = multi_call_caller(1, 2, 100, optional_sites);
+        caller.insts.insert(optional_sites, call_to(200));
+        caller.inst_src.push((0, 0));
+        caller.f32_values.push(false);
+        let n = caller.insts.len() as u32;
+        caller.blocks[0].inst_range = 0..n;
+        caller.blocks[0].terminator = Terminator::Return(n - 1);
+        caller.blocks[0].exit_acc = n - 1;
+        let mut mandatory = asm_callee(200, 4);
+        mandatory.is_inline = true;
+        mandatory.is_always_inline = true;
+        let mut funcs = alloc::vec![caller, asm_callee(100, 4), mandatory];
+        run(&mut funcs, 32, abi, &BTreeMap::new());
+        let calls = |pc: usize| {
+            funcs[0]
+                .insts
+                .iter()
+                .filter(|i| matches!(i, Inst::Call { target_pc, .. } if *target_pc == pc))
+                .count()
+        };
+        assert_eq!(calls(200), 0, "the mandatory site must be spliced");
+        assert!(
+            calls(100) > 0,
+            "the optional sites must have exhausted the cap"
+        );
     }
 
     /// A body the size of the call it replaces leaves the caller's

@@ -204,6 +204,7 @@ impl Compiler {
             array_size: 0,
             inner_array_size: 0,
             array_dims: alloc::vec::Vec::new(),
+            zero_len: false,
             bit_offset: 0,
             bit_width: 0,
             bit_unit_size: 0,
@@ -299,6 +300,7 @@ impl Compiler {
             array_size: 0,
             inner_array_size: 0,
             array_dims: Vec::new(),
+            zero_len: false,
             bit_offset: 0,
             bit_width: 0,
             bit_unit_size: 0,
@@ -391,6 +393,7 @@ impl Compiler {
             array_size: lanes,
             inner_array_size: 0,
             array_dims: alloc::vec::Vec::new(),
+            zero_len: false,
             bit_offset: 0,
             bit_width: 0,
             bit_unit_size: 0,
@@ -460,6 +463,7 @@ impl Compiler {
             } else {
                 Vec::new()
             },
+            zero_len: false,
             bit_offset: 0,
             bit_width: 0,
             bit_unit_size: 0,

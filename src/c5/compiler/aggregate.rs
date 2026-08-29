@@ -516,6 +516,7 @@ impl Compiler {
                             array_size: inner_field.array_size,
                             inner_array_size: inner_field.inner_array_size,
                             array_dims: inner_field.array_dims,
+                            zero_len: inner_field.zero_len,
                             bit_offset: inner_field.bit_offset,
                             bit_width: inner_field.bit_width,
                             bit_unit_size: inner_field.bit_unit_size,
@@ -652,6 +653,7 @@ impl Compiler {
                 let declared = self.parse_declarator(field_base);
                 self.pending.in_member_declarator = saved_member_ctx;
                 let (id_idx, mut field_ty, mut field_array_size) = declared?;
+                let mut field_zero_len = self.pending.declarator_zero_len_array;
                 // A member may carry a trailing attribute
                 // (`int x __attribute__((aligned(16)));`,
                 // `int x __attribute__((deprecated));`). Member-level
@@ -699,6 +701,7 @@ impl Compiler {
                     && self.pending.declarator_leading_ptr_count == 0
                 {
                     field_array_size = typedef_dim;
+                    field_zero_len = typedef_dim < 0 && self.pending.typedef_base_zero_len;
                     if id_idx != usize::MAX {
                         self.apply_typedef_array_dims(id_idx);
                     }
@@ -935,6 +938,7 @@ impl Compiler {
                     array_size: field_array_size,
                     inner_array_size: field_inner_array_size,
                     array_dims: field_array_dims,
+                    zero_len: field_zero_len,
                     bit_offset,
                     bit_width,
                     bit_unit_size: if bit_width > 0 { bit_unit as u8 } else { 0 },

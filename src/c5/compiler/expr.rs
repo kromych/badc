@@ -2344,6 +2344,15 @@ impl Compiler {
                 }
                 self.ty = self.symbols[id_idx].type_;
                 let is_struct_value = is_struct_value_ty(self.ty);
+                // A declared struct object starts a member chain.
+                self.pending.member_base = if is_struct_value {
+                    Some(super::MemberBase {
+                        decl_size: Some(self.size_of_type(self.ty) as i64),
+                        ..super::MemberBase::UNKNOWN
+                    })
+                } else {
+                    None
+                };
                 let is_array_var =
                     self.symbols[id_idx].array_size != 0 || self.symbols[id_idx].is_zero_len_array;
                 let is_vla_var = self.symbols[id_idx].is_vla;
@@ -3359,6 +3368,8 @@ impl Compiler {
             self.pending.last_array_decay_size = 0;
             self.pending.last_array_decay_bytes = 0;
             self.pending.last_array_decay_dims.clear();
+            let row_member = self.pending.last_array_decay_member.take();
+            let member_base = self.pending.member_base.take();
             // C99 6.5: a struct / union value is not a valid operand of an
             // arithmetic / bitwise / shift / relational / equality / logical
             // operator (the contiguous token range `Lor..=ModOp`). Reject the
@@ -4826,6 +4837,11 @@ impl Compiler {
                     // at its top so it doesn't leak past the
                     // subscript.
                     self.pending.last_array_decay_bytes = multi_dim_stride;
+                    // A row of an array member is unbounded when the member is.
+                    self.pending.last_array_decay_member = row_member.map(|m| super::ArrayMember {
+                        decl_remaining: None,
+                        unbounded: m.unbounded,
+                    });
                 } else {
                     if self.is_ptr_scaling_nontrivial(t) {
                         let scale = self.pointee_size(t);
@@ -4908,17 +4924,28 @@ impl Compiler {
                 self.next()?;
 
                 let sid = struct_id_of(t);
-                let field = self.structs[sid]
+                let field_idx = self.structs[sid]
                     .fields
                     .iter()
-                    .find(|f| f.name == field_name)
+                    .position(|f| f.name == field_name)
                     .ok_or_else(|| {
                         self.compile_err(format!(
                             "struct {} has no field {}",
                             self.structs[sid].name, field_name
                         ))
-                    })?
-                    .clone();
+                    })?;
+                let field = self.structs[sid].fields[field_idx].clone();
+                // Where the member chain stands after this step. `->`
+                // starts a chain at the pointer's target.
+                let base = if is_dot { member_base } else { None };
+                let base = base.unwrap_or(super::MemberBase::UNKNOWN);
+                let (records, at_end) = self.member_nesting(sid, field_idx);
+                let step = super::MemberBase {
+                    decl_size: base.decl_size,
+                    offset: base.offset + field.offset as i64,
+                    records: base.records + records,
+                    at_end: base.at_end && at_end,
+                };
 
                 // A function-pointer field carries its callee parameter
                 // types so a following `s.fp(args)` / `s->fp(args)` narrows
@@ -5162,6 +5189,11 @@ impl Compiler {
                             let elem_size = self.size_of_type(field.ty) as i64;
                             self.seed_multi_dim_strides(&dims, elem_size);
                         }
+                        self.pending.last_array_decay_member = Some(super::ArrayMember {
+                            decl_remaining: step.decl_size.map(|size| size - step.offset),
+                            unbounded: step.decl_size.is_none()
+                                && self.member_is_unbounded(&field, step.records, step.at_end),
+                        });
                     } else if !field_is_struct_value {
                         self.mark_emit_scalar_load();
                         // Function-pointer field: re-seed the fn-ptr
@@ -5201,6 +5233,8 @@ impl Compiler {
                             let elem_size = self.size_of_type(scalar_ty) as i64;
                             self.seed_multi_dim_strides(&dims, elem_size);
                         }
+                    } else {
+                        self.pending.member_base = Some(step);
                     }
                 }
                 // Dual-emit `Expr::Member` collapsing the address +
@@ -5242,6 +5276,7 @@ impl Compiler {
         self.pending.end_of_expr_strides_tail =
             core::mem::take(&mut self.pending.index_strides_tail);
         self.pending.index_stride = 0;
+        self.pending.member_base = None;
         Ok(())
     }
 

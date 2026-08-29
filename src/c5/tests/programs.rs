@@ -5784,8 +5784,19 @@ fn volatile_struct_assign() {
 #[test]
 fn builtin_object_size() {
     // GCC `__builtin_object_size`: folds for a known declared array,
-    // (size_t)-1 / 0 per type class otherwise, operand unevaluated.
+    // (size_t)-1 / 0 per type class otherwise, operand unevaluated. An
+    // array member is unbounded through a pointer when it is a `[]`
+    // member or, at the default -fstrict-flex-arrays=0, the last member;
+    // a member of a declared object is bounded by the object.
     assert_eq!(run_fixture("builtin_object_size.c"), 0);
+}
+
+#[test]
+fn strict_flex_arrays_default_level() {
+    // At the default -fstrict-flex-arrays=0 every trailing array member
+    // is unbounded through a pointer; only the array that is not the
+    // last member answers its size (the fixture's bit 4).
+    assert_eq!(run_fixture("strict_flex_arrays.c"), 16);
 }
 
 #[test]

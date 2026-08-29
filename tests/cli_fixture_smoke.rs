@@ -899,6 +899,79 @@ fn optimize_flag_predefines_ndebug() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+// `-fstrict-flex-arrays=N` selects which trailing array members
+// `__builtin_object_size` treats as unbounded through a pointer. The
+// fixture's exit code sets one bit per member the closest-subobject form
+// bounds; the expected codes are gcc 16's at -O2. The interpreter must
+// agree with the native image, and the bare form is level 3.
+#[test]
+fn strict_flex_arrays_level_selects_the_bounded_members() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let src = fixtures_dir().join("strict_flex_arrays.c");
+    let dir = std::env::temp_dir().join(format!("badc-flexarr-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+
+    let native = |tag: &str, flags: &[&str]| -> Option<i32> {
+        let exe = dir.join(tag);
+        let mut cmd = Command::new(badc);
+        cmd.args(flags);
+        let out = cmd
+            .arg(&src)
+            .arg("-o")
+            .arg(&exe)
+            .output()
+            .expect("run badc");
+        assert!(
+            out.status.success(),
+            "compile {flags:?} failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        Command::new(&exe).output().expect("run prog").status.code()
+    };
+    let interp = |flags: &[&str]| -> Option<i32> {
+        let mut cmd = Command::new(badc);
+        cmd.arg("--interp").args(flags);
+        let out = cmd.arg(&src).output().expect("run badc --interp");
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let line = stdout.lines().find(|l| l.starts_with("exit("))?;
+        line.trim_start_matches("exit(")
+            .trim_end_matches(')')
+            .parse()
+            .ok()
+    };
+
+    let levels: [(&str, &[&str], i32); 6] = [
+        ("default", &[], 16),
+        ("l0", &["-fstrict-flex-arrays=0"], 16),
+        ("l1", &["-fstrict-flex-arrays=1"], 24),
+        ("l2", &["-fstrict-flex-arrays=2"], 28),
+        ("l3", &["-fstrict-flex-arrays=3"], 30),
+        ("bare", &["-fstrict-flex-arrays"], 30),
+    ];
+    for (tag, flags, code) in levels {
+        assert_eq!(native(tag, flags), Some(code), "native {flags:?}");
+        assert_eq!(interp(flags), Some(code), "interp {flags:?}");
+    }
+
+    let out = Command::new(badc)
+        .arg("-fstrict-flex-arrays=4")
+        .arg(&src)
+        .arg("-o")
+        .arg(dir.join("bad"))
+        .output()
+        .expect("run badc");
+    assert!(
+        !out.status.success(),
+        "-fstrict-flex-arrays=4 must be rejected"
+    );
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("-fstrict-flex-arrays="),
+        "the rejection names the option"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 // `--install <dir>` writes every embedded header under <dir>/include
 // (recreating subdirectories) and the runtime source under <dir>/lib.
 #[test]

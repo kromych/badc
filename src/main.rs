@@ -211,6 +211,14 @@ Compile knobs:
                            whatever the default is. With --gnu the model
                            is reported as __GNUC_GNU_INLINE__ /
                            __GNUC_STDC_INLINE__.
+  -fstrict-flex-arrays[=N] Which trailing array members
+                           __builtin_object_size treats as unbounded
+                           when reached through a pointer: at level 0
+                           (the default, as in gcc) every one, at 1
+                           those declared [], [0] or [1], at 2 those
+                           declared [] or [0], at 3 only []. The bare
+                           form selects level 3. A [] member is
+                           unbounded at every level.
   -fno-jump-tables         Dispatch every switch through the compare
                            tree, never a jump table, so no switch takes
                            an indirect branch. -fjump-tables restores
@@ -717,6 +725,7 @@ fn run() {
     // header takes its standard-C path for the GNU features badc lacks.
     let mut gnu_dialect = false;
     let mut gnu89_inline = false;
+    let mut strict_flex_arrays: u8 = 0;
     // `-fshort-wchar` -- narrow `wchar_t` to an unsigned 16-bit type.
     let mut short_wchar = false;
     // `-fsigned-char` / `-funsigned-char`; `None` keeps the target ABI's
@@ -1376,6 +1385,23 @@ fn run() {
             // linkage model the unit default in place of C99's.
             "-fgnu89-inline" => gnu89_inline = true,
             "-fno-gnu89-inline" => gnu89_inline = false,
+            // gcc `-fstrict-flex-arrays[=N]`: which trailing array members
+            // `__builtin_object_size` treats as unbounded. The bare form
+            // is level 3, as in gcc.
+            "-fstrict-flex-arrays" => strict_flex_arrays = 3,
+            s if s.starts_with("-fstrict-flex-arrays=") => {
+                let spec = &s["-fstrict-flex-arrays=".len()..];
+                match spec.parse::<u8>() {
+                    Ok(n) if n <= 3 => strict_flex_arrays = n,
+                    _ => {
+                        eprint_diagnostic(format!(
+                            "badc: error: `-fstrict-flex-arrays=` takes a level \
+                             0..=3, got `{spec}`"
+                        ));
+                        std::process::exit(1);
+                    }
+                }
+            }
             // gcc / clang `-fshort-wchar`: `wchar_t` becomes an unsigned
             // 16-bit type on every target. It changes the layout of every
             // object holding a `wchar_t` or a wide literal, so it has to
@@ -2349,6 +2375,7 @@ fn run() {
             let copts = badc::CompileOptions::default()
                 .with_gnu(gnu)
                 .with_gnu89_inline(gnu89_inline)
+                .with_strict_flex_arrays(strict_flex_arrays)
                 .with_short_wchar(short_wchar)
                 .with_char_signed(char_signed)
                 .with_nostdinc(nostdinc)
@@ -2429,6 +2456,7 @@ fn run() {
         let copts = badc::CompileOptions::default()
             .with_gnu(gnu)
             .with_gnu89_inline(gnu89_inline)
+            .with_strict_flex_arrays(strict_flex_arrays)
             .with_short_wchar(short_wchar)
             .with_char_signed(char_signed)
             .with_nostdinc(nostdinc)
@@ -2543,6 +2571,7 @@ fn run() {
             let opts = badc::CompileOptions::default()
                 .with_gnu(gnu)
                 .with_gnu89_inline(gnu89_inline)
+                .with_strict_flex_arrays(strict_flex_arrays)
                 .with_short_wchar(short_wchar)
                 .with_char_signed(char_signed)
                 .with_nostdinc(nostdinc)
@@ -2672,6 +2701,7 @@ fn run() {
             gnu,
             gnu_dialect,
             gnu89_inline,
+            strict_flex_arrays,
             short_wchar,
             char_signed,
             nostdinc,
@@ -2712,6 +2742,7 @@ fn run() {
             let copts = badc::CompileOptions::default()
                 .with_gnu(gnu)
                 .with_gnu89_inline(gnu89_inline)
+                .with_strict_flex_arrays(strict_flex_arrays)
                 .with_short_wchar(short_wchar)
                 .with_char_signed(char_signed)
                 .with_nostdinc(nostdinc)
@@ -3393,6 +3424,7 @@ fn run() {
             gnu,
             gnu_dialect,
             gnu89_inline,
+            strict_flex_arrays,
             short_wchar,
             char_signed,
             nostdinc,
@@ -3534,6 +3566,7 @@ fn run() {
             gnu,
             gnu_dialect,
             gnu89_inline,
+            strict_flex_arrays,
             short_wchar,
             char_signed,
             nostdinc,
@@ -4079,6 +4112,7 @@ struct CompileCfg<'a> {
     gnu: bool,
     gnu_dialect: bool,
     gnu89_inline: bool,
+    strict_flex_arrays: u8,
     short_wchar: bool,
     char_signed: Option<bool>,
     nostdinc: bool,
@@ -4245,6 +4279,7 @@ fn tu_compile_options(
     badc::CompileOptions::default()
         .with_gnu(cfg.gnu)
         .with_gnu89_inline(cfg.gnu89_inline)
+        .with_strict_flex_arrays(cfg.strict_flex_arrays)
         .with_short_wchar(cfg.short_wchar)
         .with_char_signed(cfg.char_signed)
         .with_nostdinc(cfg.nostdinc)

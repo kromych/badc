@@ -543,6 +543,7 @@ impl Compiler {
         let saved_decay = self.pending.last_array_decay_size;
         let saved_decay_bytes = self.pending.last_array_decay_bytes;
         let saved_decay_dims = core::mem::take(&mut self.pending.last_array_decay_dims);
+        let saved_decay_member = self.pending.last_array_decay_member.take();
         self.pending.last_array_decay_size = 0;
         self.pending.last_array_decay_bytes = 0;
         self.pending.last_fn_ptr_cast = None;
@@ -562,6 +563,7 @@ impl Compiler {
                 self.pending.last_array_decay_size = 0;
                 self.pending.last_array_decay_bytes = 0;
                 self.pending.last_array_decay_dims.clear();
+                self.pending.last_array_decay_member = None;
                 self.pending.indirect_callee_params = None;
                 self.pending.indirect_callee_is_variadic = false;
                 self.pending.indirect_callee_fn_ptr_depth = 0;
@@ -646,6 +648,7 @@ impl Compiler {
             core::mem::replace(&mut self.pending.last_array_decay_dims, saved_decay_dims);
         self.pending.last_array_decay_size = saved_decay;
         self.pending.last_array_decay_bytes = saved_decay_bytes;
+        self.pending.last_array_decay_member = saved_decay_member;
         self.pending.indirect_callee_params = saved_callee_params;
         self.pending.indirect_callee_is_variadic = saved_callee_variadic;
         self.pending.indirect_callee_fn_ptr_depth = saved_callee_depth;

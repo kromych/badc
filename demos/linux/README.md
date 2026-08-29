@@ -337,8 +337,7 @@ what the shim does not recognize is what let `-fno-jump-tables` reach no
 compiler while every `.o.cmd` recorded it: the probe behind it is
 delegated to the reference compiler, so nothing in the build's own
 artifacts disagreed. On the pinned `defconfig` the unsupported set is
-`-ftrivial-auto-var-init=zero`,
-`-fzero-init-padding-bits=all`, `-fstrict-flex-arrays=3` and
+`-ftrivial-auto-var-init=zero`, `-fzero-init-padding-bits=all` and
 `-fasynchronous-unwind-tables`:
 those properties are not in the built image whatever the configuration
 says. The ftrace patch sites are forwarded:

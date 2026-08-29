@@ -204,6 +204,9 @@ FORWARD_PREFIX = (
     # CONFIG_DYNAMIC_FTRACE_WITH_CALL_OPS on arm64). Withheld, the image
     # has no site for ftrace to patch. badc validates the operands.
     "-fpatchable-function-entry=",
+    # Which trailing arrays __builtin_object_size bounds, hence what the
+    # FORTIFY_SOURCE checks are computed against. badc validates the level.
+    "-fstrict-flex-arrays=",
     # `-fno-builtin`, per library function.
     "-fno-builtin-",
     *HARDENING_PREFIX,
@@ -228,9 +231,6 @@ UNSUPPORTED_PREFIX = (
     "-ftrivial-auto-var-init=",
     # badc has no option for what an initializer leaves in padding bits.
     "-fzero-init-padding-bits=",
-    # Which trailing arrays __builtin_object_size treats as bounded, hence
-    # what the FORTIFY_SOURCE checks are computed against.
-    "-fstrict-flex-arrays=",
     # badc emits no sanitizer instrumentation, so the checks CONFIG_UBSAN
     # asks for -- array bounds and shift-exponent among them -- are absent
     # from a unit built here, and the handlers in lib/ubsan.c stay uncalled.
@@ -641,9 +641,11 @@ def _self_test() -> int:
                  "-mstack-protector-guard-offset=1360"):
         assert rewrite([flag]).argv == [flag], flag
     for flag in ("-ftrivial-auto-var-init=zero",
-                 "-fstrict-flex-arrays=3", "-fasynchronous-unwind-tables"):
+                 "-fasynchronous-unwind-tables"):
         r = rewrite([flag])
         assert r.dropped == [flag] and r.unknown == [], (flag, r)
+    # The flexible-array level reaches badc, which implements it.
+    assert rewrite(["-fstrict-flex-arrays=3"]).argv == ["-fstrict-flex-arrays=3"]
     for flag in ("-Wall", "-Werror=return-type", "-Wno-sign-compare",
                  "-fno-strict-aliasing", "-mno-red-zone", "-falign-loops=1",
                  "-march=x86-64", "-mregparm=3", "-Wl,-r", "-mlittle-endian",

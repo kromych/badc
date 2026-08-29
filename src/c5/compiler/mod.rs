@@ -193,6 +193,42 @@ pub struct AnonMember {
     pub inner: usize,
 }
 
+/// Where a member chain stands, relative to the object it started at.
+#[derive(Debug, Clone, Copy)]
+pub struct MemberBase {
+    /// Byte size of the declared object the chain started at; `None`
+    /// when it started at a pointer's target.
+    pub decl_size: Option<i64>,
+    /// Byte offset of the current subobject within that object.
+    pub offset: i64,
+    /// Struct (not union) containers crossed so far.
+    pub records: u32,
+    /// Every struct container crossed selected its last member.
+    pub at_end: bool,
+}
+
+impl MemberBase {
+    /// A chain starting at a pointer's target.
+    pub const UNKNOWN: MemberBase = MemberBase {
+        decl_size: None,
+        offset: 0,
+        records: 0,
+        at_end: true,
+    };
+}
+
+/// An array member's decay as `__builtin_object_size` reads it.
+#[derive(Debug, Clone, Copy)]
+pub struct ArrayMember {
+    /// Bytes from the member to the end of the declared object the
+    /// chain started at, when it started at one.
+    pub decl_remaining: Option<i64>,
+    /// The member may extend past its declared bound: its type is
+    /// incomplete, or `-fstrict-flex-arrays` treats it as flexible and
+    /// the chain reached it through a pointer.
+    pub unbounded: bool,
+}
+
 #[derive(Debug, Clone)]
 pub struct StructField {
     pub name: String,
@@ -220,6 +256,9 @@ pub struct StructField {
     /// or 1D-array fields. The field-access decay path reads
     /// this to compute the per-level strides for `s.xs[i][j][k]`.
     pub array_dims: Vec<i64>,
+    /// The bound was spelled `[0]` (a GNU zero-length array, complete
+    /// with size zero) rather than `[]`; both store `array_size = -1`.
+    pub zero_len: bool,
     /// Bit offset within the storage unit. Meaningful only when
     /// `bit_width > 0`.
     pub bit_offset: u32,
@@ -401,6 +440,11 @@ pub struct CompileOptions {
     /// default inline linkage model instead of C99's, and predefine
     /// `__GNUC_GNU_INLINE__` in place of `__GNUC_STDC_INLINE__`.
     pub gnu89_inline: bool,
+    /// `-fstrict-flex-arrays=N` -- which trailing array members
+    /// `__builtin_object_size` treats as unbounded through a pointer:
+    /// 0 (the default, as in gcc) every one, 1 those bounded `[]`,
+    /// `[0]` or `[1]`, 2 those bounded `[]` or `[0]`, 3 only `[]`.
+    pub strict_flex_arrays: u8,
     /// `-std=gnu*` -- the GNU dialect, which suppresses the
     /// `__STRICT_ANSI__` predefine `--gnu` otherwise installs, as in gcc
     /// and clang. Off by default: without `-std` badc reports strict
@@ -497,6 +541,12 @@ impl CompileOptions {
     /// (`-fgnu89-inline`).
     pub fn with_gnu89_inline(mut self, on: bool) -> Self {
         self.gnu89_inline = on;
+        self
+    }
+    /// Select which trailing array members are flexible
+    /// (`-fstrict-flex-arrays=N`).
+    pub fn with_strict_flex_arrays(mut self, level: u8) -> Self {
+        self.strict_flex_arrays = level;
         self
     }
     /// Select the GNU dialect (`-std=gnu*`) over strict ISO (`-std=c*`).
@@ -953,6 +1003,16 @@ pub(in crate::c5::compiler) struct Pending {
     /// way as `last_array_decay_size` so it doesn't leak.
     pub last_array_decay_bytes: i64,
 
+    /// The array member the trailing decay came from, for
+    /// `__builtin_object_size`; cleared with `last_array_decay_size`.
+    pub last_array_decay_member: Option<ArrayMember>,
+
+    /// The object a struct-valued identifier or member load left in the
+    /// accumulator, read by the next `.` step. Taken at the top of every
+    /// postfix step and cleared at the end of `expr`, so it never
+    /// outlives the step that set it.
+    pub member_base: Option<MemberBase>,
+
     /// Depth from the value currently in the accumulator down to
     /// a function-pointer rvalue, or -1 if the running expression
     /// has no function-pointer lineage. Concretely:
@@ -1329,6 +1389,8 @@ impl Default for Pending {
             typeof_operand_array_bytes: 0,
             typeof_operand_array_dims: alloc::vec::Vec::new(),
             last_array_decay_bytes: 0,
+            last_array_decay_member: None,
+            member_base: None,
             // `-1` means "not in a fn-ptr-tracked chain"; see field
             // docs above.
             fn_ptr_chain_depth: -1,
@@ -2031,6 +2093,8 @@ pub struct Compiler {
     /// `__attribute__((gnu_inline))` uses [`InlineModel::Gnu89`]
     /// regardless.
     inline_model: crate::c5::symbol::InlineModel,
+    /// Mirror of [`CompileOptions::strict_flex_arrays`].
+    strict_flex_arrays: u8,
 
     /// File-name table. Index 0 is the user's translation unit;
     /// every distinct filename observed via the lexer's
@@ -2629,6 +2693,7 @@ impl Compiler {
             } else {
                 crate::c5::symbol::InlineModel::C99
             },
+            strict_flex_arrays: opts.strict_flex_arrays,
             source_files: Vec::new(),
             source_file_index: hashbrown::HashMap::new(),
             source_label: opts.source_label.clone(),

@@ -352,7 +352,12 @@ def fetch_tarball(url: str, want_sha: str, cache: Path) -> Path:
 def clear_foreign_files(text: str) -> str:
     for opt in FOREIGN_FILE_OPTIONS:
         text = re.sub(rf'(?m)^{opt}=.*$', f'{opt}=""', text)
-    return text
+    # The signing key is not a foreign file: the kernel generates it at
+    # its default path during the build. An empty value makes every
+    # sign-file call read its key from `./` and modules_install fails;
+    # the default keeps CONFIG_MODULE_SIG=y kernels packageable.
+    return re.sub(r'(?m)^CONFIG_MODULE_SIG_KEY=""$',
+                  'CONFIG_MODULE_SIG_KEY="certs/signing_key.pem"', text)
 
 
 def phase_config(args, arch) -> Path:

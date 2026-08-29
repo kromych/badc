@@ -65,6 +65,7 @@ jobs:
         run: |
           python3 demos/linux/kaslr.py
           python3 demos/linux/verify.py --self-test
+          python3 demos/linux/packages.py --self-test
           python3 demos/linux/layout.py --self-test
           python3 demos/linux/packages.py --self-test
           python3 scripts/snapshots.py --self-test

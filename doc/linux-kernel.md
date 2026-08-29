@@ -89,6 +89,15 @@ dm-crypt and md raid1 -- because they route file data through the same kernel
 crypto and compression code, where a miscompile shows up as corrupted data
 rather than as a message in dmesg. The kunit suites run where the
 configuration builds them.
+**Self-host.** The optional `selfhost` phase turns the installed kernel into a
+build host: inside the VM running the badc kernel, badc builds the kernel
+again. Everything the build needs is staged before the reboot, so the badc
+kernel carries the build with no network. What is measured is the kernel, not
+the compiler -- the kernel log window bracketed by `/dev/kmsg` markers, taint,
+OOM records and core dumps -- plus two results only a second build can give:
+the in-guest unit outcomes against the host build's for the units both reached,
+and a sample of the objects rebuilt and required to repeat byte for byte. It is
+off by default and `--selfhost-scope` sizes it.
 
 ## What is not badc's
 

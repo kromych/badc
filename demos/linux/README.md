@@ -871,6 +871,96 @@ The stage attaches `--exercise-spares` thin qcow2 disks (2 by default) after
 the system disk and the seed, on the same bus; the system disk keeps its bus
 and its `bootindex=0`. It also raises `--vm-mem` to 4096 when it is lower,
 since the sweep holds every loaded module resident between prunes.
+### Building the kernel on the badc kernel (the `selfhost` phase)
+
+An installed kernel that boots and passes probes has been asked for minutes of
+uptime and a handful of syscalls. `--phases ...,vm,selfhost` asks it for a
+kernel build: once the guest is running the badc kernel, the phase builds the
+kernel again, with badc, inside that VM. The build is the load -- page cache,
+filesystem, scheduler, memory pressure and thousands of process spawns -- and
+the kernel is what is measured.
+
+The phase runs inside the vm phase rather than after it, because its
+precondition is a booted badc kernel and re-reaching that state costs a second
+install and reboot. It is off by default, so the gate's runtime is unchanged;
+naming it without `vm` is refused.
+
+What it does, in order:
+
+* On the stock kernel, before the install: installs the distribution's build
+  and packaging tool set (`build-essential`, `bc`, `bison`, `flex`,
+  `libssl-dev`, `libelf-dev`, `debhelper` and the rpm equivalents) from the
+  image's own mirror, then pushes in badc, `buildcc.py`, `ldshim.py` and the
+  pinned kernel tarball. Nothing the badc kernel then runs needs the network,
+  and `badc --version` is required to identify badc from inside the guest
+  before anything else starts.
+* On the badc kernel: extracts the tarball, configures, and runs make with
+  `CC=buildcc.py` under the same environment the host build uses -- the two
+  differ in nothing but the machine. `--selfhost-scope` sizes it: `units`
+  (the default) builds the built-in objects of `init/ kernel/ mm/ lib/ fs/`
+  from the tree's own `defconfig`, `image` builds the kernel and its modules,
+  and `package` runs `bindeb-pkg` / `binrpm-pkg` and checks the archive
+  listing for a kernel image. `--selfhost-config host` uses the host build's
+  configuration instead of `defconfig`.
+* The build runs detached and is polled over short ssh connections, so a
+  kernel that stops scheduling is reported as a guest that stopped answering
+  rather than stalling one connection for the whole build. Each poll records
+  the manifest line count, load and used memory; the peaks are in the report.
+
+What it fails on:
+
+* Anything the kernel logged while building. A marker is written to
+  `/dev/kmsg` on either side of the build, so the window belongs to the build
+  and not to the boot; `BUG:`/`Oops`/`Call Trace`/`UBSAN:` and `WARNING:` in
+  that window, an OOM-kill record, or a taint value that moved are each a
+  failure. A wrapped ring buffer is a failure too: no window is attributable.
+* Units. The in-guest `BADC_MANIFEST` is pulled back to
+  `<workdir>/selfhost-manifest-<arch>.txt` and read with the same reader the
+  host build's manifest uses. Any `fail`, fewer badc units than the scope's
+  floor, and -- the point of the comparison -- any unit badc compiled on the
+  build host and could not compile in the guest. The two corpora differ, so
+  only units both runs reached are compared; a difference there is the kernel
+  under the build, not a corpus difference.
+* Output. A sample of the objects badc just produced is deleted and rebuilt,
+  and the bytes have to repeat. badc is deterministic for a fixed command
+  line, so a difference is the kernel losing or corrupting what the compiler
+  wrote.
+* Core dumps, swept as `selfhost` with the same collector the other phases
+  use.
+
+The VM is sized for the work: with the phase on, the defaults become 4 vCPUs
+(bounded by the host's), 6 GiB and a 40 GiB disk instead of 2 vCPUs, 2 GiB and
+12 GiB. Every one of those is still an explicit flag.
+
+`packages.py --self-test` checks the phase's pure helpers -- the scope-to-target
+mapping, the build script, the kernel-log window split and the unit comparison
+-- and takes no tree, host or guest.
+
+#### Measured cost
+
+x86_64 `defconfig`, Ubuntu 26.04 cloud image, kvm on a 12-core host that was
+running another kernel build throughout, guest at 4 vCPUs and 6 GiB:
+
+| step | wall |
+|---|---|
+| tool install and push (stock kernel, once) | 50 s |
+| tarball extract in the guest | 25 s |
+| `make defconfig` in the guest | 21 s |
+| `units` build, 800 units, `-j4` | 919 s |
+| rebuild sample, log window, core sweep | 60 s |
+
+That is 17 min on top of the vm phase's own 3 min, for a default that covers
+800 of the 2953 units the whole `defconfig` corpus compiles -- `init/`,
+`kernel/`, `mm/`, `lib/` and `fs/`, built-in and modular. The same host
+compiled all 2953 in 570 s at `-j6`, so the guest runs at roughly a sixth of
+the host's rate per job: `image` and `package` scopes cost about an hour of
+in-guest build at this shape, which is why they are not the default.
+
+The kernel's side of that run: 0 severe and 0 warning lines in the build's log
+window, no OOM record, taint 0 before and after, no core dumps, 21.9 M page
+faults and 78 major faults, peak load 4.38 and peak 628 MiB in use. No unit
+regressed against the host build, and all 8 rebuilt objects reproduced byte for
+byte.
 
 ### The distribution's own configuration (`--config from-vm`)
 

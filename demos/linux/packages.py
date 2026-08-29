@@ -19,7 +19,8 @@ block stack under a verified stress load (exercise.py).
         --report packages-x86_64.json
 
 Phases (--phases selects a subset; each is idempotent): config, tree, build,
-package, vm. The build runs in <workdir>/linux-<version>; packages land in
+package, vm, and the optional selfhost. The build runs in
+<workdir>/linux-<version>; packages land in
 <workdir> (deb) or the tree's rpmbuild/RPMS (rpm). On a host without the Debian
 packaging tools (an rpm distribution), --deb-tools names a prefix that is
 provisioned from the host's own package mirror via `dnf download` + rpm2cpio
@@ -33,6 +34,15 @@ formats; and `--keep-going` runs the build under `make -k`, so the manifest
 ranks every unit badc rejects instead of stopping at the first. A configuration
 from another kernel version is carried forward with `make olddefconfig` and
 what moved is recorded in <workdir>/config-deviations-<arch>.txt.
+
+The selfhost phase runs inside the vm phase, once the guest is on the badc
+kernel: it stages a build environment, pushes badc and the shims, and builds
+the kernel again with badc inside the VM. The build is the load and the kernel
+is what is measured -- the kernel log window around it, taint, OOM records,
+core dumps, and the unit outcomes against the host build's. It is off by
+default; `--selfhost-scope` sizes it.
+
+`--self-test` checks the pure helpers and takes no tree, host or guest.
 
 Concurrent runs on one host are supported: the ssh forward takes a free port
 per run and the workdir is held under an exclusive lock, so a second run
@@ -815,6 +825,19 @@ def assert_link_manifest(args, failures: list[str]) -> dict:
 
 # --- vm ---------------------------------------------------------------------
 
+# Machine the vm phase runs on. The selfhost stage compiles a kernel inside
+# the guest and needs one that can; the gate's own sizes are unchanged.
+VM_SIZE = {"vm_cpus": 2, "vm_mem": 2048, "vm_disk": "12G"}
+VM_SIZE_SELFHOST = {"vm_mem": 6144, "vm_disk": "40G"}
+
+
+def vm_size(selfhost: bool) -> dict:
+    if not selfhost:
+        return dict(VM_SIZE)
+    return {**VM_SIZE, **VM_SIZE_SELFHOST,
+            "vm_cpus": min(4, os.cpu_count() or 4)}
+
+
 def ensure_image(args, arch) -> Path:
     """The cloud image, verified against a pinned sha256 in every path.
 
@@ -1278,6 +1301,411 @@ def probes(vm: VM) -> dict:
     return out
 
 
+# --- selfhost ---------------------------------------------------------------
+
+# What a kernel build needs beyond what a cloud image ships: the host compiler
+# kbuild builds its own tools with, the assembler and linker behind badc, the
+# Kconfig and certificate prerequisites, and the distribution's packaging
+# tools. Installed while the stock kernel is still running, so the badc kernel
+# carries the build alone and no part of it depends on the network.
+SELFHOST_TOOLS = {
+    "deb": ["build-essential", "bc", "bison", "flex", "libssl-dev",
+            "libelf-dev", "cpio", "kmod", "rsync", "xz-utils", "debhelper",
+            "dpkg-dev", "python3"],
+    "rpm": ["gcc", "make", "binutils", "bc", "bison", "flex", "openssl-devel",
+            "elfutils-libelf-devel", "cpio", "kmod", "rsync", "xz",
+            "rpm-build", "python3"],
+}
+
+# Built-in objects the `units` scope compiles: the subsystems the build load
+# itself runs through.
+SELFHOST_UNIT_DIRS = ["init/", "kernel/", "mm/", "lib/", "fs/"]
+
+# Minimum badc-compiled units per scope, floors just under the measured
+# counts (805 for `units` at the x86_64 defconfig pin, 2953 for the whole
+# tree). A scope that compiled a fraction of its corpus must not pass.
+SELFHOST_EXPECT = {"units": 750, "image": 2900, "package": 2900}
+
+SELFHOST_DIR = "/home/badc/selfhost"
+
+# Written to /dev/kmsg on either side of the in-guest build, so what the
+# kernel logged while building is separable from what it logged while booting.
+SELFHOST_MARK = "badc-selfhost-{}"
+
+OOM_KILL = re.compile(r"oom-kill:|Out of memory: Killed process|"
+                      r"invoked oom-killer")
+
+
+def selfhost_make_targets(scope: str, arch: dict) -> list[str]:
+    """The make targets the in-guest build runs. `units` produces object
+    files only, `image` links the kernel and builds its modules, `package`
+    runs the distribution's packaging target, which builds both and stages
+    them."""
+    if scope == "units":
+        return list(SELFHOST_UNIT_DIRS)
+    if scope == "package":
+        return ["bindeb-pkg" if arch["pkg"] == "deb" else "binrpm-pkg"]
+    return [arch["make_target"], "modules"]
+
+
+def selfhost_script(args, arch, targets: list[str], mark: str) -> str:
+    """The build script the guest runs detached. Every variable the shims
+    read is set here, so the in-guest build and the host build differ in
+    nothing but the machine they run on."""
+    ld = f"LD={SELFHOST_DIR}/ldshim.py" if args.linker == "badc" else ""
+    return f"""\
+set -u
+cd {SELFHOST_DIR}/linux-{args.tree_version} || exit 1
+export BADC={SELFHOST_DIR}/badc
+export BADC_REAL_CC=gcc BADC_LD_REAL=ld
+export BADC_TARGET={arch['target']}
+export BADC_MANIFEST={SELFHOST_DIR}/manifest.txt
+export BADC_LD_MANIFEST={SELFHOST_DIR}/ld-manifest.txt
+export BADC_WARN_LOG={SELFHOST_DIR}/warnings.txt
+export BADC_TIMEOUT={args.unit_timeout}
+echo '{mark} begin' | sudo tee /dev/kmsg > /dev/null
+make -j{args.selfhost_jobs} CC={SELFHOST_DIR}/buildcc.py {ld} {' '.join(targets)}
+rc=$?
+echo '{mark} end' | sudo tee /dev/kmsg > /dev/null
+echo $rc > {SELFHOST_DIR}/rc
+"""
+
+
+def kmsg_window(dmesg: str, mark: str) -> list[str] | None:
+    """The kernel log between the build's two markers. None when the opening
+    marker is gone: the ring buffer wrapped and no window is attributable."""
+    lines = dmesg.splitlines()
+    start = next((i for i, l in enumerate(lines) if f"{mark} begin" in l), None)
+    if start is None:
+        return None
+    end = next((i for i, l in enumerate(lines) if f"{mark} end" in l),
+               len(lines))
+    return lines[start + 1:end]
+
+
+def scan_kmsg(lines: list[str]) -> dict:
+    return {"lines": len(lines),
+            "severe": [l for l in lines if DMESG_SEVERE.search(l)],
+            "warn": [l for l in lines if DMESG_WARN.search(l)],
+            "oom": [l for l in lines if OOM_KILL.search(l)]}
+
+
+def manifest_regressions(host: dict, guest: dict) -> list[str]:
+    """Units badc compiled on the build host and could not compile in the
+    guest. The guest builds a subset of the host's corpus, so only units both
+    runs reached are compared; a difference there is the kernel under the
+    build, not a corpus difference."""
+    ok = {u.split("\t")[0] for u in host["badc"]}
+    return sorted({u.split("\t")[0] for u in guest["fail"]} & ok)
+
+
+def sample_evenly(items: list[str], n: int) -> list[str]:
+    """`n` items spread across the list, so a sample covers the build rather
+    than its first seconds."""
+    if n <= 0 or not items:
+        return []
+    if len(items) <= n:
+        return list(items)
+    step = len(items) / n
+    return [items[int(i * step)] for i in range(n)]
+
+
+def selfhost_provision(args, arch, vm: VM, result: dict) -> None:
+    """Stage what the in-guest build needs while the stock kernel is still
+    running: the tool set from the distribution's mirror, then badc, the shims
+    and the kernel tarball pushed in from the host."""
+    tools = SELFHOST_TOOLS[arch["pkg"]]
+    if arch["pkg"] == "deb":
+        # The image's own periodic apt units may still hold the lock this
+        # early after boot; the timeout waits for them instead of failing.
+        apt = "apt-get -qq -o DPkg::Lock::Timeout=600"
+        cmd = (f"export DEBIAN_FRONTEND=noninteractive; {apt} update && "
+               f"{apt} -y install " + " ".join(tools))
+    else:
+        cmd = "dnf -q -y install " + " ".join(tools)
+    log(f"selfhost: installing {len(tools)} build packages in the guest")
+    r = vm.ssh("sh -c " + shlex.quote(cmd), sudo=True,
+               timeout=args.install_timeout)
+    if r.returncode != 0:
+        raise VmError(f"selfhost tool install exited {r.returncode}: "
+                      f"{(r.stdout + r.stderr).strip()[-400:]}")
+    vm.ssh(f"mkdir -p {SELFHOST_DIR}", check=True)
+    log(f"selfhost: pushing badc, the shims and {args.tarball.name}")
+    vm.scp([args.badc, LINUX_DIR / "buildcc.py", LINUX_DIR / "ldshim.py",
+            args.tarball], SELFHOST_DIR)
+    vm.ssh(f"chmod +x {SELFHOST_DIR}/badc {SELFHOST_DIR}/buildcc.py "
+           f"{SELFHOST_DIR}/ldshim.py", check=True)
+    ver = vm.ssh(f"{SELFHOST_DIR}/badc --version", check=True).stdout.strip()
+    if not names_badc(ver):
+        raise VmError(f"the pushed badc does not run in the guest: {ver[:200]}")
+    result["badc_version"] = ver.splitlines()[0]
+    result["tools"] = tools
+    log(f"selfhost: guest badc: {result['badc_version']}")
+
+
+def selfhost_prepare_tree(args, arch, vm: VM, result: dict) -> None:
+    """Extract and configure the tree under the badc kernel; the extract
+    alone is tens of thousands of file creations against the page cache."""
+    t0 = time.time()
+    r = vm.ssh(f"cd {SELFHOST_DIR} && tar xf {args.tarball.name}",
+               timeout=args.selfhost_timeout)
+    if r.returncode != 0:
+        raise VmError(f"tarball extract in the guest exited {r.returncode}: "
+                      f"{(r.stderr or '').strip()[-300:]}")
+    result["extract_s"] = round(time.time() - t0, 1)
+    tree = f"{SELFHOST_DIR}/linux-{args.tree_version}"
+    target = "defconfig"
+    if args.selfhost_config == "host":
+        vm.scp([args.host_config], f"{tree}/.config")
+        target = "olddefconfig"
+    t0 = time.time()
+    r = vm.ssh(f"cd {tree} && make -j{args.selfhost_jobs} "
+               f"CC={SELFHOST_DIR}/buildcc.py {target} "
+               f"> {SELFHOST_DIR}/config.log 2>&1",
+               timeout=args.selfhost_timeout)
+    result["config_s"] = round(time.time() - t0, 1)
+    result["config_target"] = target
+    if r.returncode != 0:
+        raise VmError(f"make {target} in the guest exited {r.returncode}: " +
+                      vm.ssh(f"tail -n 20 {SELFHOST_DIR}/config.log").stdout)
+    log(f"selfhost: tree extracted in {result['extract_s']}s, "
+        f"{target} in {result['config_s']}s")
+
+
+def selfhost_stats(vm: VM) -> dict:
+    """Load, memory, fault and per-disk I/O counters as the guest reports
+    them, one `key value` line each."""
+    out = vm.ssh(
+        "printf 'loadavg %s\\n' \"$(cut -d' ' -f1-3 /proc/loadavg)\"; "
+        "grep -E '^(MemTotal|MemAvailable|Committed_AS):' /proc/meminfo | "
+        "tr -d ':' | awk '{print $1, $2}'; "
+        "grep -E '^(pgfault|pgmajfault|pswpin|pswpout|oom_kill) ' "
+        "/proc/vmstat; "
+        "for s in /sys/block/*/stat; do d=${s%/stat}; "
+        "echo \"io_${d##*/} $(awk '{print $3, $7}' $s)\"; done").stdout
+    stats: dict = {}
+    for line in out.splitlines():
+        key, _, value = line.partition(" ")
+        value = value.strip()
+        stats[key] = int(value) if value.isdigit() else value
+    return stats
+
+
+def selfhost_watch(args, vm: VM, result: dict) -> int:
+    """Poll the guest until the detached build records its status. Each poll
+    is a fresh ssh on a short timeout, so a kernel that stops scheduling is
+    reported as a guest that stopped answering rather than stalling an open
+    connection for the whole build."""
+    deadline = time.time() + args.selfhost_timeout
+    silent_since, last = None, -1
+    peak = {"units": 0, "load": 0.0, "mem_used_kb": 0}
+    while time.time() < deadline:
+        time.sleep(30)
+        r = vm.ssh(f"cut -d' ' -f1 /proc/loadavg; "
+                   f"wc -l < {SELFHOST_DIR}/manifest.txt 2>/dev/null || echo 0; "
+                   f"awk '/^MemTotal:/{{t=$2}} /^MemAvailable:/{{a=$2}} "
+                   f"END{{print t-a}}' /proc/meminfo; "
+                   f"cat {SELFHOST_DIR}/rc 2>/dev/null || echo -", timeout=90)
+        if r.returncode != 0:
+            silent_since = silent_since or time.time()
+            if vm.pid() is None:
+                raise VmError("qemu exited during the in-guest build "
+                              f"(console: {vm.console})")
+            silent = round(time.time() - silent_since)
+            if silent > args.vm_timeout:
+                raise VmError(f"the guest stopped answering ssh for {silent}s "
+                              f"during the in-guest build")
+            continue
+        silent_since = None
+        fields = r.stdout.split()
+        if len(fields) < 4:
+            continue
+        peak["load"] = max(peak["load"], float(fields[0]))
+        peak["units"] = max(peak["units"], int(fields[1]))
+        peak["mem_used_kb"] = max(peak["mem_used_kb"], int(fields[2]))
+        if peak["units"] != last:
+            log(f"selfhost: {peak['units']} units, load {fields[0]}, "
+                f"{int(fields[2]) >> 10} MiB used")
+            last = peak["units"]
+        if fields[3] != "-":
+            result["peak"] = peak
+            return int(fields[3])
+    raise VmError(f"the in-guest build did not finish within "
+                  f"{args.selfhost_timeout}s")
+
+
+def selfhost_objects(args, arch, vm: VM, tree: str, units: dict,
+                     result: dict, failures: list[str]) -> None:
+    """Rebuild a sample of the objects badc just produced and require the
+    bytes to repeat. badc is deterministic for a fixed command line, so a
+    difference is the kernel losing or corrupting what the compiler wrote."""
+    sources = [u for u in units["badc"] if u.endswith(".c")]
+    cands = [s[:-2] + ".o"
+             for s in sample_evenly(sources, args.selfhost_sample * 4)]
+    # kbuild compiles some sources into a directory other than the source's,
+    # so a manifest entry does not name its object. Keep the ones it does.
+    present = vm.ssh("cd %s && ls -1 %s 2>/dev/null" % (
+        tree, " ".join(shlex.quote(o) for o in cands))).stdout.split()
+    objs = sample_evenly(present, args.selfhost_sample)
+    if not objs:
+        return
+    names = " ".join(shlex.quote(o) for o in objs)
+    before = vm.ssh(f"cd {tree} && sha256sum {names}", timeout=300)
+    r = vm.ssh(f"cd {tree} && rm -f {names} && "
+               f"BADC={SELFHOST_DIR}/badc BADC_REAL_CC=gcc "
+               f"BADC_TARGET={arch['target']} "
+               f"make -j{args.selfhost_jobs} CC={SELFHOST_DIR}/buildcc.py "
+               f"{names} > {SELFHOST_DIR}/remake.log 2>&1",
+               timeout=args.selfhost_timeout)
+    after = vm.ssh(f"cd {tree} && sha256sum {names}", timeout=300)
+    same = (r.returncode == 0 and before.returncode == 0
+            and before.stdout == after.stdout)
+    result["reproduced"] = {"sampled": len(objs), "identical": same}
+    if not same:
+        detail = vm.ssh(f"tail -n 5 {SELFHOST_DIR}/remake.log").stdout
+        failures.append(f"the in-guest rebuild of {len(objs)} objects did not "
+                        f"reproduce the bytes (rc={r.returncode}): "
+                        f"{detail.strip()[-300:]}")
+    else:
+        log(f"selfhost: {len(objs)} rebuilt objects reproduced byte for byte")
+
+
+def selfhost_packages(args, arch, vm: VM, tree: str,
+                      failures: list[str]) -> list[dict]:
+    """Shape of what the in-guest packaging target produced: the archive
+    listing, and a kernel image inside it."""
+    if args.selfhost_scope != "package":
+        return []
+    if arch["pkg"] == "deb":
+        found = vm.ssh(f"ls -1 {SELFHOST_DIR}/linux-image-*.deb "
+                       f"2>/dev/null").stdout.split()
+        lister = "dpkg-deb -c"
+    else:
+        found = vm.ssh(f"find {tree}/rpmbuild/RPMS -name 'kernel-*.rpm' "
+                       f"2>/dev/null").stdout.split()
+        lister = "rpm -qlp"
+    out: list[dict] = []
+    for p in [p for p in found if "-dbg" not in p]:
+        size = vm.ssh(f"stat -c %s {shlex.quote(p)}").stdout.strip()
+        listing = vm.ssh(f"{lister} {shlex.quote(p)}", timeout=300).stdout
+        entries = listing.splitlines()
+        out.append({"name": Path(p).name, "bytes": int(size or 0),
+                    "entries": len(entries),
+                    "kernel_image": any(
+                        re.search(r"/boot/(vmlinuz|Image|vmlinux)", l)
+                        for l in entries)})
+        log(f"selfhost: package {out[-1]['name']} "
+            f"({out[-1]['bytes'] >> 20} MiB, {out[-1]['entries']} entries)")
+        if not out[-1]["kernel_image"]:
+            failures.append(f"the in-guest package {out[-1]['name']} carries "
+                            f"no kernel image")
+    if not out:
+        failures.append("the in-guest packaging target produced no package")
+    return out
+
+
+def phase_selfhost(args, arch, vm: VM, failures: list[str]) -> dict:
+    """Build the kernel again, with badc, inside the VM running the badc
+    kernel. The build is the load; the kernel is what is under test."""
+    result: dict = {"scope": args.selfhost_scope, "jobs": args.selfhost_jobs,
+                    "config": args.selfhost_config,
+                    "expect_units": args.selfhost_expect}
+    tree = f"{SELFHOST_DIR}/linux-{args.tree_version}"
+    selfhost_prepare_tree(args, arch, vm, result)
+    targets = selfhost_make_targets(args.selfhost_scope, arch)
+    result["targets"] = targets
+    mark = SELFHOST_MARK.format(os.getpid())
+    script = args.workdir / f"selfhost-build-{args.arch}.sh"
+    script.write_text(selfhost_script(args, arch, targets, mark))
+    vm.scp([script], f"{SELFHOST_DIR}/build.sh")
+    result["taint_before"] = vm.ssh(
+        "cat /proc/sys/kernel/tainted").stdout.strip()
+    result["stats_before"] = selfhost_stats(vm)
+    log(f"selfhost: make {' '.join(targets)} -j{args.selfhost_jobs} in the "
+        f"guest")
+    t0 = time.time()
+    vm.ssh(f"rm -f {SELFHOST_DIR}/rc; setsid sh {SELFHOST_DIR}/build.sh "
+           f"> {SELFHOST_DIR}/build.log 2>&1 < /dev/null &", check=True)
+    rc = selfhost_watch(args, vm, result)
+    result["build_s"] = round(time.time() - t0, 1)
+    result["build_rc"] = rc
+    result["build_tail"] = vm.ssh(
+        f"tail -n 40 {SELFHOST_DIR}/build.log").stdout.strip()[-4000:]
+    result["stats_after"] = selfhost_stats(vm)
+    result["taint_after"] = vm.ssh(
+        "cat /proc/sys/kernel/tainted").stdout.strip()
+
+    # The kernel's own record of the build window.
+    window = kmsg_window(vm.ssh("dmesg", sudo=True, timeout=300).stdout, mark)
+    if window is None:
+        result["kmsg"] = {"wrapped": True}
+        failures.append("the kernel ring buffer wrapped during the in-guest "
+                        "build; no window is attributable to it")
+    else:
+        scan = scan_kmsg(window)
+        result["kmsg"] = scan
+        log(f"selfhost: {scan['lines']} kernel log lines during the build "
+            f"({len(scan['severe'])} severe, {len(scan['warn'])} warning, "
+            f"{len(scan['oom'])} oom)")
+        if scan["severe"]:
+            failures.append(f"kernel log during the in-guest build: "
+                            f"{scan['severe'][:3]}")
+        if scan["warn"]:
+            failures.append(f"kernel warnings during the in-guest build: "
+                            f"{scan['warn'][:3]}")
+        if scan["oom"]:
+            failures.append(
+                f"{len(scan['oom'])} OOM kill records during the in-guest "
+                f"build at --vm-mem {args.vm_mem}: {scan['oom'][:2]}")
+    if result["taint_after"] != result["taint_before"]:
+        failures.append(f"kernel taint moved from {result['taint_before']} to "
+                        f"{result['taint_after']} during the in-guest build")
+
+    manifest = args.workdir / f"selfhost-manifest-{args.arch}.txt"
+    vm.pull(f"{SELFHOST_DIR}/manifest.txt", manifest)
+    warns = args.workdir / f"selfhost-warnings-{args.arch}.txt"
+    vm.pull(f"{SELFHOST_DIR}/warnings.txt", warns)
+    units = read_manifest(manifest)
+    result["units"] = {k: len(v) for k, v in units.items()}
+    counts, _ = diags.summary(warns)
+    result["diagnostics"] = [[list(k), n] for k, n in counts.most_common()]
+    log(f"selfhost: units badc={len(units['badc'])} "
+        f"fallback={len(units['fallback'])} fail={len(units['fail'])} "
+        f"in {result['build_s']}s")
+    if rc != 0:
+        failures.append(f"the in-guest build exited {rc}: "
+                        f"{result['build_tail'][-400:]}")
+    if units["fail"]:
+        named = ", ".join(u.split("\t")[0] for u in units["fail"][:5])
+        failures.append(f"units badc could not compile in the guest: "
+                        f"{len(units['fail'])} ({named})")
+    if len(units["badc"]) < args.selfhost_expect:
+        failures.append(f"in-guest units compiled: {len(units['badc'])}, "
+                        f"expected at least {args.selfhost_expect}")
+
+    host_units = read_manifest(args.manifest)
+    result["host_units"] = len(host_units["badc"])
+    if host_units["badc"]:
+        result["regressed"] = manifest_regressions(host_units, units)
+        if result["regressed"]:
+            failures.append(
+                f"{len(result['regressed'])} units badc compiled on the build "
+                f"host and failed in the guest: "
+                f"{', '.join(result['regressed'][:5])}")
+        else:
+            log(f"selfhost: no unit regressed against the host build's "
+                f"{result['host_units']}")
+    else:
+        log("selfhost: no host manifest in the workdir; unit outcomes are "
+            "not compared")
+
+    if rc == 0:
+        selfhost_objects(args, arch, vm, tree, units, result, failures)
+        result["packages"] = selfhost_packages(args, arch, vm, tree, failures)
+    result["cores"] = sweep_cores(args, vm, "selfhost", failures)
+    return result
+
+
 def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
     image = ensure_image(args, arch)
     accel = resolve_accel(args, arch)
@@ -1312,6 +1740,9 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
         log(f"stock: uname={base['uname']} systemd={base['systemd_state']} "
             f"modules={len(base['modules'])}")
         result["cores_stock"] = sweep_cores(args, vm, "stock", failures)
+        if args.selfhost:
+            result["selfhost"] = {}
+            selfhost_provision(args, arch, vm, result["selfhost"])
 
         # Only the image's own format is installable in it; a survey may have
         # built the other one alongside.
@@ -1461,6 +1892,10 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
         result["cores_badc"] = sweep_cores(args, vm, "badc", failures)
         if not result["cores_badc"]:
             log("no userspace cores under the badc kernel")
+
+        if args.selfhost:
+            result["selfhost"].update(
+                phase_selfhost(args, arch, vm, failures))
     except VmError as e:
         failures.append(str(e))
     finally:
@@ -1469,6 +1904,73 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
         except Exception as e:  # teardown must not mask the verdict
             log(f"vm teardown: {e}")
     return result
+
+
+
+# --- self-test --------------------------------------------------------------
+
+def _self_test() -> int:
+    """The pure helpers, without a tree, a host or a guest."""
+    import types
+
+    assert names_badc("badc 0.1 (gcc-compatible, GNU C 15.0.0)")
+    assert not names_badc("gcc (GCC) 15.2.1")
+
+    cfg = clear_foreign_files(
+        'CONFIG_SYSTEM_TRUSTED_KEYS="debian/certs/x.pem"\n'
+        'CONFIG_MODULE_SIG_KEY="debian/certs/k.pem"\n')
+    assert 'CONFIG_SYSTEM_TRUSTED_KEYS=""' in cfg
+    assert 'CONFIG_MODULE_SIG_KEY="certs/signing_key.pem"' in cfg
+
+    deb = {"pkg": "deb", "make_target": "bzImage", "target": "linux-x64"}
+    rpm = {"pkg": "rpm", "make_target": "Image", "target": "linux-aarch64"}
+    assert selfhost_make_targets("units", deb) == SELFHOST_UNIT_DIRS
+    assert selfhost_make_targets("image", deb) == ["bzImage", "modules"]
+    assert selfhost_make_targets("image", rpm) == ["Image", "modules"]
+    assert selfhost_make_targets("package", deb) == ["bindeb-pkg"]
+    assert selfhost_make_targets("package", rpm) == ["binrpm-pkg"]
+    assert set(SELFHOST_EXPECT) == {"units", "image", "package"}
+
+    args = types.SimpleNamespace(linker="reference", tree_version="7.1.6",
+                                 selfhost_jobs=4, unit_timeout=600)
+    sh = selfhost_script(args, deb, ["kernel/"], "M")
+    assert f"cd {SELFHOST_DIR}/linux-7.1.6" in sh
+    assert "export BADC_TARGET=linux-x64" in sh
+    assert f"make -j4 CC={SELFHOST_DIR}/buildcc.py  kernel/" in sh
+    assert "ldshim" not in sh
+    assert "echo 'M begin' | sudo tee /dev/kmsg" in sh
+    args.linker = "badc"
+    assert f"LD={SELFHOST_DIR}/ldshim.py" in selfhost_script(
+        args, deb, ["bzImage"], "M")
+
+    log_text = "[0.0] boot\n[1.0] M begin\n[2.0] WARNING: x\n[3.0] M end\n"
+    assert kmsg_window(log_text, "M") == ["[2.0] WARNING: x"]
+    assert kmsg_window("[0.0] boot\n", "M") is None
+    # No closing marker: the build died before writing it, and the window is
+    # everything the kernel logged after it started.
+    assert kmsg_window("[1.0] M begin\n[2.0] BUG: y\n", "M") == ["[2.0] BUG: y"]
+
+    scan = scan_kmsg(["BUG: unable to handle", "WARNING: at x",
+                      "oom-kill: constraint=CONSTRAINT_NONE", "plain"])
+    assert (scan["lines"], len(scan["severe"]), len(scan["warn"]),
+            len(scan["oom"])) == (4, 1, 1, 1)
+
+    host = {"badc": ["fs/open.c", "mm/filemap.c"], "fallback": [], "fail": []}
+    guest = {"badc": ["fs/open.c"], "fallback": [],
+             "fail": ["mm/filemap.c\tinternal error", "net/new.c\tx"]}
+    assert manifest_regressions(host, guest) == ["mm/filemap.c"]
+
+    assert sample_evenly([], 4) == []
+    assert sample_evenly(["a", "b"], 4) == ["a", "b"]
+    assert sample_evenly([str(i) for i in range(100)], 4) == ["0", "25", "50",
+                                                              "75"]
+
+    assert vm_size(False) == VM_SIZE
+    big = vm_size(True)
+    assert big["vm_mem"] > VM_SIZE["vm_mem"] and big["vm_cpus"] >= 1
+
+    print("linux packages: self-test ok", flush=True)
+    return 0
 
 
 # --- main -------------------------------------------------------------------
@@ -1553,7 +2055,29 @@ def main() -> int:
                     help="minimum badc-compiled units (default: per-arch)")
     ap.add_argument("--phases", default="config,tree,build,package,vm",
                     help="comma-separated subset of config,tree,build,"
-                         "package,vm")
+                         "package,vm,selfhost; selfhost is off by default and "
+                         "runs inside the vm phase")
+    ap.add_argument("--selfhost-scope", choices=sorted(SELFHOST_EXPECT),
+                    default="units",
+                    help="what the in-guest build makes: `units` the built-in "
+                         "objects of "
+                         f"{' '.join(SELFHOST_UNIT_DIRS)} (default), `image` "
+                         "the kernel and its modules, `package` the "
+                         "distribution's packaging target")
+    ap.add_argument("--selfhost-config", choices=("defconfig", "host"),
+                    default="defconfig",
+                    help="configuration the in-guest build uses: the tree's "
+                         "own defconfig (default), or the host build's")
+    ap.add_argument("--selfhost-jobs", type=int, default=0,
+                    help="make jobs in the guest (default: --vm-cpus)")
+    ap.add_argument("--selfhost-timeout", type=int, default=7200,
+                    help="seconds for any single in-guest build step")
+    ap.add_argument("--selfhost-sample", type=int, default=8,
+                    help="objects rebuilt in the guest and checked for byte "
+                         "identity")
+    ap.add_argument("--selfhost-expect-units", type=int, default=0,
+                    help="minimum badc-compiled units in the guest "
+                         "(default: per-scope)")
     ap.add_argument("--deb-tools", type=Path,
                     help="prefix for the Debian packaging tools on an rpm "
                          "host; provisioned there when missing")
@@ -1575,7 +2099,7 @@ def main() -> int:
     ap.add_argument("--vm-cpu", default="",
                     help="qemu -cpu model (default: host under kvm, max "
                          "under tcg)")
-    ap.add_argument("--vm-cpus", type=int, default=2)
+    ap.add_argument("--vm-cpus", type=int, default=None)
     ap.add_argument("--vm-disk-bus", choices=sorted(DISK_BUSES), default="virtio",
                     help="storage controller the system disk and the seed are "
                          "attached through (default: virtio); the booted "
@@ -1584,8 +2108,8 @@ def main() -> int:
     ap.add_argument("--vm-nic", choices=sorted(NICS), default="virtio-net-pci",
                     help="NIC model (default: virtio-net-pci); the booted "
                          "kernel must bind it to that model's driver")
-    ap.add_argument("--vm-mem", type=int, default=2048)
-    ap.add_argument("--vm-disk", default="12G")
+    ap.add_argument("--vm-mem", type=int, default=None)
+    ap.add_argument("--vm-disk", default=None)
     ap.add_argument("--vm-timeout", type=int, default=900,
                     help="seconds to wait for ssh after a boot")
     ap.add_argument("--install-timeout", type=int, default=1800,
@@ -1603,8 +2127,18 @@ def main() -> int:
     args.real_cc = args.real_cc or f"{cross}gcc"
     args.real_ld = args.real_ld or f"{cross}ld"
     phases = set(args.phases.split(","))
-    if unknown := phases - {"config", "tree", "build", "package", "vm"}:
+    if unknown := phases - {"config", "tree", "build", "package", "vm",
+                            "selfhost"}:
         die(f"unknown phases: {sorted(unknown)}")
+    args.selfhost = "selfhost" in phases
+    if args.selfhost and "vm" not in phases:
+        die("the selfhost phase runs inside the vm phase and needs it")
+    for name, value in vm_size(args.selfhost).items():
+        if getattr(args, name) is None:
+            setattr(args, name, value)
+    args.selfhost_jobs = args.selfhost_jobs or args.vm_cpus
+    args.selfhost_expect = (args.selfhost_expect_units
+                            or SELFHOST_EXPECT[args.selfhost_scope])
     args.workdir = args.workdir.resolve()
     args.workdir.mkdir(parents=True, exist_ok=True)
     require_case_sensitive(args.workdir)
@@ -1681,6 +2215,8 @@ def main() -> int:
         if not trees:
             die(f"no prepared tree under {args.workdir}; run the tree phase")
         tree = trees[0].parent
+    args.tree_version = tree.name[len("linux-"):]
+    args.host_config = tree / ".config"
     args.release = run(["make", "-s", "kernelrelease"], cwd=tree,
                        env=shim_env(args, arch),
                        check=True).stdout.strip()
@@ -1707,6 +2243,9 @@ def main() -> int:
         report["diagnostics"] = [[list(k), n] for k, n in counts.most_common()]
         report["module_producer"] = assert_module_producer(tree, failures)
 
+    if args.selfhost and (not args.tarball or not args.tarball.is_file()):
+        die("the selfhost phase pushes the kernel tarball into the guest; "
+            "--tarball or --tarball-url is required")
     if "vm" in phases and not failures:
         if not packages:
             packages = (sorted(args.workdir.glob(
@@ -1736,4 +2275,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    if sys.argv[1:] == ["--self-test"]:
+        sys.exit(_self_test())
     sys.exit(main())

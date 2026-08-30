@@ -59,10 +59,10 @@ TAINT_CRASH = 0x90
 SPARE_SIZE = "8G"
 
 # The sweep holds every loaded module resident between prunes; the boot
-# default leaves too little for that plus the filesystem workloads. Kept
-# under 3.5 GiB: qemu 10.2.2 on the Fedora 44 lane starts the machine but
-# never runs the firmware above that, with no diagnostic and an empty
-# console, so a larger guest silently reads as a kernel that never booted.
+# default leaves too little for that plus the filesystem workloads. The
+# ceiling is SeaBIOS: it boots an nvme disk only while the guest stays
+# under the 4 GiB memory split, so a larger guest would restrict this
+# stage to the paravirtual buses. See SEABIOS_NVME_MEM_LIMIT.
 EXERCISE_VM_MEM = 3072
 
 PASS, SKIP, FAIL = "pass", "skip", "fail"

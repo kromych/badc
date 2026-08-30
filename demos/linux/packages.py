@@ -984,6 +984,18 @@ class VmError(Exception):
     tears the VM down and writes its report."""
 
 
+# Seconds of console silence after the machine starts that mean the
+# firmware never ran.
+FIRMWARE_CONSOLE_GRACE = 90
+
+# qemu's i440fx caps memory below the 4 GiB boundary at 0xe0000000 and
+# places the rest above it. SeaBIOS boots an nvme disk only while the
+# guest stays under that split; at or above it the machine starts and
+# the firmware writes nothing at all. virtio and ahci are unaffected,
+# as is a direct `-kernel` boot at any size.
+SEABIOS_NVME_MEM_LIMIT = 3584
+
+
 class VM:
     def __init__(self, args, arch, disk: Path, seed: Path, accel: str):
         self.args, self.arch, self.disk, self.seed = args, arch, disk, seed
@@ -1099,13 +1111,32 @@ class VM:
                  f"badc@127.0.0.1:{remote}", str(dest)], timeout=600)
         return r.returncode == 0
 
+    def console_bytes(self) -> int:
+        """Bytes the machine has written to its console so far."""
+        return self.console.stat().st_size if self.console.exists() else 0
+
     def wait_ssh(self, timeout: int, expect_boot_id: str | None = None) -> str:
         """Wait until ssh answers; with expect_boot_id, until a new boot."""
         deadline = time.time() + timeout
+        # Firmware writes to the console within seconds of the machine
+        # starting. Silence past that is a machine that never began to
+        # boot, not a slow guest, and waiting out the full timeout hides
+        # which of the two happened.
+        silent_by = time.time() + FIRMWARE_CONSOLE_GRACE
         while time.time() < deadline:
             if self.pid() is None:
                 raise VmError(f"qemu exited while waiting for ssh "
                               f"(console: {self.console})")
+            if silent_by and time.time() > silent_by:
+                if self.console_bytes() == 0:
+                    raise VmError(
+                        f"no console output {FIRMWARE_CONSOLE_GRACE}s after "
+                        f"the machine started: the firmware never ran. On "
+                        f"x86 with SeaBIOS that is what an nvme disk bus "
+                        f"does once the guest has {SEABIOS_NVME_MEM_LIMIT} "
+                        f"MiB or more (vm_mem={self.args.vm_mem}, bus="
+                        f"{self.args.vm_disk_bus}) (console: {self.console})")
+                silent_by = 0
             r = self.ssh("cat /proc/sys/kernel/random/boot_id", timeout=20)
             bid = r.stdout.strip()
             if r.returncode == 0 and bid and bid != expect_boot_id:

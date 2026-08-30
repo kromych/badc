@@ -70,6 +70,20 @@ falls back to SeaBIOS on x86_64 where no firmware is installed.
 dmesg, and disk/network I/O, against a baseline taken from the image's stock
 kernel in the same userspace.
 
+**Real hardware.** `packages.py --phases hw` runs the same install, one-shot
+selection, boot, probes and exercise stage on a physical machine instead of a
+guest: the machine is reached over ssh and its console is read from a serial
+port on the host, byte for byte, so the same scanners judge both. What a
+driver has to bind to comes from the machine's own baseline rather than from
+an emulated model, and the machine's identity -- board, BIOS, CPU, firmware
+mode -- is recorded next to the verdict, so a hardware run is diffable against
+a VM run. A box with no remote power cut can only be recovered by its standing
+boot default and its watchdog, so the run refuses to start unless that default
+is a distribution kernel, selects the kernel under test for exactly one boot,
+and after a boot that never answers reports the stage the console reached and
+then waits for the machine to fall back. It is not in CI: it needs a bench
+machine with a serial line to the runner.
+
 **Exercised.** Booting reaches a few dozen of the several thousand modules a
 distribution kernel ships. `packages.py --exercise` runs a stage inside the
 booted badc kernel that drives the rest. Every crypto implementation the

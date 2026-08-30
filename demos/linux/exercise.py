@@ -289,11 +289,13 @@ FILESYSTEMS = (
 # --- guest session ----------------------------------------------------------
 
 class Ctx:
-    """Guest-side state shared by the steps: the ssh handle, the tool probe
-    cache, the running kernel's configuration and the dmesg follower."""
+    """State shared by the steps on the machine under test: the ssh handle,
+    the tool probe cache, the running kernel's configuration and the dmesg
+    follower. The handle is any target -- an emulated guest or a physical
+    box -- so the stage runs unchanged on both."""
 
-    def __init__(self, args, vm, arch, release, log):
-        self.args, self.vm, self.arch = args, vm, arch
+    def __init__(self, args, target, arch, release, log):
+        self.args, self.target, self.arch = args, target, arch
         self.release, self.log = release, log
         self.have_cache: dict[str, bool] = {}
         self.config: dict[str, str] = {}
@@ -306,8 +308,8 @@ class Ctx:
         self.faulted = ""
 
     def sh(self, cmd: str, timeout: int = 300):
-        return self.vm.ssh("sh -c " + shlex.quote(cmd), sudo=True,
-                           timeout=timeout)
+        return self.target.ssh("sh -c " + shlex.quote(cmd), sudo=True,
+                               timeout=timeout)
 
     def have(self, prog: str) -> bool:
         if prog not in self.have_cache:
@@ -649,14 +651,15 @@ def find_spares(ctx: Ctx) -> list[str]:
     return out
 
 
-def run(args, vm, arch, release, failures: list[str], log) -> dict:
+def run(args, target, arch, release, failures: list[str], log) -> dict:
     """Run the exercise stage in the booted badc kernel. Every step's verdict
     lands in the report; a failing step appends to `failures`."""
-    ctx = Ctx(args, vm, arch, release, log)
+    ctx = Ctx(args, target, arch, release, log)
     started = time.time()
     result: dict = {"steps": []}
-    cfg = vm.ssh(f"cat /boot/config-{release} 2>/dev/null || "
-                 f"zcat /proc/config.gz 2>/dev/null", sudo=True, timeout=120)
+    cfg = target.ssh(f"cat /boot/config-{release} 2>/dev/null || "
+                     f"zcat /proc/config.gz 2>/dev/null", sudo=True,
+                     timeout=120)
     ctx.config = config_options(cfg.stdout)
     result["config_seen"] = len(ctx.config)
     if not ctx.config:
@@ -665,8 +668,8 @@ def run(args, vm, arch, release, failures: list[str], log) -> dict:
                         "readable (/boot/config-<release>, /proc/config.gz)")
         return result
     ctx.start_follower()
-    vm.ssh(f"mkdir -p {GUEST_DIR}", check=True)
-    vm.scp(sorted((LINUX_DIR / "guest").glob("*")), GUEST_DIR + "/")
+    target.ssh(f"mkdir -p {GUEST_DIR}", check=True)
+    target.scp(sorted((LINUX_DIR / "guest").glob("*")), GUEST_DIR + "/")
     result["tools_installed"] = provision(ctx)
     ctx.spares = find_spares(ctx)
     log(f"exercise: spare disks {ctx.spares or 'none'}")

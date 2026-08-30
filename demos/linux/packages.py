@@ -19,7 +19,7 @@ block stack under a verified stress load (exercise.py).
         --report packages-x86_64.json
 
 Phases (--phases selects a subset; each is idempotent): config, tree, build,
-package, vm, and the optional selfhost. The build runs in
+package, vm, hw, and the optional selfhost. The build runs in
 <workdir>/linux-<version>; packages land in
 <workdir> (deb) or the tree's rpmbuild/RPMS (rpm). On a host without the Debian
 packaging tools (an rpm distribution), --deb-tools names a prefix that is
@@ -41,6 +41,13 @@ the kernel again with badc inside the VM. The build is the load and the kernel
 is what is measured -- the kernel log window around it, taint, OOM records,
 core dumps, and the unit outcomes against the host build's. It is off by
 default; `--selfhost-scope` sizes it.
+
+The hw phase runs the vm phase's sequence on a physical machine instead of a
+guest: --hw-host reaches it over ssh and --hw-serial reads its console from a
+serial port on this host. It needs no tree -- --release names what the
+packages install and --package names the files -- and it refuses to run unless
+the machine's standing boot default is a distribution kernel, since a box with
+no remote power cut has nothing else to fall back to.
 
 `--self-test` checks the pure helpers and takes no tree, host or guest.
 
@@ -64,6 +71,8 @@ import socket
 import subprocess
 import sys
 import tarfile
+import termios
+import threading
 import time
 import urllib.parse
 import urllib.request
@@ -1003,14 +1012,20 @@ def resolve_accel(args, arch) -> str:
     return "tcg"
 
 
-class VmError(Exception):
-    """A vm-phase step failed. Recorded as a run failure; the run still
-    tears the VM down and writes its report."""
+class TargetError(Exception):
+    """A step against the machine under test failed. Recorded as a run
+    failure; the run still releases the machine and writes its report."""
 
 
 # Seconds of console silence after the machine starts that mean the
 # firmware never ran.
 FIRMWARE_CONSOLE_GRACE = 90
+
+# ssh and scp options shared by every target: a lab machine's host key is
+# not pinned, and a run must never stop at a prompt.
+SSH_OPTS = ["-o", "StrictHostKeyChecking=no",
+            "-o", "UserKnownHostsFile=/dev/null",
+            "-o", "ConnectTimeout=10", "-o", "LogLevel=ERROR"]
 
 # qemu's i440fx caps memory below the 4 GiB boundary at 0xe0000000 and
 # places the rest above it. SeaBIOS boots an nvme disk only while the
@@ -1087,7 +1102,132 @@ def efi_fault(console: str) -> str | None:
     return m.group(0).strip() if m else None
 
 
-class VM:
+class Target:
+    """A machine a kernel is installed on and booted. The boot probes, the
+    core sweep and the exercise stage need only what is defined here: shell
+    commands over ssh, file transfer both ways, a console log and a wait for
+    the next boot. An emulated guest and a physical box differ in how they
+    are started, watched and released, not in any of that."""
+
+    # Seconds of console silence after a reset that mean the machine never
+    # began to boot, and seconds to let a reset take effect before polling.
+    silence_grace = FIRMWARE_CONSOLE_GRACE
+    reset_grace = 10
+
+    def __init__(self, dest: str, port: int, key: Path | None, console: Path):
+        self.dest, self.port, self.key, self.console = dest, port, key, console
+        # Console bytes already written when the current wait began; silence
+        # is judged past this point, not from an empty file.
+        self.console_mark = 0
+
+    def ssh_opts(self) -> list[str]:
+        return [*(["-i", str(self.key)] if self.key else []), *SSH_OPTS]
+
+    def ssh(self, cmd: str, timeout=120, check=False, sudo=False):
+        if sudo:
+            cmd = "sudo " + cmd
+        r = run(["ssh", "-p", str(self.port), *self.ssh_opts(), self.dest,
+                 cmd], timeout=timeout)
+        if check and r.returncode != 0:
+            raise TargetError(f"target command {cmd!r} exited {r.returncode}: "
+                              f"{(r.stderr or r.stdout).strip()[-400:]}")
+        return r
+
+    def scp(self, paths: list[Path], dest: str) -> None:
+        r = run(["scp", "-q", "-P", str(self.port), *self.ssh_opts(),
+                 *map(str, paths), f"{self.dest}:{dest}"], timeout=600)
+        if r.returncode != 0:
+            raise TargetError(f"scp onto the target exited {r.returncode}: "
+                              f"{(r.stderr or '').strip()[-300:]}")
+
+    def pull(self, remote: str, dest: Path) -> bool:
+        r = run(["scp", "-q", "-P", str(self.port), *self.ssh_opts(),
+                 f"{self.dest}:{remote}", str(dest)], timeout=600)
+        return r.returncode == 0
+
+    def console_bytes(self) -> int:
+        """Bytes the machine has written to its console so far."""
+        return self.console.stat().st_size if self.console.exists() else 0
+
+    def console_fault(self) -> str | None:
+        """The firmware exception the machine stopped at, if any. Never
+        one from before the current wait: a console captured continuously
+        keeps an earlier boot's dump in its tail."""
+        try:
+            size = self.console.stat().st_size
+            with open(self.console, "rb") as f:
+                f.seek(max(self.console_mark, size - 4096))
+                return efi_fault(f.read().decode("utf-8", "replace"))
+        except OSError:
+            return None
+
+    def console_since(self, offset: int) -> str:
+        """Console text written past `offset`, which is what a report has to
+        explain when a boot nobody watched did not come back."""
+        try:
+            with open(self.console, "rb") as f:
+                f.seek(offset)
+                return f.read().decode("utf-8", "replace")
+        except OSError as e:
+            return f"(cannot read {self.console}: {e})"
+
+    def gone(self) -> str | None:
+        """Why the machine is no longer running, when the host can tell."""
+        return None
+
+    def console_stop(self) -> str | None:
+        """A console marker meaning this boot will not reach ssh."""
+        return None
+
+    def silence_reason(self) -> str:
+        """What console silence means on this kind of machine."""
+        return "the machine never started"
+
+    def wait_ssh(self, timeout: int, expect_boot_id: str | None = None,
+                 watch_console: bool = True) -> str:
+        """Wait until ssh answers; with expect_boot_id, until a new boot."""
+        deadline = time.time() + timeout
+        # Firmware writes to the console within seconds of the machine
+        # starting. Silence past that is a machine that never began to
+        # boot, not a slow guest, and waiting out the full timeout hides
+        # which of the two happened.
+        silent_by = time.time() + self.silence_grace if watch_console else 0
+        while time.time() < deadline:
+            if reason := self.gone():
+                raise TargetError(f"{reason} (console: {self.console})")
+            fault = self.console_fault()
+            if fault:
+                raise TargetError(f"the machine faulted in the firmware or in "
+                                  f"a boot image it started: {fault} "
+                                  f"(console: {self.console})")
+            if stop := self.console_stop():
+                raise TargetError(f"the boot stopped before it could answer "
+                                  f"ssh: {stop} (console: {self.console})")
+            if silent_by and time.time() > silent_by:
+                if self.console_bytes() <= self.console_mark:
+                    raise TargetError(
+                        f"no console output {self.silence_grace}s after "
+                        f"the machine started: {self.silence_reason()} "
+                        f"(console: {self.console})")
+                silent_by = 0
+            r = self.ssh("cat /proc/sys/kernel/random/boot_id", timeout=20)
+            bid = r.stdout.strip()
+            if r.returncode == 0 and bid and bid != expect_boot_id:
+                return bid
+            time.sleep(5)
+        raise TargetError(f"target ssh not reachable within {timeout}s "
+                          f"(console: {self.console})")
+
+    def reboot(self, timeout: int, boot_id: str) -> str:
+        self.ssh("reboot", sudo=True)
+        time.sleep(self.reset_grace)
+        return self.wait_ssh(timeout, expect_boot_id=boot_id)
+
+    def stop(self) -> None:
+        """Release the machine at the end of the run."""
+
+
+class VM(Target):
     def __init__(self, args, arch, disk: Path, seed: Path, accel: str):
         self.args, self.arch, self.disk, self.seed = args, arch, disk, seed
         self.accel = accel
@@ -1108,9 +1248,10 @@ class VM:
                 f"guest memory ({SEABIOS_NVME_MEM_LIMIT} MiB and up): install "
                 f"EFI firmware, or pass --vm-disk-bus virtio, or lower "
                 f"--vm-mem")
-        self.console = args.workdir / f"console-{args.arch}.log"
+        super().__init__("badc@127.0.0.1", args.ssh_port,
+                         args.workdir / "vm-key",
+                         args.workdir / f"console-{args.arch}.log")
         self.pidfile = args.workdir / f"vm-{args.arch}.pid"
-        self.key = args.workdir / "vm-key"
         self.spares: list[Path] = []
 
     def start(self) -> None:
@@ -1178,89 +1319,12 @@ class VM:
         except (OSError, ValueError):
             return None
 
-    def ssh(self, cmd: str, timeout=120, check=False, sudo=False):
-        if sudo:
-            cmd = "sudo " + cmd
-        r = run(["ssh", "-p", str(self.args.ssh_port), "-i", str(self.key),
-                 "-o", "StrictHostKeyChecking=no",
-                 "-o", "UserKnownHostsFile=/dev/null",
-                 "-o", "ConnectTimeout=10", "-o", "LogLevel=ERROR",
-                 "badc@127.0.0.1", cmd], timeout=timeout)
-        if check and r.returncode != 0:
-            raise VmError(f"vm command {cmd!r} exited {r.returncode}: "
-                          f"{(r.stderr or r.stdout).strip()[-400:]}")
-        return r
+    def gone(self) -> str | None:
+        return None if self.pid() else "qemu exited while waiting for ssh"
 
-    def scp(self, paths: list[Path], dest: str) -> None:
-        r = run(["scp", "-q", "-P", str(self.args.ssh_port), "-i", str(self.key),
-                 "-o", "StrictHostKeyChecking=no",
-                 "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR",
-                 *map(str, paths), f"badc@127.0.0.1:{dest}"],
-                timeout=600)
-        if r.returncode != 0:
-            raise VmError(f"scp into the vm exited {r.returncode}: "
-                          f"{(r.stderr or '').strip()[-300:]}")
-
-    def pull(self, remote: str, dest: Path) -> bool:
-        r = run(["scp", "-q", "-P", str(self.args.ssh_port), "-i", str(self.key),
-                 "-o", "StrictHostKeyChecking=no",
-                 "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR",
-                 f"badc@127.0.0.1:{remote}", str(dest)], timeout=600)
-        return r.returncode == 0
-
-    def console_bytes(self) -> int:
-        """Bytes the machine has written to its console so far."""
-        return self.console.stat().st_size if self.console.exists() else 0
-
-    def console_fault(self) -> str | None:
-        """The firmware exception the machine stopped at, if any."""
-        try:
-            size = self.console.stat().st_size
-            with open(self.console, "rb") as f:
-                f.seek(max(0, size - 4096))
-                return efi_fault(f.read().decode("utf-8", "replace"))
-        except OSError:
-            return None
-
-    def wait_ssh(self, timeout: int, expect_boot_id: str | None = None) -> str:
-        """Wait until ssh answers; with expect_boot_id, until a new boot."""
-        deadline = time.time() + timeout
-        # Firmware writes to the console within seconds of the machine
-        # starting. Silence past that is a machine that never began to
-        # boot, not a slow guest, and waiting out the full timeout hides
-        # which of the two happened.
-        silent_by = time.time() + FIRMWARE_CONSOLE_GRACE
-        while time.time() < deadline:
-            if self.pid() is None:
-                raise VmError(f"qemu exited while waiting for ssh "
-                              f"(console: {self.console})")
-            fault = self.console_fault()
-            if fault:
-                raise VmError(f"the guest faulted in the firmware or in a "
-                              f"boot image it started: {fault} "
-                              f"(console: {self.console})")
-            if silent_by and time.time() > silent_by:
-                if self.console_bytes() == 0:
-                    raise VmError(
-                        f"no console output {FIRMWARE_CONSOLE_GRACE}s after "
-                        f"the machine started: the firmware never ran "
-                        f"(firmware={self.firmware}, "
-                        f"bus={self.args.vm_disk_bus}, "
-                        f"vm_mem={self.args.vm_mem}) "
-                        f"(console: {self.console})")
-                silent_by = 0
-            r = self.ssh("cat /proc/sys/kernel/random/boot_id", timeout=20)
-            bid = r.stdout.strip()
-            if r.returncode == 0 and bid and bid != expect_boot_id:
-                return bid
-            time.sleep(5)
-        raise VmError(f"vm ssh not reachable within {timeout}s "
-                      f"(console: {self.console})")
-
-    def reboot(self, timeout: int, boot_id: str) -> str:
-        self.ssh("reboot", sudo=True)
-        time.sleep(10)
-        return self.wait_ssh(timeout, expect_boot_id=boot_id)
+    def silence_reason(self) -> str:
+        return (f"the firmware never ran (firmware={self.firmware}, "
+                f"bus={self.args.vm_disk_bus}, vm_mem={self.args.vm_mem})")
 
     def stop(self) -> None:
         pid = self.pid()
@@ -1274,6 +1338,152 @@ class VM:
         os.kill(pid, 15)
 
 
+# --- hardware target --------------------------------------------------------
+
+# A physical machine takes longer than an emulated one to leave firmware:
+# POST, the boot menu's timeout and a real disk all sit before the kernel.
+HW_CONSOLE_GRACE = 180
+HW_RESET_GRACE = 20
+
+
+def baud_constant(baud: int) -> int:
+    """The termios speed constant for `baud`."""
+    try:
+        return getattr(termios, f"B{baud}")
+    except AttributeError:
+        raise ValueError(f"termios has no B{baud}; supported: " + ", ".join(
+            n[1:] for n in sorted(dir(termios))
+            if re.fullmatch(r"B\d+", n))) from None
+
+
+class SerialConsole:
+    """Reads a serial port into a log file byte for byte, giving a physical
+    machine the console a qemu `-serial file:` guest has, so the same
+    scanners read both.
+
+    The line settings are applied to the descriptor that does the reading.
+    An open() resets a port's termios on macOS, so a speed set by a separate
+    `stty` call is gone before the first byte arrives and the line then
+    delivers plausible-looking garbage rather than silence. The port carries
+    a console, and on this lane a root shell, so nothing is written to it
+    except an explicit SysRq request."""
+
+    def __init__(self, device: str, baud: int, path: Path):
+        self.device, self.baud, self.path = device, baud, path
+        self.speed = baud_constant(baud)
+        self.fd = -1
+        self.reopens = 0
+        self.bytes = 0
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def _open(self) -> None:
+        self.fd = os.open(self.device, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
+        attrs = termios.tcgetattr(self.fd)
+        cc = list(attrs[6])
+        cc[termios.VMIN], cc[termios.VTIME] = 0, 1
+        # 8N1, receiver on, modem lines ignored, no input, output or line
+        # processing: the log is to hold what the wire carried.
+        termios.tcsetattr(self.fd, termios.TCSANOW,
+                          [0, 0, termios.CS8 | termios.CREAD | termios.CLOCAL,
+                           0, self.speed, self.speed, cc])
+        termios.tcflush(self.fd, termios.TCIFLUSH)
+
+    def _close(self) -> None:
+        if self.fd >= 0:
+            try:
+                os.close(self.fd)
+            except OSError:
+                pass
+            self.fd = -1
+
+    def _pump(self) -> None:
+        with open(self.path, "wb", buffering=0) as sink:
+            while not self._stop.is_set():
+                try:
+                    data = os.read(self.fd, 4096)
+                except BlockingIOError:
+                    data = b""
+                except OSError:
+                    # The adapter re-enumerated or was unplugged. Reopening
+                    # keeps the rest of the boot on record.
+                    self._close()
+                    self.reopens += 1
+                    time.sleep(1)
+                    try:
+                        self._open()
+                    except OSError:
+                        pass
+                    continue
+                if data:
+                    sink.write(data)
+                    self.bytes += len(data)
+                else:
+                    time.sleep(0.05)
+
+    def start(self) -> None:
+        self._open()
+        self._thread = threading.Thread(target=self._pump, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread:
+            self._thread.join(timeout=5)
+        self._close()
+
+    def sysrq(self, keys: str) -> None:
+        """Magic SysRq over the serial line: a BREAK puts the port in SysRq
+        mode and the next character is the command. Best-effort -- it needs
+        a kernel that still services interrupts and a `kernel.sysrq` mask
+        that permits the command -- but it is the only remote reset a
+        machine with a battery has."""
+        if self.fd < 0:
+            raise OSError(f"{self.device} is not open")
+        for k in keys:
+            termios.tcsendbreak(self.fd, 0)
+            time.sleep(0.3)
+            os.write(self.fd, k.encode())
+            time.sleep(1.0)
+
+    def stats(self) -> dict:
+        return {"device": self.device, "baud": self.baud,
+                "bytes": self.bytes, "reopens": self.reopens,
+                "log": str(self.path)}
+
+
+class HwTarget(Target):
+    """A physical machine reached over ssh, with its console read from a
+    serial port on the host. It has no remote power cut -- the box under
+    test is a laptop -- so recovery rests on the standing boot default and
+    the chipset watchdog, and every kernel under test is selected for one
+    boot only."""
+
+    silence_grace = HW_CONSOLE_GRACE
+    reset_grace = HW_RESET_GRACE
+
+    def __init__(self, args, console: Path,
+                 serial: SerialConsole | None = None):
+        super().__init__(args.hw_host, args.hw_port, args.hw_key, console)
+        self.args, self.serial = args, serial
+
+    def console_stop(self) -> str | None:
+        _, verdict, at = console_stop(self.console_since(self.console_mark))
+        return f"{verdict}: {at}" if verdict else None
+
+    def silence_reason(self) -> str:
+        if self.serial is None:
+            return "no serial console was attached to observe the reset"
+        return (f"the machine did not restart, or {self.serial.device} "
+                f"stopped delivering")
+
+    def reboot(self, timeout: int, boot_id: str) -> str:
+        # The console is captured continuously, so silence after a reset is
+        # measured from where the log stood when the reset was ordered.
+        self.console_mark = self.console_bytes()
+        return super().reboot(timeout, boot_id)
+
+
 # Core file directory and pattern. A plain file pattern (not the distro's
 # systemd-coredump pipe) makes cores land as extractable files; the sweep
 # also checks coredumpctl in case a pipe pattern is still in force.
@@ -1281,7 +1491,7 @@ CORE_DIR = "/var/crash"
 CORE_PATTERN = f"{CORE_DIR}/core.%e.%p.%t"
 
 
-def configure_core_capture(vm: VM) -> dict:
+def configure_core_capture(vm: Target) -> dict:
     """Turn on core dumps and make the settings survive the reboot into the
     badc kernel: a sysctl.d file for the pattern, a limits.d file and a
     systemd drop-in for the size limit (so service / udev / modprobe crashes
@@ -1303,7 +1513,8 @@ def configure_core_capture(vm: VM) -> dict:
     return {"core_pattern": vm.ssh("cat /proc/sys/kernel/core_pattern").stdout.strip()}
 
 
-def sweep_cores(args, vm: VM, phase: str, findings: list[str]) -> list[dict]:
+def sweep_cores(args, vm: Target, phase: str,
+                findings: list[str]) -> list[dict]:
     """After a validation phase, collect any core dumps: pull each core, the
     crashed binary and /proc/version out of the VM into the box scratch, and
     take a first-pass backtrace on the box. A core from a badc-compiled binary
@@ -1374,7 +1585,7 @@ def analyze_core(core: Path, binp: Path, exe: str, phase: str,
             "badc_built": is_badc, "phase": phase}
 
 
-def grub_entry(vm: VM, release: str) -> str | None:
+def grub_entry(vm: Target, release: str) -> str | None:
     """The `submenu>entry` title path of the grub.cfg entry that loads
     vmlinuz-<release>, in the form `grub-reboot` takes."""
     titles: list[str] = []
@@ -1392,7 +1603,7 @@ def grub_entry(vm: VM, release: str) -> str | None:
     return None
 
 
-def probes(vm: VM) -> dict:
+def probes(vm: Target) -> dict:
     out: dict = {}
     out["uname"] = vm.ssh("uname -r", check=True).stdout.strip()
     out["proc_version"] = vm.ssh("cat /proc/version").stdout.strip()
@@ -1570,7 +1781,7 @@ def selfhost_provision(args, arch, vm: VM, result: dict) -> None:
     r = vm.ssh("sh -c " + shlex.quote(cmd), sudo=True,
                timeout=args.install_timeout)
     if r.returncode != 0:
-        raise VmError(f"selfhost tool install exited {r.returncode}: "
+        raise TargetError(f"selfhost tool install exited {r.returncode}: "
                       f"{(r.stdout + r.stderr).strip()[-400:]}")
     vm.ssh(f"mkdir -p {SELFHOST_DIR}", check=True)
     log(f"selfhost: pushing badc, the shims and {args.tarball.name}")
@@ -1580,7 +1791,8 @@ def selfhost_provision(args, arch, vm: VM, result: dict) -> None:
            f"{SELFHOST_DIR}/ldshim.py", check=True)
     ver = vm.ssh(f"{SELFHOST_DIR}/badc --version", check=True).stdout.strip()
     if not names_badc(ver):
-        raise VmError(f"the pushed badc does not run in the guest: {ver[:200]}")
+        raise TargetError(f"the pushed badc does not run in the guest: "
+                          f"{ver[:200]}")
     result["badc_version"] = ver.splitlines()[0]
     result["tools"] = tools
     log(f"selfhost: guest badc: {result['badc_version']}")
@@ -1593,7 +1805,8 @@ def selfhost_prepare_tree(args, arch, vm: VM, result: dict) -> None:
     r = vm.ssh(f"cd {SELFHOST_DIR} && tar xf {args.tarball.name}",
                timeout=args.selfhost_timeout)
     if r.returncode != 0:
-        raise VmError(f"tarball extract in the guest exited {r.returncode}: "
+        raise TargetError(f"tarball extract in the guest exited "
+                          f"{r.returncode}: "
                       f"{(r.stderr or '').strip()[-300:]}")
     result["extract_s"] = round(time.time() - t0, 1)
     tree = f"{SELFHOST_DIR}/linux-{args.tree_version}"
@@ -1609,7 +1822,8 @@ def selfhost_prepare_tree(args, arch, vm: VM, result: dict) -> None:
     result["config_s"] = round(time.time() - t0, 1)
     result["config_target"] = target
     if r.returncode != 0:
-        raise VmError(f"make {target} in the guest exited {r.returncode}: " +
+        raise TargetError(f"make {target} in the guest exited "
+                          f"{r.returncode}: " +
                       vm.ssh(f"tail -n 20 {SELFHOST_DIR}/config.log").stdout)
     log(f"selfhost: tree extracted in {result['extract_s']}s, "
         f"{target} in {result['config_s']}s")
@@ -1652,11 +1866,12 @@ def selfhost_watch(args, vm: VM, result: dict) -> int:
         if r.returncode != 0:
             silent_since = silent_since or time.time()
             if vm.pid() is None:
-                raise VmError("qemu exited during the in-guest build "
+                raise TargetError("qemu exited during the in-guest build "
                               f"(console: {vm.console})")
             silent = round(time.time() - silent_since)
             if silent > args.vm_timeout:
-                raise VmError(f"the guest stopped answering ssh for {silent}s "
+                raise TargetError(f"the guest stopped answering ssh for "
+                                  f"{silent}s "
                               f"during the in-guest build")
             continue
         silent_since = None
@@ -1673,7 +1888,7 @@ def selfhost_watch(args, vm: VM, result: dict) -> int:
         if fields[3] != "-":
             result["peak"] = peak
             return int(fields[3])
-    raise VmError(f"the in-guest build did not finish within "
+    raise TargetError(f"the in-guest build did not finish within "
                   f"{args.selfhost_timeout}s")
 
 
@@ -1849,6 +2064,128 @@ def phase_selfhost(args, arch, vm: VM, failures: list[str]) -> dict:
     return result
 
 
+PHASES = ("config", "tree", "build", "package", "vm", "hw", "selfhost")
+
+
+def resolve_phases(spec: str, release: str | None,
+                   hw_host: str | None) -> tuple[set[str], bool]:
+    """The phases `spec` names and whether they need a kernel tree. Raises
+    ValueError on a combination that cannot be run."""
+    phases = set(spec.split(","))
+    if unknown := phases - set(PHASES):
+        raise ValueError(f"unknown phases: {sorted(unknown)}")
+    if "selfhost" in phases and "vm" not in phases:
+        raise ValueError("the selfhost phase runs inside the vm phase and "
+                         "needs it")
+    if "hw" in phases and not hw_host:
+        raise ValueError("the hw phase needs --hw-host")
+    if release and {"tree", "build", "package"} & phases:
+        raise ValueError("--release names the release an already-built "
+                         "package carries; the build phases take it from "
+                         "the tree")
+    # The build phases work on the tree, and without --release it is also
+    # where the release comes from.
+    needs_tree = bool({"tree", "build", "package", "selfhost"} & phases
+                      or (phases - {"config"} and not release))
+    return phases, needs_tree
+
+
+def install_cmd(arch, packages: list[Path], extra: str = "") -> str:
+    """The distribution's command to install `packages` from files."""
+    tool = "dpkg -i" if arch["pkg"] == "deb" else "rpm -ivh"
+    names = " ".join(shlex.quote(p.name) for p in packages)
+    return " ".join(filter(None, (tool, extra, names)))
+
+
+def assert_boot(args, vm: Target, base: dict, cur: dict, result: dict,
+                failures: list[str]) -> bool:
+    """The checks every lane makes on the kernel it just booted: the release,
+    the compiler that built it, systemd, taint, the kernel log, and disk and
+    network I/O. Returns False when the machine is not running the kernel
+    under test, which makes every later check meaningless. The devices are
+    the caller's: what a driver must bind to is a property of the machine."""
+    if cur["uname"] != args.release:
+        failures.append(f"booted {cur['uname']}, expected {args.release}")
+        return False
+    # The banner is CONFIG_CC_VERSION_TEXT, captured from
+    # `$(CC) --version | head -n1` at configure time. buildcc.py answers that
+    # with badc's identification, so a kernel whose C units are badc's must
+    # say so in /proc/version and in the boot banner. Both surfaces are
+    # asserted: they come from the same string, and a disagreement means the
+    # recorded config and the running image were built from different Kconfig
+    # runs.
+    result["compiler_id"] = {
+        "banner": cur["proc_version"],
+        "dmesg_banner": cur["dmesg_banner"],
+        "names_badc": names_badc(cur["proc_version"]),
+    }
+    if args.expect_producer != "badc":
+        log(f"compiler-id (not asserted): {cur['proc_version'][:120]}")
+    elif not result["compiler_id"]["names_badc"]:
+        failures.append(
+            f"/proc/version does not identify badc: "
+            f"{cur['proc_version'][:160]}")
+    elif not names_badc(cur["dmesg_banner"]):
+        failures.append(
+            f"boot banner does not identify badc: "
+            f"{cur['dmesg_banner'][:160]}")
+    else:
+        log(f"compiler-id: {cur['proc_version'][:120]}")
+    if cur["multi_user"] != "active":
+        failures.append(f"multi-user.target: {cur['multi_user']}")
+    if cur["systemd_state"] not in ("running", "degraded"):
+        failures.append(f"systemd state: {cur['systemd_state']}")
+    if (cur["systemd_state"] == "degraded"
+            and base["systemd_state"] != "degraded"):
+        failed = vm.ssh("systemctl --failed --no-legend").stdout.strip()
+        failures.append(f"systemd degraded under the kernel under test "
+                        f"only: {failed}")
+    if cur["taint"] != "0":
+        failures.append(f"kernel tainted: {cur['taint']}")
+    if cur["dmesg_severe"]:
+        failures.append(f"dmesg severe patterns: "
+                        f"{cur['dmesg_severe'][:3]}")
+    if cur["dmesg_warn"] > base["dmesg_warn"]:
+        failures.append(f"dmesg WARNING count {cur['dmesg_warn']} exceeds "
+                        f"stock baseline {base['dmesg_warn']}")
+    if not cur["disk_rw"]:
+        failures.append("disk write/readback failed")
+    if not cur["net_route"]:
+        failures.append("no default route")
+    return True
+
+
+def assert_package_products(args, arch, vm: Target, result: dict,
+                            failures: list[str]) -> None:
+    """What the package's scriptlets had to produce -- depmod data and an
+    initramfs -- and that the packaged modules load on demand."""
+    checks = {
+        "modules.dep": f"test -s /lib/modules/{args.release}/modules.dep",
+        "initramfs": (f"test -s /boot/initrd.img-{args.release} || "
+                      f"test -s /boot/initramfs-{args.release}.img || "
+                      f"ls /boot/*/{args.release}/initrd >/dev/null"),
+    }
+    for name, cmd in checks.items():
+        if vm.ssh(cmd).returncode != 0:
+            failures.append(f"missing package product: {name}")
+    result["initrd_dmesg"] = vm.ssh(
+        "dmesg | grep -m1 -i 'unpacking initramfs'", sudo=True).stdout.strip()
+
+    loads = {}
+    for mod in arch["modprobe"]:
+        r = vm.ssh(f"modprobe {mod}", sudo=True, timeout=300)
+        listed = mod in vm.ssh("lsmod").stdout
+        loads[mod] = bool(r.returncode == 0 and listed)
+        if not loads[mod]:
+            failures.append(f"modprobe {mod}: rc={r.returncode} "
+                            f"listed={listed} "
+                            f"{(r.stderr or '').strip()[-200:]}")
+    result["modprobe"] = loads
+    after = vm.ssh("cat /proc/sys/kernel/tainted").stdout.strip()
+    if after != "0":
+        failures.append(f"kernel tainted after module loads: {after}")
+
+
 def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
     image = ensure_image(args, arch)
     accel = resolve_accel(args, arch)
@@ -1898,9 +2235,8 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
             return result
         log(f"installing {', '.join(p.name for p in packages)}")
         vm.scp(packages, "")
-        names = " ".join(shlex.quote(p.name) for p in packages)
-        cmd = f"dpkg -i {names}" if arch["pkg"] == "deb" else f"rpm -ivh {names}"
-        r = vm.ssh(cmd, sudo=True, timeout=args.install_timeout)
+        r = vm.ssh(install_cmd(arch, packages, args.install_args), sudo=True,
+                   timeout=args.install_timeout)
         result["install_rc"] = r.returncode
         result["install_tail"] = (r.stdout + r.stderr).strip()[-2000:]
         if r.returncode != 0:
@@ -1943,52 +2279,8 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
         log(f"badc: uname={cur['uname']} systemd={cur['systemd_state']} "
             f"modules={len(cur['modules'])}")
 
-        if cur["uname"] != args.release:
-            failures.append(f"booted {cur['uname']}, expected {args.release}")
+        if not assert_boot(args, vm, base, cur, result, failures):
             return result
-        # The banner is CONFIG_CC_VERSION_TEXT, captured from
-        # `$(CC) --version | head -n1` at configure time. buildcc.py
-        # answers that with badc's identification, so a kernel whose C
-        # units are badc's must say so in /proc/version and in the boot
-        # banner. Both surfaces are asserted: they come from the same
-        # string, and a disagreement means the recorded config and the
-        # running image were built from different Kconfig runs.
-        result["compiler_id"] = {
-            "banner": cur["proc_version"],
-            "dmesg_banner": cur["dmesg_banner"],
-            "names_badc": names_badc(cur["proc_version"]),
-        }
-        if not result["compiler_id"]["names_badc"]:
-            failures.append(
-                f"/proc/version does not identify badc: "
-                f"{cur['proc_version'][:160]}")
-        elif not names_badc(cur["dmesg_banner"]):
-            failures.append(
-                f"boot banner does not identify badc: "
-                f"{cur['dmesg_banner'][:160]}")
-        else:
-            log(f"compiler-id: {cur['proc_version'][:120]}")
-        if cur["multi_user"] != "active":
-            failures.append(f"multi-user.target: {cur['multi_user']}")
-        if cur["systemd_state"] not in ("running", "degraded"):
-            failures.append(f"systemd state: {cur['systemd_state']}")
-        if (cur["systemd_state"] == "degraded"
-                and base["systemd_state"] != "degraded"):
-            failed = vm.ssh("systemctl --failed --no-legend").stdout.strip()
-            failures.append(f"systemd degraded under the badc kernel only: "
-                            f"{failed}")
-        if cur["taint"] != "0":
-            failures.append(f"kernel tainted: {cur['taint']}")
-        if cur["dmesg_severe"]:
-            failures.append(f"dmesg severe patterns: "
-                            f"{cur['dmesg_severe'][:3]}")
-        if cur["dmesg_warn"] > base["dmesg_warn"]:
-            failures.append(f"dmesg WARNING count {cur['dmesg_warn']} exceeds "
-                            f"stock baseline {base['dmesg_warn']}")
-        if not cur["disk_rw"]:
-            failures.append("disk write/readback failed")
-        if not cur["net_route"]:
-            failures.append("no default route")
         want_nic = NICS[args.vm_nic]
         if want_nic not in cur["net_driver"].split():
             failures.append(f"network device not on {want_nic}: "
@@ -1998,33 +2290,7 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
             failures.append(f"root disk not on {want_disk}: "
                             f"{cur['disk_driver']!r}")
 
-        # Package-scriptlet products: depmod data and the initramfs.
-        checks = {
-            "modules.dep": f"test -s /lib/modules/{args.release}/modules.dep",
-            "initramfs": (f"test -s /boot/initrd.img-{args.release} || "
-                          f"test -s /boot/initramfs-{args.release}.img || "
-                          f"ls /boot/*/{args.release}/initrd >/dev/null"),
-        }
-        for name, cmd in checks.items():
-            if vm.ssh(cmd).returncode != 0:
-                failures.append(f"missing package product: {name}")
-        result["initrd_dmesg"] = vm.ssh(
-            "dmesg | grep -m1 -i 'unpacking initramfs'",
-            sudo=True).stdout.strip()
-
-        loads = {}
-        for mod in arch["modprobe"]:
-            r = vm.ssh(f"modprobe {mod}", sudo=True, timeout=300)
-            listed = mod in vm.ssh("lsmod").stdout
-            loads[mod] = bool(r.returncode == 0 and listed)
-            if not loads[mod]:
-                failures.append(f"modprobe {mod}: rc={r.returncode} "
-                                f"listed={listed} "
-                                f"{(r.stderr or '').strip()[-200:]}")
-        result["modprobe"] = loads
-        after = vm.ssh("cat /proc/sys/kernel/tainted").stdout.strip()
-        if after != "0":
-            failures.append(f"kernel tainted after module loads: {after}")
+        assert_package_products(args, arch, vm, result, failures)
 
         if args.exercise:
             result["exercise"] = exercise.run(args, vm, arch, args.release,
@@ -2040,7 +2306,7 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
         if args.selfhost:
             result["selfhost"].update(
                 phase_selfhost(args, arch, vm, failures))
-    except VmError as e:
+    except TargetError as e:
         failures.append(str(e))
     finally:
         try:
@@ -2049,6 +2315,457 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
             log(f"vm teardown: {e}")
     return result
 
+
+# --- hardware lane ----------------------------------------------------------
+
+# Console text kept in the report when a boot has to be explained from the
+# wire alone.
+HW_CONSOLE_TAIL = 8000
+
+# SysRq sequence for a reset that gives the filesystems a chance: sync,
+# remount read-only, boot.
+SYSRQ_RESET = "sub"
+
+# What a boot puts on a serial console, in the order it reaches them. The
+# furthest one seen names the stage a boot that never returned died in.
+BOOT_STAGES = (
+    ("firmware", re.compile(r"BdsDxe|UEFI Interactive Shell|"
+                            r"Press \S+ to enter")),
+    ("bootloader", re.compile(r"GNU GRUB|Booting `|Loading Linux ")),
+    ("earlycon", re.compile(r"earlycon:")),
+    ("kernel", re.compile(r"Linux version \d")),
+    ("initramfs", re.compile(r"[Uu]npacking initramfs|dracut-|"
+                             r"Reached target .*[Ii]nitrd")),
+    ("userspace", re.compile(r"systemd\[1\]:|Welcome to ")),
+    ("multi-user", re.compile(r"login:|"
+                             r"Reached target .*[Mm]ulti-?[- ]?[Uu]ser")),
+)
+
+# What the kernel says when something went wrong, whether or not the boot
+# continued past it.
+BOOT_FAULT = re.compile(r"Kernel panic[^\r\n]*|BUG: [^\r\n]*|"
+                        r"Oops[:#][^\r\n]*|Internal error:[^\r\n]*|"
+                        r"Unable to mount root fs[^\r\n]*")
+
+# How a boot ends when it ends badly, as a named outcome with the verdict it
+# carries. These are distinct results, not variants of "ssh never returned":
+# each says something different about where to look. A failed boot leaves no
+# journal -- emergency mode never flushes one -- so the console is the only
+# record any of them has.
+BOOT_STOPS = (
+    ("emergency",
+     "the boot dropped to the initramfs emergency shell: the root "
+     "filesystem was not mounted",
+     re.compile(r"Entering emergency mode[^\r\n]*|"
+                r"Cannot open access to console[^\r\n]*|"
+                r"emergency\.target|Emergency Mode")),
+    ("panic", "the kernel panicked",
+     re.compile(r"Kernel panic - not syncing[^\r\n]*")),
+    ("dracut-shell", "the boot stopped in the dracut shell",
+     re.compile(r"dracut:/#")),
+)
+
+
+def console_stop(text: str) -> tuple[str, str, str]:
+    """The named outcome that ended this boot, its verdict and the console
+    text that said so. The earliest marker wins, so a panic is not reported
+    as the emergency shell that followed it."""
+    best = None
+    for name, verdict, rx in BOOT_STOPS:
+        m = rx.search(text)
+        if m and (best is None or m.start() < best[0]):
+            best = (m.start(), name, verdict, m.group(0).strip())
+    return best[1:] if best else ("", "", "")
+
+
+def console_stage(text: str) -> dict:
+    """How far a boot got on the console, the first fault it reported, and
+    the named outcome that ended it."""
+    reached = [name for name, rx in BOOT_STAGES if rx.search(text)]
+    fault = BOOT_FAULT.search(text)
+    outcome, verdict, at = console_stop(text)
+    return {"stage": reached[-1] if reached else "none", "reached": reached,
+            "fault": fault.group(0).strip() if fault else "",
+            "outcome": outcome, "verdict": verdict, "stopped_at": at}
+
+
+def entry_release(kernel: str) -> str:
+    """The release a boot entry's kernel path names."""
+    name = kernel.strip().strip('"').rsplit("/", 1)[-1]
+    for prefix in ("vmlinuz-", "vmlinux-", "Image-"):
+        if name.startswith(prefix):
+            return name[len(prefix):]
+    return ""
+
+
+GRUBBY_KV = re.compile(r'^(\w+)=(?:"(.*)"|(.*))$')
+
+
+def grubby_entries(text: str) -> list[dict]:
+    """The entry blocks `grubby --info=ALL` prints, in the order it prints
+    them. `index` opens each block."""
+    entries: list[dict] = []
+    cur: dict = {}
+    for line in text.splitlines():
+        m = GRUBBY_KV.match(line.strip())
+        if not m:
+            continue
+        key = m.group(1)
+        if key == "index" and cur:
+            entries.append(cur)
+            cur = {}
+        cur[key] = m.group(2) if m.group(2) is not None else m.group(3)
+    if cur:
+        entries.append(cur)
+    return entries
+
+
+def grubby_index(entries: list[dict], release: str) -> int | None:
+    """The boot index of the entry that loads vmlinuz-<release>."""
+    for e in entries:
+        if entry_release(e.get("kernel", "")) == release:
+            try:
+                return int(e["index"])
+            except (KeyError, ValueError):
+                return None
+    return None
+
+
+def entry_root(entry: dict) -> str:
+    """The root device a boot entry names, from grubby's own `root` field or
+    from a root= in its arguments."""
+    if root := entry.get("root", "").strip():
+        return root
+    m = re.search(r"(?:^|\s)root=(\S+)", entry.get("args", ""))
+    return m.group(1) if m else ""
+
+
+def entry_bootable(entry: dict) -> str | None:
+    """Why booting this entry cannot work. An entry with no root device
+    reaches the initramfs and parks in an emergency shell, which on a
+    machine with no remote power cut costs a trip to it. `kernel-install`
+    writes the entry from /etc/kernel/cmdline, so an installed kernel
+    inherits whatever that file omits."""
+    if not entry_root(entry):
+        return (f"the entry names no root device (grubby root= empty and no "
+                f"root= in its arguments), so it cannot mount a root "
+                f"filesystem: {entry.get('args', '')[:120]!r}")
+    return None
+
+
+def cc_version_text(config: str) -> str:
+    """CONFIG_CC_VERSION_TEXT out of a kernel configuration: the compiler
+    that built the kernel the configuration belongs to."""
+    m = re.search(r'^CONFIG_CC_VERSION_TEXT="(.*)"$', config, re.M)
+    return m.group(1) if m else ""
+
+
+def fallback_refusal(default_kernel: str, release: str,
+                     cc_version: str) -> str | None:
+    """Why this machine must not be booted into `release`. The standing boot
+    default is the only recovery a box with no remote power cut has, so it
+    has to be a kernel the run neither replaces nor built."""
+    rel = entry_release(default_kernel)
+    if not rel:
+        return (f"the standing boot default is not a kernel entry: "
+                f"{default_kernel!r}")
+    if rel == release:
+        return (f"the standing boot default is {rel}, the kernel under test: "
+                f"a failed boot would fall back to itself")
+    if names_badc(cc_version):
+        return (f"the standing boot default {rel} was built by badc "
+                f"({cc_version[:80]}): the fallback has to be a "
+                f"distribution kernel")
+    return None
+
+
+def hw_identity(tgt: Target) -> dict:
+    """What the machine is, recorded next to the boot verdict so a hardware
+    run is diffable against a VM run."""
+    def dmi(field: str) -> str:
+        return tgt.ssh(f"dmidecode -s {field} 2>/dev/null | grep -v '^#'",
+                       sudo=True).stdout.strip()
+    sb = tgt.ssh("mokutil --sb-state 2>/dev/null || "
+                 "bootctl status 2>/dev/null | grep -i 'secure boot'").stdout
+    return {
+        "vendor": dmi("system-manufacturer"),
+        "model": dmi("system-product-name"),
+        "bios": " ".join(filter(None, (dmi("bios-vendor"), dmi("bios-version"),
+                                       dmi("bios-release-date")))),
+        "cpu": tgt.ssh("grep -m1 'model name' /proc/cpuinfo | "
+                       "cut -d: -f2-").stdout.strip(),
+        "firmware": ("uefi" if tgt.ssh("test -d /sys/firmware/efi").returncode
+                     == 0 else "bios"),
+        "secure_boot": sb.strip().splitlines()[0].strip() if sb.strip()
+                       else "unknown",
+        "watchdog": tgt.ssh("wdctl 2>/dev/null | "
+                            "awk -F: '/Identity|Timeout/{print $2}' | "
+                            "tr -s ' \\n' ' '", sudo=True).stdout.strip(),
+    }
+
+
+def hw_default_kernel(tgt: Target) -> str:
+    return tgt.ssh("grubby --default-kernel", sudo=True).stdout.strip()
+
+
+def hw_clear_oneshot(tgt: Target) -> str:
+    """Drop any pending one-shot selection, so the next boot is the standing
+    default whatever this run did."""
+    for tool in ("grub2-editenv", "grub-editenv"):
+        r = tgt.ssh(f"{tool} - unset next_entry", sudo=True, timeout=60)
+        if r.returncode == 0:
+            return f"{tool}: cleared"
+    return (r.stderr or r.stdout).strip()[-200:] or "unreachable"
+
+
+def hw_recover(args, tgt: HwTarget, result: dict, failures: list[str]) -> None:
+    """The machine did not answer. Record what the console last showed, then
+    establish which of the two happened: the kernel under test wedged, or the
+    box is gone. The watchdog resets a wedged kernel and the one-shot
+    selection expires with the boot that consumed it, so a box that is merely
+    wedged comes back on the standing default by itself."""
+    since = tgt.console_since(tgt.console_mark)
+    result["console_stage"] = console_stage(since)
+    result["console_tail"] = since[-HW_CONSOLE_TAIL:]
+    stage = result["console_stage"]
+    log(f"console: reached {stage['stage']}"
+        + (f"; {stage['verdict']} ({stage['stopped_at']})"
+           if stage["outcome"] else "")
+        + (f"; fault: {stage['fault']}" if stage["fault"] else ""))
+    # Two ways back, cheapest first: the watchdog resetting a kernel that
+    # stopped petting it, then a SysRq reset over the serial line for a boot
+    # that parked where the watchdog was never armed -- an initramfs
+    # emergency shell runs a systemd that never read the watchdog
+    # configuration, because that lives on the filesystem it failed to mount.
+    back_to = result.get("boot_default") or "the standing default"
+    attempts = [("the watchdog and the one-shot expiry", "")]
+    if args.hw_sysrq and tgt.serial:
+        attempts.append(("a SysRq reset over the serial line", SYSRQ_RESET))
+    last = ""
+    for how, keys in attempts:
+        if keys:
+            log(f"sending SysRq {keys!r} over {tgt.serial.device}")
+            try:
+                tgt.serial.sysrq(keys)
+            except OSError as e:
+                log(f"SysRq over {tgt.serial.device}: {e}")
+                continue
+        log(f"waiting up to {args.hw_recover_timeout}s for the machine to "
+            f"come back on {back_to} ({how})")
+        # What follows is a different boot: the markers that ended the last
+        # one must not end this wait too.
+        tgt.console_mark = tgt.console_bytes()
+        try:
+            tgt.wait_ssh(args.hw_recover_timeout, watch_console=False)
+        except TargetError as e:
+            last = str(e)
+            continue
+        back = tgt.ssh("uname -r").stdout.strip()
+        result["recovered"], result["recovered_by"] = True, how
+        result["recovered_uname"] = back
+        if back == args.release:
+            failures.append(f"the machine came back on {back}, the kernel "
+                            f"under test: the one-shot selection did not "
+                            f"expire")
+        else:
+            log(f"recovered on {back} through {how}")
+        return
+    result["recovered"] = False
+    seen = (f"the console last reached {stage['stage']}"
+            + (f" and {stage['verdict']} ({stage['stopped_at']})"
+               if stage["outcome"] else "")
+            + (f": {stage['fault']}" if stage["fault"] else "")
+            if stage["stage"] != "none"
+            else "the console recorded nothing from this boot, so a wedged "
+                 "kernel and a box that is gone read the same")
+    failures.append(f"the machine did not come back after the failed boot; "
+                    f"{seen} ({last})")
+
+
+def phase_hw(args, arch, packages: list[Path], failures: list[str]) -> dict:
+    """Install the packages on a physical machine, boot the kernel they carry
+    for exactly one boot, and run the probes and the exercise stage the vm
+    lane runs. The console is read from a serial port on this host."""
+    console = args.workdir / f"console-hw-{args.arch}.log"
+    serial = None
+    if args.hw_serial:
+        serial = SerialConsole(args.hw_serial, args.hw_baud, console)
+        try:
+            serial.start()
+        except (OSError, ValueError) as e:
+            die(f"cannot read the console from {args.hw_serial}: {e} "
+                f"(on macOS use the /dev/cu.* node, not /dev/tty.*, which "
+                f"blocks waiting for carrier detect)")
+        log(f"serial console: {args.hw_serial} at {args.hw_baud} "
+            f"-> {console}")
+    else:
+        console.write_bytes(b"")
+        log("no --hw-serial: a boot that does not reach ssh leaves no record")
+    tgt = HwTarget(args, console, serial)
+    result: dict = {"console": str(console),
+                    "serial": serial.stats() if serial else None}
+    try:
+        boot_id = tgt.wait_ssh(args.hw_timeout, watch_console=False)
+        result["target"] = hw_identity(tgt)
+        result["firmware"] = result["target"]["firmware"]
+        log(f"target: {result['target']['vendor']} "
+            f"{result['target']['model']}, bios {result['target']['bios']}, "
+            f"{result['firmware']}")
+
+        # The standing default is the recovery. Establish it before anything
+        # is installed, so a run that must not proceed has changed nothing.
+        default = hw_default_kernel(tgt)
+        result["boot_default"] = default
+        cfg = tgt.ssh(f"cat /boot/config-{entry_release(default)} 2>/dev/null",
+                      sudo=True).stdout
+        if refusal := fallback_refusal(default, args.release,
+                                       cc_version_text(cfg)):
+            failures.append(f"refusing to boot {args.release}: {refusal}")
+            return result
+        log(f"standing default: {default} (the fallback)")
+
+        result["core_capture"] = configure_core_capture(tgt)
+        base = probes(tgt)
+        result["stock"] = base
+        log(f"stock: uname={base['uname']} systemd={base['systemd_state']} "
+            f"modules={len(base['modules'])} disk={base['disk_driver']!r} "
+            f"net={base['net_driver']!r}")
+        result["cores_stock"] = sweep_cores(args, tgt, "stock", failures)
+
+        suffix = "." + arch["pkg"]
+        packages = [p for p in packages if p.suffix == suffix]
+        if not packages:
+            failures.append(f"no {suffix} package to install on "
+                            f"{arch['distro']}")
+            return result
+        log(f"installing {', '.join(p.name for p in packages)}")
+        tgt.scp(packages, "")
+        r = tgt.ssh(install_cmd(arch, packages, args.install_args), sudo=True,
+                    timeout=args.install_timeout)
+        result["install_rc"] = r.returncode
+        result["install_tail"] = (r.stdout + r.stderr).strip()[-2000:]
+        if r.returncode != 0:
+            failures.append(f"package install exited {r.returncode}: "
+                            f"{result['install_tail'][-300:]}")
+            return result
+
+        # Installing a kernel makes its own entry the default on a BLS
+        # distribution. The standing default is the recovery, so it goes
+        # back before anything selects a one-shot: an install alone must
+        # never change what the machine boots on its own.
+        moved = hw_default_kernel(tgt)
+        result["boot_default_after_install"] = moved
+        if moved != default:
+            r = tgt.ssh(f"grubby --set-default {shlex.quote(default)}",
+                        sudo=True)
+            result["boot_default_restored"] = r.returncode == 0
+            if r.returncode != 0:
+                failures.append(f"the install moved the standing default to "
+                                f"{moved}, and it could not be put back: "
+                                f"{(r.stderr or r.stdout).strip()[-200:]}")
+                return result
+            log(f"the install moved the standing default to {moved}; "
+                f"restored {default}")
+
+        entries = grubby_entries(tgt.ssh("grubby --info=ALL",
+                                         sudo=True).stdout)
+        result["boot_entries"] = len(entries)
+        index = grubby_index(entries, args.release)
+        if index is None:
+            failures.append(f"no boot entry loads vmlinuz-{args.release} "
+                            f"after the install ({len(entries)} entries)")
+            return result
+        entry = entries[index] if index < len(entries) else {}
+        result["boot_entry_root"] = entry_root(entry)
+        # Checked before the reset, not after: a boot that cannot mount a
+        # root filesystem leaves the machine in a state only someone at it
+        # can end.
+        if why := entry_bootable(entry):
+            failures.append(f"refusing to boot entry {index} "
+                            f"({args.release}): {why}")
+            return result
+        # One boot only: never the standing default, so any failure -- a hang
+        # the watchdog resets included -- comes back on the distribution
+        # kernel without anyone at the machine.
+        tgt.ssh(f"grub2-reboot {index}", sudo=True, check=True)
+        result["boot_select"] = f"grub2-reboot one-shot: index {index}"
+        log(f"rebooting into {args.release} ({result['boot_select']})")
+
+        try:
+            tgt.reboot(args.hw_timeout, boot_id)
+        except TargetError as e:
+            failures.append(str(e))
+            hw_recover(args, tgt, result, failures)
+            return result
+        since = tgt.console_since(tgt.console_mark)
+        result["console_stage"] = console_stage(since)
+        result["console_tail"] = since[-HW_CONSOLE_TAIL:]
+        log(f"console: reached {result['console_stage']['stage']} "
+            f"over {len(since)} bytes")
+
+        cur = probes(tgt)
+        result["badc"] = cur
+        log(f"badc: uname={cur['uname']} systemd={cur['systemd_state']} "
+            f"modules={len(cur['modules'])}")
+        if not assert_boot(args, tgt, base, cur, result, failures):
+            return result
+        # The machine's devices are fixed, so the baseline names what has to
+        # bind: the kernel under test must drive the same disk and network
+        # hardware the distribution kernel drove.
+        for what in ("disk_driver", "net_driver"):
+            missing = sorted(set(base[what].split()) - set(cur[what].split()))
+            if missing:
+                failures.append(f"{what}: {' '.join(missing)} bound under "
+                                f"{base['uname']} but not under "
+                                f"{cur['uname']} "
+                                f"({cur[what]!r})")
+        if result["console_stage"]["outcome"]:
+            failures.append(f"{result['console_stage']['verdict']} "
+                            f"({result['console_stage']['stopped_at']})")
+        if result["console_stage"]["fault"]:
+            failures.append(f"console fault during the boot: "
+                            f"{result['console_stage']['fault']}")
+
+        assert_package_products(args, arch, tgt, result, failures)
+        if args.exercise:
+            result["exercise"] = exercise.run(args, tgt, arch, args.release,
+                                              failures, log)
+        result["cores_badc"] = sweep_cores(args, tgt, "badc", failures)
+        if not result["cores_badc"]:
+            log("no userspace cores under the kernel under test")
+
+        if args.hw_restore:
+            log(f"restoring the machine to {default}")
+            try:
+                tgt.reboot(args.hw_timeout, tgt.ssh(
+                    "cat /proc/sys/kernel/random/boot_id").stdout.strip())
+                result["restored_uname"] = tgt.ssh("uname -r").stdout.strip()
+                if result["restored_uname"] == args.release:
+                    failures.append(
+                        f"the machine is still on {args.release} after the "
+                        f"restore: the standing default did not take")
+            except TargetError as e:
+                failures.append(f"restoring the standing default: {e}")
+    except TargetError as e:
+        failures.append(str(e))
+    finally:
+        try:
+            result["oneshot_cleared"] = hw_clear_oneshot(tgt)
+            after = hw_default_kernel(tgt)
+            result["boot_default_after"] = after
+            want = result.get("boot_default")
+            if want and after and after != want:
+                failures.append(f"the machine is left with {after} as its "
+                                f"standing default, not {want}: the next "
+                                f"boot would not fall back")
+        except Exception as e:  # teardown must not mask the verdict
+            log(f"hardware teardown: {e}")
+        if serial:
+            serial.stop()
+            result["serial"] = serial.stats()
+            log(f"serial console: {serial.bytes} bytes, "
+                f"{serial.reopens} reopens")
+    return result
 
 
 # --- self-test --------------------------------------------------------------
@@ -2186,8 +2903,198 @@ def _self_test() -> int:
     assert not seabios_nvme_blocked("bios", "virtio", 8192)
     assert exercise.EXERCISE_VM_MEM > SEABIOS_NVME_MEM_LIMIT
 
+    assert resolve_phases("config,tree,build,package,vm", None, None) == (
+        {"config", "tree", "build", "package", "vm"}, True)
+    assert resolve_phases("vm", None, None) == ({"vm"}, True)
+    assert resolve_phases("config", None, None) == ({"config"}, False)
+    # A hardware run over an already-built package needs no tree at all.
+    assert resolve_phases("hw", "7.1.6-badc", "box") == ({"hw"}, False)
+    assert resolve_phases("hw", None, "box") == ({"hw"}, True)
+    for spec, rel, host in (("vm,bogus", None, None), ("selfhost", None, None),
+                            ("hw", None, None),
+                            ("tree,build", "7.1.6-badc", None)):
+        try:
+            resolve_phases(spec, rel, host)
+            assert False, spec
+        except ValueError:
+            pass
+
+    assert install_cmd(deb, [Path("/o/linux-image_1_amd64.deb")]) == (
+        "dpkg -i linux-image_1_amd64.deb")
+    assert install_cmd(rpm, [Path("/o/kernel-1.rpm"), Path("/o/kernel-c.rpm")],
+                       "--replacepkgs") == (
+        "rpm -ivh --replacepkgs kernel-1.rpm kernel-c.rpm")
+
+    # --- hardware lane ---
+    assert baud_constant(115200) == termios.B115200
+    assert baud_constant(9600) == termios.B9600
+    try:
+        baud_constant(115201)
+        assert False
+    except ValueError:
+        pass
+
+    assert entry_release("/boot/vmlinuz-7.1.10-200.fc44.x86_64") == (
+        "7.1.10-200.fc44.x86_64")
+    assert entry_release('"/boot/vmlinuz-6.1.0-badc"') == "6.1.0-badc"
+    assert entry_release("/boot/efi/EFI/fedora/grubx64.efi") == ""
+
+    info = ('index=0\nkernel="/boot/vmlinuz-7.1.10-200.fc44.x86_64"\n'
+            'args="ro root=UUID=1e14 console=ttyS1,115200n8"\n'
+            'root="UUID=1e14"\ntitle="Fedora Linux (7.1.10-200.fc44.x86_64)"\n'
+            'index=1\nkernel="/boot/vmlinuz-7.1.6-badc"\n'
+            'title="Fedora Linux (7.1.6-badc)"\nid="c8-7.1.6-badc"\n'
+            'index=2\nkernel="/boot/vmlinuz-0-rescue-c8ed"\n')
+    entries = grubby_entries(info)
+    assert [e["index"] for e in entries] == ["0", "1", "2"]
+    assert entries[0]["args"] == "ro root=UUID=1e14 console=ttyS1,115200n8"
+    assert grubby_index(entries, "7.1.6-badc") == 1
+    assert grubby_index(entries, "7.1.10-200.fc44.x86_64") == 0
+    assert grubby_index(entries, "9.9.9") is None
+    assert grubby_entries("") == []
+
+    assert entry_root(entries[0]) == "UUID=1e14"
+    assert entry_root({"args": "ro root=/dev/sda3 quiet"}) == "/dev/sda3"
+    assert entry_root({"args": "ro rootflags=subvol=root"}) == ""
+    assert entry_bootable(entries[0]) is None
+    assert entry_bootable({"args": "ro root=/dev/sda3"}) is None
+    # rootflags is not a root device: the entry kernel-install wrote from an
+    # /etc/kernel/cmdline with no root= looks exactly like this.
+    assert entry_bootable({"args": "ro rootflags=subvol=root panic=30"})
+    assert entry_bootable({})
+
+    assert cc_version_text(
+        'CONFIG_CC_IS_GCC=y\nCONFIG_CC_VERSION_TEXT="gcc (GCC) 15.2.1"\n'
+    ) == "gcc (GCC) 15.2.1"
+    assert cc_version_text("CONFIG_CC_IS_GCC=y\n") == ""
+
+    # The standing default is the only recovery: it must be a kernel entry,
+    # neither the release under test nor one badc built.
+    assert fallback_refusal("/boot/vmlinuz-7.1.10-200.fc44.x86_64",
+                            "7.1.6-badc", "gcc (GCC) 15.2.1") is None
+    for default, rel, cc in (
+            ("", "7.1.6-badc", "gcc (GCC) 15.2.1"),
+            ("/boot/vmlinuz-7.1.6-badc", "7.1.6-badc", "gcc (GCC) 15.2.1"),
+            ("/boot/vmlinuz-7.1.6-other", "7.1.6-badc",
+             "badc 0.1 (gcc-compatible, GNU C 15.0.0)")):
+        assert fallback_refusal(default, rel, cc), (default, rel)
+
+    boot = ("GNU GRUB  version 2.14\r\nBooting `Fedora Linux'\r\n"
+            "[    0.000000] earlycon: uart8250 at I/O port 0x2f8\r\n"
+            "[    0.000000] Linux version 7.1.10-200.fc44.x86_64\r\n"
+            "[    1.100000] Unpacking initramfs...\r\n"
+            "[    5.200000] systemd[1]: Detected architecture x86-64.\r\n"
+            "[   20.000000] Reached target Multi-User System.\r\n"
+            "fedora login: ")
+    st = console_stage(boot)
+    assert (st["stage"], st["fault"]) == ("multi-user", "")
+    assert st["reached"] == ["bootloader", "earlycon", "kernel", "initramfs",
+                            "userspace", "multi-user"]
+    hung = console_stage(boot.split("Unpacking")[0] +
+                         "[    1.5] Kernel panic - not syncing: VFS: Unable "
+                         "to mount root fs\r\n")
+    assert hung["stage"] == "kernel"
+    assert hung["fault"].startswith("Kernel panic - not syncing")
+    assert console_stage("")["stage"] == "none"
+
+    # A boot that parks in the initramfs emergency shell reaches userspace
+    # and never answers ssh; the wait ends on the marker, not on the timeout.
+    emerg = ("[  OK  ] Started \x1b[0;1;39memergency.service\x1b[0m - "
+             "Emergency Shell.\r\n[  OK  ] Reached target "
+             "\x1b[0;1;39memergency.target\x1b[0m - Emergency Mode.\r\n")
+    # Emergency mode is a named outcome of its own, not "ssh never
+    # returned": the verdict names the root filesystem, not the kernel.
+    emerg_st = console_stage(emerg)
+    assert emerg_st["outcome"] == "emergency", emerg_st
+    assert "root filesystem was not mounted" in emerg_st["verdict"]
+    assert console_stage(boot)["outcome"] == ""
+    assert hung["outcome"] == "panic"
+    assert hung["stopped_at"].startswith("Kernel panic - not syncing")
+    assert console_stage(
+        "Cannot open access to console, the root account is locked."
+    )["outcome"] == "emergency"
+    # A panic that then parks in emergency mode is reported as the panic.
+    assert console_stop("[1.0] Kernel panic - not syncing: x\r\n"
+                        "Entering emergency mode.\r\n")[0] == "panic"
+
+    _self_test_wait()
+
     exercise.self_test()
     print("linux packages: self-test ok", flush=True)
+    return 0
+
+
+def _self_test_wait() -> int:
+    """Target.wait_ssh over a console file and a scripted ssh, which is every
+    way a wait ends: a machine that is gone, a console that stayed silent, a
+    marker that ended the boot, a new boot id, and the timeout."""
+    import tempfile
+    import types
+
+    class Fake(Target):
+        silence_grace = 0.01
+
+        def __init__(self, console: Path, answers, absent="", stop=""):
+            super().__init__("t@h", 22, None, console)
+            self.answers, self.absent, self.stopper = answers, absent, stop
+            self.asked = 0
+
+        def ssh(self, cmd, timeout=120, check=False, sudo=False):
+            i = min(self.asked, len(self.answers) - 1)
+            self.asked += 1
+            ok = 0 if self.answers[i] else 1
+            return types.SimpleNamespace(returncode=ok,
+                                         stdout=self.answers[i], stderr="")
+
+        def gone(self):
+            return self.absent or None
+
+        def console_stop(self):
+            return self.stopper or None
+
+    with tempfile.TemporaryDirectory() as d:
+        con = Path(d) / "console.log"
+        con.write_text("[    0.0] Linux version 7.1.6\n")
+
+        # A new boot id ends the wait; the same one keeps it going.
+        f = Fake(con, ["b2"])
+        assert f.wait_ssh(30, expect_boot_id="b1") == "b2"
+        f = Fake(con, ["", "b2"])
+        assert f.wait_ssh(30) == "b2" and f.asked == 2
+
+        for kwargs, want in (({"absent": "qemu exited"}, "qemu exited"),
+                             ({"stop": "emergency.target"}, "emergency")):
+            try:
+                Fake(con, ["b2"], **kwargs).wait_ssh(30)
+                assert False, kwargs
+            except TargetError as e:
+                assert want in str(e), e
+
+        # Silence past the grace, judged from the mark rather than from an
+        # empty file: a console that has not grown is a machine that did not
+        # start, whatever it wrote before the reset.
+        empty = Path(d) / "empty.log"
+        empty.write_bytes(b"")
+        try:
+            Fake(empty, [""]).wait_ssh(30)
+            assert False
+        except TargetError as e:
+            assert "no console output" in str(e), e
+        marked = Fake(con, [""])
+        marked.console_mark = con.stat().st_size
+        try:
+            marked.wait_ssh(30)
+            assert False
+        except TargetError as e:
+            assert "no console output" in str(e), e
+
+        # Past the mark the console has grown, so the wait runs to its
+        # timeout and says so.
+        try:
+            Fake(con, [""]).wait_ssh(0)
+            assert False
+        except TargetError as e:
+            assert "not reachable within 0s" in str(e), e
     return 0
 
 
@@ -2250,8 +3157,22 @@ def main() -> int:
                     help="minimum badc-compiled units (default: per-arch)")
     ap.add_argument("--phases", default="config,tree,build,package,vm",
                     help="comma-separated subset of config,tree,build,"
-                         "package,vm,selfhost; selfhost is off by default and "
-                         "runs inside the vm phase")
+                         "package,vm,hw,selfhost; selfhost is off by default "
+                         "and runs inside the vm phase, hw installs on the "
+                         "physical machine --hw-host names")
+    ap.add_argument("--release",
+                    help="kernel release the packages install (default: read "
+                         "from the prepared tree)")
+    ap.add_argument("--package", type=Path, action="append", default=[],
+                    dest="package_files",
+                    help="package to install, repeatable (default: what the "
+                         "package phase produced)")
+    ap.add_argument("--expect-producer", choices=("badc", "any"),
+                    default="badc",
+                    help="compiler the booted kernel must identify itself as "
+                         "built by; `any` records the banner without "
+                         "asserting it, for a run that installs a reference "
+                         "package to exercise the lane itself")
     ap.add_argument("--selfhost-scope", choices=sorted(SELFHOST_EXPECT),
                     default="units",
                     help="what the in-guest build makes: `units` the built-in "
@@ -2315,7 +3236,37 @@ def main() -> int:
     ap.add_argument("--install-timeout", type=int, default=1800,
                     help="seconds for the package install, which regenerates "
                          "the initramfs and is the longest single step")
+    ap.add_argument("--install-args", default="",
+                    help="extra flags for the package install command, e.g. "
+                         "`--replacepkgs` to reinstall a package the target "
+                         "already carries")
     ap.add_argument("--qemu-args", default="")
+    ap.add_argument("--hw-host",
+                    help="[user@]host of the physical machine the hw phase "
+                         "installs on and boots; reached over ssh with key "
+                         "authentication and password-less sudo")
+    ap.add_argument("--hw-port", type=int, default=22)
+    ap.add_argument("--hw-key", type=Path,
+                    help="ssh identity for --hw-host (default: ssh's own)")
+    ap.add_argument("--hw-serial",
+                    help="serial device on this host carrying the target's "
+                         "console, e.g. /dev/cu.usbserial-XXXX or "
+                         "/dev/ttyUSB0; without it a boot that never reaches "
+                         "ssh leaves no record")
+    ap.add_argument("--hw-baud", type=int, default=115200)
+    ap.add_argument("--hw-timeout", type=int, default=600,
+                    help="seconds to wait for ssh after a reset")
+    ap.add_argument("--hw-recover-timeout", type=int, default=600,
+                    help="seconds to wait for the machine to fall back to "
+                         "the standing default after a failed boot; the "
+                         "watchdog is what resets it")
+    ap.add_argument("--no-hw-sysrq", dest="hw_sysrq", action="store_false",
+                    help="do not send a SysRq reset over the serial line "
+                         "when a failed boot leaves the machine parked "
+                         "where the watchdog cannot reset it")
+    ap.add_argument("--no-hw-restore", dest="hw_restore", action="store_false",
+                    help="leave the machine running the kernel under test "
+                         "instead of rebooting it onto the standing default")
     exercise.add_arguments(ap)
     ap.add_argument("--workdir", type=Path,
                     default=Path.cwd() / "packages-out")
@@ -2326,13 +3277,12 @@ def main() -> int:
     cross = f"{args.arch}-linux-musl-" if platform.system() == "Darwin" else ""
     args.real_cc = args.real_cc or f"{cross}gcc"
     args.real_ld = args.real_ld or f"{cross}ld"
-    phases = set(args.phases.split(","))
-    if unknown := phases - {"config", "tree", "build", "package", "vm",
-                            "selfhost"}:
-        die(f"unknown phases: {sorted(unknown)}")
+    try:
+        phases, needs_tree = resolve_phases(args.phases, args.release,
+                                            args.hw_host)
+    except ValueError as e:
+        die(str(e))
     args.selfhost = "selfhost" in phases
-    if args.selfhost and "vm" not in phases:
-        die("the selfhost phase runs inside the vm phase and needs it")
     for name, value in vm_size(args.selfhost).items():
         if getattr(args, name) is None:
             setattr(args, name, value)
@@ -2341,7 +3291,8 @@ def main() -> int:
                             or SELFHOST_EXPECT[args.selfhost_scope])
     args.workdir = args.workdir.resolve()
     args.workdir.mkdir(parents=True, exist_ok=True)
-    require_case_sensitive(args.workdir)
+    if needs_tree:
+        require_case_sensitive(args.workdir)
     # Held for the process lifetime: the tree, the packages and the vm disk
     # all live in the workdir, so two runs sharing one would corrupt both.
     lock = (args.workdir / "lock").open("w")
@@ -2396,6 +3347,7 @@ def main() -> int:
             args.report.write_text(json.dumps(report, indent=2) + "\n")
         return 0
 
+    tree = None
     if "tree" in phases:
         if args.tarball_url:
             if not args.tarball_sha256:
@@ -2410,17 +3362,20 @@ def main() -> int:
             ln for ln in (args.workdir /
                           f"config-deviations-{args.arch}.txt")
             .read_text().splitlines() if ln.strip()])
-    else:
+    elif needs_tree:
         trees = sorted(args.workdir.glob("linux-*/Makefile"))
         if not trees:
             die(f"no prepared tree under {args.workdir}; run the tree phase")
         tree = trees[0].parent
-    args.tree_version = tree.name[len("linux-"):]
-    args.host_config = tree / ".config"
-    args.release = run(["make", "-s", "kernelrelease"], cwd=tree,
-                       env=shim_env(args, arch),
-                       check=True).stdout.strip()
-    log(f"kernel {args.release} in {tree}")
+    if tree is not None:
+        args.tree_version = tree.name[len("linux-"):]
+        args.host_config = tree / ".config"
+        args.release = run(["make", "-s", "kernelrelease"], cwd=tree,
+                           env=shim_env(args, arch),
+                           check=True).stdout.strip()
+        log(f"kernel {args.release} in {tree}")
+    else:
+        log(f"kernel {args.release} (no tree; --release)")
     report["release"] = args.release
 
     if "build" in phases:
@@ -2446,8 +3401,16 @@ def main() -> int:
     if args.selfhost and (not args.tarball or not args.tarball.is_file()):
         die("the selfhost phase pushes the kernel tarball into the guest; "
             "--tarball or --tarball-url is required")
-    if "vm" in phases and not failures:
+    if {"vm", "hw"} & phases and not failures:
+        if args.package_files:
+            for p in args.package_files:
+                if not p.is_file():
+                    die(f"no package at {p}")
+            packages = [p.resolve() for p in args.package_files]
         if not packages:
+            if tree is None:
+                die("no packages to install; pass --package or run the "
+                    "package phase")
             packages = (sorted(args.workdir.glob(
                 f"linux-image-{args.release}_*.deb"))
                 if arch["pkg"] == "deb" else
@@ -2457,7 +3420,10 @@ def main() -> int:
             packages = [p for p in packages if "-dbg" not in p.name]
             if not packages:
                 die("no packages to install; run the package phase")
-        report["vm"] = phase_vm(args, arch, packages, failures)
+        if "vm" in phases:
+            report["vm"] = phase_vm(args, arch, packages, failures)
+        if "hw" in phases:
+            report["hw"] = phase_hw(args, arch, packages, failures)
 
     if args.report:
         report["failures"] = failures
@@ -2467,10 +3433,12 @@ def main() -> int:
         print(f"linux packages: FAIL: {f}", flush=True)
     if failures:
         return 1
+    where = [f"the {arch['distro']} vm" if p == "vm" else args.hw_host
+             for p in ("vm", "hw") if p in phases]
     log(f"PASS: {args.release} packaged as "
         f"{', '.join(p.name for p in packages) or 'n/a'}"
-        + (", installed and validated in the "
-           f"{arch['distro']} vm" if "vm" in phases else ""))
+        + (f", installed and validated on {' and '.join(where)}"
+           if where else ""))
     return 0
 
 

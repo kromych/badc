@@ -1125,6 +1125,135 @@ checkable against the source. There is no `actions/cache` layer in front of
 this: a release asset downloads from the same CDN as the rest of CI's inputs,
 and the cache's eviction window is not shorter than this lane's cadence.
 
+### On real hardware (the `hw` phase)
+
+The vm phase proves a kernel boots under an emulator whose devices badc's
+output has never surprised. `--phases hw` runs the same sequence on a physical
+machine: the same probes, the same dmesg scanners, the same exercise stage,
+with the console read from a serial port on this host instead of a file qemu
+writes. Everything downstream of the machine -- `probes()`, the core sweep,
+`exercise.py` -- takes a target rather than a VM, and an emulated guest and a
+physical box differ only in how they are started, watched and released.
+
+`packages.py` reaches the machine over ssh (`--hw-host [user@]host`, with
+`--hw-port` and `--hw-key`) and reads its console from `--hw-serial`, a serial
+device on this host: `/dev/cu.usbserial-XXXX` on macOS, `/dev/ttyUSB0` on
+Linux, at `--hw-baud` (115200 by default). The line settings are applied to
+the descriptor that does the reading, using `termios` from the standard
+library rather than a `pyserial` dependency the Linux lanes would not need.
+That is not incidental: an `open()` resets a port's termios on macOS, so a
+speed set by a separate `stty` call is gone before the first byte arrives and
+the port then delivers a few bytes of plausible-looking garbage rather than
+silence, which reads like a wiring fault and is not one. Nothing is written to
+the port. The capture is byte for byte, so `DMESG_SEVERE`, the
+firmware-silence check and the EDK2 exception scan read a hardware console and
+a qemu one the same way. Without `--hw-serial` the phase still runs, and a
+boot that never reaches ssh then leaves no record of how far it got.
+
+The sequence:
+
+1. Probe the machine on its distribution kernel and record what it is --
+   `dmidecode` model and BIOS, CPU, firmware mode, Secure Boot state,
+   watchdog -- next to the boot verdict, so a hardware run is diffable against
+   a VM run.
+2. Read the standing boot default and **refuse to run** unless it is a kernel
+   entry that is neither the release under test nor one badc built
+   (`CONFIG_CC_VERSION_TEXT` in its `/boot/config-<release>` says which). The
+   standing default is the only recovery a machine with no remote power cut
+   has.
+3. Take the baseline probes and the core sweep, as the vm phase does against
+   the stock image.
+4. Copy the packages over and install them (`rpm -ivh`, `dpkg -i`).
+   `--install-args` adds flags: `--oldpackage` for a pinned kernel older than
+   the box's own, which rpm otherwise refuses, and `--replacepkgs` to
+   reinstall one the machine already carries.
+5. Put the standing default back if the install moved it -- on a BLS
+   distribution `kernel-install` makes the kernel it just installed the
+   default, which silently removes the fallback the run checked for in
+   step 2.
+6. Find the new entry with `grubby --info=ALL`, check that it names a root
+   device, and select it with `grub2-reboot <index>` -- one boot only, never
+   `grub2-set-default`.
+7. Reset, and watch the console while waiting for ssh.
+8. Run the probes, assert the boot, and run the exercise stage under
+   `--exercise`.
+9. Reboot back onto the standing default (`--no-hw-restore` leaves the machine
+   on the kernel under test) and clear any pending one-shot selection whatever
+   happened.
+
+The device assertions differ from the vm phase's, because the hardware is not
+chosen: instead of a `--vm-disk-bus` model, the baseline names what has to
+bind, and the kernel under test must drive the same disk and network hardware
+the distribution kernel drove.
+
+When ssh does not return within `--hw-timeout`, the run reports which stage
+the boot reached -- firmware, boot loader, `earlycon`, kernel, initramfs,
+userspace, multi-user -- and the first panic or oops on the wire, then waits
+`--hw-recover-timeout` for the machine to come back. The watchdog resets a
+wedged kernel and the one-shot selection expires with the boot that consumed
+it, so a box that is merely wedged returns on the distribution kernel by
+itself. A lane that cannot tell a kernel that hung from a box that is gone is
+not useful, and that second wait is what separates the two.
+
+The wait does not always have to run out. A boot that ends badly ends in one
+of a few named ways -- `emergency` (the initramfs emergency shell: the root
+filesystem was not mounted), `panic`, `dracut-shell` -- and each is a
+different verdict, not a variant of "ssh never returned". The console says
+which, so the run ends the wait on the marker rather than on the timeout and
+records the outcome and its verdict in the report. The earliest marker wins,
+so a panic is not reported as the emergency shell that followed it.
+
+Recovery is tried twice. First the watchdog and the one-shot expiry, which
+between them return a wedged kernel to the standing default on their own.
+Then, when the machine is parked where the watchdog was never armed -- an
+initramfs emergency shell runs a systemd that never read the watchdog
+configuration, because that file lives on the filesystem it failed to mount
+-- a SysRq reset over the serial line: a BREAK followed by sync,
+remount-read-only, boot. It is best-effort, needing a kernel that still
+services interrupts and a `kernel.sysrq` mask that permits the command, and
+`--no-hw-sysrq` turns it off; it is also the only remote reset a machine with
+a battery has.
+
+Two things follow from a failed boot leaving **no journal** -- emergency mode
+never gets far enough to flush one, so the serial console is the only record
+that boot has. The reader is started before anything else the phase does and
+stays open across the reset, so the capture spans the whole reboot rather
+than picking up whatever was still in flight when someone opened the port;
+and it writes to the log unbuffered, so the record survives even a run that
+is killed. The other consequence is a check made before the reset rather than
+after it: the entry selected for the boot must name a root device, in
+grubby's own `root=` field or in its arguments. `kernel-install` writes a new
+kernel's entry from `/etc/kernel/cmdline`, and an `/etc/kernel/cmdline` built
+from `grubby --info`'s `args=` alone has no `root=`, because grubby prints
+the root device in a field of its own. The entry then looks healthy and the
+boot cannot mount anything; on a machine with no remote power cut that costs
+a trip to it, so the run refuses the reset instead.
+
+`--expect-producer any` records the boot banner without asserting badc built
+it, which is what a run installing a distribution package uses to exercise the
+lane itself; the default asserts badc. The phase needs no kernel tree:
+`--release` names what the packages install and `--package` names the files,
+so a hardware run consumes an artifact another lane produced.
+
+```sh
+python3 demos/linux/packages.py --arch x86_64 --distro fedora --phases hw \
+    --release <kernel release> --package <kernel rpm> \
+    --hw-host <host> --hw-serial /dev/cu.usbserial-XXXX \
+    --workdir <scratch> --report hw-x86_64.json
+```
+
+The phase writes `hw` into the report beside `vm`, with the same key names --
+`stock`, `badc`, `install_rc`, `boot_select`, `compiler_id`, `modprobe`,
+`exercise`, `cores_stock`, `cores_badc` -- plus the machine's identity, the
+console log path and stage, the standing default before and after, and whether
+a failed boot recovered. Like the vm phase it turns on core capture through
+sysctl.d, limits.d and systemd drop-ins, which persist on the machine.
+
+The phase is not in CI: it needs a machine on a bench with a serial line to
+the runner. [`micropc-testing.md`](micropc-testing.md) documents the box this
+was built against -- what it can and cannot test, which `ttyS*` is the
+physical port, and what the boot configuration has to carry.
+
 ### Concurrency and the accelerator
 
 Two runs on one host do not collide: the ssh forward takes a free port per run

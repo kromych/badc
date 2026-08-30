@@ -65,26 +65,6 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movq	(%r12), %rax
-               	movabsq	$0x3ff0000000000000, %r11 # imm = 0x3FF0000000000000
-               	cmpq	%r11, %rax
-               	je	<addr>
-               	movl	$0x5, %eax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-               	movq	0x8(%r12), %rax
-               	movabsq	$0x4000000000000000, %r11 # imm = 0x4000000000000000
-               	cmpq	%r11, %rax
-               	je	<addr>
-               	movl	$0x6, %eax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>

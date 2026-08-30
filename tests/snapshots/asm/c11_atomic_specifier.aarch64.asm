@@ -45,8 +45,8 @@ Disassembly of section .text:
                	movk	x1, #0xffff, lsl #32
                	movk	x1, #0xffff, lsl #48
                	stur	w1, [x29, #-0x10]
-               	mov	x2, #0xd                // =13
-               	sturh	w2, [x29, #-0x8]
+               	mov	x1, #0xd                // =13
+               	sturh	w1, [x29, #-0x8]
                	ldursh	x1, [x29, #-0x8]
                	cmp	w1, #0xd
                	b.eq	<addr>

@@ -62,7 +62,6 @@ Disassembly of section .text:
                	strb	w1, [x0]
                	mov	x1, #0x7                // =7
                	strb	w1, [x0, #0x8]
-               	ldrb	w1, [x0, #0x8]
                	stur	x0, [x29, #-0x18]
                	stur	x1, [x29, #-0x20]
                	ldur	x0, [x29, #-0x20]

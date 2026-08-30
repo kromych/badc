@@ -35,20 +35,6 @@ Disassembly of section .text:
                	movq	%rcx, 0x10(%rax)
                	movl	$0x4, %ecx
                	movq	%rcx, 0x18(%rax)
-               	movq	0x10(%rax), %rcx
-               	cmpq	$0x3, %rcx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
-               	jne	<addr>
-               	movq	0x18(%rax), %rax
-               	cmpq	$0x4, %rax
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	movl	$0xf, %eax
-               	retq
                	xorq	%rax, %rax
+               	movq	%rax, %rcx
                	retq
-               	jmp	<addr>

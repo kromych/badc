@@ -56,18 +56,13 @@ Disassembly of section .text:
                	str	w3, [x1]
                	mov	x2, #0x6                // =6
                	str	w2, [x1, #0x8]
-               	ldr	x3, [x0]
-               	ldr	x4, [x0, #0x8]
-               	ldrsw	x5, [x1]
-               	sxtw	x1, w2
-               	add	x1, x5, x1
-               	sxtw	x1, w1
-               	asr	x2, x1, #63
-               	add	x1, x3, x1
-               	cmp	x1, x3
-               	cset	x3, lo
-               	add	x2, x4, x2
-               	add	x2, x2, x3
+               	ldr	x2, [x0]
+               	ldr	x3, [x0, #0x8]
+               	add	x1, x2, #0x9
+               	cmp	x1, x2
+               	cset	x2, lo
+               	add	x3, x3, #0x0
+               	add	x2, x3, x2
                	str	x1, [x0]
                	str	x2, [x0, #0x8]
                	mov	x0, x1

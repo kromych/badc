@@ -18,7 +18,6 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	mov	x0, #0x5                // =5
                	str	w0, [x1]
-               	sxtw	x0, w0
                	ret
 
 <main>:

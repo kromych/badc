@@ -150,20 +150,10 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	mov	x1, #0x4                // =4
                	strb	w1, [x0]
-               	ldrb	w0, [x0]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	mov	x2, #0x4d               // =77
-               	strb	w2, [x1]
-               	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
-               	sxtw	x0, w0
-               	cmp	w0, #0x4
-               	b.eq	<addr>
-               	mov	x0, #0x9                // =9
-               	ldp	x29, x30, [sp, #0x30]
-               	ldp	x20, x21, [sp], #0x40
-               	ret
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	x1, #0x4d               // =77
+               	strb	w1, [x0]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrb	w0, [x0]

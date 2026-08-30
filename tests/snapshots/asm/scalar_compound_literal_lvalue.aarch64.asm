@@ -29,13 +29,6 @@ Disassembly of section .text:
                	ret
                	mov	x2, #0xa                // =10
                	str	w2, [x0]
-               	sxtw	x2, w2
-               	cmp	w2, #0xa
-               	b.eq	<addr>
-               	mov	x0, #0x2                // =2
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x2, #0x9                // =9
                	stur	w2, [x29, #-0x8]
                	ldrsw	x2, [x0]

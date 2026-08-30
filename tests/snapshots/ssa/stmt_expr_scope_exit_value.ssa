@@ -6,16 +6,16 @@ fn ent_pc=4 n_params=1 variadic=false locals=2
     v0   AllocaInit(4)                                    -> -
     v1   Imm(4)                                           -> x0
     v2   Imm(0)                                           -> x0
-    v3   Intrinsic { kind=AllocaSave, args=[] }           -> x6
+    v3   Intrinsic { kind=AllocaSave, args=[] }           -> x1
     v4   Imm(0)                                           -> x0
     v5   LoadLocal { off=2, kind=I32 }                    -> x0
     v6   Imm(16)                                          -> x0
-    v7   Imm(0)                                           -> x1
+    v7   Imm(0)                                           -> x2
     v8   Intrinsic { kind=Alloca, args=[v6] }             -> x0
-    v9   Imm(0)                                           -> x1
-    v10  LoadLocal { off=-2, kind=I64 }                   -> x1
-    v11  Imm(0)                                           -> x1
-    v12  Imm(41)                                          -> x1
+    v9   Imm(0)                                           -> x2
+    v10  LoadLocal { off=-2, kind=I64 }                   -> x2
+    v11  Imm(0)                                           -> x2
+    v12  Imm(41)                                          -> x2
     v13  Store { addr=v8, disp=0, value=v12, kind=I32 }   -> -
     v14  LoadLocal { off=-2, kind=I64 }                   -> x2
     v15  LoadLocal { off=2, kind=I32 }                    -> x2
@@ -26,23 +26,23 @@ fn ent_pc=4 n_params=1 variadic=false locals=2
     v20  BinopI { op=add, lhs=v8, rhs_imm=12 }            -> x2
     v21  Imm(1)                                           -> x2
     v22  Store { addr=v8, disp=12, value=v21, kind=I32 }  -> -
-    v23  LoadLocal { off=-2, kind=I64 }                   -> x7
-    v24  Extend { value=v12, kind=I32 }                   -> x1
-    v25  LoadLocal { off=2, kind=I32 }                    -> x7
-    v26  Imm(3)                                           -> x7
-    v27  Imm(12884901888)                                 -> x7
-    v28  Imm(3)                                           -> x7
-    v29  Imm(12)                                          -> x7
+    v23  LoadLocal { off=-2, kind=I64 }                   -> x2
+    v24  Imm(41)                                          -> x2
+    v25  LoadLocal { off=2, kind=I32 }                    -> x2
+    v26  Imm(3)                                           -> x2
+    v27  Imm(12884901888)                                 -> x2
+    v28  Imm(3)                                           -> x2
+    v29  Imm(12)                                          -> x2
     v30  BinopI { op=add, lhs=v8, rhs_imm=12 }            -> x0
-    v31  Extend { value=v21, kind=I32 }                   -> x0
-    v32  Binop { op=add, lhs=v24, rhs=v31 }               -> x0
-    v33  BinopI { op=shl, lhs=v32, rhs_imm=32 }           -> x1
-    v34  Extend { value=v32, kind=I32 }                   -> x0
-    v35  LoadLocal { off=-2, kind=I64 }                   -> x1
-    v36  Intrinsic { kind=AllocaRestore, args=[v3] }      -> x1
-    v37  BinopI { op=shl, lhs=v34, rhs_imm=32 }           -> x1
-    v38  Extend { value=v34, kind=I32 }                   -> x1
-    terminator Return(v34)   (exit_acc=v34)
+    v31  Imm(1)                                           -> x0
+    v32  Imm(42)                                          -> x0
+    v33  Imm(180388626432)                                -> x0
+    v34  Imm(42)                                          -> x0
+    v35  LoadLocal { off=-2, kind=I64 }                   -> x0
+    v36  Intrinsic { kind=AllocaRestore, args=[v3] }      -> x0
+    v37  Imm(180388626432)                                -> x0
+    v38  Imm(42)                                          -> x0
+    terminator Return(v38)   (exit_acc=v38)
 ; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=vla_and_guard
 fn ent_pc=5 n_params=1 variadic=false locals=3
@@ -51,38 +51,38 @@ fn ent_pc=5 n_params=1 variadic=false locals=3
     v0   AllocaInit(5)                                    -> -
     v1   Imm(3)                                           -> x0
     v2   Imm(0)                                           -> x0
-    v3   Intrinsic { kind=AllocaSave, args=[] }           -> x2
+    v3   Intrinsic { kind=AllocaSave, args=[] }           -> x1
     v4   Imm(0)                                           -> x0
     v5   Imm(5)                                           -> x0
     v6   StoreLocal { off=-2, value=v5, kind=I32 }        -> -
-    v7   LoadLocal { off=2, kind=I32 }                    -> x1
-    v8   Imm(12)                                          -> x1
+    v7   LoadLocal { off=2, kind=I32 }                    -> x2
+    v8   Imm(12)                                          -> x2
     v9   Imm(0)                                           -> x6
-    v10  Intrinsic { kind=Alloca, args=[v8] }             -> x1
+    v10  Intrinsic { kind=Alloca, args=[v8] }             -> x2
     v11  Imm(0)                                           -> x6
     v12  LoadLocal { off=-3, kind=I64 }                   -> x6
     v13  Imm(0)                                           -> x6
     v14  LoadLocal { off=-2, kind=I32 }                   -> x6
     v15  Store { addr=v10, disp=0, value=v5, kind=I32 }   -> -
-    v16  LoadLocal { off=-3, kind=I64 }                   -> x1
-    v17  Extend { value=v5, kind=I32 }                    -> x0
-    v18  BinopI { op=add, lhs=v17, rhs_imm=2 }            -> x0
-    v19  BinopI { op=shl, lhs=v18, rhs_imm=32 }           -> x1
-    v20  Extend { value=v18, kind=I32 }                   -> x0
-    v21  LocalAddr(-2)                                    -> x6
-    v22  ImmData(16)                                      -> x1
-    v23  Load { addr=v22, disp=0, kind=I32 }              -> x7
-    v24  BinopI { op=add, lhs=v23, rhs_imm=1 }            -> x7
+    v16  LoadLocal { off=-3, kind=I64 }                   -> x0
+    v17  Imm(5)                                           -> x0
+    v18  Imm(7)                                           -> x0
+    v19  Imm(30064771072)                                 -> x0
+    v20  Imm(7)                                           -> x0
+    v21  LocalAddr(-2)                                    -> x2
+    v22  ImmData(16)                                      -> x0
+    v23  Load { addr=v22, disp=0, kind=I32 }              -> x6
+    v24  BinopI { op=add, lhs=v23, rhs_imm=1 }            -> x6
     v25  Store { addr=v22, disp=0, value=v24, kind=I32 }  -> -
-    v26  ImmData(24)                                      -> x1
-    v27  Load { addr=v21, disp=0, kind=I32 }              -> x6
+    v26  ImmData(24)                                      -> x0
+    v27  Load { addr=v21, disp=0, kind=I32 }              -> x2
     v28  Store { addr=v26, disp=0, value=v27, kind=I32 }  -> -
-    v29  Imm(0)                                           -> x1
-    v30  LoadLocal { off=-3, kind=I64 }                   -> x1
-    v31  Intrinsic { kind=AllocaRestore, args=[v3] }      -> x1
-    v32  BinopI { op=shl, lhs=v20, rhs_imm=32 }           -> x1
-    v33  Extend { value=v20, kind=I32 }                   -> x1
-    terminator Return(v20)   (exit_acc=v20)
+    v29  Imm(0)                                           -> x0
+    v30  LoadLocal { off=-3, kind=I64 }                   -> x0
+    v31  Intrinsic { kind=AllocaRestore, args=[v3] }      -> x0
+    v32  Imm(30064771072)                                 -> x0
+    v33  Imm(7)                                           -> x0
+    terminator Return(v33)   (exit_acc=v33)
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=main
 fn ent_pc=6 n_params=0 variadic=false locals=6
@@ -197,10 +197,10 @@ fn ent_pc=6 n_params=0 variadic=false locals=6
     v27  Store { addr=v1, disp=0, value=v26, kind=I32 }   -> -
     v28  Imm(1)                                           -> x1
     v29  StoreLocal { off=-5, value=v28, kind=I32 }       -> -
-    v30  Imm(2)                                           -> x2
+    v30  Imm(2)                                           -> x1
     v31  StoreLocal { off=-3, value=v30, kind=I32 }       -> -
-    v32  Extend { value=v28, kind=I32 }                   -> x1
-    v33  Extend { value=v30, kind=I32 }                   -> x1
+    v32  Imm(1)                                           -> x1
+    v33  Imm(2)                                           -> x1
     v34  Imm(3)                                           -> x1
     v35  Imm(12884901888)                                 -> x1
     v36  Imm(3)                                           -> x1
@@ -243,7 +243,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=6
     v67  Store { addr=v1, disp=0, value=v26, kind=I32 }   -> -
     v68  Imm(11)                                          -> x1
     v69  StoreLocal { off=-3, value=v68, kind=I32 }       -> -
-    v70  Extend { value=v68, kind=I32 }                   -> x1
+    v70  Imm(11)                                          -> x1
     v71  LocalAddr(-3)                                    -> x1
     v72  ImmData(16)                                      -> x1
     v73  Load { addr=v1, disp=0, kind=I32 }               -> x1
@@ -321,7 +321,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=6
     v125 Imm(0)                                           -> x0
     v126 Imm(4)                                           -> x0
     v127 StoreLocal { off=-3, value=v126, kind=I32 }      -> -
-    v128 Extend { value=v126, kind=I32 }                  -> x0
+    v128 Imm(4)                                           -> x0
     v129 Imm(20)                                          -> x0
     v130 Imm(85899345920)                                 -> x0
     v131 Imm(20)                                          -> x0

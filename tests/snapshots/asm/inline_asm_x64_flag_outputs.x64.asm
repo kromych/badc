@@ -283,11 +283,11 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	movl	$0x7, %edx
                	movl	%ecx, -0x10(%rbp)
-               	leaq	-0x10(%rbp), %rsi
+               	leaq	-0x10(%rbp), %rcx
                	movq	%rax, -0x70(%rbp)
                	movq	%rcx, -0x68(%rbp)
                	movq	%rbx, -0x60(%rbp)
-               	movq	%rsi, -0x58(%rbp)
+               	movq	%rcx, -0x58(%rbp)
                	movq	%rax, -0x50(%rbp)
                	movq	%rdx, -0x48(%rbp)
                	movq	-0x50(%rbp), %rbx
@@ -307,8 +307,8 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x7, %eax
-               	movl	%ecx, -0x10(%rbp)
-               	leaq	-0x10(%rbp), %rcx
+               	movabsq	$-0x1, %rdx
+               	movl	%edx, -0x10(%rbp)
                	movq	%rax, -0x70(%rbp)
                	movq	%rcx, -0x68(%rbp)
                	movq	%rbx, -0x60(%rbp)

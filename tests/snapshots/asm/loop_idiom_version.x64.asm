@@ -747,103 +747,87 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax
-               	leaq	(%rax), %rcx
-               	movl	$0x1020304, %edx        # imm = 0x1020304
-               	movl	%edx, (%rcx)
+               	leaq	(%rax), %rdx
+               	movl	$0x1020304, %ecx        # imm = 0x1020304
+               	movl	%ecx, (%rdx)
                	leaq	<rip>, %rdx
                	addq	$0x0, %rdx
-               	movl	(%rcx), %eax
-               	movl	%eax, (%rdx)
+               	movl	%ecx, (%rdx)
                	leaq	<rip>, %rax
                	movl	$0x2040608, %ecx        # imm = 0x2040608
                	movl	%ecx, 0x4(%rax)
-               	leaq	<rip>, %rcx
-               	movl	0x4(%rax), %eax
-               	movl	%eax, 0x4(%rcx)
+               	leaq	<rip>, %rdx
+               	movl	%ecx, 0x4(%rdx)
                	leaq	<rip>, %rax
                	movl	$0x306090c, %ecx        # imm = 0x306090C
                	movl	%ecx, 0x8(%rax)
-               	leaq	<rip>, %rcx
-               	movl	0x8(%rax), %eax
-               	movl	%eax, 0x8(%rcx)
+               	leaq	<rip>, %rdx
+               	movl	%ecx, 0x8(%rdx)
                	leaq	<rip>, %rax
                	movl	$0x4080c10, %ecx        # imm = 0x4080C10
                	movl	%ecx, 0xc(%rax)
-               	leaq	<rip>, %rcx
-               	movl	0xc(%rax), %eax
-               	movl	%eax, 0xc(%rcx)
+               	leaq	<rip>, %rdx
+               	movl	%ecx, 0xc(%rdx)
                	leaq	<rip>, %rax
                	movl	$0x50a0f14, %ecx        # imm = 0x50A0F14
                	movl	%ecx, 0x10(%rax)
-               	leaq	<rip>, %rcx
-               	movl	0x10(%rax), %eax
-               	movl	%eax, 0x10(%rcx)
+               	leaq	<rip>, %rdx
+               	movl	%ecx, 0x10(%rdx)
                	leaq	<rip>, %rax
                	movl	$0x60c1218, %ecx        # imm = 0x60C1218
                	movl	%ecx, 0x14(%rax)
-               	leaq	<rip>, %rcx
-               	movl	0x14(%rax), %eax
-               	movl	%eax, 0x14(%rcx)
+               	leaq	<rip>, %rdx
+               	movl	%ecx, 0x14(%rdx)
                	leaq	<rip>, %rax
                	movl	$0x70e151c, %ecx        # imm = 0x70E151C
                	movl	%ecx, 0x18(%rax)
-               	leaq	<rip>, %rcx
-               	movl	0x18(%rax), %eax
-               	movl	%eax, 0x18(%rcx)
+               	leaq	<rip>, %rdx
+               	movl	%ecx, 0x18(%rdx)
                	leaq	<rip>, %rax
                	movl	$0x8101820, %ecx        # imm = 0x8101820
                	movl	%ecx, 0x1c(%rax)
-               	leaq	<rip>, %rcx
-               	movl	0x1c(%rax), %eax
-               	movl	%eax, 0x1c(%rcx)
+               	leaq	<rip>, %rdx
+               	movl	%ecx, 0x1c(%rdx)
                	leaq	<rip>, %rax
                	movl	$0x9121b24, %ecx        # imm = 0x9121B24
                	movl	%ecx, 0x20(%rax)
-               	leaq	<rip>, %rcx
-               	movl	0x20(%rax), %eax
-               	movl	%eax, 0x20(%rcx)
+               	leaq	<rip>, %rdx
+               	movl	%ecx, 0x20(%rdx)
                	leaq	<rip>, %rax
                	movl	$0xa141e28, %ecx        # imm = 0xA141E28
                	movl	%ecx, 0x24(%rax)
-               	leaq	<rip>, %rcx
-               	movl	0x24(%rax), %eax
-               	movl	%eax, 0x24(%rcx)
+               	leaq	<rip>, %rdx
+               	movl	%ecx, 0x24(%rdx)
                	leaq	<rip>, %rax
                	movl	$0xb16212c, %ecx        # imm = 0xB16212C
                	movl	%ecx, 0x28(%rax)
-               	leaq	<rip>, %rcx
-               	movl	0x28(%rax), %eax
-               	movl	%eax, 0x28(%rcx)
+               	leaq	<rip>, %rdx
+               	movl	%ecx, 0x28(%rdx)
                	leaq	<rip>, %rax
                	movl	$0xc182430, %ecx        # imm = 0xC182430
                	movl	%ecx, 0x2c(%rax)
-               	leaq	<rip>, %rcx
-               	movl	0x2c(%rax), %eax
-               	movl	%eax, 0x2c(%rcx)
+               	leaq	<rip>, %rdx
+               	movl	%ecx, 0x2c(%rdx)
                	leaq	<rip>, %rax
                	movl	$0xd1a2734, %ecx        # imm = 0xD1A2734
                	movl	%ecx, 0x30(%rax)
-               	leaq	<rip>, %rcx
-               	movl	0x30(%rax), %eax
-               	movl	%eax, 0x30(%rcx)
+               	leaq	<rip>, %rdx
+               	movl	%ecx, 0x30(%rdx)
                	leaq	<rip>, %rax
                	movl	$0xe1c2a38, %ecx        # imm = 0xE1C2A38
                	movl	%ecx, 0x34(%rax)
-               	leaq	<rip>, %rcx
-               	movl	0x34(%rax), %eax
-               	movl	%eax, 0x34(%rcx)
+               	leaq	<rip>, %rdx
+               	movl	%ecx, 0x34(%rdx)
                	leaq	<rip>, %rax
                	movl	$0xf1e2d3c, %ecx        # imm = 0xF1E2D3C
                	movl	%ecx, 0x38(%rax)
-               	leaq	<rip>, %rcx
-               	movl	0x38(%rax), %eax
-               	movl	%eax, 0x38(%rcx)
+               	leaq	<rip>, %rdx
+               	movl	%ecx, 0x38(%rdx)
                	leaq	<rip>, %rax
                	movl	$0x10203040, %ecx       # imm = 0x10203040
                	movl	%ecx, 0x3c(%rax)
-               	leaq	<rip>, %rcx
-               	movl	0x3c(%rax), %eax
-               	movl	%eax, 0x3c(%rcx)
+               	leaq	<rip>, %rdx
+               	movl	%ecx, 0x3c(%rdx)
                	leaq	<rip>, %rbx
                	movl	$0x20, %r12d
                	leaq	0x20(%rbx), %rsi

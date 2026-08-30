@@ -44,5 +44,4 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	xorq	%rax, %rax
                	movl	%eax, (%rcx)
-               	movslq	%eax, %rax
                	retq

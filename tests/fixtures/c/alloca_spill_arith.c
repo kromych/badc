@@ -2,21 +2,25 @@
    carries a wide live set of integers through arithmetic and
    comparisons, so the allocator parks operands in spill slots. Once
    alloca moves the stack pointer, those slots must be read through the
-   frame pointer; an sp-relative read would take the wrong bytes. Values
-   are seeded from the alloca'd buffer so nothing folds away. Exercised
-   at -O0 and -O and under BADC_MAX_GPR=2 BADC_MAX_FPR=2. Returns 42. */
+   frame pointer; an sp-relative read would take the wrong bytes. The
+   bytes come from a volatile object, whose read is performed as written
+   (C99 6.7.3p6), so the buffer holds values no fold answers and the
+   arithmetic below stays live. Exercised at -O0 and -O and under
+   BADC_MAX_GPR=2 BADC_MAX_FPR=2. Returns 42. */
 #include <alloca.h>
+
+static volatile unsigned char seed[7] = {1, 2, 3, 4, 5, 6, 7};
 
 int main(void) {
     long n = 1L << 16;
     unsigned char *p = (unsigned char *)alloca(n);
-    p[0] = 1;
-    p[1] = 2;
-    p[2] = 3;
-    p[3] = 4;
-    p[4] = 5;
-    p[5] = 6;
-    p[n - 1] = 7;
+    p[0] = seed[0];
+    p[1] = seed[1];
+    p[2] = seed[2];
+    p[3] = seed[3];
+    p[4] = seed[4];
+    p[5] = seed[5];
+    p[n - 1] = seed[6];
 
     long a = p[0], b = p[1], c = p[2], d = p[3], e = p[4], f = p[5];
     long g = a + b, h = c + d, i = e + f;

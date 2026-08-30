@@ -50,15 +50,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movl	$0x1, %ecx
                	movl	%ecx, (%rax)
-               	movl	(%rax), %eax
-               	xorq	$0x1, %rax
-               	movl	%eax, %eax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x7, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
                	xorq	%rax, %rax
                	addq	$0x10, %rsp
                	popq	%rbp

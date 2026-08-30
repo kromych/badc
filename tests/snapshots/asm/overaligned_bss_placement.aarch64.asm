@@ -63,8 +63,7 @@ Disassembly of section .text:
                	add	x1, x1, x2
                	ldrb	w2, [x3]
                	add	x1, x1, x2
-               	sxtw	x2, w0
-               	add	x1, x1, x2
+               	add	x1, x1, #0x4
                	cmp	w1, #0xa
                	b.ne	<addr>
                	mov	x0, #0x0                // =0

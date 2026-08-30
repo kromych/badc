@@ -91,17 +91,6 @@ Disassembly of section .text:
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
                	strh	w0, [x4]
-               	sxth	x0, w0
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	cmp	w0, w17
-               	b.eq	<addr>
-               	mov	x0, #0x63               // =99
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
-               	ret
                	mov	x0, x4
                	bl	<addr>
                	uxtb	w0, w0

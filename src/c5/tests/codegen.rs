@@ -8383,6 +8383,159 @@ fn out_of_range_shift_count_does_not_feed_a_constant_p_guard() {
     }
 }
 
+/// A build-time assertion written on a member the function has just
+/// assigned must fold at `-O`: the store's constant answers the read
+/// back of the same location, the guard becomes constant, and the
+/// unreachable assert call goes with its block. The kernel's
+/// `BUILD_BUG_ON(!is_power_of_2(virtvdev->bar0_virtual_buf_size))` is
+/// this shape -- a `u8` member, so the read back is an unsigned narrow
+/// one, and the guard's second half sits past a branch the first half
+/// decides. A member whose value is not a power of two keeps its call,
+/// and without `-O` both calls stay, as they do under gcc.
+#[test]
+fn member_store_constant_guarded_assert_call_folds_away() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
+    const SRC: &str = "\
+        extern void __compiletime_assert_761(void) __attribute__((__error__(\"not a power of 2\")));\n\
+        extern void __compiletime_assert_762(void) __attribute__((__error__(\"held\")));\n\
+        struct dev { void *buf; unsigned char size; };\n\
+        static int config_size(unsigned short device) { (void)device; return 8; }\n\
+        void init(struct dev *d, unsigned short device) {\n\
+            d->size = 24 + config_size(device);\n\
+            if (!(d->size != 0 && ((d->size & (d->size - 1)) == 0)))\n\
+                __compiletime_assert_761();\n\
+        }\n\
+        void init_bad(struct dev *d, unsigned short device) {\n\
+            d->size = 24 + config_size(device) + 1;\n\
+            if (!(d->size != 0 && ((d->size & (d->size - 1)) == 0)))\n\
+                __compiletime_assert_762();\n\
+        }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let prog = crate::Compiler::with_options(
+            alloc::string::String::from(SRC),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile for {target:?}: {e}"));
+        let opt = emit_native_with_options(
+            &prog,
+            target,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..NativeOptions::new().with_optimize()
+            },
+        )
+        .unwrap_or_else(|e| panic!("emit -O for {target:?}: {e}"));
+        let syms = elf_symbol_shndx(&opt);
+        assert!(
+            !syms.iter().any(|(n, _)| n == "__compiletime_assert_761"),
+            "{target:?}: the member's stored constant must decide the guard"
+        );
+        assert!(
+            syms.iter().any(|(n, _)| n == "__compiletime_assert_762"),
+            "{target:?}: a guard that holds must keep its call"
+        );
+        let plain = emit_native_with_options(
+            &prog,
+            target,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..NativeOptions::new()
+            },
+        )
+        .unwrap_or_else(|e| panic!("emit -O0 for {target:?}: {e}"));
+        let syms = elf_symbol_shndx(&plain);
+        assert!(
+            syms.iter().any(|(n, _)| n == "__compiletime_assert_761"),
+            "{target:?}: without -O the guard stays a runtime test"
+        );
+    }
+}
+
+/// `__builtin_constant_p` over a marker pointer must answer 1 once the
+/// splices that carry the marker have happened. The kernel's
+/// `BUILD_BUG_ON(!__builtin_constant_p(tmo == libeth_xsktmo))` reaches
+/// its query through an `always_inline` body that holds a call of its
+/// own returning a struct by value, and through a function-pointer
+/// parameter the splice turns into a direct call. A site whose marker
+/// is a runtime argument keeps its call, and without `-O` both stay,
+/// as they do under gcc.
+#[test]
+fn constant_p_marker_folds_through_an_aggregate_returning_splice() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
+    const SRC: &str = "\
+        struct desc { unsigned long addr; unsigned len; };\n\
+        extern void __compiletime_assert_905(void) __attribute__((__error__(\"not constant\")));\n\
+        extern void __compiletime_assert_906(void) __attribute__((__error__(\"held\")));\n\
+        #define MARKER ((const void *)0x9e37fffffffc0001ull)\n\
+        static struct desc raw(unsigned i) { struct desc d; d.addr = i; d.len = i; return d; }\n\
+        static inline __attribute__((always_inline)) struct desc fill(unsigned i, unsigned long long priv) {\n\
+            struct desc d = raw(i);\n\
+            const void *tmo = (const void *)(unsigned long)priv;\n\
+            if (!__builtin_constant_p(tmo == MARKER)) __compiletime_assert_905();\n\
+            d.len += (tmo == MARKER) ? 1u : 0u;\n\
+            return d;\n\
+        }\n\
+        static inline __attribute__((always_inline)) struct desc fill_rt(unsigned i, unsigned long long priv) {\n\
+            struct desc d = raw(i);\n\
+            const void *tmo = (const void *)(unsigned long)priv;\n\
+            if (!__builtin_constant_p(tmo == MARKER)) __compiletime_assert_906();\n\
+            d.len += (tmo == MARKER) ? 1u : 0u;\n\
+            return d;\n\
+        }\n\
+        static inline __attribute__((always_inline)) unsigned bulk(unsigned n, unsigned long long priv,\n\
+                struct desc (*f)(unsigned, unsigned long long)) {\n\
+            unsigned t = 0;\n\
+            for (unsigned i = 0; i < n; i++) t += f(i, priv).len;\n\
+            return t;\n\
+        }\n\
+        unsigned sink;\n\
+        void top(unsigned n) { sink = bulk(n, (unsigned long long)(unsigned long)MARKER, fill); }\n\
+        void top_rt(unsigned n, unsigned long long priv) { sink = bulk(n, priv, fill_rt); }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let prog = crate::Compiler::with_options(
+            alloc::string::String::from(SRC),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile for {target:?}: {e}"));
+        let opt = emit_native_with_options(
+            &prog,
+            target,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..NativeOptions::new().with_optimize()
+            },
+        )
+        .unwrap_or_else(|e| panic!("emit -O for {target:?}: {e}"));
+        let syms = elf_symbol_shndx(&opt);
+        assert!(
+            !syms.iter().any(|(n, _)| n == "__compiletime_assert_905"),
+            "{target:?}: the marker must reach the query through the splices"
+        );
+        assert!(
+            syms.iter().any(|(n, _)| n == "__compiletime_assert_906"),
+            "{target:?}: a runtime marker must keep its call"
+        );
+        let plain = emit_native_with_options(
+            &prog,
+            target,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..NativeOptions::new()
+            },
+        )
+        .unwrap_or_else(|e| panic!("emit -O0 for {target:?}: {e}"));
+        let syms = elf_symbol_shndx(&plain);
+        assert!(
+            syms.iter().any(|(n, _)| n == "__compiletime_assert_905"),
+            "{target:?}: without -O the query answers 0 and the call stays"
+        );
+    }
+}
+
 /// `(offset, symbol name, addend)` for every `.rela.text` entry whose
 /// type is `R_X86_64_PLT32` (4): the branches this unit leaves for the
 /// linker to resolve by name.

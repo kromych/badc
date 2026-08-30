@@ -113,15 +113,6 @@ Disassembly of section .text:
                	jl	<addr>
                	movabsq	$-0x1, %rax
                	movw	%ax, (%rdi)
-               	movswq	%ax, %rax
-               	cmpl	$-0x1, %eax
-               	je	<addr>
-               	movl	$0x63, %eax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
                	xorl	%eax, %eax
                	callq	<addr>
                	movzbq	%al, %rax

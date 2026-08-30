@@ -33,10 +33,15 @@
 //! with nothing else in scope, so no parameter range depends on another
 //! function's, and a recursive or mutually recursive call contributes
 //! its argument like any other site -- one pass, no fixed point.
-//! TODO: a loop-counter argument reads as a phi over frame-cell
-//! reloads, which the shape rule cannot bound; bounding it needs
-//! either cell-aware definition ranges or complete peeling of the
-//! multi-exit counted loops that feed such sites.
+//! TODO: an argument that is a counted loop's induction variable stays
+//! unbounded. Definition ranges do not close it -- the counter's phi
+//! ascends, and widening sends the endpoint that moves to the register
+//! limit, from where the increment's narrowing extend pushes the other
+//! endpoint out too -- and the loop guard's own fact lands on the masked
+//! comparison operand, not on the value the call passes. Complete
+//! peeling of the loop does close it, and the counted loops that feed
+//! such sites have a second exit, which `super::unroll` does not
+//! expand.
 
 use super::value_range::{Range, UNIVERSE};
 use crate::c5::ir::{FunctionSsa, Inst, LoadKind, NO_VALUE, ValueId};

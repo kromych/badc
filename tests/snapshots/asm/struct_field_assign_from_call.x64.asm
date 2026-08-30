@@ -37,7 +37,7 @@ Disassembly of section .text:
                	movq	%rdx, 0x8(%rax)
                	movl	%ecx, 0x24(%rax)
                	movq	%rdx, 0x18(%rax)
-               	cmpq	%rdx, %rsi
+               	cmpq	$0x1234abcd, %rsi       # imm = 0x1234ABCD
                	jne	<addr>
                	movl	$0x1, %ecx
                	testq	%rcx, %rcx
@@ -61,29 +61,9 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	movq	0x18(%rax), %rdx
-               	cmpq	%rdx, %rdi
+               	cmpq	$0x1234abcd, %rdi       # imm = 0x1234ABCD
                	jne	<addr>
                	movl	$0x2, %ecx
-               	jmp	<addr>
-               	movq	0x8(%rax), %rdx
-               	cmpq	$0x1234abcd, %rdx       # imm = 0x1234ABCD
-               	je	<addr>
-               	movl	$0x3, %ecx
-               	jmp	<addr>
-               	movq	0x18(%rax), %rdx
-               	cmpq	$0x1234abcd, %rdx       # imm = 0x1234ABCD
-               	je	<addr>
-               	jmp	<addr>
-               	movslq	0x14(%rax), %rcx
-               	cmpl	$0x4, %ecx
-               	je	<addr>
-               	movl	$0x5, %ecx
-               	jmp	<addr>
-               	movslq	0x24(%rax), %rcx
-               	cmpl	$0x4, %ecx
-               	je	<addr>
-               	movl	$0x6, %ecx
                	jmp	<addr>
                	xorq	%rcx, %rcx
                	jmp	<addr>

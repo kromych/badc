@@ -50,24 +50,6 @@ Disassembly of section .text:
                	ldr	x19, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30
                	ret
-               	ldr	x0, [x21]
-               	mov	x17, #0x3ff0000000000000 // =4607182418800017408
-               	cmp	x0, x17
-               	b.eq	<addr>
-               	mov	x0, #0x5                // =5
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x30
-               	ret
-               	ldr	x0, [x21, #0x8]
-               	mov	x17, #0x4000000000000000 // =4611686018427387904
-               	cmp	x0, x17
-               	b.eq	<addr>
-               	mov	x0, #0x6                // =6
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x19, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x30
-               	ret
                	mov	x0, x20
                	bl	<addr>
                	uxtb	w0, w0

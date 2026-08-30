@@ -45,10 +45,7 @@ Disassembly of section .text:
                	movq	%rax, %rsp
                	movl	$0x7, %ecx
                	movq	%rcx, (%rax)
-               	movq	(%rax), %rax
-               	subq	$0x7, %rax
-               	addq	$0x0, %rax
-               	movslq	%eax, %rax
+               	xorq	%rax, %rax
                	leaq	-0x60(%rbp), %rsp
                	addq	$0x60, %rsp
                	popq	%rbp

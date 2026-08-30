@@ -94,19 +94,19 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x17, #0x3fff            // =16383
-               	add	x1, x0, x17
-               	mov	x0, #0x7                // =7
-               	strb	w0, [x1]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
+               	add	x0, x0, x17
+               	mov	x1, #0x7                // =7
+               	strb	w1, [x0]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
                	mov	x3, #0x5                // =5
-               	str	x3, [x0, #0x38]
-               	ldr	x4, [x2]
+               	str	x3, [x1, #0x38]
+               	ldr	x1, [x2]
                	ldr	x2, [x2, #0xff8]
-               	add	x2, x4, x2
-               	ldrb	w1, [x1]
-               	add	x1, x2, x1
-               	add	x0, x1, x3
+               	add	x1, x1, x2
+               	ldrb	w0, [x0]
+               	add	x0, x1, x0
+               	add	x0, x0, #0x5
                	cmp	x0, #0x16
                	b.eq	<addr>
                	mov	x0, #0x8                // =8

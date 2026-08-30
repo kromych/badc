@@ -32,21 +32,21 @@ Disassembly of section .text:
                	str	x19, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
-               	mrs	x1, TPIDR_EL0
-               	add	x1, x1, #0x0, lsl #12   // =0x0
-               	add	x1, x1, #0x18
-               	mov	x0, #0x5                // =5
-               	strb	w0, [x1, #0x3]
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
-               	add	x0, x0, #0x58
+               	add	x0, x0, #0x18
+               	mov	x1, #0x5                // =5
+               	strb	w1, [x0, #0x3]
+               	mrs	x1, TPIDR_EL0
+               	add	x1, x1, #0x0, lsl #12   // =0x0
+               	add	x1, x1, #0x58
                	mov	x2, #0x9                // =9
-               	str	x2, [x0]
-               	mov	x3, #0xb                // =11
-               	str	x3, [x0, #0x8]
-               	ldrb	w1, [x1, #0x3]
-               	add	x1, x1, x2
-               	add	x0, x1, x3
+               	str	x2, [x1]
+               	mov	x2, #0xb                // =11
+               	str	x2, [x1, #0x8]
+               	ldrb	w0, [x0, #0x3]
+               	add	x0, x0, #0x9
+               	add	x0, x0, #0xb
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x19, [sp], #0x20
                	ret

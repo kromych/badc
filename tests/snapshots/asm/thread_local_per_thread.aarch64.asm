@@ -28,13 +28,6 @@ Disassembly of section .text:
                	ret
                	mov	x1, #0x63               // =99
                	str	w1, [x0]
-               	sxtw	x1, w1
-               	cmp	w1, #0x63
-               	b.eq	<addr>
-               	mov	x0, #0xbad2             // =47826
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x19, [sp], #0x20
-               	ret
                	ldrsw	x0, [x0]
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x19, [sp], #0x20

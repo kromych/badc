@@ -51,43 +51,37 @@ fn ent_pc=3 n_params=0 variadic=false locals=3
     v45  Imm(0)                                           -> x0
     terminator Jmp(b1)   (exit_acc=v45)
   block 1  start_pc=0
-    v47  Imm(0)                                           -> x2
+    v47  Imm(0)                                           -> x1
     v48  StoreLocal { off=-1, value=v47, kind=I64 }       -> -
     v49  LocalAddr(-1)                                    -> x0
-    v50  Imm(21)                                          -> x1
+    v50  Imm(21)                                          -> x2
     v51  Store { addr=v49, disp=0, value=v50, kind=I64 }  -> -
-    v52  Load { addr=v49, disp=0, kind=I64 }              -> x6
-    v53  Load { addr=v49, disp=0, kind=I64 }              -> x6
-    v54  Binop { op=add, lhs=v50, rhs=v50 }               -> x1
-    v55  Imm(42)                                          -> x6
-    v56  Imm(180388626432)                                -> x6
-    v57  BinopI { op=ne, lhs=v54, rhs_imm=42 }            -> x1
-    terminator Bz { cond=v57, target=b3, fall=b2 }   (exit_acc=v57)
+    v52  Imm(21)                                          -> x2
+    v53  Imm(21)                                          -> x2
+    v54  Imm(42)                                          -> x2
+    v55  Imm(42)                                          -> x2
+    v56  Imm(180388626432)                                -> x2
+    v57  Imm(0)                                           -> x2
+    terminator Jmp(b2)   (exit_acc=v57)
   block 2  start_pc=0
-    v58  Imm(2)                                           -> x0
-    terminator Return(v58)   (exit_acc=v58)
-  block 3  start_pc=0
-    v59  Imm(5)                                           -> x1
+    v59  Imm(5)                                           -> x2
     v60  StoreLocal { off=-1, value=v59, kind=I64 }       -> -
-    v61  LocalAddr(-1)                                    -> x1
-    v62  Imm(9)                                           -> x1
-    v63  Imm(9)                                           -> x1
+    v61  LocalAddr(-1)                                    -> x2
+    v62  Imm(9)                                           -> x2
+    v63  Imm(9)                                           -> x2
     v64  Store { addr=v49, disp=0, value=v63, kind=I64 }  -> -
     v65  Store { addr=v49, disp=0, value=v63, kind=I64 }  -> -
-    v66  Load { addr=v49, disp=0, kind=I64 }              -> x6
-    v67  Load { addr=v49, disp=0, kind=I64 }              -> x6
-    v68  Binop { op=add, lhs=v63, rhs=v63 }               -> x6
-    v69  BinopI { op=add, lhs=v68, rhs_imm=0 }            -> x6
-    v70  Load { addr=v49, disp=0, kind=I64 }              -> x0
-    v71  Binop { op=add, lhs=v69, rhs=v63 }               -> x0
-    v72  Imm(27)                                          -> x1
-    v73  Imm(115964116992)                                -> x1
-    v74  BinopI { op=ne, lhs=v71, rhs_imm=27 }            -> x0
-    terminator Bz { cond=v74, target=b5, fall=b4 }   (exit_acc=v74)
-  block 4  start_pc=0
-    v75  Imm(3)                                           -> x0
-    terminator Return(v75)   (exit_acc=v75)
-  block 5  start_pc=0
+    v66  Imm(9)                                           -> x0
+    v67  Imm(9)                                           -> x0
+    v68  Imm(18)                                          -> x0
+    v69  Imm(18)                                          -> x0
+    v70  Imm(9)                                           -> x0
+    v71  Imm(27)                                          -> x0
+    v72  Imm(27)                                          -> x0
+    v73  Imm(115964116992)                                -> x0
+    v74  Imm(0)                                           -> x0
+    terminator Jmp(b3)   (exit_acc=v74)
+  block 3  start_pc=0
     v76  Imm(0)                                           -> x0
     terminator Return(v47)   (exit_acc=v47)
 ; --- SSA dump (ok=true) ent_pc=0 ---

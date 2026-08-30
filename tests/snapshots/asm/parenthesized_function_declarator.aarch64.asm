@@ -31,11 +31,6 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	mov	x1, #0xa                // =10
                	str	w1, [x0]
-               	ldrsw	x0, [x0]
-               	cmp	w0, #0xa
-               	cset	x0, ne
-               	cbz	x0, <addr>
-               	mov	x0, #0x2                // =2
-               	ret
                	mov	x0, #0x0                // =0
+               	mov	x1, x0
                	ret

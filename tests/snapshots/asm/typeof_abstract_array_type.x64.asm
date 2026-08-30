@@ -79,25 +79,12 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movl	$0x9, %ecx
                	movq	%rcx, 0x10(%rax)
-               	cmpq	$0x9, %rcx
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
                	xorq	%rax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x3, %eax
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
-               	movq	(%rsp), %rbx
-               	addq	$0x40, %rsp
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
                	movq	%rax, %rdx

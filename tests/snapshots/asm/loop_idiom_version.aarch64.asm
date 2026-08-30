@@ -715,150 +715,134 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	add	x1, x0, #0x0
-               	mov	x2, #0x304              // =772
-               	movk	x2, #0x102, lsl #16
-               	str	w2, [x1]
+               	add	x2, x0, #0x0
+               	mov	x1, #0x304              // =772
+               	movk	x1, #0x102, lsl #16
+               	str	w1, [x2]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	add	x2, x2, #0x0
-               	ldr	w0, [x1]
-               	str	w0, [x2]
+               	str	w1, [x2]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, #0x608              // =1544
                	movk	x1, #0x204, lsl #16
                	str	w1, [x0, #0x4]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	w0, [x0, #0x4]
-               	str	w0, [x1, #0x4]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	str	w1, [x2, #0x4]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, #0x90c              // =2316
                	movk	x1, #0x306, lsl #16
                	str	w1, [x0, #0x8]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	w0, [x0, #0x8]
-               	str	w0, [x1, #0x8]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	str	w1, [x2, #0x8]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, #0xc10              // =3088
                	movk	x1, #0x408, lsl #16
                	str	w1, [x0, #0xc]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	w0, [x0, #0xc]
-               	str	w0, [x1, #0xc]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	str	w1, [x2, #0xc]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, #0xf14              // =3860
                	movk	x1, #0x50a, lsl #16
                	str	w1, [x0, #0x10]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	w0, [x0, #0x10]
-               	str	w0, [x1, #0x10]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	str	w1, [x2, #0x10]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, #0x1218             // =4632
                	movk	x1, #0x60c, lsl #16
                	str	w1, [x0, #0x14]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	w0, [x0, #0x14]
-               	str	w0, [x1, #0x14]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	str	w1, [x2, #0x14]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, #0x151c             // =5404
                	movk	x1, #0x70e, lsl #16
                	str	w1, [x0, #0x18]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	w0, [x0, #0x18]
-               	str	w0, [x1, #0x18]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	str	w1, [x2, #0x18]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, #0x1820             // =6176
                	movk	x1, #0x810, lsl #16
                	str	w1, [x0, #0x1c]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	w0, [x0, #0x1c]
-               	str	w0, [x1, #0x1c]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	str	w1, [x2, #0x1c]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, #0x1b24             // =6948
                	movk	x1, #0x912, lsl #16
                	str	w1, [x0, #0x20]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	w0, [x0, #0x20]
-               	str	w0, [x1, #0x20]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	str	w1, [x2, #0x20]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, #0x1e28             // =7720
                	movk	x1, #0xa14, lsl #16
                	str	w1, [x0, #0x24]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	w0, [x0, #0x24]
-               	str	w0, [x1, #0x24]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	str	w1, [x2, #0x24]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, #0x212c             // =8492
                	movk	x1, #0xb16, lsl #16
                	str	w1, [x0, #0x28]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	w0, [x0, #0x28]
-               	str	w0, [x1, #0x28]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	str	w1, [x2, #0x28]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, #0x2430             // =9264
                	movk	x1, #0xc18, lsl #16
                	str	w1, [x0, #0x2c]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	w0, [x0, #0x2c]
-               	str	w0, [x1, #0x2c]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	str	w1, [x2, #0x2c]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, #0x2734             // =10036
                	movk	x1, #0xd1a, lsl #16
                	str	w1, [x0, #0x30]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	w0, [x0, #0x30]
-               	str	w0, [x1, #0x30]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	str	w1, [x2, #0x30]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, #0x2a38             // =10808
                	movk	x1, #0xe1c, lsl #16
                	str	w1, [x0, #0x34]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	w0, [x0, #0x34]
-               	str	w0, [x1, #0x34]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	str	w1, [x2, #0x34]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, #0x2d3c             // =11580
                	movk	x1, #0xf1e, lsl #16
                	str	w1, [x0, #0x38]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	w0, [x0, #0x38]
-               	str	w0, [x1, #0x38]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	str	w1, [x2, #0x38]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, #0x3040             // =12352
                	movk	x1, #0x1020, lsl #16
                	str	w1, [x0, #0x3c]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	w0, [x0, #0x3c]
-               	str	w0, [x1, #0x3c]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	str	w1, [x2, #0x3c]
                	adrp	x20, <page>
                	add	x20, x20, <lo12>
                	mov	x22, #0x20              // =32

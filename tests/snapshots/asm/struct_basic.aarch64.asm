@@ -21,15 +21,9 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x1, #0x3                // =3
                	str	w1, [x0]
-               	mov	x2, #0x4                // =4
-               	str	w2, [x0, #0x4]
-               	sxtw	x3, w1
-               	sxtw	x1, w1
-               	sxtw	x0, w2
-               	sxtw	x2, w2
-               	mul	x0, x0, x2
-               	madd	x0, x3, x1, x0
-               	sxtw	x0, w0
+               	mov	x1, #0x4                // =4
+               	str	w1, [x0, #0x4]
+               	mov	x0, #0x19               // =25
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x19, [sp], #0x20
                	ret

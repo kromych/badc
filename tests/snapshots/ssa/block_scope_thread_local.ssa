@@ -18,23 +18,23 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   TlsAddr(8)                                       -> x1
-    v2   Imm(3)                                           -> x0
-    v3   BinopI { op=add, lhs=v1, rhs_imm=3 }             -> x0
-    v4   Imm(5)                                           -> x0
+    v1   TlsAddr(8)                                       -> x0
+    v2   Imm(3)                                           -> x1
+    v3   BinopI { op=add, lhs=v1, rhs_imm=3 }             -> x1
+    v4   Imm(5)                                           -> x1
     v5   Store { addr=v1, disp=3, value=v4, kind=I8 }     -> -
-    v6   Imm(360287970189639680)                          -> x0
-    v7   TlsAddr(72)                                      -> x0
+    v6   Imm(360287970189639680)                          -> x1
+    v7   TlsAddr(72)                                      -> x1
     v8   Imm(9)                                           -> x2
     v9   Store { addr=v7, disp=0, value=v8, kind=I64 }    -> -
-    v10  BinopI { op=add, lhs=v7, rhs_imm=8 }             -> x6
-    v11  Imm(11)                                          -> x6
+    v10  BinopI { op=add, lhs=v7, rhs_imm=8 }             -> x2
+    v11  Imm(11)                                          -> x2
     v12  Store { addr=v7, disp=8, value=v11, kind=I64 }   -> -
-    v13  Load { addr=v1, disp=3, kind=I8 }                -> x1
-    v14  Load { addr=v7, disp=0, kind=I64 }               -> x7
-    v15  Binop { op=add, lhs=v13, rhs=v8 }                -> x1
-    v16  Load { addr=v7, disp=8, kind=I64 }               -> x0
-    v17  Binop { op=add, lhs=v15, rhs=v11 }               -> x0
+    v13  Load { addr=v1, disp=3, kind=I8 }                -> x0
+    v14  Imm(9)                                           -> x1
+    v15  BinopI { op=add, lhs=v13, rhs_imm=9 }            -> x0
+    v16  Imm(11)                                          -> x1
+    v17  BinopI { op=add, lhs=v15, rhs_imm=11 }           -> x0
     terminator Return(v17)   (exit_acc=v17)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=with_bool

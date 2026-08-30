@@ -19,22 +19,18 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
   block 1  start_pc=0
     v12  Imm(7)                                           -> x1
     v13  StoreLocal { off=-3, value=v12, kind=I32 }       -> -
-    v14  Extend { value=v12, kind=I32 }                   -> x1
-    v15  BinopI { op=eq, lhs=v14, rhs_imm=7 }             -> x1
-    terminator Bz { cond=v15, target=b3, fall=b2 }   (exit_acc=v15)
+    v14  Imm(7)                                           -> x1
+    v15  Imm(1)                                           -> x1
+    terminator Jmp(b2)   (exit_acc=v15)
   block 2  start_pc=0
     v16  Imm(0)                                           -> x1
     v17  StoreLocal { off=-3, value=v1, kind=I64 }        -> -
-    terminator Jmp(b4)   (exit_acc=v17)
+    terminator Jmp(b3)   (exit_acc=v17)
   block 3  start_pc=0
-    v18  Imm(1)                                           -> x0
-    v19  StoreLocal { off=-3, value=v18, kind=I64 }       -> -
-    terminator Jmp(b4)   (exit_acc=v19)
-  block 4  start_pc=0
-    v20  LoadLocal { off=-3, kind=I64 }                   -> x0
-    v21  BinopI { op=shl, lhs=v20, rhs_imm=32 }           -> x1
-    v22  Extend { value=v20, kind=I32 }                   -> x0
-    terminator Return(v22)   (exit_acc=v22)
+    v20  Imm(0)                                           -> x1
+    v21  Imm(0)                                           -> x1
+    v22  Imm(0)                                           -> x1
+    terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=ternary
 fn ent_pc=2 n_params=1 variadic=false locals=3
@@ -73,22 +69,18 @@ fn ent_pc=2 n_params=1 variadic=false locals=3
   block 5  start_pc=0
     v21  Imm(2)                                           -> x1
     v22  StoreLocal { off=-3, value=v21, kind=I32 }       -> -
-    v23  Extend { value=v21, kind=I32 }                   -> x1
-    v24  BinopI { op=eq, lhs=v23, rhs_imm=2 }             -> x1
-    terminator Bz { cond=v24, target=b7, fall=b6 }   (exit_acc=v24)
+    v23  Imm(2)                                           -> x1
+    v24  Imm(1)                                           -> x1
+    terminator Jmp(b6)   (exit_acc=v24)
   block 6  start_pc=0
     v25  Imm(0)                                           -> x1
     v26  StoreLocal { off=-3, value=v3, kind=I64 }        -> -
-    terminator Jmp(b8)   (exit_acc=v26)
+    terminator Jmp(b7)   (exit_acc=v26)
   block 7  start_pc=0
-    v27  Imm(1)                                           -> x0
-    v28  StoreLocal { off=-3, value=v27, kind=I64 }       -> -
-    terminator Jmp(b8)   (exit_acc=v28)
-  block 8  start_pc=0
-    v29  LoadLocal { off=-3, kind=I64 }                   -> x0
-    v30  BinopI { op=shl, lhs=v29, rhs_imm=32 }           -> x1
-    v31  Extend { value=v29, kind=I32 }                   -> x0
-    terminator Return(v31)   (exit_acc=v31)
+    v29  Imm(0)                                           -> x1
+    v30  Imm(0)                                           -> x1
+    v31  Imm(0)                                           -> x1
+    terminator Return(v3)   (exit_acc=v3)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main
 fn ent_pc=3 n_params=0 variadic=false locals=0

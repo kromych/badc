@@ -34,14 +34,12 @@ Disassembly of section .text:
                	str	w1, [x2]
                	mov	x1, #0x1                // =1
                	str	w1, [x0, #0x4]
-               	mov	x1, #0x2                // =2
-               	str	w1, [x0, #0x8]
-               	mov	x1, #0x3                // =3
-               	str	w1, [x0, #0xc]
-               	ldrsw	x0, [x0, #0xc]
-               	cmp	w0, #0x3
-               	cset	x0, eq
-               	sxtw	x0, w0
+               	mov	x2, #0x2                // =2
+               	str	w2, [x0, #0x8]
+               	mov	x2, #0x3                // =3
+               	str	w2, [x0, #0xc]
+               	mov	x0, x1
+               	mov	x0, x1
                	sub	sp, x29, #0x20
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp], #0x30

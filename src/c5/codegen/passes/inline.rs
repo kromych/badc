@@ -1127,22 +1127,35 @@ fn is_inline_candidate(
             // aggregate: the splice reproduces it by copying the Call,
             // remapping its arguments and re-interning the layouts its
             // `arg_aggs` name (`rewrite_callee_inst`). `target_pc` names a
-            // same-unit function and stays valid in the caller. An
-            // aggregate return stays rejected -- it delivers into a caller
-            // frame slot (`ret_slot_local`) the splice does not allocate.
-            // A by-value aggregate argument needs no such slot: its address
-            // is one more value operand, and the per-arch call plan lays
-            // the bytes into the outgoing argument area. This lets a
-            // dispatcher whose only non-purity is per-case calls inline; a
-            // constant-argument switch it wraps then folds after the
-            // splice, dropping an otherwise-live unreachable default.
-            Inst::Call { ret_agg, .. } if ret_agg.is_none() => {}
-            // A call through a function pointer in the same shape. The
-            // target is one more value operand for the splice to remap;
-            // the call is opaque -- the target is never spliced and runs
-            // in a frame of its own -- so it constrains neither the
-            // frame-region choice nor cycle membership (`region_key`).
-            Inst::CallIndirect { ret_agg, .. } if ret_agg.is_none() => {}
+            // same-unit function and stays valid in the caller. A by-value
+            // aggregate argument needs no slot: its address is one more
+            // value operand, and the per-arch call plan lays the bytes into
+            // the outgoing argument area. This lets a dispatcher whose only
+            // non-purity is per-case calls inline; a constant-argument
+            // switch it wraps then folds after the splice, dropping an
+            // otherwise-live unreachable default.
+            //
+            // An aggregate return delivers into the callee's own frame slot
+            // named by `ret_slot_local`, which the reloc path relocates with
+            // the rest of the callee's locals -- the same shift its
+            // `LocalAddr` readers take -- so the call reproduces there. The
+            // flat path allocates no region and keeps the rejection.
+            Inst::Call {
+                ret_agg,
+                ret_slot_local,
+                ..
+            }
+            | Inst::CallIndirect {
+                ret_agg,
+                ret_slot_local,
+                ..
+            } if ret_agg.is_none() || (reloc && *ret_slot_local < 0) => {
+                // A call through a function pointer differs only in that the
+                // target is one more value operand for the splice to remap;
+                // the call is opaque -- the target is never spliced and runs
+                // in a frame of its own -- so it constrains neither the
+                // frame-region choice nor cycle membership (`region_key`).
+            }
             // A phi merging values across the callee's own blocks. The
             // multi-block splice translates its incoming values through
             // `callee_remap` and shifts its predecessor block ids into the
@@ -1664,6 +1677,22 @@ pub(super) fn remap_inst_operands(inst: &mut Inst, remap: &[ValueId]) {
     inst.for_each_operand_mut(|v| *v = map_v(*v, remap));
 }
 
+/// Relocate a spliced call's aggregate-return frame slot by the region
+/// the callee's own locals moved to. A slot that is not a callee own
+/// local (`>= 0`) is not relocated and the candidate filter refused the
+/// body holding it.
+fn shift_ret_slot(inst: &mut Inst, region_base: i64) {
+    let slot = match inst {
+        Inst::Call { ret_slot_local, .. }
+        | Inst::CallIndirect { ret_slot_local, .. }
+        | Inst::CallExt { ret_slot_local, .. } => ret_slot_local,
+        _ => return,
+    };
+    if *slot < 0 {
+        *slot -= region_base;
+    }
+}
+
 /// Translate a callee inst into the caller's value space. `ParamRef`
 /// resolves to the matching call-site argument; every other operand
 /// runs through `callee_remap`. `args` is already in the caller's
@@ -1861,14 +1890,26 @@ fn splice_arg_addresses(
 /// a copied instruction that names a callee layout would otherwise
 /// index whatever sits at that position in the caller.
 fn remap_inst_agg_descs(inst: &mut Inst, agg_map: &[u32]) {
-    let arg_aggs = match inst {
-        Inst::Call { arg_aggs, .. }
-        | Inst::CallIndirect { arg_aggs, .. }
-        | Inst::CallExt { arg_aggs, .. } => arg_aggs,
+    let (arg_aggs, ret_agg) = match inst {
+        Inst::Call {
+            arg_aggs, ret_agg, ..
+        }
+        | Inst::CallIndirect {
+            arg_aggs, ret_agg, ..
+        }
+        | Inst::CallExt {
+            arg_aggs, ret_agg, ..
+        } => (arg_aggs, ret_agg),
         _ => return,
     };
     for a in arg_aggs.iter_mut().flatten() {
         *a = agg_map[*a as usize];
+    }
+    // The return layout decides the call's return convention, so a
+    // spliced call whose callee returns an aggregate re-interns it with
+    // the arguments'.
+    if let Some(r) = ret_agg.as_mut() {
+        *r = agg_map[*r as usize];
     }
 }
 
@@ -2734,9 +2775,13 @@ fn splice_multi_block(
                     }
                     _ => {}
                 }
-                if let Some(translated) =
+                if let Some(mut translated) =
                     rewrite_callee_inst(cinst, &remapped_args, &callee_remap, &agg_map)
                 {
+                    // A nested call's aggregate-return slot is a callee own
+                    // local; it takes the region shift its `LocalAddr`
+                    // readers take just above.
+                    shift_ret_slot(&mut translated, region_base);
                     let new_id = new_insts.len() as u32;
                     callee_remap[ce_pc as usize] = new_id;
                     new_insts.push(translated);

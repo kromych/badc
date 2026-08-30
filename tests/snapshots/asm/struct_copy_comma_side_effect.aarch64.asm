@@ -34,7 +34,6 @@ Disassembly of section .text:
                	strb	w10, [x2, #0xb]
                	ldr	x10, [sp], #0x10
                	str	w0, [x1]
-               	sxtw	x0, w0
                	ret
 
 <via_global_member>:
@@ -79,7 +78,6 @@ Disassembly of section .text:
                	strb	w10, [x2, #0xb]
                	ldr	x10, [sp], #0x10
                	strb	w0, [x1]
-               	sxtb	x0, w0
                	ret
 
 <main>:

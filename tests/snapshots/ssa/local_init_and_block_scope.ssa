@@ -37,7 +37,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v26  Imm(0)                                           -> x0
     terminator Jmp(b4)   (exit_acc=v26)
   block 4  start_pc=0
-    v28  LoadLocal { off=-3, kind=I32 }                   -> x0
+    v28  Imm(1)                                           -> x0
     v29  LoadLocal { off=-4, kind=I32 }                   -> x0
     v30  Imm(3)                                           -> x0
     v31  Imm(12884901888)                                 -> x0
@@ -49,7 +49,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v37  Imm(0)                                           -> x0
     terminator Jmp(b5)   (exit_acc=v37)
   block 5  start_pc=0
-    v38  LoadLocal { off=-3, kind=I32 }                   -> x0
+    v38  Imm(1)                                           -> x0
     v39  LoadLocal { off=-4, kind=I32 }                   -> x0
     v40  LoadLocal { off=-4, kind=I32 }                   -> x0
     v41  Imm(1)                                           -> x0

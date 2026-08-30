@@ -40,19 +40,19 @@ Disassembly of section .text:
 <array_and_struct>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movq	%fs:0x0, %rcx
-               	addq	$-0x58, %rcx
-               	movl	$0x5, %eax
-               	movb	%al, 0x3(%rcx)
                	movq	%fs:0x0, %rax
-               	addq	$-0x18, %rax
+               	addq	$-0x58, %rax
+               	movl	$0x5, %ecx
+               	movb	%cl, 0x3(%rax)
+               	movq	%fs:0x0, %rcx
+               	addq	$-0x18, %rcx
                	movl	$0x9, %edx
-               	movq	%rdx, (%rax)
-               	movl	$0xb, %esi
-               	movq	%rsi, 0x8(%rax)
-               	movsbq	0x3(%rcx), %rcx
-               	addq	%rdx, %rcx
-               	leaq	(%rcx,%rsi), %rax
+               	movq	%rdx, (%rcx)
+               	movl	$0xb, %edx
+               	movq	%rdx, 0x8(%rcx)
+               	movsbq	0x3(%rax), %rax
+               	addq	$0x9, %rax
+               	addq	$0xb, %rax
                	popq	%rbp
                	retq
 

@@ -43,11 +43,9 @@ Disassembly of section .text:
                	sub	x0, x29, #0x8
                	mov	x1, #0xe                // =14
                	str	w1, [x0]
-               	sxtw	x1, w1
-               	add	x1, x1, #0xe
+               	mov	x1, #0x1c               // =28
                	str	w1, [x0]
-               	sxtw	x1, w1
-               	add	x1, x1, #0xe
+               	mov	x1, #0x2a               // =42
                	str	w1, [x0]
                	ldursw	x0, [x29, #-0x8]
                	add	sp, sp, #0x10

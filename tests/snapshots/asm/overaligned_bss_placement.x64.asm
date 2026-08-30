@@ -73,8 +73,7 @@ Disassembly of section .text:
                	addq	%rdx, %rcx
                	movzbq	(%rsi), %rdx
                	addq	%rdx, %rcx
-               	movslq	%eax, %rdx
-               	addq	%rdx, %rcx
+               	addq	$0x4, %rcx
                	cmpl	$0xa, %ecx
                	jne	<addr>
                	xorq	%rax, %rax

@@ -228,16 +228,10 @@ Disassembly of section .text:
                	movq	-0x50(%rbp), %rsi
                	movq	-0x48(%rbp), %rdi
                	movq	-0x40(%rbp), %r11
-               	movq	-0x8(%rbp), %rcx
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	movl	$0x4, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
-               	retq
+               	movq	-0x8(%rbp), %rax
                	testq	%rax, %rax
                	je	<addr>
-               	movl	$0x5, %eax
+               	movl	$0x4, %eax
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq

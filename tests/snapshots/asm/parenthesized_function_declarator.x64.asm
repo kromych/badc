@@ -42,13 +42,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movl	$0xa, %ecx
                	movl	%ecx, (%rax)
-               	movslq	(%rax), %rax
-               	cmpl	$0xa, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x2, %eax
-               	retq
                	xorq	%rax, %rax
+               	movq	%rax, %rcx
                	retq

@@ -77,7 +77,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
   block 13  start_pc=0
     v51  StoreLocal { off=-1, value=v28, kind=I64 }       -> -
     v52  LocalAddr(-1)                                    -> x1
-    v53  LoadLocal { off=-1, kind=I64 }                   -> x2
+    v53  Imm(72623859790382856)                           -> x2
     v54  InlineAsm { template="bswapq %0", ops=2, args=[v52, v28] } -> -
     v55  LoadLocal { off=-1, kind=I64 }                   -> x0
     terminator Jmp(b14)   (exit_acc=v55)

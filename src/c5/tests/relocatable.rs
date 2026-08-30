@@ -1759,3 +1759,45 @@ const char *const *through(void) { return &escaped; }\n";
         );
     }
 }
+
+/// A relocatable link writes the map `-Map` asks for. GNU ld does, and
+/// kbuild's `modules.builtin.ranges` step reads `vmlinux.o.map` to
+/// attribute a section's bytes to the object that contributed them.
+/// Its reader (`scripts/generate_builtin_ranges.awk`) matches rows of
+/// exactly four fields that begin with one space and carry a non-zero
+/// size, so the row shape is what this pins.
+#[test]
+fn a_relocatable_link_renders_the_map_kbuild_reads() {
+    use crate::c5::linker::relocatable::link_relocatable_with_map;
+
+    let a = compile_obj("int av;\nint af(void) { return av; }\n", "a.o");
+    let b = compile_obj("int bv;\nint bf(void) { return bv; }\n", "b.o");
+    let (_, map) = link_relocatable_with_map(&[a, b], &RelinkOptions::default(), "out.o")
+        .expect("link with map");
+
+    // Rows the kernel's awk rule accepts: ` <osect> <addr> <size> <obj>`.
+    let rows: alloc::vec::Vec<alloc::vec::Vec<&str>> = map
+        .lines()
+        .filter(|l| l.starts_with(' ') && !l.starts_with("  "))
+        .map(|l| l.split_whitespace().collect::<alloc::vec::Vec<_>>())
+        .filter(|f| f.len() == 4 && f[2] != "0x0")
+        .collect();
+    assert!(
+        !rows.is_empty(),
+        "no rows the ranges step could read:\n{map}"
+    );
+
+    let text: alloc::vec::Vec<_> = rows.iter().filter(|f| f[0] == ".text").collect();
+    assert_eq!(text.len(), 2, "one .text row per input: {text:?}");
+    assert_eq!(text[0][3], "a.o");
+    assert_eq!(text[1][3], "b.o");
+    // The second input starts where the first ends, so the offsets
+    // partition the output section rather than repeating.
+    let off = |s: &str| u64::from_str_radix(s.trim_start_matches("0x"), 16).unwrap();
+    let size = |s: &str| u64::from_str_radix(s.trim_start_matches("0x"), 16).unwrap();
+    assert_eq!(off(text[0][1]), 0);
+    assert!(off(text[1][1]) >= size(text[0][2]), "{text:?}");
+
+    assert!(map.contains("LOAD a.o"), "inputs are listed:\n{map}");
+    assert!(map.contains("OUTPUT(out.o "), "output is named:\n{map}");
+}

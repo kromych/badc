@@ -26,7 +26,7 @@ use super::lds_link::{
 use super::object::parse_shared_library;
 use super::relocatable::{
     DiscardLocals, EM_386, EM_AARCH64, EM_X86_64, EtRel, LdScript, RelinkOptions, link_relocatable,
-    parse_et_rel, parse_module_script,
+    link_relocatable_with_map, parse_et_rel, parse_module_script,
 };
 
 /// How positional inputs and archive state were ordered on the
@@ -580,12 +580,30 @@ pub fn run_ld(args: &[String]) -> i32 {
         gnu_stack: a.gnu_stack,
         expect_machine: machine,
     };
-    let bytes = match link_relocatable(&objs, &opts) {
-        Ok(b) => b,
-        Err(e) => return ld_err(e),
+    // ld writes a map for a relocatable link too, and kbuild's
+    // `modules.builtin.ranges` step reads `vmlinux.o.map`.
+    let want_map = a.map_path.is_some() || a.print_map;
+    let (bytes, map) = if want_map {
+        match link_relocatable_with_map(&objs, &opts, &a.output.display().to_string()) {
+            Ok(v) => v,
+            Err(e) => return ld_err(e),
+        }
+    } else {
+        match link_relocatable(&objs, &opts) {
+            Ok(b) => (b, String::new()),
+            Err(e) => return ld_err(e),
+        }
     };
     if let Err(e) = std::fs::write(&a.output, &bytes) {
         return ld_err(format!("cannot write `{}`: {e}", a.output.display()));
+    }
+    if let Some(p) = &a.map_path
+        && let Err(e) = std::fs::write(p, &map)
+    {
+        return ld_err(format!("cannot write map file `{}`: {e}", p.display()));
+    }
+    if a.print_map {
+        print!("{map}");
     }
     0
 }

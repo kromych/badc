@@ -62,7 +62,7 @@ sudo systemctl reboot
 ```
 
 If that kernel does not reach userspace, the following boot is the stock
-default again — no intervention, no console needed. **Never** run
+default again -- no intervention, no console needed. **Never** run
 `grub2-set-default` or `grubby --set-default` against a badc entry.
 
 ### 2. A bounded panic
@@ -82,7 +82,7 @@ layer 2 then converts into a reboot. Leave it alone.
 
 ### 3. The hardware watchdog, for hangs that never panic
 
-A silent hang — no panic, no oops — is the one case layers 1 and 2 do not
+A silent hang -- no panic, no oops -- is the one case layers 1 and 2 do not
 cover, because nothing ever decides to reboot. `iTCO_wdt` can, but only once
 something opens `/dev/watchdog`, so it protects the window from systemd
 onwards and not before:
@@ -205,9 +205,9 @@ and fix it before rebooting.
 4. Watch the collector. Expect the banner to name badc as both compiler and
    linker:
    `Linux version 7.1.10 ... (badc 0.4.1 (gcc-compatible, GNU C 4.3.0), GNU ld (badc 0.4.1) ...)`
-5. If ssh comes back, run the same checks the qemu lane runs — `uname -r`,
+5. If ssh comes back, run the same checks the qemu lane runs -- `uname -r`,
    `/proc/sys/kernel/tainted`, `systemctl is-system-running`, `lsmod | wc -l`,
-   the root disk driver chain, and `demos/linux/exercise.py` — so the hardware
+   the root disk driver chain, and `demos/linux/exercise.py` -- so the hardware
    result is comparable to the qemu result rather than a separate vocabulary.
 6. If ssh does not come back within a few minutes, wait for the panic reboot
    (30 s) or the watchdog (60 s). When it returns on the stock kernel, read
@@ -220,8 +220,8 @@ and fix it before rebooting.
 | panic or oops after the NIC probes | yes | yes | yes, `panic=30` then stock |
 | panic before the NIC probes | no | yes | yes, `panic=30` then stock |
 | hang after systemd starts | up to the hang | no | yes, watchdog |
-| hang before systemd starts | up to the hang | no | **no — power button** |
-| hang before the NIC probes | **nothing at all** | no | **no — power button** |
+| hang before systemd starts | up to the hang | no | **no -- power button** |
+| hang before the NIC probes | **nothing at all** | no | **no -- power button** |
 
 The last row is the honest limit of this lane. There is no way to observe or
 recover from it remotely on this hardware.
@@ -236,7 +236,7 @@ recover from it remotely on this hardware.
   cycle.
 - **A hang before systemd needs physical access.** If the box gains a
   switchable outlet, note that it is a desktop with no battery, so cutting
-  power does force a reset — unlike the MicroPC, where the battery defeats
+  power does force a reset -- unlike the MicroPC, where the battery defeats
   that. That would close the last row of the table above and is the single
   highest-value addition to this lane.
 - **A monitor would close most of the gap** more cheaply than a serial port:

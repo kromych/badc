@@ -1338,11 +1338,20 @@ def bus_args(bus: str, ctl: str, drives: list[tuple[str, str, str]],
                     "-device",
                     f"ide-{kind},drive={did},bus={ctl}.{i},{boot[i]}".rstrip(",")]
         return out
-    out += ["-device", f"{bus},id={ctl}"]
+    # megasas emulates a RAID controller: a raw disk lands on the physical
+    # channel, which the MegaRAID firmware only serves in JBOD mode. Without
+    # it the driver binds, the disk enumerates, and every command to it comes
+    # back DID_BAD_TARGET -- on a gcc-built kernel as well.
+    opts = ",use_jbod=on" if bus == "megasas" else ""
+    # megasas's JBOD path answers SYNCHRONIZE CACHE with an internal target
+    # failure, which fails every flush the filesystem issues. A drive that
+    # reports no write cache is not asked to flush one.
+    dopts = ",write-cache=off" if bus == "megasas" else ""
+    out += ["-device", f"{bus},id={ctl}{opts}"]
     for i, (did, spec, kind) in enumerate(drives):
         out += ["-drive", f"if=none,id={did},{spec}",
                 "-device",
-                f"scsi-{kind},drive={did},bus={ctl}.0,scsi-id={i},"
+                f"scsi-{kind},drive={did},bus={ctl}.0,scsi-id={i}{dopts},"
                 f"{boot[i]}".rstrip(",")]
     return out
 
@@ -1374,6 +1383,7 @@ class VM(Target):
         self.pidfile = args.workdir / f"vm-{args.arch}.pid"
         self.spares: list[Path] = []
         self.data_disk: Path | None = None
+        self.devices: list[str] = []
 
     def start(self) -> None:
         args, arch = self.args, self.arch
@@ -1397,6 +1407,12 @@ class VM(Target):
                "-device", f"{args.vm_nic},netdev=n0",
                *shlex.split(args.qemu_args)]
         log(f"qemu ({accel}): {' '.join(cmd)}")
+        # Kept for the report: which controllers and NIC models the machine
+        # actually carried is what a result has to be read against, and the
+        # console is not that record -- a distribution whose kernel messages
+        # do not reach the serial line prints none of it.
+        self.devices = [a for f, a in zip(cmd, cmd[1:])
+                        if f in ("-device", "-drive")]
         self.pidfile.unlink(missing_ok=True)
         run(cmd, check=True, timeout=60)
 
@@ -2436,7 +2452,8 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
                     "accel": accel, "cpu": vm.cpu, "ssh_port": args.ssh_port,
                     "vm_cpus": args.vm_cpus, "vm_mem_mb": args.vm_mem,
                     "disk_bus": args.vm_disk_bus, "nic": args.vm_nic,
-                    "firmware": vm.firmware}
+                    "data_bus": args.vm_data_bus, "firmware": vm.firmware,
+                    "devices": vm.devices}
     try:
         boot_id = vm.wait_ssh(args.vm_timeout)
         log("stock system up; capturing baseline")
@@ -3128,8 +3145,10 @@ def _self_test() -> int:
     assert ahci[:2] == ["-device", "ahci,id=ctl1"]
     assert ahci[-1] == "ide-hd,drive=x0,bus=ctl1.0"
     scsi = bus_args("megasas", "ctl1", [("x0", "file=/x", "hd")], False)
-    assert scsi[:2] == ["-device", "megasas,id=ctl1"]
-    assert scsi[-1] == "scsi-hd,drive=x0,bus=ctl1.0,scsi-id=0"
+    assert scsi[:2] == ["-device", "megasas,id=ctl1,use_jbod=on"]
+    assert bus_args("lsi53c895a", "ctl1", [("x0", "file=/x", "hd")],
+                    False)[:2] == ["-device", "lsi53c895a,id=ctl1"]
+    assert scsi[-1] == "scsi-hd,drive=x0,bus=ctl1.0,scsi-id=0,write-cache=off"
     # nvme serials are per drive, so two controllers do not collide.
     two = bus_args("nvme", "ctl0", [("d0", "file=/d", "hd")], True) + \
         bus_args("nvme", "ctl1", [("x0", "file=/x", "hd")], False)

@@ -4,6 +4,10 @@
 //! `cargo:rustc-env` -> `env!("BADC_GIT_*")` -> the `BUILD_INFO`
 //! const in `src/lib.rs`.
 //!
+//! The `--version` tail is gated on the `badc_git` cfg, which is set
+//! only when all three read back, so a build from an exported tree
+//! prints the version line alone rather than three `unknown`s.
+//!
 //! Each value falls back to `"unknown"` when git is missing,
 //! the working tree isn't a checkout, or the requested ref
 //! doesn't exist (e.g., a freshly-init'd repo with no commits).
@@ -20,13 +24,31 @@ use std::time::{SystemTime, UNIX_EPOCH};
 fn main() {
     emit_binding_to_header_index();
 
-    let commit = git(&["rev-parse", "HEAD"]).unwrap_or_else(|| "unknown".into());
-    let branch = git(&["rev-parse", "--abbrev-ref", "HEAD"]).unwrap_or_else(|| "unknown".into());
-    let remote = git(&["remote", "get-url", "origin"]).unwrap_or_else(|| "unknown".into());
+    let commit = git(&["rev-parse", "HEAD"]);
+    let branch = git(&["rev-parse", "--abbrev-ref", "HEAD"]);
+    let remote = git(&["remote", "get-url", "origin"]);
 
-    println!("cargo:rustc-env=BADC_GIT_COMMIT={commit}");
-    println!("cargo:rustc-env=BADC_GIT_BRANCH={branch}");
-    println!("cargo:rustc-env=BADC_GIT_REMOTE={remote}");
+    // `badc_git` gates the provenance tail on `--version`. All three
+    // have to be readable for the tail to say anything: a tree with no
+    // commits, or a clone with no `origin`, reports what it knows
+    // rather than padding the rest with a placeholder.
+    println!("cargo::rustc-check-cfg=cfg(badc_git)");
+    if commit.is_some() && branch.is_some() && remote.is_some() {
+        println!("cargo:rustc-cfg=badc_git");
+    }
+
+    println!(
+        "cargo:rustc-env=BADC_GIT_COMMIT={}",
+        commit.unwrap_or_else(|| "unknown".into())
+    );
+    println!(
+        "cargo:rustc-env=BADC_GIT_BRANCH={}",
+        branch.unwrap_or_else(|| "unknown".into())
+    );
+    println!(
+        "cargo:rustc-env=BADC_GIT_REMOTE={}",
+        remote.unwrap_or_else(|| "unknown".into())
+    );
 
     // Build-time date / time, captured as env vars the preprocessor
     // reads at compile time to seed the C99 `__DATE__` and `__TIME__`

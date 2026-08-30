@@ -89,15 +89,22 @@ pub const VERSION_LINE: &str = version_line!();
 /// which would make the compiler's output depend on where badc
 /// was built. Output carries the reproducible [`OUTPUT_MARKER`]
 /// instead.
+#[cfg(badc_git)]
 pub const BUILD_INFO: &str = concat!(
     version_line!(),
-    "\n\tcommit ",
+    "\n        commit ",
     env!("BADC_GIT_COMMIT"),
-    "\n\tbranch ",
+    "\n        branch ",
     env!("BADC_GIT_BRANCH"),
-    "\n\tremote ",
+    "\n        remote ",
     env!("BADC_GIT_REMOTE")
 );
+
+/// Built outside a checkout -- an exported tree, a crates.io
+/// package -- so there is no provenance to report and the
+/// identification is the version line alone.
+#[cfg(not(badc_git))]
+pub const BUILD_INFO: &str = version_line!();
 
 /// Compiler-identification marker carried by every emitted
 /// binary: appended to the code-section tail of final images so a

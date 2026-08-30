@@ -506,15 +506,20 @@ pub fn run_ld(args: &[String]) -> i32 {
         // show the middle, so this reports what runs without claiming
         // to be binutils. Feature questions are answered by rejecting
         // options `run_ld` does not implement, not by the version.
+        // The provenance tail is absent when badc was built outside a
+        // checkout, so it is appended rather than printed as its own
+        // line: an empty tail must not leave a blank one.
         let git_tail = crate::BUILD_INFO
             .split_once('\n')
             .map(|(_, tail)| tail)
             .unwrap_or("");
         println!(
-            "GNU ld (badc {}) {LD_COMPAT_VERSION}\n{}",
-            env!("CARGO_PKG_VERSION"),
-            git_tail
+            "GNU ld (badc {}) {LD_COMPAT_VERSION}",
+            env!("CARGO_PKG_VERSION")
         );
+        if !git_tail.is_empty() {
+            println!("{git_tail}");
+        }
         return 0;
     }
 

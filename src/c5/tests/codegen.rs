@@ -88,8 +88,11 @@ fn output_marker_is_version_only_and_present_in_every_target() {
     // <version> (...)` (see `src/lib.rs`).
     let needle = crate::OUTPUT_MARKER.as_bytes();
     // The git tail only ever appears in `BUILD_INFO`; its label
-    // `\n\tcommit ` must not reach the output.
-    let git_tail = b"\n\tcommit ";
+    // must not reach the output. Taken from `BUILD_INFO` itself so
+    // the two spellings cannot drift, and skipped when badc was
+    // built outside a checkout, where there is no tail to look for.
+    let tail_label = crate::BUILD_INFO.split_once('\n').map(|(_, t)| t);
+    let git_tail = tail_label.map(str::as_bytes);
     for target in [
         Target::MacOSAarch64,
         Target::LinuxAarch64,
@@ -108,11 +111,13 @@ fn output_marker_is_version_only_and_present_in_every_target() {
             found,
             "{target:?}: expected `OUTPUT_MARKER` in emitted binary"
         );
-        let leaked = bytes.windows(git_tail.len()).any(|w| w == git_tail);
-        assert!(
-            !leaked,
-            "{target:?}: git provenance leaked into output -- breaks reproducibility"
-        );
+        if let Some(tail) = git_tail {
+            let leaked = bytes.windows(tail.len()).any(|w| w == tail);
+            assert!(
+                !leaked,
+                "{target:?}: git provenance leaked into output -- breaks reproducibility"
+            );
+        }
         // The marker sits outside the instruction stream (ELF
         // `.comment`, `__TEXT,__const`, `.rdata`): decoders walking
         // the code section must never reach it.

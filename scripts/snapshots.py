@@ -29,6 +29,10 @@ commit, failing on added, removed and modified snapshots alike.
 
 `--frame-sizes` reports the static stack bytes the corpus reserves, and
 with `--against REV` diffs that against the snapshots committed at REV.
+
+`--budget` reports the corpus access ratios and fails when the
+callee-saved entry/exit traffic per function is over its ceiling; a
+`--check` run ends with the same test.
 """
 
 from __future__ import annotations
@@ -536,6 +540,119 @@ def frame_report(root: Path, against: str | None) -> int:
     return 0
 
 
+# A disassembly line's mnemonic is its first field, its operands the
+# rest; a function opens with its `<name>:` label on a line of its own.
+MNEMONIC_RE = re.compile(r"^\s+([a-z][a-z0-9._]*)\s*(.*)$")
+FUNCTION_LABEL_RE = re.compile(r"^<[^>]+>:")
+
+# What counts as a memory access, and which of those accesses are the
+# entry/exit traffic a function pays for the callee-saved registers it
+# touches. The saved sets exclude the frame record (aarch64 x29/x30,
+# x86_64 %rbp), which any frame carries whatever the allocator does with
+# the rest of the bank.
+ARCH_ACCESS: dict[str, dict[str, re.Pattern[str]]] = {
+    "aarch64": {
+        "mem": re.compile(r"^(ld|st|prfm)"),
+        "saved": re.compile(r"\b(x19|x2[0-8]|d[89]|d1[0-5])\b"),
+        "stack": re.compile(r"\bsp\b"),
+    },
+    "x64": {
+        # A memory operand is a base/index form or a RIP-relative one.
+        # `lea` writes the address itself and touches nothing.
+        "mem": re.compile(r"\((?:%[a-z0-9]+)?[,%]|<rip>"),
+        "saved": re.compile(r"%(rbx|ebx|bx|bl|r1[2-5][dwb]?)\b"),
+        "stack": re.compile(r"\((%rsp|%rbp)\)|\(%rsp,|0x[0-9a-f]+\(%(rsp|rbp)\)"),
+    },
+}
+
+
+def access_counts(text: str, arch: str) -> tuple[int, int, int, int]:
+    """Functions, instructions, memory accesses and callee-saved
+    entry/exit accesses in one disassembly."""
+    rules = ARCH_ACCESS[arch]
+    funcs = insts = mem = saved = 0
+    for line in text.splitlines():
+        if FUNCTION_LABEL_RE.match(line):
+            funcs += 1
+            continue
+        m = MNEMONIC_RE.match(line)
+        if not m:
+            continue
+        mnemonic, operands = m.group(1), m.group(2)
+        insts += 1
+        if arch == "x64":
+            # push / pop name no operand but access the stack.
+            if mnemonic.startswith(("push", "pop")):
+                mem += 1
+                saved += 1 if rules["saved"].search(operands) else 0
+                continue
+            if mnemonic.startswith(("lea", "nop")) or not rules["mem"].search(operands):
+                continue
+        elif not rules["mem"].match(mnemonic):
+            continue
+        mem += 1
+        if rules["stack"].search(operands) and rules["saved"].search(operands):
+            saved += 1
+    return funcs, insts, mem, saved
+
+
+# Corpus ceiling per architecture: callee-saved entry/exit accesses per
+# function. A function pays these on every call it receives, whatever
+# path the call takes, so they are the part of the memory traffic that
+# scales with call frequency rather than with the work done.
+#
+# Per function rather than per instruction: a change that removes
+# instructions raises a per-instruction ratio without adding any traffic,
+# and this budget must not read an optimization as a regression. Adding
+# fixtures adds functions, so the corpus can grow without moving it.
+#
+# The margin comes from the distribution. Over the 386 commits of the
+# branch this budget was written for, the ratio rose by more than 0.024
+# on no commit but one: a cross-block CSE that let a merged value's range
+# span a call, which raised it 0.594 (+49%) and cost a kernel boot 3.5x
+# its time. The headroom below is 0.10 -- four times the largest ordinary
+# rise, a sixth of that regression.
+#
+# A ceiling moves only deliberately: regenerate, read `--budget`, and
+# change the number in the commit that spends it.
+SAVED_PER_FUNCTION: dict[str, float] = {
+    "aarch64": 1.57,
+    "x64": 2.06,
+}
+
+
+def corpus_access(root: Path) -> dict[str, tuple[int, int, int, int]]:
+    """Per-architecture totals over the committed asm snapshots."""
+    asm = root / "tests" / "snapshots" / "asm"
+    out: dict[str, list[int]] = {suffix: [0, 0, 0, 0] for suffix, _ in TARGETS}
+    for path in sorted(asm.glob("*.asm")):
+        arch = snapshot_arch(path.name)
+        for i, v in enumerate(access_counts(path.read_text(errors="replace"), arch)):
+            out[arch][i] += v
+    return {k: tuple(v) for k, v in out.items()}
+
+
+def budget_report(root: Path) -> int:
+    """Report the corpus access ratios and fail on a ceiling."""
+    rc = 0
+    for arch, (funcs, insts, mem, saved) in sorted(corpus_access(root).items()):
+        if funcs == 0 or insts == 0:
+            continue
+        ratio = saved / funcs
+        print(f"[budget] {arch}: {funcs} functions, {insts} instructions, "
+              f"{mem * 100.0 / insts:.2f} memory accesses/100 instructions, "
+              f"{ratio:.4f} callee-saved entry/exit accesses/function")
+        ceiling = SAVED_PER_FUNCTION[arch]
+        if ratio > ceiling:
+            print(f"[budget] {arch}: {ratio:.4f} callee-saved entry/exit "
+                  f"accesses per function is over the {ceiling:.4f} ceiling. "
+                  f"A value whose range now spans a call costs its function a "
+                  f"save and a restore on every call; find what widened the "
+                  f"ranges, or raise the ceiling here with the reason.")
+            rc = 1
+    return rc
+
+
 def self_test() -> int:
     """Exercise `check_clean` over the three states it separates, in a
     throwaway repository: the added case is the one `git diff` misses."""
@@ -584,6 +701,26 @@ def self_test() -> int:
         assert got == want, f"{arch} frame decode: {got} != {want}"
     assert snapshot_arch("f.aarch64.asm") == "aarch64"
     assert snapshot_arch("f.x64.asm") == "x64"
+
+    # The access counters, over the forms that decide each field: a
+    # callee-saved pair on the stack, an ordinary data access, an
+    # address computation that reads nothing, and the frame record,
+    # which is not the allocator's traffic.
+    access_cases = [
+        ("aarch64",
+         "<f>:\n\tstp\tx20, x21, [sp, #-0x20]!\n\tstp\tx29, x30, [sp, #0x10]\n"
+         "\tldr\tx0, [x1, #0x8]\n\tadd\tx0, x0, #0x1\n"
+         "\tldp\tx20, x21, [sp], #0x20\n\tret\n",
+         (1, 6, 4, 2)),
+        ("x64",
+         "<f>:\n\tpushq\t%rbp\n\tpushq\t%rbx\n\tmovq\t%r12, 0x8(%rsp)\n"
+         "\tleaq\t(%rdi,%rcx), %rax\n\tmovq\t(%rax), %rdx\n"
+         "\tpopq\t%rbx\n\tretq\n",
+         (1, 7, 5, 3)),
+    ]
+    for arch, text, want in access_cases:
+        got = access_counts(text, arch)
+        assert got == want, f"{arch} access counts: {got} != {want}"
     print("[snapshots] self-test OK")
     return 0
 
@@ -613,6 +750,13 @@ def main(argv: list[str]) -> int:
         "and exit; no regeneration",
     )
     p.add_argument(
+        "--budget",
+        action="store_true",
+        help="report the corpus access ratios, and fail when the "
+        "callee-saved entry/exit traffic is over its ceiling; no "
+        "regeneration",
+    )
+    p.add_argument(
         "--against",
         metavar="REV",
         help="with --frame-sizes, diff the totals against the snapshots "
@@ -624,10 +768,12 @@ def main(argv: list[str]) -> int:
     root = repo_root()
     if args.frame_sizes:
         return frame_report(root, args.against)
+    if args.budget:
+        return budget_report(root)
     rc = regenerate(root, args.only)
     if rc != 0 or not args.check:
         return rc
-    return check_clean(root)
+    return check_clean(root) or budget_report(root)
 
 
 if __name__ == "__main__":

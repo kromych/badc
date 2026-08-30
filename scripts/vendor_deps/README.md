@@ -36,6 +36,8 @@ project's identifier for the release:
 | curl       | curl.se release tarball                 | tarball-sha256  |
 | qemu       | git v11.0.2 tag; bundle assembled off   | git (assembled) |
 | pc-bios-x86| qemu 11.0.2 release tarball `pc-bios/`  | tarball-sha256  |
+| linux      | cdn.kernel.org release tarball          | tarball-sha256  |
+| kconfig-*  | `/boot/config` of a pinned cloud image  | file-sha256     |
 
 The full sha is recorded in `manifest.json` and in each
 demo's `setup.py` constants (`UPSTREAM_SHA`).
@@ -80,13 +82,28 @@ release tarball's sha256. Pin the packed asset's sha256 in
 `demos/qemu/setup.py` (`PC_BIOS_SHA256`) and upload it to the
 release. `manifest.json` does not track it either.
 
+## Distribution kernel configs (`kconfig-<distro>-<arch>`)
+
+These four have no upstream URL: each is the `/boot/config-$(uname -r)`
+that a pinned distribution cloud image ships, so the image digest is
+what pins it and the file's own sha256 names the asset. Produce one
+with `demos/linux/packages.py --phases config --config from-vm`, copy
+it into the bundle directory, then run `build_bundle.py`, which hashes
+it like any other asset. It refuses to run rather than guessing when a
+config it lists is not there, and prints the command that makes it.
+`packages.py --config vendor` is the consumer: it resolves
+`(distribution, architecture)` to the asset and verifies the same
+digest before the build uses it.
+
 ## Refreshing the bundle
 
 When bumping a library version (or rotating the bundle for
 any reason):
 
 1. Update the `Source` entry in `build_bundle.py` (URL,
-   version, upstream SHA) for the lib that changed.
+   version, upstream SHA) for the lib that changed. For a
+   `kconfig-*` entry there is no URL: re-extract the config and
+   update its sha256.
 2. Run `python3 scripts/vendor_deps/build_bundle.py -v`. It
    downloads each archive, computes sha256, writes
    `vendor-deps-bundle/manifest.json`, and prints the

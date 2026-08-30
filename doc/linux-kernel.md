@@ -70,6 +70,19 @@ falls back to SeaBIOS on x86_64 where no firmware is installed.
 dmesg, and disk/network I/O, against a baseline taken from the image's stock
 kernel in the same userspace.
 
+The configuration is the distribution's, not `defconfig`: each pinned cloud
+image's own `/boot/config-$(uname -r)`, mirrored on the `vendor-deps` release
+under a pinned sha256, so a package build resolves it without booting anything
+(`packages.py --config vendor`). That corpus is what a distribution kernel is,
+and it is several times defconfig's:
+
+| package | configuration | badc C units | badc asm | badc links |
+|---|---|---|---|---|
+| rpm, x86_64 | Fedora 44 | 21700 | 136 | 11535 |
+| rpm, aarch64 | Fedora 44 | 23445 | 100 | 13076 |
+| deb, x86_64 | Ubuntu 26.04 | 26000+ | 124 | 10000+ |
+| deb, aarch64 | Ubuntu 26.04 | 30000+ | 93 | 13000+ |
+
 **Real hardware.** `packages.py --phases hw` runs the same install, one-shot
 selection, boot, probes and exercise stage on a physical machine instead of a
 guest: the machine is reached over ssh and its console is read from a serial

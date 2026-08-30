@@ -11,7 +11,10 @@ verifying a pinned sha256 before unpacking.
 
 This script is the one-shot that produces the assets:
 
-  - download every upstream archive into a working directory,
+  - download every upstream archive into a working directory
+    (an asset with no upstream -- a distribution kernel config
+    taken out of a cloud image -- has to be placed there first,
+    and the script says which command produces it),
   - resolve the upstream commit SHA (or Fossil hash for sqlite)
     so each filename embeds enough provenance to retrace where
     it came from,
@@ -44,15 +47,17 @@ DEFAULT_REPO = "kromych/badc"
 @dataclass
 class Source:
     name: str
-    version: str
-    url: str
     ext: str
     upstream_sha: str
-    sha_kind: str  # "git" or "fossil"
+    sha_kind: str  # "git", "fossil", "tarball-sha256" or "file-sha256"
+    version: str = ""
+    url: str = ""  # empty for an asset produced here rather than downloaded
+    produced_by: str = ""  # the command that produces such an asset
 
     @property
     def asset_name(self) -> str:
-        return f"{self.name}-{self.version}-{self.upstream_sha[:8]}{self.ext}"
+        stem = f"{self.name}-{self.version}" if self.version else self.name
+        return f"{stem}-{self.upstream_sha[:8]}{self.ext}"
 
 
 SOURCES = [
@@ -275,6 +280,33 @@ SOURCES = [
         upstream_sha="7d50b7162a58a1d7f136145de0cc9d46fb82a7f8",
         sha_kind="git",
     ),
+    # Distribution kernel configurations, one per (distribution, architecture)
+    # cloud image pinned in demos/linux/packages.py. They are not published
+    # anywhere upstream: each is /boot/config-$(uname -r) taken out of the
+    # booted image, so the image digest is what pins them and the file's own
+    # sha256 is what names the asset. The version field is empty because the
+    # distribution release is the image's, not the config's.
+    *[
+        Source(
+            name=f"kconfig-{distro}-{arch}",
+            ext=".config",
+            upstream_sha=sha,
+            sha_kind="file-sha256",
+            produced_by=(f"python3 demos/linux/packages.py --arch {arch} "
+                         f"--distro {distro} --phases config "
+                         f"--config from-vm"),
+        )
+        for distro, arch, sha in (
+            ("fedora", "x86_64",
+             "1c0d2e478cdc33747fb3bdd9e332677c517b5791c8cbed0454d22e6e430042d5"),
+            ("fedora", "aarch64",
+             "044be830f7df5cb19c1b38ea42383e1a770b3722efb2b375cc86ac2efcfb2530"),
+            ("ubuntu", "x86_64",
+             "b07d3cb0d53236b021d73038e315018801fa6b843529d53129ad94a2a5233bf6"),
+            ("ubuntu", "aarch64",
+             "a61fbda882ae55d5321e55012f41d52e20c52f2a5de31808f89342eeb5d69cdc"),
+        )
+    ],
 ]
 
 
@@ -290,6 +322,11 @@ def sha256_of(path: Path) -> str:
         for chunk in iter(lambda: f.read(1024 * 1024), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def fail(msg: str) -> int:
+    print(f"build_bundle: {msg}", file=sys.stderr)
+    return 1
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -326,8 +363,12 @@ def main(argv: list[str] | None = None) -> int:
         asset = out_dir / src.asset_name
         if asset.is_file():
             log(f"already present: {asset.name}")
-        else:
+        elif src.url:
             fetch(src.url, asset, log)
+        else:
+            return fail(f"{src.asset_name} has no upstream to fetch; produce "
+                        f"it with `{src.produced_by}` and copy it into "
+                        f"{out_dir}")
         digest = sha256_of(asset)
         manifest[src.name] = {
             "asset": src.asset_name,
@@ -335,6 +376,7 @@ def main(argv: list[str] | None = None) -> int:
             "upstream_sha": src.upstream_sha,
             "upstream_sha_kind": src.sha_kind,
             "upstream_url": src.url,
+            "produced_by": src.produced_by,
             "sha256": digest,
         }
         asset_paths.append(asset)

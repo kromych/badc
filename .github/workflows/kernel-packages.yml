@@ -123,6 +123,8 @@ jobs:
         # Fails when badc cannot compile a unit, when a unit falls back to
         # the reference compiler, when fewer units than the floor were
         # compiled, or when the kernel's packaging target rejects the tree.
+        # `--linker reference` is stated, not left to the default: this lane
+        # is the contrast ci.yml's badc-linked kernel gate is read against.
         timeout-minutes: ${{ matrix.arch == 'x86_64' && 30 || 120 }}
         env:
           # The runner's reference compiler is not the one the pinned kernel
@@ -132,6 +134,7 @@ jobs:
           tarball=$(ls "$RUNNER_TEMP"/lk/linux-*.tar.xz | head -1)
           python demos/linux/packages.py --arch ${{ matrix.arch }} \
             --tarball "$tarball" --phases tree,build,package \
+            --linker reference \
             --expect-units ${{ matrix.floor }} \
             --workdir "$RUNNER_TEMP/pkg" \
             --report "$RUNNER_TEMP/pkg/package-${{ matrix.arch }}.json"

@@ -306,7 +306,7 @@ Never make one the default. Install it, select it for exactly one boot,
 and let any failure fall back:
 
 ```bash
-sudo dnf install -y ./kernel-7.1.6-*.x86_64.rpm     # or rpm -i
+sudo dnf install -y ./kernel-7.1.10-*.x86_64.rpm    # or rpm -i
 sudo grubby --info=ALL | grep -E '^(index|title)'   # find its index
 sudo grub2-reboot <index>                            # one shot only
 sudo systemctl reboot
@@ -326,12 +326,12 @@ on. Put it back before rebooting:
 sudo grubby --set-default /boot/vmlinuz-7.1.10-200.fc44.x86_64
 ```
 
-`rpm -i` refuses a kernel whose version is below the one the box already
-runs -- the pinned 7.1.6 against Fedora's 7.1.10 -- with `package
-kernel-7.1.10-200.fc44.x86_64 (which is newer than ...) is already
-installed`. Kernels are install-only, so the version ordering is not
-meaningful here; `--oldpackage` is what gets past it, and `dnf install`
-applies the same semantics on its own.
+`rpm -i` refuses a kernel whose version-release orders below the one the
+box already runs -- the pinned release built as `-1` against Fedora's
+`-200.fc44` -- with `package kernel-7.1.10-200.fc44.x86_64 (which is newer
+than ...) is already installed`. Kernels are install-only, so the version
+ordering is not meaningful here; `--oldpackage` is what gets past it, and
+`dnf install` applies the same semantics on its own.
 
 ## The harness lane
 

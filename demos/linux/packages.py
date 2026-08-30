@@ -3,9 +3,9 @@
 
 Builds the pinned kernel with badc compiling every kernel C unit (buildcc.py,
 same contract as verify.py: zero fallbacks), packages the result with the
-kernel's own packaging targets (bindeb-pkg on x86_64, binrpm-pkg on aarch64),
-installs the package in a stock distribution cloud image under qemu, and
-validates the rebooted system: the package scriptlets (depmod, initramfs
+kernel's own packaging targets (bindeb-pkg or binrpm-pkg, following the
+distribution), installs the package in a stock distribution cloud image under
+qemu, and validates the rebooted system: the package scriptlets (depmod, initramfs
 generation, boot-loader entry) and the running kernel (systemd reaches
 multi-user, udev-bound devices, on-demand module loads, dmesg, disk and
 network I/O). A stock-kernel baseline is captured from the same image before
@@ -14,8 +14,8 @@ after those probes that drives what the boot does not reach -- the crypto
 implementations, every built module, the kunit suites, and the filesystem and
 block stack under a verified stress load (exercise.py).
 
-    python3 demos/linux/packages.py --arch x86_64 \
-        --tarball <linux-7.1.6.tar.xz> --config <corpus .config> \
+    python3 demos/linux/packages.py --arch x86_64 --distro fedora \
+        --tarball <linux-7.1.10.tar.xz> --config vendor \
         --report packages-x86_64.json
 
 Phases (--phases selects a subset; each is idempotent): config, tree, build,
@@ -26,14 +26,20 @@ packaging tools (an rpm distribution), --deb-tools names a prefix that is
 provisioned from the host's own package mirror via `dnf download` + rpm2cpio
 extraction; nothing is installed system-wide.
 
-The same script is the local survey tool. `--config from-vm` takes the
-distribution's own /boot/config-$(uname -r) out of the stock image instead of
-building defconfig; `--tarball-url` with a required `--tarball-sha256` fetches
-the kernel rather than taking a local path; `--pkg deb,rpm` produces both
-formats; and `--keep-going` runs the build under `make -k`, so the manifest
-ranks every unit badc rejects instead of stopping at the first. A configuration
-from another kernel version is carried forward with `make olddefconfig` and
-what moved is recorded in <workdir>/config-deviations-<arch>.txt.
+The configuration is the distribution's own, not defconfig. `--config vendor`
+takes it off the vendor-deps release, sha256-verified and cached, which is what
+a package build uses; `--config from-vm` extracts the same file from the booted
+stock image, which is how that asset is produced and refreshed. A path names an
+ad-hoc config, and without `--config` the tree's defconfig is built. A
+configuration from another kernel version is carried forward with `make
+olddefconfig` and what moved is recorded in
+<workdir>/config-deviations-<arch>.txt.
+
+The same script is the local survey tool: `--tarball-url` with a required
+`--tarball-sha256` fetches the kernel rather than taking a local path; `--pkg
+deb,rpm` produces both formats; and `--keep-going` runs the build under `make
+-k`, so the manifest ranks every unit badc rejects instead of stopping at the
+first.
 
 The selfhost phase runs inside the vm phase, once the guest is on the badc
 kernel: it stages a build environment, pushes badc and the shims, and builds
@@ -99,7 +105,9 @@ IMAGE_RELEASE_TAG = "vendor-deps-v1"
 # The packaging format and the cloud image are the distribution's, not the
 # architecture's. `DISTROS[d]["images"][a]` is the image distribution `d`
 # publishes for architecture `a`; an architecture the distribution has no
-# image for is simply absent.
+# image for is simply absent. `DISTROS[d]["kconfigs"][a]` is the sha256 of
+# that image's own /boot/config, mirrored on the same release so a package
+# build does not have to boot the image to read it.
 DISTROS = {
     "debian": {
         "pkg": "deb",
@@ -152,6 +160,10 @@ DISTROS = {
                     "38473a1f61b74bf",
             },
         },
+        "kconfigs": {
+            "x86_64": "b07d3cb0d53236b021d73038e315018801fa6b843529d53129ad94a2a5233bf6",
+            "aarch64": "a61fbda882ae55d5321e55012f41d52e20c52f2a5de31808f89342eeb5d69cdc",
+        },
     },
     "fedora": {
         "pkg": "rpm",
@@ -176,6 +188,10 @@ DISTROS = {
                     "sha256:55c60a3b80d3616a08705afd0459e75fe9f03c54aba7a46e400"
                     "2a41a72fa0d5b",
             },
+        },
+        "kconfigs": {
+            "x86_64": "1c0d2e478cdc33747fb3bdd9e332677c517b5791c8cbed0454d22e6e430042d5",
+            "aarch64": "044be830f7df5cb19c1b38ea42383e1a770b3722efb2b375cc86ac2efcfb2530",
         },
     },
 }
@@ -219,6 +235,7 @@ def resolve_arch(name: str, distro: str | None) -> dict:
             f"(have: {', '.join(sorted(images))})")
     arch["pkg"] = DISTROS[arch["distro"]]["pkg"]
     arch["image"] = images[name]
+    arch["kconfig"] = DISTROS[arch["distro"]].get("kconfigs", {}).get(name)
     return arch
 
 # Storage controllers the guest disks ride on, with the kernel driver the
@@ -359,7 +376,14 @@ FOREIGN_FILE_OPTIONS = (
     "CONFIG_MODULE_SIG_KEY",
 )
 
+# Where a distribution configuration comes from. `from-vm` boots the stock
+# image and reads /boot/config-$(uname -r) out of it; `vendor` takes the
+# mirrored copy of those same bytes off the vendor-deps release, which is how
+# a package build gets one without a VM. `from-vm` is how the mirrored asset
+# is produced and refreshed.
 CONFIG_FROM_VM = "from-vm"
+CONFIG_VENDOR = "vendor"
+CONFIG_SOURCES = (CONFIG_FROM_VM, CONFIG_VENDOR)
 
 
 def fetch_tarball(url: str, want_sha: str, cache: Path) -> Path:
@@ -397,7 +421,49 @@ def clear_foreign_files(text: str) -> str:
                   'CONFIG_MODULE_SIG_KEY="certs/signing_key.pem"', text)
 
 
-def phase_config(args, arch) -> Path:
+def kconfig_asset(distro: str, arch: str, sha: str) -> str:
+    """The mirrored configuration's asset name, per the scripts/vendor_deps
+    convention: the basename plus the first 8 hex of its sha256."""
+    return f"kconfig-{distro}-{arch}-{sha[:8]}.config"
+
+
+def config_meta(path: Path, **fields) -> dict:
+    """The provenance record both config sources write beside the .config."""
+    return {**fields, "sha256": sha256_of(path),
+            "bytes": path.stat().st_size,
+            "set_options": sum(1 for ln in path.read_text().splitlines()
+                               if re.match(r"CONFIG_\w+=", ln))}
+
+
+def config_from_vendor(args, arch) -> Path:
+    """Take the distribution's configuration off the vendor-deps release.
+
+    The asset is the byte-identical copy of what `from-vm` extracted from the
+    same pinned image, held to a sha256 the same way the image itself is, so
+    a package build reaches the distribution's configuration without booting
+    anything.
+    """
+    sha = arch["kconfig"]
+    if not sha:
+        die(f"no mirrored kernel configuration for {arch['distro']}/"
+            f"{args.arch}; `--config {CONFIG_FROM_VM}` extracts one from the "
+            f"image and scripts/vendor_deps/build_bundle.py publishes it")
+    asset = kconfig_asset(arch["distro"], args.arch, sha)
+    args.config_cache.mkdir(parents=True, exist_ok=True)
+    cached = args.config_cache / asset
+    _fetch.fetch_and_verify(IMAGE_RELEASE_TAG, asset, cached, sha, log)
+    dest = args.workdir / f"config-vendor-{args.arch}.config"
+    shutil.copyfile(cached, dest)
+    meta = config_meta(dest, source="vendor-deps", asset=asset,
+                       distro=arch["distro"], image=arch["image"]["asset"])
+    (args.workdir / f"config-vendor-{args.arch}.json").write_text(
+        json.dumps(meta, indent=2) + "\n")
+    log(f"config from the {arch['distro']} mirror asset {asset}: "
+        f"{meta['set_options']} options set ({dest})")
+    return dest
+
+
+def config_from_vm(args, arch) -> Path:
     """Take the distribution's own kernel configuration out of its image.
 
     A distribution ships the configuration its kernel was built with as
@@ -434,27 +500,45 @@ def phase_config(args, arch) -> Path:
         if not vm.pull(remote, dest):
             die(f"{remote} is not readable in the {arch['distro']} image; "
                 f"the distribution kernel package ships it")
-        meta = {"source_release": release, "source_os": os_id,
-                "source_path": remote, "image": image.name,
-                "sha256": sha256_of(dest), "bytes": dest.stat().st_size,
-                "set_options": sum(1 for ln in dest.read_text().splitlines()
-                                   if re.match(r"CONFIG_\w+=", ln))}
+        meta = config_meta(dest, source="from-vm", source_release=release,
+                           source_os=os_id, source_path=remote,
+                           image=image.name)
         meta_path.write_text(json.dumps(meta, indent=2) + "\n")
         log(f"config from {os_id} kernel {release}: {meta['set_options']} "
-            f"options set ({dest})")
+            f"options set ({dest}); publish it as "
+            f"{kconfig_asset(arch['distro'], args.arch, meta['sha256'])}")
     finally:
         vm.stop()
         disk.unlink(missing_ok=True)
     return dest
 
 
+CONFIG_PHASE = {CONFIG_FROM_VM: config_from_vm,
+                CONFIG_VENDOR: config_from_vendor}
+
+
+def phase_config(args, arch) -> Path:
+    return CONFIG_PHASE[args.config](args, arch)
+
+
 # --- tree -------------------------------------------------------------------
 
+def tarball_tree(args) -> Path:
+    """Where the tarball unpacks. The directory name comes from the archive
+    rather than from the file name: a mirrored asset carries a digest prefix
+    in its file name that the directory inside it does not."""
+    with tarfile.open(args.tarball) as tf:
+        first = tf.next()
+    if first is None:
+        die(f"{args.tarball.name} is empty")
+    root = first.name.split("/", 1)[0]
+    if root in ("", ".", ".."):
+        die(f"{args.tarball.name} does not unpack into a directory")
+    return args.workdir / root
+
+
 def phase_tree(args, arch, config: Path | None) -> Path:
-    m = re.fullmatch(r"linux-(.+?)\.tar\.\w+", args.tarball.name)
-    if not m:
-        die(f"cannot derive the kernel version from {args.tarball.name!r}")
-    tree = args.workdir / f"linux-{m.group(1)}"
+    tree = tarball_tree(args)
     if not (tree / "Makefile").is_file():
         log(f"extracting {args.tarball}")
         with tarfile.open(args.tarball) as tf:
@@ -2178,19 +2262,38 @@ def assert_package_products(args, arch, vm: Target, result: dict,
     result["initrd_dmesg"] = vm.ssh(
         "dmesg | grep -m1 -i 'unpacking initramfs'", sudo=True).stdout.strip()
 
+    builtin = builtin_modules(
+        vm.ssh(f"cat /lib/modules/{args.release}/modules.builtin").stdout)
     loads = {}
     for mod in arch["modprobe"]:
         r = vm.ssh(f"modprobe {mod}", sudo=True, timeout=300)
-        listed = mod in vm.ssh("lsmod").stdout
-        loads[mod] = bool(r.returncode == 0 and listed)
-        if not loads[mod]:
+        loads[mod] = state = module_state(mod, vm.ssh("lsmod").stdout, builtin)
+        if r.returncode != 0 or state == "absent":
             failures.append(f"modprobe {mod}: rc={r.returncode} "
-                            f"listed={listed} "
+                            f"state={state} "
                             f"{(r.stderr or '').strip()[-200:]}")
     result["modprobe"] = loads
     after = vm.ssh("cat /proc/sys/kernel/tainted").stdout.strip()
     if after != "0":
         failures.append(f"kernel tainted after module loads: {after}")
+
+
+def builtin_modules(text: str) -> set[str]:
+    """The module names `modules.builtin` records, which modules_install
+    ships beside modules.dep. Lines are kbuild paths (`kernel/fs/btrfs/
+    btrfs.ko`)."""
+    return {Path(ln).stem.replace("-", "_") for ln in text.split() if ln}
+
+
+def module_state(mod: str, lsmod: str, builtin: set[str]) -> str:
+    """Where a name the gate asks for ended up: `loaded` as a module,
+    `builtin` in the image, or `absent`. A distribution configuration
+    builds in what defconfig leaves modular, so lsmod alone does not
+    answer whether the subsystem is there."""
+    key = mod.replace("-", "_")
+    if any(ln.split()[:1] == [key] for ln in lsmod.splitlines()[1:]):
+        return "loaded"
+    return "builtin" if key in builtin else "absent"
 
 
 def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
@@ -2848,6 +2951,54 @@ def _self_test() -> int:
     assert resolve_arch("x86_64", "fedora")["pkg"] == "rpm"
     assert set(DISK_BUSES) >= {"virtio", "nvme"} and "virtio-net-pci" in NICS
 
+    # Config sources: the mirrored asset name is the basename plus the first
+    # 8 hex of the digest resolve_arch carries, and every mirrored digest is
+    # a full sha256 for an architecture that distribution has an image for.
+    assert set(CONFIG_PHASE) == set(CONFIG_SOURCES)
+    assert kconfig_asset("fedora", "x86_64", "1c0d2e47" + "8" * 56) == \
+        "kconfig-fedora-x86_64-1c0d2e47.config"
+    mirrored = {(d, a) for d, spec in DISTROS.items()
+                for a in spec.get("kconfigs", ())}
+    assert mirrored == {(d, a) for d in ("fedora", "ubuntu")
+                        for a in ("x86_64", "aarch64")}
+    for distro, name in mirrored:
+        spec = resolve_arch(name, distro)
+        assert re.fullmatch(r"[0-9a-f]{64}", spec["kconfig"])
+        assert spec["kconfig"] == DISTROS[distro]["kconfigs"][name]
+    # A distribution with no mirrored configuration reports None rather than
+    # resolving to another distribution's asset.
+    assert resolve_arch("x86_64", "debian")["kconfig"] is None
+
+    # A name the gate modprobes may be a module or built in: a
+    # distribution configuration builds in what defconfig leaves modular,
+    # and modprobe reports success either way.
+    bi = builtin_modules("kernel/fs/btrfs/btrfs.ko\nkernel/net/xt-mark.ko\n")
+    assert bi == {"btrfs", "xt_mark"}
+    lsmod = "Module Size Used by\nfuse 217088 1\nnvme 61440 3\n"
+    assert module_state("fuse", lsmod, bi) == "loaded"
+    assert module_state("btrfs", lsmod, bi) == "builtin"
+    assert module_state("xt-mark", lsmod, bi) == "builtin"
+    assert module_state("xfs", lsmod, bi) == "absent"
+    # A name that only appears in another module's "Used by" column is not
+    # loaded itself.
+    assert module_state("by", lsmod, set()) == "absent"
+
+    meta = config_meta(Path(__file__), source="x")
+    assert meta["source"] == "x" and meta["bytes"] > 0
+
+    # The tree directory comes from the archive, not from the asset name:
+    # a mirrored tarball's name carries a digest prefix the directory lacks.
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        (d / "linux-7.1.10").mkdir()
+        (d / "linux-7.1.10" / "Makefile").write_text("")
+        tar = d / "linux-7.1.10-67d2f469.tar.xz"
+        with tarfile.open(tar, "w:xz") as tf:
+            tf.add(d / "linux-7.1.10", arcname="linux-7.1.10")
+        a = types.SimpleNamespace(tarball=tar, workdir=d)
+        assert tarball_tree(a) == d / "linux-7.1.10"
+
     # Firmware discovery: the first entry whose code image is installed wins,
     # and one whose variable store is absent falls back to a -bios image.
     def installed(*paths):
@@ -3142,10 +3293,12 @@ def main() -> int:
                     default=LINUX_DIR / ".cache" / "tarballs",
                     help="where a fetched tarball is kept between runs")
     ap.add_argument("--config",
-                    help=f"kernel .config to build: a path, or "
-                         f"{CONFIG_FROM_VM!r} to take the distribution's own "
-                         f"/boot/config-$(uname -r) out of the stock image "
-                         f"(default: make defconfig)")
+                    help=f"kernel .config to build: a path, "
+                         f"{CONFIG_VENDOR!r} for the distribution's own "
+                         f"configuration mirrored on the vendor-deps release, "
+                         f"or {CONFIG_FROM_VM!r} to extract that same file "
+                         f"from the booted stock image (default: make "
+                         f"defconfig)")
     ap.add_argument("--pkg", default="",
                     help="packaging formats, comma-separated from "
                          "deb,rpm (default: the image's own)")
@@ -3213,6 +3366,10 @@ def main() -> int:
     ap.add_argument("--image-cache", type=Path,
                     default=LINUX_DIR / ".cache" / "images",
                     help="where the pinned image is kept between runs")
+    ap.add_argument("--config-cache", type=Path,
+                    default=LINUX_DIR / ".cache" / "configs",
+                    help=f"where a `--config {CONFIG_VENDOR}` asset is kept "
+                         f"between runs")
     ap.add_argument("--accel", choices=("auto", "kvm", "hvf", "tcg"),
                     default="auto",
                     help="qemu accelerator; kvm and hvf fail when that "
@@ -3338,12 +3495,12 @@ def main() -> int:
     report: dict = {"arch": args.arch, "linker": args.linker, "packages": []}
 
     config = None
-    if args.config == CONFIG_FROM_VM:
+    if args.config in CONFIG_SOURCES:
         if "config" not in phases:
-            die(f"--config {CONFIG_FROM_VM} needs the config phase")
+            die(f"--config {args.config} needs the config phase")
         config = phase_config(args, arch)
         report["config_source"] = json.loads(
-            (args.workdir / f"config-vm-{args.arch}.json").read_text())
+            config.with_suffix(".json").read_text())
     elif args.config:
         config = Path(args.config)
         if not config.is_file():

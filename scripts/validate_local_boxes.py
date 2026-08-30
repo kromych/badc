@@ -25,10 +25,10 @@ Each lane:
   6. On Linux lanes, regenerate `tests/snapshots/` and fail on drift, as
      CI's `snapshots clean` job does. Skip with `--no-snapshots`.
   7. On Linux lanes, compile, link and boot the pinned `defconfig` kernel
-     with badc -- CI's kernel corpus, not the vendored minimal configs --
-     under the box's own emulator, the same four boots plus displacement
-     probes CI runs. A box without that emulator keeps the compile + link
-     cover and says so in its summary line. Skip with `--no-kernel`.
+     with badc -- CI's kernel corpus -- under the box's own emulator, the
+     same four boots plus displacement probes CI runs. A box without that
+     emulator keeps the compile + link cover and says so in its summary
+     line. Skip with `--no-kernel`.
 
 Usage (one `--box` flag per lane):
 
@@ -161,12 +161,11 @@ GATING_DEMOS = (
 
 
 # The kernel step's corpus is the pinned `defconfig` release setup.py fetches,
-# which is the tree CI's `kernel` job builds. The vendored minimal configs
-# compile a third to a half of defconfig's units and are not a substitute: they
-# have passed while defconfig-only defects reached the branch. Its own cache
-# dir, so the tree glob below cannot pick up a minimal-config tree. One tree
-# per box, so setup.py and verify.py hold it exclusively (demos/linux/ktree.py)
-# and a second run on the box is refused rather than cleaning under the first.
+# which is the tree CI's `kernel` job builds -- the only kernel corpus there
+# is. Its own cache dir, so the tree glob below cannot pick up another run's
+# tree. One tree per box, so setup.py and verify.py hold it exclusively
+# (demos/linux/ktree.py) and a second run on the box is refused rather than
+# cleaning under the first.
 KERNEL_CACHE = "~/.cache/badc-kernel-gate"
 
 # Per-architecture unit floors, the same values as the `kernel` job's matrix in

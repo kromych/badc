@@ -6,38 +6,27 @@ harness, not a pass/fail smoke: it replays every C compile of a completed
 gcc reference build against badc and buckets the failures by normalized
 error signature, producing a ranked work list for kernel support.
 
-## Pinned kernels
+## Pinned kernel
 
-Two pins, with distinct jobs and no shared version:
+One pin, 7.1.10, for both architectures and every consumer: the sweep, the
+link-and-boot gate, and the package gate. `setup.py` carries the tarball
+sha256 and configures the tree with its own `make defconfig`, so the pin alone
+reproduces the corpus and a version bump is one edit. CI's `kernel` job and
+`scripts/validate_local_boxes.py` both reach it through `setup.py`, so local
+and CI move together and neither can drift onto its own tree.
 
-| `--config` | kernel | configuration | used by |
-|---|---|---|---|
-| `defconfig` (default) | 7.1.10, both arches | the tree's own `make defconfig` | the sweep, CI's `kernel` gate, the pre-push kernel step |
-| `minimal` | 6.12.8 (x86_64), 6.10.1 (aarch64) | vendored `configs/<arch>-<version>.config` | boot bring-up and boot debugging |
+Smaller vendored configurations used to sit beside it for boot bring-up. They
+were removed: a `.config` is only meaningful against the release it was
+produced for, so each was a second pin to regenerate on every bump, and they
+compiled a third to a half of defconfig's units. A mid-end regression that
+left a statically dead call in the object -- undefined at the `vmlinux` link
+-- reached the branch with four independent runs against them green, because
+none of the units carrying it were in those configurations.
 
-Defconfig is the gate corpus. It is what a distribution builds, and it moves
-forward with the kernel, which is what makes it a gap finder. The configuration
-is not vendored. The tarball sha256 pins the tree and `make defconfig` is a
-function of the tree, so the configuration is already reproducible; a vendored
-copy would be a second artifact to regenerate on every version bump, and one
-that can silently disagree with the tree.
-
-CI's `kernel` job and `scripts/validate_local_boxes.py` both reach this corpus
-through `setup.py`'s pin, so a version bump moves local and CI together and
-neither can drift onto its own tree.
-
-The minimal configs are the opposite case and stay vendored. They are
-known-booting configurations that cannot be derived from the tree, small enough
-to iterate on, and useful when a boot has to be debugged rather than gated. A
-`.config` is only meaningful against the tree it was produced for, so each keeps
-its own release rather than being carried forward.
-
-They are deliberately not gate cover, and a green run against them does not
-stand in for one against defconfig: they compile 1912 (x86_64) and 1346
-(aarch64) units against defconfig's 2921 and 4434. A mid-end regression that
-left a statically dead call in the object -- undefined at the `vmlinux` link --
-reached the branch with four independent minimal-config runs green, because
-none of the units carrying it are in those configurations.
+The package gate builds the same tree against the distributions' own
+configurations instead (`packages.py --config vendor`, below), which is what a
+distribution kernel actually is: 21698 to 26223 units on x86_64 and 23444 to
+30552 on aarch64, against defconfig's 2953 and 10489.
 
 ## Run
 
@@ -642,9 +631,8 @@ into the tree.
 Two parameters depend on the corpus rather than the architecture and have to
 be passed. `--expect-units` is a floor on the unit count of the configuration
 under test: at defconfig the sweep tree measures 2921 (x86_64) and 4434
-(aarch64), and the vendored minimal configs 1912 and 1346, so set it just
-under whichever one is being built. `--rdinit` is whatever the initramfs
-installs, `/init` by default.
+(aarch64), so set it just under the count of what is being built. `--rdinit`
+is whatever the initramfs installs, `/init` by default.
 
 `--qemu` selects the emulator; `--qemu-args` adds arguments to the boot. An
 emulator built out of tree has no data directory, so it needs `-nic none`:
@@ -682,10 +670,10 @@ displacement it ran at. The gate fails if a configuration that randomizes the
 base produced no displaced boot, or if distinct seeds all produced one
 displacement -- either means it stopped covering relocated output.
 
-A tree with `# CONFIG_RANDOMIZE_BASE is not set` (both vendored minimal
-configs) boots at its link address, and the checks above stand down. A
-machine that supplies no `/chosen/kaslr-seed` (`-M virt,dtb-randomness=off`)
-degrades to unpinned boots with a line saying so.
+A tree with `# CONFIG_RANDOMIZE_BASE is not set` boots at its link address,
+and the checks above stand down. A machine that supplies no
+`/chosen/kaslr-seed` (`-M virt,dtb-randomness=off`) degrades to unpinned boots
+with a line saying so.
 
 CI runs this against the pinned release configured with the architecture's
 own `defconfig`, and boots the result under the emulator the qemu lane
@@ -696,8 +684,8 @@ compiles and links with badc. Both architectures are gated.
 `verify.py` boots a marker initramfs; `packages.py` runs the rest of the road
 a kernel travels in a distribution. It builds the pinned release with badc
 compiling every kernel C unit (the buildcc.py contract: zero fallbacks),
-packages it with the kernel's own targets -- `bindeb-pkg` on x86_64,
-`binrpm-pkg` on aarch64 -- installs the package in a stock cloud image
+packages it with the kernel's own targets -- `bindeb-pkg` or `binrpm-pkg`,
+following the distribution -- installs the package in a stock cloud image
 (Debian stable on x86_64, Fedora on aarch64, or the distribution `--distro`
 names: `debian`, `ubuntu`, `fedora`, each on both architectures) under qemu,
 and validates the reboot: the package scriptlets (depmod, initramfs
@@ -745,24 +733,51 @@ path and a gcc-built kernel boots the same EFI chain, so under UEFI the badc
 kernel reaches userspace only once that is fixed.
 
 ```sh
-python3 demos/linux/packages.py --arch x86_64 \
-    --tarball <linux-<version>.tar.xz> \
+python3 demos/linux/packages.py --arch x86_64 --distro fedora \
+    --tarball <linux-<version>.tar.xz> --config vendor \
     --report packages-x86_64.json
 ```
 
-`--linker badc` makes the build's links badc's too, through `ldshim.py`, and
-the run then fails on any link the shim could not make; the default keeps the
-reference `ld` so the packaging gate measures the compiler alone. Boot-loader
-installation is the one route that runs the 16-bit `setup.elf` from a disk
-rather than from qemu's `-kernel`, so it is where a badc-linked boot image is
-exercised end to end.
+### Where the configuration comes from
 
-Phases -- `config` (take a configuration out of the stock image), `tree`
-(extract + configure), `build` (hybrid make), `package`, `vm` -- are idempotent
-and `--phases` selects a subset. Without `--config` the
-tree's own `defconfig` is the corpus, which is what CI builds: 2953 units on
-x86_64 and 10489 on aarch64 at the 7.1.10 pin, kernel plus modules. A fresh
-qcow2 overlay keeps the base image pristine per run. On an rpm host the Debian
+A distribution kernel is its configuration as much as its source, so the gate
+builds the distribution's own rather than `defconfig`. `--config vendor` takes
+it off the `vendor-deps` release, held to a pinned sha256 the same way the
+cloud image is, and caches it under `.cache/configs`; the asset is named
+`kconfig-<distro>-<arch>-<sha8>.config`, the same convention
+`scripts/vendor_deps` uses everywhere. Four are published, one per
+(distribution, architecture) pair the package matrix builds:
+
+| asset | options set |
+|---|---|
+| `kconfig-fedora-x86_64` | 8048 |
+| `kconfig-fedora-aarch64` | 9197 |
+| `kconfig-ubuntu-x86_64` | 10289 |
+| `kconfig-ubuntu-aarch64` | 12605 |
+
+`--config from-vm` is where those bytes come from: it boots the pinned stock
+image and copies `/boot/config-$(uname -r)` out of it, which is the one source
+that cannot drift from the kernel the distribution ships. It is how the asset
+is refreshed when an image pin moves -- run it, then add the new digest to
+`DISTROS` in `packages.py` and to `scripts/vendor_deps/build_bundle.py`, and
+publish. A package build itself no longer boots a VM to read a config.
+
+`--config <path>` names an ad-hoc file, and without `--config` the tree's own
+`defconfig` is built.
+
+The build's links are badc's too by default, through `ldshim.py`, and the run
+fails on any link the shim could not make; `--linker reference` takes GNU `ld`
+instead, which is the contrast run that separates a compiler defect from a
+linker one. Boot-loader installation is the one route that runs the 16-bit
+`setup.elf` from a disk rather than from qemu's `-kernel`, so it is where a
+badc-linked boot image is exercised end to end.
+
+Phases -- `config` (resolve the configuration), `tree` (extract + configure),
+`build` (hybrid make), `package`, `vm` -- are idempotent and `--phases`
+selects a subset. Defconfig, which is what CI builds, is 2953 units on x86_64
+and 10489 on aarch64 at the 7.1.10 pin, kernel plus modules; a distribution
+configuration is several times that. A fresh qcow2 overlay keeps the base
+image pristine per run. On an rpm host the Debian
 packaging tools (dpkg, dpkg-dev, debhelper) are provisioned under
 `--deb-tools` from the host's own mirror via `dnf download` + rpm2cpio
 extraction; nothing is installed system-wide, and `dpkg-buildpackage` runs

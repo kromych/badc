@@ -26,7 +26,7 @@ A C unit badc cannot compile fails the build rather than being handed to gcc:
 `buildcc.py`, the `CC=` shim, removes the partial object and exits nonzero. The
 one route to another compiler is `$BADC_FALLBACK`, which names units explicitly
 and marks the build impure in the manifest; the gate fails when that count is
-nonzero. An assembly unit is the one exception, and is covered below.
+nonzero. Assembly units take the same route and no longer use it either.
 
 **Boot.** Both kernels boot under qemu, checked by more than reaching
 userspace. The initramfs `/init` prints a marker, then mounts procfs and sysfs
@@ -53,6 +53,66 @@ On x86 the KASLR relocation table built from badc's `--emit-relocs` output is
 byte-identical to GNU ld's. badc's `--version` reports
 `GNU ld (badc <version>) 2.30`, which `scripts/ld-version.sh` reads as a BFD
 linker at the kernel's own floor and deliberately no higher.
+
+Every link is badc's and only badc's: the `-r` merges, every `vmlinux` kallsyms
+pass, the x86 boot decompressor, all three vDSOs, the `-m elf_i386` boot links
+(`arch/x86/boot/setup.elf`, `arch/x86/realmode/rm/realmode.elf`, `vdso32`) and
+the scriptless probes. `LD=badc` leaves nothing to GNU ld.
+
+The i386 links read ELF32 `EM_386` relocatables whose relocations are `SHT_REL`
+-- the addend lives in the field being relocated rather than in the relocation
+record -- and write an ELF32 image. The reader materializes each implicit
+addend from the input bytes at the field's own width, so the same relocation
+engine covers both formats; the writer emits `Elf32_Ehdr`/`Phdr`/`Shdr`,
+16-byte `Elf32_Sym`, 8-byte `.dynamic` entries and 32-bit `.gnu.hash` Bloom
+words. `--emit-relocs` writes back in the target's own format, so
+`realmode.elf` carries `.rel.<section>` for `arch/x86/tools/relocs` to read.
+
+The vDSOs are shared objects, so badc emits the dynamic-linking metadata a
+loader searches -- `.dynsym`/`.dynstr`, `.hash` and `.gnu.hash` per
+`--hash-style`, `.gnu.version`/`.gnu.version_d` for the version the symbols are
+exported under, and a `.dynamic` with `DT_SONAME`, the table addresses and the
+REL/RELA/RELR tags -- plus `PT_DYNAMIC`. A link with no `-T` runs under a
+built-in default script per output kind, as GNU ld falls back on its internal
+one, which is what `scripts/tools-support-relr.sh` probes with.
+
+**Assembly.** All of it, now. `badc -c foo.S -o foo.o` assembles a unit
+directly, and kbuild routes `.S` through `$(CC)`, so `buildcc.py` decides each
+assembly unit the same way it decides a C one. Over the four 7.1.10
+distribution configurations gas assembles nothing:
+
+| package | configuration | assembly units | badc | gas |
+|---|---|---|---|---|
+| rpm, x86_64 | Fedora 44 | 141 | 141 | 0 |
+| rpm, aarch64 | Fedora 44 | 103 | 103 | 0 |
+| deb, x86_64 | Ubuntu 26.04 | 129 | 129 | 0 |
+| deb, aarch64 | Ubuntu 26.04 | 94 | 94 | 0 |
+
+measured with the fallback lists empty, so no unit was permitted to fall back.
+The last two holdouts were the GFNI affine instructions the three ARIA ciphers
+spell, and on aarch64 a lane-indexed register list, the widening multiply by
+element and the narrowing shift right, which one crypto unit needed together.
+
+An assembly unit built `-m16` or `-m32` gets an ELFCLASS32 / EM_386 object:
+`Elf32_Ehdr` / `Shdr` / `Sym` widths, `SHT_REL` tables named `.rel<section>`
+whose addends ride in the field each relocation patches, and the `R_386_*`
+numbering. The class also picks the assembler's starting code mode, the way
+`as --32` does for either spelling; `.code16` / `.code32` move it from there.
+badc generates no i386 machine code, so a C source under either is refused by
+name and only the assembler reaches the 32-bit container.
+
+Assembling is not only accepted but agreed on. Against GNU as 2.46.1's object
+for the same source, byte for byte over every allocatable section plus the
+symbol table and the relocations, **all 72** of the `.S`-derived objects the
+7.1.10 `defconfig` builds under `arch/arm64/` and `lib/crypto/arm64/` are
+identical, setting aside the DWARF badc emits none of for an assembled unit
+and the AArch64 `$x` / `$d` mapping symbols. The last object to differ did so
+by a single padding word, because a literal pool was keyed by section where
+GNU as keys it by section and subsection.
+
+One class of difference remains on x86_64: a branch to a named label in the
+same section always takes the wide displacement, where GNU as relaxes it to
+`rel8`. The bytes execute the same; the sections are longer.
 
 **Distribution.** The kernel packages as a `.deb` and an `.rpm` with the
 kernel's own `bindeb-pkg` / `binrpm-pkg` targets, installs into stock Debian
@@ -165,95 +225,6 @@ and a sample of the objects rebuilt and required to repeat byte for byte. It is
 off by default and `--selfhost-scope` sizes it.
 
 ## What is not badc's
-
-**Assembly.** Partly badc's. `badc -c foo.S -o foo.o` assembles a unit
-directly, and kbuild routes `.S` through `$(CC)`, so `buildcc.py` decides each
-assembly unit the same way it decides a C one. badc takes what its assembler
-implements and gas takes the rest; unlike the C path a fallback here is
-expected, so it is measured rather than fatal. At the 7.1.10 `defconfig` pin:
-
-| | assembly units | badc | gas |
-|---|---|---|---|
-| x86_64 | 71 | 71 | 0 |
-| aarch64 | 77 | 71 | 6 |
-
-The x86_64 row moved from 45 of 71 once `-m16` / `-m32` units stopped
-being refused: the writer emits ELFCLASS32 / EM_386 objects, so the nine
-of those fourteen units the assembler can encode are badc's. It moved
-again from 54 with the direct far branch (`ljmp` / `lcall $seg, $off`,
-the `ptr16:16` and `ptr16:32` forms), which takes two of the four
-real-mode units it was keeping on gas, and from 56 once an operand took
-an expression over symbols rather than a name: `la57toggle.S`,
-`wakeup_64.S`, `trampoline_64.S` and `head_64.S` are badc's, and both
-AArch64 `hyp-entry.S` units are what took that row from 69. The row is
-71 of 71 as measured by `verify.py --linker badc` on Fedora 44 (GNU as
-2.46.1 behind the fallback): the eleven units the earlier measurement
-left with gas -- AVX `vmovd`, `lsl r64, r64`, `ud1 r64, m`, `ud2a`, the
-high-byte registers `%ah` / `%ch` / `%dh` / `%bh`, the `.hidden` and
-`.reloc` directives, the `ANNOTATE` macros and a malformed
-operand-reference spelling -- assemble, on this tree and on master
-alike. The AVX forms the non-defconfig RAID-6 units spell
-(`lib/raid6/avx2.c`, `avx512.c` and the recovery pair, C units of the
-Fedora configuration) are encoded as well: the non-temporal `vmovntdq`
-in its VEX.256 and EVEX.512 forms, and the upper-case register spelling
-`%Zmm14`.
-
-What keeps an aarch64 unit with gas, ranked by incidence (the earlier
-measurement; the aarch64 row was not re-taken with the x86_64 one):
-
-| units | class |
-|---|---|
-| 3 | Instruction encodings the tables do not carry: the NEON `str q` / `orr v.2s, #imm` post-index and immediate forms, `sha1c`. |
-| 2 | Directives: `.hidden`, `.reloc`, `.endr` reached without its `.rept`. |
-| 1 | `:abs_g2_s:` over a label: a symbol in a `movz` / `movk` group needs a MOVW relocation the writer does not emit. |
-
-These figures supersede `tools/probe_asm_units/`'s 46 of 68 and 62 of 77. The
-probe feeds each preprocessed unit through the file-scope `asm` path in
-isolation, with no code model to honor. The numbers above are what the build
-achieves.
-
-An assembly unit built `-m16` or `-m32` gets an ELFCLASS32 / EM_386 object:
-`Elf32_Ehdr` / `Shdr` / `Sym` widths, `SHT_REL` tables named `.rel<section>`
-whose addends ride in the field each relocation patches, and the `R_386_*`
-numbering. The class also picks the assembler's starting code mode, the way
-`as --32` does for either spelling; `.code16` / `.code32` move it from there.
-badc generates no i386 machine code, so a C source under either is refused by
-name and only the assembler reaches the 32-bit container.
-
-Against GNU as 2.46.1's object for the same source, byte for byte over every
-allocatable section plus the symbol table and the relocations: 18 of the
-x86_64 units that were already badc's and, setting aside the DWARF badc emits
-none of for an assembled unit and the AArch64 `$x` / `$d` mapping symbols, 62
-of 69 aarch64 units are identical. Of the nine the 32-bit container first
-added, three are identical and the rest differ only in that DWARF and in one
-class -- a branch to a named label in the same section always takes the wide
-displacement, where GNU as relaxes it to `rel8`. The two the direct far branch
-adds carry every far branch byte for byte and differ in that class and in one
-more: a reference to a `.L` label is relocated against the label, where GNU as
-folds it to the section symbol plus an addend. The bytes execute the same; the
-sections are longer.
-
-Every link is badc's and only badc's: the `-r` merges, every `vmlinux` kallsyms
-pass, the x86 boot decompressor, all three vDSOs, the `-m elf_i386` boot links
-(`arch/x86/boot/setup.elf`, `arch/x86/realmode/rm/realmode.elf`, `vdso32`) and
-the scriptless probes. `LD=badc` leaves nothing to GNU ld.
-
-The i386 links read ELF32 `EM_386` relocatables whose relocations are `SHT_REL`
--- the addend lives in the field being relocated rather than in the relocation
-record -- and write an ELF32 image. The reader materializes each implicit
-addend from the input bytes at the field's own width, so the same relocation
-engine covers both formats; the writer emits `Elf32_Ehdr`/`Phdr`/`Shdr`,
-16-byte `Elf32_Sym`, 8-byte `.dynamic` entries and 32-bit `.gnu.hash` Bloom
-words. `--emit-relocs` writes back in the target's own format, so
-`realmode.elf` carries `.rel.<section>` for `arch/x86/tools/relocs` to read.
-
-The vDSOs are shared objects, so badc emits the dynamic-linking metadata a
-loader searches -- `.dynsym`/`.dynstr`, `.hash` and `.gnu.hash` per
-`--hash-style`, `.gnu.version`/`.gnu.version_d` for the version the symbols are
-exported under, and a `.dynamic` with `DT_SONAME`, the table addresses and the
-REL/RELA/RELR tags -- plus `PT_DYNAMIC`. A link with no `-T` runs under a
-built-in default script per output kind, as GNU ld falls back on its internal
-one, which is what `scripts/tools-support-relr.sh` probes with.
 
 **Configuration classification.** `scripts/cc-version.sh` still classifies the
 reference compiler, so `CONFIG_GCC_VERSION` keeps the reference toolchain's

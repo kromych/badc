@@ -89,34 +89,24 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v11  Imm(14)                                          -> x1
     v12  Imm(14)                                          -> x1
     v13  Store { addr=v9, disp=0, value=v12, kind=I32 }   -> -
-    v14  Imm(0)                                           -> x1
-    v15  Imm(1)                                           -> x1
-    v16  Imm(1)                                           -> x1
-    v17  Imm(14)                                          -> x1
+    v14  Imm(14)                                          -> x1
+    v15  Imm(28)                                          -> x1
+    v16  Imm(28)                                          -> x1
+    v17  Store { addr=v9, disp=0, value=v16, kind=I32 }   -> -
     v18  Imm(28)                                          -> x1
-    v19  Imm(28)                                          -> x1
-    v20  Store { addr=v9, disp=0, value=v19, kind=I32 }   -> -
-    v21  Imm(1)                                           -> x1
-    v22  Imm(2)                                           -> x1
-    v23  Imm(2)                                           -> x1
-    v24  Imm(28)                                          -> x1
-    v25  Imm(42)                                          -> x1
-    v26  Imm(42)                                          -> x1
-    v27  Store { addr=v9, disp=0, value=v26, kind=I32 }   -> -
-    v28  Imm(2)                                           -> x0
-    v29  Imm(3)                                           -> x0
-    v30  Imm(3)                                           -> x0
-    v31  Imm(3)                                           -> x0
-    v32  Imm(0)                                           -> x0
-    terminator Jmp(b3)   (exit_acc=v32)
+    v19  Imm(42)                                          -> x1
+    v20  Imm(42)                                          -> x1
+    v21  Store { addr=v9, disp=0, value=v20, kind=I32 }   -> -
+    v22  Imm(0)                                           -> x0
+    terminator Jmp(b3)   (exit_acc=v22)
   block 3  start_pc=0
-    v33  LoadLocal { off=-1, kind=I32 }                   -> x0
-    v34  Extend { value=v33, kind=I32 }                   -> x1
-    terminator Jmp(b4)   (exit_acc=v33)
+    v23  LoadLocal { off=-1, kind=I32 }                   -> x0
+    v24  Extend { value=v23, kind=I32 }                   -> x1
+    terminator Jmp(b4)   (exit_acc=v23)
   block 4  start_pc=0
-    v2   BinopI { op=shl, lhs=v33, rhs_imm=32 }           -> x2
-    v3   Extend { value=v34, kind=I32 }                   -> x1
-    terminator Return(v33)   (exit_acc=v33)
+    v2   BinopI { op=shl, lhs=v23, rhs_imm=32 }           -> x2
+    v3   Extend { value=v24, kind=I32 }                   -> x1
+    terminator Return(v23)   (exit_acc=v23)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

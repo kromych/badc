@@ -215,18 +215,48 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movabsq	$-0x6, %rbx
-               	jmp	<addr>
-               	movq	%rbx, %rdi
+               	movabsq	$-0x6, %rdi
                	callq	<addr>
-               	movq	%rax, %rcx
-               	leaq	0x7(%rbx), %rax
-               	movslq	%eax, %rax
-               	cmpq	%rax, %rcx
+               	cmpq	$0x1, %rax
+               	je	<addr>
+               	movl	$0x8, %eax
+               	movq	(%rsp), %rbx
+               	movq	0x8(%rsp), %r12
+               	addq	$0x10, %rsp
+               	popq	%rbp
+               	retq
+               	movabsq	$-0x5, %rdi
+               	callq	<addr>
+               	cmpq	$0x2, %rax
                	jne	<addr>
-               	incq	%rbx
-               	cmpq	$0x2, %rbx
-               	jle	<addr>
+               	movabsq	$-0x4, %rdi
+               	callq	<addr>
+               	cmpq	$0x3, %rax
+               	jne	<addr>
+               	movabsq	$-0x3, %rdi
+               	callq	<addr>
+               	cmpq	$0x4, %rax
+               	jne	<addr>
+               	movabsq	$-0x2, %rdi
+               	callq	<addr>
+               	cmpq	$0x5, %rax
+               	jne	<addr>
+               	movabsq	$-0x1, %rdi
+               	callq	<addr>
+               	cmpq	$0x6, %rax
+               	jne	<addr>
+               	xorq	%rdi, %rdi
+               	callq	<addr>
+               	cmpq	$0x7, %rax
+               	jne	<addr>
+               	movl	$0x1, %edi
+               	callq	<addr>
+               	cmpq	$0x8, %rax
+               	jne	<addr>
+               	movl	$0x2, %edi
+               	callq	<addr>
+               	cmpq	$0x9, %rax
+               	jne	<addr>
                	movabsq	$-0x7, %rdi
                	callq	<addr>
                	cmpq	$-0x1, %rax
@@ -267,23 +297,52 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rbx, %rbx
-               	jmp	<addr>
-               	movl	$0xfffffff6, %eax       # imm = 0xFFFFFFF6
-               	addq	%r12, %rax
-               	movl	%eax, %edi
+               	movl	$0xfffffff6, %edi       # imm = 0xFFFFFFF6
                	callq	<addr>
-               	movq	%rax, %rcx
-               	leaq	0x1(%r12), %rax
-               	movl	%eax, %eax
-               	movslq	%eax, %rax
-               	cmpq	%rax, %rcx
+               	cmpq	$0x1, %rax
+               	je	<addr>
+               	movl	$0xd, %eax
+               	movq	(%rsp), %rbx
+               	movq	0x8(%rsp), %r12
+               	addq	$0x10, %rsp
+               	popq	%rbp
+               	retq
+               	movl	$0xfffffff7, %edi       # imm = 0xFFFFFFF7
+               	callq	<addr>
+               	cmpq	$0x2, %rax
                	jne	<addr>
-               	movl	%ebx, %eax
-               	leaq	0x1(%rax), %rbx
-               	movl	%ebx, %r12d
-               	cmpl	$0xa, %r12d
-               	jb	<addr>
+               	movl	$0xfffffff8, %edi       # imm = 0xFFFFFFF8
+               	callq	<addr>
+               	cmpq	$0x3, %rax
+               	jne	<addr>
+               	movl	$0xfffffff9, %edi       # imm = 0xFFFFFFF9
+               	callq	<addr>
+               	cmpq	$0x4, %rax
+               	jne	<addr>
+               	movl	$0xfffffffa, %edi       # imm = 0xFFFFFFFA
+               	callq	<addr>
+               	cmpq	$0x5, %rax
+               	jne	<addr>
+               	movl	$0xfffffffb, %edi       # imm = 0xFFFFFFFB
+               	callq	<addr>
+               	cmpq	$0x6, %rax
+               	jne	<addr>
+               	movl	$0xfffffffc, %edi       # imm = 0xFFFFFFFC
+               	callq	<addr>
+               	cmpq	$0x7, %rax
+               	jne	<addr>
+               	movl	$0xfffffffd, %edi       # imm = 0xFFFFFFFD
+               	callq	<addr>
+               	cmpq	$0x8, %rax
+               	jne	<addr>
+               	movl	$0xfffffffe, %edi       # imm = 0xFFFFFFFE
+               	callq	<addr>
+               	cmpq	$0x9, %rax
+               	jne	<addr>
+               	movl	$0xffffffff, %edi       # imm = 0xFFFFFFFF
+               	callq	<addr>
+               	cmpq	$0xa, %rax
+               	jne	<addr>
                	movl	$0xfffffff5, %edi       # imm = 0xFFFFFFF5
                	callq	<addr>
                	cmpq	$-0x1, %rax
@@ -315,18 +374,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0xd, %eax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0x8, %eax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	addq	$0x10, %rsp

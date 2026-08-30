@@ -64,6 +64,7 @@ const DEAD_BRANCH_NEEDS_OPTIMIZE: &[&str] = &[
     "select_operand_guard_folds.c",
     "const_scalar_load_folds.c",
     "unroll_const_trip_index_literal.c",
+    "unroll_multi_exit_peel_guard.c",
     "inline_zero_frame_callee_past_gate.c",
     "ipa_const_param_guard.c",
     "addr_null_compare_inline_param.c",

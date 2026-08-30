@@ -91,10 +91,10 @@ Disassembly of section .text:
                	orr	x20, x20, x17
                	mov	x0, x23
                	bl	<addr>
-               	sub	x16, x29, #0xa0
+               	sub	x16, x29, #0xd0
                	str	x0, [x16]
                	str	x1, [x16, #0x8]
-               	sub	x21, x29, #0xa0
+               	sub	x21, x29, #0xd0
                	ldr	x0, [x21]
                	ldr	x1, [x21, #0x8]
                	add	x2, x0, #0x5
@@ -111,10 +111,10 @@ Disassembly of section .text:
                	mov	x23, #0x5               // =5
                	mov	x0, x23
                	bl	<addr>
-               	sub	x16, x29, #0xd0
+               	sub	x16, x29, #0x100
                	str	x0, [x16]
                	str	x1, [x16, #0x8]
-               	sub	x22, x29, #0xd0
+               	sub	x22, x29, #0x100
                	ldr	x0, [x22]
                	ldr	x1, [x22, #0x8]
                	add	x2, x0, #0x5
@@ -130,7 +130,7 @@ Disassembly of section .text:
                	orr	x20, x20, x17
                	mov	x0, x23
                	bl	<addr>
-               	sub	x16, x29, #0xa0
+               	sub	x16, x29, #0xd0
                	str	x0, [x16]
                	str	x1, [x16, #0x8]
                	ldr	x0, [x21]
@@ -142,7 +142,7 @@ Disassembly of section .text:
                	mov	x17, #0x10              // =16
                	orr	x20, x20, x17
                	mov	x1, #0x6                // =6
-               	sub	x0, x29, #0xa0
+               	sub	x0, x29, #0xd0
                	scvtf	d0, x1
                	mov	x2, #0x4000000000000000 // =4611686018427387904
                	fmov	d17, x2

@@ -14,17 +14,29 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	mov	x0, #0x0                // =0
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	b	<addr>
-               	add	x2, x3, #0x8
-               	sxtw	x1, w0
-               	ldr	x2, [x2, x1, lsl #3]
-               	cbnz	x2, <addr>
-               	add	x0, x1, #0x1
-               	cmp	w0, #0x4
-               	b.lt	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	add	x0, x0, #0x8
+               	add	x0, x0, #0x0
+               	ldr	x0, [x0]
+               	cbz	x0, <addr>
+               	mov	x0, #0x1                // =1
+               	ret
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	add	x0, x0, #0x8
+               	ldr	x0, [x0, #0x8]
+               	cbnz	x0, <addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	add	x0, x0, #0x8
+               	ldr	x0, [x0, #0x10]
+               	cbnz	x0, <addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	add	x0, x0, #0x8
+               	ldr	x0, [x0, #0x18]
+               	cbnz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
@@ -82,5 +94,3 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	ret
                	b	<addr>
-               	mov	x0, #0x1                // =1
-               	ret

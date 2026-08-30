@@ -64,16 +64,41 @@ Disassembly of section .text:
                	add	x0, x1, #0x1
                	cmp	w0, w3
                	b.lt	<addr>
-               	mov	x0, #0x0                // =0
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	b	<addr>
-               	sxtw	x1, w0
-               	ldr	x4, [x3, x1, lsl #3]
-               	cbnz	x4, <addr>
-               	add	x0, x1, #0x1
-               	cmp	w0, #0x8
-               	b.lt	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	add	x0, x0, #0x0
+               	ldr	x0, [x0]
+               	cbz	x0, <addr>
+               	mov	x0, #0x6                // =6
+               	ret
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0, #0x8]
+               	cbnz	x0, <addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0, #0x10]
+               	cbnz	x0, <addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0, #0x18]
+               	cbnz	x0, <addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0, #0x20]
+               	cbnz	x0, <addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0, #0x28]
+               	cbnz	x0, <addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0, #0x30]
+               	cbnz	x0, <addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0, #0x38]
+               	cbnz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x1, [x0]
@@ -112,8 +137,6 @@ Disassembly of section .text:
                	mov	x0, #0x8                // =8
                	ret
                	mov	x0, #0x0                // =0
-               	ret
-               	mov	x0, #0x6                // =6
                	ret
                	mov	x0, #0x5                // =5
                	ret

@@ -26,20 +26,33 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	xorq	%rax, %rax
-               	leaq	<rip>, %rdx
-               	leaq	<rip>, %rsi
-               	jmp	<addr>
-               	movslq	%eax, %rcx
-               	leaq	(%rsi,%rcx), %rdi
-               	movzbq	(%rdi), %rdi
-               	leaq	(%rdx,%rcx), %r8
-               	movzbq	(%r8), %r8
-               	cmpl	%r8d, %edi
+               	leaq	<rip>, %rax
+               	addq	$0x0, %rax
+               	movzbq	(%rax), %rax
+               	cmpl	$0x1, %eax
+               	je	<addr>
+               	movl	$0x1, %eax
+               	retq
+               	leaq	<rip>, %rax
+               	movzbq	0x1(%rax), %rax
+               	cmpl	$0x10, %eax
                	jne	<addr>
-               	leaq	0x1(%rcx), %rax
-               	cmpl	$0x6, %eax
-               	jl	<addr>
+               	leaq	<rip>, %rax
+               	movzbq	0x2(%rax), %rax
+               	cmpl	$0x18, %eax
+               	jne	<addr>
+               	leaq	<rip>, %rax
+               	movzbq	0x3(%rax), %rax
+               	cmpl	$0x1, %eax
+               	jne	<addr>
+               	leaq	<rip>, %rax
+               	movzbq	0x4(%rax), %rax
+               	testq	%rax, %rax
+               	jne	<addr>
+               	leaq	<rip>, %rax
+               	movzbq	0x5(%rax), %rax
+               	cmpl	$0x2, %eax
+               	jne	<addr>
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	cmpl	$0x4, %eax
@@ -67,5 +80,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	retq
                	jmp	<addr>
-               	movl	$0x1, %eax
-               	retq

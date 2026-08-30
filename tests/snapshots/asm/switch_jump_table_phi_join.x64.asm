@@ -70,34 +70,87 @@ Disassembly of section .text:
                	movq	%r12, 0x8(%rsp)
                	movq	%r13, 0x10(%rsp)
                	xorq	%rax, %rax
-               	movabsq	$-0x2, %r12
+               	movabsq	$-0x2, %rbx
                	jmp	<addr>
-               	movabsq	$-0x1, %rbx
-               	jmp	<addr>
+               	movabsq	$-0x1, %r12
                	xorq	%rdx, %rdx
                	imulq	$0x21, %rax, %r13
-               	movq	%r12, %rdi
-               	movq	%rbx, %rsi
+               	movq	%rbx, %rdi
+               	movq	%r12, %rsi
                	callq	<addr>
                	addq	%r13, %rax
                	movl	$0x1, %edx
                	imulq	$0x21, %rax, %r13
-               	movq	%r12, %rdi
-               	movq	%rbx, %rsi
+               	movq	%rbx, %rdi
+               	movq	%r12, %rsi
                	callq	<addr>
                	addq	%r13, %rax
                	movl	$0x2, %edx
                	imulq	$0x21, %rax, %r13
-               	movq	%r12, %rdi
-               	movq	%rbx, %rsi
+               	movq	%rbx, %rdi
+               	movq	%r12, %rsi
                	callq	<addr>
                	addq	%r13, %rax
-               	incq	%rbx
-               	cmpq	$0x3, %rbx
-               	jl	<addr>
-               	movslq	%r12d, %rcx
-               	leaq	0x1(%rcx), %r12
-               	cmpl	$0xe, %r12d
+               	xorq	%r12, %r12
+               	imulq	$0x21, %rax, %r13
+               	movq	%rbx, %rdi
+               	movq	%r12, %rdx
+               	movq	%r12, %rsi
+               	callq	<addr>
+               	addq	%r13, %rax
+               	movl	$0x1, %edx
+               	imulq	$0x21, %rax, %r13
+               	movq	%rbx, %rdi
+               	movq	%r12, %rsi
+               	callq	<addr>
+               	addq	%r13, %rax
+               	movl	$0x2, %edx
+               	imulq	$0x21, %rax, %r13
+               	movq	%rbx, %rdi
+               	movq	%r12, %rsi
+               	callq	<addr>
+               	addq	%r13, %rax
+               	movl	$0x1, %r12d
+               	xorq	%rdx, %rdx
+               	imulq	$0x21, %rax, %r13
+               	movq	%rbx, %rdi
+               	movq	%r12, %rsi
+               	callq	<addr>
+               	addq	%r13, %rax
+               	movl	$0x1, %edx
+               	imulq	$0x21, %rax, %r13
+               	movq	%rbx, %rdi
+               	movq	%r12, %rsi
+               	callq	<addr>
+               	addq	%r13, %rax
+               	movl	$0x2, %edx
+               	imulq	$0x21, %rax, %r13
+               	movq	%rbx, %rdi
+               	movq	%r12, %rsi
+               	callq	<addr>
+               	addq	%r13, %rax
+               	movl	$0x2, %r12d
+               	xorq	%rdx, %rdx
+               	imulq	$0x21, %rax, %r13
+               	movq	%rbx, %rdi
+               	movq	%r12, %rsi
+               	callq	<addr>
+               	addq	%r13, %rax
+               	movl	$0x1, %edx
+               	imulq	$0x21, %rax, %r13
+               	movq	%rbx, %rdi
+               	movq	%r12, %rsi
+               	callq	<addr>
+               	addq	%r13, %rax
+               	movl	$0x2, %edx
+               	imulq	$0x21, %rax, %r13
+               	movq	%rbx, %rdi
+               	movq	%r12, %rsi
+               	callq	<addr>
+               	addq	%r13, %rax
+               	movslq	%ebx, %rcx
+               	leaq	0x1(%rcx), %rbx
+               	cmpl	$0xe, %ebx
                	jl	<addr>
                	movabsq	$-0x2eb506b7b9cbd8a0, %r11 # imm = 0xD14AF94846342760
                	cmpq	%r11, %rax

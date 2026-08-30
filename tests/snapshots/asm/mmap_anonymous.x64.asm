@@ -59,19 +59,6 @@ Disassembly of section .text:
                	leaq	0x3000(%rdi), %rax
                	movl	$0x4, %ecx
                	movb	%cl, (%rax)
-               	xorq	%rax, %rax
-               	jmp	<addr>
-               	leaq	(%rdi,%rax), %rcx
-               	movsbq	(%rcx), %rdx
-               	movq	%rax, %rcx
-               	shrq	$0xc, %rcx
-               	incq	%rcx
-               	movsbq	%cl, %rcx
-               	cmpl	%ecx, %edx
-               	jne	<addr>
-               	addq	$0x1000, %rax           # imm = 0x1000
-               	cmpq	%rbx, %rax
-               	jb	<addr>
                	movq	%rbx, %rsi
                	xorl	%eax, %eax
                	callq	<addr>
@@ -84,11 +71,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-               	movl	$0x2, %eax
                	movq	(%rsp), %rbx
                	addq	$0x10, %rsp
                	popq	%rbp

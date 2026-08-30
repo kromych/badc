@@ -94,22 +94,37 @@ Disassembly of section .text:
                	addq	$0xd0, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
-               	jmp	<addr>
-               	movslq	%eax, %rcx
-               	movq	(%rdx,%rcx,8), %rsi
-               	leaq	0x74(%rcx), %rdi
-               	cmpq	%rdi, %rsi
-               	jne	<addr>
-               	leaq	0x1(%rcx), %rax
-               	cmpl	$0x8, %eax
-               	jl	<addr>
-               	xorq	%rax, %rax
+               	leaq	(%rdx), %rax
+               	movq	(%rax), %rax
+               	cmpq	$0x74, %rax
+               	je	<addr>
+               	movl	$0x1, %eax
                	leaq	-0xd0(%rbp), %rsp
                	addq	$0xd0, %rsp
                	popq	%rbp
                	retq
-               	movl	$0x1, %eax
+               	movq	0x8(%rdx), %rax
+               	cmpq	$0x75, %rax
+               	jne	<addr>
+               	movq	0x10(%rdx), %rax
+               	cmpq	$0x76, %rax
+               	jne	<addr>
+               	movq	0x18(%rdx), %rax
+               	cmpq	$0x77, %rax
+               	jne	<addr>
+               	movq	0x20(%rdx), %rax
+               	cmpq	$0x78, %rax
+               	jne	<addr>
+               	movq	0x28(%rdx), %rax
+               	cmpq	$0x79, %rax
+               	jne	<addr>
+               	movq	0x30(%rdx), %rax
+               	cmpq	$0x7a, %rax
+               	jne	<addr>
+               	movq	0x38(%rdx), %rax
+               	cmpq	$0x7b, %rax
+               	jne	<addr>
+               	xorq	%rax, %rax
                	leaq	-0xd0(%rbp), %rsp
                	addq	$0xd0, %rsp
                	popq	%rbp

@@ -196,6 +196,44 @@ returns about a gigabyte: the box now sits at 745 MB of 7.7 GB. The masks
 above still hold whatever runs on top; this simply removes the layer that
 kept asking.
 
+### A shell in emergency mode, and a way back from a wedge
+
+Both of these were added after a failed boot left the machine
+unreachable with nothing to do but hold the power button.
+
+```bash
+# /etc/systemd/system/{emergency,rescue}.service.d/sulogin-force.conf
+[Service]
+Environment=SYSTEMD_SULOGIN_FORCE=1
+```
+
+```bash
+# /etc/sysctl.d/99-sysrq.conf
+kernel.sysrq = 1
+```
+
+The autologin getty covers a boot that reaches userspace. A boot that
+does **not** drops to emergency mode, which runs `sulogin` -- and Fedora
+ships the root account locked, so the console answers `Cannot open access
+to console, the root account is locked.` and there is no shell at the one
+moment a shell matters. `SYSTEMD_SULOGIN_FORCE=1` is the documented way
+to let a headless machine past that.
+
+`kernel.sysrq=1` makes a serial BREAK followed by a key reach the kernel,
+so a wedged box can be synced and reset over the wire (`BREAK` then `s`,
+then `b`). On this machine that is the *only* remote reset: the battery
+means cutting mains power changes nothing, and the systemd watchdog is
+useless once systemd is running but stuck at a prompt.
+
+### What a failed boot leaves behind
+
+Nothing on disk. A boot that ends in emergency mode never gets far enough
+to flush the journal, so `journalctl -b -1` has no record of it --
+verified after exactly that failure. **The serial console is the only
+evidence**, which means the capture has to be running *before* the reboot
+is issued and stay open across it. Opening the port afterwards catches
+whatever is still in flight and nothing that came before.
+
 ## Booting a badc kernel
 
 Never make one the default. Install it, select it for exactly one boot,
@@ -286,6 +324,12 @@ sudo -u gdm dbus-run-session -- gsettings reset org.gnome.desktop.session idle-d
 # 5. The desktop
 sudo systemctl set-default graphical.target
 sudo systemctl isolate graphical.target
+
+# 6. Rescue-shell access and sysrq
+sudo rm -rf /etc/systemd/system/emergency.service.d/sulogin-force.conf \
+            /etc/systemd/system/rescue.service.d/sulogin-force.conf
+sudo rm -f /etc/sysctl.d/99-sysrq.conf
+sudo systemctl daemon-reload
 ```
 
 One caveat on reversing the boot arguments: `grubby --remove-args` edits

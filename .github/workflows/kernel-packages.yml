@@ -47,9 +47,16 @@ name: kernel-packages
 # behaviour whose instructions TCG executes.
 
 on:
-  # No architecture input: both lanes run in parallel, so selecting one saves
-  # no wall time. A single-architecture run is a local packages.py invocation.
+  # No architecture or format input: the four lanes run in parallel, so
+  # selecting one saves no wall time. A single-lane run is a local
+  # packages.py invocation.
   workflow_dispatch:
+    inputs:
+      linker:
+        description: "linker for the kernel build"
+        type: choice
+        options: [badc, reference]
+        default: badc
   schedule:
     # Nightly at 03:41 UTC: off the :00/:30 marks the fleet crowds, and clear
     # of the asm-fuzz lane.
@@ -85,10 +92,20 @@ jobs:
           # the emulator's default. `max` exposes LA57 on x86_64, so the lane
           # boots under 5-level paging -- which ci.yml's kernel lane does not,
           # since its guest takes the emulator's default model.
-          - { os: ubuntu-24.04,     arch: x86_64,  pkg: deb, floor: 2900,
-              cpu: 'max' }
-          - { os: ubuntu-24.04-arm, arch: aarch64, pkg: rpm, floor: 10000,
-              cpu: 'max' }
+          #
+          # Both packaging formats on both architectures: the kernel's own
+          # bindeb-pkg and binrpm-pkg targets over the same tree, installed
+          # into the distribution each format belongs to. `distro` and `pkg`
+          # are stated rather than left to the architecture's default, which
+          # is what previously fixed one format per architecture.
+          - { os: ubuntu-24.04,     arch: x86_64,  distro: ubuntu, pkg: deb,
+              floor: 2900,  cpu: 'max' }
+          - { os: ubuntu-24.04,     arch: x86_64,  distro: fedora, pkg: rpm,
+              floor: 2900,  cpu: 'max' }
+          - { os: ubuntu-24.04-arm, arch: aarch64, distro: ubuntu, pkg: deb,
+              floor: 10000, cpu: 'max' }
+          - { os: ubuntu-24.04-arm, arch: aarch64, distro: fedora, pkg: rpm,
+              floor: 10000, cpu: 'max' }
     runs-on: ${{ matrix.os }}
     # Roughly 2x the measured wall time, so a hang is bounded well below the
     # platform's 6-hour limit. Each VM boot is separately bounded by
@@ -123,8 +140,11 @@ jobs:
         # Fails when badc cannot compile a unit, when a unit falls back to
         # the reference compiler, when fewer units than the floor were
         # compiled, or when the kernel's packaging target rejects the tree.
-        # `--linker reference` is stated, not left to the default: this lane
-        # is the contrast ci.yml's badc-linked kernel gate is read against.
+        # The published packages are badc-linked, so the artefact matches
+        # what the milestone claims: badc compiles, assembles and links.
+        # `linker: reference` on a manual dispatch gives the contrast run,
+        # which separates a compiler fault from a linker one when a package
+        # regresses.
         timeout-minutes: ${{ matrix.arch == 'x86_64' && 30 || 120 }}
         env:
           # The runner's reference compiler is not the one the pinned kernel
@@ -133,8 +153,9 @@ jobs:
         run: |
           tarball=$(ls "$RUNNER_TEMP"/lk/linux-*.tar.xz | head -1)
           python demos/linux/packages.py --arch ${{ matrix.arch }} \
+            --distro ${{ matrix.distro }} --pkg ${{ matrix.pkg }} \
             --tarball "$tarball" --phases tree,build,package \
-            --linker reference \
+            --linker ${{ inputs.linker || 'badc' }} \
             --expect-units ${{ matrix.floor }} \
             --workdir "$RUNNER_TEMP/pkg" \
             --report "$RUNNER_TEMP/pkg/package-${{ matrix.arch }}.json"
@@ -158,7 +179,7 @@ jobs:
           release=$(python -c "import json,sys;print(json.load(open(sys.argv[1]))['release'])" \
             "$RUNNER_TEMP/pkg/package-${{ matrix.arch }}.json")
           badcver=$(./target/release/badc --version | head -1 | cut -d' ' -f2)
-          echo "artifact=linux-badc-${{ matrix.arch }}-$release-badc$badcver-${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
+          echo "artifact=linux-badc-${{ matrix.pkg }}-${{ matrix.arch }}-$release-badc$badcver-${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
           cat "$out/SHA256SUMS"
       - name: publish the packages
         # Uploaded before the VM runs, so the packages reach the run page
@@ -177,6 +198,7 @@ jobs:
         timeout-minutes: ${{ matrix.arch == 'x86_64' && 25 || 110 }}
         run: |
           python demos/linux/packages.py --arch ${{ matrix.arch }} \
+            --distro ${{ matrix.distro }} --pkg ${{ matrix.pkg }} \
             --phases vm --accel tcg --vm-cpu '${{ matrix.cpu }}' \
             --vm-cpus 4 --vm-mem 4096 \
             --vm-timeout 2400 --install-timeout 3600 \
@@ -191,7 +213,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: kernel-packages-vm-${{ matrix.arch }}
+          name: kernel-packages-vm-${{ matrix.pkg }}-${{ matrix.arch }}
           path: |
             ${{ runner.temp }}/pkg/vm-${{ matrix.arch }}.json
             ${{ runner.temp }}/pkg/package-${{ matrix.arch }}.json

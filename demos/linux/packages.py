@@ -88,6 +88,7 @@ from pathlib import Path
 
 import diags
 import exercise
+import setup
 
 LINUX_DIR = Path(__file__).resolve().parent
 REPO_ROOT = LINUX_DIR.parents[1]
@@ -3321,7 +3322,8 @@ def main() -> int:
                     help="reference linker (default: ld; on macOS the "
                          "musl-cross <triple>-ld for --arch)")
     ap.add_argument("--tarball", type=Path,
-                    help="pinned kernel source tarball (see setup.py)")
+                    help="kernel source tarball (default: fetch the pinned "
+                         "release from the mirror, sha256-verified)")
     ap.add_argument("--tarball-url",
                     help="fetch the kernel tarball from this URL instead; "
                          "requires --tarball-sha256")
@@ -3552,6 +3554,15 @@ def main() -> int:
 
     tree = None
     if "tree" in phases:
+        if not args.tarball and not args.tarball_url:
+            # Neither given: take the release this tree is pinned to, from
+            # the mirror, against its recorded sha256. The same verified
+            # path setup.py uses, so a bare invocation builds packages
+            # without first having to name a tarball.
+            version, sha = setup.DEFCONFIG_KERNEL
+            log(f"no tarball named; taking the pinned release {version}")
+            args.tarball_url = setup.tarball_urls(version, sha)[0]
+            args.tarball_sha256 = sha
         if args.tarball_url:
             if not args.tarball_sha256:
                 die("--tarball-url requires --tarball-sha256")

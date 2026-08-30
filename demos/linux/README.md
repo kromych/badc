@@ -751,6 +751,34 @@ by the PE entry point it reports. The same kernel boots through the BIOS
 path and a gcc-built kernel boots the same EFI chain, so under UEFI the badc
 kernel reaches userspace only once that is fixed.
 
+Naming a tarball is optional. With neither `--tarball` nor `--tarball-url`,
+the pinned release is fetched from the vendor mirror and checked against its
+recorded sha256 -- the same verified path `setup.py` uses -- so the shortest
+useful invocation is:
+
+```sh
+# packages only: fetch, configure defconfig, build, package
+python3 demos/linux/packages.py --arch x86_64 \
+    --phases config,tree,build,package
+```
+
+That leaves the `.deb` or `.rpm` in the work directory. Dropping `--phases`
+runs the whole road instead -- install into a stock cloud image, reboot into
+the badc kernel, and exercise it -- which additionally needs qemu and the
+image, fetched the same verified way.
+
+To build a kernel other than the pinned one, give the URL and its digest;
+an unverified download is refused rather than trusted:
+
+```sh
+python3 demos/linux/packages.py --arch x86_64 \
+    --tarball-url https://.../linux-<version>.tar.xz \
+    --tarball-sha256 <sha256>
+```
+
+The distribution's own configuration rather than `defconfig`, reported to a
+file:
+
 ```sh
 python3 demos/linux/packages.py --arch x86_64 --distro fedora \
     --tarball <linux-<version>.tar.xz> --config vendor \

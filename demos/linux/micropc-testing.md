@@ -111,7 +111,7 @@ Each piece earns its place:
 /etc/systemd/system/serial-getty@ttyS1.service.d/autologin.conf
 [Service]
 ExecStart=
-ExecStart=-/sbin/agetty -o '-p -- \\u' --autologin root --keep-baud 115200,57600,38400,9600 ttyS1 $TERM
+ExecStart=-/sbin/agetty -o '-p -f -- \\u' --autologin root --keep-baud 115200,57600,38400,9600 ttyS1 $TERM
 ```
 
 Debugging a kernel that reaches userspace but misbehaves means running
@@ -119,6 +119,12 @@ commands at the moment it happens; a login prompt in that situation costs
 time and sometimes the evidence. The machine is a lab target on a private
 network with Secure Boot off -- it holds no secret that a password would
 protect.
+
+The **`-f` inside `-o` is required**, and its absence is not obvious:
+`--autologin root` alone still leaves `login` authenticating, so the port
+answers with a password prompt and the journal records
+`FAILED LOGIN 1 FROM ttyS1 FOR root`. `-o` is the option string handed to
+`login`, and `-f` is what makes it accept the name without a password.
 
 ### Watchdog: the only unattended recovery
 
@@ -160,23 +166,17 @@ The DE-9 goes to a USB adapter on the Mac. Use the `cu.*` node, not
 
 ```bash
 ls /dev/cu.usbserial-* /dev/cu.SLAB_USBtoUART 2>/dev/null
-screen /dev/cu.usbserial-XXXX 115200          # interactive
+picocom -b 115200 /dev/cu.usbserial-XXXX      # interactive; C-a C-x to quit
 ```
 
-For a run that has to be diffable against the emulator's console logs,
-capture with timestamps rather than `screen`:
-
-```bash
-python3 - <<'EOF'
-import serial, time
-p = serial.Serial('/dev/cu.usbserial-XXXX', 115200, timeout=1)
-with open('micropc-console.log', 'ab', buffering=0) as f:
-    while True:
-        b = p.readline()
-        if b:
-            f.write(time.strftime('[%H:%M:%S] ').encode() + b)
-EOF
-```
+**Each `open()` of the port resets its termios on macOS**, so setting the
+speed with `stty -f` in one command and reading in the next gets the
+default rate, not 115200 -- the line then delivers a few bytes of
+plausible-looking garbage rather than silence, which reads like a wiring
+fault and is not one. Set the speed in the same descriptor that does the
+reading. `picocom` does this; so does the harness, using `termios` from
+the standard library rather than a `pyserial` dependency, which also
+keeps the capture identical on the Linux lanes.
 
 FTDI and CP210x adapters work with the drivers macOS ships; CH340 clones
 usually need a kext.

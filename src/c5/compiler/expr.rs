@@ -87,8 +87,8 @@ pub(super) fn mem_transfer_lib_name(op: super::super::ast::MemTransferOp) -> &'s
 use super::types::{
     UNSIGNED_BIT, VOLATILE_BIT, apply_qual_bits, format_type, fp_result_ty, integer_promote,
     is_bool_ty, is_float_ty, is_floating_scalar, is_long_double_ty, is_pointer_ty, is_struct_ty,
-    is_struct_value_ty, is_unsigned_ty, is_vector_ty, is_void_ptr_ty, object_segment_bits,
-    segment_of_ty, struct_id_of, struct_ptr_depth,
+    is_struct_value_ty, is_unsigned_ty, is_vector_ty, is_void_ptr_ty, narrow_const_int,
+    object_segment_bits, segment_of_ty, struct_id_of, struct_ptr_depth,
 };
 
 /// Relational comparison operator. The four variants share an
@@ -3368,8 +3368,6 @@ impl Compiler {
             // pattern, not a sign flip on the integer-shaped operand.
             if self.lex.tk == Token::Num {
                 let val = self.lex.ival;
-                let negated = val.wrapping_neg();
-                self.emit_imm(negated);
                 // C99 6.5.3.3p3: unary `-` returns the integer-
                 // promoted operand type. The literal's type comes
                 // from C99 6.4.4.1p5 (first of int / long / long
@@ -3378,7 +3376,17 @@ impl Compiler {
                 // the post-Add/Sub mask in `convert.rs` truncates
                 // a downstream `-MAX - 1` back to 32 bits and
                 // yields 0 instead of `INT64_MIN`.
-                self.ty = self.num_token_type(val);
+                self.ty = integer_promote(self.num_token_type(val));
+                // 6.2.5p9: the negation is evaluated in that type, so
+                // an unsigned result wraps modulo 2^N. `-1U` is
+                // UINT_MAX, not the 64-bit -1 a wider compare reads.
+                let negated = narrow_const_int(
+                    self.size_of_type(self.ty),
+                    is_unsigned_ty(self.ty),
+                    false,
+                    i128::from(val.wrapping_neg()),
+                ) as i64;
+                self.emit_imm(negated);
                 // Dual-emit: the constant-folded `-N` collapses
                 // the unary-minus on the AST side too. Seed
                 // `ast_acc` with the matching IntLit so a

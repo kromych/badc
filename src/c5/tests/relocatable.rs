@@ -375,6 +375,58 @@ fn unreferenced_section_static_drops_its_whole_cascade() {
 }
 
 #[test]
+fn an_asm_named_definition_gets_no_undefined_entry_beside_it() {
+    // A name spelled in an inline-asm template is a reference by name.
+    // Where the unit defines the name, the reference binds to that
+    // definition: an undefined entry beside it is a second reference to
+    // the same name, and for an internal-linkage definition nothing can
+    // ever resolve it -- a module carrying one fails to load. Only a
+    // name nothing here defines keeps an undefined entry.
+    let a = compile_obj(
+        "static const char s_obj[8] = \"s\";\n\
+         const char g_obj[8] = \"g\";\n\
+         extern const char x_obj[8];\n\
+         static int s_fun(int v) { return v; }\n\
+         int g_fun(int v) { return v; }\n\
+         int reach(int v) {\n\
+           __asm__(\"lea s_obj(%rip), %rax\");\n\
+           __asm__(\"lea g_obj(%rip), %rax\");\n\
+           __asm__(\"lea x_obj(%rip), %rax\");\n\
+           __asm__(\"lea s_fun(%rip), %rax\");\n\
+           __asm__(\"lea g_fun(%rip), %rax\");\n\
+           return v; }\n",
+        "a.o",
+    );
+    let named = |n: &str, undef: bool| {
+        a.symbols
+            .iter()
+            .filter(|s| s.name == n && (s.sec == EtSymRef::Undef) == undef)
+            .count()
+    };
+    for n in ["s_obj", "g_obj", "s_fun", "g_fun"] {
+        assert_eq!(named(n, false), 1, "`{n}` lost its definition");
+        assert_eq!(named(n, true), 0, "`{n}` got an undefined entry too");
+    }
+    assert_eq!(named("x_obj", true), 1, "a genuine extern lost its UNDEF");
+    assert_eq!(named("x_obj", false), 0, "a genuine extern gained a body");
+
+    // Every relocation resolves against a defined symbol, bar the one
+    // naming the object this unit does not define.
+    for sec in &a.sections {
+        for r in &sec.relocs {
+            let sym = &a.symbols[r.sym as usize];
+            assert!(
+                sym.sec != EtSymRef::Undef || sym.name == "x_obj",
+                "{}: reloc at {:#x} targets undefined `{}`",
+                sec.name,
+                r.offset,
+                sym.name
+            );
+        }
+    }
+}
+
+#[test]
 fn block_static_shadowing_extern_keeps_per_instance_objects() {
     // Same-named block-scope statics across sibling scopes and functions,
     // shadowing a file-scope `extern` of the name (the kernel's or51132.c

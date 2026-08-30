@@ -2046,12 +2046,18 @@ pub(super) fn write_relocatable(
     // `user_extern_data_refs` (code references) and
     // `extern_data_relocs` (pointer-to-extern-data initializers in the
     // data segment). Both resolve against the same undefined-data
-    // symbols.
+    // symbols. A name this unit defines is not one of them: the
+    // reference binds to that definition below, and an undefined entry
+    // beside it is a second reference to the name -- one nothing
+    // resolves when the definition has internal linkage.
+    let unit_defines =
+        |n: &str| -> bool { defined_fn_names.contains(n) || defined_data_by_name(n).is_some() };
     let mut user_extern_data_names: Vec<&str> = Vec::new();
     for r in &build.user_extern_data_refs {
         let s = r.symbol_name.as_str();
         if !asm_defined_labels.contains(s)
             && !program.function_aliases.iter().any(|a| a.name == s)
+            && !unit_defines(s)
             && !user_extern_data_names.contains(&s)
         {
             user_extern_data_names.push(s);
@@ -2065,6 +2071,7 @@ pub(super) fn write_relocatable(
         let s = r.symbol_name.as_str();
         if !asm_defined_labels.contains(s)
             && !defines_alias(s)
+            && !unit_defines(s)
             && !user_extern_data_names.contains(&s)
         {
             user_extern_data_names.push(s);
@@ -3035,6 +3042,25 @@ pub(super) fn write_relocatable(
         });
     }
 
+    // A named data reference whose name this unit defines, resolved on
+    // the ladder the inline-asm channels take: a function, an
+    // external-linkage object (its own symbol, so its binding reaches
+    // the linker) or an internal-linkage object (section + offset).
+    // `got` marks a site whose slot is per-symbol, where the
+    // section+offset reduction has nothing to bind to.
+    let defined_data_ref = |name: &str, got: bool| -> Option<(u64, i64)> {
+        if let Some(&idx) = func_symidx_by_name.get(name) {
+            return Some((idx as u64, 0));
+        }
+        if let Some(&idx) = defined_data_symidx.get(name) {
+            return Some((idx, 0));
+        }
+        if got {
+            return defined_data_local_symidx.get(name).map(|&i| (i, 0));
+        }
+        defined_data_by_name(name).map(&data_section_ref)
+    };
+
     // Undefined symbols for inline-asm section reloc targets no other
     // table covers; the linker resolves them against sibling units.
     let mut asm_extern_sym_idx: Vec<usize> = Vec::with_capacity(asm_extern_names.len());
@@ -3392,13 +3418,19 @@ pub(super) fn write_relocatable(
                     0,
                 ),
                 Some(pair) => pair,
-                None => {
-                    let pos = user_extern_data_names
-                        .iter()
-                        .position(|n| *n == r.symbol_name.as_str())
-                        .expect("user_extern_data_names contains every ref's name");
-                    (user_extern_data_sym_idx[pos] as u64, 0)
-                }
+                None => match defined_data_ref(
+                    r.symbol_name.as_str(),
+                    form == ExternAddrForm::Got && r.direct_pcrel.is_none(),
+                ) {
+                    Some(pair) => pair,
+                    None => {
+                        let pos = user_extern_data_names
+                            .iter()
+                            .position(|n| *n == r.symbol_name.as_str())
+                            .expect("user_extern_data_names contains every ref's name");
+                        (user_extern_data_sym_idx[pos] as u64, 0)
+                    }
+                },
             },
         };
         // A segment-qualified inline-asm `%a` operand takes a direct
@@ -3832,13 +3864,16 @@ pub(super) fn write_relocatable(
         let (sym_idx, base) = match (asm_label_ref(name), alias_sym) {
             (Some(pair), _) => pair,
             (None, Some(idx)) => (idx as u64, 0),
-            (None, None) => {
-                let pos = user_extern_data_names
-                    .iter()
-                    .position(|n| *n == name)
-                    .expect("user_extern_data_names contains every extern_data_reloc name");
-                (user_extern_data_sym_idx[pos] as u64, 0)
-            }
+            (None, None) => match defined_data_ref(name, false) {
+                Some(pair) => pair,
+                None => {
+                    let pos = user_extern_data_names
+                        .iter()
+                        .position(|n| *n == name)
+                        .expect("user_extern_data_names contains every extern_data_reloc name");
+                    (user_extern_data_sym_idx[pos] as u64, 0)
+                }
+            },
         };
         push_data_row(
             &mut carve,
@@ -3936,13 +3971,16 @@ pub(super) fn write_relocatable(
         for r in &build.tls_extern_data_relocs {
             let (sym_idx, base) = match asm_label_ref(r.symbol_name.as_str()) {
                 Some(pair) => pair,
-                None => {
-                    let pos = user_extern_data_names
-                        .iter()
-                        .position(|n| *n == r.symbol_name.as_str())
-                        .expect("user_extern_data_names contains every extern_data_reloc name");
-                    (user_extern_data_sym_idx[pos] as u64, 0)
-                }
+                None => match defined_data_ref(r.symbol_name.as_str(), false) {
+                    Some(pair) => pair,
+                    None => {
+                        let pos = user_extern_data_names
+                            .iter()
+                            .position(|n| *n == r.symbol_name.as_str())
+                            .expect("user_extern_data_names contains every extern_data_reloc name");
+                        (user_extern_data_sym_idx[pos] as u64, 0)
+                    }
+                },
             };
             push(r.data_offset, sym_idx, base + r.addend);
         }

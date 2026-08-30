@@ -36,14 +36,7 @@ Disassembly of section .text:
                	mov	x0, #0x11               // =17
                	strb	w0, [x20]
                	ldrb	w0, [x20]
-               	ldrb	w1, [x20]
-               	mov	x17, #0x4477            // =17527
-               	movk	x17, #0x5f, lsl #16
-               	add	x1, x1, x17
-               	lsr	x1, x1, #7
-               	add	x1, x1, #0x3
-               	mov	x17, #0xff              // =255
-               	and	x1, x1, x17
+               	mov	x1, #0x8c               // =140
                	strb	w1, [x20]
                	mov	x17, #0xff              // =255
                	and	x0, x0, x17

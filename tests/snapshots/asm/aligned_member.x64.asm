@@ -81,16 +81,14 @@ Disassembly of section .text:
                	movabsq	$-0x3, %rdx
                	movq	%rdx, 0x18(%rax)
                	movabsq	$0x1122334455667788, %r11 # imm = 0x1122334455667788
+               	movq	%rcx, %rax
                	cmpq	%r11, %rcx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	setne	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	movq	0x18(%rax), %rax
-               	cmpq	$-0x3, %rax
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	xorq	%rax, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x5, %eax
                	addq	$0xd0, %rsp

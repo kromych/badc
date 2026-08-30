@@ -51,11 +51,7 @@ Disassembly of section .text:
                	movl	$0x11, %ecx
                	movb	%cl, (%rax)
                	movzbq	(%rax), %rcx
-               	movzbq	(%rax), %rdx
-               	addq	$0x5f4477, %rdx         # imm = 0x5F4477
-               	shrq	$0x7, %rdx
-               	addq	$0x3, %rdx
-               	andq	$0xff, %rdx
+               	movl	$0x8c, %edx
                	movb	%dl, (%rax)
                	andq	$0xff, %rcx
                	andq	$0xff, %rcx

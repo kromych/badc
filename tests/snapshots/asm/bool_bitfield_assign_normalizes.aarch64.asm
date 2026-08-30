@@ -369,16 +369,6 @@ Disassembly of section .text:
                	str	x1, [x0, #0x8]
                	strb	w2, [x0, #0x8]
                	ldrb	w2, [x0, #0x8]
-               	asr	x2, x2, #1
-               	mov	x17, #0x1               // =1
-               	and	x2, x2, x17
-               	cmp	w2, #0x1
-               	b.eq	<addr>
-               	mov	x0, #0x25               // =37
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	ldrb	w2, [x0, #0x8]
                	mov	x17, #0xfffd            // =65533
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32

@@ -340,17 +340,17 @@ fn ent_pc=8 n_params=1 variadic=false locals=19
     v13  LocalAddr(-16)                                   -> x2
     v14  Imm(32)                                          -> x2
     v15  Imm(31)                                          -> x2
-    v16  BinopI { op=and, lhs=v4, rhs_imm=31 }            -> x2
-    v17  BinopI { op=eq, lhs=v16, rhs_imm=0 }             -> x2
-    v18  Extend { value=v17, kind=I32 }                   -> x2
-    v19  Imm(0)                                           -> x6
+    v16  BinopI { op=and, lhs=v4, rhs_imm=31 }            -> x1
+    v17  BinopI { op=eq, lhs=v16, rhs_imm=0 }             -> x1
+    v18  Extend { value=v17, kind=I32 }                   -> x1
+    v19  Imm(0)                                           -> x2
     terminator Bz { cond=v18, target=b4, fall=b2 }   (exit_acc=v18)
   block 2  start_pc=0
     v21  LocalAddr(-16)                                   -> x0
-    v22  Imm(0)                                           -> x0
-    v23  Load { addr=v4, disp=0, kind=I16 }               -> x0
-    v24  BinopI { op=eq, lhs=v23, rhs_imm=4 }             -> x0
-    v25  BinopI { op=ne, lhs=v24, rhs_imm=0 }             -> x1
+    v22  Imm(0)                                           -> x1
+    v23  Load { addr=v21, disp=0, kind=I16 }              -> x0
+    v24  Imm(1)                                           -> x0
+    v25  Imm(1)                                           -> x1
     v26  Imm(0)                                           -> x1
     terminator Jmp(b3)   (exit_acc=v24)
   block 3  start_pc=0

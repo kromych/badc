@@ -40,10 +40,10 @@ fn ent_pc=5 n_params=0 variadic=false locals=3
     v103 Imm(0)                                           -> x2
     v104 Imm(0)                                           -> x2
     v105 Load { addr=v1, disp=0, kind=U8 }                -> x2
-    v106 BinopI { op=add, lhs=v105, rhs_imm=6243447 }     -> x2
-    v107 BinopI { op=shru, lhs=v106, rhs_imm=7 }          -> x2
-    v108 BinopI { op=add, lhs=v107, rhs_imm=3 }           -> x2
-    v109 BinopI { op=and, lhs=v108, rhs_imm=255 }         -> x2
+    v106 Imm(6243464)                                     -> x2
+    v107 Imm(48777)                                       -> x2
+    v108 Imm(48780)                                       -> x2
+    v109 Imm(140)                                         -> x2
     v110 Store { addr=v1, disp=0, value=v109, kind=I8 }   -> -
     v111 Imm(0)                                           -> x2
     v112 Imm(0)                                           -> x2

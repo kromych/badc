@@ -35,14 +35,10 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	movl	$0x7, %edx
                	movb	%dl, (%rcx)
-               	movq	%rcx, %rdx
-               	andq	$0x3f, %rdx
-               	testq	%rdx, %rdx
+               	andq	$0x3f, %rcx
+               	testq	%rcx, %rcx
                	jne	<addr>
-               	movsbq	(%rcx), %rax
-               	cmpl	$0x7, %eax
-               	sete	%al
-               	movzbq	%al, %rax
+               	movl	$0x1, %eax
                	movslq	%eax, %rax
                	leaq	-0x10(%rbp), %rsp
                	addq	$0x10, %rsp

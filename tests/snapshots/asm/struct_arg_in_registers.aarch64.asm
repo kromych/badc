@@ -61,10 +61,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x60]
                	ldr	x20, [sp], #0x70
                	ret
-               	ldrsw	x2, [x20]
-               	ldrsw	x0, [x20, #0x4]
-               	lsl	x0, x0, #1
-               	add	x0, x2, x0
+               	ldrsw	x0, [x20]
+               	add	x0, x0, #0xa
                	add	x0, x0, #0x3
                	add	x0, x0, #0x4
                	sxtw	x0, w0

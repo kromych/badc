@@ -35,7 +35,8 @@ and SSA interpreter.
   [`yasm`](./demos/yasm/) assemblers, each run against its own test suite.
 * _Firmware and kernels_: [`edk2`](./demos/edk2/): badc compiles the full
   UEFI firmware from edk2 source into a bootable OVMF / AAVMF image, and the CI
-  boots run under it. [`kernel`](./demos/kernel/) is a freestanding preemptive
+  boots run under it. [`efi_hello`](./demos/efi_hello/) is a single-source EFI
+  application, its PE subsystem selected by `#pragma subsystem`. [`kernel`](./demos/kernel/) is a freestanding preemptive
   multitasking kernel on both architectures, timer interrupts and context
   switches included , [`Linux`](./demos/linux) is the Linux kernel `7.1.10`.
 * _Cryptography and compression_: [`TweetNaCl`](./demos/tweetnacl/),
@@ -43,8 +44,12 @@ and SSA interpreter.
   [`miniz`](./demos/miniz/), [`bzip2`](./demos/bzip2/).
 * _Graphics, math, and the rest_: [`stb`](./demos/stb/),
   [`raylib`](./demos/raylib/) with a Lode Runner game,
-  [`kissfft`](./demos/kissfft/), the GUI demos, the Windows driver and NT
-  native binaries, and the cooperative-concurrency libraries
+  [`kissfft`](./demos/kissfft/), the [`GUI`](./demos/gui_hello/) demos (one
+  windowed program per OS family, each cross-compiled to every target), the
+  [`WDM`](./demos/wdm_driver/) Windows kernel driver, the NT native binaries
+  ([`nt_hello`](./demos/nt_hello/), an `IMAGE_SUBSYSTEM_NATIVE` PE that runs
+  under `ntdll` alone, and [`nt_loader`](./demos/nt_loader/), which spawns one
+  through `NtCreateUserProcess`), and the cooperative-concurrency libraries
   ([`libmill`](./demos/libmill/), [`libdill`](./demos/libdill/),
   [`coroutines`](./demos/coroutines/)), whose context switches run through
   inline asm.

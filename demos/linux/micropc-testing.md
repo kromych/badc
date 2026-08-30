@@ -142,6 +142,50 @@ petted. A kernel that wedges after systemd starts resets itself within a
 minute. A kernel that hangs *before* that -- the interesting case --
 still needs the power button, which is why every badc boot is one-shot.
 
+### Suspend, disabled at every layer that can ask for it
+
+A desktop session on the target will put it to sleep mid-run. Observed on
+this box as a broadcast from the greeter -- `The system will suspend
+now!` -- which ends the ssh connection and silences the console, and is
+indistinguishable from a kernel that hung.
+
+```bash
+systemctl mask sleep.target suspend.target hibernate.target \
+  hybrid-sleep.target suspend-then-hibernate.target
+```
+
+```
+/etc/systemd/logind.conf.d/no-sleep.conf
+[Login]
+HandleLidSwitch=ignore
+HandleLidSwitchDocked=ignore
+HandleLidSwitchExternalPower=ignore
+HandleSuspendKey=ignore
+IdleAction=ignore
+```
+
+and the greeter's own policy, which is what asked here:
+
+```bash
+sudo -u gdm dbus-run-session -- gsettings set \
+  org.gnome.settings-daemon.plugins.power sleep-inactive-ac-type nothing
+sudo -u gdm dbus-run-session -- gsettings set \
+  org.gnome.settings-daemon.plugins.power sleep-inactive-battery-type nothing
+sudo -u gdm dbus-run-session -- gsettings set \
+  org.gnome.desktop.session idle-delay 0
+```
+
+Masking the targets is the layer that actually holds: whatever asks --
+greeter, logind idle, the power button -- the request fails rather than
+being honoured. `systemctl suspend` now answers `Call to Suspend failed:
+Access denied`. The lid settings matter separately, because the machine
+is a clamshell that will sit closed on a bench; without them, closing it
+ends the run.
+
+Switching the box to `multi-user.target` would remove the desktop's power
+policy wholesale and is worth considering for a dedicated target, but the
+masks above hold regardless of what runs on top.
+
 ## Booting a badc kernel
 
 Never make one the default. Install it, select it for exactly one boot,

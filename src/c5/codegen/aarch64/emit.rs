@@ -11480,14 +11480,15 @@ fn a64_label_branch_reloc(
 }
 
 /// Assign the literal pools of an asm statement's sections. Each
-/// `ldr Rt, =value` takes an entry of its section's pending pool, sharing one
-/// with an earlier request of the same width and value, and becomes a literal
-/// load of the entry's synthetic label. `.ltorg` and the end of the section
-/// deposit what has accumulated, which is where GNU as flushes.
+/// `ldr Rt, =value` takes an entry of the pending pool of its section and
+/// subsection, sharing one with an earlier request of the same width and
+/// value, and becomes a literal load of the entry's synthetic label.
+/// `.ltorg` and the end of that subsection's content deposit what has
+/// accumulated, which is where GNU as flushes.
 fn assign_a64_literal_pools(
     blocks: &mut [crate::c5::asm::AsmSectionBlock],
 ) -> Result<(), alloc::string::String> {
-    use crate::c5::asm::{AsmPoolEntry, AsmSectionItem, section_key, subsection_order};
+    use crate::c5::asm::{AsmPoolEntry, AsmSectionItem, literal_pool_key, subsection_order};
     if !blocks
         .iter()
         .flat_map(|b| &b.items)
@@ -11496,19 +11497,19 @@ fn assign_a64_literal_pools(
         return Ok(());
     }
     let order = subsection_order(blocks);
-    // Where each section's last block sits in the layout order: the flush
-    // point for whatever `.ltorg` left pending.
+    // Where each pool's last block sits in the layout order: the flush point
+    // for whatever `.ltorg` left pending.
     let mut last_of: alloc::collections::BTreeMap<alloc::string::String, usize> =
         alloc::collections::BTreeMap::new();
     for (pos, &bi) in order.iter().enumerate() {
-        last_of.insert(section_key(&blocks[bi]), pos);
+        last_of.insert(literal_pool_key(&blocks[bi]), pos);
     }
     let uniq = crate::c5::asm::next_asm_instance();
     let mut seq = 0u32;
     let mut pending: alloc::collections::BTreeMap<alloc::string::String, Vec<AsmPoolEntry>> =
         alloc::collections::BTreeMap::new();
     for (pos, &bi) in order.iter().enumerate() {
-        let key = section_key(&blocks[bi]);
+        let key = literal_pool_key(&blocks[bi]);
         for item in &mut blocks[bi].items {
             match item {
                 AsmSectionItem::LiteralPool(entries) => {

@@ -15296,6 +15296,85 @@ fn aarch64_mapping_symbols_open_on_the_class_not_the_frag() {
 }
 
 #[test]
+fn aarch64_literal_pool_is_per_subsection_like_gnu_as() {
+    // GNU as keeps one AArch64 literal pool per section and subsection. The
+    // pool is flushed at the end of the content of the subsection its loads
+    // were assembled in, so a pool of subsection 0 lands before subsection 1
+    // rather than after it, two subsections never share an entry, and a
+    // `.ltorg` in one subsection leaves another subsection's pool pending.
+    // The arm64 `alternative_if` macro puts the replacement sequence in
+    // subsection 1, which is where a unit mixing it with `ldr Rt, =value`
+    // depends on the placement. Every expectation was read off `as`
+    // (binutils 2.46.1).
+    use crate::c5::Target;
+    let words =
+        |ws: &[u32]| -> alloc::vec::Vec<u8> { ws.iter().flat_map(|w| w.to_le_bytes()).collect() };
+    /// A shape: what it is, its source, and `.text`'s bytes.
+    type Shape = (&'static str, &'static str, alloc::vec::Vec<u8>);
+    let shapes: &[Shape] = &[
+        (
+            "a subsection-0 pool, flushed before subsection 1's content",
+            ".text\nf:\n\tldr x0, =0x1122334455667788\n\tnop\n\t.subsection 1\n\
+             \tmov x9, x9\n\t.previous\n\tmov x8, x8\n",
+            words(&[
+                0x5800_0080,
+                0xd503_201f,
+                0xaa08_03e8,
+                0,
+                0x5566_7788,
+                0x1122_3344,
+                0xaa09_03e9,
+            ]),
+        ),
+        (
+            "one value loaded from both subsections, which takes an entry \
+             in each pool",
+            ".text\nf:\n\tldr x0, =0x1122334455667788\n\tnop\n\t.subsection 1\n\
+             \tldr x1, =0x1122334455667788\n\tmov x9, x9\n\t.previous\n\
+             \tmov x8, x8\n",
+            words(&[
+                0x5800_0080,
+                0xd503_201f,
+                0xaa08_03e8,
+                0,
+                0x5566_7788,
+                0x1122_3344,
+                0x5800_0041,
+                0xaa09_03e9,
+                0x5566_7788,
+                0x1122_3344,
+            ]),
+        ),
+        (
+            "a `.ltorg` in subsection 1, which leaves subsection 0's pool \
+             pending",
+            ".text\nf:\n\tldr x0, =0x1122334455667788\n\tnop\n\t.subsection 1\n\
+             \tmov x9, x9\n\t.ltorg\n\tmov x10, x10\n\t.previous\n\
+             \tmov x8, x8\n",
+            words(&[
+                0x5800_0080,
+                0xd503_201f,
+                0xaa08_03e8,
+                0,
+                0x5566_7788,
+                0x1122_3344,
+                0xaa09_03e9,
+                0xaa0a_03ea,
+            ]),
+        ),
+    ];
+    for (what, src, want) in shapes {
+        let obj = asm_reloc_tu(src, Target::LinuxAarch64);
+        let got = elf_sections(&obj)
+            .into_iter()
+            .find(|(n, ..)| n == ".text")
+            .expect(".text")
+            .3;
+        assert_eq!(&got, want, "aarch64 literal pool for {what}");
+    }
+}
+
+#[test]
 fn aarch64_code_section_alignment_matches_gnu_as() {
     // GNU as pads a code section's alignment gap with the sub-word
     // remainder as zeros and the rest as whole NOPs, and brings the

@@ -742,6 +742,13 @@ pub(crate) fn section_key(b: &AsmSectionBlock) -> alloc::string::String {
     alloc::format!("{}\u{0}{}\u{0}{:?}", b.name, b.flags, b.sh_type)
 }
 
+/// Identity of the AArch64 literal pool a block's `ldr Rt, =value` loads
+/// take entries from. GNU as keeps one pool per section and subsection,
+/// flushed at the end of that subsection's content.
+pub(crate) fn literal_pool_key(b: &AsmSectionBlock) -> alloc::string::String {
+    alloc::format!("{}\u{0}{}", section_key(b), b.subsection)
+}
+
 /// The same identity key for a section already in the sink.
 pub(crate) fn section_key_of(s: &AsmSection) -> alloc::string::String {
     alloc::format!("{}\u{0}{}\u{0}{:?}", s.name, s.flags, s.sh_type)

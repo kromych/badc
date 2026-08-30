@@ -188,6 +188,16 @@ pub(crate) enum Opnd {
         size: u8,
         q: bool,
     },
+    /// A SIMD register list with a lane `{v0.T, ..}[index]`: `count`
+    /// consecutive registers (1..4) starting at `first`, one element each, of
+    /// element-size log2 `size`. The operand of the single-structure
+    /// ld1..ld4/st1..st4.
+    VecListLane {
+        first: u8,
+        count: u8,
+        size: u8,
+        index: u8,
+    },
     Imm(i64),
     /// A floating-point immediate as its 8-bit VFP encoding (`fmov Vd, #imm`).
     FpImm(u8),
@@ -2128,15 +2138,19 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((base as u32) << 5)
             | (*first as u32));
     }
-    // SIMD single-structure lane load/store `<ld1|st1> {Vt.T}[i], [Xn]{, #inc |
-    // , Xm}`: transfer one lane. The lane index is bit-sliced across Q (30), S
-    // (12), and the size field (11..10): field4 = (index << size) | (size==3 ? 1
-    // : 0); the opcode (15..13) is the element class. L (bit 22) marks the load.
-    // The immediate post-index increment is the element size (1<<size bytes).
-    if let "ld1" | "st1" = mnemonic
+    // SIMD single-structure lane load/store `<ld1..ld4|st1..st4> {Vt.T, ..}[i],
+    // [Xn]{, #inc | , Xm}`: one element per register of the list. The structure
+    // (1..4, from the mnemonic) must match the register count; it splits across
+    // R (21) and the low opcode bit (13). The lane index is bit-sliced across Q
+    // (30), S (12) and the size field (11..10): field4 = (index << size) |
+    // (size==3 ? 1 : 0), with the element class in opcode bits 15..14. L (bit
+    // 22) marks the load. The immediate post-index increment is the transferred
+    // byte count, structure * element size.
+    if let "ld1" | "st1" | "ld2" | "st2" | "ld3" | "st3" | "ld4" | "st4" = mnemonic
         && let [
-            Opnd::VecElem {
-                num: rt,
+            Opnd::VecListLane {
+                first,
+                count,
                 size,
                 index,
             },
@@ -2144,6 +2158,12 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             post @ ..,
         ] = ops
     {
+        let structure = mnemonic.as_bytes()[2] - b'0';
+        if *count != structure {
+            return Err(String::from(
+                "inline asm: register count does not match the ld/st structure",
+            ));
+        }
         let base = match mem {
             Opnd::Mem {
                 base,
@@ -2152,16 +2172,16 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             } => *base,
             _ => {
                 return Err(String::from(
-                    "inline asm: single-lane ld1/st1 need a plain [Xn] address",
+                    "inline asm: single-structure ld/st need a plain [Xn] address",
                 ));
             }
         };
         let (rm, wb) = match post {
             [] => (0u32, 0u32),
             [Opnd::Imm(inc)] => {
-                if *inc != 1i64 << size {
+                if *inc != (*count as i64) << size {
                     return Err(String::from(
-                        "inline asm: single-lane post-index must equal the element size",
+                        "inline asm: single-structure post-index must equal the transferred size",
                     ));
                 }
                 (31, 1u32 << 23)
@@ -2173,26 +2193,32 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             ] => (*num as u32, 1u32 << 23),
             _ => {
                 return Err(String::from(
-                    "inline asm: bad single-lane post-index (want `, #imm` or `, Xm`)",
+                    "inline asm: bad single-structure post-index (want `, #imm` or `, Xm`)",
                 ));
             }
         };
         let field4 = ((*index as u32) << size) | if *size == 3 { 1 } else { 0 };
-        let opcode = if *size == 3 {
+        let element_class = if *size == 3 {
             0b100u32
         } else {
             (*size as u32) << 1
         };
+        let opcode = element_class | ((structure as u32 - 1) >> 1);
         return Ok(0x0D00_0000
             | wb
-            | (if mnemonic == "ld1" { 1u32 << 22 } else { 0 })
+            | (if mnemonic.as_bytes()[0] == b'l' {
+                1u32 << 22
+            } else {
+                0
+            })
+            | (((structure as u32 - 1) & 1) << 21)
             | (((field4 >> 3) & 1) << 30)
             | (opcode << 13)
             | (rm << 16)
             | (((field4 >> 2) & 1) << 12)
             | ((field4 & 0b11) << 10)
             | ((base as u32) << 5)
-            | (*rt as u32));
+            | (*first as u32));
     }
     // SHA3 three-source xor `eor3 Vd.16b, Vn.16b, Vm.16b, Va.16b`
     // (FEAT_SHA3): Vd = Vn ^ Vm ^ Va, .16b only.

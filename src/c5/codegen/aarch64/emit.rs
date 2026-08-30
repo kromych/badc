@@ -3861,6 +3861,17 @@ fn emit_inline_asm_aarch64(
                 size,
                 q,
             },
+            AsmOpndA64::VecListLane {
+                first,
+                count,
+                size,
+                index,
+            } => Opnd::VecListLane {
+                first,
+                count,
+                size,
+                index,
+            },
             AsmOpndA64::Ref { idx, is64 } => {
                 let Some(r) = resolve_ref(idx) else {
                     // An immediate operand has no register; a bare `%N` uses
@@ -3929,6 +3940,15 @@ fn emit_inline_asm_aarch64(
                     count: 1,
                     size,
                     q,
+                }
+            }
+            AsmOpndA64::RefVecListLane { idx, size, index } => {
+                let r = resolve_fp_ref(&op_reg, asm, idx)?;
+                Opnd::VecListLane {
+                    first: r,
+                    count: 1,
+                    size,
+                    index,
                 }
             }
             AsmOpndA64::RefQ(idx) => {
@@ -10946,6 +10966,17 @@ pub(crate) fn encode_a64_file_asm_section_code(
                 count,
                 size,
                 q,
+            },
+            AsmOpndA64::VecListLane {
+                first,
+                count,
+                size,
+                index,
+            } => Opnd::VecListLane {
+                first,
+                count,
+                size,
+                index,
             },
             AsmOpndA64::Mem { base, off, pre } => match base {
                 super::asm::MemBase::Reg(b) => Opnd::Mem { base: b, off, pre },

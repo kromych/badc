@@ -901,6 +901,7 @@ fn vector_shift() {
     assert!(encode("shl", &[v(0, 3, false), v(1, 3, false), Opnd::Imm(1)]).is_err());
 }
 
+
 #[test]
 fn vector_lane_transfer() {
     let ve = |n: u8, size: u8, index: u8| Opnd::VecElem {
@@ -1234,30 +1235,112 @@ fn simd_ld1r() {
     );
 }
 
+/// Single-structure lane load/store `<ld1..ld4|st1..st4> {Vt.T, ..}[i], [Xn]`
+/// with its three addressing modes. Words match GNU as 2.46.1 for
+/// `aarch64-linux-gnu`.
 #[test]
 fn simd_ld_st_single_lane() {
-    let el = |num: u8, size: u8, index: u8| Opnd::VecElem { num, size, index };
+    let ll = |first: u8, count: u8, size: u8, index: u8| Opnd::VecListLane {
+        first,
+        count,
+        size,
+        index,
+    };
     let mem = |base: u8| Opnd::Mem {
         base,
         off: 0,
         pre: false,
     };
-    // The lane index is bit-sliced across Q (30), S (12), and size (11..10); the
-    // opcode (15..13) is the element class. L (bit 22) marks the load.
-    assert_eq!(enc("ld1", &[el(0, 2, 2), mem(1)]), 0x4D40_8020); // {v0.s}[2]
-    assert_eq!(enc("st1", &[el(0, 2, 2), mem(1)]), 0x4D00_8020);
-    assert_eq!(enc("ld1", &[el(0, 0, 5), mem(1)]), 0x0D40_1420); // {v0.b}[5]
-    assert_eq!(enc("ld1", &[el(0, 3, 1), mem(1)]), 0x4D40_8420); // {v0.d}[1]
-    assert_eq!(enc("ld1", &[el(0, 1, 3), mem(1)]), 0x0D40_5820); // {v0.h}[3]
-    assert_eq!(enc("st1", &[el(0, 3, 0), mem(1)]), 0x0D00_8420); // {v0.d}[0]
-    // Post-index by the element size, or a register.
+    // One register: the lane index is bit-sliced across Q (30), S (12) and size
+    // (11..10); opcode bits 15..14 are the element class. L (bit 22) marks the
+    // load.
+    assert_eq!(enc("ld1", &[ll(0, 1, 2, 2), mem(1)]), 0x4D40_8020); // {v0.s}[2]
+    assert_eq!(enc("st1", &[ll(0, 1, 2, 2), mem(1)]), 0x4D00_8020);
+    assert_eq!(enc("ld1", &[ll(0, 1, 0, 5), mem(1)]), 0x0D40_1420); // {v0.b}[5]
+    assert_eq!(enc("ld1", &[ll(0, 1, 3, 1), mem(1)]), 0x4D40_8420); // {v0.d}[1]
+    assert_eq!(enc("ld1", &[ll(0, 1, 1, 3), mem(1)]), 0x0D40_5820); // {v0.h}[3]
+    assert_eq!(enc("st1", &[ll(0, 1, 3, 0), mem(1)]), 0x0D00_8420); // {v0.d}[0]
+    // Post-index by the transferred size, or by a register.
     assert_eq!(
-        enc("ld1", &[el(0, 2, 2), mem(1), Opnd::Imm(4)]),
+        enc("ld1", &[ll(0, 1, 2, 2), mem(1), Opnd::Imm(4)]),
         0x4DDF_8020
     );
-    assert_eq!(enc("ld1", &[el(0, 2, 2), mem(1), x(2)]), 0x4DC2_8020);
-    // A wrong immediate increment is rejected.
-    assert!(encode("ld1", &[el(0, 2, 2), mem(1), Opnd::Imm(8)]).is_err());
+    assert_eq!(enc("ld1", &[ll(0, 1, 2, 2), mem(1), x(2)]), 0x4DC2_8020);
+    // Two, three and four registers: the structure splits across R (21) and the
+    // low opcode bit (13), and sets the immediate increment to count << size.
+    assert_eq!(enc("ld2", &[ll(0, 2, 0, 11), mem(1)]), 0x4D60_0C20);
+    assert_eq!(enc("st2", &[ll(4, 2, 1, 6), mem(1)]), 0x4D20_5024);
+    assert_eq!(
+        enc("ld2", &[ll(0, 2, 2, 1), mem(1), Opnd::Imm(8)]),
+        0x0DFF_9020
+    );
+    assert_eq!(enc("st2", &[ll(2, 2, 3, 1), mem(1), x(5)]), 0x4DA5_8422);
+    assert_eq!(enc("ld3", &[ll(0, 3, 0, 15), mem(1)]), 0x4D40_3C20);
+    assert_eq!(
+        enc("st3", &[ll(7, 3, 1, 0), mem(1), Opnd::Imm(6)]),
+        0x0D9F_6027
+    );
+    assert_eq!(enc("ld3", &[ll(0, 3, 2, 3), mem(1), x(9)]), 0x4DC9_B020);
+    assert_eq!(enc("st3", &[ll(0, 3, 3, 0), mem(1)]), 0x0D00_A420);
+    assert_eq!(
+        enc("ld4", &[ll(0, 4, 0, 7), mem(1), Opnd::Imm(4)]),
+        0x0DFF_3C20
+    );
+    assert_eq!(
+        enc("st4", &[ll(19, 4, 2, 0), mem(0), Opnd::Imm(16)]),
+        0x0DBF_A013
+    );
+    assert_eq!(enc("ld4", &[ll(0, 4, 1, 4), mem(1)]), 0x4D60_6020);
+    assert_eq!(enc("st4", &[ll(0, 4, 3, 1), mem(1), x(3)]), 0x4DA3_A420);
+    assert_eq!(enc("ld4", &[ll(0, 4, 2, 2), mem(1), x(2)]), 0x4DE2_A020);
+    // A list wrapping past v31 keeps the first register in Rt.
+    assert_eq!(enc("st4", &[ll(30, 4, 2, 3), mem(1)]), 0x4D20_B03E);
+    assert_eq!(enc("ld3", &[ll(31, 3, 0, 3), mem(5)]), 0x0D40_2CBF);
+    assert_eq!(
+        enc("ld4", &[ll(29, 4, 0, 15), mem(1), Opnd::Imm(4)]),
+        0x4DFF_3C3D
+    );
+    assert_eq!(
+        enc("st2", &[ll(31, 2, 3, 1), mem(1), Opnd::Imm(16)]),
+        0x4DBF_843F
+    );
+    assert_eq!(enc("ld2", &[ll(31, 2, 2, 2), mem(1), x(7)]), 0x4DE7_803F);
+    // A wrong immediate increment, a count that does not match the structure,
+    // and a non-plain address are rejected.
+    assert!(encode("ld1", &[ll(0, 1, 2, 2), mem(1), Opnd::Imm(8)]).is_err());
+    assert!(encode("st4", &[ll(0, 4, 2, 0), mem(1), Opnd::Imm(8)]).is_err());
+    assert!(encode("ld4", &[ll(0, 3, 2, 0), mem(1)]).is_err());
+    assert!(encode("ld1", &[ll(0, 2, 2, 0), mem(1)]).is_err());
+    assert!(
+        encode(
+            "ld2",
+            &[
+                ll(0, 2, 2, 0),
+                Opnd::Mem {
+                    base: 1,
+                    off: 8,
+                    pre: false
+                }
+            ]
+        )
+        .is_err()
+    );
+    // The bare element operand `vN.T[i]` is the umov/ins lane, not a list:
+    // GNU as requires the braces here, and so does the encoder.
+    assert!(
+        encode(
+            "ld1",
+            &[
+                Opnd::VecElem {
+                    num: 0,
+                    size: 2,
+                    index: 2
+                },
+                mem(1)
+            ]
+        )
+        .is_err()
+    );
 }
 
 #[test]

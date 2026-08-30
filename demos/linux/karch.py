@@ -131,14 +131,14 @@ def self_test() -> None:
         # selector is what identifies it. The erratum symbol is the case a
         # substring search gets wrong.
         cfg.write_text("#\n# Automatically generated file; DO NOT EDIT.\n"
-                       "# Linux/x86 7.1.6 Kernel Configuration\n#\n"
+                       "# Linux/x86 7.1.10 Kernel Configuration\n#\n"
                        "CONFIG_X86_64=y\nCONFIG_ARM64_ERRATUM_843419=y\n")
         assert config_arch(cfg) == "x86_64"
         assert config_mismatch(cfg, "x86_64") == ""
         m = config_mismatch(cfg, "aarch64")
-        assert "configures x86_64" in m and "Linux/x86 7.1.6" in m, m
+        assert "configures x86_64" in m and "Linux/x86 7.1.10" in m, m
 
-        cfg.write_text("#\n# Linux/arm64 7.1.6 Kernel Configuration\n#\n"
+        cfg.write_text("#\n# Linux/arm64 7.1.10 Kernel Configuration\n#\n"
                        "CONFIG_ARM64=y\n")
         assert config_arch(cfg) == "aarch64"
         assert config_mismatch(cfg, "aarch64") == ""

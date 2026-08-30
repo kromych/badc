@@ -235,10 +235,10 @@ SOURCES = [
         # demos/linux/setup.py. Published as a standalone tarball on
         # cdn.kernel.org, so pinned by the tarball sha256.
         name="linux",
-        version="7.1.6",
-        url="https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.1.6.tar.xz",
+        version="7.1.10",
+        url="https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.1.10.tar.xz",
         ext=".tar.xz",
-        upstream_sha="995dd7188d924662b94b48fd6fb783587267590e5b8bb33dade2c771e7d855c1",
+        upstream_sha="67d2f4697a02f3bec98e744b1bdc307e920c24bb4e88b5ee97dc9a34e9aa9999",
         sha_kind="tarball-sha256",
     ),
     Source(

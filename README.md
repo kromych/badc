@@ -36,7 +36,7 @@ and SSA interpreter.
   UEFI firmware from edk2 source into a bootable OVMF / AAVMF image, and the CI
   boots run under it. [`kernel`](./demos/kernel/) is a freestanding preemptive
   multitasking kernel on both architectures, timer interrupts and context
-  switches included , [`Linux`](./demos/linux) is the Linux kernel `7.1.6`.
+  switches included , [`Linux`](./demos/linux) is the Linux kernel `7.1.10`.
 * _Cryptography and compression_: [`TweetNaCl`](./demos/tweetnacl/),
   [`Monocypher`](./demos/monocypher/), [`BearSSL`](./demos/bearssl/),
   [`miniz`](./demos/miniz/), [`bzip2`](./demos/bzip2/).

@@ -374,7 +374,7 @@ def _self_test() -> int:
     cc = "badc 0.3.0 (gcc-compatible, GNU C 4.2.1)"
 
     def line(ld: str) -> str:
-        return f"Linux version 7.1.6 (u@h) ({cc}, {ld}) #1 SMP PREEMPT"
+        return f"Linux version 7.1.10 (u@h) ({cc}, {ld}) #1 SMP PREEMPT"
 
     badc = line("GNU ld (badc 0.3.0) 2.33.1")
     ref = line("GNU ld version 2.46.1-1.fc44")
@@ -389,7 +389,7 @@ def _self_test() -> int:
     # the reference compiler fails on the compiler before the linker is read.
     assert banner_failure(badc, cc, None) == ""
     assert banner_failure(ref, cc, None) == ""
-    assert banner_failure("Linux version 7.1.6 (u@h) (gcc 13.2, GNU ld 2.46) #1",
+    assert banner_failure("Linux version 7.1.10 (u@h) (gcc 13.2, GNU ld 2.46) #1",
                           cc, True) == "does not identify badc as the compiler"
     assert banner_failure("", cc, True), "a log with no banner cannot pass"
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fetch and configure a Linux kernel tree for the badc translation-unit sweep.
 
-Downloads a pinned kernel release from cdn.kernel.org, verifies its sha256,
+Downloads a pinned kernel release from the vendor-deps mirror, verifies its sha256,
 extracts it under ``demos/linux/.cache``, installs a build config, and runs
 ``make olddefconfig``. With ``--build`` it then runs the gcc reference build;
 that build validates the config and writes the per-object ``.<name>.o.cmd``
@@ -58,8 +58,8 @@ import ktree
 LINUX_DIR = Path(__file__).resolve().parent
 
 # Sweep corpus: latest stable at the time of pinning, both architectures.
-DEFCONFIG_KERNEL = ("7.1.6",
-                    "995dd7188d924662b94b48fd6fb783587267590e5b8bb33dade2c771e7d855c1")
+DEFCONFIG_KERNEL = ("7.1.10",
+                    "67d2f4697a02f3bec98e744b1bdc307e920c24bb4e88b5ee97dc9a34e9aa9999")
 
 # Link-and-boot gate: (version, tarball sha256) per architecture, each the
 # release its vendored minimal config was produced for.
@@ -71,7 +71,6 @@ MINIMAL_KERNELS = {
 ARCHES = sorted(MINIMAL_KERNELS)
 CONFIGS = ("defconfig", "minimal")
 
-CDN = "https://cdn.kernel.org/pub/linux/kernel"
 MIRROR = "https://github.com/kromych/badc/releases/download/vendor-deps-v1"
 
 
@@ -80,13 +79,17 @@ def log(m: str) -> None:
 
 
 def tarball_urls(version: str, sha: str) -> list[str]:
-    """Vendor-deps mirror first (the asset name embeds the sha256 prefix,
-    scripts/vendor_deps convention), cdn.kernel.org as the fallback for
-    versions the release does not carry."""
-    return [
-        f"{MIRROR}/linux-{version}-{sha[:8]}.tar.xz",
-        f"{CDN}/v{version.split('.', 1)[0]}.x/linux-{version}.tar.xz",
-    ]
+    """The vendor-deps mirror, and only that: the asset name embeds the
+    sha256 prefix, per the scripts/vendor_deps convention.
+
+    cdn.kernel.org is deliberately not a fallback. It is the download CI
+    lost most often, and a fallback turns a missing mirror asset into an
+    intermittent failure on a host nobody controls rather than a clear
+    one. A pin bump therefore has to publish the tarball first --
+    scripts/vendor_deps/build_bundle.py carries the upstream URL for
+    that.
+    """
+    return [f"{MIRROR}/linux-{version}-{sha[:8]}.tar.xz"]
 
 
 def sha256_of(path: Path) -> str:

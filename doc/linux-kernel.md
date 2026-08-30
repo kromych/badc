@@ -1,6 +1,6 @@
 # The Linux kernel
 
-badc compiles every C translation unit of a Linux 7.1.6 `defconfig` kernel on
+badc compiles every C translation unit of a Linux 7.1.10 `defconfig` kernel on
 x86_64 and aarch64, links it, and the result boots. The harness is
 [`demos/linux/`](../demos/linux/), whose
 [README](../demos/linux/README.md) documents every script, flag and pin.
@@ -9,7 +9,7 @@ x86_64 and aarch64, links it, and the result boots. The harness is
 
 **Compile.** Every kernel C unit of the architecture's own `defconfig` is
 badc's, with zero fallbacks to another compiler. Two unit counts circulate at
-the 7.1.6 pin, and they differ only in which make targets were built:
+the 7.1.10 pin, and they differ only in which make targets were built:
 
 | build | x86_64 | aarch64 | measured by |
 |---|---|---|---|
@@ -122,7 +122,7 @@ off by default and `--selfhost-scope` sizes it.
 directly, and kbuild routes `.S` through `$(CC)`, so `buildcc.py` decides each
 assembly unit the same way it decides a C one. badc takes what its assembler
 implements and gas takes the rest; unlike the C path a fallback here is
-expected, so it is measured rather than fatal. At the 7.1.6 `defconfig` pin:
+expected, so it is measured rather than fatal. At the 7.1.10 `defconfig` pin:
 
 | | assembly units | badc | gas |
 |---|---|---|---|

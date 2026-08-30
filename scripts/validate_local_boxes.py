@@ -734,7 +734,7 @@ def main() -> int:
                   "where CI's kernel gate finds regressions that compile and "
                   "link clean, boot or not")
         else:
-            print("kernel step: 7.1.6 defconfig, compile + link + boot; adds "
+            print("kernel step: 7.1.10 defconfig, compile + link + boot; adds "
                   "4.5-11 min per Linux lane for the build (measured on an idle "
                   "box and on one shared with five other jobs) and 12 s "
                   "(aarch64, 8 emulator starts) to 26 s (x86_64, 5) for the "

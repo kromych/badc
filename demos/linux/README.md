@@ -12,7 +12,7 @@ Two pins, with distinct jobs and no shared version:
 
 | `--config` | kernel | configuration | used by |
 |---|---|---|---|
-| `defconfig` (default) | 7.1.6, both arches | the tree's own `make defconfig` | the sweep, CI's `kernel` gate, the pre-push kernel step |
+| `defconfig` (default) | 7.1.10, both arches | the tree's own `make defconfig` | the sweep, CI's `kernel` gate, the pre-push kernel step |
 | `minimal` | 6.12.8 (x86_64), 6.10.1 (aarch64) | vendored `configs/<arch>-<version>.config` | boot bring-up and boot debugging |
 
 Defconfig is the gate corpus. It is what a distribution builds, and it moves
@@ -48,7 +48,7 @@ python3 demos/linux/sweep.py \
     --kernel-dir demos/linux/.cache/linux-<version>  # replay against badc
 ```
 
-`setup.py` downloads the pinned release from cdn.kernel.org (sha256-verified),
+`setup.py` downloads the pinned release from the vendor-deps mirror (sha256-verified),
 installs the configuration `--config` selects, runs `make olddefconfig`, and
 records every option the host toolchain forced or dropped in
 `.cache/config-deviations-<arch>.txt`. `CONFIG_INITRAMFS_SOURCE` is cleared:
@@ -542,7 +542,7 @@ resolved on that PATH, so the system's GNU Make 3.81 is never the one used.
 
 ```sh
 python3 demos/linux/packages.py --arch aarch64 [--distro fedora] \
-    --linker badc --tarball <linux-7.1.6.tar.xz>
+    --linker badc --tarball <linux-7.1.10.tar.xz>
 ```
 
 It selects `hvf`, which is what makes the gate usable on a Mac: booting the
@@ -761,7 +761,7 @@ Phases -- `config` (take a configuration out of the stock image), `tree`
 (extract + configure), `build` (hybrid make), `package`, `vm` -- are idempotent
 and `--phases` selects a subset. Without `--config` the
 tree's own `defconfig` is the corpus, which is what CI builds: 2953 units on
-x86_64 and 10489 on aarch64 at the 7.1.6 pin, kernel plus modules. A fresh
+x86_64 and 10489 on aarch64 at the 7.1.10 pin, kernel plus modules. A fresh
 qcow2 overlay keeps the base image pristine per run. On an rpm host the Debian
 packaging tools (dpkg, dpkg-dev, debhelper) are provisioned under
 `--deb-tools` from the host's own mirror via `dnf download` + rpm2cpio
@@ -1023,7 +1023,7 @@ they name are ones this build produces itself: `CONFIG_INITRAMFS_SOURCE`,
 
 #### What a distribution configuration compiles today
 
-Neither architecture builds one yet. Surveyed at the 7.1.6 pin with
+Neither architecture builds one yet. Surveyed at the 7.1.10 pin with
 `--keep-going`, so the counts are the whole corpus rather than the first
 defect:
 
@@ -1080,7 +1080,7 @@ installs.
 
 ```sh
 python3 demos/linux/packages.py --arch x86_64 \
-    --tarball-url https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.1.6.tar.xz \
+    --tarball-url https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.1.10.tar.xz \
     --tarball-sha256 <sha256> \
     --config /boot/config-$(uname -r) --pkg deb,rpm \
     --phases tree,build,package --keep-going \

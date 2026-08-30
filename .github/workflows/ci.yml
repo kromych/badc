@@ -1643,11 +1643,12 @@ jobs:
     # nightly (see below).
     #
     # The kernel source is the release `demos/linux/setup.py` pins, fetched
-    # from cdn.kernel.org and rejected unless its sha256 matches -- the same
-    # pin the sweep measures against, so the gate cannot drift from it. No
-    # vendor-deps mirror: the tarball is large, would have to be rotated on
-    # every pin bump, and cdn.kernel.org is not one of the hosts that made CI
-    # flaky.
+    # from the `vendor-deps-v1` release and rejected unless its sha256
+    # matches -- the same pin the sweep measures against, so the gate cannot
+    # drift from it. The mirror is the only source: cdn.kernel.org is the
+    # download this job lost most often, and a fallback to it turns a missing
+    # asset into an intermittent failure rather than a clear one. A pin bump
+    # publishes the tarball to the release first.
     #
     # This is the kernel gate on the push path, and it is the badc-linked one.
     # The reference-linked contrast is not a second `--linker` dimension here,

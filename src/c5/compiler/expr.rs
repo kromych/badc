@@ -4863,7 +4863,11 @@ impl Compiler {
                 }
                 self.mark_emit_other();
                 self.ast_psh();
-                self.emit_imm(if fn_ptr_step { 1 } else { self.pointee_step(self.ty) });
+                self.emit_imm(if fn_ptr_step {
+                    1
+                } else {
+                    self.pointee_step(self.ty)
+                });
                 self.ast_binop(if self.lex.tk == Token::Inc {
                     super::super::ir::BinOp::Add
                 } else {

@@ -372,7 +372,7 @@ fn width_class_spelled_out(f: &Form) -> bool {
         .take_while(|g| g.mnem == f.mnem)
         .chain(FORMS_SUPPLEMENT.iter().filter(|g| g.mnem == f.mnem))
         .filter(|g| same_opcode(f, g))
-        .filter_map(|g| uniform_width(g));
+        .filter_map(uniform_width);
     let mut widths = 0u32;
     for gw in group {
         widths |= 1 << gw;

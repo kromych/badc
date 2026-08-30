@@ -858,7 +858,8 @@ fn bool_bitfield_store_converts_before_masking() {
         "an implicit conversion to a `_Bool` bitfield must emit what the          explicit `!= 0` does"
     );
     assert_ne!(
-        implicit, text_of("p->b = 0;"),
+        implicit,
+        text_of("p->b = 0;"),
         "`p->b = x & 4` must not fold to an unconditional clear"
     );
 }

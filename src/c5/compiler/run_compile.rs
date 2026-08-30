@@ -2838,11 +2838,7 @@ impl Compiler {
     /// symbol table's size then describes the aliased object, which is
     /// what a consumer walking it needs: Linux's modpost reads a
     /// `MODULE_DEVICE_TABLE` alias' device table by `st_size`.
-    fn adopt_alias_storage(
-        symbols: &mut [crate::c5::symbol::Symbol],
-        alias: usize,
-        target: usize,
-    ) {
+    fn adopt_alias_storage(symbols: &mut [crate::c5::symbol::Symbol], alias: usize, target: usize) {
         let (array_size, zero_len) = (
             symbols[target].array_size,
             symbols[target].is_zero_len_array,

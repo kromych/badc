@@ -267,8 +267,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x220
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x20, #0x0               // =0
-               	mov	x0, x20
+               	mov	x0, #0x0                // =0
                	bl	<addr>
                	cmp	x0, #0xa
                	b.eq	<addr>
@@ -286,7 +285,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x220
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, x20
+               	mov	x0, #0x0                // =0
                	ldr	x20, [sp]
                	add	sp, sp, #0x220
                	ldp	x29, x30, [sp], #0x10

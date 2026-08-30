@@ -29,26 +29,27 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	leaq	-0x8(%rbp), %rdx
-               	movq	%rdx, %r10
+               	leaq	-0x8(%rbp), %rax
+               	movq	%rax, %r10
                	fnstcw	(%r10)
                	movzwq	-0x8(%rbp), %rax
                	movq	%rax, %rcx
                	andq	$0xffff, %rcx           # imm = 0xFFFF
                	movq	%rcx, -0x8(%rbp)
-               	movq	%rdx, %r10
+               	leaq	-0x8(%rbp), %rcx
+               	movq	%rcx, %r10
                	fldcw	(%r10)
-               	leaq	-0x8(%rbp), %rdx
-               	movq	%rdx, %r10
+               	leaq	-0x8(%rbp), %rcx
+               	movq	%rcx, %r10
                	fnstcw	(%r10)
-               	movzwq	-0x8(%rbp), %rsi
-               	movq	%rsi, %rdx
+               	movzwq	-0x8(%rbp), %rcx
+               	movq	%rcx, %rdx
                	andq	$0xffff, %rdx           # imm = 0xFFFF
-               	cmpl	%ecx, %edx
+               	movq	%rax, %rsi
+               	andq	$0xffff, %rsi           # imm = 0xFFFF
+               	cmpl	%esi, %edx
                	je	<addr>
                	leaq	<rip>, %rdi
-               	andq	$0xffff, %rax           # imm = 0xFFFF
-               	movq	%rax, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
@@ -56,8 +57,6 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movq	%rax, %rsi
-               	andq	$0xffff, %rsi           # imm = 0xFFFF
                	movq	%rsi, %rcx
                	andq	$0xfff, %rcx            # imm = 0xFFF
                	cmpl	$0x37f, %ecx            # imm = 0x37F

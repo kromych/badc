@@ -55,7 +55,9 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x40
                	ret
                	ldr	d0, [x20]
-               	fmov	d17, x21
+               	mov	x0, #0x900000000000     // =158329674399744
+               	movk	x0, #0x407f, lsl #48
+               	fmov	d17, x0
                	fcmp	d0, d17
                	b.eq	<addr>
                	mov	x0, #0x2                // =2

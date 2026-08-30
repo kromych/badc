@@ -82,9 +82,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
-               	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
+               	subq	$0x30, %rsp
                	leaq	-0x28(%rbp), %rdi
                	leaq	<rip>, %rax
                	pushq	%rcx
@@ -106,13 +104,13 @@ Disassembly of section .text:
                	movq	%rcx, (%rdx)
                	popq	%rcx
                	movq	%rdx, %rax
-               	leaq	-0x8(%rbp), %rbx
+               	leaq	-0x8(%rbp), %rcx
                	leaq	<rip>, %rax
-               	pushq	%rcx
-               	movq	(%rax), %rcx
-               	movq	%rcx, (%rbx)
-               	popq	%rcx
-               	movq	%rbx, %rax
+               	pushq	%rdx
+               	movq	(%rax), %rdx
+               	movq	%rdx, (%rcx)
+               	popq	%rdx
+               	movq	%rcx, %rax
                	leaq	-0x10(%rbp), %r9
                	leaq	<rip>, %rax
                	pushq	%rcx
@@ -134,7 +132,7 @@ Disassembly of section .text:
                	movsd	(%r10,%riz), %xmm1
                	movq	%rdx, %r10
                	movsd	(%r10,%riz), %xmm2
-               	movq	%rbx, %r10
+               	movq	%rcx, %r10
                	movsd	(%r10,%riz), %xmm3
                	movq	%r9, %rdi
                	movq	(%rdi), %rdi
@@ -145,14 +143,12 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	addq	$0x40, %rsp
+               	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	xorq	%r12, %r12
-               	movq	%r12, (%rbx)
                	leaq	-0x8(%rbp), %rdi
+               	xorq	%rax, %rax
+               	movq	%rax, (%rdi)
                	movl	$0x3e800000, %r8d       # imm = 0x3E800000
                	leaq	-0x10(%rbp), %r9
                	movq	%r8, %xmm4
@@ -173,14 +169,10 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	addq	$0x40, %rsp
+               	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	movq	%r12, %rax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	addq	$0x40, %rsp
+               	xorq	%rax, %rax
+               	addq	$0x30, %rsp
                	popq	%rbp
                	retq

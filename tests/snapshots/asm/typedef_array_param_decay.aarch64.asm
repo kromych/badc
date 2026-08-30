@@ -52,18 +52,17 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	stp	x20, x21, [sp, #-0x130]!
-               	stp	x22, x23, [sp, #0x10]
-               	stp	x29, x30, [sp, #0x120]
-               	add	x29, sp, #0x120
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x100
                	sub	x1, x29, #0x100
                	add	x0, x1, #0x0
-               	mov	x21, #0x1               // =1
-               	str	x21, [x0]
-               	mov	x22, #0x2               // =2
-               	str	x22, [x1, #0x8]
-               	mov	x23, #0x3               // =3
-               	str	x23, [x1, #0x10]
+               	mov	x2, #0x1                // =1
+               	str	x2, [x0]
+               	mov	x0, #0x2                // =2
+               	str	x0, [x1, #0x8]
+               	mov	x0, #0x3                // =3
+               	str	x0, [x1, #0x10]
                	mov	x0, #0x4                // =4
                	str	x0, [x1, #0x18]
                	mov	x0, #0x5                // =5
@@ -90,67 +89,63 @@ Disassembly of section .text:
                	str	x0, [x1, #0x70]
                	mov	x0, #0x10               // =16
                	str	x0, [x1, #0x78]
-               	sub	x20, x29, #0x80
-               	mov	x0, x20
+               	sub	x0, x29, #0x80
                	bl	<addr>
-               	add	x0, x20, #0x0
-               	ldr	x0, [x0]
-               	add	x0, x0, #0x0
-               	ldr	x1, [x20, #0x8]
-               	add	x0, x0, x1
-               	ldr	x1, [x20, #0x10]
-               	add	x0, x0, x1
-               	ldr	x1, [x20, #0x18]
-               	add	x0, x0, x1
-               	ldr	x1, [x20, #0x20]
-               	add	x0, x0, x1
-               	ldr	x1, [x20, #0x28]
-               	add	x0, x0, x1
-               	ldr	x1, [x20, #0x30]
-               	add	x0, x0, x1
-               	ldr	x1, [x20, #0x38]
-               	add	x0, x0, x1
-               	ldr	x1, [x20, #0x40]
-               	add	x0, x0, x1
-               	ldr	x1, [x20, #0x48]
-               	add	x0, x0, x1
-               	ldr	x1, [x20, #0x50]
-               	add	x0, x0, x1
-               	ldr	x1, [x20, #0x58]
-               	add	x0, x0, x1
-               	ldr	x1, [x20, #0x60]
-               	add	x0, x0, x1
-               	ldr	x1, [x20, #0x68]
-               	add	x0, x0, x1
-               	ldr	x1, [x20, #0x70]
-               	add	x0, x0, x1
-               	ldr	x1, [x20, #0x78]
-               	add	x0, x0, x1
-               	cmp	x0, #0x88
+               	sub	x0, x29, #0x80
+               	add	x1, x0, #0x0
+               	ldr	x1, [x1]
+               	add	x1, x1, #0x0
+               	ldr	x2, [x0, #0x8]
+               	add	x1, x1, x2
+               	ldr	x2, [x0, #0x10]
+               	add	x1, x1, x2
+               	ldr	x2, [x0, #0x18]
+               	add	x1, x1, x2
+               	ldr	x2, [x0, #0x20]
+               	add	x1, x1, x2
+               	ldr	x2, [x0, #0x28]
+               	add	x1, x1, x2
+               	ldr	x2, [x0, #0x30]
+               	add	x1, x1, x2
+               	ldr	x2, [x0, #0x38]
+               	add	x1, x1, x2
+               	ldr	x2, [x0, #0x40]
+               	add	x1, x1, x2
+               	ldr	x2, [x0, #0x48]
+               	add	x1, x1, x2
+               	ldr	x2, [x0, #0x50]
+               	add	x1, x1, x2
+               	ldr	x2, [x0, #0x58]
+               	add	x1, x1, x2
+               	ldr	x2, [x0, #0x60]
+               	add	x1, x1, x2
+               	ldr	x2, [x0, #0x68]
+               	add	x1, x1, x2
+               	ldr	x2, [x0, #0x70]
+               	add	x1, x1, x2
+               	ldr	x2, [x0, #0x78]
+               	add	x1, x1, x2
+               	cmp	x1, #0x88
                	b.eq	<addr>
-               	mov	x0, x21
-               	ldp	x29, x30, [sp, #0x120]
-               	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x130
+               	mov	x0, #0x1                // =1
+               	add	sp, sp, #0x100
+               	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x0, [x20]
-               	cmp	x0, #0x1
+               	ldr	x1, [x0]
+               	cmp	x1, #0x1
                	b.eq	<addr>
-               	mov	x0, x22
-               	ldp	x29, x30, [sp, #0x120]
-               	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x130
+               	mov	x0, #0x2                // =2
+               	add	sp, sp, #0x100
+               	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x0, [x20, #0x78]
+               	ldr	x0, [x0, #0x78]
                	cmp	x0, #0x10
                	b.eq	<addr>
-               	mov	x0, x23
-               	ldp	x29, x30, [sp, #0x120]
-               	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x130
+               	mov	x0, #0x3                // =3
+               	add	sp, sp, #0x100
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x120]
-               	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x130
+               	add	sp, sp, #0x100
+               	ldp	x29, x30, [sp], #0x10
                	ret

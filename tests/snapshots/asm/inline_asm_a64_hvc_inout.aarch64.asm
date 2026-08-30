@@ -76,6 +76,8 @@ Disassembly of section .text:
                	ldr	x5, [sp, #0x88]
                	ldr	x6, [sp, #0x90]
                	ldr	x7, [sp, #0x98]
+               	mov	x0, #0x84000000         // =2214592512
+               	mov	x1, #0x1                // =1
                	sub	x2, x29, #0x40
                	sub	x3, x29, #0x38
                	sub	x4, x29, #0x30

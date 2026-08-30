@@ -34,19 +34,21 @@ Disassembly of section .text:
                	ldr	x0, [sp, #0x10]
                	ldr	x1, [sp, #0x18]
                	ldr	d0, [sp, #0x20]
-               	ldursw	x2, [x29, #-0x18]
-               	cmp	w2, #0x2a
+               	ldursw	x0, [x29, #-0x18]
+               	cmp	w0, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x2, #0x13               // =19
-               	mov	x3, #0x17               // =23
-               	mov	x4, #0x0                // =0
-               	str	x4, [x0]
-               	str	w2, [x0]
-               	str	w3, [x0, #0x4]
+               	mov	x1, #0x13               // =19
+               	mov	x2, #0x17               // =23
+               	sub	x0, x29, #0x18
+               	mov	x3, #0x0                // =0
+               	str	x3, [x0]
+               	str	w1, [x0]
+               	str	w2, [x0, #0x4]
+               	sub	x1, x29, #0x10
                	sub	x2, x29, #0x8
                	str	x0, [sp, #0x18]
                	str	x1, [sp, #0x20]

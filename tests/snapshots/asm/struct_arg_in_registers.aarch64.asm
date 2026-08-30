@@ -27,74 +27,74 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	str	x20, [sp, #-0x70]!
-               	stp	x29, x30, [sp, #0x60]
-               	add	x29, sp, #0x60
-               	sub	x20, x29, #0x40
-               	mov	x0, #0x3                // =3
-               	str	w0, [x20]
-               	mov	x1, #0x5                // =5
-               	str	w1, [x20, #0x4]
-               	ldrsw	x0, [x20]
-               	ldrsw	x2, [x20, #0x4]
-               	add	x0, x0, x2
-               	sxtw	x0, w0
-               	cmp	w0, #0x8
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x50
+               	sub	x0, x29, #0x40
+               	mov	x1, #0x3                // =3
+               	str	w1, [x0]
+               	mov	x2, #0x5                // =5
+               	str	w2, [x0, #0x4]
+               	ldrsw	x1, [x0]
+               	ldrsw	x3, [x0, #0x4]
+               	add	x1, x1, x3
+               	sxtw	x1, w1
+               	cmp	w1, #0x8
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0x60]
-               	ldr	x20, [sp], #0x70
+               	add	sp, sp, #0x50
+               	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrsw	x0, [x20]
+               	ldrsw	x1, [x0]
                	mov	x17, #0xa               // =10
-               	mul	x0, x0, x17
-               	add	x0, x0, #0x9
-               	ldrsw	x2, [x20, #0x4]
+               	mul	x1, x1, x17
+               	add	x1, x1, #0x9
+               	ldrsw	x3, [x0, #0x4]
                	mov	x17, #0x64              // =100
-               	mul	x2, x2, x17
-               	add	x0, x0, x2
-               	add	x0, x0, #0x7d0
-               	sxtw	x0, w0
-               	cmp	w0, #0x9eb
+               	mul	x3, x3, x17
+               	add	x1, x1, x3
+               	add	x1, x1, #0x7d0
+               	sxtw	x1, w1
+               	cmp	w1, #0x9eb
                	b.eq	<addr>
-               	mov	x0, x1
-               	ldp	x29, x30, [sp, #0x60]
-               	ldr	x20, [sp], #0x70
+               	mov	x0, x2
+               	add	sp, sp, #0x50
+               	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrsw	x0, [x20]
-               	add	x0, x0, #0xa
-               	add	x0, x0, #0x3
-               	add	x0, x0, #0x4
-               	sxtw	x0, w0
-               	cmp	w0, #0x14
+               	ldrsw	x1, [x0]
+               	add	x1, x1, #0xa
+               	add	x1, x1, #0x3
+               	add	x1, x1, #0x4
+               	sxtw	x1, w1
+               	cmp	w1, #0x14
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
-               	ldp	x29, x30, [sp, #0x60]
-               	ldr	x20, [sp], #0x70
+               	add	sp, sp, #0x50
+               	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, x20
                	ldr	x0, [x0]
                	bl	<addr>
                	cmp	x0, #0x12c
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
-               	ldp	x29, x30, [sp, #0x60]
-               	ldr	x20, [sp], #0x70
+               	add	sp, sp, #0x50
+               	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrsw	x0, [x20]
+               	sub	x1, x29, #0x40
+               	ldrsw	x0, [x1]
                	cmp	w0, #0x3
                	cset	x0, ne
                	cbnz	x0, <addr>
-               	ldrsw	x0, [x20, #0x4]
+               	ldrsw	x0, [x1, #0x4]
                	cmp	w0, #0x5
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x8                // =8
-               	ldp	x29, x30, [sp, #0x60]
-               	ldr	x20, [sp], #0x70
+               	add	sp, sp, #0x50
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x60]
-               	ldr	x20, [sp], #0x70
+               	add	sp, sp, #0x50
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>

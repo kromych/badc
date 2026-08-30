@@ -2394,8 +2394,8 @@ Disassembly of section .text:
                	strb	w1, [x0, #0x8]
                	mov	x17, #0x232f            // =9007
                	add	x1, x0, x17
-               	mov	x20, #0x7               // =7
-               	strb	w20, [x1]
+               	mov	x2, #0x7                // =7
+               	strb	w2, [x1]
                	bl	<addr>
                	cmp	x0, #0x16
                	b.eq	<addr>
@@ -2405,7 +2405,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x350
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, x20
+               	mov	x0, #0x7                // =7
                	bl	<addr>
                	cmp	x0, #0x30
                	b.eq	<addr>

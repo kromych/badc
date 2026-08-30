@@ -345,7 +345,7 @@ fn ent_pc=1 n_params=4 variadic=false locals=8
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
 fn ent_pc=2 n_params=0 variadic=false locals=7
-  spill_count=0 gpr_used=[3] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
@@ -537,14 +537,14 @@ fn ent_pc=2 n_params=0 variadic=false locals=7
     v169 BinopI { op=lt, lhs=v167, rhs_imm=32 }           -> x1
     terminator Bnz { cond=v169, target=b3, fall=b6 }   (exit_acc=v169)
   block 6  start_pc=0
-    v178 LocalAddr(-7)                                    -> x3
+    v178 LocalAddr(-7)                                    -> x7
     v179 LocalAddr(-6)                                    -> x6
     v180 LocalAddr(-4)                                    -> x2
     v181 ImmData(8)                                       -> x1
     v182 Call { target_pc=1, args=[v178, v179, v180, v181], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v183 LocalAddr(-7)                                    -> x0
-    v184 Imm(0)                                           -> x0
-    v185 Load { addr=v178, disp=0, kind=U8 }              -> x0
+    v184 Imm(0)                                           -> x1
+    v185 Load { addr=v183, disp=0, kind=U8 }              -> x0
     v186 BinopI { op=shl, lhs=v185, rhs_imm=32 }          -> x1
     v187 Extend { value=v185, kind=I32 }                  -> x1
     terminator Return(v185)   (exit_acc=v185)

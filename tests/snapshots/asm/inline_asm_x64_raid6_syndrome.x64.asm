@@ -747,15 +747,15 @@ Disassembly of section .text:
                	addq	$0x90, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x10(%rbp), %rcx
-               	leaq	-0x8(%rbp), %rdx
-               	xorq	%rax, %rax
+               	leaq	-0x10(%rbp), %rax
+               	leaq	-0x8(%rbp), %rcx
+               	xorq	%rdx, %rdx
                	movq	%rax, -0x90(%rbp)
                	movq	%rcx, -0x88(%rbp)
                	movq	%rdx, -0x80(%rbp)
-               	movq	%rcx, -0x78(%rbp)
-               	movq	%rdx, -0x70(%rbp)
-               	movq	%rax, -0x68(%rbp)
+               	movq	%rax, -0x78(%rbp)
+               	movq	%rcx, -0x70(%rbp)
+               	movq	%rdx, -0x68(%rbp)
                	movq	-0x68(%rbp), %rcx
                	xgetbv
                	movq	-0x78(%rbp), %r10
@@ -765,12 +765,13 @@ Disassembly of section .text:
                	movq	-0x90(%rbp), %rax
                	movq	-0x88(%rbp), %rcx
                	movq	-0x80(%rbp), %rdx
-               	movl	-0x10(%rbp), %ecx
-               	andq	$0x6, %rcx
-               	xorq	$0x6, %rcx
-               	movl	%ecx, %ecx
-               	testq	%rcx, %rcx
+               	movl	-0x10(%rbp), %eax
+               	andq	$0x6, %rax
+               	xorq	$0x6, %rax
+               	movl	%eax, %eax
+               	testq	%rax, %rax
                	je	<addr>
+               	xorq	%rax, %rax
                	addq	$0x90, %rsp
                	popq	%rbp
                	retq

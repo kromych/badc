@@ -331,8 +331,8 @@ fn ent_pc=8 n_params=0 variadic=false locals=17
     v127 Imm(5)                                           -> x0
     terminator Return(v127)   (exit_acc=v127)
   block 24  start_pc=0
-    v128 LocalAddr(-13)                                   -> x3
-    v129 ImmData(8)                                       -> x0
+    v128 LocalAddr(-13)                                   -> x0
+    v129 ImmData(8)                                       -> x1
     v130 Mcpy { dst=v128, src=v129, size=16, align=8 }    -> x0
     v131 LocalAddr(-15)                                   -> x7
     v132 Call { target_pc=5, args=[v131], fixed_args=1, fp_return=true, fp_arg_mask=0x0 } -> d0
@@ -352,8 +352,8 @@ fn ent_pc=8 n_params=0 variadic=false locals=17
     v140 Imm(7)                                           -> x0
     terminator Return(v140)   (exit_acc=v140)
   block 28  start_pc=0
-    v141 LocalAddr(-13)                                   -> x0
-    v142 Call { target_pc=7, args=[v128], fixed_args=1, fp_return=true, fp_arg_mask=0x0 } -> d0 [f32]
+    v141 LocalAddr(-13)                                   -> x7
+    v142 Call { target_pc=7, args=[v141], fixed_args=1, fp_return=true, fp_arg_mask=0x0 } -> d0 [f32]
     v143 Imm(1092616192)                                  -> x0 [f32]
     v144 Binop { op=fne, lhs=v142, rhs=v143 }             -> x0
     terminator Bz { cond=v144, target=b30, fall=b29 }   (exit_acc=v144)

@@ -27,16 +27,17 @@ Disassembly of section .text:
                	ldr	x16, [sp]
                	str	x0, [x16]
                	ldr	x0, [sp, #0x10]
-               	ldur	x1, [x29, #-0x28]
-               	cmp	x1, #0x5
+               	ldur	x0, [x29, #-0x28]
+               	cmp	x0, #0x5
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x1                // =1
-               	mov	x2, #0x2                // =2
-               	mov	x3, #0x3                // =3
+               	mov	x0, #0x1                // =1
+               	mov	x1, #0x2                // =2
+               	mov	x2, #0x3                // =3
+               	mov	x3, #0x4                // =4
                	mov	x4, #0x5                // =5
                	mov	x5, #0x6                // =6
                	sub	x6, x29, #0x20
@@ -53,10 +54,10 @@ Disassembly of section .text:
                	str	x7, [sp, #0x8]
                	str	x8, [sp, #0x10]
                	str	x9, [sp, #0x18]
-               	str	x1, [sp, #0x20]
-               	str	x2, [sp, #0x28]
-               	str	x3, [sp, #0x30]
-               	str	x0, [sp, #0x38]
+               	str	x0, [sp, #0x20]
+               	str	x1, [sp, #0x28]
+               	str	x2, [sp, #0x30]
+               	str	x3, [sp, #0x38]
                	str	x4, [sp, #0x40]
                	str	x5, [sp, #0x48]
                	ldr	x0, [sp, #0x20]

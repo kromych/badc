@@ -54,6 +54,7 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #48
                	str	w17, [x16, #0x1c]
                	sub	x2, x29, #0x20
+               	sub	x0, x29, #0x40
                	str	x9, [sp, #-0x10]!
                	ldr	x9, [x0]
                	str	x9, [x2]

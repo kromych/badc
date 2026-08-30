@@ -192,37 +192,38 @@ Disassembly of section .text:
                	stp	x22, x23, [sp, #0x10]
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
-               	mov	x23, #0x1               // =1
-               	mov	x0, #0x2                // =2
-               	mov	x1, #0x3                // =3
-               	mov	x2, #0x4                // =4
+               	mov	x0, #0x1                // =1
+               	mov	x1, #0x2                // =2
+               	mov	x2, #0x3                // =3
+               	mov	x3, #0x4                // =4
                	adrp	x20, <page>
                	add	x20, x20, <lo12>
-               	str	x23, [x20]
-               	str	x0, [x20, #0x8]
-               	str	x1, [x20, #0x10]
-               	str	x2, [x20, #0x18]
+               	str	x0, [x20]
+               	str	x1, [x20, #0x8]
+               	str	x2, [x20, #0x10]
+               	str	x3, [x20, #0x18]
                	adrp	x21, <page>
                	add	x21, x21, <lo12>
-               	str	x23, [x21]
-               	mov	x1, #0xa                // =10
-               	str	x1, [x21, #0x8]
-               	mov	x1, #0x64               // =100
-               	str	x1, [x21, #0x10]
-               	mov	x1, #0x3e8              // =1000
-               	str	x1, [x21, #0x18]
+               	str	x0, [x21]
+               	mov	x2, #0xa                // =10
+               	str	x2, [x21, #0x8]
+               	mov	x2, #0x64               // =100
+               	str	x2, [x21, #0x10]
+               	mov	x2, #0x3e8              // =1000
+               	str	x2, [x21, #0x18]
                	adrp	x22, <page>
                	add	x22, x22, <lo12>
-               	str	x23, [x22]
-               	str	x23, [x22, #0x8]
-               	str	x23, [x22, #0x10]
-               	str	x23, [x22, #0x18]
+               	str	x0, [x22]
+               	str	x0, [x22, #0x8]
+               	str	x0, [x22, #0x10]
+               	str	x0, [x22, #0x18]
+               	mov	x0, x1
                	bl	<addr>
                	mov	x17, #0xe14             // =3604
                	movk	x17, #0x1, lsl #16
                	cmp	x0, x17
                	b.eq	<addr>
-               	mov	x0, x23
+               	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x20]
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30

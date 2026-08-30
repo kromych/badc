@@ -11,26 +11,26 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v8   StoreLocal { off=-2, value=v7, kind=I32 }        -> -
     v9   LocalAddr(-2)                                    -> x0
     v10  InlineAsm { template="jmp wkst\n\taddl $100, %0\n.weak wkst\nwkst:\n\taddl $1, %0", ops=1, args=[v9] } -> -
-    v11  LoadLocal { off=-2, kind=I32 }                   -> x1
-    v12  Extend { value=v11, kind=I32 }                   -> x2
+    v11  LoadLocal { off=-2, kind=I32 }                   -> x0
+    v12  Extend { value=v11, kind=I32 }                   -> x1
     terminator Jmp(b2)   (exit_acc=v11)
   block 2  start_pc=0
-    v2   BinopI { op=ne, lhs=v11, rhs_imm=6 }             -> x1
+    v2   BinopI { op=ne, lhs=v11, rhs_imm=6 }             -> x0
     terminator Bz { cond=v2, target=b4, fall=b3 }   (exit_acc=v2)
   block 3  start_pc=0
     v3   Imm(1)                                           -> x0
     terminator Return(v3)   (exit_acc=v3)
   block 4  start_pc=0
-    v4   Imm(2)                                           -> x1
+    v4   Imm(2)                                           -> x0
     terminator Jmp(b5)
   block 5  start_pc=0
-    v13  Imm(2)                                           -> x1
+    v13  Imm(2)                                           -> x0
     v14  StoreLocal { off=-2, value=v13, kind=I32 }       -> -
-    v15  Imm(2)                                           -> x2
+    v15  Imm(2)                                           -> x1
     v16  StoreLocal { off=-1, value=v13, kind=I32 }       -> -
-    v17  LocalAddr(-2)                                    -> x1
+    v17  LocalAddr(-2)                                    -> x0
     v18  LocalAddr(-1)                                    -> x1
-    v19  InlineAsm { template="jmp 1f\n\taddl $100, %0\n1:\n\taddl $20, %0\n\tsubl $1, %1\n\tjne 1b\n\tjmp 2f\n\t.skip 130, 0x90\n2:", ops=2, args=[v9, v18] } -> -
+    v19  InlineAsm { template="jmp 1f\n\taddl $100, %0\n1:\n\taddl $20, %0\n\tsubl $1, %1\n\tjne 1b\n\tjmp 2f\n\t.skip 130, 0x90\n2:", ops=2, args=[v17, v18] } -> -
     v20  LoadLocal { off=-2, kind=I32 }                   -> x0
     v21  Extend { value=v20, kind=I32 }                   -> x1
     terminator Jmp(b6)   (exit_acc=v20)

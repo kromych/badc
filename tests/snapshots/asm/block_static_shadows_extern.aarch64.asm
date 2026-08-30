@@ -39,13 +39,13 @@ Disassembly of section .text:
                	add	x29, sp, #0x30
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x20, #0x2               // =2
+               	mov	x2, #0x2                // =2
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
                	mov	x9, x0
                	mov	x0, x1
-               	mov	x1, x20
+               	mov	x1, x2
                	blr	x9
                	sxtw	x0, w0
                	cmp	x0, #0x12
@@ -77,12 +77,13 @@ Disassembly of section .text:
                	ret
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
+               	mov	x2, #0x2                // =2
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
                	mov	x9, x0
                	mov	x0, x1
-               	mov	x1, x20
+               	mov	x1, x2
                	blr	x9
                	sxtw	x0, w0
                	cmp	x0, #0x67
@@ -95,13 +96,13 @@ Disassembly of section .text:
                	ret
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x20, #0x1               // =1
+               	mov	x2, #0x1                // =1
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
                	mov	x9, x0
                	mov	x0, x1
-               	mov	x1, x20
+               	mov	x1, x2
                	blr	x9
                	sxtw	x0, w0
                	cmp	x0, #0x8
@@ -114,12 +115,13 @@ Disassembly of section .text:
                	ret
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
+               	mov	x2, #0x1                // =1
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
                	mov	x9, x0
                	mov	x0, x1
-               	mov	x1, x20
+               	mov	x1, x2
                	blr	x9
                	sxtw	x0, w0
                	cmp	x0, #0x9

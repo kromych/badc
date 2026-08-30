@@ -159,8 +159,8 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x18(%rbp), %rbx
-               	movq	0x8(%rbx), %rax
+               	leaq	-0x18(%rbp), %rax
+               	movq	0x8(%rax), %rax
                	movabsq	$0x4054400000000000, %rdi # imm = 0x4054400000000000
                	movq	%rdi, %xmm0
                	callq	*%rax
@@ -178,7 +178,8 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	movq	0x10(%rbx), %rax
+               	leaq	-0x18(%rbp), %rax
+               	movq	0x10(%rax), %rax
                	movabsq	$0x401799999999999a, %rdi # imm = 0x401799999999999A
                	movq	%rdi, %xmm0
                	callq	*%rax

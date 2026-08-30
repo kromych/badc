@@ -33,11 +33,13 @@ Disassembly of section .text:
                	ldr	x0, [sp]
                	prfm	pldl1keep, [x0]
                	ldr	x0, [sp, #0x8]
+               	sub	x0, x29, #0x40
                	str	x0, [sp, #0x8]
                	str	x0, [sp]
                	ldr	x0, [sp]
                	prfm	pstl1strm, [x0, #0x10]
                	ldr	x0, [sp, #0x8]
+               	sub	x0, x29, #0x40
                	str	x0, [sp, #0x10]
                	str	x1, [sp, #0x18]
                	str	x0, [sp]

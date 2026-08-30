@@ -19,6 +19,13 @@
 //! The headroom widens as the duplicate gets cheaper to recompute, and
 //! is widest for the operand-free values, which rematerialise anywhere.
 //!
+//! A region holding a call is taken only from inside a loop. The
+//! callee-saved register such a range needs is saved by the prologue and
+//! restored by every return, so the merge bills every call of the
+//! function -- including the calls whose path never reaches the
+//! duplicate -- for a recomputation it removes once. Only a duplicate
+//! that runs per iteration repays that.
+//!
 //! Not numbered: values with no consumers, comparisons a branch consumes
 //! alone (a second use costs them the flag-branch fusion), memory reads
 //! (no aliasing analysis here), and phis.
@@ -147,6 +154,10 @@ struct Pressure {
     /// Per-block maximum of `at`, and of `at` over the block's calls.
     block_peak: Vec<[u32; 2]>,
     block_call_peak: Vec<[u32; 2]>,
+    /// Whether a block holds a call at all. `block_call_peak` reads zero
+    /// for a call with nothing of that bank live across it, so it cannot
+    /// stand in for this.
+    block_has_call: Vec<bool>,
     call_at: Vec<bool>,
 }
 
@@ -204,6 +215,7 @@ fn pressure(func: &FunctionSsa) -> Pressure {
         at: alloc::vec![[0; 2]; n],
         block_peak: alloc::vec![[0; 2]; func.blocks.len()],
         block_call_peak: alloc::vec![[0; 2]; func.blocks.len()],
+        block_has_call: alloc::vec![false; func.blocks.len()],
         call_at: alloc::vec![false; n],
     };
     let mut lc = LiveCount {
@@ -231,6 +243,7 @@ fn pressure(func: &FunctionSsa) -> Pressure {
             }
             if is_call(&func.insts[i]) {
                 p.call_at[i] = true;
+                p.block_has_call[b] = true;
                 for k in 0..2 {
                     p.block_call_peak[b][k] = p.block_call_peak[b][k].max(lc.cnt[k]);
                 }
@@ -355,10 +368,11 @@ fn loop_depth(preds: &[Vec<BlockId>], tin: &[u32], tout: &[u32]) -> Vec<u32> {
 }
 
 /// A merge's cost: peak live count over its region, count at its calls,
-/// deepest loop nesting reached.
+/// whether the region calls at all, and the deepest loop nesting reached.
 struct Cost {
     peak: [u32; 2],
     call_peak: Option<[u32; 2]>,
+    has_call: bool,
     hottest: u32,
 }
 
@@ -398,6 +412,7 @@ impl Gate<'_> {
                 c.peak[k] = c.peak[k].max(v + add[k] + base[k]);
             }
             if self.p.call_at[i as usize] {
+                c.has_call = true;
                 let cp = c.call_peak.get_or_insert([0; 2]);
                 for (k, &v) in at.iter().enumerate() {
                     cp[k] = cp[k].max(v + add[k] + base[k]);
@@ -411,6 +426,7 @@ impl Gate<'_> {
     /// Fold a whole interior block into the cost.
     fn whole(&mut self, c: &mut Cost, x: BlockId) {
         self.region.push(x);
+        c.has_call |= self.p.block_has_call[x as usize];
         for k in 0..2 {
             let add = self.extra_block[x as usize][k] + self.extra_inst_peak[x as usize][k];
             c.peak[k] = c.peak[k].max(self.p.block_peak[x as usize][k] + add);
@@ -433,6 +449,7 @@ impl Gate<'_> {
         let mut c = Cost {
             peak: [0; 2],
             call_peak: None,
+            has_call: false,
             hottest: self.depth[b as usize].max(self.depth[lb as usize]),
         };
         self.region.clear();
@@ -472,8 +489,9 @@ impl Gate<'_> {
     }
 
     /// Whether the leader reaches the duplicate without overrunning a
-    /// bank or pinning a register through hotter code. Charges the
-    /// region on success, so the next merge sees this one.
+    /// bank, pinning a register through hotter code, or billing the
+    /// function's entry and exit for a recomputation that runs once.
+    /// Charges the region on success, so the next merge sees this one.
     fn pays(
         &mut self,
         func: &FunctionSsa,
@@ -495,6 +513,13 @@ impl Gate<'_> {
             return false;
         };
         if c.hottest > self.depth[b as usize] || c.peak[bank] + need > self.caps.total[bank] {
+            return false;
+        }
+        // A range spanning a call takes a callee-saved register, whose
+        // save and restore every call of the function pays. A duplicate
+        // outside a loop removes one recomputation against that, so it
+        // never repays.
+        if c.has_call && self.depth[b as usize] == 0 {
             return false;
         }
         if let Some(cp) = c.call_peak
@@ -932,15 +957,60 @@ mod tests {
     }
 
     /// A leader whose extended range spans a call must live in a
-    /// callee-saved register. With that bank empty the merge is declined.
+    /// callee-saved register, which the prologue saves and every return
+    /// restores. Outside a loop the merge removes one recomputation
+    /// against that, so it is declined however wide the bank is.
     #[test]
-    fn merge_across_a_call_needs_the_callee_saved_bank() {
-        let mut f = dup_across_call();
-        run_one(&mut f, caps(16, 0));
-        assert_eq!(return_val(&f, 1), 4, "no callee-saved register, no merge");
-        let mut f = dup_across_call();
+    fn merge_across_a_call_outside_a_loop_is_declined() {
+        for bank in [caps(16, 0), caps(16, 8), caps(32, 24)] {
+            let mut f = dup_across_call();
+            run_one(&mut f, bank);
+            assert_eq!(return_val(&f, 1), 4, "a straight-line call is not repaid");
+        }
+    }
+
+    /// b0 sets up; b1 computes v2, calls, recomputes it as v4 and
+    /// branches back to itself on v5; b2 returns the duplicate. The back
+    /// edge puts the duplicate at loop depth 1, where the recomputation
+    /// runs per iteration and the save/restore runs per call.
+    fn dup_across_call_in_loop() -> FunctionSsa {
+        let call = Inst::CallExt {
+            binding_idx: 0,
+            args: Vec::new(),
+            fp_arg_mask: 0,
+            fp_return: false,
+            arg_aggs: Vec::new(),
+            ret_agg: None,
+            ret_slot_local: 0,
+        };
+        fresh(
+            alloc::vec![
+                Inst::Imm(3),
+                Inst::Imm(5),
+                add(0, 1),
+                call,
+                add(0, 1),
+                muli(2, 2)
+            ],
+            alloc::vec![
+                blk(0..2, Terminator::Jmp(1), 1),
+                blk(2..6, bz(5, 2, 1), 5),
+                blk(6..6, Terminator::Return(4), 4),
+            ],
+        )
+    }
+
+    /// In a loop the merge is taken, and only then does the callee-saved
+    /// bank decide it: with that bank empty there is nowhere to put the
+    /// range and the merge is declined again.
+    #[test]
+    fn merge_across_a_call_in_a_loop_needs_the_callee_saved_bank() {
+        let mut f = dup_across_call_in_loop();
         run_one(&mut f, caps(16, 8));
-        assert_eq!(return_val(&f, 1), 2, "a callee-saved bank admits it");
+        assert_eq!(return_val(&f, 2), 2, "a repeated recomputation repays it");
+        let mut f = dup_across_call_in_loop();
+        run_one(&mut f, caps(16, 0));
+        assert_eq!(return_val(&f, 2), 4, "no callee-saved register, no merge");
     }
 
     /// One conversion shape over one operand at two result widths is two

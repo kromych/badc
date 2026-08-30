@@ -192,27 +192,28 @@ Disassembly of section .text:
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq
-               	movabsq	$-0x5a5a5a5a5a5a5a5b, %rsi # imm = 0xA5A5A5A5A5A5A5A5
-               	leaq	0x38(%rcx), %rdx
-               	movq	%rsi, %gs:(%rdx)
-               	leaq	-0x8(%rbp), %rsi
+               	movabsq	$-0x5a5a5a5a5a5a5a5b, %rdx # imm = 0xA5A5A5A5A5A5A5A5
+               	leaq	0x38(%rcx), %rsi
+               	movq	%rdx, %gs:(%rsi)
+               	leaq	-0x8(%rbp), %rdx
                	movq	%rax, -0x60(%rbp)
-               	movq	%rsi, -0x58(%rbp)
+               	movq	%rdx, -0x58(%rbp)
                	pushfq
                	popq	%rax
                	movq	-0x58(%rbp), %r10
                	movq	%rax, (%r10)
                	movq	-0x60(%rbp), %rax
-               	movq	-0x8(%rbp), %rsi
-               	testq	%rsi, %rsi
+               	movq	-0x8(%rbp), %rdx
+               	testq	%rdx, %rdx
                	jne	<addr>
                	movl	$0x10, %eax
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq
-               	movq	%gs:(%rdx), %rcx
-               	incq	%rcx
-               	movq	%rcx, %gs:(%rdx)
+               	addq	$0x38, %rcx
+               	movq	%gs:(%rcx), %rdx
+               	incq	%rdx
+               	movq	%rdx, %gs:(%rcx)
                	leaq	<rip>, %rcx
                	movq	(%rcx), %rdx
                	movabsq	$0xf1e2d3c4b5a6978, %rsi # imm = 0xF1E2D3C4B5A6978

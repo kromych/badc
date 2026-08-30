@@ -22,10 +22,10 @@ fn ent_pc=0 n_params=2 variadic=false locals=1
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=main
 fn ent_pc=1 n_params=0 variadic=false locals=4
-  spill_count=0 gpr_used=[3] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(0)                                           -> x3
+    v1   Imm(0)                                           -> x0
     v2   StoreLocal { off=-1, value=v1, kind=I64 }        -> -
     v3   Imm(42)                                          -> x7
     v4   LocalAddr(-1)                                    -> x6
@@ -49,17 +49,17 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     terminator Bz { cond=v16, target=b5, fall=b3 }   (exit_acc=v16)
   block 3  start_pc=0
     v18  Imm(0)                                           -> x0
-    v19  Imm(0)                                           -> x0
-    terminator Jmp(b4)   (exit_acc=v1)
+    v19  Imm(0)                                           -> x1
+    terminator Jmp(b4)   (exit_acc=v18)
   block 4  start_pc=0
-    v22  Phi { incoming=[b3:v1, b5:v20], kind=I64 }       -> x3
-    v23  LoadLocal { off=-4, kind=I64 }                   -> x0
-    v24  BinopI { op=shl, lhs=v22, rhs_imm=32 }           -> x0
+    v22  Phi { incoming=[b3:v18, b5:v20], kind=I64 }      -> x0
+    v23  LoadLocal { off=-4, kind=I64 }                   -> x1
+    v24  BinopI { op=shl, lhs=v22, rhs_imm=32 }           -> x1
     v25  Extend { value=v22, kind=I32 }                   -> x0
     terminator Return(v25)   (exit_acc=v25)
   block 5  start_pc=0
-    v20  Imm(1)                                           -> x3
-    v21  Imm(0)                                           -> x0
+    v20  Imm(1)                                           -> x0
+    v21  Imm(0)                                           -> x1
     terminator Jmp(b4)   (exit_acc=v20)
   block 6  start_pc=0
     terminator Jmp(b2)

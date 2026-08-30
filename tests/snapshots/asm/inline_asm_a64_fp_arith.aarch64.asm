@@ -17,16 +17,16 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x40
-               	mov	x1, #0x4018000000000000 // =4618441417868443648
-               	mov	x2, #0x4020000000000000 // =4620693217682128896
-               	sub	x0, x29, #0x8
+               	mov	x0, #0x4018000000000000 // =4618441417868443648
+               	mov	x1, #0x4020000000000000 // =4620693217682128896
+               	sub	x2, x29, #0x8
                	str	d0, [sp, #0x18]
                	str	d1, [sp, #0x20]
                	str	d2, [sp, #0x28]
-               	str	x0, [sp]
-               	fmov	d16, x1
+               	str	x2, [sp]
+               	fmov	d16, x0
                	str	d16, [sp, #0x8]
-               	fmov	d16, x2
+               	fmov	d16, x1
                	str	d16, [sp, #0x10]
                	ldr	d1, [sp, #0x8]
                	ldr	d2, [sp, #0x10]
@@ -38,10 +38,11 @@ Disassembly of section .text:
                	ldr	d2, [sp, #0x28]
                	sub	x16, x29, #0x8
                	ldr	d0, [x16]
+               	sub	x1, x29, #0x8
                	str	d0, [sp, #0x10]
                	str	d1, [sp, #0x18]
-               	str	x0, [sp]
-               	fmov	d16, x1
+               	str	x1, [sp]
+               	fmov	d16, x0
                	str	d16, [sp, #0x8]
                	ldr	d1, [sp, #0x8]
                	fneg	d0, d1
@@ -51,6 +52,7 @@ Disassembly of section .text:
                	ldr	d1, [sp, #0x18]
                	sub	x16, x29, #0x8
                	ldr	d1, [x16]
+               	sub	x0, x29, #0x8
                	str	d0, [sp, #0x18]
                	str	d1, [sp, #0x20]
                	str	d2, [sp, #0x28]

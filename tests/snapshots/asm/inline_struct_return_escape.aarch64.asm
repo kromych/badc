@@ -31,11 +31,11 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	str	x20, [sp, #-0x40]!
-               	stp	x29, x30, [sp, #0x30]
-               	add	x29, sp, #0x30
-               	mov	x20, #0x0               // =0
-               	stur	x20, [x29, #-0x8]
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x20
+               	mov	x0, #0x0                // =0
+               	stur	x0, [x29, #-0x8]
                	mov	x0, #0x2a               // =42
                	sub	x1, x29, #0x8
                	bl	<addr>
@@ -56,10 +56,11 @@ Disassembly of section .text:
                	cmp	x0, #0x2a
                	cset	x0, eq
                	cbz	x0, <addr>
-               	sxtw	x0, w20
-               	ldp	x29, x30, [sp, #0x30]
-               	ldr	x20, [sp], #0x40
+               	mov	x0, #0x0                // =0
+               	sxtw	x0, w0
+               	add	sp, sp, #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x20, #0x1               // =1
+               	mov	x0, #0x1                // =1
                	b	<addr>
                	b	<addr>

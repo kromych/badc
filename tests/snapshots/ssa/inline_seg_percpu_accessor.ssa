@@ -177,30 +177,30 @@ fn ent_pc=10 n_params=0 variadic=false locals=2
   block 26  start_pc=0
     v112 LoadLocal { off=-2, kind=I64 }                   -> x2
     v113 Imm(56)                                          -> x2
-    v114 Imm(-6510615555426900571)                        -> x6
-    v115 BinopI { op=add, lhs=v87, rhs_imm=56 }           -> x2
+    v114 Imm(-6510615555426900571)                        -> x2
+    v115 BinopI { op=add, lhs=v87, rhs_imm=56 }           -> x6
     v116 SegStore { addr=v115, value=v114, kind=I64, seg=Gs } -> -
-    v117 Imm(0)                                           -> x6
+    v117 Imm(0)                                           -> x2
     terminator Jmp(b27)
   block 27  start_pc=0
-    v252 LocalAddr(-1)                                    -> x6
+    v252 LocalAddr(-1)                                    -> x2
     v253 InlineAsm { template="pushf ; pop %0", ops=1, args=[v252] } -> -
-    v254 LoadLocal { off=-1, kind=I64 }                   -> x6
+    v254 LoadLocal { off=-1, kind=I64 }                   -> x2
     terminator Jmp(b28)   (exit_acc=v254)
   block 28  start_pc=0
-    v118 BinopI { op=eq, lhs=v254, rhs_imm=0 }            -> x7
+    v118 BinopI { op=eq, lhs=v254, rhs_imm=0 }            -> x6
     terminator Bnz { cond=v254, target=b30, fall=b29 }   (exit_acc=v118)
   block 29  start_pc=0
     v119 Imm(16)                                          -> x0
     terminator Return(v119)   (exit_acc=v119)
   block 30  start_pc=0
-    v120 LoadLocal { off=-2, kind=I64 }                   -> x6
-    v121 Imm(56)                                          -> x6
-    v122 Imm(1)                                           -> x6
+    v120 LoadLocal { off=-2, kind=I64 }                   -> x2
+    v121 Imm(56)                                          -> x2
+    v122 Imm(1)                                           -> x2
     v123 BinopI { op=add, lhs=v87, rhs_imm=56 }           -> x1
-    v124 SegLoad { addr=v115, kind=I64, seg=Gs }          -> x1
-    v125 BinopI { op=add, lhs=v124, rhs_imm=1 }           -> x1
-    v126 SegStore { addr=v115, value=v125, kind=I64, seg=Gs } -> -
+    v124 SegLoad { addr=v123, kind=I64, seg=Gs }          -> x2
+    v125 BinopI { op=add, lhs=v124, rhs_imm=1 }           -> x2
+    v126 SegStore { addr=v123, value=v125, kind=I64, seg=Gs } -> -
     v127 Imm(0)                                           -> x1
     v128 ImmData(8)                                       -> x1
     v129 Load { addr=v128, disp=0, kind=I64, volatile }   -> x2

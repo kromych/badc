@@ -25,33 +25,33 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v5   Imm(1)                                           -> x0
     terminator Return(v5)   (exit_acc=v5)
   block 6  start_pc=0
-    v6   Imm(0)                                           -> x1
+    v6   Imm(0)                                           -> x0
     v7   StoreLocal { off=-1, value=v6, kind=I32, volatile } -> -
     v8   LoadLocal { off=-1, kind=I32, volatile }         -> x0
     terminator Jmp(b7)
   block 7  start_pc=0
-    v18  Extend { value=v8, kind=I32 }                    -> x2
-    v19  BinopI { op=ge, lhs=v8, rhs_imm=0 }              -> x6
+    v18  Extend { value=v8, kind=I32 }                    -> x1
+    v19  BinopI { op=ge, lhs=v8, rhs_imm=0 }              -> x2
     terminator Bz { cond=v19, target=b13, fall=b8 }   (exit_acc=v19)
   block 8  start_pc=0
-    v20  Extend { value=v18, kind=I32 }                   -> x2
+    v20  Extend { value=v18, kind=I32 }                   -> x1
     terminator Jmp(b9)   (exit_acc=v8)
   block 9  start_pc=0
-    v23  Phi { incoming=[b8:v8, b13:v6], kind=I64 }       -> x0
+    v23  Phi { incoming=[b8:v8, b13:v22], kind=I64 }      -> x0
     terminator Jmp(b10)   (exit_acc=v23)
   block 10  start_pc=0
-    v9   BinopI { op=ne, lhs=v23, rhs_imm=0 }             -> x2
+    v9   BinopI { op=ne, lhs=v23, rhs_imm=0 }             -> x1
     terminator Bz { cond=v23, target=b12, fall=b11 }   (exit_acc=v9)
   block 11  start_pc=0
     v10  Imm(2)                                           -> x0
     terminator Return(v10)   (exit_acc=v10)
   block 12  start_pc=0
     v11  Imm(0)                                           -> x0
-    terminator Return(v6)   (exit_acc=v6)
+    terminator Return(v11)   (exit_acc=v11)
   block 13  start_pc=0
     v21  Intrinsic { kind=Trap, args=[] }                 -> x0
     v22  Imm(0)                                           -> x0
-    terminator Jmp(b9)   (exit_acc=v6)
+    terminator Jmp(b9)   (exit_acc=v22)
   block 14  start_pc=0
     v15  Intrinsic { kind=Trap, args=[] }                 -> x0
     v16  Imm(0)                                           -> x0

@@ -10,21 +10,21 @@ fn ent_pc=7 n_params=0 variadic=false locals=2
     terminator Jmp(b1)
   block 1  start_pc=0
     v30  InlineAsm { template="", ops=1, args=[v3] }      -> -
-    v31  Imm(0)                                           -> x1
+    v31  Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v31)
   block 2  start_pc=0
     v32  InlineAsm { template="", ops=0, args=[] }        -> -
-    v33  Imm(0)                                           -> x1
+    v33  Imm(0)                                           -> x0
     terminator Jmp(b3)   (exit_acc=v33)
   block 3  start_pc=0
     v34  InlineAsm { template="", ops=0, args=[] }        -> -
-    v35  Imm(0)                                           -> x1
+    v35  Imm(0)                                           -> x0
     terminator Jmp(b4)   (exit_acc=v35)
   block 4  start_pc=0
-    v4   LocalAddr(-2)                                    -> x1
+    v4   LocalAddr(-2)                                    -> x0
     terminator Jmp(b5)
   block 5  start_pc=0
-    v36  InlineAsm { template=" /* note */ ;\n\t", ops=1, args=[v3] } -> -
+    v36  InlineAsm { template=" /* note */ ;\n\t", ops=1, args=[v4] } -> -
     v37  Imm(0)                                           -> x0
     terminator Jmp(b6)   (exit_acc=v37)
   block 6  start_pc=0
@@ -41,21 +41,21 @@ fn ent_pc=7 n_params=0 variadic=false locals=2
     v39  StoreLocal { off=-1, value=v11, kind=I32 }       -> -
     v40  LocalAddr(-1)                                    -> x0
     v41  InlineAsm { template="", ops=1, args=[v40] }     -> -
-    v42  LoadLocal { off=-1, kind=I32 }                   -> x1
-    v43  Extend { value=v42, kind=I32 }                   -> x2
+    v42  LoadLocal { off=-1, kind=I32 }                   -> x0
+    v43  Extend { value=v42, kind=I32 }                   -> x1
     terminator Jmp(b8)   (exit_acc=v42)
   block 8  start_pc=0
-    v12  BinopI { op=ne, lhs=v42, rhs_imm=42 }            -> x1
+    v12  BinopI { op=ne, lhs=v42, rhs_imm=42 }            -> x0
     terminator Bz { cond=v12, target=b10, fall=b9 }   (exit_acc=v12)
   block 9  start_pc=0
     v13  Imm(1)                                           -> x0
     terminator Return(v13)   (exit_acc=v13)
   block 10  start_pc=0
-    v14  Imm(4660)                                        -> x1
+    v14  Imm(4660)                                        -> x0
     terminator Jmp(b11)
   block 11  start_pc=0
-    v44  LocalAddr(-1)                                    -> x2
-    v45  InlineAsm { template="", ops=2, args=[v40, v14] } -> -
+    v44  LocalAddr(-1)                                    -> x1
+    v45  InlineAsm { template="", ops=2, args=[v44, v14] } -> -
     v46  LoadLocal { off=-1, kind=I64 }                   -> x0
     terminator Jmp(b12)   (exit_acc=v46)
   block 12  start_pc=0

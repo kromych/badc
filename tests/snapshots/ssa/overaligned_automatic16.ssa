@@ -229,7 +229,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=10
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=walk
 fn ent_pc=2 n_params=1 variadic=false locals=3
-  spill_count=0 gpr_used=[3, 12] fp_used=[]
+  spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x3
@@ -237,7 +237,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=3
     v3   LocalAddr(-3)                                    -> x1
     v4   LoadLocal { off=2, kind=I32 }                    -> x0
     v5   Imm(3)                                           -> x0
-    v6   BinopI { op=mul, lhs=v1, rhs_imm=1431655766 }    -> x12
+    v6   BinopI { op=mul, lhs=v1, rhs_imm=1431655766 }    -> x0
     v7   BinopI { op=shr, lhs=v6, rhs_imm=32 }            -> x0
     v8   BinopI { op=shru, lhs=v7, rhs_imm=63 }           -> x2
     v9   Binop { op=add, lhs=v7, rhs=v8 }                 -> x0
@@ -265,7 +265,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=3
     v27  LoadLocal { off=2, kind=I32 }                    -> x0
     v28  Imm(3)                                           -> x0
     v29  BinopI { op=mul, lhs=v1, rhs_imm=1431655766 }    -> x0
-    v30  BinopI { op=shr, lhs=v6, rhs_imm=32 }            -> x0
+    v30  BinopI { op=shr, lhs=v29, rhs_imm=32 }           -> x0
     v31  BinopI { op=shru, lhs=v30, rhs_imm=63 }          -> x2
     v32  Binop { op=add, lhs=v30, rhs=v31 }               -> x0
     v33  BinopI { op=mul, lhs=v32, rhs_imm=3 }            -> x0

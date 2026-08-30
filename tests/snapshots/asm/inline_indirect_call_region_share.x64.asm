@@ -58,12 +58,12 @@ Disassembly of section .text:
                	leaq	<rip>, %rbx
                	movq	(%rbx), %rax
                	callq	*%rax
-               	leaq	-0x20(%rbp), %r12
-               	leaq	0x18(%r12), %rdi
+               	leaq	-0x20(%rbp), %rax
+               	leaq	0x18(%rax), %rdi
                	movq	(%rbx), %rax
                	callq	*%rax
-               	movq	(%r12), %rcx
                	leaq	-0x20(%rbp), %rax
+               	movq	(%rax), %rcx
                	movq	0x8(%rax), %rdx
                	addq	%rdx, %rcx
                	movq	0x10(%rax), %rdx
@@ -79,9 +79,9 @@ Disassembly of section .text:
                	movq	%rcx, 0x8(%rax)
                	movl	$0xc, %ecx
                	movq	%rcx, 0x10(%rax)
+               	leaq	-0x20(%rbp), %rax
                	movl	$0xd, %ecx
                	movq	%rcx, 0x18(%rax)
-               	leaq	-0x20(%rbp), %rax
                	leaq	0x8(%rax), %rdi
                	leaq	<rip>, %rbx
                	movq	(%rbx), %rax

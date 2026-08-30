@@ -31,15 +31,15 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	str	x20, [sp, #-0x30]!
-               	stp	x29, x30, [sp, #0x20]
-               	add	x29, sp, #0x20
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x10
                	sub	x0, x29, #0x8
                	add	x2, x0, #0x0
                	mov	x1, #0x1                // =1
                	strb	w1, [x2]
-               	mov	x20, #0x2               // =2
-               	strb	w20, [x0, #0x1]
+               	mov	x2, #0x2                // =2
+               	strb	w2, [x0, #0x1]
                	mov	x2, #0x3                // =3
                	strb	w2, [x0, #0x2]
                	mov	x2, #0x4                // =4
@@ -61,17 +61,17 @@ Disassembly of section .text:
                	cmp	x2, x17
                	b.eq	<addr>
                	mov	x0, x1
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x20, [sp], #0x30
+               	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	bl	<addr>
                	cmp	x0, #0x9
                	b.eq	<addr>
-               	mov	x0, x20
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x20, [sp], #0x30
+               	mov	x0, #0x2                // =2
+               	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x20, [sp], #0x30
+               	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
                	ret

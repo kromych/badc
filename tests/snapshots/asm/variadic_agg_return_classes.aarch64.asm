@@ -90,73 +90,70 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	stp	x20, x21, [sp, #-0x60]!
-               	str	x22, [sp, #0x10]
-               	stp	x29, x30, [sp, #0x50]
-               	add	x29, sp, #0x50
-               	mov	x21, #0x2               // =2
-               	mov	x0, x21
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x30
+               	mov	x0, #0x2                // =2
                	bl	<addr>
                	sub	x16, x29, #0x10
                	str	d0, [x16]
                	str	d1, [x16, #0x8]
-               	sub	x22, x29, #0x10
-               	sub	x20, x29, #0x20
+               	sub	x1, x29, #0x10
+               	sub	x0, x29, #0x20
                	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x22]
-               	str	x10, [x20]
-               	ldr	x10, [x22, #0x8]
-               	str	x10, [x20, #0x8]
+               	ldr	x10, [x1]
+               	str	x10, [x0]
+               	ldr	x10, [x1, #0x8]
+               	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x0, x20
-               	ldr	d0, [x20]
-               	mov	x0, #0x4008000000000000 // =4613937818241073152
-               	fmov	d17, x0
+               	mov	x1, x0
+               	ldr	d0, [x0]
+               	mov	x1, #0x4008000000000000 // =4613937818241073152
+               	fmov	d17, x1
                	fcmp	d0, d17
-               	cset	x0, ne
-               	cbnz	x0, <addr>
-               	ldr	d0, [x20, #0x8]
+               	cset	x1, ne
+               	cbnz	x1, <addr>
+               	ldr	d0, [x0, #0x8]
                	mov	x0, #0x4002000000000000 // =4612248968380809216
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	cset	x1, ne
+               	cbz	x1, <addr>
                	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0x50]
-               	ldr	x22, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x60
+               	add	sp, sp, #0x30
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x1                // =1
                	bl	<addr>
                	sub	x16, x29, #0x10
                	str	x0, [x16]
                	str	x1, [x16, #0x8]
+               	sub	x1, x29, #0x10
+               	sub	x0, x29, #0x20
                	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x22]
-               	str	x10, [x20]
-               	ldr	x10, [x22, #0x8]
-               	str	x10, [x20, #0x8]
+               	ldr	x10, [x1]
+               	str	x10, [x0]
+               	ldr	x10, [x1, #0x8]
+               	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x0, x20
-               	ldr	d0, [x20]
-               	mov	x0, #0x3fe0000000000000 // =4602678819172646912
-               	fmov	d17, x0
+               	mov	x1, x0
+               	ldr	d0, [x0]
+               	mov	x1, #0x3fe0000000000000 // =4602678819172646912
+               	fmov	d17, x1
                	fcmp	d0, d17
-               	cset	x0, ne
-               	cbnz	x0, <addr>
-               	ldr	x0, [x20, #0x8]
+               	cset	x1, ne
+               	cbnz	x1, <addr>
+               	ldr	x0, [x0, #0x8]
                	cmp	x0, #0x2a
-               	cset	x0, ne
-               	cbz	x0, <addr>
-               	mov	x0, x21
-               	ldp	x29, x30, [sp, #0x50]
-               	ldr	x22, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x60
+               	cset	x1, ne
+               	cbz	x1, <addr>
+               	mov	x0, #0x2                // =2
+               	add	sp, sp, #0x30
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x50]
-               	ldr	x22, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x60
+               	add	sp, sp, #0x30
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>
                	b	<addr>

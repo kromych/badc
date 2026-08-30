@@ -39,9 +39,9 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	str	x20, [sp, #-0x60]!
-               	stp	x29, x30, [sp, #0x50]
-               	add	x29, sp, #0x50
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x40
                	sub	x1, x29, #0x30
                	add	x2, x1, #0x0
                	mov	x0, #0x0                // =0
@@ -86,14 +86,14 @@ Disassembly of section .text:
                	add	x0, x1, #0x1
                	cmp	w0, #0x20
                	b.lt	<addr>
-               	sub	x20, x29, #0x38
+               	sub	x0, x29, #0x38
                	sub	x1, x29, #0x30
                	sub	x2, x29, #0x20
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
-               	mov	x0, x20
                	bl	<addr>
-               	ldrb	w0, [x20]
-               	ldp	x29, x30, [sp, #0x50]
-               	ldr	x20, [sp], #0x60
+               	sub	x0, x29, #0x38
+               	ldrb	w0, [x0]
+               	add	sp, sp, #0x40
+               	ldp	x29, x30, [sp], #0x10
                	ret

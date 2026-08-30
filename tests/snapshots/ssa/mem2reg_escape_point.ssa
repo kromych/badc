@@ -31,7 +31,7 @@ fn ent_pc=4 n_params=1 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=main
 fn ent_pc=6 n_params=0 variadic=false locals=3
-  spill_count=0 gpr_used=[3] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(10)                                          -> x0
@@ -107,7 +107,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v7   Imm(10)                                          -> x0
     terminator Jmp(b16)
   block 16  start_pc=0
-    v48  Imm(10)                                          -> x3
+    v48  Imm(10)                                          -> x0
     v49  StoreLocal { off=-1, value=v48, kind=I32 }       -> -
     v50  Imm(10)                                          -> x0
     v51  LocalAddr(-1)                                    -> x7
@@ -127,9 +127,9 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v10  Imm(10)                                          -> x0
     terminator Jmp(b20)
   block 20  start_pc=0
-    v57  Imm(10)                                          -> x0
-    v58  StoreLocal { off=-3, value=v48, kind=I32 }       -> -
-    v59  Call { target_pc=4, args=[v48], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v57  Imm(10)                                          -> x7
+    v58  StoreLocal { off=-3, value=v57, kind=I32 }       -> -
+    v59  Call { target_pc=4, args=[v57], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v60  Imm(10)                                          -> x1
     v61  LocalAddr(-3)                                    -> x1
     v62  Extend { value=v59, kind=I32 }                   -> x2

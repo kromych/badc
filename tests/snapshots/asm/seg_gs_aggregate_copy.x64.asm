@@ -545,45 +545,46 @@ Disassembly of section .text:
                	addq	$0x110, %rsp            # imm = 0x110
                	popq	%rbp
                	retq
-               	xorq	%rbx, %rbx
-               	movq	%rbx, (%rax)
-               	movl	%ebx, 0x8(%rax)
-               	movl	%ebx, 0x10(%rax)
-               	movq	%rbx, 0x18(%rax)
-               	leaq	<rip>, %rcx
-               	movq	%gs:(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	leaq	0x8(%rcx), %rdx
-               	movq	%gs:(%rdx), %rdx
-               	movq	%rdx, 0x8(%rax)
-               	leaq	0x10(%rcx), %rdx
-               	movq	%gs:(%rdx), %rdx
-               	movq	%rdx, 0x10(%rax)
-               	addq	$0x18, %rcx
-               	movq	%gs:(%rcx), %rcx
+               	xorq	%rcx, %rcx
+               	movq	%rcx, (%rax)
+               	movl	%ecx, 0x8(%rax)
+               	movl	%ecx, 0x10(%rax)
                	movq	%rcx, 0x18(%rax)
-               	movq	(%rax), %rcx
+               	leaq	<rip>, %rdx
+               	movq	%gs:(%rdx), %rsi
+               	movq	%rsi, (%rax)
+               	leaq	0x8(%rdx), %rsi
+               	movq	%gs:(%rsi), %rsi
+               	movq	%rsi, 0x8(%rax)
+               	leaq	0x10(%rdx), %rsi
+               	movq	%gs:(%rsi), %rsi
+               	movq	%rsi, 0x10(%rax)
+               	addq	$0x18, %rdx
+               	movq	%gs:(%rdx), %rdx
+               	movq	%rdx, 0x18(%rax)
+               	movq	(%rax), %rdx
                	movabsq	$-0x112053135014111, %r11 # imm = 0xFEEDFACECAFEBEEF
-               	cmpq	%r11, %rcx
+               	cmpq	%r11, %rdx
                	jne	<addr>
-               	movl	0x8(%rax), %ecx
-               	cmpl	$0x11223344, %ecx       # imm = 0x11223344
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	movl	0x8(%rax), %edx
+               	cmpl	$0x11223344, %edx       # imm = 0x11223344
+               	sete	%dl
+               	movzbq	%dl, %rdx
+               	testq	%rdx, %rdx
                	je	<addr>
-               	movl	0x10(%rax), %ecx
-               	cmpl	$0x55667788, %ecx       # imm = 0x55667788
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	movl	0x10(%rax), %edx
+               	cmpl	$0x55667788, %edx       # imm = 0x55667788
+               	sete	%dl
+               	movzbq	%dl, %rdx
+               	testq	%rdx, %rdx
                	je	<addr>
                	movq	0x18(%rax), %rax
                	movabsq	$0x123456789abcdef, %r11 # imm = 0x123456789ABCDEF
+               	movq	%rax, %rcx
                	cmpq	%r11, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	movslq	%eax, %rax
+               	sete	%cl
+               	movzbq	%cl, %rcx
+               	movslq	%ecx, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x4, %eax
@@ -631,6 +632,7 @@ Disassembly of section .text:
                	addq	$0x110, %rsp            # imm = 0x110
                	popq	%rbp
                	retq
+               	xorq	%rbx, %rbx
                	movl	$0x20, %r12d
                	leaq	-0x40(%rbp), %rax
                	movabsq	$-0x112053135014111, %rcx # imm = 0xFEEDFACECAFEBEEF
@@ -1061,11 +1063,10 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	movq	%rbx, %rax
                	jmp	<addr>
-               	movq	%rbx, %rcx
+               	movq	%rcx, %rdx
                	jmp	<addr>
-               	movq	%rbx, %rcx
+               	movq	%rcx, %rdx
                	jmp	<addr>
                	jmp	<addr>
                	movq	%rcx, %rsi

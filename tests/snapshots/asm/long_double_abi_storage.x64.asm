@@ -133,20 +133,19 @@ Disassembly of section .text:
                	movsd	%xmm14, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	-0x60(%rbp)
-               	leaq	-0x10(%rbp), %rbx
+               	leaq	-0x10(%rbp), %rdi
                	leaq	-0x60(%rbp), %rsi
                	movl	$0x10, %edx
-               	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	0x7(%rbx), %rax
+               	leaq	-0x10(%rbp), %rcx
+               	movzbq	0x7(%rcx), %rax
                	xorq	$0x80, %rax
-               	movl	%eax, %ecx
+               	movl	%eax, %edx
                	movl	$0x1, %eax
-               	testq	%rcx, %rcx
+               	testq	%rdx, %rdx
                	jne	<addr>
-               	leaq	-0x10(%rbp), %rax
-               	movzbq	0x8(%rax), %rax
+               	movzbq	0x8(%rcx), %rax
                	xorq	$0xff, %rax
                	movl	%eax, %eax
                	testl	%eax, %eax
@@ -154,8 +153,7 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	leaq	-0x10(%rbp), %rax
-               	movzbq	0x9(%rax), %rax
+               	movzbq	0x9(%rcx), %rax
                	xorq	$0x3f, %rax
                	movl	%eax, %eax
                	testl	%eax, %eax

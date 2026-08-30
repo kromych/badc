@@ -17,8 +17,8 @@ Disassembly of section .text:
                	str	x19, [sp, #-0x30]!
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
-               	mov	x1, #0x1                // =1
-               	add	x17, x1, #0xf
+               	mov	x0, #0x1                // =1
+               	add	x17, x0, #0xf
                	and	x17, x17, #0xfffffffffffffff0
                	mov	x4, sp
                	sub	x4, x4, x17
@@ -41,8 +41,8 @@ Disassembly of section .text:
                	subs	x17, x17, #0x1
                	b.ne	<addr>
                	mov	sp, x0
-               	mov	x2, #0x21               // =33
-               	add	x17, x2, #0xf
+               	mov	x1, #0x21               // =33
+               	add	x17, x1, #0xf
                	and	x17, x17, #0xfffffffffffffff0
                	mov	x2, sp
                	sub	x2, x2, x17
@@ -53,8 +53,8 @@ Disassembly of section .text:
                	subs	x17, x17, #0x1
                	b.ne	<addr>
                	mov	sp, x2
-               	mov	x3, #0x64               // =100
-               	add	x17, x3, #0xf
+               	mov	x1, #0x64               // =100
+               	add	x17, x1, #0xf
                	and	x17, x17, #0xfffffffffffffff0
                	mov	x3, sp
                	sub	x3, x3, x17
@@ -66,18 +66,18 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	sp, x3
                	mov	x17, #0xf               // =15
-               	and	x5, x4, x17
+               	and	x1, x4, x17
                	mov	x17, #0xf               // =15
-               	and	x6, x0, x17
-               	orr	x5, x5, x6
+               	and	x5, x0, x17
+               	orr	x1, x1, x5
                	mov	x17, #0xf               // =15
-               	and	x6, x2, x17
-               	orr	x5, x5, x6
+               	and	x5, x2, x17
+               	orr	x1, x1, x5
                	mov	x17, #0xf               // =15
-               	and	x6, x3, x17
-               	orr	x5, x5, x6
-               	cbz	x5, <addr>
-               	mov	x0, x1
+               	and	x5, x3, x17
+               	orr	x1, x1, x5
+               	cbz	x1, <addr>
+               	mov	x0, #0x1                // =1
                	sub	sp, x29, #0x20
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp], #0x30

@@ -610,6 +610,18 @@ fn check_z_keyword(kw: &str) -> Option<i32> {
             | "nopack-relative-relocs"
             | "noseparate-code"
             | "separate-code"
+            // Dynamic-loader policy recorded in DT_FLAGS_1. The kernel
+            // passes them on links that produce no dynamic segment, so
+            // there is nothing to record and nothing to warn about.
+            | "nodefaultlib"
+            | "nodelete"
+            | "nodlopen"
+            | "nodump"
+            | "origin"
+            | "global"
+            | "initfirst"
+            | "interpose"
+            | "loadfltr"
     ) || kw.starts_with("max-page-size=")
         || kw.starts_with("common-page-size=");
     if known {
@@ -1184,6 +1196,33 @@ fn report_orphans(
 
 #[cfg(test)]
 mod tests {
+    /// The kernel links its kexec purgatory with dynamic-loader policy
+    /// keywords that a relocatable link cannot act on. Accepting them is
+    /// not the same as accepting anything: a keyword ld does not define
+    /// still has to be refused.
+    #[test]
+    fn loader_policy_z_keywords_are_accepted_and_unknown_ones_are_not() {
+        for kw in [
+            "nodefaultlib",
+            "nodelete",
+            "nodlopen",
+            "nodump",
+            "origin",
+            "global",
+            "initfirst",
+            "interpose",
+            "loadfltr",
+        ] {
+            assert!(check_z_keyword(kw).is_none(), "{kw} must link");
+        }
+        for kw in ["noexecstack", "relro", "now", "max-page-size=4096"] {
+            assert!(check_z_keyword(kw).is_none(), "{kw} regressed");
+        }
+        for kw in ["bogus-keyword", "nodefaultlibs", ""] {
+            assert!(check_z_keyword(kw).is_some(), "{kw} must be refused");
+        }
+    }
+
     use super::*;
     use alloc::vec;
 

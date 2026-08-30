@@ -2424,6 +2424,29 @@ def module_state(mod: str, lsmod: str, builtin: set[str]) -> str:
     return "builtin" if key in builtin else "absent"
 
 
+GUEST_SCRATCH = "/tmp/badc-guest"
+
+
+def run_guest_script(args, vm: Target, failures: list[str]) -> dict:
+    """Run `--vm-guest-script` in the booted kernel with `--vm-guest-file`
+    beside it. The verdict is the script's own exit status; its output is
+    recorded either way."""
+    vm.ssh(f"mkdir -p {GUEST_SCRATCH}", check=True)
+    vm.scp([args.vm_guest_script, *args.vm_guest_file], GUEST_SCRATCH + "/")
+    name = args.vm_guest_script.name
+    r = vm.ssh(f"sh -c {shlex.quote(f'cd {GUEST_SCRATCH} && sh ./{name}')}",
+               sudo=True, timeout=args.vm_timeout)
+    out = {"script": name, "rc": r.returncode,
+           "stdout": r.stdout, "stderr": r.stderr}
+    log(f"guest script {name}: rc={r.returncode}")
+    for line in r.stdout.splitlines():
+        log(f"  {line}")
+    if r.returncode != 0:
+        failures.append(f"guest script {name} exited {r.returncode}: "
+                        f"{(r.stderr or r.stdout).strip()[-300:]}")
+    return out
+
+
 def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
     image = ensure_image(args, arch)
     accel = resolve_accel(args, arch)
@@ -2548,6 +2571,8 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
                                 f"({data['dev']}): {data.get('error', '')}")
 
         assert_package_products(args, arch, vm, result, failures)
+        if args.vm_guest_script:
+            result["guest_script"] = run_guest_script(args, vm, failures)
 
         # The gate set runs on every boot; --exercise widens it. Without it
         # a boot is judged by what the guest's own init reported.
@@ -3576,6 +3601,15 @@ def main() -> int:
                          "carry a filesystem on it. For a controller no "
                          "firmware can boot from, this is how its driver is "
                          "covered")
+    ap.add_argument("--vm-guest-file", type=Path, action="append", default=[],
+                    help="file to copy into the booted kernel's guest before "
+                         "--vm-guest-script runs, repeatable")
+    ap.add_argument("--vm-guest-script", type=Path,
+                    help="shell script to run in the booted badc kernel after "
+                         "the probes; its output lands in the report. For "
+                         "driving one subsystem by hand -- swapping a module "
+                         "for another compiler's build of it, say -- without "
+                         "a harness change per experiment")
     ap.add_argument("--vm-nic", choices=sorted(NICS), default="virtio-net-pci",
                     help="NIC model (default: virtio-net-pci); the booted "
                          "kernel must bind it to that model's driver")

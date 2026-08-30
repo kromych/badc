@@ -901,6 +901,80 @@ fn vector_shift() {
     assert!(encode("shl", &[v(0, 3, false), v(1, 3, false), Opnd::Imm(1)]).is_err());
 }
 
+/// Widening multiply by one element of the second source. Words match GNU as
+/// 2.46.1 for `aarch64-linux-gnu`.
+#[test]
+fn vector_widening_by_element() {
+    let v = |n: u8, size: u8, q: bool| Opnd::VecReg { num: n, size, q };
+    let e = |n: u8, size: u8, index: u8| Opnd::VecElem {
+        num: n,
+        size,
+        index,
+    };
+    // Word elements: the index is H:L and M carries Vm's high bit, so Vm spans
+    // v0..v31.
+    assert_eq!(
+        enc("umull", &[v(23, 3, true), v(14, 2, false), e(7, 2, 2)]),
+        0x2F87_A9D7
+    );
+    assert_eq!(
+        enc("umlal", &[v(19, 3, true), v(11, 2, false), e(6, 2, 0)]),
+        0x2F86_2173
+    );
+    assert_eq!(
+        enc("umull2", &[v(3, 3, true), v(14, 2, true), e(31, 2, 3)]),
+        0x6FBF_A9C3
+    );
+    assert_eq!(
+        enc("umlsl", &[v(7, 3, true), v(8, 2, false), e(16, 2, 1)]),
+        0x2FB0_6107
+    );
+    assert_eq!(
+        enc("umlal2", &[v(13, 3, true), v(14, 2, true), e(20, 2, 0)]),
+        0x6F94_21CD
+    );
+    assert_eq!(
+        enc("smull2", &[v(15, 3, true), v(16, 2, true), e(17, 2, 2)]),
+        0x4F91_AA0F
+    );
+    assert_eq!(
+        enc("smlsl", &[v(20, 3, true), v(21, 2, false), e(22, 2, 3)]),
+        0x0FB6_6AB4
+    );
+    // Halfword elements: the index is H:L:M, which leaves Vm four bits.
+    assert_eq!(
+        enc("smull", &[v(0, 2, true), v(1, 1, false), e(15, 1, 7)]),
+        0x0F7F_A820
+    );
+    assert_eq!(
+        enc("smlal2", &[v(5, 2, true), v(6, 1, true), e(15, 1, 5)]),
+        0x4F5F_28C5
+    );
+    assert_eq!(
+        enc("smlsl2", &[v(9, 2, true), v(10, 1, true), e(3, 1, 2)]),
+        0x4F63_6149
+    );
+    assert_eq!(
+        enc("smlal", &[v(11, 2, true), v(12, 1, false), e(0, 1, 0)]),
+        0x0F40_218B
+    );
+    assert_eq!(
+        enc("umlsl2", &[v(18, 2, true), v(19, 1, true), e(14, 1, 6)]),
+        0x6F6E_6A72
+    );
+    // A halfword element selects Vm from v0..v15; the destination must be one
+    // size wider and 128-bit; the element size must match the sources; and the
+    // `2` form reads 128-bit sources.
+    assert!(encode("umlal", &[v(3, 2, true), v(14, 1, false), e(16, 1, 0)]).is_err());
+    assert!(encode("umull", &[v(3, 2, true), v(14, 2, false), e(7, 2, 0)]).is_err());
+    assert!(encode("umull", &[v(3, 3, false), v(14, 2, false), e(7, 2, 0)]).is_err());
+    assert!(encode("umull2", &[v(3, 3, true), v(14, 2, false), e(7, 2, 0)]).is_err());
+    assert!(encode("umull", &[v(3, 3, true), v(14, 2, false), e(7, 1, 0)]).is_err());
+    assert!(encode("umull", &[v(3, 3, true), v(14, 2, false), e(7, 2, 4)]).is_err());
+    // Byte and doubleword elements have no by-element widening form.
+    assert!(encode("umull", &[v(3, 1, true), v(14, 0, false), e(7, 0, 0)]).is_err());
+    assert!(encode("saddl", &[v(3, 3, true), v(14, 2, false), e(7, 2, 0)]).is_err());
+}
 
 #[test]
 fn vector_lane_transfer() {

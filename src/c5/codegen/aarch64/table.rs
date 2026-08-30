@@ -1639,6 +1639,90 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((rn as u32) << 5)
             | (rd as u32));
     }
+    // SIMD widening multiply by element `Vd.<2T>, Vn.<T>, Vm.Ts[i]`: the same
+    // widening products against one broadcast element of Vm. size (23..22) is
+    // the source width and Q (30) the `2` form, as in the vector arm; opcode
+    // (15..12) and U (29) name the operation. The element index is split across
+    // H (11), L (21) and M (20): H:L:M for a halfword element, whose Vm is
+    // bounded to v0..v15, and H:L for a word element, whose M carries Vm's high
+    // bit.
+    if let Some((wmnem, upper)) = strip_widen2(mnemonic)
+        && let Some((opcode, u)) = match wmnem {
+            "smull" => Some((0b1010u32, 0u32)),
+            "umull" => Some((0b1010, 1)),
+            "smlal" => Some((0b0010, 0)),
+            "umlal" => Some((0b0010, 1)),
+            "smlsl" => Some((0b0110, 0)),
+            "umlsl" => Some((0b0110, 1)),
+            _ => None,
+        }
+        && let [
+            Opnd::VecReg {
+                num: rd,
+                size: ds,
+                q: dq,
+            },
+            Opnd::VecReg {
+                num: rn,
+                size: ss,
+                q: sq,
+            },
+            Opnd::VecElem {
+                num: rm,
+                size: ms,
+                index,
+            },
+        ] = *ops
+    {
+        if ss != ms {
+            return Err(String::from(
+                "inline asm: widening by-element source and element sizes differ",
+            ));
+        }
+        if !dq || ds != ss + 1 || !(1..=2).contains(&ss) {
+            return Err(String::from(
+                "inline asm: widening by-element destination must be .4s (halfword sources) \
+                 or .2d (word sources)",
+            ));
+        }
+        if sq != upper {
+            return Err(String::from(
+                "inline asm: the `2` form reads 128-bit sources; the base form reads 64-bit",
+            ));
+        }
+        if index >= (16u8 >> ss) {
+            return Err(String::from("inline asm: lane index out of range"));
+        }
+        if ss == 1 && rm > 15 {
+            return Err(String::from(
+                "inline asm: a halfword element selects Vm from v0..v15",
+            ));
+        }
+        let (l, h, mbit) = if ss == 1 {
+            (
+                ((index >> 1) & 1) as u32,
+                ((index >> 2) & 1) as u32,
+                (index & 1) as u32,
+            )
+        } else {
+            (
+                (index & 1) as u32,
+                ((index >> 1) & 1) as u32,
+                ((rm >> 4) & 1) as u32,
+            )
+        };
+        return Ok(0x0F00_0000
+            | (u << 29)
+            | (if upper { 1u32 << 30 } else { 0 })
+            | ((ss as u32) << 22)
+            | (l << 21)
+            | (mbit << 20)
+            | (((rm & 0xF) as u32) << 16)
+            | (opcode << 12)
+            | (h << 11)
+            | ((rn as u32) << 5)
+            | (rd as u32));
+    }
     // SIMD narrowing two-register `Vd.<T>, Vn.<2T>`: extract narrow elements
     // from a wide vector. size (bit 22) is the DESTINATION width; the `2`
     // mnemonic writes the top half of a 128-bit destination (Q at 30). U at 29

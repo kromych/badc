@@ -61,6 +61,16 @@ pub(crate) const fn is_got_reloc(rtype: u32) -> bool {
     )
 }
 
+/// A relocation whose site transfers control: the field holds a branch
+/// displacement, so the reference names an entry point and binds to a
+/// call stub. No slot read can satisfy one.
+pub(crate) const fn is_branch_reloc(machine: NativeMachine, rtype: u32) -> bool {
+    match machine {
+        NativeMachine::X86_64 => rtype == R_X86_64_PLT32,
+        NativeMachine::Aarch64 => matches!(rtype, R_AARCH64_CALL26 | R_AARCH64_JUMP26),
+    }
+}
+
 /// Result of merging N [`NativeObject`]s. Carries enough state
 /// for a final-image writer to lay out `.text` / `.data` at the
 /// target's expected virtual addresses, materialise the PLT
@@ -1389,6 +1399,10 @@ pub fn link_native_objects_with_shared_libs<'a>(
     // writer republishes the type on the undefined dynamic symbol.
     let mut object_imports: alloc::collections::BTreeSet<usize> =
         alloc::collections::BTreeSet::new();
+    // Import indices some site branches to. An import reached by a
+    // branch is code whatever the note says of the name elsewhere.
+    let mut branch_imports: alloc::collections::BTreeSet<usize> =
+        alloc::collections::BTreeSet::new();
     // Names with dylib routing from any unit's binding map. The c5 `.o`
     // writer emits its libc imports as STB_WEAK UNDEF paired with a map
     // entry; a weak UNDEF *without* routing is a genuine unresolved weak
@@ -1619,13 +1633,17 @@ pub fn link_native_objects_with_shared_libs<'a>(
                         // kind is the reference toolchain's
                         // discriminator and survives here because an
                         // unresolvable GOT reference stays unrelaxed;
-                        // the note channel covers the direct
-                        // page-relative pair the aarch64 codegen uses
-                        // for extern data, which no relocation kind
-                        // separates from a function's address.
+                        // the note covers the forms it does not
+                        // classify, the aarch64 page-relative pair that
+                        // extern data and a function's address share.
+                        // The note names the symbol rather than the
+                        // site, and one unit's address-of puts an
+                        // imported function there, so a branch keeps
+                        // its stub whatever the note says of the name.
                         let slot_load = is_data_binding
                             || is_got_reloc(reloc.rtype)
-                            || extern_data_names.contains(sym.name.as_str());
+                            || (!is_branch_reloc(machine, reloc.rtype)
+                                && extern_data_names.contains(sym.name.as_str()));
                         // STB_WEAK = 2. An unresolved weak reference with
                         // no dylib routing resolves to address 0 (C
                         // practice; ELF leaves the symbol 0 so the
@@ -1672,7 +1690,9 @@ pub fn link_native_objects_with_shared_libs<'a>(
                             flat_imports.insert(sym.name.clone());
                         }
                         let idx = record_import(&sym.name, &mut imports, &mut import_idx_for_name);
-                        if extern_data_names.contains(sym.name.as_str()) {
+                        if is_branch_reloc(machine, reloc.rtype) {
+                            branch_imports.insert(idx);
+                        } else if extern_data_names.contains(sym.name.as_str()) {
                             object_imports.insert(idx);
                         }
                         pending_imports.push(PendingImportReloc {
@@ -2417,6 +2437,9 @@ pub fn link_native_objects_with_shared_libs<'a>(
             &defined,
         )?;
     }
+    // A name the note lists and a branch also reaches is code: the note
+    // covers the slot-versus-stub choice at a site, not the symbol's type.
+    object_imports.retain(|i| !branch_imports.contains(i));
     // The writers iterate the merged table, so it leaves the link as an
     // ordered map: the static symbol table and the dynamic export list
     // follow this order byte for byte.

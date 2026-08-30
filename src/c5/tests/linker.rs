@@ -12071,6 +12071,110 @@ fn two_tu_extern_data_links_through_own_linker() {
     }
 }
 
+/// A unit that materialises an imported function's address names it in
+/// `NT_BADC_EXTERN_DATA` -- that lowering is the extern-data one, and
+/// no relocation kind separates the two on aarch64. The note names the
+/// symbol and the link reads one set over every unit, so a sibling
+/// unit's call to the same import must still bind to a PLT stub: a
+/// branch field holds a displacement and no slot read can satisfy it.
+/// Both writers assert on the shape they get, so a call routed to the
+/// slot ends the link in an internal error (x86_64: the data-load patch
+/// finds a `call` where it expects `lea` / `mov`; aarch64: a branch
+/// relocation outlives the PLT pass).
+#[test]
+fn imported_function_called_and_address_taken_links_through_own_linker() {
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::{
+        SharedLibrary, emit_aarch64_plt, emit_x86_64_plt, link_native_objects_with_shared_libs,
+        parse_native_elf, write_native_image_from_merged,
+    };
+    use crate::c5::{NativeMachine, NativeOptions, OutputKind, Target, emit_native_with_options};
+    // Declared by the source rather than pulled from a header, so both
+    // references take the cross-TU channels a user extern uses; a
+    // shared library exporting the name supplies it at load time, as
+    // libc supplies it in a hosted link.
+    const ADDR_TU: &str = "extern int host_fn(const char *);\n\
+                           typedef int (*fn_t)(const char *);\n\
+                           fn_t get(void) { return host_fn; }\n";
+    const CALL_TU: &str = "extern int host_fn(const char *);\n\
+                           typedef int (*fn_t)(const char *);\n\
+                           fn_t get(void);\n\
+                           int main(void) { host_fn(\"x\"); return get() != 0; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let objs: Vec<_> = [ADDR_TU, CALL_TU]
+            .iter()
+            .map(|src| {
+                let program = Compiler::with_options(
+                    (*src).to_string(),
+                    target,
+                    CompileOptions::default().with_no_entry_point(true),
+                )
+                .compile()
+                .expect("compile");
+                let opts = NativeOptions {
+                    output_kind: OutputKind::Relocatable,
+                    ..Default::default()
+                };
+                let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+                parse_native_elf(&bytes).expect("parse ET_REL")
+            })
+            .collect();
+        assert!(
+            objs[0].extern_data_names.iter().any(|n| n == "host_fn"),
+            "{target:?}: the address site names the function in the note"
+        );
+        let lib = SharedLibrary {
+            soname: alloc::string::String::from("libhost.so.1"),
+            machine: objs[0].machine,
+            exports: [alloc::string::String::from("host_fn")]
+                .into_iter()
+                .collect(),
+            data_exports: alloc::collections::BTreeSet::new(),
+        };
+        let mut merged = link_native_objects_with_shared_libs(&objs, false, &[lib])
+            .expect("link resolves the function against the shared library");
+        let idx = merged
+            .imports
+            .iter()
+            .position(|n| n == "host_fn")
+            .unwrap_or_else(|| panic!("{target:?}: host_fn recorded as an import"));
+        let (reads, branches) = merged
+            .pending_imports
+            .iter()
+            .filter(|p| p.import_index == idx)
+            .fold((0usize, 0usize), |(r, b), p| {
+                if p.slot_load { (r + 1, b) } else { (r, b + 1) }
+            });
+        assert!(
+            reads > 0,
+            "{target:?}: the address site reads the import's slot"
+        );
+        assert!(
+            branches > 0,
+            "{target:?}: the call site keeps its branch, got {reads} slot read(s) only"
+        );
+        assert!(
+            !merged.object_imports.contains(&idx),
+            "{target:?}: an import a branch reaches is code, not an object"
+        );
+        let plt = match merged.machine {
+            NativeMachine::X86_64 => emit_x86_64_plt(&mut merged),
+            NativeMachine::Aarch64 => emit_aarch64_plt(&mut merged),
+        }
+        .expect("plt pass drains every branch against an import");
+        write_native_image_from_merged(
+            &merged,
+            &plt,
+            "main",
+            None,
+            OutputKind::Executable,
+            target,
+            None,
+        )
+        .expect("write executable");
+    }
+}
+
 /// A single-TU final image has no link step, so an external reference
 /// the codegen left as a zero-displacement placeholder must not reach
 /// the output: a rip-relative `lea` with disp 0 materializes the

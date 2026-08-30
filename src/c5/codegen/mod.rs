@@ -2596,8 +2596,10 @@ pub(crate) struct UserExternCallSite {
 /// `STT_NOTYPE STB_GLOBAL` symbol per unique name (untyped, as
 /// gcc emits extern references) and one reloc per ref pointing
 /// at that symbol; the name also enters the unit's
-/// `NT_BADC_EXTERN_DATA` note so the linker keeps the data/code
-/// distinction the symbol type no longer carries.
+/// `NT_BADC_EXTERN_DATA` note, which carries what the symbol type
+/// no longer does. A cross-TU function pointer rides this channel
+/// too -- materialising an address is the same lowering -- so the
+/// note names functions as well as data.
 #[derive(Debug, Clone)]
 #[allow(dead_code)] // consumed only by the std-only elf_reloc writer
 pub(crate) struct UserExternDataRef {

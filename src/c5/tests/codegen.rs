@@ -4366,6 +4366,10 @@ fn undefined_references_stay_untyped() {
             "{target:?}: the data reference is named by NT_BADC_EXTERN_DATA"
         );
         assert!(
+            parsed.extern_data_names.iter().any(|n| n == "ext_fn_addr"),
+            "{target:?}: an address-taken function shares the data lowering"
+        );
+        assert!(
             !parsed.extern_data_names.iter().any(|n| n == "ext_fn_call"),
             "{target:?}: a call site is not an address materialisation"
         );

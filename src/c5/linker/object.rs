@@ -868,10 +868,13 @@ pub struct NativeObject {
     /// The merge pass rebases them into `MergedNative::prologue_ends`,
     /// where the merged-image frame writer reads the prologue extent.
     pub prologue_ends: Vec<(u64, u64)>,
-    /// Names this unit references as data through an undefined symbol
-    /// (`NT_BADC_EXTERN_DATA`). Undefined references are all typed
-    /// `STT_NOTYPE`, so the linker reads the data/code distinction
-    /// from here to bind an import to a slot rather than a call stub.
+    /// Names this unit materialises the address of through an undefined
+    /// symbol (`NT_BADC_EXTERN_DATA`) -- extern data, and an extern
+    /// function whose address is taken, which shares that lowering.
+    /// Undefined references are all typed `STT_NOTYPE`, so the linker
+    /// reads from here whether a site the relocation kind does not
+    /// classify binds a slot rather than a call stub. A branch is
+    /// classified by its kind and never consults this.
     pub extern_data_names: Vec<String>,
     /// Standard DWARF 4 sections the `-c` writer emits.
     /// Address-bearing slots inside are placeholders paired with

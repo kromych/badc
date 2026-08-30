@@ -165,11 +165,12 @@ const NT_BADC_ELF_TPOFF: u32 = 10;
 // `MergedNative::prologue_ends`, which the merged-image DWARF frame
 // writer needs to place the post-prologue CFA rule.
 const NT_BADC_PROLOGUE_END: u32 = 11;
-// Names this unit references as data through an undefined symbol, desc
-// a NUL-separated name list. Every undefined reference is typed
-// STT_NOTYPE as gcc types its own, so the data/code distinction the
-// linker needs to bind an import to a slot rather than a call stub
-// rides here instead of the symbol type.
+// Names whose address this unit materialises through an undefined
+// symbol, desc a NUL-separated name list. Every undefined reference is
+// typed STT_NOTYPE as gcc types its own, so what the symbol type used
+// to say about binding an import to a slot rather than a call stub
+// rides here. An address-taken extern function is named too: it shares
+// the lowering, and on aarch64 no relocation kind separates the two.
 const NT_BADC_EXTERN_DATA: u32 = 12;
 /// Output section for `const`-qualified file-scope storage the
 /// declaration did not place by name.
@@ -5016,8 +5017,9 @@ fn pack_sym_info(bind: u8, ty: u8) -> u8 {
 ///   NT_BADC_EXPORTS       -- NUL-separated `#pragma export` names.
 ///   NT_BADC_PROLOGUE_END  -- (u64 entry, u64 post-prologue) `.text`
 ///                            offset pairs.
-///   NT_BADC_EXTERN_DATA   -- NUL-separated names referenced as data
-///                            through an undefined symbol.
+///   NT_BADC_EXTERN_DATA   -- NUL-separated names whose address this
+///                            unit materialises through an undefined
+///                            symbol.
 /// All records share the namesz="badc\0" namespace; the parser
 /// distinguishes by `type`. Each note is independently padded to
 /// the 4-byte ELF gABI boundary. Every record is omitted when it
@@ -5301,9 +5303,10 @@ fn build_badc_note(
         crate::c5::layout::pad_to_align(&mut out, 4);
     }
 
-    // Record 12: names referenced as data through an undefined symbol,
-    // NUL-separated. Typed STT_NOTYPE in the symbol table like every
-    // other undefined reference, so the distinction lives only here.
+    // Record 12: names whose address this unit materialises through an
+    // undefined symbol, NUL-separated. Typed STT_NOTYPE in the symbol
+    // table like every other undefined reference, so the distinction
+    // lives only here.
     if !extern_data_names.is_empty() {
         let mut desc: Vec<u8> = Vec::new();
         for n in extern_data_names {

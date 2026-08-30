@@ -987,6 +987,7 @@ pub(crate) fn emit_function(
     let macho_tlv_descriptors_snapshot = macho_tlv_descriptors.len();
     let elf_tpoff_snapshot = elf_tpoff_fixups.len();
 
+    let signs = signs_return_address(func, frame, alloc, abi);
     // A `__attribute__((naked))` function emits no prologue/epilogue; its
     // inline-asm body is the entire function (an interrupt vector or ISR
     // returning via `eret`). The matching `Terminator::Return` emits nothing.
@@ -999,22 +1000,24 @@ pub(crate) fn emit_function(
         // by a `BR` through x16/x17 (a PLT trampoline's), so it takes a
         // `BTI C` ahead of the prologue. A naked function is excluded --
         // its body is the whole function, and prefixing an instruction
-        // would displace a hand-built entry sequence.
-        //
-        // `PACIASP` accepts both of those BTYPEs itself, so a signed
-        // function needs no separate pad ahead of it.
-        if signs_return_address(func, frame, alloc, abi) {
-            emit(code, super::encode::PACIASP);
-        } else if abi.hardening.bti {
+        // would displace a hand-built entry sequence. `PACIASP` accepts
+        // both of those BTYPEs itself, so it stands in for the pad only
+        // where it is the entry's first instruction.
+        if abi.hardening.bti && (entry.nops_after > 0 || !signs) {
             emit(code, super::encode::BTI_C);
         }
     }
-    // The `-fpatchable-function-entry` NOPs after the symbol follow the
-    // landing pad and precede the prologue, as gcc orders them.
+    // The `-fpatchable-function-entry` NOPs follow the landing pad and
+    // precede the rest of the entry, as gcc orders them: a tracer
+    // rewrites the area's first two words to `mov x9, x30` and a call,
+    // which run before the return address is signed.
     for _ in 0..entry.nops_after {
         emit(code, super::encode::NOP);
     }
     if !func.is_naked {
+        if signs {
+            emit(code, super::encode::PACIASP);
+        }
         emit_prologue(code, func, alloc, frame, abi, user_extern_data_refs);
     }
     super::ssa::emit_common::record_post_prologue_pc(func, prologue_native, code.len());

@@ -441,12 +441,15 @@ struct Subprog {
     /// CFI FDE's `DW_CFA_advance_loc` so the post-prologue CFA
     /// rule starts at the right PC.
     prologue_size: u32,
-    /// The function opens with `paciasp`, so from that point the
-    /// return address it saves carries a pointer-authentication code.
-    /// The FDE flags it with `DW_CFA_AARCH64_negate_ra_state` -- an
-    /// unwinder that misses the flag reads the signature as address
-    /// bits and loses the parent frame.
-    ra_signed: bool,
+    /// Byte offset of the function's `paciasp` from `low_pc`, if it
+    /// signs: from the word after it the return address it saves
+    /// carries a pointer-authentication code. The FDE flags that PC
+    /// with `DW_CFA_AARCH64_negate_ra_state` -- an unwinder that
+    /// misses the flag reads the signature as address bits and loses
+    /// the parent frame. The offset is 0 for a plain entry and the
+    /// width of the landing pad plus the
+    /// `-fpatchable-function-entry` NOPs where those precede it.
+    ra_signed_at: Option<u32>,
     /// Locals + formal-parameters that c5 captured for this
     /// subprogram (see `Compiler::variables`). The DWARF emitter
     /// turns each into a `DW_TAG_variable` /
@@ -535,16 +538,31 @@ fn prologue_size_for(ent_pc: usize, low_pc: usize, build: &Build) -> u32 {
     }
 }
 
-/// Whether the function at `low_pc` signs its return address, read
-/// off the emitted code rather than the option: only the a64 emitter
-/// decides which functions take the pair, and this is the same
-/// instruction word it wrote.
-fn opens_with_paciasp(build: &Build, low_pc: usize) -> bool {
-    build
-        .text
-        .get(low_pc..low_pc + 4)
-        .and_then(|w| w.try_into().ok())
-        .is_some_and(|w| u32::from_le_bytes(w) == crate::c5::codegen::aarch64::encode::PACIASP)
+/// Where the function at `low_pc` signs its return address, read off
+/// the emitted code rather than the option: only the a64 emitter
+/// decides which functions take the pair, and these are the same
+/// instruction words it wrote. `PACIASP` opens the entry only when
+/// nothing precedes it; a `BTI C` landing pad and the
+/// `-fpatchable-function-entry` NOPs both come first, so the scan
+/// steps over them. It stops at the first other word, which the
+/// signing pair is never behind.
+fn paciasp_offset(build: &Build, low_pc: usize) -> Option<u32> {
+    use crate::c5::codegen::aarch64::encode;
+    let word = |at: usize| -> Option<u32> {
+        build
+            .text
+            .get(at..at + 4)
+            .and_then(|w| w.try_into().ok())
+            .map(u32::from_le_bytes)
+    };
+    let mut at = low_pc;
+    if word(at) == Some(encode::BTI_C) {
+        at += 4;
+    }
+    while word(at) == Some(encode::NOP) {
+        at += 4;
+    }
+    (word(at) == Some(encode::PACIASP)).then(|| (at - low_pc) as u32)
 }
 
 /// One-past-the-last byte of user code in `build.text`. The PLT
@@ -821,7 +839,7 @@ fn collect_subprograms(
             low_pc: code_vmaddr + lo as u64,
             high_pc: code_vmaddr + hi as u64,
             prologue_size: prologue_size_for(ent_pc, lo, build),
-            ra_signed: opens_with_paciasp(build, lo),
+            ra_signed_at: paciasp_offset(build, lo),
             variables,
             external: !internal_pcs.contains(&ent_pc),
         });
@@ -2402,15 +2420,18 @@ fn build_debug_frame(
         // CFA rule. Functions whose prologue size couldn't be
         // recovered (DCE'd, etc.) pass `prologue_size == 0` and
         // get the rule installed at the function's first byte.
-        // `paciasp` is the entry instruction, so the return address is
-        // signed from the second word on. The rest of the prologue and
-        // the whole body inherit that state; the epilogue's `autiasp`
-        // is not described, matching the FDE's existing granularity
-        // (the frame teardown is not described either).
-        if sub.ra_signed && sub.prologue_size >= 4 {
-            write_advance_loc(&mut fde_body, arch, 4);
+        // The return address is signed from the word after `paciasp`
+        // on. The rest of the prologue and the whole body inherit that
+        // state; the epilogue's `autiasp` is not described, matching
+        // the FDE's existing granularity (the frame teardown is not
+        // described either).
+        let sign_end = sub.ra_signed_at.map(|at| at + 4);
+        if let Some(end) = sign_end
+            && sub.prologue_size >= end
+        {
+            write_advance_loc(&mut fde_body, arch, end);
             fde_body.push(DW_CFA_NEGATE_RA_STATE);
-            write_advance_loc(&mut fde_body, arch, sub.prologue_size - 4);
+            write_advance_loc(&mut fde_body, arch, sub.prologue_size - end);
         } else if sub.prologue_size > 0 {
             write_advance_loc(&mut fde_body, arch, sub.prologue_size);
         }
@@ -3072,16 +3093,16 @@ mod tests {
 
     #[test]
     fn debug_frame_flags_a_signed_return_address() {
-        // A `paciasp`-opening function's FDE has to toggle
-        // RA_SIGN_STATE one instruction in, before the rest of the
-        // prologue: an unwinder that misses it reads the signature as
-        // address bits and loses the parent frame.
-        let sub = |ra_signed| Subprog {
+        // A signing function's FDE has to toggle RA_SIGN_STATE at the
+        // word after its `paciasp`, before the rest of the prologue:
+        // an unwinder that misses it reads the signature as address
+        // bits and loses the parent frame.
+        let sub = |ra_signed_at| Subprog {
             name_off: 0,
             low_pc: 0x1000,
             high_pc: 0x1040,
             prologue_size: 12,
-            ra_signed,
+            ra_signed_at,
             variables: Vec::new(),
             external: true,
         };
@@ -3098,8 +3119,8 @@ mod tests {
             }
             b
         };
-        let plain = body(false);
-        let signed = body(true);
+        let plain = body(None);
+        let signed = body(Some(0));
         assert!(
             !plain.contains(&DW_CFA_NEGATE_RA_STATE),
             "an unsigned frame claims nothing"
@@ -3116,6 +3137,15 @@ mod tests {
             ]
         );
         assert_eq!(&signed[3..], &plain[1..], "same rules follow");
+        // A landing pad and a `-fpatchable-function-entry` NOP area
+        // push `paciasp` past the entry; the toggle follows it there
+        // rather than sitting one word in.
+        let displaced = body(Some(8));
+        assert_eq!(
+            &displaced[..2],
+            &[DW_CFA_ADVANCE_LOC_HI | 3, DW_CFA_NEGATE_RA_STATE]
+        );
+        assert_eq!(&displaced[2..], &plain[1..], "same rules follow");
     }
 
     #[test]
@@ -3340,7 +3370,7 @@ mod info_golden {
             low_pc: 0x1000,
             high_pc: 0x1010,
             prologue_size: 4,
-            ra_signed: false,
+            ra_signed_at: None,
             variables: alloc::vec![],
             external: true,
         }];

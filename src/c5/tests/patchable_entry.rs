@@ -331,6 +331,105 @@ fn aarch64_call_ops_form_matches_gcc() {
     assert!(!rel.sections.iter().any(|s| s.name == "__mcount_loc"));
 }
 
+/// A callee that keeps its frame, so it takes the `PACIASP`/`AUTIASP`
+/// pair, plus a second function so the section holds more than one
+/// record.
+const PROT_SRC: &str = "extern void sink(int);\n\
+                        extern int use(int *);\n\
+                        int framed(int x) { int a = x; sink(a); return use(&a) + a; }\n\
+                        int leaf(int x) { return x + 1; }\n";
+
+const A64_BTI_C: [u8; 4] = 0xd503_245fu32.to_le_bytes();
+const A64_PACIASP: [u8; 4] = 0xd503_233fu32.to_le_bytes();
+
+/// The words a function's entry opens with, `count` of them.
+fn entry_words(rel: &EtRel, name: &str, count: usize) -> Vec<[u8; 4]> {
+    let f = func(rel, name);
+    let at = f.value as usize;
+    rel.sections[section_of(f)].bytes[at..at + 4 * count]
+        .chunks(4)
+        .map(|w| w.try_into().unwrap())
+        .collect()
+}
+
+fn aarch64_protected(patchable: PatchableEntry, bti: bool, pac_ret: bool) -> EtRel {
+    compile(
+        PROT_SRC,
+        Target::LinuxAarch64,
+        NativeOptions {
+            patchable_function_entry: patchable,
+            min_function_alignment: 8,
+            hardening: Hardening {
+                bti,
+                pac_ret,
+                ..Hardening::NONE
+            },
+            ..NativeOptions::default()
+        },
+    )
+}
+
+#[test]
+fn aarch64_signing_follows_the_nops() {
+    // gcc -mbranch-protection=pac-ret -fpatchable-function-entry=4,2:
+    // the two NOPs open the entry and `PACIASP` follows them. The
+    // kernel's `ftrace_init_nop` rewrites the first of the two to
+    // `MOV X9, X30` and the second to a call, so it requires a NOP at
+    // the symbol; a signature taken ahead of the pair would be taken
+    // on a link register the call then overwrites.
+    let rel = aarch64_protected(PatchableEntry { nops: 4, before: 2 }, false, true);
+    assert_eq!(
+        entry_words(&rel, "framed", 3),
+        [A64_NOP, A64_NOP, A64_PACIASP],
+        "signed entry"
+    );
+    // Without signing the NOPs still open the entry and the prologue
+    // follows them directly.
+    let plain = aarch64_protected(PatchableEntry { nops: 4, before: 2 }, false, false);
+    let opens = entry_words(&plain, "framed", 3);
+    assert_eq!(opens[..2], [A64_NOP, A64_NOP]);
+    assert_ne!(opens[2], A64_PACIASP);
+
+    // The record names the area's first byte, `arch/arm64/kernel/ftrace.c`
+    // reads the ops literal from the two words there and patches at
+    // `record + 8` and `record + 12`. Both must be NOPs at rest.
+    let records = patchable_records(&rel, R_AARCH64_ABS64);
+    let area = area_of(&rel, &records, "framed").expect("framed");
+    let f = func(&rel, "framed");
+    assert_eq!(f.value, area + 8);
+    assert_eq!(area % 8, 0);
+    let sec = &rel.sections[section_of(f)];
+    let a = area as usize;
+    assert!(sec.bytes[a..a + 16].chunks(4).all(|w| w == A64_NOP));
+}
+
+#[test]
+fn aarch64_a_signed_entry_with_a_nop_area_takes_its_own_landing_pad() {
+    // gcc -mbranch-protection=pac-ret+bti -fpatchable-function-entry=4,2:
+    // `BTI C`, the NOPs, then `PACIASP`. `PACIASP` stands in for the pad
+    // only where it is the entry's first instruction; the NOP area moves
+    // it, and the kernel tolerates nothing but a `BTI C` ahead of the
+    // patch site (`ftrace_call_adjust`).
+    let rel = aarch64_protected(PatchableEntry { nops: 4, before: 2 }, true, true);
+    assert_eq!(
+        entry_words(&rel, "framed", 4),
+        [A64_BTI_C, A64_NOP, A64_NOP, A64_PACIASP],
+        "pad, area, signature"
+    );
+    // Unsigned, the pad still leads and nothing stands between the NOPs
+    // and the prologue.
+    let pad_only = aarch64_protected(PatchableEntry { nops: 4, before: 2 }, true, false);
+    let opens = entry_words(&pad_only, "framed", 4);
+    assert_eq!(opens[..3], [A64_BTI_C, A64_NOP, A64_NOP]);
+    assert_ne!(opens[3], A64_PACIASP);
+
+    // With no area `PACIASP` opens the entry and is the pad itself.
+    let bare = aarch64_protected(PatchableEntry::NONE, true, true);
+    assert_eq!(entry_words(&bare, "framed", 1), [A64_PACIASP]);
+    let unsigned = aarch64_protected(PatchableEntry::NONE, true, false);
+    assert_eq!(entry_words(&unsigned, "framed", 1), [A64_BTI_C]);
+}
+
 #[test]
 fn the_area_takes_the_function_alignment_on_both_targets() {
     for (target, nop) in [(Target::LinuxX64, 1usize), (Target::LinuxAarch64, 4)] {

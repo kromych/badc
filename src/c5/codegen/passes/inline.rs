@@ -11,7 +11,9 @@
 //! * callee's body emits at most `cap` instructions (the
 //!   `--inline-cap=N` knob; default 64), counted over the code the emit
 //!   issues -- live values plus per-block branches, not the arena
-//!   (`emitted_inst_count`);
+//!   (`emitted_inst_count`), and including what the callee's own calls
+//!   will splice into it (`inlined_inst_counts`), which is what a site
+//!   pays;
 //! * callee is non-variadic;
 //! * callee's body contains no `TailExt` and no aggregate-returning
 //!   nested call -- otherwise the straight-line shapes whose
@@ -126,7 +128,7 @@ enum RegionKey {
 /// body therefore never contains another splice and every call-free splice
 /// shares the one `pool` region; a call-bearing callee can nest an
 /// activation of itself only through a call cycle, so one off every cycle
-/// (`call_cycle_members`) reuses a single per-callee region across its
+/// (`call_graph_sccs`) reuses a single per-callee region across its
 /// sites, and a cycle member appends per site.
 /// Where a spliced body's relocated locals may live: the caller's region
 /// records plus the two sets that force a fresh region per site -- callees
@@ -243,13 +245,22 @@ impl CallerRegions {
     }
 }
 
-/// Functions on a direct-call cycle (a non-singleton SCC or a self edge)
-/// in the unit's `Inst::Call` graph, by ent_pc. Inlining replaces a call
-/// with the callee's own calls -- all existing edges of the callee -- so
-/// the graph's transitive closure never grows and membership decided on
-/// the pre-inline bodies stays sound for the whole fixpoint. Iterative
-/// Tarjan.
-fn call_cycle_members(funcs: &[FunctionSsa]) -> BTreeSet<usize> {
+/// Strongly connected components of the unit's `Inst::Call` graph.
+/// Inlining replaces a call with the callee's own calls -- all existing
+/// edges of the callee -- so the graph's transitive closure never grows
+/// and a decomposition taken on the pre-inline bodies stays sound for
+/// the whole fixpoint. Iterative Tarjan.
+struct CallGraphSccs {
+    /// Component id per `funcs` index, in Tarjan completion order: an
+    /// edge leaving a component always reaches a lower id, so ascending
+    /// id order visits callees before callers.
+    comp: Vec<usize>,
+    /// ent_pc of every function on a call cycle (a non-singleton
+    /// component or a self edge).
+    cyclic: BTreeSet<usize>,
+}
+
+fn call_graph_sccs(funcs: &[FunctionSsa]) -> CallGraphSccs {
     let n = funcs.len();
     let idx_of: BTreeMap<usize, usize> = funcs
         .iter()
@@ -277,6 +288,8 @@ fn call_cycle_members(funcs: &[FunctionSsa]) -> BTreeSet<usize> {
     let mut on_stack = vec![false; n];
     let mut stack: Vec<usize> = Vec::new();
     let mut next_index = 0usize;
+    let mut comp = vec![usize::MAX; n];
+    let mut next_comp = 0usize;
     let mut members = BTreeSet::new();
     for root in 0..n {
         if index[root] != usize::MAX {
@@ -318,18 +331,24 @@ fn call_cycle_members(funcs: &[FunctionSsa]) -> BTreeSet<usize> {
                         break;
                     }
                 }
-                if scc.len() > 1 || succ[v].contains(&v) {
-                    for m in scc {
+                let cyclic_scc = scc.len() > 1 || succ[v].contains(&v);
+                for m in scc {
+                    comp[m] = next_comp;
+                    if cyclic_scc {
                         members.insert(funcs[m].ent_pc);
                     }
                 }
+                next_comp += 1;
             }
             if let Some(&(p, _)) = work.last() {
                 low[p] = low[p].min(low[v]);
             }
         }
     }
-    members
+    CallGraphSccs {
+        comp,
+        cyclic: members,
+    }
 }
 
 /// Rewrite each `Inst::CallIndirect` whose target value is an
@@ -355,7 +374,7 @@ fn call_cycle_members(funcs: &[FunctionSsa]) -> BTreeSet<usize> {
 /// * the target can reach stack-pointer asm (`sp_asm_reachers`
 ///   propagates over direct edges only, so an admitted edge must not
 ///   lead there);
-/// * the edge would close a direct-call cycle (`call_cycle_members`
+/// * the edge would close a direct-call cycle (`call_graph_sccs`
 ///   likewise assumes the direct graph gains no cycle mid-run);
 /// * the target reaches a callee with a shared region record in this
 ///   caller (`CallerRegions::per_callee`). The record's sharing rests
@@ -1658,6 +1677,59 @@ fn live_inst_mask(func: &FunctionSsa) -> Vec<bool> {
 /// counting values alone under-measures a branchy body by its blocks.
 fn emitted_inst_count(func: &FunctionSsa) -> usize {
     live_inst_mask(func).iter().filter(|b| **b).count() + func.blocks.len()
+}
+
+/// Code the emit issues for each function once this pass has spliced
+/// into it, per `funcs` index.
+///
+/// `emitted_inst_count` measures a body as it stands, where a call this
+/// pass will replace still counts one instruction. A caller pays the
+/// callee's *expanded* body at every site, and the candidacy fixpoint
+/// then expands the copies it just made, so a body measured before its
+/// own calls are spliced under-states what a site costs by the whole
+/// transitive closure. Candidacy weighs the expanded count instead.
+///
+/// The estimate follows the same admission rule the round applies: a
+/// call is expanded when its target passes `shape` and is either marked
+/// `inline` (no size bound) or estimated within `cap`. A call inside a
+/// component counts as one -- a cycle cannot expand away, and the splice
+/// declines it. Components come in ascending id order, which visits
+/// callees first, so one pass settles every count.
+fn inlined_inst_counts(
+    funcs: &[FunctionSsa],
+    shape: &[bool],
+    sccs: &CallGraphSccs,
+    cap: u32,
+) -> Vec<usize> {
+    let idx_of: BTreeMap<usize, usize> = funcs
+        .iter()
+        .enumerate()
+        .map(|(i, f)| (f.ent_pc, i))
+        .collect();
+    let mut order: Vec<usize> = (0..funcs.len()).collect();
+    order.sort_by_key(|&i| sccs.comp[i]);
+    let mut est = vec![0usize; funcs.len()];
+    let mut admitted = vec![false; funcs.len()];
+    for i in order {
+        let mut n = emitted_inst_count(&funcs[i]);
+        for inst in &funcs[i].insts {
+            let Inst::Call { target_pc, .. } = inst else {
+                continue;
+            };
+            let Some(&j) = idx_of.get(target_pc) else {
+                continue;
+            };
+            if sccs.comp[j] == sccs.comp[i] || !admitted[j] {
+                continue;
+            }
+            // The call itself goes away, so the site costs the callee's
+            // body less the one instruction it replaces.
+            n = n.saturating_add(est[j].saturating_sub(1));
+        }
+        est[i] = n;
+        admitted[i] = shape[i] && (funcs[i].is_inline || n <= cap as usize);
+    }
+    est
 }
 
 /// Map a single operand `v` through `remap`. `NO_VALUE` stays.
@@ -3755,7 +3827,8 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi, code_syms: &BTr
     // and the devirt sweep admits no edge that reaches stack-pointer asm
     // or closes a cycle.
     let orig_locals: Vec<i64> = funcs.iter().map(|f| f.locals).collect();
-    let cyclic = call_cycle_members(funcs);
+    let sccs = call_graph_sccs(funcs);
+    let cyclic = &sccs.cyclic;
     let mut regions: BTreeMap<usize, CallerRegions> = BTreeMap::new();
     // Iterate to a fixed point: each pass re-evaluates candidacy on
     // the now-substituted function bodies, so a helper that became a
@@ -3772,10 +3845,19 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi, code_syms: &BTr
         // callers are rewritten in place, so the candidates -- and only
         // they -- are copied; a body no call site can splice is never
         // read.
+        // Shape and own-size verdict first; the expanded-size estimate
+        // then declines a body whose own calls this pass will splice
+        // into it, which the caller would pay once per site.
+        let shape: Vec<bool> = funcs
+            .iter()
+            .map(|f| is_inline_candidate(f, cap, abi, None))
+            .collect();
+        let est = inlined_inst_counts(funcs, &shape, &sccs, cap);
         let bodies: Vec<FunctionSsa> = funcs
             .iter()
-            .filter(|f| is_inline_candidate(f, cap, abi, None))
-            .cloned()
+            .enumerate()
+            .filter(|(i, f)| shape[*i] && (f.is_inline || est[*i] <= cap as usize))
+            .map(|(_, f)| f.clone())
             .collect();
         if bodies.is_empty() {
             break;
@@ -3865,7 +3947,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi, code_syms: &BTr
                 &facts,
                 &mut SlotPlacement {
                     regions: regions.entry(caller.ent_pc).or_default(),
-                    cyclic: &cyclic,
+                    cyclic,
                     sp_tainted: &sp_tainted,
                 },
             );
@@ -4499,8 +4581,12 @@ mod tests {
             ..Default::default()
         };
         let funcs = alloc::vec![f(1, &[2]), f(2, &[1]), f(3, &[1]), f(4, &[4]), f(5, &[]),];
-        let members = call_cycle_members(&funcs);
-        assert_eq!(members, BTreeSet::from([1, 2, 4]));
+        let sccs = call_graph_sccs(&funcs);
+        assert_eq!(sccs.cyclic, BTreeSet::from([1, 2, 4]));
+        // Mutual recursion is one component; a caller of it is another,
+        // numbered above the component it reaches.
+        assert_eq!(sccs.comp[0], sccs.comp[1]);
+        assert!(sccs.comp[2] > sccs.comp[0]);
     }
 
     /// A self-recursive callee is not a candidate: inlining it does not
@@ -4626,6 +4712,74 @@ mod tests {
         let mut reason = alloc::string::String::new();
         assert!(!is_inline_candidate(&f, 32, abi, Some(&mut reason)));
         assert_eq!(reason, "121 insts > cap 32");
+    }
+
+    /// A body measures small while its own calls are still calls; the
+    /// caller pays the callee's expanded body once per site. The
+    /// candidacy count weighs that expansion, so a mid-level helper
+    /// under the cap on its own but over it once its leaves fold in
+    /// stays out of line, and the leaves it calls do not.
+    #[test]
+    fn expanded_body_over_the_cap_stays_out_of_line() {
+        // A leaf of 22 emitted instructions, and a mid-level body whose
+        // own values are 2 and which calls the leaf twice.
+        let leaf = superseded_byte_helper(1, 7, false);
+        assert_eq!(emitted_inst_count(&leaf), 22);
+        let mid = FunctionSsa {
+            ent_pc: 2,
+            insts: alloc::vec![call_to(1), call_to(1)],
+            inst_src: alloc::vec![(0, 0); 2],
+            f32_values: alloc::vec![false; 2],
+            blocks: alloc::vec![Block {
+                start_pc: 0,
+                inst_range: 0..2,
+                terminator: Terminator::Return(1),
+                exit_acc: 1,
+            }],
+            ..Default::default()
+        };
+        assert_eq!(emitted_inst_count(&mid), 3);
+        let funcs = alloc::vec![leaf, mid];
+        let sccs = call_graph_sccs(&funcs);
+        // 3 + 2 * (22 - 1): each site trades its one call for the body.
+        assert_eq!(
+            inlined_inst_counts(&funcs, &[true, true], &sccs, 32),
+            alloc::vec![22, 45]
+        );
+        let admitted = |cap: u32| {
+            let e = inlined_inst_counts(&funcs, &[true, true], &sccs, cap);
+            (0..2).filter(|&i| e[i] <= cap as usize).count()
+        };
+        // The leaf fits a cap of 32; the mid-level body does not, though
+        // the values it holds do.
+        assert_eq!(admitted(32), 1);
+        assert_eq!(admitted(64), 2);
+    }
+
+    /// A call inside a cycle counts as one: the splice declines it, so it
+    /// cannot expand away and must not run the estimate up.
+    #[test]
+    fn a_call_inside_a_cycle_does_not_expand_the_estimate() {
+        let mutual = |ent_pc: usize, target: usize| FunctionSsa {
+            ent_pc,
+            insts: alloc::vec![Inst::Imm(0), call_to(target)],
+            inst_src: alloc::vec![(0, 0); 2],
+            f32_values: alloc::vec![false; 2],
+            blocks: alloc::vec![Block {
+                start_pc: 0,
+                inst_range: 0..2,
+                terminator: Terminator::Return(1),
+                exit_acc: 1,
+            }],
+            ..Default::default()
+        };
+        let funcs = alloc::vec![mutual(1, 2), mutual(2, 1)];
+        let sccs = call_graph_sccs(&funcs);
+        assert_eq!(sccs.cyclic, BTreeSet::from([1, 2]));
+        assert_eq!(
+            inlined_inst_counts(&funcs, &[true, true], &sccs, 32),
+            alloc::vec![2, 2]
+        );
     }
 
     /// The arena holds no branches, so a body whose live values fit the

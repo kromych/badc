@@ -59,9 +59,29 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	movabsq	$-0xa, %rax
-               	movl	$0x1f, %ecx
-               	movl	$0x16, %eax
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	movl	$0xa, %edi
+               	callq	<addr>
+               	cmpq	$-0x3de, %rax           # imm = 0xFC22
+               	je	<addr>
+               	movl	$0x1, %eax
+               	popq	%rbp
+               	retq
+               	movl	$0xa, %edi
+               	callq	<addr>
+               	cmpq	$0xc27, %rax            # imm = 0xC27
+               	je	<addr>
+               	movl	$0x2, %eax
+               	popq	%rbp
+               	retq
+               	movl	$0xa, %edi
+               	callq	<addr>
+               	cmpq	$0x8a3, %rax            # imm = 0x8A3
+               	je	<addr>
+               	movl	$0x3, %eax
+               	popq	%rbp
+               	retq
                	movl	$0x2, %eax
                	movl	$0x17, %ecx
                	xorq	%rsi, %rsi
@@ -181,6 +201,8 @@ Disassembly of section .text:
                	cmpl	$0x33f7f8d8, %eax       # imm = 0x33F7F8D8
                	je	<addr>
                	movl	$0x6, %eax
+               	popq	%rbp
                	retq
                	xorq	%rax, %rax
+               	popq	%rbp
                	retq

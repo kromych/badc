@@ -75,6 +75,7 @@ from pathlib import Path
 
 import buildcc
 import diags
+import exercise
 import karch
 import kaslr
 import ktree
@@ -365,6 +366,21 @@ def smp_failure(text: str, want: int) -> str:
     return "" if got == want else f"activated {got} of {want} processors"
 
 
+def fault_failure(text: str) -> str:
+    """What the console says the kernel itself reported as a fault, or "".
+
+    Reaching the marker only says init ran. A kernel that warns, oopses or
+    disables a subsystem on the way there has still miscompiled, so the boot
+    is held to the same fault vocabulary the exercise stage applies to dmesg.
+    """
+    faults = exercise.dmesg_faults(text.splitlines())
+    if not faults:
+        return ""
+    first = faults[0].strip()[:120]
+    more = f" (+{len(faults) - 1} more)" if len(faults) > 1 else ""
+    return f"reported {len(faults)} kernel fault line(s){more}: {first!r}"
+
+
 def _self_test() -> int:
     """Check the banner reading against both lanes' real console text.
 
@@ -402,6 +418,22 @@ def _self_test() -> int:
     assert smp_failure("[    1.3] SMP: Total of 2 processors activated.\n",
                        2) == ""
     assert "no processor count" in smp_failure("a quiet console\n", 2)
+
+    # A fault the kernel reports on its way to the marker. Reaching init is
+    # not a verdict on the kernel: this text is from an image whose ftrace
+    # patch sites were malformed, which booted to userspace all the same.
+    ftrace = ("[    0.000000] ------------[ ftrace bug ]------------\n"
+              "[    0.000000] ftrace faulted on writing\n"
+              "[    0.000000] ------------[ cut here ]------------\n"
+              "[    0.000000] WARNING: kernel/trace/ftrace.c:2260 at "
+              "ftrace_bug+0x600/0x960, CPU#0: swapper/0\n"
+              "[    0.000000] Call trace:\n")
+    assert "2 kernel fault line(s)" in fault_failure(ftrace), fault_failure(ftrace)
+    assert fault_failure("[    0.1] smpboot: Total of 2 processors activated\n"
+                         "[    1.2] Run /init as init process\n") == ""
+    # The crypto self-test verdicts, which report a miscompiled cipher without
+    # any of the fault words.
+    assert fault_failure("[   2.0] alg: skcipher: test failed for aes\n")
 
     # A failed build states its cause in the run's own output: the gate runs
     # on remote boxes, where the log path it names is another trip away.
@@ -658,7 +690,8 @@ def main() -> int:
             banner = banner_line(text)
             mismatch = banner_failure(banner, cc_text, badc_ld)
             smp = smp_failure(text, SMP_CPUS)
-            ok = booted and checked and not mismatch and not smp
+            fault = fault_failure(text)
+            ok = booted and checked and not mismatch and not smp and not fault
             tag = f"0x{seed:016x}" if seed is not None else "unpinned"
             # An unpinned boot draws its own displacement, which the probe's
             # does not stand for, so it is left unattributed.
@@ -667,17 +700,21 @@ def main() -> int:
             log(f"boot {i}/{len(plan)}: seed={tag} displacement={disp} "
                 f"marker={'yes' if booted else 'NO'} "
                 f"checks={'yes' if checked else 'NO'} "
-                f"cpus={'yes' if not smp else 'NO'} console-lines={lines}")
+                f"cpus={'yes' if not smp else 'NO'} "
+                f"clean={'yes' if not fault else 'NO'} console-lines={lines}")
             if i == 1 and banner:
                 log(f"banner: {banner}")
             boots.append({"ok": ok, "booted": booted, "checked": checked,
-                          "cpus": not smp, "lines": lines, "log": str(out),
+                          "cpus": not smp, "clean": not fault,
+                          "lines": lines, "log": str(out),
                           "banner": banner, "seed": tag, "offset": disp})
             if booted and checked and mismatch:
                 failures.append(f"boot {i} banner {mismatch}: "
                                 f"{banner!r} (see {out})")
             elif booted and checked and smp:
                 failures.append(f"boot {i} {smp} (see {out})")
+            elif booted and checked and fault:
+                failures.append(f"boot {i} {fault} (see {out})")
             elif not ok:
                 replay = (f"; replay with --kaslr-seed 0x{seed:016x}"
                           if seed is not None else "")

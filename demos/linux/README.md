@@ -695,6 +695,25 @@ modules, an untainted kernel, a clean dmesg, and disk/network I/O. Before
 the install the same probes run against the image's stock kernel, so every
 measurement has a baseline from the same userspace.
 
+"Clean dmesg" at boot is the `DMESG_SEVERE` vocabulary: the oops shapes, plus
+the driver-reported faults -- the SCSI sense keys a working device does not
+produce, block I/O errors, filesystem corruption reports and PCI AER. The oops
+shapes alone were not enough: a controller answering every command with `Sense
+Key : Hardware Error` passed eight patterns, a taint word of 0 and a systemd
+that came up.
+
+Everything the boot logged at KERN_ERR or worse is also collected and diffed
+against the stock boot of the same image, and the run prints the lines the
+stock boot did not produce -- reported, not asserted. The baseline is a
+different kernel version, and a version gap introduces error lines of its own:
+on the Fedora 44 image a clean 7.1.10 adds three (a driver registered twice, a
+platform feature 6.19.10 did not probe for, an SELinux compatibility notice).
+Inside the exercise stage the comparison has no such gap -- the same kernel,
+seconds apart -- so there each task's own log window fails the task on
+*anything* at KERN_ERR, read from `dmesg -x`'s decoded severity rather than
+from a pattern. That is the check with no vocabulary in it, and it is why the
+storage step runs its I/O inside one task.
+
 The devices are chosen, not assumed. `--vm-disk-bus` attaches the system
 disk and the cloud-init seed through `virtio` (the default), an emulated
 `nvme` controller, an `ahci` SATA controller, or a `megasas` / `lsi53c895a`
@@ -788,16 +807,57 @@ not its debug info. The provisioned prefix is stamped with a digest of the rpm
 file names `dnf` resolves the tool set to, so a prefix built against a package
 set the mirror has moved past is rebuilt rather than reused.
 
-### Exercising the booted kernel (`--exercise`)
+### Exercising the booted kernel
 
 Booting proves the kernel reaches userspace over one storage and one network
 path. A distribution kernel ships several thousand modules and the boot loads
-a few dozen. `--exercise` adds a stage that runs after the boot probes, inside
-the badc kernel, and drives the code the boot never reaches. Its steps are
-data -- a name, the guest work and the rule that reads the outcome -- so the
-set extends without touching the driver; each step lands in the report under
+a few dozen. The stage that runs after the boot probes, inside the badc
+kernel, drives the code the boot never reaches. Its steps are data -- a name,
+the guest work and the rule that reads the outcome -- so the set extends
+without touching the driver; each step lands in the report under
 `vm.exercise` and a failing one appends to the run's `failures`.
-`--exercise-steps` selects a subset of `crypto,modules,kunit,fs,dmesg`.
+`--exercise-steps` selects a subset of
+`sockets,storage,crypto,modules,kunit,fs,dmesg`.
+
+`sockets,storage,crypto,kunit,dmesg` -- the gate set -- run on every boot; the
+boot probes otherwise judge a kernel by what the guest's own init reported
+about itself, which is a property of the image. Two defects reached the branch
+that way. An AF_VSOCK bind that returned `EINVAL` on every socket surfaced
+only because one distribution's systemd generated a unit for the family and
+the other's did not. A storage controller that answered every `TEST UNIT
+READY` with a hardware error surfaced only as sense data in the console log,
+which no pattern matched. In both cases `taint` was 0, systemd came up, and
+the boot was recorded as clean. `--exercise` adds `modules` and `fs`, which
+cost minutes; `--no-exercise-gate` drops the stage entirely, and a boot that
+skips it has no cover on the subsystems the probes never reach.
+
+`storage` writes a known payload to the root filesystem with direct I/O, reads
+it back after dropping the caches and compares it against the source digest,
+then reads the same blocks off the raw device twice. The digests are half of
+it: the step runs the I/O inside one task so the kernel log window that I/O
+produced is read as part of the verdict, which is where a controller that
+completes transfers and reports hardware errors is caught. `--exercise-storage-mb`
+sizes the payload.
+
+`sockets` creates a socket for every protocol family the configuration builds,
+loading the modules that back it first -- `af_vsock.c` declares no `net-pf-40`
+alias, so nothing autoloads `vsock` and a family reached only through autoload
+would go unprobed. Where a family binds without a peer or a device it is bound
+and listened on, and where a local transfer is reachable it carries a payload:
+AF_UNIX over a socket file, AF_INET and AF_INET6 over loopback (stream and
+datagram), AF_NETLINK through an `RTM_GETLINK` dump read back to the
+`NLMSG_DONE`, AF_ALG through a sha256 transform compared against hashlib,
+and AF_VSOCK bound on an auto-assigned and on a reserved port, listened on,
+and its local CID read from `/dev/vsock` the way `systemd-ssh-generator` reads
+it. What a family cannot reach without external state is reported as
+`uncovered` rather than counted: AF_PACKET is created and bound to `lo` and no
+frame is captured, and AF_VSOCK carries no payload -- on one gcc-built 7.1.10
+kernel a loopback round trip completed under a bare initramfs and was reset in
+a Fedora guest, so which transport carries a connection is guest module state,
+not a property of the kernel under test.
+AF_VSOCK is driven through libc rather than through the guest Python's socket
+module, since `socket.AF_VSOCK` support varies by build and a probe that
+skipped the family on that basis would leave exactly the hole it closes.
 
 `crypto` loads every module under the kernel's `crypto/`, `arch/*/crypto/` and
 `lib/crypto/` trees, forces the registration self-tests when the configuration
@@ -883,21 +943,30 @@ one that faulted here left a `mount` dead with interrupts disabled and the
 global `sync` in the next instance blocked behind it. `--exercise-steps` and
 `--exercise-fs` are how a run deliberately continues past a known fault.
 
-`dmesg` is one consolidated severity scan over everything the stage produced.
-The stage runs a `dmesg` follower into a file for its whole duration, because
+`dmesg` is one consolidated severity scan over everything the stage produced,
+by the `DMESG_SEVERE` vocabulary: the follower holds the boot log as well, and
+the boot is what the packages probes judge against the stock baseline.
+The stage runs a `dmesg -w -x` follower into a file for its whole duration
+(`-x` decodes the severity each per-task window is read by), because
 the sweep produces far more lines than the ring buffer holds and a wrapped ring
 drops exactly the early fault the sweep is looking for. The existing core-dump
 sweep runs after the stage, so a userspace core produced by it is collected
 too.
 
-The stage is opt-in and is not part of the push gate: it costs minutes, and
-the report carries the wall-clock of every task and every step so the default
-set can be tuned against measurement. On the x86_64 box (KVM, 2 vCPUs, 4 GiB
-guest), against the Ubuntu 26.04 image and against a badc-built kernel
-installed into it:
+The report carries the wall-clock of every task and every step, so the gate
+set is chosen against measurement rather than by feel: the four gate steps
+cost 20.1 s together on the x86_64 box against the Fedora 44 image (sockets
+1.6, crypto 12.3, kunit 2.1, dmesg 0.6, plus 3.5 s of stage setup -- the
+configuration read, the guest scripts, the dmesg follower), against a vm phase
+that spends minutes installing the package and booting twice. The two steps
+behind `--exercise` cost minutes on their own. Measured on that box (KVM, 2
+vCPUs, 4 GiB guest), the `crypto`, `modules`, `kunit`, `fs` and `dmesg` figures
+against the Ubuntu 26.04 image and a badc-built kernel installed into it:
 
 | step | cost | what it covered |
 |---|---|---|
+| `sockets` | 1.6 s | 7 families created, bound and driven. `socket()` alone would not have caught the AF_VSOCK defect: creation succeeded and `bind` returned `EINVAL` |
+| `storage` | 3-6 s | 64 MiB written and read back against the source digest, plus two raw-device reads, with the kernel log window read as part of the verdict |
 | `crypto` | 2-3 s | 53 to 153 algorithms registered, 39 to 54 implementations checked through AF_ALG; a 10-mode `tcrypt` sweep adds 1.5 s where `CONFIG_CRYPTO_SELFTESTS` is on |
 | `modules` | 130 ms per module | ~15 min extrapolated over Ubuntu's ~6800-module tree; `--exercise-modules N` bounds it |
 | `kunit` | 1 s | 171 cases from `kunit_test` and `kunit_example_test`; a skip where `CONFIG_KUNIT` is off |

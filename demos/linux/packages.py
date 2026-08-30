@@ -9,10 +9,12 @@ qemu, and validates the rebooted system: the package scriptlets (depmod, initram
 generation, boot-loader entry) and the running kernel (systemd reaches
 multi-user, udev-bound devices, on-demand module loads, dmesg, disk and
 network I/O). A stock-kernel baseline is captured from the same image before
-the install, so every measurement has a reference. `--exercise` adds a stage
-after those probes that drives what the boot does not reach -- the crypto
-implementations, every built module, the kunit suites, and the filesystem and
-block stack under a verified stress load (exercise.py).
+the install, so every measurement has a reference. Those probes read the
+guest's own verdict on itself, so a stage after them drives what the boot does
+not reach (exercise.py): the protocol families, a root-device round trip, the
+crypto implementations and the kunit suites run on every boot, and
+`--exercise` adds the module load sweep and the filesystem and block-stack
+stress, which cost minutes.
 
     python3 demos/linux/packages.py --arch x86_64 --distro fedora \
         --tarball <linux-7.1.10.tar.xz> --config vendor \
@@ -1712,6 +1714,13 @@ def probes(vm: Target) -> dict:
                            if DMESG_SEVERE.search(l)]
     out["dmesg_warn"] = sum(1 for l in dmesg.splitlines()
                             if DMESG_WARN.search(l))
+    # Everything the kernel logged at KERN_ERR or worse. The severity
+    # vocabulary above is the set of faults named in advance; this is the net
+    # for a driver fault nobody wrote a pattern for, and the stock boot of the
+    # same image is what says which of these lines are the image's own.
+    err = vm.ssh("dmesg --level=emerg,alert,crit,err", sudo=True, timeout=120)
+    out["dmesg_err"] = (sorted(set(exercise.normalize_log(err.stdout)))
+                        if err.returncode == 0 else None)
     out["net_route"] = vm.ssh(
         "ip -o route show default").stdout.strip()
     out["net_driver"] = vm.ssh(
@@ -2188,6 +2197,15 @@ def install_cmd(arch, packages: list[Path], extra: str = "") -> str:
     return " ".join(filter(None, (tool, extra, names)))
 
 
+def new_kernel_errors(base: dict, cur: dict) -> list[str] | None:
+    """KERN_ERR-or-worse lines the kernel under test logged and the stock boot
+    of the same image did not. None when either log was unreadable."""
+    if base.get("dmesg_err") is None or cur.get("dmesg_err") is None:
+        return None
+    seen = set(base["dmesg_err"])
+    return [l for l in cur["dmesg_err"] if l not in seen]
+
+
 def assert_boot(args, vm: Target, base: dict, cur: dict, result: dict,
                 failures: list[str]) -> bool:
     """The checks every lane makes on the kernel it just booted: the release,
@@ -2239,6 +2257,18 @@ def assert_boot(args, vm: Target, base: dict, cur: dict, result: dict,
     if cur["dmesg_warn"] > base["dmesg_warn"]:
         failures.append(f"dmesg WARNING count {cur['dmesg_warn']} exceeds "
                         f"stock baseline {base['dmesg_warn']}")
+    # Reported, not asserted: the baseline is the image's stock kernel, a
+    # different version, and a version gap introduces error lines of its own
+    # (a driver registered twice, a platform feature the older kernel did not
+    # probe for). The named vocabulary above is what fails a boot; this is
+    # what a reader compares when it does not.
+    result["dmesg_err_new"] = new_kernel_errors(base, cur)
+    if result["dmesg_err_new"] is None:
+        failures.append("the kernel error log was not readable "
+                        "(dmesg --level); no cover on driver-reported faults")
+    elif result["dmesg_err_new"]:
+        log(f"{len(result['dmesg_err_new'])} kernel error line(s) the stock "
+            f"boot did not log: {result['dmesg_err_new'][:5]}")
     if not cur["disk_rw"]:
         failures.append("disk write/readback failed")
     if not cur["net_route"]:
@@ -2402,9 +2432,11 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
 
         assert_package_products(args, arch, vm, result, failures)
 
-        if args.exercise:
+        # The gate set runs on every boot; --exercise widens it. Without it
+        # a boot is judged by what the guest's own init reported.
+        if steps := exercise.selected_steps(args):
             result["exercise"] = exercise.run(args, vm, arch, args.release,
-                                              failures, log)
+                                              failures, log, steps)
 
         # Sweep for cores produced under the badc kernel (services, udev,
         # modprobe). A kernel-side oops/panic leaves no userspace core; the
@@ -2837,9 +2869,9 @@ def phase_hw(args, arch, packages: list[Path], failures: list[str]) -> dict:
                             f"{result['console_stage']['fault']}")
 
         assert_package_products(args, arch, tgt, result, failures)
-        if args.exercise:
+        if steps := exercise.selected_steps(args):
             result["exercise"] = exercise.run(args, tgt, arch, args.release,
-                                              failures, log)
+                                              failures, log, steps)
         result["cores_badc"] = sweep_cores(args, tgt, "badc", failures)
         if not result["cores_badc"]:
             log("no userspace cores under the kernel under test")
@@ -3060,6 +3092,12 @@ def _self_test() -> int:
     assert not seabios_nvme_blocked("uefi", "nvme", 8192)
     assert not seabios_nvme_blocked("bios", "virtio", 8192)
     assert exercise.EXERCISE_VM_MEM > SEABIOS_NVME_MEM_LIMIT
+
+    assert new_kernel_errors({"dmesg_err": ["a", "b"]},
+                             {"dmesg_err": ["b", "c"]}) == ["c"]
+    assert new_kernel_errors({"dmesg_err": ["a"]}, {"dmesg_err": ["a"]}) == []
+    assert new_kernel_errors({"dmesg_err": None}, {"dmesg_err": ["a"]}) is None
+    assert new_kernel_errors({}, {"dmesg_err": ["a"]}) is None
 
     assert resolve_phases("config,tree,build,package,vm", None, None) == (
         {"config", "tree", "build", "package", "vm"}, True)

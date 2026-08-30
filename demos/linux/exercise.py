@@ -6,6 +6,13 @@ and network bind. That covers a few dozen of the several thousand modules a
 distribution kernel ships. This stage runs after those probes, inside the
 badc kernel, and drives the code the boot never reaches:
 
+  storage  the root device round-tripped through its controller: a known
+           payload written and read back with direct I/O, and the raw device
+           read twice, with the kernel log window the I/O produced read as
+           part of the verdict
+  sockets  every protocol family the configuration builds: the socket
+           created, bound where a family binds without a peer, and driven
+           through a local transfer where one is reachable
   crypto   every crypto module loaded, the registration self-tests forced
            where the configuration keeps them, and a known-answer sweep that
            reaches each registered implementation through AF_ALG by its
@@ -20,7 +27,11 @@ badc kernel, and drives the code the boot never reaches:
   dmesg     one consolidated severity scan over the whole stage
 
 Steps are data: a name, the guest work, and the rule that reads the outcome.
-`--self-test` checks the parsers and the verdict rules and needs no guest.
+`GATE_STEPS` is the subset that runs on every boot: those cost seconds, and
+they are the only check on subsystems the boot probes never reach. `--exercise`
+widens the stage to the whole set, whose module sweep and filesystem matrix
+cost minutes. `--self-test` checks the parsers and the verdict rules and needs
+no guest.
 """
 
 from __future__ import annotations
@@ -39,17 +50,43 @@ DMESG_LOG = "/var/tmp/badc-exercise-dmesg.log"
 # Kernel-log patterns that report a fault. The boot probes compare the second
 # against the stock baseline; inside the stage both fail the step that
 # produced them, since the stage's own work is what put them there.
+#
+# The second group is driver-reported. An oops-shaped vocabulary alone let a
+# storage controller answering every command with a hardware error through as
+# a clean boot: the sense data is the fault report, and nothing above it
+# matches. The sense keys listed are the ones a working device does not
+# produce; `Not Ready`, `Illegal Request` and `Unit Attention` are the normal
+# answers of empty removable media and of probes for optional commands, so
+# they are left to the KERN_ERR baseline comparison instead.
 DMESG_SEVERE = re.compile(
     r"BUG:|Oops|Call [Tt]race|general protection|"
-    r"Unable to handle kernel|kernel NULL pointer|UBSAN:|KASAN:")
+    r"Unable to handle kernel|kernel NULL pointer|UBSAN:|KASAN:|"
+    r"Sense Key : (Hardware Error|Medium Error|Aborted Command|Data Protect)|"
+    r"Add\. Sense: Internal target failure|"
+    r"critical (target|medium|nexus) error|"
+    r"Buffer I/O error on dev|blk_update_request: I/O error|"
+    r"EXT4-fs error|BTRFS (error|critical)|XFS \(.*\): (C|c)orruption|"
+    r"F2FS-fs .*: (invalid|corrupted)|"
+    r"PCIe Bus Error|AER: .*(error|Error)")
 DMESG_WARN = re.compile(r"WARNING:")
+
+# Kernel-log line shapes that vary between boots: the timestamp, and the
+# addresses, PIDs and device indices inside the text. Collapsing them lets the
+# stock baseline and the kernel under test be compared line for line.
+LOG_STAMP = re.compile(r"^<?\d*>?\[\s*\d+\.\d+\]\s*")
+LOG_VARIABLE = re.compile(r"0x[0-9a-fA-F]+|\b\d+\b")
 
 # The crypto subsystem's own verdict lines: testmgr prints these when an
 # implementation disagrees with its test vectors.
 ALG_FAIL = re.compile(r"alg: .*(test failed|failed to|inconsistent)|"
                       r"self-test failed", re.I)
 
-DMESG_STAMP = re.compile(r"^\[\s*(\d+\.\d+)\]")
+# `dmesg -x` prefixes each line with `facility:level : ` before the
+# timestamp, which is how the stage reads severity rather than guessing it
+# from the text.
+DMESG_DECODE = r"(?:\w+\s*:\w+\s*: )?"
+DMESG_STAMP = re.compile(rf"^{DMESG_DECODE}\[\s*(\d+\.\d+)\]")
+DMESG_LEVEL_ERR = re.compile(r"^\w+\s*:(err|crit|alert|emerg)\s*:")
 
 # Taint bits 4 (machine check) and 7 (oops/die).
 TAINT_CRASH = 0x90
@@ -84,6 +121,23 @@ GUEST_TOOL_PACKAGES = {
 }
 
 
+# Protocol families a distribution kernel configures, the option that builds
+# each, and the modules that must be resident before the family answers.
+# `af_vsock.c` declares no `net-pf-40` alias, so nothing autoloads vsock: a
+# family reached only through autoload would go unprobed on every guest.
+SOCKET_FAMILIES = (
+    {"name": "AF_UNIX", "config": "CONFIG_UNIX", "modules": ()},
+    {"name": "AF_INET", "config": "CONFIG_INET", "modules": ()},
+    {"name": "AF_INET6", "config": "CONFIG_IPV6", "modules": ("ipv6",)},
+    {"name": "AF_NETLINK", "config": "CONFIG_NET", "modules": ()},
+    {"name": "AF_PACKET", "config": "CONFIG_PACKET", "modules": ("af_packet",)},
+    {"name": "AF_ALG", "config": "CONFIG_CRYPTO_USER_API_HASH",
+     "modules": ("af_alg", "algif_hash")},
+    {"name": "AF_VSOCK", "config": "CONFIG_VSOCKETS",
+     "modules": ("vsock", "vsock_loopback")},
+)
+
+
 # --- pure helpers -----------------------------------------------------------
 
 def dmesg_since(text: str, since: float) -> list[str]:
@@ -104,10 +158,25 @@ def dmesg_since(text: str, since: float) -> list[str]:
     return out if stamped else text.splitlines()
 
 
+def normalize_log(text: str) -> list[str]:
+    """Kernel-log lines with the timestamp and the numbers that differ between
+    boots collapsed, so two boots' error logs compare as sets of lines."""
+    out = []
+    for line in text.splitlines():
+        line = LOG_STAMP.sub("", line).strip()
+        if line:
+            out.append(LOG_VARIABLE.sub("#", line))
+    return out
+
+
 def dmesg_faults(lines) -> list[str]:
+    """A task's own log window needs no vocabulary: the same kernel logged
+    these seconds apart, so anything it recorded at KERN_ERR belongs to the
+    work that provoked it. The patterns stay for a log with no decoded
+    severity -- a follower without `dmesg -x`, or a ring-buffer read."""
     return [l for l in lines
-            if DMESG_SEVERE.search(l) or DMESG_WARN.search(l)
-            or ALG_FAIL.search(l)]
+            if DMESG_LEVEL_ERR.match(l) or DMESG_SEVERE.search(l)
+            or DMESG_WARN.search(l) or ALG_FAIL.search(l)]
 
 
 def parse_kv(text: str) -> dict[str, list[str]]:
@@ -206,6 +275,32 @@ def kat_verdict(rc: int, out: str) -> tuple[str, str, dict]:
     return PASS, "", summary
 
 
+def sock_verdict(rc: int, out: str) -> tuple[str, str, dict]:
+    """The socket-family probe's own per-family outcome. A family the
+    configuration builds and the kernel cannot create, bind or drive fails
+    the step and names the step and the errno; what the probe could not
+    reach is carried as `uncovered` rather than counted as covered."""
+    try:
+        doc = json.loads(out[out.index("{"):out.rindex("}") + 1])
+    except (ValueError, json.JSONDecodeError):
+        return (FAIL, f"unreadable probe output (exit {rc}): "
+                      f"{out.strip()[-200:]}", {})
+    fams = doc.get("families", [])
+    bad = [f"{f['name']} {f['detail']}" for f in fams if f["status"] == FAIL]
+    data = {"families_checked": len(fams),
+            "families_failed": len(bad),
+            "families_skipped": [f"{f['name']}: {f['detail']}"
+                                 for f in fams if f["status"] == SKIP],
+            "uncovered": [f"{f['name']}: {u}"
+                          for f in fams for u in f.get("uncovered", ())],
+            "steps": {f["name"]: f["steps"] for f in fams}}
+    if bad:
+        return FAIL, "; ".join(bad[:5]), data
+    if not fams:
+        return SKIP, "the probe checked no family", data
+    return PASS, "", data
+
+
 # --- filesystem matrix ------------------------------------------------------
 
 # One entry per filesystem instance. `config` is the kernel option the
@@ -300,7 +395,7 @@ class Ctx:
         self.have_cache: dict[str, bool] = {}
         self.config: dict[str, str] = {}
         self.spares: list[str] = []
-        self.follower = False
+        self.follower = self.decoded = False
         self.offset, self.since = 0, 0.0
         # The first kernel fault the stage provokes. After one, nothing the
         # kernel reports is attributable to the work that follows, and a
@@ -347,13 +442,22 @@ class Ctx:
         """A dmesg follower into a file: the sweep produces far more lines
         than the ring buffer holds, and a wrapped ring drops exactly the
         early fault the sweep is looking for."""
-        self.sh(f"rm -f {DMESG_LOG}; : > {DMESG_LOG}; "
-                f"nohup setsid dmesg -w > {DMESG_LOG} 2>/dev/null "
-                f"< /dev/null & sleep 2", timeout=120)
-        self.follower = self.sh(f"test -s {DMESG_LOG}",
-                                timeout=60).returncode == 0
+        for flags in ("-w -x", "-w"):
+            self.sh(f"rm -f {DMESG_LOG}; : > {DMESG_LOG}; "
+                    f"nohup setsid dmesg {flags} > {DMESG_LOG} 2>/dev/null "
+                    f"< /dev/null & sleep 2", timeout=120)
+            self.follower = self.sh(f"test -s {DMESG_LOG}",
+                                    timeout=60).returncode == 0
+            if self.follower:
+                self.decoded = flags.endswith("-x")
+                break
         if not self.follower:
             self.log("exercise: no dmesg follower; using ring-buffer reads")
+        elif not self.decoded:
+            # Without it a driver error nobody wrote a pattern for is a line
+            # like any other.
+            self.log("exercise: dmesg does not decode severity here; faults "
+                     "are read by pattern only")
 
 
 class Task:
@@ -574,10 +678,45 @@ def step_fs(ctx: Ctx) -> dict:
     return {"tasks": recs, "spares": ctx.spares}
 
 
+def step_storage(ctx: Ctx) -> dict:
+    """Round-trip the root device through its controller and read the kernel
+    log window the I/O produced."""
+    task = Task("storage-roundtrip", f"sh {GUEST_DIR}/storage.sh",
+                all_of(lambda o: fs_verdict(o.kv), clean_dmesg),
+                timeout=600,
+                env={"MB": ctx.args.exercise_storage_mb, "DIR": "/var/tmp"})
+    return {"tasks": [run_task(ctx, task)]}
+
+
+def step_sockets(ctx: Ctx) -> dict:
+    """Create, bind and drive every protocol family the configuration
+    builds. The boot probes reach a family only through what the guest's own
+    init happens to do, which makes the verdict depend on the image."""
+    want = [f for f in SOCKET_FAMILIES
+            if ctx.config.get(f["config"]) in ("y", "m")]
+    if not want:
+        return {"tasks": [{"name": "socket-families", "status": SKIP,
+                           "seconds": 0,
+                           "detail": "this kernel builds no probed family"}]}
+    mods = sorted({m for f in want for m in f["modules"]})
+    cmd = ("".join(f"modprobe -q -- {m} 2>/dev/null; " for m in mods)
+           + f"python3 {GUEST_DIR}/sockfam.py")
+    task = Task("socket-families", cmd,
+                all_of(lambda o: sock_verdict(o.rc, o.out), clean_dmesg),
+                needs=("python3",), timeout=300,
+                env={"FAMILIES": ",".join(f["name"] for f in want)})
+    return {"tasks": [run_task(ctx, task)],
+            "families": [f["name"] for f in want]}
+
+
 def step_dmesg(ctx: Ctx) -> dict:
     """One consolidated severity scan over everything the stage produced."""
     text = ctx.dmesg_text()
     lines = text.splitlines()
+    # The follower holds the boot log as well as the stage's, and the boot
+    # is what the packages probes judge against the stock baseline. Here the
+    # vocabulary decides, so a distribution's own boot-time error lines do
+    # not fail work that did not produce them.
     severe = [l for l in lines if DMESG_SEVERE.search(l)]
     alg = [l for l in lines if ALG_FAIL.search(l)]
     warn = [l for l in lines if DMESG_WARN.search(l)]
@@ -607,8 +746,16 @@ def step_dmesg(ctx: Ctx) -> dict:
     return {"tasks": [rec], "taint": taint}
 
 
-STEPS = {"crypto": step_crypto, "modules": step_modules, "kunit": step_kunit,
+STEPS = {"sockets": step_sockets, "storage": step_storage,
+         "crypto": step_crypto, "modules": step_modules, "kunit": step_kunit,
          "fs": step_fs, "dmesg": step_dmesg}
+
+# The steps that run on every boot, not only under `--exercise`. Measured on
+# the x86_64 box against a badc-built Fedora kernel: 20.1 s for the four
+# together. The two left out are the stage's cost: `modules` is 130 ms per
+# module over a tree of thousands, and `fs` is 420-590 s for the matrix plus
+# the guest tool packages it installs.
+GATE_STEPS = ("sockets", "storage", "crypto", "kunit", "dmesg")
 
 
 # --- stage ------------------------------------------------------------------
@@ -651,10 +798,21 @@ def find_spares(ctx: Ctx) -> list[str]:
     return out
 
 
-def run(args, target, arch, release, failures: list[str], log) -> dict:
+def selected_steps(args) -> str:
+    """The steps this run drives. `--exercise` asks for the whole set;
+    otherwise the gate set runs anyway, since the boot probes read the
+    guest's mood rather than the kernel's subsystems."""
+    if args.exercise:
+        return args.exercise_steps
+    return ",".join(GATE_STEPS) if args.exercise_gate else ""
+
+
+def run(args, target, arch, release, failures: list[str], log,
+        steps: str = "") -> dict:
     """Run the exercise stage in the booted badc kernel. Every step's verdict
     lands in the report; a failing step appends to `failures`."""
     ctx = Ctx(args, target, arch, release, log)
+    names = [n for n in (steps or args.exercise_steps).split(",") if n]
     started = time.time()
     result: dict = {"steps": []}
     cfg = target.ssh(f"cat /boot/config-{release} 2>/dev/null || "
@@ -670,15 +828,18 @@ def run(args, target, arch, release, failures: list[str], log) -> dict:
     ctx.start_follower()
     target.ssh(f"mkdir -p {GUEST_DIR}", check=True)
     target.scp(sorted((LINUX_DIR / "guest").glob("*")), GUEST_DIR + "/")
-    result["tools_installed"] = provision(ctx)
-    ctx.spares = find_spares(ctx)
-    log(f"exercise: spare disks {ctx.spares or 'none'}")
-    # 16 MiB of source data in tmpfs: every verified digest is taken from it,
-    # never from the filesystem under test.
-    ctx.sh("mkdir -p /dev/shm && dd if=/dev/urandom of=/dev/shm/badc-seed "
-           "bs=1M count=16 2>/dev/null", timeout=300)
+    # Guest tool packages, spare disks and the seed data exist for the
+    # filesystem matrix; a run without it leaves the guest as it found it.
+    if "fs" in names:
+        result["tools_installed"] = provision(ctx)
+        ctx.spares = find_spares(ctx)
+        log(f"exercise: spare disks {ctx.spares or 'none'}")
+        # 16 MiB of source data in tmpfs: every verified digest is taken from
+        # it, never from the filesystem under test.
+        ctx.sh("mkdir -p /dev/shm && dd if=/dev/urandom of=/dev/shm/badc-seed "
+               "bs=1M count=16 2>/dev/null", timeout=300)
 
-    for name in args.exercise_steps.split(","):
+    for name in names:
         if name not in STEPS:
             failures.append(f"exercise: unknown step {name!r}")
             continue
@@ -706,9 +867,14 @@ def worst(statuses) -> str:
 
 def add_arguments(ap) -> None:
     ap.add_argument("--exercise", action="store_true",
-                    help="after the boot probes, exercise the badc kernel: "
-                         "crypto known-answer tests, a module load sweep, "
-                         "kunit, and a filesystem and block-stack stress")
+                    help="widen the exercise stage from the gate set to the "
+                         "whole one: the module load sweep and the "
+                         "filesystem and block-stack stress as well")
+    ap.add_argument("--no-exercise-gate", dest="exercise_gate",
+                    action="store_false",
+                    help=f"skip the always-on part of the stage "
+                         f"({','.join(GATE_STEPS)}); a boot that skips it has "
+                         f"no cover on the subsystems the probes never reach")
     ap.add_argument("--exercise-steps", default=",".join(STEPS),
                     help=f"comma-separated subset of {','.join(STEPS)}")
     ap.add_argument("--exercise-timeout", type=int, default=1800,
@@ -716,6 +882,8 @@ def add_arguments(ap) -> None:
     ap.add_argument("--exercise-modules", type=int, default=0,
                     help="modules to load in the sweep, evenly strided over "
                          "the module tree (default: every built module)")
+    ap.add_argument("--exercise-storage-mb", type=int, default=64,
+                    help="payload size for the root-device round trip")
     ap.add_argument("--exercise-fs", default="",
                     help="comma-separated filesystem instance labels "
                          "(default: the whole matrix)")
@@ -733,13 +901,31 @@ def add_arguments(ap) -> None:
 
 # --- self-test --------------------------------------------------------------
 
+class _StepArgs:
+    """The three fields `selected_steps` reads, for the self-test."""
+
+    def __init__(self, exercise: bool, gate: bool):
+        self.exercise, self.exercise_gate = exercise, gate
+        self.exercise_steps = "fs"
+
+
+def guest_sockfam():
+    """The guest-side socket-family probe, loaded for its family table."""
+    return _load_guest("sockfam.py")
+
+
 def guest_kat():
-    """The guest-side known-answer test, loaded for its parsers. It uses the
-    standard library only, so it runs on a host with no AF_ALG; exec'd rather
-    than imported so the check leaves no bytecode behind."""
+    """The guest-side known-answer test, loaded for its parsers."""
+    return _load_guest("afalg_kat.py")
+
+
+def _load_guest(name: str):
+    """A guest script loaded for its pure parts. They use the standard
+    library only, so they import on a host with no AF_ALG; exec'd rather than
+    imported so the check leaves no bytecode behind."""
     import types
-    ns: dict = {"__name__": "afalg_kat"}
-    exec((LINUX_DIR / "guest" / "afalg_kat.py").read_text(), ns)
+    ns: dict = {"__name__": name.removesuffix(".py")}
+    exec((LINUX_DIR / "guest" / name).read_text(), ns)
     return types.SimpleNamespace(**ns)
 
 
@@ -753,6 +939,24 @@ def self_test() -> None:
     assert dmesg_since("no stamps here\n", 5.0) == ["no stamps here"]
     faults = dmesg_faults(text.splitlines())
     assert len(faults) == 2, faults
+
+    # Driver-reported faults: the sense keys a working device does not
+    # produce fail, the ones empty removable media produce do not.
+    for line in ("sd 0:0:0:0: [sda] Sense Key : Hardware Error [current]",
+                 "sd 0:0:0:0: [sda] Add. Sense: Internal target failure",
+                 "EXT4-fs error (device sda1): ext4_find_entry:1683",
+                 "blk_update_request: I/O error, dev sda, sector 8",
+                 "pcieport 0000:00:1c.0: AER: Corrected error received"):
+        assert DMESG_SEVERE.search(line), line
+    for line in ("sr 1:0:0:0: [sr0] Sense Key : Not Ready [current]",
+                 "sd 0:0:0:0: [sda] Unit Not Ready",
+                 "megaraid_sas 0000:00:03.0: Init cmd success"):
+        assert not DMESG_SEVERE.search(line), line
+
+    assert normalize_log("[   12.500000] sd 0:0:0:0: [sda] failed\n\n") == [
+        "sd #:#:#:#: [sda] failed"]
+    assert normalize_log("<3>[    1.0] at 0xdeadbeef") == ["at #"]
+    assert normalize_log("plain line") == ["plain line"]
 
     kv = parse_kv("status=fail\nreason=digest-mismatch\nhard_mod=a rc=1\n"
                   "hard_mod=b rc=2\nnot a pair\n")
@@ -800,6 +1004,34 @@ def self_test() -> None:
     assert st == FAIL and "sha256-avx2" in detail, detail
     assert kat_verdict(2, "nonsense")[0] == FAIL
     assert kat_verdict(0, '{"checked_count": 0, "mismatch": []}')[0] == SKIP
+
+    ok = ('{"families": [{"name": "AF_VSOCK", "status": "pass", "detail": "",'
+          ' "steps": {"create": 0, "bind": 0}, "uncovered": ["no peer"]}]}')
+    st, detail, data = sock_verdict(0, ok)
+    assert st == PASS and data["families_checked"] == 1, (st, data)
+    assert data["uncovered"] == ["AF_VSOCK: no peer"], data
+    bad = ok.replace('"pass", "detail": ""', '"fail", "detail": "bind: EINVAL"')
+    st, detail, data = sock_verdict(1, bad)
+    assert st == FAIL and "bind: EINVAL" in detail, (st, detail)
+    assert data["families_failed"] == 1, data
+    skipped = ok.replace('"pass", "detail": ""',
+                         '"skip", "detail": "needs root"')
+    assert sock_verdict(0, skipped)[0] == PASS
+    assert sock_verdict(2, 'FAMILIES is empty')[0] == FAIL
+    assert sock_verdict(0, '{"families": []}')[0] == SKIP
+
+    names = [f["name"] for f in SOCKET_FAMILIES]
+    assert len(names) == len(set(names)), "duplicate family"
+    probes = guest_sockfam().PROBES
+    for f in SOCKET_FAMILIES:
+        assert f["config"].startswith("CONFIG_"), f["name"]
+        assert f["name"] in probes, f["name"]
+
+    assert set(GATE_STEPS) <= set(STEPS), GATE_STEPS
+    assert selected_steps(_StepArgs(False, True)) == ",".join(GATE_STEPS)
+    assert selected_steps(_StepArgs(False, False)) == ""
+    assert selected_steps(_StepArgs(True, True)) == "fs"
+    assert selected_steps(_StepArgs(True, False)) == "fs"
 
     assert worst([PASS, SKIP, FAIL]) == FAIL
     assert worst([SKIP, PASS]) == PASS

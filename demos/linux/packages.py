@@ -2495,6 +2495,12 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
         result["stock"] = base
         log(f"stock: uname={base['uname']} systemd={base['systemd_state']} "
             f"modules={len(base['modules'])}")
+        if args.vm_guest_script:
+            # The same script on the stock kernel, so the experiment carries
+            # its own control: same image, same machine, same bus, and the
+            # only difference is which kernel is running. A stock failure is
+            # recorded, not fatal -- the control is evidence, not a verdict.
+            result["guest_script_stock"] = run_guest_script(args, vm, [])
         result["cores_stock"] = sweep_cores(args, vm, "stock", failures)
         if args.selfhost:
             result["selfhost"] = {}

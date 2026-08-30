@@ -8,12 +8,15 @@ machine, reached over a real RS-232 line, that runs the same packages.
 
 | | |
 |---|---|
-| Model | GPD MicroPC, BIOS 4.15, `192.168.1.39` |
+| Model | GPD MicroPC, BIOS 4.15 |
 | CPU | Celeron N4100 (Gemini Lake, Goldmont Plus), 4 cores |
 | Firmware | UEFI, Secure Boot **disabled** |
 | Storage | SATA SSD (`BIWIN SSD`, 119 GB) -- no NVMe |
 | Serial | 16550A at I/O `0x2f8`, IRQ 3, exposed as the DE-9 port |
 | Distribution | Fedora 44, kernel 7.1.10-200.fc44 |
+
+The box is reached over ssh with key authentication and password-less
+sudo. Its address is site-specific and deliberately not recorded here.
 
 Three of those decide what this box can and cannot test.
 

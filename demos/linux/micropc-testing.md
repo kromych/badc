@@ -182,9 +182,19 @@ Access denied`. The lid settings matter separately, because the machine
 is a clamshell that will sit closed on a bench; without them, closing it
 ends the run.
 
-Switching the box to `multi-user.target` would remove the desktop's power
-policy wholesale and is worth considering for a dedicated target, but the
-masks above hold regardless of what runs on top.
+### No desktop
+
+```bash
+systemctl set-default multi-user.target
+systemctl isolate multi-user.target        # applies without a reboot
+```
+
+The greeter is what asked to suspend, and a desktop session contributes
+nothing to a kernel boot test while adding daemons, a compositor and a
+power policy that can each act on the machine mid-run. Removing it also
+returns about a gigabyte: the box now sits at 745 MB of 7.7 GB. The masks
+above still hold whatever runs on top; this simply removes the layer that
+kept asking.
 
 ## Booting a badc kernel
 
@@ -238,3 +248,48 @@ usually need a kext.
   run the probes and the exercise stage -- applies to this box, with the
   console read from the Mac's USB adapter instead of a file qemu writes.
   That turns a real-hardware boot from a manual session into a gate.
+
+## Undoing all of it
+
+Every change above is reversible, and none of it touches the distribution
+kernel or the bootloader binaries. `/etc/default/grub` was backed up
+before the first edit.
+
+```bash
+# 1. Boot arguments and the GRUB console
+sudo cp /etc/default/grub.badc-backup /etc/default/grub
+sudo grubby --update-kernel=ALL --remove-args=\
+"console=tty0 console=ttyS1,115200n8 earlycon=uart8250,io,0x2f8,115200n8 panic=30"
+sudo grubby --update-kernel=ALL --args="rhgb quiet"
+sudo rm -f /etc/kernel/cmdline          # regenerated on the next kernel install
+sudo grub2-mkconfig -o /boot/grub2/grub.cfg
+
+# 2. The serial root shell
+sudo systemctl disable --now serial-getty@ttyS1.service
+sudo rm -rf /etc/systemd/system/serial-getty@ttyS1.service.d
+
+# 3. The watchdog
+sudo rm -f /etc/modules-load.d/watchdog.conf /etc/systemd/system.conf.d/watchdog.conf
+sudo systemctl daemon-reexec
+
+# 4. Sleep
+sudo systemctl unmask sleep.target suspend.target hibernate.target \
+  hybrid-sleep.target suspend-then-hibernate.target
+sudo rm -f /etc/systemd/logind.conf.d/no-sleep.conf
+sudo systemctl restart systemd-logind
+for k in sleep-inactive-ac-type sleep-inactive-battery-type; do
+  sudo -u gdm dbus-run-session -- gsettings reset \
+    org.gnome.settings-daemon.plugins.power $k
+done
+sudo -u gdm dbus-run-session -- gsettings reset org.gnome.desktop.session idle-delay
+
+# 5. The desktop
+sudo systemctl set-default graphical.target
+sudo systemctl isolate graphical.target
+```
+
+One caveat on reversing the boot arguments: `grubby --remove-args` edits
+the BLS entries that exist at that moment, so a kernel installed while
+the serial configuration was in place keeps the arguments until it is
+removed or its entry is edited too. `grubby --info=ALL` shows what each
+entry currently carries.

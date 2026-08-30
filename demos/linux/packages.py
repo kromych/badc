@@ -2476,7 +2476,14 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
                     "vm_cpus": args.vm_cpus, "vm_mem_mb": args.vm_mem,
                     "disk_bus": args.vm_disk_bus, "nic": args.vm_nic,
                     "data_bus": args.vm_data_bus, "firmware": vm.firmware,
-                    "devices": vm.devices}
+                    "devices": vm.devices,
+                    # Which bytes produced this verdict. A vm-only run takes
+                    # the package from wherever --package points, and a later
+                    # build phase in the same workdir replaces it; without
+                    # the digest here a result cannot be traced back to an
+                    # artefact, let alone re-run against it.
+                    "installed": [{"name": p.name, "sha256": sha256_of(p)}
+                                  for p in packages]}
     try:
         boot_id = vm.wait_ssh(args.vm_timeout)
         log("stock system up; capturing baseline")

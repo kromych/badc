@@ -204,7 +204,7 @@ and fix it before rebooting.
 3. Select the badc entry for one boot with `grub2-reboot`, then reboot.
 4. Watch the collector. Expect the banner to name badc as both compiler and
    linker:
-   `Linux version 7.1.10 ... (badc 0.4.0 (gcc-compatible, GNU C 4.3.0), GNU ld (badc 0.4.0) ...)`
+   `Linux version 7.1.10 ... (badc 0.4.1 (gcc-compatible, GNU C 4.3.0), GNU ld (badc 0.4.1) ...)`
 5. If ssh comes back, run the same checks the qemu lane runs — `uname -r`,
    `/proc/sys/kernel/tainted`, `systemctl is-system-running`, `lsmod | wc -l`,
    the root disk driver chain, and `demos/linux/exercise.py` — so the hardware

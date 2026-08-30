@@ -68,7 +68,7 @@ The preprocessor predefines a standard set, double-underscore wrapped in the
 gcc / clang / msvc convention so it does not collide with user identifiers:
 
 ```c
-    __BADC_VERSION__   <crate version>   // string literal from Cargo.toml, e.g. "0.4.0"
+    __BADC_VERSION__   <crate version>   // string literal from Cargo.toml, e.g. "0.4.1"
     __BADC_TARGET__    "macos-aarch64"   // canonical target id (string literal)
     __aarch64__ / __arm64__              // AArch64 targets
     __x86_64__ / __amd64__               // x86_64 targets

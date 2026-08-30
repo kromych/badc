@@ -80,13 +80,16 @@ and it is several times defconfig's:
 |---|---|---|---|---|
 | rpm, x86_64 | Fedora 44 | 21701 | 141 | 11535 |
 | rpm, aarch64 | Fedora 44 | 23446 | 103 | 13076 |
-| deb, x86_64 | Ubuntu 26.04 | 26223 | 124 | -- |
-| deb, aarch64 | Ubuntu 26.04 | 30552 | 93 | -- |
+| deb, x86_64 | Ubuntu 26.04 | 26227 | 129 | 15677 |
+| deb, aarch64 | Ubuntu 26.04 | 30555 | 94 | 19136 |
 
 Every count is badc's, with no fallback to another compiler, assembler or
-linker. The two Fedora packages are complete; the Ubuntu configurations set
-`CONFIG_BUILTIN_MODULE_RANGES`, whose `-Map` output the relocatable link path
-does not yet write, so their link counts are not final.
+linker, and every one is measured with the fallback lists empty -- nothing was
+permitted to fall back, so these are results rather than allowances. All four
+packages are complete. The Ubuntu configurations set
+`CONFIG_BUILTIN_MODULE_RANGES`, which reads the map a relocatable link writes;
+that path wrote none until the linker was taught to, which is what had held
+those two lanes short of a package.
 
 **Real hardware.** `packages.py --phases hw` runs the same install, one-shot
 selection, boot, probes and exercise stage on a physical machine instead of a
@@ -100,11 +103,38 @@ boot default and its watchdog, so the run refuses to start unless that default
 is a distribution kernel, selects the kernel under test for exactly one boot,
 and after a boot that never answers reports the stage the console reached and
 then waits for the machine to fall back. It is not in CI: it needs a bench
-machine with a serial line to the runner.
+machine.
+
+Two bench machines exist and they differ in what a failure leaves behind. One
+has a physical serial port, so a kernel that dies before userspace is still
+readable and `earlycon` covers the window from firmware handoff onward; that
+lane is written up in [../demos/linux/micropc-testing.md](../demos/linux/micropc-testing.md).
+The other has neither a serial port nor a display, so nothing is observable
+until the network driver probes: there the console is netconsole over UDP,
+the post-mortem is `efi_pstore` read back on the next boot, and the early
+window is simply dark -- recovery rests entirely on the one-shot boot
+selection and a bounded `panic=`. That lane, and the four rollback layers it
+needs, are in
+[../demos/linux/xps8930-testing.md](../demos/linux/xps8930-testing.md).
 
 **Exercised.** Booting reaches a few dozen of the several thousand modules a
-distribution kernel ships. `packages.py --exercise` runs a stage inside the
-booted badc kernel that drives the rest. Every crypto implementation the
+distribution kernel ships, and reaching userspace says little about whether
+the kernel computes correct answers: a cipher that returns wrong ciphertext
+leaves taint at 0, logs nothing, and lets systemd come up. So a stage inside
+the booted badc kernel drives the rest, and the cheap part of it runs on
+**every** boot rather than on request -- socket families, a storage
+write-and-read-back, the crypto known-answer sweep, the kunit suites, and a
+dmesg scan that fails on anything a driver reports at KERN_ERR or worse. That
+set costs about ten seconds against a phase that installs a package and boots
+twice. `--exercise` adds the two expensive steps, module-by-module loading and
+the filesystem matrix; `--no-exercise-gate` opts out of the default set.
+
+The socket-family step is there because of what it caught: a kernel whose
+`bind(AF_VSOCK, ...)` always failed passed every passive check on a
+distribution whose init happens not to use that family. `socket()` succeeding
+is not the test -- the step binds, listens and reads back.
+
+Every crypto implementation the
 kernel registers is checked through AF_ALG by its driver name -- so an
 arch-optimized path is a subject on its own -- against hashlib where the
 standard library implements the algorithm and against the generic

@@ -9899,7 +9899,16 @@ fn ms_abi_selects_the_microsoft_x64_convention() {
             optimize: true,
             ..NativeOptions::default()
         };
-        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        // Which register the convention names is the question; whether the
+        // value is moved there or reloaded from a spill is not. The
+        // codegen-test pressure caps decide the latter, so the emission is
+        // taken over the whole register file.
+        let bytes = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(
+            usize::MAX,
+            usize::MAX,
+            || emit_native_with_options(&program, target, opts),
+        )
+        .expect("emit");
         let obj = crate::c5::linker::relocatable::parse_et_rel(&bytes, "conv.o").expect("parse");
         obj.sections
             .into_iter()
@@ -9997,8 +10006,12 @@ fn ms_abi_selects_the_microsoft_x64_convention() {
 /// are on the target's convention unless they say otherwise.
 #[test]
 fn an_ms_abi_definition_preserves_the_registers_that_convention_reserves() {
-    use crate::c5::codegen::ssa::reg_alloc::allocate;
+    use crate::c5::codegen::ssa::reg_alloc::{self, allocate};
     use crate::{CompileOptions, Compiler, Target};
+    // Both premises here are that the allocation reaches past the
+    // callee-saved bank into rsi/rdi. The codegen-test pressure caps
+    // truncate the bank, so it spills instead of reaching; the
+    // convention this asks about is a property of the whole file.
     // Ten live values summed pairwise at the end: more than the five
     // System V callee-saved registers, so the allocator reaches into the
     // caller-saved bank, which is where rsi and rdi are.
@@ -10023,7 +10036,9 @@ long f(long a, long b, long c, long d, long e, long g, long h, long i, long j, l
         )
         .expect("ssa");
         let f = funcs.iter().find(|f| f.name == "f").expect("f");
-        let mut regs = allocate(f, Target::LinuxX64, crate::FixedRegs::NONE).gpr_used;
+        let mut regs = reg_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+            allocate(f, Target::LinuxX64, crate::FixedRegs::NONE).gpr_used
+        });
         regs.sort_unstable();
         regs
     };
@@ -10068,7 +10083,9 @@ long g(long a, long b) { return sink(a, b); }\n";
         )
         .expect("ssa");
         let f = funcs.iter().find(|f| f.name == "g").expect("g");
-        let mut regs = allocate(f, Target::LinuxX64, crate::FixedRegs::NONE).gpr_used;
+        let mut regs = reg_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+            allocate(f, Target::LinuxX64, crate::FixedRegs::NONE).gpr_used
+        });
         regs.sort_unstable();
         regs
     };

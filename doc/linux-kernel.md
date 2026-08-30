@@ -62,10 +62,13 @@ The system disk and the NIC ride on the storage controller and NIC model the
 run selects -- the paravirtual pair by default, or an emulated NVMe, AHCI or
 SCSI controller with an e1000e / rtl8139-class NIC, whose drivers the booted
 kernel then has to bring up -- and the run asserts the booted kernel drives
-the root disk and the NIC with those models' drivers. `/proc/version` names
-badc. The run also checks an untainted kernel, a clean dmesg, and
-disk/network I/O, against a baseline taken from the image's stock kernel in the
-same userspace.
+the root disk and the NIC with those models' drivers. The guests boot under
+EFI firmware -- OVMF on x86_64 q35, AAVMF on aarch64 virt -- which is what
+the machines these packages target boot with; `--vm-firmware` selects it and
+falls back to SeaBIOS on x86_64 where no firmware is installed.
+`/proc/version` names badc. The run also checks an untainted kernel, a clean
+dmesg, and disk/network I/O, against a baseline taken from the image's stock
+kernel in the same userspace.
 
 **Exercised.** Booting reaches a few dozen of the several thousand modules a
 distribution kernel ships. `packages.py --exercise` runs a stage inside the

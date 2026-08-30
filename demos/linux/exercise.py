@@ -59,11 +59,10 @@ TAINT_CRASH = 0x90
 SPARE_SIZE = "8G"
 
 # The sweep holds every loaded module resident between prunes; the boot
-# default leaves too little for that plus the filesystem workloads. The
-# ceiling is SeaBIOS: it boots an nvme disk only while the guest stays
-# under the 4 GiB memory split, so a larger guest would restrict this
-# stage to the paravirtual buses. See SEABIOS_NVME_MEM_LIMIT.
-EXERCISE_VM_MEM = 3072
+# default leaves too little for that plus the filesystem workloads. EFI
+# boots every disk bus at this size; the SeaBIOS fallback does not boot an
+# nvme disk here, which is what SEABIOS_NVME_MEM_LIMIT reports up front.
+EXERCISE_VM_MEM = 4096
 
 PASS, SKIP, FAIL = "pass", "skip", "fail"
 

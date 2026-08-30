@@ -719,8 +719,30 @@ the driver chain under the root disk's `/sys/class/block/<dev>/device` and the
 NIC's driver link, and fails unless the selected models' drivers are the ones
 bound; a kernel that fell back to another path, or whose initramfs found no
 driver, is reported rather than passed. The system disk carries
-`bootindex=0` on the emulated buses, because SeaBIOS otherwise probes the
-controllers in its own order and can try the seed image first.
+`bootindex=0` on the emulated buses, because the firmware otherwise probes
+the controllers in its own order and can try the seed image first.
+
+The guest boots under EFI, as the machines these packages are meant for do.
+`--vm-firmware auto` (the default) takes the first firmware installed on the
+host -- OVMF under `/usr/share/edk2/ovmf` or `/usr/share/OVMF` on x86_64,
+AAVMF or `QEMU_EFI.fd` on aarch64 -- and falls back to SeaBIOS on x86_64,
+with the reason logged, when none is found; `uefi` and `bios` state the
+choice and fail when the host cannot meet it. The code image is mapped
+read-only and the variable store is a per-run copy, which the firmware
+writes. An x86_64 EFI guest runs on `q35`, the machine OVMF supports; the
+SeaBIOS fallback keeps qemu's `i440fx` default and cannot boot an `nvme`
+system disk once the guest has 3584 MiB or more -- at qemu's 4 GiB memory
+split that firmware writes nothing to the console at all -- so a run asking
+for both is refused up front instead of timing out on a silent machine.
+A boot image that faults leaves EDK2's exception dump on the console and the
+machine stops there; the run reports the dump when it appears rather than
+waiting out the ssh timeout.
+
+TODO: the badc-built x86_64 bzImage faults in its own EFI stub when the boot
+loader starts it. EDK2's dump identifies the faulting image as that bzImage,
+by the PE entry point it reports. The same kernel boots through the BIOS
+path and a gcc-built kernel boots the same EFI chain, so under UEFI the badc
+kernel reaches userspace only once that is fixed.
 
 ```sh
 python3 demos/linux/packages.py --arch x86_64 \

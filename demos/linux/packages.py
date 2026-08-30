@@ -234,14 +234,28 @@ NICS = {
     "igb": "igb",
 }
 
-# aarch64 EFI firmware, first match wins: (code, vars) pflash pair, or a
-# single -bios image.
-AARCH64_FIRMWARE = [
-    ("/usr/share/AAVMF/AAVMF_CODE.fd", "/usr/share/AAVMF/AAVMF_VARS.fd"),
-    ("/usr/share/edk2/aarch64/QEMU_EFI.fd", None),
-    ("/opt/homebrew/share/qemu/edk2-aarch64-code.fd",
-     "/opt/homebrew/share/qemu/edk2-arm-vars.fd"),
-]
+# EFI firmware per architecture, first match wins: a (code, vars) pflash
+# pair, or a single -bios image where the entry names no variable store.
+EFI_FIRMWARE = {
+    "aarch64": [
+        ("/usr/share/AAVMF/AAVMF_CODE.fd", "/usr/share/AAVMF/AAVMF_VARS.fd"),
+        ("/usr/share/edk2/aarch64/QEMU_EFI.fd", None),
+        ("/opt/homebrew/share/qemu/edk2-aarch64-code.fd",
+         "/opt/homebrew/share/qemu/edk2-arm-vars.fd"),
+    ],
+    "x86_64": [
+        ("/usr/share/edk2/ovmf/OVMF_CODE.fd",
+         "/usr/share/edk2/ovmf/OVMF_VARS.fd"),
+        ("/usr/share/OVMF/OVMF_CODE_4M.fd", "/usr/share/OVMF/OVMF_VARS_4M.fd"),
+        ("/usr/share/OVMF/OVMF_CODE.fd", "/usr/share/OVMF/OVMF_VARS.fd"),
+        ("/usr/share/edk2/x64/OVMF_CODE.4m.fd",
+         "/usr/share/edk2/x64/OVMF_VARS.4m.fd"),
+        ("/usr/share/edk2/ovmf/OVMF_CODE_4M.qcow2",
+         "/usr/share/edk2/ovmf/OVMF_VARS_4M.qcow2"),
+        ("/opt/homebrew/share/qemu/edk2-x86_64-code.fd",
+         "/opt/homebrew/share/qemu/edk2-i386-vars.fd"),
+    ],
+}
 
 DEB_TOOL_RPMS = ["dpkg", "dpkg-dev", "dpkg-perl", "debhelper", "libmd"]
 
@@ -1002,8 +1016,75 @@ FIRMWARE_CONSOLE_GRACE = 90
 # places the rest above it. SeaBIOS boots an nvme disk only while the
 # guest stays under that split; at or above it the machine starts and
 # the firmware writes nothing at all. virtio and ahci are unaffected,
-# as is a direct `-kernel` boot at any size.
+# as is a direct `-kernel` boot at any size. EFI has no such limit, which
+# is why it is the default where firmware is installed.
 SEABIOS_NVME_MEM_LIMIT = 3584
+
+
+def find_firmware(arch: str, exists=None) -> tuple[str, str | None] | None:
+    """The first installed EFI firmware entry for `arch`: (code, vars), with
+    vars None when no variable store accompanies the image."""
+    exists = exists or (lambda p: Path(p).is_file())
+    for code, vars_ in EFI_FIRMWARE.get(arch, ()):
+        if exists(code):
+            return code, (vars_ if vars_ and exists(vars_) else None)
+    return None
+
+
+def resolve_firmware(arch: str, choice: str, found) -> tuple[str, str]:
+    """The firmware `--vm-firmware choice` resolves to -- "uefi" or "bios" --
+    and the reason to log when the run did not get what it asked for.
+    Raises ValueError when the choice cannot be honoured on this host."""
+    efi_only = arch != "x86_64"
+    if choice == "bios":
+        if efi_only:
+            raise ValueError(f"--vm-firmware bios: {arch} guests have no "
+                             f"non-EFI firmware")
+        return "bios", ""
+    if found:
+        return "uefi", ""
+    pkg = ("edk2-aarch64 / qemu-efi-aarch64" if efi_only
+           else "edk2-ovmf / ovmf")
+    if choice == "uefi" or efi_only:
+        raise ValueError(f"no {arch} EFI firmware found: install {pkg}"
+                         + ("" if efi_only else ", or --vm-firmware bios"))
+    return "bios", f"no EFI firmware found ({pkg} installs it): booting SeaBIOS"
+
+
+def pflash_format(path: str) -> str:
+    return "qcow2" if path.endswith(".qcow2") else "raw"
+
+
+def firmware_args(found: tuple[str, str | None], workdir: Path) -> list[str]:
+    """qemu arguments for `found`: the read-only code image plus a per-run
+    copy of the variable store, which the firmware writes."""
+    code, vars_ = found
+    if vars_ is None:
+        return ["-bios", code]
+    copy = workdir / ("efivars" + Path(vars_).suffix)
+    shutil.copyfile(vars_, copy)
+    return ["-drive", f"if=pflash,format={pflash_format(code)},unit=0,"
+                      f"readonly=on,file={code}",
+            "-drive", f"if=pflash,format={pflash_format(vars_)},unit=1,"
+                      f"file={copy}"]
+
+
+def seabios_nvme_blocked(firmware: str, bus: str, mem: int) -> bool:
+    """True for the one machine SeaBIOS cannot boot: an nvme system disk at
+    or above the memory split."""
+    return firmware == "bios" and bus == "nvme" and mem >= SEABIOS_NVME_MEM_LIMIT
+
+
+EFI_EXCEPTION = re.compile(
+    r"!!!! (?:X64|IA32) Exception Type[^\r\n]*|"
+    r"!!!! Synchronous Exception[^\r\n]*")
+
+
+def efi_fault(console: str) -> str | None:
+    """The first line of EDK2's exception dump, which it prints when a UEFI
+    image faults. The machine stops there rather than resetting."""
+    m = EFI_EXCEPTION.search(console)
+    return m.group(0).strip() if m else None
 
 
 class VM:
@@ -1013,6 +1094,20 @@ class VM:
         # `host` passes the machine's own features through; under tcg there is
         # no host to pass through, so the model is the emulator's maximum.
         self.cpu = args.vm_cpu or ("host" if accel in ("kvm", "hvf") else "max")
+        found = find_firmware(args.arch)
+        try:
+            self.firmware, reason = resolve_firmware(
+                args.arch, args.vm_firmware, found)
+        except ValueError as e:
+            die(str(e))
+        if reason:
+            log(reason)
+        self.efi = found if self.firmware == "uefi" else None
+        if seabios_nvme_blocked(self.firmware, args.vm_disk_bus, args.vm_mem):
+            die(f"SeaBIOS cannot boot an nvme disk with {args.vm_mem} MiB of "
+                f"guest memory ({SEABIOS_NVME_MEM_LIMIT} MiB and up): install "
+                f"EFI firmware, or pass --vm-disk-bus virtio, or lower "
+                f"--vm-mem")
         self.console = args.workdir / f"console-{args.arch}.log"
         self.pidfile = args.workdir / f"vm-{args.arch}.pid"
         self.key = args.workdir / "vm-key"
@@ -1023,21 +1118,13 @@ class VM:
         accel, cpu = self.accel, self.cpu
         if args.arch == "aarch64":
             machine = ["-M", f"virt,accel={accel}"]
-            for code, vars_ in AARCH64_FIRMWARE:
-                if Path(code).is_file():
-                    if vars_ and Path(vars_).is_file():
-                        vc = args.workdir / "efivars.fd"
-                        shutil.copyfile(vars_, vc)
-                        machine += ["-drive",
-                                    f"if=pflash,format=raw,readonly=on,file={code}",
-                                    "-drive", f"if=pflash,format=raw,file={vc}"]
-                    else:
-                        machine += ["-bios", code]
-                    break
-            else:
-                die("no aarch64 EFI firmware found")
+        elif self.firmware == "uefi":
+            # OVMF runs on q35, not on the i440fx qemu defaults to.
+            machine = ["-machine", f"q35,accel={accel}"]
         else:
             machine = ["-machine", f"accel={accel}"]
+        if self.efi:
+            machine += firmware_args(self.efi, args.workdir)
         cmd = [arch["qemu"], *machine, "-cpu", cpu, "-smp", str(args.vm_cpus),
                "-m", str(args.vm_mem), "-display", "none", "-daemonize",
                "-pidfile", str(self.pidfile),
@@ -1125,6 +1212,16 @@ class VM:
         """Bytes the machine has written to its console so far."""
         return self.console.stat().st_size if self.console.exists() else 0
 
+    def console_fault(self) -> str | None:
+        """The firmware exception the machine stopped at, if any."""
+        try:
+            size = self.console.stat().st_size
+            with open(self.console, "rb") as f:
+                f.seek(max(0, size - 4096))
+                return efi_fault(f.read().decode("utf-8", "replace"))
+        except OSError:
+            return None
+
     def wait_ssh(self, timeout: int, expect_boot_id: str | None = None) -> str:
         """Wait until ssh answers; with expect_boot_id, until a new boot."""
         deadline = time.time() + timeout
@@ -1137,15 +1234,20 @@ class VM:
             if self.pid() is None:
                 raise VmError(f"qemu exited while waiting for ssh "
                               f"(console: {self.console})")
+            fault = self.console_fault()
+            if fault:
+                raise VmError(f"the guest faulted in the firmware or in a "
+                              f"boot image it started: {fault} "
+                              f"(console: {self.console})")
             if silent_by and time.time() > silent_by:
                 if self.console_bytes() == 0:
                     raise VmError(
                         f"no console output {FIRMWARE_CONSOLE_GRACE}s after "
-                        f"the machine started: the firmware never ran. On "
-                        f"x86 with SeaBIOS that is what an nvme disk bus "
-                        f"does once the guest has {SEABIOS_NVME_MEM_LIMIT} "
-                        f"MiB or more (vm_mem={self.args.vm_mem}, bus="
-                        f"{self.args.vm_disk_bus}) (console: {self.console})")
+                        f"the machine started: the firmware never ran "
+                        f"(firmware={self.firmware}, "
+                        f"bus={self.args.vm_disk_bus}, "
+                        f"vm_mem={self.args.vm_mem}) "
+                        f"(console: {self.console})")
                 silent_by = 0
             r = self.ssh("cat /proc/sys/kernel/random/boot_id", timeout=20)
             bid = r.stdout.strip()
@@ -1768,7 +1870,8 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
     result: dict = {"image": image.name, "image_sha256": arch["image"]["sha256"],
                     "accel": accel, "cpu": vm.cpu, "ssh_port": args.ssh_port,
                     "vm_cpus": args.vm_cpus, "vm_mem_mb": args.vm_mem,
-                    "disk_bus": args.vm_disk_bus, "nic": args.vm_nic}
+                    "disk_bus": args.vm_disk_bus, "nic": args.vm_nic,
+                    "firmware": vm.firmware}
     try:
         boot_id = vm.wait_ssh(args.vm_timeout)
         log("stock system up; capturing baseline")
@@ -1956,12 +2059,16 @@ def _self_test() -> int:
 
     assert names_badc("badc 0.1 (gcc-compatible, GNU C 15.0.0)")
     assert not names_badc("gcc (GCC) 15.2.1")
+    assert not names_badc("")
 
     cfg = clear_foreign_files(
         'CONFIG_SYSTEM_TRUSTED_KEYS="debian/certs/x.pem"\n'
-        'CONFIG_MODULE_SIG_KEY="debian/certs/k.pem"\n')
+        'CONFIG_MODULE_SIG_KEY="debian/certs/k.pem"\n'
+        'CONFIG_INITRAMFS_SOURCE="/x/y"\nCONFIG_LOCALVERSION="-badc"\n')
     assert 'CONFIG_SYSTEM_TRUSTED_KEYS=""' in cfg
     assert 'CONFIG_MODULE_SIG_KEY="certs/signing_key.pem"' in cfg
+    assert 'CONFIG_INITRAMFS_SOURCE=""' in cfg
+    assert 'CONFIG_LOCALVERSION="-badc"' in cfg
 
     deb = {"pkg": "deb", "make_target": "bzImage", "target": "linux-x64"}
     rpm = {"pkg": "rpm", "make_target": "Image", "target": "linux-aarch64"}
@@ -2010,36 +2117,83 @@ def _self_test() -> int:
     big = vm_size(True)
     assert big["vm_mem"] > VM_SIZE["vm_mem"] and big["vm_cpus"] >= 1
 
+    for name in ARCHES:
+        a = resolve_arch(name, None)
+        assert a["pkg"] in PACKAGERS and "sha256" in a["image"]
+        assert a["qemu"].endswith(name)
+    assert resolve_arch("x86_64", "fedora")["pkg"] == "rpm"
+    assert set(DISK_BUSES) >= {"virtio", "nvme"} and "virtio-net-pci" in NICS
+
+    # Firmware discovery: the first entry whose code image is installed wins,
+    # and one whose variable store is absent falls back to a -bios image.
+    def installed(*paths):
+        return set(paths).__contains__
+
+    assert find_firmware("x86_64", installed(
+        "/usr/share/edk2/ovmf/OVMF_CODE.fd",
+        "/usr/share/edk2/ovmf/OVMF_VARS.fd")) == (
+            "/usr/share/edk2/ovmf/OVMF_CODE.fd",
+            "/usr/share/edk2/ovmf/OVMF_VARS.fd")
+    assert find_firmware("x86_64", installed(
+        "/usr/share/OVMF/OVMF_CODE_4M.fd",
+        "/usr/share/OVMF/OVMF_VARS_4M.fd",
+        "/usr/share/OVMF/OVMF_CODE.fd",
+        "/usr/share/OVMF/OVMF_VARS.fd")) == (
+            "/usr/share/OVMF/OVMF_CODE_4M.fd",
+            "/usr/share/OVMF/OVMF_VARS_4M.fd")
+    assert find_firmware("x86_64", installed(
+        "/usr/share/OVMF/OVMF_CODE_4M.fd")) == (
+            "/usr/share/OVMF/OVMF_CODE_4M.fd", None)
+    assert find_firmware("aarch64", installed(
+        "/usr/share/edk2/aarch64/QEMU_EFI.fd")) == (
+            "/usr/share/edk2/aarch64/QEMU_EFI.fd", None)
+    assert find_firmware("x86_64", lambda p: False) is None
+
+    ovmf = ("/usr/share/OVMF/OVMF_CODE_4M.fd", "/usr/share/OVMF/OVMF_VARS_4M.fd")
+    assert resolve_firmware("x86_64", "auto", ovmf) == ("uefi", "")
+    assert resolve_firmware("x86_64", "uefi", ovmf) == ("uefi", "")
+    assert resolve_firmware("x86_64", "bios", ovmf) == ("bios", "")
+    fw, why = resolve_firmware("x86_64", "auto", None)
+    assert (fw, bool(why)) == ("bios", True)
+    for arch, choice, found in (("x86_64", "uefi", None),
+                                ("aarch64", "auto", None),
+                                ("aarch64", "uefi", None),
+                                ("aarch64", "bios", ovmf)):
+        try:
+            resolve_firmware(arch, choice, found)
+            assert False, (arch, choice)
+        except ValueError:
+            pass
+
+    assert firmware_args(("/c.fd", None), Path("/w")) == ["-bios", "/c.fd"]
+    assert (pflash_format("/x/OVMF_CODE_4M.qcow2"),
+            pflash_format("/x/OVMF_CODE.fd")) == ("qcow2", "raw")
+
+    assert efi_fault(
+        "BdsDxe: starting Boot0004\r\n"
+        "!!!! X64 Exception Type - 0D(#GP - General Protection)  CPU Apic ID "
+        "- 00000000 !!!!\r\nRIP  - 000000007A\r\n"
+    ) == ("!!!! X64 Exception Type - 0D(#GP - General Protection)  "
+          "CPU Apic ID - 00000000 !!!!")
+    assert efi_fault("!!!! Synchronous Exception at 0x000000013F2 !!!!")
+    assert efi_fault("[    0.0] Linux version 7.1.6\n") is None
+
+    # The nvme bus above the memory split is SeaBIOS's limit alone, and the
+    # exercise stage's guest size is above it.
+    assert seabios_nvme_blocked("bios", "nvme", SEABIOS_NVME_MEM_LIMIT)
+    assert not seabios_nvme_blocked("bios", "nvme", SEABIOS_NVME_MEM_LIMIT - 1)
+    assert not seabios_nvme_blocked("uefi", "nvme", 8192)
+    assert not seabios_nvme_blocked("bios", "virtio", 8192)
+    assert exercise.EXERCISE_VM_MEM > SEABIOS_NVME_MEM_LIMIT
+
+    exercise.self_test()
     print("linux packages: self-test ok", flush=True)
     return 0
 
 
 # --- main -------------------------------------------------------------------
 
-def self_test() -> int:
-    assert names_badc("badc 0.1 (gcc-compatible, GNU C 15.0.0)")
-    assert not names_badc("gcc (GCC) 15.0.0")
-    assert not names_badc("")
-    text = clear_foreign_files(
-        'CONFIG_INITRAMFS_SOURCE="/x/y"\nCONFIG_MODULE_SIG_KEY="/k.pem"\n'
-        'CONFIG_LOCALVERSION="-badc"\n')
-    assert 'CONFIG_INITRAMFS_SOURCE=""' in text
-    assert 'CONFIG_MODULE_SIG_KEY="certs/signing_key.pem"' in text
-    assert 'CONFIG_LOCALVERSION="-badc"' in text
-    for name in ARCHES:
-        arch = resolve_arch(name, None)
-        assert arch["pkg"] in PACKAGERS and "sha256" in arch["image"]
-        assert arch["qemu"].endswith(name)
-    assert resolve_arch("x86_64", "fedora")["pkg"] == "rpm"
-    assert set(DISK_BUSES) >= {"virtio", "nvme"} and "virtio-net-pci" in NICS
-    exercise.self_test()
-    print("linux packages: self-test ok", flush=True)
-    return 0
-
-
 def main() -> int:
-    if sys.argv[1:] == ["--self-test"]:
-        return self_test()
     ap = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -2149,6 +2303,11 @@ def main() -> int:
     ap.add_argument("--vm-nic", choices=sorted(NICS), default="virtio-net-pci",
                     help="NIC model (default: virtio-net-pci); the booted "
                          "kernel must bind it to that model's driver")
+    ap.add_argument("--vm-firmware", choices=("auto", "uefi", "bios"),
+                    default="auto",
+                    help="guest firmware: EFI (OVMF on x86 q35, AAVMF on "
+                         "aarch64 virt) or SeaBIOS on x86 i440fx; auto takes "
+                         "EFI wherever it is installed")
     ap.add_argument("--vm-mem", type=int, default=None)
     ap.add_argument("--vm-disk", default=None)
     ap.add_argument("--vm-timeout", type=int, default=900,

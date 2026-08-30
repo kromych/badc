@@ -178,14 +178,18 @@ pub(crate) enum Mnemonic {
     },
     /// A 2-operand VEX op with a trailing immediate `v-op $imm8, %src, %dst`
     /// (VEX.vvvv unused). Covers vpshufd / vpshuflw / vpshufhw (0F map) and
-    /// vpermilps / vpermilpd (0F3A map). `store` reverses the operand roles for
-    /// the lane extracts (`vextracti128`), whose destination is the r/m and
-    /// whose 256-bit source sets `L`.
+    /// vpermilps / vpermilpd / vpermq / vpermpd (0F3A map). `store` reverses
+    /// the operand roles for the lane extracts (`vextracti128`), whose
+    /// destination is the r/m and whose 256-bit source sets `L`. `l256` marks
+    /// the forms with no 128-bit member -- the lane-crossing permutes and the
+    /// 128-bit lane extracts -- whose VEX.L is one.
     VexImm2 {
         pp: u8,
         map: u8,
+        w: bool,
         opcode: u8,
         store: bool,
+        l256: bool,
     },
     /// A VEX packed shift by immediate `v-op $imm8, %src, %dst`, encoded
     /// `VEX(vvvv=dst, L, pp=66, 0F) <opcode> /digit ib`: the destination rides
@@ -1196,7 +1200,7 @@ pub(crate) fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
                 .or_else(|| sse_imm(name))
                 .or_else(|| vex_op(name))
                 .or_else(|| mask_op(name))
-                .or_else(|| super::evex::op(name).map(Mnemonic::Evex));
+                .or_else(|| super::evex::op(name, false).map(Mnemonic::Evex));
         }
     })
 }
@@ -1699,8 +1703,10 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
         return Some(Mnemonic::VexImm2 {
             pp: 1,
             map: 3,
+            w: false,
             opcode,
             store: true,
+            l256: true,
         });
     }
     // The element extracts as `(name, map, opcode, W, register-form opcode)`
@@ -1728,19 +1734,25 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
     if let Some(&(_, map, opcode, w)) = INSERT.iter().find(|r| r.0 == name) {
         return Some(Mnemonic::VexElemInsert { map, opcode, w });
     }
+    // `(pp, map, W, opcode, 256-bit only)`. vpermq / vpermpd cross the
+    // 128-bit lanes, so VEX gives them a 256-bit member only.
     let imm2 = match name {
-        "vpshufd" => Some((1u8, 1u8, 0x70u8)),
-        "vpshuflw" => Some((3, 1, 0x70)),
-        "vpshufhw" => Some((2, 1, 0x70)),
-        "vpermilps" => Some((1, 3, 0x04)),
-        "vpermilpd" => Some((1, 3, 0x05)),
+        "vpshufd" => Some((1u8, 1u8, false, 0x70u8, false)),
+        "vpshuflw" => Some((3, 1, false, 0x70, false)),
+        "vpshufhw" => Some((2, 1, false, 0x70, false)),
+        "vpermilps" => Some((1, 3, false, 0x04, false)),
+        "vpermilpd" => Some((1, 3, false, 0x05, false)),
+        "vpermq" => Some((1, 3, true, 0x00, true)),
+        "vpermpd" => Some((1, 3, true, 0x01, true)),
         _ => None,
     };
-    imm2.map(|(pp, map, opcode)| Mnemonic::VexImm2 {
+    imm2.map(|(pp, map, w, opcode, l256)| Mnemonic::VexImm2 {
         pp,
         map,
+        w,
         opcode,
         store: false,
+        l256,
     })
 }
 
@@ -3084,20 +3096,38 @@ fn resolve_evex(
                 | AsmOpnd::SymMem { .. }
         )
     };
+    // A vector register or memory in the leading position rules out the
+    // immediate-led shapes; anything else there admits one, an operand
+    // reference included -- it is substituted after this point, and every
+    // immediate-led shape takes its immediate there. This is what tells apart
+    // the rows of a name the ISA gives both an immediate-controlled and an
+    // index-vector-controlled member.
+    let lead_vec_or_mem = operands.first().is_some_and(&is_mem)
+        || matches!(operands.first(), Some(&AsmOpnd::Reg { reg, .. }) if reg >= XMM_BASE);
+    let lead_imm = !lead_vec_or_mem;
     let evex_only_operand = match mnemonic {
         Mnemonic::VexShiftImm { var_opcode, .. } => {
             let count_mem = operands.first().is_some_and(&is_mem);
             operands.iter().any(is_mem) && !(var_opcode.is_some() && count_mem)
         }
+        // The element broadcasts read a general register under EVEX only.
+        Mnemonic::Vex2 { .. } => {
+            matches!(operands.first(), Some(&AsmOpnd::Reg { reg, .. }) if reg < 16)
+        }
+        // An immediate-led VEX shape reading a vector register or memory in
+        // that position: the index-vector-controlled permutes have no VEX
+        // form.
+        Mnemonic::VexImm2 { .. } => lead_vec_or_mem,
         _ => false,
     };
     let mut f = match mnemonic {
-        Mnemonic::Evex(f) => f,
-        _ if evex_reg || evex_only_operand || decor.any() => {
-            super::evex::op(name).ok_or_else(|| {
+        // The name-only lookup that built this mnemonic could not see the
+        // operands, so a name with more than one row resolves here.
+        Mnemonic::Evex(f) => super::evex::op(name, lead_imm).unwrap_or(f),
+        _ if evex_reg || evex_only_operand || decor.any() => super::evex::op(name, lead_imm)
+            .ok_or_else(|| {
                 format!("inline asm: `{name}` has no EVEX (AVX-512) form these operands can take")
-            })?
-        }
+            })?,
         _ => return Ok(mnemonic),
     };
     (f.mask, f.zeroing, f.bcast) = (decor.mask, decor.zeroing, decor.bcast);
@@ -4779,8 +4809,10 @@ fn encode_bespoke(
         Mnemonic::VexImm2 {
             pp,
             map,
+            w,
             opcode,
             store,
+            l256,
         } => {
             // `v-op $imm, %src, %dst`: a 2-operand VEX (VEX.vvvv = 1111) + imm.
             // ModRM.reg holds the AT&T destination, or the source for a lane
@@ -4801,11 +4833,16 @@ fn encode_bespoke(
                     "inline asm: VEX shuffle register operand must be xmm/ymm",
                 ));
             };
+            let l = u8::from(ry || vec_reg(in_rm).is_some_and(|(_, my)| my && !store));
+            if l256 && l == 0 {
+                return Err(String::from(
+                    "inline asm: this instruction has no 128-bit form",
+                ));
+            }
             match in_rm {
                 _ if vec_reg(in_rm).is_some() => {
-                    let (m, my) = vec_reg(in_rm).unwrap();
-                    let l = u8::from(ry || (my && !store));
-                    emit_vex(code, r >= 8, false, m >= 8, map, false, 0, l, pp);
+                    let (m, _) = vec_reg(in_rm).unwrap();
+                    emit_vex(code, r >= 8, false, m >= 8, map, w, 0, l, pp);
                     code.push(opcode);
                     code.push(modrm_reg(r & 7, m & 7));
                 }
@@ -4815,17 +4852,7 @@ fn encode_bespoke(
                             "inline asm: VEX shuffle source must be xmm/ymm or memory",
                         ));
                     };
-                    emit_vex(
-                        code,
-                        r >= 8,
-                        mr.rex_x(),
-                        mr.rex_b(),
-                        map,
-                        false,
-                        0,
-                        u8::from(ry),
-                        pp,
-                    );
+                    emit_vex(code, r >= 8, mr.rex_x(), mr.rex_b(), map, w, 0, l, pp);
                     code.push(opcode);
                     mr.emit(code, mode, addr, r & 7)?;
                 }
@@ -6798,8 +6825,10 @@ mod tests {
                 Mnemonic::VexImm2 {
                     pp: 1,
                     map: 1,
+                    w: false,
                     opcode: 0x70,
-                    store: false
+                    store: false,
+                    l256: false
                 },
                 None,
                 &[Concrete::Imm(0x1b), xmm(1), xmm(0)]
@@ -7256,6 +7285,129 @@ mod tests {
     /// (VEX.66.0F38.W0). Both take an xmm or memory source and set VEX.L from
     /// the destination width; the lane broadcasts have no register-source
     /// form. Bytes measured with GNU as 2.46.1.
+    /// The lane-crossing quadword permutes: VEX gives them a 256-bit,
+    /// W1 member on the 0F3A map and no 128-bit one. Bytes from GNU as.
+    #[test]
+    fn vex_lane_permute_ops() {
+        let xmm = |n: u8| Concrete::Reg {
+            reg: XMM_BASE + n,
+            size: AsmRegSize::Quad,
+        };
+        let ymm = |n: u8| Concrete::Reg {
+            reg: YMM_BASE + n,
+            size: AsmRegSize::Quad,
+        };
+        let mem = |base: u8, disp: i32| Concrete::Mem {
+            base,
+            index: None,
+            scale: 1,
+            disp,
+            size: AsmRegSize::Quad,
+        };
+        let e = |name: &str, ops: &[Concrete]| enc(vex_op(name).unwrap(), None, ops);
+        let i = Concrete::Imm;
+        assert_eq!(
+            e("vpermq", &[i(0x2), ymm(3), ymm(10)]),
+            [0xC4, 0x63, 0xFD, 0x00, 0xD3, 0x02]
+        );
+        assert_eq!(
+            e("vpermq", &[i(0xb1), ymm(0), ymm(1)]),
+            [0xC4, 0xE3, 0xFD, 0x00, 0xC8, 0xB1]
+        );
+        assert_eq!(
+            e("vpermq", &[i(0x2), ymm(12), ymm(8)]),
+            [0xC4, 0x43, 0xFD, 0x00, 0xC4, 0x02]
+        );
+        assert_eq!(
+            e("vpermq", &[i(0x39), mem(0, 0), ymm(0)]),
+            [0xC4, 0xE3, 0xFD, 0x00, 0x00, 0x39]
+        );
+        assert_eq!(
+            e(
+                "vpermq",
+                &[
+                    i(0x39),
+                    Concrete::Mem {
+                        base: 11,
+                        index: Some(1),
+                        scale: 4,
+                        disp: 0x40,
+                        size: AsmRegSize::Quad,
+                    },
+                    ymm(9),
+                ]
+            ),
+            [0xC4, 0x43, 0xFD, 0x00, 0x4C, 0x8B, 0x40, 0x39]
+        );
+        assert_eq!(
+            e("vpermpd", &[i(0x1b), ymm(2), ymm(3)]),
+            [0xC4, 0xE3, 0xFD, 0x01, 0xDA, 0x1B]
+        );
+        assert_eq!(
+            e("vpermpd", &[i(0x1b), mem(7, 0), ymm(15)]),
+            [0xC4, 0x63, 0xFD, 0x01, 0x3F, 0x1B]
+        );
+        assert_eq!(
+            e("vpermpd", &[i(0x0), ymm(8), ymm(9)]),
+            [0xC4, 0x43, 0xFD, 0x01, 0xC8, 0x00]
+        );
+        // The leading operand settles which member of a two-shape name an
+        // instruction names: a vector register there is the index-vector
+        // control, which is EVEX-only, while an operand reference is not yet
+        // substituted and keeps the immediate-led VEX form.
+        let vec_opnd = |reg| AsmOpnd::Reg {
+            reg,
+            size: AsmRegSize::Quad,
+        };
+        let route = |name: &str, ops: &[AsmOpnd]| {
+            resolve_evex(vex_op(name).unwrap(), name, ops, EvexDecor::default()).unwrap()
+        };
+        assert!(matches!(
+            route(
+                "vpermq",
+                &[
+                    vec_opnd(YMM_BASE + 2),
+                    vec_opnd(YMM_BASE + 1),
+                    vec_opnd(YMM_BASE)
+                ]
+            ),
+            Mnemonic::Evex(_)
+        ));
+        assert!(matches!(
+            route(
+                "vpermq",
+                &[AsmOpnd::Imm(2), vec_opnd(YMM_BASE + 1), vec_opnd(YMM_BASE)]
+            ),
+            Mnemonic::VexImm2 { .. }
+        ));
+        assert!(matches!(
+            route(
+                "vpshufd",
+                &[
+                    AsmOpnd::Ref { idx: 0, size: None },
+                    vec_opnd(XMM_BASE + 1),
+                    vec_opnd(XMM_BASE)
+                ]
+            ),
+            Mnemonic::VexImm2 { .. }
+        ));
+        // Neither permute has a 128-bit member, and neither do the 128-bit
+        // lane extracts, whose ModRM.reg source is the 256-bit operand.
+        for (name, ops) in [
+            ("vpermq", [Concrete::Imm(0x2), xmm(3), xmm(10)]),
+            ("vpermpd", [Concrete::Imm(0x1b), xmm(2), xmm(3)]),
+            ("vextracti128", [Concrete::Imm(0), xmm(1), xmm(0)]),
+            ("vextractf128", [Concrete::Imm(0), xmm(1), xmm(0)]),
+        ] {
+            let mut c = Vec::new();
+            let r = encode(&mut c, 8, vex_op(name).unwrap(), None, &ops);
+            assert!(
+                r.is_err_and(|e| e.contains("no 128-bit form")),
+                "{name} encoded a 128-bit form"
+            );
+        }
+    }
+
     #[test]
     fn vex_lane_broadcast_and_extend_ops() {
         let xmm = |n: u8| Concrete::Reg {

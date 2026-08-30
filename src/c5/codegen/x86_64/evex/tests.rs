@@ -13,11 +13,18 @@ use alloc::vec::Vec;
 use crate::c5::ir::AsmRegSize;
 
 use super::super::asm::{
-    AsmMemBase, AsmOpnd, Concrete, encode, parse_file_template, parse_template,
+    AsmMemBase, AsmOpnd, Concrete, encode_in, parse_file_template, parse_template,
 };
+use super::super::table::Mode;
 
 /// Assemble one AT&T instruction the way the file-scope asm path does.
 fn enc(text: &str) -> Result<Vec<u8>, String> {
+    enc_in(text, Mode::Bits64)
+}
+
+/// [`enc`] in a given code mode. VEX and EVEX carry no mode-dependent field,
+/// so only the addressing an instruction's memory operand encodes differs.
+fn enc_in(text: &str, mode: Mode) -> Result<Vec<u8>, String> {
     let mut out = Vec::new();
     for insn in parse_file_template(text.as_bytes())? {
         let reg_of = |b: AsmMemBase| match b {
@@ -45,8 +52,8 @@ fn enc(text: &str) -> Result<Vec<u8>, String> {
                 ref other => panic!("unexpected operand {other:?}"),
             })
             .collect();
-        let addr = super::super::asm::addr_size(&insn, super::super::table::Mode::Bits64);
-        encode(&mut out, addr, insn.mnemonic, insn.suffix, &ops)?;
+        let addr = super::super::asm::addr_size(&insn, mode);
+        encode_in(&mut out, mode, addr, insn.mnemonic, insn.suffix, &ops)?;
     }
     Ok(out)
 }
@@ -55,6 +62,16 @@ fn enc(text: &str) -> Result<Vec<u8>, String> {
 #[track_caller]
 fn gas(text: &str, bytes: &[u8]) {
     match enc(text) {
+        Ok(got) if got == bytes => {}
+        Ok(got) => panic!("{text}\n  badc {got:02x?}\n  gas  {bytes:02x?}"),
+        Err(e) => panic!("{text}: {e}"),
+    }
+}
+
+/// Check one instruction in a given code mode against the bytes GNU as emits.
+#[track_caller]
+fn gas_in(text: &str, mode: Mode, bytes: &[u8]) {
+    match enc_in(text, mode) {
         Ok(got) if got == bytes => {}
         Ok(got) => panic!("{text}\n  badc {got:02x?}\n  gas  {bytes:02x?}"),
         Err(e) => panic!("{text}: {e}"),
@@ -71,10 +88,36 @@ fn refused(text: &str, needle: &str) {
     }
 }
 
-/// The two instructions that kept the x86_64 defconfig kernel's last assembly
+/// The instructions that kept the x86_64 defconfig kernel's last assembly
 /// units on gas.
 #[test]
 fn kernel_units() {
+    // lib/crypto/x86/poly1305-x86_64-cryptogams.S: the same lane permute in
+    // its AVX2 (VEX, 256-bit) and AVX-512 (EVEX, 512-bit) instantiations.
+    gas(
+        "vpermq $0x2,%ymm3,%ymm10",
+        &[0xC4, 0x63, 0xFD, 0x00, 0xD3, 0x02],
+    );
+    gas(
+        "vpermq $0x2,%zmm3,%zmm14",
+        &[0x62, 0x73, 0xFD, 0x48, 0x00, 0xF3, 0x02],
+    );
+    gas(
+        "vpermq $0xb1,%zmm15,%zmm4",
+        &[0x62, 0xD3, 0xFD, 0x48, 0x00, 0xE7, 0xB1],
+    );
+    // The same unit's widening multiply, which EVEX gives a qword broadcast
+    // and so W=1 where VEX ignores the bit.
+    gas(
+        "vpmuludq %zmm7,%zmm16,%zmm11",
+        &[0x62, 0x71, 0xFD, 0x40, 0xF4, 0xDF],
+    );
+    // arch/x86/crypto/aes-ctr-avx-x86_64.S: `vpbroadcastq XCTR_CTR, LE_CTR`
+    // with XCTR_CTR = %r9 and LE_CTR = V9 at vl=64.
+    gas(
+        "vpbroadcastq %r9,%zmm9",
+        &[0x62, 0x52, 0xFD, 0x48, 0x7C, 0xC9],
+    );
     // lib/crypto/x86/blake2s-core.S.
     gas(
         "vpermi2d %ymm7,%ymm6,%ymm8",
@@ -1253,6 +1296,238 @@ fn tuple_scale_factors() {
         [1, 2]
     );
     assert_eq!([n(Dup, 16, true, false), n(Dup, 64, true, false)], [8, 64]);
+}
+
+/// The lane-crossing quadword permutes. Each name has two members: an
+/// immediate-controlled one on the 0F3A map and an index-vector-controlled one
+/// on 0F38, told apart by the leading operand. Neither has a 128-bit form.
+#[test]
+fn lane_permutes() {
+    gas(
+        "vpermq $0x2,%ymm3,%ymm20",
+        &[0x62, 0xE3, 0xFD, 0x28, 0x00, 0xE3, 0x02],
+    );
+    gas(
+        "vpermq $0x2,%ymm19,%ymm3",
+        &[0x62, 0xB3, 0xFD, 0x28, 0x00, 0xDB, 0x02],
+    );
+    gas(
+        "vpermq $0x2,%zmm3,%zmm14{%k1}",
+        &[0x62, 0x73, 0xFD, 0x49, 0x00, 0xF3, 0x02],
+    );
+    gas(
+        "vpermq $0x2,%zmm3,%zmm14{%k2}{z}",
+        &[0x62, 0x73, 0xFD, 0xCA, 0x00, 0xF3, 0x02],
+    );
+    // Tuple Full: disp8 scales by 64 without a broadcast and by 8 with one.
+    gas(
+        "vpermq $0x2,(%rax),%zmm1",
+        &[0x62, 0xF3, 0xFD, 0x48, 0x00, 0x08, 0x02],
+    );
+    gas(
+        "vpermq $0x2,0x40(%rax),%zmm1",
+        &[0x62, 0xF3, 0xFD, 0x48, 0x00, 0x48, 0x01, 0x02],
+    );
+    gas(
+        "vpermq $0x2,-0x40(%rax),%zmm1",
+        &[0x62, 0xF3, 0xFD, 0x48, 0x00, 0x48, 0xFF, 0x02],
+    );
+    gas(
+        "vpermq $0x2,(%rax){1to8},%zmm1",
+        &[0x62, 0xF3, 0xFD, 0x58, 0x00, 0x08, 0x02],
+    );
+    gas(
+        "vpermq $0x2,0x40(%rax){1to8},%zmm1",
+        &[0x62, 0xF3, 0xFD, 0x58, 0x00, 0x48, 0x08, 0x02],
+    );
+    gas(
+        "vpermpd $0x1b,%zmm2,%zmm3",
+        &[0x62, 0xF3, 0xFD, 0x48, 0x01, 0xDA, 0x1B],
+    );
+    gas(
+        "vpermpd $0x1b,%ymm2,%ymm19",
+        &[0x62, 0xE3, 0xFD, 0x28, 0x01, 0xDA, 0x1B],
+    );
+    // The index-vector-controlled member. It has no VEX form at any length,
+    // so it reaches EVEX on low registers too.
+    gas(
+        "vpermq %zmm2,%zmm1,%zmm0",
+        &[0x62, 0xF2, 0xF5, 0x48, 0x36, 0xC2],
+    );
+    gas(
+        "vpermq %ymm2,%ymm1,%ymm0",
+        &[0x62, 0xF2, 0xF5, 0x28, 0x36, 0xC2],
+    );
+    gas(
+        "vpermq %zmm18,%zmm17,%zmm16",
+        &[0x62, 0xA2, 0xF5, 0x40, 0x36, 0xC2],
+    );
+    gas(
+        "vpermq (%rax),%zmm1,%zmm0",
+        &[0x62, 0xF2, 0xF5, 0x48, 0x36, 0x00],
+    );
+    gas(
+        "vpermq (%rax){1to8},%zmm1,%zmm0",
+        &[0x62, 0xF2, 0xF5, 0x58, 0x36, 0x00],
+    );
+    gas(
+        "vpermq 0x40(%rax),%zmm1,%zmm0",
+        &[0x62, 0xF2, 0xF5, 0x48, 0x36, 0x40, 0x01],
+    );
+    gas(
+        "vpermq %zmm2,%zmm1,%zmm0{%k7}",
+        &[0x62, 0xF2, 0xF5, 0x4F, 0x36, 0xC2],
+    );
+    gas(
+        "vpermpd %zmm2,%zmm1,%zmm0",
+        &[0x62, 0xF2, 0xF5, 0x48, 0x16, 0xC2],
+    );
+    gas(
+        "vpermpd %ymm2,%ymm1,%ymm16",
+        &[0x62, 0xE2, 0xF5, 0x28, 0x16, 0xC2],
+    );
+    // GNU as refuses every 128-bit spelling of both members.
+    refused("vpermq $0x2,%xmm19,%xmm3", "no 128-bit form");
+    refused("vpermpd $0x1b,%xmm2,%xmm19", "no 128-bit form");
+    refused("vpermq %xmm2,%xmm1,%xmm0", "no 128-bit form");
+    refused("vpermpd %xmm18,%xmm17,%xmm16", "no 128-bit form");
+}
+
+/// The element broadcasts read a general register under a second opcode, whose
+/// width EVEX.W fixes: `vpbroadcastq` takes a 64-bit register and the narrower
+/// three a 32-bit one, as GNU as accepts them.
+#[test]
+fn broadcast_from_general_register() {
+    gas(
+        "vpbroadcastq %rax,%zmm0",
+        &[0x62, 0xF2, 0xFD, 0x48, 0x7C, 0xC0],
+    );
+    gas(
+        "vpbroadcastq %rax,%ymm0",
+        &[0x62, 0xF2, 0xFD, 0x28, 0x7C, 0xC0],
+    );
+    gas(
+        "vpbroadcastq %rax,%xmm0",
+        &[0x62, 0xF2, 0xFD, 0x08, 0x7C, 0xC0],
+    );
+    gas(
+        "vpbroadcastq %r15,%zmm31",
+        &[0x62, 0x42, 0xFD, 0x48, 0x7C, 0xFF],
+    );
+    gas(
+        "vpbroadcastq %rax,%zmm1{%k3}",
+        &[0x62, 0xF2, 0xFD, 0x4B, 0x7C, 0xC8],
+    );
+    gas(
+        "vpbroadcastq %rax,%zmm1{%k3}{z}",
+        &[0x62, 0xF2, 0xFD, 0xCB, 0x7C, 0xC8],
+    );
+    gas(
+        "vpbroadcastd %eax,%zmm0",
+        &[0x62, 0xF2, 0x7D, 0x48, 0x7C, 0xC0],
+    );
+    gas(
+        "vpbroadcastd %r9d,%ymm20",
+        &[0x62, 0xC2, 0x7D, 0x28, 0x7C, 0xE1],
+    );
+    gas(
+        "vpbroadcastd %eax,%xmm17",
+        &[0x62, 0xE2, 0x7D, 0x08, 0x7C, 0xC8],
+    );
+    gas(
+        "vpbroadcastw %eax,%zmm0",
+        &[0x62, 0xF2, 0x7D, 0x48, 0x7B, 0xC0],
+    );
+    gas(
+        "vpbroadcastw %r13d,%ymm3",
+        &[0x62, 0xD2, 0x7D, 0x28, 0x7B, 0xDD],
+    );
+    gas(
+        "vpbroadcastb %eax,%zmm0",
+        &[0x62, 0xF2, 0x7D, 0x48, 0x7A, 0xC0],
+    );
+    gas(
+        "vpbroadcastb %r13d,%xmm3",
+        &[0x62, 0xD2, 0x7D, 0x08, 0x7A, 0xDD],
+    );
+    // The vector-register and memory members keep their own opcodes.
+    gas(
+        "vpbroadcastq %xmm1,%zmm9",
+        &[0x62, 0x72, 0xFD, 0x48, 0x59, 0xC9],
+    );
+    gas(
+        "vpbroadcastq (%rax),%zmm9",
+        &[0x62, 0x72, 0xFD, 0x48, 0x59, 0x08],
+    );
+    gas(
+        "vpbroadcastd %xmm1,%zmm9",
+        &[0x62, 0x72, 0x7D, 0x48, 0x58, 0xC9],
+    );
+    gas(
+        "vpbroadcastd (%rax),%zmm9",
+        &[0x62, 0x72, 0x7D, 0x48, 0x58, 0x08],
+    );
+    // The widths GNU as refuses.
+    refused("vpbroadcastq %eax,%zmm0", "64-bit general register");
+    refused("vpbroadcastd %rax,%zmm0", "32-bit general register");
+    refused("vpbroadcastw %ax,%zmm0", "32-bit general register");
+    refused("vpbroadcastb %al,%zmm0", "32-bit general register");
+}
+
+/// The widening 32x32 multiplies, whose EVEX members broadcast a qword and so
+/// set W where their VEX ones ignore it.
+#[test]
+fn widening_multiplies() {
+    gas(
+        "vpmuludq (%rax){1to8},%zmm1,%zmm0",
+        &[0x62, 0xF1, 0xF5, 0x58, 0xF4, 0x00],
+    );
+    gas(
+        "vpmuldq %zmm2,%zmm1,%zmm0",
+        &[0x62, 0xF2, 0xF5, 0x48, 0x28, 0xC2],
+    );
+    gas(
+        "vpmuldq 0x40(%rax),%zmm1,%zmm0",
+        &[0x62, 0xF2, 0xF5, 0x48, 0x28, 0x40, 0x01],
+    );
+}
+
+/// The code mode reaches an instruction's addressing, not its VEX / EVEX
+/// prefix: the register forms encode identically at 16, 32 and 64 bits, and a
+/// 32-bit memory operand encodes as its 64-bit counterpart does.
+#[test]
+fn permutes_and_broadcasts_across_code_modes() {
+    #[track_caller]
+    fn same(text: &str, bytes: &[u8]) {
+        for mode in [Mode::Bits16, Mode::Bits32, Mode::Bits64] {
+            match enc_in(text, mode) {
+                Ok(got) if got == bytes => {}
+                Ok(got) => panic!("{text} at {mode:?}\n  badc {got:02x?}\n  gas  {bytes:02x?}"),
+                Err(e) => panic!("{text} at {mode:?}: {e}"),
+            }
+        }
+    }
+    same(
+        "vpermq $0x2,%ymm3,%ymm2",
+        &[0xC4, 0xE3, 0xFD, 0x00, 0xD3, 0x02],
+    );
+    same(
+        "vpermq $0x2,%zmm3,%zmm4",
+        &[0x62, 0xF3, 0xFD, 0x48, 0x00, 0xE3, 0x02],
+    );
+    same(
+        "vpbroadcastd %eax,%zmm0",
+        &[0x62, 0xF2, 0x7D, 0x48, 0x7C, 0xC0],
+    );
+    same(
+        "vpbroadcastb %ecx,%xmm2",
+        &[0x62, 0xF2, 0x7D, 0x08, 0x7A, 0xD1],
+    );
+    gas_in(
+        "vpermq $0x39,(%eax),%ymm0",
+        Mode::Bits32,
+        &[0xC4, 0xE3, 0xFD, 0x00, 0x00, 0x39],
+    );
 }
 
 // ------------------------------------------------------------------

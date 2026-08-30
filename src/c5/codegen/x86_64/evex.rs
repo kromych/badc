@@ -19,6 +19,8 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
+use crate::c5::ir::AsmRegSize;
+
 use super::asm::{Concrete, MemRm, XMM_BASE, YMM_BASE, ZMM_BASE, mask_reg_num};
 
 /// Memory-operand tuple type. It fixes the factor `N` that the hardware
@@ -101,6 +103,15 @@ pub(crate) enum Shape {
     VmI(u8),
 }
 
+impl Shape {
+    /// Whether the operand list of this shape leads with an immediate. It is
+    /// what separates the rows of a name the ISA gives two shapes -- the lane
+    /// permutes, controlled either by an immediate or by a vector of indices.
+    const fn leads_imm(self) -> bool {
+        matches!(self, Shape::RvmI | Shape::RmI | Shape::MrI | Shape::VmI(_))
+    }
+}
+
 /// One EVEX-encodable instruction form.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Form {
@@ -120,6 +131,15 @@ pub(crate) struct Form {
     /// vector registers; a zero opcode means the form has no such pair.
     pub(crate) alt_pp: u8,
     pub(crate) alt_op: u8,
+    /// Opcode this form takes when its r/m operand is a general register
+    /// rather than a vector register or memory (the element broadcasts);
+    /// a zero opcode means the form has no such member. EVEX.W selects the
+    /// general register's width: 8 bytes when set, 4 otherwise.
+    pub(crate) gpr_op: u8,
+    /// Smallest vector length, in bytes, the form has a member at (0 for the
+    /// forms defined at every length). The lane-crossing quadword permutes
+    /// start at 256 bits.
+    pub(crate) min_vl: u8,
     pub(crate) tuple: Tuple,
     /// The ModRM.reg operand is an opmask register, not a vector one (the
     /// compares and tests, and the mask-from-vector moves).
@@ -147,6 +167,8 @@ const fn form(shape: Shape, pp: u8, map: u8, w: bool, opcode: u8, tuple: Tuple) 
         gpr_rm: false,
         alt_pp: 0,
         alt_op: 0,
+        gpr_op: 0,
+        min_vl: 0,
         tuple,
         kreg: false,
         krm: false,
@@ -250,6 +272,16 @@ const fn grvmi(map: u8, w: bool, opcode: u8, tuple: Tuple) -> Form {
     }
 }
 
+/// A form whose r/m operand may also be a general register, under `gpr_op`.
+const fn or_gpr(f: Form, gpr_op: u8) -> Form {
+    Form { gpr_op, ..f }
+}
+
+/// A form with no 128-bit member.
+const fn vl256(f: Form) -> Form {
+    Form { min_vl: 32, ..f }
+}
+
 /// Every EVEX form this encoder implements, as `(mnemonic, form)`. Each row
 /// states its tuple type rather than defaulting one: the tuple fixes the
 /// compressed displacement scale, and a wrong scale encodes cleanly while
@@ -282,6 +314,10 @@ const TABLE: &[(&str, Form)] = {
     ("vpaddd",  rvm(1, 1, false, 0xFE, Full)), ("vpaddq",  rvm(1, 1, true,  0xD4, Full)),
     ("vpsubd",  rvm(1, 1, false, 0xFA, Full)), ("vpsubq",  rvm(1, 1, true,  0xFB, Full)),
     ("vpmulld", rvm(1, 2, false, 0x40, Full)), ("vpmullq", rvm(1, 2, true,  0x40, Full)),
+    // The widening 32x32 multiplies read dword elements and write qword ones,
+    // so their broadcast is a qword and EVEX.W is set where VEX leaves it
+    // ignored.
+    ("vpmuludq", rvm(1, 1, true, 0xF4, Full)), ("vpmuldq", rvm(1, 2, true, 0x28, Full)),
     ("vpminsd", rvm(1, 2, false, 0x39, Full)), ("vpminsq", rvm(1, 2, true,  0x39, Full)),
     ("vpmaxsd", rvm(1, 2, false, 0x3D, Full)), ("vpmaxsq", rvm(1, 2, true,  0x3D, Full)),
     ("vpsllvd", rvm(1, 2, false, 0x47, Full)), ("vpsllvq", rvm(1, 2, true,  0x47, Full)),
@@ -364,6 +400,13 @@ const TABLE: &[(&str, Form)] = {
     // 2-operand with a trailing immediate.
     ("vpshufd",   rmi(1, 1, false, 0x70, Full)),
     ("vpermilps", rmi(1, 3, false, 0x04, Full)), ("vpermilpd", rmi(1, 3, true, 0x05, Full)),
+    // The lane-crossing quadword permutes take their control either as an
+    // immediate (0F3A) or as a vector of indices (0F38); the two rows of each
+    // name are told apart by the leading operand. Neither has a 128-bit form.
+    ("vpermq",  vl256(rmi(1, 3, true, 0x00, Full))),
+    ("vpermq",  vl256(rvm(1, 2, true, 0x36, Full))),
+    ("vpermpd", vl256(rmi(1, 3, true, 0x01, Full))),
+    ("vpermpd", vl256(rvm(1, 2, true, 0x16, Full))),
     // Sub-vector broadcasts: memory-only sources of 2, 4 or 8 elements.
     ("vbroadcasti32x2", rmmem(false, 0x59, Group(2))),
     ("vbroadcastf32x2", rmmem(false, 0x19, Group(2))),
@@ -376,10 +419,10 @@ const TABLE: &[(&str, Form)] = {
     ("vbroadcasti32x8", rmmem(false, 0x5B, Group(8))),
     ("vbroadcastf32x8", rmmem(false, 0x1B, Group(8))),
     // Element broadcasts, packed extends and converts.
-    ("vpbroadcastb", rm(1, 2, false, 0x78, Elem(1))),
-    ("vpbroadcastw", rm(1, 2, false, 0x79, Elem(2))),
-    ("vpbroadcastd", rm(1, 2, false, 0x58, Elem(4))),
-    ("vpbroadcastq", rm(1, 2, true,  0x59, Elem(8))),
+    ("vpbroadcastb", or_gpr(rm(1, 2, false, 0x78, Elem(1)), 0x7A)),
+    ("vpbroadcastw", or_gpr(rm(1, 2, false, 0x79, Elem(2)), 0x7B)),
+    ("vpbroadcastd", or_gpr(rm(1, 2, false, 0x58, Elem(4)), 0x7C)),
+    ("vpbroadcastq", or_gpr(rm(1, 2, true,  0x59, Elem(8)), 0x7C)),
     ("vbroadcastss", rm(1, 2, false, 0x18, Elem(4))),
     ("vbroadcastsd", rm(1, 2, true,  0x19, Elem(8))),
     ("vpmovsxbw", rm(1, 2, false, 0x20, HalfMem)),
@@ -429,8 +472,15 @@ const TABLE: &[(&str, Form)] = {
 };
 
 /// The EVEX form of `name`, or `None` when the name has none in this table.
-pub(crate) fn op(name: &str) -> Option<Form> {
-    TABLE.iter().find(|r| r.0 == name).map(|r| r.1)
+/// A name with several rows has one per shape, and `lead_imm` -- whether the
+/// operand list leads with an immediate -- picks between them; where no row
+/// agrees, the first is returned so [`encode`] reports the shape mismatch.
+pub(crate) fn op(name: &str, lead_imm: bool) -> Option<Form> {
+    let rows = || TABLE.iter().filter(|r| r.0 == name);
+    rows()
+        .find(|r| r.1.shape.leads_imm() == lead_imm)
+        .or_else(|| rows().next())
+        .map(|r| r.1)
 }
 
 /// Decode a vector register operand to `(number, vector length in bytes)`.
@@ -572,6 +622,25 @@ pub(crate) fn encode(code: &mut Vec<u8>, f: Form, ops: &[Concrete]) -> Result<()
             }
             (Some((n, _)), ..) => Rm::Reg(n),
             (_, _, &Concrete::Reg { reg, .. }) if f.gpr_rm && reg < 16 => Rm::Reg(reg),
+            // A general register in the r/m position of a form that also
+            // takes a vector one selects the form's other opcode; EVEX.W
+            // fixes the register's width there.
+            (_, _, &Concrete::Reg { reg, size }) if f.gpr_op != 0 && reg < 16 => {
+                let want = if f.w {
+                    AsmRegSize::Quad
+                } else {
+                    AsmRegSize::Long
+                };
+                if size != want {
+                    return bad(if f.w {
+                        "this instruction reads a 64-bit general register"
+                    } else {
+                        "this instruction reads a 32-bit general register"
+                    });
+                }
+                opcode = f.gpr_op;
+                Rm::Reg(reg)
+            }
             // A mask <-> vector move has register forms only.
             (_, Some(_), _) if f.kreg && f.shape == Shape::Rm => {
                 return bad("this instruction takes a vector register source");
@@ -589,6 +658,12 @@ pub(crate) fn encode(code: &mut Vec<u8>, f: Form, ops: &[Concrete]) -> Result<()
         .flatten()
         .max()
         .ok_or_else(|| String::from("inline asm: EVEX op names no vector register"))?;
+    if vl < u32::from(f.min_vl) {
+        return Err(format!(
+            "inline asm: this instruction has no {}-bit form",
+            vl * 8
+        ));
+    }
     let ll = match vl {
         16 => 0u8,
         32 => 1,

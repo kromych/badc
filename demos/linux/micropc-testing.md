@@ -85,7 +85,28 @@ grub2-mkconfig -o /boot/grub2/grub.cfg
 ```
 
 `/etc/kernel/cmdline` is written from the resulting default entry so a
-kernel installed later inherits the same arguments.
+kernel installed later inherits the same arguments -- and it **must
+carry `root=`**, which is easy to lose:
+
+```bash
+sudo grubby --info=DEFAULT          # root= is printed on its own line,
+                                    # NOT inside args="..."
+```
+
+Deriving the file from `args=` alone produces a command line with no root
+device. Nothing complains at install time; the entry simply cannot mount
+a root filesystem, and the machine lands in emergency mode on the next
+boot into it. That is not hypothetical -- it is how this box was first
+stranded, and the resulting entry had to be repaired with
+`grubby --update-kernel=... --args="root=UUID=..."`.
+
+Installing a kernel here also **silently takes the standing default**:
+`rpm -i` runs `kernel-install`, which writes the new entry and points
+`saved_entry` at it. Re-assert the fallback after any install:
+
+```bash
+sudo grubby --set-default /boot/vmlinuz-<the distro kernel>
+```
 
 Each piece earns its place:
 
@@ -325,7 +346,13 @@ sudo -u gdm dbus-run-session -- gsettings reset org.gnome.desktop.session idle-d
 sudo systemctl set-default graphical.target
 sudo systemctl isolate graphical.target
 
-# 6. Rescue-shell access and sysrq
+# 6. Core capture, if the lane's probes ran
+sudo rm -f /etc/sysctl.d/99-badc-cores.conf /etc/security/limits.d/99-badc-core.conf \
+           /etc/systemd/system.conf.d/99-badc-core.conf
+sudo rm -rf /var/crash
+sudo systemctl daemon-reexec
+
+# 7. Rescue-shell access and sysrq
 sudo rm -rf /etc/systemd/system/emergency.service.d/sulogin-force.conf \
             /etc/systemd/system/rescue.service.d/sulogin-force.conf
 sudo rm -f /etc/sysctl.d/99-sysrq.conf

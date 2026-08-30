@@ -485,7 +485,17 @@ def darwin_kbuild_env(args, arch, env: dict) -> None:
     env["CROSS_COMPILE"] = args.real_cc[:-len("gcc")] if args.real_cc.endswith(
         "-gcc") else env.get("CROSS_COMPILE", "")
     hc = LINUX_DIR / "hostcompat"
-    env["HOSTCFLAGS"] = f"-I{hc} -include {hc}/hostcompat.h -D_UUID_T"
+    # `__cold` is an attribute macro in Apple's SDK and a keyword-like
+    # define in the kernel's tools headers; the collision is between two
+    # host headers, not in kernel code.
+    env["HOSTCFLAGS"] = (f"-I{hc} -include {hc}/hostcompat.h -D_UUID_T"
+                         f" -Wno-macro-redefined")
+    # objtool, which x86 builds as a host program, links libelf; the SDK
+    # has none and Homebrew keeps its headers in a subdirectory.
+    elf = brew / "opt/libelf"
+    if elf.is_dir():
+        env["HOSTCFLAGS"] += f" -I{elf}/include -I{elf}/include/libelf"
+        env["HOSTLDFLAGS"] = f"-L{elf}/lib " + env.get("HOSTLDFLAGS", "")
     ssl = brew / "opt/openssl/lib/pkgconfig"
     if ssl.is_dir():
         env["PKG_CONFIG_PATH"] = ":".join(

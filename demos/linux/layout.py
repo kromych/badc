@@ -59,7 +59,6 @@ import json
 import os
 import platform
 import re
-import shlex
 import shutil
 import subprocess
 import sys
@@ -443,14 +442,21 @@ def extract(path: Path, dwarfdump: str) -> dict:
     # the parse never reads (decl_file/decl_line/sibling/location, and every
     # DIE that is not a type) in grep rather than in Python is what keeps the
     # extraction bound by the dumper instead of by the interpreter.
-    cmd = (f"{shlex.quote(dwarfdump)} --debug-info {shlex.quote(str(path))} "
-           f"| grep -E {shlex.quote(FILTER_ERE)}")
     # `grep` exits 1 on no match, so the dumper's own status is what says
-    # whether the read worked; without pipefail the pipeline would hide it
-    # and an unreadable file would report as a clean comparison of nothing.
-    proc = subprocess.Popen(["sh", "-c", f"set -o pipefail; {cmd}"],
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                            text=True, errors="replace", bufsize=1 << 20)
+    # whether the read worked; a pipeline that reported only the last stage
+    # would hide it and an unreadable file would report as a clean comparison
+    # of nothing. The two stages are run directly rather than through a shell
+    # so the dumper's status is the one read, on any /bin/sh.
+    errs = tempfile.TemporaryFile()
+    dump = subprocess.Popen([dwarfdump, "--debug-info", str(path)],
+                            stdout=subprocess.PIPE, stderr=errs,
+                            bufsize=1 << 20)
+    assert dump.stdout is not None
+    proc = subprocess.Popen(["grep", "-E", FILTER_ERE], stdin=dump.stdout,
+                            stdout=subprocess.PIPE, text=True,
+                            errors="replace", bufsize=1 << 20)
+    # The parent's copy, so the dumper sees the reader go away.
+    dump.stdout.close()
     assert proc.stdout is not None
     out: dict = {}
     units = 0
@@ -471,10 +477,14 @@ def extract(path: Path, dwarfdump: str) -> dict:
     finally:
         proc.stdout.close()
         proc.wait()
-    if proc.returncode not in (0, 1):
-        err = (proc.stderr.read() if proc.stderr else "").strip()
-        die(f"reading DWARF from {path} failed (rc={proc.returncode})"
+        dump.wait()
+    if dump.returncode != 0:
+        errs.seek(0)
+        err = errs.read().decode("utf-8", "replace").strip()
+        errs.close()
+        die(f"reading DWARF from {path} failed (rc={dump.returncode})"
             + (f": {err.splitlines()[0]}" if err else ""))
+    errs.close()
     return {"aggregates": out, "units": units,
             "big_endian": big_endian, "addr_size": addr_size}
 

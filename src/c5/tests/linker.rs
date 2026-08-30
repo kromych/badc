@@ -5317,6 +5317,95 @@ fn assembler_local_labels_stay_out_of_the_symbol_table() {
     }
 }
 
+#[test]
+fn typed_local_label_leaves_the_symbol_table_and_its_reference_reduces() {
+    // `SYM_FUNC_START_LOCAL(.Lname)` spells a local label `@function` and
+    // sizes it; GNU as still keeps it out of `.symtab`, because the name
+    // carries the local-label prefix. The reference to it has to reduce to
+    // the label's section plus its offset, or dropping the symbol would
+    // leave the relocation with nothing to name. `--keep-locals` restores
+    // the entry without moving the relocation, as `as -L` does.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        __asm__(\".pushsection .lltext,\\\"ax\\\"\\n\
+                 .globl ll_entry\\n\
+                 ll_entry: nop\\n\
+                 .type .Lll_local, @function\\n\
+                 .Lll_local: nop\\n\\tnop\\n\
+                 .size .Lll_local, .-.Lll_local\\n\
+                 .popsection\\n\
+                 .pushsection .lldata,\\\"a\\\"\\n\
+                 .quad .Lll_local\\n\
+                 .popsection\\n\");\n\
+        int use_it(void) { return 1; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        // `nop` is one byte on x86-64 and four on AArch64; the label sits
+        // one instruction in and covers two.
+        let nop: i64 = if target == Target::LinuxX64 { 1 } else { 4 };
+        for keep in [false, true] {
+            let copts = CompileOptions {
+                no_entry_point: true,
+                gnu: true,
+                ..Default::default()
+            };
+            let program = Compiler::with_options(String::from(src), target, copts)
+                .compile()
+                .expect("compile");
+            let bytes = emit_native_with_options(
+                &program,
+                target,
+                NativeOptions {
+                    output_kind: OutputKind::Relocatable,
+                    keep_local_labels: keep,
+                    ..Default::default()
+                },
+            )
+            .expect("emit");
+            let syms = elf_symbols(&bytes);
+            let secs = elf_sections(&bytes);
+            let local = syms.iter().find(|(n, ..)| n == ".Lll_local");
+            match (keep, local) {
+                (false, Some(s)) => panic!("{target:?}: `.symtab` carries {s:?}"),
+                (false, None) => {}
+                (true, None) => panic!("{target:?}: --keep-locals dropped `.Lll_local`"),
+                (true, Some(&(_, info, _, _, size))) => {
+                    // STB_LOCAL | STT_FUNC, sized by the `.size` directive.
+                    assert_eq!(info, 0x02, "{target:?}: st_info {info:#x}");
+                    assert_eq!(size as i64, 2 * nop, "{target:?}: st_size {size}");
+                }
+            }
+            // The section-symbol index of `.lltext`, which the reduced
+            // relocation must name.
+            let lltext_shndx = secs
+                .iter()
+                .position(|(n, ..)| n == ".lltext")
+                .expect("`.lltext` section") as u16;
+            let sec_sym = syms
+                .iter()
+                .position(|&(_, info, shndx, ..)| info == 0x03 && shndx == lltext_shndx)
+                .expect("`.lltext` section symbol") as u64;
+            let rela = &secs
+                .iter()
+                .find(|(n, ..)| n == ".rela.lldata")
+                .expect("`.rela.lldata`")
+                .3;
+            let entries = rela.as_chunks::<24>().0;
+            assert_eq!(
+                entries.len(),
+                1,
+                "{target:?}: {} relocations",
+                entries.len()
+            );
+            let info = u64::from_le_bytes(entries[0][8..16].try_into().unwrap());
+            let addend = i64::from_le_bytes(entries[0][16..24].try_into().unwrap());
+            assert_eq!(info >> 32, sec_sym, "{target:?}: reduction names a section");
+            // `ll_entry` is one instruction; the label starts past it.
+            assert_eq!(addend, nop, "{target:?}: addend {addend}");
+        }
+    }
+}
+
 /// A hand-built one-unit [`NativeObject`] with only the fields the
 /// resolution tests below exercise populated.
 fn minimal_native_object(

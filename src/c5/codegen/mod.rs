@@ -1921,6 +1921,10 @@ pub(crate) struct Build {
     /// Mirror of [`NativeOptions::elf_class`]. Fixes the on-disk
     /// record widths and the relocation ABI of a `-c` object.
     pub elf_class: ElfClass,
+    /// Mirror of [`NativeOptions::keep_local_labels`]. The relocatable
+    /// writer keeps the assembler's local-label temporaries in `.symtab`
+    /// when set.
+    pub keep_local_labels: bool,
     /// The shared library's own name, recorded in the image so a
     /// consumer that links against it by name references the file it
     /// loads at runtime (PE export-directory Name, Mach-O
@@ -3142,6 +3146,13 @@ pub struct NativeOptions {
     /// the relocated field, and the `R_386_*` type numbers. Final
     /// images are unaffected.
     pub elf_class: ElfClass,
+    /// `-Wa,-L` / `-Wa,--keep-locals`: keep the assembler's local-label
+    /// temporaries (the `.L`-prefixed names) in a relocatable object's
+    /// `.symtab`. Off by default, as in GNU as. The relocations are the
+    /// same either way -- a reference to one reduces to its section plus
+    /// an addend regardless -- so this only changes what a symbol dump
+    /// shows.
+    pub keep_local_labels: bool,
     /// Least alignment every function's entry gets in `.text`
     /// (`-fmin-function-alignment=N` / `-falign-functions=N`). 1 is the
     /// default and pads nothing, which is what a function packed against
@@ -3400,6 +3411,7 @@ impl NativeOptions {
             pic_link: false,
             code_model: CodeModel::Small,
             elf_class: ElfClass::Elf64,
+            keep_local_labels: false,
             hardening: Hardening::NONE,
             stack_protect: StackProtect::OFF,
             fixed_regs: FixedRegs::NONE,

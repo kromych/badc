@@ -2619,6 +2619,7 @@ pub(crate) fn lower(
         pic_link: native.pic || native.pic_link,
         code_model: native.code_model,
         elf_class: native.elf_class,
+        keep_local_labels: native.keep_local_labels,
         shared_lib_name: None,
         dllmain_pc: None,
         macho_tlv_fixups,

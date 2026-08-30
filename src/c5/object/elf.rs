@@ -4231,6 +4231,7 @@ mod tests {
             pic_link: false,
             code_model: Default::default(),
             elf_class: Default::default(),
+            keep_local_labels: false,
             rodata: Default::default(),
             data_pcrel_relocs: Vec::new(),
             text_pcrel_relocs: Vec::new(),

@@ -3391,6 +3391,7 @@ mod tests {
             pic_link: false,
             code_model: Default::default(),
             elf_class: Default::default(),
+            keep_local_labels: false,
             data_align: 8,
             bss_size: 0,
             init_fini_arrays: Default::default(),

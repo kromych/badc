@@ -1419,7 +1419,7 @@ fn link_relocatable_inner(
             };
             let discard = match opts.discard_locals {
                 DiscardLocals::None => false,
-                DiscardLocals::Temporaries => sym.name.starts_with(".L"),
+                DiscardLocals::Temporaries => crate::c5::asm::is_local_label(&sym.name),
                 DiscardLocals::All => sym.kind != STT_FILE,
             };
             if discard {

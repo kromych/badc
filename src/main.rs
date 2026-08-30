@@ -161,7 +161,11 @@ Compile knobs:
   -Xassembler <opt>        assembler is built in, so each option is
                            checked against what it implements rather
                            than passed on; an option it does not
-                           implement is refused by name.
+                           implement is refused by name. `-Wa,-L`
+                           (`--keep-locals`) keeps the local-label
+                           temporaries -- the `.L`-prefixed names --
+                           in a `-c` object's symbol table, which
+                           GNU as drops without it.
   -m16 / -m32 / -m64       Code model, x86 targets only. `-m16` and
                            `-m32` preprocess the unit as i386 (`__i386__`
                            defined, `__x86_64__` not, ILP32 widths) and
@@ -524,6 +528,15 @@ impl DepOptions {
     }
 }
 
+/// What one accepted `-Wa,` / `-Xassembler` option asks for.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum AssemblerOption {
+    /// Selects nothing badc's assembler does differently.
+    NoEffect,
+    /// `-L` / `--keep-locals`.
+    KeepLocals,
+}
+
 /// Check one `-Wa,` / `-Xassembler` option against what badc's assembler
 /// implements. The accepted set is what its behavior already matches:
 ///
@@ -539,17 +552,20 @@ impl DepOptions {
 ///   each member unconditionally, so a ceiling at or above that set selects
 ///   nothing. It does not reject an instruction above a lower ceiling, which
 ///   is the one direction this diverges from gas.
+/// * `-L` / `--keep-locals` -- keeps the local-label temporaries in the
+///   object's `.symtab`; see [`badc::NativeOptions::keep_local_labels`].
 ///
 /// Anything else is refused: passing it on is not an option, and accepting
 /// it would claim behavior badc does not have.
-fn accept_assembler_option(opt: &str) -> Result<(), String> {
+fn accept_assembler_option(opt: &str) -> Result<AssemblerOption, String> {
     let name = opt.split_once('=').map_or(opt, |(n, _)| n);
     match name {
+        "-L" | "--keep-locals" => Ok(AssemblerOption::KeepLocals),
         "--fatal-warnings"
         | "-mrelax-relocations"
         | "--noexecstack"
         | "--no-warn-rwx-segments"
-        | "-march" => Ok(()),
+        | "-march" => Ok(AssemblerOption::NoEffect),
         _ => Err(format!("badc: error: unsupported assembler option `{opt}`")),
     }
 }
@@ -725,6 +741,8 @@ fn run() {
     // `const` placements in a `-c` object; see `NativeOptions::pic_link`.
     let mut fno_pic = false;
     let mut jump_tables = true;
+    // `-Wa,-L` / `-Wa,--keep-locals`.
+    let mut keep_local_labels = false;
     let mut min_function_alignment: u32 = 1;
     let mut patchable_function_entry = badc::PatchableEntry::NONE;
     let mut profiling = badc::Profiling::OFF;
@@ -1060,19 +1078,23 @@ fn run() {
             // it implements rather than passed on.
             s if s.starts_with("-Wa,") => {
                 for opt in s["-Wa,".len()..].split(',') {
-                    if let Err(e) = accept_assembler_option(opt) {
-                        eprint_diagnostic(e);
-                        std::process::exit(1);
+                    match accept_assembler_option(opt) {
+                        Ok(o) => keep_local_labels |= o == AssemblerOption::KeepLocals,
+                        Err(e) => {
+                            eprint_diagnostic(e);
+                            std::process::exit(1);
+                        }
                     }
                 }
             }
             "-Xassembler" => match iter.next() {
-                Some(opt) => {
-                    if let Err(e) = accept_assembler_option(&opt) {
+                Some(opt) => match accept_assembler_option(&opt) {
+                    Ok(o) => keep_local_labels |= o == AssemblerOption::KeepLocals,
+                    Err(e) => {
                         eprint_diagnostic(e);
                         std::process::exit(1);
                     }
-                }
+                },
                 None => {
                     eprint_diagnostic("badc: error: -Xassembler requires an option");
                     std::process::exit(1);
@@ -2832,6 +2854,7 @@ fn run() {
         reloc_opts.stack_protect = stack_protect;
         reloc_opts.fixed_regs = fixed_regs;
         reloc_opts.elf_class = object_elf_class;
+        reloc_opts.keep_local_labels = keep_local_labels;
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
         }
@@ -3567,6 +3590,7 @@ fn run() {
         reloc_opts.stack_protect = stack_protect;
         reloc_opts.fixed_regs = fixed_regs;
         reloc_opts.elf_class = object_elf_class;
+        reloc_opts.keep_local_labels = keep_local_labels;
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
         }
@@ -3710,6 +3734,7 @@ fn run() {
         reloc_opts.stack_protect = stack_protect;
         reloc_opts.fixed_regs = fixed_regs;
         reloc_opts.elf_class = object_elf_class;
+        reloc_opts.keep_local_labels = keep_local_labels;
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
         }

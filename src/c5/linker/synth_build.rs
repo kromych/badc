@@ -484,6 +484,7 @@ fn synth_program_and_build(
         pic_link: false,
         code_model: Default::default(),
         elf_class: Default::default(),
+        keep_local_labels: false,
         data_align: merged.data_align,
         bss_size: merged.bss_size as i64,
         init_fini_arrays: merged.init_fini_arrays,

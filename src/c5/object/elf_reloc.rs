@@ -2553,20 +2553,29 @@ pub(super) fn write_relocatable(
         .map(|r| r.symbol_name.as_str())
         .filter(|n| extern_addr_form(n) == ExternAddrForm::Got)
         .collect();
-    // Local inline-asm section labels, still inside the LOCAL block. A
-    // `.L`-prefixed local is an assembler temporary: gas keeps it out of
-    // `.symtab`, and every reference to one reduces to its section plus
-    // an addend (`asm_label_secref`), so the entry has no reader. One in
-    // a mergeable section keeps its entry, since no reduction covers it.
+    // A local label GNU as treats as an assembler temporary: the name
+    // carries the local-label prefix, and references to it reduce to its
+    // section plus an addend (`asm_label_secref`) whatever `.type` and
+    // `.size` say -- the kernel's SYM_FUNC_START_LOCAL sizes one
+    // `@function` and gas drops it anyway. A mergeable section's addend
+    // is a merge-table offset and a GOT slot is per-symbol, so neither
+    // reduces and both keep their entry.
+    let asm_local_temp = |l: &AsmLabelSym| -> bool {
+        !l.global
+            && !l.weak
+            && crate::c5::asm::is_local_label(l.name)
+            && !l.merge
+            && !got_ref_names.contains(l.name)
+    };
+    // Local inline-asm section labels, still inside the LOCAL block.
+    // `--keep-locals` holds the temporaries, as `as -L` does; the
+    // stand-ins for numeric labels stay out, as gas's unnamed ones do.
     for (j, l) in asm_labels.iter().enumerate() {
         if l.global || l.weak {
             continue;
         }
-        if l.name.starts_with(".L")
-            && l.st_type == STT_NOTYPE
-            && !l.merge
-            && !got_ref_names.contains(l.name)
-        {
+        let keep = build.keep_local_labels && !crate::c5::asm::is_generated_local_label(l.name);
+        if asm_local_temp(l) && !keep {
             continue;
         }
         asm_label_symidx.insert(l.name, symbols.len() as u32);
@@ -2940,15 +2949,20 @@ pub(super) fn write_relocatable(
     // relocation against a local non-function/object symbol that way,
     // and readers of an object's metadata sections require the
     // section+addend form (an unexpected symbol type there aborts
-    // their relocation walk). Named globals, weak definitions, and
-    // `.type`d function / object labels keep their own symbol -- the
-    // binding and the type are what a reader needs from them, as does a
-    // label in a mergeable section, whose section-relative addend the
-    // linker would read as a merge-table offset.
+    // their relocation walk). A local-label temporary reduces whatever
+    // its `.type` says, since it carries no symbol to name. Named
+    // globals, weak definitions, and other `.type`d function / object
+    // labels keep their own symbol -- the binding and the type are what
+    // a reader needs from them, as does a label in a mergeable section,
+    // whose section-relative addend the linker would read as a
+    // merge-table offset.
     let mut asm_label_secref: alloc::collections::BTreeMap<&str, (u64, i64)> =
         alloc::collections::BTreeMap::new();
     for l in &asm_labels {
-        if l.global || l.weak || l.st_type != STT_NOTYPE || l.shndx == SHN_ABS || l.merge {
+        if l.global || l.weak || l.shndx == SHN_ABS || l.merge {
+            continue;
+        }
+        if l.st_type != STT_NOTYPE && !asm_local_temp(l) {
             continue;
         }
         asm_label_secref.insert(l.name, (l.sec_sym, l.value as i64));
@@ -6012,6 +6026,7 @@ mod tests {
             pic_link: false,
             code_model: Default::default(),
             elf_class: Default::default(),
+            keep_local_labels: false,
             rodata: Default::default(),
             data_pcrel_relocs: Vec::new(),
             text_pcrel_relocs: Vec::new(),

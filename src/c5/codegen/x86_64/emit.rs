@@ -9986,7 +9986,7 @@ fn emit_inline_asm_once(
         else {
             continue;
         };
-        if name.starts_with(".L") {
+        if crate::c5::asm::is_local_label(name) {
             continue;
         }
         // One definition per name across the unit, as in GNU as.

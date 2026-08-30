@@ -6249,7 +6249,7 @@ impl<'a> LdsLinker<'a> {
                 // offsets deduplication moves, unless the link emits
                 // relocations that can name them.
                 if !self.opts.discard_none
-                    && sym.name.starts_with(".L")
+                    && crate::c5::asm::is_local_label(&sym.name)
                     && (self.opts.discard_locals
                         || (!track && self.sym_input_flags(obj_i, sym_i) & SHF_MERGE != 0))
                 {

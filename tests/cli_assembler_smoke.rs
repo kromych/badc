@@ -712,6 +712,71 @@ fn assembler_options_are_checked_rather_than_passed_on() {
     assert!(ok, "-Xassembler must accept what -Wa, accepts");
 }
 
+/// GNU as keeps a label whose name carries the local-label prefix out of
+/// `.symtab` unless `-L` / `--keep-locals` is given, whatever `.type` and
+/// `.size` name it: the kernel's `SYM_FUNC_START_LOCAL(.Lname)` spells one
+/// `@function` and sizes it, and `as` still drops it. References reduce to
+/// the label's section plus an addend either way, so the option moves no
+/// relocation.
+#[test]
+fn local_labels_reach_the_symbol_table_only_under_keep_locals() {
+    const SRC: &str = "\t.text\n\t.globl entry\n\t.type entry, @function\nentry:\n\
+                       \tnop\n\t.size entry, .-entry\n\
+                       \t.type .Lno_longmode, @function\n.Lno_longmode:\n1:\thlt\n\
+                       \tjmp 1b\n\t.size .Lno_longmode, .-.Lno_longmode\n\
+                       \t.section .rodata\n\t.quad .Lno_longmode\n";
+    let d = dir("keep-locals");
+    write(&d, "b.s", SRC);
+    let mut objs = Vec::new();
+    for extra in [
+        &[][..],
+        &["-Wa,-L"][..],
+        &["-Wa,--keep-locals"][..],
+        &["-Xassembler", "-L"][..],
+    ] {
+        let mut args = vec!["-q", "-c", "--target=linux-x64"];
+        args.extend_from_slice(extra);
+        args.extend_from_slice(&["b.s", "-o", "b.o"]);
+        run_ok(&d, &args);
+        objs.push(std::fs::read(d.join("b.o")).expect("object"));
+    }
+    let locals = |b: &[u8]| -> Vec<(String, u8, u64)> {
+        sym_table(b)
+            .into_iter()
+            .filter(|(n, ..)| n.starts_with(".L"))
+            .map(|(n, info, _, _, size)| (n, info, size))
+            .collect()
+    };
+    assert!(
+        locals(&objs[0]).is_empty(),
+        "default keeps {:?}",
+        locals(&objs[0])
+    );
+    // STB_LOCAL | STT_FUNC, sized by the `.size` directive. The numeric
+    // label `1:` gets no entry: gas's own stand-in for one carries no
+    // name a source can spell and never reaches the table.
+    for (i, o) in objs[1..].iter().enumerate() {
+        assert_eq!(
+            locals(o),
+            vec![(".Lno_longmode".to_string(), 0x02, 3)],
+            "keep-locals spelling {i} kept {:?}",
+            locals(o)
+        );
+    }
+    // The `.quad` reduces to `.text` + the label's offset in every mode --
+    // the entry the option restores has no relocation reader.
+    for (i, o) in objs.iter().enumerate() {
+        assert_eq!(
+            named_relocs(o, ".rela.rodata")
+                .into_iter()
+                .map(|(_, _, n, a)| (n, a))
+                .collect::<Vec<_>>(),
+            vec![(".text".to_string(), 1)],
+            "object {i}"
+        );
+    }
+}
+
 /// One ELF32 section as `(name, sh_type, sh_offset, sh_size, sh_info,
 /// sh_entsize)`, in header order.
 fn elf32_sections(b: &[u8]) -> Vec<(String, u32, usize, usize, u32, u32)> {

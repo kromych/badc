@@ -1444,7 +1444,7 @@ pub(crate) fn materialize_asm_sections(
         })
     {
         if num_unique
-            .insert(name, alloc::format!(".Lc5_asmsec_{uniq}_{name}"))
+            .insert(name, alloc::format!("{ASMSEC_LABEL_PREFIX}{uniq}_{name}"))
             .is_some()
         {
             return Err(alloc::format!(

@@ -3124,9 +3124,10 @@ def main() -> int:
                          "units badc declines (default: gcc; on macOS the "
                          "musl-cross <triple>-gcc for --arch)")
     ap.add_argument("--linker", choices=("reference", "badc"),
-                    default="reference",
-                    help="linker for the kernel build: the reference `ld`, "
-                         "or badc through ldshim.py")
+                    default=os.environ.get("BADC_LINKER", "badc"),
+                    help="linker for the kernel build: badc through "
+                         "ldshim.py (the default, matching verify.py), or "
+                         "the reference `ld` for the contrast run")
     ap.add_argument("--real-ld", default=os.environ.get("BADC_LD_REAL"),
                     help="reference linker (default: ld; on macOS the "
                          "musl-cross <triple>-ld for --arch)")

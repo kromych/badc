@@ -25,7 +25,7 @@ none of the units carrying it were in those configurations.
 
 The package gate builds the same tree against the distributions' own
 configurations instead (`packages.py --config vendor`, below), which is what a
-distribution kernel actually is: 21698 to 26223 units on x86_64 and 23444 to
+distribution kernel actually is: 21701 to 26223 units on x86_64 and 23446 to
 30552 on aarch64, against defconfig's 2953 and 10489.
 
 ## Run

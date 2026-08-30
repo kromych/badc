@@ -76,12 +76,17 @@ under a pinned sha256, so a package build resolves it without booting anything
 (`packages.py --config vendor`). That corpus is what a distribution kernel is,
 and it is several times defconfig's:
 
-| package | configuration | badc C units | badc asm | badc links |
+| package | configuration | C units | assembly units | links |
 |---|---|---|---|---|
-| rpm, x86_64 | Fedora 44 | 21700 | 136 | 11535 |
-| rpm, aarch64 | Fedora 44 | 23445 | 100 | 13076 |
-| deb, x86_64 | Ubuntu 26.04 | 26000+ | 124 | 10000+ |
-| deb, aarch64 | Ubuntu 26.04 | 30000+ | 93 | 13000+ |
+| rpm, x86_64 | Fedora 44 | 21701 | 141 | 11535 |
+| rpm, aarch64 | Fedora 44 | 23446 | 103 | 13076 |
+| deb, x86_64 | Ubuntu 26.04 | 26223 | 124 | -- |
+| deb, aarch64 | Ubuntu 26.04 | 30552 | 93 | -- |
+
+Every count is badc's, with no fallback to another compiler, assembler or
+linker. The two Fedora packages are complete; the Ubuntu configurations set
+`CONFIG_BUILTIN_MODULE_RANGES`, whose `-Map` output the relocatable link path
+does not yet write, so their link counts are not final.
 
 **Real hardware.** `packages.py --phases hw` runs the same install, one-shot
 selection, boot, probes and exercise stage on a physical machine instead of a

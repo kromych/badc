@@ -899,6 +899,28 @@ fn vector_shift() {
     assert!(encode("sshr", &[v(0, 2, true), v(1, 2, true), Opnd::Imm(0)]).is_err());
     assert!(encode("sshr", &[v(0, 2, true), v(1, 2, true), Opnd::Imm(33)]).is_err());
     assert!(encode("shl", &[v(0, 3, false), v(1, 3, false), Opnd::Imm(1)]).is_err());
+    // shrn/rshrn narrow while shifting: immh:immb is 2*esize - shift over the
+    // DESTINATION element size, the source being one size wider and always
+    // 128-bit; the `2` form writes the upper half. Words match GNU as 2.46.1.
+    let nr = |m: &str, ds: u8, dq: bool, amt: i64, rd: u8, rn: u8| {
+        enc(m, &[v(rd, ds, dq), v(rn, ds + 1, true), Opnd::Imm(amt)])
+    };
+    assert_eq!(nr("shrn", 2, false, 26, 30, 21), 0x0F26_86BE);
+    assert_eq!(nr("shrn", 0, false, 1, 0, 1), 0x0F0F_8420);
+    assert_eq!(nr("shrn2", 0, true, 8, 2, 3), 0x4F08_8462);
+    assert_eq!(nr("rshrn", 1, false, 16, 4, 5), 0x0F10_8CA4);
+    assert_eq!(nr("rshrn2", 2, true, 32, 6, 7), 0x4F20_8CE6);
+    assert_eq!(nr("shrn", 1, false, 7, 8, 9), 0x0F19_8528);
+    assert_eq!(nr("rshrn2", 1, true, 3, 10, 11), 0x4F1D_8D6A);
+    // The `2` form needs the 128-bit destination and the base form the 64-bit
+    // one; the source must be one size wider and 128-bit; the amount is
+    // 1..esize of the destination.
+    assert!(encode("shrn", &[v(0, 2, true), v(1, 3, true), Opnd::Imm(4)]).is_err());
+    assert!(encode("shrn2", &[v(0, 2, false), v(1, 3, true), Opnd::Imm(4)]).is_err());
+    assert!(encode("shrn", &[v(0, 2, false), v(1, 3, false), Opnd::Imm(4)]).is_err());
+    assert!(encode("shrn", &[v(0, 2, false), v(1, 2, true), Opnd::Imm(4)]).is_err());
+    assert!(encode("shrn", &[v(0, 2, false), v(1, 3, true), Opnd::Imm(0)]).is_err());
+    assert!(encode("shrn", &[v(0, 2, false), v(1, 3, true), Opnd::Imm(33)]).is_err());
 }
 
 /// Widening multiply by one element of the second source. Words match GNU as

@@ -1307,6 +1307,56 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((rn as u32) << 5)
             | (rd as u32));
     }
+    // SIMD narrowing shift right by immediate `<shrn|rshrn> Vd.<Tb>, Vn.<Ta>,
+    // #shift`: shift each wide element right and write the low half of the
+    // result. immh:immb is 2*esize-shift over the DESTINATION element size, the
+    // source being one size wider; opcode (15..11) is 10000, or 10001 for the
+    // rounding form. The `2` mnemonic writes the top half of a 128-bit
+    // destination (Q at 30).
+    if let Some((nmnem, upper)) = strip_widen2(mnemonic)
+        && let Some(opcode) = match nmnem {
+            "shrn" => Some(0b10000u32),
+            "rshrn" => Some(0b10001),
+            _ => None,
+        }
+        && let [
+            Opnd::VecReg {
+                num: rd,
+                size: ds,
+                q: dq,
+            },
+            Opnd::VecReg {
+                num: rn,
+                size: ss,
+                q: sq,
+            },
+            Opnd::Imm(shift),
+        ] = *ops
+    {
+        if ss != ds + 1 || ds > 2 || !sq {
+            return Err(String::from(
+                "inline asm: narrowing shift source must be one element size wider and 128-bit",
+            ));
+        }
+        if dq != upper {
+            return Err(String::from(
+                "inline asm: the `2` form writes a 128-bit destination; the base form writes 64-bit",
+            ));
+        }
+        let esize = 8i64 << ds;
+        if shift < 1 || shift > esize {
+            return Err(String::from(
+                "inline asm: narrowing shift amount out of range",
+            ));
+        }
+        return Ok(0x0F00_0000
+            | (opcode << 11)
+            | (1u32 << 10)
+            | (if upper { 1u32 << 30 } else { 0 })
+            | (((2 * esize - shift) as u32) << 16)
+            | ((rn as u32) << 5)
+            | (rd as u32));
+    }
     // SIMD modified immediate `<movi|mvni|orr|bic> Vd.T, #imm{, lsl #s}`. The
     // 8-bit value splits abc:defgh across bits 18..16 and 9..5; cmode selects
     // the element size and shift, op (bit 29) the inverting variant (mvni,

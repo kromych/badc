@@ -183,6 +183,33 @@ fn kernel_units() {
         "vpclmulqdq $0x00,%xmm7,%xmm0,%xmm0",
         &[0xC4, 0xE3, 0x79, 0x44, 0xC7, 0x00],
     );
+    // arch/x86/crypto/aria-{aesni-avx,aesni-avx2,gfni-avx512}-asm_64.S: the
+    // same affine transform at each of the three vector lengths, VEX below
+    // 512 bits and EVEX at it.
+    gas(
+        "vgf2p8affineqb $0x2c,%xmm4,%xmm15,%xmm15",
+        &[0xC4, 0x63, 0x81, 0xCE, 0xFC, 0x2C],
+    );
+    gas(
+        "vgf2p8affineqb $0x2c,%ymm4,%ymm15,%ymm15",
+        &[0xC4, 0x63, 0x85, 0xCE, 0xFC, 0x2C],
+    );
+    gas(
+        "vgf2p8affineqb $0x2c,%zmm28,%zmm15,%zmm15",
+        &[0x62, 0x13, 0x85, 0x48, 0xCE, 0xFC, 0x2C],
+    );
+    gas(
+        "vgf2p8affineinvqb $0x00,%xmm2,%xmm15,%xmm15",
+        &[0xC4, 0x63, 0x81, 0xCF, 0xFA, 0x00],
+    );
+    gas(
+        "vgf2p8affineinvqb $0xe2,%ymm0,%ymm13,%ymm13",
+        &[0xC4, 0x63, 0x95, 0xCF, 0xE8, 0xE2],
+    );
+    gas(
+        "vgf2p8affineinvqb $0xe2,%zmm24,%zmm15,%zmm15",
+        &[0x62, 0x13, 0x85, 0x48, 0xCF, 0xF8, 0xE2],
+    );
 }
 
 /// The AVX-512 forms the distribution-configuration crypto units name:
@@ -235,6 +262,123 @@ fn vaes_and_lane_shuffles() {
     gas(
         "vshuff32x4 $4,%zmm4,%zmm5,%zmm6",
         &[0x62, 0xF3, 0x55, 0x48, 0x23, 0xF4, 0x04],
+    );
+}
+
+/// GFNI under EVEX, the form `arch/x86/crypto/aria-gfni-avx512-asm_64.S`
+/// names. The affine transforms read qword elements: W is set, the tuple is
+/// Full, and a `{1toN}` broadcast reads one qword. The field multiply reads
+/// bytes: W is clear, the tuple is Full Mem, and it has no broadcast.
+#[test]
+fn gfni_evex() {
+    // The whole register file through R', X, V' and B.
+    gas(
+        "vgf2p8affineqb $0x33,%xmm31,%xmm7,%xmm0",
+        &[0x62, 0x93, 0xC5, 0x08, 0xCE, 0xC7, 0x33],
+    );
+    gas(
+        "vgf2p8affineqb $0x33,%ymm16,%ymm17,%ymm18",
+        &[0x62, 0xA3, 0xF5, 0x20, 0xCE, 0xD0, 0x33],
+    );
+    gas(
+        "vgf2p8affineqb $0x2c,%zmm28,%zmm15,%zmm15",
+        &[0x62, 0x13, 0x85, 0x48, 0xCE, 0xFC, 0x2C],
+    );
+    gas(
+        "vgf2p8affineinvqb $0xe2,%zmm24,%zmm15,%zmm15",
+        &[0x62, 0x13, 0x85, 0x48, 0xCF, 0xF8, 0xE2],
+    );
+    // Masking and zeroing.
+    gas(
+        "vgf2p8affineinvqb $0x33,%zmm3,%zmm2,%zmm9{%k1}",
+        &[0x62, 0x73, 0xED, 0x49, 0xCF, 0xCB, 0x33],
+    );
+    gas(
+        "vgf2p8affineinvqb $0x33,%zmm3,%zmm2,%zmm9{%k7}{z}",
+        &[0x62, 0x73, 0xED, 0xCF, 0xCF, 0xCB, 0x33],
+    );
+    gas(
+        "vgf2p8affineqb $0x33,%ymm3,%ymm2,%ymm9{%k5}{z}",
+        &[0x62, 0x73, 0xED, 0xAD, 0xCE, 0xCB, 0x33],
+    );
+    // Full tuple: disp8 scales by the vector length, and by 8 -- one qword --
+    // under a broadcast.
+    gas(
+        "vgf2p8affineinvqb $0x33,64(%rdx),%xmm6,%xmm22",
+        &[0x62, 0xE3, 0xCD, 0x08, 0xCF, 0x72, 0x04, 0x33],
+    );
+    gas(
+        "vgf2p8affineinvqb $0x33,64(%rdx),%ymm6,%ymm22",
+        &[0x62, 0xE3, 0xCD, 0x28, 0xCF, 0x72, 0x02, 0x33],
+    );
+    gas(
+        "vgf2p8affineinvqb $0x33,64(%rdx),%zmm6,%zmm22",
+        &[0x62, 0xE3, 0xCD, 0x48, 0xCF, 0x72, 0x01, 0x33],
+    );
+    gas(
+        "vgf2p8affineinvqb $0x33,8128(%rdx),%zmm6,%zmm22",
+        &[0x62, 0xE3, 0xCD, 0x48, 0xCF, 0x72, 0x7F, 0x33],
+    );
+    gas(
+        "vgf2p8affineinvqb $0x33,8192(%rdx),%zmm6,%zmm22",
+        &[
+            0x62, 0xE3, 0xCD, 0x48, 0xCF, 0xB2, 0x00, 0x20, 0x00, 0x00, 0x33,
+        ],
+    );
+    gas(
+        "vgf2p8affineinvqb $0x33,63(%rdx),%zmm6,%zmm22",
+        &[
+            0x62, 0xE3, 0xCD, 0x48, 0xCF, 0xB2, 0x3F, 0x00, 0x00, 0x00, 0x33,
+        ],
+    );
+    gas(
+        "vgf2p8affineqb $0x33,(%rdx){1to2},%xmm6,%xmm22",
+        &[0x62, 0xE3, 0xCD, 0x18, 0xCE, 0x32, 0x33],
+    );
+    gas(
+        "vgf2p8affineqb $0x33,8(%rdx){1to4},%ymm6,%ymm22",
+        &[0x62, 0xE3, 0xCD, 0x38, 0xCE, 0x72, 0x01, 0x33],
+    );
+    gas(
+        "vgf2p8affineqb $0x33,1016(%rdx){1to8},%zmm6,%zmm22",
+        &[0x62, 0xE3, 0xCD, 0x58, 0xCE, 0x72, 0x7F, 0x33],
+    );
+    gas(
+        "vgf2p8affineqb $0x33,-1024(%rdx){1to8},%zmm6,%zmm22",
+        &[0x62, 0xE3, 0xCD, 0x58, 0xCE, 0x72, 0x80, 0x33],
+    );
+    gas(
+        "vgf2p8affineqb $0x33,1024(%rdx){1to8},%zmm6,%zmm22",
+        &[
+            0x62, 0xE3, 0xCD, 0x58, 0xCE, 0xB2, 0x00, 0x04, 0x00, 0x00, 0x33,
+        ],
+    );
+    // The field multiply: W clear, no broadcast, disp8 by the vector length.
+    gas(
+        "vgf2p8mulb %zmm17,%zmm18,%zmm19",
+        &[0x62, 0xA2, 0x6D, 0x40, 0xCF, 0xD9],
+    );
+    gas(
+        "vgf2p8mulb %ymm31,%ymm2,%ymm3{%k2}",
+        &[0x62, 0x92, 0x6D, 0x2A, 0xCF, 0xDF],
+    );
+    gas(
+        "vgf2p8mulb %xmm16,%xmm1,%xmm2{%k4}{z}",
+        &[0x62, 0xB2, 0x75, 0x8C, 0xCF, 0xD0],
+    );
+    gas(
+        "vgf2p8mulb 64(%rdx),%zmm6,%zmm22",
+        &[0x62, 0xE2, 0x4D, 0x48, 0xCF, 0x72, 0x01],
+    );
+    gas(
+        "vgf2p8mulb 63(%rdx),%zmm6,%zmm22",
+        &[0x62, 0xE2, 0x4D, 0x48, 0xCF, 0xB2, 0x3F, 0x00, 0x00, 0x00],
+    );
+    gas(
+        "vgf2p8mulb 96(%r12,%r13,8),%zmm31,%zmm31",
+        &[
+            0x62, 0x02, 0x05, 0x40, 0xCF, 0xBC, 0xEC, 0x60, 0x00, 0x00, 0x00,
+        ],
     );
 }
 
@@ -1252,6 +1396,27 @@ fn refusals() {
     refused("vpcmpeqd %zmm1,%zmm2,%k3{%k4}{z}", "opmask destination");
     refused("kmovq %eax,%k1", "64-bit general register");
     refused("kandw %k1,%k2,%eax", "opmask instruction takes");
+    // GFNI: the field multiply reads bytes and has no broadcast form; the
+    // affine transforms read qwords, so the element count must match the
+    // vector length. The legacy-SSE names have no EVEX row at all.
+    refused(
+        "vgf2p8mulb (%rax){1to8},%zmm1,%zmm0",
+        "no `{1toN}` broadcast",
+    );
+    refused(
+        "vgf2p8affineqb $1,(%rax){1to4},%xmm2,%xmm3",
+        "does not match the operand",
+    );
+    refused("gf2p8affineqb $1,%zmm1,%zmm0", "no EVEX");
+    refused("gf2p8mulb %ymm1,%ymm0", "must be an XMM register");
+    refused(
+        "vgf2p8affineqb %xmm1,%xmm2,%xmm3",
+        "needs $imm, %src2, %src1, %dst",
+    );
+    refused(
+        "vgf2p8mulb $1,%xmm1,%xmm2,%xmm3",
+        "VEX op needs %src2, %src1, %dst",
+    );
 }
 
 /// The tuple table is the SDM's, restated as a function; these are the factors

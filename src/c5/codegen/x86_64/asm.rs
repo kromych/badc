@@ -166,10 +166,12 @@ pub(crate) enum Mnemonic {
     },
     /// A 3-operand VEX op with a trailing immediate `v-op $imm8, %src2, %src1,
     /// %dst`. Covers vshufps / vshufpd (0F map) and vperm2f128 / vpblendd /
-    /// vpalignr / vinsertf128 (0F3A map).
+    /// vpalignr / vinsertf128 / vgf2p8affine{,inv}qb (0F3A map). `w` is the
+    /// VEX.W bit, which the qword-element forms set.
     VexImm3 {
         pp: u8,
         map: u8,
+        w: bool,
         opcode: u8,
         /// Set for the `is4` blends, whose leading operand is a vector register
         /// carried in the top four bits of the trailing byte instead of an
@@ -1276,6 +1278,7 @@ fn sse2_op(name: &str) -> Option<Mnemonic> {
         ("ptest", 0x66, 0x17),
         ("aesimc", 0x66, 0xDB), ("aesenc", 0x66, 0xDC), ("aesenclast", 0x66, 0xDD),
         ("aesdec", 0x66, 0xDE), ("aesdeclast", 0x66, 0xDF),
+        ("gf2p8mulb", 0x66, 0xCF),
         ("sha1nexte", 0, 0xC8), ("sha1msg1", 0, 0xC9), ("sha1msg2", 0, 0xCA),
         ("sha256rnds2", 0, 0xCB), ("sha256msg1", 0, 0xCC), ("sha256msg2", 0, 0xCD),
     ];
@@ -1392,6 +1395,9 @@ fn sse_imm(name: &str) -> Option<Mnemonic> {
         ("shufps", 0, 1, 0xC6, false, false), ("shufpd", 0x66, 1, 0xC6, false, false),
         ("palignr", 0x66, 3, 0x0F, false, false),
         ("pclmulqdq", 0x66, 3, 0x44, false, false),
+        // GFNI. The legacy encoding leaves the qword element width implicit.
+        ("gf2p8affineqb", 0x66, 3, 0xCE, false, false),
+        ("gf2p8affineinvqb", 0x66, 3, 0xCF, false, false),
         ("blendps", 0x66, 3, 0x0C, false, false), ("blendpd", 0x66, 3, 0x0D, false, false),
         ("pblendw", 0x66, 3, 0x0E, false, false),
         ("aeskeygenassist", 0x66, 3, 0xDF, false, false),
@@ -1634,6 +1640,7 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
         ("vpmaxsb", false, 0x3C), ("vpmaxsd", false, 0x3D),
         ("vaesenc", false, 0xDC), ("vaesenclast", false, 0xDD),
         ("vaesdec", false, 0xDE), ("vaesdeclast", false, 0xDF),
+        ("vgf2p8mulb", false, 0xCF),
         ("vfmadd132ps", false, 0x98), ("vfmadd213ps", false, 0xA8), ("vfmadd231ps", false, 0xB8),
         ("vfmadd132pd", true, 0x98), ("vfmadd213pd", true, 0xA8), ("vfmadd231pd", true, 0xB8),
         ("vfmsub132ps", false, 0x9A), ("vfmsub213ps", false, 0xAA), ("vfmsub231ps", false, 0xBA),
@@ -1651,31 +1658,34 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
             opcode,
         });
     }
-    // Immediate ops as `(pp, map, opcode)`. 3-operand: vshuf{ps,pd} (0F C6) and
-    // the 0F3A lane ops. 2-operand: vpshuf{d,lw,hw} (0F 70), vpermil{ps,pd},
-    // and the lane extracts, which write their r/m operand. TODO: EVEX /
-    // AVX-512 forms need their own encoding shape.
+    // Immediate ops as `(pp, map, W, opcode)`. 3-operand: vshuf{ps,pd} (0F C6)
+    // and the 0F3A lane ops. 2-operand: vpshuf{d,lw,hw} (0F 70), vpermil{ps,pd},
+    // and the lane extracts, which write their r/m operand.
     let imm3 = match name {
-        "vshufps" => Some((0u8, 1u8, 0xC6u8)),
-        "vshufpd" => Some((1, 1, 0xC6)),
-        "vcmpps" => Some((0, 1, 0xC2)),
-        "vcmppd" => Some((1, 1, 0xC2)),
-        "vcmpss" => Some((2, 1, 0xC2)),
-        "vcmpsd" => Some((3, 1, 0xC2)),
-        "vperm2f128" => Some((1, 3, 0x06)),
-        "vperm2i128" => Some((1, 3, 0x46)),
-        "vpblendd" => Some((1, 3, 0x02)),
-        "vpalignr" => Some((1, 3, 0x0F)),
-        "vinsertf128" => Some((1, 3, 0x18)),
-        "vinserti128" => Some((1, 3, 0x38)),
-        "vpclmulqdq" => Some((1, 3, 0x44)),
-        "vpblendw" => Some((1, 3, 0x0E)),
+        "vshufps" => Some((0u8, 1u8, false, 0xC6u8)),
+        "vshufpd" => Some((1, 1, false, 0xC6)),
+        "vcmpps" => Some((0, 1, false, 0xC2)),
+        "vcmppd" => Some((1, 1, false, 0xC2)),
+        "vcmpss" => Some((2, 1, false, 0xC2)),
+        "vcmpsd" => Some((3, 1, false, 0xC2)),
+        "vperm2f128" => Some((1, 3, false, 0x06)),
+        "vperm2i128" => Some((1, 3, false, 0x46)),
+        "vpblendd" => Some((1, 3, false, 0x02)),
+        "vpalignr" => Some((1, 3, false, 0x0F)),
+        "vinsertf128" => Some((1, 3, false, 0x18)),
+        "vinserti128" => Some((1, 3, false, 0x38)),
+        "vpclmulqdq" => Some((1, 3, false, 0x44)),
+        "vpblendw" => Some((1, 3, false, 0x0E)),
+        // GFNI: qword elements, so VEX.W is set.
+        "vgf2p8affineqb" => Some((1, 3, true, 0xCE)),
+        "vgf2p8affineinvqb" => Some((1, 3, true, 0xCF)),
         _ => None,
     };
-    if let Some((pp, map, opcode)) = imm3 {
+    if let Some((pp, map, w, opcode)) = imm3 {
         return Some(Mnemonic::VexImm3 {
             pp,
             map,
+            w,
             opcode,
             is4: false,
         });
@@ -1691,6 +1701,7 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
         return Some(Mnemonic::VexImm3 {
             pp: 1,
             map: 3,
+            w: false,
             opcode,
             is4: true,
         });
@@ -4753,6 +4764,7 @@ fn encode_bespoke(
         Mnemonic::VexImm3 {
             pp,
             map,
+            w,
             opcode,
             is4,
         } => {
@@ -4787,7 +4799,7 @@ fn encode_bespoke(
                 _ if vec_reg(src2).is_some() => {
                     let (s2, s2y) = vec_reg(src2).unwrap();
                     let l = u8::from(dy || s1y || s2y || leady);
-                    emit_vex(code, d >= 8, false, s2 >= 8, map, false, s1, l, pp);
+                    emit_vex(code, d >= 8, false, s2 >= 8, map, w, s1, l, pp);
                     code.push(opcode);
                     code.push(modrm_reg(d & 7, s2 & 7));
                 }
@@ -4798,7 +4810,7 @@ fn encode_bespoke(
                         ));
                     };
                     let l = u8::from(dy || s1y || leady);
-                    emit_vex(code, d >= 8, mr.rex_x(), mr.rex_b(), map, false, s1, l, pp);
+                    emit_vex(code, d >= 8, mr.rex_x(), mr.rex_b(), map, w, s1, l, pp);
                     code.push(opcode);
                     mr.emit(code, mode, addr, d & 7)?;
                 }
@@ -6812,6 +6824,7 @@ mod tests {
                 Mnemonic::VexImm3 {
                     pp: 0,
                     map: 1,
+                    w: false,
                     opcode: 0xC6,
                     is4: false
                 },
@@ -6859,6 +6872,7 @@ mod tests {
             Some(Mnemonic::VexImm3 {
                 pp: 0,
                 map: 1,
+                w: false,
                 opcode: 0xC6,
                 is4: false
             })
@@ -7225,6 +7239,7 @@ mod tests {
             Some(Mnemonic::VexImm3 {
                 pp: 1,
                 map: 3,
+                w: false,
                 opcode: 0x4C,
                 is4: true
             })
@@ -7234,6 +7249,7 @@ mod tests {
             Some(Mnemonic::VexImm3 {
                 pp: 1,
                 map: 3,
+                w: false,
                 opcode: 0x4A,
                 is4: true
             })
@@ -7243,6 +7259,7 @@ mod tests {
             Some(Mnemonic::VexImm3 {
                 pp: 1,
                 map: 3,
+                w: false,
                 opcode: 0x4B,
                 is4: true
             })
@@ -7252,6 +7269,7 @@ mod tests {
             Some(Mnemonic::VexImm3 {
                 pp: 1,
                 map: 3,
+                w: false,
                 opcode: 0x0E,
                 is4: false
             })
@@ -7528,6 +7546,64 @@ mod tests {
             (b"pextrw $7, %%xmm9, %%r10d", &[0x66, 0x45, 0x0F, 0xC5, 0xD1, 0x07]),
             (b"pinsrw $2, %%eax, %%xmm3", &[0x66, 0x0F, 0xC4, 0xD8, 0x02]),
             (b"pinsrw $5, %%r11d, %%xmm12", &[0x66, 0x45, 0x0F, 0xC4, 0xE3, 0x05]),
+        ];
+        for (tmpl, want) in cases {
+            assert_eq!(
+                asm_bytes(tmpl),
+                *want,
+                "{}",
+                core::str::from_utf8(tmpl).unwrap()
+            );
+        }
+    }
+
+    /// GFNI outside AVX-512: the legacy-SSE forms (128-bit, xmm0..15) and the
+    /// VEX ones (128/256-bit). The affine transforms operate on qword
+    /// elements, which VEX spells as W=1 and the legacy encoding leaves
+    /// implicit; the field multiply operates on bytes and takes W=0. Bytes
+    /// measured with GNU as 2.46.1.
+    #[test]
+    fn gfni_ops() {
+        #[rustfmt::skip]
+        let cases: &[(&[u8], &[u8])] = &[
+            (b"gf2p8affineqb $0x2c, %%xmm4, %%xmm5", &[0x66, 0x0F, 0x3A, 0xCE, 0xEC, 0x2C]),
+            (b"gf2p8affineqb $0x00, %%xmm12, %%xmm3",
+             &[0x66, 0x41, 0x0F, 0x3A, 0xCE, 0xDC, 0x00]),
+            (b"gf2p8affineinvqb $0xe2, %%xmm2, %%xmm13",
+             &[0x66, 0x44, 0x0F, 0x3A, 0xCF, 0xEA, 0xE2]),
+            (b"gf2p8affineinvqb $0x63, %%xmm11, %%xmm14",
+             &[0x66, 0x45, 0x0F, 0x3A, 0xCF, 0xF3, 0x63]),
+            (b"gf2p8affineqb $0x5a, 64(%%rdi), %%xmm7",
+             &[0x66, 0x0F, 0x3A, 0xCE, 0x7F, 0x40, 0x5A]),
+            (b"gf2p8affineqb $0x5a, 8(%%rax,%%r13,4), %%xmm9",
+             &[0x66, 0x46, 0x0F, 0x3A, 0xCE, 0x4C, 0xA8, 0x08, 0x5A]),
+            (b"gf2p8affineinvqb $0xff, (%%r12), %%xmm0",
+             &[0x66, 0x41, 0x0F, 0x3A, 0xCF, 0x04, 0x24, 0xFF]),
+            (b"gf2p8mulb %%xmm1, %%xmm0", &[0x66, 0x0F, 0x38, 0xCF, 0xC1]),
+            (b"gf2p8mulb %%xmm9, %%xmm10", &[0x66, 0x45, 0x0F, 0x38, 0xCF, 0xD1]),
+            (b"gf2p8mulb 32(%%r12), %%xmm3", &[0x66, 0x41, 0x0F, 0x38, 0xCF, 0x5C, 0x24, 0x20]),
+            (b"gf2p8mulb (%%rbp,%%rsi,8), %%xmm15",
+             &[0x66, 0x44, 0x0F, 0x38, 0xCF, 0x7C, 0xF5, 0x00]),
+            (b"vgf2p8affineqb $0x2c, %%xmm4, %%xmm15, %%xmm15",
+             &[0xC4, 0x63, 0x81, 0xCE, 0xFC, 0x2C]),
+            (b"vgf2p8affineinvqb $0x00, %%xmm2, %%xmm15, %%xmm15",
+             &[0xC4, 0x63, 0x81, 0xCF, 0xFA, 0x00]),
+            (b"vgf2p8affineqb $0x05, %%xmm1, %%xmm14, %%xmm14",
+             &[0xC4, 0x63, 0x89, 0xCE, 0xF1, 0x05]),
+            (b"vgf2p8affineqb $0x2c, %%ymm4, %%ymm15, %%ymm15",
+             &[0xC4, 0x63, 0x85, 0xCE, 0xFC, 0x2C]),
+            (b"vgf2p8affineinvqb $0xe2, %%ymm0, %%ymm13, %%ymm13",
+             &[0xC4, 0x63, 0x95, 0xCF, 0xE8, 0xE2]),
+            (b"vgf2p8affineqb $0x5a, 48(%%rdx), %%ymm1, %%ymm10",
+             &[0xC4, 0x63, 0xF5, 0xCE, 0x52, 0x30, 0x5A]),
+            (b"vgf2p8affineinvqb $0x5a, 8(%%r14,%%r13,4), %%xmm0, %%xmm15",
+             &[0xC4, 0x03, 0xF9, 0xCF, 0x7C, 0xAE, 0x08, 0x5A]),
+            (b"vgf2p8mulb %%xmm1, %%xmm2, %%xmm3", &[0xC4, 0xE2, 0x69, 0xCF, 0xD9]),
+            (b"vgf2p8mulb %%xmm11, %%xmm12, %%xmm13", &[0xC4, 0x42, 0x19, 0xCF, 0xEB]),
+            (b"vgf2p8mulb %%ymm11, %%ymm12, %%ymm13", &[0xC4, 0x42, 0x1D, 0xCF, 0xEB]),
+            (b"vgf2p8mulb (%%rax), %%ymm0, %%ymm15", &[0xC4, 0x62, 0x7D, 0xCF, 0x38]),
+            (b"vgf2p8mulb 64(%%r12,%%rbx,2), %%ymm8, %%ymm9",
+             &[0xC4, 0x42, 0x3D, 0xCF, 0x4C, 0x5C, 0x40]),
         ];
         for (tmpl, want) in cases {
             assert_eq!(

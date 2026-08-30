@@ -349,6 +349,8 @@ const TABLE: &[(&str, Form)] = {
     ("vaesenclast", rvm(1, 2, false, 0xDD, FullMem)),
     ("vaesdec",     rvm(1, 2, false, 0xDE, FullMem)),
     ("vaesdeclast", rvm(1, 2, false, 0xDF, FullMem)),
+    // GFNI: byte elements, so W is clear and the form takes no broadcast.
+    ("vgf2p8mulb", rvm(1, 2, false, 0xCF, FullMem)),
     // Scalar single / double: one element, its width from EVEX.W.
     ("vaddss", rvm(2, 1, false, 0x58, ElemW)), ("vaddsd", rvm(3, 1, true,  0x58, ElemW)),
     ("vsubss", rvm(2, 1, false, 0x5C, ElemW)), ("vsubsd", rvm(3, 1, true,  0x5C, ElemW)),
@@ -357,6 +359,9 @@ const TABLE: &[(&str, Form)] = {
     // 3-operand with a trailing immediate.
     ("vpternlogd", rvmi(1, 3, false, 0x25, Full)), ("vpternlogq", rvmi(1, 3, true, 0x25, Full)),
     ("vpclmulqdq", rvmi(1, 3, false, 0x44, FullMem)),
+    // GFNI: qword elements, so W is set and a broadcast reads one qword.
+    ("vgf2p8affineqb",    rvmi(1, 3, true, 0xCE, Full)),
+    ("vgf2p8affineinvqb", rvmi(1, 3, true, 0xCF, Full)),
     ("vshufps",    rvmi(0, 1, false, 0xC6, Full)), ("vshufpd", rvmi(1, 1, true, 0xC6, Full)),
     ("vpalignr",   rvmi(1, 3, false, 0x0F, FullMem)),
     // The 128-bit lane shuffles, which have no VEX form.

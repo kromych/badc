@@ -41,8 +41,8 @@ use super::AnonMember;
 use super::Compiler;
 use super::const_expr::ConstVal;
 use super::types::{
-    is_bool_ty, is_pointer_ty, is_struct_ty, is_struct_value_ty, is_unsigned_ty, narrow_const_int,
-    strip_unsigned, struct_id_of, struct_ptr_depth,
+    is_bool_ty, is_pointer_ty, is_struct_ty, is_struct_value_ty, is_unsigned_ty, is_vector_ty,
+    narrow_const_int, strip_unsigned, struct_id_of, struct_ptr_depth, struct_ty_for,
 };
 
 /// A resolved chained array designator `[i][j]...`: `base` and
@@ -3080,6 +3080,11 @@ impl Compiler {
             for _ in 0..close_parens {
                 self.accept(')')?;
             }
+        } else if self.lex.tk != '{' && is_vector_ty(&self.structs, struct_ty_for(sid)) {
+            // C99 6.7.8p13 over the GCC vector extension: an element of vector
+            // type takes either a brace list of lanes or one compatible
+            // whole-vector expression, which must not elide into the lanes.
+            self.emit_array_leaf_runtime(local_val, off, struct_ty_for(sid))?;
         } else {
             let braced = self.lex.tk == '{';
             self.emit_struct_runtime_at(local_val, off, sid, braced)?;

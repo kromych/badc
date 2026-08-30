@@ -2250,6 +2250,14 @@ pub(crate) fn lower(
         .filter(|f| f.is_variadic)
         .map(|f| f.ent_pc)
         .collect();
+    // Per-callee calling convention, for the callees that declare one
+    // (`__attribute__((ms_abi))` / `((sysv_abi))`). A direct call site
+    // reads it to marshal into that convention's argument window.
+    let mut conv_targets: alloc::collections::BTreeMap<usize, super::CallConv> = ssa_funcs
+        .iter()
+        .filter(|f| f.conv != super::CallConv::Target)
+        .map(|f| (f.ent_pc, f.conv))
+        .collect();
     // Per-callee declared return type, read by the tail-call
     // conversion to compare extension contracts.
     let ret_tags: alloc::collections::BTreeMap<usize, i64> = ssa_funcs
@@ -2273,6 +2281,15 @@ pub(crate) fn lower(
                 && extern_pcs.contains(&(sym.val as usize))
             {
                 variadic_targets.insert(sym.val as usize);
+            }
+            // A cross-TU callee's convention comes off its declaration in
+            // this unit, the same place the definition's would.
+            if sym.is_fun_entity()
+                && !sym.defined_here
+                && sym.conv != super::CallConv::Target
+                && extern_pcs.contains(&(sym.val as usize))
+            {
+                conv_targets.insert(sym.val as usize, sym.conv);
             }
         }
     }
@@ -2405,6 +2422,7 @@ pub(crate) fn lower(
                 &extern_tls_names,
                 imports,
                 &variadic_targets,
+                &conv_targets,
                 &ret_tags,
                 program.tls_data.len(),
                 &mut fn_unwind,

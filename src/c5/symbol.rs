@@ -81,6 +81,14 @@ pub(crate) struct Symbol {
     /// ABI.
     pub h_params: Vec<i64>,
     pub h_is_variadic: bool,
+    /// Calling convention of the function this symbol names, or of the
+    /// function a function-pointer object points to
+    /// (`__attribute__((ms_abi))` / `((sysv_abi))`). Already normalised
+    /// against the target, so `CallConv::Target` covers both "no
+    /// attribute" and "the attribute is inert here".
+    pub conv: crate::c5::codegen::CallConv,
+    /// Shadow slot for `conv` (see `h_is_variadic`).
+    pub h_conv: crate::c5::codegen::CallConv,
 
     /// True while the function's return type is the implicit `int`
     /// default rather than a declared type: a `#pragma binding` seen
@@ -779,6 +787,8 @@ impl crate::c5::layout::DataOffsets for Symbol {
             is_variadic: _,
             h_params: _,
             h_is_variadic: _,
+            conv: _,
+            h_conv: _,
             implicit_return_int: _,
             is_noreturn: _,
             is_thread_local,

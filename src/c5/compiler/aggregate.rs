@@ -367,6 +367,15 @@ impl Compiler {
                 if typedef_align > 0 {
                     self.pending.type_align = typedef_align;
                 }
+                // A function / function-pointer typedef carries the
+                // pointed-to function's calling convention; a declarator
+                // through the alias inherits it unless the declaration names
+                // one of its own.
+                if self.symbols[self.lex.curr_id_idx].conv != crate::c5::codegen::CallConv::Target
+                    && self.pending.attr_call_conv == crate::c5::codegen::CallConv::Target
+                {
+                    self.pending.attr_call_conv = self.symbols[self.lex.curr_id_idx].conv;
+                }
                 // Carry the typedef's fn-pointer lineage forward
                 // (mirrors `decl_base.rs` for the non-aggregate
                 // path) so a `typedef RET (*fn_t)(args); struct {
@@ -525,6 +534,7 @@ impl Compiler {
                             fn_ptr_ret_indirection: inner_field.fn_ptr_ret_indirection,
                             params: inner_field.params,
                             is_variadic: inner_field.is_variadic,
+                            conv: inner_field.conv,
                             anon_union_group: union_group,
                             anon_struct_group: struct_group,
                             explicit_align: inner_field.explicit_align,
@@ -732,6 +742,11 @@ impl Compiler {
                 // side-channel so it cannot leak to the next field.
                 let field_is_variadic = !field_params.is_empty()
                     && matches!(self.pending.typedef_fn_proto.take(), Some((_, true)));
+                // A function-pointer member's `ms_abi` / `sysv_abi`
+                // (`efi_status_t (__efiapi *exit)(...)`, or the typedef
+                // form `efi_get_time_t __efiapi *get_time`). Consumed
+                // here so it cannot leak to the next member.
+                let field_conv = core::mem::take(&mut self.pending.attr_call_conv);
                 let is_aggregate_value = is_struct_value_ty(field_ty);
                 // C99 6.7.2.1: a member must have complete type, and an
                 // array of an incomplete type is itself incomplete. Only a
@@ -948,6 +963,7 @@ impl Compiler {
                     fn_ptr_ret_indirection: field_fn_ptr_ret_indirection,
                     params: field_params,
                     is_variadic: field_is_variadic,
+                    conv: field_conv,
                     anon_union_group: 0,
                     anon_struct_group: 0,
                     explicit_align: group_align.max(decl_align) as u32,

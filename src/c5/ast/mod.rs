@@ -764,6 +764,10 @@ pub(crate) struct FinishedFunction {
     pub is_noinline: bool,
     /// `__attribute__((naked))`: propagated onto `FunctionSsa::is_naked`.
     pub is_naked: bool,
+    /// `__attribute__((ms_abi))` / `((sysv_abi))`: propagated onto
+    /// `FunctionSsa::conv`. `CallConv::Target` when the definition
+    /// follows the target's own convention.
+    pub conv: crate::c5::codegen::CallConv,
     pub n_locals: i64,
     /// Per-parameter type tags in declared order. The walker
     /// reads these to emit the C99 6.2.4 / 6.5.2.2-mandated
@@ -871,6 +875,15 @@ pub(crate) struct Ast {
     /// passes the tail on the stack). Sparse: empty unless a variadic
     /// indirect call appears in the function.
     pub variadic_indirect_callees: Vec<(ExprId, u32)>,
+    /// Indirect-call callees whose pointed-to function declares a
+    /// calling convention other than the target's
+    /// (`__attribute__((ms_abi))` / `((sysv_abi))`), keyed by the
+    /// callee's `ExprId`. Recorded at parse time, where the callee's
+    /// declared type is in scope; the walker reads it to pick the
+    /// argument placement, shadow space and callee-clobber shape the
+    /// call site marshals to. Sparse: empty unless such a call appears
+    /// in the function.
+    pub conv_indirect_callees: Vec<(ExprId, crate::c5::codegen::CallConv)>,
     /// `Expr::Ident` nodes that reference a block-scope `extern` which
     /// shadows an enclosing bound name (a local, parameter, or enum
     /// constant). The shadowed binding is restored at block exit, so the
@@ -1225,6 +1238,7 @@ impl crate::c5::layout::DataOffsets for FinishedFunction {
             is_always_inline: _,
             is_noinline: _,
             is_naked: _,
+            conv: _,
             n_locals: _,
             param_tys: _,
             param_local_slots: _,

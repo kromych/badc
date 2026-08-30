@@ -306,7 +306,9 @@ header takes its standard-C path for the GNU features badc lacks.
   inside a packed struct keeps its members overlapping), `aligned(N)` /
   `_Alignas`, `section(name)`, `alias(target)`, `visibility(kind)`
   (`hidden` / `internal` map to `STV_HIDDEN`), `weak`, `used`, `naked`,
-  `always_inline`, `gnu_inline`,
+  `always_inline`, `gnu_inline`, `ms_abi` / `sysv_abi` (the x86_64
+  calling convention of a function or of a function pointer's pointee;
+  x86-only, inert elsewhere, as in GCC),
   `cleanup(fn)` (the function runs on scope exit), `constructor` /
   `destructor` (run before / after `main`, optional priority), `noreturn`,
   `unused` / `maybe_unused`, `vector_size(N)` (modeled as an aggregate),

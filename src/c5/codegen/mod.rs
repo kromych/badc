@@ -3933,7 +3933,52 @@ impl Default for Abi {
     }
 }
 
+/// Calling convention a function definition or a call site follows,
+/// when it is not the target's own. GCC spells the two x86_64
+/// conventions `__attribute__((ms_abi))` and
+/// `__attribute__((sysv_abi))`; both are x86-only and inert on other
+/// architectures, which is what `__efiapi` relies on (it expands to
+/// `ms_abi` under `CONFIG_X86_64` and to nothing elsewhere).
+///
+/// A convention names an existing ABI row rather than a new one:
+/// `Ms` is what [`Target::WindowsX64`] already describes (arguments in
+/// rcx/rdx/r8/r9 by position, 32 bytes of shadow space, rsi/rdi and
+/// xmm6..xmm15 callee-saved) and `SysV` is [`Target::LinuxX64`]'s. See
+/// [`Target::abi_row`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum CallConv {
+    /// The target's own convention.
+    #[default]
+    Target,
+    /// Microsoft x64 (`__attribute__((ms_abi))`).
+    Ms,
+    /// System V AMD64 (`__attribute__((sysv_abi))`).
+    SysV,
+}
+
 impl Target {
+    /// The target whose ABI row `conv` selects. Off x86_64 both
+    /// attributes are inert, so the row stays this target's own; on
+    /// x86_64 the two conventions are the two x86_64 targets' rows,
+    /// which differ in exactly the argument placement, shadow space,
+    /// variadic dialect and callee-saved register set the attributes
+    /// choose. Only the ABI-shaped queries -- [`Self::abi`], the
+    /// allocator's register banks, the callee-saved FP predicate --
+    /// take the substituted row; nothing about the object format,
+    /// relocation shapes or type widths changes.
+    pub(crate) fn abi_row(self, conv: CallConv) -> Target {
+        match (self, conv) {
+            (Target::LinuxX64 | Target::WindowsX64, CallConv::Ms) => Target::WindowsX64,
+            (Target::LinuxX64 | Target::WindowsX64, CallConv::SysV) => Target::LinuxX64,
+            _ => self,
+        }
+    }
+
+    /// [`Self::abi`] for a function or call site following `conv`.
+    pub(crate) fn abi_for(self, conv: CallConv) -> Abi {
+        self.abi_row(conv).abi()
+    }
+
     /// ABI description for this target. Used by both the
     /// lowering pass and the entry-stub builders. Kept as a
     /// match against `Target` so adding a target is one row

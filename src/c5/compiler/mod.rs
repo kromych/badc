@@ -34,7 +34,10 @@ mod type_layout;
 #[cfg(test)]
 pub(crate) use emit::SCOPE_UNWIND;
 pub(crate) use initializer::PendingLabelReloc;
-pub(crate) use type_layout::{StructReturnAbi, host_abi_agg_desc, struct_return_abi};
+pub(crate) use type_layout::{
+    StructReturnAbi, host_abi_agg_desc, host_abi_agg_desc_conv, struct_return_abi,
+    struct_return_abi_conv,
+};
 pub(crate) mod types;
 
 /// Largest alignment (in bytes) honored on a static object via C11
@@ -311,6 +314,12 @@ pub struct StructField {
     /// variadic ABI. False for a non-function-pointer field or a
     /// non-variadic prototype.
     pub is_variadic: bool,
+    /// Calling convention of the function a function-pointer field
+    /// points to (`__attribute__((ms_abi))` / `((sysv_abi))`). Mirrors
+    /// `Symbol::conv`; `CallConv::Target` for every other field. The
+    /// EFI boot- and runtime-services tables declare their members this
+    /// way, so a call through one has to marshal to that convention.
+    pub(crate) conv: crate::c5::codegen::CallConv,
     /// Non-zero for a field promoted from an anonymous union (C11
     /// 6.7.2.1p13). All members of one anonymous union share the same
     /// value; the same id groups them so a brace-list initializer
@@ -964,6 +973,12 @@ pub(in crate::c5::compiler) struct Pending {
     /// variant passes the tail on the stack). Set and cleared at the same
     /// sites as `indirect_callee_params`.
     pub indirect_callee_is_variadic: bool,
+    /// Calling convention of the function `indirect_callee_params`
+    /// describes (`__attribute__((ms_abi))` / `((sysv_abi))`). Set and
+    /// cleared at the same sites as `indirect_callee_params`; the call
+    /// arm records it on the callee `ExprId` so the walker can pick the
+    /// convention long after the declaration went out of scope.
+    pub indirect_callee_conv: crate::c5::codegen::CallConv,
     /// Pointer depth of the value whose prototype is held in
     /// `indirect_callee_params`, in `Symbol::fn_ptr_indirection`'s
     /// convention (1: the value is the function pointer). Threaded at the
@@ -1248,6 +1263,12 @@ pub(in crate::c5::compiler) struct Pending {
     /// A consumed `__attribute__((weak))`: the declared symbol binds
     /// STB_WEAK in the object's symbol table.
     pub attr_weak: bool,
+    /// A consumed `__attribute__((ms_abi))` / `((sysv_abi))`: the
+    /// calling convention of the function (or pointed-to function)
+    /// being declared. Already normalised against the target, so
+    /// `CallConv::Target` means "the target's own", including on a
+    /// target where the attribute is inert.
+    pub attr_call_conv: crate::c5::codegen::CallConv,
     /// A consumed `__attribute__((used))`: keep the definition in the
     /// object even when nothing in the unit references it.
     pub attr_used: bool,
@@ -1290,6 +1311,7 @@ pub(super) struct DeclSpecifiers {
     base_is_const: bool,
     attr_used: bool,
     attr_weak: bool,
+    attr_call_conv: crate::c5::codegen::CallConv,
     attr_visibility: Option<bool>,
     attr_section: Option<alloc::string::String>,
     attr_patchable_entry: Option<(u32, u32)>,
@@ -1312,6 +1334,7 @@ impl Pending {
             base_is_const: core::mem::take(&mut self.base_is_const),
             attr_used: core::mem::take(&mut self.attr_used),
             attr_weak: core::mem::take(&mut self.attr_weak),
+            attr_call_conv: core::mem::take(&mut self.attr_call_conv),
             attr_visibility: self.attr_visibility.take(),
             attr_section: self.attr_section.take(),
             attr_patchable_entry: self.attr_patchable_entry.take(),
@@ -1331,6 +1354,7 @@ impl Pending {
         self.base_is_const = s.base_is_const;
         self.attr_used = s.attr_used;
         self.attr_weak = s.attr_weak;
+        self.attr_call_conv = s.attr_call_conv;
         self.attr_visibility = s.attr_visibility;
         self.attr_section = s.attr_section;
         self.attr_patchable_entry = s.attr_patchable_entry;
@@ -1450,6 +1474,7 @@ impl Default for Pending {
             fn_ptr_param_types: None,
             indirect_callee_params: None,
             indirect_callee_is_variadic: false,
+            indirect_callee_conv: crate::c5::codegen::CallConv::Target,
             indirect_callee_fn_ptr_depth: 0,
             indirect_callee_ret_fn_ptr: 0,
             last_fn_ptr_cast: None,
@@ -1495,6 +1520,7 @@ impl Default for Pending {
             attr_cleanup: None,
             attr_uninitialized: false,
             attr_weak: false,
+            attr_call_conv: crate::c5::codegen::CallConv::Target,
             attr_used: false,
             attr_visibility: None,
             attr_section: None,
@@ -2085,6 +2111,10 @@ pub struct Compiler {
     /// Set at function-body entry from the function's symbol
     /// (`Symbol::returns_void`), cleared at exit.
     current_func_returns_void: bool,
+    /// Calling convention of the function body being parsed, taken off
+    /// its symbol at the opening brace. Propagated onto
+    /// `FinishedFunction::conv`.
+    current_func_conv: crate::c5::codegen::CallConv,
 
     /// Preprocessor failure (e.g. unterminated `#if`) deferred from
     /// `with_target` until `compile` runs, so the construction API
@@ -2758,6 +2788,7 @@ impl Compiler {
             pending_asm_globl: Vec::new(),
             current_func_return_ty: 0,
             current_func_returns_void: false,
+            current_func_conv: crate::c5::codegen::CallConv::Target,
             pending: Pending::default(),
             pending_store_symbols: Vec::new(),
             warn_dead_store: opts.warn_dead_store,

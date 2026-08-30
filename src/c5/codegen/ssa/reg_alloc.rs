@@ -511,9 +511,18 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     let n_insts = func.insts.len();
     let mut places: Vec<Place> = vec![Place::None; n_insts];
     let mut hints: Vec<Option<u8>> = vec![None; n_insts];
-    populate_return_hints(func, target, &mut hints);
-    populate_param_ref_hints(func, target, &mut hints);
+    // The definition's own convention decides where its arguments arrive
+    // and what it must give back to its caller
+    // (`__attribute__((ms_abi))` / `((sysv_abi))`).
+    let conv_target = target.abi_row(func.conv);
+    populate_return_hints(func, conv_target, &mut hints);
+    populate_param_ref_hints(func, conv_target, &mut hints);
     populate_phi_hints(func, &mut hints);
+    // The allocation banks stay the target's own, not the convention's:
+    // a value live across a call has to sit in a register the *callee*
+    // preserves, and this function's callees follow the target's
+    // convention unless they say otherwise. Only the prologue's save
+    // list grows for a foreign convention -- see `conv_banks` below.
     let banks = RegBanks::new(target, fixed);
     if n_insts == 0 {
         return Allocation {
@@ -583,7 +592,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     let node_of: Vec<ValueId> = (0..func.insts.len() as ValueId)
         .map(|v| classes.find(v))
         .collect();
-    let param_incoming_forbid = compute_param_incoming_forbid(func, target);
+    let param_incoming_forbid = compute_param_incoming_forbid(func, conv_target);
     let mut node_cons: Vec<Option<NodeConstraints>> = vec![None; func.insts.len()];
     for (v, inst) in func.insts.iter().enumerate() {
         if !produces_value(inst) {
@@ -951,10 +960,31 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // prologue's `str xN, [sp, ...]` sequence to exactly the
     // registers AAPCS64 / SysV / Win64 require the callee to
     // preserve.
-    let gpr_used_callee: Vec<u8> = gpr_used
+    // A definition on a foreign calling convention gives back whatever
+    // that convention marks non-volatile on top of the target's own set
+    // (`ms_abi` adds rsi, rdi and xmm6..xmm15 to the System V list), so
+    // the save list is the union. `conv_target == target` for a
+    // definition on the target's own convention, and the union is then
+    // the plain filter.
+    let conv_banks = RegBanks::new(conv_target, fixed);
+    let mut gpr_used_callee: Vec<u8> = gpr_used
         .into_iter()
-        .filter(|r| banks.callee_gprs.contains(r))
+        .filter(|r| banks.callee_gprs.contains(r) || conv_banks.callee_gprs.contains(r))
         .collect();
+    // `gpr_used` covers the registers the allocator hands out as values.
+    // The emit writes more on its own: every call marshals its arguments
+    // into the *callee's* argument registers, and this function's callees
+    // follow the target's convention. On a foreign convention some of
+    // those are registers this function owes its caller -- System V
+    // marshals into rsi and rdi, which the Microsoft x64 convention
+    // reserves -- so they join the save list too.
+    if conv_target != target && func.insts.iter().any(is_call) {
+        for &r in target.abi().int_arg_regs {
+            if conv_banks.callee_gprs.contains(&r) && !gpr_used_callee.contains(&r) {
+                gpr_used_callee.push(r);
+            }
+        }
+    }
     // The x86_64 writer's fixed scratch (r10 / r11) is caller-saved, so
     // it needs no save: `function_clobbers_scratch` returns empty for
     // x86_64 and r13 -- now an ordinary callee-saved allocation target --
@@ -964,8 +994,26 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // not this list, so adding it here would double-count the save.
     let mut fp_used_callee: Vec<u8> = fp_used
         .into_iter()
-        .filter(|r| banks.callee_fprs.contains(r))
+        .filter(|r| banks.callee_fprs.contains(r) || fp_callee_saved(conv_target, *r))
         .collect();
+    // The same for the floating-point argument registers a call
+    // marshals into: the target's bank runs xmm0..xmm7 where the
+    // Microsoft x64 convention reserves xmm6 upward, so a call passing
+    // that many floating-point arguments reaches them.
+    if conv_target != target {
+        let fp_args = func
+            .insts
+            .iter()
+            .map(fp_arg_count)
+            .max()
+            .unwrap_or(0)
+            .min(banks.caller_fprs.len());
+        for &r in &banks.caller_fprs[..fp_args] {
+            if fp_callee_saved(conv_target, r) && !fp_used_callee.contains(&r) {
+                fp_used_callee.push(r);
+            }
+        }
+    }
     // The FP scratch sits outside `callee_fprs` (never an allocator
     // value), so the filter above drops it; a callee-saved scratch the
     // body touches joins the list here so the prologue / epilogue's
@@ -974,7 +1022,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     for (i, &r) in banks.fp_scratch.iter().enumerate() {
         if demand[i]
             && r != NO_FP_SCRATCH
-            && fp_callee_saved(target, r)
+            && (fp_callee_saved(target, r) || fp_callee_saved(conv_target, r))
             && !fp_used_callee.contains(&r)
         {
             fp_used_callee.push(r);
@@ -2048,6 +2096,45 @@ fn populate_return_hints(func: &FunctionSsa, target: Target, hints: &mut [Option
     }
 }
 
+/// True for an instruction that transfers control to a callee, which
+/// marshals its arguments into the callee convention's registers.
+fn is_call(inst: &Inst) -> bool {
+    matches!(
+        inst,
+        Inst::Call { .. }
+            | Inst::CallIndirect { .. }
+            | Inst::CallExt { .. }
+            | Inst::Intrinsic { .. }
+    )
+}
+
+/// How many floating-point arguments a call instruction passes, so the
+/// caller can tell which of the FP argument registers its marshalling
+/// reaches. Zero for anything that is not a call.
+fn fp_arg_count(inst: &Inst) -> usize {
+    match inst {
+        Inst::Call { fp_arg_mask, .. }
+        | Inst::CallIndirect { fp_arg_mask, .. }
+        | Inst::CallExt { fp_arg_mask, .. } => fp_arg_mask.count_ones() as usize,
+        _ => 0,
+    }
+}
+
+/// Index into the integer / FP argument-register bank that parameter
+/// `pi` arrives in. System V AMD64 3.2.3 and AAPCS64 6.4.1 advance
+/// independent banks, so a parameter's index is its rank among the
+/// same-class parameters before it; the Microsoft x64 convention places
+/// by argument position, so each parameter's index is its declared
+/// position whatever the classes before it were.
+fn param_reg_rank(func: &FunctionSsa, target: Target, pi: usize, is_fp: bool) -> usize {
+    if target.abi().position_indexed_args {
+        return pi;
+    }
+    (0..pi)
+        .filter(|&j| ((func.param_fp_mask & (1u32 << j)) != 0) == is_fp)
+        .count()
+}
+
 /// Per-value mask of physical registers the colorer must not assign,
 /// to keep each `Inst::ParamRef` off the incoming argument register of a
 /// later same-bank `ParamRef`. A `ParamRef` reads its incoming argument
@@ -2118,21 +2205,8 @@ fn compute_param_incoming_forbid(func: &FunctionSsa, target: Target) -> Vec<u64>
         }
         let pi = *idx as usize;
         let is_fp = (func.param_fp_mask & (1u32 << pi)) != 0;
-        let (rank, bank): (usize, &[u8]) = if is_fp {
-            (
-                (0..pi)
-                    .filter(|&j| (func.param_fp_mask & (1u32 << j)) != 0)
-                    .count(),
-                fp_args,
-            )
-        } else {
-            (
-                (0..pi)
-                    .filter(|&j| (func.param_fp_mask & (1u32 << j)) == 0)
-                    .count(),
-                int_args,
-            )
-        };
+        let bank: &[u8] = if is_fp { fp_args } else { int_args };
+        let rank = param_reg_rank(func, target, pi, is_fp);
         if let Some(&r) = bank.get(rank) {
             params.push((vid, is_fp, r));
         }
@@ -2207,21 +2281,8 @@ fn populate_param_ref_hints(func: &FunctionSsa, target: Target, hints: &mut [Opt
         if let Inst::ParamRef { idx: i, .. } = inst {
             let pi = *i as usize;
             let is_fp = (func.param_fp_mask & (1u32 << pi)) != 0;
-            let (rank, bank): (usize, &[u8]) = if is_fp {
-                (
-                    (0..pi)
-                        .filter(|&j| (func.param_fp_mask & (1u32 << j)) != 0)
-                        .count(),
-                    fp_args,
-                )
-            } else {
-                (
-                    (0..pi)
-                        .filter(|&j| (func.param_fp_mask & (1u32 << j)) == 0)
-                        .count(),
-                    int_args,
-                )
-            };
+            let bank: &[u8] = if is_fp { fp_args } else { int_args };
+            let rank = param_reg_rank(func, target, pi, is_fp);
             if let Some(&r) = bank.get(rank)
                 && idx < hints.len()
                 && hints[idx].is_none()
@@ -3589,6 +3650,7 @@ int main(void) { return 0; }
             is_always_inline: false,
             is_noinline: false,
             is_naked: false,
+            conv: crate::c5::codegen::CallConv::Target,
             section: None,
             patchable_entry: None,
             no_instrument: false,
@@ -3823,6 +3885,7 @@ int main(void) { return 0; }
             is_always_inline: false,
             is_noinline: false,
             is_naked: false,
+            conv: crate::c5::codegen::CallConv::Target,
             section: None,
             patchable_entry: None,
             no_instrument: false,

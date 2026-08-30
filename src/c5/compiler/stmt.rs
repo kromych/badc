@@ -552,6 +552,12 @@ impl Compiler {
             }
             self.symbols[id_idx].array_size = td_array;
             self.symbols[id_idx].is_function_type = typedef_is_fn_type;
+            // A function-type typedef records the calling convention its
+            // declaration named, so a declarator through the alias
+            // inherits it (`typedef efi_status_t __efiapi f_t(void);`).
+            if self.pending.attr_call_conv != crate::c5::codegen::CallConv::Target {
+                self.symbols[id_idx].conv = self.pending.attr_call_conv;
+            }
             if typedef_fpi > 0 {
                 self.symbols[id_idx].fn_ptr_indirection = typedef_fpi;
                 self.symbols[id_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;

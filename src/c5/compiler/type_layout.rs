@@ -225,6 +225,7 @@ impl Compiler {
             fn_ptr_ret_indirection: 0,
             params: alloc::vec::Vec::new(),
             is_variadic: false,
+            conv: crate::c5::codegen::CallConv::Target,
             anon_union_group: 0,
             anon_struct_group: 0,
             explicit_align: 0,
@@ -322,6 +323,7 @@ impl Compiler {
             fn_ptr_ret_indirection: 0,
             params: Vec::new(),
             is_variadic: false,
+            conv: crate::c5::codegen::CallConv::Target,
             anon_union_group: 0,
             anon_struct_group: 0,
             explicit_align: 0,
@@ -416,6 +418,7 @@ impl Compiler {
             fn_ptr_ret_indirection: 0,
             params: alloc::vec::Vec::new(),
             is_variadic: false,
+            conv: crate::c5::codegen::CallConv::Target,
             anon_union_group: 0,
             anon_struct_group: 0,
             explicit_align: 0,
@@ -487,6 +490,7 @@ impl Compiler {
             fn_ptr_ret_indirection: 0,
             params: alloc::vec::Vec::new(),
             is_variadic: false,
+            conv: crate::c5::codegen::CallConv::Target,
             anon_union_group: 0,
             anon_struct_group: 0,
             explicit_align: 0,
@@ -855,6 +859,21 @@ pub(crate) fn flatten_struct_fields(
 /// at most 16 bytes (AAPCS64 register / HFA classes); every other
 /// case keeps the existing c5 by-address convention.
 pub(crate) fn host_abi_agg_desc(structs: &[StructDef], target: Target, ty: i64) -> Option<AggDesc> {
+    host_abi_agg_desc_conv(structs, target, crate::c5::codegen::CallConv::Target, ty)
+}
+
+/// [`host_abi_agg_desc`] for a function or call site on `conv`
+/// (`__attribute__((ms_abi))` / `((sysv_abi))`). `target` still fixes
+/// the member layout -- scalar widths are a property of the target, not
+/// of the calling convention -- while the classification follows the
+/// convention's ABI row.
+pub(crate) fn host_abi_agg_desc_conv(
+    structs: &[StructDef],
+    target: Target,
+    conv: crate::c5::codegen::CallConv,
+    ty: i64,
+) -> Option<AggDesc> {
+    let row = target.abi_row(conv);
     if !matches!(
         target,
         Target::MacOSAarch64
@@ -900,14 +919,14 @@ pub(crate) fn host_abi_agg_desc(structs: &[StructDef], target: Target, ty: i64) 
     }
     let is_hfa = aarch64 && crate::c5::codegen::abi_classify::hfa_member_layout(&fields).is_some();
     if !is_hfa {
-        if matches!(target, Target::WindowsX64) {
+        if matches!(row, Target::WindowsX64) {
             // Win64: only a 1-, 2-, 4-, or 8-byte aggregate is passed by
             // value in a register; larger ones go by implicit reference,
             // which keeps the by-address convention.
             if !matches!(size, 1 | 2 | 4 | 8) {
                 return None;
             }
-        } else if size > 16 && !matches!(target, Target::LinuxX64) {
+        } else if size > 16 && !matches!(row, Target::LinuxX64) {
             // AArch64 passes a larger non-HFA aggregate by reference; the c5
             // by-address convention already matches. System V x86_64 passes
             // it inline on the stack (MEMORY class), handled by the marshal.
@@ -922,7 +941,7 @@ pub(crate) fn host_abi_agg_desc(structs: &[StructDef], target: Target, ty: i64) 
         // struct-in-register FP class, so an FP-member aggregate there
         // keeps the by-address convention. TODO: Windows x64 FP-aggregate
         // arguments.
-        if !matches!(target, Target::LinuxX64)
+        if !matches!(row, Target::LinuxX64)
             && !aarch64
             && fields.iter().any(|f| f.kind != ScalarKind::Int)
         {
@@ -959,6 +978,19 @@ pub(crate) enum StructReturnAbi {
 /// (registers or x8); every other aggregate keeps the c5 out-pointer
 /// convention. See [`host_abi_agg_desc`] for the argument-side gate.
 pub(crate) fn struct_return_abi(structs: &[StructDef], target: Target, ty: i64) -> StructReturnAbi {
+    struct_return_abi_conv(structs, target, crate::c5::codegen::CallConv::Target, ty)
+}
+
+/// [`struct_return_abi`] for a function or call site on `conv`; see
+/// [`host_abi_agg_desc_conv`] for why the layout and the classification
+/// take different targets.
+pub(crate) fn struct_return_abi_conv(
+    structs: &[StructDef],
+    target: Target,
+    conv: crate::c5::codegen::CallConv,
+    ty: i64,
+) -> StructReturnAbi {
+    let row = target.abi_row(conv);
     if !is_struct_ty(ty) || struct_ptr_depth(ty) != 0 {
         return StructReturnAbi::NotStruct;
     }
@@ -966,8 +998,8 @@ pub(crate) fn struct_return_abi(structs: &[StructDef], target: Target, ty: i64) 
         target,
         Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64
     );
-    let win64 = matches!(target, Target::WindowsX64);
-    if !aarch64 && !matches!(target, Target::LinuxX64 | Target::WindowsX64) {
+    let win64 = matches!(row, Target::WindowsX64);
+    if !aarch64 && !matches!(row, Target::LinuxX64 | Target::WindowsX64) {
         return StructReturnAbi::OutPtr;
     }
     let id = struct_id_of(ty);

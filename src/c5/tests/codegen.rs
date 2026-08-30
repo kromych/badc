@@ -9713,3 +9713,214 @@ fn address_of_compound_literal_argument_stays_a_scalar_pointer() {
         );
     }
 }
+
+/// `__attribute__((ms_abi))` puts a definition, and a call through a
+/// pointer whose declared type carries it, on the Microsoft x64 calling
+/// convention while the rest of the unit stays on System V: arguments in
+/// rcx/rdx/r8/r9 by position, 32 bytes of caller-reserved shadow space,
+/// rsi/rdi callee-saved. The Linux kernel spells it `__efiapi` and UEFI
+/// firmware enters the x86_64 EFI stub through it; compiling the
+/// attribute away leaves the stub reading its system-table argument out
+/// of the wrong register.
+///
+/// The attribute is x86-only, as in gcc: on the aarch64 targets and on
+/// Windows -- where it names the target's own convention -- it changes
+/// nothing, which the second half asserts.
+#[test]
+fn ms_abi_selects_the_microsoft_x64_convention() {
+    use crate::{
+        CompileOptions, Compiler, NativeOptions, OutputKind, Target, emit_native_with_options,
+    };
+    // One function per unit, so a byte pattern found anywhere in `.text`
+    // belongs to the function under test.
+    let text = |src: &str, target: Target| -> alloc::vec::Vec<u8> {
+        let copts = CompileOptions {
+            no_entry_point: true,
+            ..Default::default()
+        };
+        let program = Compiler::with_options(src.to_string(), target, copts)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            optimize: true,
+            ..NativeOptions::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let obj = crate::c5::linker::relocatable::parse_et_rel(&bytes, "conv.o").expect("parse");
+        obj.sections
+            .into_iter()
+            .find(|s| s.name == ".text")
+            .expect(".text")
+            .bytes
+    };
+    let has = |hay: &[u8], needle: &[u8]| hay.windows(needle.len()).any(|w| w == needle);
+
+    // `mov rax, rcx` / `mov rax, rdi`: which register the first integer
+    // parameter arrives in.
+    const FROM_RCX: &[u8] = &[0x48, 0x89, 0xc8];
+    const FROM_RDI: &[u8] = &[0x48, 0x89, 0xf8];
+    // `sub rsp, 0x20`: the caller-reserved shadow space (Microsoft x64
+    // calling convention); System V reserves none.
+    const SHADOW: &[u8] = &[0x48, 0x81, 0xec, 0x20, 0x00, 0x00, 0x00];
+    // `mov rcx, rdi` / `mov rsi, rdi`: the first argument's outgoing
+    // register at a call site.
+    const TO_RCX: &[u8] = &[0x48, 0x89, 0xf9];
+    const TO_RSI: &[u8] = &[0x48, 0x89, 0xfe];
+
+    const FIRST_PARAM: &str = "long long f(long long a, long long b) { return a; }\n";
+    const MS_FIRST_PARAM: &str = "long long f(long long, long long) __attribute__((ms_abi));\n\
+         long long f(long long a, long long b) { return a; }\n";
+    const CALL: &str =
+        "long long (*p)(long long, long long);\nlong long c(long long x) { return p(x, x); }\n";
+    const MS_CALL: &str = "long long (__attribute__((ms_abi)) *p)(long long, long long);\n\
+         long long c(long long x) { return p(x, x); }\n";
+
+    let sysv_def = text(FIRST_PARAM, Target::LinuxX64);
+    let ms_def = text(MS_FIRST_PARAM, Target::LinuxX64);
+    assert!(
+        has(&sysv_def, FROM_RDI) && !has(&sysv_def, FROM_RCX),
+        "a System V definition takes its first integer parameter in rdi"
+    );
+    assert!(
+        has(&ms_def, FROM_RCX) && !has(&ms_def, FROM_RDI),
+        "an ms_abi definition takes its first integer parameter in rcx"
+    );
+
+    let sysv_call = text(CALL, Target::LinuxX64);
+    let ms_call = text(MS_CALL, Target::LinuxX64);
+    assert!(
+        has(&sysv_call, TO_RSI) && !has(&sysv_call, SHADOW),
+        "a System V call site passes in rdi/rsi and reserves no shadow space"
+    );
+    assert!(
+        has(&ms_call, TO_RCX) && has(&ms_call, SHADOW),
+        "a call through an ms_abi function pointer passes in rcx/rdx and \
+         reserves 32 bytes of shadow space"
+    );
+
+    // Off x86_64, and on a target already on this convention, the
+    // attribute is inert: the same source emits the same code with and
+    // without it.
+    for target in [
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsAarch64,
+        Target::WindowsX64,
+    ] {
+        assert_eq!(
+            text(FIRST_PARAM, target),
+            text(MS_FIRST_PARAM, target),
+            "{target:?}: ms_abi must be inert here"
+        );
+        assert_eq!(
+            text(CALL, target),
+            text(MS_CALL, target),
+            "{target:?}: ms_abi must be inert here"
+        );
+    }
+
+    // `sysv_abi` is the mirror image: inert on the System V x86_64
+    // target, and the System V convention on Windows.
+    const SYSV_FIRST_PARAM: &str = "long long f(long long, long long) __attribute__((sysv_abi));\n\
+         long long f(long long a, long long b) { return a; }\n";
+    assert_eq!(
+        text(FIRST_PARAM, Target::LinuxX64),
+        text(SYSV_FIRST_PARAM, Target::LinuxX64),
+        "sysv_abi must be inert on a System V target"
+    );
+    let win_sysv_def = text(SYSV_FIRST_PARAM, Target::WindowsX64);
+    assert!(
+        has(&win_sysv_def, FROM_RDI) && !has(&win_sysv_def, FROM_RCX),
+        "a sysv_abi definition on Windows takes its first parameter in rdi"
+    );
+}
+
+/// A definition on the Microsoft x64 convention has to give back
+/// rsi/rdi and xmm6..xmm15, which System V leaves volatile, so any of
+/// them the body colors joins the prologue's save list. The allocation
+/// banks stay System V's: a value live across a call must sit in a
+/// register the *callee* preserves, and an `ms_abi` function's callees
+/// are on the target's convention unless they say otherwise.
+#[test]
+fn an_ms_abi_definition_preserves_the_registers_that_convention_reserves() {
+    use crate::c5::codegen::ssa::reg_alloc::allocate;
+    use crate::{CompileOptions, Compiler, Target};
+    // Ten live values summed pairwise at the end: more than the five
+    // System V callee-saved registers, so the allocator reaches into the
+    // caller-saved bank, which is where rsi and rdi are.
+    const BODY: &str = "\
+long f(long a, long b, long c, long d, long e, long g, long h, long i, long j, long k) {\n\
+    long s = a * b + c * d + e * g + h * i + j * k;\n\
+    return s + a + b + c + d + e + g + h + i + j + k;\n\
+}\n";
+    let saved = |src: &str| -> alloc::vec::Vec<u8> {
+        let copts = CompileOptions {
+            no_entry_point: true,
+            ..Default::default()
+        };
+        let program = Compiler::with_options(src.to_string(), Target::LinuxX64, copts)
+            .compile()
+            .expect("compile");
+        let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(
+            &program,
+            Target::LinuxX64,
+            false,
+            true,
+        )
+        .expect("ssa");
+        let f = funcs.iter().find(|f| f.name == "f").expect("f");
+        let mut regs = allocate(f, Target::LinuxX64, crate::FixedRegs::NONE).gpr_used;
+        regs.sort_unstable();
+        regs
+    };
+    const MS: &str = "long f(long, long, long, long, long, long, long, long, long, long) \
+                      __attribute__((ms_abi));\n";
+    // rsi (6) and rdi (7) are System V argument registers, so a System V
+    // definition never saves them; the same body on the Microsoft x64
+    // convention must.
+    let sysv = saved(BODY);
+    assert!(
+        !sysv.contains(&6) && !sysv.contains(&7),
+        "System V leaves rsi/rdi volatile, saved={sysv:?}"
+    );
+    let ms = saved(&alloc::format!("{MS}{BODY}"));
+    assert!(
+        ms.contains(&6) || ms.contains(&7),
+        "an ms_abi definition that colors rsi/rdi must save them, saved={ms:?}"
+    );
+
+    // A call marshals its arguments into the *callee's* argument
+    // registers, and an ms_abi function's callees are on the target's
+    // convention: on System V that writes rsi and rdi, which this
+    // function owes its caller whether or not the allocator handed
+    // either one out as a value.
+    const CALLS_OUT: &str = "\
+extern long sink(long, long);\n\
+long g(long a, long b) __attribute__((ms_abi));\n\
+long g(long a, long b) { return sink(a, b); }\n";
+    let calls_out = {
+        let copts = CompileOptions {
+            no_entry_point: true,
+            ..Default::default()
+        };
+        let program = Compiler::with_options(CALLS_OUT.to_string(), Target::LinuxX64, copts)
+            .compile()
+            .expect("compile");
+        let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(
+            &program,
+            Target::LinuxX64,
+            false,
+            true,
+        )
+        .expect("ssa");
+        let f = funcs.iter().find(|f| f.name == "g").expect("g");
+        let mut regs = allocate(f, Target::LinuxX64, crate::FixedRegs::NONE).gpr_used;
+        regs.sort_unstable();
+        regs
+    };
+    assert!(
+        calls_out.contains(&6) && calls_out.contains(&7),
+        "an ms_abi definition that calls out must give rsi/rdi back, saved={calls_out:?}"
+    );
+}

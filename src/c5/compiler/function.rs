@@ -57,7 +57,18 @@ impl Compiler {
         (indirection, ret_indirection, params, variadic)
     }
 
+    /// A parameter's own `ms_abi` / `sysv_abi` describes that
+    /// parameter's pointed-to function, not the declarator the list
+    /// belongs to, so the enclosing convention is detached across the
+    /// list the way the other declarator carriers are.
     pub(super) fn parse_function_params(&mut self) -> Result<ParsedParams, C5Error> {
+        let outer_conv = core::mem::take(&mut self.pending.attr_call_conv);
+        let r = self.parse_function_params_inner();
+        self.pending.attr_call_conv = outer_conv;
+        r
+    }
+
+    fn parse_function_params_inner(&mut self) -> Result<ParsedParams, C5Error> {
         let mut args = Vec::new();
         let mut types = Vec::new();
         let mut is_variadic = false;
@@ -258,6 +269,9 @@ impl Compiler {
             // parameter or expression.
             let (fn_ptr_indirection, fn_ptr_ret_indirection, fnptr_pp, fnptr_variadic) =
                 self.take_param_fn_ptr_carriers();
+            // Drained per parameter so one parameter's convention cannot
+            // leak into the next.
+            let param_conv = core::mem::take(&mut self.pending.attr_call_conv);
             self.ty = full_ty;
             // An unnamed parameter, or any parameter of a function-pointer
             // declarator's prototype, records its type without binding a
@@ -314,6 +328,7 @@ impl Compiler {
                 self.symbols[param_idx].params = pp_types;
                 self.symbols[param_idx].is_variadic = fnptr_variadic;
             }
+            self.symbols[param_idx].conv = param_conv;
 
             args.push(param_idx);
             types.push(full_ty);

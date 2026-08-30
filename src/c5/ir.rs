@@ -319,6 +319,12 @@ pub(crate) enum Inst {
         fp_return: bool,
         /// See [`Self::Call::fp_arg_mask`].
         fp_arg_mask: u32,
+        /// Calling convention the pointed-to function follows, read off
+        /// the callee pointer's declared type
+        /// (`__attribute__((ms_abi))` / `((sysv_abi))`). Selects the
+        /// argument placement, shadow space and variadic dialect the
+        /// call site marshals to.
+        callee_conv: crate::c5::codegen::CallConv,
         /// See [`Self::Call::arg_aggs`].
         arg_aggs: Vec<Option<u32>>,
         /// See [`Self::Call::ret_agg`].
@@ -1295,6 +1301,12 @@ pub(crate) struct FunctionSsa {
     /// prologue/epilogue and no implicit return; the body (inline asm) is the
     /// function's entire machine code. Used for interrupt service routines.
     pub is_naked: bool,
+    /// Calling convention the definition follows when it is not the
+    /// target's own: `__attribute__((ms_abi))` /
+    /// `__attribute__((sysv_abi))`. The prologue binds the incoming
+    /// arguments from that convention's registers and the allocator
+    /// takes its callee-saved banks; see [`crate::c5::codegen::CallConv`].
+    pub conv: crate::c5::codegen::CallConv,
     /// True when the definition binds STB_WEAK: `__attribute__((weak))` on
     /// the function or one of its declarations, or a file-scope asm `.weak`
     /// naming it. A strong definition in another object replaces it at link
@@ -1673,6 +1685,7 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             is_always_inline: _,
             is_noinline: _,
             is_naked: _,
+            conv: _,
             is_weak: _,
             is_internal: _,
             section: _,

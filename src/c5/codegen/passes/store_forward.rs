@@ -556,6 +556,7 @@ mod tests {
             is_always_inline: false,
             is_noinline: false,
             is_naked: false,
+            conv: crate::c5::codegen::CallConv::Target,
             section: None,
             patchable_entry: None,
             no_instrument: false,

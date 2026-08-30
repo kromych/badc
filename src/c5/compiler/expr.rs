@@ -2316,6 +2316,13 @@ impl Compiler {
                             .variadic_indirect_callees
                             .push((callee_id, self.symbols[id_idx].params.len() as u32));
                     }
+                    if is_var_call
+                        && self.symbols[id_idx].conv != crate::c5::codegen::CallConv::Target
+                    {
+                        self.ast
+                            .conv_indirect_callees
+                            .push((callee_id, self.symbols[id_idx].conv));
+                    }
                     self.ast_emit_call(callee_id, ast_arg_ids.clone(), result_ty);
                     // For struct-returning callees, the result lives
                     // in the caller-allocated temp. After the call,
@@ -2500,6 +2507,7 @@ impl Compiler {
                 if !is_array_var && !is_struct_value && !self.symbols[id_idx].params.is_empty() {
                     self.pending.indirect_callee_params = Some(self.symbols[id_idx].params.clone());
                     self.pending.indirect_callee_is_variadic = self.symbols[id_idx].is_variadic;
+                    self.pending.indirect_callee_conv = self.symbols[id_idx].conv;
                     self.pending.indirect_callee_fn_ptr_depth =
                         self.symbols[id_idx].fn_ptr_indirection;
                     self.pending.indirect_callee_ret_fn_ptr =
@@ -2605,6 +2613,7 @@ impl Compiler {
                         self.pending.indirect_callee_params =
                             Some(self.symbols[id_idx].params.clone());
                         self.pending.indirect_callee_is_variadic = self.symbols[id_idx].is_variadic;
+                        self.pending.indirect_callee_conv = self.symbols[id_idx].conv;
                         self.pending.indirect_callee_fn_ptr_depth = fpi;
                         self.pending.indirect_callee_ret_fn_ptr =
                             self.symbols[id_idx].fn_ptr_ret_indirection;
@@ -2965,6 +2974,8 @@ impl Compiler {
                             cast_fpi.unwrap_or(1).max(1),
                         ));
                         self.pending.indirect_callee_is_variadic = pp.is_variadic;
+                        self.pending.indirect_callee_conv =
+                            core::mem::take(&mut self.pending.attr_call_conv);
                         self.pending.indirect_callee_fn_ptr_depth = cast_fpi.unwrap_or(1).max(1);
                         self.pending.indirect_callee_ret_fn_ptr = 0;
                         self.pending.indirect_callee_params = if pp.types.is_empty() {
@@ -3652,6 +3663,7 @@ impl Compiler {
                 // for the walker's host-ABI tail placement.
                 let callee_is_variadic =
                     core::mem::take(&mut self.pending.indirect_callee_is_variadic);
+                let callee_conv = core::mem::take(&mut self.pending.indirect_callee_conv);
                 let callee_ret_fn_ptr =
                     core::mem::take(&mut self.pending.indirect_callee_ret_fn_ptr);
                 let callee_fixed = callee_params.as_ref().map_or(0, |p| p.len()) as u32;
@@ -3720,6 +3732,15 @@ impl Compiler {
                             self.ast
                                 .variadic_indirect_callees
                                 .push((callee_id, callee_fixed));
+                        }
+                        // A callee whose declared type names a calling
+                        // convention other than the target's: record it on
+                        // the callee node, where the walker can read it
+                        // after the declaration's scope is gone.
+                        if callee_conv != crate::c5::codegen::CallConv::Target {
+                            self.ast
+                                .conv_indirect_callees
+                                .push((callee_id, callee_conv));
                         }
                         let id = self.ast.push_expr(
                             super::super::ast::Expr::Call {
@@ -4947,6 +4968,7 @@ impl Compiler {
                 let saved_callee_params = self.pending.indirect_callee_params.take();
                 let saved_callee_variadic =
                     core::mem::take(&mut self.pending.indirect_callee_is_variadic);
+                let saved_callee_conv = core::mem::take(&mut self.pending.indirect_callee_conv);
                 let saved_callee_depth =
                     core::mem::take(&mut self.pending.indirect_callee_fn_ptr_depth);
                 let saved_callee_ret =
@@ -4957,6 +4979,7 @@ impl Compiler {
                 let idx_ast = self.ast_acc;
                 self.pending.indirect_callee_params = saved_callee_params;
                 self.pending.indirect_callee_is_variadic = saved_callee_variadic;
+                self.pending.indirect_callee_conv = saved_callee_conv;
                 self.pending.indirect_callee_fn_ptr_depth = saved_callee_depth;
                 self.pending.indirect_callee_ret_fn_ptr = saved_callee_ret;
                 self.pending.fn_ptr_chain_depth = saved_fn_ptr_chain;
@@ -5138,6 +5161,11 @@ impl Compiler {
                     None
                 };
                 self.pending.indirect_callee_is_variadic = field_is_fn_ptr && field.is_variadic;
+                self.pending.indirect_callee_conv = if field_is_fn_ptr {
+                    field.conv
+                } else {
+                    crate::c5::codegen::CallConv::Target
+                };
                 self.pending.indirect_callee_fn_ptr_depth = if field_is_fn_ptr {
                     field.fn_ptr_indirection
                 } else {

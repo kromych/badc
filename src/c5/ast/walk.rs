@@ -128,6 +128,7 @@ pub(crate) fn walk_function(
         alloca_top_slot,
         over_aligned_slots,
         ssp,
+        conv,
         ..
     } = fun;
     let (ent_pc, end_pc, n_params) = (*ent_pc, *end_pc, *n_params);
@@ -135,6 +136,7 @@ pub(crate) fn walk_function(
     let (returns_struct, return_struct_size) = (*returns_struct, *return_struct_size);
     let (return_ty, alloca_top_slot) = (*return_ty, *alloca_top_slot);
     let mut b = super::super::codegen::ssa::build::SsaBuilder::new(ent_pc, n_params, is_variadic);
+    b.set_conv(*conv);
     b.set_end_pc(end_pc);
     b.set_ssp(*ssp);
     // Only at -O, where `passes::divmod_pair` folds the split back when
@@ -191,7 +193,15 @@ pub(crate) fn walk_function(
     // start at slot 2. Every other aggregate keeps the c5 out-pointer
     // convention (hidden pointer at slot 2, parameters start at 3).
     use crate::c5::compiler::StructReturnAbi;
-    let ret_abi = crate::c5::compiler::struct_return_abi(structs, target, return_ty);
+    // Every ABI question about this definition -- where its arguments
+    // arrive, how an aggregate parameter or return is classified -- is
+    // asked of the convention it declares, which is the target's own
+    // unless `__attribute__((ms_abi))` / `((sysv_abi))` says otherwise.
+    // `abi_target` carries that convention to the argument planner;
+    // layout-shaped queries keep the real target, since scalar widths
+    // are the target's property and not the convention's.
+    let abi_target = target.abi_row(*conv);
+    let ret_abi = crate::c5::compiler::struct_return_abi_conv(structs, target, *conv, return_ty);
     let ret_outptr = matches!(ret_abi, StructReturnAbi::OutPtr);
     let ret_in_regs = matches!(ret_abi, StructReturnAbi::Regs(_));
     let ret_indirect = matches!(ret_abi, StructReturnAbi::Indirect(_));
@@ -232,7 +242,9 @@ pub(crate) fn walk_function(
         param_aggs = alloc::vec![None; param_tys.len()];
         param_arg_aggs = alloc::vec![None; param_tys.len()];
         for (i, &pty) in param_tys.iter().enumerate() {
-            if let Some(desc) = crate::c5::compiler::host_abi_agg_desc(structs, target, pty) {
+            if let Some(desc) =
+                crate::c5::compiler::host_abi_agg_desc_conv(structs, target, *conv, pty)
+            {
                 param_arg_aggs[i] = Some(crate::c5::codegen::ArgAgg {
                     class: crate::c5::codegen::abi_classify::classify_aggregate(
                         desc.size,
@@ -298,7 +310,7 @@ pub(crate) fn walk_function(
         let eff = super::super::codegen::effective_fp_arg_mask(
             param_tys.len(),
             b.param_fp_mask(),
-            target.abi(),
+            abi_target.abi(),
         );
         b.set_param_fp_mask(eff);
     }
@@ -310,7 +322,7 @@ pub(crate) fn walk_function(
     let param_plan = super::super::codegen::plan_param_regs_aggs(
         param_tys.len(),
         b.param_fp_mask(),
-        target.abi(),
+        abi_target.abi(),
         &param_arg_aggs,
     );
     let param_in_fp_reg = |i: usize| -> bool {
@@ -716,6 +728,42 @@ impl<'a> Walker<'a> {
             }
             Expr::Comma { rhs, .. } => self.indirect_callee_proto(*rhs, arg_count),
             _ => (false, arg_count),
+        }
+    }
+
+    /// Calling convention the callee of a call expression follows,
+    /// whether it names a function directly or goes through a pointer.
+    /// Every ABI question the call site asks -- argument placement,
+    /// aggregate argument and return classification, the variadic
+    /// dialect -- is asked of this, not of the target's own convention.
+    fn callee_conv(&self, callee: super::ExprId) -> crate::c5::codegen::CallConv {
+        if let Expr::Ident { sym, class, .. } = self.ast.expr(callee)
+            && *class == Token::Fun as i64
+            && let Some(s) = self.symbols.get(*sym as usize)
+            && s.conv != crate::c5::codegen::CallConv::Target
+        {
+            return s.conv;
+        }
+        self.indirect_callee_conv(callee)
+    }
+
+    /// Calling convention the pointed-to function of an indirect call
+    /// follows. Recorded at parse time on the callee's `ExprId` when the
+    /// declared type carries `__attribute__((ms_abi))` /
+    /// `((sysv_abi))`; the entry is already normalised against the
+    /// target, so anything listed differs from the target's own.
+    fn indirect_callee_conv(&self, callee: super::ExprId) -> crate::c5::codegen::CallConv {
+        if let Some(&(_, conv)) = self
+            .ast
+            .conv_indirect_callees
+            .iter()
+            .find(|(c, _)| *c == callee)
+        {
+            return conv;
+        }
+        match self.ast.expr(callee) {
+            Expr::Comma { rhs, .. } => self.indirect_callee_conv(*rhs),
+            _ => crate::c5::codegen::CallConv::Target,
         }
     }
 
@@ -4399,6 +4447,7 @@ impl<'a> Walker<'a> {
                 Ok(b.load_local(slot, read_kind))
             }
             Expr::Call { callee, args, ty } => {
+                let callee_conv = self.callee_conv(*callee);
                 // Out-pointer-returning c5-internal callee: allocate a
                 // result temp on this frame, prepend its address as the
                 // hidden out-pointer arg 0, run the call, and return the
@@ -4410,7 +4459,12 @@ impl<'a> Walker<'a> {
                 if is_struct_ty(*ty)
                     && struct_ptr_depth(*ty) == 0
                     && matches!(
-                        crate::c5::compiler::struct_return_abi(self.structs, self.target, *ty),
+                        crate::c5::compiler::struct_return_abi_conv(
+                            self.structs,
+                            self.target,
+                            callee_conv,
+                            *ty
+                        ),
                         crate::c5::compiler::StructReturnAbi::OutPtr
                     )
                     && let Expr::Ident {
@@ -4566,7 +4620,7 @@ impl<'a> Walker<'a> {
                         // widened 8-byte double, matching what the callee
                         // reads back, and pass `fp_arg_mask = 0`.
                         let callee_variadic = self.fun_is_variadic(*sym);
-                        let abi = self.target.abi();
+                        let abi = self.target.abi_for(callee_conv);
                         // Named (fixed) parameter count of the callee.
                         // For a variadic callee the prototype records the
                         // pre-ellipsis parameters in `Symbol::params`;
@@ -4635,9 +4689,10 @@ impl<'a> Walker<'a> {
                                 if callee_variadic && i < self.symbols[*sym as usize].params.len() {
                                     continue;
                                 }
-                                if let Some(desc) = crate::c5::compiler::host_abi_agg_desc(
+                                if let Some(desc) = crate::c5::compiler::host_abi_agg_desc_conv(
                                     self.structs,
                                     self.target,
+                                    callee_conv,
                                     ty_tag,
                                 ) {
                                     if arg_aggs.is_empty() {
@@ -4688,9 +4743,10 @@ impl<'a> Walker<'a> {
                             }
                             if let crate::c5::compiler::StructReturnAbi::Regs(desc)
                             | crate::c5::compiler::StructReturnAbi::Indirect(desc) =
-                                crate::c5::compiler::struct_return_abi(
+                                crate::c5::compiler::struct_return_abi_conv(
                                     self.structs,
                                     self.target,
+                                    callee_conv,
                                     *ty,
                                 )
                             {
@@ -4755,9 +4811,10 @@ impl<'a> Walker<'a> {
                             }
                             if let crate::c5::compiler::StructReturnAbi::Regs(desc)
                             | crate::c5::compiler::StructReturnAbi::Indirect(desc) =
-                                crate::c5::compiler::struct_return_abi(
+                                crate::c5::compiler::struct_return_abi_conv(
                                     self.structs,
                                     self.target,
+                                    callee_conv,
                                     *ty,
                                 )
                             {
@@ -4831,8 +4888,12 @@ impl<'a> Walker<'a> {
                         // operand.
                         let ret_temp = if let crate::c5::compiler::StructReturnAbi::Regs(desc)
                         | crate::c5::compiler::StructReturnAbi::Indirect(desc) =
-                            crate::c5::compiler::struct_return_abi(self.structs, self.target, *ty)
-                        {
+                            crate::c5::compiler::struct_return_abi_conv(
+                                self.structs,
+                                self.target,
+                                callee_conv,
+                                *ty,
+                            ) {
                             let ridx = b.intern_agg_desc(desc.clone());
                             let slot = b.alloc_synthetic_struct(desc.size as i64);
                             Some((ridx, slot))
@@ -4974,8 +5035,12 @@ impl<'a> Walker<'a> {
                         // the use site copies from this temp's address.
                         let ret_temp = if let crate::c5::compiler::StructReturnAbi::Regs(desc)
                         | crate::c5::compiler::StructReturnAbi::Indirect(desc) =
-                            crate::c5::compiler::struct_return_abi(self.structs, self.target, *ty)
-                        {
+                            crate::c5::compiler::struct_return_abi_conv(
+                                self.structs,
+                                self.target,
+                                callee_conv,
+                                *ty,
+                            ) {
                             let ridx = b.intern_agg_desc(desc.clone());
                             let slot = b.alloc_synthetic_struct(desc.size as i64);
                             Some((ridx, slot))
@@ -5022,7 +5087,12 @@ impl<'a> Walker<'a> {
                 // type rather than the variable symbol would close this.
                 let (callee_variadic, callee_fixed) =
                     self.indirect_callee_proto(*callee, args.len());
-                let abi = self.target.abi();
+                // The pointed-to function's own calling convention drives
+                // the argument placement, so every ABI question below --
+                // which variadic dialect applies, whether a floating-point
+                // argument rides the FP bank -- is asked of it rather than
+                // of the target's default.
+                let abi = self.target.abi_for(callee_conv);
                 let target = match indirect_target {
                     Some(t) => t,
                     None => self.walk_expr_rvalue(b, *callee)?,
@@ -5048,9 +5118,12 @@ impl<'a> Walker<'a> {
                     if !(is_struct_value_ty(aty)) {
                         continue;
                     }
-                    if let Some(desc) =
-                        crate::c5::compiler::host_abi_agg_desc(self.structs, self.target, aty)
-                    {
+                    if let Some(desc) = crate::c5::compiler::host_abi_agg_desc_conv(
+                        self.structs,
+                        self.target,
+                        callee_conv,
+                        aty,
+                    ) {
                         if arg_aggs.is_empty() {
                             arg_aggs = alloc::vec![None; arg_vals.len()];
                         }
@@ -5067,7 +5140,12 @@ impl<'a> Walker<'a> {
                 // cdecl (its prologue skips the FP bank), so the call is
                 // non-variadic with FP mask 0.
                 if matches!(
-                    crate::c5::compiler::struct_return_abi(self.structs, self.target, *ty),
+                    crate::c5::compiler::struct_return_abi_conv(
+                        self.structs,
+                        self.target,
+                        callee_conv,
+                        *ty
+                    ),
                     crate::c5::compiler::StructReturnAbi::OutPtr
                 ) {
                     // The callee writes the whole struct through the
@@ -5100,7 +5178,8 @@ impl<'a> Walker<'a> {
                     }
                     all_args.extend_from_slice(&arg_vals);
                     let fixed = all_args.len();
-                    let call = b.call_indirect(target, all_args, false, fixed, false, 0);
+                    let call =
+                        b.call_indirect(target, all_args, false, fixed, false, 0, callee_conv);
                     if !arg_aggs.is_empty() {
                         // `all_args` prepends the hidden out-pointer, so the
                         // aggregate descriptors shift by one slot.
@@ -5118,8 +5197,12 @@ impl<'a> Walker<'a> {
                 // struct into the temp.
                 let ret_temp = if let crate::c5::compiler::StructReturnAbi::Regs(desc)
                 | crate::c5::compiler::StructReturnAbi::Indirect(desc) =
-                    crate::c5::compiler::struct_return_abi(self.structs, self.target, *ty)
-                {
+                    crate::c5::compiler::struct_return_abi_conv(
+                        self.structs,
+                        self.target,
+                        callee_conv,
+                        *ty,
+                    ) {
                     let ridx = b.intern_agg_desc(desc.clone());
                     let slot = b.alloc_synthetic_struct(desc.size as i64);
                     Some((ridx, slot))
@@ -5152,6 +5235,7 @@ impl<'a> Walker<'a> {
                         callee_fixed,
                         fp_return,
                         fp_arg_mask,
+                        callee_conv,
                     );
                     if !arg_aggs.is_empty() {
                         b.set_call_arg_aggs(call, arg_aggs);
@@ -5195,6 +5279,7 @@ impl<'a> Walker<'a> {
                         callee_fixed,
                         fp_return,
                         fp_arg_mask,
+                        callee_conv,
                     );
                     if !arg_aggs.is_empty() {
                         b.set_call_arg_aggs(call, arg_aggs);
@@ -5262,6 +5347,7 @@ impl<'a> Walker<'a> {
                     callee_fixed,
                     fp_return,
                     call_fp_arg_mask,
+                    callee_conv,
                 );
                 if !arg_aggs.is_empty() {
                     b.set_call_arg_aggs(call, arg_aggs);

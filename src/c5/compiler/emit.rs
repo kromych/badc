@@ -783,6 +783,7 @@ impl Compiler {
         s.h_fn_ptr_ret_indirection = s.fn_ptr_ret_indirection;
         s.h_params = s.params.clone();
         s.h_is_variadic = s.is_variadic;
+        s.h_conv = s.conv;
         s.h_array_size = s.array_size;
         s.h_type_align = s.type_align;
         // Clone rather than `mem::take`: the inner-scope binding
@@ -854,6 +855,7 @@ impl Compiler {
         sym.fn_ptr_ret_indirection = sym.h_fn_ptr_ret_indirection;
         sym.params = core::mem::take(&mut sym.h_params);
         sym.is_variadic = sym.h_is_variadic;
+        sym.conv = sym.h_conv;
         sym.array_size = sym.h_array_size;
         sym.type_align = sym.h_type_align;
         sym.inner_array_size = sym.h_inner_array_size;
@@ -895,6 +897,7 @@ impl Compiler {
             && sym.fn_ptr_ret_indirection == sym.h_fn_ptr_ret_indirection
             && sym.params == sym.h_params
             && sym.is_variadic == sym.h_is_variadic
+            && sym.conv == sym.h_conv
             && sym.array_size == sym.h_array_size
             && sym.type_align == sym.h_type_align
             && sym.inner_array_size == sym.h_inner_array_size
@@ -1087,6 +1090,7 @@ impl Compiler {
             is_always_inline: self.pending_is_always_inline,
             is_noinline: self.pending_is_noinline,
             is_naked: self.pending_is_naked,
+            conv: self.current_func_conv,
             n_locals: self.max_loc_offs,
             name: self.current_function_name.clone(),
             param_tys,
@@ -1108,6 +1112,7 @@ impl Compiler {
         self.pending_is_always_inline = false;
         self.pending_is_noinline = false;
         self.pending_is_naked = false;
+        self.current_func_conv = crate::c5::codegen::CallConv::Target;
         self.finished_functions.push(finished);
     }
 

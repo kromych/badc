@@ -378,6 +378,8 @@ fn devirtualize_indirect_calls(
         .map(|(i, f)| (f.ent_pc, i))
         .collect();
     let variadic: BTreeMap<usize, bool> = funcs.iter().map(|f| (f.ent_pc, f.is_variadic)).collect();
+    let conv: BTreeMap<usize, crate::c5::codegen::CallConv> =
+        funcs.iter().map(|f| (f.ent_pc, f.conv)).collect();
     // Direct-call adjacency by function index, extended as rewrites land
     // so every reachability check runs against the current graph.
     let mut succ: Vec<BTreeSet<usize>> = funcs
@@ -420,6 +422,7 @@ fn devirtualize_indirect_calls(
             let Inst::CallIndirect {
                 target,
                 callee_variadic,
+                callee_conv,
                 ..
             } = inst
             else {
@@ -434,7 +437,12 @@ fn devirtualize_indirect_calls(
                 continue;
             }
             let Some(&ki) = idx_of.get(k) else { continue };
-            if variadic[k] != *callee_variadic || sp_tainted.contains(k) {
+            // The pointer's declared prototype has to be the callee's:
+            // the direct call the rewrite produces marshals per the
+            // definition's variadic-ness and calling convention, so a
+            // pointer that disagrees with either would change the call.
+            if variadic[k] != *callee_variadic || conv[k] != *callee_conv || sp_tainted.contains(k)
+            {
                 continue;
             }
             let reach = reach_set(&succ, ki);
@@ -2958,6 +2966,7 @@ fn splice_multi_block(
         patchable_entry: original.patchable_entry,
         no_instrument: original.no_instrument,
         is_naked: original.is_naked,
+        conv: original.conv,
         is_weak: original.is_weak,
         is_internal: original.is_internal,
         const_params: original.const_params,
@@ -4088,6 +4097,7 @@ mod tests {
                 target: 2,
                 args: alloc::vec![],
                 callee_variadic: false,
+                callee_conv: crate::c5::codegen::CallConv::Target,
                 fixed_args: 0,
                 fp_return: false,
                 fp_arg_mask: 0,
@@ -5663,6 +5673,7 @@ mod tests {
                 fixed_args: 0,
                 fp_return: false,
                 fp_arg_mask: 0,
+                callee_conv: crate::c5::codegen::CallConv::Target,
                 arg_aggs: alloc::vec![],
                 ret_agg: None,
                 ret_slot_local: 0,

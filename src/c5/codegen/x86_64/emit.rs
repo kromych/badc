@@ -1714,6 +1714,7 @@ pub(crate) fn emit_function(
     extern_tls_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     imports: &super::ResolvedImports,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
+    conv_targets: &alloc::collections::BTreeMap<usize, super::CallConv>,
     ret_tags: &alloc::collections::BTreeMap<usize, i64>,
     tls_total_size: usize,
     fn_unwind: &mut Vec<super::FnUnwind>,
@@ -1794,7 +1795,7 @@ pub(crate) fn emit_function(
         }};
     }
     let abi = {
-        let mut a = target.abi();
+        let mut a = target.abi_for(func.conv);
         a.no_fp_varargs = no_fp_regs;
         a.strict_align = strict_align;
         a.hardening = hardening;
@@ -2068,7 +2069,15 @@ pub(crate) fn emit_function(
             // epilogue; ret`. Saves one call+ret pair per recursion level
             // and removes the post-call rax-to-place mov. See
             // `detect_tail_call` for the safety preconditions.
-            let tail_call = detect_tail_call(func, block, abi, variadic_targets, ret_tags, target);
+            let tail_call = detect_tail_call(
+                func,
+                block,
+                abi,
+                variadic_targets,
+                conv_targets,
+                ret_tags,
+                target,
+            );
             for v in block.inst_range.clone() {
                 let inst = &func.insts[v as usize];
                 let place = place_of(alloc, v);
@@ -2178,6 +2187,7 @@ pub(crate) fn emit_function(
                         target,
                         imports,
                         variadic_targets,
+                        conv_targets,
                         extern_tls_names,
                         extern_data_names,
                         extern_code_names,
@@ -3368,6 +3378,9 @@ struct FnCtx<'a> {
     target: Target,
     imports: &'a super::ResolvedImports,
     variadic_targets: &'a alloc::collections::BTreeSet<usize>,
+    /// Callee ent_pc -> the convention that callee declares, for the
+    /// callees that declare one at all. Absent means the target's own.
+    conv_targets: &'a alloc::collections::BTreeMap<usize, super::CallConv>,
     extern_tls_names: &'a alloc::collections::BTreeMap<u32, alloc::string::String>,
     /// `Inst::ImmData` value-id -> cross-TU data symbol name, for an `i`-class
     /// inline-asm operand that names an external address, whether in a section
@@ -3406,6 +3419,7 @@ fn emit_inst(
         target,
         imports,
         variadic_targets,
+        conv_targets,
         extern_tls_names,
         extern_data_names,
         extern_code_names,
@@ -3701,7 +3715,11 @@ fn emit_inst(
             *fixed_args,
             alloc,
             frame,
-            abi,
+            callee_abi(
+                abi,
+                target,
+                conv_targets.get(target_pc).copied().unwrap_or_default(),
+            ),
             fixups,
             variadic_targets.contains(target_pc),
             *fp_return,
@@ -3728,7 +3746,9 @@ fn emit_inst(
             *fp_arg_mask,
             alloc,
             frame,
-            abi,
+            // A libc import follows the target's convention, never the
+            // caller's.
+            callee_abi(abi, target, super::CallConv::Target),
             target,
             plt_call_fixups,
             imports,
@@ -3786,12 +3806,13 @@ fn emit_inst(
             frame,
         ),
         Inst::CallIndirect {
-            target,
+            target: callee,
             args,
             callee_variadic,
             fixed_args,
             fp_return,
             fp_arg_mask,
+            callee_conv,
             arg_aggs,
             ret_agg,
             ret_slot_local,
@@ -3799,13 +3820,13 @@ fn emit_inst(
         } => emit_call_indirect(
             code,
             dst,
-            *target,
+            *callee,
             args,
             *callee_variadic,
             *fixed_args,
             alloc,
             frame,
-            abi,
+            callee_abi(abi, target, *callee_conv),
             *fp_return,
             *fp_arg_mask,
             arg_aggs,
@@ -6656,6 +6677,25 @@ fn emit_call_ext(
     super::encode::emit_extend_rax_for_return(code, ext);
     mirror_int_dst(code, dst, Reg::RAX, frame);
     true
+}
+
+/// The ABI a call site marshals to: the callee's own convention, which
+/// is the target's unless the callee declares `ms_abi` / `sysv_abi`.
+/// It is never the caller's -- a `ms_abi` function calling an ordinary
+/// one has to marshal into the ordinary one's argument window. The rest
+/// of `Abi` describes this compilation rather than any convention, so
+/// it carries over from the caller unchanged.
+fn callee_abi(abi: super::Abi, target: Target, conv: super::CallConv) -> super::Abi {
+    let row = target.abi_for(conv);
+    super::Abi {
+        int_arg_regs: row.int_arg_regs,
+        shadow_space: row.shadow_space,
+        variadic_on_stack: row.variadic_on_stack,
+        variadic_int_only: row.variadic_int_only,
+        position_indexed_args: row.position_indexed_args,
+        variadic_zero_xmm_count: row.variadic_zero_xmm_count,
+        ..abi
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -11722,6 +11762,7 @@ fn detect_tail_call<'a>(
     block: &super::super::ir::Block,
     abi: super::Abi,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
+    conv_targets: &alloc::collections::BTreeMap<usize, super::CallConv>,
     ret_tags: &alloc::collections::BTreeMap<usize, i64>,
     target: Target,
 ) -> Option<(usize, usize, &'a [u32])> {
@@ -11769,6 +11810,14 @@ fn detect_tail_call<'a>(
     // tail conversion's `marshal_args` would deliver garbage. The
     // regular `emit_call` path branches on this same flag.
     if variadic_targets.contains(&target_pc) {
+        return None;
+    }
+    // The tail conversion reuses this frame and this function's entry
+    // contract; a callee on another calling convention wants a different
+    // argument window, a different shadow-space reservation and a
+    // different set of preserved registers. Keep the regular
+    // call-then-return path.
+    if conv_targets.get(&target_pc).copied().unwrap_or_default() != func.conv {
         return None;
     }
     // The callee's epilogue extends a sub-word integer return per its

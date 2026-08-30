@@ -59,6 +59,8 @@ struct AttrFlags {
     no_instrument_function: bool,
     uninitialized: bool,
     transparent_union: bool,
+    ms_abi: bool,
+    sysv_abi: bool,
 }
 
 impl AttrFlags {
@@ -80,6 +82,8 @@ impl AttrFlags {
         self.no_instrument_function |= other.no_instrument_function;
         self.uninitialized |= other.uninitialized;
         self.transparent_union |= other.transparent_union;
+        self.ms_abi |= other.ms_abi;
+        self.sysv_abi |= other.sysv_abi;
     }
 }
 
@@ -1048,6 +1052,15 @@ impl Compiler {
                 // GNU `transparent_union`: parameters of the union type
                 // accept arguments of any member type.
                 f.transparent_union = true;
+            } else if n == "ms_abi" || n == "__ms_abi__" {
+                // GNU `ms_abi`: the function follows the Microsoft x64
+                // calling convention. x86-only; ignored elsewhere, which
+                // is what the Linux `__efiapi` spelling relies on.
+                f.ms_abi = true;
+            } else if n == "sysv_abi" || n == "__sysv_abi__" {
+                // GNU `sysv_abi`: the function follows the System V AMD64
+                // calling convention. x86-only, as `ms_abi`.
+                f.sysv_abi = true;
             }
         }
     }
@@ -1432,6 +1445,21 @@ impl Compiler {
         if attrs.uninitialized {
             self.pending.attr_uninitialized = true;
         }
+        // `ms_abi` / `sysv_abi` name the declared function's (or
+        // function pointer's) calling convention. Both are inert off
+        // x86_64, matching gcc, which ignores them on other targets.
+        if attrs.ms_abi || attrs.sysv_abi {
+            let conv = if attrs.ms_abi {
+                crate::c5::codegen::CallConv::Ms
+            } else {
+                crate::c5::codegen::CallConv::SysV
+            };
+            self.pending.attr_call_conv = if self.target.abi_row(conv) == self.target {
+                crate::c5::codegen::CallConv::Target
+            } else {
+                conv
+            };
+        }
         Ok(attrs.packed)
     }
 
@@ -1773,6 +1801,15 @@ impl Compiler {
             // spelling would otherwise be lost; record it for debug
             // info (DWARF 4 5.3 names it with a DW_TAG_typedef DIE).
             self.pending.spell_base_typedef = Some(self.lex.curr_id_idx as u32);
+            // A function / function-pointer typedef carries the
+            // pointed-to function's calling convention; a declarator
+            // through the alias inherits it unless the declaration names
+            // one of its own.
+            if self.symbols[self.lex.curr_id_idx].conv != crate::c5::codegen::CallConv::Target
+                && self.pending.attr_call_conv == crate::c5::codegen::CallConv::Target
+            {
+                self.pending.attr_call_conv = self.symbols[self.lex.curr_id_idx].conv;
+            }
             // Carry the typedef's fn-pointer lineage forward (gh
             // #19) so a later `fn_t fp` declaration ends up with
             // the right indirection count.

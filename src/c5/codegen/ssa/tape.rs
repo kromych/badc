@@ -75,6 +75,7 @@ pub(crate) fn insert(func: &mut FunctionSsa, ins: &[Insertion]) -> (Rewrite, Und
         is_always_inline: _,
         is_noinline: _,
         is_naked: _,
+        conv: _,
         is_weak: _,
         is_internal: _,
         section: _,

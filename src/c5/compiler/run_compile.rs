@@ -384,6 +384,7 @@ impl Compiler {
             self.pending.attr_cleanup = None;
             self.pending.attr_uninitialized = false;
             self.pending.attr_weak = false;
+            self.pending.attr_call_conv = crate::c5::codegen::CallConv::Target;
             self.pending.attr_used = false;
             self.pending.attr_visibility = None;
             self.pending.attr_section = None;
@@ -928,6 +929,13 @@ impl Compiler {
                     self.symbols[id_idx].is_void_typedef = declarator_is_bare_void;
                     self.symbols[id_idx].is_enum_typedef = base_is_enum;
                     self.symbols[id_idx].is_function_type = typedef_is_fn_type;
+                    // A function-type typedef records the calling
+                    // convention its declaration named, so a declarator
+                    // through the alias inherits it
+                    // (`typedef efi_status_t __efiapi f_t(void);`).
+                    if self.pending.attr_call_conv != crate::c5::codegen::CallConv::Target {
+                        self.symbols[id_idx].conv = self.pending.attr_call_conv;
+                    }
                     // A GNU `aligned(N)` type attribute on the typedef
                     // (its own declaration's attribute, else propagated
                     // from an aligned typedef base) becomes the alias's
@@ -1418,6 +1426,7 @@ impl Compiler {
                     self.current_func_return_ty = return_ty;
                     self.current_func_returns_void = self.symbols[id_idx].returns_void;
                     self.current_function_name = self.symbols[id_idx].name.clone();
+                    self.current_func_conv = self.symbols[id_idx].conv;
 
                     // c5 callers push args right-to-left (cdecl-style), so
                     // the i'th declared param ends up at `[bp + 16*(i+1)]`,
@@ -1433,8 +1442,18 @@ impl Compiler {
                     // start at val=3. Host-ABI returns (AAPCS64 registers
                     // or x8) carry no hidden argument, so their params start
                     // at val=2 like any other function.
+                    // The convention decides it: a by-value aggregate
+                    // return the Microsoft x64 convention passes through a
+                    // hidden pointer is one System V may still return in
+                    // registers, and the slot numbering has to match what
+                    // the codegen places.
                     let param_base = if matches!(
-                        super::struct_return_abi(&self.structs, self.target, return_ty),
+                        super::struct_return_abi_conv(
+                            &self.structs,
+                            self.target,
+                            self.current_func_conv,
+                            return_ty,
+                        ),
                         super::StructReturnAbi::OutPtr
                     ) {
                         3
@@ -2982,6 +3001,14 @@ impl Compiler {
         }
         if self.pending.attr_used {
             self.symbols[id_idx].is_used = true;
+        }
+        // `ms_abi` / `sysv_abi`: the convention of the function this
+        // symbol names, or of the function a function-pointer object
+        // points to. Sticky across declarations like the rest, so a
+        // prototype carrying it and a later definition without it agree
+        // on one convention.
+        if self.pending.attr_call_conv != crate::c5::codegen::CallConv::Target {
+            self.symbols[id_idx].conv = self.pending.attr_call_conv;
         }
         if self.pending.attr_constructor {
             self.symbols[id_idx].is_constructor = true;

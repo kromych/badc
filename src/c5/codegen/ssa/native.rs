@@ -44,6 +44,10 @@ pub(crate) fn compile_function_to_bytes(
     let alloc = super::reg_alloc::allocate(func, target, crate::c5::codegen::FixedRegs::NONE);
     let imports = ResolvedImports::default();
     let variadic_targets: BTreeSet<usize> = BTreeSet::new();
+    // The single-function native path has no cross-function table; a
+    // definition's own convention rides `FunctionSsa::conv`.
+    let conv_targets: alloc::collections::BTreeMap<usize, crate::c5::codegen::CallConv> =
+        alloc::collections::BTreeMap::new();
     // Single-function compile: no same-image callees are resolvable,
     // so the tail-call conversion sees no known return contracts.
     let ret_tags: alloc::collections::BTreeMap<usize, i64> =
@@ -215,6 +219,7 @@ pub(crate) fn compile_function_to_bytes(
                     &extern_tls_names,
                     &imports,
                     &variadic_targets,
+                    &conv_targets,
                     &ret_tags,
                     0,
                     &mut fn_unwind,

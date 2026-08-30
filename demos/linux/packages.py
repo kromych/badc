@@ -2091,8 +2091,15 @@ def resolve_phases(spec: str, release: str | None,
 
 
 def install_cmd(arch, packages: list[Path], extra: str = "") -> str:
-    """The distribution's command to install `packages` from files."""
-    tool = "dpkg -i" if arch["pkg"] == "deb" else "rpm -ivh"
+    """The distribution's command to install `packages` from files.
+
+    A kernel is an install-only package, so a build of an older release
+    than the one already present is added beside it rather than upgraded
+    over it -- but rpm still refuses the older version without being told
+    that is the intent, and the corpus release trails the distribution's
+    own on any machine that has been updated.
+    """
+    tool = "dpkg -i" if arch["pkg"] == "deb" else "rpm -ivh --oldpackage"
     names = " ".join(shlex.quote(p.name) for p in packages)
     return " ".join(filter(None, (tool, extra, names)))
 
@@ -2923,7 +2930,7 @@ def _self_test() -> int:
         "dpkg -i linux-image_1_amd64.deb")
     assert install_cmd(rpm, [Path("/o/kernel-1.rpm"), Path("/o/kernel-c.rpm")],
                        "--replacepkgs") == (
-        "rpm -ivh --replacepkgs kernel-1.rpm kernel-c.rpm")
+        "rpm -ivh --oldpackage --replacepkgs kernel-1.rpm kernel-c.rpm")
 
     # --- hardware lane ---
     assert baud_constant(115200) == termios.B115200

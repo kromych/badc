@@ -133,6 +133,26 @@ nc -u -l -k 6666 | tee "netconsole-$(date +%Y%m%dT%H%M%S).log"
 This is the primary window. It covers driver probe, filesystem mount,
 `switch_root`, systemd, and everything after.
 
+Prove the path carries before a boot depends on it, because a netconsole that
+does not arrive is indistinguishable from a kernel that produced no output.
+Start the collector, then send from the box over the same route the kernel
+will use:
+
+```sh
+# on the collector
+nc -u -l 6666
+
+# on the box, from bash -- the login shell may be zsh, which has no /dev/udp
+bash -c 'echo probe > /dev/udp/<collector-ip>/6666'
+```
+
+The probe arriving confirms the addressing, the route and that nothing between
+the two machines drops the port. It does not confirm the MAC in the
+`netconsole=` line, which the kernel uses directly rather than resolving by
+ARP: get that wrong and the frames are emitted and silently not delivered. Read
+it from the collector's own interface, and re-read it if the collector's
+hardware or network changes.
+
 ### efi_pstore, for what happens when nothing is watching
 
 The module is present but **disabled** (`pstore_disable=Y`), so today a panic
@@ -273,6 +293,33 @@ recover from it remotely on this hardware.
   tail of dmesg, at the cost of reserved memory. Worth enabling if pstore's
   record turns out to be too short to diagnose something.
 
+## What the preparation changes
+
+Seven items, and nothing else. `hwprep.py status` prints the recorded ones at
+any time; the table gives the manual undo for each, should the record be lost.
+
+| # | Change | Where it lives | Outlives a reboot | Undo |
+|---|--------|----------------|-------------------|------|
+| 1 | The rollback snapshot | `/var/lib/badc-hwprep/` | yes | `sudo rm -rf /var/lib/badc-hwprep` -- it only records |
+| 2 | Watchdog drop-in | `/etc/systemd/system.conf.d/badc-watchdog.conf` | yes | `sudo rm` it, then `sudo systemctl daemon-reexec` |
+| 3 | Kernel package | rpm database, `/boot`, `/lib/modules` | yes | `sudo rpm -e kernel-<version>` -- takes its BLS entry with it |
+| 4 | Arguments on the badc entry | that entry's BLS file only | yes | `sudo grubby --update-kernel=/boot/vmlinuz-<version> --remove-args="..."` |
+| 5 | One-shot boot selection | `next_entry` in the grubenv | no, one boot | `sudo grub2-editenv - unset next_entry` |
+| 6 | pstore records left by a crash | EFI variable store, via `/sys/fs/pstore` | yes | `sudo rm -f /sys/fs/pstore/*` |
+| 7 | Initramfs rebuild | `/boot/initramfs-<running>.img` | yes | `sudo dracut -f` regenerates it |
+
+Item 2 is the only one that changes how the machine behaves outside the badc
+entry: after `arm`, systemd pets a hardware watchdog with a one-minute timeout
+on **every** boot, stock kernels included. A stock system that wedges hard
+enough to stop systemd from petting it will therefore reset itself rather than
+sit there. That is the intended behaviour -- it is what makes an unattended
+badc boot recoverable -- but it applies machine-wide, and it is live from the
+moment `arm` runs, not from the first badc boot.
+
+Items 3 through 6 touch the badc entry alone. Nothing in this lane modifies
+`/etc/default/grub`, the stock kernels, their command lines, the default boot
+entry, or the root filesystem.
+
 ## Undoing all of it
 
 ```sh
@@ -283,32 +330,24 @@ sudo python3 hwprep.py status        # what remains, and what is default
 `rollback` replays the recorded changes newest-first: it strips the arguments
 it added from the entries it added them to, removes the kernel packages it
 installed, and restores or deletes each file it wrote according to whether
-that file existed beforehand. It then re-checks the invariant and compares
-the installed kernel set against the one `record` captured, reporting any
-difference in either direction rather than assuming the undo was complete.
+that file existed beforehand. It then re-checks the invariant and compares the
+installed kernel set against the one `record` captured, reporting any
+difference in either direction rather than reporting success on the strength
+of having run.
 
-The equivalent by hand, should the record be lost:
+It does not clear items 5 and 6 -- a pending one-shot selection is consumed by
+the next boot whether or not anyone clears it, and the pstore records are the
+evidence a failed boot was run to collect. Clear those by hand when done:
 
 ```sh
-# 1. The badc kernel and its boot entry
-sudo rpm -e kernel-7.1.10                     # removes its BLS entry too
-sudo grub2-editenv - unset next_entry         # clear any pending one-shot
-
-# 2. Post-mortem capture
-sudo rm -f /etc/modprobe.d/pstore.conf
+sudo grub2-editenv - unset next_entry
 sudo rm -f /sys/fs/pstore/*
-sudo dracut -f
-
-# 3. The watchdog
-sudo rm -f /etc/systemd/system.conf.d/watchdog.conf
-sudo systemctl daemon-reexec
-
-# 4. Verify the machine is back where it started
-sudo grubby --default-title                   # a stock kernel
-rpm -q kernel                                 # the three stock kernels
-diff <(sudo grubby --info=ALL) ~/rollback/grubby-before.txt
 ```
 
-Nothing in this lane modifies `/etc/default/grub`, the stock kernels, their
-command lines, or the root filesystem, so there is no state to restore beyond
-the four items above.
+To confirm the machine is where it started:
+
+```sh
+sudo python3 hwprep.py status                       # 0 recorded changes
+diff <(sudo grubby --info=ALL) /var/lib/badc-hwprep/before/grubby-info-all.txt
+rpm -q kernel                                       # the stock set, unchanged
+```

@@ -359,18 +359,19 @@ impl Compiler {
             // TODO: a row reached through a pointer to an array answers
             // the row's size, where the object holding it is unknown.
             (Some(n), None) => n,
-            // A member with no declared bound has no extent of its own, so
-            // the closest surrounding subobject with one is the object that
-            // holds it: the subobject forms answer what the whole-object
-            // forms do, the space from the member to the end of the
-            // declared object. Answering the member's nominal 0 instead
-            // reports that no byte may be written, which is what
-            // FORTIFY_SOURCE reads to reject every write into a flexible
-            // array member.
-            (Some(_), Some(m)) if flexible => m.decl_remaining.unwrap_or(unknown),
             (Some(n), Some(m)) if kind & 1 == 1 => {
                 if m.unbounded {
                     unknown
+                } else if flexible {
+                    // A member with no declared bound has no extent of its
+                    // own, so the closest surrounding subobject with one is
+                    // the object holding it -- when the chain started at a
+                    // declared object. Answering the member's nominal 0
+                    // there reports that no byte may be written, which is
+                    // what FORTIFY_SOURCE reads to reject every write into
+                    // a flexible array member. Through a pointer there is
+                    // no such object, and the declared extent stands.
+                    m.decl_remaining.unwrap_or(n)
                 } else {
                     n
                 }

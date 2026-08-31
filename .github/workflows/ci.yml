@@ -1660,7 +1660,7 @@ jobs:
     # The exception is a build that succeeded and a boot that did not, which is
     # a miscompile or a bad link and does not say which; a single
     # `--linker reference` run separates those two, and the same contrast runs
-    # nightly (see below).
+    # in `kernel-packages.yml` (see below).
     #
     # The kernel source is the release `demos/linux/setup.py` pins, fetched
     # from the `vendor-deps-v1` release and rejected unless its sha256
@@ -1684,13 +1684,12 @@ jobs:
     # run coming out the faster of the pair, so a second dimension would buy
     # the link steps at the price of a second full compile per architecture on
     # every push. `kernel-packages.yml` carries the contrast instead: same
-    # pinned release, same `make defconfig`, kbuild's default LD, nightly on
-    # both architectures, and booted into a stock distribution userspace
+    # pinned release, same `make defconfig`, kbuild's default LD, on both
+    # architectures, and booted into a stock distribution userspace
     # rather than a marker initramfs. The distribution dimension -- deb/rpm
     # packaging, install into a stock cloud image, boot into the installed
-    # kernel through its boot loader -- is that same workflow, which runs
-    # nightly and on demand because it needs a VM and GitHub-hosted runners
-    # have no KVM.
+    # kernel through its boot loader -- is that same workflow, which runs on
+    # demand because it needs a VM and GitHub-hosted runners have no KVM.
     name: kernel (${{ matrix.label }} defconfig, badc-linked, badc-built qemu)
     strategy:
       fail-fast: false

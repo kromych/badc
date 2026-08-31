@@ -23,13 +23,19 @@ name: kernel-packages
 # The aarch64 TCG figure is 28 min of `rpm -ivh` regenerating the initramfs
 # with dracut and 11 min of boots and probes, and a runner's cores are slower
 # than the box's, which is what --install-timeout below is sized for. Neither
-# lane fits a push; both fit a nightly.
+# lane fits a push, which is why this workflow is not on it.
+#
+# It carries no schedule either. The corpus it builds is a pinned release at a
+# fixed configuration, so a run repeats the previous run's work unless a commit
+# changed the compiler -- and the commits that do are already gated by ci.yml's
+# per-push `kernel` job. A daily run of four lanes at these costs buys a result
+# that is almost always identical to the last one. It runs when someone asks
+# for it.
 #
 # ci.yml's `kernel` job keeps the per-push gate -- same "badc compiles every
 # unit, zero fallbacks" contract, booted with a marker initramfs under the
 # badc-built emulator, and with badc as the tree's LD as well. This workflow
-# adds the distribution dimension on a nightly schedule, on demand, and on a
-# labelled pull request.
+# adds the distribution dimension on demand and on a labelled pull request.
 #
 # It is also the linker contrast, which is why the push path does not carry
 # one. This lane builds the same pinned release at the same `make defconfig`
@@ -57,10 +63,6 @@ on:
         type: choice
         options: [badc, reference]
         default: badc
-  schedule:
-    # Nightly at 03:41 UTC: off the :00/:30 marks the fleet crowds, and clear
-    # of the asm-fuzz lane.
-    - cron: "41 3 * * *"
   pull_request:
     # Opt-in per pull request: add the `kernel-packages` label to run it.
     types: [labeled]

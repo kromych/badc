@@ -1405,9 +1405,11 @@ model (`host` under kvm, `max` under tcg).
 ### In CI
 
 `.github/workflows/kernel-packages.yml` runs the whole harness -- build,
-package, publish, install, boot -- on a nightly schedule, on
-`workflow_dispatch`, and on a pull request carrying the `kernel-packages`
-label. It is deliberately off the push path, and the reason is the
+package, publish, install, boot -- on `workflow_dispatch` and on a pull
+request carrying the `kernel-packages` label. It carries no schedule: the
+corpus is a pinned release at a fixed configuration, so a repeat run repeats
+the previous run's work unless a commit changed the compiler, and those are
+gated per push by `ci.yml`'s `kernel` job. It is deliberately off the push path, and the reason is the
 accelerator: GitHub-hosted runners expose no `/dev/kvm`, so the VM runs under
 TCG. Measured on the boxes against the same packages and images with the VM's
 host cores capped at 4, the vm phase costs 40 s under KVM and 3 min under TCG
@@ -1435,8 +1437,8 @@ coming out the faster of the pair. A second matrix dimension would therefore
 buy the link steps at the price of a second full compile per architecture on
 every push. `kernel-packages.yml` carries the contrast instead: it builds the
 same pinned release at the same `make defconfig` with kbuild's default `LD`,
-nightly and on both architectures, which is where GNU ld consuming badc's
-kernel objects is gated. A kernel that boots one way and not the other
+on both architectures, which is where GNU ld consuming badc's kernel objects
+is gated. A kernel that boots one way and not the other
 separates a compiler defect from a linker one.
 
 Each lane publishes two artifacts: the packages (deb or rpm, plus headers,

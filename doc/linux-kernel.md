@@ -281,7 +281,8 @@ probe compiler, so a replayed measurement can reflect badc instead.
 
 CI runs `verify.py` on every push for both architectures, under an emulator
 that the qemu lane itself compiled and linked with badc. The packaging and
-install path runs in `.github/workflows/kernel-packages.yml` nightly, on
-demand, and on a pull request carrying the `kernel-packages` label -- it is off
-the push path because GitHub-hosted runners expose no `/dev/kvm` and the VM
-would run under TCG.
+install path runs in `.github/workflows/kernel-packages.yml` on demand and on
+a pull request carrying the `kernel-packages` label -- it is off the push path
+because GitHub-hosted runners expose no `/dev/kvm` and the VM would run under
+TCG, and it carries no schedule because the corpus is pinned and a repeat run
+repeats the previous run's work.

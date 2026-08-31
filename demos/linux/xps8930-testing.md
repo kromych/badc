@@ -115,13 +115,27 @@ sudo grubby --info=ALL | grep -c '^title='
 
 ### netconsole, for anything after the NIC is up
 
-`netconsole.ko` ships with the distribution kernel and the badc one. Configured
-on the kernel command line it starts as soon as the network driver probes,
-which is far earlier than any userspace logging:
+`netconsole.ko` ships with the distribution kernel and the badc one, and both
+build it as a **module** (`CONFIG_NETCONSOLE=m`). That decides where the target
+goes, and getting it wrong is silent: `netconsole=` on the kernel command line
+is a parameter only a builtin registers, so on these kernels it is rejected --
+the boot prints one `Unknown kernel command line parameters` line and carries
+on with no remote log at all. `hwprep.py entry` reads which it is and writes
+
+```
+/etc/modprobe.d/badc-netconsole.conf   options netconsole netconsole=<spec>
+/etc/modules-load.d/badc-netconsole.conf   netconsole
+```
+
+for a module, or puts it on the command line for a builtin. The spec is
 
 ```
 netconsole=6666@<box-ip>/<iface>,6666@<collector-ip>/<collector-mac>
 ```
+
+As a module it loads from userspace, so it covers everything from that point
+on but not the window before it -- driver probe, mount, `switch_root`. pstore
+is the only record for that window, which is why both are armed.
 
 Both IP addresses and the collector's MAC are site-specific and deliberately
 not recorded here. Collect on the other machine with:

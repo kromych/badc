@@ -154,16 +154,24 @@ class Prep:
             out.append((os.path.basename(p)[len("vmlinuz-"):], p))
         return out
 
-    def pstore_kind(self):
-        """"module", "builtin", or None. A builtin takes its parameters from
-        the kernel command line; modprobe.d reaches loadable modules only."""
-        if not os.path.exists("/sys/module/efi_pstore"):
-            return None
-        for line in self.out(["modinfo", "efi_pstore"]).splitlines():
+    def module_kind(self, name):
+        """"module", "builtin", or None.
+
+        The distinction decides where a parameter has to go, and getting it
+        wrong is silent both ways: a builtin ignores modprobe.d, and a
+        loadable module's parameter on the kernel command line is rejected as
+        unknown -- the kernel prints one line about it at boot and carries on
+        without the facility the parameter was meant to arm."""
+        for line in self.out(["modinfo", name]).splitlines():
             if line.startswith("filename:"):
                 return "builtin" if "(builtin)" in line else "module"
-        return "builtin" if not os.path.exists(
-            "/sys/module/efi_pstore/initstate") else "module"
+        if os.path.exists(f"/sys/module/{name}"):
+            return ("module" if os.path.exists(f"/sys/module/{name}/initstate")
+                    else "builtin")
+        return None
+
+    def pstore_kind(self):
+        return self.module_kind("efi_pstore")
 
     def pstore_enabled(self):
         try:
@@ -381,16 +389,17 @@ class Prep:
             print(f"! {v} is not a kernel this tool installed.")
             print("! refusing to change a stock entry's arguments.")
             return 1
+        # `oops=panic` is the boot-parameter form. `panic_on_oops` is a
+        # sysctl name and the kernel rejects it on the command line.
         add = [
             f"panic={args.panic}",
-            "panic_on_oops=1",
             "oops=panic",
             "printk.always_kmsg_dump=1",
         ]
         if self.pstore_kind() == "builtin" and not self.pstore_enabled():
             add.append("efi_pstore.pstore_disable=0")
         if args.netconsole:
-            add.append(f"netconsole={args.netconsole}")
+            self.arm_netconsole(args.netconsole, add)
         if args.console:
             add.append(f"console={args.console}")
         if args.args:
@@ -413,6 +422,32 @@ class Prep:
         self.record_action(action="entry", version=v, path=path, args=add)
         print()
         return 0 if self.check_invariant() else 1
+
+    def arm_netconsole(self, spec, add):
+        """Put the netconsole target where the build will actually read it.
+
+        Built in, it is a kernel command-line parameter and starts as soon as
+        the network driver probes. Built as a module -- which is what both
+        Fedora and Ubuntu ship -- the same text on the command line is
+        rejected as an unknown parameter and nothing listens, so it goes to
+        modprobe.d with a modules-load.d entry to load it. That costs the
+        early window: the module loads from userspace, so a failure before
+        then reaches no collector, and pstore remains the only record."""
+        kind = self.module_kind("netconsole")
+        if kind == "builtin":
+            add.append(f"netconsole={spec}")
+            print("  netconsole: builtin, armed on the command line")
+            return
+        if kind is None:
+            print("  ! netconsole is not available on this kernel; no remote log")
+            return
+        self.write_file("/etc/modprobe.d/badc-netconsole.conf",
+                        f"options netconsole netconsole={spec}\n")
+        self.write_file("/etc/modules-load.d/badc-netconsole.conf",
+                        "netconsole\n")
+        print("  netconsole: module, armed via modprobe.d + modules-load.d")
+        print("  note: it loads from userspace, so a failure before that")
+        print("  reaches no collector. pstore covers that window.")
 
     # -- check ------------------------------------------------------------
 

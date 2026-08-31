@@ -21,7 +21,7 @@ two lanes agree, this document says so and does not repeat the reasoning.
 | Root | ext4 on `/dev/sda2`, 817 GB free; ESP is a separate 2 GB `/dev/sda1` |
 | Network | one wired interface, static lease on the lab network |
 | Watchdogs | `intel_oc_wdt` and `iTCO_wdt`, both loaded |
-| Serial | **none.** `/dev/ttyS0..17` exist as driver nodes; `/proc/tty/driver/serial` reports no port behind any of them |
+| Serial | a 16550A exists (`ttyS0`, `type=4`, `0x3f8`, IRQ 4) but reaches no accessible connector: the board ships no DB-9, and any PCB header is not reachable. Unusable as a console |
 | Display | **none attached.** All three DRM connectors report `disconnected` |
 
 The root filesystem is ext4, so there is no filesystem snapshot to roll back
@@ -29,21 +29,24 @@ to. Rollback here means *boot a different kernel*, and nothing else.
 
 ## The constraint, stated plainly
 
-With no serial port and no monitor, a kernel that fails before the network
-comes up produces **no output anywhere**. There is no console to watch, no
-scrollback to read, and no shell to log into. The machine is either reachable
-over ssh or it is a black box.
+There is a UART on this board -- sysfs reports `ttyS0` as `type=4`
+(`PORT_16550A`) at `0x3f8` IRQ 4, which is a port the driver probed, not a
+phantom node -- but it reaches no connector anyone can attach a cable to. The
+chassis has no DB-9, and whatever header may exist on the PCB is not
+accessible. So there is no serial console, and with no monitor attached there
+is no console at all.
 
-Three consequences drive the whole design:
+A kernel that fails before the network comes up therefore produces **no output
+anywhere**: nothing to watch, no scrollback to read, no shell to log into. The
+machine is either reachable over ssh or it is a black box. Everything below
+follows from that: the visibility has to be arranged in advance, and the
+recovery has to be automatic, because there will be nobody at a console to
+intervene.
 
-1. **The badc kernel must never become the default.** If a boot wedges, the
-   recovery has to happen without anyone reading anything, which means the
-   *next* boot must already be a stock kernel.
-2. **A panic must reboot, not hang.** `kernel.panic` is `0` on this box today,
-   so a panic sits there forever. On a headless machine that converts a
-   software fault into a physical trip.
-3. **Post-mortem has to survive the reboot**, because nothing can be observed
-   during the failure. That is what pstore is for, and it is currently off.
+(An earlier revision of this document asserted the machine had no serial port
+at all. That came from reading `/proc/tty/driver/serial`, which is root-only
+and had returned empty because the command failed, not because the file was
+empty. The conclusion held; the evidence for it did not.)
 
 ## Rollback: the part that matters
 
@@ -149,6 +152,14 @@ sudo cat /sys/fs/pstore/dmesg-efi-*
 sudo rm /sys/fs/pstore/dmesg-efi-* # clear before the next attempt
 ```
 
+`efi_pstore` is **builtin** on the Fedora kernels this box runs (`modinfo
+efi_pstore` reports `filename: (builtin)`), and it ships with
+`pstore_disable=Y`. A builtin takes its parameters from the kernel command
+line, not from `modprobe.d`: a `modprobe.d` drop-in for it is read by nothing
+and changes nothing. The parameter therefore goes on the badc entry's command
+line, as `efi_pstore.pstore_disable=0`, where it applies to the kernel whose
+death is being recorded and to no other.
+
 The ESP has 2 GB free and EFI variable space is small; clearing records between
 runs keeps the variable store from filling.
 
@@ -162,39 +173,55 @@ messages worth having. Drop both from the badc entry. Leave
 
 Each step is reversible and the undo is recorded at the end of this document.
 
+Every step below needs root; the operator account has a passwordless `sudo`
+rule, so they can be driven over ssh. `hwprep.py` applies them, records what it
+changed, and replays the record backwards on `rollback`.
+
+`hwprep.py` performs these, records every change it makes, and replays the
+record backwards on `rollback`. Run it on the box:
+
 ```sh
-# 1. Record the state to return to.
-sudo grubby --info=ALL > ~/rollback/grubby-before.txt
-sudo cp /etc/default/grub ~/rollback/
-sudo grub2-editenv list > ~/rollback/grubenv-before.txt
-rpm -q kernel > ~/rollback/kernels-before.txt
-sysctl kernel.panic kernel.panic_on_oops > ~/rollback/sysctl-before.txt
+scp demos/linux/hwprep.py <box>:                     # from the repo
 
-# 2. Turn on the post-mortem path.
-echo 'options efi_pstore pstore_disable=0' | sudo tee /etc/modprobe.d/pstore.conf
-sudo dracut -f                       # rebuild so the setting applies early
+# 1. Record the state to return to. Refuses nothing, changes nothing.
+sudo python3 hwprep.py record
 
-# 3. Arm the watchdog for the post-systemd window.
-sudo install -d /etc/systemd/system.conf.d
-printf '[Manager]\nRuntimeWatchdogSec=60\nRebootWatchdogSec=120\n' \
-  | sudo tee /etc/systemd/system.conf.d/watchdog.conf
-sudo systemctl daemon-reexec
+# 2-3. Post-mortem capture and the watchdog.
+sudo python3 hwprep.py arm
 
-# 4. Install the badc package. It adds a version, it does not replace one.
-sudo rpm -ivh --oldpackage <kernel-7.1.10-*.x86_64.rpm>
-rpm -q kernel                        # confirm the stock kernels are still there
+# 4. Install the badc package. It adds a version, it replaces none.
+sudo python3 hwprep.py install kernel-7.1.10-*.x86_64.rpm
 
-# 5. Give the badc entry its own arguments, and nothing else its own arguments.
-sudo grubby --update-kernel="/boot/vmlinuz-7.1.10" \
-  --args="panic=30 panic_on_oops=1 oops=panic printk.always_kmsg_dump=1 netconsole=..." \
-  --remove-args="rhgb quiet"
+# 5. Give that entry its own arguments, and no other entry any.
+sudo python3 hwprep.py entry --kernel 7.1.10 \
+  --netconsole '6666@<box-ip>/<iface>,6666@<collector-ip>/<collector-mac>'
 
-# 6. Confirm the default is still a stock kernel.
-sudo grubby --default-title
+# 6. Confirm the machine can still recover. This is the step not to skip.
+sudo python3 hwprep.py check
 ```
 
-Step 6 is the one that must not be skipped. If it names the badc kernel, stop
-and fix it before rebooting.
+`check` is the gate. It reports `READY` only when the default boot entry is a
+stock kernel, at least one stock kernel remains installed to fall back to, and
+the recovery configuration is in effect -- reading the watchdog's live timeout
+from systemd and pstore's state from the running kernel, rather than the
+presence of the files that were meant to set them. The `arm` step relies on
+that distinction: on this machine it removes its own `modprobe.d` drop-in once
+it sees `efi_pstore` is builtin, because that file could not have worked.
+
+Every step is idempotent, so a re-run after an interruption is safe, and each
+prints what it changed. `--dry-run` prints without changing anything.
+
+Then, and only after `check` reports `READY`:
+
+```sh
+sudo python3 hwprep.py boot --kernel 7.1.10   # one boot, then back to stock
+sudo systemctl reboot
+```
+
+`boot` selects the entry through `grub2-reboot`, which GRUB consumes on the
+next start. It does not change `GRUB_DEFAULT`, so a kernel that panics, hangs
+or never reaches userspace is followed by a stock boot without anyone touching
+the machine.
 
 ## Boot procedure
 
@@ -247,6 +274,20 @@ recover from it remotely on this hardware.
   record turns out to be too short to diagnose something.
 
 ## Undoing all of it
+
+```sh
+sudo python3 hwprep.py rollback      # --keep-kernels leaves the packages
+sudo python3 hwprep.py status        # what remains, and what is default
+```
+
+`rollback` replays the recorded changes newest-first: it strips the arguments
+it added from the entries it added them to, removes the kernel packages it
+installed, and restores or deletes each file it wrote according to whether
+that file existed beforehand. It then re-checks the invariant and compares
+the installed kernel set against the one `record` captured, reporting any
+difference in either direction rather than assuming the undo was complete.
+
+The equivalent by hand, should the record be lost:
 
 ```sh
 # 1. The badc kernel and its boot entry

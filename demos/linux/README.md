@@ -1366,6 +1366,32 @@ the runner. [`micropc-testing.md`](micropc-testing.md) documents the box this
 was built against -- what it can and cannot test, which `ttyS*` is the
 physical port, and what the boot configuration has to carry.
 
+A machine with no reachable serial port cannot run the phase, because the
+phase reads its verdict off the console. It can still be booted by hand, and
+[`xps8930-testing.md`](xps8930-testing.md) documents that lane: what a boot
+proves without a console, and what it leaves behind when it fails.
+`hwprep.py` prepares either kind of machine and undoes the preparation:
+
+```sh
+sudo python3 hwprep.py record            # snapshot the state to return to
+sudo python3 hwprep.py arm               # pstore and the watchdog
+sudo python3 hwprep.py install <package> # add a kernel, replace none
+sudo python3 hwprep.py entry --kernel V  # arguments for that entry alone
+sudo python3 hwprep.py check             # READY, or why not
+sudo python3 hwprep.py boot --kernel V   # one boot, then back to stock
+sudo python3 hwprep.py rollback          # replay the record backwards
+```
+
+It holds one invariant, checked after every step that could disturb it: the
+default boot entry is a stock kernel, so recovery from a kernel that panics or
+hangs is a power cycle rather than a rescue disk. It refuses to alter a stock
+entry's arguments, refuses to select an entry it did not install, and records
+each change so `rollback` replays facts instead of a list of undo commands
+written in advance. Machine differences are read rather than assumed: it
+routes a module parameter through `modprobe.d` or the kernel command line
+depending on whether the module is loadable or builtin, and reports the
+watchdog's live timeout from systemd rather than the drop-in that asked for it.
+
 ### Concurrency and the accelerator
 
 Two runs on one host do not collide: the ssh forward takes a free port per run

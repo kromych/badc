@@ -1800,6 +1800,12 @@ def probes(vm: Target) -> dict:
     out: dict = {}
     out["uname"] = vm.ssh("uname -r", check=True).stdout.strip()
     out["proc_version"] = vm.ssh("cat /proc/version").stdout.strip()
+    # The digest of the image the guest will boot next, which identifies the
+    # build where the release cannot: `sha256sum` prints "<hex>  <path>".
+    out["boot_image_sha256"] = vm.ssh(
+        f"sha256sum /boot/vmlinuz-{out['uname']} 2>/dev/null "
+        f"|| sha256sum /boot/Image-{out['uname']} 2>/dev/null"
+    ).stdout.strip().split(" ")[0]
     # Not `head -1`: only x86_64 prints the version banner first. arm64
     # opens with the CPU-identification line.
     out["dmesg_banner"] = vm.ssh(
@@ -2329,6 +2335,51 @@ def deb_data_member(pkg: Path) -> str | None:
     return None
 
 
+def packaged_kernel_image(pkg: Path, kind: str) -> bytes | None:
+    """The kernel image file out of a package, or None when it holds none.
+
+    Read from the package rather than from the guest, because the guest is
+    exactly what is in question: an install that silently did nothing leaves
+    the previous image in place, and asking the guest then confirms itself."""
+    q = shlex.quote(str(pkg))
+    if kind == "deb":
+        # dpkg-deb is not present on the rpm lanes, which still build debs
+        # through a vendored toolchain. A deb is an ar archive whose data
+        # member is a tarball; the decompressor comes from that member's name
+        # because tar does not detect it on a pipe on every host.
+        cmds = [f"dpkg-deb --fsys-tarfile {q} | "
+                f"tar -xO --wildcards './boot/vmlinuz-*' './boot/Image-*' 2>/dev/null"]
+        member = deb_data_member(pkg)
+        if member:
+            dec = {"xz": "xz -dc", "gz": "gzip -dc", "zst": "zstd -dc",
+                   "bz2": "bzip2 -dc"}.get(member.rsplit(".", 1)[-1], "cat")
+            cmds.append(f"ar p {q} {shlex.quote(member)} 2>/dev/null | "
+                        f"{dec} 2>/dev/null | tar -xO --wildcards "
+                        f"'./boot/vmlinuz-*' './boot/Image-*' 2>/dev/null")
+    else:
+        cmds = [f"rpm2cpio {q} | cpio -i --to-stdout --quiet "
+                f"'*/vmlinuz*' '*/Image*' 2>/dev/null"]
+    for cmd in cmds:
+        try:
+            out = subprocess.run(["sh", "-c", cmd], capture_output=True, timeout=600)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if out.stdout:
+            return out.stdout
+    return None
+
+
+def packaged_kernel_sha256(pkg: Path, kind: str) -> str | None:
+    """sha256 of the kernel image inside a package.
+
+    The release does not identify a build and the banner is only readable on
+    some architectures -- an aarch64 zboot image keeps it compressed inside a
+    PE -- but the bytes always identify it, and the guest can hash the file it
+    is about to boot. That makes the check architecture-independent."""
+    image = packaged_kernel_image(pkg, kind)
+    return hashlib.sha256(image).hexdigest() if image else None
+
+
 def packaged_kernel_build_id(pkg: Path, kind: str) -> str | None:
     """`kernel_build_id` of the kernel image inside a package file.
 
@@ -2338,36 +2389,14 @@ def packaged_kernel_build_id(pkg: Path, kind: str) -> str | None:
     Returns None when the package holds no kernel image or the extraction
     tool is absent -- the caller reports that rather than failing, since a
     headers-only package legitimately has none."""
-    q = shlex.quote(str(pkg))
-    if kind == "deb":
-        # dpkg-deb is not present on the rpm lanes, which still build debs
-        # through a vendored toolchain. A deb is an ar archive whose data
-        # member is a tarball, and tar detects the compression itself, so
-        # binutils and tar suffice where dpkg tooling is absent.
-        cmds = [f"dpkg-deb --fsys-tarfile {q} | "
-                f"tar -xO --wildcards './boot/vmlinuz-*' 2>/dev/null"]
-        member = deb_data_member(pkg)
-        if member:
-            # tar does not detect the compression on a pipe on every host,
-            # so the decompressor is chosen from the member's own name.
-            dec = {"xz": "xz -dc", "gz": "gzip -dc", "zst": "zstd -dc",
-                   "bz2": "bzip2 -dc"}.get(member.rsplit(".", 1)[-1], "cat")
-            cmds.append(f"ar p {q} {shlex.quote(member)} 2>/dev/null | "
-                        f"{dec} 2>/dev/null | "
-                        f"tar -xO --wildcards './boot/vmlinuz-*' 2>/dev/null")
-    else:
-        cmds = [f"rpm2cpio {q} | cpio -i --to-stdout --quiet '*/vmlinuz*' 2>/dev/null"]
-    for cmd in cmds:
-        try:
-            out = subprocess.run(["sh", "-c", cmd], capture_output=True, timeout=300)
-        except (OSError, subprocess.SubprocessError):
-            continue
-        if not out.stdout:
-            continue
-        m = re.search(rb"#\d+ SMP[^\x00\n]{0,160}", out.stdout)
-        if m:
-            return m.group(0).decode("utf8", "replace").strip()
-    return None
+    image = packaged_kernel_image(pkg, kind)
+    if not image:
+        return None
+    # x86_64 keeps the banner in the bzImage setup header, in the clear.
+    # An aarch64 zboot image is a PE wrapping a compressed Image, so the
+    # string is not there and the digest is what identifies the build.
+    m = re.search(rb"#\d+ SMP[^\x00\n]{0,160}", image)
+    return m.group(0).decode("utf8", "replace").strip() if m else None
 
 
 def new_kernel_errors(base: dict, cur: dict) -> list[str] | None:
@@ -2404,16 +2433,28 @@ def assert_boot(args, vm: Target, base: dict, cur: dict, result: dict,
     # packaged image and the running kernel both carry, so a guest that kept a
     # previously installed kernel of the same name fails here rather than
     # reporting on the wrong binary.
-    want = result.get("packaged_build_id")
-    got = kernel_build_id(cur["proc_version"])
-    if want and got and want != got:
+    want_id = result.get("packaged_build_id")
+    got_id = kernel_build_id(cur["proc_version"])
+    if want_id and got_id and want_id != got_id:
         failures.append(f"booted a different build of {args.release}: "
-                        f"running {got!r}, packaged {want!r}")
+                        f"running {got_id!r}, packaged {want_id!r}")
         return False
-    if want and got:
-        log(f"build-id: {got}")
-    elif not want:
-        log("build-id: not read from the package (not asserted)")
+    # The digest carries the same claim where the banner is not readable in
+    # the packaged image, which is every architecture whose vmlinuz keeps the
+    # kernel compressed. It compares the file the guest is about to boot.
+    want_sha = result.get("packaged_image_sha256")
+    got_sha = cur.get("boot_image_sha256")
+    if want_sha and got_sha and want_sha != got_sha:
+        failures.append(
+            f"the installed /boot image is not the packaged one: "
+            f"guest {got_sha[:16]}, package {want_sha[:16]}")
+        return False
+    if got_id and want_id:
+        log(f"build-id: {got_id}")
+    if want_sha and got_sha:
+        log(f"image sha256 matches the package: {got_sha[:16]}")
+    elif not want_id and not want_sha:
+        log("kernel identity: not read from the package (not asserted)")
     # The banner is CONFIG_CC_VERSION_TEXT, captured from
     # `$(CC) --version | head -n1` at configure time. buildcc.py answers that
     # with badc's identification, so a kernel whose C units are badc's must
@@ -2617,6 +2658,12 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
         result["packaged_build_id"] = next(
             (b for b in (packaged_kernel_build_id(p, arch["pkg"])
                          for p in packages) if b), None)
+        result["packaged_image_sha256"] = next(
+            (h for h in (packaged_kernel_sha256(p, arch["pkg"])
+                         for p in packages) if h), None)
+        result["packaged_image_sha256"] = next(
+            (h for h in (packaged_kernel_sha256(p, arch["pkg"])
+                         for p in packages) if h), None)
         log(f"installing {', '.join(p.name for p in packages)}"
             + (f" ({result['packaged_build_id']})"
                if result.get("packaged_build_id") else ""))

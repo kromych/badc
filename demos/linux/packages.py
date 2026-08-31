@@ -2289,10 +2289,85 @@ def install_cmd(arch, packages: list[Path], extra: str = "") -> str:
     over it -- but rpm still refuses the older version without being told
     that is the intent, and the corpus release trails the distribution's
     own on any machine that has been updated.
+
+    `--replacepkgs` is not optional. kbuild derives the release from the
+    configuration and a build counter, so two builds of the same tree at the
+    same config carry the same name-version-release whatever changed in the
+    compiler between them. Without it, installing into an image that already
+    holds that NVR is a no-op: the guest boots the kernel already there, and
+    every probe then reports on a binary that is not the one under test.
+    `dpkg -i` reinstalls an identical version already.
     """
-    tool = "dpkg -i" if arch["pkg"] == "deb" else "rpm -ivh --oldpackage"
+    tool = ("dpkg -i" if arch["pkg"] == "deb"
+            else "rpm -ivh --oldpackage --replacepkgs")
     names = " ".join(shlex.quote(p.name) for p in packages)
     return " ".join(filter(None, (tool, extra, names)))
+
+
+def kernel_build_id(banner: str) -> str | None:
+    """The `#N SMP ... <date>` tail of a kernel version banner.
+
+    The release alone does not identify a build: kbuild derives it from the
+    configuration and a build counter, so rebuilding the same tree at the same
+    config with a different compiler produces the same release. The build
+    counter and timestamp do differ, and both `/proc/version` and the packaged
+    image carry them."""
+    m = re.search(r"#\d+\s+\S.*", banner)
+    return m.group(0).strip() if m else None
+
+
+def deb_data_member(pkg: Path) -> str | None:
+    """The `data.tar.*` member of a deb, whose name gives its compression."""
+    try:
+        out = subprocess.run(["ar", "t", str(pkg)], capture_output=True,
+                             text=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    for line in out.stdout.splitlines():
+        if line.strip().startswith("data.tar"):
+            return line.strip()
+    return None
+
+
+def packaged_kernel_build_id(pkg: Path, kind: str) -> str | None:
+    """`kernel_build_id` of the kernel image inside a package file.
+
+    Read from the package rather than from the guest, because the guest is
+    exactly what is in question: an install that silently did nothing leaves
+    the previous image in place, and asking the guest then confirms itself.
+    Returns None when the package holds no kernel image or the extraction
+    tool is absent -- the caller reports that rather than failing, since a
+    headers-only package legitimately has none."""
+    q = shlex.quote(str(pkg))
+    if kind == "deb":
+        # dpkg-deb is not present on the rpm lanes, which still build debs
+        # through a vendored toolchain. A deb is an ar archive whose data
+        # member is a tarball, and tar detects the compression itself, so
+        # binutils and tar suffice where dpkg tooling is absent.
+        cmds = [f"dpkg-deb --fsys-tarfile {q} | "
+                f"tar -xO --wildcards './boot/vmlinuz-*' 2>/dev/null"]
+        member = deb_data_member(pkg)
+        if member:
+            # tar does not detect the compression on a pipe on every host,
+            # so the decompressor is chosen from the member's own name.
+            dec = {"xz": "xz -dc", "gz": "gzip -dc", "zst": "zstd -dc",
+                   "bz2": "bzip2 -dc"}.get(member.rsplit(".", 1)[-1], "cat")
+            cmds.append(f"ar p {q} {shlex.quote(member)} 2>/dev/null | "
+                        f"{dec} 2>/dev/null | "
+                        f"tar -xO --wildcards './boot/vmlinuz-*' 2>/dev/null")
+    else:
+        cmds = [f"rpm2cpio {q} | cpio -i --to-stdout --quiet '*/vmlinuz*' 2>/dev/null"]
+    for cmd in cmds:
+        try:
+            out = subprocess.run(["sh", "-c", cmd], capture_output=True, timeout=300)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if not out.stdout:
+            continue
+        m = re.search(rb"#\d+ SMP[^\x00\n]{0,160}", out.stdout)
+        if m:
+            return m.group(0).decode("utf8", "replace").strip()
+    return None
 
 
 def new_kernel_errors(base: dict, cur: dict) -> list[str] | None:
@@ -2324,6 +2399,21 @@ def assert_boot(args, vm: Target, base: dict, cur: dict, result: dict,
     if cur["uname"] != args.release:
         failures.append(f"booted {cur['uname']}, expected {args.release}")
         return False
+    # The release matching is not enough: two builds of the same tree at the
+    # same config share it. Compare the build counter and timestamp, which the
+    # packaged image and the running kernel both carry, so a guest that kept a
+    # previously installed kernel of the same name fails here rather than
+    # reporting on the wrong binary.
+    want = result.get("packaged_build_id")
+    got = kernel_build_id(cur["proc_version"])
+    if want and got and want != got:
+        failures.append(f"booted a different build of {args.release}: "
+                        f"running {got!r}, packaged {want!r}")
+        return False
+    if want and got:
+        log(f"build-id: {got}")
+    elif not want:
+        log("build-id: not read from the package (not asserted)")
     # The banner is CONFIG_CC_VERSION_TEXT, captured from
     # `$(CC) --version | head -n1` at configure time. buildcc.py answers that
     # with badc's identification, so a kernel whose C units are badc's must
@@ -2524,7 +2614,12 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
             failures.append(f"no {suffix} package to install in the "
                             f"{arch['distro']} image")
             return result
-        log(f"installing {', '.join(p.name for p in packages)}")
+        result["packaged_build_id"] = next(
+            (b for b in (packaged_kernel_build_id(p, arch["pkg"])
+                         for p in packages) if b), None)
+        log(f"installing {', '.join(p.name for p in packages)}"
+            + (f" ({result['packaged_build_id']})"
+               if result.get("packaged_build_id") else ""))
         vm.scp(packages, "")
         r = vm.ssh(install_cmd(arch, packages, args.install_args), sudo=True,
                    timeout=args.install_timeout)
@@ -2945,7 +3040,12 @@ def phase_hw(args, arch, packages: list[Path], failures: list[str]) -> dict:
             failures.append(f"no {suffix} package to install on "
                             f"{arch['distro']}")
             return result
-        log(f"installing {', '.join(p.name for p in packages)}")
+        result["packaged_build_id"] = next(
+            (b for b in (packaged_kernel_build_id(p, arch["pkg"])
+                         for p in packages) if b), None)
+        log(f"installing {', '.join(p.name for p in packages)}"
+            + (f" ({result['packaged_build_id']})"
+               if result.get("packaged_build_id") else ""))
         tgt.scp(packages, "")
         r = tgt.ssh(install_cmd(arch, packages, args.install_args), sudo=True,
                     timeout=args.install_timeout)
@@ -3310,9 +3410,14 @@ def _self_test() -> int:
 
     assert install_cmd(deb, [Path("/o/linux-image_1_amd64.deb")]) == (
         "dpkg -i linux-image_1_amd64.deb")
-    assert install_cmd(rpm, [Path("/o/kernel-1.rpm"), Path("/o/kernel-c.rpm")],
-                       "--replacepkgs") == (
+    assert install_cmd(rpm, [Path("/o/kernel-1.rpm"), Path("/o/kernel-c.rpm")]) == (
         "rpm -ivh --oldpackage --replacepkgs kernel-1.rpm kernel-c.rpm")
+    assert install_cmd(rpm, [Path("/o/kernel-1.rpm")], "--nodeps") == (
+        "rpm -ivh --oldpackage --replacepkgs --nodeps kernel-1.rpm")
+    assert kernel_build_id("Linux version 7.1.10 (u@h) (badc 0.4.0) "
+                           "#2 SMP PREEMPT_DYNAMIC Sun Aug 30 19:03:17 PDT 2026"
+                           ) == "#2 SMP PREEMPT_DYNAMIC Sun Aug 30 19:03:17 PDT 2026"
+    assert kernel_build_id("no build id here") is None
 
     # --- hardware lane ---
     assert baud_constant(115200) == termios.B115200

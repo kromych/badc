@@ -1009,6 +1009,13 @@ impl TypeCatalog {
                 Self::insert_with_chain(&mut entries, plt_seed(ty));
             }
         }
+        // Aggregates a cast type-name reached; nothing has to declare an
+        // object of the type.
+        for (id, sd) in structs.iter().enumerate() {
+            if sd.cast_named {
+                Self::insert_with_chain(&mut entries, CatalogEntry::Struct { id: id as u32 });
+            }
+        }
 
         // Transitive expansion: every Struct entry pulls in its
         // members' types, which can themselves pull in more

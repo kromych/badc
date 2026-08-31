@@ -2722,6 +2722,7 @@ impl Compiler {
                 // float, double, or struct base, with any number of
                 // `*` markers and pointer-level qualifiers.
                 t = self.parse_decl_base_type()?;
+                self.note_cast_type_name(t);
                 // An array typedef (`typedef T A[N]`, e.g. `sigjmp_buf`)
                 // contributes its element count here; a single `*` below
                 // forms a pointer-to-array whose deref is the C99 6.3.2.1p3

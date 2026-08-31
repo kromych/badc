@@ -170,6 +170,10 @@ pub struct StructDef {
     /// that member. Set only when the attribute is honored
     /// (`mark_transparent_union`).
     pub is_transparent_union: bool,
+    /// A cast type-name in this unit names the aggregate. C99 6.5.4 makes
+    /// that a use of the type whatever becomes of the value, so debug info
+    /// keeps a DIE for it with no object of the type declared.
+    pub cast_named: bool,
 }
 
 /// One unnamed bit-field of an aggregate (`int :N;`). `before` is the

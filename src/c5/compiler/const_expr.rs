@@ -1815,6 +1815,7 @@ impl Compiler {
 
     fn parse_const_type_name_inner(&mut self) -> Result<ConstTypeName, C5Error> {
         let mut ty = self.parse_decl_base_type()?;
+        self.note_cast_type_name(ty);
         // Consumed as a type name, not bound through a declarator.
         self.pending.bare_function_type_declarator = false;
         let base_is_const = self.pending.base_is_const;

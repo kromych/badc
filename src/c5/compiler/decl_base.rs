@@ -32,7 +32,7 @@ use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{
-    SEG_FS_BIT, SEG_GS_BIT, UNSIGNED_BIT, VOLATILE_BIT, VOLATILE_INNER_BIT, apply_qual_bits,
+    self, SEG_FS_BIT, SEG_GS_BIT, UNSIGNED_BIT, VOLATILE_BIT, VOLATILE_INNER_BIT, apply_qual_bits,
     is_decl_modifier, struct_ty_for,
 };
 
@@ -198,6 +198,18 @@ impl Compiler {
         }
         self.next()?;
         Ok(true)
+    }
+
+    /// Flag the aggregate a cast type-name named, which the debug-info
+    /// type catalog seeds from. Pointer decoration is irrelevant: the
+    /// tag is the use.
+    pub(super) fn note_cast_type_name(&mut self, ty: i64) {
+        if !types::is_struct_ty(ty) {
+            return;
+        }
+        if let Some(sd) = self.structs.get_mut(types::struct_id_of(ty)) {
+            sd.cast_named = true;
+        }
     }
 
     /// Parse a struct / union / typedef-name base reference --

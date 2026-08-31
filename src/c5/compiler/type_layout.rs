@@ -153,6 +153,7 @@ impl Compiler {
             is_array: false,
             is_anonymous: false,
             is_transparent_union: false,
+            cast_named: false,
         });
         let id = self.structs.len() - 1;
         if let Some(scope) = self.tag_scopes.last_mut() {
@@ -251,6 +252,7 @@ impl Compiler {
             is_array: false,
             is_anonymous: false,
             is_transparent_union: false,
+            cast_named: false,
         });
         struct_ty_for(self.structs.len() - 1)
     }
@@ -345,6 +347,7 @@ impl Compiler {
             is_array: false,
             is_anonymous: false,
             is_transparent_union: false,
+            cast_named: false,
         });
         struct_ty_for(self.structs.len() - 1)
     }
@@ -440,6 +443,7 @@ impl Compiler {
             is_array: false,
             is_anonymous: false,
             is_transparent_union: false,
+            cast_named: false,
         });
         struct_ty_for(self.structs.len() - 1)
     }
@@ -516,6 +520,7 @@ impl Compiler {
             is_array: true,
             is_anonymous: false,
             is_transparent_union: false,
+            cast_named: false,
         });
         struct_ty_for(self.structs.len() - 1)
     }

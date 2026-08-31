@@ -787,8 +787,8 @@ fn coalesce(f: &mut FunctionSsa, compact: bool) -> BTreeMap<i64, Option<i64>> {
     // Group lifetime: a shareable group is busy from its first event (a
     // store, or the address take that every access data-depends on) to its
     // last read. Partial stores cannot kill a group, so reads gen and
-    // nothing kills: two dataflow problems bound the busy range, "a read
-    // is still reachable" (backward) and "some event has happened"
+    // nothing kills: two reachability relations bound the busy range, "a
+    // read is still reachable" (backward) and "some event has happened"
     // (forward), and two groups interfere when one has an access inside
     // the other's busy range.
     let sidx: Vec<usize> = (0..ng).filter(|&g| shareable[g]).collect();
@@ -824,61 +824,77 @@ fn coalesce(f: &mut FunctionSsa, compact: bool) -> BTreeMap<i64, Option<i64>> {
             }
         }
     }
-    // Backward: r_in = has_read | r_out.
-    let mut r_in = alloc::vec![0u64; nb * gwords];
-    let mut r_out = alloc::vec![0u64; nb * gwords];
-    let mut work: Vec<usize> = (0..nb).collect();
-    let mut queued = alloc::vec![true; nb];
-    while let Some(b) = work.pop() {
-        queued[b] = false;
-        let mut grew = false;
+    // Both relations are reachability -- nothing kills, so `r_in[b]`
+    // holds the reads of every block `b` reaches and `s_out[b]` the
+    // events of every block that reaches `b`. Reachability is constant
+    // over a strongly connected component, so the condensation settles
+    // each in one sweep over its components in the id order `scc`
+    // guarantees: no fixed point, no dependence on the visit order, and
+    // no re-visit when a bit arrives late.
+    let (comp, ncomp) = graph.scc();
+    let (comp_off, comp_blocks) = SuccGraph::blocks_by_comp(&comp, ncomp);
+    let cblocks = |c: usize| &comp_blocks[comp_off[c] as usize..comp_off[c + 1] as usize];
+    // Backward: a component's reads plus those of every component it
+    // reaches. Ids ascend towards the sources, so successors are settled.
+    let mut c_read = alloc::vec![0u64; ncomp * gwords];
+    for b in 0..nb {
+        let c = comp[b] as usize;
         for w in 0..gwords {
-            let mut out = 0u64;
-            for &s in graph.of(b as BlockId) {
-                out |= r_in[s as usize * gwords + w];
-            }
-            r_out[b * gwords + w] = out;
-            let v = g_read[b * gwords + w] | out;
-            if v != r_in[b * gwords + w] {
-                r_in[b * gwords + w] = v;
-                grew = true;
-            }
+            c_read[c * gwords + w] |= g_read[b * gwords + w];
         }
-        if grew {
-            for &p in graph.preds_of(b as BlockId) {
-                if !queued[p as usize] {
-                    queued[p as usize] = true;
-                    work.push(p as usize);
+    }
+    for c in 0..ncomp {
+        for &b in cblocks(c) {
+            for &t in graph.of(b) {
+                let d = comp[t as usize] as usize;
+                if d == c {
+                    continue;
+                }
+                for w in 0..gwords {
+                    c_read[c * gwords + w] |= c_read[d * gwords + w];
                 }
             }
         }
     }
-    // Forward: s_out = s_in | has_event.
-    let mut s_in = alloc::vec![0u64; nb * gwords];
-    let mut s_out = alloc::vec![0u64; nb * gwords];
-    let mut work: Vec<usize> = (0..nb).collect();
-    let mut queued = alloc::vec![true; nb];
-    while let Some(b) = work.pop() {
-        queued[b] = false;
-        let mut grew = false;
+    // Forward: a component's events plus those of every component that
+    // reaches it. Ids descend towards the sinks, so predecessors are
+    // settled.
+    let mut c_event = alloc::vec![0u64; ncomp * gwords];
+    for b in 0..nb {
+        let c = comp[b] as usize;
         for w in 0..gwords {
-            let mut inb = 0u64;
+            c_event[c * gwords + w] |= g_event[b * gwords + w];
+        }
+    }
+    for c in (0..ncomp).rev() {
+        for &b in cblocks(c) {
             for &p in graph.preds_of(b as BlockId) {
-                inb |= s_out[p as usize * gwords + w];
-            }
-            s_in[b * gwords + w] = inb;
-            let v = g_event[b * gwords + w] | inb;
-            if v != s_out[b * gwords + w] {
-                s_out[b * gwords + w] = v;
-                grew = true;
+                let d = comp[p as usize] as usize;
+                if d == c {
+                    continue;
+                }
+                for w in 0..gwords {
+                    c_event[c * gwords + w] |= c_event[d * gwords + w];
+                }
             }
         }
-        if grew {
-            for &s in graph.of(b as BlockId) {
-                if !queued[s as usize] {
-                    queued[s as usize] = true;
-                    work.push(s as usize);
-                }
+    }
+    // Per-block edges of the two relations, the only form the
+    // interference walk below reads: what a block's successors still
+    // read, and what has already happened on entry to it.
+    let mut r_out = alloc::vec![0u64; nb * gwords];
+    let mut s_in = alloc::vec![0u64; nb * gwords];
+    for b in 0..nb {
+        for &t in graph.of(b as BlockId) {
+            let d = comp[t as usize] as usize;
+            for w in 0..gwords {
+                r_out[b * gwords + w] |= c_read[d * gwords + w];
+            }
+        }
+        for &p in graph.preds_of(b as BlockId) {
+            let d = comp[p as usize] as usize;
+            for w in 0..gwords {
+                s_in[b * gwords + w] |= c_event[d * gwords + w];
             }
         }
     }
@@ -1160,7 +1176,7 @@ fn store_width(kind: crate::c5::ir::StoreKind) -> i64 {
 }
 #[cfg(all(test, feature = "std"))]
 mod tests {
-    use super::super::super::ir::{Block, LoadKind, StoreKind, Terminator};
+    use super::super::super::ir::{Block, LoadKind, NO_VALUE, StoreKind, Terminator};
     use super::*;
 
     fn one_block(insts: Vec<Inst>, ret: ValueId, locals: i64) -> FunctionSsa {
@@ -1748,6 +1764,173 @@ mod tests {
         assert!(
             matches!(f.insts[3], Inst::LocalAddr(-2)),
             "the 2-cell group packs against the colour's high end"
+        );
+    }
+
+    /// A multi-block function whose blocks are the given instruction
+    /// ranges and terminators.
+    fn multi_block(
+        insts: Vec<Inst>,
+        blocks: Vec<(u32, u32, Terminator)>,
+        locals: i64,
+    ) -> FunctionSsa {
+        let n = insts.len();
+        FunctionSsa {
+            locals,
+            synthetic_base: 1,
+            inst_src: alloc::vec![(0, 0); n],
+            f32_values: alloc::vec![false; n],
+            blocks: blocks
+                .into_iter()
+                .map(|(lo, hi, terminator)| Block {
+                    start_pc: lo as usize,
+                    inst_range: lo..hi,
+                    terminator,
+                    exit_acc: NO_VALUE,
+                })
+                .collect(),
+            insts,
+            ..Default::default()
+        }
+    }
+
+    /// Store to, then load from, a 2-cell object at `slot`. Emitted at
+    /// value index `base`; occupies four instructions.
+    fn touch_group(slot: i64, base: ValueId) -> Vec<Inst> {
+        alloc::vec![
+            Inst::Imm(0),
+            Inst::LocalAddr(slot),
+            Inst::Store {
+                addr: base + 1,
+                disp: 0,
+                value: base,
+                kind: StoreKind::I64,
+                volatile: false,
+                align: 0,
+            },
+            Inst::Load {
+                addr: base + 1,
+                disp: 0,
+                kind: LoadKind::I64,
+                volatile: false,
+                align: 0,
+            },
+        ]
+    }
+
+    /// A group's lifetime runs over the CFG, not over the instruction
+    /// tape: an object written before a loop and read after it is busy
+    /// inside the loop, so an object the loop body owns cannot take its
+    /// storage. With no such reader the two are disjoint and share.
+    #[test]
+    fn loop_carried_group_lifetime_prevents_sharing() {
+        // B0 writes A, B1 (the loop body) touches B, B2 closes the loop,
+        // B3 reads A when `outer_read` is set.
+        let build = |outer_read: bool| {
+            let mut insts = alloc::vec![
+                Inst::Imm(0),
+                Inst::LocalAddr(-8),
+                Inst::Store {
+                    addr: 1,
+                    disp: 0,
+                    value: 0,
+                    kind: StoreKind::I64,
+                    volatile: false,
+                    align: 0,
+                },
+            ];
+            insts.extend(touch_group(-4, 3));
+            let tail: Vec<Inst> = if outer_read {
+                alloc::vec![Inst::Load {
+                    addr: 1,
+                    disp: 0,
+                    kind: LoadKind::I64,
+                    volatile: false,
+                    align: 0,
+                }]
+            } else {
+                alloc::vec![Inst::Imm(1)]
+            };
+            insts.extend(tail);
+            let mut f = multi_block(
+                insts,
+                alloc::vec![
+                    (0, 3, Terminator::Jmp(1)),
+                    (3, 7, Terminator::Jmp(2)),
+                    (
+                        7,
+                        7,
+                        Terminator::Bz {
+                            cond: NO_VALUE,
+                            target: 1,
+                            fall_through: 3,
+                        },
+                    ),
+                    (7, 8, Terminator::Return(NO_VALUE)),
+                ],
+                8,
+            );
+            f.multi_cell_slots = alloc::vec![(-8, 4), (-4, 4)];
+            f
+        };
+        let mut live = build(true);
+        coalesce(&mut live, true);
+        assert_eq!(
+            live.locals, 8,
+            "a read after the loop keeps the pre-loop object busy inside it"
+        );
+        let mut dead = build(false);
+        coalesce(&mut dead, true);
+        assert_eq!(dead.locals, 4, "with no later read the two objects share");
+    }
+
+    /// Group lifetimes are reachability relations, settled by one sweep
+    /// over the CFG's condensation. Iterating them to a fixed point
+    /// instead costs a re-visit per bit that arrives late, which on an
+    /// interpreter dispatch loop -- thousands of blocks, an object per
+    /// handler -- turned one translation unit's compile into fifteen
+    /// seconds. The shape below is that one in miniature: a long chain
+    /// closed into a cycle, with objects in its head. The bound is 30x
+    /// the measured sweep and a quarter of what the fixed point cost on
+    /// the same shape.
+    #[test]
+    fn group_lifetimes_do_not_iterate_per_block() {
+        const BLOCKS: usize = 16000;
+        const GROUPS: usize = 1024;
+        let mut insts: Vec<Inst> = Vec::with_capacity(GROUPS * 4);
+        let mut blocks: Vec<(u32, u32, Terminator)> = Vec::with_capacity(BLOCKS);
+        let mut cells: Vec<(i64, i64)> = Vec::with_capacity(GROUPS);
+        for b in 0..BLOCKS {
+            let base = insts.len() as ValueId;
+            if b < GROUPS {
+                let slot = -2 - 2 * b as i64;
+                insts.extend(touch_group(slot, base));
+                cells.push((slot, 2));
+            }
+            // The last block closes the chain into a cycle, so the whole
+            // function is one strongly connected component.
+            let term = if b + 1 == BLOCKS {
+                Terminator::Bz {
+                    cond: NO_VALUE,
+                    target: 0,
+                    fall_through: 0,
+                }
+            } else {
+                Terminator::Jmp((b + 1) as BlockId)
+            };
+            blocks.push((base, insts.len() as u32, term));
+        }
+        let mut f = multi_block(insts, blocks, 2 * GROUPS as i64);
+        f.multi_cell_slots = cells;
+        let start = std::time::Instant::now();
+        coalesce(&mut f, true);
+        let elapsed = start.elapsed();
+        // Every object is live around the cycle, so none share.
+        assert_eq!(f.locals, 2 * GROUPS as i64);
+        assert!(
+            elapsed.as_secs() < 3,
+            "{BLOCKS} blocks took {elapsed:?}: the group lifetimes are being \
+             iterated rather than swept over the condensation"
         );
     }
 }

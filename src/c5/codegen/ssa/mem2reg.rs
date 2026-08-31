@@ -255,6 +255,95 @@ impl SuccGraph {
         order.reverse();
         order
     }
+
+    /// Strongly connected components, one id per block, numbered in the
+    /// order Tarjan closes them -- reverse topological order of the
+    /// condensation, so an edge `c -> d` between distinct components has
+    /// `id(d) < id(c)`. A forward relation therefore settles by walking
+    /// the ids downward and a backward one by walking them upward, each
+    /// in a single sweep. Blocks unreachable from the entry get their own
+    /// components like any other. Iterative, so a deep CFG does not
+    /// recurse.
+    pub(crate) fn scc(&self) -> (Vec<u32>, usize) {
+        let n = self.offsets.len() - 1;
+        let mut comp = alloc::vec![u32::MAX; n];
+        let mut ncomp = 0usize;
+        if n == 0 {
+            return (comp, 0);
+        }
+        // `index[b]` is b's DFS number plus one, 0 while unvisited.
+        let mut index = alloc::vec![0u32; n];
+        let mut low = alloc::vec![0u32; n];
+        let mut on_stack = alloc::vec![false; n];
+        let mut stack: Vec<BlockId> = Vec::new();
+        let mut call: Vec<(BlockId, usize)> = Vec::new();
+        let mut next = 1u32;
+        for root in 0..n {
+            if index[root] != 0 {
+                continue;
+            }
+            index[root] = next;
+            low[root] = next;
+            next += 1;
+            stack.push(root as BlockId);
+            on_stack[root] = true;
+            call.push((root as BlockId, 0));
+            while let Some(&(b, si)) = call.last() {
+                let succ = self.of(b);
+                if si < succ.len() {
+                    call.last_mut().unwrap().1 += 1;
+                    let s = succ[si] as usize;
+                    if index[s] == 0 {
+                        index[s] = next;
+                        low[s] = next;
+                        next += 1;
+                        stack.push(s as BlockId);
+                        on_stack[s] = true;
+                        call.push((s as BlockId, 0));
+                    } else if on_stack[s] {
+                        let bl = low[b as usize].min(index[s]);
+                        low[b as usize] = bl;
+                    }
+                    continue;
+                }
+                call.pop();
+                if low[b as usize] == index[b as usize] {
+                    while let Some(m) = stack.pop() {
+                        on_stack[m as usize] = false;
+                        comp[m as usize] = ncomp as u32;
+                        if m == b {
+                            break;
+                        }
+                    }
+                    ncomp += 1;
+                }
+                if let Some(&(parent, _)) = call.last() {
+                    let pl = low[parent as usize].min(low[b as usize]);
+                    low[parent as usize] = pl;
+                }
+            }
+        }
+        (comp, ncomp)
+    }
+
+    /// Blocks grouped by component id in CSR form: `(offsets, blocks)`
+    /// with component `c` holding `blocks[offsets[c]..offsets[c + 1]]`.
+    pub(crate) fn blocks_by_comp(comp: &[u32], ncomp: usize) -> (Vec<u32>, Vec<BlockId>) {
+        let mut offsets = alloc::vec![0u32; ncomp + 1];
+        for &c in comp {
+            offsets[c as usize + 1] += 1;
+        }
+        for i in 0..ncomp {
+            offsets[i + 1] += offsets[i];
+        }
+        let mut fill = offsets.clone();
+        let mut blocks = alloc::vec![0 as BlockId; comp.len()];
+        for (b, &c) in comp.iter().enumerate() {
+            blocks[fill[c as usize] as usize] = b as BlockId;
+            fill[c as usize] += 1;
+        }
+        (offsets, blocks)
+    }
 }
 
 /// Sentinel for an undefined / unreachable immediate dominator.
@@ -1660,6 +1749,52 @@ mod tests {
             extern_imm_code_refs: Vec::new(),
             extern_imm_data_refs: Vec::new(),
             extern_tls_refs: Vec::new(),
+        }
+    }
+
+    /// `scc` groups a cycle into one component and numbers the
+    /// components so that every condensation edge points at a lower id.
+    /// Both group-lifetime sweeps in `slot_coalesce` read the relation
+    /// off that order in a single pass, so a violation would silently
+    /// truncate a lifetime.
+    #[test]
+    fn scc_numbers_components_in_reverse_topological_order() {
+        // 0 -> 1 -> 2 -> 1 (cycle), 2 -> 3 (exit); 4 is unreachable and
+        // branches into the cycle.
+        let blocks = alloc::vec![
+            empty_block(Terminator::Jmp(1)),
+            empty_block(Terminator::Jmp(2)),
+            empty_block(Terminator::Bz {
+                cond: NO_VALUE,
+                target: 1,
+                fall_through: 3,
+            }),
+            empty_block(Terminator::Return(NO_VALUE)),
+            empty_block(Terminator::Jmp(1)),
+        ];
+        let f = func_with(Vec::new(), blocks);
+        let g = SuccGraph::new(&f);
+        let (comp, ncomp) = g.scc();
+        assert_eq!(ncomp, 4, "the 1-2 cycle is one component, the rest single");
+        assert_eq!(comp[1], comp[2], "a cycle is one component");
+        for b in [0usize, 3, 4] {
+            assert_ne!(comp[b], comp[1]);
+        }
+        for b in 0..f.blocks.len() {
+            for &s in g.of(b as BlockId) {
+                let (c, d) = (comp[b], comp[s as usize]);
+                assert!(
+                    d <= c,
+                    "edge {b}->{s} crosses components {c}->{d} the wrong way"
+                );
+            }
+        }
+        let (off, by_comp) = SuccGraph::blocks_by_comp(&comp, ncomp);
+        assert_eq!(by_comp.len(), f.blocks.len());
+        for c in 0..ncomp {
+            for &b in &by_comp[off[c] as usize..off[c + 1] as usize] {
+                assert_eq!(comp[b as usize] as usize, c);
+            }
         }
     }
 

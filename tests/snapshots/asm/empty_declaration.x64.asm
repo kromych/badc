@@ -41,12 +41,11 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movl	$0xb, %edx
                	movl	%edx, (%rcx)
-               	leaq	<rip>, %rdi
-               	movl	$0xc, %esi
-               	movl	%esi, (%rdi)
+               	leaq	<rip>, %rsi
+               	movl	$0xc, %edi
+               	movl	%edi, (%rsi)
                	movslq	(%rcx), %rcx
-               	movslq	%esi, %rsi
-               	addq	%rsi, %rcx
+               	addq	$0xc, %rcx
                	cmpl	$0x17, %ecx
                	je	<addr>
                	movq	%rdx, %rax

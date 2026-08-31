@@ -29,22 +29,18 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	mov	x1, #0x7                // =7
                	str	w1, [x0]
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	mov	x1, #0x23               // =35
-               	str	w1, [x2]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	mov	x2, #0x23               // =35
+               	str	w2, [x1]
                	adrp	x20, <page>
                	add	x20, x20, <lo12>
-               	ldrsw	x2, [x0]
-               	sxtw	x1, w1
+               	ldrsw	x1, [x0]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
                	mov	x9, x0
                	mov	x0, x20
-               	mov	x16, x1
-               	mov	x1, x2
-               	mov	x2, x16
                	blr	x9
                	ldrsw	x0, [x20]
                	ldp	x29, x30, [sp, #0x20]
@@ -61,22 +57,18 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	mov	x1, #0x7                // =7
                	str	w1, [x0]
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	mov	x1, #0x23               // =35
-               	str	w1, [x2]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	mov	x2, #0x23               // =35
+               	str	w2, [x1]
                	adrp	x20, <page>
                	add	x20, x20, <lo12>
-               	ldrsw	x2, [x0]
-               	sxtw	x1, w1
+               	ldrsw	x1, [x0]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
                	mov	x9, x0
                	mov	x0, x20
-               	mov	x16, x1
-               	mov	x1, x2
-               	mov	x2, x16
                	blr	x9
                	ldrsw	x0, [x20]
                	ldp	x29, x30, [sp, #0x20]

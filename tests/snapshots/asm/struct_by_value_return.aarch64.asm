@@ -108,23 +108,21 @@ Disassembly of section .text:
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30
                	ret
-               	mov	x20, #0x3               // =3
-               	mov	x0, x20
+               	mov	x0, #0x3                // =3
                	bl	<addr>
-               	mov	x21, x0
-               	mov	x22, #0x4               // =4
-               	mov	x0, x22
+               	mov	x20, x0
+               	mov	x0, #0x4                // =4
                	bl	<addr>
-               	cmp	w21, #0x3
+               	cmp	w20, #0x3
                	b.eq	<addr>
-               	mov	x0, x20
+               	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30
                	ret
                	cmp	w0, #0x4
                	b.eq	<addr>
-               	mov	x0, x22
+               	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30

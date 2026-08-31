@@ -34,7 +34,10 @@ mod type_layout;
 #[cfg(test)]
 pub(crate) use emit::SCOPE_UNWIND;
 pub(crate) use initializer::PendingLabelReloc;
-pub(crate) use type_layout::{StructReturnAbi, host_abi_agg_desc, struct_return_abi};
+pub(crate) use type_layout::{
+    StructReturnAbi, host_abi_agg_desc, host_abi_agg_desc_conv, struct_return_abi,
+    struct_return_abi_conv,
+};
 pub(crate) mod types;
 
 /// Largest alignment (in bytes) honored on a static object via C11
@@ -162,6 +165,15 @@ pub struct StructDef {
     /// spelling carries a parse-order serial and matches nothing across
     /// translation units.
     pub is_anonymous: bool,
+    /// GNU `transparent_union`: a function parameter of this union type
+    /// accepts an argument compatible with any member and takes it as
+    /// that member. Set only when the attribute is honored
+    /// (`mark_transparent_union`).
+    pub is_transparent_union: bool,
+    /// A cast type-name in this unit names the aggregate. C99 6.5.4 makes
+    /// that a use of the type whatever becomes of the value, so debug info
+    /// keeps a DIE for it with no object of the type declared.
+    pub cast_named: bool,
 }
 
 /// One unnamed bit-field of an aggregate (`int :N;`). `before` is the
@@ -193,6 +205,42 @@ pub struct AnonMember {
     pub inner: usize,
 }
 
+/// Where a member chain stands, relative to the object it started at.
+#[derive(Debug, Clone, Copy)]
+pub struct MemberBase {
+    /// Byte size of the declared object the chain started at; `None`
+    /// when it started at a pointer's target.
+    pub decl_size: Option<i64>,
+    /// Byte offset of the current subobject within that object.
+    pub offset: i64,
+    /// Struct (not union) containers crossed so far.
+    pub records: u32,
+    /// Every struct container crossed selected its last member.
+    pub at_end: bool,
+}
+
+impl MemberBase {
+    /// A chain starting at a pointer's target.
+    pub const UNKNOWN: MemberBase = MemberBase {
+        decl_size: None,
+        offset: 0,
+        records: 0,
+        at_end: true,
+    };
+}
+
+/// An array member's decay as `__builtin_object_size` reads it.
+#[derive(Debug, Clone, Copy)]
+pub struct ArrayMember {
+    /// Bytes from the member to the end of the declared object the
+    /// chain started at, when it started at one.
+    pub decl_remaining: Option<i64>,
+    /// The member may extend past its declared bound: its type is
+    /// incomplete, or `-fstrict-flex-arrays` treats it as flexible and
+    /// the chain reached it through a pointer.
+    pub unbounded: bool,
+}
+
 #[derive(Debug, Clone)]
 pub struct StructField {
     pub name: String,
@@ -220,6 +268,9 @@ pub struct StructField {
     /// or 1D-array fields. The field-access decay path reads
     /// this to compute the per-level strides for `s.xs[i][j][k]`.
     pub array_dims: Vec<i64>,
+    /// The bound was spelled `[0]` (a GNU zero-length array, complete
+    /// with size zero) rather than `[]`; both store `array_size = -1`.
+    pub zero_len: bool,
     /// Bit offset within the storage unit. Meaningful only when
     /// `bit_width > 0`.
     pub bit_offset: u32,
@@ -267,6 +318,12 @@ pub struct StructField {
     /// variadic ABI. False for a non-function-pointer field or a
     /// non-variadic prototype.
     pub is_variadic: bool,
+    /// Calling convention of the function a function-pointer field
+    /// points to (`__attribute__((ms_abi))` / `((sysv_abi))`). Mirrors
+    /// `Symbol::conv`; `CallConv::Target` for every other field. The
+    /// EFI boot- and runtime-services tables declare their members this
+    /// way, so a call through one has to marshal to that convention.
+    pub(crate) conv: crate::c5::codegen::CallConv,
     /// Non-zero for a field promoted from an anonymous union (C11
     /// 6.7.2.1p13). All members of one anonymous union share the same
     /// value; the same id groups them so a brace-list initializer
@@ -401,6 +458,11 @@ pub struct CompileOptions {
     /// default inline linkage model instead of C99's, and predefine
     /// `__GNUC_GNU_INLINE__` in place of `__GNUC_STDC_INLINE__`.
     pub gnu89_inline: bool,
+    /// `-fstrict-flex-arrays=N` -- which trailing array members
+    /// `__builtin_object_size` treats as unbounded through a pointer:
+    /// 0 (the default, as in gcc) every one, 1 those bounded `[]`,
+    /// `[0]` or `[1]`, 2 those bounded `[]` or `[0]`, 3 only `[]`.
+    pub strict_flex_arrays: u8,
     /// `-std=gnu*` -- the GNU dialect, which suppresses the
     /// `__STRICT_ANSI__` predefine `--gnu` otherwise installs, as in gcc
     /// and clang. Off by default: without `-std` badc reports strict
@@ -429,6 +491,49 @@ pub struct CompileOptions {
     /// the implementation. `None` keeps the target ABI's own choice; see
     /// [`Self::plain_char_signed`], the sole resolution of the pair.
     pub char_signed: Option<bool>,
+    /// `-ftrivial-auto-var-init=`: what an automatic object declared
+    /// without an initializer holds on entry to its scope; see
+    /// [`AutoVarInit`].
+    pub auto_var_init: AutoVarInit,
+}
+
+/// `-ftrivial-auto-var-init=`: the initialization the compiler supplies
+/// for an automatic object the program declares without an initializer
+/// -- scalars, aggregates, arrays and variable-length arrays alike. The
+/// store is emitted where the object's storage is established, so a
+/// declaration reached by a jump past it (C99 6.8.6.1 `goto`, 6.8.4.2
+/// `switch`) is not covered, as in gcc. An object carrying
+/// `__attribute__((uninitialized))` or bound to a register by `asm` opts
+/// out. Diagnostics and the `-O` promotion of the object are unchanged:
+/// the supplied value is an ordinary initializer later stores overwrite.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum AutoVarInit {
+    /// `uninitialized`: the storage holds whatever the frame held.
+    #[default]
+    Uninitialized,
+    /// `zero`: every byte of the object is zero.
+    Zero,
+    /// `pattern`: every byte of the object is
+    /// [`AUTO_VAR_INIT_PATTERN_BYTE`].
+    Pattern,
+}
+
+/// The byte `AutoVarInit::Pattern` repeats over the object. gcc 16
+/// stores `0xFE` for every type on both x86-64 and AArch64 (clang uses
+/// a per-type pattern instead); the value is unlikely to be a valid
+/// pointer or a small count and reads back as a negative integer.
+pub const AUTO_VAR_INIT_PATTERN_BYTE: u8 = 0xFE;
+
+impl AutoVarInit {
+    /// The byte stored over an uninitialized object, `None` when the
+    /// object is left as declared.
+    pub(crate) fn fill_byte(self) -> Option<u8> {
+        match self {
+            Self::Uninitialized => None,
+            Self::Zero => Some(0),
+            Self::Pattern => Some(AUTO_VAR_INIT_PATTERN_BYTE),
+        }
+    }
 }
 
 impl CompileOptions {
@@ -451,6 +556,12 @@ impl CompileOptions {
     /// Narrow `wchar_t` to an unsigned 16-bit type (`-fshort-wchar`).
     pub fn with_short_wchar(mut self, on: bool) -> Self {
         self.short_wchar = on;
+        self
+    }
+    /// Initialize the automatic objects the program leaves
+    /// uninitialized (`-ftrivial-auto-var-init=`).
+    pub fn with_auto_var_init(mut self, mode: AutoVarInit) -> Self {
+        self.auto_var_init = mode;
         self
     }
     /// Take the standard library headers off the `#include` search
@@ -497,6 +608,12 @@ impl CompileOptions {
     /// (`-fgnu89-inline`).
     pub fn with_gnu89_inline(mut self, on: bool) -> Self {
         self.gnu89_inline = on;
+        self
+    }
+    /// Select which trailing array members are flexible
+    /// (`-fstrict-flex-arrays=N`).
+    pub fn with_strict_flex_arrays(mut self, level: u8) -> Self {
+        self.strict_flex_arrays = level;
         self
     }
     /// Select the GNU dialect (`-std=gnu*`) over strict ISO (`-std=c*`).
@@ -820,6 +937,10 @@ pub(in crate::c5::compiler) struct Pending {
     /// the array-declarator distinguish a C99 6.7.6.2 VLA dimension from
     /// a genuine constant-expression error that must be diagnosed.
     pub const_expr_nonconst: bool,
+    /// Set by the constant-expression evaluator when a fold consumed a
+    /// compound literal, which denotes an object (C99 6.5.2.5p4) rather
+    /// than a value; `__builtin_constant_p` answers 0 for such an operand.
+    pub const_expr_compound_literal: bool,
     /// Binding-site carrier for a function-pointer typedef's
     /// prototype: `Some((fixed_param_count, is_variadic))` when the
     /// base type was a typedef whose alias is a function-pointer
@@ -856,6 +977,12 @@ pub(in crate::c5::compiler) struct Pending {
     /// variant passes the tail on the stack). Set and cleared at the same
     /// sites as `indirect_callee_params`.
     pub indirect_callee_is_variadic: bool,
+    /// Calling convention of the function `indirect_callee_params`
+    /// describes (`__attribute__((ms_abi))` / `((sysv_abi))`). Set and
+    /// cleared at the same sites as `indirect_callee_params`; the call
+    /// arm records it on the callee `ExprId` so the walker can pick the
+    /// convention long after the declaration went out of scope.
+    pub indirect_callee_conv: crate::c5::codegen::CallConv,
     /// Pointer depth of the value whose prototype is held in
     /// `indirect_callee_params`, in `Symbol::fn_ptr_indirection`'s
     /// convention (1: the value is the function pointer). Threaded at the
@@ -953,6 +1080,16 @@ pub(in crate::c5::compiler) struct Pending {
     /// way as `last_array_decay_size` so it doesn't leak.
     pub last_array_decay_bytes: i64,
 
+    /// The array member the trailing decay came from, for
+    /// `__builtin_object_size`; cleared with `last_array_decay_size`.
+    pub last_array_decay_member: Option<ArrayMember>,
+
+    /// The object a struct-valued identifier or member load left in the
+    /// accumulator, read by the next `.` step. Taken at the top of every
+    /// postfix step and cleared at the end of `expr`, so it never
+    /// outlives the step that set it.
+    pub member_base: Option<MemberBase>,
+
     /// Depth from the value currently in the accumulator down to
     /// a function-pointer rvalue, or -1 if the running expression
     /// has no function-pointer lineage. Concretely:
@@ -972,6 +1109,13 @@ pub(in crate::c5::compiler) struct Pending {
     /// (so the post-`*` type still satisfies `is_pointer_ty` and
     /// the call-site fallback can't fire).
     pub fn_ptr_chain_depth: i64,
+
+    /// True when `fn_ptr_chain_depth` describes an array's *element*
+    /// rather than the value in hand: an array of function pointers
+    /// decays to a pointer to one, and the decay seeds the depth from
+    /// the element so `(*arr[i])(...)` still sees the 6.3.2.1p4 no-op.
+    /// Cleared with `fn_ptr_chain_depth`.
+    pub fn_ptr_depth_is_array_elem: bool,
 
     /// Symbol index of the Token::Loc whose value was loaded by
     /// the most recently emitted scalar load (`LoadKind::I64` /
@@ -1055,6 +1199,10 @@ pub(in crate::c5::compiler) struct Pending {
     /// skip to mark the declared locals so their unused-variable
     /// diagnostics are suppressed.
     pub attr_maybe_unused: bool,
+    /// Side channel from `skip_attribute_specifiers`: true when the most
+    /// recent run named `transparent_union`, false otherwise (every run
+    /// rewrites it). Consumed by the aggregate and typedef paths.
+    pub attr_transparent_union: bool,
     /// Requested object alignment from `_Alignas(N)` /
     /// `__attribute__((aligned(N)))` / `__declspec(align(N))`, 0 when
     /// absent. The declaration parse takes it: file-scope objects
@@ -1113,9 +1261,18 @@ pub(in crate::c5::compiler) struct Pending {
     /// feature; this is the GCC/Clang extension that scope-guard and
     /// auto-cleanup idioms rely on).
     pub attr_cleanup: Option<usize>,
+    /// A consumed `__attribute__((uninitialized))`: the declared
+    /// automatic object is left out of `-ftrivial-auto-var-init`.
+    pub attr_uninitialized: bool,
     /// A consumed `__attribute__((weak))`: the declared symbol binds
     /// STB_WEAK in the object's symbol table.
     pub attr_weak: bool,
+    /// A consumed `__attribute__((ms_abi))` / `((sysv_abi))`: the
+    /// calling convention of the function (or pointed-to function)
+    /// being declared. Already normalised against the target, so
+    /// `CallConv::Target` means "the target's own", including on a
+    /// target where the attribute is inert.
+    pub attr_call_conv: crate::c5::codegen::CallConv,
     /// A consumed `__attribute__((used))`: keep the definition in the
     /// object even when nothing in the unit references it.
     pub attr_used: bool,
@@ -1129,6 +1286,10 @@ pub(in crate::c5::compiler) struct Pending {
     /// A consumed `__attribute__((section("name")))`: the named object
     /// section the declared symbol's bytes go to.
     pub attr_section: Option<alloc::string::String>,
+    /// A consumed `__attribute__((patchable_function_entry(N, M)))`.
+    pub attr_patchable_entry: Option<(u32, u32)>,
+    /// A consumed `__attribute__((no_instrument_function))`.
+    pub attr_no_instrument: bool,
     /// A consumed `__attribute__((alias("target")))`: the declared name
     /// is an additional symbol for `target`.
     pub attr_alias: Option<alloc::string::String>,
@@ -1154,9 +1315,13 @@ pub(super) struct DeclSpecifiers {
     base_is_const: bool,
     attr_used: bool,
     attr_weak: bool,
+    attr_call_conv: crate::c5::codegen::CallConv,
     attr_visibility: Option<bool>,
     attr_section: Option<alloc::string::String>,
+    attr_patchable_entry: Option<(u32, u32)>,
+    attr_no_instrument: bool,
     attr_cleanup: Option<usize>,
+    attr_uninitialized: bool,
     attr_align: i64,
     attr_alignas: i64,
     type_align: i64,
@@ -1173,9 +1338,13 @@ impl Pending {
             base_is_const: core::mem::take(&mut self.base_is_const),
             attr_used: core::mem::take(&mut self.attr_used),
             attr_weak: core::mem::take(&mut self.attr_weak),
+            attr_call_conv: core::mem::take(&mut self.attr_call_conv),
             attr_visibility: self.attr_visibility.take(),
             attr_section: self.attr_section.take(),
+            attr_patchable_entry: self.attr_patchable_entry.take(),
+            attr_no_instrument: core::mem::take(&mut self.attr_no_instrument),
             attr_cleanup: self.attr_cleanup.take(),
+            attr_uninitialized: core::mem::take(&mut self.attr_uninitialized),
             attr_align: core::mem::take(&mut self.attr_align),
             attr_alignas: core::mem::take(&mut self.attr_alignas),
             type_align: core::mem::take(&mut self.type_align),
@@ -1189,9 +1358,13 @@ impl Pending {
         self.base_is_const = s.base_is_const;
         self.attr_used = s.attr_used;
         self.attr_weak = s.attr_weak;
+        self.attr_call_conv = s.attr_call_conv;
         self.attr_visibility = s.attr_visibility;
         self.attr_section = s.attr_section;
+        self.attr_patchable_entry = s.attr_patchable_entry;
+        self.attr_no_instrument = s.attr_no_instrument;
         self.attr_cleanup = s.attr_cleanup;
+        self.attr_uninitialized = s.attr_uninitialized;
         self.attr_align = s.attr_align;
         self.attr_alignas = s.attr_alignas;
         self.type_align = s.type_align;
@@ -1300,10 +1473,12 @@ impl Default for Pending {
             declarator_zero_len_array: false,
             sizeof_vla_size_slot: None,
             const_expr_nonconst: false,
+            const_expr_compound_literal: false,
             typedef_fn_proto: None,
             fn_ptr_param_types: None,
             indirect_callee_params: None,
             indirect_callee_is_variadic: false,
+            indirect_callee_conv: crate::c5::codegen::CallConv::Target,
             indirect_callee_fn_ptr_depth: 0,
             indirect_callee_ret_fn_ptr: 0,
             last_fn_ptr_cast: None,
@@ -1319,9 +1494,12 @@ impl Default for Pending {
             typeof_operand_array_bytes: 0,
             typeof_operand_array_dims: alloc::vec::Vec::new(),
             last_array_decay_bytes: 0,
+            last_array_decay_member: None,
+            member_base: None,
             // `-1` means "not in a fn-ptr-tracked chain"; see field
             // docs above.
             fn_ptr_chain_depth: -1,
+            fn_ptr_depth_is_array_elem: false,
             last_loaded_local: None,
             last_loaded_local_prior_was_read: false,
             last_loaded_local_prior_pending: Vec::new(),
@@ -1331,6 +1509,7 @@ impl Default for Pending {
             last_imm_was_zero: false,
             compound_lit_close_parens: 0,
             attr_maybe_unused: false,
+            attr_transparent_union: false,
             attr_align: 0,
             attr_alignas: 0,
             type_align: 0,
@@ -1343,10 +1522,14 @@ impl Default for Pending {
             attr_destructor: false,
             attr_init_priority: None,
             attr_cleanup: None,
+            attr_uninitialized: false,
             attr_weak: false,
+            attr_call_conv: crate::c5::codegen::CallConv::Target,
             attr_used: false,
             attr_visibility: None,
             attr_section: None,
+            attr_patchable_entry: None,
+            attr_no_instrument: false,
             attr_alias: None,
             saw_register_storage: false,
             auto_type_single_declarator: false,
@@ -1932,6 +2115,10 @@ pub struct Compiler {
     /// Set at function-body entry from the function's symbol
     /// (`Symbol::returns_void`), cleared at exit.
     current_func_returns_void: bool,
+    /// Calling convention of the function body being parsed, taken off
+    /// its symbol at the opening brace. Propagated onto
+    /// `FinishedFunction::conv`.
+    current_func_conv: crate::c5::codegen::CallConv,
 
     /// Preprocessor failure (e.g. unterminated `#if`) deferred from
     /// `with_target` until `compile` runs, so the construction API
@@ -2010,6 +2197,9 @@ pub struct Compiler {
     /// auto-include retry never runs, which is when a builtin's
     /// fallback call must bind without a declaration.
     nostdinc: bool,
+    /// Mirror of [`CompileOptions::auto_var_init`]. Read where an
+    /// automatic object without an initializer is bound.
+    auto_var_init: AutoVarInit,
     /// Mirror of [`CompileOptions::elf_class`]: the assembler's
     /// starting code mode.
     elf_class: crate::c5::ElfClass,
@@ -2019,6 +2209,8 @@ pub struct Compiler {
     /// `__attribute__((gnu_inline))` uses [`InlineModel::Gnu89`]
     /// regardless.
     inline_model: crate::c5::symbol::InlineModel,
+    /// Mirror of [`CompileOptions::strict_flex_arrays`].
+    strict_flex_arrays: u8,
 
     /// File-name table. Index 0 is the user's translation unit;
     /// every distinct filename observed via the lexer's
@@ -2600,6 +2792,7 @@ impl Compiler {
             pending_asm_globl: Vec::new(),
             current_func_return_ty: 0,
             current_func_returns_void: false,
+            current_func_conv: crate::c5::codegen::CallConv::Target,
             pending: Pending::default(),
             pending_store_symbols: Vec::new(),
             warn_dead_store: opts.warn_dead_store,
@@ -2609,6 +2802,7 @@ impl Compiler {
             export_all_functions: opts.export_all_functions,
             no_builtin: opts.no_builtin,
             nostdinc: opts.nostdinc,
+            auto_var_init: opts.auto_var_init,
             no_builtin_fns: opts.no_builtin_fns.clone(),
             optimize: opts.optimize,
             elf_class: opts.elf_class,
@@ -2617,6 +2811,7 @@ impl Compiler {
             } else {
                 crate::c5::symbol::InlineModel::C99
             },
+            strict_flex_arrays: opts.strict_flex_arrays,
             source_files: Vec::new(),
             source_file_index: hashbrown::HashMap::new(),
             source_label: opts.source_label.clone(),
@@ -3067,9 +3262,11 @@ impl Compiler {
             self.rebase_relocated_globals();
             // Record each defined object's byte size for the object
             // writers' symbol tables; the writers have no type layout.
+            // An alias is sized like any other object: it took its
+            // target's element count when it resolved.
             for i in 0..self.symbols.len() {
                 let s = &self.symbols[i];
-                if s.class != Token::Glo as i64 || !s.defined_here || s.is_alias {
+                if s.class != Token::Glo as i64 || !s.defined_here {
                     continue;
                 }
                 // A staged literal recorded its own reserved extent; its

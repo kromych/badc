@@ -22,13 +22,15 @@ Each lane:
   5. Run the gating demos (`GATING_DEMOS` below) through
      `scripts/run_demos.py`, which runs them concurrently; every demo the
      lane's kind selects runs, `--demo-jobs` bounds only how many at once.
-  6. On Linux lanes, regenerate `tests/snapshots/` and fail on drift, as
+  6. Check the compile-throughput counters over the QuickJS corpus the
+     demos just fetched, as CI's perf job does.
+  7. On Linux lanes, regenerate `tests/snapshots/` and fail on drift, as
      CI's `snapshots clean` job does. Skip with `--no-snapshots`.
-  7. On Linux lanes, compile, link and boot the pinned `defconfig` kernel
-     with badc -- CI's kernel corpus, not the vendored minimal configs --
-     under the box's own emulator, the same four boots plus displacement
-     probes CI runs. A box without that emulator keeps the compile + link
-     cover and says so in its summary line. Skip with `--no-kernel`.
+  8. On Linux lanes, compile, link and boot the pinned `defconfig` kernel
+     with badc -- CI's kernel corpus -- under the box's own emulator, the
+     same four boots plus displacement probes CI runs. A box without that
+     emulator keeps the compile + link cover and says so in its summary
+     line. Skip with `--no-kernel`.
 
 Usage (one `--box` flag per lane):
 
@@ -161,12 +163,11 @@ GATING_DEMOS = (
 
 
 # The kernel step's corpus is the pinned `defconfig` release setup.py fetches,
-# which is the tree CI's `kernel` job builds. The vendored minimal configs
-# compile a third to a half of defconfig's units and are not a substitute: they
-# have passed while defconfig-only defects reached the branch. Its own cache
-# dir, so the tree glob below cannot pick up a minimal-config tree. One tree
-# per box, so setup.py and verify.py hold it exclusively (demos/linux/ktree.py)
-# and a second run on the box is refused rather than cleaning under the first.
+# which is the tree CI's `kernel` job builds -- the only kernel corpus there
+# is. Its own cache dir, so the tree glob below cannot pick up another run's
+# tree. One tree per box, so setup.py and verify.py hold it exclusively
+# (demos/linux/ktree.py) and a second run on the box is refused rather than
+# cleaning under the first.
 KERNEL_CACHE = "~/.cache/badc-kernel-gate"
 
 # Per-architecture unit floors, the same values as the `kernel` job's matrix in
@@ -398,6 +399,11 @@ def posix_steps(
         )
     if demos:
         steps.append("step " + demo_command(box, jobs, "python3"))
+        # After the demos, which fetch the QuickJS corpus the counters
+        # measure. Both are ratios taken within the run, so the lane's
+        # own speed cancels and one set of ceilings covers every box;
+        # CI's perf job runs the same check.
+        steps.append("step python3 scripts/compile_throughput.py --check")
     # The macOS host regenerates snapshots after every commit through the
     # post-commit hook, so the drift check adds cover on the Linux lanes
     # only. The kernel corpus is Linux-only.
@@ -734,7 +740,7 @@ def main() -> int:
                   "where CI's kernel gate finds regressions that compile and "
                   "link clean, boot or not")
         else:
-            print("kernel step: 7.1.6 defconfig, compile + link + boot; adds "
+            print("kernel step: 7.1.10 defconfig, compile + link + boot; adds "
                   "4.5-11 min per Linux lane for the build (measured on an idle "
                   "box and on one shared with five other jobs) and 12 s "
                   "(aarch64, 8 emulator starts) to 26 s (x86_64, 5) for the "

@@ -28,9 +28,8 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x50, %rsp
-               	movq	%rbx, (%rsp)
-               	leaq	-0x40(%rbp), %rbx
+               	subq	$0x40, %rsp
+               	leaq	-0x40(%rbp), %rdi
                	movl	$0x40, %esi
                	leaq	<rip>, %rdx
                	movl	$0x3fc00000, %eax       # imm = 0x3FC00000
@@ -39,24 +38,21 @@ Disassembly of section .text:
                	movl	$0x3dcccccd, %eax       # imm = 0x3DCCCCCD
                	movq	%rax, %xmm14
                	cvtss2sd	%xmm14, %xmm1
-               	movq	%rbx, %rdi
                	movb	$0x2, %al
                	callq	<addr>
                	movslq	%eax, %rax
+               	leaq	-0x40(%rbp), %rdi
                	leaq	<rip>, %rsi
-               	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	movq	(%rsp), %rbx
-               	addq	$0x50, %rsp
+               	addq	$0x40, %rsp
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	movq	(%rsp), %rbx
-               	addq	$0x50, %rsp
+               	addq	$0x40, %rsp
                	popq	%rbp
                	retq

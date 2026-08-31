@@ -291,11 +291,30 @@ pub(crate) struct AsmSectionBlock {
     pub flags: alloc::string::String,
     /// `@type` / `%type` argument (`progbits`, `nobits`, ...), if any.
     pub sh_type: Option<alloc::string::String>,
+    /// The `M` flag's entry size; 0 when the flag is absent.
+    pub entsize: u32,
+    /// The section the `o` flag orders this one after.
+    pub link: Option<alloc::string::String>,
     /// `.subsection` number. Subsections share the section's identity and
     /// space; layout orders a section's blocks by this number, so
     /// subsection 1 lands after every subsection-0 block.
     pub subsection: u32,
     pub items: alloc::vec::Vec<AsmSectionItem>,
+}
+
+impl AsmSectionBlock {
+    /// An empty subsection-0 block of the same section.
+    pub(crate) fn clone_identity(&self) -> Self {
+        AsmSectionBlock {
+            name: self.name.clone(),
+            flags: self.flags.clone(),
+            sh_type: self.sh_type.clone(),
+            entsize: self.entsize,
+            link: self.link.clone(),
+            subsection: 0,
+            items: alloc::vec::Vec::new(),
+        }
+    }
 }
 
 /// Instruction-field flavor of a section relocation. `Data` is a plain
@@ -605,6 +624,10 @@ pub(crate) struct AsmSection {
     pub name: alloc::string::String,
     pub flags: alloc::string::String,
     pub sh_type: Option<alloc::string::String>,
+    /// The `M` flag's entry size and the `o` flag's ordering section, as
+    /// the directive gave them.
+    pub entsize: u32,
+    pub link: Option<alloc::string::String>,
     pub bytes: alloc::vec::Vec<u8>,
     pub relocs: alloc::vec::Vec<AsmSectionReloc>,
     /// Labels defined in the section; each becomes a symbol whose section
@@ -717,6 +740,13 @@ pub(crate) struct AsmSectionsSnapshot {
 /// key: they are ordered blocks of one section.
 pub(crate) fn section_key(b: &AsmSectionBlock) -> alloc::string::String {
     alloc::format!("{}\u{0}{}\u{0}{:?}", b.name, b.flags, b.sh_type)
+}
+
+/// Identity of the AArch64 literal pool a block's `ldr Rt, =value` loads
+/// take entries from. GNU as keeps one pool per section and subsection,
+/// flushed at the end of that subsection's content.
+pub(crate) fn literal_pool_key(b: &AsmSectionBlock) -> alloc::string::String {
+    alloc::format!("{}\u{0}{}", section_key(b), b.subsection)
 }
 
 /// The same identity key for a section already in the sink.

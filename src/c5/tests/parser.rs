@@ -155,18 +155,21 @@ fn expect_vector_error(body: &str, needle: &str) {
 }
 
 #[test]
-fn vector_relational_operators_are_rejected() {
-    // The GCC vector extension defines the relational and equality operators
-    // over vectors, yielding an integer vector of 0 / -1 per lane. That result
-    // type is not lowered, so both spellings reject rather than operating on
-    // the operand's address.
+fn vector_comparison_operand_mismatches_are_rejected() {
+    // The comparisons take the arithmetic operand rule: same byte width
+    // and element width and kind, or a broadcast scalar. A mismatched
+    // pair rejects with the operator's name.
     expect_vector_error(
-        "int main(void) { i32x4 r = i4 < i4; return r[0]; }",
-        "invalid operands to binary operator (aggregate type)",
+        "int main(void) { u8x8 q = h; return (a == q)[0]; }",
+        "invalid operands to binary `==`",
     );
     expect_vector_error(
-        "int main(void) { i32x4 r = i4 == i4; return r[0]; }",
-        "invalid operands to binary operator (aggregate type)",
+        "int main(void) { return (i4 < e)[0]; }",
+        "invalid operands to binary `<`",
+    );
+    expect_vector_error(
+        "int main(void) { return (a > u4)[0]; }",
+        "invalid operands to binary `>`",
     );
 }
 
@@ -2655,6 +2658,49 @@ fn multi_dim_compound_literal_dimension_constraints() {
 }
 
 #[test]
+fn struct_array_compound_literal_counts_elements_not_leaves() {
+    // C99 6.5.2.5p3: the literal is an unnamed object initialized by its
+    // brace list, so an array-of-struct bound is measured in elements.
+    // Four leaves fill the two elements of a `[2]` literal, and brace
+    // elision folds a flat run into one element apiece (6.7.8p20).
+    let prog = Compiler::new(
+        "struct s { int a; int b; };\n\
+         int main(void) {\n\
+             const struct s *p = (const struct s[2]){ { 1, 2 }, { 3, 4 } };\n\
+             const struct s *q = (const struct s[]){ 7, 8, 9, 10 };\n\
+             return p[0].a + p[0].b + p[1].a + p[1].b + q[1].b - 20;\n\
+         }"
+        .to_string(),
+    )
+    .compile()
+    .expect("an array-of-struct literal takes one element per brace group");
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+
+    // The excess is counted in elements: three brace groups, and six
+    // elided leaves folding into three elements, both over a bound of 2.
+    expect_compile_error(
+        "struct s { int a; int b; };\n\
+         int main(void) { const struct s *p = (const struct s[2]){ {1,2},{3,4},{5,6} };\n\
+             return p[0].a; }",
+        "too many initializers for compound literal (3 > 2)",
+    );
+    expect_compile_error(
+        "struct s { int a; int b; };\n\
+         int main(void) { const struct s *p = (const struct s[2]){ 1,2,3,4,5,6 };\n\
+             return p[0].a; }",
+        "too many initializers for compound literal (3 > 2)",
+    );
+    // A designator past the bound keeps its own diagnostic, as the named
+    // array declaration reports it.
+    expect_compile_error(
+        "struct s { int a; int b; };\n\
+         int main(void) { const struct s *p = (const struct s[2]){ [5] = {1,2} };\n\
+             return p[0].a; }",
+        "array designator index 5..5 out of bounds [0, 2)",
+    );
+}
+
+#[test]
 fn address_of_a_thread_local_is_not_a_constant_expression() {
     // C11 6.7.9p4: an object with static storage duration is initialized
     // by constant expressions, and a thread-local object's address is not
@@ -2851,4 +2897,46 @@ fn invalid_universal_character_names_are_diagnosed() {
     .compile()
     .expect("a permitted universal character name encodes as UTF-8");
     assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+}
+
+/// A static initializer element that does not fold is diagnosed by what
+/// failed: a builtin's non-constant operand is named as such, and only a
+/// name with no declaration is reported undeclared.
+#[test]
+fn static_initializer_diagnostic_names_what_failed() {
+    let msg = |src: &str| match Compiler::new(src.to_string()).compile() {
+        Err(e) => e.to_string(),
+        Ok(_) => panic!("expected a compile error for {src:?}"),
+    };
+    let m = msg(
+        "static int rt; static int x = __builtin_choose_expr(rt, 1, 2); int main(void) { return x; }",
+    );
+    assert!(
+        m.contains("constant integer expected (got identifier `rt`)"),
+        "{m}"
+    );
+    assert!(!m.contains("undeclared"), "{m}");
+    let m = msg("static int x = __builtin_alloca(4); int main(void) { return x; }");
+    assert!(
+        m.contains("constant integer expected (got identifier `__builtin_alloca`)"),
+        "{m}"
+    );
+    assert!(!m.contains("undeclared"), "{m}");
+    expect_compile_error(
+        "static int x = missing; int main(void) { return x; }",
+        "use of undeclared identifier `missing`",
+    );
+    expect_compile_error(
+        "static int x = missing(1); int main(void) { return x; }",
+        "use of undeclared identifier `missing`",
+    );
+    expect_compile_error(
+        "enum e { A = B }; int main(void) { return A; }",
+        "use of undeclared identifier `B`",
+    );
+    // A name a bundled header declares carries the include hint.
+    expect_compile_error(
+        "static int x = getchar(); int main(void) { return x; }",
+        "use of undeclared identifier `getchar` -- try `#include <stdio.h>`",
+    );
 }

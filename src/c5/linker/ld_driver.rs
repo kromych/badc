@@ -26,7 +26,7 @@ use super::lds_link::{
 use super::object::parse_shared_library;
 use super::relocatable::{
     DiscardLocals, EM_386, EM_AARCH64, EM_X86_64, EtRel, LdScript, RelinkOptions, link_relocatable,
-    parse_et_rel, parse_module_script,
+    link_relocatable_with_map, parse_et_rel, parse_module_script,
 };
 
 /// How positional inputs and archive state were ordered on the
@@ -506,15 +506,20 @@ pub fn run_ld(args: &[String]) -> i32 {
         // show the middle, so this reports what runs without claiming
         // to be binutils. Feature questions are answered by rejecting
         // options `run_ld` does not implement, not by the version.
+        // The provenance tail is absent when badc was built outside a
+        // checkout, so it is appended rather than printed as its own
+        // line: an empty tail must not leave a blank one.
         let git_tail = crate::BUILD_INFO
             .split_once('\n')
             .map(|(_, tail)| tail)
             .unwrap_or("");
         println!(
-            "GNU ld (badc {}) {LD_COMPAT_VERSION}\n{}",
-            env!("CARGO_PKG_VERSION"),
-            git_tail
+            "GNU ld (badc {}) {LD_COMPAT_VERSION}",
+            env!("CARGO_PKG_VERSION")
         );
+        if !git_tail.is_empty() {
+            println!("{git_tail}");
+        }
         return 0;
     }
 
@@ -580,12 +585,30 @@ pub fn run_ld(args: &[String]) -> i32 {
         gnu_stack: a.gnu_stack,
         expect_machine: machine,
     };
-    let bytes = match link_relocatable(&objs, &opts) {
-        Ok(b) => b,
-        Err(e) => return ld_err(e),
+    // ld writes a map for a relocatable link too, and kbuild's
+    // `modules.builtin.ranges` step reads `vmlinux.o.map`.
+    let want_map = a.map_path.is_some() || a.print_map;
+    let (bytes, map) = if want_map {
+        match link_relocatable_with_map(&objs, &opts, &a.output.display().to_string()) {
+            Ok(v) => v,
+            Err(e) => return ld_err(e),
+        }
+    } else {
+        match link_relocatable(&objs, &opts) {
+            Ok(b) => (b, String::new()),
+            Err(e) => return ld_err(e),
+        }
     };
     if let Err(e) = std::fs::write(&a.output, &bytes) {
         return ld_err(format!("cannot write `{}`: {e}", a.output.display()));
+    }
+    if let Some(p) = &a.map_path
+        && let Err(e) = std::fs::write(p, &map)
+    {
+        return ld_err(format!("cannot write map file `{}`: {e}", p.display()));
+    }
+    if a.print_map {
+        print!("{map}");
     }
     0
 }
@@ -610,6 +633,18 @@ fn check_z_keyword(kw: &str) -> Option<i32> {
             | "nopack-relative-relocs"
             | "noseparate-code"
             | "separate-code"
+            // Dynamic-loader policy recorded in DT_FLAGS_1. The kernel
+            // passes them on links that produce no dynamic segment, so
+            // there is nothing to record and nothing to warn about.
+            | "nodefaultlib"
+            | "nodelete"
+            | "nodlopen"
+            | "nodump"
+            | "origin"
+            | "global"
+            | "initfirst"
+            | "interpose"
+            | "loadfltr"
     ) || kw.starts_with("max-page-size=")
         || kw.starts_with("common-page-size=");
     if known {
@@ -1184,6 +1219,33 @@ fn report_orphans(
 
 #[cfg(test)]
 mod tests {
+    /// The kernel links its kexec purgatory with dynamic-loader policy
+    /// keywords that a relocatable link cannot act on. Accepting them is
+    /// not the same as accepting anything: a keyword ld does not define
+    /// still has to be refused.
+    #[test]
+    fn loader_policy_z_keywords_are_accepted_and_unknown_ones_are_not() {
+        for kw in [
+            "nodefaultlib",
+            "nodelete",
+            "nodlopen",
+            "nodump",
+            "origin",
+            "global",
+            "initfirst",
+            "interpose",
+            "loadfltr",
+        ] {
+            assert!(check_z_keyword(kw).is_none(), "{kw} must link");
+        }
+        for kw in ["noexecstack", "relro", "now", "max-page-size=4096"] {
+            assert!(check_z_keyword(kw).is_none(), "{kw} regressed");
+        }
+        for kw in ["bogus-keyword", "nodefaultlibs", ""] {
+            assert!(check_z_keyword(kw).is_some(), "{kw} must be refused");
+        }
+    }
+
     use super::*;
     use alloc::vec;
 

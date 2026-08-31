@@ -161,11 +161,12 @@ fn pac_ret_signed_frames_return_natively() {
     );
 }
 
-/// `__builtin_return_address(0)` stages the slot through x30 so
+/// `__builtin_return_address` stages the slot through x30 so
 /// `xpaclri` can strip it. x30 holds the live link register, so this
 /// pins that the epilogue's reload puts it back: a caller that keeps
 /// running after the read would otherwise return through the loaded
-/// value. Also checks the result carries no authentication bits.
+/// value. Also checks the result carries no authentication bits, at
+/// level 0 and read from a caller's record.
 #[test]
 fn return_address_reads_a_bare_pointer_and_keeps_the_return_path() {
     const SRC: &str = "
@@ -181,6 +182,16 @@ fn return_address_reads_a_bare_pointer_and_keeps_the_return_path() {
             /* A signed pointer sets bits above the 48-bit address range. */
             return ((unsigned long)p >> 48) == 0;
         }
+        /* Level 1 reads the caller's slot, signed under pac-ret since the
+           caller stored its link register; it takes the same strip. */
+        __attribute__((noinline)) void *ra1(void) {
+            return __builtin_return_address(1);
+        }
+        __attribute__((noinline)) int walked_matches_own(void) {
+            void *own = __builtin_return_address(0);
+            void *up = ra1();
+            return canonical(up) && up == own;
+        }
         int main(void) {
             int bad = 0;
             void *a = ra();
@@ -189,6 +200,7 @@ fn return_address_reads_a_bare_pointer_and_keeps_the_return_path() {
             if (!canonical(__builtin_return_address(0))) bad++;
             if (mixed(10) != 11) bad++;
             if (add1(41) != 42) bad++;
+            if (!walked_matches_own()) bad++;
             return bad == 0 ? 42 : bad;
         }
     ";
@@ -390,6 +402,43 @@ fn const_object_store_faults() {
         "const_store_linked",
     );
     assert_eq!(code, -1, "linked-image const store must die on a signal");
+}
+
+/// A const pointer object initialized with another unit's symbol folds
+/// at `-O` to that symbol's address plus the displacement; the bound
+/// reference the fold records must reach the emitter under the fold's
+/// own value id, with the addend applied.
+#[test]
+fn const_pointer_to_extern_object_folds_across_units() {
+    use crate::{CompileOptions, Program};
+    const UNIT_A: &str = "\
+extern int shared[4];\n\
+static int *const third = &shared[2];\n\
+int main(void) { return *third == 30 ? 0 : 1; }\n";
+    const UNIT_B: &str = "int shared[4] = {10, 20, 30, 40};\n";
+    let compile = |src: &str| -> Program {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::MacOSAarch64, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile: {e}"))
+    };
+    let (a, b) = (compile(UNIT_A), compile(UNIT_B));
+    let bytes = super::link_executable_with_runtime_multi(
+        &[&a, &b],
+        Target::MacOSAarch64,
+        NativeOptions::default().with_optimize(),
+    )
+    .unwrap_or_else(|e| panic!("link: {e}"));
+    let path = super::unique_temp_path("badc-test", "const_ptr_extern_fold", ".bin");
+    {
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+    }
+    set_executable(&path);
+    codesign(&path);
+    let output = super::output_when_not_busy(|| Command::new(&path));
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(output.status.code(), Some(0));
 }
 
 #[test]

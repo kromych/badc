@@ -40,13 +40,6 @@ Disassembly of section .text:
                	retq
                	movl	$0x78, %ecx
                	movb	%cl, 0xb(%rax)
-               	movsbq	%cl, %rax
-               	cmpl	$0x78, %eax
-               	je	<addr>
-               	movl	$0x8, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
-               	retq
                	xorq	%rax, %rax
                	addq	$0x20, %rsp
                	popq	%rbp

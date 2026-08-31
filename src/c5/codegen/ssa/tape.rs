@@ -16,7 +16,7 @@ use super::super::ir::{Block, FunctionSsa, Inst, NO_VALUE, ValueId};
 /// One instruction to place ahead of tape index `at`, which must name an
 /// instruction inside a block. Operands are old value ids: [`insert`]
 /// maps them with the rest.
-pub(super) struct Insertion {
+pub(crate) struct Insertion {
     pub at: ValueId,
     pub inst: Inst,
     /// `FunctionSsa::f32_values` entry for the inserted value.
@@ -24,14 +24,14 @@ pub(super) struct Insertion {
 }
 
 /// Old-to-new value ids, and the id each insertion received.
-pub(super) struct Rewrite {
+pub(crate) struct Rewrite {
     pub remap: Vec<ValueId>,
     pub ids: Vec<ValueId>,
 }
 
 /// The parts of a [`FunctionSsa`] an insertion replaces, kept so a plan
 /// that does not pay for itself can be undone exactly.
-pub(super) struct Undo {
+pub(crate) struct Undo {
     insts: Vec<Inst>,
     inst_src: Vec<(u32, u32)>,
     f32_values: Vec<bool>,
@@ -44,7 +44,7 @@ pub(super) struct Undo {
 }
 
 impl Undo {
-    pub(super) fn restore(self, func: &mut FunctionSsa) {
+    pub(crate) fn restore(self, func: &mut FunctionSsa) {
         func.insts = self.insts;
         func.inst_src = self.inst_src;
         func.f32_values = self.f32_values;
@@ -62,7 +62,7 @@ impl Undo {
 /// every operand, terminator and `exit_acc`, and the relocation tables.
 /// An inserted value takes the source position of the instruction it
 /// goes ahead of.
-pub(super) fn insert(func: &mut FunctionSsa, ins: &[Insertion]) -> (Rewrite, Undo) {
+pub(crate) fn insert(func: &mut FunctionSsa, ins: &[Insertion]) -> (Rewrite, Undo) {
     let FunctionSsa {
         name: _,
         ent_pc: _,
@@ -75,9 +75,12 @@ pub(super) fn insert(func: &mut FunctionSsa, ins: &[Insertion]) -> (Rewrite, Und
         is_always_inline: _,
         is_noinline: _,
         is_naked: _,
+        conv: _,
         is_weak: _,
         is_internal: _,
         section: _,
+        patchable_entry: _,
+        no_instrument: _,
         const_params: _,
         insts,
         inst_src,

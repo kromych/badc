@@ -23,30 +23,30 @@ fn ent_pc=0 n_params=0 variadic=false locals=11
     v17  LoadLocal { off=-11, kind=I64 }                  -> x1
     v18  Imm(7)                                           -> x1
     v19  Store { addr=v15, disp=0, value=v18, kind=I64 }  -> -
-    v20  LoadLocal { off=-11, kind=I64 }                  -> x1
-    v21  Imm(32)                                          -> x1
-    v22  Imm(0)                                           -> x1
+    v20  LoadLocal { off=-11, kind=I64 }                  -> x0
+    v21  Imm(32)                                          -> x0
+    v22  Imm(0)                                           -> x0
     terminator Jmp(b1)   (exit_acc=v22)
   block 1  start_pc=0
-    v24  LocalAddr(-10)                                   -> x1
-    v25  Imm(0)                                           -> x2
-    v26  Load { addr=v24, disp=0, kind=I64 }              -> x1
-    v27  LocalAddr(-10)                                   -> x1
-    v28  Load { addr=v27, disp=0, kind=I64 }              -> x1
-    v29  Imm(0)                                           -> x1
-    v30  Imm(0)                                           -> x1
-    v31  Imm(0)                                           -> x1
-    v32  LoadLocal { off=-11, kind=I64 }                  -> x1
-    v33  Load { addr=v15, disp=0, kind=I64 }              -> x0
-    v34  BinopI { op=sub, lhs=v33, rhs_imm=7 }            -> x0
-    v35  BinopI { op=shl, lhs=v34, rhs_imm=32 }           -> x1
-    v36  Extend { value=v34, kind=I32 }                   -> x1
-    v37  BinopI { op=add, lhs=v34, rhs_imm=0 }            -> x0
-    v38  BinopI { op=shl, lhs=v37, rhs_imm=32 }           -> x1
-    v39  Extend { value=v37, kind=I32 }                   -> x0
-    v40  BinopI { op=shl, lhs=v39, rhs_imm=32 }           -> x1
-    v41  Extend { value=v39, kind=I32 }                   -> x1
-    terminator Return(v39)   (exit_acc=v39)
+    v24  LocalAddr(-10)                                   -> x0
+    v25  Imm(0)                                           -> x1
+    v26  Load { addr=v24, disp=0, kind=I64 }              -> x0
+    v27  LocalAddr(-10)                                   -> x0
+    v28  Load { addr=v27, disp=0, kind=I64 }              -> x0
+    v29  Imm(0)                                           -> x0
+    v30  Imm(0)                                           -> x0
+    v31  Imm(0)                                           -> x0
+    v32  LoadLocal { off=-11, kind=I64 }                  -> x0
+    v33  Imm(7)                                           -> x0
+    v34  Imm(0)                                           -> x0
+    v35  Imm(0)                                           -> x0
+    v36  Imm(0)                                           -> x0
+    v37  Imm(0)                                           -> x0
+    v38  Imm(0)                                           -> x0
+    v39  Imm(0)                                           -> x0
+    v40  Imm(0)                                           -> x0
+    v41  Imm(0)                                           -> x0
+    terminator Return(v41)   (exit_acc=v41)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

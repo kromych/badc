@@ -266,18 +266,14 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	movl	$0x4, %edx
                	movw	%dx, (%rcx)
-               	movq	%rcx, %rdx
-               	andq	$0x1f, %rdx
-               	testl	%edx, %edx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	movslq	%edx, %rdx
-               	testq	%rdx, %rdx
+               	andq	$0x1f, %rcx
+               	testl	%ecx, %ecx
+               	sete	%cl
+               	movzbq	%cl, %rcx
+               	movslq	%ecx, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
-               	movswq	(%rcx), %rax
-               	cmpl	$0x4, %eax
-               	sete	%al
-               	movzbq	%al, %rax
+               	movl	$0x1, %eax
                	movslq	%eax, %rax
                	leaq	-0xa0(%rbp), %rsp
                	addq	$0xa0, %rsp

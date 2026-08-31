@@ -1,28 +1,20 @@
 #!/usr/bin/env python3
 """Fetch and configure a Linux kernel tree for the badc translation-unit sweep.
 
-Downloads a pinned kernel release from cdn.kernel.org, verifies its sha256,
-extracts it under ``demos/linux/.cache``, installs a build config, and runs
-``make olddefconfig``. With ``--build`` it then runs the gcc reference build;
-that build validates the config and writes the per-object ``.<name>.o.cmd``
+Downloads a pinned kernel release from the vendor-deps mirror, verifies its sha256,
+extracts it under ``demos/linux/.cache``, configures it with ``make defconfig``
+and ``make olddefconfig``. With ``--build`` it then runs the gcc reference
+build; that build validates the config and writes the per-object ``.<name>.o.cmd``
 files Kbuild leaves next to each object, which are the replay corpus
 ``sweep.py`` consumes. The tree is held exclusively while it is written
 (ktree.py): reconfiguring under a build in progress rewrites what that build
 is reading.
 
-Two configurations, selected by ``--config``:
-
-``defconfig`` (default)
-    The sweep corpus: one release for both architectures, configured by the
-    tree's own ``make defconfig``. The tarball hash pins the tree and defconfig
-    is a function of the tree, so the configuration is reproducible without a
-    vendored copy that would have to be re-generated on every version bump.
-
-``minimal``
-    The link-and-boot gate's corpus: a vendored known-booting minimal config
-    (``configs/<arch>-<version>.config``). A ``.config`` is only meaningful
-    against the tree it was produced for, so each architecture keeps the
-    release its config was made for.
+One release and one configuration for both architectures: the pinned tarball,
+configured by the tree's own ``make defconfig``. The tarball hash pins the tree
+and defconfig is a function of the tree, so the configuration is reproducible
+from the pin alone. A vendored ``.config`` is only meaningful against the
+release it was produced for, so it would add a second pin to bump.
 
 Config options the reference toolchain forces or drops during
 ``olddefconfig`` are recorded in ``config-deviations-<arch>.txt`` next to the
@@ -57,21 +49,13 @@ import ktree
 
 LINUX_DIR = Path(__file__).resolve().parent
 
-# Sweep corpus: latest stable at the time of pinning, both architectures.
-DEFCONFIG_KERNEL = ("7.1.6",
-                    "995dd7188d924662b94b48fd6fb783587267590e5b8bb33dade2c771e7d855c1")
+# The corpus: latest stable at the time of pinning, both architectures.
+DEFCONFIG_KERNEL = ("7.1.10",
+                    "67d2f4697a02f3bec98e744b1bdc307e920c24bb4e88b5ee97dc9a34e9aa9999")
 
-# Link-and-boot gate: (version, tarball sha256) per architecture, each the
-# release its vendored minimal config was produced for.
-MINIMAL_KERNELS = {
-    "x86_64": ("6.12.8", "2291da065ca04b715c89ee50362aec3f021a7414bc963f1b56736682c8122979"),
-    "aarch64": ("6.10.1", "70109dfd1cd1c5f8a58eb1cb37122b9bf93f9c6a6280bf91019263c7339cf76b"),
-}
+# The architectures kbuild can be driven for from either host.
+ARCHES = sorted(karch.ARCHES)
 
-ARCHES = sorted(MINIMAL_KERNELS)
-CONFIGS = ("defconfig", "minimal")
-
-CDN = "https://cdn.kernel.org/pub/linux/kernel"
 MIRROR = "https://github.com/kromych/badc/releases/download/vendor-deps-v1"
 
 
@@ -80,13 +64,17 @@ def log(m: str) -> None:
 
 
 def tarball_urls(version: str, sha: str) -> list[str]:
-    """Vendor-deps mirror first (the asset name embeds the sha256 prefix,
-    scripts/vendor_deps convention), cdn.kernel.org as the fallback for
-    versions the release does not carry."""
-    return [
-        f"{MIRROR}/linux-{version}-{sha[:8]}.tar.xz",
-        f"{CDN}/v{version.split('.', 1)[0]}.x/linux-{version}.tar.xz",
-    ]
+    """The vendor-deps mirror, and only that: the asset name embeds the
+    sha256 prefix, per the scripts/vendor_deps convention.
+
+    cdn.kernel.org is deliberately not a fallback. It is the download CI
+    lost most often, and a fallback turns a missing mirror asset into an
+    intermittent failure on a host nobody controls rather than a clear
+    one. A pin bump therefore has to publish the tarball first --
+    scripts/vendor_deps/build_bundle.py carries the upstream URL for
+    that.
+    """
+    return [f"{MIRROR}/linux-{version}-{sha[:8]}.tar.xz"]
 
 
 def sha256_of(path: Path) -> str:
@@ -140,10 +128,6 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--arch", choices=ARCHES, default=karch.host_arch(),
                     help="kernel architecture (default: host)")
-    ap.add_argument("--config", choices=CONFIGS, default="defconfig",
-                    help="configuration to build: the tree's own defconfig "
-                         "(the sweep corpus) or the vendored minimal config "
-                         "(the link-and-boot gate)")
     ap.add_argument("--cache", type=Path, default=LINUX_DIR / ".cache",
                     help="download/extract directory")
     ap.add_argument("--build", action="store_true",
@@ -155,21 +139,12 @@ def main(argv: list[str] | None = None) -> int:
                     help="make parallelism for --build (default: nproc)")
     args = ap.parse_args(argv)
 
-    if args.arch not in MINIMAL_KERNELS:
-        sys.exit(f"linux setup: no pinned kernel for arch {args.arch!r}")
     # Before anything is downloaded: a cross build that cannot be run here
     # must say so rather than produce a host-architecture tree.
     gap = karch.cross_gap(args.arch)
     if gap and not args.fetch_only:
         sys.exit(f"linux setup: {gap}")
-    if args.config == "defconfig":
-        version, sha = DEFCONFIG_KERNEL
-        config = None
-    else:
-        version, sha = MINIMAL_KERNELS[args.arch]
-        config = LINUX_DIR / "configs" / f"{args.arch}-{version}.config"
-        if not config.is_file():
-            sys.exit(f"linux setup: missing vendored config {config}")
+    version, sha = DEFCONFIG_KERNEL
 
     cache = args.cache
     cache.mkdir(parents=True, exist_ok=True)
@@ -189,13 +164,10 @@ def main(argv: list[str] | None = None) -> int:
         extract(tar_path, cache)
 
     env = karch.make_env(args.arch)
-    if config is None:
-        log(f"make defconfig (ARCH={env['ARCH']})")
-        subprocess.run(["make", "defconfig"], cwd=tree, check=True,
-                       env=env, stdout=subprocess.DEVNULL)
-        base = (tree / ".config").read_bytes()
-    else:
-        base = config.read_bytes()
+    log(f"make defconfig (ARCH={env['ARCH']})")
+    subprocess.run(["make", "defconfig"], cwd=tree, check=True,
+                   env=env, stdout=subprocess.DEVNULL)
+    base = (tree / ".config").read_bytes()
     # A config may reference build products from its home tree (an embedded
     # initramfs). The sweep needs the compile commands, not the boot artifacts,
     # so external file references are cleared; the change shows up in the
@@ -213,7 +185,7 @@ def main(argv: list[str] | None = None) -> int:
     mismatch = karch.config_mismatch(tree / ".config", args.arch)
     if mismatch:
         sys.exit(f"linux setup: {mismatch}")
-    # Record every option olddefconfig changed relative to the vendored config.
+    # Record every option olddefconfig changed relative to defconfig.
     dev = subprocess.run(["./scripts/diffconfig", ".config.orig", ".config"],
                          cwd=tree, capture_output=True, text=True)
     (cache / f"config-deviations-{args.arch}.txt").write_text(dev.stdout)

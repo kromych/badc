@@ -28,7 +28,12 @@
 //! re-materialised operand -- the same extension of the same value
 //! emitted in two blocks -- reads the fact recorded for the other. The
 //! key covers only pure arithmetic; a load or a call is opaque, so
-//! nothing is carried across a write to memory.
+//! nothing is carried across a write to memory. A store is the one
+//! write that also establishes something: a later read of the location
+//! it wrote produces the value it stored, so the stored value's bounds
+//! become the reading's, which is how a local whose address escaped --
+//! and which therefore keeps its frame slot -- is still bounded by what
+//! the body last assigned to it.
 //!
 //! `run_one` takes an entry range per parameter, which
 //! [`super::ipa_const_param`] derives from the call sites of a function
@@ -38,7 +43,7 @@
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
-use crate::c5::ir::{BinOp, BlockId, FunctionSsa, Inst, LoadKind, Terminator, ValueId};
+use crate::c5::ir::{BinOp, BlockId, FunctionSsa, Inst, LoadKind, StoreKind, Terminator, ValueId};
 
 /// Inclusive bounds on a value's 64-bit register contents, read as a
 /// signed integer. `i128` so intersection and the +-1 steps below cannot
@@ -221,6 +226,88 @@ fn load_expr_key(insts: &[Inst], canon: &[ValueId], v: ValueId) -> Option<Key> {
         )),
         _ => None,
     }
+}
+
+/// The integer load kinds that read back exactly the bytes a store of
+/// `kind` wrote. A float store leaves no integer reading.
+fn load_kinds_of_store(kind: StoreKind) -> &'static [LoadKind] {
+    match kind {
+        StoreKind::I8 => &[LoadKind::I8, LoadKind::U8],
+        StoreKind::I16 => &[LoadKind::I16, LoadKind::U16],
+        StoreKind::I32 => &[LoadKind::I32, LoadKind::U32],
+        StoreKind::I64 => &[LoadKind::I64],
+        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 => &[],
+    }
+}
+
+/// What a store establishes about a later load of the location it
+/// wrote: `(load key, range)` per load kind that reads the store back
+/// unchanged.
+///
+/// The store writes the low bytes of its value and the load extends
+/// them again, so the round trip is the identity exactly when the
+/// value's range already lies inside the window the load's own kind
+/// produces (C99 6.3.1.3 -- a value representable in the accessed type
+/// converts to itself). Outside that window the bytes still round trip,
+/// but the extension changes the value, and the load's own width range
+/// already says everything then.
+///
+/// A volatile store is excluded: the object may change between the
+/// write and the read by means outside the abstract machine (C99
+/// 6.7.3p6), so what was written does not bound what is read.
+fn stored_facts(
+    canon: &[ValueId],
+    inst: &Inst,
+    mut range_of: impl FnMut(ValueId) -> Range,
+) -> Vec<(Key, Range)> {
+    let c = |x: ValueId| canon.get(x as usize).copied().unwrap_or(x);
+    let (kinds, value, key_for): (_, _, &dyn Fn(LoadKind) -> Key) = match inst {
+        Inst::Store {
+            addr,
+            disp,
+            value,
+            kind,
+            volatile: false,
+            ..
+        } => (load_kinds_of_store(*kind), *value, &|k| {
+            (5, c(*addr), load_kind_code(k), *disp as i64)
+        }),
+        Inst::StoreLocal {
+            off,
+            value,
+            kind,
+            volatile: false,
+        } => (load_kinds_of_store(*kind), *value, &|k| {
+            (6, 0, load_kind_code(k), *off)
+        }),
+        Inst::StoreIndexed {
+            base,
+            index,
+            scale,
+            value,
+            kind,
+        } => (load_kinds_of_store(*kind), *value, &|k| {
+            (
+                7,
+                c(*base),
+                c(*index),
+                ((*scale as i64) << 8) | load_kind_code(k) as i64,
+            )
+        }),
+        _ => return Vec::new(),
+    };
+    if kinds.is_empty() {
+        return Vec::new();
+    }
+    let r = range_of(value);
+    if r.is_universe() {
+        return Vec::new();
+    }
+    kinds
+        .iter()
+        .filter(|&&k| extend_range(k).is_none_or(|w| w.contains(r)))
+        .map(|&k| (key_for(k), r))
+        .collect()
 }
 
 /// Whether an instruction may write memory (or transfer control to code
@@ -1018,8 +1105,22 @@ pub(crate) fn run_one(func: &mut FunctionSsa, params: &[Range]) -> bool {
         for pc in range.start..range.end {
             let inst = &func.insts[pc as usize];
             if writes_memory(inst) {
+                // What a store puts in memory bounds a later read of
+                // the same location. Read the value's range before the
+                // wipe -- it may itself rest on a load fact -- and
+                // record the reading afterwards, so the store's own
+                // invalidation does not drop what it just established.
+                let established = {
+                    let insts = func.insts.as_slice();
+                    stored_facts(&canon, inst, |v| {
+                        held(&facts, &def, key_of(insts, &canon, v), v)
+                    })
+                };
                 facts.wipe_loads();
                 epoch += 1;
+                for (k, r) in established {
+                    facts.set(k, r);
+                }
             }
             let insts = func.insts.as_slice();
             let at = |v: ValueId| held(&facts, &def, key_of(insts, &canon, v), v);
@@ -1221,10 +1322,15 @@ mod tests {
                 Inst::LocalAddr(-1),
             ];
             if poison {
+                // The stored value is the address itself, which carries
+                // no bounds: the reload is then decided by the store's
+                // invalidation alone, which is what this pins. A store
+                // of a bounded value establishes its own fact and is
+                // covered by `stored_value_bounds_a_later_reload`.
                 insts.push(Inst::Store {
                     addr: 3,
                     disp: 8,
-                    value: 2,
+                    value: 3,
                     kind: StoreKind::I64,
                     volatile: false,
                     align: 0,
@@ -1280,6 +1386,68 @@ mod tests {
         assert!(
             matches!(poisoned.insts[6], Inst::BinopI { .. }),
             "a store between the guard and the reload must end the fact"
+        );
+    }
+
+    /// What a store writes bounds a later read of the location, at the
+    /// load kinds that give the value back unchanged. A narrower read
+    /// converts the value (C99 6.3.1.3), so it takes no bound from a
+    /// source range that does not fit the width it reads.
+    #[test]
+    fn stored_value_bounds_a_later_reload() {
+        use crate::c5::ir::StoreKind;
+        // a = LocalAddr(-1); p = ParamRef(0); v = p & 0x1ff;
+        // store[a+8] = v (I64 or I8); y = load[a+8] (matching kind);
+        // y >= 0
+        let build = |kind: StoreKind, load_kind: LoadKind| {
+            let insts = alloc::vec![
+                Inst::LocalAddr(-1),
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64,
+                },
+                Inst::BinopI {
+                    op: BinOp::And,
+                    lhs: 1,
+                    rhs_imm: 0x1ff,
+                },
+                Inst::Store {
+                    addr: 0,
+                    disp: 8,
+                    value: 2,
+                    kind,
+                    volatile: false,
+                    align: 0,
+                },
+                Inst::Load {
+                    addr: 0,
+                    disp: 8,
+                    kind: load_kind,
+                    volatile: false,
+                    align: 0,
+                },
+                Inst::BinopI {
+                    op: BinOp::Ge,
+                    lhs: 4,
+                    rhs_imm: 0,
+                },
+            ];
+            fresh(insts, 1)
+        };
+        // Full width: the read gives the value back, so [0, 511] holds.
+        let mut wide = build(StoreKind::I64, LoadKind::I64);
+        run_one(&mut wide, &[]);
+        assert!(
+            matches!(wide.insts[5], Inst::Imm(1)),
+            "an I64 reload of an I64 store takes the stored bound"
+        );
+        // A byte store of a value that does not fit a byte: the read
+        // sign-extends different bits, so the stored bound says nothing.
+        let mut narrow = build(StoreKind::I8, LoadKind::I8);
+        run_one(&mut narrow, &[]);
+        assert!(
+            matches!(narrow.insts[5], Inst::BinopI { .. }),
+            "a signed byte reload of a [0, 511] store takes no bound"
         );
     }
 

@@ -22,11 +22,14 @@ use super::{C5Error, Compiler, Program, Vm};
 // These modules emit / link native images (via `emit_native*` and the
 // `link_*` helpers below), which require `native-emit` -- pulled in by
 // `full`. The host-only `--features std` build gates them out.
+mod auto_var_init;
 #[cfg(feature = "full")]
 mod codegen;
 mod deferred;
 #[cfg(feature = "full")]
 mod dwarf;
+#[cfg(feature = "full")]
+mod fixed_regs;
 mod fixture_tables;
 mod frame_slot_fuzz;
 mod inline_asm;
@@ -49,6 +52,8 @@ mod native_pe_arm64;
 #[cfg(feature = "full")]
 mod native_pe_x64;
 mod parser;
+#[cfg(feature = "full")]
+mod patchable_entry;
 mod pointer_tracking;
 mod programs;
 #[cfg(feature = "full")]
@@ -637,6 +642,20 @@ pub fn run_str(src: &str) -> i64 {
 /// Compile + run a fixture.
 pub fn run_fixture(name: &str) -> i64 {
     run_str(&load_fixture(name))
+}
+
+/// [`run_fixture`] for an explicit target. The interpreter reads the
+/// target's type widths, so a fixture whose result turns on the data
+/// model runs for LP64 and LLP64 alike from any host.
+pub fn run_fixture_for(name: &str, target: crate::Target) -> i64 {
+    Vm::new(
+        Compiler::with_target(with_prelude(&load_fixture(name)), target)
+            .compile()
+            .unwrap(),
+    )
+    .with_pointer_tracking()
+    .run()
+    .unwrap()
 }
 
 /// Compile + run a fixture with `args` exposed to `main(int argc, char **argv)`.

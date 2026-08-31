@@ -1408,24 +1408,24 @@ pub(crate) struct MaterializedLabel {
 
 /// Materialize the parsed section blocks: resolve operand constants and
 /// label references, lay out the bytes, and merge into the sink by
-/// `(name, flags, sh_type)`. `const_of` yields an `i`-class operand's
-/// constant; `label_off` resolves a template-label name to its location --
-/// an emitted-stream text offset or a deferred replacement region
-/// ([`LabelLoc`]); `None` means the name is a symbol. `operand_sym` yields
-/// the relocation target of an `i`-class operand that names a link-time
-/// address (`.long %c0 - .`) rather than a constant; `goto_block` yields
-/// the block index of an `asm goto` label (`.long %l0 - .`). Returns the
+/// `(name, flags, sh_type)`. `operands` resolves an `i`-class operand to
+/// its constant, or to the relocation target of the link-time address it
+/// names instead (`.long %c0 - .`); `label_off` resolves a template-label
+/// name to its location -- an emitted-stream text offset or a deferred
+/// replacement region ([`LabelLoc`]); `None` means the name is a symbol.
+/// `goto_block` yields the block index of an `asm goto` label
+/// (`.long %l0 - .`). Returns the
 /// labels defined this call so a main-stream reference resolves against a
 /// definition placed in a section.
 pub(crate) fn materialize_asm_sections(
     blocks: &[AsmSectionBlock],
-    const_of: &dyn Fn(u8) -> Option<i64>,
+    operands: &AsmOperandResolver,
     label_off: &dyn Fn(&str) -> Option<LabelLoc>,
-    operand_sym: &dyn Fn(u8) -> Option<(AsmSectionTarget, i64)>,
     goto_block: &dyn Fn(u8) -> Option<u32>,
     align_is_p2: bool,
     sink: &mut AsmSectionSink,
 ) -> Result<alloc::vec::Vec<MaterializedLabel>, alloc::string::String> {
+    let (const_of, operand_sym) = (operands.const_of, operands.symbol_of);
     // GNU as numeric labels (`2:`, `14470:`) are local to one asm instance;
     // the same digits recur across every expansion of a macro like the bug
     // table, so the accumulating sink would collide them. Rename each
@@ -1444,7 +1444,7 @@ pub(crate) fn materialize_asm_sections(
         })
     {
         if num_unique
-            .insert(name, alloc::format!(".Lc5_asmsec_{uniq}_{name}"))
+            .insert(name, alloc::format!("{ASMSEC_LABEL_PREFIX}{uniq}_{name}"))
             .is_some()
         {
             return Err(alloc::format!(
@@ -2037,7 +2037,8 @@ pub(crate) fn materialize_asm_sections(
                                     let (target, add) = operand_sym(*idx).ok_or_else(|| {
                                         alloc::format!(
                                             "inline asm: section data value `%c{idx}` is neither \
-                                             a constant nor a link-time address"
+                                             a constant nor a link-time address: the operand is {}",
+                                            (operands.form)(*idx)
                                         )
                                     })?;
                                     if !matches!(width, 1 | 2 | 4 | 8) {
@@ -2243,7 +2244,9 @@ pub(crate) fn materialize_asm_sections(
                                 } else {
                                     operand_sym(*idx).ok_or_else(|| {
                                         alloc::format!(
-                                            "inline asm: operand `%c{idx}` does not name a link-time address"
+                                            "inline asm: operand `%c{idx}` does not name a link-time \
+                                             address: the operand is {}",
+                                            (operands.form)(*idx)
                                         )
                                     })?
                                 };
@@ -2697,8 +2700,7 @@ pub(crate) fn materialize_file_asm(
         encode_code(&mut blocks)?;
         materialize_asm_sections(
             &blocks,
-            &|_| None,
-            &|_| None,
+            &AsmOperandResolver::NONE,
             &|_| None,
             &|_| None,
             align_is_p2,

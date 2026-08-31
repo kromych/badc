@@ -22,11 +22,19 @@ Three input modes:
 
 ``--replay --tree``
     Compile each kernel unit twice from the tree's Kbuild ``.cmd`` corpus --
-    once with the recorded reference command plus debug info, once with
-    badc's flag set plus ``-g`` -- and compare per unit. The two sides run
-    the same preprocessor surface over the same sources by construction, so
-    this mode cannot be confounded by configuration, and it covers every
-    translation unit rather than only the types that reached vmlinux.
+    once with the recorded command plus debug info, once with badc's flag
+    set plus ``-g`` -- and compare per unit. The two sides run the same
+    preprocessor surface over the same sources by construction, so this mode
+    cannot be confounded by configuration, and it covers every translation
+    unit rather than only the types that reached vmlinux.
+
+    A tree the badc gate built records ``buildcc.py`` -- badc's Kbuild CC
+    shim -- as the compiler of every kernel unit, so the reference leg
+    substitutes ``--real-cc`` for that driver. The recorded arguments are
+    the reference compiler's own surface: the shim rewrites for badc
+    internally and leaves the configuration probes to the reference
+    compiler, so naming it ahead of them reproduces the command the build
+    would have run without the shim.
 
 Extraction backend: ``llvm-dwarfdump``, whose one-attribute-per-line DIE dump
 is parsed directly. ``--cross-check N`` re-reads N aggregates with gdb's
@@ -51,19 +59,28 @@ import json
 import os
 import platform
 import re
-import shlex
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from pathlib import Path
+from typing import NamedTuple
 
+import karch
 import sweep
 
 LINUX_DIR = Path(__file__).resolve().parent
 REPO_ROOT = LINUX_DIR.parents[1]
 
 ARCHES = sorted(sweep.TARGETS)
+
+# Scripts here that stand in as Kbuild's ``CC``. Neither is a compiler:
+# buildcc.py routes kernel units to badc and needs ``$BADC``, ccshim.py
+# answers Kconfig's probes. A tree built through one records it as the
+# compiler of every unit, so a replay has to name the compiler behind it.
+CC_SHIMS = frozenset(("buildcc.py", "ccshim.py"))
 
 # Aggregate members can only refer to these tags, so the per-unit type table
 # skips everything else (subprograms, variables, call sites and location
@@ -107,12 +124,19 @@ def host_arch() -> str:
     return sweep.host_arch()
 
 
-def tool(name: str) -> str:
-    from shutil import which
-    p = which(name)
+def tool(name: str, purpose: str = "to read DWARF") -> str:
+    p = shutil.which(name)
     if not p:
-        die(f"{name} not found; it is required to read DWARF")
+        die(f"{name} not found; it is required {purpose}")
     return p
+
+
+def executable(name: str) -> str | None:
+    """`name` resolved to a runnable program, or None."""
+    if os.sep in name or (os.altsep and os.altsep in name):
+        p = Path(name)
+        return str(p) if p.is_file() and os.access(p, os.X_OK) else None
+    return shutil.which(name)
 
 
 # --------------------------------------------------------------------------
@@ -418,14 +442,21 @@ def extract(path: Path, dwarfdump: str) -> dict:
     # the parse never reads (decl_file/decl_line/sibling/location, and every
     # DIE that is not a type) in grep rather than in Python is what keeps the
     # extraction bound by the dumper instead of by the interpreter.
-    cmd = (f"{shlex.quote(dwarfdump)} --debug-info {shlex.quote(str(path))} "
-           f"| grep -E {shlex.quote(FILTER_ERE)}")
     # `grep` exits 1 on no match, so the dumper's own status is what says
-    # whether the read worked; without pipefail the pipeline would hide it
-    # and an unreadable file would report as a clean comparison of nothing.
-    proc = subprocess.Popen(["sh", "-c", f"set -o pipefail; {cmd}"],
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                            text=True, errors="replace", bufsize=1 << 20)
+    # whether the read worked; a pipeline that reported only the last stage
+    # would hide it and an unreadable file would report as a clean comparison
+    # of nothing. The two stages are run directly rather than through a shell
+    # so the dumper's status is the one read, on any /bin/sh.
+    errs = tempfile.TemporaryFile()
+    dump = subprocess.Popen([dwarfdump, "--debug-info", str(path)],
+                            stdout=subprocess.PIPE, stderr=errs,
+                            bufsize=1 << 20)
+    assert dump.stdout is not None
+    proc = subprocess.Popen(["grep", "-E", FILTER_ERE], stdin=dump.stdout,
+                            stdout=subprocess.PIPE, text=True,
+                            errors="replace", bufsize=1 << 20)
+    # The parent's copy, so the dumper sees the reader go away.
+    dump.stdout.close()
     assert proc.stdout is not None
     out: dict = {}
     units = 0
@@ -446,10 +477,14 @@ def extract(path: Path, dwarfdump: str) -> dict:
     finally:
         proc.stdout.close()
         proc.wait()
-    if proc.returncode not in (0, 1):
-        err = (proc.stderr.read() if proc.stderr else "").strip()
-        die(f"reading DWARF from {path} failed (rc={proc.returncode})"
+        dump.wait()
+    if dump.returncode != 0:
+        errs.seek(0)
+        err = errs.read().decode("utf-8", "replace").strip()
+        errs.close()
+        die(f"reading DWARF from {path} failed (rc={dump.returncode})"
             + (f": {err.splitlines()[0]}" if err else ""))
+    errs.close()
     return {"aggregates": out, "units": units,
             "big_endian": big_endian, "addr_size": addr_size}
 
@@ -798,13 +833,32 @@ def pair_artifacts(ref_tree: Path, badc_tree: Path) -> list[tuple[str, Path, Pat
 # Replay mode
 
 
-def replay_units(tree: Path, arch: str, badc: Path, scratch: Path,
-                 jobs: int, limit: int, timeout: int) -> list[dict]:
-    """Compile each kernel C unit with both compilers at debug-info level
-    into `scratch`, returning per-unit object paths."""
-    target = sweep.TARGETS[arch]
-    scratch.mkdir(parents=True, exist_ok=True)
-    units = []
+class Unit(NamedTuple):
+    """One replayed translation unit: its source, the driver the tree
+    recorded, the arguments behind that driver, and the CC shim's script
+    name when the driver is one of them."""
+    source: str
+    driver: str
+    args: list[str]
+    shim: str | None
+
+
+def split_driver(argv: list[str]) -> tuple[str, list[str], str | None]:
+    """(driver, arguments behind it, CC shim script name or None).
+
+    Kbuild records ``$(CC) <args>``, optionally through an interpreter when
+    ``CC`` names a script."""
+    i = 1 if len(argv) > 1 and Path(argv[0]).name.startswith("python") else 0
+    name = Path(argv[i]).name
+    return argv[i], argv[i + 1:], name if name in CC_SHIMS else None
+
+
+def replay_corpus(tree: Path, limit: int, stride: int) -> list[Unit]:
+    """The kernel C units to replay from the tree's Kbuild `.cmd` corpus.
+    `stride` keeps every Nth unit of the path-sorted corpus, a sample spread
+    over the subsystems rather than a prefix of one; `limit` caps the count."""
+    units: list[Unit] = []
+    seen = 0
     for p in sorted(tree.rglob(".*.o.cmd")):
         if set(p.relative_to(tree).parts) & sweep.SKIP_DIRS:
             continue
@@ -812,18 +866,81 @@ def replay_units(tree: Path, arch: str, badc: Path, scratch: Path,
         if not argv:
             continue
         kind, src = sweep.classify(argv)
-        if kind == "c":
-            units.append((argv, src))
+        if kind != "c":
+            continue
+        seen += 1
+        if (seen - 1) % stride:
+            continue
+        driver, rest, shim = split_driver(argv)
+        units.append(Unit(src, driver, rest, shim))
         if limit and len(units) >= limit:
             break
+    return units
+
+
+def first_line(text: str) -> str:
+    lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+    return lines[0] if lines else ""
+
+
+def reference_cc(args, units: list[Unit], report: dict) -> str | None:
+    """The compiler the reference leg runs, or None to keep each unit's own
+    recorded driver.
+
+    The recorded driver is the reference compiler in a tree the reference
+    compiler built. It is not one in a tree built through a CC shim:
+    re-running the shim compiles the reference leg with badc too, and with
+    ``$BADC`` unset it compiles nothing at all."""
+    shims = sorted({u.shim for u in units if u.shim})
+    shim_units = sum(1 for u in units if u.shim)
+    report["reference_cc"] = {
+        "units": len(units), "shim_units": shim_units,
+        "recorded_shims": shims,
+        "recorded_drivers": sorted({u.driver for u in units})[:4],
+    }
+    if args.real_cc:
+        name, why = args.real_cc, "--real-cc"
+    elif not shims:
+        report["reference_cc"]["resolved"] = "recorded driver"
+        return None
+    else:
+        env = os.environ.get("BADC_REAL_CC")
+        name = env or karch.tool(args.arch, "gcc")
+        why = "$BADC_REAL_CC" if env else f"the {args.arch} gcc"
+    path = executable(name)
+    report["reference_cc"].update({"resolved": name, "source": why,
+                                   "path": path})
+    if path is None:
+        die((f"{args.tree} records {' and '.join(shims)} as the compiler of "
+             f"{shim_units} of {len(units)} replayed units; that is badc's "
+             "Kbuild CC shim, not a compiler, so replaying it makes the "
+             "reference leg badc as well. " if shims else "")
+            + f"The reference compiler for the replay -- {name}, from {why} "
+              "-- is not executable. Pass --real-cc with a compiler that "
+              "builds this kernel"
+            + (", or replay a tree the reference compiler built."
+               if shims else "."))
+    return path
+
+
+def replay_units(tree: Path, arch: str, badc: Path, scratch: Path,
+                 jobs: int, timeout: int, units: list[Unit],
+                 ref_cc: str | None) -> list[dict]:
+    """Compile each unit with both compilers at debug-info level into
+    `scratch`, returning per-unit object paths. `ref_cc` drives the
+    reference leg in place of the recorded driver; None keeps that
+    driver."""
+    target = sweep.TARGETS[arch]
+    scratch.mkdir(parents=True, exist_ok=True)
 
     def one(idx_item):
-        idx, (argv, src) = idx_item
-        stem = f"{idx:05d}-{Path(src).name}"
-        rec = {"source": src, "ref_obj": None, "badc_obj": None,
-               "ref_rc": None, "badc_rc": None}
+        idx, u = idx_item
+        stem = f"{idx:05d}-{Path(u.source).name}"
+        rec = {"source": u.source, "ref_obj": None, "badc_obj": None,
+               "ref_rc": None, "badc_rc": None, "ref_error": None,
+               "badc_error": None}
         ro = scratch / f"{stem}.ref.o"
-        cmd = list(argv)
+        cmd = [ref_cc or u.driver, *u.args]
         for i, a in enumerate(cmd[:-1]):
             if a == "-o":
                 cmd[i + 1] = str(ro)
@@ -831,7 +948,8 @@ def replay_units(tree: Path, arch: str, badc: Path, scratch: Path,
         cmd = [a for a in cmd if not a.startswith("-Wp,-MMD,")]
         bo = scratch / f"{stem}.badc.o"
         bcmd = [str(badc), "--gnu", "-q", "-c", f"--target={target}",
-                *sweep.rewrite(argv), "-g", src, "-o", str(bo)]
+                *sweep.rewrite([u.driver, *u.args]), "-g", u.source,
+                "-o", str(bo)]
         # An object already in the scratch directory is reused: a re-run
         # then costs only the extraction, and an interrupted run resumes.
         for key, obj, run in (("ref", ro, cmd), ("badc", bo, bcmd)):
@@ -844,10 +962,15 @@ def replay_units(tree: Path, arch: str, badc: Path, scratch: Path,
                 rec[f"{key}_rc"] = r.returncode
                 if r.returncode == 0 and obj.is_file():
                     rec[f"{key}_obj"] = str(obj)
+                else:
+                    rec[f"{key}_error"] = (first_line(r.stderr)
+                                           or f"exit {r.returncode}")
             except subprocess.TimeoutExpired:
                 rec[f"{key}_rc"] = "timeout"
+                rec[f"{key}_error"] = f"timeout after {timeout}s"
             except OSError as e:
                 rec[f"{key}_rc"] = f"exec-failed: {e.strerror}"
+                rec[f"{key}_error"] = f"{run[0]}: {e.strerror}"
         return rec
 
     with ThreadPoolExecutor(max_workers=jobs) as pool:
@@ -891,6 +1014,19 @@ def fmt_member_diff(d: dict) -> str:
     bits = ", ".join(
         f"{f} {v[0]}->{v[1]}" for f, v in sorted(d["fields"].items()))
     return f"      {d['member']}: {bits}"
+
+
+def write_report(path: Path | None, report: dict) -> None:
+    if path is None:
+        return
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(report, indent=1, sort_keys=True,
+                                   default=str))
+    except OSError as e:
+        log(f"could not write {path}: {e.strerror}")
+        return
+    log(f"report: {path}")
 
 
 def summarize(res: dict, top: int) -> str:
@@ -1147,47 +1283,64 @@ def _self_test() -> int:
            in unit_aggregates(anon, big_endian=False, addr_size=8)}
     assert [(m["name"], m["offset"]) for m in got["outer"]] == [
         ("head", 0), ("x", 4), ("y", 8)], got["outer"]
+
+    # A tree the badc gate built records the CC shim, not a compiler.
+    shim = str(LINUX_DIR / "buildcc.py")
+    assert split_driver([shim, "-c", "a.c"]) == (shim, ["-c", "a.c"],
+                                                 "buildcc.py")
+    assert split_driver(["python3", shim, "-c"]) == (shim, ["-c"],
+                                                     "buildcc.py")
+    assert split_driver(["gcc", "-c", "a.c"]) == ("gcc", ["-c", "a.c"], None)
+    assert split_driver(["/usr/bin/aarch64-linux-gnu-gcc", "-c"]) == (
+        "/usr/bin/aarch64-linux-gnu-gcc", ["-c"], None)
+
+    ns = argparse.Namespace(real_cc=None, arch="x86_64", tree=Path("/t"))
+    gcc_units = [Unit("a.c", "gcc", ["-c"], None)]
+    shim_units = [Unit("a.c", shim, ["-c"], "buildcc.py")]
+    rep: dict = {}
+    assert reference_cc(ns, gcc_units, rep) is None, rep
+    assert rep["reference_cc"]["recorded_shims"] == []
+    saved = os.environ.get("BADC_REAL_CC")
+    try:
+        os.environ["BADC_REAL_CC"] = sys.executable
+        rep = {}
+        assert reference_cc(ns, shim_units, rep) == sys.executable, rep
+        assert rep["reference_cc"]["shim_units"] == 1, rep
+        ns.real_cc = sys.executable
+        assert reference_cc(ns, gcc_units, {}) == sys.executable
+        ns.real_cc = None
+        # A shim with no compiler behind it stops the run rather than
+        # reporting an empty comparison.
+        os.environ["BADC_REAL_CC"] = "layout-self-test-absent-cc"
+        try:
+            reference_cc(ns, shim_units, {})
+        except SystemExit as e:
+            assert "Kbuild CC shim" in str(e.code), e.code
+            assert "layout-self-test-absent-cc" in str(e.code), e.code
+        else:
+            raise AssertionError("a shim with no compiler must stop the run")
+    finally:
+        os.environ.pop("BADC_REAL_CC", None)
+        if saved is not None:
+            os.environ["BADC_REAL_CC"] = saved
+
+    # A run that cannot compare still publishes its report: the artifact is
+    # what explains the failure.
+    with tempfile.TemporaryDirectory() as d:
+        rp = Path(d) / "out" / "layout.json"
+        try:
+            main(["--replay", "--tree", d, "--report", str(rp),
+                  "--dwarfdump", sys.executable])
+        except SystemExit:
+            pass
+        assert rp.is_file(), rp
+        assert json.loads(rp.read_text()).get("error"), rp.read_text()
+
     print("linux layout: self-test ok")
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(
-        description="compare struct layouts between a reference-compiler "
-                    "kernel build and a badc one")
-    ap.add_argument("--arch", choices=ARCHES, default=host_arch())
-    ap.add_argument("--ref-elf", type=Path, help="reference ELF to compare")
-    ap.add_argument("--badc-elf", type=Path, help="badc ELF to compare")
-    ap.add_argument("--ref-tree", type=Path, help="reference kernel tree")
-    ap.add_argument("--badc-tree", type=Path, help="badc kernel tree")
-    ap.add_argument("--replay", action="store_true",
-                    help="compile each unit of --tree with both compilers "
-                         "and compare per unit")
-    ap.add_argument("--tree", type=Path, help="kernel tree for --replay")
-    ap.add_argument("--badc", type=Path, help="badc binary")
-    ap.add_argument("--scratch", type=Path,
-                    help="replay object directory (default: alongside "
-                         "--report)")
-    ap.add_argument("--limit", type=int, default=0,
-                    help="replay at most N units (0: all)")
-    ap.add_argument("-j", "--jobs", type=int, default=os.cpu_count() or 4)
-    ap.add_argument("--timeout", type=int, default=600,
-                    help="seconds per compile in --replay")
-    ap.add_argument("--cross-check", type=int, default=0, metavar="N",
-                    help="re-read N aggregates with gdb and assert the parse "
-                         "agrees")
-    ap.add_argument("--top", type=int, default=25,
-                    help="differences to print in the summary")
-    ap.add_argument("--report", type=Path, help="write the full result as JSON")
-    ap.add_argument("--dwarfdump", default="llvm-dwarfdump")
-    ap.add_argument("--gdb", default="gdb")
-    ap.add_argument("--self-test", action="store_true",
-                    help="check the DWARF parse and the differ, no inputs")
-    args = ap.parse_args(argv)
-
-    if args.self_test:
-        return _self_test()
-
+def run(args, report: dict) -> int:
     modes = [bool(args.ref_elf and args.badc_elf),
              bool(args.ref_tree and args.badc_tree),
              bool(args.replay)]
@@ -1196,9 +1349,6 @@ def main(argv: list[str] | None = None) -> int:
             "--ref-tree/--badc-tree, or --replay --tree")
     dwarfdump = tool(args.dwarfdump)
 
-    started = time.time()
-    report: dict = {"arch": args.arch, "mode": None, "preconditions": {},
-                    "artifacts": []}
     ref_acc: dict = {}
     badc_acc: dict = {}
     sample_elf: Path | None = None
@@ -1216,19 +1366,52 @@ def main(argv: list[str] | None = None) -> int:
             "config_sha256": config_digest(args.tree)[0],
             "release": kernel_release(args.tree),
             "same_source_and_config": "by construction: both compilers "
-                                      "replay the same recorded command over "
-                                      "the same tree",
+                                      "replay the same recorded arguments "
+                                      "over the same tree",
         }
-        log(f"replaying units from {args.tree} (jobs={args.jobs})")
+        stride = max(1, args.stride)
+        units = replay_corpus(args.tree, args.limit, stride)
+        if not units:
+            die(f"{args.tree} holds no kernel C unit .cmd file; the tree has "
+                "not been built, so there is no command to replay")
+        # Resolved before anything is compiled: a reference leg that cannot
+        # run is a defect in the invocation, not a result to be reported as
+        # an empty comparison.
+        ref_cc = reference_cc(args, units, report)
+        log(f"replaying {len(units)} units from {args.tree} "
+            f"(jobs={args.jobs}, reference {ref_cc or 'as recorded'})")
         recs = replay_units(args.tree, args.arch, badc, scratch, args.jobs,
-                            args.limit, args.timeout)
+                            args.timeout, units, ref_cc)
         ok_ref = sum(1 for r in recs if r["ref_obj"])
         ok_badc = sum(1 for r in recs if r["badc_obj"])
         both = [r for r in recs if r["ref_obj"] and r["badc_obj"]]
         log(f"units: {len(recs)}; reference built {ok_ref}; badc built "
             f"{ok_badc}; both {len(both)}")
-        report["replay"] = {"units": len(recs), "ref_built": ok_ref,
-                            "badc_built": ok_badc, "both": len(both)}
+        report["replay"] = {
+            "units": len(recs), "stride": stride, "ref_built": ok_ref,
+            "badc_built": ok_badc, "both": len(both),
+            "reference_cc": ref_cc or "as recorded",
+            "failures": [{k: r[k] for k in ("source", "ref_rc", "ref_error",
+                                            "badc_rc", "badc_error")}
+                         for r in recs
+                         if not (r["ref_obj"] and r["badc_obj"])][:50],
+        }
+        if not both:
+            stalled = [n for n, k in (("the reference compiler", ok_ref),
+                                      ("badc", ok_badc)) if not k]
+            why = (" and ".join(stalled) + " compiled nothing" if stalled
+                   else "no unit compiled on both sides")
+            first = next((r for r in recs
+                          if not (r["ref_obj"] and r["badc_obj"])), None)
+            detail = "; ".join(
+                f"{lbl} {first[k + '_error']}" for k, lbl in
+                (("ref", "reference:"), ("badc", "badc:"))
+                if first and first[k + "_error"])
+            die(f"the replay produced no comparable unit pair out of "
+                f"{len(recs)} units: {why} (reference {ok_ref}, badc "
+                f"{ok_badc}, reference compiler {ref_cc or 'as recorded'})."
+                + (f" First failure, {first['source']} -- {detail}"
+                   if detail else ""))
         payload = [(r["ref_obj"], r["badc_obj"], dwarfdump) for r in both]
         with ProcessPoolExecutor(max_workers=args.jobs) as pool:
             for i, (rx, bx) in enumerate(
@@ -1280,10 +1463,9 @@ def main(argv: list[str] | None = None) -> int:
 
     res = compare(ref_acc, badc_acc)
     report["result"] = res
-    report["seconds"] = round(time.time() - started, 1)
 
     if args.cross_check and sample_elf is not None:
-        gdb = tool(args.gdb)
+        gdb = tool(args.gdb, "for --cross-check")
         names = [d["name"] for d in res["differences"][:args.cross_check]]
         pool = [n for n, e in sorted(badc_acc["aggregates"].items())
                 if dominant(e)[0]["members"] and n not in names]
@@ -1295,11 +1477,68 @@ def main(argv: list[str] | None = None) -> int:
             f"({cc['unavailable']} not visible to gdb)")
 
     print(summarize(res, args.top))
-    if args.report:
-        args.report.parent.mkdir(parents=True, exist_ok=True)
-        args.report.write_text(json.dumps(report, indent=1, sort_keys=True))
-        log(f"report: {args.report}")
     return 1 if res["counts"]["layout_differing"] else 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(
+        description="compare struct layouts between a reference-compiler "
+                    "kernel build and a badc one")
+    ap.add_argument("--arch", choices=ARCHES, default=host_arch())
+    ap.add_argument("--ref-elf", type=Path, help="reference ELF to compare")
+    ap.add_argument("--badc-elf", type=Path, help="badc ELF to compare")
+    ap.add_argument("--ref-tree", type=Path, help="reference kernel tree")
+    ap.add_argument("--badc-tree", type=Path, help="badc kernel tree")
+    ap.add_argument("--replay", action="store_true",
+                    help="compile each unit of --tree with both compilers "
+                         "and compare per unit")
+    ap.add_argument("--tree", type=Path, help="kernel tree for --replay")
+    ap.add_argument("--badc", type=Path, help="badc binary")
+    ap.add_argument("--real-cc",
+                    help="reference compiler for --replay; replaces the "
+                         "driver the tree recorded (default: that driver, or "
+                         "$BADC_REAL_CC / the target's gcc when the tree "
+                         "records a badc CC shim)")
+    ap.add_argument("--scratch", type=Path,
+                    help="replay object directory (default: alongside "
+                         "--report)")
+    ap.add_argument("--limit", type=int, default=0,
+                    help="replay at most N units (0: all)")
+    ap.add_argument("--stride", type=int, default=1,
+                    help="replay every Nth unit of the path-sorted corpus "
+                         "(default 1: every unit)")
+    ap.add_argument("-j", "--jobs", type=int, default=os.cpu_count() or 4)
+    ap.add_argument("--timeout", type=int, default=600,
+                    help="seconds per compile in --replay")
+    ap.add_argument("--cross-check", type=int, default=0, metavar="N",
+                    help="re-read N aggregates with gdb and assert the parse "
+                         "agrees")
+    ap.add_argument("--top", type=int, default=25,
+                    help="differences to print in the summary")
+    ap.add_argument("--report", type=Path, help="write the full result as JSON")
+    ap.add_argument("--dwarfdump", default="llvm-dwarfdump")
+    ap.add_argument("--gdb", default="gdb")
+    ap.add_argument("--self-test", action="store_true",
+                    help="check the DWARF parse and the differ, no inputs")
+    args = ap.parse_args(argv)
+
+    if args.self_test:
+        return _self_test()
+
+    started = time.time()
+    report: dict = {"arch": args.arch, "mode": None, "preconditions": {},
+                    "artifacts": []}
+    try:
+        return run(args, report)
+    except SystemExit as e:
+        # A precondition that stops the run is the finding, so it belongs in
+        # the report the caller publishes, not only on the console.
+        if isinstance(e.code, str):
+            report["error"] = e.code
+        raise
+    finally:
+        report.setdefault("seconds", round(time.time() - started, 1))
+        write_report(args.report, report)
 
 
 if __name__ == "__main__":

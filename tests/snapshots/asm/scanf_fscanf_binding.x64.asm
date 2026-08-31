@@ -67,11 +67,10 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	%rbx, (%rsp)
-               	xorq	%rbx, %rbx
-               	movl	%ebx, -0x10(%rbp)
-               	movl	%ebx, -0x8(%rbp)
+               	subq	$0x10, %rsp
+               	xorq	%rax, %rax
+               	movl	%eax, -0x10(%rbp)
+               	movl	%eax, -0x8(%rbp)
                	cmpl	$0x1869f, %edi          # imm = 0x1869F
                	jle	<addr>
                	leaq	<rip>, %rdi
@@ -79,7 +78,7 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
-               	movq	%rbx, %rdi
+               	xorq	%rdi, %rdi
                	callq	<addr>
                	movq	%rax, %rdi
                	leaq	<rip>, %rsi
@@ -91,7 +90,6 @@ Disassembly of section .text:
                	movslq	-0x8(%rbp), %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
-               	movq	(%rsp), %rbx
-               	addq	$0x20, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq

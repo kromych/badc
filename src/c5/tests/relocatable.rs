@@ -258,6 +258,49 @@ fn asm_label_renames_every_emitted_symbol() {
 }
 
 #[test]
+fn an_internal_linkage_data_alias_names_its_target() {
+    // `static T a __attribute__((alias("t")))` is an additional local name
+    // for `t`'s storage. Linux builds `MODULE_DEVICE_TABLE` out of exactly
+    // this form and modpost reads the device table through the alias
+    // symbol's section, value and size, so dropping it loses every
+    // modalias the module would have carried.
+    const STB_LOCAL: u8 = 0;
+    const STB_GLOBAL: u8 = 1;
+    const STT_OBJECT: u8 = 1;
+    let a = compile_obj(
+        "struct id { unsigned v, d, cls; };\n\
+         static const struct id tbl[] = { { 1, 2, 3 }, { 0, 0, 0 } };\n\
+         int glob[3] = { 4, 5, 6 };\n\
+         static typeof(tbl) tbl_alias __attribute__((used, alias(\"tbl\")));\n\
+         static int glob_alias[3] __attribute__((used, alias(\"glob\")));\n\
+         extern const struct id tbl_ext[] __attribute__((alias(\"tbl\")));\n\
+         const struct id *anchor(void) { return tbl; }\n",
+        "a.o",
+    );
+    let sym = |n: &str| {
+        a.symbols
+            .iter()
+            .find(|s| s.name == n)
+            .unwrap_or_else(|| panic!("`{n}` missing from the symbol table"))
+    };
+    for (alias, target, binding) in [
+        ("tbl_alias", "tbl", STB_LOCAL),
+        ("glob_alias", "glob", STB_LOCAL),
+        ("tbl_ext", "tbl", STB_GLOBAL),
+    ] {
+        let (al, tg) = (sym(alias), sym(target));
+        assert_eq!(al.binding, binding, "{alias} binding");
+        assert_eq!(al.kind, STT_OBJECT, "{alias} type");
+        assert_eq!(al.value, tg.value, "{alias} value");
+        assert_eq!(al.size, tg.size, "{alias} size");
+        assert!(
+            matches!((al.sec, tg.sec), (EtSymRef::Section(i), EtSymRef::Section(j)) if i == j),
+            "{alias} must sit in {target}'s section"
+        );
+    }
+}
+
+#[test]
 fn duplicate_strong_definitions_are_rejected() {
     let a = compile_obj("int dup_val = 1;\n", "a.o");
     let b = compile_obj("int dup_val = 2;\n", "b.o");
@@ -284,6 +327,156 @@ fn locals_kept_per_object() {
     let last_local = merged.symbols.iter().rposition(|s| s.binding == 0).unwrap();
     let first_global = merged.symbols.iter().position(|s| s.binding != 0).unwrap();
     assert!(last_local < first_global);
+}
+
+#[test]
+fn unreferenced_section_static_drops_its_whole_cascade() {
+    // A section attribute selects placement, not retention (gcc parity),
+    // so an unreferenced section-attributed static drops and the sweep
+    // cascades: the static function only its initializer named goes with
+    // it, and with that function goes its reference to a symbol this unit
+    // never defines. The kernel earlycon table takes this shape in a
+    // module build, where the declaration keeps the section and loses
+    // `used`. `used`, an ordinary reference, and a name spelled in an asm
+    // template each still pin their definition.
+    let a = compile_obj(
+        "struct e { const char *n; int (*s)(int); };\n\
+         int builtin_only(int);\n\
+         static int dead_setup(int v) { return builtin_only(v); }\n\
+         static const struct e dead_tbl __attribute__((unused))\n\
+           __attribute__((section(\"__earlycon_table\"))) = { \"d\", dead_setup };\n\
+         static int used_setup(int v) { return v + 1; }\n\
+         static const struct e used_tbl __attribute__((used))\n\
+           __attribute__((section(\"__earlycon_table\"))) = { \"u\", used_setup };\n\
+         static int live_counter = 3;\n\
+         static int asm_only = 9;\n\
+         int reach(int i) { __asm__(\"lea asm_only(%rip), %rax\");\n\
+           live_counter += i; return live_counter; }\n",
+        "a.o",
+    );
+    let mentioned = |n: &str| a.symbols.iter().any(|s| s.name == n);
+    let defined = |n: &str| {
+        a.symbols
+            .iter()
+            .any(|s| s.name == n && s.sec != EtSymRef::Undef)
+    };
+
+    assert!(!mentioned("dead_tbl"), "unreferenced section table kept");
+    assert!(!mentioned("dead_setup"), "table's callee kept");
+    assert!(
+        !mentioned("builtin_only"),
+        "dropped cascade left an undefined reference"
+    );
+
+    assert!(defined("used_tbl"), "`used` object dropped");
+    assert!(defined("used_setup"), "`used` object's callee dropped");
+    assert!(defined("live_counter"), "referenced static dropped");
+    assert!(defined("asm_only"), "asm-template-named static dropped");
+}
+
+#[test]
+fn an_asm_named_definition_gets_no_undefined_entry_beside_it() {
+    // A name spelled in an inline-asm template is a reference by name.
+    // Where the unit defines the name, the reference binds to that
+    // definition: an undefined entry beside it is a second reference to
+    // the same name, and for an internal-linkage definition nothing can
+    // ever resolve it -- a module carrying one fails to load. Only a
+    // name nothing here defines keeps an undefined entry.
+    let a = compile_obj(
+        "static const char s_obj[8] = \"s\";\n\
+         const char g_obj[8] = \"g\";\n\
+         extern const char x_obj[8];\n\
+         static int s_fun(int v) { return v; }\n\
+         int g_fun(int v) { return v; }\n\
+         int reach(int v) {\n\
+           __asm__(\"lea s_obj(%rip), %rax\");\n\
+           __asm__(\"lea g_obj(%rip), %rax\");\n\
+           __asm__(\"lea x_obj(%rip), %rax\");\n\
+           __asm__(\"lea s_fun(%rip), %rax\");\n\
+           __asm__(\"lea g_fun(%rip), %rax\");\n\
+           return v; }\n",
+        "a.o",
+    );
+    let named = |n: &str, undef: bool| {
+        a.symbols
+            .iter()
+            .filter(|s| s.name == n && (s.sec == EtSymRef::Undef) == undef)
+            .count()
+    };
+    for n in ["s_obj", "g_obj", "s_fun", "g_fun"] {
+        assert_eq!(named(n, false), 1, "`{n}` lost its definition");
+        assert_eq!(named(n, true), 0, "`{n}` got an undefined entry too");
+    }
+    assert_eq!(named("x_obj", true), 1, "a genuine extern lost its UNDEF");
+    assert_eq!(named("x_obj", false), 0, "a genuine extern gained a body");
+
+    // Every relocation resolves against a defined symbol, bar the one
+    // naming the object this unit does not define.
+    for sec in &a.sections {
+        for r in &sec.relocs {
+            let sym = &a.symbols[r.sym as usize];
+            assert!(
+                sym.sec != EtSymRef::Undef || sym.name == "x_obj",
+                "{}: reloc at {:#x} targets undefined `{}`",
+                sec.name,
+                r.offset,
+                sym.name
+            );
+        }
+    }
+}
+
+#[test]
+fn block_static_shadowing_extern_keeps_per_instance_objects() {
+    // Same-named block-scope statics across sibling scopes and functions,
+    // shadowing a file-scope `extern` of the name (the kernel's or51132.c
+    // against `sections.h`): each static is a defined local object and no
+    // reference resolves to the extern unless the extern itself is named.
+    let base = "extern char _data[];\n\
+                extern int sink(const unsigned char *p, int n);\n\
+                int f(int k) {\n\
+                    if (k) { static const unsigned char _data[] = {1, 2}; return sink(_data, 2); }\n\
+                    { static const unsigned char _data[] = {3, 4, 5}; return sink(_data, 3); }\n\
+                }\n\
+                int g(void) {\n\
+                    static const unsigned char _data[] = {6};\n\
+                    static const unsigned char *p = _data;\n\
+                    static const unsigned char *tab[] = {_data, &_data[0]};\n\
+                    return sink(p, 1) + sink(tab[1], 1);\n\
+                }\n";
+    let count = |a: &EtRel| {
+        let defined = a
+            .symbols
+            .iter()
+            .filter(|s| {
+                s.name.starts_with("_data.")
+                    && s.binding == 0
+                    && matches!(s.sec, EtSymRef::Section(_))
+            })
+            .count();
+        let undef = a
+            .symbols
+            .iter()
+            .filter(|s| s.name == "_data" && matches!(s.sec, EtSymRef::Undef))
+            .count();
+        (defined, undef)
+    };
+    for target in ["x64", "aarch64"] {
+        let a = match target {
+            "x64" => compile_obj(base, "a.o"),
+            _ => compile_obj_aarch64(base, "a.o"),
+        };
+        // One defined local object per declaration, zero undefined `_data`.
+        assert_eq!(count(&a), (3, 0), "{target}");
+        assert!(!a.symbols.iter().any(|s| s.name == "_data"), "{target}");
+    }
+    // A genuine reference to the file-scope extern coexists with the
+    // shadowing statics: exactly one undefined `_data` row, defined
+    // objects unchanged.
+    let with_ref =
+        alloc::format!("{base}int h(void) {{ return sink((const unsigned char *)_data, 1); }}\n");
+    let b = compile_obj(&with_ref, "b.o");
+    assert_eq!(count(&b), (3, 1));
 }
 
 #[test]
@@ -1490,4 +1683,173 @@ fn an_aarch64_instruction_relocation_has_no_implicit_addend() {
     assert!(msg.contains("has no implicit-addend field"), "{msg}");
     assert!(msg.contains("R_AARCH64_"), "{msg}");
     assert!(!msg.contains("internal compiler error"), "{msg}");
+}
+
+fn compile_pie_optimized(src: &str, target: Target) -> EtRel {
+    let copts = CompileOptions {
+        no_entry_point: true,
+        ..Default::default()
+    };
+    let program = Compiler::with_options(src.to_string(), target, copts)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        optimize: true,
+        pic: true,
+        pic_link: true,
+        ..Default::default()
+    };
+    parse_et_rel(
+        &emit_native_with_options(&program, target, opts).expect("emit"),
+        "pie.o",
+    )
+    .expect("parse")
+}
+
+/// C99 6.7.3p5: a `const` pointer object with static storage duration
+/// holds its initializer's address for the whole execution, so at `-O`
+/// a load from it is the address constant itself and no pointer object,
+/// and no absolute relocation, reaches the object -- the form gcc's
+/// `-fpie` objects take, and the one a consumer that forbids absolute
+/// relocations outside the debug sections (the kernel's EFI stub)
+/// requires. An object whose address escapes stays, with its
+/// relocation.
+#[test]
+fn const_pointer_objects_fold_to_their_address_in_a_pie_object() {
+    use crate::c5::object::elf_reloc_types as rt;
+    const FOLDED: &str = "\
+static const char *const file_scope = \"file scope\";\n\
+static const struct { const char *name; int n; } agg = {\"aggregate\", 7};\n\
+static const int table[4] = {10, 20, 30, 40};\n\
+static const int *const table_end = &table[4];\n\
+extern int ext_arr[8];\n\
+static int *const ext_two = &ext_arr[2];\n\
+static int twice(int v) { return v * 2; }\n\
+static int (*const op)(int) = twice;\n\
+const char *pick(int k) {\n\
+    static const char *const block_scope = \"block scope\";\n\
+    switch (k) {\n\
+    case 1: return file_scope;\n\
+    case 2: return block_scope + 6;\n\
+    case 3: return agg.name;\n\
+    default: return block_scope;\n\
+    }\n\
+}\n\
+const int *end(void) { return table_end; }\n\
+int *ext(void) { return ext_two; }\n\
+int apply(int v) { return op(v) + agg.n; }\n";
+    const ESCAPED: &str = "\
+static const char *const escaped = \"escaped\";\n\
+const char *const *through(void) { return &escaped; }\n";
+    let pointer_objects = [
+        "file_scope",
+        "block_scope",
+        "agg",
+        "table_end",
+        "ext_two",
+        "op",
+    ];
+    for (target, abs) in [
+        (Target::LinuxAarch64, rt::R_AARCH64_ABS64),
+        (Target::LinuxX64, rt::R_X86_64_64),
+    ] {
+        let abs_relocs = |o: &EtRel| -> Vec<(String, u64)> {
+            o.sections
+                .iter()
+                .filter(|s| !s.name.starts_with(".debug"))
+                .flat_map(|s| {
+                    s.relocs
+                        .iter()
+                        .filter(|r| r.rtype == abs)
+                        .map(move |r| (s.name.clone(), r.offset))
+                })
+                .collect()
+        };
+        let obj = compile_pie_optimized(FOLDED, target);
+        assert_eq!(abs_relocs(&obj), Vec::new(), "{target:?}");
+        assert!(
+            !obj.sections.iter().any(|s| s.name == ".data.rel.ro"),
+            "{target:?}: a folded pointer object left in .data.rel.ro"
+        );
+        let left: Vec<&str> = obj
+            .symbols
+            .iter()
+            .map(|s| s.name.as_str())
+            .filter(|n| {
+                pointer_objects
+                    .iter()
+                    .any(|p| n == p || n.strip_prefix(p).is_some_and(|t| t.starts_with('.')))
+            })
+            .collect();
+        assert_eq!(left, Vec::<&str>::new(), "{target:?}");
+        // The extern's address is materialized in code, by name.
+        let ext_arr = obj
+            .symbols
+            .iter()
+            .position(|s| s.name == "ext_arr")
+            .expect("ext_arr stays undefined") as u32;
+        let text = obj
+            .sections
+            .iter()
+            .find(|s| s.name == ".text")
+            .expect(".text");
+        assert!(
+            text.relocs.iter().any(|r| r.sym == ext_arr),
+            "{target:?}: no text relocation against ext_arr"
+        );
+
+        let obj = compile_pie_optimized(ESCAPED, target);
+        assert!(
+            obj.symbols.iter().any(|s| s.name == "escaped"),
+            "{target:?}: an address-taken pointer object must stay"
+        );
+        assert_eq!(
+            abs_relocs(&obj),
+            alloc::vec![(String::from(".data.rel.ro"), 0)],
+            "{target:?}"
+        );
+    }
+}
+
+/// A relocatable link writes the map `-Map` asks for. GNU ld does, and
+/// kbuild's `modules.builtin.ranges` step reads `vmlinux.o.map` to
+/// attribute a section's bytes to the object that contributed them.
+/// Its reader (`scripts/generate_builtin_ranges.awk`) matches rows of
+/// exactly four fields that begin with one space and carry a non-zero
+/// size, so the row shape is what this pins.
+#[test]
+fn a_relocatable_link_renders_the_map_kbuild_reads() {
+    use crate::c5::linker::relocatable::link_relocatable_with_map;
+
+    let a = compile_obj("int av;\nint af(void) { return av; }\n", "a.o");
+    let b = compile_obj("int bv;\nint bf(void) { return bv; }\n", "b.o");
+    let (_, map) = link_relocatable_with_map(&[a, b], &RelinkOptions::default(), "out.o")
+        .expect("link with map");
+
+    // Rows the kernel's awk rule accepts: ` <osect> <addr> <size> <obj>`.
+    let rows: alloc::vec::Vec<alloc::vec::Vec<&str>> = map
+        .lines()
+        .filter(|l| l.starts_with(' ') && !l.starts_with("  "))
+        .map(|l| l.split_whitespace().collect::<alloc::vec::Vec<_>>())
+        .filter(|f| f.len() == 4 && f[2] != "0x0")
+        .collect();
+    assert!(
+        !rows.is_empty(),
+        "no rows the ranges step could read:\n{map}"
+    );
+
+    let text: alloc::vec::Vec<_> = rows.iter().filter(|f| f[0] == ".text").collect();
+    assert_eq!(text.len(), 2, "one .text row per input: {text:?}");
+    assert_eq!(text[0][3], "a.o");
+    assert_eq!(text[1][3], "b.o");
+    // The second input starts where the first ends, so the offsets
+    // partition the output section rather than repeating.
+    let off = |s: &str| u64::from_str_radix(s.trim_start_matches("0x"), 16).unwrap();
+    let size = |s: &str| u64::from_str_radix(s.trim_start_matches("0x"), 16).unwrap();
+    assert_eq!(off(text[0][1]), 0);
+    assert!(off(text[1][1]) >= size(text[0][2]), "{text:?}");
+
+    assert!(map.contains("LOAD a.o"), "inputs are listed:\n{map}");
+    assert!(map.contains("OUTPUT(out.o "), "output is named:\n{map}");
 }

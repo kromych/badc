@@ -215,6 +215,7 @@ impl Compiler {
     /// rvalue path tagged.
     pub(super) fn mark_emit_scalar_load(&mut self) {
         self.pending.fn_ptr_chain_depth = -1;
+        self.pending.fn_ptr_depth_is_array_elem = false;
         self.pending.last_loaded_local = None;
         self.pending.last_emit_was_indirect_call = false;
         self.pending.last_imm_was_zero = false;
@@ -225,6 +226,7 @@ impl Compiler {
     /// accumulator becomes the rhs.
     pub(super) fn ast_psh(&mut self) {
         self.pending.fn_ptr_chain_depth = -1;
+        self.pending.fn_ptr_depth_is_array_elem = false;
         self.pending.last_emit_was_indirect_call = false;
         self.pending.last_imm_was_zero = false;
         self.ast_vstack.push(self.ast_acc.take());
@@ -236,6 +238,7 @@ impl Compiler {
     /// state-tracking flags every binop emit needs to clear.
     pub(super) fn ast_binop(&mut self, binop: super::super::ir::BinOp) {
         self.pending.fn_ptr_chain_depth = -1;
+        self.pending.fn_ptr_depth_is_array_elem = false;
         self.pending.last_emit_was_indirect_call = false;
         self.pending.last_imm_was_zero = false;
         self.ast_apply_binop(binop);
@@ -245,6 +248,7 @@ impl Compiler {
     /// (C99 6.5.3.3p3, result type IEEE-754 negated input).
     pub(super) fn ast_fneg(&mut self) {
         self.pending.fn_ptr_chain_depth = -1;
+        self.pending.fn_ptr_depth_is_array_elem = false;
         self.pending.last_emit_was_indirect_call = false;
         self.pending.last_imm_was_zero = false;
         self.ast_apply_unary(super::super::ast::UnOp::Neg);
@@ -268,6 +272,7 @@ impl Compiler {
     /// don't drive an AST hook funnel through here.
     pub(super) fn mark_emit_other(&mut self) {
         self.pending.fn_ptr_chain_depth = -1;
+        self.pending.fn_ptr_depth_is_array_elem = false;
         self.pending.last_emit_was_indirect_call = false;
         self.pending.last_imm_was_zero = false;
     }
@@ -279,6 +284,7 @@ impl Compiler {
     /// (char, short, int, float, or pointer-sized).
     pub(super) fn ast_assign(&mut self) {
         self.pending.fn_ptr_chain_depth = -1;
+        self.pending.fn_ptr_depth_is_array_elem = false;
         self.pending.last_emit_was_indirect_call = false;
         self.pending.last_imm_was_zero = false;
         self.ast_apply_assign();
@@ -321,6 +327,7 @@ impl Compiler {
     /// helper only updates the trailing-emit peek flags.
     pub(super) fn emit_imm(&mut self, val: i64) {
         self.pending.fn_ptr_chain_depth = -1;
+        self.pending.fn_ptr_depth_is_array_elem = false;
         self.pending.last_emit_was_indirect_call = false;
         // Only literal-zero immediates set the peek flag; every
         // other immediate clears it.
@@ -776,6 +783,7 @@ impl Compiler {
         s.h_fn_ptr_ret_indirection = s.fn_ptr_ret_indirection;
         s.h_params = s.params.clone();
         s.h_is_variadic = s.is_variadic;
+        s.h_conv = s.conv;
         s.h_array_size = s.array_size;
         s.h_type_align = s.type_align;
         // Clone rather than `mem::take`: the inner-scope binding
@@ -796,6 +804,16 @@ impl Compiler {
         s.h_vla_ptr_slot = s.vla_ptr_slot;
         s.h_vla_size_slot = s.vla_size_slot;
         s.h_is_zero_len_array = s.is_zero_len_array;
+        // Storage-shape and linkage-mark fields a block-scope static's
+        // declarator overwrites on the shared slot.
+        s.h_reserved_data_bytes = s.reserved_data_bytes;
+        s.h_fam_init_bytes = s.fam_init_bytes;
+        s.h_data_align = s.data_align;
+        s.h_is_thread_local = s.is_thread_local;
+        s.h_is_const_qualified = s.is_const_qualified;
+        s.h_storage_is_const = s.storage_is_const;
+        s.h_runtime_initialized = s.runtime_initialized;
+        s.h_is_extern_decl = s.is_extern_decl;
         // The inner binding starts unpinned; a `register ... asm("reg")`
         // declarator sets its own binding after this shadow.
         s.h_asm_register = s.asm_register;
@@ -809,6 +827,8 @@ impl Compiler {
         // The inner binding records its own folded const value, if any.
         s.h_const_object_value = s.const_object_value;
         s.const_object_value = None;
+        s.h_static_local_record = s.static_local_record;
+        s.static_local_record = None;
     }
 
     /// Inverse of [`Self::shadow_symbol`]: restore the saved outer
@@ -825,6 +845,7 @@ impl Compiler {
             sym.class = 0;
             sym.is_scope_bound = false;
             sym.block_extern_active = false;
+            sym.static_local_record = sym.h_static_local_record;
             return;
         }
         sym.class = sym.h_class;
@@ -834,6 +855,7 @@ impl Compiler {
         sym.fn_ptr_ret_indirection = sym.h_fn_ptr_ret_indirection;
         sym.params = core::mem::take(&mut sym.h_params);
         sym.is_variadic = sym.h_is_variadic;
+        sym.conv = sym.h_conv;
         sym.array_size = sym.h_array_size;
         sym.type_align = sym.h_type_align;
         sym.inner_array_size = sym.h_inner_array_size;
@@ -842,10 +864,19 @@ impl Compiler {
         sym.vla_ptr_slot = sym.h_vla_ptr_slot;
         sym.vla_size_slot = sym.h_vla_size_slot;
         sym.is_zero_len_array = sym.h_is_zero_len_array;
+        sym.reserved_data_bytes = sym.h_reserved_data_bytes;
+        sym.fam_init_bytes = sym.h_fam_init_bytes;
+        sym.data_align = sym.h_data_align;
+        sym.is_thread_local = sym.h_is_thread_local;
+        sym.is_const_qualified = sym.h_is_const_qualified;
+        sym.storage_is_const = sym.h_storage_is_const;
+        sym.runtime_initialized = sym.h_runtime_initialized;
+        sym.is_extern_decl = sym.h_is_extern_decl;
         sym.asm_register = sym.h_asm_register;
         sym.is_global_register = sym.h_is_global_register;
         sym.asm_name = sym.h_asm_name.take();
         sym.const_object_value = sym.h_const_object_value;
+        sym.static_local_record = sym.h_static_local_record;
         sym.is_scope_bound = false;
         sym.block_extern_active = false;
         // The register-asm binding belongs to the block-scope local
@@ -866,6 +897,7 @@ impl Compiler {
             && sym.fn_ptr_ret_indirection == sym.h_fn_ptr_ret_indirection
             && sym.params == sym.h_params
             && sym.is_variadic == sym.h_is_variadic
+            && sym.conv == sym.h_conv
             && sym.array_size == sym.h_array_size
             && sym.type_align == sym.h_type_align
             && sym.inner_array_size == sym.h_inner_array_size
@@ -874,10 +906,19 @@ impl Compiler {
             && sym.vla_ptr_slot == sym.h_vla_ptr_slot
             && sym.vla_size_slot == sym.h_vla_size_slot
             && sym.is_zero_len_array == sym.h_is_zero_len_array
+            && sym.reserved_data_bytes == sym.h_reserved_data_bytes
+            && sym.fam_init_bytes == sym.h_fam_init_bytes
+            && sym.data_align == sym.h_data_align
+            && sym.is_thread_local == sym.h_is_thread_local
+            && sym.is_const_qualified == sym.h_is_const_qualified
+            && sym.storage_is_const == sym.h_storage_is_const
+            && sym.runtime_initialized == sym.h_runtime_initialized
+            && sym.is_extern_decl == sym.h_is_extern_decl
             && sym.asm_register == sym.h_asm_register
             && sym.is_global_register == sym.h_is_global_register
             && sym.asm_name == sym.h_asm_name
             && sym.const_object_value == sym.h_const_object_value
+            && sym.static_local_record == sym.h_static_local_record
             && !sym.is_scope_bound
             && !sym.block_extern_active
     }
@@ -1049,6 +1090,7 @@ impl Compiler {
             is_always_inline: self.pending_is_always_inline,
             is_noinline: self.pending_is_noinline,
             is_naked: self.pending_is_naked,
+            conv: self.current_func_conv,
             n_locals: self.max_loc_offs,
             name: self.current_function_name.clone(),
             param_tys,
@@ -1070,6 +1112,7 @@ impl Compiler {
         self.pending_is_always_inline = false;
         self.pending_is_noinline = false;
         self.pending_is_naked = false;
+        self.current_func_conv = crate::c5::codegen::CallConv::Target;
         self.finished_functions.push(finished);
     }
 
@@ -1147,6 +1190,14 @@ impl Compiler {
         // by name / same-TU offset regardless of the class restored at
         // block exit. Record it for the walker.
         let block_extern = class == Token::Glo as i64 && s.block_extern_active;
+        // A reference to a block-scope static resolves against its
+        // emission record: the slot's binding is restored at scope exit,
+        // so walk-time re-resolution through the slot would see whatever
+        // file-scope binding the name has (C99 6.2.1p4 shadowing).
+        let sym = match s.static_local_record {
+            Some(r) if class == Token::Glo as i64 && !s.block_extern_active => r,
+            _ => sym,
+        };
         let id = self.ast.push_expr(
             Expr::Ident {
                 sym,
@@ -1385,25 +1436,11 @@ impl Compiler {
     /// walker allocates the runtime-sized storage at this point.
     pub(super) fn ast_emit_vla_decl(
         &mut self,
-        sym: u32,
-        elem_ty: i64,
-        elem_size: i64,
-        ptr_slot: i64,
-        size_slot: i64,
-        dim: super::super::ast::ExprId,
+        decl: super::super::ast::Decl,
     ) -> super::super::ast::StmtId {
+        debug_assert!(matches!(decl, super::super::ast::Decl::Vla { .. }));
         let pos = self.ast_src_pos();
-        let decl_id = self.ast.push_decl(
-            super::super::ast::Decl::Vla {
-                sym,
-                elem_ty,
-                elem_size,
-                ptr_slot,
-                size_slot,
-                dim,
-            },
-            pos,
-        );
+        let decl_id = self.ast.push_decl(decl, pos);
         self.ast
             .push_stmt(super::super::ast::Stmt::Decl(decl_id), pos)
     }
@@ -1824,7 +1861,11 @@ impl Compiler {
         // operand type here (it retags after the emit, since the flavour
         // pick reads both operand types), so stamp the result type here
         // rather than leaving consumers to infer it from the operands.
-        let ty = if crate::c5::ast::walk::is_comparison_op(op) {
+        // The GCC vector extension is the exception: a vector comparison
+        // yields a vector, and its arm sets `self.ty` to it before this.
+        let ty = if crate::c5::ast::walk::is_comparison_op(op)
+            && !super::types::is_vector_ty(&self.structs, self.ty)
+        {
             super::super::token::Ty::Int as i64
         } else {
             self.ty

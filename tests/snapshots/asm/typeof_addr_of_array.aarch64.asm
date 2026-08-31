@@ -14,35 +14,36 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	mov	x0, #0x0                // =0
-               	mov	x4, #0xa                // =10
-               	b	<addr>
-               	sxtw	x2, w0
-               	ldrsw	x5, [x1, x2, lsl #2]
-               	mul	x3, x2, x4
-               	add	x3, x3, #0xa
-               	cmp	w5, w3
-               	b.ne	<addr>
-               	add	x0, x2, #0x1
-               	cmp	w0, #0x4
-               	b.lt	<addr>
-               	mov	x0, #0x0                // =0
-               	mov	x5, #0xa                // =10
-               	b	<addr>
-               	sxtw	x2, w0
-               	ldrsw	x4, [x1, x2, lsl #2]
-               	mul	x3, x2, x5
-               	add	x3, x3, #0xa
-               	cmp	w4, w3
-               	b.ne	<addr>
-               	add	x0, x2, #0x1
-               	cmp	w0, #0x4
-               	b.lt	<addr>
-               	mov	x0, #0x0                // =0
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	add	x1, x0, #0x0
+               	ldrsw	x2, [x1]
+               	cmp	w2, #0xa
+               	b.eq	<addr>
+               	mov	x0, #0x3                // =3
                	ret
+               	ldrsw	x2, [x0, #0x4]
+               	cmp	w2, #0x14
+               	b.ne	<addr>
+               	ldrsw	x2, [x0, #0x8]
+               	cmp	w2, #0x1e
+               	b.ne	<addr>
+               	ldrsw	x2, [x0, #0xc]
+               	cmp	w2, #0x28
+               	b.ne	<addr>
+               	ldrsw	x1, [x1]
+               	cmp	w1, #0xa
+               	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ret
-               	mov	x0, #0x3                // =3
+               	ldrsw	x1, [x0, #0x4]
+               	cmp	w1, #0x14
+               	b.ne	<addr>
+               	ldrsw	x1, [x0, #0x8]
+               	cmp	w1, #0x1e
+               	b.ne	<addr>
+               	ldrsw	x0, [x0, #0xc]
+               	cmp	w0, #0x28
+               	b.ne	<addr>
+               	mov	x0, #0x0                // =0
                	ret

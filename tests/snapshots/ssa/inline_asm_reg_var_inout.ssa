@@ -10,34 +10,34 @@ fn ent_pc=2 n_params=0 variadic=false locals=5
     v13  Imm(4)                                           -> x0
     v14  LocalAddr(-5)                                    -> x1
     v15  InlineAsm { template="addq $1, %%rax", ops=2, args=[v14, v13] } -> -
-    v16  LoadLocal { off=-5, kind=I64 }                   -> x1
+    v16  LoadLocal { off=-5, kind=I64 }                   -> x0
     terminator Jmp(b2)   (exit_acc=v16)
   block 2  start_pc=0
-    v2   BinopI { op=ne, lhs=v16, rhs_imm=5 }             -> x1
+    v2   BinopI { op=ne, lhs=v16, rhs_imm=5 }             -> x0
     terminator Bz { cond=v2, target=b4, fall=b3 }   (exit_acc=v2)
   block 3  start_pc=0
     v3   Imm(1)                                           -> x0
     terminator Return(v3)   (exit_acc=v3)
   block 4  start_pc=0
-    v4   Imm(1)                                           -> x1
-    v5   Imm(2)                                           -> x1
-    v6   Imm(3)                                           -> x1
-    v7   Imm(4)                                           -> x1
-    v8   Imm(5)                                           -> x1
-    v9   Imm(6)                                           -> x1
+    v4   Imm(1)                                           -> x0
+    v5   Imm(2)                                           -> x0
+    v6   Imm(3)                                           -> x0
+    v7   Imm(4)                                           -> x0
+    v8   Imm(5)                                           -> x0
+    v9   Imm(6)                                           -> x0
     terminator Jmp(b5)
   block 5  start_pc=0
-    v17  Imm(1)                                           -> x1
-    v18  Imm(2)                                           -> x2
-    v19  Imm(3)                                           -> x6
-    v20  Imm(4)                                           -> x7
+    v17  Imm(1)                                           -> x0
+    v18  Imm(2)                                           -> x1
+    v19  Imm(3)                                           -> x2
+    v20  Imm(4)                                           -> x6
     v21  Imm(5)                                           -> x7
     v22  Imm(6)                                           -> x8
     v23  LocalAddr(-4)                                    -> x9
     v24  LocalAddr(-3)                                    -> x3
     v25  LocalAddr(-2)                                    -> x12
     v26  LocalAddr(-1)                                    -> x13
-    v27  InlineAsm { template="addq %%r8, %%rax\n\taddq %%r9, %%rcx\n\taddq $2, %%rdx\n\taddq $3, %%rsi", ops=10, args=[v23, v24, v25, v26, v17, v18, v19, v13, v21, v22] } -> -
+    v27  InlineAsm { template="addq %%r8, %%rax\n\taddq %%r9, %%rcx\n\taddq $2, %%rdx\n\taddq $3, %%rsi", ops=10, args=[v23, v24, v25, v26, v17, v18, v19, v20, v21, v22] } -> -
     v28  LoadLocal { off=-4, kind=I64 }                   -> x0
     v29  LoadLocal { off=-3, kind=I64 }                   -> x1
     v30  Binop { op=add, lhs=v28, rhs=v29 }               -> x0

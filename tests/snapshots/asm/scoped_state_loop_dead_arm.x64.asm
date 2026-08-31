@@ -25,6 +25,48 @@ Disassembly of section .text:
                	int3
                	int3
 
+<reader>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x10, %rsp
+               	movq	%rbx, (%rsp)
+               	xorq	%rsi, %rsi
+               	movl	$0x3, %eax
+               	leaq	<rip>, %r9
+               	movq	(%r9), %rcx
+               	leaq	<rip>, %r8
+               	movq	%rsi, %rdi
+               	jmp	<addr>
+               	movq	(%r8), %rbx
+               	addq	%rcx, %rbx
+               	movq	%rbx, (%r8)
+               	incq	%rdi
+               	cmpl	$0x2, %edx
+               	jb	<addr>
+               	cmpl	$0x3, %edx
+               	jb	<addr>
+               	movq	(%r9), %rax
+               	cmpq	%rax, %rcx
+               	jne	<addr>
+               	xorq	%rax, %rax
+               	movq	%rax, %rdx
+               	jmp	<addr>
+               	movl	$0x1, %eax
+               	xorq	%rdx, %rdx
+               	jmp	<addr>
+               	movq	%rsi, %rax
+               	movq	%rsi, %rdx
+               	jmp	<addr>
+               	jmp	<addr>
+               	movl	%eax, %edx
+               	testq	%rdx, %rdx
+               	jne	<addr>
+               	movq	(%rsp), %rbx
+               	movq	%rdi, %rax
+               	addq	$0x10, %rsp
+               	popq	%rbp
+               	retq
+
 <work>:
                	leaq	<rip>, %rax
                	movq	(%rax), %rcx
@@ -34,47 +76,21 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	xorq	%rcx, %rcx
-               	movl	$0x3, %edx
-               	leaq	<rip>, %rax
-               	movq	(%rax), %rax
-               	movq	%rcx, %rdi
-               	jmp	<addr>
-               	leaq	<rip>, %r8
-               	movq	(%r8), %r9
-               	addq	%rax, %r9
-               	movq	%r9, (%r8)
-               	incq	%rdi
-               	cmpl	$0x2, %esi
-               	jb	<addr>
-               	cmpl	$0x3, %esi
-               	jb	<addr>
-               	leaq	<rip>, %rdx
-               	movq	(%rdx), %rdx
-               	cmpq	%rdx, %rax
-               	jne	<addr>
-               	movq	%rcx, %rdx
-               	movq	%rcx, %rsi
-               	jmp	<addr>
-               	movl	$0x1, %edx
-               	xorq	%rsi, %rsi
-               	jmp	<addr>
-               	movq	%rcx, %rdx
-               	movq	%rcx, %rsi
-               	jmp	<addr>
-               	jmp	<addr>
-               	movl	%edx, %esi
-               	testq	%rsi, %rsi
-               	jne	<addr>
-               	cmpq	$0x1, %rdi
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	callq	<addr>
+               	cmpq	$0x1, %rax
                	je	<addr>
                	movl	$0x1, %eax
+               	popq	%rbp
                	retq
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	cmpq	$0x3, %rax
                	je	<addr>
                	movl	$0x2, %eax
+               	popq	%rbp
                	retq
                	xorq	%rax, %rax
+               	popq	%rbp
                	retq

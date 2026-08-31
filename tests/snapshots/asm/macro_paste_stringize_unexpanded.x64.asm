@@ -29,12 +29,11 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movl	$0x1, %ecx
                	movl	%ecx, (%rax)
-               	leaq	<rip>, %rsi
-               	movl	$0x2, %edx
-               	movl	%edx, (%rsi)
+               	leaq	<rip>, %rdx
+               	movl	$0x2, %esi
+               	movl	%esi, (%rdx)
                	movslq	(%rax), %rax
-               	movslq	%edx, %rdx
-               	addq	%rdx, %rax
+               	addq	$0x2, %rax
                	cmpl	$0x3, %eax
                	je	<addr>
                	movq	%rcx, %rax

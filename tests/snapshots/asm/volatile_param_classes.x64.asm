@@ -42,8 +42,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
-               	movq	%rbx, (%rsp)
+               	subq	$0x30, %rsp
                	leaq	-0x10(%rbp), %rax
                	xorq	%rcx, %rcx
                	movq	%rcx, (%rax)
@@ -59,11 +58,11 @@ Disassembly of section .text:
                	movsd	-0x18(%rbp,%riz), %xmm1
                	addsd	%xmm1, %xmm0
                	movsd	%xmm0, (%rax,%riz)
-               	movabsq	$0x4004000000000000, %rbx # imm = 0x4004000000000000
-               	movq	0x8(%rax), %rcx
-               	incq	%rcx
-               	movq	%rcx, 0x8(%rax)
-               	movq	%rbx, %xmm14
+               	movabsq	$0x4004000000000000, %rcx # imm = 0x4004000000000000
+               	movq	0x8(%rax), %rsi
+               	incq	%rsi
+               	movq	%rsi, 0x8(%rax)
+               	movq	%rcx, %xmm14
                	movsd	%xmm14, -0x18(%rbp,%riz)
                	movsd	(%rax,%riz), %xmm0
                	movsd	%xmm0, -0x20(%rbp,%riz)
@@ -100,26 +99,24 @@ Disassembly of section .text:
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
-               	movq	(%rsp), %rbx
                	movq	%rdx, %rax
-               	addq	$0x40, %rsp
+               	addq	$0x30, %rsp
                	popq	%rbp
                	retq
                	movl	$0x40a00000, %edi       # imm = 0x40A00000
                	movq	%rdi, %xmm0
                	callq	<addr>
-               	movq	%rbx, %xmm15
+               	movabsq	$0x4004000000000000, %rax # imm = 0x4004000000000000
+               	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
-               	movq	(%rsp), %rbx
-               	addq	$0x40, %rsp
+               	addq	$0x30, %rsp
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	movq	(%rsp), %rbx
-               	addq	$0x40, %rsp
+               	addq	$0x30, %rsp
                	popq	%rbp
                	retq
                	jmp	<addr>

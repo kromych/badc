@@ -23,8 +23,8 @@
 
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
-use super::Compiler;
 use super::types::{is_struct_value_ty, struct_id_of, struct_ptr_depth};
+use super::{Compiler, StructField};
 
 impl Compiler {
     /// Parse the operand of a `sizeof` and return its byte
@@ -242,6 +242,7 @@ impl Compiler {
             let lev = Token::Inc as i64;
             self.pending.last_array_decay_size = 0;
             self.pending.last_array_decay_bytes = 0;
+            self.pending.last_array_decay_member = None;
             self.expr(lev)?;
             let array_count = self.pending.last_array_decay_size;
             let array_bytes = self.pending.last_array_decay_bytes;
@@ -254,6 +255,7 @@ impl Compiler {
             self.code_reloc_sym_idx.truncate(saved_code_reloc_sym_idx);
             self.pending.last_array_decay_size = 0;
             self.pending.last_array_decay_bytes = 0;
+            self.pending.last_array_decay_member = None;
             if array_bytes > 0 {
                 // Multi-dim pointer-to-array subscript or `*p`
                 // row deref: the row's byte size is known
@@ -292,11 +294,16 @@ impl Compiler {
 
     /// GCC `__builtin_object_size(ptr, type)`, `type` in 0..=3: a
     /// `size_t` constant. The pointer operand is unevaluated, like a
-    /// `sizeof` operand. When it names a complete declared array the
-    /// object's byte count folds (exact for every `type`); otherwise
-    /// the result is the documented "unknown" value -- `(size_t)-1`
-    /// for types 0 and 1 (maximum forms), 0 for types 2 and 3
-    /// (minimum forms).
+    /// `sizeof` operand. Types 0 and 2 ask for the whole object, 1 and
+    /// 3 for the closest enclosing subobject; "unknown" is `(size_t)-1`
+    /// for the maximum forms (0 and 1) and 0 for the minimum forms. A
+    /// declared array, string literal or compound literal is the whole
+    /// object. An array member of a declared object is bounded by the
+    /// object; through a pointer the whole object is unknown and the
+    /// member answers its size unless `member_is_unbounded`. A member
+    /// with no declared bound answers the space remaining in the object
+    /// holding it, for the subobject forms as well as the whole-object
+    /// ones, since it has no extent of its own to narrow to.
     pub(super) fn parse_object_size_builtin(&mut self) -> Result<(), C5Error> {
         // The call dispatch consumed `__builtin_object_size (`.
         let saved_ty = self.ty;
@@ -306,9 +313,11 @@ impl Compiler {
         let vstack_depth = self.ast_vstack.len();
         self.pending.last_array_decay_size = 0;
         self.pending.last_array_decay_bytes = 0;
+        self.pending.last_array_decay_member = None;
         self.expr(Token::Assign as i64)?;
         let array_count = self.pending.last_array_decay_size;
         let array_bytes = self.pending.last_array_decay_bytes;
+        let member = self.pending.last_array_decay_member.take();
         let expr_ty = self.ty;
         self.next_ent_pc = saved_text_len;
         self.clear_recent_emits();
@@ -330,26 +339,98 @@ impl Compiler {
             return Err(self.compile_err("`)` expected to close `__builtin_object_size`"));
         }
         self.next()?;
+        // `-1` marks an array with no declared bound: a flexible array
+        // member (C99 6.7.2.1p16) or a zero-length one.
+        let flexible = array_count < 0;
         let known: Option<i64> = if array_bytes > 0 {
             Some(array_bytes)
         } else if array_count > 0 {
             let elem_ty = expr_ty - Ty::Ptr as i64;
             Some(array_count * self.size_of_type(elem_ty) as i64)
-        } else if array_count < 0 {
+        } else if flexible {
             // Zero-length array: a known object of 0 bytes.
             Some(0)
         } else {
             None
         };
-        let v = match known {
-            Some(n) => n,
-            None if kind <= 1 => -1,
-            None => 0,
+        let unknown = if kind <= 1 { -1 } else { 0 };
+        let v = match (known, member) {
+            (None, _) => unknown,
+            // TODO: a row reached through a pointer to an array answers
+            // the row's size, where the object holding it is unknown.
+            (Some(n), None) => n,
+            (Some(n), Some(m)) if kind & 1 == 1 => {
+                if m.unbounded {
+                    unknown
+                } else if flexible {
+                    // A member with no declared bound has no extent of its
+                    // own, so the closest surrounding subobject with one is
+                    // the object holding it -- when the chain started at a
+                    // declared object. Answering the member's nominal 0
+                    // there reports that no byte may be written, which is
+                    // what FORTIFY_SOURCE reads to reject every write into
+                    // a flexible array member. Through a pointer there is
+                    // no such object, and the declared extent stands.
+                    m.decl_remaining.unwrap_or(n)
+                } else {
+                    n
+                }
+            }
+            (Some(_), Some(m)) => m.decl_remaining.unwrap_or(unknown),
         };
         self.emit_imm(v);
         self.ty = self.size_t_ty();
         self.ast_emit_int_lit(v, self.ty);
         Ok(())
+    }
+
+    /// How many struct (not union) containers member `idx` of aggregate
+    /// `sid` lies in, the aggregate itself and the anonymous aggregates
+    /// the member was promoted from included, and whether each of them
+    /// holds the member, or the anonymous aggregate holding it, last.
+    pub(super) fn member_nesting(&self, sid: usize, idx: usize) -> (u32, bool) {
+        let (mut sid, mut idx) = (sid, idx as u32);
+        let (mut records, mut at_end) = (0, true);
+        loop {
+            let s = &self.structs[sid];
+            let anon = s
+                .anon_members
+                .iter()
+                .find(|m| (m.first..m.first + m.count).contains(&idx));
+            let end = anon.map_or(idx + 1, |m| m.first + m.count) as usize;
+            if !s.is_union {
+                records += 1;
+                at_end &= end == s.fields.len();
+            }
+            match anon {
+                Some(m) => (sid, idx) = (m.inner, idx - m.first),
+                None => return (records, at_end),
+            }
+        }
+    }
+
+    /// gcc's rule for an array member reached through a pointer: it has
+    /// no bound the object can be held to when its type is incomplete,
+    /// or when `-fstrict-flex-arrays` admits its bound and it is the last
+    /// member of every container on the way, at most one of which is a
+    /// struct (`records` and `at_end` as `member_nesting` counts them,
+    /// accumulated over the chain).
+    pub(super) fn member_is_unbounded(&self, f: &StructField, records: u32, at_end: bool) -> bool {
+        if f.array_size < 0 && !f.zero_len {
+            return true;
+        }
+        let outer = if f.array_dims.len() >= 2 {
+            f.array_dims[0]
+        } else {
+            f.array_size
+        };
+        let admitted = match self.strict_flex_arrays {
+            0 => true,
+            1 => outer <= 1,
+            2 => f.array_size < 0,
+            _ => false,
+        };
+        admitted && records <= 1 && at_end
     }
 
     /// GCC `__builtin_choose_expr(const, e1, e2)`: the chosen operand
@@ -396,12 +477,6 @@ impl Compiler {
         Ok(())
     }
 
-    /// GCC `__builtin_constant_p(x)`: an `int`, 1 when the unevaluated
-    /// operand folds to a constant expression. A parse-time constant
-    /// answers 1, which no later phase revises. A non-constant operand
-    /// can still become one after inlining and constant propagation, so
-    /// where deferring is sound it becomes an `Intrinsic::ConstantP` for
-    /// the SSA folds; otherwise the conservative 0 stands.
     /// GCC `__builtin_has_attribute(operand, attribute)`: an `int`
     /// constant. badc does not model the queried attributes on objects or
     /// types, so under its own semantics no operand carries one -- the
@@ -420,6 +495,12 @@ impl Compiler {
         Ok(())
     }
 
+    /// GCC `__builtin_constant_p(x)`: an `int`, 1 when the unevaluated
+    /// operand folds to a constant value. A parse-time constant answers
+    /// 1, which no later phase revises. A non-constant operand can still
+    /// become one after inlining and constant propagation, so where
+    /// deferring is sound it becomes an `Intrinsic::ConstantP` for the
+    /// SSA folds; otherwise the conservative 0 stands.
     pub(super) fn parse_constant_p_builtin(&mut self) -> Result<(), C5Error> {
         // The call dispatch consumed `__builtin_constant_p (`.
         let snap = self.lex.snapshot();

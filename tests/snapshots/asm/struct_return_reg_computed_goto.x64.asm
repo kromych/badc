@@ -35,15 +35,7 @@ Disassembly of section .text:
                	jmpq	*%rcx
                	movl	$0x7, %ecx
                	movl	%ecx, -0x18(%rbp)
-               	movslq	%ecx, %rcx
-               	cmpl	$0x7, %ecx
-               	jne	<addr>
                	movq	%rax, -0x18(%rbp)
-               	jmp	<addr>
-               	movl	$0x1, %eax
-               	movq	%rax, -0x18(%rbp)
-               	movq	-0x18(%rbp), %rax
-               	movslq	%eax, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
@@ -79,15 +71,7 @@ Disassembly of section .text:
                	retq
                	movl	$0x2, %ecx
                	movl	%ecx, -0x18(%rbp)
-               	movslq	%ecx, %rcx
-               	cmpl	$0x2, %ecx
-               	jne	<addr>
                	movq	%rax, -0x18(%rbp)
-               	jmp	<addr>
-               	movl	$0x1, %eax
-               	movq	%rax, -0x18(%rbp)
-               	movq	-0x18(%rbp), %rax
-               	movslq	%eax, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	popq	%r11

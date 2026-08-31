@@ -16,7 +16,9 @@
 //! initialized data fold inside the same fixed point, so an address that
 //! becomes constant only after a branch fold collapses its phi (an
 //! inlined table lookup behind a folded bounds check) still folds and
-//! can decide the next branch.
+//! can decide the next branch. The same round folds a load of a location
+//! this function stored a constant into, which is what a build-time
+//! assertion written on a member the function just assigned reads.
 
 use super::value_range::Range;
 use crate::c5::ir::FunctionSsa;
@@ -35,6 +37,9 @@ struct Opts<'a> {
     resolve_constant_p: bool,
     fold_selects: bool,
     implied_ranges: bool,
+    /// Fold a load of a location this function stored a constant into
+    /// ([`super::store_forward::fold_const_loads`]).
+    const_stores: bool,
     /// Entry range per declared parameter, from the interprocedural
     /// join in [`super::ipa_const_param`]. Empty when none is known.
     param_ranges: &'a [Range],
@@ -51,6 +56,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                 resolve_constant_p: false,
                 fold_selects: false,
                 implied_ranges: false,
+                const_stores: false,
                 param_ranges: &[],
             },
         );
@@ -80,6 +86,7 @@ pub(crate) fn run_with_const_data(
                 resolve_constant_p: true,
                 fold_selects: true,
                 implied_ranges: true,
+                const_stores: true,
                 param_ranges: ranges,
             },
         );
@@ -109,10 +116,18 @@ fn run_one(func: &mut FunctionSsa, opts: &Opts<'_>) {
             .const_data
             .is_some_and(|cd| super::const_global_fold::fold_template_loads(func, cd));
         let ranged = opts.implied_ranges && super::value_range::run_one(func, opts.param_ranges);
+        let stored = opts.const_stores && super::store_forward::fold_const_loads(func);
         let folded = super::constfold_branch::run_one(func);
         let pruned = super::prune_unreachable::run_one(func);
         bound -= 1;
-        if (!folded && !pruned && !loaded && !forwarded && !selected && !nulled && !ranged)
+        if (!folded
+            && !pruned
+            && !loaded
+            && !forwarded
+            && !selected
+            && !nulled
+            && !ranged
+            && !stored)
             || bound == 0
         {
             // The fixed point is the last chance to discover a constant,

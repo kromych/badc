@@ -182,6 +182,31 @@ pub(crate) fn is_numeric_label(name: &str) -> bool {
     !name.is_empty() && name.bytes().all(|c| c.is_ascii_digit())
 }
 
+/// GNU as's local label prefix on ELF.
+pub(crate) const LOCAL_LABEL_PREFIX: &str = ".L";
+
+/// A named label GNU as treats as an assembler temporary: it stays out
+/// of `.symtab` unless `-L` / `--keep-locals` is given, whatever `.type`
+/// and `.size` name it, and references to it reduce to its section plus
+/// an addend.
+pub(crate) fn is_local_label(name: &str) -> bool {
+    name.starts_with(LOCAL_LABEL_PREFIX)
+}
+
+/// Prefix of the name a numeric label in a pushed section is renamed to.
+pub(crate) const ASMSEC_LABEL_PREFIX: &str = ".Lc5_asmsec_";
+
+/// Prefix of the name each definition of a multiply-defined numeric
+/// label is renamed to.
+pub(crate) const MULTIDEF_LABEL_PREFIX: &str = ".Lc5ll_";
+
+/// A stand-in this module generated for a GNU as numeric label. gas names
+/// its own nothing a source can spell and keeps them out of `.symtab`
+/// even under `-L`, so these follow.
+pub(crate) fn is_generated_local_label(name: &str) -> bool {
+    name.starts_with(ASMSEC_LABEL_PREFIX) || name.starts_with(MULTIDEF_LABEL_PREFIX)
+}
+
 /// Split a numeric-label reference into its digits, dropping a trailing
 /// GNU as direction suffix (`14472b` / `14471f` -> `14472` / `14471`).
 /// Returns `None` when the reference is not a numeric label.
@@ -290,7 +315,7 @@ pub(crate) fn rewrite_multidef_local_labels(text: &str) -> Option<alloc::string:
     for t in &toks {
         if t.reference.is_none() && def_counts[t.num] >= 2 {
             let v = defs.entry(t.num).or_default();
-            let name = alloc::format!(".Lc5ll_{uniq}_{}_{}", t.num, v.len());
+            let name = alloc::format!("{MULTIDEF_LABEL_PREFIX}{uniq}_{}_{}", t.num, v.len());
             v.push((t.start, name));
         }
     }

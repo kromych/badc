@@ -41,13 +41,6 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movq	0x8(%rax), %rcx
-               	cmpq	$0x9, %rcx
-               	je	<addr>
-               	movl	$0x16, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
-               	retq
                	leaq	0x8(%rax), %rcx
                	movq	%rax, %r10
                	movq	%rcx, %rax

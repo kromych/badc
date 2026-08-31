@@ -67,8 +67,8 @@ Disassembly of section .text:
                	mov	x9, x21
                	fmov	d0, x0
                	blr	x9
-               	mov	x20, #0x4000000000000000 // =4611686018427387904
-               	fmov	d17, x20
+               	mov	x0, #0x4000000000000000 // =4611686018427387904
+               	fmov	d17, x0
                	fcmp	d0, d17
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
@@ -103,7 +103,8 @@ Disassembly of section .text:
                	mov	x9, x23
                	fmov	d0, x0
                	blr	x9
-               	fmov	d17, x20
+               	mov	x0, #0x4000000000000000 // =4611686018427387904
+               	fmov	d17, x0
                	fcmp	d0, d17
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
@@ -113,25 +114,22 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x70
                	ret
-               	sub	x20, x29, #0x18
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
+               	sub	x0, x29, #0x18
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
                	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x20]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x20, #0x8]
-               	ldr	x10, [x0, #0x10]
-               	str	x10, [x20, #0x10]
+               	ldr	x10, [x1]
+               	str	x10, [x0]
+               	ldr	x10, [x1, #0x8]
+               	str	x10, [x0, #0x8]
+               	ldr	x10, [x1, #0x10]
+               	str	x10, [x0, #0x10]
                	ldr	x10, [sp], #0x10
-               	mov	x0, x20
-               	ldr	x0, [x20]
-               	mov	x21, #0x4022000000000000 // =4621256167635550208
-               	fmov	d16, x21
+               	mov	x20, #0x4022000000000000 // =4621256167635550208
+               	fmov	d16, x20
                	fneg	d0, d16
-               	mov	x9, x0
-               	blr	x9
-               	fmov	d17, x21
+               	bl	<addr>
+               	fmov	d17, x20
                	fcmp	d0, d17
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
@@ -141,13 +139,15 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x70
                	ret
-               	ldr	x0, [x20, #0x8]
+               	sub	x0, x29, #0x18
+               	ldr	x0, [x0, #0x8]
                	mov	x1, #0x400000000000     // =70368744177664
                	movk	x1, #0x4054, lsl #48
                	mov	x9, x0
                	fmov	d0, x1
                	blr	x9
-               	fmov	d17, x21
+               	mov	x0, #0x4022000000000000 // =4621256167635550208
+               	fmov	d17, x0
                	fcmp	d0, d17
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
@@ -157,7 +157,8 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x70
                	ret
-               	ldr	x0, [x20, #0x10]
+               	sub	x0, x29, #0x18
+               	ldr	x0, [x0, #0x10]
                	mov	x1, #0x999a             // =39322
                	movk	x1, #0x9999, lsl #16
                	movk	x1, #0x9999, lsl #32
@@ -190,10 +191,11 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x70
                	ret
-               	mov	x1, #0x800000000000     // =140737488355328
-               	movk	x1, #0x4048, lsl #48
-               	fmov	d16, x1
+               	mov	x0, #0x800000000000     // =140737488355328
+               	movk	x0, #0x4048, lsl #48
+               	fmov	d16, x0
                	fsqrt	d0, d16
+               	mov	x0, #0x401c000000000000 // =4619567317775286272
                	fmov	d17, x0
                	fcmp	d0, d17
                	b.eq	<addr>

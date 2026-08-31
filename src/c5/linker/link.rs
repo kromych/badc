@@ -61,6 +61,16 @@ pub(crate) const fn is_got_reloc(rtype: u32) -> bool {
     )
 }
 
+/// A relocation whose site transfers control: the field holds a branch
+/// displacement, so the reference names an entry point and binds to a
+/// call stub. No slot read can satisfy one.
+pub(crate) const fn is_branch_reloc(machine: NativeMachine, rtype: u32) -> bool {
+    match machine {
+        NativeMachine::X86_64 => rtype == R_X86_64_PLT32,
+        NativeMachine::Aarch64 => matches!(rtype, R_AARCH64_CALL26 | R_AARCH64_JUMP26),
+    }
+}
+
 /// Result of merging N [`NativeObject`]s. Carries enough state
 /// for a final-image writer to lay out `.text` / `.data` at the
 /// target's expected virtual addresses, materialise the PLT
@@ -566,6 +576,28 @@ fn named_group_order(
     v
 }
 
+/// The widest alignment the merged `.bss` answers to: each unit's `.bss`
+/// family, each named zero-fill section, and each common symbol, whose
+/// `st_value` is its alignment.
+fn bss_alignment(objs: &[NativeObject]) -> usize {
+    let units = objs
+        .iter()
+        .map(|o| crate::c5::layout::bss_image_align(o.bss_align));
+    let named = named_group_order(objs, SectionFamily::Bss)
+        .into_iter()
+        .map(|(_, s)| s.align.max(1) as usize);
+    let commons = objs
+        .iter()
+        .flat_map(|o| &o.symbols)
+        .filter(|s| matches!(s.section, NativeSymSection::Common))
+        .map(|s| s.value.max(1) as usize);
+    units
+        .chain(named)
+        .chain(commons)
+        .max()
+        .unwrap_or(crate::c5::layout::BSS_ALIGN_MIN)
+}
+
 /// One grouped name's merged extent. `start` / `end` are offsets in
 /// the merged data stream, or in the zero-fill region when `bss`.
 struct NamedExtent {
@@ -839,6 +871,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
     let mut text: Vec<u8> = Vec::new();
     let mut data: Vec<u8> = Vec::new();
     let mut bss_size: usize = 0;
+    let bss_align = bss_alignment(objs);
     let mut data_align: usize = crate::c5::layout::DATA_ALIGN_MIN;
     let mut rodata_align: usize = crate::c5::layout::DATA_ALIGN_MIN;
     let mut relro_align: usize = crate::c5::layout::DATA_ALIGN_MIN;
@@ -880,8 +913,11 @@ pub fn link_native_objects_with_shared_libs<'a>(
     // One alignment covers the whole data image: the writers place
     // every region from it, and each region starts at a multiple of it
     // so a unit's data base keeps the residue its `sh_addralign` asked
-    // for once the region is placed.
-    data_align = crate::c5::layout::data_image_align(data_align.max(rodata_align).max(relro_align));
+    // for once the region is placed. The bss tail is one more region in
+    // the same offset space, so its alignment counts here too.
+    data_align = crate::c5::layout::data_image_align(
+        data_align.max(rodata_align).max(relro_align).max(bss_align),
+    );
     align_up(&mut data, data_align);
     let data_ro_len = data.len();
     for obj in objs {
@@ -1057,7 +1093,9 @@ pub fn link_native_objects_with_shared_libs<'a>(
 
     // The merged bss region begins at `data.len()` in the unified
     // data-offset space; pad the file image so bss offsets keep their
-    // per-unit alignment residues in the final image.
+    // per-unit alignment residues in the final image. `data_align` covers
+    // the bss alignment, so the padded end and the region boundaries
+    // before it are bss boundaries wherever the writers place the stream.
     if bss_size > 0 {
         align_up(&mut data, crate::c5::layout::bss_image_align(data_align));
     }
@@ -1351,9 +1389,19 @@ pub fn link_native_objects_with_shared_libs<'a>(
         .iter()
         .flat_map(|o| o.copy_relocs.iter().map(|(local, _host)| local.as_str()))
         .collect();
-    // Import indices an input symbol table typed `STT_OBJECT`. The
+    // Names any unit references as data through an undefined symbol;
+    // the symbol table types every undefined reference STT_NOTYPE.
+    let extern_data_names: hashbrown::HashSet<&str> = objs
+        .iter()
+        .flat_map(|o| o.extern_data_names.iter().map(|n| n.as_str()))
+        .collect();
+    // Import indices the note channel names as data references. The
     // writer republishes the type on the undefined dynamic symbol.
     let mut object_imports: alloc::collections::BTreeSet<usize> =
+        alloc::collections::BTreeSet::new();
+    // Import indices some site branches to. An import reached by a
+    // branch is code whatever the note says of the name elsewhere.
+    let mut branch_imports: alloc::collections::BTreeSet<usize> =
         alloc::collections::BTreeSet::new();
     // Names with dylib routing from any unit's binding map. The c5 `.o`
     // writer emits its libc imports as STB_WEAK UNDEF paired with a map
@@ -1585,12 +1633,17 @@ pub fn link_native_objects_with_shared_libs<'a>(
                         // kind is the reference toolchain's
                         // discriminator and survives here because an
                         // unresolvable GOT reference stays unrelaxed;
-                        // the symbol type covers the direct
-                        // page-relative pair the aarch64 codegen uses
-                        // for extern data.
+                        // the note covers the forms it does not
+                        // classify, the aarch64 page-relative pair that
+                        // extern data and a function's address share.
+                        // The note names the symbol rather than the
+                        // site, and one unit's address-of puts an
+                        // imported function there, so a branch keeps
+                        // its stub whatever the note says of the name.
                         let slot_load = is_data_binding
                             || is_got_reloc(reloc.rtype)
-                            || sym.kind == super::object::STT_OBJECT;
+                            || (!is_branch_reloc(machine, reloc.rtype)
+                                && extern_data_names.contains(sym.name.as_str()));
                         // STB_WEAK = 2. An unresolved weak reference with
                         // no dylib routing resolves to address 0 (C
                         // practice; ELF leaves the symbol 0 so the
@@ -1637,7 +1690,9 @@ pub fn link_native_objects_with_shared_libs<'a>(
                             flat_imports.insert(sym.name.clone());
                         }
                         let idx = record_import(&sym.name, &mut imports, &mut import_idx_for_name);
-                        if sym.kind == super::object::STT_OBJECT {
+                        if is_branch_reloc(machine, reloc.rtype) {
+                            branch_imports.insert(idx);
+                        } else if extern_data_names.contains(sym.name.as_str()) {
                             object_imports.insert(idx);
                         }
                         pending_imports.push(PendingImportReloc {
@@ -2382,6 +2437,9 @@ pub fn link_native_objects_with_shared_libs<'a>(
             &defined,
         )?;
     }
+    // A name the note lists and a branch also reaches is code: the note
+    // covers the slot-versus-stub choice at a site, not the symbol's type.
+    object_imports.retain(|i| !branch_imports.contains(i));
     // The writers iterate the merged table, so it leaves the link as an
     // ordered map: the static symbol table and the dynamic export list
     // follow this order byte for byte.
@@ -4272,6 +4330,7 @@ mod tests {
             elf_tpoff_fixups: alloc::vec::Vec::new(),
             copy_relocs: alloc::vec::Vec::new(),
             prologue_ends: alloc::vec::Vec::new(),
+            extern_data_names: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),
@@ -4438,6 +4497,7 @@ mod tests {
             elf_tpoff_fixups: alloc::vec::Vec::new(),
             copy_relocs: alloc::vec::Vec::new(),
             prologue_ends: alloc::vec::Vec::new(),
+            extern_data_names: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),
@@ -4527,6 +4587,7 @@ mod tests {
             elf_tpoff_fixups: alloc::vec::Vec::new(),
             copy_relocs: alloc::vec::Vec::new(),
             prologue_ends: alloc::vec::Vec::new(),
+            extern_data_names: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),
@@ -4587,6 +4648,7 @@ mod tests {
             elf_tpoff_fixups: alloc::vec::Vec::new(),
             copy_relocs: alloc::vec::Vec::new(),
             prologue_ends: alloc::vec::Vec::new(),
+            extern_data_names: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),
@@ -4659,6 +4721,7 @@ mod tests {
                 elf_tpoff_fixups: alloc::vec::Vec::new(),
                 copy_relocs: alloc::vec::Vec::new(),
                 prologue_ends: alloc::vec::Vec::new(),
+                extern_data_names: alloc::vec::Vec::new(),
                 debug_info: alloc::vec::Vec::new(),
                 debug_abbrev: alloc::vec::Vec::new(),
                 debug_line: alloc::vec::Vec::new(),
@@ -4838,6 +4901,7 @@ mod tests {
             elf_tpoff_fixups: alloc::vec::Vec::new(),
             copy_relocs: alloc::vec::Vec::new(),
             prologue_ends: alloc::vec::Vec::new(),
+            extern_data_names: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),
@@ -4925,6 +4989,7 @@ mod tests {
             elf_tpoff_fixups: alloc::vec::Vec::new(),
             copy_relocs: alloc::vec::Vec::new(),
             prologue_ends: alloc::vec::Vec::new(),
+            extern_data_names: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),

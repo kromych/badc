@@ -17,13 +17,13 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x40
-               	mov	x1, #0x5                // =5
-               	sub	x0, x29, #0x8
+               	mov	x0, #0x5                // =5
+               	sub	x1, x29, #0x8
                	str	x0, [sp, #0x10]
                	str	x1, [sp, #0x18]
                	str	d0, [sp, #0x20]
-               	str	x0, [sp]
-               	str	x1, [sp, #0x8]
+               	str	x1, [sp]
+               	str	x0, [sp, #0x8]
                	ldr	x1, [sp, #0x8]
                	dup	v0.4s, w1
                	shl	v0.4s, v0.4s, #0x3
@@ -33,22 +33,23 @@ Disassembly of section .text:
                	ldr	x0, [sp, #0x10]
                	ldr	x1, [sp, #0x18]
                	ldr	d0, [sp, #0x20]
-               	ldursw	x1, [x29, #-0x8]
-               	cmp	w1, #0x28
+               	ldursw	x0, [x29, #-0x8]
+               	cmp	w0, #0x28
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0xffac             // =65452
-               	movk	x1, #0xffff, lsl #16
-               	movk	x1, #0xffff, lsl #32
-               	movk	x1, #0xffff, lsl #48
+               	mov	x0, #0xffac             // =65452
+               	movk	x0, #0xffff, lsl #16
+               	movk	x0, #0xffff, lsl #32
+               	movk	x0, #0xffff, lsl #48
+               	sub	x1, x29, #0x8
                	str	x0, [sp, #0x10]
                	str	x1, [sp, #0x18]
                	str	d0, [sp, #0x20]
-               	str	x0, [sp]
-               	str	x1, [sp, #0x8]
+               	str	x1, [sp]
+               	str	x0, [sp, #0x8]
                	ldr	x1, [sp, #0x8]
                	dup	v0.4s, w1
                	sshr	v0.4s, v0.4s, #0x1
@@ -58,17 +59,18 @@ Disassembly of section .text:
                	ldr	x0, [sp, #0x10]
                	ldr	x1, [sp, #0x18]
                	ldr	d0, [sp, #0x20]
-               	ldursw	x1, [x29, #-0x8]
+               	ldursw	x0, [x29, #-0x8]
                	mov	x17, #0xffd6            // =65494
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	cmp	w1, w17
+               	cmp	w0, w17
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	sub	x0, x29, #0x8
                	mov	x1, #0xa8               // =168
                	str	x0, [sp, #0x10]
                	str	x1, [sp, #0x18]

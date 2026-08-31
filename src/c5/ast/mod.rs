@@ -209,6 +209,12 @@ pub(crate) struct BitfieldDesc {
     /// 6.7.2.1p10 says the read sign-extends through the top of
     /// the storage word.
     pub signed: bool,
+    /// The member's declared type. C99 6.5.16.1p2 converts an assigned
+    /// value to it before the store; for every integer type that
+    /// conversion is the width truncation the store already performs,
+    /// but `_Bool` (6.3.1.2) and a floating source (6.3.1.4) are not
+    /// expressible as a mask.
+    pub ty: i64,
 }
 
 impl BitfieldDesc {
@@ -640,10 +646,13 @@ pub(crate) struct RuntimeInitElement {
 ///   constant. The parser stages the bytes at `src_data_off`
 ///   inside `Program.data`; the walker emits `Inst::Mcpy` to
 ///   copy them into the local's slot.
-/// * `Zero { size_bytes }` -- the same, for a template that is
-///   wholly zero and short enough to store inline. The parser
-///   stages no bytes and the walker emits the stores, so no data
-///   object is emitted for it.
+/// * `Fill { byte, size_bytes }` -- every byte of the object takes
+///   `byte`: the all-zero template of a brace list short enough to
+///   store inline, which stages no bytes and emits no data object, or
+///   the initialization `-ftrivial-auto-var-init` supplies for an
+///   object the program declares without an initializer. The walker
+///   emits unrolled stores within the inline bound and a store loop
+///   past it.
 /// * `Runtime { zero_init, elements }` -- a brace-list
 ///   initializer with at least one non-constant element. C99
 ///   6.7.8p13. `zero_init` is the optional prelude that implements
@@ -658,7 +667,8 @@ pub(crate) enum LocalInit {
         src_data_off: i64,
         size_bytes: i64,
     },
-    Zero {
+    Fill {
+        byte: u8,
         size_bytes: i64,
     },
     Runtime {
@@ -672,7 +682,7 @@ pub(crate) enum LocalInit {
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum LocalInitPrelude {
     Template { src_data_off: i64, size_bytes: i64 },
-    Zero { size_bytes: i64 },
+    Fill { byte: u8, size_bytes: i64 },
 }
 
 /// Declaration node. Captures variable / function declarations
@@ -701,7 +711,8 @@ pub(crate) enum Decl {
     /// that many bytes from the stack via the alloca intrinsic, stores
     /// the base pointer into `ptr_slot`, and the byte count into
     /// `size_slot` (read back by `sizeof`). `elem_ty` carries the
-    /// element type for struct-size remapping.
+    /// element type for struct-size remapping. `fill` is the byte
+    /// `-ftrivial-auto-var-init` stores over the allocation.
     Vla {
         sym: u32,
         elem_ty: i64,
@@ -709,6 +720,7 @@ pub(crate) enum Decl {
         ptr_slot: i64,
         size_slot: i64,
         dim: ExprId,
+        fill: Option<u8>,
     },
     /// Block-scope `static T name [= init];` declaration. C99
     /// 6.2.4p3 (lifetime is whole program) + 6.7.8p4 (init must
@@ -752,6 +764,10 @@ pub(crate) struct FinishedFunction {
     pub is_noinline: bool,
     /// `__attribute__((naked))`: propagated onto `FunctionSsa::is_naked`.
     pub is_naked: bool,
+    /// `__attribute__((ms_abi))` / `((sysv_abi))`: propagated onto
+    /// `FunctionSsa::conv`. `CallConv::Target` when the definition
+    /// follows the target's own convention.
+    pub conv: crate::c5::codegen::CallConv,
     pub n_locals: i64,
     /// Per-parameter type tags in declared order. The walker
     /// reads these to emit the C99 6.2.4 / 6.5.2.2-mandated
@@ -859,6 +875,15 @@ pub(crate) struct Ast {
     /// passes the tail on the stack). Sparse: empty unless a variadic
     /// indirect call appears in the function.
     pub variadic_indirect_callees: Vec<(ExprId, u32)>,
+    /// Indirect-call callees whose pointed-to function declares a
+    /// calling convention other than the target's
+    /// (`__attribute__((ms_abi))` / `((sysv_abi))`), keyed by the
+    /// callee's `ExprId`. Recorded at parse time, where the callee's
+    /// declared type is in scope; the walker reads it to pick the
+    /// argument placement, shadow space and callee-clobber shape the
+    /// call site marshals to. Sparse: empty unless such a call appears
+    /// in the function.
+    pub conv_indirect_callees: Vec<(ExprId, crate::c5::codegen::CallConv)>,
     /// `Expr::Ident` nodes that reference a block-scope `extern` which
     /// shadows an enclosing bound name (a local, parameter, or enum
     /// constant). The shadowed binding is restored at block exit, so the
@@ -1213,6 +1238,7 @@ impl crate::c5::layout::DataOffsets for FinishedFunction {
             is_always_inline: _,
             is_noinline: _,
             is_naked: _,
+            conv: _,
             n_locals: _,
             param_tys: _,
             param_local_slots: _,
@@ -1243,10 +1269,10 @@ fn local_init_offsets(init: &mut LocalInit, f: &mut impl FnMut(&mut i64)) {
             ..
         } => f(src_data_off),
         LocalInit::Runtime {
-            zero_init: Some(LocalInitPrelude::Zero { .. }) | None,
+            zero_init: Some(LocalInitPrelude::Fill { .. }) | None,
             ..
         }
-        | LocalInit::Zero { .. }
+        | LocalInit::Fill { .. }
         | LocalInit::None
         | LocalInit::Scalar(..) => {}
     }

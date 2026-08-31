@@ -38,11 +38,11 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	testq	%rcx, %rcx
                	jne	<addr>
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rsi
                	xorq	%rax, %rax
                	jmp	<addr>
                	leaq	0x1(%rcx), %rax
-               	leaq	0x8(%rdi), %rdx
+               	leaq	0x8(%rsi), %rdx
                	movslq	%eax, %rcx
                	movq	(%rdx,%rcx,8), %rdx
                	testq	%rdx, %rdx
@@ -52,11 +52,11 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rsi
                	xorq	%rax, %rax
                	jmp	<addr>
                	leaq	0x1(%rcx), %rax
-               	leaq	0x8(%rdi), %rdx
+               	leaq	0x8(%rsi), %rdx
                	movslq	%eax, %rcx
                	movq	(%rdx,%rcx,8), %rdx
                	testq	%rdx, %rdx
@@ -68,26 +68,9 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	leaq	<rip>, %rax
-               	movq	0x8(%rax), %rax
-               	movsbq	(%rax), %rax
-               	cmpl	$0x61, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	leaq	<rip>, %rax
-               	movq	0x10(%rax), %rax
-               	movsbq	(%rax), %rax
-               	cmpl	$0x62, %eax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x2, %eax
-               	retq
-               	movq	(%rsi), %rdx
                	xorq	%rax, %rax
+               	movq	%rax, %rcx
+               	leaq	<rip>, %rdx
                	jmp	<addr>
                	leaq	0x1(%rcx), %rax
                	movslq	%eax, %rcx
@@ -99,6 +82,5 @@ Disassembly of section .text:
                	subq	$0x2, %rax
                	movslq	%eax, %rax
                	retq
-               	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>

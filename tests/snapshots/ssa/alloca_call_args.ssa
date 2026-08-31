@@ -70,15 +70,15 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     terminator Bnz { cond=v34, target=b2, fall=b5 }   (exit_acc=v34)
   block 5  start_pc=0
     v39  Imm(1048575)                                     -> x0
-    v40  BinopI { op=add, lhs=v4, rhs_imm=1048575 }       -> x6
-    v41  Imm(8)                                           -> x0
-    v42  Imm(8)                                           -> x0
+    v40  BinopI { op=add, lhs=v4, rhs_imm=1048575 }       -> x0
+    v41  Imm(8)                                           -> x6
+    v42  Imm(8)                                           -> x6
     v43  Store { addr=v40, disp=0, value=v42, kind=I8 }   -> -
-    v44  Load { addr=v4, disp=0, kind=I8 }                -> x6
-    v45  Imm(1048575)                                     -> x7
+    v44  Load { addr=v4, disp=0, kind=I8 }                -> x0
+    v45  Imm(1048575)                                     -> x6
     v46  BinopI { op=add, lhs=v4, rhs_imm=1048575 }       -> x1
-    v47  Extend { value=v42, kind=I8 }                    -> x0
-    v48  Binop { op=add, lhs=v44, rhs=v47 }               -> x0
+    v47  Imm(8)                                           -> x1
+    v48  BinopI { op=add, lhs=v44, rhs_imm=8 }            -> x0
     v49  Extend { value=v48, kind=I32 }                   -> x15
     terminator Jmp(b6)   (exit_acc=v49)
   block 6  start_pc=0

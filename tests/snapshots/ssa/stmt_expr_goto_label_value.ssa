@@ -365,11 +365,11 @@ fn ent_pc=3 n_params=0 variadic=false locals=3
     v305 Imm(1)                                           -> x2
     v306 Imm(8)                                           -> x0
     v307 BinopI { op=add, lhs=v93, rhs_imm=8 }            -> x0
-    v308 Load { addr=v93, disp=8, kind=I64 }              -> x0
-    v309 Imm(-1)                                          -> x1
-    v310 Imm(9)                                           -> x1
-    v311 Imm(-512)                                        -> x1
-    v312 BinopI { op=and, lhs=v308, rhs_imm=-512 }        -> x0
+    v308 Imm(257)                                         -> x0
+    v309 Imm(-1)                                          -> x0
+    v310 Imm(9)                                           -> x0
+    v311 Imm(-512)                                        -> x0
+    v312 Imm(0)                                           -> x0
     terminator Jmp(b78)   (exit_acc=v312)
   block 76  start_pc=0
     v317 BinopI { op=add, lhs=v315, rhs_imm=1 }           -> x1

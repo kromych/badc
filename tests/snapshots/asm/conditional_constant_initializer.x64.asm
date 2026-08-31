@@ -47,36 +47,14 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	leaq	<rip>, %rax
-               	movq	0x8(%rax), %rax
-               	leaq	<rip>, %rcx
-               	cmpq	%rcx, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	leaq	<rip>, %rax
-               	movq	0x8(%rax), %rax
-               	leaq	<rip>, %rcx
-               	cmpq	%rcx, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x3, %eax
-               	popq	%rbp
-               	retq
-               	leaq	<rip>, %rax
-               	movq	(%rax), %rax
-               	callq	*%rax
+               	movq	%rax, %rcx
+               	callq	<addr>
                	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax
-               	movq	(%rax), %rax
-               	callq	*%rax
+               	callq	<addr>
                	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0x5, %eax
@@ -85,4 +63,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	jmp	<addr>

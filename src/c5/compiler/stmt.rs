@@ -66,9 +66,18 @@ pub(super) struct BlockShadow {
     vla_ptr_slot: i64,
     vla_size_slot: i64,
     is_zero_len_array: bool,
+    reserved_data_bytes: i64,
+    fam_init_bytes: i64,
+    data_align: i64,
+    is_thread_local: bool,
+    is_const_qualified: bool,
+    storage_is_const: bool,
+    runtime_initialized: bool,
+    is_extern_decl: bool,
     asm_register: Option<crate::c5::symbol::AsmRegister>,
     is_global_register: bool,
     const_object_value: Option<crate::c5::symbol::ConstObjectValue>,
+    static_local_record: Option<u32>,
 }
 
 impl Compiler {
@@ -82,7 +91,7 @@ impl Compiler {
         let s = &self.symbols[idx];
         let (inner_array_size, array_dims) =
             prior.unwrap_or_else(|| (s.inner_array_size, s.array_dims.clone()));
-        BlockShadow {
+        let shadow = BlockShadow {
             idx,
             class: s.class,
             type_: s.type_,
@@ -99,10 +108,23 @@ impl Compiler {
             vla_ptr_slot: s.vla_ptr_slot,
             vla_size_slot: s.vla_size_slot,
             is_zero_len_array: s.is_zero_len_array,
+            reserved_data_bytes: s.reserved_data_bytes,
+            fam_init_bytes: s.fam_init_bytes,
+            data_align: s.data_align,
+            is_thread_local: s.is_thread_local,
+            is_const_qualified: s.is_const_qualified,
+            storage_is_const: s.storage_is_const,
+            runtime_initialized: s.runtime_initialized,
+            is_extern_decl: s.is_extern_decl,
             asm_register: s.asm_register,
             is_global_register: s.is_global_register,
             const_object_value: s.const_object_value,
-        }
+            static_local_record: s.static_local_record,
+        };
+        // The inner binding is not (yet) a block-scope static; its own
+        // promotion re-sets the record.
+        self.symbols[idx].static_local_record = None;
+        shadow
     }
 
     /// Restore a binding saved by [`Self::capture_block_shadow`], reverting
@@ -116,6 +138,7 @@ impl Compiler {
         if s.scoped_fn_decl && s.class == Token::Fun as i64 && b.class == 0 {
             s.class = 0;
             s.block_extern_active = false;
+            s.static_local_record = b.static_local_record;
             return;
         }
         s.class = b.class;
@@ -133,9 +156,18 @@ impl Compiler {
         s.vla_ptr_slot = b.vla_ptr_slot;
         s.vla_size_slot = b.vla_size_slot;
         s.is_zero_len_array = b.is_zero_len_array;
+        s.reserved_data_bytes = b.reserved_data_bytes;
+        s.fam_init_bytes = b.fam_init_bytes;
+        s.data_align = b.data_align;
+        s.is_thread_local = b.is_thread_local;
+        s.is_const_qualified = b.is_const_qualified;
+        s.storage_is_const = b.storage_is_const;
+        s.runtime_initialized = b.runtime_initialized;
+        s.is_extern_decl = b.is_extern_decl;
         s.asm_register = b.asm_register;
         s.is_global_register = b.is_global_register;
         s.const_object_value = b.const_object_value;
+        s.static_local_record = b.static_local_record;
         s.block_extern_active = false;
     }
 
@@ -439,6 +471,7 @@ impl Compiler {
             if let Some(m) = self.pending.attr_mode.take() {
                 ty = self.apply_mode_to_type(ty, m)?;
             }
+            let declarator_transparent = core::mem::take(&mut self.pending.attr_transparent_union);
             let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
             let fn_ptr_ret_indirection = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
             let bare_fn_type = core::mem::take(&mut self.pending.bare_function_type_declarator);
@@ -484,6 +517,11 @@ impl Compiler {
             self.symbols[id_idx].class = Token::Typedef as i64;
             self.symbols[id_idx].type_ = typedef_ty;
             self.symbols[id_idx].val = 0;
+            // A declarator-position `transparent_union` binds to the
+            // aliased union, as at file scope.
+            if declarator_transparent && super::types::is_struct_value_ty(typedef_ty) {
+                self.mark_transparent_union(super::types::struct_id_of(typedef_ty));
+            }
             // GNU `aligned(N)` type attribute on the alias (its own
             // attribute, else propagated from an aligned typedef base).
             let alias_align = if self.pending.attr_align > 0 {
@@ -514,6 +552,12 @@ impl Compiler {
             }
             self.symbols[id_idx].array_size = td_array;
             self.symbols[id_idx].is_function_type = typedef_is_fn_type;
+            // A function-type typedef records the calling convention its
+            // declaration named, so a declarator through the alias
+            // inherits it (`typedef efi_status_t __efiapi f_t(void);`).
+            if self.pending.attr_call_conv != crate::c5::codegen::CallConv::Target {
+                self.symbols[id_idx].conv = self.pending.attr_call_conv;
+            }
             if typedef_fpi > 0 {
                 self.symbols[id_idx].fn_ptr_indirection = typedef_fpi;
                 self.symbols[id_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
@@ -788,6 +832,7 @@ impl Compiler {
                 // statement (not a declaration) cannot leak onto the next
                 // declaration; the declaration path re-reads it after this.
                 self.pending.attr_cleanup = None;
+                self.pending.attr_uninitialized = false;
                 self.skip_attribute_specifiers()?;
                 leading_maybe_unused = self.pending.attr_maybe_unused;
                 if self.lex.tk == '}' {
@@ -1687,7 +1732,7 @@ impl Compiler {
         // value in and the output value out, like a matching constraint).
         // Two outputs cannot both leave a value in one register.
         let fixed_reg = |op: &AsmOperand| match op.constraint {
-            AsmConstraint::Fixed(r) | AsmConstraint::RegOrImm(r) => Some(r),
+            AsmConstraint::Fixed(r) | AsmConstraint::RegOrImm { reg: Some(r), .. } => Some(r),
             _ => None,
         };
         for (i, a) in operands.iter().enumerate() {
@@ -1706,7 +1751,9 @@ impl Compiler {
             // A `Bound` operand is deliberately excluded: preserving the
             // register the asm was asked to see and affect would defeat
             // the binding.
-            if let AsmConstraint::Fixed(r) | AsmConstraint::RegOrImm(r) = op.constraint {
+            if let AsmConstraint::Fixed(r) | AsmConstraint::RegOrImm { reg: Some(r), .. } =
+                op.constraint
+            {
                 clobber_regs |= 1 << r;
             }
         }
@@ -2000,6 +2047,13 @@ impl Compiler {
             .find(|&c| c == 'L' || Self::X86_IMM_CONSTRAINTS.iter().any(|&(l, ..)| l == c))
     }
 
+    /// True when the constant `v` takes the immediate arm `letter` of an
+    /// x86 register-or-immediate constraint: `i` / `n` admit any constant,
+    /// a range letter its range.
+    pub(crate) fn x86_imm_alternative_accepts(letter: char, v: i64) -> bool {
+        matches!(letter, 'i' | 'n') || Self::x86_imm_constraint_accepts(letter, v)
+    }
+
     /// True when `v` satisfies the x86 immediate constraint `letter`.
     pub(crate) fn x86_imm_constraint_accepts(letter: char, v: i64) -> bool {
         if letter == 'L' {
@@ -2058,6 +2112,11 @@ impl Compiler {
         Self::aarch64_movz_imm(x, is64)
             || Self::aarch64_movz_imm(!x & mask, is64)
             || super::super::codegen::aarch64::table::encode_logical_imm(x, is64).is_some()
+    }
+
+    /// The AArch64 counterpart of [`Self::x86_imm_alternative_accepts`].
+    pub(crate) fn aarch64_imm_alternative_accepts(letter: char, v: i64) -> bool {
+        matches!(letter, 'i' | 'n') || Self::aarch64_imm_constraint_accepts(letter, v)
     }
 
     /// True when `v` satisfies the AArch64 immediate constraint `letter`
@@ -2160,13 +2219,19 @@ impl Compiler {
                 _ => return None,
             })
         };
-        // `i` / `n` take any integer constant; the range-restricted letters
-        // additionally bound its value, which the operand site checks once
-        // the constant is in hand. The letters are target-specific: x86 and
-        // aarch64 each give `I`..`N` their own ranges.
-        let has_imm = body.contains(['i', 'n'])
-            || (is_x86 && Self::x86_imm_constraint_letter(body).is_some())
-            || (!is_x86 && Self::aarch64_imm_constraint_letter(body).is_some());
+        // `i` / `n` (and the immediate arm of `g`) take any integer
+        // constant; the range-restricted letters additionally bound its
+        // value, which the operand site checks once the constant is in
+        // hand. The letters are target-specific: x86 and aarch64 each give
+        // `I`..`N` their own ranges.
+        let imm_letter = if body.contains(['i', 'n', 'g']) {
+            Some('i')
+        } else if is_x86 {
+            Self::x86_imm_constraint_letter(body)
+        } else {
+            Self::aarch64_imm_constraint_letter(body)
+        };
+        let has_imm = imm_letter.is_some();
         // A memory-only constraint (`m`, `=m`, `+m`): the operand is accessed
         // through a memory reference. `g` / `rm` also permit memory but prefer
         // a register, which the register path below handles.
@@ -2185,10 +2250,17 @@ impl Compiler {
         let has_general = body.contains(['r', 'q', 'g']);
         let has_reg = has_general || body.contains('m');
         // A specific-register letter (possibly combined with `i` as in
-        // `ci`: the value takes that register, or an immediate).
+        // `ci`: the value takes that register, or an immediate). Only an
+        // input can be an immediate.
         if !has_general && let Some(reg) = body.chars().find_map(fixed) {
-            if has_imm {
-                return Some((AsmConstraint::RegOrImm(reg), is_rw));
+            if let Some(imm) = imm_letter.filter(|_| !is_output) {
+                return Some((
+                    AsmConstraint::RegOrImm {
+                        reg: Some(reg),
+                        imm,
+                    },
+                    is_rw,
+                ));
             }
             return Some((AsmConstraint::Fixed(reg), is_rw));
         }
@@ -2200,6 +2272,9 @@ impl Compiler {
             return Some((AsmConstraint::Fp, is_rw));
         }
         if has_reg {
+            if let Some(imm) = imm_letter.filter(|_| has_general && !is_output) {
+                return Some((AsmConstraint::RegOrImm { reg: None, imm }, is_rw));
+            }
             return Some((AsmConstraint::Reg, is_rw));
         }
         if has_imm && !is_output {
@@ -2650,6 +2725,7 @@ impl Compiler {
         // unary `*`, which would mis-apply the decay no-op and drop the
         // load an assignment lvalue needs.
         self.pending.fn_ptr_chain_depth = -1;
+        self.pending.fn_ptr_depth_is_array_elem = false;
         // GNU statement attributes: an attribute specifier at statement
         // position appertains to the statement that follows, and
         // `__attribute__((fallthrough));` -- what `<linux/compiler_attributes.h>`

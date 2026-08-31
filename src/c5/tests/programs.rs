@@ -505,29 +505,17 @@ fn typedef_aligned_attribute() {
 #[test]
 fn builtin_return_address() {
     // __builtin_return_address(0) is the caller's return address; native
-    // reads the saved slot at [fp+8], the VM returns a non-zero per-frame
-    // proxy. The fixture returns 0 only when it is non-null.
+    // reads the saved slot at [fp+8], the VM the code position its frame
+    // record holds. The fixture returns 0 only when it is non-null.
     assert_eq!(run_fixture("builtin_return_address.c"), 0);
 }
 
 #[test]
-fn builtin_return_address_rejects_a_non_zero_level() {
+fn frame_builtins_take_a_non_negative_constant_level() {
     // GCC types the operand as the number of frames to walk up and
-    // rejects a non-constant one. Only level 0 is answerable for a
-    // return address: gcc's aarch64 backend returns a constant 0 for a
-    // higher level, and its x86-64 backend yields a stack address once a
-    // caller drops its frame pointer. A diagnostic replaces both wrong
-    // answers.
+    // rejects a non-constant one; a negative level names no frame.
     use crate::c5::Compiler;
     for (src, want) in [
-        (
-            "void *f(void){ return __builtin_return_address(1); }",
-            "supports level 0 only",
-        ),
-        (
-            "void *f(void){ return __builtin_return_address(2 + 3); }",
-            "supports level 0 only",
-        ),
         (
             "void *f(int n){ return __builtin_return_address(n); }",
             "must be an integer constant",
@@ -554,12 +542,14 @@ fn builtin_return_address_rejects_a_non_zero_level() {
             "expected {want:?} for {src:?}, got {msg:?}"
         );
     }
-    // Level 0 compiles, spelled directly or as a constant expression;
-    // a frame-address level above 0 compiles to the chain walk.
+    // Any constant expression compiles: level 0 directly, a level above
+    // 0 to the chain walk.
     for ok in [
         "void *f(void){ return __builtin_return_address(0); } int main(void){return 0;}",
         "void *f(void){ return __builtin_frame_address(0); } int main(void){return 0;}",
         "void *f(void){ return __builtin_return_address(1 - 1); } int main(void){return 0;}",
+        "void *f(void){ return __builtin_return_address(1); } int main(void){return 0;}",
+        "void *f(void){ return __builtin_return_address(2 + 3); } int main(void){return 0;}",
         "void *f(void){ return __builtin_frame_address(1); } int main(void){return 0;}",
         "void *f(void){ return __builtin_frame_address(1 + 2); } int main(void){return 0;}",
     ] {
@@ -576,6 +566,17 @@ fn builtin_frame_address_walks_to_a_callers_frame() {
     // frames that published them; gcc answers identically at -O0 and -O2
     // on linux-x86_64 and linux-aarch64.
     assert_eq!(run_fixture("builtin_frame_address_levels.c"), 0);
+}
+
+#[test]
+fn builtin_return_address_walks_to_a_callers_frame() {
+    // __builtin_return_address(N > 0) reports the return address level 0
+    // reports N calls up, read from the frame record the frame-pointer
+    // walk reaches. The fixture checks three levels against the frames
+    // that published them and against the labels around each call; gcc
+    // answers identically at -O0 on linux-x86_64 and folds a level above
+    // 0 to 0 on linux-aarch64.
+    assert_eq!(run_fixture("builtin_return_address_levels.c"), 0);
 }
 
 #[test]
@@ -879,6 +880,14 @@ fn overaligned_data_placement() {
     // matched against GCC and clang on x86-64 and aarch64. The native /
     // JIT parity lists carry the same fixture (the VM does not compact).
     assert_eq!(run_fixture("overaligned_data_placement.c"), 0);
+}
+
+#[test]
+fn overaligned_bss_placement() {
+    // Zero-initialized objects with an explicit `aligned(N)` land on their
+    // boundary when `.data` asks for less: the merged `.bss` base follows
+    // the widest `.bss` alignment, not the `.data` one.
+    assert_eq!(run_fixture("overaligned_bss_placement.c"), 0);
 }
 
 #[test]
@@ -1416,6 +1425,14 @@ fn string_literal_const_index_fold() {
     // equal the runtime load at every position, including the
     // terminator and concatenated parts.
     assert_eq!(run_fixture("string_literal_const_index_fold.c"), 0);
+}
+
+#[test]
+fn const_array_copy_member_fold() {
+    // A whole-struct copy of a const static array element reads the
+    // initializer bytes; copies from a mutable array, a written-through
+    // copy, and a variable index read what is actually stored.
+    assert_eq!(run_fixture("const_array_copy_member_fold.c"), 0);
 }
 
 #[test]
@@ -3187,6 +3204,17 @@ fn const_object_array_bound() {
 }
 
 #[test]
+fn const_pointer_object_fold() {
+    // A const-qualified pointer object with static storage duration is
+    // read as its initializer's address: file-scope and block-scope
+    // objects, an aggregate member, an interior and a one-past-the-end
+    // element address, a later-defined extern, a function, and one
+    // whose own address escapes. The object-level cover is in
+    // `relocatable`.
+    assert_eq!(run_fixture("const_pointer_object_fold.c"), 0);
+}
+
+#[test]
 fn block_scope_thread_local() {
     // C11 6.7.1: a block-scope `static _Thread_local` / `static __thread`
     // object has thread storage duration -- placed in the TLS block, one per
@@ -3870,6 +3898,16 @@ fn typedef_at_function_body_top_level() {
 }
 
 #[test]
+fn static_local_shadowing_a_file_scope_name_binds_locally() {
+    // C99 6.2.2p6 + 6.2.4p3: a block-scope static object has no
+    // linkage. The fixture self-checks that its references bind to the
+    // block-scope storage under a name shared with a file-scope extern
+    // declaration and with a defined global, and that the hidden
+    // global's storage record survives the scope.
+    assert_eq!(run_fixture("static_local_shadows_file_scope.c"), 0);
+}
+
+#[test]
 fn const_expr_cast_narrows_to_target_width() {
     // C99 6.3.1.3: a cast to an integer type in a constant expression
     // narrows to the target width and re-interprets by signedness, so
@@ -4103,6 +4141,15 @@ fn bitfield_storage_unit_matches_base_type() {
     // a uint32_t-based struct to 8 bytes and bleeds a
     // read-modify-write into adjacent storage.
     assert_eq!(run_fixture("bitfield_storage_unit.c"), 0);
+}
+
+#[test]
+fn partial_initializer_zeroes_the_padding() {
+    // C99 6.7.8p10 requires zero padding for static storage only; an
+    // automatic aggregate initializer zero-fills the whole object before
+    // storing the members, which is what `-fzero-init-padding-bits=all`
+    // names. The fixture dirties the stack first and ORs the padding.
+    assert_eq!(run_fixture("init_padding_zero.c"), 0);
 }
 
 #[test]
@@ -5764,8 +5811,19 @@ fn volatile_struct_assign() {
 #[test]
 fn builtin_object_size() {
     // GCC `__builtin_object_size`: folds for a known declared array,
-    // (size_t)-1 / 0 per type class otherwise, operand unevaluated.
+    // (size_t)-1 / 0 per type class otherwise, operand unevaluated. An
+    // array member is unbounded through a pointer when it is a `[]`
+    // member or, at the default -fstrict-flex-arrays=0, the last member;
+    // a member of a declared object is bounded by the object.
     assert_eq!(run_fixture("builtin_object_size.c"), 0);
+}
+
+#[test]
+fn strict_flex_arrays_default_level() {
+    // At the default -fstrict-flex-arrays=0 every trailing array member
+    // is unbounded through a pointer; only the array that is not the
+    // last member answers its size (the fixture's bit 4).
+    assert_eq!(run_fixture("strict_flex_arrays.c"), 16);
 }
 
 #[test]
@@ -5775,6 +5833,17 @@ fn bool_bitfield_zero_extends() {
     // yields. The wrong sign made an expression like `64 - 8 * flag`
     // overshoot when a `_Bool` bitfield feeds integer arithmetic.
     assert_eq!(run_fixture("bool_bitfield_zero_extends.c"), 0);
+}
+
+#[test]
+fn bool_bitfield_assign_normalizes() {
+    // C99 6.5.16.1p2 + 6.3.1.2: a value assigned to a `_Bool` bitfield
+    // converts to `_Bool` (zero / nonzero) before the store, not by
+    // truncation to the field's width. Masking alone folded
+    // `flag = x & 4` to a constant 0 for a field at bit 0 or 1, which
+    // is the kernel's `data->allow_reinit = flags &
+    // PERCPU_REF_ALLOW_REINIT`.
+    assert_eq!(run_fixture("bool_bitfield_assign_normalizes.c"), 0);
 }
 
 #[test]
@@ -5867,6 +5936,23 @@ fn builtin_constant_p() {
     // idiom so a stubbed always-0 form can't silently collapse it to
     // the fallback arm.
     assert_eq!(run_fixture("builtin_constant_p.c"), 0);
+}
+
+#[test]
+fn builtin_constant_p_value_kinds() {
+    // An object or a symbol-relative address is not a constant value:
+    // an array, a struct, `&global` and a compound literal answer 0 as
+    // gcc does; literals, enum constants, `sizeof` and folded pointer
+    // comparisons answer 1.
+    assert_eq!(run_fixture("builtin_constant_p_value_kinds.c"), 0);
+}
+
+#[test]
+fn builtin_constant_p_selects_choose_expr_arm_in_initializer() {
+    // The kernel's PIN_GROUP shape: an array operand selects the address
+    // arm, whose value carries a relocation; an integer operand selects
+    // the constant arm; a floating arm keeps its value.
+    assert_eq!(run_fixture("builtin_constant_p_choose_expr_init.c"), 0);
 }
 
 #[test]
@@ -6028,6 +6114,35 @@ fn inline_asm_extended_operands_fixture() {
     // Full fixture (also snapshotted): x86_64 asm forms with a portable
     // fallback. Returns 0 when every form round-trips.
     assert_eq!(run_fixture("inline_asm_extended_operands.c"), 0);
+}
+
+#[test]
+fn inline_asm_x64_operand_modifiers_fixture() {
+    // `%z` / `%h` and the immediate arm of a register-or-immediate
+    // constraint, with a portable fallback.
+    assert_eq!(run_fixture("inline_asm_x64_operand_modifiers.c"), 42);
+}
+
+#[test]
+fn inline_asm_x64_operand_modifiers_hold_under_both_data_models() {
+    use crate::Target;
+    // The suffix `%z` selects and the comparisons the fixture makes follow
+    // the operand's width, and `long` is 4 bytes on the Windows targets.
+    // The x86 targets take the asm arm and the aarch64 ones the portable
+    // fallback, so both arms are covered at both widths.
+    for target in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+        Target::MacOSAarch64,
+    ] {
+        assert_eq!(
+            super::run_fixture_for("inline_asm_x64_operand_modifiers.c", target),
+            42,
+            "{target:?}"
+        );
+    }
 }
 
 #[test]

@@ -9,15 +9,15 @@ fn ent_pc=2 n_params=0 variadic=false locals=5
     v10  LocalAddr(-2)                                    -> x0
     v11  Imm(0)                                           -> x1
     v12  InlineAsm { template="cpuid", ops=2, args=[v10, v11] } -> -
-    v13  LoadLocal { off=-2, kind=U32 }                   -> x2
+    v13  LoadLocal { off=-2, kind=U32 }                   -> x1
     terminator Jmp(b2)   (exit_acc=v13)
   block 2  start_pc=0
-    v14  LocalAddr(-2)                                    -> x1
+    v14  LocalAddr(-2)                                    -> x2
     v15  LocalAddr(-3)                                    -> x6
     v16  LocalAddr(-4)                                    -> x7
     v17  LocalAddr(-5)                                    -> x8
-    v18  Imm(0)                                           -> x1
-    v19  InlineAsm { template="cpuid", ops=6, args=[v10, v15, v16, v17, v18, v18] } -> -
+    v18  Imm(0)                                           -> x0
+    v19  InlineAsm { template="cpuid", ops=6, args=[v14, v15, v16, v17, v18, v18] } -> -
     v20  LoadLocal { off=-2, kind=U32 }                   -> x0
     terminator Jmp(b3)   (exit_acc=v20)
   block 3  start_pc=0

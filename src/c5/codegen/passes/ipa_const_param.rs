@@ -33,6 +33,15 @@
 //! with nothing else in scope, so no parameter range depends on another
 //! function's, and a recursive or mutually recursive call contributes
 //! its argument like any other site -- one pass, no fixed point.
+//! TODO: an argument that is a counted loop's induction variable stays
+//! unbounded. Definition ranges do not close it -- the counter's phi
+//! ascends, and widening sends the endpoint that moves to the register
+//! limit, from where the increment's narrowing extend pushes the other
+//! endpoint out too -- and the loop guard's own fact lands on the masked
+//! comparison operand, not on the value the call passes. Complete
+//! peeling of the loop does close it, and the counted loops that feed
+//! such sites have a second exit, which `super::unroll` does not
+//! expand.
 
 use super::value_range::{Range, UNIVERSE};
 use crate::c5::ir::{FunctionSsa, Inst, LoadKind, NO_VALUE, ValueId};
@@ -91,8 +100,8 @@ fn note_search(read: usize, rescan: usize) {
 fn note_search(_read: usize, _rescan: usize) {}
 
 /// The distinct maximal runs of identifier characters across `texts`.
-fn identifier_runs<'a>(texts: &[&'a [u8]]) -> Vec<&'a [u8]> {
-    let mut seen: hashbrown::HashSet<&[u8]> = hashbrown::HashSet::new();
+fn identifier_runs<'a>(texts: &[&'a [u8]]) -> hashbrown::HashSet<&'a [u8]> {
+    let mut seen: hashbrown::HashSet<&'a [u8]> = hashbrown::HashSet::new();
     for t in texts {
         let mut i = 0;
         while i < t.len() {
@@ -107,7 +116,7 @@ fn identifier_runs<'a>(texts: &[&'a [u8]]) -> Vec<&'a [u8]> {
             seen.insert(&t[start..i]);
         }
     }
-    seen.into_iter().collect()
+    seen
 }
 
 /// Entry PCs whose function can be reached other than through the
@@ -143,10 +152,11 @@ pub(crate) fn escaping_functions(
             }
         }
     }
-    // A C function name is a run of identifier characters, so any
-    // occurrence of one in a template lies inside a maximal such run.
-    // Searching the distinct runs is the same test over far fewer bytes
-    // than re-scanning every template once per function.
+    // A C function name is a run of identifier characters, so a
+    // template referencing one holds it as a whole maximal run; the
+    // same name inside a longer identifier is a different symbol. The
+    // distinct runs answer that by equality, over far fewer bytes than
+    // re-scanning every template once per function.
     let runs = identifier_runs(&asm_texts);
     let asm_bytes: usize = asm_texts.iter().map(|t| t.len()).sum();
     for f in funcs {
@@ -154,16 +164,17 @@ pub(crate) fn escaping_functions(
         if name.is_empty() {
             continue;
         }
-        let haystacks: &[&[u8]] = if name.iter().all(|&b| is_ident_byte(b)) {
-            &runs
-        } else {
-            &asm_texts
-        };
         note_search(0, asm_bytes);
-        if haystacks.iter().any(|t| {
-            note_search(t.len(), 0);
-            t.windows(name.len()).any(|w| w == name)
-        }) {
+        let hit = if name.iter().all(|&b| is_ident_byte(b)) {
+            note_search(name.len(), 0);
+            runs.contains(name)
+        } else {
+            asm_texts.iter().any(|t| {
+                note_search(t.len(), 0);
+                t.windows(name.len()).any(|w| w == name)
+            })
+        };
+        if hit {
             named.insert(f.name.as_str());
         }
     }

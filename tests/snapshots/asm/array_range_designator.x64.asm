@@ -77,15 +77,11 @@ Disassembly of section .text:
                	leaq	0x1(%rax), %rbx
                	cmpl	$0x2, %ebx
                	jl	<addr>
-               	leaq	<rip>, %rax
-               	movq	0x30(%rax), %rax
-               	callq	*%rax
+               	callq	<addr>
                	cmpl	$0x16, %eax
                	movl	$0x1, %eax
                	jne	<addr>
-               	leaq	<rip>, %rax
-               	movq	0x38(%rax), %rax
-               	callq	*%rax
+               	callq	<addr>
                	cmpl	$0xb, %eax
                	setne	%al
                	movzbq	%al, %rax
@@ -101,15 +97,11 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax
-               	movq	0x48(%rax), %rax
-               	callq	*%rax
+               	callq	<addr>
                	cmpl	$0xb, %eax
                	movl	$0x1, %eax
                	jne	<addr>
-               	leaq	<rip>, %rax
-               	movq	0x50(%rax), %rax
-               	callq	*%rax
+               	callq	<addr>
                	cmpl	$0xb, %eax
                	setne	%al
                	movzbq	%al, %rax
@@ -200,15 +192,11 @@ Disassembly of section .text:
                	je	<addr>
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax
-               	movq	(%rax), %rax
-               	callq	*%rax
+               	callq	<addr>
                	cmpl	$0xb, %eax
                	movl	$0x1, %eax
                	jne	<addr>
-               	leaq	<rip>, %rax
-               	movq	0x8(%rax), %rax
-               	callq	*%rax
+               	callq	<addr>
                	cmpl	$0x16, %eax
                	setne	%al
                	movzbq	%al, %rax
@@ -262,15 +250,11 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax
-               	movq	0x18(%rax), %rax
-               	callq	*%rax
+               	callq	<addr>
                	cmpl	$0x16, %eax
                	movl	$0x1, %eax
                	jne	<addr>
-               	leaq	<rip>, %rax
-               	movq	0x20(%rax), %rax
-               	callq	*%rax
+               	callq	<addr>
                	cmpl	$0x16, %eax
                	setne	%al
                	movzbq	%al, %rax

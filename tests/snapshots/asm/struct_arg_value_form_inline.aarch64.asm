@@ -86,16 +86,6 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	mov	x0, #0x0                // =0
-               	b	<addr>
-               	mov	w2, w1
-               	mov	w2, w2
-               	cmp	w2, w1
-               	b.ne	<addr>
-               	add	x0, x1, #0x1
-               	mov	w1, w0
-               	cmp	w1, #0x4
-               	b.lo	<addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x0, #0x0                // =0
@@ -106,6 +96,4 @@ Disassembly of section .text:
                	cbz	x1, <addr>
                	mov	x0, #0x8                // =8
                	ret
-               	ret
-               	mov	x0, #0x3                // =3
                	ret

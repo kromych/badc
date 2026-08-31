@@ -36,6 +36,9 @@ pub(crate) enum AsmOpndA64 {
     /// `{%N.T}`: a one-register table list whose register is operand N
     /// (the tbl/tbx table when the wrapper passes it as a `w` operand).
     RefVecList { idx: u8, size: u8, q: bool },
+    /// `{%N.T}[i]`: a one-register lane list whose register is operand N, the
+    /// operand the single-structure load/stores take.
+    RefVecListLane { idx: u8, size: u8, index: u8 },
     /// `%cN` / `%PN`: operand N substituted as a bare constant, without
     /// immediate syntax. Valid on an `i`-class operand; the emitter
     /// resolves the compile-time constant value.
@@ -76,6 +79,15 @@ pub(crate) enum AsmOpndA64 {
         count: u8,
         size: u8,
         q: bool,
+    },
+    /// A SIMD register list with a lane `{v0.T, ..}[i]` of `count` consecutive
+    /// registers (1..4) sharing one element size, plus the lane index. Used by
+    /// the single-structure ld1..ld4/st1..st4.
+    VecListLane {
+        first: u8,
+        count: u8,
+        size: u8,
+        index: u8,
     },
     /// A literal immediate `#imm`.
     Imm(i64),
@@ -560,28 +572,77 @@ fn parse_vec_elem(tok: &str) -> Option<(u8, u8, u8)> {
     Some((num, size, index))
 }
 
-/// Parse a single-element register list with a lane `{v0.s}[2]` into the
-/// register number, element-size log2, and lane index (as a `VecElem`). Used by
-/// the single-structure lane load/store forms; the lane rides outside the
-/// braces, unlike the arrangement lists `parse_vec_list` handles.
-fn parse_vec_list_lane(tok: &str) -> Option<(u8, u8, u8)> {
-    let (reg_part, lane_part) = tok.strip_prefix('{')?.split_once('}')?;
+/// Split a lane list `{..}[i]` into its brace body and the lane index, checked
+/// against the lane count of `size`.
+fn split_lane_list(tok: &str) -> Option<(&str, u8, u8)> {
+    let (body, lane_part) = tok.strip_prefix('{')?.split_once('}')?;
     let lane = lane_part
         .trim()
         .strip_prefix('[')?
         .strip_suffix(']')?
         .trim();
-    let (num_s, letter) = reg_part.trim().strip_prefix('v')?.split_once('.')?;
+    let index: u8 = lane.parse().ok()?;
+    // The element letter is the same for every register of the list, so read
+    // the size off the first one to bound the index.
+    let letter = body
+        .split(&[',', '-'][..])
+        .next()?
+        .trim()
+        .split_once('.')?
+        .1;
+    let size = element_size(letter.trim())?;
+    if index >= (16u8 >> size) {
+        return None;
+    }
+    Some((body, size, index))
+}
+
+/// One member of a lane list: `vN.<b|h|s|d>`, which names an element size
+/// rather than an arrangement.
+fn parse_vec_elem_reg(tok: &str) -> Option<(u8, u8)> {
+    let (num_s, letter) = tok.strip_prefix('v')?.split_once('.')?;
     let num: u8 = num_s.trim().parse().ok()?;
     if num > 31 {
         return None;
     }
-    let size = element_size(letter.trim())?;
-    let index: u8 = lane.parse().ok()?;
-    if index >= (16u8 >> size) {
+    Some((num, element_size(letter.trim())?))
+}
+
+/// Parse a register list with a lane `{v0.s, v1.s, ..}[2]` (or the range form
+/// `{v0.s-v3.s}[2]`) into the first register number, the count (1..4), the
+/// element-size log2, and the lane index. The registers must be consecutive
+/// modulo 32 and share one element size. This is the operand of the
+/// single-structure ld1..ld4/st1..st4; the lane rides outside the braces,
+/// unlike the arrangement lists `parse_vec_list` handles.
+fn parse_vec_list_lane(tok: &str) -> Option<(u8, u8, u8, u8)> {
+    let (body, size, index) = split_lane_list(tok)?;
+    let inner = body.trim();
+    let regs: Vec<(u8, u8)> = if let Some((lo, hi)) = inner.split_once('-') {
+        let (f, fs) = parse_vec_elem_reg(lo.trim())?;
+        let (l, ls) = parse_vec_elem_reg(hi.trim())?;
+        if fs != ls {
+            return None;
+        }
+        let count = (l.wrapping_sub(f) & 31) as usize + 1;
+        (0..count)
+            .map(|i| (f.wrapping_add(i as u8) & 31, fs))
+            .collect()
+    } else {
+        inner
+            .split(',')
+            .map(|p| parse_vec_elem_reg(p.trim()))
+            .collect::<Option<Vec<_>>>()?
+    };
+    if regs.is_empty() || regs.len() > 4 {
         return None;
     }
-    Some((num, size, index))
+    let (first, _) = regs[0];
+    for (i, &(n, s)) in regs.iter().enumerate() {
+        if s != size || n != (first.wrapping_add(i as u8) & 31) {
+            return None;
+        }
+    }
+    Some((first, regs.len() as u8, size, index))
 }
 
 /// Parse a SIMD register list `{v0.T, v1.T, ..}` or the range form
@@ -953,8 +1014,28 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
     {
         return Ok(AsmOpndA64::RefVecList { idx, size, q });
     }
-    if let Some((num, size, index)) = parse_vec_list_lane(tok) {
-        return Ok(AsmOpndA64::VecElem { num, size, index });
+    // `{%N.T}[i]`: the same list with a lane, the single-structure operand. A
+    // list of several operand references has no consecutive-register guarantee,
+    // so the element letter must be the whole brace body.
+    if let Some((body, size, index)) = split_lane_list(tok)
+        && let Some((digits, letter)) = body
+            .trim()
+            .strip_prefix('%')
+            .and_then(|r| r.split_once('.'))
+        && !digits.is_empty()
+        && digits.bytes().all(|c| c.is_ascii_digit())
+        && element_size(letter.trim()) == Some(size)
+        && let Ok(idx) = digits.parse::<u8>()
+    {
+        return Ok(AsmOpndA64::RefVecListLane { idx, size, index });
+    }
+    if let Some((first, count, size, index)) = parse_vec_list_lane(tok) {
+        return Ok(AsmOpndA64::VecListLane {
+            first,
+            count,
+            size,
+            index,
+        });
     }
     if let Some((first, count, size, q)) = parse_vec_list(tok) {
         return Ok(AsmOpndA64::VecList {
@@ -1600,10 +1681,16 @@ pub(crate) fn assign_operand_regs(
     operands: &[crate::c5::ir::AsmOperand],
     clobber_regs: u32,
     clobber_fp_regs: u32,
+    const_of: &dyn Fn(usize) -> Option<i64>,
 ) -> Result<Vec<Option<u8>>, String> {
     use crate::c5::ir::AsmConstraint as C;
     let mut assigned: Vec<Option<u8>> = alloc::vec![None; operands.len()];
     let mut used = [false; 32];
+    // A register-or-immediate operand is the immediate when its value is a
+    // constant the immediate class admits, and takes no register then.
+    let takes_imm = |i: usize, imm: char| {
+        const_of(i).is_some_and(|v| crate::Compiler::aarch64_imm_alternative_accepts(imm, v))
+    };
     // Fixed constraints (register-asm variables) own their register;
     // assign them before the clobber marks, whose bits include the
     // fixed operands' own registers. Operands may share one register --
@@ -1634,7 +1721,12 @@ pub(crate) fn assign_operand_regs(
     // x0..x15 are the allocatable pool; x16/x17 are the emitter's scratch.
     let pool: [u8; 16] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
     for (i, op) in operands.iter().enumerate() {
-        if matches!(op.constraint, C::Reg | C::Mem | C::MemBase) {
+        let pooled = match op.constraint {
+            C::Reg | C::Mem | C::MemBase => true,
+            C::RegOrImm { reg: None, imm } => !takes_imm(i, imm),
+            _ => false,
+        };
+        if pooled {
             let r = pool
                 .iter()
                 .copied()
@@ -1670,10 +1762,10 @@ pub(crate) fn assign_operand_regs(
             assigned[i] = Some(r);
         }
     }
-    // The register-or-immediate class letters are x86-specific and do
-    // not occur in AArch64 templates; reject rather than mis-assign.
+    // The register-class letters are x86-specific and do not occur in
+    // AArch64 templates; reject rather than mis-assign.
     for op in operands {
-        if matches!(op.constraint, C::RegOrImm(_)) {
+        if matches!(op.constraint, C::RegOrImm { reg: Some(_), .. }) {
             return Err(String::from(
                 "inline asm: register-class-letter constraint not supported on AArch64",
             ));
@@ -1803,14 +1895,14 @@ mod tests {
         };
         // With x0 and x2 clobbered, three GP operands take x1, x3, x4.
         let gp = [op(C::Reg), op(C::Reg), op(C::Reg)];
-        let a = assign_operand_regs(&gp, (1 << 0) | (1 << 2), 0).unwrap();
+        let a = assign_operand_regs(&gp, (1 << 0) | (1 << 2), 0, &|_| None).unwrap();
         assert_eq!(a, [Some(1), Some(3), Some(4)]);
         // An FP (d0) clobber pushes a `w` operand off d0 onto d1.
-        let a = assign_operand_regs(&[op(C::Fp)], 0, 1 << 0).unwrap();
+        let a = assign_operand_regs(&[op(C::Fp)], 0, 1 << 0, &|_| None).unwrap();
         assert_eq!(a, [Some(1)]);
         // No clobbers: the base assignment is unchanged.
         assert_eq!(
-            assign_operand_regs(&gp, 0, 0).unwrap(),
+            assign_operand_regs(&gp, 0, 0, &|_| None).unwrap(),
             [Some(0), Some(1), Some(2)]
         );
     }
@@ -2441,19 +2533,68 @@ mod tests {
                 q: true
             }
         );
-        // The lane form `{vN.T}[i]` is a single element (the lane rides outside
-        // the braces), parsed as a VecElem shared with the umov/ins forms.
-        assert_eq!(parse_vec_list_lane("{v0.s}[2]"), Some((0, 2, 2)));
-        assert_eq!(parse_vec_list_lane("{v5.b}[15]"), Some((5, 0, 15)));
+        // The lane form `{vN.T, ..}[i]`: the members name an element size, not
+        // an arrangement, and the lane rides outside the braces. Both the comma
+        // and the range spelling reach the same list.
+        assert_eq!(parse_vec_list_lane("{v0.s}[2]"), Some((0, 1, 2, 2)));
+        assert_eq!(parse_vec_list_lane("{v5.b}[15]"), Some((5, 1, 0, 15)));
+        assert_eq!(
+            parse_vec_list_lane("{v19.s, v20.s, v21.s, v22.s}[0]"),
+            Some((19, 4, 2, 0))
+        );
+        assert_eq!(parse_vec_list_lane("{v0.s-v3.s}[1]"), Some((0, 4, 2, 1)));
+        assert_eq!(
+            parse_vec_list_lane("{v30.h,v31.h,v0.h}[7]"),
+            Some((30, 3, 1, 7))
+        ); // wraps
+        assert_eq!(parse_vec_list_lane("{v31.d-v0.d}[1]"), Some((31, 2, 3, 1))); // wraps
         assert_eq!(parse_vec_list_lane("{v0.d}[2]"), None); // lane out of range
         assert_eq!(parse_vec_list_lane("{v0.4s}"), None); // an arrangement list
+        assert_eq!(parse_vec_list_lane("{v0.4s}[1]"), None); // arrangement, not element
+        assert_eq!(parse_vec_list_lane("{v0.s, v2.s}[0]"), None); // not consecutive
+        assert_eq!(parse_vec_list_lane("{v0.s, v1.h}[0]"), None); // sizes differ
+        assert_eq!(
+            parse_vec_list_lane("{v0.b, v1.b, v2.b, v3.b, v4.b}[0]"),
+            None
+        ); // > 4
         let insns = parse_template(b"ld1 {v3.s}[2], [x2]").unwrap();
         assert_eq!(
             insns[0].operands[0],
-            AsmOpndA64::VecElem {
-                num: 3,
+            AsmOpndA64::VecListLane {
+                first: 3,
+                count: 1,
                 size: 2,
                 index: 2
+            }
+        );
+        let insns = parse_template(b"st4 {v19.s,v20.s,v21.s,v22.s}[0],[x0],#16").unwrap();
+        assert_eq!(
+            insns[0].operands[0],
+            AsmOpndA64::VecListLane {
+                first: 19,
+                count: 4,
+                size: 2,
+                index: 0
+            }
+        );
+        assert_eq!(insns[0].operands[2], AsmOpndA64::Imm(16));
+        // `{%N.T}[i]` is the same list with the register named by an operand
+        // reference; a bare `%N.T[i]` stays the umov/ins element view.
+        let insns = parse_template(b"st1 {%0.d}[1], [%1]; umov %w2, %0.s[3]").unwrap();
+        assert_eq!(
+            insns[0].operands[0],
+            AsmOpndA64::RefVecListLane {
+                idx: 0,
+                size: 3,
+                index: 1
+            }
+        );
+        assert_eq!(
+            insns[1].operands[1],
+            AsmOpndA64::RefVecElem {
+                idx: 0,
+                size: 2,
+                index: 3
             }
         );
     }
@@ -2813,7 +2954,7 @@ mod tests {
             op(C::Reg, false, false),
         ];
         assert_eq!(
-            assign_operand_regs(&ops, 0, 0).unwrap(),
+            assign_operand_regs(&ops, 0, 0, &|_| None).unwrap(),
             [Some(0), Some(1), Some(2), Some(3)]
         );
     }
@@ -2834,7 +2975,7 @@ mod tests {
             op(AsmConstraint::Fixed(9), false),
             op(AsmConstraint::Reg, false),
         ];
-        let assigned = assign_operand_regs(&ops, 0, 0).unwrap();
+        let assigned = assign_operand_regs(&ops, 0, 0, &|_| None).unwrap();
         assert_eq!(assigned[0], Some(9));
         assert_ne!(assigned[1], Some(9));
         // An output and an input pinned to one register share it: the
@@ -2844,11 +2985,11 @@ mod tests {
             op(AsmConstraint::Fixed(0), false),
         ];
         assert_eq!(
-            assign_operand_regs(&pair, 0, 0).unwrap(),
+            assign_operand_regs(&pair, 0, 0, &|_| None).unwrap(),
             [Some(0), Some(0)]
         );
         // x16/x17 (emit scratch) and beyond are rejected.
         let hi = [op(AsmConstraint::Fixed(16), false)];
-        assert!(assign_operand_regs(&hi, 0, 0).is_err());
+        assert!(assign_operand_regs(&hi, 0, 0, &|_| None).is_err());
     }
 }

@@ -35,24 +35,26 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0, #0x8]
-               	add	x1, x0, #0x0
-               	ldrsw	x1, [x1]
-               	add	x1, x1, #0x0
-               	ldrsw	x2, [x0, #0x4]
-               	add	x1, x1, x2
-               	ldrsw	x0, [x0, #0x8]
-               	add	x0, x1, x0
-               	cmp	x0, #0x12
-               	b.eq	<addr>
-               	mov	x0, #0x6                // =6
-               	ldp	x29, x30, [sp], #0x10
-               	ret
+               	sub	sp, sp, #0x20
+               	sub	x0, x29, #0x10
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	str	x10, [sp, #-0x10]!
+               	ldr	x10, [x1]
+               	str	x10, [x0]
+               	ldrb	w10, [x1, #0x8]
+               	strb	w10, [x0, #0x8]
+               	ldrb	w10, [x1, #0x9]
+               	strb	w10, [x0, #0x9]
+               	ldrb	w10, [x1, #0xa]
+               	strb	w10, [x0, #0xa]
+               	ldrb	w10, [x1, #0xb]
+               	strb	w10, [x0, #0xb]
+               	ldr	x10, [sp], #0x10
                	mov	x0, #0xb                // =11
                	mov	x1, #0x16               // =22
                	bl	<addr>
                	sxtw	x0, w0
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

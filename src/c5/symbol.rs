@@ -39,6 +39,8 @@ pub(crate) struct Symbol {
     /// reserves one element, so a larger initializer must allocate
     /// fresh storage rather than overrun the following globals.
     pub reserved_data_bytes: i64,
+    /// Shadow slot for `reserved_data_bytes` (see `h_class`).
+    pub h_reserved_data_bytes: i64,
     /// `(previous offset, previous reserved bytes)` when a defining
     /// declaration moved the object out of the storage a tentative
     /// definition had reserved. C99 6.9.2 makes both declarations
@@ -56,6 +58,8 @@ pub(crate) struct Symbol {
     /// recorded size covers the tail and the named-section carve moves
     /// all of it.
     pub fam_init_bytes: i64,
+    /// Shadow slot for `fam_init_bytes` (see `h_class`).
+    pub h_fam_init_bytes: i64,
     pub h_class: i64,
     pub h_type: i64,
     pub h_val: i64,
@@ -77,6 +81,14 @@ pub(crate) struct Symbol {
     /// ABI.
     pub h_params: Vec<i64>,
     pub h_is_variadic: bool,
+    /// Calling convention of the function this symbol names, or of the
+    /// function a function-pointer object points to
+    /// (`__attribute__((ms_abi))` / `((sysv_abi))`). Already normalised
+    /// against the target, so `CallConv::Target` covers both "no
+    /// attribute" and "the attribute is inert here".
+    pub conv: crate::c5::codegen::CallConv,
+    /// Shadow slot for `conv` (see `h_is_variadic`).
+    pub h_conv: crate::c5::codegen::CallConv,
 
     /// True while the function's return type is the implicit `int`
     /// default rather than a declared type: a `#pragma binding` seen
@@ -101,6 +113,8 @@ pub(crate) struct Symbol {
     /// __thread_data + __thread_vars. The VM treats the slot
     /// like a regular global (single-threaded execution).
     pub is_thread_local: bool,
+    /// Shadow slot for `is_thread_local` (see `h_class`).
+    pub h_is_thread_local: bool,
 
     /// GNU explicit-register variable: `register T name asm("reg")`
     /// binds the local to a machine register. Stack- and frame-pointer
@@ -159,6 +173,15 @@ pub(crate) struct Symbol {
     /// `.bss` placement.
     pub section_name: Option<String>,
 
+    /// `__attribute__((patchable_function_entry(N, M)))` seen on any
+    /// declaration of the name: `N` NOPs at the entry, `M` of them ahead
+    /// of the symbol, in place of `-fpatchable-function-entry=`.
+    pub patchable_function_entry: Option<(u32, u32)>,
+
+    /// `__attribute__((no_instrument_function))` seen on any declaration
+    /// of the name: `-pg` emits no profiling call in the body.
+    pub no_instrument_function: bool,
+
     /// `__attribute__((constructor))` seen on any declaration of the
     /// name. Sticky like `is_weak`, so a prototype's attribute reaches
     /// the definition, which registers the `InitFunc` at body open.
@@ -176,6 +199,8 @@ pub(crate) struct Symbol {
     /// allocation. The relocatable writer lays named sections out with
     /// it; the unified `.data` placement keeps its own 8-byte floor.
     pub data_align: i64,
+    /// Shadow slot for `data_align` (see `h_class`).
+    pub h_data_align: i64,
 
     /// `__attribute__((alias("target")))`: this symbol is an additional
     /// name for its target; `val` carries the target's entry / offset.
@@ -274,6 +299,8 @@ pub(crate) struct Symbol {
     /// back from the object's `.data` storage when this is set, so
     /// `char buf[N * 2 + 1]` is a fixed array rather than a VLA.
     pub is_const_qualified: bool,
+    /// Shadow slot for `is_const_qualified` (see `h_class`).
+    pub h_is_const_qualified: bool,
 
     /// Folded initializer of a block-scope `const`-qualified scalar
     /// arithmetic object with automatic storage. GCC (GNU mode, at -O)
@@ -294,6 +321,8 @@ pub(crate) struct Symbol {
     /// the object's lifetime. The const-global fold reads this to prove a
     /// null comparison of such a member false.
     pub storage_is_const: bool,
+    /// Shadow slot for `storage_is_const` (see `h_class`).
+    pub h_storage_is_const: bool,
 
     /// True once a `Token::Glo` symbol has been seen with an
     /// explicit initializer (`= ...`). Tentative-definition
@@ -310,6 +339,8 @@ pub(crate) struct Symbol {
     /// that is not a link-time constant). A pass reading the image for
     /// the object's value must skip it.
     pub runtime_initialized: bool,
+    /// Shadow slot for `runtime_initialized` (see `h_class`).
+    pub h_runtime_initialized: bool,
 
     /// Number of derefs from this variable's *loaded value* down
     /// to a function-pointer rvalue, plus 1, or 0 if the variable
@@ -429,6 +460,8 @@ pub(crate) struct Symbol {
     /// from a tentative definition that the parser is still
     /// waiting to resolve.
     pub is_extern_decl: bool,
+    /// Shadow slot for `is_extern_decl` (see `h_class`).
+    pub h_is_extern_decl: bool,
 
     /// Per-name census of the file-scope declarations of a function in
     /// the translation unit, sticky across all of them. Each records
@@ -440,6 +473,11 @@ pub(crate) struct Symbol {
     /// unit's definition is an inline definition; see
     /// [`inline_definition`].
     pub saw_noninline_decl: bool,
+    /// A definition in this unit spelled without `inline`. Under the
+    /// GNU89 model an `extern inline` body is inline-only, and gcc's
+    /// gnu_inline contract lets the same unit provide the ordinary
+    /// definition; that definition is the external one.
+    pub saw_noninline_def: bool,
     pub saw_static_decl: bool,
     pub saw_plain_inline_decl: bool,
     pub saw_extern_inline_decl: bool,
@@ -497,9 +535,18 @@ pub(crate) struct Symbol {
     /// emission record (the persistent `name.N` symbol; the scoped
     /// binding itself is restored at function exit). A block-scope
     /// static exists only in an emitted instance of its function, so
-    /// static DCE honors `is_used` / `section_name` on such a record
-    /// only while the owner survives. `None` for file-scope symbols.
+    /// static DCE honors `is_used` on such a record only while the
+    /// owner survives. `None` for file-scope symbols.
     pub owner_ent_pc: Option<u64>,
+
+    /// Index of the emission record while this slot's live binding is a
+    /// block-scope static. Reference-capture sites resolve the name to
+    /// the record, whose state outlives the scope-exit restore of the
+    /// slot (which may bring back a same-named file-scope `extern`).
+    /// Set at the promotion, cleared when the binding's scope exits.
+    pub static_local_record: Option<u32>,
+    /// Shadow slot for `static_local_record` at function-body scope.
+    pub h_static_local_record: Option<u32>,
 
     /// True for the synthetic internal symbol of an anonymous compound
     /// literal staged in the data segment. Its initializer bytes are
@@ -669,9 +716,10 @@ pub fn inline_definition(sym: &Symbol, model: InlineModel) -> bool {
     let gnu89 = sym.is_gnu_inline || model == InlineModel::Gnu89;
     if gnu89 {
         // GCC's `gnu_inline` contract: `extern inline` is used only for
-        // inlining, and a declaration spelling `inline` without
-        // `extern` cancels that back to a standalone definition.
-        sym.saw_extern_inline_decl && !sym.saw_plain_inline_decl
+        // inlining, a declaration spelling `inline` without `extern`
+        // cancels that back to a standalone definition, and an ordinary
+        // definition in the same unit is the external one.
+        sym.saw_extern_inline_decl && !sym.saw_plain_inline_decl && !sym.saw_noninline_def
     } else {
         // C99 6.7.4p6: every declaration `inline`, none `extern`. A
         // non-inline declaration sets `saw_noninline_decl`, so only the
@@ -726,10 +774,12 @@ impl crate::c5::layout::DataOffsets for Symbol {
             class,
             type_: _,
             val,
-            reserved_data_bytes: _, // a byte count, not an offset
-            relocated_from: _,      // the pre-relocation span, kept for diagnostics
-            data_byte_size: _,      // a byte count
-            fam_init_bytes: _,      // a byte count
+            reserved_data_bytes: _,   // a byte count, not an offset
+            h_reserved_data_bytes: _, // scope-restore shadow
+            relocated_from: _,        // the pre-relocation span, kept for diagnostics
+            data_byte_size: _,        // a byte count
+            fam_init_bytes: _,        // a byte count
+            h_fam_init_bytes: _,
             h_class: _,
             h_type: _,
             h_val: _, // scope-restore shadow; every scope is unwound before a `Program` exists
@@ -737,9 +787,12 @@ impl crate::c5::layout::DataOffsets for Symbol {
             is_variadic: _,
             h_params: _,
             h_is_variadic: _,
+            conv: _,
+            h_conv: _,
             implicit_return_int: _,
             is_noreturn: _,
             is_thread_local,
+            h_is_thread_local: _,
             asm_register: _,
             h_asm_register: _,
             is_global_register: _,
@@ -750,10 +803,13 @@ impl crate::c5::layout::DataOffsets for Symbol {
             is_used,
             is_hidden: _,
             section_name,
+            patchable_function_entry: _,
+            no_instrument_function: _,
             is_constructor: _,
             is_destructor: _,
             init_priority: _,
             data_align: _, // an alignment, not an offset
+            h_data_align: _,
             is_alias: _,
             array_size: _,
             h_array_size: _,
@@ -771,11 +827,14 @@ impl crate::c5::layout::DataOffsets for Symbol {
             h_is_zero_len_array: _,
             decl_spelling: _, // debug-info spelling, not an offset
             is_const_qualified: _,
+            h_is_const_qualified: _,
             const_object_value: _,
             h_const_object_value: _, // scope-restore shadow
             storage_is_const: _,
+            h_storage_is_const: _,
             has_initializer: _,
             runtime_initialized: _,
+            h_runtime_initialized: _,
             fn_ptr_indirection: _,
             h_fn_ptr_indirection: _,
             fn_ptr_ret_indirection: _,
@@ -789,7 +848,9 @@ impl crate::c5::layout::DataOffsets for Symbol {
             linkage: _,
             defined_here,
             is_extern_decl: _,
+            h_is_extern_decl: _,
             saw_noninline_decl: _,
+            saw_noninline_def: _,
             saw_plain_inline_decl: _,  // linkage model input, not an offset
             saw_extern_inline_decl: _, // linkage model input, not an offset
             is_gnu_inline: _,          // linkage model selector
@@ -801,6 +862,8 @@ impl crate::c5::layout::DataOffsets for Symbol {
             is_scope_bound: _,
             scoped_fn_decl: _,
             owner_ent_pc: _, // code address space
+            static_local_record: _,
+            h_static_local_record: _, // scope-restore shadow
             is_compound_literal: _,
             was_referenced: _,
             was_read: _,

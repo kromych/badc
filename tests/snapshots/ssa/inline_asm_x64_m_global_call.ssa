@@ -22,28 +22,28 @@ fn ent_pc=3 n_params=0 variadic=false locals=1
     v0   AllocaInit(0)                                    -> -
     terminator Jmp(b1)
   block 1  start_pc=0
-    v12  LocalAddr(-1)                                    -> x1
-    v13  ImmData(8)                                       -> x0
-    v14  BinopI { op=add, lhs=v13, rhs_imm=8 }            -> x0
+    v12  LocalAddr(-1)                                    -> x0
+    v13  ImmData(8)                                       -> x1
+    v14  BinopI { op=add, lhs=v13, rhs_imm=8 }            -> x1
     v15  InlineAsm { template="call *%1", ops=2, args=[v12, v14] } -> -
-    v16  LoadLocal { off=-1, kind=I32 }                   -> x2
-    v17  Extend { value=v16, kind=I32 }                   -> x7
+    v16  LoadLocal { off=-1, kind=I32 }                   -> x1
+    v17  Extend { value=v16, kind=I32 }                   -> x6
     terminator Jmp(b2)   (exit_acc=v16)
   block 2  start_pc=0
     v1   Imm(0)                                           -> x0
     v2   ImmData(8)                                       -> x0
-    v3   BinopI { op=add, lhs=v2, rhs_imm=8 }             -> x6
-    v4   ImmCode(ent_pc=1)                                -> x6
+    v3   BinopI { op=add, lhs=v2, rhs_imm=8 }             -> x2
+    v4   ImmCode(ent_pc=1)                                -> x2
     v5   Store { addr=v2, disp=8, value=v4, kind=I64 }    -> -
     v6   Extend { value=v17, kind=I32 }                   -> x0
     terminator Jmp(b3)
   block 3  start_pc=0
     v18  LocalAddr(-1)                                    -> x0
-    v19  ImmData(8)                                       -> x0
-    v20  BinopI { op=add, lhs=v19, rhs_imm=8 }            -> x0
-    v21  InlineAsm { template="call *%1", ops=2, args=[v12, v20] } -> -
+    v19  ImmData(8)                                       -> x2
+    v20  BinopI { op=add, lhs=v19, rhs_imm=8 }            -> x2
+    v21  InlineAsm { template="call *%1", ops=2, args=[v18, v20] } -> -
     v22  LoadLocal { off=-1, kind=I32 }                   -> x0
-    v23  Extend { value=v22, kind=I32 }                   -> x1
+    v23  Extend { value=v22, kind=I32 }                   -> x2
     terminator Jmp(b4)   (exit_acc=v22)
   block 4  start_pc=0
     v7   Binop { op=add, lhs=v16, rhs=v22 }               -> x0

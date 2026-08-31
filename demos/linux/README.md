@@ -6,38 +6,27 @@ harness, not a pass/fail smoke: it replays every C compile of a completed
 gcc reference build against badc and buckets the failures by normalized
 error signature, producing a ranked work list for kernel support.
 
-## Pinned kernels
+## Pinned kernel
 
-Two pins, with distinct jobs and no shared version:
+One pin, 7.1.10, for both architectures and every consumer: the sweep, the
+link-and-boot gate, and the package gate. `setup.py` carries the tarball
+sha256 and configures the tree with its own `make defconfig`, so the pin alone
+reproduces the corpus and a version bump is one edit. CI's `kernel` job and
+`scripts/validate_local_boxes.py` both reach it through `setup.py`, so local
+and CI move together and neither can drift onto its own tree.
 
-| `--config` | kernel | configuration | used by |
-|---|---|---|---|
-| `defconfig` (default) | 7.1.6, both arches | the tree's own `make defconfig` | the sweep, CI's `kernel` gate, the pre-push kernel step |
-| `minimal` | 6.12.8 (x86_64), 6.10.1 (aarch64) | vendored `configs/<arch>-<version>.config` | boot bring-up and boot debugging |
+Smaller vendored configurations used to sit beside it for boot bring-up. They
+were removed: a `.config` is only meaningful against the release it was
+produced for, so each was a second pin to regenerate on every bump, and they
+compiled a third to a half of defconfig's units. A mid-end regression that
+left a statically dead call in the object -- undefined at the `vmlinux` link
+-- reached the branch with four independent runs against them green, because
+none of the units carrying it were in those configurations.
 
-Defconfig is the gate corpus. It is what a distribution builds, and it moves
-forward with the kernel, which is what makes it a gap finder. The configuration
-is not vendored. The tarball sha256 pins the tree and `make defconfig` is a
-function of the tree, so the configuration is already reproducible; a vendored
-copy would be a second artifact to regenerate on every version bump, and one
-that can silently disagree with the tree.
-
-CI's `kernel` job and `scripts/validate_local_boxes.py` both reach this corpus
-through `setup.py`'s pin, so a version bump moves local and CI together and
-neither can drift onto its own tree.
-
-The minimal configs are the opposite case and stay vendored. They are
-known-booting configurations that cannot be derived from the tree, small enough
-to iterate on, and useful when a boot has to be debugged rather than gated. A
-`.config` is only meaningful against the tree it was produced for, so each keeps
-its own release rather than being carried forward.
-
-They are deliberately not gate cover, and a green run against them does not
-stand in for one against defconfig: they compile 1912 (x86_64) and 1346
-(aarch64) units against defconfig's 2921 and 4434. A mid-end regression that
-left a statically dead call in the object -- undefined at the `vmlinux` link --
-reached the branch with four independent minimal-config runs green, because
-none of the units carrying it are in those configurations.
+The package gate builds the same tree against the distributions' own
+configurations instead (`packages.py --config vendor`, below), which is what a
+distribution kernel actually is: 21701 to 26223 units on x86_64 and 23446 to
+30552 on aarch64, against defconfig's 2953 and 10489.
 
 ## Run
 
@@ -48,7 +37,7 @@ python3 demos/linux/sweep.py \
     --kernel-dir demos/linux/.cache/linux-<version>  # replay against badc
 ```
 
-`setup.py` downloads the pinned release from cdn.kernel.org (sha256-verified),
+`setup.py` downloads the pinned release from the vendor-deps mirror (sha256-verified),
 installs the configuration `--config` selects, runs `make olddefconfig`, and
 records every option the host toolchain forced or dropped in
 `.cache/config-deviations-<arch>.txt`. `CONFIG_INITRAMFS_SOURCE` is cleared:
@@ -91,7 +80,7 @@ level is honored (`-O1` and above become badc `-O`; `-O0` units -- e.g. ones
 that `#error` under `__OPTIMIZE__` -- stay plain), and everything else is
 dropped -- warnings, `-g`/`-std`, and the gcc code-model/hardening set
 (`-mcmodel=kernel`, `-mno-red-zone`, `-fno-strict-aliasing`,
-`-ftrivial-auto-var-init=`, ...) have no badc spelling. Each unit runs as
+`-fpatchable-function-entry=`, ...) have no badc spelling. Each unit runs as
 `badc --gnu -q -c --target=<triple>` from the kernel tree (Kbuild paths are
 relative). Assembly units (`.S`) are out of scope and counted separately, as
 are `.cmd` files that hold no kernel C compile (host tools, linker steps).
@@ -200,7 +189,7 @@ totals, so the columns still add up.
 
 `--reference cc` compiles each unit with a second compiler as well, on the
 command kbuild recorded. That line carries work badc's rewritten flag set
-does not do (warnings, patchable function entries), so the
+does not do (warnings), so the
 ratio is build cost against build cost rather than pass for pass; a
 per-unit distribution and the units badc is furthest behind on come with it.
 
@@ -337,13 +326,19 @@ what the shim does not recognize is what let `-fno-jump-tables` reach no
 compiler while every `.o.cmd` recorded it: the probe behind it is
 delegated to the reference compiler, so nothing in the build's own
 artifacts disagreed. On the pinned `defconfig` the unsupported set is
-`-ftrivial-auto-var-init=zero`,
-`-fzero-init-padding-bits=all`, `-fstrict-flex-arrays=3`,
-`-fpatchable-function-entry=` (x86_64) and
 `-fasynchronous-unwind-tables`:
-those properties are not in the built image whatever the configuration
-says. `buildcc.py --self-test` checks the classification and takes no
-tree; `verify.py --self-test` runs it, which CI does on every push.
+that property is not in the built image whatever the configuration
+says. The ftrace patch sites are forwarded:
+`-fpatchable-function-entry=N,M` gives every function its NOP area and
+its `__patchable_function_entries` record, and on x86_64 `-pg -mfentry
+-mrecord-mcount` gives it the `__fentry__` call and the `__mcount_loc`
+entry, in the forms gcc emits. `-ftrivial-auto-var-init=zero`
+(CONFIG_INIT_STACK_ALL_ZERO) is forwarded and implemented;
+`-fzero-init-padding-bits=all` is dropped with the measurement that an
+automatic aggregate initializer already zero-fills the whole object,
+padding included, before storing the members. `buildcc.py --self-test`
+checks the classification and takes no tree; `verify.py --self-test`
+runs it, which CI does on every push.
 
 Everything else (probes, `-E`, `-S`, links, the host tools under
 `scripts/` and `tools/`) goes to gcc untouched, so the configuration and
@@ -471,7 +466,7 @@ What the host has to supply:
 
 ```sh
 brew install make coreutils findutils gnu-sed grep gawk gnu-tar bison flex \
-    musl-cross
+    musl-cross binutils openssl rpm dpkg
 ```
 
 `/usr/bin/make` is GNU Make 3.81 and the tree refuses anything below 4.0, so
@@ -484,7 +479,7 @@ links every kernel unit, and that toolchain answers the `cc-option` /
 assembler declines, and supplies `CROSS_COMPILE=` for `OBJCOPY`, `NM`, `AR`
 and `STRIP`.
 
-Four headers separate the host tools from a macOS SDK, and `hostcompat/`
+Five headers separate the host tools from a macOS SDK, and `hostcompat/`
 carries them. `elf.h` is self-contained: the tree's own uapi ELF header cannot
 stand in, because it defines `ELF64_ST_BIND` in terms of `ELF_ST_BIND` and
 `scripts/mod/modpost.h` defines that back to `ELF64_ST_BIND`. `byteswap.h` and
@@ -494,6 +489,11 @@ reaches the kernel's `struct uuid_t` through `<linux/mod_devicetable.h>` while
 the SDK typedefs `uuid_t` to `unsigned char[16]`, and the SDK's only user of
 its own spelling is `gethostuuid()`. `hostcompat.h` is force-included and
 supplies `O_LARGEFILE` and `copy_file_range()` for `usr/gen_init_cpio.c`.
+`asm-generic/int-ll64.h` is the uapi fixed-width type header that
+`tools/include/uapi/linux/types.h` includes by its system name, which
+`scripts/sign-file` reaches under `CONFIG_MODULE_SIG`; Linux hosts have it
+from their kernel headers, and the tree's own copy includes an
+`<asm/bitsperlong.h>` the SDK lacks and nothing in it uses.
 
 ```sh
 HC=$PWD/demos/linux/hostcompat
@@ -511,14 +511,27 @@ the target instead -- the rpm's `%post` runs `depmod` directly, the deb's
 `postinst` reaches it through `/etc/kernel/postinst.d` -- so the missing host
 `depmod` costs nothing.
 
-`packages.py` runs here too, with the same variables in the environment
-(`shim_env` inherits it) and `readelf` on PATH from Homebrew's binutils,
-placed after `/usr/bin` so its `strip` and `ar` do not shadow Apple's:
+The tree must sit on a case-sensitive filesystem: it carries header pairs
+that differ only in case (`netfilter_ipv4/ipt_ECN.h` and `ipt_ecn.h`, the
+`xt_DSCP.h` / `xt_dscp.h` family), and a macOS volume in APFS's default
+format keeps one of each pair at extraction, after which the build fails on
+a missing struct member rather than on the filesystem. `packages.py` probes
+its workdir and refuses a case-insensitive one, naming the `hdiutil` sparse
+image that provides a case-sensitive volume without repartitioning.
+
+`packages.py` runs here too and sets that environment itself on a macOS
+host: `ARCH`, `CROSS_COMPILE` (derived from `--real-cc`, which defaults to
+the musl-cross `<arch>-linux-musl-gcc` for `--arch` there, as `--real-ld`
+does to its `ld`), `HOSTCFLAGS` with `hostcompat/`, `DEPMOD=true`, the
+`gnubin` directories ahead of the system ones and Homebrew's binutils after
+them -- so `readelf` is found while Apple's `strip` and `ar` keep shadowing
+GNU's -- and `PKG_CONFIG_PATH` pointing at Homebrew's OpenSSL for the
+signing host tools `CONFIG_MODULE_SIG` builds. Every `make` it runs is
+resolved on that PATH, so the system's GNU Make 3.81 is never the one used.
 
 ```sh
-python3 demos/linux/packages.py --arch aarch64 [--distro debian] \
-    --real-cc aarch64-linux-musl-gcc --real-ld aarch64-linux-musl-ld \
-    --linker badc --tarball <linux-7.1.6.tar.xz>
+python3 demos/linux/packages.py --arch aarch64 [--distro fedora] \
+    --linker badc --tarball <linux-7.1.10.tar.xz>
 ```
 
 It selects `hvf`, which is what makes the gate usable on a Mac: booting the
@@ -618,9 +631,8 @@ into the tree.
 Two parameters depend on the corpus rather than the architecture and have to
 be passed. `--expect-units` is a floor on the unit count of the configuration
 under test: at defconfig the sweep tree measures 2921 (x86_64) and 4434
-(aarch64), and the vendored minimal configs 1912 and 1346, so set it just
-under whichever one is being built. `--rdinit` is whatever the initramfs
-installs, `/init` by default.
+(aarch64), so set it just under the count of what is being built. `--rdinit`
+is whatever the initramfs installs, `/init` by default.
 
 `--qemu` selects the emulator; `--qemu-args` adds arguments to the boot. An
 emulator built out of tree has no data directory, so it needs `-nic none`:
@@ -658,10 +670,10 @@ displacement it ran at. The gate fails if a configuration that randomizes the
 base produced no displaced boot, or if distinct seeds all produced one
 displacement -- either means it stopped covering relocated output.
 
-A tree with `# CONFIG_RANDOMIZE_BASE is not set` (both vendored minimal
-configs) boots at its link address, and the checks above stand down. A
-machine that supplies no `/chosen/kaslr-seed` (`-M virt,dtb-randomness=off`)
-degrades to unpinned boots with a line saying so.
+A tree with `# CONFIG_RANDOMIZE_BASE is not set` boots at its link address,
+and the checks above stand down. A machine that supplies no
+`/chosen/kaslr-seed` (`-M virt,dtb-randomness=off`) degrades to unpinned boots
+with a line saying so.
 
 CI runs this against the pinned release configured with the architecture's
 own `defconfig`, and boots the result under the emulator the qemu lane
@@ -672,35 +684,147 @@ compiles and links with badc. Both architectures are gated.
 `verify.py` boots a marker initramfs; `packages.py` runs the rest of the road
 a kernel travels in a distribution. It builds the pinned release with badc
 compiling every kernel C unit (the buildcc.py contract: zero fallbacks),
-packages it with the kernel's own targets -- `bindeb-pkg` on x86_64,
-`binrpm-pkg` on aarch64 -- installs the package in a stock cloud image
-(Debian stable on x86_64, Fedora on aarch64) under qemu, and validates the
-reboot: the package scriptlets (depmod, initramfs generation via
-initramfs-tools or dracut, the boot-loader entry), systemd reaching
-multi-user, udev-bound virtio devices, on-demand `modprobe` of packaged
+packages it with the kernel's own targets -- `bindeb-pkg` or `binrpm-pkg`,
+following the distribution -- installs the package in a stock cloud image
+(Debian stable on x86_64, Fedora on aarch64, or the distribution `--distro`
+names: `debian`, `ubuntu`, `fedora`, each on both architectures) under qemu,
+and validates the reboot: the package scriptlets (depmod, initramfs
+generation via initramfs-tools or dracut, the boot-loader entry), systemd
+reaching multi-user, udev-bound devices, on-demand `modprobe` of packaged
 modules, an untainted kernel, a clean dmesg, and disk/network I/O. Before
 the install the same probes run against the image's stock kernel, so every
 measurement has a baseline from the same userspace.
 
+"Clean dmesg" at boot is the `DMESG_SEVERE` vocabulary: the oops shapes, plus
+the driver-reported faults -- the SCSI sense keys a working device does not
+produce, block I/O errors, filesystem corruption reports and PCI AER. The oops
+shapes alone were not enough: a controller answering every command with `Sense
+Key : Hardware Error` passed eight patterns, a taint word of 0 and a systemd
+that came up.
+
+Everything the boot logged at KERN_ERR or worse is also collected and diffed
+against the stock boot of the same image, and the run prints the lines the
+stock boot did not produce -- reported, not asserted. The baseline is a
+different kernel version, and a version gap introduces error lines of its own:
+on the Fedora 44 image a clean 7.1.10 adds three (a driver registered twice, a
+platform feature 6.19.10 did not probe for, an SELinux compatibility notice).
+Inside the exercise stage the comparison has no such gap -- the same kernel,
+seconds apart -- so there each task's own log window fails the task on
+*anything* at KERN_ERR, read from `dmesg -x`'s decoded severity rather than
+from a pattern. That is the check with no vocabulary in it, and it is why the
+storage step runs its I/O inside one task.
+
+The devices are chosen, not assumed. `--vm-disk-bus` attaches the system
+disk and the cloud-init seed through `virtio` (the default), an emulated
+`nvme` controller, an `ahci` SATA controller, or a `megasas` / `lsi53c895a`
+SCSI HBA, and `--vm-nic` selects `virtio-net-pci` (the default), `e1000e`,
+`e1000`, `rtl8139` or `igb`. The paravirtual pair exercises two drivers; the
+emulated models exercise the controller drivers a distribution kernel ships
+for real hardware -- `nvme`, `ahci` plus the SCSI disk layer, `megaraid_sas`,
+`sym53c8xx`, `e1000e` -- as compiled by badc. After the reboot the run reads
+the driver chain under the root disk's `/sys/class/block/<dev>/device` and the
+NIC's driver link, and fails unless the selected models' drivers are the ones
+bound; a kernel that fell back to another path, or whose initramfs found no
+driver, is reported rather than passed. The system disk carries
+`bootindex=0` on the emulated buses, because the firmware otherwise probes
+the controllers in its own order and can try the seed image first.
+
+The guest boots under EFI, as the machines these packages are meant for do.
+`--vm-firmware auto` (the default) takes the first firmware installed on the
+host -- OVMF under `/usr/share/edk2/ovmf` or `/usr/share/OVMF` on x86_64,
+AAVMF or `QEMU_EFI.fd` on aarch64 -- and falls back to SeaBIOS on x86_64,
+with the reason logged, when none is found; `uefi` and `bios` state the
+choice and fail when the host cannot meet it. The code image is mapped
+read-only and the variable store is a per-run copy, which the firmware
+writes. An x86_64 EFI guest runs on `q35`, the machine OVMF supports; the
+SeaBIOS fallback keeps qemu's `i440fx` default and cannot boot an `nvme`
+system disk once the guest has 3584 MiB or more -- at qemu's 4 GiB memory
+split that firmware writes nothing to the console at all -- so a run asking
+for both is refused up front instead of timing out on a silent machine.
+A boot image that faults leaves EDK2's exception dump on the console and the
+machine stops there; the run reports the dump when it appears rather than
+waiting out the ssh timeout.
+
+TODO: the badc-built x86_64 bzImage faults in its own EFI stub when the boot
+loader starts it. EDK2's dump identifies the faulting image as that bzImage,
+by the PE entry point it reports. The same kernel boots through the BIOS
+path and a gcc-built kernel boots the same EFI chain, so under UEFI the badc
+kernel reaches userspace only once that is fixed.
+
+Naming a tarball is optional. With neither `--tarball` nor `--tarball-url`,
+the pinned release is fetched from the vendor mirror and checked against its
+recorded sha256 -- the same verified path `setup.py` uses -- so the shortest
+useful invocation is:
+
+```sh
+# packages only: fetch, configure defconfig, build, package
+python3 demos/linux/packages.py --arch x86_64 \
+    --phases config,tree,build,package
+```
+
+That leaves the `.deb` or `.rpm` in the work directory. Dropping `--phases`
+runs the whole road instead -- install into a stock cloud image, reboot into
+the badc kernel, and exercise it -- which additionally needs qemu and the
+image, fetched the same verified way.
+
+To build a kernel other than the pinned one, give the URL and its digest;
+an unverified download is refused rather than trusted:
+
 ```sh
 python3 demos/linux/packages.py --arch x86_64 \
-    --tarball <linux-<version>.tar.xz> \
+    --tarball-url https://.../linux-<version>.tar.xz \
+    --tarball-sha256 <sha256>
+```
+
+The distribution's own configuration rather than `defconfig`, reported to a
+file:
+
+```sh
+python3 demos/linux/packages.py --arch x86_64 --distro fedora \
+    --tarball <linux-<version>.tar.xz> --config vendor \
     --report packages-x86_64.json
 ```
 
-`--linker badc` makes the build's links badc's too, through `ldshim.py`, and
-the run then fails on any link the shim could not make; the default keeps the
-reference `ld` so the packaging gate measures the compiler alone. Boot-loader
-installation is the one route that runs the 16-bit `setup.elf` from a disk
-rather than from qemu's `-kernel`, so it is where a badc-linked boot image is
-exercised end to end.
+### Where the configuration comes from
 
-Phases -- `config` (take a configuration out of the stock image), `tree`
-(extract + configure), `build` (hybrid make), `package`, `vm` -- are idempotent
-and `--phases` selects a subset. Without `--config` the
-tree's own `defconfig` is the corpus, which is what CI builds: 2953 units on
-x86_64 and 10489 on aarch64 at the 7.1.6 pin, kernel plus modules. A fresh
-qcow2 overlay keeps the base image pristine per run. On an rpm host the Debian
+A distribution kernel is its configuration as much as its source, so the gate
+builds the distribution's own rather than `defconfig`. `--config vendor` takes
+it off the `vendor-deps` release, held to a pinned sha256 the same way the
+cloud image is, and caches it under `.cache/configs`; the asset is named
+`kconfig-<distro>-<arch>-<sha8>.config`, the same convention
+`scripts/vendor_deps` uses everywhere. Four are published, one per
+(distribution, architecture) pair the package matrix builds:
+
+| asset | options set |
+|---|---|
+| `kconfig-fedora-x86_64` | 8048 |
+| `kconfig-fedora-aarch64` | 9197 |
+| `kconfig-ubuntu-x86_64` | 10289 |
+| `kconfig-ubuntu-aarch64` | 12605 |
+
+`--config from-vm` is where those bytes come from: it boots the pinned stock
+image and copies `/boot/config-$(uname -r)` out of it, which is the one source
+that cannot drift from the kernel the distribution ships. It is how the asset
+is refreshed when an image pin moves -- run it, then add the new digest to
+`DISTROS` in `packages.py` and to `scripts/vendor_deps/build_bundle.py`, and
+publish. A package build itself no longer boots a VM to read a config.
+
+`--config <path>` names an ad-hoc file, and without `--config` the tree's own
+`defconfig` is built.
+
+The build's links are badc's too by default, through `ldshim.py`, and the run
+fails on any link the shim could not make; `--linker reference` takes GNU `ld`
+instead, which is the contrast run that separates a compiler defect from a
+linker one. Boot-loader installation is the one route that runs the 16-bit
+`setup.elf` from a disk rather than from qemu's `-kernel`, so it is where a
+badc-linked boot image is exercised end to end.
+
+Phases -- `config` (resolve the configuration), `tree` (extract + configure),
+`build` (hybrid make), `package`, `vm` -- are idempotent and `--phases`
+selects a subset. Defconfig, which is what CI builds, is 2953 units on x86_64
+and 10489 on aarch64 at the 7.1.10 pin, kernel plus modules; a distribution
+configuration is several times that. A fresh qcow2 overlay keeps the base
+image pristine per run. On an rpm host the Debian
 packaging tools (dpkg, dpkg-dev, debhelper) are provisioned under
 `--deb-tools` from the host's own mirror via `dnf download` + rpm2cpio
 extraction; nothing is installed system-wide, and `dpkg-buildpackage` runs
@@ -710,6 +834,267 @@ not what the produced package depends on. `rpmbuild` runs with
 not its debug info. The provisioned prefix is stamped with a digest of the rpm
 file names `dnf` resolves the tool set to, so a prefix built against a package
 set the mirror has moved past is rebuilt rather than reused.
+
+### Exercising the booted kernel
+
+Booting proves the kernel reaches userspace over one storage and one network
+path. A distribution kernel ships several thousand modules and the boot loads
+a few dozen. The stage that runs after the boot probes, inside the badc
+kernel, drives the code the boot never reaches. Its steps are data -- a name,
+the guest work and the rule that reads the outcome -- so the set extends
+without touching the driver; each step lands in the report under
+`vm.exercise` and a failing one appends to the run's `failures`.
+`--exercise-steps` selects a subset of
+`sockets,storage,crypto,modules,kunit,fs,dmesg`.
+
+`sockets,storage,crypto,kunit,dmesg` -- the gate set -- run on every boot; the
+boot probes otherwise judge a kernel by what the guest's own init reported
+about itself, which is a property of the image. Two defects reached the branch
+that way. An AF_VSOCK bind that returned `EINVAL` on every socket surfaced
+only because one distribution's systemd generated a unit for the family and
+the other's did not. A storage controller that answered every `TEST UNIT
+READY` with a hardware error surfaced only as sense data in the console log,
+which no pattern matched. In both cases `taint` was 0, systemd came up, and
+the boot was recorded as clean. `--exercise` adds `modules` and `fs`, which
+cost minutes; `--no-exercise-gate` drops the stage entirely, and a boot that
+skips it has no cover on the subsystems the probes never reach.
+
+`storage` writes a known payload to the root filesystem with direct I/O, reads
+it back after dropping the caches and compares it against the source digest,
+then reads the same blocks off the raw device twice. The digests are half of
+it: the step runs the I/O inside one task so the kernel log window that I/O
+produced is read as part of the verdict, which is where a controller that
+completes transfers and reports hardware errors is caught. `--exercise-storage-mb`
+sizes the payload.
+
+`sockets` creates a socket for every protocol family the configuration builds,
+loading the modules that back it first -- `af_vsock.c` declares no `net-pf-40`
+alias, so nothing autoloads `vsock` and a family reached only through autoload
+would go unprobed. Where a family binds without a peer or a device it is bound
+and listened on, and where a local transfer is reachable it carries a payload:
+AF_UNIX over a socket file, AF_INET and AF_INET6 over loopback (stream and
+datagram), AF_NETLINK through an `RTM_GETLINK` dump read back to the
+`NLMSG_DONE`, AF_ALG through a sha256 transform compared against hashlib,
+and AF_VSOCK bound on an auto-assigned and on a reserved port, listened on,
+and its local CID read from `/dev/vsock` the way `systemd-ssh-generator` reads
+it. What a family cannot reach without external state is reported as
+`uncovered` rather than counted: AF_PACKET is created and bound to `lo` and no
+frame is captured, and AF_VSOCK carries no payload -- on one gcc-built 7.1.10
+kernel a loopback round trip completed under a bare initramfs and was reset in
+a Fedora guest, so which transport carries a connection is guest module state,
+not a property of the kernel under test.
+AF_VSOCK is driven through libc rather than through the guest Python's socket
+module, since `socket.AF_VSOCK` support varies by build and a probe that
+skipped the family on that basis would leave exactly the hole it closes.
+
+`crypto` loads every module under the kernel's `crypto/`, `arch/*/crypto/` and
+`lib/crypto/` trees, forces the registration self-tests when the configuration
+keeps them (`CONFIG_CRYPTO_SELFTESTS`, plus a `tcrypt` mode sweep -- tcrypt
+returns an error on completion by design, so its verdict comes from dmesg),
+scans the whole kernel log for testmgr's own verdicts -- a built-in algorithm
+is tested when it registers, which is during the boot, before the stage runs --
+and then checks the implementations against references. The check reaches each
+registered implementation through AF_ALG *by its driver name*, so `sha256-avx2`
+and `sha256-generic` are separate subjects rather than whichever the priority
+ordering would select. Hashes are compared against hashlib where the standard
+library implements the algorithm; the remaining hashes, the skciphers and the
+AEADs are compared against the generic implementation registered under the same
+algorithm name, with a decrypt round trip on top. This is the step that carries
+the coverage on most configurations: `CONFIG_CRYPTO_SELFTESTS` depends on
+`CONFIG_EXPERT`, so Ubuntu 26.04 and the tree's own `defconfig` both leave the
+in-kernel tests out, and `tcrypt` with them. It is also finer than they are: a
+self-test failure names an algorithm, a mismatch here names the implementation
+and the reference it disagreed with.
+
+`modules` loads every module in the kernel's module tree once, one at a time
+under a per-module timeout, and classifies each outcome. A module that
+declines because the hardware is absent is expected and counted; a module that
+faults, hangs, fails on a missing symbol or sets the oops or machine-check
+taint bit is a finding. Modules already loaded when the sweep starts are never
+unloaded, so the sweep cannot take the network or the root disk down; the test
+suites are left to the `kunit` step, since a suite loaded here runs a second
+time and collides with its own boot-time registrations; the rest are pruned
+every 250 loads, which bounds memory and exercises the module exit
+paths. The report carries the counts -- built, attempted, loaded, refused,
+failed hard, still resident -- and the taint word on both sides of the sweep,
+with the refusals named by errno and the hard failures by module.
+`--exercise-modules N` strides evenly over the sorted module list instead of
+loading all of it, keeping every subsystem prefix represented.
+
+`kunit` loads the in-kernel suites and reads their KTAP output from debugfs and
+dmesg, failing on any `not ok`. It records a skip when the configuration has no
+`CONFIG_KUNIT`; the Ubuntu 26.04 configuration does not set it. A kernel that
+also sets `CONFIG_KUNIT_FAULT_TEST` oopses on purpose during that suite, which
+the dmesg gate then reports; leave it off for a gate run.
+
+`fs` is a stress test over the block stack, not a smoke test. Each instance
+puts a filesystem on a loop device over a sparse file -- which also exercises
+`loop.ko` -- with the loop's logical block size varied between 512 and 4096
+across instances, because the sector-size paths are distinct code. Four
+concurrent instances of each job kind then run for `--exercise-fs-seconds`:
+rotating-block `dd` writes with `conv=fsync`, small-file
+create/rename/hardlink/unlink churn, a tree copy with `find`/`grep` sweeps and
+`rm -rf`, sparse writes with `O_DIRECT` reads, and one `fsstress` or `fio` job
+when the image has either. The writers hold back above 80% full: a filesystem
+the jobs drive to ENOSPC can end the instance unmountable -- ntfs3 cannot
+extend `$MFT` once it is full -- and that says nothing about the kernel. Data is verified rather than assumed: a file set is
+written from a seed held in tmpfs, its digests are computed from that seed and
+never from the filesystem, and
+after the workload the caches are dropped, the filesystem is unmounted and
+mounted again, and every digest is checked. Silent corruption is what a
+codegen defect on a copy or checksum path produces, and no dmesg scan reports
+it. Each instance ends with the filesystem's own check-only fsck, where a
+non-clean result is a hard failure.
+
+The matrix covers ext4 (4096- and 512-byte logical blocks), xfs, f2fs, vfat,
+exfat, ntfs3, udf, and squashfs, erofs and iso9660 as read-only images built
+from a staging tree. It deliberately includes the checksum-heavy
+configurations, which route file data through the same kernel crypto code the
+crypto step tests directly: btrfs with `--csum crc32c`, `--csum xxhash`,
+`--csum sha256` and `--csum blake2`, a btrfs instance with
+`compress-force=zstd`, and ext4 and xfs with metadata checksums on. dm-crypt
+adds two LUKS2 instances (`aes-xts-plain64` and `aes-cbc-essiv:sha256`) and md
+adds a raid1 instance
+over the stage's two spare disks. An instance the running kernel has no
+option for, or whose `mkfs` is missing or refuses, is recorded as a skip with
+the reason rather than as a failure; a tool killed by a signal is a failure
+instead, since a crashed `mkfs`, `cryptsetup` or `mdadm` is evidence rather
+than a missing feature; `--exercise-tools auto` first installs the
+missing tools from the guest's own package mirror, and `skip` leaves the image
+as it is.
+
+The stage stops at the first kernel fault: once a task's kernel log carries an
+oops or a BUG, the tasks after it record a skip naming that fault instead of
+running. Nothing the kernel reports afterwards is attributable to the work that
+provoked it, and a wedged subsystem turns the remaining tasks into timeouts --
+one that faulted here left a `mount` dead with interrupts disabled and the
+global `sync` in the next instance blocked behind it. `--exercise-steps` and
+`--exercise-fs` are how a run deliberately continues past a known fault.
+
+`dmesg` is one consolidated severity scan over everything the stage produced,
+by the `DMESG_SEVERE` vocabulary: the follower holds the boot log as well, and
+the boot is what the packages probes judge against the stock baseline.
+The stage runs a `dmesg -w -x` follower into a file for its whole duration
+(`-x` decodes the severity each per-task window is read by), because
+the sweep produces far more lines than the ring buffer holds and a wrapped ring
+drops exactly the early fault the sweep is looking for. The existing core-dump
+sweep runs after the stage, so a userspace core produced by it is collected
+too.
+
+The report carries the wall-clock of every task and every step, so the gate
+set is chosen against measurement rather than by feel: the four gate steps
+cost 20.1 s together on the x86_64 box against the Fedora 44 image (sockets
+1.6, crypto 12.3, kunit 2.1, dmesg 0.6, plus 3.5 s of stage setup -- the
+configuration read, the guest scripts, the dmesg follower), against a vm phase
+that spends minutes installing the package and booting twice. The two steps
+behind `--exercise` cost minutes on their own. Measured on that box (KVM, 2
+vCPUs, 4 GiB guest), the `crypto`, `modules`, `kunit`, `fs` and `dmesg` figures
+against the Ubuntu 26.04 image and a badc-built kernel installed into it:
+
+| step | cost | what it covered |
+|---|---|---|
+| `sockets` | 1.6 s | 7 families created, bound and driven. `socket()` alone would not have caught the AF_VSOCK defect: creation succeeded and `bind` returned `EINVAL` |
+| `storage` | 3-6 s | 64 MiB written and read back against the source digest, plus two raw-device reads, with the kernel log window read as part of the verdict |
+| `crypto` | 2-3 s | 53 to 153 algorithms registered, 39 to 54 implementations checked through AF_ALG; a 10-mode `tcrypt` sweep adds 1.5 s where `CONFIG_CRYPTO_SELFTESTS` is on |
+| `modules` | 130 ms per module | ~15 min extrapolated over Ubuntu's ~6800-module tree; `--exercise-modules N` bounds it |
+| `kunit` | 1 s | 171 cases from `kunit_test` and `kunit_example_test`; a skip where `CONFIG_KUNIT` is off |
+| `fs` | 420-590 s for 18 instances | 2 s (erofs) to 39 s (LUKS aes-cbc-essiv) each at `--exercise-fs-seconds 15`, the upper figure with a kernel build running alongside |
+| `dmesg` | 1 s | one scan over the stage's whole kernel log |
+
+The stage attaches `--exercise-spares` thin qcow2 disks (2 by default) after
+the system disk and the seed, on the same bus; the system disk keeps its bus
+and its `bootindex=0`. It also raises `--vm-mem` to 4096 when it is lower,
+since the sweep holds every loaded module resident between prunes.
+### Building the kernel on the badc kernel (the `selfhost` phase)
+
+An installed kernel that boots and passes probes has been asked for minutes of
+uptime and a handful of syscalls. `--phases ...,vm,selfhost` asks it for a
+kernel build: once the guest is running the badc kernel, the phase builds the
+kernel again, with badc, inside that VM. The build is the load -- page cache,
+filesystem, scheduler, memory pressure and thousands of process spawns -- and
+the kernel is what is measured.
+
+The phase runs inside the vm phase rather than after it, because its
+precondition is a booted badc kernel and re-reaching that state costs a second
+install and reboot. It is off by default, so the gate's runtime is unchanged;
+naming it without `vm` is refused.
+
+What it does, in order:
+
+* On the stock kernel, before the install: installs the distribution's build
+  and packaging tool set (`build-essential`, `bc`, `bison`, `flex`,
+  `libssl-dev`, `libelf-dev`, `debhelper` and the rpm equivalents) from the
+  image's own mirror, then pushes in badc, `buildcc.py`, `ldshim.py` and the
+  pinned kernel tarball. Nothing the badc kernel then runs needs the network,
+  and `badc --version` is required to identify badc from inside the guest
+  before anything else starts.
+* On the badc kernel: extracts the tarball, configures, and runs make with
+  `CC=buildcc.py` under the same environment the host build uses -- the two
+  differ in nothing but the machine. `--selfhost-scope` sizes it: `units`
+  (the default) builds the built-in objects of `init/ kernel/ mm/ lib/ fs/`
+  from the tree's own `defconfig`, `image` builds the kernel and its modules,
+  and `package` runs `bindeb-pkg` / `binrpm-pkg` and checks the archive
+  listing for a kernel image. `--selfhost-config host` uses the host build's
+  configuration instead of `defconfig`.
+* The build runs detached and is polled over short ssh connections, so a
+  kernel that stops scheduling is reported as a guest that stopped answering
+  rather than stalling one connection for the whole build. Each poll records
+  the manifest line count, load and used memory; the peaks are in the report.
+
+What it fails on:
+
+* Anything the kernel logged while building. A marker is written to
+  `/dev/kmsg` on either side of the build, so the window belongs to the build
+  and not to the boot; `BUG:`/`Oops`/`Call Trace`/`UBSAN:` and `WARNING:` in
+  that window, an OOM-kill record, or a taint value that moved are each a
+  failure. A wrapped ring buffer is a failure too: no window is attributable.
+* Units. The in-guest `BADC_MANIFEST` is pulled back to
+  `<workdir>/selfhost-manifest-<arch>.txt` and read with the same reader the
+  host build's manifest uses. Any `fail`, fewer badc units than the scope's
+  floor, and -- the point of the comparison -- any unit badc compiled on the
+  build host and could not compile in the guest. The two corpora differ, so
+  only units both runs reached are compared; a difference there is the kernel
+  under the build, not a corpus difference.
+* Output. A sample of the objects badc just produced is deleted and rebuilt,
+  and the bytes have to repeat. badc is deterministic for a fixed command
+  line, so a difference is the kernel losing or corrupting what the compiler
+  wrote.
+* Core dumps, swept as `selfhost` with the same collector the other phases
+  use.
+
+The VM is sized for the work: with the phase on, the defaults become 4 vCPUs
+(bounded by the host's), 6 GiB and a 40 GiB disk instead of 2 vCPUs, 2 GiB and
+12 GiB. Every one of those is still an explicit flag.
+
+`packages.py --self-test` checks the phase's pure helpers -- the scope-to-target
+mapping, the build script, the kernel-log window split and the unit comparison
+-- and takes no tree, host or guest.
+
+#### Measured cost
+
+x86_64 `defconfig`, Ubuntu 26.04 cloud image, kvm on a 12-core host that was
+running another kernel build throughout, guest at 4 vCPUs and 6 GiB:
+
+| step | wall |
+|---|---|
+| tool install and push (stock kernel, once) | 50 s |
+| tarball extract in the guest | 25 s |
+| `make defconfig` in the guest | 21 s |
+| `units` build, 800 units, `-j4` | 919 s |
+| rebuild sample, log window, core sweep | 60 s |
+
+That is 17 min on top of the vm phase's own 3 min, for a default that covers
+800 of the 2953 units the whole `defconfig` corpus compiles -- `init/`,
+`kernel/`, `mm/`, `lib/` and `fs/`, built-in and modular. The same host
+compiled all 2953 in 570 s at `-j6`, so the guest runs at roughly a sixth of
+the host's rate per job: `image` and `package` scopes cost about an hour of
+in-guest build at this shape, which is why they are not the default.
+
+The kernel's side of that run: 0 severe and 0 warning lines in the build's log
+window, no OOM record, taint 0 before and after, no core dumps, 21.9 M page
+faults and 78 major faults, peak load 4.38 and peak 628 MiB in use. No unit
+regressed against the host build, and all 8 rebuilt objects reproduced byte for
+byte.
 
 ### The distribution's own configuration (`--config from-vm`)
 
@@ -750,7 +1135,7 @@ they name are ones this build produces itself: `CONFIG_INITRAMFS_SOURCE`,
 
 #### What a distribution configuration compiles today
 
-Neither architecture builds one yet. Surveyed at the 7.1.6 pin with
+Neither architecture builds one yet. Surveyed at the 7.1.10 pin with
 `--keep-going`, so the counts are the whole corpus rather than the first
 defect:
 
@@ -807,7 +1192,7 @@ installs.
 
 ```sh
 python3 demos/linux/packages.py --arch x86_64 \
-    --tarball-url https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.1.6.tar.xz \
+    --tarball-url https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.1.10.tar.xz \
     --tarball-sha256 <sha256> \
     --config /boot/config-$(uname -r) --pkg deb,rpm \
     --phases tree,build,package --keep-going \
@@ -836,7 +1221,11 @@ Each architecture's image is a `vendor-deps-v1` release asset pinned by
 sha256, fetched through the same helper as every other vendored archive and
 rejected on mismatch -- in all paths, including a `--image` pointing at a local
 file (`--image-sha256` states the digest of a deliberately different one).
-Without a pin, a red gate is not attributable to a badc change.
+Without a pin, a red gate is not attributable to a badc change. An image the
+release does not carry yet is fetched from the `upstream` URL its table entry
+records and held to the same pinned digest, so adding a distribution needs
+only the entry; mirroring the bytes is a separate step and the run says which
+source it used.
 
 The bytes are the distributions' own, mirrored rather than fetched from them,
 because an upstream URL is not a durable pin: Debian keeps only the last few
@@ -847,6 +1236,161 @@ for it (sha512 for Debian, sha256 for Fedora), so the mirrored bytes stay
 checkable against the source. There is no `actions/cache` layer in front of
 this: a release asset downloads from the same CDN as the rest of CI's inputs,
 and the cache's eviction window is not shorter than this lane's cadence.
+
+### On real hardware (the `hw` phase)
+
+The vm phase proves a kernel boots under an emulator whose devices badc's
+output has never surprised. `--phases hw` runs the same sequence on a physical
+machine: the same probes, the same dmesg scanners, the same exercise stage,
+with the console read from a serial port on this host instead of a file qemu
+writes. Everything downstream of the machine -- `probes()`, the core sweep,
+`exercise.py` -- takes a target rather than a VM, and an emulated guest and a
+physical box differ only in how they are started, watched and released.
+
+`packages.py` reaches the machine over ssh (`--hw-host [user@]host`, with
+`--hw-port` and `--hw-key`) and reads its console from `--hw-serial`, a serial
+device on this host: `/dev/cu.usbserial-XXXX` on macOS, `/dev/ttyUSB0` on
+Linux, at `--hw-baud` (115200 by default). The line settings are applied to
+the descriptor that does the reading, using `termios` from the standard
+library rather than a `pyserial` dependency the Linux lanes would not need.
+That is not incidental: an `open()` resets a port's termios on macOS, so a
+speed set by a separate `stty` call is gone before the first byte arrives and
+the port then delivers a few bytes of plausible-looking garbage rather than
+silence, which reads like a wiring fault and is not one. Nothing is written to
+the port. The capture is byte for byte, so `DMESG_SEVERE`, the
+firmware-silence check and the EDK2 exception scan read a hardware console and
+a qemu one the same way. Without `--hw-serial` the phase still runs, and a
+boot that never reaches ssh then leaves no record of how far it got.
+
+The sequence:
+
+1. Probe the machine on its distribution kernel and record what it is --
+   `dmidecode` model and BIOS, CPU, firmware mode, Secure Boot state,
+   watchdog -- next to the boot verdict, so a hardware run is diffable against
+   a VM run.
+2. Read the standing boot default and **refuse to run** unless it is a kernel
+   entry that is neither the release under test nor one badc built
+   (`CONFIG_CC_VERSION_TEXT` in its `/boot/config-<release>` says which). The
+   standing default is the only recovery a machine with no remote power cut
+   has.
+3. Take the baseline probes and the core sweep, as the vm phase does against
+   the stock image.
+4. Copy the packages over and install them (`rpm -ivh`, `dpkg -i`).
+   `--install-args` adds flags: `--oldpackage` for a pinned kernel older than
+   the box's own, which rpm otherwise refuses, and `--replacepkgs` to
+   reinstall one the machine already carries.
+5. Put the standing default back if the install moved it -- on a BLS
+   distribution `kernel-install` makes the kernel it just installed the
+   default, which silently removes the fallback the run checked for in
+   step 2.
+6. Find the new entry with `grubby --info=ALL`, check that it names a root
+   device, and select it with `grub2-reboot <index>` -- one boot only, never
+   `grub2-set-default`.
+7. Reset, and watch the console while waiting for ssh.
+8. Run the probes, assert the boot, and run the exercise stage under
+   `--exercise`.
+9. Reboot back onto the standing default (`--no-hw-restore` leaves the machine
+   on the kernel under test) and clear any pending one-shot selection whatever
+   happened.
+
+The device assertions differ from the vm phase's, because the hardware is not
+chosen: instead of a `--vm-disk-bus` model, the baseline names what has to
+bind, and the kernel under test must drive the same disk and network hardware
+the distribution kernel drove.
+
+When ssh does not return within `--hw-timeout`, the run reports which stage
+the boot reached -- firmware, boot loader, `earlycon`, kernel, initramfs,
+userspace, multi-user -- and the first panic or oops on the wire, then waits
+`--hw-recover-timeout` for the machine to come back. The watchdog resets a
+wedged kernel and the one-shot selection expires with the boot that consumed
+it, so a box that is merely wedged returns on the distribution kernel by
+itself. A lane that cannot tell a kernel that hung from a box that is gone is
+not useful, and that second wait is what separates the two.
+
+The wait does not always have to run out. A boot that ends badly ends in one
+of a few named ways -- `emergency` (the initramfs emergency shell: the root
+filesystem was not mounted), `panic`, `dracut-shell` -- and each is a
+different verdict, not a variant of "ssh never returned". The console says
+which, so the run ends the wait on the marker rather than on the timeout and
+records the outcome and its verdict in the report. The earliest marker wins,
+so a panic is not reported as the emergency shell that followed it.
+
+Recovery is tried twice. First the watchdog and the one-shot expiry, which
+between them return a wedged kernel to the standing default on their own.
+Then, when the machine is parked where the watchdog was never armed -- an
+initramfs emergency shell runs a systemd that never read the watchdog
+configuration, because that file lives on the filesystem it failed to mount
+-- a SysRq reset over the serial line: a BREAK followed by sync,
+remount-read-only, boot. It is best-effort, needing a kernel that still
+services interrupts and a `kernel.sysrq` mask that permits the command, and
+`--no-hw-sysrq` turns it off; it is also the only remote reset a machine with
+a battery has.
+
+Two things follow from a failed boot leaving **no journal** -- emergency mode
+never gets far enough to flush one, so the serial console is the only record
+that boot has. The reader is started before anything else the phase does and
+stays open across the reset, so the capture spans the whole reboot rather
+than picking up whatever was still in flight when someone opened the port;
+and it writes to the log unbuffered, so the record survives even a run that
+is killed. The other consequence is a check made before the reset rather than
+after it: the entry selected for the boot must name a root device, in
+grubby's own `root=` field or in its arguments. `kernel-install` writes a new
+kernel's entry from `/etc/kernel/cmdline`, and an `/etc/kernel/cmdline` built
+from `grubby --info`'s `args=` alone has no `root=`, because grubby prints
+the root device in a field of its own. The entry then looks healthy and the
+boot cannot mount anything; on a machine with no remote power cut that costs
+a trip to it, so the run refuses the reset instead.
+
+`--expect-producer any` records the boot banner without asserting badc built
+it, which is what a run installing a distribution package uses to exercise the
+lane itself; the default asserts badc. The phase needs no kernel tree:
+`--release` names what the packages install and `--package` names the files,
+so a hardware run consumes an artifact another lane produced.
+
+```sh
+python3 demos/linux/packages.py --arch x86_64 --distro fedora --phases hw \
+    --release <kernel release> --package <kernel rpm> \
+    --hw-host <host> --hw-serial /dev/cu.usbserial-XXXX \
+    --workdir <scratch> --report hw-x86_64.json
+```
+
+The phase writes `hw` into the report beside `vm`, with the same key names --
+`stock`, `badc`, `install_rc`, `boot_select`, `compiler_id`, `modprobe`,
+`exercise`, `cores_stock`, `cores_badc` -- plus the machine's identity, the
+console log path and stage, the standing default before and after, and whether
+a failed boot recovered. Like the vm phase it turns on core capture through
+sysctl.d, limits.d and systemd drop-ins, which persist on the machine.
+
+The phase is not in CI: it needs a machine on a bench with a serial line to
+the runner. [`micropc-testing.md`](micropc-testing.md) documents the box this
+was built against -- what it can and cannot test, which `ttyS*` is the
+physical port, and what the boot configuration has to carry.
+
+A machine with no reachable serial port cannot run the phase, because the
+phase reads its verdict off the console. It can still be booted by hand, and
+[`xps8930-testing.md`](xps8930-testing.md) documents that lane: what a boot
+proves without a console, and what it leaves behind when it fails.
+`hwprep.py` prepares either kind of machine and undoes the preparation:
+
+```sh
+sudo python3 hwprep.py record            # snapshot the state to return to
+sudo python3 hwprep.py arm               # pstore and the watchdog
+sudo python3 hwprep.py install <package> # add a kernel, replace none
+sudo python3 hwprep.py entry --kernel V  # arguments for that entry alone
+sudo python3 hwprep.py check             # READY, or why not
+sudo python3 hwprep.py boot --kernel V   # one boot, then back to stock
+sudo python3 hwprep.py rollback          # replay the record backwards
+```
+
+It holds one invariant, checked after every step that could disturb it: the
+default boot entry is a stock kernel, so recovery from a kernel that panics or
+hangs is a power cycle rather than a rescue disk. It refuses to alter a stock
+entry's arguments, refuses to select an entry it did not install, and records
+each change so `rollback` replays facts instead of a list of undo commands
+written in advance. Machine differences are read rather than assumed: it
+routes a module parameter through `modprobe.d` or the kernel command line
+depending on whether the module is loadable or builtin, and reports the
+watchdog's live timeout from systemd rather than the drop-in that asked for it.
 
 ### Concurrency and the accelerator
 
@@ -861,9 +1405,11 @@ model (`host` under kvm, `max` under tcg).
 ### In CI
 
 `.github/workflows/kernel-packages.yml` runs the whole harness -- build,
-package, publish, install, boot -- on a nightly schedule, on
-`workflow_dispatch`, and on a pull request carrying the `kernel-packages`
-label. It is deliberately off the push path, and the reason is the
+package, publish, install, boot -- on `workflow_dispatch` and on a pull
+request carrying the `kernel-packages` label. It carries no schedule: the
+corpus is a pinned release at a fixed configuration, so a repeat run repeats
+the previous run's work unless a commit changed the compiler, and those are
+gated per push by `ci.yml`'s `kernel` job. It is deliberately off the push path, and the reason is the
 accelerator: GitHub-hosted runners expose no `/dev/kvm`, so the VM runs under
 TCG. Measured on the boxes against the same packages and images with the VM's
 host cores capped at 4, the vm phase costs 40 s under KVM and 3 min under TCG
@@ -891,8 +1437,8 @@ coming out the faster of the pair. A second matrix dimension would therefore
 buy the link steps at the price of a second full compile per architecture on
 every push. `kernel-packages.yml` carries the contrast instead: it builds the
 same pinned release at the same `make defconfig` with kbuild's default `LD`,
-nightly and on both architectures, which is where GNU ld consuming badc's
-kernel objects is gated. A kernel that boots one way and not the other
+on both architectures, which is where GNU ld consuming badc's kernel objects
+is gated. A kernel that boots one way and not the other
 separates a compiler defect from a linker one.
 
 Each lane publishes two artifacts: the packages (deb or rpm, plus headers,
@@ -940,8 +1486,12 @@ python3 demos/linux/layout.py --arch x86_64 \
     --cross-check 40 --report layout-x86_64.json
 ```
 
-Both trees must carry debug info (`CONFIG_DEBUG_INFO_DWARF4`; badc emits
-DWARF 4) and must hold the same source and the same configuration. The run
+`--stride N` keeps every Nth unit of the path-sorted corpus in `--replay`
+mode, a sample spread over the subsystems; CI's `kernel` job runs the replay
+at stride 8 over the defconfig tree the gate just built, with `--cross-check
+20`, and fails on any differing layout. Both trees must carry debug info
+(`CONFIG_DEBUG_INFO_DWARF4`; badc emits DWARF 4) and must hold the same
+source and the same configuration. The run
 enforces the second part rather than assuming it: it refuses to compare
 unless the two `.config` files agree once the toolchain identification
 symbols -- `CONFIG_CC_VERSION_TEXT`, the `*_VERSION` strings -- are removed,
@@ -957,12 +1507,25 @@ Three input modes:
 * `--ref-tree` / `--badc-tree` compares `vmlinux` plus every `.ko` both
   trees built, paired by tree-relative path.
 * `--replay --tree` compiles each unit of one tree twice -- the recorded
-  Kbuild command plus `-gdwarf-4`, and badc's flag set plus `-g` -- and
+  Kbuild arguments plus `-gdwarf-4`, and badc's flag set plus `-g` -- and
   compares per unit. Both sides then run the same preprocessor surface over
   the same sources by construction, and the corpus is every translation
   unit rather than the types that reached `vmlinux`. Objects already in the
   scratch directory are reused, so a re-run costs only the extraction and an
   interrupted run resumes.
+
+  A tree `verify.py` built records `buildcc.py` as `$(CC)` in every `.cmd`
+  file, and that shim is not a compiler: replaying it runs badc on both
+  legs, or nothing at all when `$BADC` is unset. The reference leg therefore
+  substitutes `--real-cc` for the recorded driver, defaulting to
+  `$BADC_REAL_CC` or the target's `gcc` -- the compiler the shim itself
+  falls back to. The recorded arguments are that compiler's own surface,
+  since the shim rewrites for badc internally and leaves the `cc-option`
+  probes to the reference compiler. A tree the reference compiler built
+  keeps its recorded driver. When the tree records a shim and no reference
+  compiler resolves, the run stops before compiling anything and says which
+  shim, how many units and which compiler it looked for; it does not report
+  an empty comparison. `--report` is written on that path too.
 
 Reported per aggregate: total size, and per member the byte offset, size,
 bit offset and bit width. Comparison is on those facts only; member type
@@ -1002,8 +1565,10 @@ That validates the reader and demonstrates that a debugger consumes badc's
 DWARF at all. It costs about 2 ms per type, which is why it samples rather
 than extracts.
 
-`--self-test` checks the DWARF parse and the differ against a synthetic dump
-and needs no toolchain, tree or kernel.
+`--self-test` checks the DWARF parse and the differ against a synthetic dump,
+the recorded-driver split and the reference compiler it resolves, and that a
+run stopped by a precondition still writes its `--report`. It needs no
+toolchain, tree or kernel, and runs in CI's script harness self-tests.
 
 ### What badc's DWARF carries
 

@@ -333,6 +333,63 @@ fn render_section(out: &mut String, sec: &OutSec, rows: Vec<Row>, syms: &[(u64, 
 /// The three-column `name address size` layout GNU ld uses: the name
 /// padded to column 16 (wrapping long names onto their own line), an
 /// `0x%016x` address, the size right-aligned in 11 columns.
+/// One input section placed into an output section by a relocatable
+/// link: its offset within that output section, its size, and the
+/// object it came from.
+pub struct RelocRow {
+    pub name: String,
+    pub offset: u64,
+    pub size: u64,
+    pub source: String,
+}
+
+/// Render the map GNU ld writes for `-Map` on a relocatable link.
+///
+/// `-r` resolves no addresses, so the output section headers carry the
+/// image's own `sh_addr` (zero) and `sh_size`, and each row sits at its
+/// offset within the section. That is what `generate_builtin_ranges.awk`
+/// reads out of `vmlinux.o.map` to attribute a section's bytes to the
+/// object that contributed them.
+pub fn render_relocatable_map(
+    image: &[u8],
+    inputs: &[String],
+    rows_of: &[(String, Vec<RelocRow>)],
+    output_name: &str,
+) -> Result<String, C5Error> {
+    let (sections, bfd_format) = parse_image_sections(image)?;
+    let mut out = String::new();
+    out.push_str("Linker script and memory map\n\n");
+    for label in inputs {
+        out.push_str(&format!("LOAD {label}\n"));
+    }
+    if !inputs.is_empty() {
+        out.push('\n');
+    }
+    for sec in &sections {
+        if matches!(sec.name.as_str(), "" | ".symtab" | ".strtab" | ".shstrtab") {
+            continue;
+        }
+        push_columns(&mut out, &sec.name, sec.addr, sec.size);
+        out.push('\n');
+        let Some((_, rows)) = rows_of.iter().find(|(n, _)| *n == sec.name) else {
+            continue;
+        };
+        for r in rows {
+            push_columns(
+                &mut out,
+                &format!(" {}", r.name),
+                sec.addr + r.offset,
+                r.size,
+            );
+            out.push(' ');
+            out.push_str(&r.source);
+            out.push('\n');
+        }
+    }
+    out.push_str(&format!("OUTPUT({output_name} {bfd_format})\n"));
+    Ok(out)
+}
+
 fn push_columns(out: &mut String, name: &str, addr: u64, size: u64) {
     out.push_str(name);
     if name.len() >= NAME_COL - 1 {

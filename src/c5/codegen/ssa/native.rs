@@ -41,9 +41,13 @@ pub(crate) fn compile_function_to_bytes(
     func: &FunctionSsa,
     target: Target,
 ) -> Result<Vec<u8>, String> {
-    let alloc = super::reg_alloc::allocate(func, target);
+    let alloc = super::reg_alloc::allocate(func, target, crate::c5::codegen::FixedRegs::NONE);
     let imports = ResolvedImports::default();
     let variadic_targets: BTreeSet<usize> = BTreeSet::new();
+    // The single-function native path has no cross-function table; a
+    // definition's own convention rides `FunctionSsa::conv`.
+    let conv_targets: alloc::collections::BTreeMap<usize, crate::c5::codegen::CallConv> =
+        alloc::collections::BTreeMap::new();
     // Single-function compile: no same-image callees are resolvable,
     // so the tail-call conversion sees no known return contracts.
     let ret_tags: alloc::collections::BTreeMap<usize, i64> =
@@ -100,6 +104,7 @@ pub(crate) fn compile_function_to_bytes(
                     label_relocs: &mut label_relocs,
                     text_data_ranges: &mut text_data_ranges,
                     canary_frame_bytes: &mut alloc::collections::BTreeMap::new(),
+                    mcount_sites: &mut alloc::vec::Vec::new(),
                 };
                 super::aarch64::emit::emit_function(
                     func,
@@ -124,6 +129,8 @@ pub(crate) fn compile_function_to_bytes(
                     false,
                     super::super::Hardening::NONE,
                     super::super::StackProtect::OFF,
+                    super::super::FunctionEntry::default(),
+                    super::super::FixedRegs::NONE,
                 )
             };
             if !ok {
@@ -198,6 +205,7 @@ pub(crate) fn compile_function_to_bytes(
                     label_relocs: &mut label_relocs,
                     text_data_ranges: &mut text_data_ranges,
                     canary_frame_bytes: &mut alloc::collections::BTreeMap::new(),
+                    mcount_sites: &mut alloc::vec::Vec::new(),
                 };
                 super::x86_64::emit::emit_function(
                     func,
@@ -211,6 +219,7 @@ pub(crate) fn compile_function_to_bytes(
                     &extern_tls_names,
                     &imports,
                     &variadic_targets,
+                    &conv_targets,
                     &ret_tags,
                     0,
                     &mut fn_unwind,
@@ -226,6 +235,8 @@ pub(crate) fn compile_function_to_bytes(
                     false,
                     super::super::Hardening::NONE,
                     super::super::StackProtect::OFF,
+                    super::super::FunctionEntry::default(),
+                    super::super::FixedRegs::NONE,
                 )
             };
             if !ok {

@@ -31,6 +31,7 @@
 
 use alloc::format;
 use alloc::string::String;
+use alloc::string::ToString;
 use alloc::vec::Vec;
 
 use super::super::error::C5Error;
@@ -86,8 +87,8 @@ pub(super) fn mem_transfer_lib_name(op: super::super::ast::MemTransferOp) -> &'s
 use super::types::{
     UNSIGNED_BIT, VOLATILE_BIT, apply_qual_bits, format_type, fp_result_ty, integer_promote,
     is_bool_ty, is_float_ty, is_floating_scalar, is_long_double_ty, is_pointer_ty, is_struct_ty,
-    is_struct_value_ty, is_unsigned_ty, is_vector_ty, is_void_ptr_ty, object_segment_bits,
-    segment_of_ty, struct_id_of, struct_ptr_depth,
+    is_struct_value_ty, is_unsigned_ty, is_vector_ty, is_void_ptr_ty, narrow_const_int,
+    object_segment_bits, segment_of_ty, struct_id_of, struct_ptr_depth,
 };
 
 /// Relational comparison operator. The four variants share an
@@ -645,6 +646,47 @@ impl Compiler {
         super::super::lexer::resolve_symbol(&mut self.symbols, &mut self.symbol_index, bytes, hash)
     }
 
+    /// Redirect a builtin's library-function binding away from a
+    /// unit-local inline definition of the same name.
+    ///
+    /// `__builtin_<fn>` denotes the library function, which has
+    /// external linkage. An inline definition provides no external
+    /// definition (C99 6.7.4p6), so it is not what the builtin names,
+    /// and the body badc emits for it calls the builtin in turn --
+    /// binding there leaves the body calling itself. A fortified header
+    /// defining `memcmp` as a wrapper over `__builtin_memcmp` is the
+    /// shape that reaches.
+    ///
+    /// The reference goes to the external name through a slot carrying
+    /// only that reference. `.` cannot occur in a C identifier, so the
+    /// slot collides with nothing the source can declare and ordinary
+    /// lookups still find the inline definition; its assembler name is
+    /// the library name, so the call relocates against the one external
+    /// definition the program links.
+    fn builtin_library_symbol(&mut self, idx: usize) -> usize {
+        let sym = &self.symbols[idx];
+        if sym.class != Token::Fun as i64
+            || sym.saw_static_decl
+            || !crate::c5::symbol::inline_definition(sym, self.inline_model)
+        {
+            return idx;
+        }
+        let link_name = sym.link_name().to_string();
+        let (type_, params, is_variadic) = (sym.type_, sym.params.clone(), sym.is_variadic);
+        let slot = self.resolve_symbol_named(&alloc::format!("{link_name}.builtin"));
+        let sym = &mut self.symbols[slot];
+        if sym.class == 0 {
+            sym.class = Token::Fun as i64;
+            sym.type_ = type_;
+            sym.params = params;
+            sym.is_variadic = is_variadic;
+            sym.asm_name = Some(link_name);
+            sym.linkage = crate::c5::symbol::Linkage::External;
+            sym.defined_here = false;
+        }
+        slot
+    }
+
     /// Build the call a declined memory-transfer expansion falls back
     /// to: the library function of the same name, with the arguments
     /// already parsed. An undeclared library name reports the same
@@ -680,13 +722,11 @@ impl Compiler {
                 i
             }
             None => {
-                let suggestion = match super::super::headers::header_declaring(name) {
-                    Some(h) => format!(" -- try `#include <{h}>`"),
-                    None => String::new(),
-                };
+                let suggestion = self.include_hint(name);
                 return Err(self.compile_err(format!("unknown function `{name}`{suggestion}")));
             }
         };
+        let idx = self.builtin_library_symbol(idx);
         self.symbols[idx].was_referenced = true;
         self.flush_pending_stores();
         self.pending.last_emit_was_indirect_call = false;
@@ -899,10 +939,16 @@ impl Compiler {
     /// silently operating on the operand's address. Called by each
     /// value-computing binary branch after both operand types are known.
     fn reject_aggregate_binop(&self, lhs_ty: i64, rhs_ty: i64, op: &str) -> Result<(), C5Error> {
-        // GCC vector extension: the element-wise operators take a vector
-        // operand pair or a vector against a broadcast scalar. The relational
-        // and logical operators, and every other aggregate operand, reject.
+        // GCC vector extension: the element-wise operators and the
+        // comparisons take a vector operand pair or a vector against a
+        // broadcast scalar. The logical operators, and every other
+        // aggregate operand, reject.
         if self.vector_binop_ty(lhs_ty, rhs_ty, op).is_some() {
+            return Ok(());
+        }
+        if matches!(op, "==" | "!=" | "<" | ">" | "<=" | ">=")
+            && self.vector_binop_ty(lhs_ty, rhs_ty, "+").is_some()
+        {
             return Ok(());
         }
         // The GCC 128-bit integer shares the aggregate layout machinery
@@ -922,8 +968,8 @@ impl Compiler {
     /// two vectors of the same byte width and the same element width and
     /// kind, or a vector against a scalar that broadcasts to every lane.
     /// `% & | ^ << >>` need integer elements, and an integer-element vector
-    /// does not take a floating scalar. The relational and equality operators
-    /// are not lowered and are excluded so they keep rejecting.
+    /// does not take a floating scalar. The comparisons share the operand
+    /// rule through [`Self::vector_compare_ty`].
     fn vector_binop_ty(&self, lhs_ty: i64, rhs_ty: i64, op: &str) -> Option<i64> {
         if !matches!(
             op,
@@ -965,6 +1011,59 @@ impl Compiler {
             return None;
         }
         Some(vec_ty)
+    }
+
+    /// Result type of a GCC vector-extension comparison, or `None` when
+    /// the operand pair is not one. The operand rule is the arithmetic
+    /// one; the result is a vector of the same byte width whose elements
+    /// are the signed integer type of the operands' element width, each
+    /// lane 0 or -1 (gcc 16, measured).
+    fn vector_compare_ty(&mut self, lhs_ty: i64, rhs_ty: i64) -> Option<i64> {
+        let vec_ty = self.vector_binop_ty(lhs_ty, rhs_ty, "+")?;
+        let elem_ty = self.structs[struct_id_of(vec_ty)].fields[0].ty;
+        let signed = match self.size_of_type(elem_ty) {
+            1 => Ty::Char as i64,
+            2 => Ty::Short as i64,
+            4 => Ty::Int as i64,
+            _ => Ty::LongLong as i64,
+        };
+        let bytes = self.structs[struct_id_of(vec_ty)].size as i64;
+        Some(self.make_vector_type(signed, bytes))
+    }
+
+    /// Comparison opcode flavour for a vector operand pair: floating by
+    /// the element type; between two integer vectors unsigned when either
+    /// element is (6.3.1.8 common type, as gcc compares); against a
+    /// broadcast scalar the vector's element decides, since the scalar
+    /// converts to it first.
+    fn vector_compare_op(
+        &self,
+        lhs_ty: i64,
+        rhs_ty: i64,
+        signed_op: super::super::ir::BinOp,
+        unsigned_op: super::super::ir::BinOp,
+        fp_op: super::super::ir::BinOp,
+    ) -> super::super::ir::BinOp {
+        let lhs_vec = is_vector_ty(&self.structs, lhs_ty);
+        let rhs_vec = is_vector_ty(&self.structs, rhs_ty);
+        let elem_of = |ty: i64| {
+            if is_vector_ty(&self.structs, ty) {
+                self.structs[struct_id_of(ty)].fields[0].ty
+            } else {
+                ty
+            }
+        };
+        let (le, re) = (elem_of(lhs_ty), elem_of(rhs_ty));
+        let vec_elem = if lhs_vec { le } else { re };
+        if is_floating_scalar(vec_elem) {
+            return fp_op;
+        }
+        let unsigned = if lhs_vec && rhs_vec {
+            is_unsigned_ty(le) || is_unsigned_ty(re)
+        } else {
+            is_unsigned_ty(vec_elem)
+        };
+        if unsigned { unsigned_op } else { signed_op }
     }
 
     /// Opcode for `E1 op= E2` given the operand types. C99 6.5.16.2p3:
@@ -1244,6 +1343,7 @@ impl Compiler {
                     );
                     if let Some(fn_name) = alias {
                         id_idx = self.resolve_symbol_named(fn_name);
+                        id_idx = self.builtin_library_symbol(id_idx);
                     }
                 }
                 // C89 6.3.2.2 implicit declaration, restricted to the
@@ -1382,9 +1482,11 @@ impl Compiler {
                     // the intrinsic node is built the result is wrapped
                     // in a load of this type (GCC value semantics).
                     let mut va_arg_result_ty: Option<i64> = None;
-                    // `__builtin_frame_address` level above 0: how many
-                    // saved-frame-pointer loads wrap the intrinsic node.
+                    // A level above 0 of either frame builtin: how many
+                    // saved-frame-pointer loads wrap the intrinsic node, and
+                    // whether the return slot of the frame reached is read.
                     let mut frame_walk_levels: i64 = 0;
+                    let mut walked_return_slot = false;
                     let mut ast_intrinsic_args: alloc::vec::Vec<super::super::ast::ExprId> =
                         alloc::vec::Vec::new();
                     if intrinsic_id == trap_id {
@@ -1612,33 +1714,23 @@ impl Compiler {
                     {
                         // GCC defines the operand as the number of frames to
                         // walk up and requires it to be a constant. Level 0
-                        // reads this function's own frame. Above 0,
-                        // `__builtin_frame_address` walks the saved
-                        // frame-pointer chain; `__builtin_return_address` has
-                        // no single behaviour to reproduce -- gcc's aarch64
-                        // backend folds it to a constant 0 and its x86-64
-                        // backend yields a stack address once a caller drops
-                        // its frame pointer -- so it is rejected. The level is
+                        // reads this function's own frame record. Above 0,
+                        // both walk the saved frame-pointer chain that far,
+                        // and `__builtin_return_address` then reads the
+                        // return slot of the record reached. The level is
                         // consumed at parse time and reaches no operand.
                         self.expr(Token::Assign as i64)?;
                         let level = self.ast_acc.and_then(|a| self.expr_const_int(a));
                         match level {
                             Some(0) => {}
-                            Some(n) if n > 0 && intrinsic_id == frame_address_id => {
+                            Some(n) if n > 0 => {
                                 frame_walk_levels = n;
-                            }
-                            Some(n) if n < 0 => {
-                                return Err(self.compile_err(format!(
-                                    "invalid argument to `{fn_name}`: \
-                                     the level must not be negative, got {n}"
-                                )));
+                                walked_return_slot = intrinsic_id == return_address_id;
                             }
                             Some(n) => {
                                 return Err(self.compile_err(format!(
-                                    "`{fn_name}` supports level 0 only, not {n}: \
-                                     the targets gcc supports disagree on what a \
-                                     caller's return address is, so there is no \
-                                     one behaviour to reproduce"
+                                    "invalid argument to `{fn_name}`: \
+                                     the level must not be negative, got {n}"
                                 )));
                             }
                             None => {
@@ -1740,9 +1832,15 @@ impl Compiler {
                     // source order.
                     let intr_ty = self.ty;
                     let pos = self.ast_src_pos();
+                    // A walked return address starts from the frame address.
+                    let node_kind = if walked_return_slot {
+                        frame_address_id
+                    } else {
+                        intrinsic_id
+                    };
                     let id = self.ast.push_expr(
                         super::super::ast::Expr::Intrinsic {
-                            kind: intrinsic_id,
+                            kind: node_kind,
                             args: ast_intrinsic_args,
                             ty: intr_ty,
                         },
@@ -1764,10 +1862,13 @@ impl Compiler {
                         self.ty = res_ty;
                         self.ast_apply_unary(super::super::ast::UnOp::Deref);
                     }
-                    // `__builtin_frame_address(N)`, N > 0. A frame record
+                    // A level N > 0 of either frame builtin. A frame record
                     // holds the caller's frame pointer at offset 0, so each
                     // level is one load through the level below it. This is
-                    // the sequence gcc emits on both supported targets.
+                    // the sequence gcc emits on both supported targets for
+                    // `__builtin_frame_address`; `__builtin_return_address`
+                    // then reads the return slot of the record reached, which
+                    // the level-0 intrinsic does when given that frame.
                     let void_ptr_ty = (Ty::Char as i64) + (Ty::Ptr as i64);
                     for _ in 0..frame_walk_levels {
                         if let Some(child) = self.ast_acc {
@@ -1776,6 +1877,19 @@ impl Compiler {
                         self.mark_emit_scalar_load();
                         self.ty = void_ptr_ty;
                         self.ast_apply_unary(super::super::ast::UnOp::Deref);
+                    }
+                    if walked_return_slot && let Some(walked) = self.ast_acc {
+                        let pos = self.ast_src_pos();
+                        let id = self.ast.push_expr(
+                            super::super::ast::Expr::Intrinsic {
+                                kind: return_address_id,
+                                args: alloc::vec![walked],
+                                ty: void_ptr_ty,
+                            },
+                            pos,
+                        );
+                        self.ast_acc = Some(id);
+                        self.ty = void_ptr_ty;
                     }
                 } else {
                     // Snapshot the declared signature up front: the per-arg
@@ -1923,13 +2037,20 @@ impl Compiler {
                             let arg_ty = self.ty;
                             let zero = self.last_emit_is_zero();
                             let untyped = self.last_emit_was_indirect_call();
-                            if let Some(m) = Self::type_warning_with_flags(
-                                &self.structs,
-                                want,
-                                self.ty,
-                                zero,
-                                untyped,
-                            ) {
+                            // A GNU `transparent_union` parameter accepts an
+                            // argument compatible with any member and takes it
+                            // as that member, with no diagnostic.
+                            let tu_member =
+                                Self::transparent_union_member(&self.structs, want, self.ty, zero);
+                            if tu_member.is_none()
+                                && let Some(m) = Self::type_warning_with_flags(
+                                    &self.structs,
+                                    want,
+                                    self.ty,
+                                    zero,
+                                    untyped,
+                                )
+                            {
                                 let got = self.ty;
                                 let want_s = format_type(want, &self.structs);
                                 let got_s = format_type(got, &self.structs);
@@ -1961,7 +2082,38 @@ impl Compiler {
                             // Without this, the integer bit pattern
                             // lands in the GPR-arg register and libm
                             // reads garbage out of the FP register.
-                            self.convert_assign_rhs(want);
+                            if let Some(member_ty) = tu_member {
+                                // Materialize the member into an anonymous
+                                // union object (same staging the arg temps
+                                // use), so every backend passes the argument
+                                // per the aggregate convention -- GCC passes
+                                // it as the union containing the member.
+                                self.convert_assign_rhs(member_ty);
+                                let slots = self.slots_of_type(want);
+                                let off = self.reserve_slots(slots);
+                                if slots >= 1 {
+                                    self.multi_cell_temps.push((off, slots));
+                                }
+                                if let Some(value) = self.ast_acc.take() {
+                                    let init = super::super::ast::LocalInit::Runtime {
+                                        zero_init: None,
+                                        elements: alloc::vec![
+                                            super::super::ast::RuntimeInitElement {
+                                                offset: 0,
+                                                value: super::super::ast::RuntimeInitValue::Expr(
+                                                    value,
+                                                ),
+                                                ty: member_ty,
+                                                bitfield: None,
+                                            }
+                                        ],
+                                    };
+                                    self.ast_emit_compound_literal(off, want, 0, init);
+                                }
+                                self.ty = want;
+                            } else {
+                                self.convert_assign_rhs(want);
+                            }
                             // C99 6.5.2.2p4: the argument is converted to the
                             // declared parameter type. For a Sys (libc) callee
                             // the conversion must happen here -- the import
@@ -2107,10 +2259,7 @@ impl Compiler {
                         self.ast_acc = None;
                     } else {
                         let name = self.symbols[id_idx].name.clone();
-                        let suggestion = match super::super::headers::header_declaring(&name) {
-                            Some(h) => format!(" -- try `#include <{h}>`"),
-                            None => String::new(),
-                        };
+                        let suggestion = self.include_hint(&name);
                         return Err(
                             self.compile_err(format!("unknown function `{name}`{suggestion}"))
                         );
@@ -2166,6 +2315,13 @@ impl Compiler {
                         self.ast
                             .variadic_indirect_callees
                             .push((callee_id, self.symbols[id_idx].params.len() as u32));
+                    }
+                    if is_var_call
+                        && self.symbols[id_idx].conv != crate::c5::codegen::CallConv::Target
+                    {
+                        self.ast
+                            .conv_indirect_callees
+                            .push((callee_id, self.symbols[id_idx].conv));
                     }
                     self.ast_emit_call(callee_id, ast_arg_ids.clone(), result_ty);
                     // For struct-returning callees, the result lives
@@ -2330,6 +2486,15 @@ impl Compiler {
                 }
                 self.ty = self.symbols[id_idx].type_;
                 let is_struct_value = is_struct_value_ty(self.ty);
+                // A declared struct object starts a member chain.
+                self.pending.member_base = if is_struct_value {
+                    Some(super::MemberBase {
+                        decl_size: Some(self.size_of_type(self.ty) as i64),
+                        ..super::MemberBase::UNKNOWN
+                    })
+                } else {
+                    None
+                };
                 let is_array_var =
                     self.symbols[id_idx].array_size != 0 || self.symbols[id_idx].is_zero_len_array;
                 let is_vla_var = self.symbols[id_idx].is_vla;
@@ -2342,6 +2507,7 @@ impl Compiler {
                 if !is_array_var && !is_struct_value && !self.symbols[id_idx].params.is_empty() {
                     self.pending.indirect_callee_params = Some(self.symbols[id_idx].params.clone());
                     self.pending.indirect_callee_is_variadic = self.symbols[id_idx].is_variadic;
+                    self.pending.indirect_callee_conv = self.symbols[id_idx].conv;
                     self.pending.indirect_callee_fn_ptr_depth =
                         self.symbols[id_idx].fn_ptr_indirection;
                     self.pending.indirect_callee_ret_fn_ptr =
@@ -2441,11 +2607,13 @@ impl Compiler {
                     let fpi = self.symbols[id_idx].fn_ptr_indirection;
                     if fpi > 0 {
                         self.pending.fn_ptr_chain_depth = fpi - 1;
+                        self.pending.fn_ptr_depth_is_array_elem = true;
                     }
                     if fpi > 0 || !self.symbols[id_idx].params.is_empty() {
                         self.pending.indirect_callee_params =
                             Some(self.symbols[id_idx].params.clone());
                         self.pending.indirect_callee_is_variadic = self.symbols[id_idx].is_variadic;
+                        self.pending.indirect_callee_conv = self.symbols[id_idx].conv;
                         self.pending.indirect_callee_fn_ptr_depth = fpi;
                         self.pending.indirect_callee_ret_fn_ptr =
                             self.symbols[id_idx].fn_ptr_ret_indirection;
@@ -2554,6 +2722,7 @@ impl Compiler {
                 // float, double, or struct base, with any number of
                 // `*` markers and pointer-level qualifiers.
                 t = self.parse_decl_base_type()?;
+                self.note_cast_type_name(t);
                 // An array typedef (`typedef T A[N]`, e.g. `sigjmp_buf`)
                 // contributes its element count here; a single `*` below
                 // forms a pointer-to-array whose deref is the C99 6.3.2.1p3
@@ -2806,6 +2975,8 @@ impl Compiler {
                             cast_fpi.unwrap_or(1).max(1),
                         ));
                         self.pending.indirect_callee_is_variadic = pp.is_variadic;
+                        self.pending.indirect_callee_conv =
+                            core::mem::take(&mut self.pending.attr_call_conv);
                         self.pending.indirect_callee_fn_ptr_depth = cast_fpi.unwrap_or(1).max(1);
                         self.pending.indirect_callee_ret_fn_ptr = 0;
                         self.pending.indirect_callee_params = if pp.types.is_empty() {
@@ -3046,8 +3217,11 @@ impl Compiler {
                 // a struct lvalue is its rvalue, leaving the value
                 // unchanged. Limit the wrap to the lvalue forms
                 // `walk_expr_lvalue` handles; a struct rvalue with no
-                // lvalue (compound literal, call result) keeps the
-                // address-as-value representation and its struct type.
+                // lvalue (a call result) keeps the address-as-value
+                // representation and its struct type. A compound
+                // literal is an lvalue (C99 6.5.2.5p4) and is wrapped,
+                // so a consumer (e.g. the call-argument classifiers)
+                // types `&(T){...}` as a pointer, not a by-value `T`.
                 let wrappable = match self.ast_acc {
                     Some(id) => matches!(
                         self.ast.expr(id),
@@ -3055,6 +3229,7 @@ impl Compiler {
                             | super::super::ast::Expr::Member { .. }
                             | super::super::ast::Expr::Index { .. }
                             | super::super::ast::Expr::Binary { .. }
+                            | super::super::ast::Expr::CompoundLiteral { .. }
                             | super::super::ast::Expr::Unary {
                                 op: super::super::ast::UnOp::Deref,
                                 ..
@@ -3194,8 +3369,6 @@ impl Compiler {
             // pattern, not a sign flip on the integer-shaped operand.
             if self.lex.tk == Token::Num {
                 let val = self.lex.ival;
-                let negated = val.wrapping_neg();
-                self.emit_imm(negated);
                 // C99 6.5.3.3p3: unary `-` returns the integer-
                 // promoted operand type. The literal's type comes
                 // from C99 6.4.4.1p5 (first of int / long / long
@@ -3204,7 +3377,17 @@ impl Compiler {
                 // the post-Add/Sub mask in `convert.rs` truncates
                 // a downstream `-MAX - 1` back to 32 bits and
                 // yields 0 instead of `INT64_MIN`.
-                self.ty = self.num_token_type(val);
+                self.ty = integer_promote(self.num_token_type(val));
+                // 6.2.5p9: the negation is evaluated in that type, so
+                // an unsigned result wraps modulo 2^N. `-1U` is
+                // UINT_MAX, not the 64-bit -1 a wider compare reads.
+                let negated = narrow_const_int(
+                    self.size_of_type(self.ty),
+                    is_unsigned_ty(self.ty),
+                    false,
+                    i128::from(val.wrapping_neg()),
+                ) as i64;
+                self.emit_imm(negated);
                 // Dual-emit: the constant-folded `-N` collapses
                 // the unary-minus on the AST side too. Seed
                 // `ast_acc` with the matching IntLit so a
@@ -3270,6 +3453,7 @@ impl Compiler {
                 self.ty = ety;
             } else {
                 let pre_inc_lvalue = self.ast_acc;
+                let fn_ptr_step = self.value_is_function_pointer();
                 self.rewrite_trailing_load_as_psh()
                     .ok_or_else(|| self.compile_err("bad lvalue in pre-increment"))?;
                 // ++/-- reads the prior value and stores a new one.
@@ -3293,11 +3477,15 @@ impl Compiler {
                 // seeded into the stride snapshot when the operand was
                 // loaded (the operand was parsed via a nested `expr()`,
                 // so it sits in `end_of_expr_stride`).
-                let step = self.pointer_to_array_arith_stride(
-                    self.pending.end_of_expr_stride,
-                    self.ty,
-                    self.pointee_step(self.ty),
-                );
+                let step = if fn_ptr_step {
+                    1
+                } else {
+                    self.pointer_to_array_arith_stride(
+                        self.pending.end_of_expr_stride,
+                        self.ty,
+                        self.pointee_step(self.ty),
+                    )
+                };
                 self.emit_imm(step);
                 self.ast_binop(if t == Token::Inc as i64 {
                     super::super::ir::BinOp::Add
@@ -3345,6 +3533,8 @@ impl Compiler {
             self.pending.last_array_decay_size = 0;
             self.pending.last_array_decay_bytes = 0;
             self.pending.last_array_decay_dims.clear();
+            let row_member = self.pending.last_array_decay_member.take();
+            let member_base = self.pending.member_base.take();
             // C99 6.5: a struct / union value is not a valid operand of an
             // arithmetic / bitwise / shift / relational / equality / logical
             // operator (the contiguous token range `Lor..=ModOp`). Reject the
@@ -3354,9 +3544,11 @@ impl Compiler {
                 && self.lex.tk >= Token::Lor as i64
                 && self.lex.tk <= Token::ModOp as i64
                 // GCC vector extension: a vector LHS with an element-wise
-                // operator reaches the per-operator branch, which checks the
-                // RHS. The relational and logical operators still reject.
-                && !(is_vector_ty(&self.structs, t) && is_vector_binop_token(self.lex.tk.raw()))
+                // operator (comparisons included) reaches the per-operator
+                // branch, which checks the RHS. The logical operators reject.
+                && !(is_vector_ty(&self.structs, t)
+                    && (is_vector_binop_token(self.lex.tk.raw())
+                        || is_vector_compare_token(self.lex.tk.raw())))
                 // The GCC 128-bit integer is an integer type; the
                 // per-operator branch below routes it to the walker's
                 // half-pair expansion.
@@ -3480,6 +3672,7 @@ impl Compiler {
                 // for the walker's host-ABI tail placement.
                 let callee_is_variadic =
                     core::mem::take(&mut self.pending.indirect_callee_is_variadic);
+                let callee_conv = core::mem::take(&mut self.pending.indirect_callee_conv);
                 let callee_ret_fn_ptr =
                     core::mem::take(&mut self.pending.indirect_callee_ret_fn_ptr);
                 let callee_fixed = callee_params.as_ref().map_or(0, |p| p.len()) as u32;
@@ -3548,6 +3741,15 @@ impl Compiler {
                             self.ast
                                 .variadic_indirect_callees
                                 .push((callee_id, callee_fixed));
+                        }
+                        // A callee whose declared type names a calling
+                        // convention other than the target's: record it on
+                        // the callee node, where the walker can read it
+                        // after the declaration's scope is gone.
+                        if callee_conv != crate::c5::codegen::CallConv::Target {
+                            self.ast
+                                .conv_indirect_callees
+                                .push((callee_id, callee_conv));
                         }
                         let id = self.ast.push_expr(
                             super::super::ast::Expr::Call {
@@ -3846,6 +4048,7 @@ impl Compiler {
                     continue;
                 }
                 self.next()?;
+                let lhs_fn_ptr = self.value_is_function_pointer();
                 // Rewrite the trailing load into a Psh so the
                 // address sits on the c5 stack across the compound
                 // op; the helper hands back the matching reload op
@@ -3891,7 +4094,7 @@ impl Compiler {
                 {
                     let elem_ty = lhs_ty - Ty::Ptr as i64;
                     let elem_size = self.size_of_type(elem_ty) as i64;
-                    if elem_size > 1 {
+                    if !lhs_fn_ptr && elem_size > 1 {
                         self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, elem_size);
                     }
                 }
@@ -4196,13 +4399,19 @@ impl Compiler {
                 self.ast_psh();
                 self.expr(Token::LtOp as i64)?;
                 self.reject_aggregate_binop(t, self.ty, name)?;
-                if is_floating_scalar(t) || is_floating_scalar(self.ty) {
+                if let Some(vty) = self.vector_compare_ty(t, self.ty) {
+                    let base = if invert { B::Ne } else { B::Eq };
+                    let op = self.vector_compare_op(t, self.ty, base, base, fp_op);
+                    self.ty = vty;
+                    self.ast_binop(op);
+                } else if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, name)?;
                     self.ast_binop(fp_op);
+                    self.ty = Ty::Int as i64;
                 } else {
                     self.emit_eq_with_common_width(t, invert);
+                    self.ty = Ty::Int as i64;
                 }
-                self.ty = Ty::Int as i64;
             } else if let Some(cmp) = Cmp::from_tok(self.lex.tk) {
                 // All four relational ops share the same emit shape;
                 // see `Cmp::ops` for the per-flavour op picks.
@@ -4211,21 +4420,27 @@ impl Compiler {
                 self.ast_psh();
                 self.expr(Token::ShlOp as i64)?;
                 self.reject_aggregate_binop(t, self.ty, name)?;
-                if is_floating_scalar(t) || is_floating_scalar(self.ty) {
-                    self.require_both_float(t, name)?;
-                    self.ast_binop(fp_op);
-                } else if is_pointer_ty(t)
-                    || is_pointer_ty(self.ty)
-                    || is_unsigned_ty(self.arith_common_ty(t, self.ty))
-                {
-                    // Addresses order by unsigned magnitude: the common-type
-                    // rule does not apply to pointers, and a signed compare
-                    // misorders any address with bit 63 set.
-                    self.ast_binop(unsigned_op);
+                if let Some(vty) = self.vector_compare_ty(t, self.ty) {
+                    let op = self.vector_compare_op(t, self.ty, signed_op, unsigned_op, fp_op);
+                    self.ty = vty;
+                    self.ast_binop(op);
                 } else {
-                    self.ast_binop(signed_op);
+                    if is_floating_scalar(t) || is_floating_scalar(self.ty) {
+                        self.require_both_float(t, name)?;
+                        self.ast_binop(fp_op);
+                    } else if is_pointer_ty(t)
+                        || is_pointer_ty(self.ty)
+                        || is_unsigned_ty(self.arith_common_ty(t, self.ty))
+                    {
+                        // Addresses order by unsigned magnitude: the common-type
+                        // rule does not apply to pointers, and a signed compare
+                        // misorders any address with bit 63 set.
+                        self.ast_binop(unsigned_op);
+                    } else {
+                        self.ast_binop(signed_op);
+                    }
+                    self.ty = Ty::Int as i64;
                 }
-                self.ty = Ty::Int as i64;
             } else if self.lex.tk == Token::ShlOp {
                 self.next()?;
                 self.ast_psh();
@@ -4287,9 +4502,15 @@ impl Compiler {
                 // re-seeds it after this op so chained pointer-to-array
                 // arithmetic (`p + i - 1`) keeps the array size.
                 let lhs_stride = self.pending.index_stride;
+                // A function pointer strides one byte per unit, so the
+                // operand's fn-pointer lineage has to be read before the
+                // RHS parse overwrites it.
+                let lhs_fn_ptr = self.value_is_function_pointer();
                 let mut carry_stride: i64 = 0;
                 self.ast_psh();
                 self.expr(Token::MulOp as i64)?;
+                let rhs_fn_ptr = self.value_is_function_pointer();
+                let fn_ptr_arith = lhs_fn_ptr || rhs_fn_ptr;
                 self.reject_aggregate_binop(t, self.ty, "+")?;
                 if let Some(vty) = self.vector_binop_ty(t, self.ty, "+") {
                     self.ty = vty;
@@ -4311,7 +4532,7 @@ impl Compiler {
                     // need to set the result type to ptr.
                     let rhs_ty = self.ty;
                     let lhs_ty = t;
-                    if self.is_ptr_scaling_nontrivial(rhs_ty) {
+                    if !fn_ptr_arith && self.is_ptr_scaling_nontrivial(rhs_ty) {
                         // Snapshot the AST operands before the
                         // pointer-scaling sequence: lhs (int) sits
                         // on the parser-side vstack, rhs (ptr) is
@@ -4389,7 +4610,7 @@ impl Compiler {
                     }
                 } else {
                     let rhs_ty = self.ty;
-                    if self.is_ptr_scaling_nontrivial(t) {
+                    if !fn_ptr_arith && self.is_ptr_scaling_nontrivial(t) {
                         let scale =
                             self.pointer_to_array_arith_stride(lhs_stride, t, self.pointee_size(t));
                         if scale > self.pointee_size(t) {
@@ -4421,9 +4642,12 @@ impl Compiler {
             } else if self.lex.tk == Token::SubOp {
                 self.next()?;
                 let lhs_stride = self.pending.index_stride;
+                let lhs_fn_ptr = self.value_is_function_pointer();
                 let mut carry_stride: i64 = 0;
                 self.ast_psh();
                 self.expr(Token::MulOp as i64)?;
+                let rhs_fn_ptr = self.value_is_function_pointer();
+                let fn_ptr_arith = lhs_fn_ptr || rhs_fn_ptr;
                 self.reject_aggregate_binop(t, self.ty, "-")?;
                 if let Some(vty) = self.vector_binop_ty(t, self.ty, "-") {
                     self.ty = vty;
@@ -4445,12 +4669,12 @@ impl Compiler {
                     // in `p - q` reads this node), not the operand pointer.
                     self.ty = Ty::Int as i64;
                     self.ast_binop(crate::c5::ir::BinOp::Sub);
-                    if self.is_ptr_scaling_nontrivial(t) {
+                    if !fn_ptr_arith && self.is_ptr_scaling_nontrivial(t) {
                         let scale =
                             self.pointer_to_array_arith_stride(lhs_stride, t, self.pointee_size(t));
                         self.emit_binop_with_imm(crate::c5::ir::BinOp::Div, scale);
                     }
-                } else if self.is_ptr_scaling_nontrivial(t) {
+                } else if !fn_ptr_arith && self.is_ptr_scaling_nontrivial(t) {
                     let scale =
                         self.pointer_to_array_arith_stride(lhs_stride, t, self.pointee_size(t));
                     if scale > self.pointee_size(t) {
@@ -4651,6 +4875,7 @@ impl Compiler {
                     continue;
                 }
                 let post_inc_lvalue = self.ast_acc;
+                let fn_ptr_step = self.value_is_function_pointer();
                 self.rewrite_trailing_load_as_psh()
                     .ok_or_else(|| self.compile_err("bad lvalue in post-increment"))?;
                 // Post ++/-- reads the prior value and stores a
@@ -4668,7 +4893,11 @@ impl Compiler {
                 }
                 self.mark_emit_other();
                 self.ast_psh();
-                self.emit_imm(self.pointee_step(self.ty));
+                self.emit_imm(if fn_ptr_step {
+                    1
+                } else {
+                    self.pointee_step(self.ty)
+                });
                 self.ast_binop(if self.lex.tk == Token::Inc {
                     super::super::ir::BinOp::Add
                 } else {
@@ -4681,11 +4910,15 @@ impl Compiler {
                 // into the stride snapshot at the operand load (which
                 // sits in the current scope's `index_stride` for a
                 // postfix operand).
-                let post_step = self.pointer_to_array_arith_stride(
-                    self.pending.index_stride,
-                    self.ty,
-                    self.pointee_step(self.ty),
-                );
+                let post_step = if fn_ptr_step {
+                    1
+                } else {
+                    self.pointer_to_array_arith_stride(
+                        self.pending.index_stride,
+                        self.ty,
+                        self.pointee_step(self.ty),
+                    )
+                };
                 self.emit_imm(post_step);
                 self.ast_binop(if self.lex.tk == Token::Inc {
                     super::super::ir::BinOp::Sub
@@ -4744,6 +4977,7 @@ impl Compiler {
                 let saved_callee_params = self.pending.indirect_callee_params.take();
                 let saved_callee_variadic =
                     core::mem::take(&mut self.pending.indirect_callee_is_variadic);
+                let saved_callee_conv = core::mem::take(&mut self.pending.indirect_callee_conv);
                 let saved_callee_depth =
                     core::mem::take(&mut self.pending.indirect_callee_fn_ptr_depth);
                 let saved_callee_ret =
@@ -4754,6 +4988,7 @@ impl Compiler {
                 let idx_ast = self.ast_acc;
                 self.pending.indirect_callee_params = saved_callee_params;
                 self.pending.indirect_callee_is_variadic = saved_callee_variadic;
+                self.pending.indirect_callee_conv = saved_callee_conv;
                 self.pending.indirect_callee_fn_ptr_depth = saved_callee_depth;
                 self.pending.indirect_callee_ret_fn_ptr = saved_callee_ret;
                 self.pending.fn_ptr_chain_depth = saved_fn_ptr_chain;
@@ -4812,6 +5047,11 @@ impl Compiler {
                     // at its top so it doesn't leak past the
                     // subscript.
                     self.pending.last_array_decay_bytes = multi_dim_stride;
+                    // A row of an array member is unbounded when the member is.
+                    self.pending.last_array_decay_member = row_member.map(|m| super::ArrayMember {
+                        decl_remaining: None,
+                        unbounded: m.unbounded,
+                    });
                 } else {
                     if self.is_ptr_scaling_nontrivial(t) {
                         let scale = self.pointee_size(t);
@@ -4894,17 +5134,28 @@ impl Compiler {
                 self.next()?;
 
                 let sid = struct_id_of(t);
-                let field = self.structs[sid]
+                let field_idx = self.structs[sid]
                     .fields
                     .iter()
-                    .find(|f| f.name == field_name)
+                    .position(|f| f.name == field_name)
                     .ok_or_else(|| {
                         self.compile_err(format!(
                             "struct {} has no field {}",
                             self.structs[sid].name, field_name
                         ))
-                    })?
-                    .clone();
+                    })?;
+                let field = self.structs[sid].fields[field_idx].clone();
+                // Where the member chain stands after this step. `->`
+                // starts a chain at the pointer's target.
+                let base = if is_dot { member_base } else { None };
+                let base = base.unwrap_or(super::MemberBase::UNKNOWN);
+                let (records, at_end) = self.member_nesting(sid, field_idx);
+                let step = super::MemberBase {
+                    decl_size: base.decl_size,
+                    offset: base.offset + field.offset as i64,
+                    records: base.records + records,
+                    at_end: base.at_end && at_end,
+                };
 
                 // A function-pointer field carries its callee parameter
                 // types so a following `s.fp(args)` / `s->fp(args)` narrows
@@ -4919,6 +5170,11 @@ impl Compiler {
                     None
                 };
                 self.pending.indirect_callee_is_variadic = field_is_fn_ptr && field.is_variadic;
+                self.pending.indirect_callee_conv = if field_is_fn_ptr {
+                    field.conv
+                } else {
+                    crate::c5::codegen::CallConv::Target
+                };
                 self.pending.indirect_callee_fn_ptr_depth = if field_is_fn_ptr {
                     field.fn_ptr_indirection
                 } else {
@@ -4976,6 +5232,7 @@ impl Compiler {
                         // where a signed 1-bit field reads its set bit
                         // back as -1.
                         signed: !is_unsigned_ty(field.ty) && !is_bool_ty(field.ty),
+                        ty: field_ty,
                     };
                     let bf_field_off = field.offset as i64;
                     // The AST node carries the access's own type, which
@@ -5148,6 +5405,11 @@ impl Compiler {
                             let elem_size = self.size_of_type(field.ty) as i64;
                             self.seed_multi_dim_strides(&dims, elem_size);
                         }
+                        self.pending.last_array_decay_member = Some(super::ArrayMember {
+                            decl_remaining: step.decl_size.map(|size| size - step.offset),
+                            unbounded: step.decl_size.is_none()
+                                && self.member_is_unbounded(&field, step.records, step.at_end),
+                        });
                     } else if !field_is_struct_value {
                         self.mark_emit_scalar_load();
                         // Function-pointer field: re-seed the fn-ptr
@@ -5187,6 +5449,8 @@ impl Compiler {
                             let elem_size = self.size_of_type(scalar_ty) as i64;
                             self.seed_multi_dim_strides(&dims, elem_size);
                         }
+                    } else {
+                        self.pending.member_base = Some(step);
                     }
                 }
                 // Dual-emit `Expr::Member` collapsing the address +
@@ -5228,6 +5492,7 @@ impl Compiler {
         self.pending.end_of_expr_strides_tail =
             core::mem::take(&mut self.pending.index_strides_tail);
         self.pending.index_stride = 0;
+        self.pending.member_base = None;
         Ok(())
     }
 
@@ -5803,6 +6068,20 @@ fn vector_binop_entry(tk: i64) -> Option<&'static (Token, &'static str, super::s
 
 fn is_vector_binop_token(tk: i64) -> bool {
     vector_binop_entry(tk).is_some()
+}
+
+/// The comparison tokens the GCC vector extension lowers element-wise.
+fn is_vector_compare_token(tk: i64) -> bool {
+    [
+        Token::EqOp,
+        Token::NeOp,
+        Token::LtOp,
+        Token::GtOp,
+        Token::LeOp,
+        Token::GeOp,
+    ]
+    .iter()
+    .any(|t| *t as i64 == tk)
 }
 
 fn vector_binop_name(tk: i64) -> &'static str {

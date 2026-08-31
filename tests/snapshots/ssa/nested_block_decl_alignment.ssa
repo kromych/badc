@@ -13,16 +13,16 @@ fn ent_pc=3 n_params=0 variadic=false locals=2
     v5   Store { addr=v2, disp=0, value=v4, kind=I8 }     -> -
     v6   Imm(504403158265495552)                          -> x2
     v7   LocalAddr(-1)                                    -> x2
-    v8   BinopI { op=and, lhs=v2, rhs_imm=63 }            -> x2
-    v9   BinopI { op=eq, lhs=v8, rhs_imm=0 }              -> x6
-    v10  Imm(0)                                           -> x7
+    v8   BinopI { op=and, lhs=v2, rhs_imm=63 }            -> x1
+    v9   BinopI { op=eq, lhs=v8, rhs_imm=0 }              -> x2
+    v10  Imm(0)                                           -> x6
     terminator Bnz { cond=v8, target=b4, fall=b2 }   (exit_acc=v9)
   block 2  start_pc=0
     v12  LocalAddr(-1)                                    -> x0
-    v13  Imm(0)                                           -> x0
-    v14  Load { addr=v2, disp=0, kind=I8 }                -> x0
-    v15  BinopI { op=eq, lhs=v14, rhs_imm=7 }             -> x0
-    v16  BinopI { op=ne, lhs=v15, rhs_imm=0 }             -> x1
+    v13  Imm(0)                                           -> x1
+    v14  Load { addr=v12, disp=0, kind=I8 }               -> x0
+    v15  Imm(1)                                           -> x0
+    v16  Imm(1)                                           -> x1
     v17  Imm(0)                                           -> x1
     terminator Jmp(b3)   (exit_acc=v15)
   block 3  start_pc=0

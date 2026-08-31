@@ -128,6 +128,7 @@ pub(crate) fn walk_function(
         alloca_top_slot,
         over_aligned_slots,
         ssp,
+        conv,
         ..
     } = fun;
     let (ent_pc, end_pc, n_params) = (*ent_pc, *end_pc, *n_params);
@@ -135,6 +136,7 @@ pub(crate) fn walk_function(
     let (returns_struct, return_struct_size) = (*returns_struct, *return_struct_size);
     let (return_ty, alloca_top_slot) = (*return_ty, *alloca_top_slot);
     let mut b = super::super::codegen::ssa::build::SsaBuilder::new(ent_pc, n_params, is_variadic);
+    b.set_conv(*conv);
     b.set_end_pc(end_pc);
     b.set_ssp(*ssp);
     // Only at -O, where `passes::divmod_pair` folds the split back when
@@ -191,7 +193,15 @@ pub(crate) fn walk_function(
     // start at slot 2. Every other aggregate keeps the c5 out-pointer
     // convention (hidden pointer at slot 2, parameters start at 3).
     use crate::c5::compiler::StructReturnAbi;
-    let ret_abi = crate::c5::compiler::struct_return_abi(structs, target, return_ty);
+    // Every ABI question about this definition -- where its arguments
+    // arrive, how an aggregate parameter or return is classified -- is
+    // asked of the convention it declares, which is the target's own
+    // unless `__attribute__((ms_abi))` / `((sysv_abi))` says otherwise.
+    // `abi_target` carries that convention to the argument planner;
+    // layout-shaped queries keep the real target, since scalar widths
+    // are the target's property and not the convention's.
+    let abi_target = target.abi_row(*conv);
+    let ret_abi = crate::c5::compiler::struct_return_abi_conv(structs, target, *conv, return_ty);
     let ret_outptr = matches!(ret_abi, StructReturnAbi::OutPtr);
     let ret_in_regs = matches!(ret_abi, StructReturnAbi::Regs(_));
     let ret_indirect = matches!(ret_abi, StructReturnAbi::Indirect(_));
@@ -232,7 +242,9 @@ pub(crate) fn walk_function(
         param_aggs = alloc::vec![None; param_tys.len()];
         param_arg_aggs = alloc::vec![None; param_tys.len()];
         for (i, &pty) in param_tys.iter().enumerate() {
-            if let Some(desc) = crate::c5::compiler::host_abi_agg_desc(structs, target, pty) {
+            if let Some(desc) =
+                crate::c5::compiler::host_abi_agg_desc_conv(structs, target, *conv, pty)
+            {
                 param_arg_aggs[i] = Some(crate::c5::codegen::ArgAgg {
                     class: crate::c5::codegen::abi_classify::classify_aggregate(
                         desc.size,
@@ -298,7 +310,7 @@ pub(crate) fn walk_function(
         let eff = super::super::codegen::effective_fp_arg_mask(
             param_tys.len(),
             b.param_fp_mask(),
-            target.abi(),
+            abi_target.abi(),
         );
         b.set_param_fp_mask(eff);
     }
@@ -310,7 +322,7 @@ pub(crate) fn walk_function(
     let param_plan = super::super::codegen::plan_param_regs_aggs(
         param_tys.len(),
         b.param_fp_mask(),
-        target.abi(),
+        abi_target.abi(),
         &param_arg_aggs,
     );
     let param_in_fp_reg = |i: usize| -> bool {
@@ -719,6 +731,42 @@ impl<'a> Walker<'a> {
         }
     }
 
+    /// Calling convention the callee of a call expression follows,
+    /// whether it names a function directly or goes through a pointer.
+    /// Every ABI question the call site asks -- argument placement,
+    /// aggregate argument and return classification, the variadic
+    /// dialect -- is asked of this, not of the target's own convention.
+    fn callee_conv(&self, callee: super::ExprId) -> crate::c5::codegen::CallConv {
+        if let Expr::Ident { sym, class, .. } = self.ast.expr(callee)
+            && *class == Token::Fun as i64
+            && let Some(s) = self.symbols.get(*sym as usize)
+            && s.conv != crate::c5::codegen::CallConv::Target
+        {
+            return s.conv;
+        }
+        self.indirect_callee_conv(callee)
+    }
+
+    /// Calling convention the pointed-to function of an indirect call
+    /// follows. Recorded at parse time on the callee's `ExprId` when the
+    /// declared type carries `__attribute__((ms_abi))` /
+    /// `((sysv_abi))`; the entry is already normalised against the
+    /// target, so anything listed differs from the target's own.
+    fn indirect_callee_conv(&self, callee: super::ExprId) -> crate::c5::codegen::CallConv {
+        if let Some(&(_, conv)) = self
+            .ast
+            .conv_indirect_callees
+            .iter()
+            .find(|(c, _)| *c == callee)
+        {
+            return conv;
+        }
+        match self.ast.expr(callee) {
+            Expr::Comma { rhs, .. } => self.indirect_callee_conv(*rhs),
+            _ => crate::c5::codegen::CallConv::Target,
+        }
+    }
+
     /// Resolve a `Token::Glo` address producer to either an
     /// intra-unit data offset or a cross-TU symbol reference.
     ///
@@ -1122,18 +1170,33 @@ impl<'a> Walker<'a> {
         let (elem_ty, lanes) = self.vector_lanes(ty);
         let size = self.struct_size(ty);
         let elem_size = size / lanes;
-        let lane_op = vector_lane_binop(op, elem_ty);
-        let lk = load_kind_for(elem_ty, self.target);
+        // A comparison loads at the operand element type (float or
+        // unsigned included) and stores 0 / -1 at the result's signed
+        // element; the parser fixed the opcode flavour from the operands.
+        let is_cmp = is_vector_compare_op(op);
+        let src_elem_ty = if is_cmp {
+            let vec = if lhs_vec { lhs } else { rhs };
+            let vty = expr_ty(self.ast.expr(vec)).unwrap_or(ty);
+            self.vector_lanes(vty).0
+        } else {
+            elem_ty
+        };
+        let lane_op = if is_cmp {
+            op
+        } else {
+            vector_lane_binop(op, elem_ty)
+        };
+        let lk = load_kind_for(src_elem_ty, self.target);
         let sk = store_kind_for(elem_ty, self.target);
         let lv = if lhs_vec {
             self.walk_copy_operand(b, lhs)?
         } else {
-            self.vector_broadcast_operand(b, lhs, elem_ty)?
+            self.vector_broadcast_operand(b, lhs, src_elem_ty)?
         };
         let rv = if rhs_vec {
             self.walk_copy_operand(b, rhs)?
         } else {
-            self.vector_broadcast_operand(b, rhs, elem_ty)?
+            self.vector_broadcast_operand(b, rhs, src_elem_ty)?
         };
         let slot = b.alloc_synthetic_struct(size);
         let dst = b.local_addr(slot);
@@ -1152,7 +1215,11 @@ impl<'a> Walker<'a> {
                 rv
             };
             let mut r = b.binop(lane_op, a, c);
-            if b.is_f32(a) && b.is_f32(c) {
+            if is_cmp {
+                // The scalar compare yields 0 / 1; the lane holds 0 / -1.
+                let z = b.imm(0);
+                r = b.binop(BinOp::Sub, z, r);
+            } else if b.is_f32(a) && b.is_f32(c) {
                 r = b.mark_f32(r);
             }
             let da = lane_addr(b, dst, off);
@@ -2722,6 +2789,7 @@ impl<'a> Walker<'a> {
                 ptr_slot,
                 size_slot,
                 dim,
+                fill,
                 ..
             } => {
                 // C99 6.7.6.2: allocate `count * sizeof(elem)` bytes
@@ -2731,6 +2799,7 @@ impl<'a> Walker<'a> {
                 let ptr_slot = *ptr_slot;
                 let size_slot = *size_slot;
                 let dim = *dim;
+                let fill = *fill;
                 let n = self.walk_expr_rvalue(b, dim)?;
                 let bytes = if elem_size == 1 {
                     n
@@ -2743,6 +2812,9 @@ impl<'a> Walker<'a> {
                     alloc::vec![bytes],
                 );
                 b.store_local(ptr_slot, ptr, super::super::ir::StoreKind::I64);
+                if let Some(byte) = fill {
+                    self.fill_loop(b, ptr, bytes, byte);
+                }
                 Ok(())
             }
             super::super::ast::Decl::StaticLocal { .. } => {
@@ -2811,29 +2883,70 @@ impl<'a> Walker<'a> {
         b.mcpy(dst, src, size, offset_align(SLOT_ALIGN, src_data_off));
     }
 
-    /// Store zeros over the first `size` bytes of the local at `slot`,
-    /// in place of copying the all-zero template the parser declined to
-    /// stage. A frame slot is `SLOT_ALIGN`-aligned, so the fill runs in
-    /// whole units down to the tail.
-    fn init_zero(
+    /// Store `byte` over the first `size` bytes of the local at `slot`,
+    /// in place of copying a staged template. A frame slot is
+    /// `SLOT_ALIGN`-aligned, so the fill runs in whole units down to the
+    /// tail; past the inline bound it runs as a loop.
+    fn init_fill(
         &mut self,
         b: &mut super::super::codegen::ssa::build::SsaBuilder,
         slot: i64,
         size: i64,
+        byte: u8,
     ) {
         if size <= 0 {
             return;
         }
         let dst = b.local_addr(slot);
-        let zero = b.imm(0);
+        if super::mem_transfer_accesses(size, SLOT_ALIGN) > super::MAX_MEM_FILL_ACCESSES {
+            let bytes = b.imm(size);
+            self.fill_loop(b, dst, bytes, byte);
+            return;
+        }
         for (off, width) in super::mem_transfer_chunks(size, SLOT_ALIGN) {
             let p = if off == 0 {
                 dst
             } else {
                 b.binop_imm(BinOp::Add, dst, off)
             };
-            b.store(p, zero, store_kind_for_width(width));
+            let v = b.imm(repeat_byte(byte, width));
+            b.store(p, v, store_kind_for_width(width));
         }
+    }
+
+    /// Store `byte` over `bytes` bytes at `dst` with a loop of 8-byte
+    /// stores. The count is rounded up to a multiple of 8: a frame slot
+    /// and an `alloca` allocation are both sized in units of at least
+    /// that and start 8-aligned, so the rounded run stays inside the
+    /// object's own storage. The cursor lives in a synthetic slot the
+    /// `-O` promotion lifts into a register.
+    fn fill_loop(
+        &mut self,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
+        dst: super::super::ir::ValueId,
+        bytes: super::super::ir::ValueId,
+        byte: u8,
+    ) {
+        let cursor = b.alloc_synthetic_local();
+        let rounded = b.binop_imm(BinOp::Add, bytes, 7);
+        let rounded = b.binop_imm(BinOp::And, rounded, -8);
+        let end = b.binop(BinOp::Add, dst, rounded);
+        b.store_local(cursor, dst, StoreKind::I64);
+        let header = b.new_block();
+        let body = b.new_block();
+        let after = b.new_block();
+        b.jmp(header);
+        b.switch_to(header);
+        let p = b.load_local(cursor, LoadKind::I64);
+        let more = b.binop(BinOp::Ult, p, end);
+        b.branch_zero(more, after, body);
+        b.switch_to(body);
+        let v = b.imm(repeat_byte(byte, 8));
+        b.store(p, v, StoreKind::I64);
+        let next = b.binop_imm(BinOp::Add, p, 8);
+        b.store_local(cursor, next, StoreKind::I64);
+        b.jmp(header);
+        b.switch_to(after);
     }
 
     fn emit_local_init(
@@ -2878,8 +2991,8 @@ impl<'a> Walker<'a> {
                 self.init_from_template(b, slot, *src_data_off, *size_bytes);
                 Ok(())
             }
-            super::super::ast::LocalInit::Zero { size_bytes } => {
-                self.init_zero(b, slot, *size_bytes);
+            super::super::ast::LocalInit::Fill { byte, size_bytes } => {
+                self.init_fill(b, slot, *size_bytes, *byte);
                 Ok(())
             }
             super::super::ast::LocalInit::Runtime {
@@ -2893,8 +3006,8 @@ impl<'a> Walker<'a> {
                         src_data_off,
                         size_bytes,
                     }) => self.init_from_template(b, slot, *src_data_off, *size_bytes),
-                    Some(super::super::ast::LocalInitPrelude::Zero { size_bytes }) => {
-                        self.init_zero(b, slot, *size_bytes)
+                    Some(super::super::ast::LocalInitPrelude::Fill { byte, size_bytes }) => {
+                        self.init_fill(b, slot, *size_bytes, *byte)
                     }
                     None => {}
                 }
@@ -3054,21 +3167,7 @@ impl<'a> Walker<'a> {
             let out = self.bitfield_sign_extend_128(b, bf, masked);
             return self.bitfield_value_form(b, bf, out);
         }
-        let (load_kind, store_kind) = (bitfield_load_kind(bf), bitfield_store_kind(bf));
-        let masked = b.binop_imm(BinOp::And, value, mask_lo);
-        let old = load_place(b, addr, load_kind, seg, vol, align);
-        let cleared = b.binop_imm(
-            BinOp::And,
-            old,
-            !bitfield_mask_halves(bf.bit_width, bf.bit_offset).0,
-        );
-        let shifted = if bf.bit_offset > 0 {
-            b.binop_imm(BinOp::Shl, masked, bf.bit_offset as i64)
-        } else {
-            masked
-        };
-        let combined = b.binop(BinOp::Or, cleared, shifted);
-        store_place(b, addr, combined, store_kind, seg, vol, align);
+        let masked = merge_into_bitfield(b, addr, bf, value, seg, vol, align);
         if bf.signed && w < 64 {
             let up = b.binop_imm(BinOp::Shl, masked, 64 - w);
             b.binop_imm(BinOp::Shr, up, 64 - w)
@@ -3095,7 +3194,16 @@ impl<'a> Walker<'a> {
         let v = self.walk_copy_operand(b, rhs)?;
         // C99 6.3.1.3: a 128-bit source narrows to the field's type,
         // which is its low half -- not the address the value is carried as.
-        Ok(if is128 { b.load(v, LoadKind::I64) } else { v })
+        let v = if is128 { b.load(v, LoadKind::I64) } else { v };
+        // C99 6.5.16.1p2: the value is converted to the type of the left
+        // operand. A floating source needs the 6.3.1.4 conversion here --
+        // the store's mask is an integer operation and cannot express it.
+        let src_ty = expr_ty(self.ast.expr(rhs)).unwrap_or(bf.ty);
+        Ok(if is_floating_scalar(src_ty) {
+            self.convert_scalar_value(b, v, src_ty, bf.ty)
+        } else {
+            v
+        })
     }
 
     /// The field's bits, right-aligned in a 128-bit storage unit and
@@ -4339,6 +4447,7 @@ impl<'a> Walker<'a> {
                 Ok(b.load_local(slot, read_kind))
             }
             Expr::Call { callee, args, ty } => {
+                let callee_conv = self.callee_conv(*callee);
                 // Out-pointer-returning c5-internal callee: allocate a
                 // result temp on this frame, prepend its address as the
                 // hidden out-pointer arg 0, run the call, and return the
@@ -4350,7 +4459,12 @@ impl<'a> Walker<'a> {
                 if is_struct_ty(*ty)
                     && struct_ptr_depth(*ty) == 0
                     && matches!(
-                        crate::c5::compiler::struct_return_abi(self.structs, self.target, *ty),
+                        crate::c5::compiler::struct_return_abi_conv(
+                            self.structs,
+                            self.target,
+                            callee_conv,
+                            *ty
+                        ),
                         crate::c5::compiler::StructReturnAbi::OutPtr
                     )
                     && let Expr::Ident {
@@ -4384,7 +4498,10 @@ impl<'a> Walker<'a> {
                         // integer slot, or the marshal moves only its 4-byte
                         // form into the low half and the f64 read sees noise in
                         // the high half.
-                        if expr_ty(self.ast.expr(*a)).map(is_float_ty).unwrap_or(false) {
+                        if arg_value_ty(self.ast.expr(*a))
+                            .map(is_float_ty)
+                            .unwrap_or(false)
+                        {
                             let widened = b.fp_widen_to_f64(v);
                             let slot = b.alloc_synthetic_local();
                             b.store_local(slot, widened, super::super::ir::StoreKind::I64);
@@ -4470,7 +4587,7 @@ impl<'a> Walker<'a> {
                     // A by-value aggregate argument is copied by the
                     // callee through the generic space.
                     arg_vals.push(self.walk_copy_operand(b, *a)?);
-                    if expr_ty(self.ast.expr(*a))
+                    if arg_value_ty(self.ast.expr(*a))
                         .map(is_floating_scalar)
                         .unwrap_or(false)
                         && i < 32
@@ -4503,7 +4620,7 @@ impl<'a> Walker<'a> {
                         // widened 8-byte double, matching what the callee
                         // reads back, and pass `fp_arg_mask = 0`.
                         let callee_variadic = self.fun_is_variadic(*sym);
-                        let abi = self.target.abi();
+                        let abi = self.target.abi_for(callee_conv);
                         // Named (fixed) parameter count of the callee.
                         // For a variadic callee the prototype records the
                         // pre-ellipsis parameters in `Symbol::params`;
@@ -4545,7 +4662,7 @@ impl<'a> Walker<'a> {
                                 let agg_ty = if i < nparams {
                                     Some(self.symbols[*sym as usize].params[i])
                                 } else {
-                                    match expr_ty(self.ast.expr(args[i])) {
+                                    match arg_value_ty(self.ast.expr(args[i])) {
                                         Some(aty)
                                             if is_struct_value_ty(aty)
                                                 && self.struct_size(aty) <= 8 =>
@@ -4572,9 +4689,10 @@ impl<'a> Walker<'a> {
                                 if callee_variadic && i < self.symbols[*sym as usize].params.len() {
                                     continue;
                                 }
-                                if let Some(desc) = crate::c5::compiler::host_abi_agg_desc(
+                                if let Some(desc) = crate::c5::compiler::host_abi_agg_desc_conv(
                                     self.structs,
                                     self.target,
+                                    callee_conv,
                                     ty_tag,
                                 ) {
                                     if arg_aggs.is_empty() {
@@ -4600,7 +4718,7 @@ impl<'a> Walker<'a> {
                                 if i < fixed_args {
                                     continue;
                                 }
-                                let arg_is_fp = expr_ty(self.ast.expr(*a))
+                                let arg_is_fp = arg_value_ty(self.ast.expr(*a))
                                     .map(is_floating_scalar)
                                     .unwrap_or(false);
                                 if arg_is_fp {
@@ -4625,9 +4743,10 @@ impl<'a> Walker<'a> {
                             }
                             if let crate::c5::compiler::StructReturnAbi::Regs(desc)
                             | crate::c5::compiler::StructReturnAbi::Indirect(desc) =
-                                crate::c5::compiler::struct_return_abi(
+                                crate::c5::compiler::struct_return_abi_conv(
                                     self.structs,
                                     self.target,
+                                    callee_conv,
                                     *ty,
                                 )
                             {
@@ -4667,7 +4786,7 @@ impl<'a> Walker<'a> {
                                 if i < fixed_args {
                                     continue;
                                 }
-                                let arg_is_fp = expr_ty(self.ast.expr(*a))
+                                let arg_is_fp = arg_value_ty(self.ast.expr(*a))
                                     .map(is_floating_scalar)
                                     .unwrap_or(false);
                                 if arg_is_fp {
@@ -4692,9 +4811,10 @@ impl<'a> Walker<'a> {
                             }
                             if let crate::c5::compiler::StructReturnAbi::Regs(desc)
                             | crate::c5::compiler::StructReturnAbi::Indirect(desc) =
-                                crate::c5::compiler::struct_return_abi(
+                                crate::c5::compiler::struct_return_abi_conv(
                                     self.structs,
                                     self.target,
+                                    callee_conv,
                                     *ty,
                                 )
                             {
@@ -4739,7 +4859,7 @@ impl<'a> Walker<'a> {
                             callee_variadic || (fp_arg_mask != 0 && eff_fp_arg_mask == 0);
                         let call_fp_arg_mask = if force_int {
                             for (i, a) in args.iter().enumerate() {
-                                let arg_is_fp = expr_ty(self.ast.expr(*a))
+                                let arg_is_fp = arg_value_ty(self.ast.expr(*a))
                                     .map(is_floating_scalar)
                                     .unwrap_or(false);
                                 if arg_is_fp {
@@ -4768,8 +4888,12 @@ impl<'a> Walker<'a> {
                         // operand.
                         let ret_temp = if let crate::c5::compiler::StructReturnAbi::Regs(desc)
                         | crate::c5::compiler::StructReturnAbi::Indirect(desc) =
-                            crate::c5::compiler::struct_return_abi(self.structs, self.target, *ty)
-                        {
+                            crate::c5::compiler::struct_return_abi_conv(
+                                self.structs,
+                                self.target,
+                                callee_conv,
+                                *ty,
+                            ) {
                             let ridx = b.intern_agg_desc(desc.clone());
                             let slot = b.alloc_synthetic_struct(desc.size as i64);
                             Some((ridx, slot))
@@ -4843,7 +4967,7 @@ impl<'a> Walker<'a> {
                             let arg_ty = if i < nparams {
                                 self.symbols[*sym as usize].params[i]
                             } else {
-                                match expr_ty(self.ast.expr(args[i])) {
+                                match arg_value_ty(self.ast.expr(args[i])) {
                                     Some(t) => t,
                                     None => continue,
                                 }
@@ -4911,8 +5035,12 @@ impl<'a> Walker<'a> {
                         // the use site copies from this temp's address.
                         let ret_temp = if let crate::c5::compiler::StructReturnAbi::Regs(desc)
                         | crate::c5::compiler::StructReturnAbi::Indirect(desc) =
-                            crate::c5::compiler::struct_return_abi(self.structs, self.target, *ty)
-                        {
+                            crate::c5::compiler::struct_return_abi_conv(
+                                self.structs,
+                                self.target,
+                                callee_conv,
+                                *ty,
+                            ) {
                             let ridx = b.intern_agg_desc(desc.clone());
                             let slot = b.alloc_synthetic_struct(desc.size as i64);
                             Some((ridx, slot))
@@ -4959,7 +5087,12 @@ impl<'a> Walker<'a> {
                 // type rather than the variable symbol would close this.
                 let (callee_variadic, callee_fixed) =
                     self.indirect_callee_proto(*callee, args.len());
-                let abi = self.target.abi();
+                // The pointed-to function's own calling convention drives
+                // the argument placement, so every ABI question below --
+                // which variadic dialect applies, whether a floating-point
+                // argument rides the FP bank -- is asked of it rather than
+                // of the target's default.
+                let abi = self.target.abi_for(callee_conv);
                 let target = match indirect_target {
                     Some(t) => t,
                     None => self.walk_expr_rvalue(b, *callee)?,
@@ -4979,15 +5112,18 @@ impl<'a> Walker<'a> {
                     if callee_variadic && i >= callee_fixed {
                         continue;
                     }
-                    let Some(aty) = expr_ty(self.ast.expr(args[i])) else {
+                    let Some(aty) = arg_value_ty(self.ast.expr(args[i])) else {
                         continue;
                     };
                     if !(is_struct_value_ty(aty)) {
                         continue;
                     }
-                    if let Some(desc) =
-                        crate::c5::compiler::host_abi_agg_desc(self.structs, self.target, aty)
-                    {
+                    if let Some(desc) = crate::c5::compiler::host_abi_agg_desc_conv(
+                        self.structs,
+                        self.target,
+                        callee_conv,
+                        aty,
+                    ) {
                         if arg_aggs.is_empty() {
                             arg_aggs = alloc::vec![None; arg_vals.len()];
                         }
@@ -5004,7 +5140,12 @@ impl<'a> Walker<'a> {
                 // cdecl (its prologue skips the FP bank), so the call is
                 // non-variadic with FP mask 0.
                 if matches!(
-                    crate::c5::compiler::struct_return_abi(self.structs, self.target, *ty),
+                    crate::c5::compiler::struct_return_abi_conv(
+                        self.structs,
+                        self.target,
+                        callee_conv,
+                        *ty
+                    ),
                     crate::c5::compiler::StructReturnAbi::OutPtr
                 ) {
                     // The callee writes the whole struct through the
@@ -5025,7 +5166,7 @@ impl<'a> Walker<'a> {
                     // pattern and reloaded through an integer slot so it is not
                     // passed as its 4-byte form in the low half of the slot.
                     for i in 0..arg_vals.len() {
-                        if expr_ty(self.ast.expr(args[i]))
+                        if arg_value_ty(self.ast.expr(args[i]))
                             .map(is_float_ty)
                             .unwrap_or(false)
                         {
@@ -5037,7 +5178,8 @@ impl<'a> Walker<'a> {
                     }
                     all_args.extend_from_slice(&arg_vals);
                     let fixed = all_args.len();
-                    let call = b.call_indirect(target, all_args, false, fixed, false, 0);
+                    let call =
+                        b.call_indirect(target, all_args, false, fixed, false, 0, callee_conv);
                     if !arg_aggs.is_empty() {
                         // `all_args` prepends the hidden out-pointer, so the
                         // aggregate descriptors shift by one slot.
@@ -5055,8 +5197,12 @@ impl<'a> Walker<'a> {
                 // struct into the temp.
                 let ret_temp = if let crate::c5::compiler::StructReturnAbi::Regs(desc)
                 | crate::c5::compiler::StructReturnAbi::Indirect(desc) =
-                    crate::c5::compiler::struct_return_abi(self.structs, self.target, *ty)
-                {
+                    crate::c5::compiler::struct_return_abi_conv(
+                        self.structs,
+                        self.target,
+                        callee_conv,
+                        *ty,
+                    ) {
                     let ridx = b.intern_agg_desc(desc.clone());
                     let slot = b.alloc_synthetic_struct(desc.size as i64);
                     Some((ridx, slot))
@@ -5075,7 +5221,7 @@ impl<'a> Walker<'a> {
                         if i < callee_fixed {
                             continue;
                         }
-                        let arg_is_fp = expr_ty(self.ast.expr(*a))
+                        let arg_is_fp = arg_value_ty(self.ast.expr(*a))
                             .map(is_floating_scalar)
                             .unwrap_or(false);
                         if arg_is_fp {
@@ -5089,6 +5235,7 @@ impl<'a> Walker<'a> {
                         callee_fixed,
                         fp_return,
                         fp_arg_mask,
+                        callee_conv,
                     );
                     if !arg_aggs.is_empty() {
                         b.set_call_arg_aggs(call, arg_aggs);
@@ -5118,7 +5265,7 @@ impl<'a> Walker<'a> {
                         if i < callee_fixed {
                             continue;
                         }
-                        let arg_is_fp = expr_ty(self.ast.expr(*a))
+                        let arg_is_fp = arg_value_ty(self.ast.expr(*a))
                             .map(is_floating_scalar)
                             .unwrap_or(false);
                         if arg_is_fp {
@@ -5132,6 +5279,7 @@ impl<'a> Walker<'a> {
                         callee_fixed,
                         fp_return,
                         fp_arg_mask,
+                        callee_conv,
                     );
                     if !arg_aggs.is_empty() {
                         b.set_call_arg_aggs(call, arg_aggs);
@@ -5174,7 +5322,7 @@ impl<'a> Walker<'a> {
                 let call_fp_arg_mask =
                     if force_int_indirect || (fp_arg_mask != 0 && eff_fp_arg_mask == 0) {
                         for (i, a) in args.iter().enumerate() {
-                            let arg_is_fp = expr_ty(self.ast.expr(*a))
+                            let arg_is_fp = arg_value_ty(self.ast.expr(*a))
                                 .map(is_floating_scalar)
                                 .unwrap_or(false);
                             if arg_is_fp {
@@ -5199,6 +5347,7 @@ impl<'a> Walker<'a> {
                     callee_fixed,
                     fp_return,
                     call_fp_arg_mask,
+                    callee_conv,
                 );
                 if !arg_aggs.is_empty() {
                     b.set_call_arg_aggs(call, arg_aggs);
@@ -6930,8 +7079,8 @@ impl<'a> Walker<'a> {
 /// `StoreLocal`); every other lvalue -- a dereference, an array element,
 /// a struct field, or a float-stored local -- routes through a
 /// materialized address. The slot path takes no `LocalAddr`, so the slot
-/// stays promotable in `promotable_slots`; the address path marks it
-/// address-taken and pins it to memory.
+/// stays promotable; the address path pins it to memory from the point
+/// the address is taken.
 enum RmwPlace {
     Slot(i64),
     /// A materialized address, with the segment override every access
@@ -7010,25 +7159,52 @@ impl RmwPlace {
                 seg,
                 align,
             } => {
-                // C99 6.7.2.1: load the unit, clear the slice, mask + shift
-                // the new value into place, OR back, store.
                 debug_assert!(bf.unit_size <= 8);
-                let (load_kind, store_kind) = (bitfield_load_kind(bf), bitfield_store_kind(bf));
-                let mask = bitfield_mask_halves(bf.bit_width, 0).0;
-                let clear_mask = !bitfield_mask_halves(bf.bit_width, bf.bit_offset).0;
-                let old = load_place(b, addr, load_kind, seg, vol, align);
-                let cleared = b.binop_imm(BinOp::And, old, clear_mask);
-                let masked = b.binop_imm(BinOp::And, value, mask);
-                let shifted = if bf.bit_offset > 0 {
-                    b.binop_imm(BinOp::Shl, masked, bf.bit_offset as i64)
-                } else {
-                    masked
-                };
-                let combined = b.binop(BinOp::Or, cleared, shifted);
-                store_place(b, addr, combined, store_kind, seg, vol, align);
+                merge_into_bitfield(b, addr, bf, value, seg, vol, align);
             }
         }
     }
+}
+
+/// Merge `value` into the bitfield at `addr` (C99 6.7.2.1): load the
+/// storage unit, clear the field's slice, shift the value into place,
+/// OR, and store the unit back. Returns the value the width mask kept,
+/// right-aligned -- the assignment expression's value per C99 6.5.16p3.
+/// Every narrow bitfield store reaches this: assignment, compound
+/// assignment, increment, and the runtime initializer.
+fn merge_into_bitfield(
+    b: &mut super::super::codegen::ssa::build::SsaBuilder,
+    addr: super::super::ir::ValueId,
+    bf: super::super::ast::BitfieldDesc,
+    value: super::super::ir::ValueId,
+    seg: AsmSeg,
+    vol: bool,
+    align: u8,
+) -> super::super::ir::ValueId {
+    let (load_kind, store_kind) = (bitfield_load_kind(bf), bitfield_store_kind(bf));
+    // C99 6.5.16.1p2 converts the value to the field's declared type.
+    // The width mask below is that conversion for every integer type;
+    // `_Bool` is not, since 6.3.1.2 maps every nonzero value to 1.
+    let value = if is_bool_scalar(bf.ty) {
+        b.binop_imm(BinOp::Ne, value, 0)
+    } else {
+        value
+    };
+    let masked = b.binop_imm(BinOp::And, value, bitfield_mask_halves(bf.bit_width, 0).0);
+    let old = load_place(b, addr, load_kind, seg, vol, align);
+    let cleared = b.binop_imm(
+        BinOp::And,
+        old,
+        !bitfield_mask_halves(bf.bit_width, bf.bit_offset).0,
+    );
+    let shifted = if bf.bit_offset > 0 {
+        b.binop_imm(BinOp::Shl, masked, bf.bit_offset as i64)
+    } else {
+        masked
+    };
+    let combined = b.binop(BinOp::Or, cleared, shifted);
+    store_place(b, addr, combined, store_kind, seg, vol, align);
+    masked
 }
 
 /// A bitfield's slice mask as the low and high halves of a 128-bit
@@ -7129,6 +7305,30 @@ fn vector_lane_binop(op: BinOp, elem_ty: i64) -> BinOp {
     }
 }
 
+/// The comparison opcodes the GCC vector extension lowers element-wise.
+fn is_vector_compare_op(op: BinOp) -> bool {
+    use BinOp as B;
+    matches!(
+        op,
+        B::Eq
+            | B::Ne
+            | B::Lt
+            | B::Gt
+            | B::Le
+            | B::Ge
+            | B::Ult
+            | B::Ugt
+            | B::Ule
+            | B::Uge
+            | B::Feq
+            | B::Fne
+            | B::Flt
+            | B::Fgt
+            | B::Fle
+            | B::Fge
+    )
+}
+
 /// Integer store kind for a `width`-byte access.
 fn store_kind_for_width(width: u32) -> StoreKind {
     match width {
@@ -7199,6 +7399,16 @@ fn store_place(
             b.seg_store(addr, value, kind, seg, vol);
         }
     }
+}
+
+/// `byte` repeated across `width` bytes, as the immediate a store of
+/// that width takes.
+fn repeat_byte(byte: u8, width: u32) -> i64 {
+    let mut v: u64 = 0;
+    for _ in 0..width {
+        v = (v << 8) | u64::from(byte);
+    }
+    v as i64
 }
 
 /// Mirror of [`load_kind_for`] for stores.
@@ -7475,6 +7685,22 @@ pub(crate) fn expr_ty(e: &Expr) -> Option<i64> {
         }
         // An asm statement carries no value type.
         Expr::InlineAsm(_) => None,
+    }
+}
+
+/// The type an expression contributes as a call argument (C99
+/// 6.5.2.2p6/p7: the argument's converted type). An array-typed
+/// compound literal decays to a pointer to its first element (C99
+/// 6.3.2.1p3); its element type must not classify the argument as a
+/// by-value aggregate or as a floating-point scalar. `Expr::Ident`
+/// and `Expr::Member` already carry the decayed type. Other shapes
+/// keep [`expr_ty`].
+pub(crate) fn arg_value_ty(e: &Expr) -> Option<i64> {
+    match e {
+        Expr::CompoundLiteral { ty, array_size, .. } if *array_size != 0 => {
+            Some(*ty + crate::c5::token::Ty::Ptr as i64)
+        }
+        _ => expr_ty(e),
     }
 }
 

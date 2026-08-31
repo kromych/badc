@@ -136,17 +136,6 @@ Disassembly of section .text:
                	retq
                	movl	$0x15, %eax
                	movl	%eax, -0x8(%rbp)
-               	movslq	%eax, %rax
-               	cmpl	$0x15, %eax
-               	je	<addr>
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rcx
-               	incq	%rcx
-               	movl	%ecx, (%rax)
-               	movl	$0xa, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
                	incq	%rcx

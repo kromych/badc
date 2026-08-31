@@ -1329,3 +1329,162 @@ fn a_qualified_typedef_wraps_the_alias() {
         c.offset
     );
 }
+
+/// DWARF 4/5 3.3.4: formal-parameter DIEs appear in declaration order.
+/// pahole builds each function's BTF prototype from that child order,
+/// and the kernel's BTF encoding tags arena kfunc arguments by
+/// position, so a scrambled order miscompiles vmlinux BTF. The capture
+/// walk used to follow symbol-table order -- name-interning order
+/// across the unit -- so `first` below plants low symbol ids on the
+/// names `second` reuses.
+#[test]
+fn formal_parameters_keep_declaration_order() {
+    let u = compile_unit(
+        "param-order",
+        "void first(int flags, int node_id) { int map = flags + node_id; (void)map; }\n\
+         long second(void *p__map, void *addr__ign, unsigned page_cnt, int node_id,\n\
+                     unsigned long flags) {\n\
+             void *map = p__map;\n\
+             return (long)map + (long)addr__ign + page_cnt + node_id + (long)flags;\n\
+         }\n",
+    );
+    let sub = u.named(DW_TAG_SUBPROGRAM, "second");
+    let kids = u.children(sub);
+    let params: Vec<_> = kids
+        .iter()
+        .filter(|d| d.tag == DW_TAG_FORMAL_PARAMETER)
+        .map(|d| d.name().unwrap())
+        .collect();
+    assert_eq!(
+        params,
+        ["p__map", "addr__ign", "page_cnt", "node_id", "flags"],
+        "formal parameters follow declaration order"
+    );
+    let last_param = kids
+        .iter()
+        .rposition(|d| d.tag == DW_TAG_FORMAL_PARAMETER)
+        .unwrap();
+    let first_var = kids
+        .iter()
+        .position(|d| d.tag == DW_TAG_VARIABLE)
+        .expect("local `map` has a variable DIE");
+    assert!(
+        last_param < first_var,
+        "parameter DIEs precede variable DIEs"
+    );
+}
+
+/// A type whose only mention is a cast in a discarded expression keeps
+/// its DIE. C99 6.5.4 makes the cast a use of the named type whatever
+/// becomes of the value; the kernel's `BTF_TYPE_EMIT(type)` is exactly
+/// `((void)(type *)0)`, and pahole converts the DIE into vmlinux BTF.
+#[test]
+fn cast_only_type_keeps_its_die() {
+    let u = compile_unit(
+        "cast-only",
+        "struct only_mentioned { int a; long b; char c[8]; };\n\
+         struct also_used { int x; };\n\
+         static struct also_used used_inst;\n\
+         void f(void) { ((void)(struct only_mentioned *)0); }\n\
+         int g(void) { return used_inst.x; }\n",
+    );
+    let d = u.named(DW_TAG_STRUCTURE_TYPE, "only_mentioned");
+    let names: Vec<_> = u.members(d).iter().map(|m| m.name().unwrap()).collect();
+    assert_eq!(names, ["a", "b", "c"]);
+    assert_eq!(d.at(DW_AT_BYTE_SIZE).unwrap().as_uint(), 24);
+    u.named(DW_TAG_STRUCTURE_TYPE, "also_used");
+}
+
+/// The kernel's `register_bpf_struct_ops` shape: the aggregate is
+/// defined at block scope inside a statement expression and emitted by
+/// the cast alone. A union in the same position behaves the same way.
+#[test]
+fn cast_only_type_declared_in_a_statement_expression_keeps_its_die() {
+    let u = compile_unit(
+        "cast-only-stmt-expr",
+        "int f(void) {\n\
+         	return ({\n\
+         		struct block_scoped { long common; int data; };\n\
+         		((void)(struct block_scoped *)0);\n\
+         		1;\n\
+         	});\n\
+         }\n\
+         void g(void) { ((void)(union cast_named_union *)0); }\n\
+         union cast_named_union { int a; double b; };\n",
+    );
+    let s = u.named(DW_TAG_STRUCTURE_TYPE, "block_scoped");
+    let names: Vec<_> = u.members(s).iter().map(|m| m.name().unwrap()).collect();
+    assert_eq!(names, ["common", "data"]);
+    u.named(DW_TAG_UNION_TYPE, "cast_named_union");
+}
+
+/// A cast type-name inside an unevaluated operand and a compound
+/// literal of an otherwise-unused type both name their type, and so
+/// does a cast in a static initializer. `sizeof` / `_Alignof` of a
+/// type-name fold to a constant and leave no type behind -- gcc and
+/// clang emit no DIE for those, and neither does badc.
+#[test]
+fn only_cast_type_names_reach_debug_info() {
+    let u = compile_unit(
+        "cast-vs-sizeof",
+        "struct in_sizeof { int a; };\n\
+         struct in_alignof { int a; };\n\
+         struct in_unevaluated { int a; };\n\
+         struct in_compound_literal { int a; };\n\
+         struct in_static_init { int a; };\n\
+         struct never_named { int a; };\n\
+         static void *p = (struct in_static_init *)0;\n\
+         unsigned long f(void) { return sizeof(struct in_sizeof); }\n\
+         unsigned long g(void) { return _Alignof(struct in_alignof); }\n\
+         unsigned long h(void) { return sizeof(*(struct in_unevaluated *)0); }\n\
+         void k(void) { ((void)(struct in_compound_literal){1}); }\n\
+         void *q(void) { return p; }\n",
+    );
+    for want in ["in_unevaluated", "in_compound_literal", "in_static_init"] {
+        u.named(DW_TAG_STRUCTURE_TYPE, want);
+    }
+    for absent in ["in_sizeof", "in_alignof", "never_named"] {
+        assert!(
+            !u.dies
+                .iter()
+                .any(|d| d.tag == DW_TAG_STRUCTURE_TYPE && d.name() == Some(absent)),
+            "struct {absent} has a DIE but nothing casts to it\n{}",
+            u.render()
+        );
+    }
+}
+
+/// The image emitter takes the same seed. A single unit compiled
+/// straight to an executable keeps the DIE for a type only a cast
+/// names, so a `-g` link is not a second place the type is dropped.
+#[test]
+fn cast_only_type_keeps_its_die_in_a_linked_image() {
+    let dir = tempdir("cast-only-image");
+    let src = dir.join("a.c");
+    std::fs::write(
+        &src,
+        "struct only_mentioned { int a; long b; };\n\
+         void f(void) { ((void)(struct only_mentioned *)0); }\n\
+         int main(void) { f(); return 0; }\n",
+    )
+    .expect("write a.c");
+    let exe = dir.join("prog");
+    let out = Command::new(badc())
+        .arg("-g")
+        .arg("--target=linux-x64")
+        .arg("-o")
+        .arg(&exe)
+        .arg(&src)
+        .current_dir(&dir)
+        .output()
+        .expect("run badc");
+    assert!(
+        out.status.success(),
+        "link failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let u = parse_object(&exe);
+    let d = u.named(DW_TAG_STRUCTURE_TYPE, "only_mentioned");
+    let names: Vec<_> = u.members(d).iter().map(|m| m.name().unwrap()).collect();
+    assert_eq!(names, ["a", "b"]);
+}

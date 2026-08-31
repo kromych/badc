@@ -38,12 +38,6 @@ Disassembly of section .text:
                	retq
                	movl	$0x63, %ecx
                	movl	%ecx, (%rax)
-               	movslq	%ecx, %rcx
-               	cmpl	$0x63, %ecx
-               	je	<addr>
-               	movl	$0xbad2, %eax           # imm = 0xBAD2
-               	popq	%rbp
-               	retq
                	movslq	(%rax), %rax
                	popq	%rbp
                	retq

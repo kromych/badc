@@ -145,6 +145,12 @@ FORWARD_EXACT = {
     # CR4.OSFXSR on x86_64, CPACR_EL1.FPEN on aarch64) and callers do not
     # maintain the System V `al` convention.
     "-mno-sse", "-mgeneral-regs-only",
+    # ftrace's x86_64 form (CONFIG_FUNCTION_TRACER with
+    # CONFIG_FTRACE_MCOUNT_USE_CC): `call __fentry__` at every function
+    # entry and the `__mcount_loc` table ftrace patches from. Withheld, no
+    # unit built here carries a call to patch. badc rejects the set on
+    # aarch64 as gcc does.
+    "-pg", "-mfentry", "-mrecord-mcount", "-mnop-mcount",
     # wchar_t width. The kernel builds the whole tree with -fshort-wchar and
     # stages L"..." into efi_char16_t (u16) arrays, so a compiler that never
     # sees it lays out the wrong element width.
@@ -193,8 +199,30 @@ FORWARD_PREFIX = (
     # three-function object placed the third at offset 0x61. badc validates
     # the operand.
     "-fmin-function-alignment=",
+    # ftrace patch sites: the NOP area at every function entry and its
+    # `__patchable_function_entries` record (CONFIG_CALL_PADDING on x86_64,
+    # CONFIG_DYNAMIC_FTRACE_WITH_CALL_OPS on arm64). Withheld, the image
+    # has no site for ftrace to patch. badc validates the operands.
+    "-fpatchable-function-entry=",
+    # Which trailing arrays __builtin_object_size bounds, hence what the
+    # FORTIFY_SOURCE checks are computed against. badc validates the level.
+    "-fstrict-flex-arrays=",
     # `-fno-builtin`, per library function.
     "-fno-builtin-",
+    # CONFIG_INIT_STACK_ALL_ZERO: every automatic object declared without
+    # an initializer is zeroed where its storage is established. badc
+    # validates the value and implements all three.
+    "-ftrivial-auto-var-init=",
+    # AArch64 CPU selection: the crypto/aes/sha2 extensions set the
+    # __ARM_FEATURE_* macros the NEON units gate on; badc validates the
+    # extension list and refuses one it does not implement.
+    "-mcpu=",
+    # A reserved register. badc keeps it out of its allocator and its own
+    # scratch picks, and refuses a name it cannot honour (the stack and frame
+    # pointers, its scratch registers), so the unit fails rather than
+    # compiling with the register in use. x18, the shadow-call-stack
+    # register, is outside badc's aarch64 pool on every target already.
+    "-ffixed-",
     *HARDENING_PREFIX,
 )
 
@@ -204,23 +232,28 @@ FORWARD_PREFIX = (
 # reaches the build's diagnostic summary rather than only the reader of this
 # file.
 UNSUPPORTED_EXACT = {
+    # Calls mcount/__fentry__ on entry; see -mfentry below.
+    "-pg",
     # badc emits no .eh_frame, so the 64-bit vDSO units that ask for unwind
     # tables get none. The negative spelling is already what badc does.
     "-fasynchronous-unwind-tables", "-funwind-tables",
 }
 
 UNSUPPORTED_PREFIX = (
-    # badc leaves automatic storage uninitialized, so
-    # CONFIG_INIT_STACK_ALL_ZERO is not in effect.
-    "-ftrivial-auto-var-init=",
-    # badc has no option for what an initializer leaves in padding bits.
-    "-fzero-init-padding-bits=",
-    # badc emits no patch site and no __fentry__ call, so ftrace has nothing
-    # to patch in a unit built here.
-    "-fpatchable-function-entry",
-    # Which trailing arrays __builtin_object_size treats as bounded, hence
-    # what the FORTIFY_SOURCE checks are computed against.
-    "-fstrict-flex-arrays=",
+    # badc emits no sanitizer instrumentation, so the checks CONFIG_UBSAN
+    # asks for -- array bounds and shift-exponent among them -- are absent
+    # from a unit built here, and the handlers in lib/ubsan.c stay uncalled.
+    "-fsanitize=", "-fsanitize-trap=",
+    # Both have an observable effect badc does not reproduce, so neither
+    # can be ignored: the first moves a zero-initialized definition out of
+    # .bss into .data, and the second lowers a definition's ELF visibility
+    # so it does not bind outside its own link.
+    "-fno-zero-initialized-in-bss",
+    "-fvisibility=",
+    # Clears the call-clobbered registers a function used before it returns
+    # (CONFIG_ZERO_CALL_USED_REGS). badc emits no such epilogue.
+    # TODO: implement the register-clearing epilogue and forward the flag.
+    "-fzero-call-used-regs=",
 )
 
 # Flags measured to leave badc's object unchanged, with the measurement.
@@ -254,10 +287,6 @@ IGNORE_EXACT = {
     # Debug-info detail. badc emits one DWARF form per construct, so these
     # change nothing outside the .debug_* sections.
     "-fno-var-tracking", "-femit-struct-debug-baseonly",
-    # aarch64 reserves x18 in badc's register pool on every target, so the
-    # shadow-call-stack register is never allocated. Any other -ffixed- is
-    # unlisted and fails the unit.
-    "-ffixed-x18",
     # badc's aarch64 targets are little-endian LP64 only; -mbig-endian and
     # -mabi=ilp32 are unlisted and fail the unit rather than being assumed.
     "-mlittle-endian", "-mabi=lp64",
@@ -269,6 +298,18 @@ IGNORE_EXACT = {
     # for, and it addresses nothing below the stack pointer: every function
     # subtracts its frame before using it.
     "-mskip-rax-setup", "-mno-red-zone",
+    # An inliner tuning hint. badc's inliner does not distinguish a callee
+    # by its call count, so declining that heuristic asks for what it
+    # already does; measured to leave the object unchanged.
+    "-fno-inline-functions-called-once",
+    # Instruction-scheduling hints. badc schedules to its own model and
+    # exposes no knob either names, so both ask for what a unit gets.
+    "-fsched-pressure", "-fno-schedule-insns", "-fno-schedule-insns2",
+    # The positive spelling of the SSE baseline. badc's x86-64 backend
+    # emits SSE and SSE2 unconditionally -- they are the psABI baseline --
+    # so a unit re-enabling them for FPU code gets what it already had.
+    # The negative spellings are ignored above for the same reason.
+    "-msse", "-msse2", "-mhard-float",
 }
 
 IGNORE_PREFIX = (
@@ -285,6 +326,12 @@ IGNORE_PREFIX = (
     # units carry them, and of those only the hand-written assembly reaches
     # badc -- the C ones go to the real compiler -- where neither applies.
     "-mregparm=", "-mpreferred-stack-boundary=",
+    # Padding of a partially initialized automatic aggregate. Measured on
+    # x86_64, aarch64 and the macOS host at -O0 and -O: a struct or union
+    # initializer zero-fills the whole object before storing the members,
+    # so every value of the flag names what the object already gets. badc
+    # validates the value.
+    "-fzero-init-padding-bits=",
 )
 
 
@@ -587,6 +634,11 @@ def _self_test() -> int:
     assert rewrite(["-nostdinc"]).argv == ["-nostdinc"]
     assert rewrite(["-fmin-function-alignment=16"]).argv == \
         ["-fmin-function-alignment=16"]
+    # The ftrace patch sites reach badc verbatim on both architectures.
+    for flag in ("-fpatchable-function-entry=16,16",
+                 "-fpatchable-function-entry=4,2", "-pg", "-mfentry",
+                 "-mrecord-mcount"):
+        assert rewrite([flag]) == Rewritten([flag], [], []), flag
     for flag in ("-fno-builtin", "-ffreestanding", "-fno-builtin-wcslen"):
         assert rewrite([flag]).argv == [flag], flag
     # The stack protector and its guard placement reach badc verbatim; the
@@ -599,21 +651,34 @@ def _self_test() -> int:
                  "-mstack-protector-guard=sysreg",
                  "-mstack-protector-guard-offset=1360"):
         assert rewrite([flag]).argv == [flag], flag
+    # CONFIG_INIT_STACK_ALL_ZERO's flag reaches badc; the padding flag
+    # names what the object already gets and is dropped with that
+    # measurement.
+    for flag in ("-mcpu=generic+crypto",):
+        assert rewrite([flag]).argv == [flag], flag
     for flag in ("-ftrivial-auto-var-init=zero",
-                 "-fpatchable-function-entry=16,16",
-                 "-fstrict-flex-arrays=3", "-fasynchronous-unwind-tables"):
+                 "-ftrivial-auto-var-init=pattern"):
+        assert rewrite([flag]).argv == [flag], flag
+    for flag in ("-fasynchronous-unwind-tables",):
         r = rewrite([flag])
         assert r.dropped == [flag] and r.unknown == [], (flag, r)
+    # The flexible-array level reaches badc, which implements it.
+    assert rewrite(["-fstrict-flex-arrays=3"]).argv == ["-fstrict-flex-arrays=3"]
     for flag in ("-Wall", "-Werror=return-type", "-Wno-sign-compare",
                  "-fno-strict-aliasing", "-mno-red-zone", "-falign-loops=1",
                  "-march=x86-64", "-mregparm=3", "-Wl,-r", "-mlittle-endian",
-                 "-mabi=lp64", "-ffixed-x18", "-fno-optimize-sibling-calls"):
+                 "-mabi=lp64", "-fno-optimize-sibling-calls",
+                 "-fzero-init-padding-bits=all"):
         r = rewrite([flag])
         assert r == Rewritten([], [], []), (flag, r)
     # A target property badc does not implement is not assumed satisfied
     # because its opposite is: only the spelling that holds is listed.
-    for flag in ("-mbig-endian", "-mabi=ilp32", "-ffixed-x9"):
+    for flag in ("-mbig-endian", "-mabi=ilp32"):
         assert rewrite([flag]).unknown == [flag], flag
+    # Every reserved register reaches badc, which honours it or fails the
+    # unit; the shim no longer decides which spellings it can drop.
+    for flag in ("-ffixed-x18", "-ffixed-x9", "-ffixed-q16", "-ffixed-r12"):
+        assert rewrite([flag]) == Rewritten([flag], [], []), flag
     assert rewrite(["-fno-PIE", "-Wa,-mrelax-relocations=no"]).argv == \
         ["-fno-PIE", "-Wa,-mrelax-relocations=no"]
     # The plain-char selection reaches badc: the kernel passes it on every

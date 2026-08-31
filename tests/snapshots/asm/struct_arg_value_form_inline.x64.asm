@@ -110,16 +110,6 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	xorq	%rax, %rax
-               	jmp	<addr>
-               	movl	%ecx, %edx
-               	movl	%edx, %edx
-               	cmpl	%ecx, %edx
-               	jne	<addr>
-               	leaq	0x1(%rcx), %rax
-               	movl	%eax, %ecx
-               	cmpl	$0x4, %ecx
-               	jb	<addr>
                	leaq	<rip>, %rcx
                	xorq	%rax, %rax
                	movl	%eax, (%rcx)
@@ -129,6 +119,4 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x8, %eax
                	retq
-               	retq
-               	movl	$0x3, %eax
                	retq

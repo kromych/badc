@@ -19,9 +19,9 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	ldr	x0, [x3, #0x8]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	x0, [x1, #0x8]
                	cmp	x0, #0x1
                	cset	x0, ne
                	cbz	x0, <addr>
@@ -36,25 +36,48 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	mov	x0, #0x0                // =0
-               	b	<addr>
-               	add	x2, x3, #0x10
-               	sxtw	x1, w0
-               	ldr	x4, [x2, x1, lsl #3]
-               	add	x2, x1, #0xa
-               	sxtw	x2, w2
-               	cmp	x4, x2
+               	add	x0, x1, #0x10
+               	add	x2, x0, #0x0
+               	ldr	x2, [x2]
+               	cmp	x2, #0xa
+               	b.eq	<addr>
+               	mov	x0, #0x2                // =2
+               	ret
+               	ldr	x2, [x0, #0x8]
+               	cmp	x2, #0xb
                	b.ne	<addr>
-               	add	x0, x1, #0x1
-               	cmp	w0, #0xb
-               	b.lt	<addr>
+               	ldr	x2, [x0, #0x10]
+               	cmp	x2, #0xc
+               	b.ne	<addr>
+               	ldr	x2, [x0, #0x18]
+               	cmp	x2, #0xd
+               	b.ne	<addr>
+               	ldr	x2, [x0, #0x20]
+               	cmp	x2, #0xe
+               	b.ne	<addr>
+               	ldr	x2, [x0, #0x28]
+               	cmp	x2, #0xf
+               	b.ne	<addr>
+               	ldr	x2, [x0, #0x30]
+               	cmp	x2, #0x10
+               	b.ne	<addr>
+               	ldr	x2, [x0, #0x38]
+               	cmp	x2, #0x11
+               	b.ne	<addr>
+               	ldr	x2, [x0, #0x40]
+               	cmp	x2, #0x12
+               	b.ne	<addr>
+               	ldr	x2, [x0, #0x48]
+               	cmp	x2, #0x13
+               	b.ne	<addr>
+               	ldr	x0, [x0, #0x50]
+               	cmp	x0, #0x14
+               	b.ne	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	cmp	x3, x0
+               	cmp	x1, x0
                	b.ne	<addr>
                	mov	x0, #0x3                // =3
                	ret
                	mov	x0, #0x0                // =0
-               	ret
-               	mov	x0, #0x2                // =2
                	ret

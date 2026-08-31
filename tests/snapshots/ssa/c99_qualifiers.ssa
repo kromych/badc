@@ -60,15 +60,12 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v26  ImmData(16)                                      -> x0
     v27  Imm(1)                                           -> x1
     v28  Store { addr=v26, disp=0, value=v27, kind=I32 }  -> -
-    v29  Load { addr=v26, disp=0, kind=U32 }              -> x0
-    v30  BinopI { op=xor, lhs=v29, rhs_imm=1 }            -> x0
-    v31  BinopI { op=and, lhs=v30, rhs_imm=4294967295 }   -> x0
-    v32  BinopI { op=ne, lhs=v31, rhs_imm=0 }             -> x1
-    terminator Bz { cond=v31, target=b11, fall=b10 }   (exit_acc=v32)
+    v29  Imm(1)                                           -> x0
+    v30  Imm(0)                                           -> x0
+    v31  Imm(0)                                           -> x0
+    v32  Imm(0)                                           -> x0
+    terminator Jmp(b10)   (exit_acc=v32)
   block 10  start_pc=0
-    v33  Imm(7)                                           -> x0
-    terminator Return(v33)   (exit_acc=v33)
-  block 11  start_pc=0
     v34  Imm(0)                                           -> x0
     terminator Return(v34)   (exit_acc=v34)
 c99_qualifiers.c:47: warning: unused variable `sum`

@@ -133,47 +133,47 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     v121 Imm(1)                                           -> x0
     terminator Return(v121)   (exit_acc=v121)
   block 4  start_pc=0
-    v122 LocalAddr(-2)                                    -> x2
-    v123 LoadLocal { off=-3, kind=I64 }                   -> x1
-    v124 Imm(8)                                           -> x1
-    v125 BinopI { op=shru, lhs=v117, rhs_imm=3 }          -> x1
+    v122 LocalAddr(-2)                                    -> x1
+    v123 LoadLocal { off=-3, kind=I64 }                   -> x2
+    v124 Imm(8)                                           -> x2
+    v125 BinopI { op=shru, lhs=v117, rhs_imm=3 }          -> x2
     v126 InlineAsm { template="movq (,%1,8), %0", ops=2, args=[v122, v125] } -> -
-    v127 LoadLocal { off=-2, kind=I64 }                   -> x2
-    v128 BinopI { op=ne, lhs=v127, rhs_imm=8192 }         -> x2
+    v127 LoadLocal { off=-2, kind=I64 }                   -> x1
+    v128 BinopI { op=ne, lhs=v127, rhs_imm=8192 }         -> x1
     terminator Bz { cond=v128, target=b6, fall=b5 }   (exit_acc=v128)
   block 5  start_pc=0
     v129 Imm(2)                                           -> x0
     terminator Return(v129)   (exit_acc=v129)
   block 6  start_pc=0
-    v130 LocalAddr(-2)                                    -> x2
-    v131 LoadLocal { off=-3, kind=I64 }                   -> x6
-    v132 Imm(8)                                           -> x6
-    v133 BinopI { op=shru, lhs=v117, rhs_imm=3 }          -> x6
-    v134 InlineAsm { template="movq 16(,%1,8), %0", ops=2, args=[v130, v125] } -> -
-    v135 LoadLocal { off=-2, kind=I64 }                   -> x2
-    v136 BinopI { op=ne, lhs=v135, rhs_imm=8194 }         -> x2
+    v130 LocalAddr(-2)                                    -> x1
+    v131 LoadLocal { off=-3, kind=I64 }                   -> x2
+    v132 Imm(8)                                           -> x2
+    v133 BinopI { op=shru, lhs=v117, rhs_imm=3 }          -> x2
+    v134 InlineAsm { template="movq 16(,%1,8), %0", ops=2, args=[v130, v133] } -> -
+    v135 LoadLocal { off=-2, kind=I64 }                   -> x1
+    v136 BinopI { op=ne, lhs=v135, rhs_imm=8194 }         -> x1
     terminator Bz { cond=v136, target=b8, fall=b7 }   (exit_acc=v136)
   block 7  start_pc=0
     v137 Imm(3)                                           -> x0
     terminator Return(v137)   (exit_acc=v137)
   block 8  start_pc=0
-    v138 LocalAddr(-2)                                    -> x2
-    v139 LoadLocal { off=-3, kind=I64 }                   -> x6
-    v140 Imm(4)                                           -> x6
-    v141 BinopI { op=shru, lhs=v117, rhs_imm=2 }          -> x6
+    v138 LocalAddr(-2)                                    -> x1
+    v139 LoadLocal { off=-3, kind=I64 }                   -> x2
+    v140 Imm(4)                                           -> x2
+    v141 BinopI { op=shru, lhs=v117, rhs_imm=2 }          -> x2
     v142 InlineAsm { template="movq (,%1,4), %0", ops=2, args=[v138, v141] } -> -
-    v143 LoadLocal { off=-2, kind=I64 }                   -> x2
-    v144 BinopI { op=ne, lhs=v143, rhs_imm=8192 }         -> x2
+    v143 LoadLocal { off=-2, kind=I64 }                   -> x1
+    v144 BinopI { op=ne, lhs=v143, rhs_imm=8192 }         -> x1
     terminator Bz { cond=v144, target=b10, fall=b9 }   (exit_acc=v144)
   block 9  start_pc=0
     v145 Imm(4)                                           -> x0
     terminator Return(v145)   (exit_acc=v145)
   block 10  start_pc=0
-    v146 LoadLocal { off=-3, kind=I64 }                   -> x2
-    v147 Imm(8)                                           -> x2
-    v148 BinopI { op=shru, lhs=v117, rhs_imm=3 }          -> x2
+    v146 LoadLocal { off=-3, kind=I64 }                   -> x1
+    v147 Imm(8)                                           -> x1
+    v148 BinopI { op=shru, lhs=v117, rhs_imm=3 }          -> x1
     v149 Imm(48879)                                       -> x2
-    v150 InlineAsm { template="movq %1, 24(,%0,8)", ops=2, args=[v125, v149] } -> -
+    v150 InlineAsm { template="movq %1, 24(,%0,8)", ops=2, args=[v148, v149] } -> -
     v151 ImmData(16)                                      -> x1
     v152 Imm(24)                                          -> x2
     v153 BinopI { op=add, lhs=v151, rhs_imm=24 }          -> x2

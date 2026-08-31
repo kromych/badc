@@ -43,6 +43,11 @@ boxes using `./scripts/validate_local_boxes.py`:
     `scripts/run_demos.py` runs the lane's set concurrently. `--demo-jobs`
     bounds how many run at a time, never which ones run; the runner prints
     its roster and its width.
+  * the compile-throughput check over the QuickJS corpus the demos just
+    fetched: `-O0` cost over `-O` cost, and the slowest unit over the
+    median one. Both are ratios taken within the run, so the lane's own
+    speed cancels and one set of ceilings covers every box; CI's perf job
+    runs the same check.
   * the snapshot-drift check on every Linux lane: regenerate
     `tests/snapshots/` and fail on drift, as CI's `snapshots clean` job does.
     It needs `llvm-objdump` -- the committed snapshots were disassembled with
@@ -76,9 +81,11 @@ the firmware CI's `ovmf` lane publishes as an artifact.
 The script is the contract; this list describes it and has to be updated with it.
 
 The kernel step's corpus is `defconfig` on the pinned release -- the tree CI's
-`kernel` job builds. The vendored minimal configs under `demos/linux/configs/`
-are not a substitute: they compile a third to a half as many units and have passed
-while defconfig-only regressions reached the branch. The build costs 4.5-11 min
+`kernel` job builds. The vendored minimal configs it once carried were removed:
+they compiled a third to a half as many units and had passed while
+defconfig-only regressions reached the branch. The package matrix takes each
+distribution's own configuration instead, fetched sha256-verified from the
+vendor mirror. The build costs 4.5-11 min
 per Linux lane and the boots 12 s (aarch64, eight emulator starts) to 26 s
 (x86_64, five) on top of it, measured on the boxes over an image that boots; an
 image that does not boot ends each boot at the 90 s cap instead. `--no-kernel`

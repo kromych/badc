@@ -38,16 +38,8 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	movl	$0x5, %eax
                	movl	%eax, -0x10(%rbp)
-               	movslq	%eax, %rax
-               	addq	$0x3, %rax
+               	movl	$0x8, %eax
                	movl	%eax, -0x8(%rbp)
-               	movslq	%eax, %rax
-               	cmpl	$0x8, %eax
-               	je	<addr>
-               	movl	$0x1, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
-               	retq
                	leaq	-0x8(%rbp), %rax
                	movslq	(%rax), %rax
                	cmpl	$0x8, %eax

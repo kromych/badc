@@ -41,11 +41,9 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x1, [x0]
-               	add	x1, x1, #0x15
                	ldr	d0, [x0, #0x8]
                	fcvtzs	x0, d0
-               	add	x0, x1, x0
+               	add	x0, x0, #0x18
                	cmp	x0, #0x1c
                	b.eq	<addr>
                	mov	x0, #0x2                // =2

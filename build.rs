@@ -4,6 +4,10 @@
 //! `cargo:rustc-env` -> `env!("BADC_GIT_*")` -> the `BUILD_INFO`
 //! const in `src/lib.rs`.
 //!
+//! The `--version` tail is gated on the `badc_git` cfg, which is set
+//! only when all three read back, so a build from an exported tree
+//! prints the version line alone rather than three `unknown`s.
+//!
 //! Each value falls back to `"unknown"` when git is missing,
 //! the working tree isn't a checkout, or the requested ref
 //! doesn't exist (e.g., a freshly-init'd repo with no commits).
@@ -17,16 +21,68 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// `commit` / `branch` / `remote` from `.badc-provenance` beside the
+/// manifest, written by whatever copied this tree out of its checkout.
+/// Absent file, unreadable file and malformed lines all yield nothing:
+/// the caller then reports no provenance rather than a guess.
+fn recorded_provenance() -> BTreeMap<String, String> {
+    let path =
+        PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap_or_default()).join(".badc-provenance");
+    println!("cargo:rerun-if-changed={}", path.display());
+    let mut out = BTreeMap::new();
+    let Ok(text) = fs::read_to_string(&path) else {
+        return out;
+    };
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if let Some((k, v)) = line.split_once('=') {
+            let v = v.trim();
+            if !v.is_empty() {
+                out.insert(k.trim().to_string(), v.to_string());
+            }
+        }
+    }
+    out
+}
+
 fn main() {
     emit_binding_to_header_index();
 
-    let commit = git(&["rev-parse", "HEAD"]).unwrap_or_else(|| "unknown".into());
-    let branch = git(&["rev-parse", "--abbrev-ref", "HEAD"]).unwrap_or_else(|| "unknown".into());
-    let remote = git(&["remote", "get-url", "origin"]).unwrap_or_else(|| "unknown".into());
+    // A tree copied without its `.git` -- rsync to a build box, an
+    // exported archive -- still came from a commit, and a binary that
+    // cannot name it cannot be traced back to what produced it. The
+    // copier records the three values in `.badc-provenance`, which is
+    // read only when git itself answers nothing.
+    let recorded = recorded_provenance();
+    let commit = git(&["rev-parse", "HEAD"]).or_else(|| recorded.get("commit").cloned());
+    let branch =
+        git(&["rev-parse", "--abbrev-ref", "HEAD"]).or_else(|| recorded.get("branch").cloned());
+    let remote = git(&["remote", "get-url", "origin"]).or_else(|| recorded.get("remote").cloned());
 
-    println!("cargo:rustc-env=BADC_GIT_COMMIT={commit}");
-    println!("cargo:rustc-env=BADC_GIT_BRANCH={branch}");
-    println!("cargo:rustc-env=BADC_GIT_REMOTE={remote}");
+    // `badc_git` gates the provenance tail on `--version`. All three
+    // have to be readable for the tail to say anything: a tree with no
+    // commits, or a clone with no `origin`, reports what it knows
+    // rather than padding the rest with a placeholder.
+    println!("cargo::rustc-check-cfg=cfg(badc_git)");
+    if commit.is_some() && branch.is_some() && remote.is_some() {
+        println!("cargo:rustc-cfg=badc_git");
+    }
+
+    println!(
+        "cargo:rustc-env=BADC_GIT_COMMIT={}",
+        commit.unwrap_or_else(|| "unknown".into())
+    );
+    println!(
+        "cargo:rustc-env=BADC_GIT_BRANCH={}",
+        branch.unwrap_or_else(|| "unknown".into())
+    );
+    println!(
+        "cargo:rustc-env=BADC_GIT_REMOTE={}",
+        remote.unwrap_or_else(|| "unknown".into())
+    );
 
     // Build-time date / time, captured as env vars the preprocessor
     // reads at compile time to seed the C99 `__DATE__` and `__TIME__`
@@ -40,10 +96,19 @@ fn main() {
     println!("cargo:rustc-env=BADC_BUILD_DATE={date_str}");
     println!("cargo:rustc-env=BADC_BUILD_TIME={time_str}");
 
-    // Re-run when HEAD or any ref moves (commit / checkout /
-    // branch swap), or when this build script itself changes.
-    println!("cargo:rerun-if-changed=.git/HEAD");
-    println!("cargo:rerun-if-changed=.git/refs");
+    // Re-run when HEAD or the branch it names moves, or when this
+    // build script itself changes.
+    //
+    // `.git/refs` alone does not do it. Cargo tracks a directory's own
+    // mtime, and a branch under a prefix -- `refs/heads/topic/name` --
+    // updates `refs/heads/topic`, leaving `refs/heads` untouched; a
+    // packed ref updates neither. The commit embedded in the binary
+    // then lags HEAD silently, which is the one thing this provenance
+    // must not do. The paths come from git so a worktree or a submodule,
+    // where `.git` is a file pointing elsewhere, resolves correctly.
+    for path in git_watch_paths() {
+        println!("cargo:rerun-if-changed={path}");
+    }
     println!("cargo:rerun-if-changed=build.rs");
     // include_str! attaches a per-file rerun-if-changed dep, but
     // Cargo's incremental build under Swatinem/rust-cache has been
@@ -362,6 +427,24 @@ fn civil_from_days(days: i64) -> (i64, u32, u32) {
     let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
     let y = if m <= 2 { y + 1 } else { y };
     (y, m, d)
+}
+
+/// Files whose change means HEAD now names a different commit: HEAD
+/// itself, the loose ref it points at, and the packed-refs file that
+/// holds the ref when it is not loose. Falls back to the conventional
+/// layout when git cannot be asked.
+fn git_watch_paths() -> Vec<String> {
+    let mut paths = Vec::new();
+    let git_path = |p: &str| git(&["rev-parse", "--git-path", p]);
+    paths.push(git_path("HEAD").unwrap_or_else(|| ".git/HEAD".into()));
+    paths.push(git_path("packed-refs").unwrap_or_else(|| ".git/packed-refs".into()));
+    // Detached HEAD names no ref, and then HEAD itself carries the commit.
+    if let Some(r) = git(&["symbolic-ref", "--quiet", "HEAD"])
+        && let Some(p) = git_path(&r)
+    {
+        paths.push(p);
+    }
+    paths
 }
 
 fn git(args: &[&str]) -> Option<String> {

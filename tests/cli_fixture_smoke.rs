@@ -64,6 +64,7 @@ const DEAD_BRANCH_NEEDS_OPTIMIZE: &[&str] = &[
     "select_operand_guard_folds.c",
     "const_scalar_load_folds.c",
     "unroll_const_trip_index_literal.c",
+    "unroll_multi_exit_peel_guard.c",
     "inline_zero_frame_callee_past_gate.c",
     "ipa_const_param_guard.c",
     "addr_null_compare_inline_param.c",
@@ -117,6 +118,7 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("inline_asm_x64_cmov.c", "linux-aarch64"),            // x86-64 cmovcc
     ("inline_asm_x64_cdqe.c", "linux-aarch64"),            // x86-64 cdqe
     ("inline_asm_x64_movnti.c", "linux-aarch64"),          // x86-64 movnti/sfence
+    ("inline_asm_x64_raid6_syndrome.c", "linux-aarch64"),  // x86-64 AVX2 / AVX-512 RAID-6 syndrome
     ("inline_asm_x64_clflush.c", "linux-aarch64"),         // x86-64 clflush/prefetch
     ("inline_asm_x64_prefetch.c", "linux-aarch64"),        // x86-64 prefetch hint family
     ("inline_asm_x64_setjmp_label.c", "linux-aarch64"),    // x86-64 asm context switch
@@ -428,6 +430,7 @@ const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
     ("string_concat_encoding_prefix.c", 0),
     ("utf8_string_prefix_ucn.c", 0),
     ("overaligned_data_placement.c", 0),
+    ("overaligned_bss_placement.c", 0),
     ("overaligned_type_placement.c", 0),
     ("page_multiple_alignment.c", 0),
     ("file_scope_asm_decls.c", 0),
@@ -897,6 +900,79 @@ fn optimize_flag_predefines_ndebug() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+// `-fstrict-flex-arrays=N` selects which trailing array members
+// `__builtin_object_size` treats as unbounded through a pointer. The
+// fixture's exit code sets one bit per member the closest-subobject form
+// bounds; the expected codes are gcc 16's at -O2. The interpreter must
+// agree with the native image, and the bare form is level 3.
+#[test]
+fn strict_flex_arrays_level_selects_the_bounded_members() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let src = fixtures_dir().join("strict_flex_arrays.c");
+    let dir = std::env::temp_dir().join(format!("badc-flexarr-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+
+    let native = |tag: &str, flags: &[&str]| -> Option<i32> {
+        let exe = dir.join(tag);
+        let mut cmd = Command::new(badc);
+        cmd.args(flags);
+        let out = cmd
+            .arg(&src)
+            .arg("-o")
+            .arg(&exe)
+            .output()
+            .expect("run badc");
+        assert!(
+            out.status.success(),
+            "compile {flags:?} failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        Command::new(&exe).output().expect("run prog").status.code()
+    };
+    let interp = |flags: &[&str]| -> Option<i32> {
+        let mut cmd = Command::new(badc);
+        cmd.arg("--interp").args(flags);
+        let out = cmd.arg(&src).output().expect("run badc --interp");
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let line = stdout.lines().find(|l| l.starts_with("exit("))?;
+        line.trim_start_matches("exit(")
+            .trim_end_matches(')')
+            .parse()
+            .ok()
+    };
+
+    let levels: [(&str, &[&str], i32); 6] = [
+        ("default", &[], 16),
+        ("l0", &["-fstrict-flex-arrays=0"], 16),
+        ("l1", &["-fstrict-flex-arrays=1"], 24),
+        ("l2", &["-fstrict-flex-arrays=2"], 28),
+        ("l3", &["-fstrict-flex-arrays=3"], 30),
+        ("bare", &["-fstrict-flex-arrays"], 30),
+    ];
+    for (tag, flags, code) in levels {
+        assert_eq!(native(tag, flags), Some(code), "native {flags:?}");
+        assert_eq!(interp(flags), Some(code), "interp {flags:?}");
+    }
+
+    let out = Command::new(badc)
+        .arg("-fstrict-flex-arrays=4")
+        .arg(&src)
+        .arg("-o")
+        .arg(dir.join("bad"))
+        .output()
+        .expect("run badc");
+    assert!(
+        !out.status.success(),
+        "-fstrict-flex-arrays=4 must be rejected"
+    );
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("-fstrict-flex-arrays="),
+        "the rejection names the option"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 // `--install <dir>` writes every embedded header under <dir>/include
 // (recreating subdirectories) and the runtime source under <dir>/lib.
 #[test]
@@ -1333,6 +1409,124 @@ fn host_native_target() -> Option<&'static str> {
     }
 }
 
+/// `-ftrivial-auto-var-init`: the fixture dirties the stack through a
+/// callee and reads every uninitialized object shape back, exiting with
+/// the count of bytes that miss the selected byte. Both values run at
+/// both optimization levels on the host; `=pattern` passes the fixture the
+/// byte it checks against. The unflagged build has to see the stale bytes,
+/// which is what makes a zero exit the stores' doing.
+#[test]
+fn trivial_auto_var_init_fills_every_uninitialized_object() {
+    let Some(target) = host_native_target() else {
+        return;
+    };
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let root = std::env::temp_dir().join(format!("badc-auto-var-init-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&root);
+    let fixture = fixtures_dir().join("trivial_auto_var_init.c");
+    let build = |name: &str, flags: &[&str]| {
+        let out = root.join(name);
+        let built = Command::new(badc)
+            .arg(format!("--target={target}"))
+            .args(flags)
+            .arg("-o")
+            .arg(&out)
+            .arg(&fixture)
+            .output()
+            .expect("run badc");
+        assert!(
+            built.status.success(),
+            "{flags:?}: build failed -- {}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        Command::new(&out)
+            .output()
+            .expect("run the image")
+            .status
+            .code()
+    };
+    for (name, flags) in [
+        ("zero0", &["-ftrivial-auto-var-init=zero"][..]),
+        ("zero1", &["-O", "-ftrivial-auto-var-init=zero"][..]),
+        (
+            "pattern0",
+            &["-ftrivial-auto-var-init=pattern", "-DEXPECT=0xFE"][..],
+        ),
+        (
+            "pattern1",
+            &["-O", "-ftrivial-auto-var-init=pattern", "-DEXPECT=0xFE"][..],
+        ),
+    ] {
+        assert_eq!(
+            build(name, flags),
+            Some(0),
+            "{flags:?}: stale bytes read back"
+        );
+    }
+    assert_ne!(
+        build("none", &[]),
+        Some(0),
+        "the probes must see the stale bytes without the flag"
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// Both flags take their gcc value sets and reject anything else by
+/// name. `-fzero-init-padding-bits=` changes nothing: an automatic
+/// aggregate initializer already zero-fills the object, which
+/// `init_padding_zero.c` locks; every value has to compile a unit.
+#[test]
+fn auto_var_init_and_padding_flags_are_validated_by_name() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let root = std::env::temp_dir().join(format!("badc-auto-var-flags-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&root);
+    let src = root.join("f.c");
+    std::fs::write(
+        &src,
+        "int f(void) { struct { char c; int i; } s = { 1 }; int x; return s.i + x; }\n",
+    )
+    .expect("write source");
+    let compile = |flag: &str| {
+        Command::new(badc)
+            .arg("--target=linux-x64")
+            .arg(flag)
+            .arg("-c")
+            .arg("-o")
+            .arg(root.join("f.o"))
+            .arg(&src)
+            .output()
+            .expect("run badc")
+    };
+    for flag in [
+        "-ftrivial-auto-var-init=uninitialized",
+        "-ftrivial-auto-var-init=zero",
+        "-ftrivial-auto-var-init=pattern",
+        "-fzero-init-padding-bits=standard",
+        "-fzero-init-padding-bits=unions",
+        "-fzero-init-padding-bits=all",
+    ] {
+        let out = compile(flag);
+        assert!(
+            out.status.success(),
+            "{flag}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+    for (flag, name) in [
+        ("-ftrivial-auto-var-init=random", "-ftrivial-auto-var-init="),
+        ("-fzero-init-padding-bits=none", "-fzero-init-padding-bits="),
+    ] {
+        let out = compile(flag);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(!out.status.success(), "{flag} must be rejected");
+        assert!(
+            stderr.contains(name),
+            "{flag}: the rejection names the flag: {stderr}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 /// The x86 kernel names the guard's register and symbol without naming
 /// the form, because gcc's x86 default for `-mstack-protector-guard=` is
 /// `tls`. Requiring the form stopped the defconfig build at the first
@@ -1482,5 +1676,500 @@ fn stack_protector_canary_holds_and_catches_a_smashed_frame() {
         None,
         "a smashed frame must reach __stack_chk_fail, which does not return"
     );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// `-fpatchable-function-entry=2,1` on the host, with `-pg -mfentry
+/// -mrecord-mcount` on x86-64: the NOP after each symbol and the
+/// `__fentry__` call execute, and the image links only if the records
+/// do. `__fentry__` is file-scope asm because the contract is that it
+/// keeps every register, which a C body does not.
+#[test]
+fn patchable_entries_and_fentry_calls_run_on_the_native_target() {
+    let Some(target) = host_smoke_target() else {
+        return;
+    };
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let root = std::env::temp_dir().join(format!("badc-pfe-run-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&root);
+    let src = root.join("pfe.c");
+    std::fs::write(
+        &src,
+        "long fentry_calls;\n\
+         #ifdef __x86_64__\n\
+         __asm__(\".text\\n.globl __fentry__\\n.type __fentry__, @function\\n\"\n\
+                 \"__fentry__:\\n\\tincq fentry_calls(%rip)\\n\\tret\\n\");\n\
+         #endif\n\
+         __attribute__((noinline)) int add(int a, int b) { return a + b; }\n\
+         __attribute__((noinline)) int mul(int a, int b) { return a * b; }\n\
+         __attribute__((noinline, no_instrument_function)) int sub(int a, int b) { return a - b; }\n\
+         int main(void) {\n\
+             int r = add(2, 3) + mul(4, 5) + sub(30, 5);\n\
+             if (r != 50) return 1;\n\
+         #ifdef __x86_64__\n\
+             /* main, add and mul; sub is not instrumented. */\n\
+             if (fentry_calls != 3) return 2;\n\
+         #endif\n\
+             return 0;\n\
+         }\n",
+    )
+    .expect("write source");
+    let x86 = target == "linux-x64";
+    for (tag, opt) in [("-O0", &[][..]), ("-O", &["-O"][..])] {
+        let exe = root.join(format!("pfe{tag}"));
+        let mut cmd = Command::new(badc);
+        cmd.arg(format!("--target={target}"))
+            .args(opt)
+            .arg("-fpatchable-function-entry=2,1");
+        if x86 {
+            cmd.args(["-pg", "-mfentry", "-mrecord-mcount"]);
+        }
+        let built = cmd
+            .arg("-o")
+            .arg(&exe)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            built.status.success(),
+            "{tag}: build failed: {}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        let run = Command::new(&exe).output().expect("run image");
+        assert_eq!(
+            run.status.code(),
+            Some(0),
+            "{tag}: the instrumented image failed"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// Sixteen integers and twenty doubles live across calls, more than either
+/// callee-saved bank holds, so at `-O` every register of both banks and the
+/// FP scratch see use; `fpr_leaf` fills the caller-saved FP bank of a
+/// target with no callee-saved one. `clobbers` names a callee-saved
+/// register in a clobber list, which the emitter otherwise saves around
+/// the statement.
+const FIXED_PRESSURE_SRC: &str = "\
+long sink(long a, long b, long c, long d) { return a + b + c + d; }
+double fsink(double a, double b) { return a - b; }
+long gpr_pressure(long *p) {
+    long v0 = p[0], v1 = p[1], v2 = p[2], v3 = p[3], v4 = p[4], v5 = p[5];
+    long v6 = p[6], v7 = p[7], v8 = p[8], v9 = p[9], v10 = p[10], v11 = p[11];
+    long v12 = p[12], v13 = p[13], v14 = p[14], v15 = p[15];
+    long r = sink(v0, v1, v2, v3);
+    r += sink(v4, v5, v6, v7);
+    return r + v0 * 3 + v1 * 5 + v2 * 7 + v3 * 11 + v4 * 13 + v5 * 17 + v6 * 19 + v7 * 23
+        + v8 * 29 + v9 * 31 + v10 * 37 + v11 * 41 + v12 * 43 + v13 * 47 + v14 * 53 + v15 * 59;
+}
+double fpr_pressure(double *p) {
+    double v0 = p[0], v1 = p[1], v2 = p[2], v3 = p[3], v4 = p[4], v5 = p[5];
+    double v6 = p[6], v7 = p[7], v8 = p[8], v9 = p[9], v10 = p[10], v11 = p[11];
+    double v12 = p[12], v13 = p[13], v14 = p[14], v15 = p[15], v16 = p[16], v17 = p[17];
+    double v18 = p[18], v19 = p[19];
+    double r = fsink(v0, v1);
+    r += fsink(v2, v3);
+    return r + v0 * 3 + v1 * 5 + v2 * 7 + v3 * 11 + v4 * 13 + v5 * 17 + v6 * 19 + v7 * 23
+        + v8 * 29 + v9 * 31 + v10 * 37 + v11 * 41 + v12 * 43 + v13 * 47 + v14 * 53 + v15 * 59
+        + v16 * 61 + v17 * 67 + v18 * 71 + v19 * 73;
+}
+double fpr_leaf(double *p) {
+    double v0 = p[0], v1 = p[1], v2 = p[2], v3 = p[3], v4 = p[4], v5 = p[5];
+    double v6 = p[6], v7 = p[7];
+    return v0 * v1 + v2 * v3 + v4 * v5 + v6 * v7 + v0 * v7 + v1 * v6 + v2 * v5 + v3 * v4;
+}
+#ifdef __aarch64__
+long clobbers(long a) { __asm__(\"nop\" ::: \"x20\"); return a; }
+#else
+long clobbers(long a) { __asm__(\"nop\" ::: \"r12\"); return a; }
+#endif
+";
+
+/// A `main` over [`FIXED_PRESSURE_SRC`] that checks every function against
+/// plain loops and exits 0 when all agree.
+const FIXED_PRESSURE_MAIN: &str = "\
+long add3(long a, long b, long c) { return a + b * 2 + c * 3; }
+double mix(double a, double b) { return a * 2.0 + b; }
+int main(void) {
+    static const long gw[16] = {3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59};
+    static const long fw[20] = {3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59,
+                                61, 67, 71, 73};
+    long p[16]; double q[20]; long i;
+    for (i = 0; i < 16; i++) p[i] = i + 1;
+    for (i = 0; i < 20; i++) q[i] = (double)(i + 1) * 0.5;
+    long ge = (1 + 2 + 3 + 4) + (5 + 6 + 7 + 8);
+    double fe = (0.5 - 1.0) + (1.5 - 2.0);
+    for (i = 0; i < 16; i++) ge += p[i] * gw[i];
+    for (i = 0; i < 20; i++) fe += q[i] * (double)fw[i];
+    double le = 0.0;
+    for (i = 0; i < 4; i++) le += q[2 * i] * q[2 * i + 1] + q[i] * q[7 - i];
+    int bad = 0;
+    if (gpr_pressure(p) != ge) bad |= 1;
+    if (fpr_pressure(q) != fe) bad |= 2;
+    if (fpr_leaf(q) != le) bad |= 4;
+    if (clobbers(7) != 7) bad |= 8;
+    if (add3(1, 2, 3) != 14 || mix(1.5, 2.0) != 5.0) bad |= 16;
+    return bad;
+}
+";
+
+/// Disassemble `obj` with the first of `llvm-objdump` / `objdump` on PATH
+/// that decodes it. `None` when neither is installed or neither decodes
+/// the object's architecture.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn disassemble(obj: &std::path::Path) -> Option<String> {
+    for tool in ["llvm-objdump", "objdump"] {
+        let Ok(out) = Command::new(tool)
+            .args(["-d", "--no-show-raw-insn"])
+            .arg(obj)
+            .output()
+        else {
+            continue;
+        };
+        let text = String::from_utf8_lossy(&out.stdout).into_owned();
+        if out.status.success() && text.contains("<gpr_pressure>:") {
+            return Some(text);
+        }
+    }
+    None
+}
+
+/// `(instructions, instructions naming one of `names`)` in the body of
+/// `func`. Operands are split at every character outside `[A-Za-z0-9_]`,
+/// so `%r12d`, `v16.2d` and `[x20, #8]` each yield their register as a
+/// token.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn register_mentions(dis: &str, func: &str, names: &[&str]) -> (usize, usize) {
+    let mut in_func = false;
+    let (mut total, mut hits) = (0usize, 0usize);
+    for line in dis.lines() {
+        if line.contains('<') && line.trim_end().ends_with(">:") {
+            in_func = line.contains(&format!("<{func}>:"));
+            continue;
+        }
+        let Some((addr, body)) = line.split_once(':') else {
+            continue;
+        };
+        let addr = addr.trim();
+        if !in_func || addr.is_empty() || !addr.bytes().all(|b| b.is_ascii_hexdigit()) {
+            continue;
+        }
+        total += 1;
+        if body
+            .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+            .any(|tok| names.contains(&tok))
+        {
+            hits += 1;
+        }
+    }
+    (total, hits)
+}
+
+/// `-ffixed-REG` keeps the register out of the emitted text of a function
+/// under register pressure, for a general and an FP register on both
+/// targets, including a register the emitter would otherwise use as its
+/// own FP scratch and one an inline-asm clobber list names. The plain
+/// build is the control: the same functions use every one of them.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn ffixed_keeps_the_register_out_of_the_emitted_code() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let root = std::env::temp_dir().join(format!("badc-ffixed-{}", std::process::id()));
+    std::fs::create_dir_all(&root).expect("create dir");
+    let src = root.join("pressure.c");
+    std::fs::write(&src, FIXED_PRESSURE_SRC).expect("write source");
+    // The pressure caps of a `codegen_test` run would keep the control
+    // build off the register under test; the banks are the full ones.
+    let compile = |target: &str, flags: &[&str], obj: &std::path::Path| {
+        let out = Command::new(badc)
+            .env_remove("BADC_MAX_GPR")
+            .env_remove("BADC_MAX_FPR")
+            .arg(format!("--target={target}"))
+            .args(["-O", "-c", "-o"])
+            .arg(obj)
+            .args(flags)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            out.status.success(),
+            "{target} {flags:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    };
+    let a64_v16: &[&str] = &["b16", "h16", "s16", "d16", "q16", "v16"];
+    let a64_v10: &[&str] = &["b10", "h10", "s10", "d10", "q10", "v10"];
+    let a64_x20: &[&str] = &["x20", "w20"];
+    let x64_r12: &[&str] = &["r12", "r12d", "r12w", "r12b"];
+    // Per function, the spellings that must vanish under the flags.
+    type Mentions<'a> = &'a [(&'a str, &'a [&'a str])];
+    let cases: [(&str, &[&str], Mentions); 2] = [
+        (
+            "linux-aarch64",
+            &["-ffixed-x20", "-ffixed-q16", "-ffixed-d10"],
+            &[
+                ("gpr_pressure", a64_x20),
+                ("fpr_pressure", a64_v16),
+                ("fpr_pressure", a64_v10),
+                ("clobbers", a64_x20),
+            ],
+        ),
+        (
+            "linux-x64",
+            &["-ffixed-r12", "-ffixed-xmm14", "-ffixed-xmm5"],
+            &[
+                ("gpr_pressure", x64_r12),
+                ("fpr_pressure", &["xmm14"]),
+                ("fpr_leaf", &["xmm5"]),
+                ("clobbers", x64_r12),
+            ],
+        ),
+    ];
+    let mut measured = 0usize;
+    for (target, flags, checks) in cases {
+        let plain = root.join(format!("{target}-plain.o"));
+        compile(target, &[], &plain);
+        let Some(control) = disassemble(&plain) else {
+            eprintln!("{target}: no disassembler decodes the object; register check not run");
+            continue;
+        };
+        let reserved = root.join(format!("{target}-fixed.o"));
+        compile(target, flags, &reserved);
+        let text = disassemble(&reserved).expect("the second object decodes like the first");
+        for (func, names) in checks {
+            let (n, used) = register_mentions(&control, func, names);
+            assert!(n > 0, "{target}: `{func}` not found in the disassembly");
+            assert!(
+                used > 0,
+                "{target}: `{func}` does not use {names:?} without the flag"
+            );
+            let (m, left) = register_mentions(&text, func, names);
+            assert!(m > 0, "{target}: `{func}` missing from the reserved build");
+            assert_eq!(
+                left, 0,
+                "{target}: `{func}` names {names:?} under {flags:?}"
+            );
+            measured += 1;
+        }
+    }
+    let _ = std::fs::remove_dir_all(&root);
+    if measured == 0 {
+        eprintln!("ffixed: no disassembler on PATH; the emitted-code check was skipped");
+    }
+}
+
+/// An unknown name, a register the code generator cannot give up, and a
+/// reservation that leaves no FP scratch are each refused with a
+/// diagnostic that names the cause.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn ffixed_refuses_what_it_cannot_honour() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let root = std::env::temp_dir().join(format!("badc-ffixed-err-{}", std::process::id()));
+    std::fs::create_dir_all(&root).expect("create dir");
+    let src = root.join("pressure.c");
+    std::fs::write(&src, FIXED_PRESSURE_SRC).expect("write source");
+    let refused = |target: &str, flags: &[&str], expect: &[&str]| {
+        let out = Command::new(badc)
+            .arg(format!("--target={target}"))
+            .args(["-c", "-o"])
+            .arg(root.join("out.o"))
+            .args(flags)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(!out.status.success(), "{target} {flags:?} must fail");
+        for e in expect {
+            assert!(
+                stderr.contains(e),
+                "{target} {flags:?}: expected `{e}` in: {stderr}"
+            );
+        }
+    };
+    refused(
+        "linux-aarch64",
+        &["-ffixed-bogus"],
+        &["-ffixed-bogus", "unknown register name"],
+    );
+    refused(
+        "linux-x64",
+        &["-ffixed-bogus"],
+        &["-ffixed-bogus", "unknown register name"],
+    );
+    refused(
+        "linux-aarch64",
+        &["-ffixed-"],
+        &["requires a register name"],
+    );
+    refused("linux-aarch64", &["-ffixed-sp"], &["stack pointer"]);
+    refused("linux-aarch64", &["-ffixed-x29"], &["frame pointer"]);
+    refused("linux-aarch64", &["-ffixed-x16"], &["scratch register"]);
+    refused("linux-x64", &["-ffixed-rsp"], &["stack pointer"]);
+    refused("linux-x64", &["-ffixed-ebp"], &["frame pointer"]);
+    refused("linux-x64", &["-ffixed-r10"], &["scratch register"]);
+    // Every xmm outside the allocator's bank reserved: a function with FP
+    // work has no scratch left and the diagnostic names it.
+    let all_upper: Vec<String> = (8..16).map(|n| format!("-ffixed-xmm{n}")).collect();
+    let flags: Vec<&str> = all_upper.iter().map(String::as_str).collect();
+    refused(
+        "linux-x64",
+        &flags,
+        &["no floating-point scratch register", "function `fsink`"],
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// Reserving argument registers and the emitter's FP scratch changes no
+/// result: the ABI still passes through them, and the image runs the
+/// same at both optimization levels.
+#[test]
+fn ffixed_argument_registers_still_carry_the_call() {
+    let Some(target) = host_native_target() else {
+        return;
+    };
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let root = std::env::temp_dir().join(format!("badc-ffixed-run-{}", std::process::id()));
+    std::fs::create_dir_all(&root).expect("create dir");
+    let src = root.join("run.c");
+    std::fs::write(&src, format!("{FIXED_PRESSURE_SRC}{FIXED_PRESSURE_MAIN}")).expect("write");
+    let flags: &[&str] = if target.ends_with("aarch64") {
+        &[
+            "-ffixed-x1",
+            "-ffixed-d1",
+            "-ffixed-x20",
+            "-ffixed-q16",
+            "-ffixed-q17",
+        ]
+    } else {
+        &[
+            "-ffixed-rsi",
+            "-ffixed-xmm1",
+            "-ffixed-r12",
+            "-ffixed-xmm14",
+            "-ffixed-xmm15",
+        ]
+    };
+    for opt in [&[][..], &["-O"][..]] {
+        let bin = root.join("run");
+        let built = Command::new(badc)
+            .arg(format!("--target={target}"))
+            .args(opt)
+            .args(flags)
+            .arg("-o")
+            .arg(&bin)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            built.status.success(),
+            "{opt:?}: build failed -- {}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        let run = Command::new(&bin).output().expect("run the image");
+        assert_eq!(
+            run.status.code(),
+            Some(0),
+            "{opt:?}: a function disagreed with its reference"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// `-mcpu=` sets the AArch64 feature macros the way gcc does and
+/// refuses what badc does not implement: `+crypto` makes the AES
+/// intrinsics compile for linux-aarch64, an unknown extension and an
+/// x86-64 target are refused by name.
+#[test]
+fn mcpu_extensions_gate_the_feature_macros() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let root = std::env::temp_dir().join(format!("badc-mcpu-{}", std::process::id()));
+    std::fs::create_dir_all(&root).expect("create dir");
+    let src = root.join("aes.c");
+    std::fs::write(
+        &src,
+        "#ifndef __ARM_FEATURE_CRYPTO\n#error crypto missing\n#endif\n\
+         #include <arm_neon.h>\n\
+         uint8x16_t r(uint8x16_t s, uint8x16_t k) { return vaesmcq_u8(vaeseq_u8(s, k)); }\n",
+    )
+    .expect("write source");
+    let obj = root.join("aes.o");
+    let ok = Command::new(badc)
+        .args([
+            "--gnu",
+            "-q",
+            "-c",
+            "--target=linux-aarch64",
+            "-mcpu=generic+crypto",
+        ])
+        .arg(&src)
+        .arg("-o")
+        .arg(&obj)
+        .output()
+        .expect("run badc");
+    assert!(
+        ok.status.success(),
+        "{}",
+        String::from_utf8_lossy(&ok.stderr)
+    );
+    for (args, want) in [
+        (
+            &["-c", "--target=linux-aarch64", "-mcpu=generic+bogus"][..],
+            "extension `bogus`",
+        ),
+        (
+            &["-c", "--target=linux-x64", "-mcpu=generic"][..],
+            "AArch64",
+        ),
+    ] {
+        let out = Command::new(badc)
+            .args(args)
+            .arg(&src)
+            .args(["-o", "/dev/null"])
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !out.status.success() && err.contains(want),
+            "{args:?}: {err}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// The profiling options are refused where gcc has none, by name.
+#[test]
+fn profiling_options_are_refused_by_name_where_gcc_has_none() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let root = std::env::temp_dir().join(format!("badc-pfe-refuse-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&root);
+    let src = root.join("f.c");
+    std::fs::write(&src, "int f(void) { return 0; }\n").expect("write source");
+    for (target, flag) in [
+        ("linux-aarch64", "-pg"),
+        ("linux-aarch64", "-mfentry"),
+        ("linux-aarch64", "-mrecord-mcount"),
+        ("linux-x64", "-fpatchable-function-entry=1,2"),
+        ("windows-x64", "-fpatchable-function-entry=2,1"),
+        ("macos-aarch64", "-pg"),
+    ] {
+        let out = Command::new(badc)
+            .arg(format!("--target={target}"))
+            .arg(flag)
+            .arg("-c")
+            .arg("-o")
+            .arg(root.join("f.o"))
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(!out.status.success(), "{target} {flag}: must be refused");
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        let name = flag.split('=').next().unwrap_or(flag);
+        assert!(
+            stderr.contains(name),
+            "{target} {flag}: the diagnostic must name the option: {stderr}"
+        );
+    }
     let _ = std::fs::remove_dir_all(&root);
 }

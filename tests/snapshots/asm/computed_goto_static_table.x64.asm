@@ -34,14 +34,13 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movq	%rdi, 0x10(%rbp)
-               	xorq	%rcx, %rcx
-               	movl	%ecx, -0x8(%rbp)
-               	movl	%ecx, -0x10(%rbp)
+               	xorq	%rax, %rax
+               	movl	%eax, -0x8(%rbp)
+               	movl	%eax, -0x10(%rbp)
                	leaq	<rip>, %rax
-               	movslq	%ecx, %rcx
-               	leaq	0x1(%rcx), %rdx
-               	movl	%edx, -0x10(%rbp)
-               	addq	%rdi, %rcx
+               	movl	$0x1, %ecx
+               	movl	%ecx, -0x10(%rbp)
+               	leaq	(%rdi), %rcx
                	movzbq	(%rcx), %rcx
                	movq	(%rax,%rcx,8), %rcx
                	jmpq	*%rcx

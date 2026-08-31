@@ -505,6 +505,7 @@ impl<'a> Exp<'a> {
     fn join_va(
         &mut self,
         raw_args: &[Vec<Tok>],
+        sep_space: &[bool],
         nfixed: usize,
         expand: bool,
         depth: usize,
@@ -512,7 +513,8 @@ impl<'a> Exp<'a> {
         let mut v: Vec<Tok> = Vec::new();
         for (k, a) in raw_args.iter().enumerate().skip(nfixed) {
             if k > nfixed {
-                let comma = self.synth(",".to_string(), TokKind::Punct, false);
+                let sp = sep_space.get(k - 1).copied().unwrap_or(false);
+                let comma = self.synth(",".to_string(), TokKind::Punct, sp);
                 v.push(comma);
             }
             let mut e = if expand {
@@ -520,8 +522,12 @@ impl<'a> Exp<'a> {
             } else {
                 a.clone()
             };
+            // C99 6.10.3.2p2: stringization keeps the argument's spelling,
+            // so the space after the joining comma is the source's own --
+            // `f(a,b)` stringizes to "a,b", `f(a, b)` to "a, b".
+            let lexed = a.first().map(|t| t.space).unwrap_or(k > nfixed);
             if let Some(first) = e.first_mut() {
-                first.space = k > nfixed;
+                first.space = lexed;
             }
             v.append(&mut e);
         }
@@ -533,7 +539,7 @@ impl<'a> Exp<'a> {
     /// (depth-1 commas dropped) and the closing paren's hideset, or
     /// `None` -- consuming nothing -- when the parens don't close
     /// (C99 6.10.3p10: the name alone is not an invocation).
-    fn scan_args(&self, rest: &mut Vec<Tok>) -> Option<(Vec<Vec<Tok>>, u32)> {
+    fn scan_args(&self, rest: &mut Vec<Tok>) -> Option<(Vec<Vec<Tok>>, Vec<bool>, u32)> {
         // Find the extent first (no copies), then move the tokens out.
         let n = rest.len();
         let mut depth = 1usize;
@@ -562,6 +568,9 @@ impl<'a> Exp<'a> {
         let mut tail = rest.split_off(close);
         tail.pop(); // the `(`
         let mut args: Vec<Vec<Tok>> = Vec::new();
+        // Each separating comma's own leading-space flag: stringizing a
+        // variadic tail keeps the source spelling around the commas too.
+        let mut seps: Vec<bool> = Vec::new();
         let mut cur: Vec<Tok> = Vec::new();
         let mut depth = 1usize;
         while let Some(t) = tail.pop() {
@@ -576,6 +585,7 @@ impl<'a> Exp<'a> {
                     }
                     b',' if depth == 1 => {
                         args.push(core::mem::take(&mut cur));
+                        seps.push(t.space);
                         continue;
                     }
                     _ => {}
@@ -584,7 +594,7 @@ impl<'a> Exp<'a> {
             cur.push(t);
         }
         args.push(cur);
-        Some((args, rp_hs))
+        Some((args, seps, rp_hs))
     }
 
     /// The macro body's tokens mapped into this arena, and whether the
@@ -652,12 +662,12 @@ impl<'a> Exp<'a> {
                 // Function-like: an invocation only when `(` follows
                 // (C99 6.10.3p10) and closes within the line.
                 if rest.last().is_some_and(|&t| self.is_punct(t, "("))
-                    && let Some((raw_args, rp_hs)) = self.scan_args(&mut rest)
+                    && let Some((raw_args, sep_space, rp_hs)) = self.scan_args(&mut rest)
                 {
                     pp.check_macro_arity(name, def, &raw_args, self.filename, self.line_no);
                     let common = self.hs_intersect(tok.hs, rp_hs);
                     let inv = self.hs_with_name(common, name);
-                    let mut sub = self.subst(name, def, &raw_args, inv, depth);
+                    let mut sub = self.subst(name, def, &raw_args, &sep_space, inv, depth);
                     if let Some(f) = sub.first_mut() {
                         f.space = tok.space;
                     }
@@ -769,6 +779,7 @@ impl<'a> Exp<'a> {
         name: &str,
         def: &FnMacro,
         raw_args: &[Vec<Tok>],
+        sep_space: &[bool],
         inv_hs: u32,
         depth: usize,
     ) -> Vec<Tok> {
@@ -776,7 +787,7 @@ impl<'a> Exp<'a> {
         let nfixed = def.params.len();
 
         let raw_va: Vec<Tok> = if def.is_variadic {
-            self.join_va(raw_args, nfixed, false, depth)
+            self.join_va(raw_args, sep_space, nfixed, false, depth)
         } else {
             Vec::new()
         };
@@ -877,7 +888,7 @@ impl<'a> Exp<'a> {
                         match &exp_va {
                             Some(v) => v.clone(),
                             None => {
-                                let v = self.join_va(raw_args, nfixed, true, depth);
+                                let v = self.join_va(raw_args, sep_space, nfixed, true, depth);
                                 exp_va = Some(v.clone());
                                 v
                             }

@@ -93,6 +93,7 @@ impl Compiler {
             // (`enum E { ... } __attribute__((packed))`), the position GCC
             // and Clang accept most often.
             packed = self.skip_attribute_specifiers()? || packed;
+            self.pending.attr_transparent_union = false;
             let underlying = if let Some(m) = self.pending.attr_mode.take() {
                 // `mode(M)` fixes the enum's width outright; the
                 // enumerators must fit, as GCC requires.

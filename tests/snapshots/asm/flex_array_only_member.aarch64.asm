@@ -24,16 +24,6 @@ Disassembly of section .text:
                	str	x1, [x0, #0x10]
                	mov	x1, #0x4                // =4
                	str	x1, [x0, #0x18]
-               	ldr	x1, [x0, #0x10]
-               	cmp	x1, #0x3
-               	cset	x1, ne
-               	cbnz	x1, <addr>
-               	ldr	x0, [x0, #0x18]
-               	cmp	x0, #0x4
-               	cset	x1, ne
-               	cbz	x1, <addr>
-               	mov	x0, #0xf                // =15
-               	ret
                	mov	x0, #0x0                // =0
+               	mov	x1, x0
                	ret
-               	b	<addr>

@@ -319,6 +319,12 @@ pub(crate) enum Inst {
         fp_return: bool,
         /// See [`Self::Call::fp_arg_mask`].
         fp_arg_mask: u32,
+        /// Calling convention the pointed-to function follows, read off
+        /// the callee pointer's declared type
+        /// (`__attribute__((ms_abi))` / `((sysv_abi))`). Selects the
+        /// argument placement, shadow space and variadic dialect the
+        /// call site marshals to.
+        callee_conv: crate::c5::codegen::CallConv,
         /// See [`Self::Call::arg_aggs`].
         arg_aggs: Vec<Option<u32>>,
         /// See [`Self::Call::ret_agg`].
@@ -976,10 +982,12 @@ pub(crate) enum AsmConstraint {
     /// Matching constraint (`"0".."9"`): shares the register assigned to
     /// the operand at that index (an earlier output).
     Match(u8),
-    /// Immediate-or-register (`ci`): a compile-time-constant operand is
-    /// used as an immediate, otherwise the value is loaded into the
-    /// register of the given class.
-    RegOrImm(u8),
+    /// Register-or-immediate (`g`, `ri`, `rI`, `ci`): an input whose value
+    /// is a constant the immediate class `imm` admits (`i` / `n` admit any
+    /// constant, a range letter its range) prints as that immediate;
+    /// otherwise the value is loaded into a register -- the architectural
+    /// register `reg` names, or any allocatable one when `None`.
+    RegOrImm { reg: Option<u8>, imm: char },
     /// Immediate-only (`i`, `n`).
     Imm,
     /// A memory operand (`m`, `=m`, `+m`): the operand argument is the
@@ -1293,6 +1301,12 @@ pub(crate) struct FunctionSsa {
     /// prologue/epilogue and no implicit return; the body (inline asm) is the
     /// function's entire machine code. Used for interrupt service routines.
     pub is_naked: bool,
+    /// Calling convention the definition follows when it is not the
+    /// target's own: `__attribute__((ms_abi))` /
+    /// `__attribute__((sysv_abi))`. The prologue binds the incoming
+    /// arguments from that convention's registers and the allocator
+    /// takes its callee-saved banks; see [`crate::c5::codegen::CallConv`].
+    pub conv: crate::c5::codegen::CallConv,
     /// True when the definition binds STB_WEAK: `__attribute__((weak))` on
     /// the function or one of its declarations, or a file-scope asm `.weak`
     /// naming it. A strong definition in another object replaces it at link
@@ -1310,6 +1324,11 @@ pub(crate) struct FunctionSsa {
     /// body with one is only spliced into a caller placed identically,
     /// as gcc does.
     pub section: Option<alloc::string::String>,
+    /// `__attribute__((patchable_function_entry(N, M)))`: the NOP area
+    /// this function takes in place of the option's.
+    pub patchable_entry: Option<(u32, u32)>,
+    /// `__attribute__((no_instrument_function))`: no profiling call.
+    pub no_instrument: bool,
     /// Declared parameters, by index, whose value a whole-program
     /// constant reached (`passes::ipa_const_param`). Their incoming
     /// argument register has no reader left, so the entry spill of
@@ -1666,9 +1685,12 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             is_always_inline: _,
             is_noinline: _,
             is_naked: _,
+            conv: _,
             is_weak: _,
             is_internal: _,
             section: _,
+            patchable_entry: _,
+            no_instrument: _,
             const_params: _,
             insts,
             inst_src: _,

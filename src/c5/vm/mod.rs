@@ -177,17 +177,14 @@ impl<H: Host> Vm<H> {
             let runtime = ssa::CODE_ADDR_TAG as u64 | r.target_ent_pc;
             data[off..off + 8].copy_from_slice(&runtime.to_le_bytes());
         }
-        // A `&&label` initializer slot takes the same treatment against
-        // the label's block: `Inst::BlockAddr` materializes
-        // `CODE_ADDR_TAG | block` and `GotoIndirect` masks the tag back
-        // off, so the slot holds the value a runtime label address has.
-        // The block index is meaningful only inside its own function,
-        // which is where C99's `goto *` confines the value anyway.
+        // A `&&label` initializer slot holds the value a runtime label
+        // address has: the code position `Inst::BlockAddr` materializes
+        // for the label's block, which `GotoIndirect` decodes.
         if let Ok(funcs) = &ssa_funcs {
-            for f in funcs {
+            for (func_idx, f) in funcs.iter().enumerate() {
                 for r in &f.label_data_relocs {
                     let off = r.data_offset as usize;
-                    let runtime = ssa::CODE_ADDR_TAG as u64 | r.block as u64;
+                    let runtime = ssa::code_position(func_idx, r.block as usize, 0) as u64;
                     data[off..off + 8].copy_from_slice(&runtime.to_le_bytes());
                 }
             }

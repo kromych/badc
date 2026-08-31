@@ -23,13 +23,19 @@ name: kernel-packages
 # The aarch64 TCG figure is 28 min of `rpm -ivh` regenerating the initramfs
 # with dracut and 11 min of boots and probes, and a runner's cores are slower
 # than the box's, which is what --install-timeout below is sized for. Neither
-# lane fits a push; both fit a nightly.
+# lane fits a push, which is why this workflow is not on it.
+#
+# It carries no schedule either. The corpus it builds is a pinned release at a
+# fixed configuration, so a run repeats the previous run's work unless a commit
+# changed the compiler -- and the commits that do are already gated by ci.yml's
+# per-push `kernel` job. A daily run of four lanes at these costs buys a result
+# that is almost always identical to the last one. It runs when someone asks
+# for it.
 #
 # ci.yml's `kernel` job keeps the per-push gate -- same "badc compiles every
 # unit, zero fallbacks" contract, booted with a marker initramfs under the
 # badc-built emulator, and with badc as the tree's LD as well. This workflow
-# adds the distribution dimension on a nightly schedule, on demand, and on a
-# labelled pull request.
+# adds the distribution dimension on demand and on a labelled pull request.
 #
 # It is also the linker contrast, which is why the push path does not carry
 # one. This lane builds the same pinned release at the same `make defconfig`
@@ -47,13 +53,16 @@ name: kernel-packages
 # behaviour whose instructions TCG executes.
 
 on:
-  # No architecture input: both lanes run in parallel, so selecting one saves
-  # no wall time. A single-architecture run is a local packages.py invocation.
+  # No architecture or format input: the four lanes run in parallel, so
+  # selecting one saves no wall time. A single-lane run is a local
+  # packages.py invocation.
   workflow_dispatch:
-  schedule:
-    # Nightly at 03:41 UTC: off the :00/:30 marks the fleet crowds, and clear
-    # of the asm-fuzz lane.
-    - cron: "41 3 * * *"
+    inputs:
+      linker:
+        description: "linker for the kernel build"
+        type: choice
+        options: [badc, reference]
+        default: badc
   pull_request:
     # Opt-in per pull request: add the `kernel-packages` label to run it.
     types: [labeled]
@@ -85,10 +94,20 @@ jobs:
           # the emulator's default. `max` exposes LA57 on x86_64, so the lane
           # boots under 5-level paging -- which ci.yml's kernel lane does not,
           # since its guest takes the emulator's default model.
-          - { os: ubuntu-24.04,     arch: x86_64,  pkg: deb, floor: 2900,
-              cpu: 'max' }
-          - { os: ubuntu-24.04-arm, arch: aarch64, pkg: rpm, floor: 10000,
-              cpu: 'max' }
+          #
+          # Both packaging formats on both architectures: the kernel's own
+          # bindeb-pkg and binrpm-pkg targets over the same tree, installed
+          # into the distribution each format belongs to. `distro` and `pkg`
+          # are stated rather than left to the architecture's default, which
+          # is what previously fixed one format per architecture.
+          - { os: ubuntu-24.04,     arch: x86_64,  distro: ubuntu, pkg: deb,
+              floor: 2900,  cpu: 'max' }
+          - { os: ubuntu-24.04,     arch: x86_64,  distro: fedora, pkg: rpm,
+              floor: 2900,  cpu: 'max' }
+          - { os: ubuntu-24.04-arm, arch: aarch64, distro: ubuntu, pkg: deb,
+              floor: 10000, cpu: 'max' }
+          - { os: ubuntu-24.04-arm, arch: aarch64, distro: fedora, pkg: rpm,
+              floor: 10000, cpu: 'max' }
     runs-on: ${{ matrix.os }}
     # Roughly 2x the measured wall time, so a hang is bounded well below the
     # platform's 6-hour limit. Each VM boot is separately bounded by
@@ -123,6 +142,11 @@ jobs:
         # Fails when badc cannot compile a unit, when a unit falls back to
         # the reference compiler, when fewer units than the floor were
         # compiled, or when the kernel's packaging target rejects the tree.
+        # The published packages are badc-linked, so the artefact matches
+        # what the milestone claims: badc compiles, assembles and links.
+        # `linker: reference` on a manual dispatch gives the contrast run,
+        # which separates a compiler fault from a linker one when a package
+        # regresses.
         timeout-minutes: ${{ matrix.arch == 'x86_64' && 30 || 120 }}
         env:
           # The runner's reference compiler is not the one the pinned kernel
@@ -131,7 +155,9 @@ jobs:
         run: |
           tarball=$(ls "$RUNNER_TEMP"/lk/linux-*.tar.xz | head -1)
           python demos/linux/packages.py --arch ${{ matrix.arch }} \
+            --distro ${{ matrix.distro }} --pkg ${{ matrix.pkg }} \
             --tarball "$tarball" --phases tree,build,package \
+            --linker ${{ inputs.linker || 'badc' }} \
             --expect-units ${{ matrix.floor }} \
             --workdir "$RUNNER_TEMP/pkg" \
             --report "$RUNNER_TEMP/pkg/package-${{ matrix.arch }}.json"
@@ -155,7 +181,7 @@ jobs:
           release=$(python -c "import json,sys;print(json.load(open(sys.argv[1]))['release'])" \
             "$RUNNER_TEMP/pkg/package-${{ matrix.arch }}.json")
           badcver=$(./target/release/badc --version | head -1 | cut -d' ' -f2)
-          echo "artifact=linux-badc-${{ matrix.arch }}-$release-badc$badcver-${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
+          echo "artifact=linux-badc-${{ matrix.pkg }}-${{ matrix.arch }}-$release-badc$badcver-${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
           cat "$out/SHA256SUMS"
       - name: publish the packages
         # Uploaded before the VM runs, so the packages reach the run page
@@ -174,6 +200,7 @@ jobs:
         timeout-minutes: ${{ matrix.arch == 'x86_64' && 25 || 110 }}
         run: |
           python demos/linux/packages.py --arch ${{ matrix.arch }} \
+            --distro ${{ matrix.distro }} --pkg ${{ matrix.pkg }} \
             --phases vm --accel tcg --vm-cpu '${{ matrix.cpu }}' \
             --vm-cpus 4 --vm-mem 4096 \
             --vm-timeout 2400 --install-timeout 3600 \
@@ -188,7 +215,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: kernel-packages-vm-${{ matrix.arch }}
+          name: kernel-packages-vm-${{ matrix.pkg }}-${{ matrix.arch }}
           path: |
             ${{ runner.temp }}/pkg/vm-${{ matrix.arch }}.json
             ${{ runner.temp }}/pkg/package-${{ matrix.arch }}.json

@@ -29,29 +29,39 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
-               	xorq	%rcx, %rcx
-               	leaq	<rip>, %rsi
-               	movq	%rcx, %rax
-               	jmp	<addr>
-               	movq	(%rsi), %r8
-               	movslq	%eax, %rdx
-               	leaq	(%rdx,%rdx,2), %rdi
-               	addq	%rdi, %r8
-               	addq	$0x0, %r8
-               	movsbq	(%r8), %r8
-               	addq	%r8, %rcx
-               	movq	(%rsi), %r8
-               	addq	%rdi, %r8
-               	movsbq	0x1(%r8), %r8
-               	addq	%r8, %rcx
-               	movq	(%rsi), %r8
-               	addq	%r8, %rdi
-               	movsbq	0x2(%rdi), %rdi
-               	addq	%rdi, %rcx
-               	leaq	0x1(%rdx), %rax
-               	cmpl	$0x2, %eax
-               	jl	<addr>
-               	cmpl	$0x15, %ecx
+               	leaq	<rip>, %rax
+               	movq	(%rax), %rax
+               	addq	$0x0, %rax
+               	addq	$0x0, %rax
+               	movsbq	(%rax), %rax
+               	addq	$0x0, %rax
+               	leaq	<rip>, %rcx
+               	movq	(%rcx), %rcx
+               	addq	$0x0, %rcx
+               	movsbq	0x1(%rcx), %rcx
+               	addq	%rcx, %rax
+               	leaq	<rip>, %rcx
+               	movq	(%rcx), %rcx
+               	addq	$0x0, %rcx
+               	movsbq	0x2(%rcx), %rcx
+               	addq	%rcx, %rax
+               	leaq	<rip>, %rcx
+               	movq	(%rcx), %rcx
+               	addq	$0x3, %rcx
+               	addq	$0x0, %rcx
+               	movsbq	(%rcx), %rcx
+               	addq	%rcx, %rax
+               	leaq	<rip>, %rcx
+               	movq	(%rcx), %rcx
+               	addq	$0x3, %rcx
+               	movsbq	0x1(%rcx), %rcx
+               	addq	%rcx, %rax
+               	leaq	<rip>, %rcx
+               	movq	(%rcx), %rcx
+               	addq	$0x3, %rcx
+               	movsbq	0x2(%rcx), %rcx
+               	addq	%rcx, %rax
+               	cmpl	$0x15, %eax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

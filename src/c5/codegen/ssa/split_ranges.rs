@@ -39,9 +39,9 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use super::super::ir::{FunctionSsa, Inst, NO_VALUE, Terminator, ValueId};
-use super::Target;
 use super::reg_alloc::{Allocation, Place};
 use super::tape::{Insertion, Undo};
+use super::{FixedRegs, Target};
 
 /// A run of uses of one value over a contiguous stretch of the
 /// instruction tape, with no barrier between the first and the last.
@@ -278,9 +278,13 @@ pub(super) fn spill_traffic(func: &FunctionSsa, alloc: &Allocation) -> u64 {
 /// Allocate `func`, then retry with the spilled values' call-free runs
 /// split out. Returns whichever allocation carries less loop-weighted
 /// spill traffic, leaving `func` matching the returned allocation.
-pub(crate) fn allocate_split(func: &mut FunctionSsa, target: Target) -> Allocation {
-    let base = super::reg_alloc::allocate(func, target);
-    allocate_split_with(func, target, base)
+pub(crate) fn allocate_split(
+    func: &mut FunctionSsa,
+    target: Target,
+    fixed: FixedRegs,
+) -> Allocation {
+    let base = super::reg_alloc::allocate(func, target, fixed);
+    allocate_split_with(func, target, fixed, base)
 }
 
 /// [`allocate_split`] over an allocation of `func` the caller already
@@ -289,6 +293,7 @@ pub(crate) fn allocate_split(func: &mut FunctionSsa, target: Target) -> Allocati
 pub(super) fn allocate_split_with(
     func: &mut FunctionSsa,
     target: Target,
+    fixed: FixedRegs,
     base: Allocation,
 ) -> Allocation {
     let runs = plan(func, &base);
@@ -297,7 +302,7 @@ pub(super) fn allocate_split_with(
     }
     let base_traffic = spill_traffic(func, &base);
     let undo = apply(func, &runs);
-    let alt = super::reg_alloc::allocate(func, target);
+    let alt = super::reg_alloc::allocate(func, target, fixed);
     if spill_traffic(func, &alt) < base_traffic {
         return alt;
     }
@@ -370,6 +375,7 @@ mod tests {
             spill_count: 1,
             gpr_used: Vec::new(),
             fp_used: Vec::new(),
+            fp_scratch: RegBanks::for_target(Target::host()).fp_scratch,
             use_counts: vec![1; n],
             last_use: vec![0; n],
             cmp32: vec![false; n],
@@ -629,7 +635,7 @@ mod tests {
                 block(5..5, Terminator::Return(NO_VALUE)),
             ],
         );
-        let alloc = super::super::reg_alloc::allocate(&f, Target::host());
+        let alloc = super::super::reg_alloc::allocate(&f, Target::host(), FixedRegs::NONE);
         assert!(alloc.branch_fused[2], "the compare still fuses");
     }
 
@@ -682,7 +688,7 @@ mod tests {
     fn split_once(cap: usize) -> (FunctionSsa, Allocation) {
         with_pool_size_override(cap, cap, || {
             let mut f = crossing_call_then_reuse();
-            let a = allocate_split(&mut f, Target::host());
+            let a = allocate_split(&mut f, Target::host(), FixedRegs::NONE);
             (f, a)
         })
     }

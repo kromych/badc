@@ -868,6 +868,14 @@ pub struct NativeObject {
     /// The merge pass rebases them into `MergedNative::prologue_ends`,
     /// where the merged-image frame writer reads the prologue extent.
     pub prologue_ends: Vec<(u64, u64)>,
+    /// Names this unit materialises the address of through an undefined
+    /// symbol (`NT_BADC_EXTERN_DATA`) -- extern data, and an extern
+    /// function whose address is taken, which shares that lowering.
+    /// Undefined references are all typed `STT_NOTYPE`, so the linker
+    /// reads from here whether a site the relocation kind does not
+    /// classify binds a slot rather than a call stub. A branch is
+    /// classified by its kind and never consults this.
+    pub extern_data_names: Vec<String>,
     /// Standard DWARF 4 sections the `-c` writer emits.
     /// Address-bearing slots inside are placeholders paired with
     /// entries in `debug_info_relocs` / `debug_line_relocs`; the
@@ -1502,6 +1510,9 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     //                                     descriptor_index) pairs.
     //   type=11 NT_BADC_PROLOGUE_END -- (u64 entry_offset, u64
     //                                   post_prologue_offset) `.text` pairs.
+    //   type=12 NT_BADC_EXTERN_DATA  -- NUL-separated names this unit
+    //                                  references as data through an
+    //                                  undefined symbol.
     // Records under namesz != "badc\0" are skipped silently so
     // future vendor extensions can coexist.
     let mut dylibs: Vec<String> = Vec::new();
@@ -1515,6 +1526,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     let mut macho_tlv_descriptor_syms: Vec<(usize, String)> = Vec::new();
     let mut elf_tpoff_fixups: Vec<(u64, ElfTpoffTarget)> = Vec::new();
     let mut prologue_ends: Vec<(u64, u64)> = Vec::new();
+    let mut extern_data_names: Vec<String> = Vec::new();
     if let Some(i) = dylibs_section_idx {
         let body = section_slice(bytes, &shdrs[i])?;
         let mut cur = 0usize;
@@ -1676,6 +1688,14 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
                             c += 16;
                         }
                     }
+                    12 => {
+                        for chunk in body[cur..desc_end].split(|&b| b == 0) {
+                            if chunk.is_empty() {
+                                continue;
+                            }
+                            extern_data_names.push(String::from_utf8_lossy(chunk).into_owned());
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -1754,6 +1774,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         macho_tlv_fixups,
         copy_relocs,
         prologue_ends,
+        extern_data_names,
         debug_info,
         debug_abbrev,
         debug_line,

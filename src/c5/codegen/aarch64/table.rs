@@ -188,6 +188,16 @@ pub(crate) enum Opnd {
         size: u8,
         q: bool,
     },
+    /// A SIMD register list with a lane `{v0.T, ..}[index]`: `count`
+    /// consecutive registers (1..4) starting at `first`, one element each, of
+    /// element-size log2 `size`. The operand of the single-structure
+    /// ld1..ld4/st1..st4.
+    VecListLane {
+        first: u8,
+        count: u8,
+        size: u8,
+        index: u8,
+    },
     Imm(i64),
     /// A floating-point immediate as its 8-bit VFP encoding (`fmov Vd, #imm`).
     FpImm(u8),
@@ -1297,6 +1307,56 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((rn as u32) << 5)
             | (rd as u32));
     }
+    // SIMD narrowing shift right by immediate `<shrn|rshrn> Vd.<Tb>, Vn.<Ta>,
+    // #shift`: shift each wide element right and write the low half of the
+    // result. immh:immb is 2*esize-shift over the DESTINATION element size, the
+    // source being one size wider; opcode (15..11) is 10000, or 10001 for the
+    // rounding form. The `2` mnemonic writes the top half of a 128-bit
+    // destination (Q at 30).
+    if let Some((nmnem, upper)) = strip_widen2(mnemonic)
+        && let Some(opcode) = match nmnem {
+            "shrn" => Some(0b10000u32),
+            "rshrn" => Some(0b10001),
+            _ => None,
+        }
+        && let [
+            Opnd::VecReg {
+                num: rd,
+                size: ds,
+                q: dq,
+            },
+            Opnd::VecReg {
+                num: rn,
+                size: ss,
+                q: sq,
+            },
+            Opnd::Imm(shift),
+        ] = *ops
+    {
+        if ss != ds + 1 || ds > 2 || !sq {
+            return Err(String::from(
+                "inline asm: narrowing shift source must be one element size wider and 128-bit",
+            ));
+        }
+        if dq != upper {
+            return Err(String::from(
+                "inline asm: the `2` form writes a 128-bit destination; the base form writes 64-bit",
+            ));
+        }
+        let esize = 8i64 << ds;
+        if shift < 1 || shift > esize {
+            return Err(String::from(
+                "inline asm: narrowing shift amount out of range",
+            ));
+        }
+        return Ok(0x0F00_0000
+            | (opcode << 11)
+            | (1u32 << 10)
+            | (if upper { 1u32 << 30 } else { 0 })
+            | (((2 * esize - shift) as u32) << 16)
+            | ((rn as u32) << 5)
+            | (rd as u32));
+    }
     // SIMD modified immediate `<movi|mvni|orr|bic> Vd.T, #imm{, lsl #s}`. The
     // 8-bit value splits abc:defgh across bits 18..16 and 9..5; cmode selects
     // the element size and shift, op (bit 29) the inverting variant (mvni,
@@ -1626,6 +1686,90 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | (if upper { 1u32 << 30 } else { 0 })
             | ((ss as u32) << 22)
             | ((rm as u32) << 16)
+            | ((rn as u32) << 5)
+            | (rd as u32));
+    }
+    // SIMD widening multiply by element `Vd.<2T>, Vn.<T>, Vm.Ts[i]`: the same
+    // widening products against one broadcast element of Vm. size (23..22) is
+    // the source width and Q (30) the `2` form, as in the vector arm; opcode
+    // (15..12) and U (29) name the operation. The element index is split across
+    // H (11), L (21) and M (20): H:L:M for a halfword element, whose Vm is
+    // bounded to v0..v15, and H:L for a word element, whose M carries Vm's high
+    // bit.
+    if let Some((wmnem, upper)) = strip_widen2(mnemonic)
+        && let Some((opcode, u)) = match wmnem {
+            "smull" => Some((0b1010u32, 0u32)),
+            "umull" => Some((0b1010, 1)),
+            "smlal" => Some((0b0010, 0)),
+            "umlal" => Some((0b0010, 1)),
+            "smlsl" => Some((0b0110, 0)),
+            "umlsl" => Some((0b0110, 1)),
+            _ => None,
+        }
+        && let [
+            Opnd::VecReg {
+                num: rd,
+                size: ds,
+                q: dq,
+            },
+            Opnd::VecReg {
+                num: rn,
+                size: ss,
+                q: sq,
+            },
+            Opnd::VecElem {
+                num: rm,
+                size: ms,
+                index,
+            },
+        ] = *ops
+    {
+        if ss != ms {
+            return Err(String::from(
+                "inline asm: widening by-element source and element sizes differ",
+            ));
+        }
+        if !dq || ds != ss + 1 || !(1..=2).contains(&ss) {
+            return Err(String::from(
+                "inline asm: widening by-element destination must be .4s (halfword sources) \
+                 or .2d (word sources)",
+            ));
+        }
+        if sq != upper {
+            return Err(String::from(
+                "inline asm: the `2` form reads 128-bit sources; the base form reads 64-bit",
+            ));
+        }
+        if index >= (16u8 >> ss) {
+            return Err(String::from("inline asm: lane index out of range"));
+        }
+        if ss == 1 && rm > 15 {
+            return Err(String::from(
+                "inline asm: a halfword element selects Vm from v0..v15",
+            ));
+        }
+        let (l, h, mbit) = if ss == 1 {
+            (
+                ((index >> 1) & 1) as u32,
+                ((index >> 2) & 1) as u32,
+                (index & 1) as u32,
+            )
+        } else {
+            (
+                (index & 1) as u32,
+                ((index >> 1) & 1) as u32,
+                ((rm >> 4) & 1) as u32,
+            )
+        };
+        return Ok(0x0F00_0000
+            | (u << 29)
+            | (if upper { 1u32 << 30 } else { 0 })
+            | ((ss as u32) << 22)
+            | (l << 21)
+            | (mbit << 20)
+            | (((rm & 0xF) as u32) << 16)
+            | (opcode << 12)
+            | (h << 11)
             | ((rn as u32) << 5)
             | (rd as u32));
     }
@@ -2128,15 +2272,19 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((base as u32) << 5)
             | (*first as u32));
     }
-    // SIMD single-structure lane load/store `<ld1|st1> {Vt.T}[i], [Xn]{, #inc |
-    // , Xm}`: transfer one lane. The lane index is bit-sliced across Q (30), S
-    // (12), and the size field (11..10): field4 = (index << size) | (size==3 ? 1
-    // : 0); the opcode (15..13) is the element class. L (bit 22) marks the load.
-    // The immediate post-index increment is the element size (1<<size bytes).
-    if let "ld1" | "st1" = mnemonic
+    // SIMD single-structure lane load/store `<ld1..ld4|st1..st4> {Vt.T, ..}[i],
+    // [Xn]{, #inc | , Xm}`: one element per register of the list. The structure
+    // (1..4, from the mnemonic) must match the register count; it splits across
+    // R (21) and the low opcode bit (13). The lane index is bit-sliced across Q
+    // (30), S (12) and the size field (11..10): field4 = (index << size) |
+    // (size==3 ? 1 : 0), with the element class in opcode bits 15..14. L (bit
+    // 22) marks the load. The immediate post-index increment is the transferred
+    // byte count, structure * element size.
+    if let "ld1" | "st1" | "ld2" | "st2" | "ld3" | "st3" | "ld4" | "st4" = mnemonic
         && let [
-            Opnd::VecElem {
-                num: rt,
+            Opnd::VecListLane {
+                first,
+                count,
                 size,
                 index,
             },
@@ -2144,6 +2292,12 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             post @ ..,
         ] = ops
     {
+        let structure = mnemonic.as_bytes()[2] - b'0';
+        if *count != structure {
+            return Err(String::from(
+                "inline asm: register count does not match the ld/st structure",
+            ));
+        }
         let base = match mem {
             Opnd::Mem {
                 base,
@@ -2152,16 +2306,16 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             } => *base,
             _ => {
                 return Err(String::from(
-                    "inline asm: single-lane ld1/st1 need a plain [Xn] address",
+                    "inline asm: single-structure ld/st need a plain [Xn] address",
                 ));
             }
         };
         let (rm, wb) = match post {
             [] => (0u32, 0u32),
             [Opnd::Imm(inc)] => {
-                if *inc != 1i64 << size {
+                if *inc != (*count as i64) << size {
                     return Err(String::from(
-                        "inline asm: single-lane post-index must equal the element size",
+                        "inline asm: single-structure post-index must equal the transferred size",
                     ));
                 }
                 (31, 1u32 << 23)
@@ -2173,26 +2327,32 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             ] => (*num as u32, 1u32 << 23),
             _ => {
                 return Err(String::from(
-                    "inline asm: bad single-lane post-index (want `, #imm` or `, Xm`)",
+                    "inline asm: bad single-structure post-index (want `, #imm` or `, Xm`)",
                 ));
             }
         };
         let field4 = ((*index as u32) << size) | if *size == 3 { 1 } else { 0 };
-        let opcode = if *size == 3 {
+        let element_class = if *size == 3 {
             0b100u32
         } else {
             (*size as u32) << 1
         };
+        let opcode = element_class | ((structure as u32 - 1) >> 1);
         return Ok(0x0D00_0000
             | wb
-            | (if mnemonic == "ld1" { 1u32 << 22 } else { 0 })
+            | (if mnemonic.as_bytes()[0] == b'l' {
+                1u32 << 22
+            } else {
+                0
+            })
+            | (((structure as u32 - 1) & 1) << 21)
             | (((field4 >> 3) & 1) << 30)
             | (opcode << 13)
             | (rm << 16)
             | (((field4 >> 2) & 1) << 12)
             | ((field4 & 0b11) << 10)
             | ((base as u32) << 5)
-            | (*rt as u32));
+            | (*first as u32));
     }
     // SHA3 three-source xor `eor3 Vd.16b, Vn.16b, Vm.16b, Va.16b`
     // (FEAT_SHA3): Vd = Vn ^ Vm ^ Va, .16b only.

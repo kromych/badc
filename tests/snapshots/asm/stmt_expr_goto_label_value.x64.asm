@@ -198,8 +198,7 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	leaq	-0x10(%rbp), %rsi
                	movl	$0x1, %edx
-               	movq	0x8(%rsi), %rax
-               	andq	$-0x200, %rax           # imm = 0xFE00
+               	xorq	%rax, %rax
                	jmp	<addr>
                	leaq	0x1(%rdx), %rcx
                	movq	%rcx, %rax

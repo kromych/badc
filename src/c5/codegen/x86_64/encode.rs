@@ -1832,6 +1832,8 @@ pub(crate) fn lower(
     let mut code: Vec<u8> = Vec::new();
     let mut func_ent_pcs: Vec<usize> = Vec::new();
     let mut func_ends: Vec<usize> = Vec::new();
+    let mut patchable_entries: Vec<super::EntryArea> = Vec::new();
+    let mut mcount_sites: Vec<usize> = Vec::new();
     let mut func_names: Vec<alloc::string::String> = Vec::new();
     let mut func_prologue_native: alloc::collections::BTreeMap<usize, usize> =
         alloc::collections::BTreeMap::new();
@@ -2071,7 +2073,7 @@ pub(crate) fn lower(
         // the promoted field slots feed the same debug-info location
         // drop as the initial mem2reg.
         super::ssa::emit_common::time_pass("passes::sroa::run (x86_64)", || {
-            let usable_gpr = super::ssa::reg_alloc::usable_gpr_count(target);
+            let usable_gpr = super::ssa::reg_alloc::usable_gpr_count(target, native.fixed_regs);
             // What each function does with its pointer parameters, so a
             // call taking an object's address gives up only the fields
             // it can reach. Derived once over the whole unit, and only
@@ -2200,7 +2202,7 @@ pub(crate) fn lower(
         // addresses the fold would have turned into displacements; the
         // canonical bases then feed store forwarding.
         super::ssa::emit_common::time_pass("passes::cse::run (x86_64)", || {
-            let caps = super::ssa::reg_alloc::bank_capacity(target);
+            let caps = super::ssa::reg_alloc::bank_capacity(target, native.fixed_regs);
             crate::c5::codegen::passes::cse::run(&mut ssa_funcs, caps);
         });
         // Rebuild the single modulo where the builder's split quotient
@@ -2248,6 +2250,14 @@ pub(crate) fn lower(
         .filter(|f| f.is_variadic)
         .map(|f| f.ent_pc)
         .collect();
+    // Per-callee calling convention, for the callees that declare one
+    // (`__attribute__((ms_abi))` / `((sysv_abi))`). A direct call site
+    // reads it to marshal into that convention's argument window.
+    let mut conv_targets: alloc::collections::BTreeMap<usize, super::CallConv> = ssa_funcs
+        .iter()
+        .filter(|f| f.conv != super::CallConv::Target)
+        .map(|f| (f.ent_pc, f.conv))
+        .collect();
     // Per-callee declared return type, read by the tail-call
     // conversion to compare extension contracts.
     let ret_tags: alloc::collections::BTreeMap<usize, i64> = ssa_funcs
@@ -2272,6 +2282,15 @@ pub(crate) fn lower(
             {
                 variadic_targets.insert(sym.val as usize);
             }
+            // A cross-TU callee's convention comes off its declaration in
+            // this unit, the same place the definition's would.
+            if sym.is_fun_entity()
+                && !sym.defined_here
+                && sym.conv != super::CallConv::Target
+                && extern_pcs.contains(&(sym.val as usize))
+            {
+                conv_targets.insert(sym.val as usize, sym.conv);
+            }
         }
     }
     // Branch on a zero test's operand directly. Immediately before
@@ -2289,9 +2308,9 @@ pub(crate) fn lower(
                 .iter_mut()
                 .map(|f| {
                     if native.optimize {
-                        super::ssa::licm::allocate_hoisted(f, target)
+                        super::ssa::licm::allocate_hoisted(f, target, native.fixed_regs)
                     } else {
-                        super::ssa::reg_alloc::allocate(f, target)
+                        super::ssa::reg_alloc::allocate(f, target, native.fixed_regs)
                     }
                 })
                 .collect()
@@ -2325,9 +2344,19 @@ pub(crate) fn lower(
     text_align = text_align.max(fn_align);
     for (func_ssa, alloc_for) in ssa_funcs.iter().zip(ssa_allocs.iter()) {
         let ent_pc = func_ssa.ent_pc;
-        // `-fmin-function-alignment=N`: the entry starts at a multiple of
-        // N, the gap filled with one-byte NOPs.
+        let entry = super::FunctionEntry::of(func_ssa, &native);
+        // `-fmin-function-alignment=N`: the function's first byte starts
+        // at a multiple of N, the gap filled with one-byte NOPs. Under
+        // `-fpatchable-function-entry` that byte opens the NOP area, of
+        // which `nops_before` precede the symbol.
         super::pad_to_alignment(&mut code, fn_align, &[0x90]);
+        if entry.nops_before + entry.nops_after > 0 {
+            patchable_entries.push(super::EntryArea {
+                func: func_ent_pcs.len(),
+                start: code.len(),
+            });
+        }
+        code.resize(code.len() + entry.nops_before as usize, 0x90);
         pc_to_native[ent_pc] = code.len();
         func_ent_pcs.push(ent_pc);
         func_names.push(func_ssa.name.clone());
@@ -2377,6 +2406,7 @@ pub(crate) fn lower(
                 label_relocs: &mut label_relocs,
                 text_data_ranges: &mut text_data_ranges,
                 canary_frame_bytes: &mut canary_frame_bytes,
+                mcount_sites: &mut mcount_sites,
             };
             #[cfg(feature = "std")]
             let _ = super::ssa::emit_common::take_bail();
@@ -2392,6 +2422,7 @@ pub(crate) fn lower(
                 &extern_tls_names,
                 imports,
                 &variadic_targets,
+                &conv_targets,
                 &ret_tags,
                 program.tls_data.len(),
                 &mut fn_unwind,
@@ -2405,6 +2436,8 @@ pub(crate) fn lower(
                 native.output_kind == super::OutputKind::Relocatable && !native.pic,
                 native.hardening,
                 native.stack_protect.resolved_for(target),
+                entry,
+                native.fixed_regs,
             )
         };
         #[cfg(feature = "std")]
@@ -2435,6 +2468,9 @@ pub(crate) fn lower(
             )));
         }
         func_ends.push(code.len());
+    }
+    if !native.profiling.record_mcount {
+        mcount_sites.clear();
     }
     #[cfg(feature = "std")]
     if super::ssa::emit_common::time_passes_enabled() {
@@ -2666,6 +2702,8 @@ pub(crate) fn lower(
         pc_to_native,
         func_ent_pcs,
         func_ends,
+        patchable_entries,
+        mcount_sites,
         func_names,
         func_prologue_native,
         promoted_local_slots,
@@ -2696,6 +2734,7 @@ pub(crate) fn lower(
         pic_link: native.pic || native.pic_link,
         code_model: native.code_model,
         elf_class: native.elf_class,
+        keep_local_labels: native.keep_local_labels,
         shared_lib_name: None,
         dllmain_pc: None,
         // Mach-O TLV is arm64-only on Apple Silicon; x86_64 macOS

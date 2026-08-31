@@ -48,21 +48,28 @@ Disassembly of section .text:
                	subq	$0x1, %r11
                	jne	<addr>
                	movq	%rax, %rsp
-               	movl	$0x1, %ecx
-               	movb	%cl, (%rax)
-               	movl	$0x2, %ecx
-               	movb	%cl, 0x1(%rax)
-               	movl	$0x3, %ecx
-               	movb	%cl, 0x2(%rax)
-               	movl	$0x4, %ecx
-               	movb	%cl, 0x3(%rax)
-               	movl	$0x5, %ecx
-               	movb	%cl, 0x4(%rax)
-               	movl	$0x6, %ecx
-               	movb	%cl, 0x5(%rax)
-               	leaq	0xffff(%rax), %rcx
-               	movl	$0x7, %edx
-               	movb	%dl, (%rcx)
+               	leaq	<rip>, %rcx
+               	movzbq	(%rcx), %rdx
+               	movb	%dl, (%rax)
+               	leaq	0x1(%rcx), %rdx
+               	movzbq	(%rdx), %rdx
+               	movb	%dl, 0x1(%rax)
+               	leaq	0x2(%rcx), %rdx
+               	movzbq	(%rdx), %rdx
+               	movb	%dl, 0x2(%rax)
+               	leaq	0x3(%rcx), %rdx
+               	movzbq	(%rdx), %rdx
+               	movb	%dl, 0x3(%rax)
+               	leaq	0x4(%rcx), %rdx
+               	movzbq	(%rdx), %rdx
+               	movb	%dl, 0x4(%rax)
+               	leaq	0x5(%rcx), %rdx
+               	movzbq	(%rdx), %rdx
+               	movb	%dl, 0x5(%rax)
+               	leaq	0xffff(%rax), %rdx
+               	addq	$0x6, %rcx
+               	movzbq	(%rcx), %rcx
+               	movb	%cl, (%rdx)
                	movzbq	(%rax), %r15
                	movzbq	0x1(%rax), %rbx
                	movzbq	0x2(%rax), %r12

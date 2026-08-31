@@ -14,7 +14,7 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	stp	x20, x21, [sp, #-0x50]!
+               	str	x20, [sp, #-0x50]!
                	str	x19, [sp, #0x10]
                	stp	x29, x30, [sp, #0x40]
                	add	x29, sp, #0x40
@@ -32,7 +32,7 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x19, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x50
+               	ldr	x20, [sp], #0x50
                	ret
                	ldur	x0, [x29, #-0x10]
                	ldrsw	x0, [x0]
@@ -41,13 +41,12 @@ Disassembly of section .text:
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x19, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x50
+               	ldr	x20, [sp], #0x50
                	ret
                	mov	x0, #0x8                // =8
                	bl	<addr>
                	mov	x20, x0
-               	mov	x21, #0x4               // =4
-               	mov	x0, x21
+               	mov	x0, #0x4                // =4
                	bl	<addr>
                	str	x0, [x20]
                	mov	x1, #0x7b               // =123
@@ -59,19 +58,19 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x19, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x50
+               	ldr	x20, [sp], #0x50
                	ret
                	ldr	x0, [x20]
                	ldrsw	x0, [x0]
                	cmp	w0, #0x7b
                	b.eq	<addr>
-               	mov	x0, x21
+               	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x19, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x50
+               	ldr	x20, [sp], #0x50
                	ret
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x19, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x50
+               	ldr	x20, [sp], #0x50
                	ret

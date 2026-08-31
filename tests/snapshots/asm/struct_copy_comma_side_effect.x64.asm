@@ -43,7 +43,6 @@ Disassembly of section .text:
                	movb	%al, 0xb(%rdx)
                	popq	%rax
                	movl	%eax, (%rcx)
-               	movslq	%eax, %rax
                	retq
 
 <via_global_member>:
@@ -84,7 +83,6 @@ Disassembly of section .text:
                	movb	%al, 0xb(%rcx)
                	popq	%rax
                	movb	%al, (%rsi)
-               	movsbq	%al, %rax
                	retq
 
 <main>:

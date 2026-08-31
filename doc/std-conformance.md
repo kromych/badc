@@ -174,10 +174,16 @@ anonymous members, `<stdatomic.h>`).
 badc's driver has no accept-and-ignore bucket: any dash-prefixed argument
 no option arm matches is an error, not a warning. Common gcc spellings
 badc does not implement -- `-Wall` and the rest of the `-W` family bar
-`-W[no-]dead-store`, `-x`, `-isystem`, `-nostdinc`, `-static` -- therefore
-fail the invocation rather than being dropped. A build system that passes
-a compiler's whole flag set through has to filter it; the kernel harness
-under `demos/linux/` does exactly that.
+`-W[no-]dead-store`, `-x`, `-isystem`, `-static`, and `-gdwarf-<n>` --
+therefore fail the invocation rather than being dropped. A build system that
+passes a compiler's whole flag set through has to filter it; the kernel
+harness under `demos/linux/` does exactly that.
+
+`-Wa,<opt>` and `-Xassembler <opt>` are checked rather than passed on, since
+the assembler is built in: an option badc's assembler has no equivalent for
+is refused by name (`unsupported assembler option`) instead of reaching a
+program that is not there. `-L` / `--keep-locals` is accepted and keeps the
+local-label temporaries in the symbol table, as GNU as does.
 
 `-std=<dialect>` is accepted. badc compiles C99 with the GNU extensions
 always available, so the name selects only whether `__STRICT_ANSI__` is
@@ -250,8 +256,8 @@ header takes its standard-C path for the GNU features badc lacks.
   - byte swapping -- `__builtin_bswap16` / `32` / `64`;
   - control -- `__builtin_expect`, `__builtin_unreachable`,
     `__builtin_trap`, `__builtin_prefetch`, `__builtin_assume_aligned`;
-  - frame -- `__builtin_frame_address`, `__builtin_return_address`
-    (level 0 only), `__builtin_alloca`;
+  - frame -- `__builtin_frame_address`, `__builtin_return_address` (any
+    constant level, walking the frame-pointer chain), `__builtin_alloca`;
   - variadics -- `__builtin_va_list`, `__builtin_va_start` / `va_arg` /
     `va_end` / `va_copy`;
   - compile-time queries -- `__builtin_constant_p`,
@@ -306,7 +312,9 @@ header takes its standard-C path for the GNU features badc lacks.
   inside a packed struct keeps its members overlapping), `aligned(N)` /
   `_Alignas`, `section(name)`, `alias(target)`, `visibility(kind)`
   (`hidden` / `internal` map to `STV_HIDDEN`), `weak`, `used`, `naked`,
-  `always_inline`, `gnu_inline`,
+  `always_inline`, `gnu_inline`, `ms_abi` / `sysv_abi` (the x86_64
+  calling convention of a function or of a function pointer's pointee;
+  x86-only, inert elsewhere, as in GCC),
   `cleanup(fn)` (the function runs on scope exit), `constructor` /
   `destructor` (run before / after `main`, optional priority), `noreturn`,
   `unused` / `maybe_unused`, `vector_size(N)` (modeled as an aggregate),

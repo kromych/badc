@@ -42,32 +42,30 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
                	callq	<addr>
-               	xorq	%rbx, %rbx
-               	movq	%rbx, %xmm15
+               	xorq	%rcx, %rcx
+               	movq	%rcx, %xmm15
                	ucomisd	%xmm0, %xmm15
                	jbe	<addr>
                	movl	$0x1, %eax
-               	movq	%rbx, %xmm15
+               	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jbe	<addr>
                	orq	$0x2, %rax
-               	movq	%rbx, %xmm15
+               	movq	%rcx, %xmm15
                	ucomisd	%xmm0, %xmm15
                	jb	<addr>
                	orq	$0x4, %rax
-               	movq	%rbx, %xmm15
+               	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jb	<addr>
                	orq	$0x8, %rax
-               	movq	%rbx, %xmm15
+               	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	jne	<addr>
                	orq	$0x10, %rax
-               	movq	%rbx, %xmm15
+               	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	jne	<addr>
@@ -87,17 +85,13 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	movl	$0x1, %eax
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
-               	movq	%rbx, %rax
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
+               	xorq	%rax, %rax
                	popq	%rbp
                	retq
                	jmp	<addr>
@@ -107,5 +101,5 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	movq	%rbx, %rax
+               	movq	%rcx, %rax
                	jmp	<addr>

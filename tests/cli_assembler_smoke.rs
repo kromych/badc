@@ -712,6 +712,71 @@ fn assembler_options_are_checked_rather_than_passed_on() {
     assert!(ok, "-Xassembler must accept what -Wa, accepts");
 }
 
+/// GNU as keeps a label whose name carries the local-label prefix out of
+/// `.symtab` unless `-L` / `--keep-locals` is given, whatever `.type` and
+/// `.size` name it: the kernel's `SYM_FUNC_START_LOCAL(.Lname)` spells one
+/// `@function` and sizes it, and `as` still drops it. References reduce to
+/// the label's section plus an addend either way, so the option moves no
+/// relocation.
+#[test]
+fn local_labels_reach_the_symbol_table_only_under_keep_locals() {
+    const SRC: &str = "\t.text\n\t.globl entry\n\t.type entry, @function\nentry:\n\
+                       \tnop\n\t.size entry, .-entry\n\
+                       \t.type .Lno_longmode, @function\n.Lno_longmode:\n1:\thlt\n\
+                       \tjmp 1b\n\t.size .Lno_longmode, .-.Lno_longmode\n\
+                       \t.section .rodata\n\t.quad .Lno_longmode\n";
+    let d = dir("keep-locals");
+    write(&d, "b.s", SRC);
+    let mut objs = Vec::new();
+    for extra in [
+        &[][..],
+        &["-Wa,-L"][..],
+        &["-Wa,--keep-locals"][..],
+        &["-Xassembler", "-L"][..],
+    ] {
+        let mut args = vec!["-q", "-c", "--target=linux-x64"];
+        args.extend_from_slice(extra);
+        args.extend_from_slice(&["b.s", "-o", "b.o"]);
+        run_ok(&d, &args);
+        objs.push(std::fs::read(d.join("b.o")).expect("object"));
+    }
+    let locals = |b: &[u8]| -> Vec<(String, u8, u64)> {
+        sym_table(b)
+            .into_iter()
+            .filter(|(n, ..)| n.starts_with(".L"))
+            .map(|(n, info, _, _, size)| (n, info, size))
+            .collect()
+    };
+    assert!(
+        locals(&objs[0]).is_empty(),
+        "default keeps {:?}",
+        locals(&objs[0])
+    );
+    // STB_LOCAL | STT_FUNC, sized by the `.size` directive. The numeric
+    // label `1:` gets no entry: gas's own stand-in for one carries no
+    // name a source can spell and never reaches the table.
+    for (i, o) in objs[1..].iter().enumerate() {
+        assert_eq!(
+            locals(o),
+            vec![(".Lno_longmode".to_string(), 0x02, 3)],
+            "keep-locals spelling {i} kept {:?}",
+            locals(o)
+        );
+    }
+    // The `.quad` reduces to `.text` + the label's offset in every mode --
+    // the entry the option restores has no relocation reader.
+    for (i, o) in objs.iter().enumerate() {
+        assert_eq!(
+            named_relocs(o, ".rela.rodata")
+                .into_iter()
+                .map(|(_, _, n, a)| (n, a))
+                .collect::<Vec<_>>(),
+            vec![(".text".to_string(), 1)],
+            "object {i}"
+        );
+    }
+}
+
 /// One ELF32 section as `(name, sh_type, sh_offset, sh_size, sh_info,
 /// sh_entsize)`, in header order.
 fn elf32_sections(b: &[u8]) -> Vec<(String, u32, usize, usize, u32, u32)> {
@@ -2866,4 +2931,64 @@ fn unused_section_symbols_follow_the_target_policy() {
         "linux-aarch64",
     );
     assert_eq!(count(&a), 3, "aarch64: the three defaults keep theirs");
+}
+
+/// `(name, sh_type, sh_flags, sh_link, sh_entsize)` of every section header
+/// of an ELF64 object.
+fn section_headers64(b: &[u8]) -> Vec<(String, u32, u64, u32, u64)> {
+    let u16at = |o: usize| u16::from_le_bytes([b[o], b[o + 1]]) as usize;
+    let u32at = |o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap());
+    let u64at = |o: usize| u64::from_le_bytes(b[o..o + 8].try_into().unwrap());
+    let shoff = u64at(0x28) as usize;
+    let (shentsize, shnum, shstrndx) = (u16at(0x3a), u16at(0x3c), u16at(0x3e));
+    let strtab = u64at(shoff + shstrndx * shentsize + 0x18) as usize;
+    (0..shnum)
+        .map(|i| {
+            let sh = shoff + i * shentsize;
+            let n = strtab + u32at(sh) as usize;
+            let end = b[n..].iter().position(|&c| c == 0).unwrap();
+            (
+                String::from_utf8_lossy(&b[n..n + end]).into_owned(),
+                u32at(sh + 4),
+                u64at(sh + 8),
+                u32at(sh + 0x28),
+                u64at(sh + 0x38),
+            )
+        })
+        .collect()
+}
+
+/// GNU as keeps the `.previous` slot beside the `.pushsection` stack and
+/// `.popsection` restores what the push saved, so a `.section` /
+/// `.previous` pair bracketing a pushed section returns to the section
+/// before the pair. The kernel's `xen-asm.S` switches to `.init.text`,
+/// expands `UNWIND_HINT` there and returns with `.previous` before
+/// `xen_iret:`; the `ANNOTATE` label after it bound to
+/// `.discard.unwind_hints` and objtool rejected the linked image. The
+/// `.discard.annotate_insn` header carries the `M` flag and the entry size
+/// and `.text.hot` its `o` link, as GNU as 2.46.1 writes them.
+#[test]
+fn previous_after_a_push_pop_pair_and_the_section_attributes_match_gas() {
+    const PC32: u32 = 2;
+    const SHT_PROGBITS: u32 = 1;
+    const SHF_ALLOC_EXEC: u64 = 0x2 | 0x4;
+    const SHF_MERGE: u64 = 0x10;
+    const SHF_LINK_ORDER: u64 = 0x80;
+    let src = "\t.text\n\t.globl f\nf:\n\t.section .init.text,\"ax\"\n\
+               \t.pushsection .discard.unwind_hints\n\t.long 0\n\t.popsection\n\t.previous\n\
+               .Lhere_1:\n\t.pushsection .discard.annotate_insn,\"M\",@progbits,8\n\
+               \t.long .Lhere_1 - ., 1\n\t.popsection\n\tret\n\
+               \t.section .text.hot,\"axo\",@progbits,.text\n\tret\n";
+    let bytes = object_of("prev-after-pop", src);
+    assert_eq!(
+        named_relocs(&bytes, ".rela.discard.annotate_insn"),
+        vec![(0, PC32, ".text".to_string(), 0)]
+    );
+    let headers = section_headers64(&bytes);
+    let header = |name: &str| headers.iter().find(|h| h.0 == name).expect(name);
+    let text = headers.iter().position(|h| h.0 == ".text").unwrap() as u32;
+    let insn = header(".discard.annotate_insn");
+    assert_eq!((insn.1, insn.2, insn.4), (SHT_PROGBITS, SHF_MERGE, 8));
+    let hot = header(".text.hot");
+    assert_eq!((hot.2, hot.3), (SHF_ALLOC_EXEC | SHF_LINK_ORDER, text));
 }

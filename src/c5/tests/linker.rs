@@ -829,6 +829,42 @@ fn parenthesized_bitfield_lvalue_assigns_as_a_store() {
 }
 
 #[test]
+fn bool_bitfield_store_converts_before_masking() {
+    // C99 6.5.16.1p2 + 6.3.1.2: the value assigned to a `_Bool` bitfield
+    // converts to `_Bool` first, so `p->flag = x & 4` stores 1 for every
+    // x with bit 2 set. Masking the raw value to the field's width
+    // instead makes `(x & 4) & 1` a constant 0, which the folder then
+    // turns into an unconditional clear of the field.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let text_of = |body: &str| -> alloc::vec::Vec<u8> {
+        let src = alloc::format!(
+            "struct s {{ _Bool a:1; _Bool b:1; unsigned c:6; }};\n             void set_b(struct s *p, unsigned x){{ {body} }}\n             int main(void){{ return 0; }}\n"
+        );
+        let program = Compiler::with_target(src, Target::LinuxX64)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        parse_native_elf(&bytes).expect("parse ET_REL").text
+    };
+    let implicit = text_of("p->b = x & 4;");
+    assert_eq!(
+        implicit,
+        text_of("p->b = (x & 4) != 0;"),
+        "an implicit conversion to a `_Bool` bitfield must emit what the          explicit `!= 0` does"
+    );
+    assert_ne!(
+        implicit,
+        text_of("p->b = 0;"),
+        "`p->b = x & 4` must not fold to an unconditional clear"
+    );
+}
+
+#[test]
 fn parenthesized_bitfield_lvalue_post_inc_and_compound_assign() {
     // C99 6.5.1p5 / 6.5.2.4 / 6.5.16.2: `(p->f)++` and `(p->f) OP= v` on a
     // parenthesized bitfield lvalue must emit the same object as the
@@ -1785,10 +1821,13 @@ fn noinline_holds_a_body_out_of_line() {
 }
 
 #[test]
-fn used_and_section_statics_survive_dce() {
-    // `__attribute__((used))` and named-section placement keep an
-    // otherwise unreferenced internal definition: their consumers
-    // resolve only at link time (kernel-style section protocols).
+fn used_retains_a_static_and_a_named_section_does_not() {
+    // `__attribute__((used))` asks for an otherwise unreferenced
+    // internal definition to be emitted; a section attribute only says
+    // where a definition that is emitted goes. gcc parity, and the same
+    // rule for data and functions: a section protocol that needs its
+    // entry at link time spells `used` (the kernel's `__used
+    // __section(...)` tables), and one that does not gets dropped.
     let src = "\
         static long used_obj __attribute__((used)) = 0x2233445566778899L;\n\
         static long sect_obj __attribute__((section(\".keep2\"))) = 0x33445566778899aaL;\n\
@@ -1802,14 +1841,11 @@ fn used_and_section_statics_survive_dce() {
         "used-attributed static data must survive"
     );
     assert!(
-        bytes
+        !bytes
             .windows(8)
             .any(|w| w == 0x33445566778899aau64.to_le_bytes()),
-        "named-section static data must survive"
+        "unreferenced section-only static data must drop"
     );
-    // gcc parity: a named section alone does not retain a function
-    // (`static inline` helpers headers pull in are section-attributed
-    // wholesale via `__init`-style macros).
     assert!(
         !bytes.windows(7).any(|w| w == b"sect_fn"),
         "unreferenced section-only static function must drop"
@@ -2175,7 +2211,7 @@ fn always_inline_large_struct_return_folds_on_both_return_conventions() {
             !obj.symbols.iter().any(|s| s.name == "mk_state"),
             "{target:?}: the inlined callee must not keep an out-of-line body"
         );
-        if usable_gpr_count(target) >= STATE_FIELDS {
+        if usable_gpr_count(target, crate::FixedRegs::NONE) >= STATE_FIELDS {
             assert!(
                 !obj.symbols.iter().any(|s| s.name == "bug"),
                 "{target:?}: the folded guard must leave no reference to `bug`"
@@ -5281,6 +5317,95 @@ fn assembler_local_labels_stay_out_of_the_symbol_table() {
     }
 }
 
+#[test]
+fn typed_local_label_leaves_the_symbol_table_and_its_reference_reduces() {
+    // `SYM_FUNC_START_LOCAL(.Lname)` spells a local label `@function` and
+    // sizes it; GNU as still keeps it out of `.symtab`, because the name
+    // carries the local-label prefix. The reference to it has to reduce to
+    // the label's section plus its offset, or dropping the symbol would
+    // leave the relocation with nothing to name. `--keep-locals` restores
+    // the entry without moving the relocation, as `as -L` does.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        __asm__(\".pushsection .lltext,\\\"ax\\\"\\n\
+                 .globl ll_entry\\n\
+                 ll_entry: nop\\n\
+                 .type .Lll_local, @function\\n\
+                 .Lll_local: nop\\n\\tnop\\n\
+                 .size .Lll_local, .-.Lll_local\\n\
+                 .popsection\\n\
+                 .pushsection .lldata,\\\"a\\\"\\n\
+                 .quad .Lll_local\\n\
+                 .popsection\\n\");\n\
+        int use_it(void) { return 1; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        // `nop` is one byte on x86-64 and four on AArch64; the label sits
+        // one instruction in and covers two.
+        let nop: i64 = if target == Target::LinuxX64 { 1 } else { 4 };
+        for keep in [false, true] {
+            let copts = CompileOptions {
+                no_entry_point: true,
+                gnu: true,
+                ..Default::default()
+            };
+            let program = Compiler::with_options(String::from(src), target, copts)
+                .compile()
+                .expect("compile");
+            let bytes = emit_native_with_options(
+                &program,
+                target,
+                NativeOptions {
+                    output_kind: OutputKind::Relocatable,
+                    keep_local_labels: keep,
+                    ..Default::default()
+                },
+            )
+            .expect("emit");
+            let syms = elf_symbols(&bytes);
+            let secs = elf_sections(&bytes);
+            let local = syms.iter().find(|(n, ..)| n == ".Lll_local");
+            match (keep, local) {
+                (false, Some(s)) => panic!("{target:?}: `.symtab` carries {s:?}"),
+                (false, None) => {}
+                (true, None) => panic!("{target:?}: --keep-locals dropped `.Lll_local`"),
+                (true, Some(&(_, info, _, _, size))) => {
+                    // STB_LOCAL | STT_FUNC, sized by the `.size` directive.
+                    assert_eq!(info, 0x02, "{target:?}: st_info {info:#x}");
+                    assert_eq!(size as i64, 2 * nop, "{target:?}: st_size {size}");
+                }
+            }
+            // The section-symbol index of `.lltext`, which the reduced
+            // relocation must name.
+            let lltext_shndx = secs
+                .iter()
+                .position(|(n, ..)| n == ".lltext")
+                .expect("`.lltext` section") as u16;
+            let sec_sym = syms
+                .iter()
+                .position(|&(_, info, shndx, ..)| info == 0x03 && shndx == lltext_shndx)
+                .expect("`.lltext` section symbol") as u64;
+            let rela = &secs
+                .iter()
+                .find(|(n, ..)| n == ".rela.lldata")
+                .expect("`.rela.lldata`")
+                .3;
+            let entries = rela.as_chunks::<24>().0;
+            assert_eq!(
+                entries.len(),
+                1,
+                "{target:?}: {} relocations",
+                entries.len()
+            );
+            let info = u64::from_le_bytes(entries[0][8..16].try_into().unwrap());
+            let addend = i64::from_le_bytes(entries[0][16..24].try_into().unwrap());
+            assert_eq!(info >> 32, sec_sym, "{target:?}: reduction names a section");
+            // `ll_entry` is one instruction; the label starts past it.
+            assert_eq!(addend, nop, "{target:?}: addend {addend}");
+        }
+    }
+}
+
 /// A hand-built one-unit [`NativeObject`] with only the fields the
 /// resolution tests below exercise populated.
 fn minimal_native_object(
@@ -5325,6 +5450,7 @@ fn minimal_native_object(
         elf_tpoff_fixups: alloc::vec::Vec::new(),
         copy_relocs: alloc::vec::Vec::new(),
         prologue_ends: alloc::vec::Vec::new(),
+        extern_data_names: alloc::vec::Vec::new(),
         debug_info: alloc::vec::Vec::new(),
         debug_abbrev: alloc::vec::Vec::new(),
         debug_line: alloc::vec::Vec::new(),
@@ -5614,6 +5740,7 @@ fn aarch64_data_ref_object_ex(
         tls_relocs: alloc::vec::Vec::new(),
         tls_bss_size: 0,
         prologue_ends: alloc::vec::Vec::new(),
+        extern_data_names: alloc::vec::Vec::new(),
         symbols: alloc::vec![NativeSymbol {
             name: String::new(),
             section: NativeSymSection::Undef,
@@ -5867,6 +5994,7 @@ fn blank_aarch64_object() -> crate::c5::linker::NativeObject {
         tls_relocs: alloc::vec::Vec::new(),
         tls_bss_size: 0,
         prologue_ends: alloc::vec::Vec::new(),
+        extern_data_names: alloc::vec::Vec::new(),
         symbols: alloc::vec::Vec::new(),
         text_relocs: alloc::vec::Vec::new(),
         data_relocs: alloc::vec::Vec::new(),
@@ -7129,6 +7257,295 @@ fn constant_p_inline_param_folds_assert_call_at_o() {
         has(b"compiletime_assert_11") && has(b"rt_fallback"),
         "without -O the early 0 keeps the assert reference and the runtime arm"
     );
+}
+
+#[test]
+fn later_address_escape_folds_assert_call_at_o() {
+    // The build-time-assert idiom `if (!(c)) undefined_fn();` on a
+    // local whose address is taken only after the check. Until the
+    // address is taken no pointer to the local exists, so the check
+    // reads the store above it whatever sits between the two: a call
+    // to a const function, a call to an extern function, or nothing.
+    // gcc 16 -O2 folds the const and the call-free shapes and keeps the
+    // extern-call one (its escape analysis is flow-insensitive); the
+    // ordering argument does not depend on the callee, so all three
+    // fold here. Without -O the reference stays, as with gcc -O0.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let shapes = [
+        (
+            "const call",
+            "static int cfn(int x) __attribute__((const));\n\
+             static int cfn(int x) { return x + 1; }\n",
+            "cfn(6)",
+        ),
+        ("extern call", "extern int efn(int x);\n", "efn(6)"),
+        ("no call", "", "6"),
+    ];
+    for (shape, decls, init) in shapes {
+        let program = Compiler::new(alloc::format!(
+            "{TEST_PRELUDE}\
+             extern void compiletime_assert_33(void) __attribute__((error(\"A\")));\n\
+             {decls}\
+             static __attribute__((noinline)) int probe(void) {{\n\
+                 int init = 32;\n\
+                 int result = {init};\n\
+                 if (!(init >= 32)) compiletime_assert_33();\n\
+                 __asm__ __volatile__(\"\" : : \"r\"(&init) : \"memory\");\n\
+                 __asm__ __volatile__(\"\" : : \"r\"(&result) : \"memory\");\n\
+                 return init + result;\n\
+             }}\n\
+             int main(void) {{ return probe(); }}\n"
+        ))
+        .compile()
+        .expect("compile");
+        for target in [Target::LinuxX64, Target::LinuxAarch64] {
+            let opts = NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                optimize: true,
+                ..Default::default()
+            };
+            let bytes = emit_native_with_options(&program, target, opts).expect("emit -O");
+            let has = |name: &[u8]| bytes.windows(name.len()).any(|w| w == name);
+            assert!(has(b"probe"), "{shape}, {target:?}: probe must survive");
+            assert!(
+                !has(b"compiletime_assert_33"),
+                "{shape}, {target:?}: the assert on a local whose address is taken after \
+                 the check must fold away at -O"
+            );
+        }
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit -O0");
+        let has = |name: &[u8]| bytes.windows(name.len()).any(|w| w == name);
+        assert!(
+            has(b"compiletime_assert_33"),
+            "{shape}: without -O the reference stays, as with gcc -O0"
+        );
+    }
+}
+
+#[test]
+fn const_array_copy_member_folds_assert_calls_at_o() {
+    // The kernel's CHECK_PACKED_FIELDS shape: an element of a const
+    // static array copied whole into a local -- directly and through a
+    // pointer holding the array's address -- with member loads of the
+    // copy guarding calls to undefined error-attributed externs, one
+    // statement-expression block per unrolled index. At -O the copy's
+    // bytes are the initializer's, so every guard folds and the calls
+    // never reach the object; the copy from a mutable array keeps its
+    // call at every level.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::new(alloc::format!(
+        "{TEST_PRELUDE}\
+         struct pf {{ unsigned char startbit, endbit, offset, size; }};\n\
+         static const struct pf fields[] =\n\
+             {{ {{ 63, 61, 0, 1 }}, {{ 60, 52, 1, 2 }}, {{ 51, 28, 3, 4 }} }};\n\
+         static struct pf mut_fields[] = {{ {{ 7, 5, 0, 3 }} }};\n\
+         extern void ct_order_0(void) __attribute__((__noreturn__, __error__(\"o0\")));\n\
+         extern void ct_size_0(void) __attribute__((__noreturn__, __error__(\"s0\")));\n\
+         extern void ct_order_1(void) __attribute__((__noreturn__, __error__(\"o1\")));\n\
+         extern void ct_size_1(void) __attribute__((__noreturn__, __error__(\"s1\")));\n\
+         extern void ct_order_2(void) __attribute__((__noreturn__, __error__(\"o2\")));\n\
+         extern void ct_size_2(void) __attribute__((__noreturn__, __error__(\"s2\")));\n\
+         extern void ct_kept_mut(void) __attribute__((__error__(\"m\")));\n\
+         int check(void) {{\n\
+             int r = 0;\n\
+             ({{ struct pf __f = fields[0];\n\
+                do {{ if (!(!(__f.startbit < __f.endbit))) ct_order_0(); }} while (0);\n\
+                do {{ if (!(!(__f.size != 1 && __f.size != 2 && __f.size != 4 && __f.size != 8)))\n\
+                    ct_size_0(); }} while (0);\n\
+                r += __f.offset; }});\n\
+             ({{ typeof(&(fields)[0]) _f = (fields);\n\
+                typeof(_f[0]) __f = _f[1];\n\
+                do {{ if (!(!(__f.startbit < __f.endbit))) ct_order_1(); }} while (0);\n\
+                do {{ if (!(!(__f.size != 1 && __f.size != 2 && __f.size != 4 && __f.size != 8)))\n\
+                    ct_size_1(); }} while (0);\n\
+                r += __f.offset; }});\n\
+             ({{ typeof(&(fields)[0]) _f = (fields);\n\
+                typeof(_f[0]) __f = _f[2];\n\
+                do {{ if (!(!(__f.startbit < __f.endbit))) ct_order_2(); }} while (0);\n\
+                do {{ if (!(!(__f.size != 1 && __f.size != 2 && __f.size != 4 && __f.size != 8)))\n\
+                    ct_size_2(); }} while (0);\n\
+                r += __f.offset; }});\n\
+             ({{ struct pf __f = mut_fields[0];\n\
+                do {{ if (!(!(__f.size != 1 && __f.size != 2 && __f.size != 4 && __f.size != 8)))\n\
+                    ct_kept_mut(); }} while (0);\n\
+                r += __f.offset; }});\n\
+             return r;\n\
+         }}\n\
+         int main(void) {{ return check() - 4; }}\n"
+    ))
+    .compile()
+    .expect("compile");
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            optimize: true,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit -O");
+        let has = |name: &[u8]| bytes.windows(name.len()).any(|w| w == name);
+        assert!(has(b"check"), "{target:?}: the live function must survive");
+        for sym in [
+            b"ct_order_0".as_slice(),
+            b"ct_size_0",
+            b"ct_order_1",
+            b"ct_size_1",
+            b"ct_order_2",
+            b"ct_size_2",
+        ] {
+            assert!(
+                !has(sym),
+                "{target:?}: a guard on a const element copy must fold away at -O"
+            );
+        }
+        assert!(
+            !has(b"rt_"),
+            "{target:?}: no runtime helper is expected in this shape"
+        );
+        assert!(
+            has(b"ct_kept_mut"),
+            "{target:?}: a copy from a mutable array must keep its call"
+        );
+    }
+    // Without -O the template fold does not run, as gcc -O0 keeps the
+    // references.
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit -O0");
+    let has = |name: &[u8]| bytes.windows(name.len()).any(|w| w == name);
+    assert!(
+        has(b"ct_order_0") && has(b"ct_size_2") && has(b"ct_kept_mut"),
+        "without -O the guards keep their references"
+    );
+}
+
+#[test]
+fn asm_template_longer_identifier_keeps_ipa_ranges() {
+    // An asm template referencing a symbol holds its name as a whole
+    // identifier run. `helper_sz` inside the longer `bpf_helper_sz` is
+    // a different symbol, so the template must not mark `helper_sz`
+    // escaping -- its call sites stay the only entries and the sign
+    // canary folds at -O. A template naming `direct_sz` itself does
+    // escape it, so that canary survives.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let body = |err: &str| {
+        alloc::format!(
+            "long acc = 0;\n\
+             if (!(__builtin_constant_p((long long)(p) >= 0) && ((long long)(p) >= 0)))\n\
+                 {err}();\n\
+             acc += work(p, 1); acc += work(acc, 2); acc += work(acc, 3);\n\
+             acc += work(acc, 4); acc += work(acc, 5); acc += work(acc, 6);\n\
+             acc += work(acc, 7); acc += work(acc, 8); acc += work(acc, 9);\n\
+             acc += work(acc, 10); acc += work(acc, 11); acc += work(acc, 12);\n\
+             acc += work(acc, 13); acc += work(acc, 14); acc += work(acc, 15);\n\
+             acc += work(acc, 16); acc += work(acc, 17); acc += work(acc, 18);\n\
+             return acc;\n"
+        )
+    };
+    let program = Compiler::new(alloc::format!(
+        "{TEST_PRELUDE}\
+         extern void run_sign_folded(void);\n\
+         extern void run_sign_kept(void);\n\
+         extern long work(long, long);\n\
+         static long helper_sz(long p) {{ {} }}\n\
+         static long direct_sz(long p) {{ {} }}\n\
+         long bpf_helper_sz(unsigned v) {{\n\
+             __asm__ volatile (\"nop /* bpf_helper_sz */\" ::: \"memory\");\n\
+             return helper_sz(v);\n\
+         }}\n\
+         long bpf_direct_sz(unsigned v) {{\n\
+             __asm__ volatile (\"nop /* direct_sz */\" ::: \"memory\");\n\
+             return direct_sz(v);\n\
+         }}\n\
+         int main(void) {{ return (int)(bpf_helper_sz(3) + bpf_direct_sz(4)); }}\n",
+        body("run_sign_folded"),
+        body("run_sign_kept"),
+    ))
+    .compile()
+    .expect("compile");
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            optimize: true,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit -O");
+        let has = |name: &[u8]| bytes.windows(name.len()).any(|w| w == name);
+        assert!(
+            !has(b"run_sign_folded"),
+            "{target:?}: a longer identifier containing the name is not a reference to it"
+        );
+        assert!(
+            has(b"run_sign_kept"),
+            "{target:?}: a template naming the function escapes it"
+        );
+    }
+}
+
+#[test]
+fn minmax_signedness_check_folds_for_signed_operands_at_o() {
+    // The kernel's min()/max() signedness probe on two runtime signed
+    // operands: each side's class is 2 plus a deferred
+    // `__builtin_constant_p`, staged through a local, and 2 & 2 is
+    // nonzero whatever the probes resolve to, so the guard folds at -O
+    // once the resolved zeros forward through the staging slot. With
+    // one unsigned 64-bit operand the classes are disjoint and the
+    // call must survive, as gcc keeps it.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let check = |x: &str, y: &str, err: &str| {
+        alloc::format!(
+            "do {{ if (!(!(!(\n\
+               ((((typeof({x}))(-1)) < ((typeof({x}))1))\n\
+                  ? (2 + (__builtin_constant_p((long long)({x}) >= 0) && ((long long)({x}) >= 0)))\n\
+                  : (1 + 2 * (sizeof({x}) < 4)))\n\
+               & ((((typeof({y}))(-1)) < ((typeof({y}))1))\n\
+                  ? (2 + (__builtin_constant_p((long long)({y}) >= 0) && ((long long)({y}) >= 0)))\n\
+                  : (1 + 2 * (sizeof({y}) < 4)))\n\
+             )))) {err}(); }} while (0);\n"
+        )
+    };
+    let program = Compiler::new(alloc::format!(
+        "{TEST_PRELUDE}\
+         extern void both_signed_folded(void);\n\
+         extern void mixed_sign_kept(void);\n\
+         long kmin(long a, long b) {{\n\
+             return ({{ long __x = a; long __y = b;\n\
+                        {}\
+                        __x < __y ? __x : __y; }});\n\
+         }}\n\
+         unsigned long kmin_mixed(long a, unsigned long b) {{\n\
+             return ({{ long __x = a; unsigned long __y = b;\n\
+                        {}\
+                        (unsigned long)__x < __y ? (unsigned long)__x : __y; }});\n\
+         }}\n\
+         int main(void) {{ return (int)(kmin(5, 3) + kmin_mixed(1, 2) - 4); }}\n",
+        check("__x", "__y", "both_signed_folded"),
+        check("__x", "__y", "mixed_sign_kept"),
+    ))
+    .compile()
+    .expect("compile");
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            optimize: true,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit -O");
+        let has = |name: &[u8]| bytes.windows(name.len()).any(|w| w == name);
+        assert!(
+            !has(b"both_signed_folded"),
+            "{target:?}: two signed operands share class 2, so the guard is dead at -O"
+        );
+        assert!(
+            has(b"mixed_sign_kept"),
+            "{target:?}: a signed/unsigned-64 pair has disjoint classes"
+        );
+    }
 }
 
 #[test]
@@ -11744,6 +12161,110 @@ fn two_tu_extern_data_links_through_own_linker() {
     }
 }
 
+/// A unit that materialises an imported function's address names it in
+/// `NT_BADC_EXTERN_DATA` -- that lowering is the extern-data one, and
+/// no relocation kind separates the two on aarch64. The note names the
+/// symbol and the link reads one set over every unit, so a sibling
+/// unit's call to the same import must still bind to a PLT stub: a
+/// branch field holds a displacement and no slot read can satisfy it.
+/// Both writers assert on the shape they get, so a call routed to the
+/// slot ends the link in an internal error (x86_64: the data-load patch
+/// finds a `call` where it expects `lea` / `mov`; aarch64: a branch
+/// relocation outlives the PLT pass).
+#[test]
+fn imported_function_called_and_address_taken_links_through_own_linker() {
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::{
+        SharedLibrary, emit_aarch64_plt, emit_x86_64_plt, link_native_objects_with_shared_libs,
+        parse_native_elf, write_native_image_from_merged,
+    };
+    use crate::c5::{NativeMachine, NativeOptions, OutputKind, Target, emit_native_with_options};
+    // Declared by the source rather than pulled from a header, so both
+    // references take the cross-TU channels a user extern uses; a
+    // shared library exporting the name supplies it at load time, as
+    // libc supplies it in a hosted link.
+    const ADDR_TU: &str = "extern int host_fn(const char *);\n\
+                           typedef int (*fn_t)(const char *);\n\
+                           fn_t get(void) { return host_fn; }\n";
+    const CALL_TU: &str = "extern int host_fn(const char *);\n\
+                           typedef int (*fn_t)(const char *);\n\
+                           fn_t get(void);\n\
+                           int main(void) { host_fn(\"x\"); return get() != 0; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let objs: Vec<_> = [ADDR_TU, CALL_TU]
+            .iter()
+            .map(|src| {
+                let program = Compiler::with_options(
+                    (*src).to_string(),
+                    target,
+                    CompileOptions::default().with_no_entry_point(true),
+                )
+                .compile()
+                .expect("compile");
+                let opts = NativeOptions {
+                    output_kind: OutputKind::Relocatable,
+                    ..Default::default()
+                };
+                let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+                parse_native_elf(&bytes).expect("parse ET_REL")
+            })
+            .collect();
+        assert!(
+            objs[0].extern_data_names.iter().any(|n| n == "host_fn"),
+            "{target:?}: the address site names the function in the note"
+        );
+        let lib = SharedLibrary {
+            soname: alloc::string::String::from("libhost.so.1"),
+            machine: objs[0].machine,
+            exports: [alloc::string::String::from("host_fn")]
+                .into_iter()
+                .collect(),
+            data_exports: alloc::collections::BTreeSet::new(),
+        };
+        let mut merged = link_native_objects_with_shared_libs(&objs, false, &[lib])
+            .expect("link resolves the function against the shared library");
+        let idx = merged
+            .imports
+            .iter()
+            .position(|n| n == "host_fn")
+            .unwrap_or_else(|| panic!("{target:?}: host_fn recorded as an import"));
+        let (reads, branches) = merged
+            .pending_imports
+            .iter()
+            .filter(|p| p.import_index == idx)
+            .fold((0usize, 0usize), |(r, b), p| {
+                if p.slot_load { (r + 1, b) } else { (r, b + 1) }
+            });
+        assert!(
+            reads > 0,
+            "{target:?}: the address site reads the import's slot"
+        );
+        assert!(
+            branches > 0,
+            "{target:?}: the call site keeps its branch, got {reads} slot read(s) only"
+        );
+        assert!(
+            !merged.object_imports.contains(&idx),
+            "{target:?}: an import a branch reaches is code, not an object"
+        );
+        let plt = match merged.machine {
+            NativeMachine::X86_64 => emit_x86_64_plt(&mut merged),
+            NativeMachine::Aarch64 => emit_aarch64_plt(&mut merged),
+        }
+        .expect("plt pass drains every branch against an import");
+        write_native_image_from_merged(
+            &merged,
+            &plt,
+            "main",
+            None,
+            OutputKind::Executable,
+            target,
+            None,
+        )
+        .expect("write executable");
+    }
+}
+
 /// A single-TU final image has no link step, so an external reference
 /// the codegen left as a zero-displacement placeholder must not reach
 /// the output: a rip-relative `lea` with disp 0 materializes the
@@ -14480,6 +15001,204 @@ fn asm_reloc_tu(src: &str, target: crate::c5::Target) -> alloc::vec::Vec<u8> {
     emit_native_with_options(&program, target, opts).expect("emit")
 }
 
+/// `(sh_addr, sh_flags, sh_addralign, sh_entsize)` of a named section.
+fn section_header(bytes: &[u8], name: &str) -> (u64, u64, u64, u64) {
+    let u16le = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap()) as usize;
+    let u32le = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+    let u64le = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let shoff = u64le(0x28) as usize;
+    let strtab = u64le(shoff + u16le(0x3E) * 64 + 0x18) as usize;
+    for i in 0..u16le(0x3C) {
+        let sh = shoff + i * 64;
+        let at = strtab + u32le(sh) as usize;
+        let end = bytes[at..].iter().position(|&b| b == 0).unwrap() + at;
+        if &bytes[at..end] == name.as_bytes() {
+            return (
+                u64le(sh + 0x10),
+                u64le(sh + 0x08),
+                u64le(sh + 0x30),
+                u64le(sh + 0x38),
+            );
+        }
+    }
+    panic!("no section named {name}");
+}
+
+/// `.rela.text` of a `-c` object as `(offset, symbol name, addend)`.
+/// A section symbol carries no name of its own; it reads as the
+/// section's, the way readelf renders one.
+fn text_relocs(bytes: &[u8]) -> alloc::vec::Vec<(u64, String, i64)> {
+    let sections = elf_sections(bytes);
+    let rela = &sections
+        .iter()
+        .find(|(n, ..)| n == ".rela.text")
+        .expect(".rela.text")
+        .3;
+    let syms = elf_symbols(bytes);
+    rela.as_chunks::<24>()
+        .0
+        .iter()
+        .map(|e| {
+            let info = u64::from_le_bytes(e[8..16].try_into().unwrap());
+            let sym = &syms[(info >> 32) as usize];
+            let name = if sym.0.is_empty() {
+                sections[sym.2 as usize].0.clone()
+            } else {
+                sym.0.clone()
+            };
+            (
+                u64::from_le_bytes(e[0..8].try_into().unwrap()),
+                name,
+                i64::from_le_bytes(e[16..24].try_into().unwrap()),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn mergeable_sections_carry_their_alignment_entsize_and_own_labels() {
+    // `.section name, "aM", @progbits, N` plus `.align A` is how the
+    // kernel's SIMD constants are declared. The object must carry the
+    // alignment and the entry size, and -- because the linker reads a
+    // section symbol's addend as an offset into the merge table -- a
+    // local label in such a section keeps its own symbol instead of
+    // reducing to `section + addend`, which the pc-relative -4 would
+    // turn into an offset no entry covers. gas and clang both do this;
+    // a plain section still takes the reduction. Read off binutils 2.46.
+    use crate::c5::Target;
+    let src = "\
+        .section .rodata.cst16.k1, \"aM\", @progbits, 16\n\
+        .align 16\n\
+        .Lk1:\n\t.quad 1\n\t.quad 2\n\
+        .section .rodata.cst32.k2, \"aM\", @progbits, 32\n\
+        .align 32\n\
+        .Lk2:\n\t.quad 3\n\t.quad 4\n\t.quad 5\n\t.quad 6\n\
+        .section .rodata.plain, \"a\", @progbits\n\
+        .align 16\n\
+        .Lp1:\n\t.quad 7\n\t.quad 8\n\
+        .text\n\
+        .globl f\n\
+        f:\n\
+        \tmovdqa .Lk1(%rip), %xmm0\n\
+        \tmovdqa .Lk2(%rip), %xmm1\n\
+        \tmovdqa .Lp1(%rip), %xmm2\n\
+        \tret\n";
+    let bytes = asm_reloc_tu(src, Target::LinuxX64);
+    const SHF_ALLOC: u64 = 0x2;
+    const SHF_MERGE: u64 = 0x10;
+    for (name, align, entsize, merge) in [
+        (".rodata.cst16.k1", 16u64, 16u64, true),
+        (".rodata.cst32.k2", 32, 32, true),
+        (".rodata.plain", 16, 0, false),
+    ] {
+        let (_, flags, a, e) = section_header(&bytes, name);
+        assert_eq!(a, align, "{name} sh_addralign");
+        assert_eq!(e, entsize, "{name} sh_entsize");
+        assert_eq!(flags & SHF_ALLOC, SHF_ALLOC, "{name} is not SHF_ALLOC");
+        assert_eq!(
+            flags & SHF_MERGE != 0,
+            merge,
+            "{name} SHF_MERGE is not {merge}"
+        );
+    }
+    // A merge section's local label reaches `.symtab`; a plain one's
+    // stays out, its references reduced to the section symbol.
+    let names: alloc::vec::Vec<String> = elf_symbols(&bytes).into_iter().map(|s| s.0).collect();
+    assert!(names.iter().any(|n| n == ".Lk1"), "{names:?}");
+    assert!(names.iter().any(|n| n == ".Lk2"), "{names:?}");
+    assert!(!names.iter().any(|n| n == ".Lp1"), "{names:?}");
+    assert_eq!(
+        text_relocs(&bytes)
+            .into_iter()
+            .map(|(_, n, a)| (n, a))
+            .collect::<alloc::vec::Vec<_>>(),
+        alloc::vec![
+            (String::from(".Lk1"), -4),
+            (String::from(".Lk2"), -4),
+            (String::from(".rodata.plain"), -4),
+        ],
+    );
+}
+
+#[test]
+fn assembled_mergeable_constants_link_to_aligned_addresses() {
+    // End to end over the shape the kernel's SIMD units use: two
+    // assembled objects whose mergeable 16-byte constants the script
+    // link pools. Each `movdqa` must reach a 16-byte-aligned address
+    // holding its own constant, and the two identical constants must
+    // share one entry.
+    use crate::c5::Target;
+    use crate::c5::linker::lds::parse_linker_script;
+    use crate::c5::linker::lds_link::{LdsOptions, link_with_script, parse_lds_object};
+    // `sec` holds `body`, and `f` loads its head. K1 recurs across the
+    // two units, so the pool folds the second copy into the first.
+    const K1: &str = "\t.quad 0x0504070601000302\n\t.quad 0x0D0C0F0E09080B0A\n";
+    const K3: &str = "\t.quad 0x0407060500030201\n\t.quad 0x0C0F0E0D080B0A09\n";
+    let unit = |sec: &str, body: &str, f: &str| {
+        alloc::format!(
+            ".section .rodata.cst16.{sec}, \"aM\", @progbits, 16\n\
+             .align 16\n\
+             .L{sec}:\n{body}\
+             .text\n.globl {f}\n{f}:\n\tmovdqa .L{sec}(%rip), %xmm0\n\tret\n"
+        )
+    };
+    // The odd-sized section comes first, so a pool placed without its
+    // alignment lands five bytes into `.rodata`.
+    let a = alloc::format!(
+        ".section .rodata.pad, \"a\", @progbits\n\t.byte 1,2,3,4,5\n{}",
+        unit("k1", K1, "geta")
+    );
+    let b = unit("k2", K1, "getb") + &unit("k3", K3, "getc");
+    let script = parse_linker_script(
+        "SECTIONS { . = 0x400000; .text : { *(.text*) } . = ALIGN(0x1000); \
+         .rodata : { *(.rodata) *(.rodata.*) } }",
+    )
+    .expect("parses");
+    let objs = alloc::vec![
+        parse_lds_object("a.o", asm_reloc_tu(&a, Target::LinuxX64)).expect("parse a"),
+        parse_lds_object("b.o", asm_reloc_tu(&b, Target::LinuxX64)).expect("parse b"),
+    ];
+    let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+    assert!(res.warnings.is_empty(), "{:?}", res.warnings);
+    let sections = elf_sections(&res.image);
+    let (_, _, _, text) = sections
+        .iter()
+        .find(|(n, ..)| n == ".text")
+        .expect(".text")
+        .clone();
+    let text_addr = section_header(&res.image, ".text").0;
+    let ro_addr = section_header(&res.image, ".rodata").0;
+    let ro = &sections
+        .iter()
+        .find(|(n, ..)| n == ".rodata")
+        .expect(".rodata")
+        .3;
+    // Each `movdqa xmm0, [rip+disp32]` is `66 0f 6f 05 <disp32>`.
+    let targets: alloc::vec::Vec<u64> = text
+        .windows(8)
+        .enumerate()
+        .filter(|(_, w)| w[..4] == [0x66, 0x0f, 0x6f, 0x05])
+        .map(|(k, w)| {
+            let d = i32::from_le_bytes(w[4..8].try_into().unwrap()) as i64;
+            (text_addr + k as u64 + 8).wrapping_add(d as u64)
+        })
+        .collect();
+    assert_eq!(targets.len(), 3, "one load per unit: {targets:x?}");
+    for &t in &targets {
+        assert_eq!(t % 16, 0, "0x{t:x} is not 16-byte aligned");
+    }
+    assert_eq!(targets[0], targets[1], "identical constants share an entry");
+    assert_ne!(targets[1], targets[2], "distinct constants stay apart");
+    let at = |addr: u64| -> &[u8] {
+        let k = (addr - ro_addr) as usize;
+        &ro[k..k + 16]
+    };
+    let k1: [u8; 16] = [2, 3, 0, 1, 6, 7, 4, 5, 10, 11, 8, 9, 14, 15, 12, 13];
+    let k3: [u8; 16] = [1, 2, 3, 0, 5, 6, 7, 4, 9, 10, 11, 8, 13, 14, 15, 12];
+    assert_eq!(at(targets[0]), k1, "geta reaches its constant");
+    assert_eq!(at(targets[2]), k3, "getc reaches its constant");
+}
+
 #[test]
 fn aarch64_assembled_shapes_carry_the_mapping_symbols_gnu_as_emits() {
     // `$x` opens a run of A64 instructions and `$d` a run of data, each
@@ -14662,6 +15381,85 @@ fn aarch64_mapping_symbols_open_on_the_class_not_the_frag() {
             got, gas,
             "the divergence from GNU as for {what} is deliberate"
         );
+    }
+}
+
+#[test]
+fn aarch64_literal_pool_is_per_subsection_like_gnu_as() {
+    // GNU as keeps one AArch64 literal pool per section and subsection. The
+    // pool is flushed at the end of the content of the subsection its loads
+    // were assembled in, so a pool of subsection 0 lands before subsection 1
+    // rather than after it, two subsections never share an entry, and a
+    // `.ltorg` in one subsection leaves another subsection's pool pending.
+    // The arm64 `alternative_if` macro puts the replacement sequence in
+    // subsection 1, which is where a unit mixing it with `ldr Rt, =value`
+    // depends on the placement. Every expectation was read off `as`
+    // (binutils 2.46.1).
+    use crate::c5::Target;
+    let words =
+        |ws: &[u32]| -> alloc::vec::Vec<u8> { ws.iter().flat_map(|w| w.to_le_bytes()).collect() };
+    /// A shape: what it is, its source, and `.text`'s bytes.
+    type Shape = (&'static str, &'static str, alloc::vec::Vec<u8>);
+    let shapes: &[Shape] = &[
+        (
+            "a subsection-0 pool, flushed before subsection 1's content",
+            ".text\nf:\n\tldr x0, =0x1122334455667788\n\tnop\n\t.subsection 1\n\
+             \tmov x9, x9\n\t.previous\n\tmov x8, x8\n",
+            words(&[
+                0x5800_0080,
+                0xd503_201f,
+                0xaa08_03e8,
+                0,
+                0x5566_7788,
+                0x1122_3344,
+                0xaa09_03e9,
+            ]),
+        ),
+        (
+            "one value loaded from both subsections, which takes an entry \
+             in each pool",
+            ".text\nf:\n\tldr x0, =0x1122334455667788\n\tnop\n\t.subsection 1\n\
+             \tldr x1, =0x1122334455667788\n\tmov x9, x9\n\t.previous\n\
+             \tmov x8, x8\n",
+            words(&[
+                0x5800_0080,
+                0xd503_201f,
+                0xaa08_03e8,
+                0,
+                0x5566_7788,
+                0x1122_3344,
+                0x5800_0041,
+                0xaa09_03e9,
+                0x5566_7788,
+                0x1122_3344,
+            ]),
+        ),
+        (
+            "a `.ltorg` in subsection 1, which leaves subsection 0's pool \
+             pending",
+            ".text\nf:\n\tldr x0, =0x1122334455667788\n\tnop\n\t.subsection 1\n\
+             \tmov x9, x9\n\t.ltorg\n\tmov x10, x10\n\t.previous\n\
+             \tmov x8, x8\n",
+            words(&[
+                0x5800_0080,
+                0xd503_201f,
+                0xaa08_03e8,
+                0,
+                0x5566_7788,
+                0x1122_3344,
+                0xaa09_03e9,
+                0xaa0a_03ea,
+            ]),
+        ),
+    ];
+    for (what, src, want) in shapes {
+        let obj = asm_reloc_tu(src, Target::LinuxAarch64);
+        let got = elf_sections(&obj)
+            .into_iter()
+            .find(|(n, ..)| n == ".text")
+            .expect(".text")
+            .3;
+        assert_eq!(&got, want, "aarch64 literal pool for {what}");
     }
 }
 

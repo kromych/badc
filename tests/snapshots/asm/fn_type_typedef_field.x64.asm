@@ -86,8 +86,8 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, -0x10(%rbp)
                	movq	%rdx, -0x8(%rbp)
-               	leaq	-0x10(%rbp), %rbx
-               	movq	(%rbx), %rax
+               	leaq	-0x10(%rbp), %rax
+               	movq	(%rax), %rax
                	cmpq	$0x5, %rax
                	setne	%al
                	movzbq	%al, %rax
@@ -97,7 +97,8 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, -0x10(%rbp)
                	movq	%rdx, -0x8(%rbp)
-               	movq	0x8(%rbx), %rax
+               	leaq	-0x10(%rbp), %rax
+               	movq	0x8(%rax), %rax
                	cmpq	$0xa, %rax
                	setne	%al
                	movzbq	%al, %rax

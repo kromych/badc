@@ -712,6 +712,8 @@ fn encode_table(fdes: &[Fde], t: CfiTarget, eh: bool) -> Result<AsmSection, Stri
         name: String::from(if eh { ".eh_frame" } else { ".debug_frame" }),
         flags: String::from(if eh { "a" } else { "" }),
         sh_type: None,
+        entsize: 0,
+        link: None,
         bytes,
         relocs,
         labels: Vec::new(),

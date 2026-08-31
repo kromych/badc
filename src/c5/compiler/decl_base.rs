@@ -32,7 +32,7 @@ use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{
-    SEG_FS_BIT, SEG_GS_BIT, UNSIGNED_BIT, VOLATILE_BIT, VOLATILE_INNER_BIT, apply_qual_bits,
+    self, SEG_FS_BIT, SEG_GS_BIT, UNSIGNED_BIT, VOLATILE_BIT, VOLATILE_INNER_BIT, apply_qual_bits,
     is_decl_modifier, struct_ty_for,
 };
 
@@ -56,6 +56,11 @@ struct AttrFlags {
     naked: bool,
     weak: bool,
     used: bool,
+    no_instrument_function: bool,
+    uninitialized: bool,
+    transparent_union: bool,
+    ms_abi: bool,
+    sysv_abi: bool,
 }
 
 impl AttrFlags {
@@ -74,6 +79,11 @@ impl AttrFlags {
         self.naked |= other.naked;
         self.weak |= other.weak;
         self.used |= other.used;
+        self.no_instrument_function |= other.no_instrument_function;
+        self.uninitialized |= other.uninitialized;
+        self.transparent_union |= other.transparent_union;
+        self.ms_abi |= other.ms_abi;
+        self.sysv_abi |= other.sysv_abi;
     }
 }
 
@@ -190,6 +200,18 @@ impl Compiler {
         Ok(true)
     }
 
+    /// Flag the aggregate a cast type-name named, which the debug-info
+    /// type catalog seeds from. Pointer decoration is irrelevant: the
+    /// tag is the use.
+    pub(super) fn note_cast_type_name(&mut self, ty: i64) {
+        if !types::is_struct_ty(ty) {
+            return;
+        }
+        if let Some(sd) = self.structs.get_mut(types::struct_id_of(ty)) {
+            sd.cast_named = true;
+        }
+    }
+
     /// Parse a struct / union / typedef-name base reference --
     /// the keyword token has already been peeked, but not yet
     /// consumed. Used by both `parse_decl_base_type` and the
@@ -203,6 +225,7 @@ impl Compiler {
         // An attribute may sit between the keyword and the tag
         // (`struct __attribute__((packed)) name`).
         let packed = self.skip_attribute_specifiers()?;
+        let head_transparent = core::mem::take(&mut self.pending.attr_transparent_union);
         let mut anonymous = false;
         let name = if self.lex.tk == Token::Id {
             let n = self.symbols[self.lex.curr_id_idx].name.clone();
@@ -223,6 +246,9 @@ impl Compiler {
             // `struct name { ... } __attribute__((...))`: the attributes
             // follow the body and apply to the aggregate just laid out.
             self.apply_post_body_attributes(id)?;
+            if head_transparent {
+                self.mark_transparent_union(id);
+            }
             id
         } else {
             // A trailing attribute on a tag use without a body
@@ -541,6 +567,7 @@ impl Compiler {
         let saved_decay = self.pending.last_array_decay_size;
         let saved_decay_bytes = self.pending.last_array_decay_bytes;
         let saved_decay_dims = core::mem::take(&mut self.pending.last_array_decay_dims);
+        let saved_decay_member = self.pending.last_array_decay_member.take();
         self.pending.last_array_decay_size = 0;
         self.pending.last_array_decay_bytes = 0;
         self.pending.last_fn_ptr_cast = None;
@@ -560,6 +587,7 @@ impl Compiler {
                 self.pending.last_array_decay_size = 0;
                 self.pending.last_array_decay_bytes = 0;
                 self.pending.last_array_decay_dims.clear();
+                self.pending.last_array_decay_member = None;
                 self.pending.indirect_callee_params = None;
                 self.pending.indirect_callee_is_variadic = false;
                 self.pending.indirect_callee_fn_ptr_depth = 0;
@@ -644,6 +672,7 @@ impl Compiler {
             core::mem::replace(&mut self.pending.last_array_decay_dims, saved_decay_dims);
         self.pending.last_array_decay_size = saved_decay;
         self.pending.last_array_decay_bytes = saved_decay_bytes;
+        self.pending.last_array_decay_member = saved_decay_member;
         self.pending.indirect_callee_params = saved_callee_params;
         self.pending.indirect_callee_is_variadic = saved_callee_variadic;
         self.pending.indirect_callee_fn_ptr_depth = saved_callee_depth;
@@ -1025,6 +1054,25 @@ impl Compiler {
                 // GNU `used`: keep the definition in the object even when
                 // nothing in the unit references it.
                 f.used = true;
+            } else if n == "no_instrument_function" || n == "__no_instrument_function__" {
+                f.no_instrument_function = true;
+            } else if n == "uninitialized" || n == "__uninitialized__" {
+                // GNU `uninitialized`: the automatic object opts out of
+                // `-ftrivial-auto-var-init`.
+                f.uninitialized = true;
+            } else if n == "transparent_union" || n == "__transparent_union__" {
+                // GNU `transparent_union`: parameters of the union type
+                // accept arguments of any member type.
+                f.transparent_union = true;
+            } else if n == "ms_abi" || n == "__ms_abi__" {
+                // GNU `ms_abi`: the function follows the Microsoft x64
+                // calling convention. x86-only; ignored elsewhere, which
+                // is what the Linux `__efiapi` spelling relies on.
+                f.ms_abi = true;
+            } else if n == "sysv_abi" || n == "__sysv_abi__" {
+                // GNU `sysv_abi`: the function follows the System V AMD64
+                // calling convention. x86-only, as `ms_abi`.
+                f.sysv_abi = true;
             }
         }
     }
@@ -1158,6 +1206,11 @@ impl Compiler {
                                 self.symbols[self.lex.curr_id_idx].name.as_str(),
                                 "visibility" | "__visibility__"
                             );
+                        let is_patchable_entry = self.lex.tk == Token::Id
+                            && matches!(
+                                self.symbols[self.lex.curr_id_idx].name.as_str(),
+                                "patchable_function_entry" | "__patchable_function_entry__"
+                            );
                         let mut seen = AttrFlags::default();
                         self.note_attribute_name(&mut seen);
                         attrs.merge_names(&seen);
@@ -1214,6 +1267,28 @@ impl Compiler {
                                 return Err(
                                     self.compile_err("`)` expected after `section` operand")
                                 );
+                            }
+                            self.next()?;
+                        } else if is_patchable_entry && self.lex.tk == '(' {
+                            // GCC `patchable_function_entry(N[, M])`: this
+                            // function's NOP area, overriding the option's.
+                            self.next()?; // `(`
+                            let n = self.parse_constant_int()?;
+                            let m = if self.lex.tk == ',' {
+                                self.next()?;
+                                self.parse_constant_int()?
+                            } else {
+                                0
+                            };
+                            if n < 0 || m < 0 || m > n || n > u32::MAX as i64 {
+                                return Err(self
+                                    .compile_err("`patchable_function_entry` takes N >= M >= 0"));
+                            }
+                            self.pending.attr_patchable_entry = Some((n as u32, m as u32));
+                            if self.lex.tk != ')' {
+                                return Err(self.compile_err(
+                                    "`)` expected after `patchable_function_entry` operands",
+                                ));
                             }
                             self.next()?;
                         } else if is_alias && self.lex.tk == '(' {
@@ -1339,6 +1414,9 @@ impl Compiler {
         if attrs.packed {
             self.pending.attr_packed = true;
         }
+        if attrs.transparent_union {
+            self.pending.attr_transparent_union = true;
+        }
         if vector_size > 0 {
             self.pending.attr_vector_size = vector_size;
         }
@@ -1364,6 +1442,9 @@ impl Compiler {
         if attrs.naked {
             self.pending_is_naked = true;
         }
+        if attrs.no_instrument_function {
+            self.pending.attr_no_instrument = true;
+        }
         if let Some(p) = init_priority {
             self.pending.attr_init_priority = Some(p);
         }
@@ -1372,6 +1453,24 @@ impl Compiler {
         }
         if attrs.used {
             self.pending.attr_used = true;
+        }
+        if attrs.uninitialized {
+            self.pending.attr_uninitialized = true;
+        }
+        // `ms_abi` / `sysv_abi` name the declared function's (or
+        // function pointer's) calling convention. Both are inert off
+        // x86_64, matching gcc, which ignores them on other targets.
+        if attrs.ms_abi || attrs.sysv_abi {
+            let conv = if attrs.ms_abi {
+                crate::c5::codegen::CallConv::Ms
+            } else {
+                crate::c5::codegen::CallConv::SysV
+            };
+            self.pending.attr_call_conv = if self.target.abi_row(conv) == self.target {
+                crate::c5::codegen::CallConv::Target
+            } else {
+                conv
+            };
         }
         Ok(attrs.packed)
     }
@@ -1714,6 +1813,15 @@ impl Compiler {
             // spelling would otherwise be lost; record it for debug
             // info (DWARF 4 5.3 names it with a DW_TAG_typedef DIE).
             self.pending.spell_base_typedef = Some(self.lex.curr_id_idx as u32);
+            // A function / function-pointer typedef carries the
+            // pointed-to function's calling convention; a declarator
+            // through the alias inherits it unless the declaration names
+            // one of its own.
+            if self.symbols[self.lex.curr_id_idx].conv != crate::c5::codegen::CallConv::Target
+                && self.pending.attr_call_conv == crate::c5::codegen::CallConv::Target
+            {
+                self.pending.attr_call_conv = self.symbols[self.lex.curr_id_idx].conv;
+            }
             // Carry the typedef's fn-pointer lineage forward (gh
             // #19) so a later `fn_t fp` declaration ends up with
             // the right indirection count.

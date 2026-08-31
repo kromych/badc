@@ -29,6 +29,21 @@ use super::eval::{self, round_if_f32};
 pub(super) const CODE_ADDR_TAG: i64 = 0x4000_0000_0000_0000;
 const CODE_ADDR_MASK: i64 = 0x4000_0000_0000_0000;
 
+/// A position inside a function's code, tagged like a function pointer:
+/// the function's index in `Program::funcs` above bit 40, the block
+/// above bit 20 and the instruction offset within the block below it.
+/// `Inst::BlockAddr` is offset 0 of the label's block and a return
+/// address the offset after the call, so the positions in one function
+/// order the way its blocks do, as native addresses do.
+pub(super) fn code_position(func_idx: usize, block: usize, offset: usize) -> i64 {
+    CODE_ADDR_TAG | ((func_idx as i64) << 40) | ((block as i64) << 20) | offset as i64
+}
+
+/// The block a code position lies in.
+fn code_position_block(position: i64) -> usize {
+    ((position >> 20) & 0xF_FFFF) as usize
+}
+
 /// `Inst::ImmExtCode` results carry this bit so `Inst::CallIndirect`
 /// routes a call through an imported-function address (`&strcmp`)
 /// to the libc dispatch by binding index rather than looking up a
@@ -241,8 +256,9 @@ impl Memory {
         base
     }
 
-    /// Size of the per-frame record: one link to the caller's record.
-    const FRAME_RECORD_BYTES: usize = 8;
+    /// Size of the per-frame record: the link to the caller's record and
+    /// the return address, in the native frame record's order.
+    const FRAME_RECORD_BYTES: usize = 16;
 
     fn alloc_frame(&mut self, frame_bytes: usize) -> Result<usize, C5Error> {
         let base = self.stack_top;
@@ -397,8 +413,8 @@ impl<'a> Program<'a> {
         self
     }
 
-    fn lookup(&self, ent_pc: usize) -> Option<&'a FunctionSsa> {
-        self.ent_pc_to_idx.get(&ent_pc).map(|&i| &self.funcs[i])
+    fn lookup(&self, ent_pc: usize) -> Option<usize> {
+        self.ent_pc_to_idx.get(&ent_pc).copied()
     }
 
     fn binding_name(&self, idx: i64) -> Result<&'a str, C5Error> {
@@ -430,12 +446,16 @@ struct Frame<'a> {
     /// `stack_base + (N - 1) * 8`; param `i + 2` lives at
     /// `stack_base + (locals + i) * 8`.
     stack_base: usize,
-    /// Byte offset of this frame's record, just above its slots. Holds
-    /// the caller's record offset (0 for the entry frame) in its first
-    /// eight bytes. `Intrinsic::FrameAddress` answers with it, so a
-    /// chained load walks callers the way it does on a native frame
-    /// pointer.
+    /// Byte offset of this frame's record, just above its slots: the
+    /// caller's record offset in its first eight bytes and the return
+    /// address (a code position) in the next eight, both 0 for the entry
+    /// frame. `Intrinsic::FrameAddress` answers with it, so a chained
+    /// load walks callers the way it does on a native frame pointer, and
+    /// `Intrinsic::ReturnAddress` reads the slot beside the link.
     record: usize,
+    /// Index of `func` in `Program::funcs`: the function field of every
+    /// code position this frame materializes.
+    func_idx: usize,
     /// Total bytes the frame allocated; saved here so
     /// `release_frame` lines up with the alloc_frame returned by
     /// `Memory::alloc_frame`.
@@ -450,6 +470,17 @@ struct Frame<'a> {
 }
 
 impl Frame<'_> {
+    /// The link a call at instruction `call` of this frame hands `callee`.
+    fn link_to(&self, callee: usize, call: ValueId) -> CallLink {
+        let block = &self.func.blocks[self.block_idx];
+        let offset = (call - block.inst_range.start + 1) as usize;
+        CallLink {
+            func_idx: callee,
+            caller_record: self.record,
+            return_address: code_position(self.func_idx, self.block_idx, offset),
+        }
+    }
+
     /// c5-slot offset -> byte address in `Memory::bytes`.
     ///
     /// The c5 cdecl assigns local slot `-N` (N >= 1) to byte
@@ -569,7 +600,7 @@ pub(super) fn run_program_with_args_tracked<H: Host>(
         let ctor = prog
             .lookup(pc)
             .ok_or_else(|| C5Error::Runtime(format!("vm_ssa: no constructor at ent_pc {pc}")))?;
-        if let Err(e) = run_func(&prog, &mut mem, host, ctor, &[], &[], 0) {
+        if let Err(e) = run_func(&prog, &mut mem, host, CallLink::entry(ctor), &[], &[]) {
             return match exit_status_of(&e) {
                 Some(status) => Ok(status),
                 None => Err(e),
@@ -582,12 +613,12 @@ pub(super) fn run_program_with_args_tracked<H: Host>(
         ))
     })?;
     let entry_args: [i64; 2] = [argc, argv_addr];
-    let slice: &[i64] = if entry.n_params == 0 {
+    let slice: &[i64] = if prog.funcs[entry].n_params == 0 {
         &[]
     } else {
         &entry_args
     };
-    let status = match run_func(&prog, &mut mem, host, entry, slice, &[], 0) {
+    let status = match run_func(&prog, &mut mem, host, CallLink::entry(entry), slice, &[]) {
         Err(e) => match exit_status_of(&e) {
             Some(status) => status,
             None => return Err(e),
@@ -601,7 +632,7 @@ pub(super) fn run_program_with_args_tracked<H: Host>(
         let dtor = prog
             .lookup(pc)
             .ok_or_else(|| C5Error::Runtime(format!("vm_ssa: no destructor at ent_pc {pc}")))?;
-        if let Err(e) = run_func(&prog, &mut mem, host, dtor, &[], &[], 0) {
+        if let Err(e) = run_func(&prog, &mut mem, host, CallLink::entry(dtor), &[], &[]) {
             match exit_status_of(&e) {
                 Some(s) => return Ok(s),
                 None => return Err(e),
@@ -694,6 +725,27 @@ impl Host for NullHost {
     }
 }
 
+/// What a call hands the callee's frame: the callee and the two words
+/// its frame record holds, the caller's record and the position the
+/// callee returns to. Both words are 0 for a frame the program entry
+/// runs.
+#[derive(Clone, Copy)]
+struct CallLink {
+    func_idx: usize,
+    caller_record: usize,
+    return_address: i64,
+}
+
+impl CallLink {
+    fn entry(func_idx: usize) -> Self {
+        Self {
+            func_idx,
+            caller_record: 0,
+            return_address: 0,
+        }
+    }
+}
+
 /// Run one function in the program context. `args` lands in the
 /// parameter byte slots per the c5 cdecl: arg `i` at
 /// `stack_base + (locals + i) * 8`.
@@ -708,11 +760,11 @@ fn run_func<H: Host>(
     prog: &Program<'_>,
     mem: &mut Memory,
     host: &mut H,
-    func: &FunctionSsa,
+    link: CallLink,
     args: &[i64],
     arg_aggs: &[Option<u32>],
-    caller_record: usize,
 ) -> Result<i64, C5Error> {
+    let func = &prog.funcs[link.func_idx];
     let locals = func.locals.max(0) as usize;
     let n_params = func.n_params.max(args.len());
     let frame_bytes = (locals + n_params) * 8;
@@ -721,7 +773,8 @@ fn run_func<H: Host>(
     // stack.
     let stack_base = mem.alloc_frame(frame_bytes + Memory::FRAME_RECORD_BYTES)?;
     let record = stack_base + frame_bytes;
-    mem.write_bytes(record, &(caller_record as u64).to_le_bytes())?;
+    mem.write_bytes(record, &(link.caller_record as u64).to_le_bytes())?;
+    mem.write_bytes(record + 8, &link.return_address.to_le_bytes())?;
     // C11 6.7.5: reserve the aligned region for over-aligned automatic objects
     // above this frame; `release_frame(stack_base)` reclaims it on return.
     let realign_base = if func.over_aligned.is_empty() {
@@ -762,6 +815,7 @@ fn run_func<H: Host>(
         regs: alloc::vec![i64::MIN; func.insts.len()],
         stack_base,
         record,
+        func_idx: link.func_idx,
         frame_bytes,
         locals,
         realign_base,
@@ -819,11 +873,9 @@ fn run_func<H: Host>(
                 frame.block_idx = target as usize;
             }
             Terminator::GotoIndirect { target } => {
-                // `target` holds a label-address token produced by
-                // Inst::BlockAddr (CODE_ADDR_TAG | block index). Mask the
-                // tag to recover the destination block index.
-                let tok = frame.regs[target as usize];
-                frame.block_idx = (tok & !CODE_ADDR_TAG) as usize;
+                // `target` holds the code position `Inst::BlockAddr`
+                // materialized for the label's block.
+                frame.block_idx = code_position_block(frame.regs[target as usize]);
             }
             Terminator::JumpTable { idx, table } => {
                 // The lowering's bounds check proves the index in
@@ -978,11 +1030,9 @@ fn run_inst<H: Host>(
             return Ok(());
         }
         Inst::BlockAddr(b) => {
-            // Label address (GCC `&&label`). Tag the block index as a
-            // code pointer so it is non-zero (truthy, like a real label
-            // address) and distinct from a data address; GotoIndirect
-            // masks the tag back off to recover the block index.
-            frame.regs[v as usize] = CODE_ADDR_TAG | (*b as i64);
+            // Label address (GCC `&&label`): the code position at the
+            // start of the label's block, which GotoIndirect decodes.
+            frame.regs[v as usize] = code_position(frame.func_idx, *b as usize, 0);
             return Ok(());
         }
         Inst::LocalAddr(off) => {
@@ -1227,7 +1277,8 @@ fn run_inst<H: Host>(
                 C5Error::Runtime(format!("vm_ssa: Call: no function at ent_pc {target_pc}",))
             })?;
             let arg_vals = collect_call_args(frame, mem, args, arg_aggs, *fixed_args)?;
-            let ret = run_func(prog, mem, host, callee, &arg_vals, arg_aggs, frame.record)?;
+            let link = frame.link_to(callee, v);
+            let ret = run_func(prog, mem, host, link, &arg_vals, arg_aggs)?;
             frame.regs[v as usize] = finish_agg_return(frame, mem, *ret_agg, *ret_slot_local, ret)?;
             return Ok(());
         }
@@ -1277,7 +1328,8 @@ fn run_inst<H: Host>(
                 ))
             })?;
             let arg_vals = collect_call_args(frame, mem, args, arg_aggs, *fixed_args)?;
-            let ret = run_func(prog, mem, host, callee, &arg_vals, arg_aggs, frame.record)?;
+            let link = frame.link_to(callee, v);
+            let ret = run_func(prog, mem, host, link, &arg_vals, arg_aggs)?;
             frame.regs[v as usize] = finish_agg_return(frame, mem, *ret_agg, *ret_slot_local, ret)?;
             return Ok(());
         }
@@ -2153,7 +2205,19 @@ fn run_inline_asm(
     use crate::c5::codegen::x86_64::asm::{AsmOpnd, Mnemonic, parse_template};
     use crate::c5::ir::AsmRegSize;
 
-    let insns = parse_template(&asm.template).map_err(C5Error::Runtime)?;
+    // `%zN` prints operand N's size suffix into its mnemonic, as the
+    // native lowering resolves it before parsing.
+    let text = core::str::from_utf8(&asm.template).map_err(|_| {
+        C5Error::Runtime(alloc::string::String::from("inline asm: non-UTF8 template"))
+    })?;
+    let sized = crate::c5::asm::expand_size_suffix_refs(text, &|idx| {
+        asm.operands
+            .get(idx as usize)
+            .and_then(|op| crate::c5::codegen::x86_64::asm::att_size_suffix(op.width))
+    })
+    .map_err(C5Error::Runtime)?;
+    let insns =
+        parse_template(sized.as_deref().unwrap_or(text).as_bytes()).map_err(C5Error::Runtime)?;
     // An `asm goto` label branch transfers control between blocks,
     // which this per-instruction evaluator cannot model.
     if insns.iter().any(|i| {
@@ -2195,6 +2259,10 @@ fn run_inline_asm(
         &asm.operands,
         asm.clobber_regs,
         asm.clobber_fp_regs,
+        &|i| {
+            args.get(i)
+                .and_then(|&a| crate::c5::asm::asm_operand_const(frame.func, a))
+        },
     )
     .map_err(C5Error::Runtime)?;
     // The interpreter models only the 16 GPRs; an `x` (xmm) operand carries a
@@ -2252,6 +2320,10 @@ fn run_inline_asm(
             AsmOpnd::Reg { size, .. } => (0, size),
             // The high byte of one of the first four GPRs.
             AsmOpnd::HighReg(n) => ((xregs[n as usize - 4] >> 8) & 0xff, AsmRegSize::Byte),
+            AsmOpnd::HighRef(idx) => match op_reg[idx as usize] {
+                Some(r) if r < 4 => ((xregs[r as usize] >> 8) & 0xff, AsmRegSize::Byte),
+                _ => (0, AsmRegSize::Byte),
+            },
             AsmOpnd::Ref { idx, size } => {
                 let sz = size.unwrap_or(AsmRegSize::from_width(asm.operands[idx as usize].width));
                 match op_reg[idx as usize] {
@@ -2290,6 +2362,7 @@ fn run_inline_asm(
             // A high-byte write updates bits 8..16 of its GPR, which the
             // model's whole-register slots do not express: no-op.
             AsmOpnd::HighReg(_)
+            | AsmOpnd::HighRef(_)
             | AsmOpnd::Imm(_)
             | AsmOpnd::RefConst { .. }
             | AsmOpnd::Label { .. }
@@ -3047,10 +3120,18 @@ fn run_intrinsic(
             Ok(())
         }
         Intrinsic::ReturnAddress => {
-            // No native return address in the interpreter; return a stable
-            // non-zero per-frame proxy, enough for callers that only store
-            // or compare it.
-            frame.regs[v as usize] = frame.stack_base as i64;
+            // The return slot of a frame record: this frame's without an
+            // operand, the walked-to frame's with one, as natively.
+            let record = match args {
+                [] => frame.record,
+                [walked] => frame.regs[*walked as usize] as usize,
+                _ => {
+                    return Err(C5Error::Runtime(
+                        "vm_ssa: ReturnAddress: expected at most 1 arg".to_string(),
+                    ));
+                }
+            };
+            frame.regs[v as usize] = load_from_memory(mem, record + 8, LoadKind::I64)?;
             Ok(())
         }
         // The integer bit-count builtins are lowered to a portable

@@ -293,8 +293,7 @@ impl Compiler {
         crate::c5::codegen::encode_file_asm_section_code(&mut blocks, self.target, self.elf_class)?;
         crate::c5::asm::materialize_asm_sections(
             &blocks,
-            &|_| None,
-            &|_| None,
+            &crate::c5::asm::AsmOperandResolver::NONE,
             &|_| None,
             &|_| None,
             aarch64,
@@ -383,10 +382,14 @@ impl Compiler {
             self.pending.attr_destructor = false;
             self.pending.attr_init_priority = None;
             self.pending.attr_cleanup = None;
+            self.pending.attr_uninitialized = false;
             self.pending.attr_weak = false;
+            self.pending.attr_call_conv = crate::c5::codegen::CallConv::Target;
             self.pending.attr_used = false;
             self.pending.attr_visibility = None;
             self.pending.attr_section = None;
+            self.pending.attr_patchable_entry = None;
+            self.pending.attr_no_instrument = false;
             self.pending.attr_alias = None;
             self.pending.saw_register_storage = false;
             self.pending.auto_type_single_declarator = false;
@@ -712,6 +715,8 @@ impl Compiler {
                 if let Some(m) = self.pending.attr_mode.take() {
                     ty = self.apply_mode_to_type(ty, m)?;
                 }
+                let declarator_transparent =
+                    core::mem::take(&mut self.pending.attr_transparent_union);
                 // Capture per this declarator before any nested parse can
                 // overwrite it (a later parameter of function type would
                 // re-set it). A bare function-type declarator is a function
@@ -916,9 +921,21 @@ impl Compiler {
                     self.symbols[id_idx].class = Token::Typedef as i64;
                     self.symbols[id_idx].type_ = typedef_ty;
                     self.symbols[id_idx].val = 0;
+                    // `typedef union {...} T __attribute__((transparent_union))`:
+                    // a declarator-position attribute binds to the aliased union.
+                    if declarator_transparent && super::types::is_struct_value_ty(typedef_ty) {
+                        self.mark_transparent_union(super::types::struct_id_of(typedef_ty));
+                    }
                     self.symbols[id_idx].is_void_typedef = declarator_is_bare_void;
                     self.symbols[id_idx].is_enum_typedef = base_is_enum;
                     self.symbols[id_idx].is_function_type = typedef_is_fn_type;
+                    // A function-type typedef records the calling
+                    // convention its declaration named, so a declarator
+                    // through the alias inherits it
+                    // (`typedef efi_status_t __efiapi f_t(void);`).
+                    if self.pending.attr_call_conv != crate::c5::codegen::CallConv::Target {
+                        self.symbols[id_idx].conv = self.pending.attr_call_conv;
+                    }
                     // A GNU `aligned(N)` type attribute on the typedef
                     // (its own declaration's attribute, else propagated
                     // from an aligned typedef base) becomes the alias's
@@ -1409,6 +1426,7 @@ impl Compiler {
                     self.current_func_return_ty = return_ty;
                     self.current_func_returns_void = self.symbols[id_idx].returns_void;
                     self.current_function_name = self.symbols[id_idx].name.clone();
+                    self.current_func_conv = self.symbols[id_idx].conv;
 
                     // c5 callers push args right-to-left (cdecl-style), so
                     // the i'th declared param ends up at `[bp + 16*(i+1)]`,
@@ -1424,8 +1442,18 @@ impl Compiler {
                     // start at val=3. Host-ABI returns (AAPCS64 registers
                     // or x8) carry no hidden argument, so their params start
                     // at val=2 like any other function.
+                    // The convention decides it: a by-value aggregate
+                    // return the Microsoft x64 convention passes through a
+                    // hidden pointer is one System V may still return in
+                    // registers, and the slot numbering has to match what
+                    // the codegen places.
                     let param_base = if matches!(
-                        super::struct_return_abi(&self.structs, self.target, return_ty),
+                        super::struct_return_abi_conv(
+                            &self.structs,
+                            self.target,
+                            self.current_func_conv,
+                            return_ty,
+                        ),
                         super::StructReturnAbi::OutPtr
                     ) {
                         3
@@ -1469,6 +1497,9 @@ impl Compiler {
                         self.symbols[id_idx].val = ent_pc as i64;
                     }
                     self.symbols[id_idx].defined_here = true;
+                    if !self.pending_saw_inline_specifier {
+                        self.symbols[id_idx].saw_noninline_def = true;
+                    }
                     // A body trumps any earlier `extern T f();`
                     // forward declaration -- the function is now
                     // defined in this translation unit.
@@ -1622,6 +1653,7 @@ impl Compiler {
                         {
                             self.pending.attr_maybe_unused = false;
                             self.pending.attr_cleanup = None;
+                            self.pending.attr_uninitialized = false;
                             self.skip_attribute_specifiers()?;
                             leading_maybe_unused = self.pending.attr_maybe_unused;
                             if self.lex.tk == '}' {
@@ -1808,9 +1840,22 @@ impl Compiler {
                     let bound = self.take_scope_bound();
                     // `variables` accumulates over the whole unit; this
                     // function owns exactly the entries appended from here on.
+                    // Parameters go first, in declaration order (DWARF 5
+                    // 3.3.4): `bound` is symbol-table order, which follows
+                    // name interning across the unit, not the prototype.
                     let vars_start = self.variables.len();
-                    for &bi in &bound {
-                        let i = bi as usize;
+                    let capture_order: alloc::vec::Vec<usize> = params
+                        .indices
+                        .iter()
+                        .copied()
+                        .chain(
+                            bound
+                                .iter()
+                                .map(|&bi| bi as usize)
+                                .filter(|i| !param_set.contains(i)),
+                        )
+                        .collect();
+                    for i in capture_order {
                         let sym = &self.symbols[i];
                         if sym.class == Token::Loc as i64
                             && sym.val != 0
@@ -2055,7 +2100,7 @@ impl Compiler {
                         self.symbols[id_idx].class = Token::Glo as i64;
                         self.symbols[id_idx].type_ = ty;
                         self.symbols[id_idx].val = self.symbols[tgt].val;
-                        self.symbols[id_idx].array_size = self.symbols[tgt].array_size;
+                        Self::adopt_alias_storage(&mut self.symbols, id_idx, tgt);
                         self.symbols[id_idx].defined_here = true;
                         self.symbols[id_idx].is_extern_decl = false;
                         self.symbols[id_idx].is_alias = true;
@@ -2790,7 +2835,7 @@ impl Compiler {
             self.symbols[id_idx].defined_here = true;
             self.symbols[id_idx].is_extern_decl = false;
             if is_object {
-                self.symbols[id_idx].array_size = self.symbols[tgt].array_size;
+                Self::adopt_alias_storage(&mut self.symbols, id_idx, tgt);
             } else {
                 let name = self.symbols[id_idx].link_name().into();
                 let bind = alias_bind(&self.symbols[id_idx]);
@@ -2804,6 +2849,21 @@ impl Compiler {
             }
         }
         Ok(())
+    }
+
+    /// An object alias names its target's storage, so it takes the
+    /// target's extent along with its offset -- the declarator may leave
+    /// the count out (`extern T a[] __attribute__((alias("t")))`). The
+    /// symbol table's size then describes the aliased object, which is
+    /// what a consumer walking it needs: Linux's modpost reads a
+    /// `MODULE_DEVICE_TABLE` alias' device table by `st_size`.
+    fn adopt_alias_storage(symbols: &mut [crate::c5::symbol::Symbol], alias: usize, target: usize) {
+        let (array_size, zero_len) = (
+            symbols[target].array_size,
+            symbols[target].is_zero_len_array,
+        );
+        symbols[alias].array_size = array_size;
+        symbols[alias].is_zero_len_array = zero_len;
     }
 
     /// Symbol index the alias target `name` resolves to: a defined symbol
@@ -2942,6 +3002,14 @@ impl Compiler {
         if self.pending.attr_used {
             self.symbols[id_idx].is_used = true;
         }
+        // `ms_abi` / `sysv_abi`: the convention of the function this
+        // symbol names, or of the function a function-pointer object
+        // points to. Sticky across declarations like the rest, so a
+        // prototype carrying it and a later definition without it agree
+        // on one convention.
+        if self.pending.attr_call_conv != crate::c5::codegen::CallConv::Target {
+            self.symbols[id_idx].conv = self.pending.attr_call_conv;
+        }
         if self.pending.attr_constructor {
             self.symbols[id_idx].is_constructor = true;
         }
@@ -2968,6 +3036,12 @@ impl Compiler {
         }
         if let Some(sec) = self.pending.attr_section.take() {
             self.symbols[id_idx].section_name = Some(sec);
+        }
+        if let Some(area) = self.pending.attr_patchable_entry.take() {
+            self.symbols[id_idx].patchable_function_entry = Some(area);
+        }
+        if self.pending.attr_no_instrument {
+            self.symbols[id_idx].no_instrument_function = true;
         }
     }
 }

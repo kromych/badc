@@ -39,12 +39,11 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movl	$0x7, %ecx
                	movl	%ecx, (%rax)
-               	leaq	<rip>, %rdx
-               	movl	$0x23, %ecx
-               	movl	%ecx, (%rdx)
+               	leaq	<rip>, %rcx
+               	movl	$0x23, %edx
+               	movl	%edx, (%rcx)
                	leaq	<rip>, %rbx
                	movslq	(%rax), %rsi
-               	movslq	%ecx, %rdx
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	movq	%rbx, %rdi
@@ -63,12 +62,11 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movl	$0x7, %ecx
                	movl	%ecx, (%rax)
-               	leaq	<rip>, %rdx
-               	movl	$0x23, %ecx
-               	movl	%ecx, (%rdx)
+               	leaq	<rip>, %rcx
+               	movl	$0x23, %edx
+               	movl	%edx, (%rcx)
                	leaq	<rip>, %rbx
                	movslq	(%rax), %rsi
-               	movslq	%ecx, %rdx
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	movq	%rbx, %rdi

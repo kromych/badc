@@ -41,10 +41,10 @@ use alloc::vec::Vec;
 use hashbrown::HashMap;
 
 use super::super::ir::{BinOp, BlockId, FunctionSsa, Inst, NO_VALUE, ValueId};
-use super::Target;
 use super::mem2reg::{dominators, predecessors};
 use super::reg_alloc::Allocation;
 use super::tape::{Insertion, Undo};
+use super::{FixedRegs, Target};
 use crate::c5::codegen::passes::layout::{natural_loops, rpo_numbers};
 
 const NO_BLOCK: BlockId = BlockId::MAX;
@@ -264,7 +264,7 @@ fn sym_of(refs: &[(u32, u32)]) -> HashMap<u32, u32> {
 }
 
 /// Materializations worth hoisting, one entry per destination and key.
-fn plan(func: &FunctionSsa, target: Target) -> Vec<Hoist> {
+fn plan(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> Vec<Hoist> {
     // A longjmp restores the callee-saved registers and the stack
     // pointer only, so a value the allocator leaves in a caller-saved
     // register does not survive the second return from a setjmp
@@ -342,15 +342,20 @@ fn plan(func: &FunctionSsa, target: Target) -> Vec<Hoist> {
             }
         }
     }
-    cap_per_destination(func, target, out)
+    cap_per_destination(func, target, fixed, out)
 }
 
 /// Keep the most profitable hoists per destination, bounded by a share
 /// of the register file. Every hoist adds a value live across the whole
 /// loop; past that bound the allocation retry would reject the plan
 /// wholesale and the profitable entries would go with it.
-fn cap_per_destination(func: &FunctionSsa, target: Target, mut hoists: Vec<Hoist>) -> Vec<Hoist> {
-    let cap = (super::reg_alloc::usable_gpr_count(target) / 2).max(1);
+fn cap_per_destination(
+    func: &FunctionSsa,
+    target: Target,
+    fixed: FixedRegs,
+    mut hoists: Vec<Hoist>,
+) -> Vec<Hoist> {
+    let cap = (super::reg_alloc::usable_gpr_count(target, fixed) / 2).max(1);
     // Destination block per hoist, read back off the insertion point.
     let mut block_of = vec![NO_BLOCK; func.insts.len()];
     for (b, block) in func.blocks.iter().enumerate() {
@@ -469,15 +474,19 @@ fn placement_cost(func: &FunctionSsa, alloc: &Allocation) -> u64 {
 /// allocation carries the lower [`placement_cost`], leaving `func`
 /// matching the returned allocation, and finishes through the
 /// live-range split so both retries share one baseline allocation.
-pub(crate) fn allocate_hoisted(func: &mut FunctionSsa, target: Target) -> Allocation {
-    let hoists = plan(func, target);
+pub(crate) fn allocate_hoisted(
+    func: &mut FunctionSsa,
+    target: Target,
+    fixed: FixedRegs,
+) -> Allocation {
+    let hoists = plan(func, target, fixed);
     if hoists.is_empty() {
-        return super::split_ranges::allocate_split(func, target);
+        return super::split_ranges::allocate_split(func, target, fixed);
     }
-    let base = super::reg_alloc::allocate(func, target);
+    let base = super::reg_alloc::allocate(func, target, fixed);
     let base_cost = placement_cost(func, &base);
     let undo = apply(func, &hoists);
-    let alt = super::reg_alloc::allocate(func, target);
+    let alt = super::reg_alloc::allocate(func, target, fixed);
     // A hoist removes work from the loop unconditionally; the only way
     // it can lose is by taking a register the function had another use
     // for, which shows up here as extra traffic or an extra save.
@@ -488,13 +497,21 @@ pub(crate) fn allocate_hoisted(func: &mut FunctionSsa, target: Target) -> Alloca
         undo.restore(func);
         base
     };
-    super::split_ranges::allocate_split_with(func, target, picked)
+    super::split_ranges::allocate_split_with(func, target, fixed, picked)
 }
 
 #[cfg(test)]
 mod tests {
     use super::super::super::ir::{Block, LoadKind, StoreKind, Terminator};
     use super::*;
+
+    fn plan(func: &FunctionSsa, target: Target) -> Vec<Hoist> {
+        super::plan(func, target, FixedRegs::NONE)
+    }
+
+    fn allocate_hoisted(func: &mut FunctionSsa, target: Target) -> Allocation {
+        super::allocate_hoisted(func, target, FixedRegs::NONE)
+    }
 
     /// Tape index of the first body instruction in [`loop_func`].
     const BODY: u32 = 4;
@@ -713,7 +730,9 @@ mod tests {
         let hoists = plan(&f, Target::LinuxAarch64);
         // One destination takes at most its register share, so the count
         // this observes distinctness through is bounded by that share.
-        let cap = (super::super::reg_alloc::usable_gpr_count(Target::LinuxAarch64) / 2).max(1);
+        let cap =
+            (super::super::reg_alloc::usable_gpr_count(Target::LinuxAarch64, FixedRegs::NONE) / 2)
+                .max(1);
         assert_eq!(hoists.len(), 2.min(cap));
         assert_eq!(hoists[0].key, Key::Imm(0x4048_f5c3, false));
         if cap >= 2 {
@@ -866,7 +885,9 @@ mod tests {
         ]);
         f.extern_imm_data_refs.push((BODY, 9));
         f.extern_imm_data_refs.push((BODY + 2, 11));
-        let cap = (super::super::reg_alloc::usable_gpr_count(Target::LinuxAarch64) / 2).max(1);
+        let cap =
+            (super::super::reg_alloc::usable_gpr_count(Target::LinuxAarch64, FixedRegs::NONE) / 2)
+                .max(1);
         let hoists = plan(&f, Target::LinuxAarch64);
         assert_eq!(hoists.len(), 2.min(cap));
         if cap >= 2 {
@@ -909,7 +930,9 @@ mod tests {
 
     #[test]
     fn one_destination_takes_no_more_than_the_register_share() {
-        let cap = (super::super::reg_alloc::usable_gpr_count(Target::LinuxAarch64) / 2).max(1);
+        let cap =
+            (super::super::reg_alloc::usable_gpr_count(Target::LinuxAarch64, FixedRegs::NONE) / 2)
+                .max(1);
         // Each load feeds a running sum, so no materialization is dead.
         let mut body: Vec<Inst> = Vec::new();
         let (mut idx, mut acc) = (BODY, NO_VALUE);

@@ -13,13 +13,13 @@ fn ent_pc=2 n_params=0 variadic=false locals=6
     v68  LoadLocal { off=-1, kind=I64 }                   -> x2
     terminator Jmp(b2)   (exit_acc=v68)
   block 2  start_pc=0
-    v2   Imm(0)                                           -> x1
-    v3   Imm(-8)                                          -> x1
+    v2   Imm(0)                                           -> x0
+    v3   Imm(-8)                                          -> x0
     terminator Jmp(b3)
   block 3  start_pc=0
     v69  StoreLocal { off=-1, value=v3, kind=I64 }        -> -
-    v70  LocalAddr(-1)                                    -> x1
-    v71  InlineAsm { template="not %0", ops=1, args=[v66] } -> -
+    v70  LocalAddr(-1)                                    -> x0
+    v71  InlineAsm { template="not %0", ops=1, args=[v70] } -> -
     v72  LoadLocal { off=-1, kind=I64 }                   -> x6
     terminator Jmp(b4)   (exit_acc=v72)
   block 4  start_pc=0

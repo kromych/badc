@@ -2,25 +2,30 @@
 
 ## Compile the Linux kernel
 
-Every C translation unit of a Linux 7.1.6
+Every C translation unit of a Linux 7.1.10
 `defconfig` kernel on x86_64 and aarch64 is built by `badc` in the CI, this is 2921 and
 4434 units for the kernel image, 2953 and 10489
 with the modules. Both kernels boot, checked by boot markers plus in-kernel
 procfs/sysfs self-checks. All
 `defconfig` modules build and load, with per-module verdicts identical to a
 gcc-built kernel. `badc` links the kernel, too, and those kernels boot too as well.
-The kernel packages as a `.deb` and an `.rpm`, installs into stock Debian 13 and
-Fedora 44 images, and reaches systemd multi-user with modules autoloading,
-`/proc/version` names `badc`.
+The kernel packages as a `.deb` and an `.rpm`, installs into stock Debian 13,
+Ubuntu 26.04 and Fedora 44 images, and reaches systemd multi-user with modules
+autoloading, `/proc/version` names `badc`. Built from each distribution's own
+configuration rather than `defconfig`, all four packages -- `{rpm, deb}` x
+`{x86_64, aarch64}` -- are `badc`'s entirely: 101929 C units and 59424 links
+with the fallback lists empty, so nothing was permitted to fall back to
+another compiler, assembler or linker.
 
-`badc -c foo.S -o foo.o` assembles too, and the kernel build uses it: of the
-`defconfig` assembly units `badc` takes 60 of 71 on x86_64 -- the real-mode
-boot units among them, written out as ELFCLASS32 / EM_386 objects under `-m16`
-/ `-m32` -- and 71 of 77 on aarch64, `gas` the rest. `ld` links nothing:
+`badc -c foo.S -o foo.o` assembles too, and the kernel build uses it. Across
+the four distribution-configuration packages `gas` assembles nothing at all:
+467 assembly units, every one `badc`'s, the real-mode boot units among them,
+written out as ELFCLASS32 / EM_386 objects under `-m16` / `-m32`. The
+`defconfig` counts are broken out in the kernel document. `ld` links nothing:
 `badc` makes every link, the 32-bit
 i386 ones (boot setup, realmode blob, 32-bit vDSO) included, and all three vDSOs
 are `badc`-linked, dynamic metadata and symbol versions included. See for
-more [here](./doc/linux-kernel.md).
+more [here](./linux-kernel.md).
 
 ## Target five platforms from any host
 

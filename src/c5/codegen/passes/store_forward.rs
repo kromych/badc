@@ -43,7 +43,7 @@
 //! table keyed by slot index, with the same width, volatile, and
 //! distance discipline. A slot reachable only through `LoadLocal` /
 //! `StoreLocal` -- no `LocalAddr`, no volatile access
-//! (`mem2reg::promotable_slots`), and no write through a `FunctionSsa`
+//! (`mem2reg::address_free_slots`), and no write through a `FunctionSsa`
 //! field or call result slot -- has no address value, so no `Store`,
 //! `Mcpy`, or atomic can write it; its entries survive those
 //! instructions and die at another `StoreLocal` to the same slot, at a
@@ -54,7 +54,7 @@
 //! pointer also kills its entries. A volatile access neither forwards
 //! nor seeds on either discipline.
 
-use crate::c5::codegen::ssa::mem2reg::promotable_slots;
+use crate::c5::codegen::ssa::mem2reg::address_free_slots;
 use crate::c5::ir::{FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, ValueId};
 use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
@@ -135,7 +135,7 @@ struct SlotEntry {
 
 /// Slots whose store -> load pairs may forward: reachable only through
 /// `LoadLocal` / `StoreLocal`, so every write is visible in the SSA.
-/// Starts from `mem2reg::promotable_slots` (no `LocalAddr`, no volatile
+/// Starts from `mem2reg::address_free_slots` (no `LocalAddr`, no volatile
 /// access, no alloca slot) and removes the slots the emit writes
 /// through `FunctionSsa` fields or call metadata rather than an
 /// instruction. A function with a runtime-growing frame is skipped
@@ -148,7 +148,7 @@ fn forwardable_slots(func: &FunctionSsa) -> BTreeSet<i64> {
     {
         return BTreeSet::new();
     }
-    let mut slots = promotable_slots(func);
+    let mut slots = address_free_slots(func);
     slots.remove(&func.indirect_result_slot);
     for s in &func.param_local_slots {
         slots.remove(s);
@@ -536,6 +536,274 @@ fn run_one(func: &mut FunctionSsa) {
     }
 }
 
+/// The value a load of `kind` yields from a location whose low bytes
+/// hold `bits`, canonically extended per C99 6.3.1.3. `None` for a
+/// floating load, whose value an integer immediate does not describe.
+fn const_for_load(bits: i64, kind: LoadKind) -> Option<i64> {
+    match kind {
+        LoadKind::I64 => Some(bits),
+        LoadKind::I32 => Some(bits as i32 as i64),
+        LoadKind::U32 => Some(bits as u32 as i64),
+        LoadKind::I16 => Some(bits as i16 as i64),
+        LoadKind::U16 => Some(bits as u16 as i64),
+        LoadKind::I8 => Some(bits as i8 as i64),
+        LoadKind::U8 => Some(bits as u8 as i64),
+        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => None,
+    }
+}
+
+/// The `(base, displacement)` an access address denotes, following the
+/// constant pointer additions the builder emits for a member or an
+/// element at a fixed offset. `super::index_fold` folds these into the
+/// access's own `disp` field, but it runs after the fixed point this
+/// serves, so the store and the load of one member still reach here as
+/// two separate additions off the same base.
+fn base_disp(func: &FunctionSsa, addr: ValueId, disp: i32) -> (ValueId, i64) {
+    let mut base = addr;
+    let mut off = disp as i64;
+    // Each step consumes one addition; a chain longer than this is not
+    // a member path the builder produced.
+    for _ in 0..8 {
+        let (lhs, k) = match func.insts.get(base as usize) {
+            Some(Inst::BinopI {
+                op: crate::c5::ir::BinOp::Add,
+                lhs,
+                rhs_imm,
+            }) => (*lhs, *rhs_imm),
+            Some(Inst::Binop {
+                op: crate::c5::ir::BinOp::Add,
+                lhs,
+                rhs,
+            }) => match (func.insts.get(*lhs as usize), func.insts.get(*rhs as usize)) {
+                (_, Some(Inst::Imm(k))) => (*lhs, *k),
+                (Some(Inst::Imm(k)), _) => (*rhs, *k),
+                _ => break,
+            },
+            _ => break,
+        };
+        let Some(next) = off.checked_add(k) else {
+            break;
+        };
+        base = lhs;
+        off = next;
+    }
+    (base, off)
+}
+
+/// Byte ranges `[a, a+aw)` and `[b, b+bw)` overlap, at the widened
+/// displacements [`base_disp`] produces.
+fn overlaps64(a: i64, aw: u8, b: i64, bw: u8) -> bool {
+    a < b + bw as i64 && b < a + aw as i64
+}
+
+/// A location the block prefix has written a known constant to.
+#[derive(Clone, Copy, PartialEq)]
+struct ConstEntry {
+    addr: ValueId,
+    disp: i64,
+    width: u8,
+    /// The stored constant. A load reads its low `width` bytes.
+    bits: i64,
+}
+
+/// As [`ConstEntry`], for a frame slot.
+#[derive(Clone, Copy, PartialEq)]
+struct ConstSlotEntry {
+    off: i64,
+    width: u8,
+    bits: i64,
+}
+
+/// The constant an integer store writes, if it writes one.
+fn stored_const(
+    func: &FunctionSsa,
+    value: ValueId,
+    kind: StoreKind,
+    volatile: bool,
+) -> Option<i64> {
+    if volatile || !is_int_store(kind) {
+        return None;
+    }
+    match func.insts.get(value as usize) {
+        Some(Inst::Imm(k)) => Some(*k),
+        _ => None,
+    }
+}
+
+/// Rewrite every load that reads back a constant this function stored
+/// into the location, and report whether anything changed.
+///
+/// This is the memory half of constant propagation: the value a load
+/// yields is decided by the store that last wrote the location, so a
+/// location the function itself initialised with a constant makes the
+/// load a constant (C99 6.5p2 -- the store and the load are separated
+/// by a sequence point and nothing between them writes the object).
+/// It runs inside the [`super::simplify_branches`] fixed point beside
+/// the const-object load fold, so a build-time assertion written on a
+/// member the function just assigned decides its branch and the
+/// unreachable call goes away with the block.
+///
+/// The aliasing and volatile discipline is the one [`run`] documents.
+/// Two differences follow from the value being a constant rather than a
+/// register: there is no live-range bound, since an immediate
+/// rematerializes wherever it is read; and the availability carries
+/// into a block with a single predecessor, whose only path in is
+/// through that predecessor's exit state. A load-origin entry is not
+/// recorded -- only a store seeds a constant here -- so a load left
+/// alone stays a load.
+pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
+    if func.blocks.is_empty()
+        || !func
+            .insts
+            .iter()
+            .any(|i| matches!(i, Inst::Store { .. } | Inst::StoreLocal { .. }))
+    {
+        return false;
+    }
+    let slots = forwardable_slots(func);
+    let exposed = exposed_slots(func, &slots);
+    let preds = crate::c5::codegen::ssa::mem2reg::predecessors(func);
+    let rpo = super::layout::rpo_numbers(func);
+    // Blocks in reverse postorder, so a block's single predecessor is
+    // already processed when the block is reached.
+    let mut order: Vec<usize> = (0..func.blocks.len()).collect();
+    order.sort_by_key(|&b| rpo[b]);
+
+    let mut exit_tables: Vec<Option<(Vec<ConstEntry>, Vec<ConstSlotEntry>)>> =
+        alloc::vec![None; func.blocks.len()];
+    let mut folds: Vec<(usize, i64)> = Vec::new();
+
+    for b in order {
+        let (mut table, mut slot_table) = match preds[b].as_slice() {
+            [p] if *p as usize != b => exit_tables[*p as usize].clone().unwrap_or_default(),
+            _ => (Vec::new(), Vec::new()),
+        };
+        let range = func.blocks[b].inst_range.clone();
+        for idx in range {
+            let i = idx as usize;
+            if i >= func.insts.len() {
+                break;
+            }
+            match func.insts[i] {
+                Inst::Load { volatile: true, .. } | Inst::LoadLocal { volatile: true, .. } => {}
+                Inst::Load {
+                    addr, disp, kind, ..
+                } => {
+                    let (addr, disp) = base_disp(func, addr, disp);
+                    let w = load_width(kind);
+                    if let Some(e) = table
+                        .iter()
+                        .find(|e| e.addr == addr && e.disp == disp && e.width == w)
+                        && let Some(c) = const_for_load(e.bits, kind)
+                    {
+                        folds.push((i, c));
+                    }
+                }
+                Inst::LoadLocal { off, kind, .. } => {
+                    let w = load_width(kind);
+                    if let Some(e) = slot_table.iter().find(|e| e.off == off && e.width == w)
+                        && let Some(c) = const_for_load(e.bits, kind)
+                    {
+                        folds.push((i, c));
+                    }
+                }
+                Inst::Store {
+                    addr,
+                    disp,
+                    value,
+                    kind,
+                    volatile,
+                    ..
+                } => {
+                    let (addr, disp) = base_disp(func, addr, disp);
+                    let w = store_width(kind);
+                    table.retain(|e| e.addr == addr && !overlaps64(e.disp, e.width, disp, w));
+                    slot_table.retain(|e| !exposed.contains(&e.off));
+                    if let Some(bits) = stored_const(func, value, kind, volatile) {
+                        table.push(ConstEntry {
+                            addr,
+                            disp,
+                            width: w,
+                            bits,
+                        });
+                    }
+                }
+                Inst::StoreLocal {
+                    off,
+                    value,
+                    kind,
+                    volatile,
+                } => {
+                    table.clear();
+                    slot_table.retain(|e| e.off != off);
+                    if (slots.contains(&off) || exposed.contains(&off))
+                        && let Some(bits) = stored_const(func, value, kind, volatile)
+                    {
+                        slot_table.push(ConstSlotEntry {
+                            off,
+                            width: store_width(kind),
+                            bits,
+                        });
+                    }
+                }
+                Inst::SegLoad { .. }
+                | Inst::SegStore { .. }
+                | Inst::LoadIndexed { .. }
+                | Inst::Imm(_)
+                | Inst::ImmData(_)
+                | Inst::ImmCode(_)
+                | Inst::ImmExtCode(_)
+                | Inst::BlockAddr(_)
+                | Inst::LocalAddr(_)
+                | Inst::TlsAddr(_)
+                | Inst::Binop { .. }
+                | Inst::BinopI { .. }
+                | Inst::Fneg(_)
+                | Inst::Fma { .. }
+                | Inst::MulAdd { .. }
+                | Inst::Extend { .. }
+                | Inst::Bswap { .. }
+                | Inst::Copy { .. }
+                | Inst::FpCast { .. }
+                | Inst::ParamRef { .. }
+                | Inst::Phi { .. } => {}
+                Inst::StoreIndexed { .. }
+                | Inst::Mcpy { .. }
+                | Inst::AtomicRmw { .. }
+                | Inst::AtomicCas { .. }
+                | Inst::AllocaInit(_) => {
+                    table.clear();
+                    slot_table.retain(|e| !exposed.contains(&e.off));
+                }
+                // A call can write any location a pointer reaches, so
+                // the pointer table dies. A forwardable slot has no
+                // address value for a callee to write through, and an
+                // immediate costs nothing to keep available, so its
+                // entries survive; an exposed slot's do not.
+                Inst::Call { .. }
+                | Inst::CallIndirect { .. }
+                | Inst::CallExt { .. }
+                | Inst::Intrinsic { .. }
+                | Inst::X86Simd { .. }
+                | Inst::InlineAsm { .. }
+                | Inst::TailExt(_) => {
+                    table.clear();
+                    slot_table.retain(|e| !exposed.contains(&e.off));
+                }
+            }
+        }
+        exit_tables[b] = Some((table, slot_table));
+    }
+
+    if folds.is_empty() {
+        return false;
+    }
+    for (i, c) in folds {
+        func.insts[i] = Inst::Imm(c);
+    }
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::run_one;
@@ -556,7 +824,10 @@ mod tests {
             is_always_inline: false,
             is_noinline: false,
             is_naked: false,
+            conv: crate::c5::codegen::CallConv::Target,
             section: None,
+            patchable_entry: None,
+            no_instrument: false,
             is_weak: false,
             is_internal: false,
             const_params: 0,

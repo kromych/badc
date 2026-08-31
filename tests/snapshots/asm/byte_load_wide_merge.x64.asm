@@ -155,29 +155,12 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	leaq	0x5(%rax), %rcx
-               	movzwq	(%rcx), %rcx
-               	movl	%ecx, %ecx
-               	cmpl	$0x7766, %ecx           # imm = 0x7766
+               	addq	$0x5, %rax
+               	movzwq	(%rax), %rax
+               	movl	%eax, %eax
+               	cmpl	$0x7766, %eax           # imm = 0x7766
                	je	<addr>
                	movl	$0x7, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-               	addq	$0x2, %rax
-               	movzbq	(%rax), %rcx
-               	shlq	$0x10, %rcx
-               	movl	%ecx, %ecx
-               	movzbq	0x1(%rax), %rdx
-               	shlq	$0x8, %rdx
-               	movl	%edx, %edx
-               	orq	%rdx, %rcx
-               	movzbq	0x2(%rax), %rax
-               	orq	%rcx, %rax
-               	movl	%eax, %eax
-               	cmpl	$0x334455, %eax         # imm = 0x334455
-               	je	<addr>
-               	movl	$0x8, %eax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq

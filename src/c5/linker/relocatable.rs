@@ -959,6 +959,30 @@ fn merge_property_notes(inputs: &[Vec<&[u8]>], align: u64) -> Option<EtSection> 
 
 /// Merge parsed ET_REL objects into one ET_REL image.
 pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>, C5Error> {
+    link_relocatable_inner(objs, opts, false).map(|(b, _)| b)
+}
+
+/// `-r` merge that also renders the link map for `-Map` / `--print-map`.
+/// GNU ld writes one for a relocatable link, and kbuild's
+/// `modules.builtin.ranges` step reads `vmlinux.o.map` to attribute each
+/// section's bytes to the object that contributed them.
+pub fn link_relocatable_with_map(
+    objs: &[EtRel],
+    opts: &RelinkOptions,
+    output_name: &str,
+) -> Result<(Vec<u8>, String), C5Error> {
+    let (bytes, rows) = link_relocatable_inner(objs, opts, true)?;
+    let inputs: Vec<String> = objs.iter().map(|o| o.source.clone()).collect();
+    let map = super::map::render_relocatable_map(&bytes, &inputs, &rows, output_name)?;
+    Ok((bytes, map))
+}
+
+#[allow(clippy::type_complexity)]
+fn link_relocatable_inner(
+    objs: &[EtRel],
+    opts: &RelinkOptions,
+    want_map: bool,
+) -> Result<(Vec<u8>, Vec<(String, Vec<super::map::RelocRow>)>), C5Error> {
     if objs.is_empty() {
         return Err(err("no input objects"));
     }
@@ -1185,7 +1209,7 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
     let mut globals: HashMap<String, GState> = HashMap::new();
     // GNU ld adopts a definite symbol type from any occurrence when
     // the winning entry is STT_NOTYPE (an assembler definition typed
-    // by a C reference, e.g. `extern const char x[]`).
+    // by an explicit `.type` on a reference in another unit).
     let mut kind_hint: HashMap<String, u8> = HashMap::new();
     let vis_rank = |v: u8| -> u8 { [0u8, 3, 2, 1][(v & 3) as usize] };
     let merge_other = |a: u8, b: u8| -> u8 {
@@ -1395,7 +1419,7 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
             };
             let discard = match opts.discard_locals {
                 DiscardLocals::None => false,
-                DiscardLocals::Temporaries => sym.name.starts_with(".L"),
+                DiscardLocals::Temporaries => crate::c5::asm::is_local_label(&sym.name),
                 DiscardLocals::All => sym.kind != STT_FILE,
             };
             if discard {
@@ -1605,7 +1629,37 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
                 .unwrap_or_else(|| g.members.first().map(|&m| 1 + m as u32).unwrap_or(0))
         })
         .collect();
-    write_et_rel(
+    // Section contributions for the map, taken before `outsecs` is
+    // consumed: a row is an input section's offset and size within the
+    // output section it landed in.
+    let rows: Vec<(String, Vec<super::map::RelocRow>)> = if want_map {
+        outsecs
+            .iter()
+            .map(|out| {
+                let rows = out
+                    .contribs
+                    .iter()
+                    .map(|c| {
+                        let s = &objs[c.obj].sections[c.sec];
+                        super::map::RelocRow {
+                            name: s.name.clone(),
+                            offset: c.offset,
+                            size: if s.sh_type == SHT_NOBITS {
+                                s.nobits_size
+                            } else {
+                                s.bytes.len() as u64
+                            },
+                            source: objs[c.obj].source.clone(),
+                        }
+                    })
+                    .collect();
+                (out.name.clone(), rows)
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let file = write_et_rel(
         machine,
         objs,
         &outsecs,
@@ -1615,7 +1669,8 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
         raw_syms,
         first_global,
         opts.build_id_sha1,
-    )
+    )?;
+    Ok((file, rows))
 }
 
 struct OutGroup {

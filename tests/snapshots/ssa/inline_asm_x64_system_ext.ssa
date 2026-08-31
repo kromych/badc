@@ -42,30 +42,30 @@ fn ent_pc=13 n_params=2 variadic=false locals=8
     v20  StoreLocal { off=-3, value=v10, kind=I32 }       -> -
     v21  LocalAddr(-2)                                    -> x0
     v22  ImmData(8)                                       -> x1
-    v23  Mcpy { dst=v21, src=v22, size=4, align=8 }       -> x1
-    v24  LocalAddr(-8)                                    -> x1
+    v23  Mcpy { dst=v21, src=v22, size=4, align=8 }       -> x0
+    v24  LocalAddr(-8)                                    -> x0
     terminator Jmp(b6)
   block 6  start_pc=0
-    v43  Imm(0)                                           -> x2
+    v43  Imm(0)                                           -> x1
     v44  InlineAsm { template="invept %0, %1", ops=2, args=[v24, v43] } -> -
-    v45  Imm(0)                                           -> x2
+    v45  Imm(0)                                           -> x0
     terminator Jmp(b7)   (exit_acc=v45)
   block 7  start_pc=0
-    v25  LocalAddr(-5)                                    -> x2
-    v26  LocalAddr(-3)                                    -> x6
+    v25  LocalAddr(-5)                                    -> x0
+    v26  LocalAddr(-3)                                    -> x1
     terminator Jmp(b8)
   block 8  start_pc=0
     v46  InlineAsm { template="fnclex\n\tfldl %1\n\tfdivl %1\n\tfmull %1\n\tfldl %1\n\tfsubp %%st,%%st(1)\n\tfistpl %0\n\tfwait\n\tfninit", ops=2, args=[v26, v25] } -> -
-    v47  Imm(0)                                           -> x2
+    v47  Imm(0)                                           -> x0
     terminator Jmp(b9)   (exit_acc=v47)
   block 9  start_pc=0
-    v27  LocalAddr(-2)                                    -> x2
-    v28  Imm(1)                                           -> x2
+    v27  LocalAddr(-2)                                    -> x0
+    v28  Imm(1)                                           -> x1
     terminator Jmp(b10)
   block 10  start_pc=0
-    v48  Imm(1)                                           -> x2
-    v49  LocalAddr(-1)                                    -> x6
-    v50  InlineAsm { template="movzbl (%1,%2), %k0\n\tmovsbq (%1), %0\n\tmovzwl 2(%1), %k0\n\tmovslq %k0, %0", ops=3, args=[v49, v21, v48] } -> -
+    v48  Imm(1)                                           -> x1
+    v49  LocalAddr(-1)                                    -> x2
+    v50  InlineAsm { template="movzbl (%1,%2), %k0\n\tmovsbq (%1), %0\n\tmovzwl 2(%1), %k0\n\tmovslq %k0, %0", ops=3, args=[v49, v27, v48] } -> -
     v51  LoadLocal { off=-1, kind=I64 }                   -> x0
     terminator Jmp(b11)   (exit_acc=v51)
   block 11  start_pc=0
@@ -73,30 +73,30 @@ fn ent_pc=13 n_params=2 variadic=false locals=8
     terminator Jmp(b12)
   block 12  start_pc=0
     v52  Imm(0)                                           -> x0
-    v53  Imm(0)                                           -> x2
-    v54  Imm(0)                                           -> x2
+    v53  Imm(0)                                           -> x1
+    v54  Imm(0)                                           -> x1
     v55  InlineAsm { template="invlpga %1, %0", ops=2, args=[v52, v52] } -> -
     v56  Imm(0)                                           -> x0
     terminator Jmp(b13)   (exit_acc=v56)
   block 13  start_pc=0
-    v30  LocalAddr(-8)                                    -> x0
+    v30  LocalAddr(-8)                                    -> x1
     terminator Jmp(b14)
   block 14  start_pc=0
     v57  Imm(0)                                           -> x0
-    v58  InlineAsm { template="lock cmpxchg16b %0", ops=5, args=[v24, v57, v57, v57, v57] } -> -
+    v58  InlineAsm { template="lock cmpxchg16b %0", ops=5, args=[v30, v57, v57, v57, v57] } -> -
     terminator Jmp(b15)   (exit_acc=v57)
   block 15  start_pc=0
     v31  LocalAddr(-5)                                    -> x0
     terminator Jmp(b16)
   block 16  start_pc=0
     v59  InlineAsm { template="fldl %0", ops=1, args=[v31] } -> -
-    v60  Imm(0)                                           -> x1
+    v60  Imm(0)                                           -> x0
     terminator Jmp(b17)   (exit_acc=v60)
   block 17  start_pc=0
-    v32  LocalAddr(-5)                                    -> x1
+    v32  LocalAddr(-5)                                    -> x0
     terminator Jmp(b18)
   block 18  start_pc=0
-    v61  InlineAsm { template="fstpl %0", ops=1, args=[v31] } -> -
+    v61  InlineAsm { template="fstpl %0", ops=1, args=[v32] } -> -
     v62  Imm(0)                                           -> x0
     terminator Jmp(b19)   (exit_acc=v62)
   block 19  start_pc=0
@@ -104,13 +104,13 @@ fn ent_pc=13 n_params=2 variadic=false locals=8
     terminator Jmp(b20)
   block 20  start_pc=0
     v63  InlineAsm { template="ldmxcsr %0", ops=1, args=[v33] } -> -
-    v64  Imm(0)                                           -> x1
+    v64  Imm(0)                                           -> x0
     terminator Jmp(b21)   (exit_acc=v64)
   block 21  start_pc=0
-    v34  LocalAddr(-4)                                    -> x1
+    v34  LocalAddr(-4)                                    -> x0
     terminator Jmp(b22)
   block 22  start_pc=0
-    v65  InlineAsm { template="stmxcsr %0", ops=1, args=[v33] } -> -
+    v65  InlineAsm { template="stmxcsr %0", ops=1, args=[v34] } -> -
     v66  Imm(0)                                           -> x0
     terminator Jmp(b23)   (exit_acc=v66)
   block 23  start_pc=0

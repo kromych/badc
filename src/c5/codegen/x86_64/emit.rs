@@ -120,6 +120,11 @@ pub(crate) struct Frame {
     /// with no rsp move; its bytes are counted in `frame_bytes` and the
     /// objects live at `[rbp + align_region_off + region_off]`.
     pub align_region_off: i64,
+    /// Registers `-ffixed-` keeps out of every scratch pick.
+    pub fixed_regs: super::FixedRegs,
+    /// The FP scratch xmm registers, outside the allocator's banks; see
+    /// `RegBanks::fp_scratch`.
+    pub fp_scratch: [u8; super::ssa::reg_alloc::FP_SCRATCH_COUNT],
 }
 
 fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Frame {
@@ -157,7 +162,7 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Fra
     // Inline-asm scratch, directly below the va save area (or the spill
     // region when there is none) and above the rsp-addressed saved
     // registers. Sized for the largest block in the function.
-    let asm_bytes = asm_scratch_bytes(func);
+    let asm_bytes = asm_scratch_bytes(func, abi.fixed_regs);
     let asm_scratch_off = if asm_bytes > 0 {
         -((locals_bytes + alloc_spill_bytes + va_save_bytes + asm_bytes) as i32)
     } else {
@@ -212,6 +217,8 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Fra
         frame_bytes,
         alloc_spill_base: locals_bytes,
         canary_bytes,
+        fixed_regs: abi.fixed_regs,
+        fp_scratch: alloc.fp_scratch,
         param_spill_bytes,
         param_cell_stride,
         va_reg_save_off,
@@ -232,7 +239,7 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Fra
 /// Bytes of frame scratch the function's largest inline-asm block needs:
 /// 16 per saved xmm, 8 per saved GP register, 8 per operand capture.
 /// Mirrors the save-list computation in [`emit_inline_asm`].
-fn asm_scratch_bytes(func: &FunctionSsa) -> u32 {
+fn asm_scratch_bytes(func: &FunctionSsa, fixed: super::FixedRegs) -> u32 {
     let mut max = 0u32;
     for inst in &func.insts {
         let Inst::InlineAsm { asm, args } = inst else {
@@ -243,12 +250,18 @@ fn asm_scratch_bytes(func: &FunctionSsa) -> u32 {
         if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::X86) {
             continue;
         }
-        let Ok(op_reg) =
-            super::asm::assign_operand_regs(&asm.operands, asm.clobber_regs, asm.clobber_fp_regs)
-        else {
+        let Ok(op_reg) = super::asm::assign_operand_regs(
+            &asm.operands,
+            asm.clobber_regs | fixed.gpr,
+            asm.clobber_fp_regs | fixed.fpr,
+            &|i| {
+                args.get(i)
+                    .and_then(|&a| crate::c5::asm::asm_operand_const(func, a))
+            },
+        ) else {
             continue;
         };
-        let Ok((used, fp_used, _)) = asm_save_masks_and_stage(asm, &op_reg) else {
+        let Ok((used, fp_used, _)) = asm_save_masks_and_stage(asm, &op_reg, fixed) else {
             continue;
         };
         let bytes = fp_used.count_ones() * 16 + used.count_ones() * 8 + args.len() as u32 * 8;
@@ -266,10 +279,13 @@ fn asm_scratch_bytes(func: &FunctionSsa) -> u32 {
 /// clobbered non-operand register (already saved), then a free
 /// allocator-visible register, added to the save mask. Sizing
 /// (`asm_scratch_bytes`) and emission (`emit_inline_asm`) share this so
-/// the frame region always covers the emitted save list.
+/// the frame region always covers the emitted save list. A `-ffixed-`
+/// register holds nothing of the compiler's, so it is neither the stage
+/// nor saved: a write the template makes to it stays, as under gcc.
 fn asm_save_masks_and_stage(
     asm: &super::super::ir::AsmBlock,
     op_reg: &[Option<u8>],
+    fixed: super::FixedRegs,
 ) -> Result<(u32, u32, Reg), alloc::string::String> {
     use super::super::ir::AsmConstraint;
     let mut used = asm.clobber_regs;
@@ -294,7 +310,7 @@ fn asm_save_masks_and_stage(
     // are free even unclobbered. A free allocator-visible register may
     // hold a live value, so it is the last resort and joins the save
     // list.
-    let free = |r: u8| operand_gp & (1 << r) == 0;
+    let free = |r: u8| operand_gp & (1 << r) == 0 && !fixed.has_gpr(r);
     let stage = [10u8, 11]
         .into_iter()
         .find(|&r| free(r))
@@ -311,7 +327,7 @@ fn asm_save_masks_and_stage(
     if stage != 10 && stage != 11 && asm.clobber_regs & (1 << stage) == 0 {
         used |= 1 << stage;
     }
-    Ok((used, fp_used, Reg(stage)))
+    Ok((used & !fixed.gpr, fp_used & !fixed.fpr, Reg(stage)))
 }
 
 /// True when the function is a variadic c5 callee compiled for the
@@ -388,9 +404,13 @@ const CALLER_SAVED_INT_SCRATCHES: &[u8] = &[0, 1, 2, 8, 9];
 /// return). Used by emit handlers that need an intra-instruction
 /// scratch (BinopI immediate-materialise, VaArg staging, alloca
 /// bookkeeping, ...).
-fn pick_caller_saved_scratch(rd: Reg, operand_regs: &[Reg]) -> Option<Reg> {
+fn pick_caller_saved_scratch(
+    rd: Reg,
+    operand_regs: &[Reg],
+    fixed: super::FixedRegs,
+) -> Option<Reg> {
     for cand in CALLER_SAVED_INT_SCRATCHES {
-        if *cand == rd.0 {
+        if *cand == rd.0 || fixed.has_gpr(*cand) {
             continue;
         }
         if operand_regs.iter().any(|r| r.0 == *cand) {
@@ -412,6 +432,7 @@ fn pick_caller_saved_scratch_live_aware(
     operand_regs: &[Reg],
     pc: u32,
     alloc: &Allocation,
+    fixed: super::FixedRegs,
 ) -> Option<Reg> {
     let mut live: alloc::vec::Vec<Reg> = alloc::vec::Vec::with_capacity(operand_regs.len() + 4);
     live.extend_from_slice(operand_regs);
@@ -425,7 +446,7 @@ fn pick_caller_saved_scratch_live_aware(
             live.push(Reg(*r));
         }
     }
-    pick_caller_saved_scratch(rd, &live)
+    pick_caller_saved_scratch(rd, &live, fixed)
 }
 
 /// Total bytes the prologue allocates between the return
@@ -452,7 +473,7 @@ fn pick_caller_saved_scratch_live_aware(
 /// stack untouched, so the function can ret directly with no
 /// stack adjustment.
 fn is_full_leaf(func: &FunctionSsa, frame: Frame, alloc: &Allocation, abi: super::Abi) -> bool {
-    if frame.frame_bytes != 0 || frame.param_spill_bytes != 0 {
+    if frame.frame_bytes != 0 || frame.param_spill_bytes != 0 || abi.mcount_frame {
         return false;
     }
     // A function that realigns rsp for an over-aligned automatic object needs
@@ -797,18 +818,6 @@ const SCRATCH_RDX: Reg = Reg(2);
 /// reserving it forces no prologue save.
 const SCRATCH_R11: Reg = Reg(11);
 
-/// Scratch XMM registers for FP handlers. The SSA allocator's
-/// caller_fprs pool covers `xmm0..xmm7` and callee_fprs is empty
-/// on SysV (no callee-saved xmm), so any allocator-held FP value
-/// lives in xmm0..xmm7. xmm14 / xmm15 sit outside both banks and
-/// stay free as primary / secondary scratches.
-const SCRATCH_XMM14: Reg = Reg(14);
-const SCRATCH_XMM15: Reg = Reg(15);
-/// Third FP scratch for the three-input fused multiply-add, holding a
-/// spilled accumulator. xmm13 is outside the allocator's xmm0..xmm7
-/// pool, like xmm14 / xmm15.
-const SCRATCH_XMM13: Reg = Reg(13);
-
 /// Extract the FP reg from a `Place`, or `None` if it's not an
 /// xmm register.
 fn fp_reg(place: Place) -> Option<Reg> {
@@ -816,13 +825,13 @@ fn fp_reg(place: Place) -> Option<Reg> {
 }
 
 /// Pick the working xmm a single-result FP-producing handler writes
-/// into: the allocator's chosen reg for `FpReg`, or `SCRATCH_XMM14`
+/// into: the allocator's chosen reg for `FpReg`, or the first FP scratch
 /// for `Spill`. Other place kinds (`IntReg`, `None`) are not legal
 /// for the FP handlers.
-fn fp_or_spill_dst(dst: Place) -> Option<Reg> {
+fn fp_or_spill_dst(dst: Place, frame: Frame) -> Option<Reg> {
     match dst {
         Place::FpReg(r) => Some(Reg(r)),
-        Place::Spill(_) => Some(SCRATCH_XMM14),
+        Place::Spill(_) => Some(Reg(frame.fp_scratch[0])),
         _ => None,
     }
 }
@@ -1149,7 +1158,7 @@ fn emit_phi_predecessor_moves(
     alloc: &Allocation,
     frame: Frame,
 ) -> bool {
-    // r10 / r11 (int) and xmm15 / xmm14 (fp) are reserved scratch outside the
+    // r10 / r11 (int) and the FP scratch pair are reserved scratch outside the
     // allocator's banks, so they hold no value live across the terminator.
     super::ssa::emit_common::emit_phi_predecessor_moves(
         &super::ssa::emit_common::X64Backend,
@@ -1160,8 +1169,8 @@ fn emit_phi_predecessor_moves(
         frame,
         SCRATCH_R10.0,
         SCRATCH_R11.0,
-        SCRATCH_XMM15.0,
-        SCRATCH_XMM14.0,
+        frame.fp_scratch[1],
+        frame.fp_scratch[0],
     )
 }
 
@@ -1461,7 +1470,7 @@ fn marshal_args(
     // argument source is consumed before any Spill / IntReg source
     // materialises into its target xmm -- otherwise a Spill load into
     // xmmN would overwrite a value another argument still reads from
-    // xmmN. SCRATCH_XMM15 breaks any cycle and lies outside the
+    // xmmN. the second FP scratch breaks any cycle and lies outside the
     // allocator's xmm pool.
     let mut fp_moves: Vec<(u8, u8)> = Vec::new();
     for (i, &placement) in plan.placements.iter().enumerate() {
@@ -1472,7 +1481,7 @@ fn marshal_args(
             fp_moves.push((s, r));
         }
     }
-    schedule_xmm_reg_moves(code, &mut fp_moves, SCRATCH_XMM15);
+    schedule_xmm_reg_moves(code, &mut fp_moves, Reg(frame.fp_scratch[1]));
     for (i, &placement) in plan.placements.iter().enumerate() {
         if let super::ArgPlacement::FpReg(r) = placement {
             match arg_place(i) {
@@ -1705,6 +1714,7 @@ pub(crate) fn emit_function(
     extern_tls_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     imports: &super::ResolvedImports,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
+    conv_targets: &alloc::collections::BTreeMap<usize, super::CallConv>,
     ret_tags: &alloc::collections::BTreeMap<usize, i64>,
     tls_total_size: usize,
     fn_unwind: &mut Vec<super::FnUnwind>,
@@ -1718,6 +1728,8 @@ pub(crate) fn emit_function(
     abs_jump_tables: bool,
     hardening: super::Hardening,
     stack_protect: super::StackProtect,
+    entry: super::FunctionEntry,
+    fixed_regs: super::FixedRegs,
 ) -> bool {
     // The bundled emit output arrives in `cx`; recreate the per-field names as
     // disjoint reborrows so the body below (including the per-`Inst` `cx` it
@@ -1739,6 +1751,7 @@ pub(crate) fn emit_function(
     let label_relocs = &mut *cx.label_relocs;
     let text_data_ranges = &mut *cx.text_data_ranges;
     let canary_frame_bytes = &mut *cx.canary_frame_bytes;
+    let mcount_sites = &mut *cx.mcount_sites;
     let snapshot = code.len();
     let fixups_snapshot = fixups.len();
     let plt_call_fixups_snapshot = plt_call_fixups.len();
@@ -1756,11 +1769,13 @@ pub(crate) fn emit_function(
     // merged TLS layout; see `emit_tls_addr`.
     let elf_tpoff_snapshot = elf_tpoff_fixups.len();
     let pending_func_fixups_snapshot = pending_func_fixups.len();
+    let mcount_sites_snapshot = mcount_sites.len();
     // Roll every output buffer back to its pre-function snapshot and
     // bail; the `tls` form also drops the recorded tpoff fixups.
     macro_rules! bail_rollback {
         () => {{
             code.truncate(snapshot);
+            mcount_sites.truncate(mcount_sites_snapshot);
             fixups.truncate(fixups_snapshot);
             plt_call_fixups.truncate(plt_call_fixups_snapshot);
             data_fixups.truncate(data_fixups_snapshot);
@@ -1780,11 +1795,13 @@ pub(crate) fn emit_function(
         }};
     }
     let abi = {
-        let mut a = target.abi();
+        let mut a = target.abi_for(func.conv);
         a.no_fp_varargs = no_fp_regs;
         a.strict_align = strict_align;
         a.hardening = hardening;
         a.stack_protect = stack_protect;
+        a.mcount_frame = entry.profile.is_some_and(|call| call.after_prologue);
+        a.fixed_regs = fixed_regs;
         a
     };
     if let Some(bytes) = super::ssa::emit_common::locals_bytes_over_limit(func) {
@@ -1792,6 +1809,10 @@ pub(crate) fn emit_function(
         return false;
     }
     let frame = compute_frame(func, alloc, abi);
+    if let Some(why) = super::ssa::reg_alloc::fp_scratch_shortfall(func, frame.fp_scratch) {
+        bail_msg(why);
+        return false;
+    }
     if frame.canary_bytes > 0 {
         canary_frame_bytes.insert(func.ent_pc, frame.canary_bytes);
     }
@@ -1827,6 +1848,7 @@ pub(crate) fn emit_function(
     // asm) is the entire machine code, so there is no frame to set up or
     // unwind. The matching `Terminator::Return` below emits no epilogue.
     let mut uw = if func.is_naked {
+        code.resize(code.len() + entry.nops_after as usize, 0x90);
         super::FnUnwind::default()
     } else {
         // Indirect-branch tracking: a function entry is reachable by an
@@ -1836,6 +1858,15 @@ pub(crate) fn emit_function(
         // A naked function is excluded -- its body is the whole function.
         if abi.hardening.cf_protection_branch {
             super::encode::emit_endbr64(code);
+        }
+        // The `-fpatchable-function-entry` NOPs after the symbol, then
+        // the `-mfentry` call, both ahead of the prologue as gcc orders
+        // them.
+        code.resize(code.len() + entry.nops_after as usize, 0x90);
+        if let Some(call) = entry.profile
+            && !call.after_prologue
+        {
+            emit_profile_call(code, call, asm_extern_call_sites, mcount_sites);
         }
         emit_prologue(
             code,
@@ -1848,6 +1879,15 @@ pub(crate) fn emit_function(
         )
     };
     uw.begin = snapshot as u32;
+    // `-pg` without `-mfentry`: `call mcount` once the frame stands, so
+    // the callee reads the return address through rbp. It runs ahead of
+    // the parameter placement below, so `mcount` must keep the argument
+    // registers, as the C library's does.
+    if let Some(call) = entry.profile
+        && call.after_prologue
+    {
+        emit_profile_call(code, call, asm_extern_call_sites, mcount_sites);
+    }
     super::ssa::emit_common::record_post_prologue_pc(func, prologue_native, code.len());
 
     // Place the entry `Inst::ParamRef` values from their host argument
@@ -2029,7 +2069,15 @@ pub(crate) fn emit_function(
             // epilogue; ret`. Saves one call+ret pair per recursion level
             // and removes the post-call rax-to-place mov. See
             // `detect_tail_call` for the safety preconditions.
-            let tail_call = detect_tail_call(func, block, abi, variadic_targets, ret_tags, target);
+            let tail_call = detect_tail_call(
+                func,
+                block,
+                abi,
+                variadic_targets,
+                conv_targets,
+                ret_tags,
+                target,
+            );
             for v in block.inst_range.clone() {
                 let inst = &func.insts[v as usize];
                 let place = place_of(alloc, v);
@@ -2129,6 +2177,7 @@ pub(crate) fn emit_function(
                         label_relocs: &mut *label_relocs,
                         text_data_ranges: &mut *text_data_ranges,
                         canary_frame_bytes: &mut *canary_frame_bytes,
+                        mcount_sites: &mut *mcount_sites,
                     };
                     let fcx = FnCtx {
                         func,
@@ -2138,6 +2187,7 @@ pub(crate) fn emit_function(
                         target,
                         imports,
                         variadic_targets,
+                        conv_targets,
                         extern_tls_names,
                         extern_data_names,
                         extern_code_names,
@@ -3103,7 +3153,7 @@ fn emit_prologue(
     // The allocator's FP register pool (`callee_fprs`) is empty for both
     // SysV and Win64, so it never assigns an SSA value to a non-volatile
     // xmm. The only non-volatile xmm exposure is the emit pass's fixed
-    // FP scratch (xmm13/14/15), which the allocator lists in `fp_used`
+    // FP scratch, which the allocator lists in `fp_used`
     // for Win64 functions that perform FP work. Save those at the bottom
     // of the frame (lowest addresses) with the full 128-bit `movups`,
     // since the caller's value may occupy the upper lanes. SysV leaves
@@ -3328,6 +3378,9 @@ struct FnCtx<'a> {
     target: Target,
     imports: &'a super::ResolvedImports,
     variadic_targets: &'a alloc::collections::BTreeSet<usize>,
+    /// Callee ent_pc -> the convention that callee declares, for the
+    /// callees that declare one at all. Absent means the target's own.
+    conv_targets: &'a alloc::collections::BTreeMap<usize, super::CallConv>,
     extern_tls_names: &'a alloc::collections::BTreeMap<u32, alloc::string::String>,
     /// `Inst::ImmData` value-id -> cross-TU data symbol name, for an `i`-class
     /// inline-asm operand that names an external address, whether in a section
@@ -3366,6 +3419,7 @@ fn emit_inst(
         target,
         imports,
         variadic_targets,
+        conv_targets,
         extern_tls_names,
         extern_data_names,
         extern_code_names,
@@ -3444,8 +3498,8 @@ fn emit_inst(
                     match dst {
                         Place::FpReg(r) => load(code, Reg(r)),
                         Place::Spill(_) => {
-                            load(code, SCRATCH_XMM14);
-                            fp_spill_dst_to_slot(code, dst, SCRATCH_XMM14, frame);
+                            load(code, Reg(frame.fp_scratch[0]));
+                            fp_spill_dst_to_slot(code, dst, Reg(frame.fp_scratch[0]), frame);
                         }
                         _ => return fail("ParamRef: FP param dst not fp reg / spill"),
                     }
@@ -3661,7 +3715,11 @@ fn emit_inst(
             *fixed_args,
             alloc,
             frame,
-            abi,
+            callee_abi(
+                abi,
+                target,
+                conv_targets.get(target_pc).copied().unwrap_or_default(),
+            ),
             fixups,
             variadic_targets.contains(target_pc),
             *fp_return,
@@ -3688,7 +3746,9 @@ fn emit_inst(
             *fp_arg_mask,
             alloc,
             frame,
-            abi,
+            // A libc import follows the target's convention, never the
+            // caller's.
+            callee_abi(abi, target, super::CallConv::Target),
             target,
             plt_call_fixups,
             imports,
@@ -3746,12 +3806,13 @@ fn emit_inst(
             frame,
         ),
         Inst::CallIndirect {
-            target,
+            target: callee,
             args,
             callee_variadic,
             fixed_args,
             fp_return,
             fp_arg_mask,
+            callee_conv,
             arg_aggs,
             ret_agg,
             ret_slot_local,
@@ -3759,13 +3820,13 @@ fn emit_inst(
         } => emit_call_indirect(
             code,
             dst,
-            *target,
+            *callee,
             args,
             *callee_variadic,
             *fixed_args,
             alloc,
             frame,
-            abi,
+            callee_abi(abi, target, *callee_conv),
             *fp_return,
             *fp_arg_mask,
             arg_aggs,
@@ -4172,7 +4233,7 @@ fn emit_load_fp_mem(
     bound: Option<u32>,
     site: &str,
 ) -> bool {
-    let Some(dd) = fp_or_spill_dst(dst) else {
+    let Some(dd) = fp_or_spill_dst(dst, frame) else {
         return fail(&alloc::format!("{site}: dst not fp reg / spill"));
     };
     if matches!(kind, LoadKind::F80 | LoadKind::F128) {
@@ -4224,7 +4285,7 @@ fn emit_load_fp_mem(
 /// FP store `*(f32/f64*)[base + disp] = value`. A single-precision
 /// value (C99 6.3.1.8) writes directly via `movss`; a wider f64 value
 /// (a `double` assigned to a `float` the walker didn't pre-narrow)
-/// narrows via `cvtsd2ss` into SCRATCH_XMM15 first so `dn` (which may
+/// narrows via `cvtsd2ss` into the second FP scratch first so `dn` (which may
 /// be an allocator-held xmm the result Place expects) survives.
 /// `movsd` covers the 8-byte `double` store. The stored value also
 /// feeds `dst` per the c5 store-leaves-value rule (C99 6.5.16p3).
@@ -4242,7 +4303,7 @@ fn emit_store_fp_mem(
     bound: Option<u32>,
     site: &str,
 ) -> bool {
-    let Some(dn) = materialize_fp(code, value_place, SCRATCH_XMM14, frame) else {
+    let Some(dn) = materialize_fp(code, value_place, Reg(frame.fp_scratch[0]), frame) else {
         return fail(&alloc::format!(
             "{site}: value not fp reg / spill / int reg"
         ));
@@ -4278,8 +4339,8 @@ fn emit_store_fp_mem(
         let src = if value_is_f32 {
             dn
         } else {
-            emit_cvtsd2ss(code, SCRATCH_XMM15, dn);
-            SCRATCH_XMM15
+            emit_cvtsd2ss(code, Reg(frame.fp_scratch[1]), dn);
+            Reg(frame.fp_scratch[1])
         };
         match bound {
             Some(a) => narrowed(code, src, 4, a),
@@ -4752,7 +4813,7 @@ fn emit_copy(
 ) -> bool {
     let src_place = place_of(alloc, value);
     if is_fp {
-        let Some(dd) = fp_or_spill_dst(dst) else {
+        let Some(dd) = fp_or_spill_dst(dst, frame) else {
             return fail("Copy: dst not fp reg / spill");
         };
         let Some(dn) = materialize_fp(code, src_place, dd, frame) else {
@@ -4839,23 +4900,23 @@ fn emit_fma(
     let a_place = place_of(alloc, a);
     let b_place = place_of(alloc, b);
     let c_place = place_of(alloc, c);
-    let Some(ra) = materialize_fp(code, a_place, SCRATCH_XMM14, frame) else {
+    let Some(ra) = materialize_fp(code, a_place, Reg(frame.fp_scratch[0]), frame) else {
         return fail("Fma: a not fp reg / spill / int reg");
     };
-    if ra.0 != SCRATCH_XMM14.0 {
-        emit_movapd_xmm_xmm(code, SCRATCH_XMM14, ra);
+    if ra.0 != frame.fp_scratch[0] {
+        emit_movapd_xmm_xmm(code, Reg(frame.fp_scratch[0]), ra);
     }
-    let Some(rb) = materialize_fp(code, b_place, SCRATCH_XMM15, frame) else {
+    let Some(rb) = materialize_fp(code, b_place, Reg(frame.fp_scratch[1]), frame) else {
         return fail("Fma: b not fp reg / spill / int reg");
     };
-    if rb.0 != SCRATCH_XMM15.0 {
-        emit_movapd_xmm_xmm(code, SCRATCH_XMM15, rb);
+    if rb.0 != frame.fp_scratch[1] {
+        emit_movapd_xmm_xmm(code, Reg(frame.fp_scratch[1]), rb);
     }
     // The destination also supplies the accumulator. A spilled result
     // routes through a third scratch outside the pool.
     let dd = match dst {
         Place::FpReg(r) => Reg(r),
-        Place::Spill(_) => SCRATCH_XMM13,
+        Place::Spill(_) => Reg(frame.fp_scratch[2]),
         _ => return fail("Fma: dst not fp reg / spill"),
     };
     let Some(rc) = materialize_fp(code, c_place, dd, frame) else {
@@ -4864,7 +4925,7 @@ fn emit_fma(
     if rc.0 != dd.0 {
         emit_movapd_xmm_xmm(code, dd, rc);
     }
-    let (a14, b15) = (SCRATCH_XMM14, SCRATCH_XMM15);
+    let (a14, b15) = (Reg(frame.fp_scratch[0]), Reg(frame.fp_scratch[1]));
     match (neg_product, neg_addend, is_f32) {
         (false, false, false) => emit_vfmadd231sd(code, dd, a14, b15),
         (false, true, false) => emit_vfmsub231sd(code, dd, a14, b15),
@@ -4974,7 +5035,7 @@ fn emit_mul_add(
 /// `Inst::Fneg(v)` -- flip the IEEE 754 sign bit. For a `double`
 /// the mask is `1 << 63`; for a single-precision value (C99 6.3.1.8)
 /// the mask is `1 << 31`, flipping the sign bit of the f32 held in
-/// the low dword. Builds the mask on the fly into `SCRATCH_XMM15`
+/// the low dword. Builds the mask on the fly into the second FP scratch
 /// (movq xmm, r10 after loading the immediate into r10) and xors in
 /// place.
 fn emit_fneg(
@@ -4986,7 +5047,7 @@ fn emit_fneg(
     frame: Frame,
 ) -> bool {
     let src_place = place_of(alloc, value);
-    let Some(dd) = fp_or_spill_dst(dst) else {
+    let Some(dd) = fp_or_spill_dst(dst, frame) else {
         return fail("Fneg: dst not fp reg / spill");
     };
     let Some(dn) = materialize_fp(code, src_place, dd, frame) else {
@@ -4996,7 +5057,7 @@ fn emit_fneg(
         emit_movapd_xmm_xmm(code, dd, dn);
     }
     // Build the sign-bit mask in an integer scratch and transfer to
-    // SCRATCH_XMM15, then xorpd in place. r10 is reserved outside both
+    // the second FP scratch, then xorpd in place. r10 is reserved outside both
     // allocator banks and holds nothing live on this path (Fneg reads
     // only its FP `value`), so the mask load clobbers no allocator
     // value.
@@ -5007,8 +5068,8 @@ fn emit_fneg(
         i64::MIN
     };
     emit_mov_r_imm64(code, scratch_int, mask);
-    emit_movq_xmm_r(code, SCRATCH_XMM15, scratch_int);
-    emit_xorpd(code, dd, SCRATCH_XMM15);
+    emit_movq_xmm_r(code, Reg(frame.fp_scratch[1]), scratch_int);
+    emit_xorpd(code, dd, Reg(frame.fp_scratch[1]));
     fp_spill_dst_to_slot(code, dst, dd, frame);
     true
 }
@@ -5017,7 +5078,7 @@ fn emit_fneg(
 /// single hardware instruction. `sqrt` uses `SQRTSD` / `SQRTSS`; `fabs`
 /// clears the IEEE 754 sign bit by AND-ing with the inverted-sign mask
 /// (C99 7.12.7), built in an integer scratch and transferred to
-/// SCRATCH_XMM15, mirroring `emit_fneg`.
+/// the second FP scratch, mirroring `emit_fneg`.
 fn emit_fp_unary(
     code: &mut Vec<u8>,
     dst: Place,
@@ -5030,7 +5091,7 @@ fn emit_fp_unary(
     use super::super::op::Intrinsic as I;
     use super::encode::{emit_andpd, emit_roundsd, emit_roundss, emit_sqrtsd, emit_sqrtss};
     let src_place = place_of(alloc, value);
-    let Some(dd) = fp_or_spill_dst(dst) else {
+    let Some(dd) = fp_or_spill_dst(dst, frame) else {
         return fail("fp_unary: dst not fp reg / spill");
     };
     let Some(dn) = materialize_fp(code, src_place, dd, frame) else {
@@ -5051,8 +5112,8 @@ fn emit_fp_unary(
             }
             let mask: i64 = if is_f32 { 0x7fff_ffff } else { i64::MAX };
             emit_mov_r_imm64(code, SCRATCH_R10, mask);
-            emit_movq_xmm_r(code, SCRATCH_XMM15, SCRATCH_R10);
-            emit_andpd(code, dd, SCRATCH_XMM15);
+            emit_movq_xmm_r(code, Reg(frame.fp_scratch[1]), SCRATCH_R10);
+            emit_andpd(code, dd, Reg(frame.fp_scratch[1]));
         }
         I::Floor | I::Floorf | I::Ceil | I::Ceilf | I::Trunc | I::Truncf => {
             // ROUNDSD/ROUNDSS rounding-mode immediate, with bit 3 set to
@@ -5095,7 +5156,7 @@ fn emit_fp_cast(
             let Some(rn) = materialize_int(code, src_place, SCRATCH_R10, frame) else {
                 return fail("FpCast IntToFp: value not int reg / spill");
             };
-            let Some(dd) = fp_or_spill_dst(dst) else {
+            let Some(dd) = fp_or_spill_dst(dst, frame) else {
                 return fail("FpCast IntToFp: dst not fp reg / spill");
             };
             // Break the false dependency `cvtsi2*` carries on the
@@ -5121,7 +5182,7 @@ fn emit_fp_cast(
             let Some(src) = materialize_int(code, src_place, SCRATCH_R10, frame) else {
                 return fail("FpCast UIntToFp: value not int reg / spill");
             };
-            let Some(dd) = fp_or_spill_dst(dst) else {
+            let Some(dd) = fp_or_spill_dst(dst, frame) else {
                 return fail("FpCast UIntToFp: dst not fp reg / spill");
             };
             // Modifiable scratch copies so a live source register is not
@@ -5163,7 +5224,7 @@ fn emit_fp_cast(
             true
         }
         FpCastKind::FpToInt => {
-            let Some(dn) = materialize_fp(code, src_place, SCRATCH_XMM14, frame) else {
+            let Some(dn) = materialize_fp(code, src_place, Reg(frame.fp_scratch[0]), frame) else {
                 return fail("FpCast FpToInt: value not fp reg / spill / int reg");
             };
             let Some(rd) = int_or_spill_dst(dst) else {
@@ -5186,7 +5247,8 @@ fn emit_fp_cast(
             // indefinite. Compare with 2^63: below it the signed
             // truncate is exact; at or above, subtract 2^63, truncate
             // the in-range remainder, and set bit 63.
-            let Some(src_xmm) = materialize_fp(code, src_place, SCRATCH_XMM14, frame) else {
+            let Some(src_xmm) = materialize_fp(code, src_place, Reg(frame.fp_scratch[0]), frame)
+            else {
                 return fail("FpCast UFpToInt: value not fp reg / spill / int reg");
             };
             let Some(rd) = int_or_spill_dst(dst) else {
@@ -5194,9 +5256,9 @@ fn emit_fp_cast(
             };
             // Modifiable copy so the `subsd` below cannot clobber a
             // live source xmm.
-            let dn = SCRATCH_XMM14;
+            let dn = Reg(frame.fp_scratch[0]);
             emit_movapd_xmm_xmm(code, dn, src_xmm);
-            let two63 = SCRATCH_XMM15;
+            let two63 = Reg(frame.fp_scratch[1]);
             emit_mov_r_imm64(code, SCRATCH_R11, 0x43E0000000000000u64 as i64);
             emit_movq_xmm_r(code, two63, SCRATCH_R11);
             emit_ucomisd(code, dn, two63);
@@ -5221,10 +5283,10 @@ fn emit_fp_cast(
         // low dword of the xmm; `cvtss2sd` reads it, `cvtsd2ss` writes
         // it, so both are register-to-register with no separate move.
         FpCastKind::F32ToF64 => {
-            let Some(dn) = materialize_fp(code, src_place, SCRATCH_XMM14, frame) else {
+            let Some(dn) = materialize_fp(code, src_place, Reg(frame.fp_scratch[0]), frame) else {
                 return fail("FpCast F32ToF64: value not fp reg / spill / int reg");
             };
-            let Some(dd) = fp_or_spill_dst(dst) else {
+            let Some(dd) = fp_or_spill_dst(dst, frame) else {
                 return fail("FpCast F32ToF64: dst not fp reg / spill");
             };
             emit_cvtss2sd(code, dd, dn);
@@ -5232,10 +5294,10 @@ fn emit_fp_cast(
             true
         }
         FpCastKind::F64ToF32 => {
-            let Some(dn) = materialize_fp(code, src_place, SCRATCH_XMM14, frame) else {
+            let Some(dn) = materialize_fp(code, src_place, Reg(frame.fp_scratch[0]), frame) else {
                 return fail("FpCast F64ToF32: value not fp reg / spill / int reg");
             };
-            let Some(dd) = fp_or_spill_dst(dst) else {
+            let Some(dd) = fp_or_spill_dst(dst, frame) else {
                 return fail("FpCast F64ToF32: dst not fp reg / spill");
             };
             emit_cvtsd2ss(code, dd, dn);
@@ -5264,17 +5326,17 @@ fn emit_binop(
     // rhs to the same xmm as dst; `materialize_fp` returns an
     // `FpReg` source in place without copying, so staging lhs into
     // dst would then clobber rhs. Capture rhs first, forcing a copy
-    // into `SCRATCH_XMM15` when it aliases dst.
+    // into the second FP scratch when it aliases dst.
     if let Some(arith) = fp_arith_enc_for(op, alloc.is_f32(v)) {
-        let Some(dd) = fp_or_spill_dst(dst) else {
+        let Some(dd) = fp_or_spill_dst(dst, frame) else {
             return fail("Fbinop: dst not fp reg / spill");
         };
         let dm = match rhs_place {
             Place::FpReg(r) if r == dd.0 => {
-                emit_movapd_xmm_xmm(code, SCRATCH_XMM15, dd);
-                SCRATCH_XMM15
+                emit_movapd_xmm_xmm(code, Reg(frame.fp_scratch[1]), dd);
+                Reg(frame.fp_scratch[1])
             }
-            _ => match materialize_fp(code, rhs_place, SCRATCH_XMM15, frame) {
+            _ => match materialize_fp(code, rhs_place, Reg(frame.fp_scratch[1]), frame) {
                 Some(r) => r,
                 None => return fail("Fbinop: rhs not fp reg / spill / int reg"),
             },
@@ -5297,10 +5359,10 @@ fn emit_binop(
     // / `setne` paths get an explicit AND-with-`setnp` /
     // OR-with-`setp` fixup.
     if let Some((cc, nan_fix)) = fp_compare_cc(op) {
-        let Some(dn) = materialize_fp(code, lhs_place, SCRATCH_XMM14, frame) else {
+        let Some(dn) = materialize_fp(code, lhs_place, Reg(frame.fp_scratch[0]), frame) else {
             return fail("Fcmp: lhs not fp reg / spill / int reg");
         };
-        let Some(dm) = materialize_fp(code, rhs_place, SCRATCH_XMM15, frame) else {
+        let Some(dm) = materialize_fp(code, rhs_place, Reg(frame.fp_scratch[1]), frame) else {
             return fail("Fcmp: rhs not fp reg / spill / int reg");
         };
         // When a fused branch reads the flags, `Flt` / `Fle` compare
@@ -5815,12 +5877,14 @@ fn emit_shift_by_count_reg(
     // `def < v < last_use` pc-interval test is not a liveness test: a
     // value carried around a loop back edge is live at the shift while
     // the shift's pc lies outside the interval.
+    // A `-ffixed-rcx` holds a value of the program's, preserved the same way.
     let _ = v;
     let rcx_holds_live = count_reg.map(|r| r.0).unwrap_or(u8::MAX) != Reg::RCX.0
-        && alloc
-            .places
-            .iter()
-            .any(|p| matches!(p, Place::IntReg(r) if *r == Reg::RCX.0));
+        && (frame.fixed_regs.has_gpr(Reg::RCX.0)
+            || alloc
+                .places
+                .iter()
+                .any(|p| matches!(p, Place::IntReg(r) if *r == Reg::RCX.0)));
     if rcx_holds_live {
         emit_push_r(code, Reg::RCX);
     }
@@ -6615,6 +6679,25 @@ fn emit_call_ext(
     true
 }
 
+/// The ABI a call site marshals to: the callee's own convention, which
+/// is the target's unless the callee declares `ms_abi` / `sysv_abi`.
+/// It is never the caller's -- a `ms_abi` function calling an ordinary
+/// one has to marshal into the ordinary one's argument window. The rest
+/// of `Abi` describes this compilation rather than any convention, so
+/// it carries over from the caller unchanged.
+fn callee_abi(abi: super::Abi, target: Target, conv: super::CallConv) -> super::Abi {
+    let row = target.abi_for(conv);
+    super::Abi {
+        int_arg_regs: row.int_arg_regs,
+        shadow_space: row.shadow_space,
+        variadic_on_stack: row.variadic_on_stack,
+        variadic_int_only: row.variadic_int_only,
+        position_indexed_args: row.position_indexed_args,
+        variadic_zero_xmm_count: row.variadic_zero_xmm_count,
+        ..abi
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn emit_call_indirect(
     code: &mut Vec<u8>,
@@ -6718,7 +6801,7 @@ fn emit_call_indirect(
     // the marshal's reserved scratch r10 / r11, so a pick never aliases
     // it. When everything is blocked the `else` branch below spills the
     // target to the stack.
-    let target_scratch = pick_caller_saved_scratch(Reg(0xff), &blocked);
+    let target_scratch = pick_caller_saved_scratch(Reg(0xff), &blocked, abi.fixed_regs);
     // System V AMD64 3.2.3: a variadic call passes the XMM-argument
     // count in `al`. Computed from the plan and emitted after the
     // marshal (which never writes rax, blocked above for the target).
@@ -6940,6 +7023,7 @@ fn asm_mem_size(
     modifier.or(insn.suffix).or_else(|| {
         insn.operands.iter().find_map(|o| match *o {
             AsmOpnd::Reg { reg, size } if reg < super::asm::XMM_BASE => Some(size),
+            AsmOpnd::HighReg(_) | AsmOpnd::HighRef(_) => Some(AsmRegSize::Byte),
             AsmOpnd::Ref { idx, size }
                 if op_reg.get(idx as usize).copied().flatten().is_some()
                     && !matches!(
@@ -6987,7 +7071,7 @@ fn asm_riprel_target(
 ) -> Option<AsmRipSym> {
     use crate::c5::asm::{asm_operand_code_base, asm_operand_data_target};
     if let Some((target, addend)) =
-        asm_operand_data_target(&func.insts, arg, &|v| extern_data_names.get(&v).cloned())
+        asm_operand_data_target(func, arg, &|v| extern_data_names.get(&v).cloned())
     {
         use crate::c5::asm::AsmSectionTarget;
         return Some(match target {
@@ -7001,7 +7085,7 @@ fn asm_riprel_target(
             _ => return None,
         });
     }
-    let (base_vid, ent_pc, offset) = asm_operand_code_base(&func.insts, arg)?;
+    let (base_vid, ent_pc, offset) = asm_operand_code_base(func, arg)?;
     // `name2entpc` holds the unit's own definitions. One of them takes the
     // entry-PC channel, which reaches the emitted body; every other name is
     // cross-TU and relocates by name. The in-unit channel names the entry,
@@ -7015,6 +7099,33 @@ fn asm_riprel_target(
             name: name.clone(),
             offset,
         })
+}
+
+/// Byte offset within `body` of the disp32 field of its symbolic
+/// RIP-relative operand, and the count of bytes trailing the field (an
+/// immediate). Re-encodes with a distinct displacement in that operand,
+/// keeping its form; exactly the field's four bytes differ.
+fn riprel_field(
+    body: &[u8],
+    concrete: &[super::asm::Concrete],
+    addr: u8,
+    insn: &super::asm::AsmInsn,
+) -> Option<(usize, usize)> {
+    let idx = concrete
+        .iter()
+        .position(|c| matches!(c, super::asm::Concrete::RipRel { .. }))?;
+    let super::asm::Concrete::RipRel { size, .. } = concrete[idx] else {
+        return None;
+    };
+    let mut probe = concrete.to_vec();
+    probe[idx] = super::asm::Concrete::RipRel {
+        disp: RIPREL_PROBE_DISP,
+        size,
+    };
+    let mut probe_bytes = alloc::vec::Vec::new();
+    super::asm::encode(&mut probe_bytes, addr, insn.mnemonic, insn.suffix, &probe).ok()?;
+    let (field, width) = differing_run(body, &probe_bytes)?;
+    (width == 4).then(|| (field, body.len() - field - 4))
 }
 
 /// Encode replacement instructions in an executable inline-asm section
@@ -7056,7 +7167,7 @@ fn encode_x86_asm_section_code(
             Some(Inst::ImmCode(pc)) => entpc2name
                 .get(pc)
                 .map(|n| AsmSectionTarget::Symbol(alloc::string::String::from(*n))),
-            _ => crate::c5::asm::asm_operand_data_target(&func.insts, arg, &|v| {
+            _ => crate::c5::asm::asm_operand_data_target(func, arg, &|v| {
                 extern_data_names.get(&v).cloned()
             })
             .map(|(t, _)| t),
@@ -7064,18 +7175,19 @@ fn encode_x86_asm_section_code(
     };
     // A `%N` naming an `i`-class operand with a compile-time constant.
     let imm_of = |idx: u8| -> Option<i64> {
-        match func.insts.get(*args.get(idx as usize)? as usize) {
-            Some(Inst::Imm(v)) => Some(*v),
-            _ => None,
-        }
+        crate::c5::asm::asm_operand_const(func, *args.get(idx as usize)?)
+    };
+    let form = |idx: u8| -> alloc::string::String {
+        args.get(idx as usize).map_or_else(
+            || alloc::string::String::from("past the operand list"),
+            |&a| crate::c5::asm::asm_operand_form(func, a),
+        )
     };
     // A `%a[N]` operand naming a link-time data address (`&global`): its reloc
     // target and the constant byte offset added to it.
     let addr_of = |idx: u8| -> Option<(AsmSectionTarget, i64)> {
         let arg = *args.get(idx as usize)?;
-        crate::c5::asm::asm_operand_data_target(&func.insts, arg, &|v| {
-            extern_data_names.get(&v).cloned()
-        })
+        crate::c5::asm::asm_operand_data_target(func, arg, &|v| extern_data_names.get(&v).cloned())
     };
     let mut mode = super::table::Mode::Bits64;
     let mut fold = crate::c5::asm::AsmParseFold::default();
@@ -7089,6 +7201,7 @@ fn encode_x86_asm_section_code(
                     operands,
                     imm_of: &imm_of,
                     addr_of: &addr_of,
+                    form: &form,
                     fold: &f,
                     file_scope: false,
                 };
@@ -7125,6 +7238,7 @@ pub(crate) fn encode_x86_file_asm_section_code(
     let goto_block = |_: u8| -> Option<u32> { None };
     let imm_of = |_: u8| -> Option<i64> { None };
     let addr_of = |_: u8| -> Option<(AsmSectionTarget, i64)> { None };
+    let form = |_: u8| alloc::string::String::from("not an operand of this statement");
     let mut mode = if class.is32() {
         super::table::Mode::Bits32
     } else {
@@ -7161,6 +7275,7 @@ pub(crate) fn encode_x86_file_asm_section_code(
                     operands: &[],
                     imm_of: &imm_of,
                     addr_of: &addr_of,
+                    form: &form,
                     fold: &none,
                     file_scope: true,
                 };
@@ -7172,6 +7287,7 @@ pub(crate) fn encode_x86_file_asm_section_code(
                     operands: &[],
                     imm_of: &imm_of,
                     addr_of: &addr_of,
+                    form: &form,
                     fold: &f,
                     file_scope: true,
                 };
@@ -7328,6 +7444,8 @@ struct SectionOperandRefs<'a> {
     operands: &'a [super::super::ir::AsmOperand],
     imm_of: &'a dyn Fn(u8) -> Option<i64>,
     addr_of: &'a dyn Fn(u8) -> Option<(crate::c5::asm::AsmSectionTarget, i64)>,
+    /// The form of an operand that is neither a register nor a constant.
+    form: &'a dyn Fn(u8) -> alloc::string::String,
     /// The value an operand expression already has at this point of the
     /// stream, when the walk's [`AsmParseFold`] can prove it is a constant.
     /// A folded immediate or displacement encodes as a literal, taking the
@@ -7713,6 +7831,13 @@ fn encode_one_x86_section_insn(
             }
             AsmOpnd::Reg { reg, size } => concrete.push(Concrete::Reg { reg, size }),
             AsmOpnd::HighReg(n) => concrete.push(Concrete::HighReg(n)),
+            AsmOpnd::HighRef(idx) => {
+                concrete.push(super::asm::resolve_high_ref(
+                    idx,
+                    refs.operands,
+                    refs.op_reg,
+                )?);
+            }
             AsmOpnd::Ref { idx, size } => {
                 // A memory-constraint (`m`) operand holds its address in the
                 // assigned register; `%N` is the register-indirect reference
@@ -7743,7 +7868,9 @@ fn encode_one_x86_section_insn(
                     }
                     None => concrete.push(reg_of(idx, size).ok_or_else(|| {
                         alloc::format!(
-                            "inline asm: replacement `{text}` operand `%{idx}` is not a register or constant"
+                            "inline asm: replacement `{text}` operand `%{idx}` is not a register \
+                             or constant: the operand is {}",
+                            (refs.form)(idx)
                         )
                     })?),
                 }
@@ -7790,9 +7917,22 @@ fn encode_one_x86_section_insn(
                         concrete.push(Concrete::RipRel { disp: 0, size });
                     }
                     (None, None) => {
-                        return Err(alloc::format!(
-                            "inline asm: replacement `{text}` memory base is not a register operand"
-                        ));
+                        let AsmMemBase::Ref(bi) = base else {
+                            return Err(alloc::format!(
+                                "inline asm: replacement `{text}` memory base is not a register"
+                            ));
+                        };
+                        let abs = (refs.imm_of)(bi)
+                            .filter(|_| index.is_none())
+                            .and_then(|v| i32::try_from(v.checked_add(disp as i64)?).ok());
+                        let Some(disp) = abs else {
+                            return Err(alloc::format!(
+                                "inline asm: replacement `{text}` memory base `%{bi}` is not a \
+                                 register, a constant or a link-time address: the operand is {}",
+                                (refs.form)(bi)
+                            ));
+                        };
+                        concrete.push(Concrete::AbsMem { disp, size });
                     }
                 }
             }
@@ -7818,7 +7958,9 @@ fn encode_one_x86_section_insn(
                     None => {
                         let (target, off) = (refs.addr_of)(idx).ok_or_else(|| {
                             alloc::format!(
-                                "inline asm: replacement `{text}` `%c`/`%P` operand is not a constant or address"
+                                "inline asm: replacement `{text}` `%c`/`%P` operand is not a \
+                                 constant or address: the operand is {}",
+                                (refs.form)(idx)
                             )
                         })?;
                         if sym_disp.is_some() {
@@ -7865,7 +8007,9 @@ fn encode_one_x86_section_insn(
                     None => {
                         let (target, off) = (refs.addr_of)(idx).ok_or_else(|| {
                             alloc::format!(
-                                "inline asm: replacement `{text}` `%c`/`%P` operand is not a constant or address"
+                                "inline asm: replacement `{text}` `%c`/`%P` operand is not a \
+                                 constant or address: the operand is {}",
+                                (refs.form)(idx)
                             )
                         })?;
                         if sym_disp.is_some() {
@@ -8453,7 +8597,7 @@ fn emit_inline_asm_once(
     mut goto_ctx: Option<AsmGotoCtx<'_>>,
     long_sites: &mut alloc::collections::BTreeSet<usize>,
 ) -> bool {
-    use super::super::ir::{AsmConstraint, AsmRegSize, AsmSeg, Inst};
+    use super::super::ir::{AsmConstraint, AsmRegSize, AsmSeg};
     use super::asm::{AsmOpnd, Concrete};
     // A statement that lowers to nothing keeps only its IR-level ordering
     // effect; the operand staging around zero bytes of code is dead, and
@@ -8476,30 +8620,42 @@ fn emit_inline_asm_once(
     // single-definition labels.
     let multidef = crate::c5::asm::rewrite_multidef_local_labels(text);
     let text = multidef.as_deref().unwrap_or(text);
+    // `%zN` prints operand N's size suffix into its mnemonic; the parser
+    // reads the resolved mnemonic.
+    let sized = match crate::c5::asm::expand_size_suffix_refs(text, &|idx| {
+        asm.operands
+            .get(idx as usize)
+            .and_then(|op| super::asm::att_size_suffix(op.width))
+    }) {
+        Ok(s) => s,
+        Err(m) => {
+            bail_msg(&m);
+            return false;
+        }
+    };
+    let text = sized.as_deref().unwrap_or(text);
+    // The constant value of an `i`-class operand reference, if any.
+    let const_of = |idx: u8| -> Option<i64> {
+        crate::c5::asm::asm_operand_const(func, *args.get(idx as usize)?)
+    };
     // The operand register assignment is needed both for the code stream and,
     // ahead of it, for the GNU-as macro pass and a replacement instruction that
     // references a template operand (`popcntl %1, %0`); compute it once, first.
-    let op_reg =
-        match super::asm::assign_operand_regs(&asm.operands, asm.clobber_regs, asm.clobber_fp_regs)
-        {
-            Ok(r) => r,
-            Err(m) => {
-                bail_msg(&m);
-                return false;
-            }
-        };
+    let op_reg = match super::asm::assign_operand_regs(
+        &asm.operands,
+        asm.clobber_regs | frame.fixed_regs.gpr,
+        asm.clobber_fp_regs | frame.fixed_regs.fpr,
+        &|i| const_of(i as u8),
+    ) {
+        Ok(r) => r,
+        Err(m) => {
+            bail_msg(&m);
+            return false;
+        }
+    };
     // Expand any GNU-as macro directives (`.macro` / `.irp` / `.ifc` / `.set` /
     // `.if`) before section extraction, substituting each register operand to
     // its assigned AT&T name so the macro's register-name comparisons resolve.
-    let const_of = |idx: u8| -> Option<i64> {
-        let arg = *args.get(idx as usize)?;
-        match func.insts.get(arg as usize) {
-            Some(Inst::Imm(v)) => Some(*v),
-            // An unpromoted function (a computed goto opts out of mem2reg)
-            // leaves an `"i"` constant operand a load of a constant local.
-            _ => crate::c5::asm::asm_operand_local_const(func, arg),
-        }
-    };
     let gas_subst = |tok: &str| -> Option<alloc::string::String> {
         let body = tok.strip_prefix('%')?;
         let (modifier, digits) = match body.as_bytes().first() {
@@ -8525,6 +8681,9 @@ fn emit_inline_asm_once(
             return None;
         }
         let r = op_reg.get(idx as usize).copied().flatten()?;
+        if modifier == Some(b'h') {
+            return (r < 4).then(|| alloc::format!("%{}", super::asm::GPR_HB[r as usize]));
+        }
         let width = match modifier {
             Some(b'b') => 1,
             Some(b'w') => 2,
@@ -8628,7 +8787,7 @@ fn emit_inline_asm_once(
     // save to 8-byte scratch slots; `x` (xmm) operands and FP clobbers live
     // in the independent XMM file and take 16-byte slots. `stage` carries
     // the capture / load / store-back sequences below.
-    let (used, fp_used, stage) = match asm_save_masks_and_stage(asm, &op_reg) {
+    let (used, fp_used, stage) = match asm_save_masks_and_stage(asm, &op_reg, frame.fixed_regs) {
         Ok(t) => t,
         Err(m) => {
             bail_msg(&m);
@@ -8750,13 +8909,13 @@ fn emit_inline_asm_once(
     let mut goto_sites: alloc::vec::Vec<(usize, LocalBranchKind, usize)> = alloc::vec::Vec::new();
     // The constant value of an `i`-class operand reference, if any.
     let const_of = |idx: u8| -> Option<i64> {
-        let arg = *args.get(idx as usize)?;
-        match func.insts.get(arg as usize) {
-            Some(Inst::Imm(v)) => Some(*v),
-            // An unpromoted function (a computed goto opts out of mem2reg)
-            // leaves an `"i"` constant operand a load of a constant local.
-            _ => crate::c5::asm::asm_operand_local_const(func, arg),
-        }
+        crate::c5::asm::asm_operand_const(func, *args.get(idx as usize)?)
+    };
+    let operand_form = |idx: u8| -> alloc::string::String {
+        args.get(idx as usize).map_or_else(
+            || alloc::string::String::from("past the operand list"),
+            |&a| crate::c5::asm::asm_operand_form(func, a),
+        )
     };
     // Section-label offsets, so a `.skip` in the main stream can size its
     // padding against the replacement length (`775f - 774f`, both in a
@@ -9190,11 +9349,22 @@ fn emit_inline_asm_once(
             let c = match *o {
                 AsmOpnd::Imm(val) => Concrete::Imm(val),
                 AsmOpnd::HighReg(n) => Concrete::HighReg(n),
+                AsmOpnd::HighRef(idx) => {
+                    match super::asm::resolve_high_ref(idx, &asm.operands, &op_reg) {
+                        Ok(c) => c,
+                        Err(m) => return fail(&m),
+                    }
+                }
                 // `%cN` / `%PN` with a compile-time constant (the address
                 // case was handled above): a bare immediate.
                 AsmOpnd::RefConst { idx, .. } => match const_of(idx) {
                     Some(v) => Concrete::Imm(v),
-                    None => return fail("inline asm: non-constant `%c`/`%P` operand"),
+                    None => {
+                        return fail(&alloc::format!(
+                            "inline asm: non-constant `%c`/`%P` operand `%{idx}`: the operand is {}",
+                            operand_form(idx)
+                        ));
+                    }
                 },
                 // A bare `%cN` / `%PN` memory reference: a constant addresses
                 // absolutely (the percpu form under a `%%gs:` / `%%fs:`
@@ -9225,9 +9395,11 @@ fn emit_inline_asm_once(
                                 Concrete::RipRel { disp: 0, size }
                             }
                             None => {
-                                return fail(
-                                    "inline asm: `%c`/`%P` memory operand is not a constant or address",
-                                );
+                                return fail(&alloc::format!(
+                                    "inline asm: `%c`/`%P` memory operand `%{idx}` is not a constant \
+                                     or address: the operand is {}",
+                                    operand_form(idx)
+                                ));
                             }
                         },
                     }
@@ -9298,11 +9470,11 @@ fn emit_inline_asm_once(
                             reg: r,
                             size: size.unwrap_or(AsmRegSize::from_width(width)),
                         },
-                        // A `%N` naming an immediate-only operand: use its
+                        // A `%N` naming an operand with no register: its
                         // constant value.
-                        None => match func.insts.get(args[idx as usize] as usize) {
-                            Some(Inst::Imm(v)) => Concrete::Imm(*v),
-                            _ => return fail("inline asm: non-constant immediate operand"),
+                        None => match const_of(idx) {
+                            Some(v) => Concrete::Imm(v),
+                            None => return fail("inline asm: non-constant immediate operand"),
                         },
                     }
                 }
@@ -9357,7 +9529,24 @@ fn emit_inline_asm_once(
                             continue;
                         }
                         (None, None) => {
-                            return fail("inline asm: memory base must be a register operand");
+                            let super::asm::AsmMemBase::Ref(bi) = base else {
+                                return fail("inline asm: memory base must be a register");
+                            };
+                            let abs = const_of(bi)
+                                .filter(|_| index.is_none())
+                                .and_then(|v| i32::try_from(v.checked_add(disp as i64)?).ok());
+                            let Some(disp) = abs else {
+                                return fail(&alloc::format!(
+                                    "inline asm: memory base `%{bi}` is not a register, a \
+                                     constant or a link-time address: the operand is {}",
+                                    operand_form(bi)
+                                ));
+                            };
+                            concrete.push(Concrete::AbsMem {
+                                disp,
+                                size: size.unwrap_or(AsmRegSize::Quad),
+                            });
+                            continue;
                         }
                     };
                     let index = match index {
@@ -9431,9 +9620,11 @@ fn emit_inline_asm_once(
                                 Concrete::RipRel { disp: 0, size }
                             }
                             None => {
-                                return fail(
-                                    "inline asm: `%c`/`%P` RIP-relative operand is not a constant or address",
-                                );
+                                return fail(&alloc::format!(
+                                    "inline asm: `%c`/`%P` RIP-relative operand `%{idx}` is not a \
+                                     constant or address: the operand is {}",
+                                    operand_form(idx)
+                                ));
                             }
                         },
                     }
@@ -9593,13 +9784,6 @@ fn emit_inline_asm_once(
             };
             concrete.push(c);
         }
-        // A RIP-relative symbolic operand puts its disp32 at the end of the
-        // instruction; a trailing immediate would displace it, so the reloc
-        // offset below would be wrong. Reject that combination rather than
-        // relocate the wrong bytes.
-        if riprel_reloc.is_some() && concrete.iter().any(|c| matches!(c, Concrete::Imm(_))) {
-            return fail("inline asm: a symbolic RIP-relative operand with an immediate");
-        }
         if abs_label.is_some()
             && concrete
                 .iter()
@@ -9664,28 +9848,32 @@ fn emit_inline_asm_once(
             expr_fixups.push((insn_at, at, 4, text));
         }
         // Record the RIP-relative relocation against the operand's symbol.
-        // The disp32 occupies the last four bytes of the instruction just
-        // encoded; both channels place the reloc at `instr_offset + 3`, so
-        // anchor three bytes before it. gcc's addend is the operand's
-        // constant offset less the 4-byte PC-relative end skew.
+        // Both channels place the reloc at `instr_offset + 3`, so anchor
+        // three bytes before the disp32 field. gcc's addend is the operand's
+        // constant offset less the field's 4-byte PC-relative end skew and
+        // any immediate trailing the field (`testb $imm, sym(%rip)`).
         if let Some((sym, disp)) = riprel_reloc.take() {
-            let instr_offset = code.len() - 4 - 3;
+            let Some((field, trailing)) = riprel_field(&body, &concrete, addr, insn) else {
+                return fail("inline asm: RIP-relative displacement field not found");
+            };
+            let instr_offset = code.len() - (body.len() - field) - 3;
+            let trailing = trailing as i64;
             match sym {
                 AsmRipSym::Extern { name, offset } => {
                     user_extern_data_refs.push(super::UserExternDataRef {
                         instr_offset,
                         symbol_name: name,
-                        direct_pcrel: Some(offset + disp - 4),
+                        direct_pcrel: Some(offset + disp - 4 - trailing),
                     });
                 }
                 AsmRipSym::Local { data_offset } => {
                     data_fixups.push(DataFixup {
                         instr_offset,
-                        data_offset: (data_offset + disp) as u64,
+                        data_offset: (data_offset + disp - trailing) as u64,
                         part: AddrPart::Whole,
                     });
                 }
-                AsmRipSym::Text { ent_pc } if disp == 0 => {
+                AsmRipSym::Text { ent_pc } if disp == 0 && trailing == 0 => {
                     pending_func_fixups.push((instr_offset, ent_pc));
                 }
                 AsmRipSym::Text { .. } => {
@@ -9798,7 +9986,7 @@ fn emit_inline_asm_once(
         else {
             continue;
         };
-        if name.starts_with(".L") {
+        if crate::c5::asm::is_local_label(name) {
             continue;
         }
         // One definition per name across the unit, as in GNU as.
@@ -9844,9 +10032,14 @@ fn emit_inline_asm_once(
         // where `%c0` is `&sym` or a string literal) relocates against the
         // data image, resolved like the operand's own `ImmData` lowering.
         let operand_sym = |idx: u8| -> Option<(crate::c5::asm::AsmSectionTarget, i64)> {
-            crate::c5::asm::asm_operand_data_target(&func.insts, *args.get(idx as usize)?, &|vid| {
+            crate::c5::asm::asm_operand_data_target(func, *args.get(idx as usize)?, &|vid| {
                 extern_data_names.get(&vid).cloned()
             })
+        };
+        let resolver = crate::c5::asm::AsmOperandResolver {
+            const_of: &|idx| const_of(idx),
+            symbol_of: &operand_sym,
+            form: &operand_form,
         };
         // An `asm goto` label operand (`.long %l0 - .`): the goto row's block
         // index. Its text offset is not final here; the reloc carries the
@@ -9857,9 +10050,8 @@ fn emit_inline_asm_once(
         };
         let defined = match crate::c5::asm::materialize_asm_sections(
             section_blocks,
-            &|idx| const_of(idx),
+            &resolver,
             &label_off,
-            &operand_sym,
             &goto_block,
             false,
             asm_sections,
@@ -10105,8 +10297,8 @@ fn emit_x86_simd(
     use super::asm::{Concrete, XMM_BASE};
     use crate::c5::ir::AsmRegSize;
     use crate::c5::x86_simd::{self, Form};
-    const DST: u8 = SCRATCH_XMM15.0;
-    const SRC: u8 = SCRATCH_XMM14.0;
+    let dst_x: u8 = frame.fp_scratch[1];
+    let src_x: u8 = frame.fp_scratch[0];
     let row = x86_simd::get(op);
     // An operand's value (an address for the 128-bit and pointer operands),
     // in its own register or loaded into `scratch`.
@@ -10168,19 +10360,19 @@ fn emit_x86_simd(
             let Some(a) = operand(code, 1, SCRATCH_R10) else {
                 return fail("x86 simd: operand 1 has no place");
             };
-            if !load128(code, DST, a) {
+            if !load128(code, dst_x, a) {
                 return false;
             }
             let Some(b) = operand(code, 2, SCRATCH_R10) else {
                 return fail("x86 simd: operand 2 has no place");
             };
-            if !load128(code, SRC, b) {
+            if !load128(code, src_x, b) {
                 return false;
             }
             let ok = if row.form == Form::Vv {
-                insn(code, row.mnem, &[xmm(SRC), xmm(DST)])
+                insn(code, row.mnem, &[xmm(src_x), xmm(dst_x)])
             } else {
-                insn(code, row.mnem, &[imm8, xmm(SRC), xmm(DST)])
+                insn(code, row.mnem, &[imm8, xmm(src_x), xmm(dst_x)])
             };
             if !ok {
                 return false;
@@ -10190,13 +10382,13 @@ fn emit_x86_simd(
             let Some(a) = operand(code, 1, SCRATCH_R10) else {
                 return fail("x86 simd: operand 1 has no place");
             };
-            if !load128(code, SRC, a) {
+            if !load128(code, src_x, a) {
                 return false;
             }
             let ok = if row.form == Form::V {
-                insn(code, row.mnem, &[xmm(SRC), xmm(DST)])
+                insn(code, row.mnem, &[xmm(src_x), xmm(dst_x)])
             } else {
-                insn(code, row.mnem, &[imm8, xmm(SRC), xmm(DST)])
+                insn(code, row.mnem, &[imm8, xmm(src_x), xmm(dst_x)])
             };
             if !ok {
                 return false;
@@ -10206,17 +10398,17 @@ fn emit_x86_simd(
             let Some(a) = operand(code, 1, SCRATCH_R10) else {
                 return fail("x86 simd: operand 1 has no place");
             };
-            if !load128(code, DST, a) {
+            if !load128(code, dst_x, a) {
                 return false;
             }
             let ok = match imm {
-                Some(_) => insn(code, row.mnem, &[imm8, xmm(DST)]),
+                Some(_) => insn(code, row.mnem, &[imm8, xmm(dst_x)]),
                 None => {
                     let Some(c) = operand(code, 2, SCRATCH_R10) else {
                         return fail("x86 simd: shift count has no place");
                     };
-                    super::encode::emit_movq_xmm_r(code, Reg(SRC), c);
-                    insn(code, row.mnem, &[xmm(SRC), xmm(DST)])
+                    super::encode::emit_movq_xmm_r(code, Reg(src_x), c);
+                    insn(code, row.mnem, &[xmm(src_x), xmm(dst_x)])
                 }
             };
             if !ok {
@@ -10227,7 +10419,7 @@ fn emit_x86_simd(
             let Some(p) = operand(code, 1, SCRATCH_R10) else {
                 return fail("x86 simd: pointer operand has no place");
             };
-            if !load128(code, DST, p) {
+            if !load128(code, dst_x, p) {
                 return false;
             }
         }
@@ -10235,19 +10427,19 @@ fn emit_x86_simd(
             let Some(a) = operand(code, 1, SCRATCH_R10) else {
                 return fail("x86 simd: source operand has no place");
             };
-            if !load128(code, DST, a) {
+            if !load128(code, dst_x, a) {
                 return false;
             }
             let Some(p) = operand(code, 0, SCRATCH_R10) else {
                 return fail("x86 simd: pointer operand has no place");
             };
-            return store128(code, p, DST);
+            return store128(code, p, dst_x);
         }
         Form::Extract => {
             let Some(a) = operand(code, 1, SCRATCH_R10) else {
                 return fail("x86 simd: operand 1 has no place");
             };
-            if !load128(code, SRC, a) {
+            if !load128(code, src_x, a) {
                 return false;
             }
             // `pextrw` zero-extends into the 32-bit register; `pextrd`
@@ -10255,7 +10447,7 @@ fn emit_x86_simd(
             if !insn(
                 code,
                 row.mnem,
-                &[imm8, xmm(SRC), gpr(SCRATCH_R11, AsmRegSize::Long)],
+                &[imm8, xmm(src_x), gpr(SCRATCH_R11, AsmRegSize::Long)],
             ) {
                 return false;
             }
@@ -10272,7 +10464,7 @@ fn emit_x86_simd(
             let Some(a) = operand(code, 1, SCRATCH_R10) else {
                 return fail("x86 simd: operand 1 has no place");
             };
-            if !load128(code, DST, a) {
+            if !load128(code, dst_x, a) {
                 return false;
             }
             let Some(x) = operand(code, 2, SCRATCH_R10) else {
@@ -10281,7 +10473,7 @@ fn emit_x86_simd(
             // Every `pinsr` narrower than a quadword reads a 32-bit
             // register and uses the low lanes of it.
             let size = int_size(row.int_width.max(4));
-            if !insn(code, row.mnem, &[imm8, gpr(x, size), xmm(DST)]) {
+            if !insn(code, row.mnem, &[imm8, gpr(x, size), xmm(dst_x)]) {
                 return false;
             }
         }
@@ -10289,13 +10481,13 @@ fn emit_x86_simd(
             let Some(a) = operand(code, 1, SCRATCH_R10) else {
                 return fail("x86 simd: operand 1 has no place");
             };
-            if !load128(code, SRC, a) {
+            if !load128(code, src_x, a) {
                 return false;
             }
             if !insn(
                 code,
                 row.mnem,
-                &[xmm(SRC), gpr(SCRATCH_R11, AsmRegSize::Long)],
+                &[xmm(src_x), gpr(SCRATCH_R11, AsmRegSize::Long)],
             ) {
                 return false;
             }
@@ -10343,7 +10535,7 @@ fn emit_x86_simd(
         return fail("x86 simd: destination has no place");
     };
     if row.form.returns_vector() {
-        store128(code, d, DST)
+        store128(code, d, dst_x)
     } else {
         true
     }
@@ -10924,13 +11116,25 @@ fn emit_intrinsic(
             true
         }
         I::ReturnAddress => {
-            // __builtin_return_address(0): the return address the call
-            // pushed, at [rbp + 8] above the saved rbp. The parser admits
-            // level 0 only, so there is no operand.
+            // __builtin_return_address: the return address a frame record
+            // holds at [fp + 8], above the saved rbp. Without an operand
+            // the record is the current frame's; with one, the frame
+            // address a level above 0 walked to.
             let Some(rd) = int_or_spill_dst(dst) else {
                 return fail("ReturnAddress: dst not int reg / spill");
             };
-            emit_mov_r_mem(code, rd, Reg::RBP, 8);
+            let fp = match args {
+                [] => Reg::RBP,
+                [walked] => {
+                    let Some(r) = int_operand_into_rd(code, place_of(alloc, *walked), rd, frame)
+                    else {
+                        return fail("ReturnAddress: frame not int reg / spill");
+                    };
+                    r
+                }
+                _ => return fail("ReturnAddress: expected at most 1 arg"),
+            };
+            emit_mov_r_mem(code, rd, fp, 8);
             spill_dst_to_slot(code, dst, rd, frame);
             true
         }
@@ -11558,6 +11762,7 @@ fn detect_tail_call<'a>(
     block: &super::super::ir::Block,
     abi: super::Abi,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
+    conv_targets: &alloc::collections::BTreeMap<usize, super::CallConv>,
     ret_tags: &alloc::collections::BTreeMap<usize, i64>,
     target: Target,
 ) -> Option<(usize, usize, &'a [u32])> {
@@ -11605,6 +11810,14 @@ fn detect_tail_call<'a>(
     // tail conversion's `marshal_args` would deliver garbage. The
     // regular `emit_call` path branches on this same flag.
     if variadic_targets.contains(&target_pc) {
+        return None;
+    }
+    // The tail conversion reuses this frame and this function's entry
+    // contract; a callee on another calling convention wants a different
+    // argument window, a different shadow-space reservation and a
+    // different set of preserved registers. Keep the regular
+    // call-then-return path.
+    if conv_targets.get(&target_pc).copied().unwrap_or_default() != func.conv {
         return None;
     }
     // The callee's epilogue extends a sub-word integer return per its
@@ -11874,10 +12087,10 @@ fn emit_return(
         false
     };
     if return_is_fp {
-        // SCRATCH_XMM14 is outside the allocator's pool, so a
+        // the first FP scratch is outside the allocator's pool, so a
         // spilled f64 lands there without clobbering an
         // allocator-held xmm.
-        if let Some(dn) = materialize_fp(code, return_place, SCRATCH_XMM14, frame)
+        if let Some(dn) = materialize_fp(code, return_place, Reg(frame.fp_scratch[0]), frame)
             && dn.0 != Reg::XMM0.0
         {
             emit_movapd_xmm_xmm(code, Reg::XMM0, dn);
@@ -12086,6 +12299,23 @@ fn emit_extern_branch(
     }
 }
 
+/// The `-pg` call site: `call __fentry__` / `call mcount` relocated by
+/// name, or under `-mnop-mcount` a NOP of the call's width in its place.
+/// `-mrecord-mcount` records the site either way.
+fn emit_profile_call(
+    code: &mut Vec<u8>,
+    call: super::ProfileCall,
+    extern_sites: &mut Vec<super::UserExternCallSite>,
+    mcount_sites: &mut Vec<usize>,
+) {
+    mcount_sites.push(code.len());
+    if call.nop {
+        code.extend_from_slice(&[0x0F, 0x1F, 0x44, 0x00, 0x00]);
+    } else {
+        emit_extern_branch(code, extern_sites, call.symbol(), true);
+    }
+}
+
 /// Function return. `-mfunction-return=thunk-extern` replaces `ret` with
 /// a jump to the external return thunk, which returns itself; the
 /// straight-line-speculation trap then has no `ret` to guard.
@@ -12225,9 +12455,18 @@ mod asm_scratch_tests {
     /// with one instruction reserves the operand's save + capture slots.
     #[test]
     fn noop_template_needs_no_scratch() {
-        assert_eq!(asm_scratch_bytes(&asm_func("")), 0);
-        assert_eq!(asm_scratch_bytes(&asm_func("/* note */ ;")), 0);
-        assert!(asm_scratch_bytes(&asm_func("nop")) > 0);
+        assert_eq!(
+            asm_scratch_bytes(&asm_func(""), crate::c5::codegen::FixedRegs::NONE),
+            0
+        );
+        assert_eq!(
+            asm_scratch_bytes(
+                &asm_func("/* note */ ;"),
+                crate::c5::codegen::FixedRegs::NONE
+            ),
+            0
+        );
+        assert!(asm_scratch_bytes(&asm_func("nop"), crate::c5::codegen::FixedRegs::NONE) > 0);
     }
 }
 
@@ -12240,20 +12479,29 @@ mod scratch_picker_tests {
         // rd = rdi (outside the pool) and no operands: the helper
         // returns the first preference (rax) per the
         // CALLER_SAVED_INT_SCRATCHES ordering [0, 1, 2, 8, 9].
-        assert_eq!(pick_caller_saved_scratch(Reg(7), &[]), Some(Reg(0)));
+        assert_eq!(
+            pick_caller_saved_scratch(Reg(7), &[], crate::c5::codegen::FixedRegs::NONE),
+            Some(Reg(0))
+        );
     }
 
     #[test]
     fn pick_skips_rd() {
         // rd = rax forces the helper past the first preference;
         // the next entry (rcx) wins.
-        assert_eq!(pick_caller_saved_scratch(Reg(0), &[]), Some(Reg(1)));
+        assert_eq!(
+            pick_caller_saved_scratch(Reg(0), &[], crate::c5::codegen::FixedRegs::NONE),
+            Some(Reg(1))
+        );
     }
 
     #[test]
     fn pick_skips_operand_regs() {
         // rd = rax, operands hold rcx (1) -> rdx (2) wins.
-        assert_eq!(pick_caller_saved_scratch(Reg(0), &[Reg(1)]), Some(Reg(2)));
+        assert_eq!(
+            pick_caller_saved_scratch(Reg(0), &[Reg(1)], crate::c5::codegen::FixedRegs::NONE),
+            Some(Reg(2))
+        );
     }
 
     #[test]
@@ -12265,7 +12513,10 @@ mod scratch_picker_tests {
         // scratch register.
         let rd = Reg(0);
         let operands = [Reg(1), Reg(2), Reg(8), Reg(9)];
-        assert_eq!(pick_caller_saved_scratch(rd, &operands), None);
+        assert_eq!(
+            pick_caller_saved_scratch(rd, &operands, crate::c5::codegen::FixedRegs::NONE),
+            None
+        );
     }
 
     #[test]
@@ -12275,7 +12526,10 @@ mod scratch_picker_tests {
         // must return None.
         let rd = Reg(7);
         let operands = [Reg(0), Reg(1), Reg(2), Reg(8), Reg(9)];
-        assert_eq!(pick_caller_saved_scratch(rd, &operands), None);
+        assert_eq!(
+            pick_caller_saved_scratch(rd, &operands, crate::c5::codegen::FixedRegs::NONE),
+            None
+        );
     }
 }
 
@@ -12357,7 +12611,11 @@ mod mul_add_tests {
                 _ => None,
             })
             .expect("MulAdd operands");
-        let mut alloc = super::super::ssa::reg_alloc::allocate(&func, target);
+        let mut alloc = super::super::ssa::reg_alloc::allocate(
+            &func,
+            target,
+            crate::c5::codegen::FixedRegs::NONE,
+        );
         alloc.places[a as usize] = pa;
         alloc.places[b as usize] = pb;
         alloc.places[c as usize] = pc;
@@ -12898,6 +13156,75 @@ mod code_mode_tests {
                 0x00, 0x00, 0xc3
             ]
         );
+    }
+
+    /// A width class the instruction catalogue spells out member by member
+    /// still takes the operand-size prefix. `and`'s ModRM immediate group is
+    /// written `r/m16, imm16` / `r/m32, imm32` / `r/m64, imms32` rather than
+    /// `rv/mv, immv`, and `lea` reaches the catalogue without its 16-bit
+    /// destination row at all; a 32-bit member of either under `.code16` is
+    /// what the x86 real-mode trampoline runs. A group with no 16-bit member
+    /// is the `y` class, which REX.W alone selects and `66` does not reach.
+    /// Bytes measured with GNU as 2.46.1 for the same source.
+    #[test]
+    fn spelled_out_width_class_takes_the_operand_size_prefix() {
+        for (src, want) in [
+            (
+                ".code16\nandl $0x000f00f0, %ecx\n",
+                &[0x66, 0x81, 0xe1, 0xf0, 0x00, 0x0f, 0x00][..],
+            ),
+            (
+                ".code16\nandl $0x0700a169, %edx\n",
+                &[0x66, 0x81, 0xe2, 0x69, 0xa1, 0x00, 0x07][..],
+            ),
+            (
+                ".code16\nandl $0x12345678, 4(%bx)\n",
+                &[0x66, 0x81, 0x67, 0x04, 0x78, 0x56, 0x34, 0x12][..],
+            ),
+            (
+                ".code16\nandw $0x1234, %cx\n",
+                &[0x81, 0xe1, 0x34, 0x12][..],
+            ),
+            (
+                ".code16\nandw $0x1234, 4(%bx)\n",
+                &[0x81, 0x67, 0x04, 0x34, 0x12][..],
+            ),
+            (".code16\nandl $0x7f, %ecx\n", &[0x66, 0x83, 0xe1, 0x7f][..]),
+            (
+                ".code16\nleal 4(%bx), %eax\n",
+                &[0x66, 0x8d, 0x47, 0x04][..],
+            ),
+            (".code16\nleaw 4(%bx), %ax\n", &[0x8d, 0x47, 0x04][..]),
+            (".code16\nptwrite %eax\n", &[0xf3, 0x0f, 0xae, 0xe0][..]),
+            (
+                ".code32\nandl $0x000f00f0, %ecx\n",
+                &[0x81, 0xe1, 0xf0, 0x00, 0x0f, 0x00][..],
+            ),
+            (
+                ".code32\nandw $0x1234, %cx\n",
+                &[0x66, 0x81, 0xe1, 0x34, 0x12][..],
+            ),
+            (".code32\nleal 4(%ebx), %eax\n", &[0x8d, 0x43, 0x04][..]),
+            (
+                ".code32\nleaw 4(%ebx), %ax\n",
+                &[0x66, 0x8d, 0x43, 0x04][..],
+            ),
+            (".code32\nptwrite %eax\n", &[0xf3, 0x0f, 0xae, 0xe0][..]),
+            (
+                "andq $0x000f00f0, %rcx\n",
+                &[0x48, 0x81, 0xe1, 0xf0, 0x00, 0x0f, 0x00][..],
+            ),
+            (
+                "andl $0x000f00f0, %ecx\n",
+                &[0x81, 0xe1, 0xf0, 0x00, 0x0f, 0x00][..],
+            ),
+            ("leaw 4(%rbx), %ax\n", &[0x66, 0x8d, 0x43, 0x04][..]),
+            ("leal 4(%rbx), %eax\n", &[0x8d, 0x43, 0x04][..]),
+            ("leaq 4(%rbx), %rax\n", &[0x48, 0x8d, 0x43, 0x04][..]),
+            ("ptwrite %eax\n", &[0xf3, 0x0f, 0xae, 0xe0][..]),
+        ] {
+            assert_eq!(assemble(src), want, "{src}");
+        }
     }
 
     /// GNU as orders the prefixes segment, address size, operand size, then

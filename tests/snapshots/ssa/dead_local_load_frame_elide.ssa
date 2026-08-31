@@ -245,19 +245,11 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     terminator Jmp(b4)   (exit_acc=v101)
   block 4  start_pc=0
     v102 Load { addr=v82, disp=0, kind=I64, align=1 }     -> x1
-    v103 Imm(1)                                           -> x2
-    v104 Imm(2)                                           -> x2
-    v105 Imm(3)                                           -> x2
-    v106 Imm(4)                                           -> x2
-    v107 Imm(5)                                           -> x2
-    v108 Imm(6)                                           -> x2
-    v109 Imm(7)                                           -> x2
-    v110 Bswap { value=v102, width=8 }                    -> x1
-    v111 Imm(8)                                           -> x2
-    v112 Imm(0)                                           -> x2
-    terminator Jmp(b5)   (exit_acc=v112)
+    v103 Bswap { value=v102, width=8 }                    -> x1
+    v104 Imm(0)                                           -> x2
+    terminator Jmp(b5)   (exit_acc=v104)
   block 5  start_pc=0
-    v94  BinopI { op=ne, lhs=v110, rhs_imm=72623859790382856 } -> x1
+    v94  BinopI { op=ne, lhs=v103, rhs_imm=72623859790382856 } -> x1
     terminator Bz { cond=v94, target=b7, fall=b6 }   (exit_acc=v94)
   block 6  start_pc=0
     v95  Imm(1)                                           -> x0

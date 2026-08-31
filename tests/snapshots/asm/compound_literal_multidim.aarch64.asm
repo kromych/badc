@@ -17,31 +17,45 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30
-               	mov	x1, #0x0                // =0
-               	mov	x6, #0x3                // =3
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	mov	x0, x1
-               	b	<addr>
-               	ldr	x5, [x3]
-               	sxtw	x2, w0
-               	mul	x4, x2, x6
-               	add	x5, x5, x4
-               	add	x5, x5, #0x0
-               	ldrsb	x5, [x5]
-               	add	x1, x1, x5
-               	ldr	x5, [x3]
-               	add	x5, x5, x4
-               	ldrsb	x5, [x5, #0x1]
-               	add	x1, x1, x5
-               	ldr	x5, [x3]
-               	add	x4, x5, x4
-               	ldrsb	x4, [x4, #0x2]
-               	add	x1, x1, x4
-               	add	x0, x2, #0x1
-               	cmp	w0, #0x2
-               	b.lt	<addr>
-               	cmp	w1, #0x15
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0]
+               	add	x0, x0, #0x0
+               	add	x0, x0, #0x0
+               	ldrsb	x0, [x0]
+               	add	x0, x0, #0x0
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	x1, [x1]
+               	add	x1, x1, #0x0
+               	ldrsb	x1, [x1, #0x1]
+               	add	x0, x0, x1
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	x1, [x1]
+               	add	x1, x1, #0x0
+               	ldrsb	x1, [x1, #0x2]
+               	add	x0, x0, x1
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	x1, [x1]
+               	add	x1, x1, #0x3
+               	add	x1, x1, #0x0
+               	ldrsb	x1, [x1]
+               	add	x0, x0, x1
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	x1, [x1]
+               	add	x1, x1, #0x3
+               	ldrsb	x1, [x1, #0x1]
+               	add	x0, x0, x1
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	x1, [x1]
+               	add	x1, x1, #0x3
+               	ldrsb	x1, [x1, #0x2]
+               	add	x0, x0, x1
+               	cmp	w0, #0x15
                	cset	x0, ne
                	cbnz	x0, <addr>
                	adrp	x0, <page>

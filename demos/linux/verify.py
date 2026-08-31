@@ -75,6 +75,7 @@ from pathlib import Path
 
 import buildcc
 import diags
+import exercise
 import karch
 import kaslr
 import ktree
@@ -117,6 +118,13 @@ CHECK_STEP = "BADC-SELFTEST-STEP"
 # kernel panics once it reaches userspace and the panic notifier prints
 # `Kernel Offset:`. panic=-1 (already on the command line) then ends the boot.
 PROBE_RDINIT = "/nonexistent-kaslr-probe"
+# Processors each boot asks the machine for. Every architecture's
+# `smp_cpus_done` reports how many came online, and the count is the only
+# evidence a boot gives that the secondaries started: a machine whose
+# secondaries never report alive still reaches userspace on the boot CPU, so
+# the markers appear either way.
+SMP_CPUS = 2
+SMP_TOTAL_RE = re.compile(r"Total of (\d+) processors activated")
 
 
 def log(m: str) -> None:
@@ -258,7 +266,7 @@ def boot(args, arch: dict, image: Path, out: Path, rdinit: str,
     ]
     cmd = [
         args.qemu, *machine_args(arch), *args.qemu_args,
-        "-smp", "2", "-m", "1024", "-nographic", "-no-reboot",
+        "-smp", str(SMP_CPUS), "-m", "1024", "-nographic", "-no-reboot",
         "-kernel", str(image),
         "-initrd", str(args.initramfs),
         "-append", " ".join(append),
@@ -286,7 +294,7 @@ def seed_trees(args, arch: dict, plan: list[int | None]) -> dict[int, Path]:
     base = Path(args.workdir) / f"base-{args.arch}.dtb"
     base.unlink(missing_ok=True)
     cmd = [args.qemu, *machine_args(arch, base), *args.qemu_args,
-           "-smp", "2", "-m", "1024", "-nographic"]
+           "-smp", str(SMP_CPUS), "-m", "1024", "-nographic"]
     try:
         subprocess.run(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                        stderr=subprocess.DEVNULL, timeout=args.boot_timeout)
@@ -347,6 +355,32 @@ def banner_failure(banner: str, cc_text: str, badc_ld: bool | None) -> str:
     return ""
 
 
+def smp_failure(text: str, want: int) -> str:
+    """What the console says about processor bringup that contradicts the
+    machine the boot asked for, or "". A count below `want` is a kernel that
+    booted and then ran on fewer cores than it was given."""
+    m = SMP_TOTAL_RE.search(text)
+    if not m:
+        return f"reports no processor count for a {want}-processor machine"
+    got = int(m.group(1))
+    return "" if got == want else f"activated {got} of {want} processors"
+
+
+def fault_failure(text: str) -> str:
+    """What the console says the kernel itself reported as a fault, or "".
+
+    Reaching the marker only says init ran. A kernel that warns, oopses or
+    disables a subsystem on the way there has still miscompiled, so the boot
+    is held to the same fault vocabulary the exercise stage applies to dmesg.
+    """
+    faults = exercise.dmesg_faults(text.splitlines())
+    if not faults:
+        return ""
+    first = faults[0].strip()[:120]
+    more = f" (+{len(faults) - 1} more)" if len(faults) > 1 else ""
+    return f"reported {len(faults)} kernel fault line(s){more}: {first!r}"
+
+
 def _self_test() -> int:
     """Check the banner reading against both lanes' real console text.
 
@@ -356,7 +390,7 @@ def _self_test() -> int:
     cc = "badc 0.3.0 (gcc-compatible, GNU C 4.2.1)"
 
     def line(ld: str) -> str:
-        return f"Linux version 7.1.6 (u@h) ({cc}, {ld}) #1 SMP PREEMPT"
+        return f"Linux version 7.1.10 (u@h) ({cc}, {ld}) #1 SMP PREEMPT"
 
     badc = line("GNU ld (badc 0.3.0) 2.33.1")
     ref = line("GNU ld version 2.46.1-1.fc44")
@@ -371,9 +405,35 @@ def _self_test() -> int:
     # the reference compiler fails on the compiler before the linker is read.
     assert banner_failure(badc, cc, None) == ""
     assert banner_failure(ref, cc, None) == ""
-    assert banner_failure("Linux version 7.1.6 (u@h) (gcc 13.2, GNU ld 2.46) #1",
+    assert banner_failure("Linux version 7.1.10 (u@h) (gcc 13.2, GNU ld 2.46) #1",
                           cc, True) == "does not identify badc as the compiler"
     assert banner_failure("", cc, True), "a log with no banner cannot pass"
+
+    # The bringup count, which a boot that reaches userspace on one core of
+    # two still prints.
+    assert smp_failure("[    1.3] smpboot: Total of 2 processors activated (1 "
+                       "BogoMIPS)\n", 2) == ""
+    assert smp_failure("[   31.1] smpboot: Total of 1 processors activated\n",
+                       2) == "activated 1 of 2 processors"
+    assert smp_failure("[    1.3] SMP: Total of 2 processors activated.\n",
+                       2) == ""
+    assert "no processor count" in smp_failure("a quiet console\n", 2)
+
+    # A fault the kernel reports on its way to the marker. Reaching init is
+    # not a verdict on the kernel: this text is from an image whose ftrace
+    # patch sites were malformed, which booted to userspace all the same.
+    ftrace = ("[    0.000000] ------------[ ftrace bug ]------------\n"
+              "[    0.000000] ftrace faulted on writing\n"
+              "[    0.000000] ------------[ cut here ]------------\n"
+              "[    0.000000] WARNING: kernel/trace/ftrace.c:2260 at "
+              "ftrace_bug+0x600/0x960, CPU#0: swapper/0\n"
+              "[    0.000000] Call trace:\n")
+    assert "2 kernel fault line(s)" in fault_failure(ftrace), fault_failure(ftrace)
+    assert fault_failure("[    0.1] smpboot: Total of 2 processors activated\n"
+                         "[    1.2] Run /init as init process\n") == ""
+    # The crypto self-test verdicts, which report a miscompiled cipher without
+    # any of the fault words.
+    assert fault_failure("[   2.0] alg: skcipher: test failed for aes\n")
 
     # A failed build states its cause in the run's own output: the gate runs
     # on remote boxes, where the log path it names is another trip away.
@@ -629,7 +689,9 @@ def main() -> int:
             checked = not args.check_marker or args.check_marker in text
             banner = banner_line(text)
             mismatch = banner_failure(banner, cc_text, badc_ld)
-            ok = booted and checked and not mismatch
+            smp = smp_failure(text, SMP_CPUS)
+            fault = fault_failure(text)
+            ok = booted and checked and not mismatch and not smp and not fault
             tag = f"0x{seed:016x}" if seed is not None else "unpinned"
             # An unpinned boot draws its own displacement, which the probe's
             # does not stand for, so it is left unattributed.
@@ -637,15 +699,22 @@ def main() -> int:
                     if seed is not None else "drawn")
             log(f"boot {i}/{len(plan)}: seed={tag} displacement={disp} "
                 f"marker={'yes' if booted else 'NO'} "
-                f"checks={'yes' if checked else 'NO'} console-lines={lines}")
+                f"checks={'yes' if checked else 'NO'} "
+                f"cpus={'yes' if not smp else 'NO'} "
+                f"clean={'yes' if not fault else 'NO'} console-lines={lines}")
             if i == 1 and banner:
                 log(f"banner: {banner}")
             boots.append({"ok": ok, "booted": booted, "checked": checked,
-                          "lines": lines, "log": str(out), "banner": banner,
-                          "seed": tag, "offset": disp})
+                          "cpus": not smp, "clean": not fault,
+                          "lines": lines, "log": str(out),
+                          "banner": banner, "seed": tag, "offset": disp})
             if booted and checked and mismatch:
                 failures.append(f"boot {i} banner {mismatch}: "
                                 f"{banner!r} (see {out})")
+            elif booted and checked and smp:
+                failures.append(f"boot {i} {smp} (see {out})")
+            elif booted and checked and fault:
+                failures.append(f"boot {i} {fault} (see {out})")
             elif not ok:
                 replay = (f"; replay with --kaslr-seed 0x{seed:016x}"
                           if seed is not None else "")

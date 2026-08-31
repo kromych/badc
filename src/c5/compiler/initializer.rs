@@ -41,8 +41,8 @@ use super::AnonMember;
 use super::Compiler;
 use super::const_expr::ConstVal;
 use super::types::{
-    is_pointer_ty, is_struct_ty, is_struct_value_ty, is_unsigned_ty, narrow_const_int,
-    strip_unsigned, struct_id_of, struct_ptr_depth,
+    is_bool_ty, is_pointer_ty, is_struct_ty, is_struct_value_ty, is_unsigned_ty, is_vector_ty,
+    narrow_const_int, strip_unsigned, struct_id_of, struct_ptr_depth, struct_ty_for,
 };
 
 /// A resolved chained array designator `[i][j]...`: `base` and
@@ -237,6 +237,13 @@ impl Compiler {
                 if let Some(sym_idx) = src_sym {
                     self.reject_thread_local_addr_const(sym_idx)?;
                 }
+                // A block-scope static's address anchors to its emission
+                // record (see `emit_addr_reloc`).
+                let src_sym = src_sym.map(|i| {
+                    self.symbols[i]
+                        .static_local_record
+                        .map_or(i, |r| r as usize)
+                });
                 self.note_init_reloc(here);
                 // A target defined in another unit (`extern T x;` with no
                 // definition here) resolves by name at link time, not
@@ -445,6 +452,19 @@ impl Compiler {
         let is_float = stripped == Ty::Float as i64;
         let is_double = stripped == Ty::Double as i64;
         if !is_float && !is_double {
+            // C99 6.3.1.2: a scalar converted to `_Bool` is 0 when it
+            // compares equal to 0 and 1 otherwise -- not its low bit,
+            // and for a floating source not its truncation either
+            // (`(_Bool)0.5` is 1). A relocation carries an object
+            // address, which is never null.
+            if is_bool_ty(elem_ty) && !is_pointer_ty(elem_ty) {
+                let nonzero = match reloc {
+                    InitElemReloc::Float64Bits => f64::from_bits(value as u64) != 0.0,
+                    InitElemReloc::None => value != 0,
+                    _ => true,
+                };
+                return i128::from(nonzero);
+            }
             // A floating constant initializing an integer element
             // converts to the integer value (C99 6.3.1.4, truncation
             // toward zero); without this the raw IEEE-754 bit pattern
@@ -1031,16 +1051,7 @@ impl Compiler {
                 let paren_snap = self.lex.snapshot();
                 self.next()?;
                 if self.lex_is_type_start() {
-                    let base = self.parse_decl_base_type()?;
-                    let _ = core::mem::take(&mut self.pending.typedef_base_array_size);
-                    let mut stars: i64 = 0;
-                    while self.lex.tk == Token::MulOp || self.lex.tk == Token::TypeQual {
-                        if self.lex.tk == Token::MulOp {
-                            stars += 1;
-                        }
-                        self.next()?;
-                    }
-                    let cast_ty = base + stars * (Ty::Ptr as i64);
+                    let cast_ty = self.parse_const_type_name()?.ty;
                     if self.lex.tk == ')' && !is_struct_value_ty(cast_ty) {
                         // The cast retypes the address and so sets the
                         // stride of a following `+ N`: a pointer target
@@ -1525,55 +1536,22 @@ impl Compiler {
             let snap = self.lex.snapshot();
             self.next()?;
             if self.lex_is_type_start() {
-                let mut cast_ty = self.parse_decl_base_type()?;
-                // The cast type is discarded here rather than bound through a
-                // declarator, so clear the function-type side channels it may
-                // have set. A cast to a function-type-typedef pointer
-                // (`(FnT *)expr`) otherwise leaves base_is_function_type set,
-                // and the next pointer declaration absorbs its `*`.
-                self.pending.base_is_function_type = false;
-                self.pending.bare_function_type_declarator = false;
-                self.pending.fn_ptr_indirection = None;
-                self.pending.fn_ptr_ret_indirection = 0;
-                self.pending.typedef_fn_proto = None;
-                self.pending.fn_ptr_param_types = None;
-                let mut cast_ptrs: i64 = 0;
-                while self.lex.tk == Token::MulOp || self.lex.tk == Token::TypeQual {
-                    if self.lex.tk == Token::MulOp {
-                        cast_ty += Ty::Ptr as i64;
-                        cast_ptrs += 1;
-                    }
-                    self.next()?;
-                }
-                let base_dims = self.take_typedef_literal_dims(cast_ptrs);
+                let name = self.parse_const_type_name()?;
+                let cast_ty = name.ty;
                 // C99 6.5.2.5 array-typed compound literal:
                 // `(T[]){...}` / `(T[N]){...}`. The array name decays to a
                 // pointer to its first element, so the literal contributes
                 // an anonymous static array and the element stores its
                 // address. Distinguished from a plain cast by the `[`, or
                 // for an array typedef (`(row){...}`) by the `{` past `)`.
-                if self.lex.tk == Token::Brak {
-                    let (v, reloc, _) = self.parse_array_compound_literal(cast_ty, &base_dims)?;
+                if self.lex.tk == Token::Brak || self.at_typedef_array_literal(&name)? {
+                    let (v, reloc, _) =
+                        self.parse_array_compound_literal(cast_ty, &name.base_dims)?;
                     if let InitElemReloc::Data(Some(sym)) = reloc {
+                        self.symbols[sym].storage_is_const = name.object_is_const;
                         self.reject_automatic_compound_literal(sym)?;
                     }
                     return Ok((v, reloc));
-                }
-                if !base_dims.is_empty() && self.lex.tk == ')' {
-                    let paren_snap = self.lex.snapshot();
-                    let paren_data = self.data.len();
-                    self.next()?;
-                    let is_literal = self.lex.tk == '{';
-                    self.restore_lex(paren_snap);
-                    self.truncate_data(paren_data);
-                    if is_literal {
-                        let (v, reloc, _) =
-                            self.parse_array_compound_literal(cast_ty, &base_dims)?;
-                        if let InitElemReloc::Data(Some(sym)) = reloc {
-                            self.reject_automatic_compound_literal(sym)?;
-                        }
-                        return Ok((v, reloc));
-                    }
                 }
                 // C99 6.5.2.5 scalar-typed compound literal `(T){ v }`: the
                 // brace holds a single value; the result is that value
@@ -1665,10 +1643,7 @@ impl Compiler {
                 // leaf's address and the cast merely retypes it.
                 if !self.post_cast_is_reloc_leaf()? {
                     self.restore_lex(snap);
-                    return match self.parse_const_expr_cond_val()? {
-                        ConstVal::Float(f) => Ok((f.to_bits() as i128, InitElemReloc::Float64Bits)),
-                        v => self.init_scalar_of(v),
-                    };
+                    return self.parse_constant_init_scalar();
                 }
                 // Optional function-pointer abstract declarator
                 // `(*)(args)` after the base type. Same treatment
@@ -1789,10 +1764,7 @@ impl Compiler {
                 let inner_is_cast = self.lex_is_type_start();
                 let mut is_cast_of_string = false;
                 if inner_is_cast {
-                    let _ = self.parse_decl_base_type()?;
-                    while self.lex.tk == Token::MulOp || self.lex.tk == Token::TypeQual {
-                        self.next()?;
-                    }
+                    let _ = self.parse_const_type_name()?;
                     if self.lex.tk == ')' {
                         self.next()?;
                         is_cast_of_string = self.lex.tk == '"';
@@ -1872,13 +1844,21 @@ impl Compiler {
                 self.next()?;
                 return Ok((off as i128, InitElemReloc::Data(None)));
             }
-            // An identifier followed by `(` is a call, not the symbol's
+            // A name with no declaration is either a builtin the constant
+            // evaluator folds (C99 6.6p10) or undeclared; the evaluator
+            // tells the two apart and diagnoses whichever holds. A fold may
+            // select an address constant (`__builtin_choose_expr` over an
+            // array), which carries its relocation.
+            if class == 0 {
+                return self.parse_constant_init_scalar();
+            }
+            // A declared name followed by `(` is a call, not the symbol's
             // address: taking the branches below would consume the name
             // alone and leave the argument list to be misread as further
             // elements. A static initializer admits a call only when it
-            // folds (C99 6.6p10) -- the constant evaluator owns which
-            // builtins do -- so defer to it, and fall through when it
-            // cannot, leaving the diagnostics below to report the shape.
+            // folds (a library function over a literal), so defer to the
+            // evaluator and fall through when it cannot, leaving the
+            // diagnostics below to report the shape.
             if self.lex.peek_after_whitespace(b'(') {
                 let snap = self.lex.snapshot();
                 let data_snap = self.data.len();
@@ -1889,40 +1869,6 @@ impl Compiler {
                 self.restore_lex(snap);
                 self.truncate_data(data_snap);
                 self.pending.const_expr_nonconst = nonconst;
-            }
-            // C99 6.5.1: an identifier must be declared before use. An
-            // undeclared identifier as an initializer element has no
-            // resolvable value, so reject it rather than bind a placeholder
-            // that resolves to a silent zero; name the header that declares
-            // it when one is known. A function referenced before its
-            // definition reaches the `Token::Fun` branch below through its
-            // prototype (C99 6.7p7 -- a prior declaration satisfies the
-            // type), so this rejects only genuinely undeclared names.
-            if class == 0 {
-                // The name may be an implementation builtin folding to an
-                // integer constant expression (C99 6.6p10). That evaluator
-                // owns which builtins fold, so defer rather than keep a
-                // second set here; what it cannot fold is undeclared.
-                let snap = self.lex.snapshot();
-                let data_snap = self.data.len();
-                let nonconst = self.pending.const_expr_nonconst;
-                if let Ok(v) = self.parse_constant_i128() {
-                    return Ok((v, InitElemReloc::None));
-                }
-                self.restore_lex(snap);
-                self.truncate_data(data_snap);
-                self.pending.const_expr_nonconst = nonconst;
-                let name = self.symbols[idx].name.clone();
-                return Err(self.compile_err(
-                    match super::super::headers::header_declaring(&name) {
-                        Some(h) => format!(
-                            "use of undeclared identifier `{name}` in an initializer -- try `#include <{h}>`"
-                        ),
-                        None => {
-                            format!("use of undeclared identifier `{name}` in an initializer")
-                        }
-                    },
-                ));
             }
             if class == Token::Fun as i64 {
                 self.symbols[idx].was_referenced = true;
@@ -2066,17 +2012,19 @@ impl Compiler {
     }
 
     /// A folded constant as an initializer element: a symbol-relative
-    /// address carries its relocation, anything else is a plain value.
+    /// address carries its relocation, a floating value its `f64` bit
+    /// pattern, and an integer is a plain value.
     fn init_scalar_of(&self, v: ConstVal) -> Result<(i128, InitElemReloc), C5Error> {
-        if let ConstVal::Addr(a) = v
-            && a.root.is_symbolic()
-        {
-            return Ok((a.value as i128, Self::init_elem_reloc_of(a)));
+        match v {
+            ConstVal::Addr(a) if a.root.is_symbolic() => {
+                Ok((a.value as i128, Self::init_elem_reloc_of(a)))
+            }
+            ConstVal::Float(f) => Ok((f.to_bits() as i128, InitElemReloc::Float64Bits)),
+            v => Ok((
+                self.require_integer_const(v)?.as_i128(),
+                InitElemReloc::None,
+            )),
         }
-        Ok((
-            self.require_integer_const(v)?.as_i128(),
-            InitElemReloc::None,
-        ))
     }
 
     /// Drain the array-typedef base carriers into the dimension list an
@@ -2151,11 +2099,17 @@ impl Compiler {
         // offsets are computed as `off + i * elem_size`, not from the
         // live `self.data` length. A `[N]` designator can push the count
         // past the positional entry total (C99 6.7.8p22).
-        let (scanned, _) = self.scan_array_init()?;
-        // The scan count tallies leaves, not rows, so it is no floor for
-        // a multi-dim literal.
-        let fallback = if inner_span > 1 { 0 } else { scanned };
-        let rows = self.designated_array_count(fallback, inner_span)?;
+        let rows = if elem_is_struct {
+            // Brace elision folds a run of field values into one
+            // aggregate element, not one per leaf (C99 6.7.8p20).
+            self.struct_array_init_elem_count(struct_id_of(elem_ty))?
+        } else {
+            let (scanned, _) = self.scan_array_init()?;
+            // The scan count tallies leaves, not rows, so it is no floor
+            // for a multi-dim literal.
+            let fallback = if inner_span > 1 { 0 } else { scanned };
+            self.designated_array_count(fallback, inner_span)?
+        };
         let rows = rows.max(dims[0]).max(0);
         let count = (rows * inner_span) as usize;
         let mut full_dims = alloc::vec::Vec::with_capacity(dims.len());
@@ -2274,6 +2228,29 @@ impl Compiler {
         }
         let sym_idx = self.intern_compound_literal_symbol(off, cl_ty, size as i64);
         self.collect_struct_initializer(struct_id_of(cl_ty), off)?;
+        Ok((off, sym_idx))
+    }
+
+    /// Emit a scalar-typed `(T){ v }` compound-literal body -- entered with
+    /// `tk` on the opening `{` and `cl_ty` an integer, floating or pointer
+    /// type. Reserve an aligned slot in the data segment, intern an
+    /// anonymous internal-linkage symbol for it, and fill it through the
+    /// scalar static-initializer path, which takes the brace pair and
+    /// every constant value form, an address with its relocation
+    /// included. Returns (its data offset, its symbol index).
+    pub(super) fn emit_scalar_compound_literal_body(
+        &mut self,
+        cl_ty: i64,
+    ) -> Result<(i64, usize), C5Error> {
+        self.align_data_to_8();
+        let size = self.size_of_type(cl_ty).max(1);
+        let off = self.data.len() as i64;
+        // The scalar initializer writes whole 8-byte slots.
+        for _ in 0..size.div_ceil(8) * 8 {
+            self.data.push(0);
+        }
+        let sym_idx = self.intern_compound_literal_symbol(off, cl_ty, size as i64);
+        self.parse_global_initializer(cl_ty, off, false)?;
         Ok((off, sym_idx))
     }
 
@@ -3103,6 +3080,11 @@ impl Compiler {
             for _ in 0..close_parens {
                 self.accept(')')?;
             }
+        } else if self.lex.tk != '{' && is_vector_ty(&self.structs, struct_ty_for(sid)) {
+            // C99 6.7.8p13 over the GCC vector extension: an element of vector
+            // type takes either a brace list of lanes or one compatible
+            // whole-vector expression, which must not elide into the lanes.
+            self.emit_array_leaf_runtime(local_val, off, struct_ty_for(sid))?;
         } else {
             let braced = self.lex.tk == '{';
             self.emit_struct_runtime_at(local_val, off, sid, braced)?;
@@ -3832,7 +3814,12 @@ impl Compiler {
             // brace list each rewrite the entire unit. Merge
             // the bitfield's bits into the existing storage
             // unit instead.
-            let (value, _reloc) = self.parse_constant_init_value()?;
+            let (value, reloc) = self.parse_constant_init_value()?;
+            // C99 6.7.9p11 initializes as if by assignment, so the value
+            // converts to the member's declared type first. The mask
+            // below expresses that for an integer field but not for a
+            // floating source (C99 6.3.1.4) or a `_Bool` field (6.3.1.2).
+            let value = self.to_storage_bits(value, reloc, field.ty);
             // C99 6.7.2.1p11: the bitfield's addressable storage
             // unit width is determined by the declared base type;
             // the RMW span must match `bit_unit_size` so it does
@@ -4040,7 +4027,10 @@ impl Compiler {
                     bit_offset: field.bit_offset as u8,
                     bit_width: field.bit_width as u8,
                     unit_size: field.bit_unit_size,
-                    signed: !is_unsigned_ty(field.ty),
+                    // C99 6.2.5p2: `_Bool` holds only 0 or 1, so a
+                    // `_Bool` field is unsigned even at width 1.
+                    signed: !is_unsigned_ty(field.ty) && !is_bool_ty(field.ty),
+                    ty: field.ty,
                 })
             } else {
                 None
@@ -4269,7 +4259,8 @@ impl Compiler {
                 self.data_object_starts.push(src_data_addr as i64);
             }
             self.mark_emit_other();
-            self.pending_local_aggregate_ast = Some(LocalInitPrelude::Zero {
+            self.pending_local_aggregate_ast = Some(LocalInitPrelude::Fill {
+                byte: 0,
                 size_bytes: total_bytes as i64,
             });
             return;

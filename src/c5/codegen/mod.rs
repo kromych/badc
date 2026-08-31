@@ -1751,6 +1751,12 @@ pub(crate) struct Build {
     /// (the linker's synthesized build, test fixtures), where the next
     /// function's start stands in as before.
     pub func_ends: Vec<usize>,
+    /// `-fpatchable-function-entry` NOP areas, one per function that has
+    /// one, in emission order.
+    pub patchable_entries: Vec<EntryArea>,
+    /// Byte offsets of the profiling call sites `-mrecord-mcount`
+    /// records, in emission order.
+    pub mcount_sites: Vec<usize>,
     /// Source-level function names parallel to `func_ent_pcs`,
     /// populated from `FunctionSsa::name` during the per-arch
     /// emit loop. Empty entries surface for archive-reloaded
@@ -1915,6 +1921,10 @@ pub(crate) struct Build {
     /// Mirror of [`NativeOptions::elf_class`]. Fixes the on-disk
     /// record widths and the relocation ABI of a `-c` object.
     pub elf_class: ElfClass,
+    /// Mirror of [`NativeOptions::keep_local_labels`]. The relocatable
+    /// writer keeps the assembler's local-label temporaries in `.symtab`
+    /// when set.
+    pub keep_local_labels: bool,
     /// The shared library's own name, recorded in the image so a
     /// consumer that links against it by name references the file it
     /// loads at runtime (PE export-directory Name, Mach-O
@@ -2587,8 +2597,13 @@ pub(crate) struct UserExternCallSite {
 /// `lea` rip-rel (x86_64) shape as [`DataFixup`], but the
 /// target is a named symbol defined in another TU rather than
 /// a local `.data` byte offset. The writer emits one undefined
-/// `STT_OBJECT STB_GLOBAL` symbol per unique name and one reloc
-/// per ref pointing at that symbol.
+/// `STT_NOTYPE STB_GLOBAL` symbol per unique name (untyped, as
+/// gcc emits extern references) and one reloc per ref pointing
+/// at that symbol; the name also enters the unit's
+/// `NT_BADC_EXTERN_DATA` note, which carries what the symbol type
+/// no longer does. A cross-TU function pointer rides this channel
+/// too -- materialising an address is the same lowering -- so the
+/// note names functions as well as data.
 #[derive(Debug, Clone)]
 #[allow(dead_code)] // consumed only by the std-only elf_reloc writer
 pub(crate) struct UserExternDataRef {
@@ -2894,6 +2909,116 @@ pub fn stack_guard_sysreg(name: &str) -> Option<u16> {
     aarch64::asm::sysreg_field(name)
 }
 
+/// Registers `-ffixed-REG` keeps out of the allocator, one bit per
+/// architectural number: `gpr` over the general file, `fpr` over the
+/// floating-point / SIMD file. The ABI still passes arguments and
+/// results through a reserved register; only the allocator's own
+/// choices, the emitters' scratch picks and the inline-asm operand
+/// pools exclude it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct FixedRegs {
+    pub gpr: u32,
+    pub fpr: u32,
+}
+
+impl FixedRegs {
+    /// No register reserved.
+    pub const NONE: Self = Self { gpr: 0, fpr: 0 };
+
+    pub const fn has_gpr(self, r: u8) -> bool {
+        r < 32 && self.gpr & (1 << r) != 0
+    }
+
+    pub const fn has_fpr(self, r: u8) -> bool {
+        r < 32 && self.fpr & (1 << r) != 0
+    }
+
+    pub fn is_empty(self) -> bool {
+        self == Self::NONE
+    }
+
+    /// Add the register `reg` names.
+    pub fn insert(&mut self, reg: FixedReg) {
+        match reg {
+            FixedReg::Gpr(r) => self.gpr |= 1 << r,
+            FixedReg::Fpr(r) => self.fpr |= 1 << r,
+        }
+    }
+}
+
+/// A register `-ffixed-REG` may name, by file and architectural number.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FixedReg {
+    Gpr(u8),
+    Fpr(u8),
+}
+
+/// Resolve the operand of `-ffixed-REG` on `target`. Every architectural
+/// spelling of a register names it: `x9` / `w9` and `q16` / `v16` / `d16`
+/// / `s16` / `h16` / `b16` on AArch64, `rax` / `eax` / `ax` / `al` and
+/// `r8` / `r8d` / `r8w` / `r8b` on x86-64. The stack and frame pointers,
+/// the AArch64 link register and the registers the code generator keeps
+/// as its own scratch are refused; an unknown name is reported by name.
+pub fn fixed_register(target: Target, name: &str) -> Result<FixedReg, String> {
+    let refuse = |what: &str| {
+        Err(alloc::format!(
+            "`-ffixed-{name}`: {what} cannot be reserved"
+        ))
+    };
+    let unknown = || Err(alloc::format!("`-ffixed-{name}`: unknown register name"));
+    if target.is_aarch64() {
+        // gcc's `rN` alias and the `fp` / `lr` names spell x registers.
+        let canonical: alloc::string::String = match name {
+            "fp" => "x29".into(),
+            "lr" => "x30".into(),
+            _ => match name.strip_prefix('r') {
+                Some(rest) if !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit()) => {
+                    alloc::format!("x{rest}")
+                }
+                _ => name.into(),
+            },
+        };
+        if matches!(canonical.as_str(), "xzr" | "wzr") {
+            return unknown();
+        }
+        let Some((is_fp, num)) = aarch64::asm::clobber_reg_name(&canonical) else {
+            return unknown();
+        };
+        if is_fp {
+            return Ok(FixedReg::Fpr(num));
+        }
+        match num {
+            31 => refuse("the stack pointer"),
+            29 => refuse("the frame pointer"),
+            30 => refuse("the link register"),
+            16 | 17 | 19 => refuse("the code generator's scratch register"),
+            _ => Ok(FixedReg::Gpr(num)),
+        }
+    } else {
+        use x86_64::asm::{XMM_BASE, YMM_BASE, high_byte_reg_by_name, reg_by_name};
+        let num = match reg_by_name(name) {
+            Some((r, _)) if r < 16 => r,
+            Some((r, _)) if (XMM_BASE..XMM_BASE + 32).contains(&r) => {
+                return Ok(FixedReg::Fpr(r - XMM_BASE));
+            }
+            Some((r, _)) if (YMM_BASE..YMM_BASE + 32).contains(&r) => {
+                return Ok(FixedReg::Fpr(r - YMM_BASE));
+            }
+            _ => match high_byte_reg_by_name(name) {
+                // The ModRM field of `ah`..`bh` is the register number plus 4.
+                Some(field) => field - 4,
+                None => return unknown(),
+            },
+        };
+        match num {
+            4 => refuse("the stack pointer"),
+            5 => refuse("the frame pointer"),
+            10 | 11 => refuse("the code generator's scratch register"),
+            _ => Ok(FixedReg::Gpr(num)),
+        }
+    }
+}
+
 /// gcc's `--param ssp-buffer-size=` default.
 pub const DEFAULT_SSP_BUFFER_SIZE: u32 = 8;
 
@@ -3012,12 +3137,22 @@ pub struct NativeOptions {
     /// Stack-canary configuration (`-fstack-protector*` /
     /// `-mstack-protector-guard*`); see [`StackProtect`].
     pub stack_protect: StackProtect,
+    /// Registers `-ffixed-REG` keeps out of the allocator; see
+    /// [`FixedRegs`].
+    pub fixed_regs: FixedRegs,
     /// ELF class of a relocatable object (`-m32` / `-m16` on an
     /// assembly unit). An ELFCLASS32 x86 object is an i386 object:
     /// `EM_386`, `SHT_REL` relocation tables whose addend lives in
     /// the relocated field, and the `R_386_*` type numbers. Final
     /// images are unaffected.
     pub elf_class: ElfClass,
+    /// `-Wa,-L` / `-Wa,--keep-locals`: keep the assembler's local-label
+    /// temporaries (the `.L`-prefixed names) in a relocatable object's
+    /// `.symtab`. Off by default, as in GNU as. The relocations are the
+    /// same either way -- a reference to one reduces to its section plus
+    /// an addend regardless -- so this only changes what a symbol dump
+    /// shows.
+    pub keep_local_labels: bool,
     /// Least alignment every function's entry gets in `.text`
     /// (`-fmin-function-alignment=N` / `-falign-functions=N`). 1 is the
     /// default and pads nothing, which is what a function packed against
@@ -3027,6 +3162,111 @@ pub struct NativeOptions {
     /// what `CONFIG_FUNCTION_ALIGNMENT` states. A symbol's `st_size`
     /// covers its code only; the fill belongs to no function.
     pub min_function_alignment: u32,
+    /// `-fpatchable-function-entry=N,M`: the NOP area at every function
+    /// entry. A function's own `patchable_function_entry` attribute
+    /// replaces it.
+    pub patchable_function_entry: PatchableEntry,
+    /// `-pg` and its x86-64 modifiers.
+    pub profiling: Profiling,
+}
+
+/// `-fpatchable-function-entry=N,M`: `nops` NOPs at a function's entry,
+/// `before` of them ahead of the symbol. The function alignment applies
+/// to the area's first byte; the symbol's size covers the NOPs after it,
+/// which run ahead of the prologue and of any profiling call.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PatchableEntry {
+    pub nops: u32,
+    pub before: u32,
+}
+
+impl PatchableEntry {
+    pub const NONE: Self = Self { nops: 0, before: 0 };
+}
+
+/// `-pg`: a call to the profiling entry point in every function not
+/// marked `no_instrument_function`. The modifiers are x86-64's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Profiling {
+    pub enabled: bool,
+    /// `-mfentry`: `call __fentry__` at the symbol, ahead of the
+    /// prologue. Off, `call mcount` follows the prologue.
+    pub fentry: bool,
+    /// `-mrecord-mcount`: an `__mcount_loc` entry per call site.
+    pub record_mcount: bool,
+    /// `-mnop-mcount`: a NOP of the call's width in the call's place.
+    pub nop_mcount: bool,
+}
+
+impl Profiling {
+    pub const OFF: Self = Self {
+        enabled: false,
+        fentry: true,
+        record_mcount: false,
+        nop_mcount: false,
+    };
+}
+
+/// A function's `-fpatchable-function-entry` NOP area: the index into
+/// [`Build::func_ent_pcs`] and the area's first byte in [`Build::text`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EntryArea {
+    pub func: usize,
+    pub start: usize,
+}
+
+/// The profiling call a function takes under `-pg`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ProfileCall {
+    /// `call mcount` after the prologue; off, `call __fentry__` at the
+    /// symbol ahead of it.
+    pub after_prologue: bool,
+    /// A NOP of the call's width stands in the call's place.
+    pub nop: bool,
+}
+
+impl ProfileCall {
+    pub(crate) fn symbol(self) -> &'static str {
+        if self.after_prologue {
+            "mcount"
+        } else {
+            "__fentry__"
+        }
+    }
+}
+
+/// A function's entry sequence, resolved from the options and the
+/// function's own attributes. The NOPs ahead of the symbol are the
+/// emit loop's; the rest is emitted with the function.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct FunctionEntry {
+    pub nops_before: u32,
+    pub nops_after: u32,
+    pub profile: Option<ProfileCall>,
+}
+
+impl FunctionEntry {
+    pub(crate) fn of(func: &crate::c5::ir::FunctionSsa, native: &NativeOptions) -> Self {
+        let (nops, before) = match func.patchable_entry {
+            Some((n, m)) => (n, m),
+            None => {
+                let area = native.patchable_function_entry;
+                (area.nops, area.before)
+            }
+        };
+        let p = native.profiling;
+        // A naked function's body is its own inline asm, with no frame
+        // for `mcount` to read; the profiling call is not inserted.
+        let profile = (p.enabled && !func.no_instrument && !func.is_naked).then_some(ProfileCall {
+            after_prologue: !p.fentry,
+            nop: p.nop_mcount,
+        });
+        Self {
+            nops_before: before.min(nops),
+            nops_after: nops - before.min(nops),
+            profile,
+        }
+    }
 }
 
 /// Fill `code` with `nop` up to a multiple of `align`, for the gap ahead
@@ -3171,9 +3411,13 @@ impl NativeOptions {
             pic_link: false,
             code_model: CodeModel::Small,
             elf_class: ElfClass::Elf64,
+            keep_local_labels: false,
             hardening: Hardening::NONE,
             stack_protect: StackProtect::OFF,
+            fixed_regs: FixedRegs::NONE,
             min_function_alignment: 1,
+            patchable_function_entry: PatchableEntry::NONE,
+            profiling: Profiling::OFF,
         }
     }
 
@@ -3298,6 +3542,37 @@ pub(crate) fn lower_for_with_prebuilt(
     {
         return Err(C5Error::Compile(alloc::format!(
             "error: `-fstack-protector*` needs relocatable output: the canary's              failure branch names `{STACK_CHK_FAIL_SYMBOL}`, which only a              relocatable object can relocate"
+        )));
+    }
+    // The profiling call names `__fentry__` / `mcount` the same way.
+    // TODO: gcc's aarch64 form (`mov x0, x30; bl _mcount` after the
+    // prologue) needs the argument registers kept across the call.
+    if options.profiling.enabled {
+        if options.output_kind != OutputKind::Relocatable {
+            return Err(C5Error::Compile(alloc::string::String::from(
+                "error: `-pg` needs relocatable output: the profiling call names \
+                 `__fentry__` / `mcount`, which only a relocatable object can relocate",
+            )));
+        }
+        if target.is_aarch64() {
+            return Err(C5Error::Compile(alloc::string::String::from(
+                "error: `-pg` is not implemented for aarch64; the kernel's \
+                 `-fpatchable-function-entry=` form is",
+            )));
+        }
+    }
+    // The patchable-entry records are ELF sections. TODO: the PE and
+    // Mach-O forms.
+    if target.binary_format() != BinaryFormat::Elf
+        && (options.patchable_function_entry.nops > 0
+            || program
+                .symbols
+                .iter()
+                .any(|s| s.defined_here && s.patchable_function_entry.is_some_and(|(n, _)| n > 0)))
+    {
+        return Err(C5Error::Compile(alloc::format!(
+            "error: patchable function entries are not implemented for {}",
+            target.binary_format().name()
         )));
     }
     let is_shared = options.output_kind == OutputKind::SharedLibrary;
@@ -3617,6 +3892,12 @@ pub(crate) struct Abi {
     /// [`NativeOptions::stack_protect`]), not a `Target::abi` row
     /// property; see [`StackProtect`].
     pub stack_protect: StackProtect,
+    /// A frame in every function, for `-pg`'s `mcount` form: the callee
+    /// reads the return address through rbp.
+    pub mcount_frame: bool,
+    /// Registers the emitters may not pick as scratch or inline-asm
+    /// operands. Per-run (from [`NativeOptions::fixed_regs`]).
+    pub fixed_regs: FixedRegs,
 }
 
 impl Abi {
@@ -3664,7 +3945,52 @@ impl Default for Abi {
     }
 }
 
+/// Calling convention a function definition or a call site follows,
+/// when it is not the target's own. GCC spells the two x86_64
+/// conventions `__attribute__((ms_abi))` and
+/// `__attribute__((sysv_abi))`; both are x86-only and inert on other
+/// architectures, which is what `__efiapi` relies on (it expands to
+/// `ms_abi` under `CONFIG_X86_64` and to nothing elsewhere).
+///
+/// A convention names an existing ABI row rather than a new one:
+/// `Ms` is what [`Target::WindowsX64`] already describes (arguments in
+/// rcx/rdx/r8/r9 by position, 32 bytes of shadow space, rsi/rdi and
+/// xmm6..xmm15 callee-saved) and `SysV` is [`Target::LinuxX64`]'s. See
+/// [`Target::abi_row`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum CallConv {
+    /// The target's own convention.
+    #[default]
+    Target,
+    /// Microsoft x64 (`__attribute__((ms_abi))`).
+    Ms,
+    /// System V AMD64 (`__attribute__((sysv_abi))`).
+    SysV,
+}
+
 impl Target {
+    /// The target whose ABI row `conv` selects. Off x86_64 both
+    /// attributes are inert, so the row stays this target's own; on
+    /// x86_64 the two conventions are the two x86_64 targets' rows,
+    /// which differ in exactly the argument placement, shadow space,
+    /// variadic dialect and callee-saved register set the attributes
+    /// choose. Only the ABI-shaped queries -- [`Self::abi`], the
+    /// allocator's register banks, the callee-saved FP predicate --
+    /// take the substituted row; nothing about the object format,
+    /// relocation shapes or type widths changes.
+    pub(crate) fn abi_row(self, conv: CallConv) -> Target {
+        match (self, conv) {
+            (Target::LinuxX64 | Target::WindowsX64, CallConv::Ms) => Target::WindowsX64,
+            (Target::LinuxX64 | Target::WindowsX64, CallConv::SysV) => Target::LinuxX64,
+            _ => self,
+        }
+    }
+
+    /// [`Self::abi`] for a function or call site following `conv`.
+    pub(crate) fn abi_for(self, conv: CallConv) -> Abi {
+        self.abi_row(conv).abi()
+    }
+
     /// ABI description for this target. Used by both the
     /// lowering pass and the entry-stub builders. Kept as a
     /// match against `Target` so adding a target is one row
@@ -3700,6 +4026,8 @@ impl Target {
                 strict_align: false,
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
+                mcount_frame: false,
+                fixed_regs: FixedRegs::NONE,
             },
             Target::LinuxAarch64 => Abi {
                 arch: Arch::Aarch64,
@@ -3713,6 +4041,8 @@ impl Target {
                 strict_align: false,
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
+                mcount_frame: false,
+                fixed_regs: FixedRegs::NONE,
             },
             Target::LinuxX64 => Abi {
                 arch: Arch::X86_64,
@@ -3726,6 +4056,8 @@ impl Target {
                 strict_align: false,
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
+                mcount_frame: false,
+                fixed_regs: FixedRegs::NONE,
             },
             Target::WindowsX64 => Abi {
                 arch: Arch::X86_64,
@@ -3739,6 +4071,8 @@ impl Target {
                 strict_align: false,
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
+                mcount_frame: false,
+                fixed_regs: FixedRegs::NONE,
             },
             Target::WindowsAarch64 => Abi {
                 arch: Arch::Aarch64,
@@ -3752,6 +4086,8 @@ impl Target {
                 strict_align: false,
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
+                mcount_frame: false,
+                fixed_regs: FixedRegs::NONE,
             },
         }
     }

@@ -65,6 +65,9 @@ jobs:
         run: |
           python3 demos/linux/kaslr.py
           python3 demos/linux/verify.py --self-test
+          python3 demos/linux/packages.py --self-test
+          python3 demos/linux/layout.py --self-test
+          python3 demos/linux/exercise.py --self-test
           python3 scripts/snapshots.py --self-test
           python3 scripts/validate_local_boxes.py --self-test
       # Sources and docs are ASCII-only. Smart quotes / em dashes /
@@ -975,9 +978,12 @@ jobs:
     # builds the interpreter four more times; allow headroom over the
     # lighter fixtures.
     timeout-minutes: 30
-    # Don't gate CI on perf numbers -- a regression should surface in
-    # the job summary but not block the merge. Hard failures from the
-    # harness (no compilers found, fixture missing) still fail the job.
+    # The comparison tables are absolute seconds against a reference
+    # compiler on whatever runner the job landed on; they surface in the
+    # job summary and do not block the merge. The compile-throughput
+    # counters below are ratios taken within one run, so the runner
+    # cancels out of them and they do gate. Hard failures from the
+    # harness (no compilers found, fixture missing) fail the job too.
     continue-on-error: false
     steps:
       - uses: actions/checkout@v4
@@ -1004,6 +1010,23 @@ jobs:
           python3 demos/stb/setup.py
           python3 demos/sqlite3/setup.py
           python3 demos/quickjs/setup.py
+      - name: compile-throughput counters
+        # Ratios over the QuickJS units fetched above -- `-O0` cost over
+        # `-O` cost, and the slowest unit over the median one. Both are
+        # taken within this run on this runner, so the runner class
+        # cancels; `--check` fails on a committed ceiling. This is the
+        # only gating step in the job.
+        run: |
+          python3 scripts/compile_throughput.py --check > /tmp/throughput.md; rc=$?
+          cat /tmp/throughput.md
+          {
+            echo "## compile throughput (${{ matrix.os }})"
+            echo ""
+            cat /tmp/throughput.md
+          } >> "$GITHUB_STEP_SUMMARY"
+          # The table reaches the summary either way; the step's status
+          # is the check's, which a pipe into `tee` would discard.
+          exit $rc
       - name: build tcc for the host
         run: bash tests/perf/build_tcc.sh
       - name: run perf harness + write to job summary
@@ -1637,14 +1660,15 @@ jobs:
     # The exception is a build that succeeded and a boot that did not, which is
     # a miscompile or a bad link and does not say which; a single
     # `--linker reference` run separates those two, and the same contrast runs
-    # nightly (see below).
+    # in `kernel-packages.yml` (see below).
     #
     # The kernel source is the release `demos/linux/setup.py` pins, fetched
-    # from cdn.kernel.org and rejected unless its sha256 matches -- the same
-    # pin the sweep measures against, so the gate cannot drift from it. No
-    # vendor-deps mirror: the tarball is large, would have to be rotated on
-    # every pin bump, and cdn.kernel.org is not one of the hosts that made CI
-    # flaky.
+    # from the `vendor-deps-v1` release and rejected unless its sha256
+    # matches -- the same pin the sweep measures against, so the gate cannot
+    # drift from it. The mirror is the only source: cdn.kernel.org is the
+    # download this job lost most often, and a fallback to it turns a missing
+    # asset into an intermittent failure rather than a clear one. A pin bump
+    # publishes the tarball to the release first.
     #
     # This is the kernel gate on the push path, and it is the badc-linked one.
     # The reference-linked contrast is not a second `--linker` dimension here,
@@ -1660,13 +1684,12 @@ jobs:
     # run coming out the faster of the pair, so a second dimension would buy
     # the link steps at the price of a second full compile per architecture on
     # every push. `kernel-packages.yml` carries the contrast instead: same
-    # pinned release, same `make defconfig`, kbuild's default LD, nightly on
-    # both architectures, and booted into a stock distribution userspace
+    # pinned release, same `make defconfig`, kbuild's default LD, on both
+    # architectures, and booted into a stock distribution userspace
     # rather than a marker initramfs. The distribution dimension -- deb/rpm
     # packaging, install into a stock cloud image, boot into the installed
-    # kernel through its boot loader -- is that same workflow, which runs
-    # nightly and on demand because it needs a VM and GitHub-hosted runners
-    # have no KVM.
+    # kernel through its boot loader -- is that same workflow, which runs on
+    # demand because it needs a VM and GitHub-hosted runners have no KVM.
     name: kernel (${{ matrix.label }} defconfig, badc-linked, badc-built qemu)
     strategy:
       fail-fast: false
@@ -1719,7 +1742,9 @@ jobs:
       - name: install kernel build deps + the emulator's shared libraries
         # No qemu-system-* package: the only emulator on this runner is the one
         # the qemu lane built, so the boot cannot silently use a distro build.
-        run: ./scripts/apt_resilient_install.sh flex bison bc libelf-dev libssl-dev libglib2.0-dev zlib1g-dev libfdt-dev
+        # llvm carries llvm-dwarfdump and gdb answers the layout step's
+        # --cross-check; neither is in the runner image.
+        run: ./scripts/apt_resilient_install.sh flex bison bc libelf-dev libssl-dev libglib2.0-dev zlib1g-dev libfdt-dev llvm gdb
       - name: fetch the badc-built emulator (qemu lane, -O0)
         uses: actions/download-artifact@v4
         with:
@@ -1772,6 +1797,24 @@ jobs:
             --expect-units ${{ matrix.floor }} --boot-timeout 90 \
             --workdir "$RUNNER_TEMP/verify" \
             --report "$RUNNER_TEMP/verify/verify-${{ matrix.arch }}.json"
+      # Every eighth unit of the tree the gate just built, compiled again by
+      # gcc and by badc with debug info, and every aggregate's size and
+      # member offsets compared through the DWARF both emit. A layout that
+      # differs is an ABI defect between vmlinux and the modules sharing the
+      # type, and it corrupts memory rather than failing to load.
+      #
+      # The gate built through buildcc.py, so every .cmd file in the tree
+      # records that shim as the compiler; the reference leg substitutes the
+      # target's gcc for it, the same compiler the gate's shim falls back to.
+      # The step fails before compiling anything if that compiler is absent.
+      - name: compare type layouts through DWARF (gcc vs badc, strided replay)
+        timeout-minutes: 15
+        run: |
+          python demos/linux/layout.py --replay --tree "$KERNEL_TREE" \
+            --arch ${{ matrix.arch }} --badc target/release/badc \
+            --stride 8 --cross-check 20 \
+            --scratch "$RUNNER_TEMP/layout" \
+            --report "$RUNNER_TEMP/verify/layout-${{ matrix.arch }}.json"
       - name: publish the gate result and boot logs
         # Both manifests go up: the per-unit one is the compiling claim's
         # evidence, the per-link one the linking claim's.
@@ -1781,6 +1824,7 @@ jobs:
           name: kernel-verify-${{ matrix.label }}
           path: |
             ${{ runner.temp }}/verify/verify-*.json
+            ${{ runner.temp }}/verify/layout-*.json
             ${{ runner.temp }}/verify/boot-*.log
             ${{ runner.temp }}/verify/probe-*.log
             ${{ runner.temp }}/verify/manifest-*.txt

@@ -69,19 +69,13 @@ Disassembly of section .text:
                	movl	%esi, (%rcx)
                	movl	$0x6, %edx
                	movl	%edx, 0x8(%rcx)
-               	movq	(%rax), %rsi
-               	movq	0x8(%rax), %rdi
-               	movslq	(%rcx), %r8
-               	movslq	%edx, %rcx
-               	addq	%r8, %rcx
-               	movslq	%ecx, %rcx
-               	movq	%rcx, %rdx
-               	sarq	$0x3f, %rdx
-               	addq	%rsi, %rcx
-               	cmpq	%rsi, %rcx
-               	setb	%sil
-               	movzbq	%sil, %rsi
-               	addq	%rdi, %rdx
+               	movq	(%rax), %rdx
+               	movq	0x8(%rax), %rsi
+               	leaq	0x9(%rdx), %rcx
+               	cmpq	%rdx, %rcx
+               	setb	%dl
+               	movzbq	%dl, %rdx
+               	addq	$0x0, %rsi
                	addq	%rsi, %rdx
                	movq	%rcx, (%rax)
                	movq	%rdx, 0x8(%rax)

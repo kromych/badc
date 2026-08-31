@@ -38,7 +38,7 @@ fn ent_pc=3 n_params=3 variadic=false locals=2
 ; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=main
 fn ent_pc=5 n_params=0 variadic=false locals=19
-  spill_count=0 gpr_used=[3, 12] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
@@ -341,17 +341,17 @@ fn ent_pc=5 n_params=0 variadic=false locals=19
     v206 Imm(3)                                           -> x0
     terminator Return(v206)   (exit_acc=v206)
   block 25  start_pc=0
-    v207 LocalAddr(-19)                                   -> x12
+    v207 LocalAddr(-19)                                   -> x7
     v208 ImmData(8)                                       -> x0
     v209 Mcpy { dst=v207, src=v208, size=16, align=8 }    -> x0
     v210 LocalAddr(-19)                                   -> x0
     v211 Imm(1)                                           -> x6
     v212 Call { target_pc=1, args=[v207, v211], fixed_args=2, fp_return=true, fp_arg_mask=0x0 } -> d0
-    v213 Imm(4609434218613702656)                         -> x3
-    v214 Imm(4616189618054758400)                         -> x0
+    v213 Imm(4609434218613702656)                         -> x0
+    v214 Imm(4616189618054758400)                         -> x1
     v215 Binop { op=fmul, lhs=v213, rhs=v214 }            -> d1
-    v216 Imm(4612248968380809216)                         -> x1
-    v217 Imm(4611686018427387904)                         -> x2
+    v216 Imm(4612248968380809216)                         -> x2
+    v217 Imm(4611686018427387904)                         -> x6
     v218 Binop { op=fmul, lhs=v216, rhs=v217 }            -> d1
     v219 Fma { a=v213, b=v214, c=v218, neg_product=false, neg_addend=false } -> d1
     v220 Imm(4607182418800017408)                         -> x0
@@ -363,16 +363,16 @@ fn ent_pc=5 n_params=0 variadic=false locals=19
     terminator Return(v223)   (exit_acc=v223)
   block 27  start_pc=0
     v224 ImmCode(ent_pc=1)                                -> x7
-    v225 LocalAddr(-19)                                   -> x0
+    v225 LocalAddr(-19)                                   -> x6
     v226 Imm(1)                                           -> x2
-    v227 Call { target_pc=3, args=[v224, v207, v226], fixed_args=3, fp_return=true, fp_arg_mask=0x0 } -> d0
+    v227 Call { target_pc=3, args=[v224, v225, v226], fixed_args=3, fp_return=true, fp_arg_mask=0x0 } -> d0
     v228 Imm(4609434218613702656)                         -> x0
-    v229 Imm(4616189618054758400)                         -> x0
-    v230 Binop { op=fmul, lhs=v213, rhs=v229 }            -> d1
-    v231 Imm(4612248968380809216)                         -> x1
-    v232 Imm(4611686018427387904)                         -> x2
+    v229 Imm(4616189618054758400)                         -> x1
+    v230 Binop { op=fmul, lhs=v228, rhs=v229 }            -> d1
+    v231 Imm(4612248968380809216)                         -> x2
+    v232 Imm(4611686018427387904)                         -> x6
     v233 Binop { op=fmul, lhs=v231, rhs=v232 }            -> d1
-    v234 Fma { a=v213, b=v229, c=v233, neg_product=false, neg_addend=false } -> d1
+    v234 Fma { a=v228, b=v229, c=v233, neg_product=false, neg_addend=false } -> d1
     v235 Imm(4607182418800017408)                         -> x0
     v236 Binop { op=fadd, lhs=v234, rhs=v235 }            -> d1
     v237 Binop { op=fne, lhs=v227, rhs=v236 }             -> x0

@@ -16,10 +16,10 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v10  Imm(0)                                           -> x2
     v11  Store { addr=v3, disp=8, value=v10, kind=I64 }   -> -
     v12  LoadLocal { off=-1, kind=I64 }                   -> x0
-    v13  Extend { value=v6, kind=I32 }                    -> x0
-    v14  BinopI { op=shl, lhs=v13, rhs_imm=32 }           -> x1
-    v15  Extend { value=v13, kind=I32 }                   -> x1
-    terminator Return(v13)   (exit_acc=v13)
+    v13  Imm(42)                                          -> x0
+    v14  Imm(180388626432)                                -> x0
+    v15  Imm(42)                                          -> x0
+    terminator Return(v6)   (exit_acc=v6)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

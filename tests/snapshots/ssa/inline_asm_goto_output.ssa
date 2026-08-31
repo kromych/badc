@@ -57,7 +57,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     terminator AsmGoto { table=0 }   [b2, b21]
   block 2  start_pc=0
     v14  LoadLocal { off=-1, kind=I32 }                   -> x0
-    v15  Extend { value=v14, kind=I32 }                   -> x2
+    v15  Extend { value=v14, kind=I32 }                   -> x1
     terminator Jmp(b3)   (exit_acc=v14)
   block 3  start_pc=0
     v20  Phi { incoming=[b2:v14, b21:v18], kind=I64 }     -> x0
@@ -73,8 +73,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     terminator Jmp(b7)
   block 7  start_pc=0
     v21  Imm(20)                                          -> x0
-    v22  LocalAddr(-1)                                    -> x2
-    v23  InlineAsm { template="mov %1, %0\n\taddl $1, %0\n\tcmpl $10, %1\n\tjg %l0", ops=2, args=[v12, v21] } -> -
+    v22  LocalAddr(-1)                                    -> x1
+    v23  InlineAsm { template="mov %1, %0\n\taddl $1, %0\n\tcmpl $10, %1\n\tjg %l0", ops=2, args=[v22, v21] } -> -
     terminator AsmGoto { table=1 }   [b8, b20]
   block 8  start_pc=0
     v24  LoadLocal { off=-1, kind=I32 }                   -> x0
@@ -127,7 +127,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v16  LoadLocal { off=-1, kind=I32 }                   -> x0
     v17  BinopI { op=add, lhs=v16, rhs_imm=100 }          -> x0
     v18  Extend { value=v17, kind=I32 }                   -> x0
-    v19  Extend { value=v18, kind=I32 }                   -> x2
+    v19  Extend { value=v18, kind=I32 }                   -> x1
     terminator Jmp(b3)   (exit_acc=v18)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

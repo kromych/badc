@@ -161,7 +161,11 @@ Compile knobs:
   -Xassembler <opt>        assembler is built in, so each option is
                            checked against what it implements rather
                            than passed on; an option it does not
-                           implement is refused by name.
+                           implement is refused by name. `-Wa,-L`
+                           (`--keep-locals`) keeps the local-label
+                           temporaries -- the `.L`-prefixed names --
+                           in a `-c` object's symbol table, which
+                           GNU as drops without it.
   -m16 / -m32 / -m64       Code model, x86 targets only. `-m16` and
                            `-m32` preprocess the unit as i386 (`__i386__`
                            defined, `__x86_64__` not, ILP32 widths) and
@@ -211,6 +215,14 @@ Compile knobs:
                            whatever the default is. With --gnu the model
                            is reported as __GNUC_GNU_INLINE__ /
                            __GNUC_STDC_INLINE__.
+  -fstrict-flex-arrays[=N] Which trailing array members
+                           __builtin_object_size treats as unbounded
+                           when reached through a pointer: at level 0
+                           (the default, as in gcc) every one, at 1
+                           those declared [], [0] or [1], at 2 those
+                           declared [] or [0], at 3 only []. The bare
+                           form selects level 3. A [] member is
+                           unbounded at every level.
   -fno-jump-tables         Dispatch every switch through the compare
                            tree, never a jump table, so no switch takes
                            an indirect branch. -fjump-tables restores
@@ -235,6 +247,35 @@ Compile knobs:
                            function against its predecessor. A symbol's
                            size covers its instructions only; the fill
                            belongs to no function.
+  -fpatchable-function-entry=N[,M]
+                           Put N NOPs at every function entry, M of them
+                           (default 0) ahead of the symbol, and record
+                           the area's first byte in a per-function
+                           __patchable_function_entries section linked
+                           to the function's text section. A function's
+                           patchable_function_entry attribute replaces
+                           the pair; the alignment above applies to the
+                           area's first byte. ELF targets.
+  -pg                      Call the profiling entry point from every
+                           function not marked no_instrument_function:
+                           __fentry__ at the symbol under -mfentry (the
+                           default), mcount after the prologue under
+                           -mno-fentry. linux-x64 only.
+  -mrecord-mcount          Record every -pg call site in an __mcount_loc
+                           section.
+  -mnop-mcount             Put a NOP of the call's width in each -pg
+                           call's place.
+  -ffixed-REG              Keep register REG out of the allocator, so no
+                           compiler-chosen value lives in it. Any
+                           architectural spelling names it (x9 / w9,
+                           q16 / v16 / d16 / s16; rax / eax / ax / al,
+                           r8 / r8d / r8w / r8b, xmm5). The ABI still
+                           passes arguments and results through it, and
+                           an inline-asm operand, clobber or `register`
+                           variable may still name it. The stack and
+                           frame pointers, the AArch64 link register and
+                           the code generator's own scratch registers
+                           (x16, x17, x19; r10, r11) are refused.
   -fstack-protector        Give a stack canary to every function holding
                            a character array of at least --param
                            ssp-buffer-size= bytes (default 8), or calling
@@ -251,6 +292,13 @@ Compile knobs:
   --param ssp-buffer-size=N
                            Least character-array size, in bytes, that
                            -fstack-protector protects a function for.
+  -mcpu=NAME[+ext...]      AArch64 CPU selection. The name picks a
+                           scheduling model badc does not differentiate;
+                           `+crypto` / `+aes` / `+sha2` (and their `no`
+                           forms) set the __ARM_FEATURE_* macros the way
+                           gcc does, with the crypto encodings always
+                           available to inline asm. Another extension is
+                           refused by name.
   -mstack-protector-guard=global|tls|sysreg
                            Where the guard value is read from. The
                            default follows the target: %fs:0x28 on
@@ -268,6 +316,26 @@ Compile knobs:
                            Read the guard from NAME instead of
                            __stack_chk_guard. Not combinable with
                            -mstack-protector-guard-offset=.
+  -ftrivial-auto-var-init=uninitialized|zero|pattern
+                           Initialize every automatic object declared
+                           without an initializer -- scalars,
+                           aggregates, arrays and variable-length
+                           arrays -- where its storage is established:
+                           `zero` stores zeros, `pattern` stores the
+                           byte 0xFE over it. `uninitialized` (the
+                           default) leaves it as the frame held it.
+                           __attribute__((uninitialized)) on an object
+                           opts it out. A declaration a `goto` or
+                           `switch` jumps past is not covered, as in
+                           gcc. Diagnostics and the -O promotion of the
+                           object are unchanged.
+  -fzero-init-padding-bits=standard|unions|all
+                           Which automatic initializers zero their
+                           padding. Every value selects what badc
+                           already emits: an aggregate initializer
+                           zero-fills the whole object, padding
+                           included, before storing the members, for
+                           structs and unions alike.
   -fshort-wchar            Give wchar_t an unsigned 16-bit type instead
                            of the target's default, narrowing the
                            elements of L-prefixed string and character
@@ -460,6 +528,15 @@ impl DepOptions {
     }
 }
 
+/// What one accepted `-Wa,` / `-Xassembler` option asks for.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum AssemblerOption {
+    /// Selects nothing badc's assembler does differently.
+    NoEffect,
+    /// `-L` / `--keep-locals`.
+    KeepLocals,
+}
+
 /// Check one `-Wa,` / `-Xassembler` option against what badc's assembler
 /// implements. The accepted set is what its behavior already matches:
 ///
@@ -475,17 +552,20 @@ impl DepOptions {
 ///   each member unconditionally, so a ceiling at or above that set selects
 ///   nothing. It does not reject an instruction above a lower ceiling, which
 ///   is the one direction this diverges from gas.
+/// * `-L` / `--keep-locals` -- keeps the local-label temporaries in the
+///   object's `.symtab`; see [`badc::NativeOptions::keep_local_labels`].
 ///
 /// Anything else is refused: passing it on is not an option, and accepting
 /// it would claim behavior badc does not have.
-fn accept_assembler_option(opt: &str) -> Result<(), String> {
+fn accept_assembler_option(opt: &str) -> Result<AssemblerOption, String> {
     let name = opt.split_once('=').map_or(opt, |(n, _)| n);
     match name {
+        "-L" | "--keep-locals" => Ok(AssemblerOption::KeepLocals),
         "--fatal-warnings"
         | "-mrelax-relocations"
         | "--noexecstack"
         | "--no-warn-rwx-segments"
-        | "-march" => Ok(()),
+        | "-march" => Ok(AssemblerOption::NoEffect),
         _ => Err(format!("badc: error: unsupported assembler option `{opt}`")),
     }
 }
@@ -614,6 +694,7 @@ fn run() {
     let mut map_path: Option<PathBuf> = None;
     let mut print_map = false;
     let mut target_spec: Option<String> = None;
+    let mut mcpu: Option<String> = None;
     let mut defines: Vec<(String, String)> = Vec::new();
     let mut undefines: Vec<String> = Vec::new();
     let mut include_paths: Vec<String> = Vec::new();
@@ -651,6 +732,8 @@ fn run() {
     // diagnostic for a `.c` source under it names.
     let mut code_model_flag: Option<String> = None;
     let mut mno_fp_regs = false;
+    // `-ffixed-REG` operands, resolved against the target once it is known.
+    let mut fixed_reg_names: Vec<String> = Vec::new();
     let mut mstrict_align = false;
     let mut fpic = false;
     // `-fno-pic` / `-fno-pie`, tracked apart from `fpic` because the
@@ -658,7 +741,13 @@ fn run() {
     // `const` placements in a `-c` object; see `NativeOptions::pic_link`.
     let mut fno_pic = false;
     let mut jump_tables = true;
+    // `-Wa,-L` / `-Wa,--keep-locals`.
+    let mut keep_local_labels = false;
     let mut min_function_alignment: u32 = 1;
+    let mut patchable_function_entry = badc::PatchableEntry::NONE;
+    let mut profiling = badc::Profiling::OFF;
+    // The `-pg` modifiers seen, x86-64 options gcc's aarch64 rejects.
+    let mut mcount_modifiers: Vec<String> = Vec::new();
     let mut code_model = badc::CodeModel::Small;
     let mut code_model_tiny = false;
     let mut hardening = badc::Hardening::NONE;
@@ -695,8 +784,12 @@ fn run() {
     // header takes its standard-C path for the GNU features badc lacks.
     let mut gnu_dialect = false;
     let mut gnu89_inline = false;
+    let mut strict_flex_arrays: u8 = 0;
     // `-fshort-wchar` -- narrow `wchar_t` to an unsigned 16-bit type.
     let mut short_wchar = false;
+    // `-ftrivial-auto-var-init=` -- what an automatic object declared
+    // without an initializer holds; see `AutoVarInit`.
+    let mut auto_var_init = badc::AutoVarInit::Uninitialized;
     // `-fsigned-char` / `-funsigned-char`; `None` keeps the target ABI's
     // own plain-`char` signedness.
     let mut char_signed: Option<bool> = None;
@@ -985,19 +1078,23 @@ fn run() {
             // it implements rather than passed on.
             s if s.starts_with("-Wa,") => {
                 for opt in s["-Wa,".len()..].split(',') {
-                    if let Err(e) = accept_assembler_option(opt) {
-                        eprint_diagnostic(e);
-                        std::process::exit(1);
+                    match accept_assembler_option(opt) {
+                        Ok(o) => keep_local_labels |= o == AssemblerOption::KeepLocals,
+                        Err(e) => {
+                            eprint_diagnostic(e);
+                            std::process::exit(1);
+                        }
                     }
                 }
             }
             "-Xassembler" => match iter.next() {
-                Some(opt) => {
-                    if let Err(e) = accept_assembler_option(&opt) {
+                Some(opt) => match accept_assembler_option(&opt) {
+                    Ok(o) => keep_local_labels |= o == AssemblerOption::KeepLocals,
+                    Err(e) => {
                         eprint_diagnostic(e);
                         std::process::exit(1);
                     }
-                }
+                },
                 None => {
                     eprint_diagnostic("badc: error: -Xassembler requires an option");
                     std::process::exit(1);
@@ -1032,11 +1129,24 @@ fn run() {
             // (OS kernels) run with that register file trapped, so any
             // access faults; see `NativeOptions::no_fp_regs`.
             "-mno-sse" | "-mgeneral-regs-only" => mno_fp_regs = true,
+            // Keep a register out of the allocator; see `NativeOptions::fixed_regs`.
+            s if s.starts_with("-ffixed-") => {
+                let name = &s["-ffixed-".len()..];
+                if name.is_empty() {
+                    eprint_diagnostic("badc: error: `-ffixed-` requires a register name");
+                    std::process::exit(1);
+                }
+                fixed_reg_names.push(name.to_string());
+            }
             // Keep every compiler-generated memory access naturally
             // aligned for its width. Code that runs with the MMU off
             // sees Device-typed memory, where an unaligned access
             // raises an alignment fault instead of being fixed up;
             // see `NativeOptions::strict_align`.
+            // AArch64 CPU selection. The base name picks a scheduling
+            // model badc does not differentiate; the extensions decide
+            // the feature macros, resolved once the target is known.
+            s if s.starts_with("-mcpu=") => mcpu = Some(s["-mcpu=".len()..].to_string()),
             "-mstrict-align" => mstrict_align = true,
             "-mno-strict-align" => mstrict_align = false,
             // Speculative-execution mitigations, in gcc's spellings. An
@@ -1277,6 +1387,38 @@ fn run() {
                     }
                 }
             }
+            // gcc `-fpatchable-function-entry=N[,M]`: N NOPs at every
+            // function entry, M of them ahead of the symbol, recorded per
+            // function in `__patchable_function_entries`.
+            s if s.starts_with("-fpatchable-function-entry=") => {
+                let spec = &s["-fpatchable-function-entry=".len()..];
+                let (n, m) = spec.split_once(',').unwrap_or((spec, "0"));
+                match (n.parse::<u32>(), m.parse::<u32>()) {
+                    (Ok(nops), Ok(before)) if before <= nops => {
+                        patchable_function_entry = badc::PatchableEntry { nops, before };
+                    }
+                    _ => {
+                        eprint_diagnostic(format!(
+                            "badc: error: `-fpatchable-function-entry=` takes `N[,M]` \
+                             with M <= N, got `{spec}`"
+                        ));
+                        std::process::exit(1);
+                    }
+                }
+            }
+            "-pg" => profiling.enabled = true,
+            "-mfentry" | "-mno-fentry" => {
+                profiling.fentry = arg == "-mfentry";
+                mcount_modifiers.push(arg.clone());
+            }
+            "-mrecord-mcount" | "-mno-record-mcount" => {
+                profiling.record_mcount = arg == "-mrecord-mcount";
+                mcount_modifiers.push(arg.clone());
+            }
+            "-mnop-mcount" | "-mno-nop-mcount" => {
+                profiling.nop_mcount = arg == "-mnop-mcount";
+                mcount_modifiers.push(arg.clone());
+            }
             // Code model for `-c` objects; see `CodeModel`. `small` is
             // the default; `kernel` switches external-address
             // materialization to the sign-extended 32-bit absolute form
@@ -1322,12 +1464,63 @@ fn run() {
             // linkage model the unit default in place of C99's.
             "-fgnu89-inline" => gnu89_inline = true,
             "-fno-gnu89-inline" => gnu89_inline = false,
+            // gcc `-fstrict-flex-arrays[=N]`: which trailing array members
+            // `__builtin_object_size` treats as unbounded. The bare form
+            // is level 3, as in gcc.
+            "-fstrict-flex-arrays" => strict_flex_arrays = 3,
+            s if s.starts_with("-fstrict-flex-arrays=") => {
+                let spec = &s["-fstrict-flex-arrays=".len()..];
+                match spec.parse::<u8>() {
+                    Ok(n) if n <= 3 => strict_flex_arrays = n,
+                    _ => {
+                        eprint_diagnostic(format!(
+                            "badc: error: `-fstrict-flex-arrays=` takes a level \
+                             0..=3, got `{spec}`"
+                        ));
+                        std::process::exit(1);
+                    }
+                }
+            }
             // gcc / clang `-fshort-wchar`: `wchar_t` becomes an unsigned
             // 16-bit type on every target. It changes the layout of every
             // object holding a `wchar_t` or a wide literal, so it has to
             // reach the front end rather than be dropped as a no-op.
             "-fshort-wchar" => short_wchar = true,
             "-fno-short-wchar" => short_wchar = false,
+            // gcc `-ftrivial-auto-var-init=`: the front end supplies the
+            // initializer, so every output mode carries it.
+            s if s.starts_with("-ftrivial-auto-var-init=") => {
+                let spec = &s["-ftrivial-auto-var-init=".len()..];
+                auto_var_init = match spec {
+                    "uninitialized" => badc::AutoVarInit::Uninitialized,
+                    "zero" => badc::AutoVarInit::Zero,
+                    "pattern" => badc::AutoVarInit::Pattern,
+                    _ => {
+                        eprint_diagnostic(format!(
+                            "badc: error: unsupported argument `{spec}` to \
+                             `-ftrivial-auto-var-init=` (supported: uninitialized, \
+                             zero, pattern)"
+                        ));
+                        std::process::exit(1);
+                    }
+                };
+            }
+            // gcc `-fzero-init-padding-bits=`: measured on all three
+            // targets at both optimization levels, a partially initialized
+            // automatic struct or union has zero padding whichever value is
+            // named, since the whole object is zero-filled before its
+            // members are stored. The argument is checked and nothing
+            // changes.
+            s if s.starts_with("-fzero-init-padding-bits=") => {
+                let spec = &s["-fzero-init-padding-bits=".len()..];
+                if !matches!(spec, "standard" | "unions" | "all") {
+                    eprint_diagnostic(format!(
+                        "badc: error: unsupported argument `{spec}` to \
+                         `-fzero-init-padding-bits=` (supported: standard, unions, all)"
+                    ));
+                    std::process::exit(1);
+                }
+            }
             // gcc / clang `-fsigned-char` / `-funsigned-char`: C99
             // 6.2.5p15 leaves plain `char`'s signedness to the
             // implementation, and each selects one over the target
@@ -1686,6 +1879,17 @@ fn run() {
         }
     };
 
+    let mut fixed_regs = badc::FixedRegs::NONE;
+    for name in &fixed_reg_names {
+        match badc::fixed_register(target, name) {
+            Ok(reg) => fixed_regs.insert(reg),
+            Err(e) => {
+                eprint_diagnostic(format!("badc: error: {e}"));
+                std::process::exit(1);
+            }
+        }
+    }
+
     // The host's implicit system include path, probed after the bundled
     // headers so a hosted native build resolves third-party headers
     // (`zlib.h`, `libfdt.h`) without shadowing the embedded standard set.
@@ -1708,6 +1912,40 @@ fn run() {
              `--jit` and `--interp` execute in this process and reach no \
              `__stack_chk_fail`",
         );
+        std::process::exit(1);
+    }
+    // The profiling call and the patchable-entry records are ELF object
+    // contracts: the call names `__fentry__` / `mcount` for the link and
+    // the records are sections of the object.
+    // TODO: the aarch64 `-pg` form and the PE / Mach-O records.
+    let is_elf_target = matches!(target, badc::Target::LinuxX64 | badc::Target::LinuxAarch64);
+    if profiling.enabled && matches!(mode, Mode::Jit | Mode::Interp) {
+        eprint_diagnostic(
+            "badc: error: `-pg` needs a compiled output: `--jit` and `--interp` \
+             execute in this process and reach no `__fentry__`",
+        );
+        std::process::exit(1);
+    }
+    if profiling.enabled && (!is_elf_target || target.is_aarch64()) {
+        eprint_diagnostic(format!(
+            "badc: error: `-pg` is not implemented for {}",
+            target.id_str()
+        ));
+        std::process::exit(1);
+    }
+    if let Some(flag) = mcount_modifiers.first()
+        && target.is_aarch64()
+    {
+        eprint_diagnostic(format!(
+            "badc: error: `{flag}` is an x86-64 option; gcc's aarch64 has none"
+        ));
+        std::process::exit(1);
+    }
+    if patchable_function_entry != badc::PatchableEntry::NONE && !is_elf_target {
+        eprint_diagnostic(format!(
+            "badc: error: `-fpatchable-function-entry=` is not implemented for {}",
+            target.id_str()
+        ));
         std::process::exit(1);
     }
     // The canary sequences name the System V handler and guard object.
@@ -1812,6 +2050,54 @@ fn run() {
              `global` and `tls` guard forms only",
         );
         std::process::exit(1);
+    }
+    if let Some(spec) = &mcpu {
+        if !matches!(
+            target,
+            badc::Target::LinuxAarch64 | badc::Target::MacOSAarch64 | badc::Target::WindowsAarch64
+        ) {
+            eprint_diagnostic(
+                "badc: error: `-mcpu=` names an AArch64 CPU; the x86-64 targets take none",
+            );
+            std::process::exit(1);
+        }
+        // gcc's model, measured: `+crypto` is `+aes+sha2`, `no<ext>`
+        // subtracts, and __ARM_FEATURE_CRYPTO holds only while both do.
+        // The AES and SHA-2 encodings are always in badc's tables; any
+        // other modifier is refused rather than accepted inertly.
+        let mut parts = spec.split('+');
+        if parts.next().unwrap_or("").is_empty() {
+            eprint_diagnostic(format!("badc: error: `-mcpu={spec}` names no CPU"));
+            std::process::exit(1);
+        }
+        let (mut aes, mut sha2) = (false, false);
+        for ext in parts {
+            match ext {
+                "crypto" => (aes, sha2) = (true, true),
+                "nocrypto" => (aes, sha2) = (false, false),
+                "aes" => aes = true,
+                "noaes" => aes = false,
+                "sha2" => sha2 = true,
+                "nosha2" => sha2 = false,
+                other => {
+                    eprint_diagnostic(format!(
+                        "badc: error: `-mcpu=` extension `{other}` is not \
+                         implemented; badc implements `crypto`, `aes`, \
+                         `sha2` and their `no` forms"
+                    ));
+                    std::process::exit(1);
+                }
+            }
+        }
+        for (name, on) in [
+            ("__ARM_FEATURE_AES", aes),
+            ("__ARM_FEATURE_SHA2", sha2),
+            ("__ARM_FEATURE_CRYPTO", aes && sha2),
+        ] {
+            if on && !defines.iter().any(|(n, _)| n == name) {
+                defines.push((name.to_string(), String::from("1")));
+            }
+        }
     }
     if code_model_tiny && target != badc::Target::LinuxAarch64 {
         eprint_diagnostic(
@@ -2261,8 +2547,10 @@ fn run() {
             let copts = badc::CompileOptions::default()
                 .with_gnu(gnu)
                 .with_gnu89_inline(gnu89_inline)
+                .with_strict_flex_arrays(strict_flex_arrays)
                 .with_short_wchar(short_wchar)
                 .with_char_signed(char_signed)
+                .with_auto_var_init(auto_var_init)
                 .with_nostdinc(nostdinc)
                 .with_no_builtin(no_builtin)
                 .with_no_builtin_fns(no_builtin_fns.clone())
@@ -2341,8 +2629,10 @@ fn run() {
         let copts = badc::CompileOptions::default()
             .with_gnu(gnu)
             .with_gnu89_inline(gnu89_inline)
+            .with_strict_flex_arrays(strict_flex_arrays)
             .with_short_wchar(short_wchar)
             .with_char_signed(char_signed)
+            .with_auto_var_init(auto_var_init)
             .with_nostdinc(nostdinc)
             .with_no_builtin(no_builtin)
             .with_no_builtin_fns(no_builtin_fns.clone())
@@ -2385,6 +2675,7 @@ fn run() {
         if mode == Mode::Jit {
             // The JIT lowers for the host; --target plays no part.
             let mut jit_opts = NativeOptions::new().with_inline_cap(inline_cap);
+            jit_opts.fixed_regs = fixed_regs;
             if optimize_flag {
                 jit_opts = jit_opts.with_optimize();
             }
@@ -2455,8 +2746,10 @@ fn run() {
             let opts = badc::CompileOptions::default()
                 .with_gnu(gnu)
                 .with_gnu89_inline(gnu89_inline)
+                .with_strict_flex_arrays(strict_flex_arrays)
                 .with_short_wchar(short_wchar)
                 .with_char_signed(char_signed)
+                .with_auto_var_init(auto_var_init)
                 .with_nostdinc(nostdinc)
                 .with_no_builtin(no_builtin)
                 .with_no_builtin_fns(no_builtin_fns.clone())
@@ -2547,6 +2840,8 @@ fn run() {
         reloc_opts.strict_align = mstrict_align;
         reloc_opts.jump_tables = jump_tables;
         reloc_opts.min_function_alignment = min_function_alignment;
+        reloc_opts.patchable_function_entry = patchable_function_entry;
+        reloc_opts.profiling = profiling;
         reloc_opts.pic = fpic;
         // These objects are linked into an image below, and every image
         // this toolchain writes takes its data relocations at load time
@@ -2557,7 +2852,9 @@ fn run() {
         reloc_opts.code_model = code_model;
         reloc_opts.hardening = hardening;
         reloc_opts.stack_protect = stack_protect;
+        reloc_opts.fixed_regs = fixed_regs;
         reloc_opts.elf_class = object_elf_class;
+        reloc_opts.keep_local_labels = keep_local_labels;
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
         }
@@ -2582,8 +2879,10 @@ fn run() {
             gnu,
             gnu_dialect,
             gnu89_inline,
+            strict_flex_arrays,
             short_wchar,
             char_signed,
+            auto_var_init,
             nostdinc,
             no_builtin,
             no_builtin_fns: &no_builtin_fns,
@@ -2622,8 +2921,10 @@ fn run() {
             let copts = badc::CompileOptions::default()
                 .with_gnu(gnu)
                 .with_gnu89_inline(gnu89_inline)
+                .with_strict_flex_arrays(strict_flex_arrays)
                 .with_short_wchar(short_wchar)
                 .with_char_signed(char_signed)
+                .with_auto_var_init(auto_var_init)
                 .with_nostdinc(nostdinc)
                 .with_no_builtin(no_builtin)
                 .with_no_builtin_fns(no_builtin_fns.clone())
@@ -2651,6 +2952,10 @@ fn run() {
             // guard; every toolchain builds them unprotected, and a canary
             // inside the handler would recurse on a real check failure.
             opts.stack_protect = badc::StackProtect::OFF;
+            // Nor the user's `-pg` call or patchable entries: the crt objects
+            // a toolchain links are built without them.
+            opts.profiling = badc::Profiling::OFF;
+            opts.patchable_function_entry = badc::PatchableEntry::NONE;
             match badc::emit_native_with_options_owned(program, target, opts) {
                 Ok(b) => b,
                 Err(e) => {
@@ -3276,12 +3581,16 @@ fn run() {
         reloc_opts.strict_align = mstrict_align;
         reloc_opts.jump_tables = jump_tables;
         reloc_opts.min_function_alignment = min_function_alignment;
+        reloc_opts.patchable_function_entry = patchable_function_entry;
+        reloc_opts.profiling = profiling;
         reloc_opts.pic = fpic;
         reloc_opts.pic_link = pic_link_default(fno_pic, code_model);
         reloc_opts.code_model = code_model;
         reloc_opts.hardening = hardening;
         reloc_opts.stack_protect = stack_protect;
+        reloc_opts.fixed_regs = fixed_regs;
         reloc_opts.elf_class = object_elf_class;
+        reloc_opts.keep_local_labels = keep_local_labels;
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
         }
@@ -3297,8 +3606,10 @@ fn run() {
             gnu,
             gnu_dialect,
             gnu89_inline,
+            strict_flex_arrays,
             short_wchar,
             char_signed,
+            auto_var_init,
             nostdinc,
             no_builtin,
             no_builtin_fns: &no_builtin_fns,
@@ -3414,12 +3725,16 @@ fn run() {
         reloc_opts.strict_align = mstrict_align;
         reloc_opts.jump_tables = jump_tables;
         reloc_opts.min_function_alignment = min_function_alignment;
+        reloc_opts.patchable_function_entry = patchable_function_entry;
+        reloc_opts.profiling = profiling;
         reloc_opts.pic = fpic;
         reloc_opts.pic_link = pic_link_default(fno_pic, code_model);
         reloc_opts.code_model = code_model;
         reloc_opts.hardening = hardening;
         reloc_opts.stack_protect = stack_protect;
+        reloc_opts.fixed_regs = fixed_regs;
         reloc_opts.elf_class = object_elf_class;
+        reloc_opts.keep_local_labels = keep_local_labels;
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
         }
@@ -3436,8 +3751,10 @@ fn run() {
             gnu,
             gnu_dialect,
             gnu89_inline,
+            strict_flex_arrays,
             short_wchar,
             char_signed,
+            auto_var_init,
             nostdinc,
             no_builtin,
             no_builtin_fns: &no_builtin_fns,
@@ -3981,8 +4298,10 @@ struct CompileCfg<'a> {
     gnu: bool,
     gnu_dialect: bool,
     gnu89_inline: bool,
+    strict_flex_arrays: u8,
     short_wchar: bool,
     char_signed: Option<bool>,
+    auto_var_init: badc::AutoVarInit,
     nostdinc: bool,
     no_builtin: bool,
     no_builtin_fns: &'a [String],
@@ -4147,8 +4466,10 @@ fn tu_compile_options(
     badc::CompileOptions::default()
         .with_gnu(cfg.gnu)
         .with_gnu89_inline(cfg.gnu89_inline)
+        .with_strict_flex_arrays(cfg.strict_flex_arrays)
         .with_short_wchar(cfg.short_wchar)
         .with_char_signed(cfg.char_signed)
+        .with_auto_var_init(cfg.auto_var_init)
         .with_nostdinc(cfg.nostdinc)
         .with_no_builtin(cfg.no_builtin)
         .with_no_builtin_fns(cfg.no_builtin_fns.to_vec())

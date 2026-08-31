@@ -68,7 +68,7 @@ The preprocessor predefines a standard set, double-underscore wrapped in the
 gcc / clang / msvc convention so it does not collide with user identifiers:
 
 ```c
-    __BADC_VERSION__   <crate version>   // string literal from Cargo.toml, e.g. "0.4.0"
+    __BADC_VERSION__   <crate version>   // string literal from Cargo.toml, e.g. "0.4.1"
     __BADC_TARGET__    "macos-aarch64"   // canonical target id (string literal)
     __aarch64__ / __arm64__              // AArch64 targets
     __x86_64__ / __amd64__               // x86_64 targets
@@ -247,6 +247,21 @@ require: `-mcmodel=small|kernel|tiny`, `-mno-sse` / `-mgeneral-regs-only`
 family below. Options badc does not implement are rejected rather than
 accepted and ignored, so a configure-time probe gets a truthful answer.
 
+`-ffixed-REG` keeps a register out of the allocator, so no compiler-chosen
+value lives in it -- what the kernel asks for the shadow-call-stack register
+(`-ffixed-x18`) and for the NEON registers a unit keeps guest or caller state
+in (`-ffixed-q16` .. `-ffixed-q31`). Every architectural spelling names the
+register (`x9` / `w9`, `q16` / `v16` / `d16` / `s16`, `rax` / `eax` / `ax` /
+`al`, `r8` / `r8d` / `r8w` / `r8b`, `xmm5`). The ABI still passes arguments
+and results through a reserved register, and an inline-asm operand, clobber
+or `register` variable may still name it; the code generator's own scratch
+picks avoid it, and an FP scratch it would have used moves to another
+register outside the allocator's banks, into the callee-saved bank's tail
+when none is left there. The stack and frame pointers, the AArch64 link
+register and the scratch registers the code generator cannot give up (x16,
+x17, x19; r10, r11) are refused, as is a reservation that leaves a function
+with floating-point work no scratch register at all.
+
 `-fstack-protector`, `-fstack-protector-strong` and `-fstack-protector-all`
 select which functions carry a stack canary; `-fno-stack-protector` (the
 default) selects none. The per-function rule is gcc's, read off the declared
@@ -270,6 +285,23 @@ aarch64 form that reads a per-task offset above a system register
 The family needs relocatable output -- the failure branch is a relocation
 against `__stack_chk_fail` -- so `--jit` and `--interp` reject it, as do the
 Windows targets, whose C library exports neither symbol.
+
+`-ftrivial-auto-var-init=uninitialized|zero|pattern` (the kernel's
+`CONFIG_INIT_STACK_ALL_ZERO` passes `zero`) initializes every automatic
+object declared without an initializer -- scalars, aggregates, arrays and
+variable-length arrays -- where its storage is established: the value is
+supplied in the front end as an ordinary initializer, so every output mode
+carries it and the `-O` promotion treats it as any written one. `pattern`
+stores the byte `0xFE` gcc stores. A scalar that fits a register takes the
+value as a literal of its own type; anything wider is filled byte-wise,
+unrolled within the inline bound and as a store loop past it, and a
+variable-length array's loop follows its allocation.
+`__attribute__((uninitialized))` opts an object out, as does binding it to a
+register with `asm`; a declaration a `goto` or `switch` jumps past is not
+covered, as in gcc. `-fzero-init-padding-bits=standard|unions|all` is
+accepted with every value and changes nothing: an automatic aggregate
+initializer already zero-fills the whole object, padding included, before it
+stores the members, for structs and unions alike.
 
 `pac-ret` signs the return address of every function that stores the link
 register: `paciasp` ahead of the prologue, `autiasp` after the last teardown

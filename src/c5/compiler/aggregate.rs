@@ -121,6 +121,8 @@ impl Compiler {
                     is_vector: false,
                     is_array: false,
                     is_anonymous: false,
+                    is_transparent_union: false,
+                    cast_named: false,
                 });
                 let id = self.structs.len() - 1;
                 if let Some(scope) = self.tag_scopes.last_mut() {
@@ -366,6 +368,15 @@ impl Compiler {
                 if typedef_align > 0 {
                     self.pending.type_align = typedef_align;
                 }
+                // A function / function-pointer typedef carries the
+                // pointed-to function's calling convention; a declarator
+                // through the alias inherits it unless the declaration names
+                // one of its own.
+                if self.symbols[self.lex.curr_id_idx].conv != crate::c5::codegen::CallConv::Target
+                    && self.pending.attr_call_conv == crate::c5::codegen::CallConv::Target
+                {
+                    self.pending.attr_call_conv = self.symbols[self.lex.curr_id_idx].conv;
+                }
                 // Carry the typedef's fn-pointer lineage forward
                 // (mirrors `decl_base.rs` for the non-aggregate
                 // path) so a `typedef RET (*fn_t)(args); struct {
@@ -516,6 +527,7 @@ impl Compiler {
                             array_size: inner_field.array_size,
                             inner_array_size: inner_field.inner_array_size,
                             array_dims: inner_field.array_dims,
+                            zero_len: inner_field.zero_len,
                             bit_offset: inner_field.bit_offset,
                             bit_width: inner_field.bit_width,
                             bit_unit_size: inner_field.bit_unit_size,
@@ -523,6 +535,7 @@ impl Compiler {
                             fn_ptr_ret_indirection: inner_field.fn_ptr_ret_indirection,
                             params: inner_field.params,
                             is_variadic: inner_field.is_variadic,
+                            conv: inner_field.conv,
                             anon_union_group: union_group,
                             anon_struct_group: struct_group,
                             explicit_align: inner_field.explicit_align,
@@ -652,6 +665,7 @@ impl Compiler {
                 let declared = self.parse_declarator(field_base);
                 self.pending.in_member_declarator = saved_member_ctx;
                 let (id_idx, mut field_ty, mut field_array_size) = declared?;
+                let mut field_zero_len = self.pending.declarator_zero_len_array;
                 // A member may carry a trailing attribute
                 // (`int x __attribute__((aligned(16)));`,
                 // `int x __attribute__((deprecated));`). Member-level
@@ -660,6 +674,7 @@ impl Compiler {
                 // from raising the aggregate's alignment), independent of
                 // a struct-level `packed`.
                 self.skip_attribute_specifiers()?;
+                self.pending.attr_transparent_union = false;
                 if let Some(m) = self.pending.attr_mode.take() {
                     field_ty = self.apply_mode_to_type(field_ty, m)?;
                 }
@@ -699,6 +714,7 @@ impl Compiler {
                     && self.pending.declarator_leading_ptr_count == 0
                 {
                     field_array_size = typedef_dim;
+                    field_zero_len = typedef_dim < 0 && self.pending.typedef_base_zero_len;
                     if id_idx != usize::MAX {
                         self.apply_typedef_array_dims(id_idx);
                     }
@@ -727,6 +743,11 @@ impl Compiler {
                 // side-channel so it cannot leak to the next field.
                 let field_is_variadic = !field_params.is_empty()
                     && matches!(self.pending.typedef_fn_proto.take(), Some((_, true)));
+                // A function-pointer member's `ms_abi` / `sysv_abi`
+                // (`efi_status_t (__efiapi *exit)(...)`, or the typedef
+                // form `efi_get_time_t __efiapi *get_time`). Consumed
+                // here so it cannot leak to the next member.
+                let field_conv = core::mem::take(&mut self.pending.attr_call_conv);
                 let is_aggregate_value = is_struct_value_ty(field_ty);
                 // C99 6.7.2.1: a member must have complete type, and an
                 // array of an incomplete type is itself incomplete. Only a
@@ -935,6 +956,7 @@ impl Compiler {
                     array_size: field_array_size,
                     inner_array_size: field_inner_array_size,
                     array_dims: field_array_dims,
+                    zero_len: field_zero_len,
                     bit_offset,
                     bit_width,
                     bit_unit_size: if bit_width > 0 { bit_unit as u8 } else { 0 },
@@ -942,6 +964,7 @@ impl Compiler {
                     fn_ptr_ret_indirection: field_fn_ptr_ret_indirection,
                     params: field_params,
                     is_variadic: field_is_variadic,
+                    conv: field_conv,
                     anon_union_group: 0,
                     anon_struct_group: 0,
                     explicit_align: group_align.max(decl_align) as u32,
@@ -1011,6 +1034,7 @@ impl Compiler {
         if self.skip_attribute_specifiers()? {
             self.repack_struct(struct_id);
         }
+        let transparent = core::mem::take(&mut self.pending.attr_transparent_union);
         let req = self.take_member_align()?;
         if req > 0 {
             let align = self.structs[struct_id].align.max(req as usize);
@@ -1019,7 +1043,43 @@ impl Compiler {
             self.structs[struct_id].explicit_align =
                 self.structs[struct_id].explicit_align.max(req as u32);
         }
+        if transparent {
+            self.mark_transparent_union(struct_id);
+        }
         Ok(())
+    }
+
+    /// Honor or discard a `transparent_union` request on the aggregate.
+    /// GCC honors the attribute only when the union's machine mode is the
+    /// first member's, mirrored here as a non-floating, non-bitfield
+    /// first member whose storage covers every member; otherwise GCC
+    /// warns and ignores it. An incomplete union (a typedef alias of a
+    /// forward declaration) cannot be checked and takes the flag as
+    /// declared.
+    pub(super) fn mark_transparent_union(&mut self, struct_id: usize) {
+        let def = &self.structs[struct_id];
+        if def.is_union && !def.is_complete {
+            self.structs[struct_id].is_transparent_union = true;
+            return;
+        }
+        let n = def.fields.len();
+        let honored = def.is_union
+            && n > 0
+            && def.fields[0].bit_width == 0
+            && !super::types::is_floating_scalar(def.fields[0].ty)
+            && (0..n)
+                .map(|i| self.packed_member_storage(struct_id, i))
+                .max()
+                == Some(self.packed_member_storage(struct_id, 0));
+        if honored {
+            self.structs[struct_id].is_transparent_union = true;
+        } else {
+            let line = self.lex.line;
+            self.warn_at(
+                line,
+                alloc::string::String::from("`transparent_union` attribute ignored"),
+            );
+        }
     }
 
     /// Re-lay a struct's fields with `__attribute__((packed))`

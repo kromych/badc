@@ -106,78 +106,69 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	stp	x20, x21, [sp, #-0x40]!
-               	stp	x22, x23, [sp, #0x10]
-               	str	x19, [sp, #0x20]
-               	stp	x29, x30, [sp, #0x30]
-               	add	x29, sp, #0x30
+               	str	x20, [sp, #-0x30]!
+               	str	x19, [sp, #0x10]
+               	stp	x29, x30, [sp, #0x20]
+               	add	x29, sp, #0x20
                	mov	x0, #0x14               // =20
                	bl	<addr>
                	mov	x20, x0
-               	mov	x21, #0x0               // =0
+               	mov	x1, #0x0                // =0
                	mov	x0, #0xc                // =12
                	str	w0, [x20]
-               	mov	x22, #0x4               // =4
+               	mov	x2, #0x4                // =4
                	mov	x0, #0x7                // =7
                	str	w0, [x20, #0x4]
                	mov	x0, #0xf                // =15
                	str	w0, [x20, #0x8]
-               	mov	x23, #0x5               // =5
-               	str	w23, [x20, #0xc]
+               	mov	x0, #0x5                // =5
+               	str	w0, [x20, #0xc]
                	mov	x0, #0xa                // =10
                	str	w0, [x20, #0x10]
                	mov	x0, x20
-               	mov	x2, x22
-               	mov	x1, x21
                	bl	<addr>
                	ldrsw	x0, [x20]
                	cmp	w0, #0x5
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0x30]
-               	ldr	x19, [sp, #0x20]
-               	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x40
+               	ldp	x29, x30, [sp, #0x20]
+               	ldr	x19, [sp, #0x10]
+               	ldr	x20, [sp], #0x30
                	ret
                	ldrsw	x0, [x20, #0x4]
                	cmp	w0, #0x7
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
-               	ldp	x29, x30, [sp, #0x30]
-               	ldr	x19, [sp, #0x20]
-               	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x40
+               	ldp	x29, x30, [sp, #0x20]
+               	ldr	x19, [sp, #0x10]
+               	ldr	x20, [sp], #0x30
                	ret
                	ldrsw	x0, [x20, #0x8]
                	cmp	w0, #0xa
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
-               	ldp	x29, x30, [sp, #0x30]
-               	ldr	x19, [sp, #0x20]
-               	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x40
+               	ldp	x29, x30, [sp, #0x20]
+               	ldr	x19, [sp, #0x10]
+               	ldr	x20, [sp], #0x30
                	ret
                	ldrsw	x0, [x20, #0xc]
                	cmp	w0, #0xc
                	b.eq	<addr>
-               	mov	x0, x22
-               	ldp	x29, x30, [sp, #0x30]
-               	ldr	x19, [sp, #0x20]
-               	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x40
+               	mov	x0, #0x4                // =4
+               	ldp	x29, x30, [sp, #0x20]
+               	ldr	x19, [sp, #0x10]
+               	ldr	x20, [sp], #0x30
                	ret
                	ldrsw	x0, [x20, #0x10]
                	cmp	w0, #0xf
                	b.eq	<addr>
-               	mov	x0, x23
-               	ldp	x29, x30, [sp, #0x30]
-               	ldr	x19, [sp, #0x20]
-               	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x40
+               	mov	x0, #0x5                // =5
+               	ldp	x29, x30, [sp, #0x20]
+               	ldr	x19, [sp, #0x10]
+               	ldr	x20, [sp], #0x30
                	ret
-               	mov	x0, x21
-               	ldp	x29, x30, [sp, #0x30]
-               	ldr	x19, [sp, #0x20]
-               	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x40
+               	mov	x0, #0x0                // =0
+               	ldp	x29, x30, [sp, #0x20]
+               	ldr	x19, [sp, #0x10]
+               	ldr	x20, [sp], #0x30
                	ret

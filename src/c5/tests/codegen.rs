@@ -88,8 +88,11 @@ fn output_marker_is_version_only_and_present_in_every_target() {
     // <version> (...)` (see `src/lib.rs`).
     let needle = crate::OUTPUT_MARKER.as_bytes();
     // The git tail only ever appears in `BUILD_INFO`; its label
-    // `\n\tcommit ` must not reach the output.
-    let git_tail = b"\n\tcommit ";
+    // must not reach the output. Taken from `BUILD_INFO` itself so
+    // the two spellings cannot drift, and skipped when badc was
+    // built outside a checkout, where there is no tail to look for.
+    let tail_label = crate::BUILD_INFO.split_once('\n').map(|(_, t)| t);
+    let git_tail = tail_label.map(str::as_bytes);
     for target in [
         Target::MacOSAarch64,
         Target::LinuxAarch64,
@@ -108,11 +111,13 @@ fn output_marker_is_version_only_and_present_in_every_target() {
             found,
             "{target:?}: expected `OUTPUT_MARKER` in emitted binary"
         );
-        let leaked = bytes.windows(git_tail.len()).any(|w| w == git_tail);
-        assert!(
-            !leaked,
-            "{target:?}: git provenance leaked into output -- breaks reproducibility"
-        );
+        if let Some(tail) = git_tail {
+            let leaked = bytes.windows(tail.len()).any(|w| w == tail);
+            assert!(
+                !leaked,
+                "{target:?}: git provenance leaked into output -- breaks reproducibility"
+            );
+        }
         // The marker sits outside the instruction stream (ELF
         // `.comment`, `__TEXT,__const`, `.rdata`): decoders walking
         // the code section must never reach it.
@@ -4303,6 +4308,79 @@ fn internal_linkage_data_objects_are_named_by_local_symbols() {
     }
 }
 
+/// gcc emits every undefined reference untyped -- an extern array, an
+/// address-taken function and a plain call all reach `.symtab` as
+/// `STT_NOTYPE` `SHN_UNDEF`, only `extern _Thread_local` is typed
+/// (`STT_TLS`). A linker adopts a typed UNDEF onto an untyped
+/// definition, so `STT_OBJECT` on a reference to an assembly code
+/// label retypes it in the linked image and objdump renders the
+/// label's range as data; the kernel's x86 decoder posttest rejects
+/// an image linked so. The distinction rides the vendor note.
+#[test]
+fn undefined_references_stay_untyped() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    const STT_NOTYPE: u8 = 0;
+    const STT_TLS: u8 = 6;
+    let src = "extern char ext_array[];\n\
+               extern void ext_fn_addr(void);\n\
+               extern void ext_fn_call(void);\n\
+               extern _Thread_local int ext_tls;\n\
+               unsigned long f(void) {\n\
+                   ext_fn_call();\n\
+                   return (unsigned long)ext_array + (unsigned long)ext_fn_addr\n\
+                       + (unsigned long)ext_tls;\n\
+               }\n\
+               int main(void) { return (int)f(); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_target(src.to_string(), target)
+            .compile()
+            .expect("compile");
+        let obj = emit_native_with_options(
+            &program,
+            target,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..NativeOptions::new()
+            },
+        )
+        .expect("emit relocatable");
+        let records = elf64_symbol_records(&obj);
+        for (name, want) in [
+            ("ext_array", STT_NOTYPE),
+            ("ext_fn_addr", STT_NOTYPE),
+            ("ext_fn_call", STT_NOTYPE),
+            ("ext_tls", STT_TLS),
+        ] {
+            let hits: alloc::vec::Vec<_> = records.iter().filter(|(n, ..)| n == name).collect();
+            assert_eq!(
+                hits.len(),
+                1,
+                "{target:?}: one `.symtab` entry for `{name}`"
+            );
+            let (_, st_info, st_shndx, _, _) = hits[0];
+            assert_eq!(*st_shndx, 0, "{target:?}: `{name}` is undefined");
+            assert_eq!(st_info & 0xf, want, "{target:?}: `{name}` symbol type");
+        }
+        // The note channel carries what the symbol type no longer does.
+        // It names the sites that materialise an address -- the data
+        // object, and an address-taken function, which shares that
+        // lowering -- and not a call site, which binds to a stub.
+        let parsed = crate::c5::linker::parse_native_object(&obj).expect("parse object");
+        assert!(
+            parsed.extern_data_names.iter().any(|n| n == "ext_array"),
+            "{target:?}: the data reference is named by NT_BADC_EXTERN_DATA"
+        );
+        assert!(
+            parsed.extern_data_names.iter().any(|n| n == "ext_fn_addr"),
+            "{target:?}: an address-taken function shares the data lowering"
+        );
+        assert!(
+            !parsed.extern_data_names.iter().any(|n| n == "ext_fn_call"),
+            "{target:?}: a call site is not an address materialisation"
+        );
+    }
+}
+
 /// A `_Bool` returned by a callee defined in another unit is only
 /// defined in the low byte per the psABI; a caller that tests the full
 /// return register (`!f()` / `if (f())`) must mask to the low byte
@@ -5346,6 +5424,19 @@ fn elf64_section_headers(
         .collect()
 }
 
+/// `(sh_flags, sh_addralign, section index)` of the section named
+/// `name`, read straight from the header table.
+fn elf64_shdr_flags_align(obj: &[u8], name: &str) -> Option<(u64, u64, usize)> {
+    let u16a = |o: usize| u16::from_le_bytes(obj[o..o + 2].try_into().unwrap());
+    let u64a = |o: usize| u64::from_le_bytes(obj[o..o + 8].try_into().unwrap());
+    let shoff = u64a(0x28) as usize;
+    let shentsize = u16a(0x3a) as usize;
+    let names = elf64_section_headers(obj);
+    let idx = names.iter().position(|(n, ..)| n == name)?;
+    let h = shoff + idx * shentsize;
+    Some((u64a(h + 8), u64a(h + 0x30), idx))
+}
+
 /// Full `.symtab` records of an ELF64 object as
 /// `(name, st_info, st_shndx, st_value, st_size)`.
 fn elf64_symbol_records(b: &[u8]) -> alloc::vec::Vec<(alloc::string::String, u8, u16, u64, u64)> {
@@ -5569,6 +5660,147 @@ fn alias_defined_object_referenced_from_asm_binds_to_its_definition() {
                 "{target:?}: asm reference to `{name}` binds to an undefined symbol"
             );
         }
+    }
+}
+
+/// The Linux kernel's `__EXPORT_SYMBOL` emits one `.export_symbol`
+/// record per export through file-scope asm: a `__export_symbol_<name>`
+/// label, the license as `.asciz`, the namespace as adjacent `.ascii`
+/// literals with an explicit NUL, then `.balign 8` and a `.quad <name>`.
+/// modpost pairs each relocation with the nearest label at or below its
+/// offset and requires the relocation's target to be the GLOBAL symbol
+/// named by the label suffix, so the byte layout, the label placement,
+/// and the relocation targets must all match what GNU as produces.
+#[test]
+fn kernel_export_symbol_records_take_the_gas_shape() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    const SRC: &str = "\
+        int plain_sym; \
+        int ns_sym; \
+        asm(\".section \\\".export_symbol\\\",\\\"a\\\" ; __export_symbol_plain_sym: ; .asciz \\\"\\\" ; .ascii \\\"\\\" \\\"\\\\0\\\" ; .balign 8 ; .quad plain_sym ; .previous\"); \
+        asm(\".section \\\".export_symbol\\\",\\\"a\\\" ; __export_symbol_ns_sym: ; .asciz \\\"GPL\\\" ; .ascii \\\"module:\\\" \\\"m_one,m_two\\\" \\\"\\\\0\\\" ; .balign 8 ; .quad ns_sym ; .previous\");";
+    // GNU as 2.44 layout for the same input: record 0 holds two empty
+    // strings and its pointer slot at +8; record 1 starts at +16 with
+    // "GPL\0", the concatenated namespace, padding, and its slot at +40.
+    let mut want = [0u8; 48];
+    want[16..20].copy_from_slice(b"GPL\0");
+    want[20..39].copy_from_slice(b"module:m_one,m_two\0");
+    for (target, reloc_ty) in [(Target::LinuxX64, 1u32), (Target::LinuxAarch64, 257u32)] {
+        let program = Compiler::with_options(
+            SRC.to_string(),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new()
+        };
+        let obj = crate::emit_native_with_options(&program, target, opts)
+            .unwrap_or_else(|e| panic!("emit ({target:?}): {e}"));
+        let sec = elf64_section(&obj, ".export_symbol").expect("export section");
+        assert_eq!(sec, want, "{target:?}: record bytes diverge from gas");
+        let (flags, addralign, sec_idx) =
+            elf64_shdr_flags_align(&obj, ".export_symbol").expect("export header");
+        assert_eq!(flags, 2, "{target:?}: section flags are not SHF_ALLOC");
+        assert_eq!(addralign, 8, "{target:?}: section alignment diverges");
+        let syms = elf64_symbol_records(&obj);
+        for (label, at) in [
+            ("__export_symbol_plain_sym", 0u64),
+            ("__export_symbol_ns_sym", 16),
+        ] {
+            let (_, info, shndx, value, _) = *syms
+                .iter()
+                .find(|s| s.0 == label)
+                .unwrap_or_else(|| panic!("{target:?}: `{label}` missing"));
+            assert_eq!(info >> 4, 0, "{target:?}: `{label}` is not LOCAL");
+            assert_eq!(info & 0xf, 0, "{target:?}: `{label}` is not NOTYPE");
+            assert_eq!(shndx as usize, sec_idx, "{target:?}: `{label}` section");
+            assert_eq!(value, at, "{target:?}: `{label}` is off its record");
+        }
+        let rela = elf64_section(&obj, ".rela.export_symbol").expect("export relocations");
+        assert_eq!(rela.len(), 48, "{target:?}: expected two RELA entries");
+        for (r, (off, name)) in rela
+            .as_chunks::<24>()
+            .0
+            .iter()
+            .zip([(8u64, "plain_sym"), (40, "ns_sym")])
+        {
+            assert_eq!(
+                u64::from_le_bytes(r[0..8].try_into().unwrap()),
+                off,
+                "{target:?}: `{name}` slot offset"
+            );
+            assert_eq!(
+                u32::from_le_bytes(r[8..12].try_into().unwrap()),
+                reloc_ty,
+                "{target:?}: `{name}` relocation type"
+            );
+            assert_eq!(r[16..24], [0; 8], "{target:?}: `{name}` addend");
+            let sym_idx = u32::from_le_bytes(r[12..16].try_into().unwrap()) as usize;
+            let (target_name, info, shndx, _, _) = &syms[sym_idx];
+            assert_eq!(target_name, name, "{target:?}: relocation target name");
+            assert_eq!(info >> 4, 1, "{target:?}: `{name}` target is not GLOBAL");
+            assert_ne!(*shndx, 0, "{target:?}: `{name}` target is undefined");
+        }
+    }
+}
+
+/// A block-scope static object has no linkage (C99 6.2.2p6): a name
+/// shared with a file-scope `extern` declaration must bind to the
+/// block-scope storage, and the unreferenced extern must not surface
+/// as an undefined symbol or a relocation target.
+#[test]
+fn block_scope_static_shadowing_an_extern_binds_locally() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    const SRC: &str = "\
+        extern unsigned long long cc_mask; \
+        unsigned long pick(unsigned int cc, unsigned long flags) { \
+            static const unsigned long cc_mask[6] = {0x800, 1, 0x40, 0x41, 0x80, 4}; \
+            return flags & cc_mask[cc >> 1]; \
+        }";
+    let mut table = [0u8; 48];
+    for (i, v) in [0x800u64, 1, 0x40, 0x41, 0x80, 4].iter().enumerate() {
+        table[i * 8..i * 8 + 8].copy_from_slice(&v.to_le_bytes());
+    }
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_options(
+            SRC.to_string(),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new()
+        };
+        let obj = crate::emit_native_with_options(&program, target, opts)
+            .unwrap_or_else(|e| panic!("emit ({target:?}): {e}"));
+        let syms = elf64_symbol_records(&obj);
+        for (name, _, shndx, _, _) in &syms {
+            assert!(
+                !(name == "cc_mask" && *shndx == 0),
+                "{target:?}: the shadowed extern surfaced as an undefined symbol"
+            );
+        }
+        for (name, ty, off, size, _) in elf64_section_headers(&obj) {
+            if ty != 4 || !name.starts_with(".rela") {
+                continue;
+            }
+            for r in obj[off as usize..(off + size) as usize].as_chunks::<24>().0 {
+                let sym_idx = u32::from_le_bytes(r[12..16].try_into().unwrap()) as usize;
+                assert_ne!(
+                    syms[sym_idx].0, "cc_mask",
+                    "{target:?}: a reference relocated against the extern"
+                );
+            }
+        }
+        assert!(
+            obj.windows(48).any(|w| w == table),
+            "{target:?}: the block-scope table's storage is missing"
+        );
     }
 }
 
@@ -8156,6 +8388,236 @@ fn out_of_range_shift_count_does_not_feed_a_constant_p_guard() {
     }
 }
 
+/// A build-time assertion written on a member the function has just
+/// assigned must fold at `-O`: the store's constant answers the read
+/// back of the same location, the guard becomes constant, and the
+/// unreachable assert call goes with its block. The kernel's
+/// `BUILD_BUG_ON(!is_power_of_2(virtvdev->bar0_virtual_buf_size))` is
+/// this shape -- a `u8` member, so the read back is an unsigned narrow
+/// one, and the guard's second half sits past a branch the first half
+/// decides. A member whose value is not a power of two keeps its call,
+/// and without `-O` both calls stay, as they do under gcc.
+#[test]
+fn member_store_constant_guarded_assert_call_folds_away() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
+    const SRC: &str = "\
+        extern void __compiletime_assert_761(void) __attribute__((__error__(\"not a power of 2\")));\n\
+        extern void __compiletime_assert_762(void) __attribute__((__error__(\"held\")));\n\
+        struct dev { void *buf; unsigned char size; };\n\
+        static int config_size(unsigned short device) { (void)device; return 8; }\n\
+        void init(struct dev *d, unsigned short device) {\n\
+            d->size = 24 + config_size(device);\n\
+            if (!(d->size != 0 && ((d->size & (d->size - 1)) == 0)))\n\
+                __compiletime_assert_761();\n\
+        }\n\
+        void init_bad(struct dev *d, unsigned short device) {\n\
+            d->size = 24 + config_size(device) + 1;\n\
+            if (!(d->size != 0 && ((d->size & (d->size - 1)) == 0)))\n\
+                __compiletime_assert_762();\n\
+        }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let prog = crate::Compiler::with_options(
+            alloc::string::String::from(SRC),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile for {target:?}: {e}"));
+        let opt = emit_native_with_options(
+            &prog,
+            target,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..NativeOptions::new().with_optimize()
+            },
+        )
+        .unwrap_or_else(|e| panic!("emit -O for {target:?}: {e}"));
+        let syms = elf_symbol_shndx(&opt);
+        assert!(
+            !syms.iter().any(|(n, _)| n == "__compiletime_assert_761"),
+            "{target:?}: the member's stored constant must decide the guard"
+        );
+        assert!(
+            syms.iter().any(|(n, _)| n == "__compiletime_assert_762"),
+            "{target:?}: a guard that holds must keep its call"
+        );
+        let plain = emit_native_with_options(
+            &prog,
+            target,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..NativeOptions::new()
+            },
+        )
+        .unwrap_or_else(|e| panic!("emit -O0 for {target:?}: {e}"));
+        let syms = elf_symbol_shndx(&plain);
+        assert!(
+            syms.iter().any(|(n, _)| n == "__compiletime_assert_761"),
+            "{target:?}: without -O the guard stays a runtime test"
+        );
+    }
+}
+
+/// `__builtin_constant_p` over a marker pointer must answer 1 once the
+/// splices that carry the marker have happened. The kernel's
+/// `BUILD_BUG_ON(!__builtin_constant_p(tmo == libeth_xsktmo))` reaches
+/// its query through an `always_inline` body that holds a call of its
+/// own returning a struct by value, and through a function-pointer
+/// parameter the splice turns into a direct call. A site whose marker
+/// is a runtime argument keeps its call, and without `-O` both stay,
+/// as they do under gcc.
+#[test]
+fn constant_p_marker_folds_through_an_aggregate_returning_splice() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
+    const SRC: &str = "\
+        struct desc { unsigned long addr; unsigned len; };\n\
+        extern void __compiletime_assert_905(void) __attribute__((__error__(\"not constant\")));\n\
+        extern void __compiletime_assert_906(void) __attribute__((__error__(\"held\")));\n\
+        #define MARKER ((const void *)0x9e37fffffffc0001ull)\n\
+        static struct desc raw(unsigned i) { struct desc d; d.addr = i; d.len = i; return d; }\n\
+        static inline __attribute__((always_inline)) struct desc fill(unsigned i, unsigned long long priv) {\n\
+            struct desc d = raw(i);\n\
+            const void *tmo = (const void *)(unsigned long)priv;\n\
+            if (!__builtin_constant_p(tmo == MARKER)) __compiletime_assert_905();\n\
+            d.len += (tmo == MARKER) ? 1u : 0u;\n\
+            return d;\n\
+        }\n\
+        static inline __attribute__((always_inline)) struct desc fill_rt(unsigned i, unsigned long long priv) {\n\
+            struct desc d = raw(i);\n\
+            const void *tmo = (const void *)(unsigned long)priv;\n\
+            if (!__builtin_constant_p(tmo == MARKER)) __compiletime_assert_906();\n\
+            d.len += (tmo == MARKER) ? 1u : 0u;\n\
+            return d;\n\
+        }\n\
+        static inline __attribute__((always_inline)) unsigned bulk(unsigned n, unsigned long long priv,\n\
+                struct desc (*f)(unsigned, unsigned long long)) {\n\
+            unsigned t = 0;\n\
+            for (unsigned i = 0; i < n; i++) t += f(i, priv).len;\n\
+            return t;\n\
+        }\n\
+        unsigned sink;\n\
+        void top(unsigned n) { sink = bulk(n, (unsigned long long)(unsigned long)MARKER, fill); }\n\
+        void top_rt(unsigned n, unsigned long long priv) { sink = bulk(n, priv, fill_rt); }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let prog = crate::Compiler::with_options(
+            alloc::string::String::from(SRC),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile for {target:?}: {e}"));
+        let opt = emit_native_with_options(
+            &prog,
+            target,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..NativeOptions::new().with_optimize()
+            },
+        )
+        .unwrap_or_else(|e| panic!("emit -O for {target:?}: {e}"));
+        let syms = elf_symbol_shndx(&opt);
+        assert!(
+            !syms.iter().any(|(n, _)| n == "__compiletime_assert_905"),
+            "{target:?}: the marker must reach the query through the splices"
+        );
+        assert!(
+            syms.iter().any(|(n, _)| n == "__compiletime_assert_906"),
+            "{target:?}: a runtime marker must keep its call"
+        );
+        let plain = emit_native_with_options(
+            &prog,
+            target,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..NativeOptions::new()
+            },
+        )
+        .unwrap_or_else(|e| panic!("emit -O0 for {target:?}: {e}"));
+        let syms = elf_symbol_shndx(&plain);
+        assert!(
+            syms.iter().any(|(n, _)| n == "__compiletime_assert_905"),
+            "{target:?}: without -O the query answers 0 and the call stays"
+        );
+    }
+}
+
+/// A local whose address escapes keeps its frame slot, so every read of
+/// it is a reload. What the body last stored into that slot still bounds
+/// the reload, which is what decides the signedness tag `clamp()` and
+/// `min()` assert on. `drivers/iio/adc/ad7768-1.c` is this shape:
+/// `regmap_read(&val)` takes the address, `val &= GENMASK(2, 0)` bounds
+/// it, and `clamp(val, 1, rdev->desc->n_voltages)` compares it against
+/// an `unsigned`. Without the mask the tag really is open and the call
+/// stays, and without `-O` both stay, as they do under gcc.
+#[test]
+fn stored_bound_decides_a_clamp_signedness_assert() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
+    const SRC: &str = "\
+        extern void __compiletime_assert_612(void) __attribute__((__error__(\"clamp() signedness error\")));\n\
+        extern void __compiletime_assert_613(void) __attribute__((__error__(\"held\")));\n\
+        extern int regmap_read(void *m, unsigned reg, int *val);\n\
+        struct desc { unsigned int n_voltages; };\n\
+        struct rdev { struct desc *desc; };\n\
+        #define TAG(v) ((((typeof(v))(-1)) < (typeof(v))1) \\\n\
+                ? (2 + (__builtin_constant_p((long long)(v) >= 0) && ((long long)(v) >= 0))) \\\n\
+                : (1 + 2 * (sizeof(v) < 4)))\n\
+        #define CLAMP(a, b, c, fail) ({ __auto_type __v = (a); __auto_type __l = (b); __auto_type __h = (c); \\\n\
+                do { if (!(!(!(TAG(__v) & TAG(__l) & TAG(__h))))) fail(); } while (0); \\\n\
+                ((__v) >= (__h) ? (__h) : ((__v) <= (__l) ? (__l) : (__v))); })\n\
+        int bounded(void *m, struct rdev *rdev) {\n\
+            int val;\n\
+            if (regmap_read(m, 0x2c, &val)) return -1;\n\
+            val = val & 0x7;\n\
+            return CLAMP(val, 1, rdev->desc->n_voltages, __compiletime_assert_612) - 1;\n\
+        }\n\
+        int open_range(void *m, struct rdev *rdev) {\n\
+            int val;\n\
+            if (regmap_read(m, 0x2c, &val)) return -1;\n\
+            return CLAMP(val, 1, rdev->desc->n_voltages, __compiletime_assert_613) - 1;\n\
+        }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let prog = crate::Compiler::with_options(
+            alloc::string::String::from(SRC),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile for {target:?}: {e}"));
+        let opt = emit_native_with_options(
+            &prog,
+            target,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..NativeOptions::new().with_optimize()
+            },
+        )
+        .unwrap_or_else(|e| panic!("emit -O for {target:?}: {e}"));
+        let syms = elf_symbol_shndx(&opt);
+        assert!(
+            !syms.iter().any(|(n, _)| n == "__compiletime_assert_612"),
+            "{target:?}: the mask must bound the reload and settle the tag"
+        );
+        assert!(
+            syms.iter().any(|(n, _)| n == "__compiletime_assert_613"),
+            "{target:?}: an unbounded reload must keep its call"
+        );
+        let plain = emit_native_with_options(
+            &prog,
+            target,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..NativeOptions::new()
+            },
+        )
+        .unwrap_or_else(|e| panic!("emit -O0 for {target:?}: {e}"));
+        let syms = elf_symbol_shndx(&plain);
+        assert!(
+            syms.iter().any(|(n, _)| n == "__compiletime_assert_612"),
+            "{target:?}: without -O the tag stays a runtime test"
+        );
+    }
+}
+
 /// `(offset, symbol name, addend)` for every `.rela.text` entry whose
 /// type is `R_X86_64_PLT32` (4): the branches this unit leaves for the
 /// linker to resolve by name.
@@ -8764,32 +9226,52 @@ fn a64_pac_ret_skips_a_naked_body() {
 
 #[test]
 fn a64_return_address_strips_the_authentication_code() {
-    // `__builtin_return_address(0)` reads the slot `paciasp` signed, so
-    // the raw load returns a pointer matching no symbol range. `xpaclri`
+    // `__builtin_return_address` reads a slot `paciasp` signed, so the
+    // raw load returns a pointer matching no symbol range. `xpaclri`
     // strips it. gcc and clang emit the hint whatever `-mbranch-protection`
     // selects, since it is a NOP without FEAT_PAuth; match that, and check
-    // the staging register the hint form forces.
+    // the staging register the hint form forces. A level above 0 reads
+    // the slot of the record the walk reached through the same strip.
     const XPACLRI: u32 = 0xD503_20FF;
-    // `ldr x30, [x29, #8]` -- the offset field scales by 8.
-    const LDR_X30_SLOT: u32 = 0xF940_0000 | (1 << 10) | (29 << 5) | 30;
-    const SRC: &str = "void *ra(void) { return __builtin_return_address(0); }\n";
-    for hardening in [crate::Hardening::NONE, PAC_RET_ONLY] {
-        let w = a64_pac_words(SRC, hardening);
-        assert_eq!(
-            w.iter().filter(|&&x| x == XPACLRI).count(),
+    // `ldr x30, [<Xn>, #8]` -- the offset field scales by 8.
+    const LDR_X30_SLOT: u32 = 0xF940_0000 | (1 << 10) | 30;
+    const RN_MASK: u32 = 0x1F << 5;
+    for (src, level) in [
+        (
+            "void *ra(void) { return __builtin_return_address(0); }\n",
+            0,
+        ),
+        (
+            "void *ra(void) { return __builtin_return_address(1); }\n",
             1,
-            "one strip per read, whatever the flag selects"
-        );
-        let at = w
-            .iter()
-            .position(|&x| x == XPACLRI)
-            .expect("xpaclri emitted");
-        // The hint reaches x30 only, so the slot has to load into it.
-        assert_eq!(
-            w[at - 1],
-            LDR_X30_SLOT,
-            "the strip follows `ldr x30, [x29, #8]`"
-        );
+        ),
+    ] {
+        for hardening in [crate::Hardening::NONE, PAC_RET_ONLY] {
+            let w = a64_pac_words(src, hardening);
+            assert_eq!(
+                w.iter().filter(|&&x| x == XPACLRI).count(),
+                1,
+                "level {level}: one strip per read, whatever the flag selects"
+            );
+            let at = w
+                .iter()
+                .position(|&x| x == XPACLRI)
+                .expect("xpaclri emitted");
+            // The hint reaches x30 only, so the slot has to load into it.
+            let ldr = w[at - 1];
+            assert_eq!(
+                ldr & !RN_MASK,
+                LDR_X30_SLOT,
+                "level {level}: the strip follows `ldr x30, [xN, #8]`"
+            );
+            // Level 0 reads the current record; a walked level reads the
+            // record the loaded frame pointer names.
+            assert_eq!(
+                (ldr & RN_MASK) >> 5 == 29,
+                level == 0,
+                "level {level}: the slot's base register"
+            );
+        }
     }
 }
 
@@ -9399,5 +9881,298 @@ fn stack_protector_moves_the_debug_info_frame_offsets_with_the_locals() {
     assert!(
         !has(&guarded, 0x60),
         "the unprotected offset must not survive: it names the canary region"
+    );
+}
+
+/// C99 6.5.2.2p7: a call argument is converted as if by assignment,
+/// so `&(T){...}` is a pointer and the callee receives the literal
+/// object's address. Classifying the argument by the compound-literal
+/// slot backing it instead of by its type tagged it as a by-value
+/// aggregate through a function pointer: the emitter loaded the
+/// literal's eightbytes into the argument registers and shifted every
+/// later argument up one. A by-value literal argument keeps its tag.
+#[test]
+fn address_of_compound_literal_argument_stays_a_scalar_pointer() {
+    use crate::c5::ir::Inst;
+    use crate::{Compiler, Target};
+    const SRC: &str = "typedef struct { unsigned long a, b; } g; \
+         int by_addr(int (*fp)(void *, const g *, void **), void *h, void **o) \
+         { return fp(h, &(g){ 1, 2 }, o); } \
+         int by_value(int (*fv)(void *, g, void **), void *h, void **o) \
+         { return fv(h, (g){ 1, 2 }, o); } \
+         int main(void){ return 0; }";
+    for target in [Target::LinuxAarch64, Target::LinuxX64] {
+        let program = Compiler::with_target(SRC.to_string(), target)
+            .compile()
+            .expect("compile");
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let idx = |name: &str| {
+            funcs
+                .iter()
+                .position(|f| f.name == name)
+                .unwrap_or_else(|| panic!("{name}: not produced"))
+        };
+        // Argument list and whether argument 2 carries a by-value
+        // aggregate tag.
+        let shape = |i: usize| -> (alloc::vec::Vec<u32>, bool) {
+            funcs[i]
+                .insts
+                .iter()
+                .find_map(|inst| match inst {
+                    Inst::CallIndirect { args, arg_aggs, .. } => {
+                        Some((args.clone(), matches!(arg_aggs.get(1), Some(Some(_)))))
+                    }
+                    _ => None,
+                })
+                .expect("indirect call")
+        };
+        let by_addr = idx("by_addr");
+        let (args, tagged) = shape(by_addr);
+        assert_eq!(args.len(), 3, "{target:?}: by_addr argument count");
+        assert!(
+            !tagged,
+            "{target:?}: `&(g){{...}}` must not be tagged as a by-value aggregate"
+        );
+        assert!(
+            matches!(funcs[by_addr].insts[args[1] as usize], Inst::LocalAddr(_)),
+            "{target:?}: argument 2 must be the literal slot's address, got {:?}",
+            funcs[by_addr].insts[args[1] as usize]
+        );
+        let (args, tagged) = shape(idx("by_value"));
+        assert_eq!(args.len(), 3, "{target:?}: by_value argument count");
+        assert!(
+            tagged,
+            "{target:?}: a by-value struct literal argument keeps its aggregate tag"
+        );
+    }
+}
+
+/// `__attribute__((ms_abi))` puts a definition, and a call through a
+/// pointer whose declared type carries it, on the Microsoft x64 calling
+/// convention while the rest of the unit stays on System V: arguments in
+/// rcx/rdx/r8/r9 by position, 32 bytes of caller-reserved shadow space,
+/// rsi/rdi callee-saved. The Linux kernel spells it `__efiapi` and UEFI
+/// firmware enters the x86_64 EFI stub through it; compiling the
+/// attribute away leaves the stub reading its system-table argument out
+/// of the wrong register.
+///
+/// The attribute is x86-only, as in gcc: on the aarch64 targets and on
+/// Windows -- where it names the target's own convention -- it changes
+/// nothing, which the second half asserts.
+#[test]
+fn ms_abi_selects_the_microsoft_x64_convention() {
+    use crate::{
+        CompileOptions, Compiler, NativeOptions, OutputKind, Target, emit_native_with_options,
+    };
+    // One function per unit, so a byte pattern found anywhere in `.text`
+    // belongs to the function under test.
+    let text = |src: &str, target: Target| -> alloc::vec::Vec<u8> {
+        let copts = CompileOptions {
+            no_entry_point: true,
+            ..Default::default()
+        };
+        let program = Compiler::with_options(src.to_string(), target, copts)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            optimize: true,
+            ..NativeOptions::default()
+        };
+        // Which register the convention names is the question; whether the
+        // value is moved there or reloaded from a spill is not. The
+        // codegen-test pressure caps decide the latter, so the emission is
+        // taken over the whole register file.
+        let bytes = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(
+            usize::MAX,
+            usize::MAX,
+            || emit_native_with_options(&program, target, opts),
+        )
+        .expect("emit");
+        let obj = crate::c5::linker::relocatable::parse_et_rel(&bytes, "conv.o").expect("parse");
+        obj.sections
+            .into_iter()
+            .find(|s| s.name == ".text")
+            .expect(".text")
+            .bytes
+    };
+    let has = |hay: &[u8], needle: &[u8]| hay.windows(needle.len()).any(|w| w == needle);
+
+    // `mov rax, rcx` / `mov rax, rdi`: which register the first integer
+    // parameter arrives in.
+    const FROM_RCX: &[u8] = &[0x48, 0x89, 0xc8];
+    const FROM_RDI: &[u8] = &[0x48, 0x89, 0xf8];
+    // `sub rsp, 0x20`: the caller-reserved shadow space (Microsoft x64
+    // calling convention); System V reserves none.
+    const SHADOW: &[u8] = &[0x48, 0x81, 0xec, 0x20, 0x00, 0x00, 0x00];
+    // `mov rcx, rdi` / `mov rsi, rdi`: the first argument's outgoing
+    // register at a call site.
+    const TO_RCX: &[u8] = &[0x48, 0x89, 0xf9];
+    const TO_RSI: &[u8] = &[0x48, 0x89, 0xfe];
+
+    const FIRST_PARAM: &str = "long long f(long long a, long long b) { return a; }\n";
+    const MS_FIRST_PARAM: &str = "long long f(long long, long long) __attribute__((ms_abi));\n\
+         long long f(long long a, long long b) { return a; }\n";
+    const CALL: &str =
+        "long long (*p)(long long, long long);\nlong long c(long long x) { return p(x, x); }\n";
+    const MS_CALL: &str = "long long (__attribute__((ms_abi)) *p)(long long, long long);\n\
+         long long c(long long x) { return p(x, x); }\n";
+
+    let sysv_def = text(FIRST_PARAM, Target::LinuxX64);
+    let ms_def = text(MS_FIRST_PARAM, Target::LinuxX64);
+    assert!(
+        has(&sysv_def, FROM_RDI) && !has(&sysv_def, FROM_RCX),
+        "a System V definition takes its first integer parameter in rdi"
+    );
+    assert!(
+        has(&ms_def, FROM_RCX) && !has(&ms_def, FROM_RDI),
+        "an ms_abi definition takes its first integer parameter in rcx"
+    );
+
+    let sysv_call = text(CALL, Target::LinuxX64);
+    let ms_call = text(MS_CALL, Target::LinuxX64);
+    assert!(
+        has(&sysv_call, TO_RSI) && !has(&sysv_call, SHADOW),
+        "a System V call site passes in rdi/rsi and reserves no shadow space"
+    );
+    assert!(
+        has(&ms_call, TO_RCX) && has(&ms_call, SHADOW),
+        "a call through an ms_abi function pointer passes in rcx/rdx and \
+         reserves 32 bytes of shadow space"
+    );
+
+    // Off x86_64, and on a target already on this convention, the
+    // attribute is inert: the same source emits the same code with and
+    // without it.
+    for target in [
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsAarch64,
+        Target::WindowsX64,
+    ] {
+        assert_eq!(
+            text(FIRST_PARAM, target),
+            text(MS_FIRST_PARAM, target),
+            "{target:?}: ms_abi must be inert here"
+        );
+        assert_eq!(
+            text(CALL, target),
+            text(MS_CALL, target),
+            "{target:?}: ms_abi must be inert here"
+        );
+    }
+
+    // `sysv_abi` is the mirror image: inert on the System V x86_64
+    // target, and the System V convention on Windows.
+    const SYSV_FIRST_PARAM: &str = "long long f(long long, long long) __attribute__((sysv_abi));\n\
+         long long f(long long a, long long b) { return a; }\n";
+    assert_eq!(
+        text(FIRST_PARAM, Target::LinuxX64),
+        text(SYSV_FIRST_PARAM, Target::LinuxX64),
+        "sysv_abi must be inert on a System V target"
+    );
+    let win_sysv_def = text(SYSV_FIRST_PARAM, Target::WindowsX64);
+    assert!(
+        has(&win_sysv_def, FROM_RDI) && !has(&win_sysv_def, FROM_RCX),
+        "a sysv_abi definition on Windows takes its first parameter in rdi"
+    );
+}
+
+/// A definition on the Microsoft x64 convention has to give back
+/// rsi/rdi and xmm6..xmm15, which System V leaves volatile, so any of
+/// them the body colors joins the prologue's save list. The allocation
+/// banks stay System V's: a value live across a call must sit in a
+/// register the *callee* preserves, and an `ms_abi` function's callees
+/// are on the target's convention unless they say otherwise.
+#[test]
+fn an_ms_abi_definition_preserves_the_registers_that_convention_reserves() {
+    use crate::c5::codegen::ssa::reg_alloc::{self, allocate};
+    use crate::{CompileOptions, Compiler, Target};
+    // Both premises here are that the allocation reaches past the
+    // callee-saved bank into rsi/rdi. The codegen-test pressure caps
+    // truncate the bank, so it spills instead of reaching; the
+    // convention this asks about is a property of the whole file.
+    // Ten live values summed pairwise at the end: more than the five
+    // System V callee-saved registers, so the allocator reaches into the
+    // caller-saved bank, which is where rsi and rdi are.
+    const BODY: &str = "\
+long f(long a, long b, long c, long d, long e, long g, long h, long i, long j, long k) {\n\
+    long s = a * b + c * d + e * g + h * i + j * k;\n\
+    return s + a + b + c + d + e + g + h + i + j + k;\n\
+}\n";
+    let saved = |src: &str| -> alloc::vec::Vec<u8> {
+        let copts = CompileOptions {
+            no_entry_point: true,
+            ..Default::default()
+        };
+        let program = Compiler::with_options(src.to_string(), Target::LinuxX64, copts)
+            .compile()
+            .expect("compile");
+        let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(
+            &program,
+            Target::LinuxX64,
+            false,
+            true,
+        )
+        .expect("ssa");
+        let f = funcs.iter().find(|f| f.name == "f").expect("f");
+        let mut regs = reg_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+            allocate(f, Target::LinuxX64, crate::FixedRegs::NONE).gpr_used
+        });
+        regs.sort_unstable();
+        regs
+    };
+    const MS: &str = "long f(long, long, long, long, long, long, long, long, long, long) \
+                      __attribute__((ms_abi));\n";
+    // rsi (6) and rdi (7) are System V argument registers, so a System V
+    // definition never saves them; the same body on the Microsoft x64
+    // convention must.
+    let sysv = saved(BODY);
+    assert!(
+        !sysv.contains(&6) && !sysv.contains(&7),
+        "System V leaves rsi/rdi volatile, saved={sysv:?}"
+    );
+    let ms = saved(&alloc::format!("{MS}{BODY}"));
+    assert!(
+        ms.contains(&6) || ms.contains(&7),
+        "an ms_abi definition that colors rsi/rdi must save them, saved={ms:?}"
+    );
+
+    // A call marshals its arguments into the *callee's* argument
+    // registers, and an ms_abi function's callees are on the target's
+    // convention: on System V that writes rsi and rdi, which this
+    // function owes its caller whether or not the allocator handed
+    // either one out as a value.
+    const CALLS_OUT: &str = "\
+extern long sink(long, long);\n\
+long g(long a, long b) __attribute__((ms_abi));\n\
+long g(long a, long b) { return sink(a, b); }\n";
+    let calls_out = {
+        let copts = CompileOptions {
+            no_entry_point: true,
+            ..Default::default()
+        };
+        let program = Compiler::with_options(CALLS_OUT.to_string(), Target::LinuxX64, copts)
+            .compile()
+            .expect("compile");
+        let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(
+            &program,
+            Target::LinuxX64,
+            false,
+            true,
+        )
+        .expect("ssa");
+        let f = funcs.iter().find(|f| f.name == "g").expect("g");
+        let mut regs = reg_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+            allocate(f, Target::LinuxX64, crate::FixedRegs::NONE).gpr_used
+        });
+        regs.sort_unstable();
+        regs
+    };
+    assert!(
+        calls_out.contains(&6) && calls_out.contains(&7),
+        "an ms_abi definition that calls out must give rsi/rdi back, saved={calls_out:?}"
     );
 }

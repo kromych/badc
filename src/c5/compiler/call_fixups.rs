@@ -88,10 +88,7 @@ impl Compiler {
         for sym_idx in undeclared {
             let name = self.symbols[sym_idx].name.clone();
             let line = self.symbols[sym_idx].decl_line;
-            let suggestion = match super::super::headers::header_declaring(&name) {
-                Some(h) => alloc::format!(" -- try `#include <{h}>`"),
-                None => alloc::string::String::new(),
-            };
+            let suggestion = self.include_hint(&name);
             self.warn_at(
                 line,
                 alloc::format!(

@@ -9,10 +9,10 @@ fn ent_pc=1 n_params=3 variadic=true locals=6
     v3   Mcpy { dst=v1, src=v2, size=16, align=4 }        -> x0
     v4   LocalAddr(-3)                                    -> x0
     v5   LocalAddr(4)                                     -> x1
-    v6   Intrinsic { kind=VaStart, args=[v4, v5] }        -> x1
-    v7   LocalAddr(-3)                                    -> x1
+    v6   Intrinsic { kind=VaStart, args=[v4, v5] }        -> x0
+    v7   LocalAddr(-3)                                    -> x0
     v8   Imm(4)                                           -> x1
-    v9   Intrinsic { kind=VaArg, args=[v4, v8] }          -> x0
+    v9   Intrinsic { kind=VaArg, args=[v7, v8] }          -> x0
     v10  Load { addr=v9, disp=0, kind=I32 }               -> x1
     v11  Imm(0)                                           -> x0
     v12  LocalAddr(-3)                                    -> x0

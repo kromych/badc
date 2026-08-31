@@ -89,12 +89,11 @@ Disassembly of section .text:
                	addq	$0x1000, %rax           # imm = 0x1000
                	cmpq	$0x100000, %rax         # imm = 0x100000
                	jl	<addr>
-               	leaq	0xfffff(%rcx), %rsi
-               	movl	$0x8, %eax
-               	movb	%al, (%rsi)
-               	movsbq	(%rcx), %rsi
-               	movsbq	%al, %rax
-               	addq	%rsi, %rax
+               	leaq	0xfffff(%rcx), %rax
+               	movl	$0x8, %esi
+               	movb	%sil, (%rax)
+               	movsbq	(%rcx), %rax
+               	addq	$0x8, %rax
                	movslq	%eax, %r15
                	movl	$0x1, %edi
                	movl	$0x2, %esi

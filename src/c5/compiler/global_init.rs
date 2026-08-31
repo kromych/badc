@@ -122,6 +122,11 @@ impl Compiler {
     ) -> Result<(), C5Error> {
         // `is_thread_local` is the slot's storage, not the target's.
         self.reject_thread_local_addr_const(target_idx)?;
+        // A block-scope static's address anchors to its emission record;
+        // the binding slot is restored at scope exit (see `ast_emit_ident`).
+        let target_idx = self.symbols[target_idx]
+            .static_local_record
+            .map_or(target_idx, |r| r as usize);
         self.symbols[target_idx].was_referenced = true;
         if !is_thread_local {
             self.note_init_reloc(var_offset as usize);
@@ -622,20 +627,21 @@ impl Compiler {
         // the addend with no relocation.
         let cv = self.require_integer_const(cv)?;
 
-        // C99 6.7.8p11 / 6.3.1.4: a constant initializing a floating
-        // object takes the floating value. Coerce the ConstVal to f64
-        // here rather than through `as_int` first, which truncated the
-        // fraction of a float-valued expression whose leading token is
-        // an integer (e.g. `3 * 0.5`). Narrow to the slot width (f32
-        // for `float`, f64 for `double`).
-        let value = if var_is_float {
+        // C99 6.7.9p11 initializes as if by assignment, so the constant
+        // converts to the object's declared type. A floating constant
+        // keeps its floating form to here rather than going through
+        // `as_int` first, which truncated the fraction of a float-valued
+        // expression whose leading token is an integer (e.g. `3 * 0.5`)
+        // -- and which a `_Bool` destination must see, since 6.3.1.2
+        // tests the value against 0 rather than truncating it.
+        let value = if var_is_float || matches!(cv, ConstVal::Float(_)) {
             self.to_storage_bits(
                 cv.as_float().to_bits() as i128,
                 InitElemReloc::Float64Bits,
                 var_ty,
             )
         } else {
-            cv.as_i128()
+            self.to_storage_bits(cv.as_i128(), InitElemReloc::None, var_ty)
         };
         // Integer slots are preallocated 8 bytes wide; the 16-byte
         // integer needs both halves written.

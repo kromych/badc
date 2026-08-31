@@ -1036,6 +1036,13 @@ fn build_debug_info(
             }
         })
         .collect();
+    // Aggregates a cast type-name reached; nothing has to declare an
+    // object of the type.
+    for (id, sd) in program.structs.iter().enumerate() {
+        if sd.cast_named {
+            catalog.of_aggregate(id);
+        }
+    }
     catalog.drain();
     let mut dies: Vec<DieBuf> = Vec::new();
     let mut next = 0usize;

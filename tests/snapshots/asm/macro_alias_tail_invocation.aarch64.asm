@@ -93,17 +93,6 @@ Disassembly of section .text:
                	ret
                	mov	x1, #0x0                // =0
                	str	w1, [x0]
-               	sxtw	x0, w1
-               	cbz	x0, <addr>
-               	mov	x2, #0x2c               // =44
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x3, [x0]
-               	add	x3, x3, #0x1
-               	str	w3, [x0]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	str	w2, [x0]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]

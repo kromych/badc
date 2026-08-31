@@ -52,16 +52,13 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v15  Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v15)
   block 2  start_pc=0
-    v17  ImmData(16)                                      -> x1
-    v18  Imm(9)                                           -> x0
+    v17  ImmData(16)                                      -> x0
+    v18  Imm(9)                                           -> x1
     v19  Store { addr=v17, disp=0, value=v18, kind=I32 }  -> -
-    v20  Extend { value=v18, kind=I32 }                   -> x0
-    v21  BinopI { op=ne, lhs=v20, rhs_imm=9 }             -> x0
-    terminator Bz { cond=v21, target=b4, fall=b3 }   (exit_acc=v21)
+    v20  Imm(9)                                           -> x0
+    v21  Imm(0)                                           -> x0
+    terminator Jmp(b3)   (exit_acc=v21)
   block 3  start_pc=0
-    v22  Imm(3)                                           -> x0
-    terminator Return(v22)   (exit_acc=v22)
-  block 4  start_pc=0
     v23  Imm(0)                                           -> x0
     terminator Return(v23)   (exit_acc=v23)
 ; --- SSA dump (ok=true) ent_pc=0 ---

@@ -172,9 +172,12 @@ impl SsaBuilder {
             is_always_inline: false,
             is_noinline: false,
             is_naked: false,
+            conv: crate::c5::codegen::CallConv::Target,
             is_weak: false,
             is_internal: false,
             section: None,
+            patchable_entry: None,
+            no_instrument: false,
             const_params: 0,
             insts: Vec::new(),
             inst_src: Vec::new(),
@@ -239,6 +242,12 @@ impl SsaBuilder {
     /// counter post-walk.
     pub(crate) fn set_end_pc(&mut self, end_pc: usize) {
         self.func.end_pc = end_pc;
+    }
+
+    /// Record the definition's calling convention
+    /// (`__attribute__((ms_abi))` / `((sysv_abi))`).
+    pub(crate) fn set_conv(&mut self, conv: crate::c5::codegen::CallConv) {
+        self.func.conv = conv;
     }
 
     /// Enable the register-divisor modulo split. See [`Self::binop`].
@@ -1244,6 +1253,7 @@ impl SsaBuilder {
     }
 
     /// `Inst::CallIndirect` -- function-pointer call.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn call_indirect(
         &mut self,
         target: ValueId,
@@ -1252,6 +1262,7 @@ impl SsaBuilder {
         fixed_args: usize,
         fp_return: bool,
         fp_arg_mask: u32,
+        callee_conv: crate::c5::codegen::CallConv,
     ) -> ValueId {
         self.local_cache.clear();
         self.push(Inst::CallIndirect {
@@ -1261,6 +1272,7 @@ impl SsaBuilder {
             fixed_args,
             fp_return,
             fp_arg_mask,
+            callee_conv,
             arg_aggs: alloc::vec::Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
@@ -1735,7 +1747,11 @@ mod tests {
             super::super::Target::LinuxX64,
             super::super::Target::LinuxAarch64,
         ] {
-            let alloc = super::super::reg_alloc::allocate(&func, target);
+            let alloc = super::super::reg_alloc::allocate(
+                &func,
+                target,
+                crate::c5::codegen::FixedRegs::NONE,
+            );
             assert_eq!(
                 alloc.places.len(),
                 func.insts.len(),
@@ -1836,7 +1852,11 @@ mod tests {
             super::super::Target::LinuxX64,
             super::super::Target::LinuxAarch64,
         ] {
-            let alloc = super::super::reg_alloc::allocate(&func, target);
+            let alloc = super::super::reg_alloc::allocate(
+                &func,
+                target,
+                crate::c5::codegen::FixedRegs::NONE,
+            );
             assert_eq!(alloc.places.len(), func.insts.len());
         }
     }

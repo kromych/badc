@@ -484,6 +484,7 @@ fn synth_program_and_build(
         pic_link: false,
         code_model: Default::default(),
         elf_class: Default::default(),
+        keep_local_labels: false,
         data_align: merged.data_align,
         bss_size: merged.bss_size as i64,
         init_fini_arrays: merged.init_fini_arrays,
@@ -521,6 +522,8 @@ fn synth_program_and_build(
         // next entry, since the padding an input carries is already in its
         // `.text` bytes.
         func_ends: Vec::new(),
+        patchable_entries: Vec::new(),
+        mcount_sites: Vec::new(),
         func_ent_pcs,
         func_names,
         func_prologue_native,

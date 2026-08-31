@@ -13,11 +13,18 @@ use alloc::vec::Vec;
 use crate::c5::ir::AsmRegSize;
 
 use super::super::asm::{
-    AsmMemBase, AsmOpnd, Concrete, encode, parse_file_template, parse_template,
+    AsmMemBase, AsmOpnd, Concrete, encode_in, parse_file_template, parse_template,
 };
+use super::super::table::Mode;
 
 /// Assemble one AT&T instruction the way the file-scope asm path does.
 fn enc(text: &str) -> Result<Vec<u8>, String> {
+    enc_in(text, Mode::Bits64)
+}
+
+/// [`enc`] in a given code mode. VEX and EVEX carry no mode-dependent field,
+/// so only the addressing an instruction's memory operand encodes differs.
+fn enc_in(text: &str, mode: Mode) -> Result<Vec<u8>, String> {
     let mut out = Vec::new();
     for insn in parse_file_template(text.as_bytes())? {
         let reg_of = |b: AsmMemBase| match b {
@@ -45,8 +52,8 @@ fn enc(text: &str) -> Result<Vec<u8>, String> {
                 ref other => panic!("unexpected operand {other:?}"),
             })
             .collect();
-        let addr = super::super::asm::addr_size(&insn, super::super::table::Mode::Bits64);
-        encode(&mut out, addr, insn.mnemonic, insn.suffix, &ops)?;
+        let addr = super::super::asm::addr_size(&insn, mode);
+        encode_in(&mut out, mode, addr, insn.mnemonic, insn.suffix, &ops)?;
     }
     Ok(out)
 }
@@ -55,6 +62,16 @@ fn enc(text: &str) -> Result<Vec<u8>, String> {
 #[track_caller]
 fn gas(text: &str, bytes: &[u8]) {
     match enc(text) {
+        Ok(got) if got == bytes => {}
+        Ok(got) => panic!("{text}\n  badc {got:02x?}\n  gas  {bytes:02x?}"),
+        Err(e) => panic!("{text}: {e}"),
+    }
+}
+
+/// Check one instruction in a given code mode against the bytes GNU as emits.
+#[track_caller]
+fn gas_in(text: &str, mode: Mode, bytes: &[u8]) {
+    match enc_in(text, mode) {
         Ok(got) if got == bytes => {}
         Ok(got) => panic!("{text}\n  badc {got:02x?}\n  gas  {bytes:02x?}"),
         Err(e) => panic!("{text}: {e}"),
@@ -71,10 +88,36 @@ fn refused(text: &str, needle: &str) {
     }
 }
 
-/// The two instructions that kept the x86_64 defconfig kernel's last assembly
+/// The instructions that kept the x86_64 defconfig kernel's last assembly
 /// units on gas.
 #[test]
 fn kernel_units() {
+    // lib/crypto/x86/poly1305-x86_64-cryptogams.S: the same lane permute in
+    // its AVX2 (VEX, 256-bit) and AVX-512 (EVEX, 512-bit) instantiations.
+    gas(
+        "vpermq $0x2,%ymm3,%ymm10",
+        &[0xC4, 0x63, 0xFD, 0x00, 0xD3, 0x02],
+    );
+    gas(
+        "vpermq $0x2,%zmm3,%zmm14",
+        &[0x62, 0x73, 0xFD, 0x48, 0x00, 0xF3, 0x02],
+    );
+    gas(
+        "vpermq $0xb1,%zmm15,%zmm4",
+        &[0x62, 0xD3, 0xFD, 0x48, 0x00, 0xE7, 0xB1],
+    );
+    // The same unit's widening multiply, which EVEX gives a qword broadcast
+    // and so W=1 where VEX ignores the bit.
+    gas(
+        "vpmuludq %zmm7,%zmm16,%zmm11",
+        &[0x62, 0x71, 0xFD, 0x40, 0xF4, 0xDF],
+    );
+    // arch/x86/crypto/aes-ctr-avx-x86_64.S: `vpbroadcastq XCTR_CTR, LE_CTR`
+    // with XCTR_CTR = %r9 and LE_CTR = V9 at vl=64.
+    gas(
+        "vpbroadcastq %r9,%zmm9",
+        &[0x62, 0x52, 0xFD, 0x48, 0x7C, 0xC9],
+    );
     // lib/crypto/x86/blake2s-core.S.
     gas(
         "vpermi2d %ymm7,%ymm6,%ymm8",
@@ -140,6 +183,33 @@ fn kernel_units() {
         "vpclmulqdq $0x00,%xmm7,%xmm0,%xmm0",
         &[0xC4, 0xE3, 0x79, 0x44, 0xC7, 0x00],
     );
+    // arch/x86/crypto/aria-{aesni-avx,aesni-avx2,gfni-avx512}-asm_64.S: the
+    // same affine transform at each of the three vector lengths, VEX below
+    // 512 bits and EVEX at it.
+    gas(
+        "vgf2p8affineqb $0x2c,%xmm4,%xmm15,%xmm15",
+        &[0xC4, 0x63, 0x81, 0xCE, 0xFC, 0x2C],
+    );
+    gas(
+        "vgf2p8affineqb $0x2c,%ymm4,%ymm15,%ymm15",
+        &[0xC4, 0x63, 0x85, 0xCE, 0xFC, 0x2C],
+    );
+    gas(
+        "vgf2p8affineqb $0x2c,%zmm28,%zmm15,%zmm15",
+        &[0x62, 0x13, 0x85, 0x48, 0xCE, 0xFC, 0x2C],
+    );
+    gas(
+        "vgf2p8affineinvqb $0x00,%xmm2,%xmm15,%xmm15",
+        &[0xC4, 0x63, 0x81, 0xCF, 0xFA, 0x00],
+    );
+    gas(
+        "vgf2p8affineinvqb $0xe2,%ymm0,%ymm13,%ymm13",
+        &[0xC4, 0x63, 0x95, 0xCF, 0xE8, 0xE2],
+    );
+    gas(
+        "vgf2p8affineinvqb $0xe2,%zmm24,%zmm15,%zmm15",
+        &[0x62, 0x13, 0x85, 0x48, 0xCF, 0xF8, 0xE2],
+    );
 }
 
 /// The AVX-512 forms the distribution-configuration crypto units name:
@@ -192,6 +262,123 @@ fn vaes_and_lane_shuffles() {
     gas(
         "vshuff32x4 $4,%zmm4,%zmm5,%zmm6",
         &[0x62, 0xF3, 0x55, 0x48, 0x23, 0xF4, 0x04],
+    );
+}
+
+/// GFNI under EVEX, the form `arch/x86/crypto/aria-gfni-avx512-asm_64.S`
+/// names. The affine transforms read qword elements: W is set, the tuple is
+/// Full, and a `{1toN}` broadcast reads one qword. The field multiply reads
+/// bytes: W is clear, the tuple is Full Mem, and it has no broadcast.
+#[test]
+fn gfni_evex() {
+    // The whole register file through R', X, V' and B.
+    gas(
+        "vgf2p8affineqb $0x33,%xmm31,%xmm7,%xmm0",
+        &[0x62, 0x93, 0xC5, 0x08, 0xCE, 0xC7, 0x33],
+    );
+    gas(
+        "vgf2p8affineqb $0x33,%ymm16,%ymm17,%ymm18",
+        &[0x62, 0xA3, 0xF5, 0x20, 0xCE, 0xD0, 0x33],
+    );
+    gas(
+        "vgf2p8affineqb $0x2c,%zmm28,%zmm15,%zmm15",
+        &[0x62, 0x13, 0x85, 0x48, 0xCE, 0xFC, 0x2C],
+    );
+    gas(
+        "vgf2p8affineinvqb $0xe2,%zmm24,%zmm15,%zmm15",
+        &[0x62, 0x13, 0x85, 0x48, 0xCF, 0xF8, 0xE2],
+    );
+    // Masking and zeroing.
+    gas(
+        "vgf2p8affineinvqb $0x33,%zmm3,%zmm2,%zmm9{%k1}",
+        &[0x62, 0x73, 0xED, 0x49, 0xCF, 0xCB, 0x33],
+    );
+    gas(
+        "vgf2p8affineinvqb $0x33,%zmm3,%zmm2,%zmm9{%k7}{z}",
+        &[0x62, 0x73, 0xED, 0xCF, 0xCF, 0xCB, 0x33],
+    );
+    gas(
+        "vgf2p8affineqb $0x33,%ymm3,%ymm2,%ymm9{%k5}{z}",
+        &[0x62, 0x73, 0xED, 0xAD, 0xCE, 0xCB, 0x33],
+    );
+    // Full tuple: disp8 scales by the vector length, and by 8 -- one qword --
+    // under a broadcast.
+    gas(
+        "vgf2p8affineinvqb $0x33,64(%rdx),%xmm6,%xmm22",
+        &[0x62, 0xE3, 0xCD, 0x08, 0xCF, 0x72, 0x04, 0x33],
+    );
+    gas(
+        "vgf2p8affineinvqb $0x33,64(%rdx),%ymm6,%ymm22",
+        &[0x62, 0xE3, 0xCD, 0x28, 0xCF, 0x72, 0x02, 0x33],
+    );
+    gas(
+        "vgf2p8affineinvqb $0x33,64(%rdx),%zmm6,%zmm22",
+        &[0x62, 0xE3, 0xCD, 0x48, 0xCF, 0x72, 0x01, 0x33],
+    );
+    gas(
+        "vgf2p8affineinvqb $0x33,8128(%rdx),%zmm6,%zmm22",
+        &[0x62, 0xE3, 0xCD, 0x48, 0xCF, 0x72, 0x7F, 0x33],
+    );
+    gas(
+        "vgf2p8affineinvqb $0x33,8192(%rdx),%zmm6,%zmm22",
+        &[
+            0x62, 0xE3, 0xCD, 0x48, 0xCF, 0xB2, 0x00, 0x20, 0x00, 0x00, 0x33,
+        ],
+    );
+    gas(
+        "vgf2p8affineinvqb $0x33,63(%rdx),%zmm6,%zmm22",
+        &[
+            0x62, 0xE3, 0xCD, 0x48, 0xCF, 0xB2, 0x3F, 0x00, 0x00, 0x00, 0x33,
+        ],
+    );
+    gas(
+        "vgf2p8affineqb $0x33,(%rdx){1to2},%xmm6,%xmm22",
+        &[0x62, 0xE3, 0xCD, 0x18, 0xCE, 0x32, 0x33],
+    );
+    gas(
+        "vgf2p8affineqb $0x33,8(%rdx){1to4},%ymm6,%ymm22",
+        &[0x62, 0xE3, 0xCD, 0x38, 0xCE, 0x72, 0x01, 0x33],
+    );
+    gas(
+        "vgf2p8affineqb $0x33,1016(%rdx){1to8},%zmm6,%zmm22",
+        &[0x62, 0xE3, 0xCD, 0x58, 0xCE, 0x72, 0x7F, 0x33],
+    );
+    gas(
+        "vgf2p8affineqb $0x33,-1024(%rdx){1to8},%zmm6,%zmm22",
+        &[0x62, 0xE3, 0xCD, 0x58, 0xCE, 0x72, 0x80, 0x33],
+    );
+    gas(
+        "vgf2p8affineqb $0x33,1024(%rdx){1to8},%zmm6,%zmm22",
+        &[
+            0x62, 0xE3, 0xCD, 0x58, 0xCE, 0xB2, 0x00, 0x04, 0x00, 0x00, 0x33,
+        ],
+    );
+    // The field multiply: W clear, no broadcast, disp8 by the vector length.
+    gas(
+        "vgf2p8mulb %zmm17,%zmm18,%zmm19",
+        &[0x62, 0xA2, 0x6D, 0x40, 0xCF, 0xD9],
+    );
+    gas(
+        "vgf2p8mulb %ymm31,%ymm2,%ymm3{%k2}",
+        &[0x62, 0x92, 0x6D, 0x2A, 0xCF, 0xDF],
+    );
+    gas(
+        "vgf2p8mulb %xmm16,%xmm1,%xmm2{%k4}{z}",
+        &[0x62, 0xB2, 0x75, 0x8C, 0xCF, 0xD0],
+    );
+    gas(
+        "vgf2p8mulb 64(%rdx),%zmm6,%zmm22",
+        &[0x62, 0xE2, 0x4D, 0x48, 0xCF, 0x72, 0x01],
+    );
+    gas(
+        "vgf2p8mulb 63(%rdx),%zmm6,%zmm22",
+        &[0x62, 0xE2, 0x4D, 0x48, 0xCF, 0xB2, 0x3F, 0x00, 0x00, 0x00],
+    );
+    gas(
+        "vgf2p8mulb 96(%r12,%r13,8),%zmm31,%zmm31",
+        &[
+            0x62, 0x02, 0x05, 0x40, 0xCF, 0xBC, 0xEC, 0x60, 0x00, 0x00, 0x00,
+        ],
     );
 }
 
@@ -859,6 +1046,214 @@ fn vex_move_direction() {
     gas("vmovq %rcx,%xmm0", &[0xC4, 0xE1, 0xF9, 0x6E, 0xC1]);
 }
 
+/// The non-temporal moves have one direction each: the stores take a memory
+/// destination only, `vmovntdqa` a memory source only.
+#[test]
+fn non_temporal_moves() {
+    gas("vmovntdq %ymm4,(%rdi)", &[0xC5, 0xFD, 0xE7, 0x27]);
+    gas(
+        "vmovntdq %ymm12,64(%rdi,%rcx,2)",
+        &[0xC5, 0x7D, 0xE7, 0x64, 0x4F, 0x40],
+    );
+    gas(
+        "vmovntdq %ymm2,-32(%r13)",
+        &[0xC4, 0xC1, 0x7D, 0xE7, 0x55, 0xE0],
+    );
+    gas("vmovntdq %xmm3,16(%rsi)", &[0xC5, 0xF9, 0xE7, 0x5E, 0x10]);
+    gas("vmovntps %ymm1,(%rax)", &[0xC5, 0xFC, 0x2B, 0x08]);
+    gas("vmovntpd %ymm1,(%rax)", &[0xC5, 0xFD, 0x2B, 0x08]);
+    gas(
+        "vmovntdq %zmm4,(%rdi)",
+        &[0x62, 0xF1, 0x7D, 0x48, 0xE7, 0x27],
+    );
+    gas(
+        "vmovntdq %zmm12,64(%rdi,%rcx,2)",
+        &[0x62, 0x71, 0x7D, 0x48, 0xE7, 0x64, 0x4F, 0x01],
+    );
+    gas(
+        "vmovntdq %zmm12,-64(%r13)",
+        &[0x62, 0x51, 0x7D, 0x48, 0xE7, 0x65, 0xFF],
+    );
+    // The disp8 scale is the full vector: 128 compresses, 129 does not.
+    gas(
+        "vmovntdq %zmm2,128(%rsi)",
+        &[0x62, 0xF1, 0x7D, 0x48, 0xE7, 0x56, 0x02],
+    );
+    gas(
+        "vmovntdq %zmm2,129(%rsi)",
+        &[0x62, 0xF1, 0x7D, 0x48, 0xE7, 0x96, 0x81, 0x00, 0x00, 0x00],
+    );
+    gas(
+        "vmovntdq %zmm31,(%r14,%r15,8)",
+        &[0x62, 0x01, 0x7D, 0x48, 0xE7, 0x3C, 0xFE],
+    );
+    gas(
+        "vmovntdq %ymm17,(%rax)",
+        &[0x62, 0xE1, 0x7D, 0x28, 0xE7, 0x08],
+    );
+    gas(
+        "vmovntdq %xmm20,(%rax)",
+        &[0x62, 0xE1, 0x7D, 0x08, 0xE7, 0x20],
+    );
+    gas(
+        "vmovntps %zmm1,64(%rax)",
+        &[0x62, 0xF1, 0x7C, 0x48, 0x2B, 0x48, 0x01],
+    );
+    gas(
+        "vmovntpd %zmm1,64(%rax)",
+        &[0x62, 0xF1, 0xFD, 0x48, 0x2B, 0x48, 0x01],
+    );
+    gas(
+        "vmovntdqa 64(%rax),%zmm1",
+        &[0x62, 0xF2, 0x7D, 0x48, 0x2A, 0x48, 0x01],
+    );
+    gas(
+        "vmovntdqa (%rax),%ymm17",
+        &[0x62, 0xE2, 0x7D, 0x28, 0x2A, 0x08],
+    );
+    refused("vmovntdq %ymm1,%ymm2", "memory destination");
+    refused("vmovntdq (%rax),%ymm1", "memory destination");
+    refused("vmovntdq %zmm1,%zmm2", "memory destination");
+    refused("vmovntdq (%rax),%zmm1", "memory destination");
+    refused("vmovntdqa %ymm1,%ymm2", "memory source");
+    refused("vmovntdqa %zmm1,%zmm2", "memory source");
+}
+
+/// GNU as reads register names without regard to case; the kernel's AVX-512
+/// RAID-6 syndrome spells `%Zmm14`.
+#[test]
+fn register_names_fold_case() {
+    gas(
+        "vpaddb %Zmm14,%zmm14,%zmm14",
+        &[0x62, 0x51, 0x0D, 0x48, 0xFC, 0xF6],
+    );
+    gas("vpxor %YMM5,%ymm4,%ymm4", &[0xC5, 0xDD, 0xEF, 0xE5]);
+    gas(
+        "vpcmpgtb %zmm4,%zmm5,%K1",
+        &[0x62, 0xF1, 0x55, 0x48, 0x64, 0xCC],
+    );
+    gas("vmovdqa (%RDI),%ymm0", &[0xC5, 0xFD, 0x6F, 0x07]);
+}
+
+/// Every mnemonic and operand form the RAID-6 units spell (`lib/raid6/avx2.c`,
+/// `avx512.c`, `recov_avx2.c`, `recov_avx512.c`), at both vector lengths.
+#[test]
+fn raid6_units() {
+    gas(
+        "vmovdqa64 (%rdi),%zmm0",
+        &[0x62, 0xF1, 0xFD, 0x48, 0x6F, 0x07],
+    );
+    gas(
+        "vmovdqa64 %zmm2,%zmm4",
+        &[0x62, 0xF1, 0xFD, 0x48, 0x6F, 0xE2],
+    );
+    gas(
+        "vmovdqa64 %zmm4,64(%rdi)",
+        &[0x62, 0xF1, 0xFD, 0x48, 0x7F, 0x67, 0x01],
+    );
+    gas("vmovdqa (%rdi),%ymm0", &[0xC5, 0xFD, 0x6F, 0x07]);
+    gas("vmovdqa %ymm2,%ymm4", &[0xC5, 0xFD, 0x6F, 0xE2]);
+    gas("vmovdqa %ymm4,32(%rdi)", &[0xC5, 0xFD, 0x7F, 0x67, 0x20]);
+    gas(
+        "vpxorq %zmm5,%zmm4,%zmm4",
+        &[0x62, 0xF1, 0xDD, 0x48, 0xEF, 0xE5],
+    );
+    gas(
+        "vpxorq 64(%rdi),%zmm4,%zmm4",
+        &[0x62, 0xF1, 0xDD, 0x48, 0xEF, 0x67, 0x01],
+    );
+    gas("vpxor %ymm5,%ymm4,%ymm4", &[0xC5, 0xDD, 0xEF, 0xE5]);
+    gas(
+        "vpxor 32(%rdi),%ymm4,%ymm4",
+        &[0xC5, 0xDD, 0xEF, 0x67, 0x20],
+    );
+    gas(
+        "vpandq %zmm0,%zmm5,%zmm5",
+        &[0x62, 0xF1, 0xD5, 0x48, 0xDB, 0xE8],
+    );
+    gas("vpand %ymm0,%ymm5,%ymm5", &[0xC5, 0xD5, 0xDB, 0xE8]);
+    gas(
+        "vpaddb %zmm4,%zmm4,%zmm4",
+        &[0x62, 0xF1, 0x5D, 0x48, 0xFC, 0xE4],
+    );
+    gas("vpaddb %ymm4,%ymm4,%ymm4", &[0xC5, 0xDD, 0xFC, 0xE4]);
+    gas(
+        "vpcmpgtb %zmm4,%zmm5,%k1",
+        &[0x62, 0xF1, 0x55, 0x48, 0x64, 0xCC],
+    );
+    gas(
+        "vpcmpgtb %zmm14,%zmm15,%k4",
+        &[0x62, 0xD1, 0x05, 0x48, 0x64, 0xE6],
+    );
+    gas("vpcmpgtb %ymm4,%ymm5,%ymm5", &[0xC5, 0xD5, 0x64, 0xEC]);
+    gas("vpmovm2b %k1,%zmm5", &[0x62, 0xF2, 0x7E, 0x48, 0x28, 0xE9]);
+    gas("vpmovm2b %k4,%zmm15", &[0x62, 0x72, 0x7E, 0x48, 0x28, 0xFC]);
+    gas(
+        "vpsraw $4,%zmm3,%zmm6",
+        &[0x62, 0xF1, 0x4D, 0x48, 0x71, 0xE3, 0x04],
+    );
+    gas("vpsraw $4,%ymm3,%ymm6", &[0xC5, 0xCD, 0x71, 0xE3, 0x04]);
+    gas(
+        "vpshufb %zmm6,%zmm1,%zmm1",
+        &[0x62, 0xF2, 0x75, 0x48, 0x00, 0xCE],
+    );
+    gas("vpshufb %ymm6,%ymm1,%ymm1", &[0xC4, 0xE2, 0x75, 0x00, 0xCE]);
+    gas(
+        "vpbroadcastb (%rax),%zmm7",
+        &[0x62, 0xF2, 0x7D, 0x48, 0x78, 0x38],
+    );
+    gas("vpbroadcastb (%rax),%ymm7", &[0xC4, 0xE2, 0x7D, 0x78, 0x38]);
+    gas(
+        "vbroadcasti64x2 (%rax),%zmm1",
+        &[0x62, 0xF2, 0xFD, 0x48, 0x5A, 0x08],
+    );
+    gas(
+        "vbroadcasti128 (%rax),%ymm1",
+        &[0xC4, 0xE2, 0x7D, 0x5A, 0x08],
+    );
+    gas(
+        "vmovapd %zmm1,%zmm14",
+        &[0x62, 0x71, 0xFD, 0x48, 0x28, 0xF1],
+    );
+    gas("vmovapd %ymm1,%ymm14", &[0xC5, 0x7D, 0x28, 0xF1]);
+    gas("prefetchnta 64(%rdi)", &[0x0F, 0x18, 0x47, 0x40]);
+    gas("prefetchnta (%rdi,%rcx,1)", &[0x0F, 0x18, 0x04, 0x0F]);
+}
+
+/// The VEX compares with a vector destination, which the EVEX rows (an
+/// opmask destination) do not reach.
+#[test]
+fn vex_vector_compares() {
+    gas(
+        "vpcmpgtq %xmm1,%xmm2,%xmm0",
+        &[0xC4, 0xE2, 0x69, 0x37, 0xC1],
+    );
+    gas(
+        "vpcmpgtq (%rax),%ymm2,%ymm0",
+        &[0xC4, 0xE2, 0x6D, 0x37, 0x00],
+    );
+    gas(
+        "vcmpps $1,%ymm1,%ymm2,%ymm0",
+        &[0xC5, 0xEC, 0xC2, 0xC1, 0x01],
+    );
+    gas(
+        "vcmppd $1,%xmm1,%xmm2,%xmm0",
+        &[0xC5, 0xE9, 0xC2, 0xC1, 0x01],
+    );
+    gas(
+        "vcmpss $1,(%rax),%xmm2,%xmm0",
+        &[0xC5, 0xEA, 0xC2, 0x00, 0x01],
+    );
+    gas(
+        "vcmpsd $1,%xmm1,%xmm2,%xmm0",
+        &[0xC5, 0xEB, 0xC2, 0xC1, 0x01],
+    );
+    gas(
+        "vcmpps $2,%zmm1,%zmm2,%k1",
+        &[0x62, 0xF1, 0x6C, 0x48, 0xC2, 0xC9, 0x02],
+    );
+}
+
 /// The EVEX element insert / extract forms, reached when the vector operand is
 /// one only EVEX names.
 #[test]
@@ -1001,6 +1396,27 @@ fn refusals() {
     refused("vpcmpeqd %zmm1,%zmm2,%k3{%k4}{z}", "opmask destination");
     refused("kmovq %eax,%k1", "64-bit general register");
     refused("kandw %k1,%k2,%eax", "opmask instruction takes");
+    // GFNI: the field multiply reads bytes and has no broadcast form; the
+    // affine transforms read qwords, so the element count must match the
+    // vector length. The legacy-SSE names have no EVEX row at all.
+    refused(
+        "vgf2p8mulb (%rax){1to8},%zmm1,%zmm0",
+        "no `{1toN}` broadcast",
+    );
+    refused(
+        "vgf2p8affineqb $1,(%rax){1to4},%xmm2,%xmm3",
+        "does not match the operand",
+    );
+    refused("gf2p8affineqb $1,%zmm1,%zmm0", "no EVEX");
+    refused("gf2p8mulb %ymm1,%ymm0", "must be an XMM register");
+    refused(
+        "vgf2p8affineqb %xmm1,%xmm2,%xmm3",
+        "needs $imm, %src2, %src1, %dst",
+    );
+    refused(
+        "vgf2p8mulb $1,%xmm1,%xmm2,%xmm3",
+        "VEX op needs %src2, %src1, %dst",
+    );
 }
 
 /// The tuple table is the SDM's, restated as a function; these are the factors
@@ -1045,6 +1461,238 @@ fn tuple_scale_factors() {
         [1, 2]
     );
     assert_eq!([n(Dup, 16, true, false), n(Dup, 64, true, false)], [8, 64]);
+}
+
+/// The lane-crossing quadword permutes. Each name has two members: an
+/// immediate-controlled one on the 0F3A map and an index-vector-controlled one
+/// on 0F38, told apart by the leading operand. Neither has a 128-bit form.
+#[test]
+fn lane_permutes() {
+    gas(
+        "vpermq $0x2,%ymm3,%ymm20",
+        &[0x62, 0xE3, 0xFD, 0x28, 0x00, 0xE3, 0x02],
+    );
+    gas(
+        "vpermq $0x2,%ymm19,%ymm3",
+        &[0x62, 0xB3, 0xFD, 0x28, 0x00, 0xDB, 0x02],
+    );
+    gas(
+        "vpermq $0x2,%zmm3,%zmm14{%k1}",
+        &[0x62, 0x73, 0xFD, 0x49, 0x00, 0xF3, 0x02],
+    );
+    gas(
+        "vpermq $0x2,%zmm3,%zmm14{%k2}{z}",
+        &[0x62, 0x73, 0xFD, 0xCA, 0x00, 0xF3, 0x02],
+    );
+    // Tuple Full: disp8 scales by 64 without a broadcast and by 8 with one.
+    gas(
+        "vpermq $0x2,(%rax),%zmm1",
+        &[0x62, 0xF3, 0xFD, 0x48, 0x00, 0x08, 0x02],
+    );
+    gas(
+        "vpermq $0x2,0x40(%rax),%zmm1",
+        &[0x62, 0xF3, 0xFD, 0x48, 0x00, 0x48, 0x01, 0x02],
+    );
+    gas(
+        "vpermq $0x2,-0x40(%rax),%zmm1",
+        &[0x62, 0xF3, 0xFD, 0x48, 0x00, 0x48, 0xFF, 0x02],
+    );
+    gas(
+        "vpermq $0x2,(%rax){1to8},%zmm1",
+        &[0x62, 0xF3, 0xFD, 0x58, 0x00, 0x08, 0x02],
+    );
+    gas(
+        "vpermq $0x2,0x40(%rax){1to8},%zmm1",
+        &[0x62, 0xF3, 0xFD, 0x58, 0x00, 0x48, 0x08, 0x02],
+    );
+    gas(
+        "vpermpd $0x1b,%zmm2,%zmm3",
+        &[0x62, 0xF3, 0xFD, 0x48, 0x01, 0xDA, 0x1B],
+    );
+    gas(
+        "vpermpd $0x1b,%ymm2,%ymm19",
+        &[0x62, 0xE3, 0xFD, 0x28, 0x01, 0xDA, 0x1B],
+    );
+    // The index-vector-controlled member. It has no VEX form at any length,
+    // so it reaches EVEX on low registers too.
+    gas(
+        "vpermq %zmm2,%zmm1,%zmm0",
+        &[0x62, 0xF2, 0xF5, 0x48, 0x36, 0xC2],
+    );
+    gas(
+        "vpermq %ymm2,%ymm1,%ymm0",
+        &[0x62, 0xF2, 0xF5, 0x28, 0x36, 0xC2],
+    );
+    gas(
+        "vpermq %zmm18,%zmm17,%zmm16",
+        &[0x62, 0xA2, 0xF5, 0x40, 0x36, 0xC2],
+    );
+    gas(
+        "vpermq (%rax),%zmm1,%zmm0",
+        &[0x62, 0xF2, 0xF5, 0x48, 0x36, 0x00],
+    );
+    gas(
+        "vpermq (%rax){1to8},%zmm1,%zmm0",
+        &[0x62, 0xF2, 0xF5, 0x58, 0x36, 0x00],
+    );
+    gas(
+        "vpermq 0x40(%rax),%zmm1,%zmm0",
+        &[0x62, 0xF2, 0xF5, 0x48, 0x36, 0x40, 0x01],
+    );
+    gas(
+        "vpermq %zmm2,%zmm1,%zmm0{%k7}",
+        &[0x62, 0xF2, 0xF5, 0x4F, 0x36, 0xC2],
+    );
+    gas(
+        "vpermpd %zmm2,%zmm1,%zmm0",
+        &[0x62, 0xF2, 0xF5, 0x48, 0x16, 0xC2],
+    );
+    gas(
+        "vpermpd %ymm2,%ymm1,%ymm16",
+        &[0x62, 0xE2, 0xF5, 0x28, 0x16, 0xC2],
+    );
+    // GNU as refuses every 128-bit spelling of both members.
+    refused("vpermq $0x2,%xmm19,%xmm3", "no 128-bit form");
+    refused("vpermpd $0x1b,%xmm2,%xmm19", "no 128-bit form");
+    refused("vpermq %xmm2,%xmm1,%xmm0", "no 128-bit form");
+    refused("vpermpd %xmm18,%xmm17,%xmm16", "no 128-bit form");
+}
+
+/// The element broadcasts read a general register under a second opcode, whose
+/// width EVEX.W fixes: `vpbroadcastq` takes a 64-bit register and the narrower
+/// three a 32-bit one, as GNU as accepts them.
+#[test]
+fn broadcast_from_general_register() {
+    gas(
+        "vpbroadcastq %rax,%zmm0",
+        &[0x62, 0xF2, 0xFD, 0x48, 0x7C, 0xC0],
+    );
+    gas(
+        "vpbroadcastq %rax,%ymm0",
+        &[0x62, 0xF2, 0xFD, 0x28, 0x7C, 0xC0],
+    );
+    gas(
+        "vpbroadcastq %rax,%xmm0",
+        &[0x62, 0xF2, 0xFD, 0x08, 0x7C, 0xC0],
+    );
+    gas(
+        "vpbroadcastq %r15,%zmm31",
+        &[0x62, 0x42, 0xFD, 0x48, 0x7C, 0xFF],
+    );
+    gas(
+        "vpbroadcastq %rax,%zmm1{%k3}",
+        &[0x62, 0xF2, 0xFD, 0x4B, 0x7C, 0xC8],
+    );
+    gas(
+        "vpbroadcastq %rax,%zmm1{%k3}{z}",
+        &[0x62, 0xF2, 0xFD, 0xCB, 0x7C, 0xC8],
+    );
+    gas(
+        "vpbroadcastd %eax,%zmm0",
+        &[0x62, 0xF2, 0x7D, 0x48, 0x7C, 0xC0],
+    );
+    gas(
+        "vpbroadcastd %r9d,%ymm20",
+        &[0x62, 0xC2, 0x7D, 0x28, 0x7C, 0xE1],
+    );
+    gas(
+        "vpbroadcastd %eax,%xmm17",
+        &[0x62, 0xE2, 0x7D, 0x08, 0x7C, 0xC8],
+    );
+    gas(
+        "vpbroadcastw %eax,%zmm0",
+        &[0x62, 0xF2, 0x7D, 0x48, 0x7B, 0xC0],
+    );
+    gas(
+        "vpbroadcastw %r13d,%ymm3",
+        &[0x62, 0xD2, 0x7D, 0x28, 0x7B, 0xDD],
+    );
+    gas(
+        "vpbroadcastb %eax,%zmm0",
+        &[0x62, 0xF2, 0x7D, 0x48, 0x7A, 0xC0],
+    );
+    gas(
+        "vpbroadcastb %r13d,%xmm3",
+        &[0x62, 0xD2, 0x7D, 0x08, 0x7A, 0xDD],
+    );
+    // The vector-register and memory members keep their own opcodes.
+    gas(
+        "vpbroadcastq %xmm1,%zmm9",
+        &[0x62, 0x72, 0xFD, 0x48, 0x59, 0xC9],
+    );
+    gas(
+        "vpbroadcastq (%rax),%zmm9",
+        &[0x62, 0x72, 0xFD, 0x48, 0x59, 0x08],
+    );
+    gas(
+        "vpbroadcastd %xmm1,%zmm9",
+        &[0x62, 0x72, 0x7D, 0x48, 0x58, 0xC9],
+    );
+    gas(
+        "vpbroadcastd (%rax),%zmm9",
+        &[0x62, 0x72, 0x7D, 0x48, 0x58, 0x08],
+    );
+    // The widths GNU as refuses.
+    refused("vpbroadcastq %eax,%zmm0", "64-bit general register");
+    refused("vpbroadcastd %rax,%zmm0", "32-bit general register");
+    refused("vpbroadcastw %ax,%zmm0", "32-bit general register");
+    refused("vpbroadcastb %al,%zmm0", "32-bit general register");
+}
+
+/// The widening 32x32 multiplies, whose EVEX members broadcast a qword and so
+/// set W where their VEX ones ignore it.
+#[test]
+fn widening_multiplies() {
+    gas(
+        "vpmuludq (%rax){1to8},%zmm1,%zmm0",
+        &[0x62, 0xF1, 0xF5, 0x58, 0xF4, 0x00],
+    );
+    gas(
+        "vpmuldq %zmm2,%zmm1,%zmm0",
+        &[0x62, 0xF2, 0xF5, 0x48, 0x28, 0xC2],
+    );
+    gas(
+        "vpmuldq 0x40(%rax),%zmm1,%zmm0",
+        &[0x62, 0xF2, 0xF5, 0x48, 0x28, 0x40, 0x01],
+    );
+}
+
+/// The code mode reaches an instruction's addressing, not its VEX / EVEX
+/// prefix: the register forms encode identically at 16, 32 and 64 bits, and a
+/// 32-bit memory operand encodes as its 64-bit counterpart does.
+#[test]
+fn permutes_and_broadcasts_across_code_modes() {
+    #[track_caller]
+    fn same(text: &str, bytes: &[u8]) {
+        for mode in [Mode::Bits16, Mode::Bits32, Mode::Bits64] {
+            match enc_in(text, mode) {
+                Ok(got) if got == bytes => {}
+                Ok(got) => panic!("{text} at {mode:?}\n  badc {got:02x?}\n  gas  {bytes:02x?}"),
+                Err(e) => panic!("{text} at {mode:?}: {e}"),
+            }
+        }
+    }
+    same(
+        "vpermq $0x2,%ymm3,%ymm2",
+        &[0xC4, 0xE3, 0xFD, 0x00, 0xD3, 0x02],
+    );
+    same(
+        "vpermq $0x2,%zmm3,%zmm4",
+        &[0x62, 0xF3, 0xFD, 0x48, 0x00, 0xE3, 0x02],
+    );
+    same(
+        "vpbroadcastd %eax,%zmm0",
+        &[0x62, 0xF2, 0x7D, 0x48, 0x7C, 0xC0],
+    );
+    same(
+        "vpbroadcastb %ecx,%xmm2",
+        &[0x62, 0xF2, 0x7D, 0x08, 0x7A, 0xD1],
+    );
+    gas_in(
+        "vpermq $0x39,(%eax),%ymm0",
+        Mode::Bits32,
+        &[0xC4, 0xE3, 0xFD, 0x00, 0x00, 0x39],
+    );
 }
 
 // ------------------------------------------------------------------

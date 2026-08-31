@@ -140,10 +140,11 @@ pub(crate) enum Mnemonic {
     },
     /// A 2-operand VEX move `v-op %src, %dst` (VEX.vvvv unused). A register or
     /// memory source into a register uses `load_op`; a register into memory uses
-    /// `store_op`. Covers vmovups/vmovaps/vmovdqu/vmovdqa (128/256-bit).
+    /// `store_op`. Covers vmovups/vmovaps/vmovdqu/vmovdqa (128/256-bit). A
+    /// non-temporal store has only one direction, so its `load_op` is absent.
     VexMov {
         pp: u8,
-        load_op: u8,
+        load_op: Option<u8>,
         store_op: u8,
     },
     /// `vmovd` / `vmovq`: the VEX forms of `movd` / `movq`, moving the low
@@ -165,10 +166,12 @@ pub(crate) enum Mnemonic {
     },
     /// A 3-operand VEX op with a trailing immediate `v-op $imm8, %src2, %src1,
     /// %dst`. Covers vshufps / vshufpd (0F map) and vperm2f128 / vpblendd /
-    /// vpalignr / vinsertf128 (0F3A map).
+    /// vpalignr / vinsertf128 / vgf2p8affine{,inv}qb (0F3A map). `w` is the
+    /// VEX.W bit, which the qword-element forms set.
     VexImm3 {
         pp: u8,
         map: u8,
+        w: bool,
         opcode: u8,
         /// Set for the `is4` blends, whose leading operand is a vector register
         /// carried in the top four bits of the trailing byte instead of an
@@ -177,14 +180,18 @@ pub(crate) enum Mnemonic {
     },
     /// A 2-operand VEX op with a trailing immediate `v-op $imm8, %src, %dst`
     /// (VEX.vvvv unused). Covers vpshufd / vpshuflw / vpshufhw (0F map) and
-    /// vpermilps / vpermilpd (0F3A map). `store` reverses the operand roles for
-    /// the lane extracts (`vextracti128`), whose destination is the r/m and
-    /// whose 256-bit source sets `L`.
+    /// vpermilps / vpermilpd / vpermq / vpermpd (0F3A map). `store` reverses
+    /// the operand roles for the lane extracts (`vextracti128`), whose
+    /// destination is the r/m and whose 256-bit source sets `L`. `l256` marks
+    /// the forms with no 128-bit member -- the lane-crossing permutes and the
+    /// 128-bit lane extracts -- whose VEX.L is one.
     VexImm2 {
         pp: u8,
         map: u8,
+        w: bool,
         opcode: u8,
         store: bool,
+        l256: bool,
     },
     /// A VEX packed shift by immediate `v-op $imm8, %src, %dst`, encoded
     /// `VEX(vvvv=dst, L, pp=66, 0F) <opcode> /digit ib`: the destination rides
@@ -402,6 +409,9 @@ pub(crate) enum AsmOpnd {
     Reg { reg: u8, size: AsmRegSize },
     /// `%ah` / `%ch` / `%dh` / `%bh`, held as the ModRM field value 4..8.
     HighReg(u8),
+    /// `%hN`: the high byte of operand N's register, which must be one of
+    /// the four legacy byte-addressable registers.
+    HighRef(u8),
     /// `$imm`: a literal immediate.
     Imm(i64),
     /// `disp(%%reg)` / `disp(%N)`: an explicit memory reference written in
@@ -589,7 +599,7 @@ pub(crate) enum Concrete {
 pub(crate) fn check_operand_refs(insns: &[AsmInsn], n_operands: usize) -> Result<(), String> {
     for insn in insns {
         for o in &insn.operands {
-            if let AsmOpnd::Ref { idx, .. } = *o
+            if let AsmOpnd::Ref { idx, .. } | AsmOpnd::HighRef(idx) = *o
                 && idx as usize >= n_operands
             {
                 return Err(alloc::format!(
@@ -668,15 +678,55 @@ pub(crate) fn gpr_att_name(num: u8, width: u8) -> Option<&'static str> {
     table.get(num as usize).copied()
 }
 
+/// AT&T operand-size suffix of a `width`-byte integer operand, the letter
+/// a `%z` reference prints. `None` for a width with no suffix.
+pub(crate) fn att_size_suffix(width: u8) -> Option<&'static str> {
+    Some(match width {
+        1 => "b",
+        2 => "w",
+        4 => "l",
+        8 => "q",
+        _ => return None,
+    })
+}
+
+/// Resolve a `%h` reference: the high byte of operand `idx`'s register,
+/// which must be one of rax / rcx / rdx / rbx.
+pub(crate) fn resolve_high_ref(
+    idx: u8,
+    operands: &[crate::c5::ir::AsmOperand],
+    op_reg: &[Option<u8>],
+) -> Result<Concrete, String> {
+    use crate::c5::ir::AsmConstraint as C;
+    operands
+        .get(idx as usize)
+        .filter(|op| !matches!(op.constraint, C::Fp | C::Mem))
+        .and_then(|_| op_reg.get(idx as usize).copied().flatten())
+        .filter(|&r| r < 4)
+        .map(|r| Concrete::HighReg(r + 4))
+        .ok_or_else(|| format!("inline asm: `%h{idx}` needs its operand in rax, rcx, rdx or rbx"))
+}
+
 const BAD_VMOV_OPND: &str = "inline asm: `vmovd`/`vmovq` operand must be a \
 register or memory";
+
+/// A register name as the tables spell it: GNU as reads register names
+/// without regard to case, so an upper-case spelling folds to lower.
+fn fold_reg_case(name: &str) -> alloc::borrow::Cow<'_, str> {
+    if name.bytes().any(|c| c.is_ascii_uppercase()) {
+        alloc::borrow::Cow::Owned(name.to_ascii_lowercase())
+    } else {
+        alloc::borrow::Cow::Borrowed(name)
+    }
+}
 
 /// Operand for a register named in a template, covering both register
 /// classes an 8-bit name can denote.
 fn named_reg_operand(name: &str) -> Option<AsmOpnd> {
-    match reg_by_name(name) {
+    let name = fold_reg_case(name);
+    match reg_by_name(&name) {
         Some((reg, size)) => Some(AsmOpnd::Reg { reg, size }),
-        None => high_byte_reg_by_name(name).map(AsmOpnd::HighReg),
+        None => high_byte_reg_by_name(&name).map(AsmOpnd::HighReg),
     }
 }
 
@@ -821,7 +871,7 @@ pub(crate) fn mask_reg_num(c: &Concrete) -> Option<u8> {
 /// Operand for an opmask register named in a template. The size marker is
 /// unused: the mnemonic's width letter fixes the operation width.
 fn mask_reg_operand(name: &str) -> Option<AsmOpnd> {
-    mask_by_name(name).map(|k| AsmOpnd::Reg {
+    mask_by_name(&fold_reg_case(name)).map(|k| AsmOpnd::Reg {
         reg: MASK_BASE + k,
         size: AsmRegSize::Quad,
     })
@@ -830,24 +880,35 @@ fn mask_reg_operand(name: &str) -> Option<AsmOpnd> {
 /// Assign an x86 register number to each register operand of an
 /// extended-asm statement, per its constraint. Returns a vector
 /// parallel to `operands`: `Some(reg)` for a register operand, `None`
-/// for a pure immediate. Fixed and matching constraints take their
-/// required register; `r` operands take free registers from a fixed
-/// pool (never r10 / r11, which the emitter reserves as bridge scratch,
-/// nor rsp / rbp, nor any GP register named in the clobber list).
+/// for an immediate. Fixed and matching constraints take their required
+/// register; `r` operands take free registers from a fixed pool (never
+/// r10 / r11, which the emitter reserves as bridge scratch, nor rsp /
+/// rbp, nor any GP register named in the clobber list). A
+/// register-or-immediate operand is the immediate when `const_of` yields
+/// a constant its immediate class admits, and takes no register then.
 /// Shared by the emitter and the interpreter so both resolve the
 /// template's `%N` references to the same registers.
 pub(crate) fn assign_operand_regs(
     operands: &[crate::c5::ir::AsmOperand],
     clobber_regs: u32,
     clobber_fp_regs: u32,
+    const_of: &dyn Fn(usize) -> Option<i64>,
 ) -> Result<Vec<Option<u8>>, String> {
     use crate::c5::ir::AsmConstraint as C;
     let mut assigned: Vec<Option<u8>> = alloc::vec![None; operands.len()];
     let mut used = [false; 16];
+    let takes_imm = |i: usize, imm: char| {
+        const_of(i).is_some_and(|v| crate::Compiler::x86_imm_alternative_accepts(imm, v))
+    };
     // Fixed / bound / register-or-immediate operands take their named
     // register.
     for (i, op) in operands.iter().enumerate() {
-        if let C::Fixed(r) | C::Bound(r) | C::RegOrImm(r) = op.constraint {
+        let named = match op.constraint {
+            C::Fixed(r) | C::Bound(r) => Some(r),
+            C::RegOrImm { reg: Some(r), imm } if !takes_imm(i, imm) => Some(r),
+            _ => None,
+        };
+        if let Some(r) = named {
             assigned[i] = Some(r);
             used[r as usize] = true;
         }
@@ -870,7 +931,12 @@ pub(crate) fn assign_operand_regs(
     // addressed through, and the emitter's own bridge scratch).
     let pool = [0u8, 3, 1, 2, 6, 7, 8, 9, 12, 13, 14, 15];
     for (i, op) in operands.iter().enumerate() {
-        if matches!(op.constraint, C::Reg | C::Mem | C::Flags(_)) {
+        let pooled = match op.constraint {
+            C::Reg | C::Mem | C::Flags(_) => true,
+            C::RegOrImm { reg: None, imm } => !takes_imm(i, imm),
+            _ => false,
+        };
+        if pooled {
             let r = pool
                 .iter()
                 .copied()
@@ -1136,7 +1202,7 @@ pub(crate) fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
                 .or_else(|| sse_imm(name))
                 .or_else(|| vex_op(name))
                 .or_else(|| mask_op(name))
-                .or_else(|| super::evex::op(name).map(Mnemonic::Evex));
+                .or_else(|| super::evex::op(name, false).map(Mnemonic::Evex));
         }
     })
 }
@@ -1212,6 +1278,7 @@ fn sse2_op(name: &str) -> Option<Mnemonic> {
         ("ptest", 0x66, 0x17),
         ("aesimc", 0x66, 0xDB), ("aesenc", 0x66, 0xDC), ("aesenclast", 0x66, 0xDD),
         ("aesdec", 0x66, 0xDE), ("aesdeclast", 0x66, 0xDF),
+        ("gf2p8mulb", 0x66, 0xCF),
         ("sha1nexte", 0, 0xC8), ("sha1msg1", 0, 0xC9), ("sha1msg2", 0, 0xCA),
         ("sha256rnds2", 0, 0xCB), ("sha256msg1", 0, 0xCC), ("sha256msg2", 0, 0xCD),
     ];
@@ -1328,6 +1395,9 @@ fn sse_imm(name: &str) -> Option<Mnemonic> {
         ("shufps", 0, 1, 0xC6, false, false), ("shufpd", 0x66, 1, 0xC6, false, false),
         ("palignr", 0x66, 3, 0x0F, false, false),
         ("pclmulqdq", 0x66, 3, 0x44, false, false),
+        // GFNI. The legacy encoding leaves the qword element width implicit.
+        ("gf2p8affineqb", 0x66, 3, 0xCE, false, false),
+        ("gf2p8affineinvqb", 0x66, 3, 0xCF, false, false),
         ("blendps", 0x66, 3, 0x0C, false, false), ("blendpd", 0x66, 3, 0x0D, false, false),
         ("pblendw", 0x66, 3, 0x0E, false, false),
         ("aeskeygenassist", 0x66, 3, 0xDF, false, false),
@@ -1428,14 +1498,18 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
     if let "vmovd" | "vmovq" = name {
         return Some(Mnemonic::VexMovd { w: name == "vmovq" });
     }
-    // 2-operand VEX moves as `(pp, load-op, store-op)`.
+    // 2-operand VEX moves as `(pp, load-op, store-op)`; the non-temporal
+    // stores have no load direction.
     let mov = match name {
-        "vmovups" => Some((0u8, 0x10u8, 0x11u8)),
-        "vmovupd" => Some((1, 0x10, 0x11)),
-        "vmovaps" => Some((0, 0x28, 0x29)),
-        "vmovapd" => Some((1, 0x28, 0x29)),
-        "vmovdqu" => Some((2, 0x6F, 0x7F)),
-        "vmovdqa" => Some((1, 0x6F, 0x7F)),
+        "vmovups" => Some((0u8, Some(0x10u8), 0x11u8)),
+        "vmovupd" => Some((1, Some(0x10), 0x11)),
+        "vmovaps" => Some((0, Some(0x28), 0x29)),
+        "vmovapd" => Some((1, Some(0x28), 0x29)),
+        "vmovdqu" => Some((2, Some(0x6F), 0x7F)),
+        "vmovdqa" => Some((1, Some(0x6F), 0x7F)),
+        "vmovntdq" => Some((1, None, 0xE7)),
+        "vmovntps" => Some((0, None, 0x2B)),
+        "vmovntpd" => Some((1, None, 0x2B)),
         _ => None,
     };
     if let Some((pp, load_op, store_op)) = mov {
@@ -1561,11 +1635,12 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
         ("vpsllvq", true, 0x47), ("vpsrlvq", true, 0x45),
         ("vpermd", false, 0x36), ("vpermps", false, 0x16), ("vpshufb", false, 0x00),
         ("vpsignb", false, 0x08), ("vpsignw", false, 0x09), ("vpsignd", false, 0x0A),
-        ("vpcmpeqq", false, 0x29), ("vpackusdw", false, 0x2B),
+        ("vpcmpeqq", false, 0x29), ("vpcmpgtq", false, 0x37), ("vpackusdw", false, 0x2B),
         ("vpminsb", false, 0x38), ("vpminsd", false, 0x39),
         ("vpmaxsb", false, 0x3C), ("vpmaxsd", false, 0x3D),
         ("vaesenc", false, 0xDC), ("vaesenclast", false, 0xDD),
         ("vaesdec", false, 0xDE), ("vaesdeclast", false, 0xDF),
+        ("vgf2p8mulb", false, 0xCF),
         ("vfmadd132ps", false, 0x98), ("vfmadd213ps", false, 0xA8), ("vfmadd231ps", false, 0xB8),
         ("vfmadd132pd", true, 0x98), ("vfmadd213pd", true, 0xA8), ("vfmadd231pd", true, 0xB8),
         ("vfmsub132ps", false, 0x9A), ("vfmsub213ps", false, 0xAA), ("vfmsub231ps", false, 0xBA),
@@ -1583,27 +1658,34 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
             opcode,
         });
     }
-    // Immediate ops as `(pp, map, opcode)`. 3-operand: vshuf{ps,pd} (0F C6) and
-    // the 0F3A lane ops. 2-operand: vpshuf{d,lw,hw} (0F 70), vpermil{ps,pd},
-    // and the lane extracts, which write their r/m operand. TODO: EVEX /
-    // AVX-512 forms need their own encoding shape.
+    // Immediate ops as `(pp, map, W, opcode)`. 3-operand: vshuf{ps,pd} (0F C6)
+    // and the 0F3A lane ops. 2-operand: vpshuf{d,lw,hw} (0F 70), vpermil{ps,pd},
+    // and the lane extracts, which write their r/m operand.
     let imm3 = match name {
-        "vshufps" => Some((0u8, 1u8, 0xC6u8)),
-        "vshufpd" => Some((1, 1, 0xC6)),
-        "vperm2f128" => Some((1, 3, 0x06)),
-        "vperm2i128" => Some((1, 3, 0x46)),
-        "vpblendd" => Some((1, 3, 0x02)),
-        "vpalignr" => Some((1, 3, 0x0F)),
-        "vinsertf128" => Some((1, 3, 0x18)),
-        "vinserti128" => Some((1, 3, 0x38)),
-        "vpclmulqdq" => Some((1, 3, 0x44)),
-        "vpblendw" => Some((1, 3, 0x0E)),
+        "vshufps" => Some((0u8, 1u8, false, 0xC6u8)),
+        "vshufpd" => Some((1, 1, false, 0xC6)),
+        "vcmpps" => Some((0, 1, false, 0xC2)),
+        "vcmppd" => Some((1, 1, false, 0xC2)),
+        "vcmpss" => Some((2, 1, false, 0xC2)),
+        "vcmpsd" => Some((3, 1, false, 0xC2)),
+        "vperm2f128" => Some((1, 3, false, 0x06)),
+        "vperm2i128" => Some((1, 3, false, 0x46)),
+        "vpblendd" => Some((1, 3, false, 0x02)),
+        "vpalignr" => Some((1, 3, false, 0x0F)),
+        "vinsertf128" => Some((1, 3, false, 0x18)),
+        "vinserti128" => Some((1, 3, false, 0x38)),
+        "vpclmulqdq" => Some((1, 3, false, 0x44)),
+        "vpblendw" => Some((1, 3, false, 0x0E)),
+        // GFNI: qword elements, so VEX.W is set.
+        "vgf2p8affineqb" => Some((1, 3, true, 0xCE)),
+        "vgf2p8affineinvqb" => Some((1, 3, true, 0xCF)),
         _ => None,
     };
-    if let Some((pp, map, opcode)) = imm3 {
+    if let Some((pp, map, w, opcode)) = imm3 {
         return Some(Mnemonic::VexImm3 {
             pp,
             map,
+            w,
             opcode,
             is4: false,
         });
@@ -1619,6 +1701,7 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
         return Some(Mnemonic::VexImm3 {
             pp: 1,
             map: 3,
+            w: false,
             opcode,
             is4: true,
         });
@@ -1631,8 +1714,10 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
         return Some(Mnemonic::VexImm2 {
             pp: 1,
             map: 3,
+            w: false,
             opcode,
             store: true,
+            l256: true,
         });
     }
     // The element extracts as `(name, map, opcode, W, register-form opcode)`
@@ -1660,19 +1745,25 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
     if let Some(&(_, map, opcode, w)) = INSERT.iter().find(|r| r.0 == name) {
         return Some(Mnemonic::VexElemInsert { map, opcode, w });
     }
+    // `(pp, map, W, opcode, 256-bit only)`. vpermq / vpermpd cross the
+    // 128-bit lanes, so VEX gives them a 256-bit member only.
     let imm2 = match name {
-        "vpshufd" => Some((1u8, 1u8, 0x70u8)),
-        "vpshuflw" => Some((3, 1, 0x70)),
-        "vpshufhw" => Some((2, 1, 0x70)),
-        "vpermilps" => Some((1, 3, 0x04)),
-        "vpermilpd" => Some((1, 3, 0x05)),
+        "vpshufd" => Some((1u8, 1u8, false, 0x70u8, false)),
+        "vpshuflw" => Some((3, 1, false, 0x70, false)),
+        "vpshufhw" => Some((2, 1, false, 0x70, false)),
+        "vpermilps" => Some((1, 3, false, 0x04, false)),
+        "vpermilpd" => Some((1, 3, false, 0x05, false)),
+        "vpermq" => Some((1, 3, true, 0x00, true)),
+        "vpermpd" => Some((1, 3, true, 0x01, true)),
         _ => None,
     };
-    imm2.map(|(pp, map, opcode)| Mnemonic::VexImm2 {
+    imm2.map(|(pp, map, w, opcode, l256)| Mnemonic::VexImm2 {
         pp,
         map,
+        w,
         opcode,
         store: false,
+        l256,
     })
 }
 
@@ -2127,6 +2218,16 @@ fn parse_operand(tok: &str, labels: &[&str], file_scope: bool) -> Result<AsmOpnd
                 disp: 0,
             });
         }
+        // `%hN`: the high byte of operand N's register.
+        if let Some(digits) = body.strip_prefix('h')
+            && !digits.is_empty()
+            && digits.bytes().all(|c| c.is_ascii_digit())
+        {
+            let idx: u8 = digits
+                .parse()
+                .map_err(|_| format!("inline asm: bad operand reference `{tok}`"))?;
+            return Ok(AsmOpnd::HighRef(idx));
+        }
         // `%N` or `%<size>N`. A leading size modifier is a single
         // letter b/w/k/q before the operand digits.
         let (size, digits) = match body.as_bytes().first() {
@@ -2249,7 +2350,7 @@ fn parse_mem_base(tok: &str) -> Option<AsmMemBase> {
     if !digits.is_empty() && digits.bytes().all(|c| c.is_ascii_digit()) {
         return Some(AsmMemBase::Ref(digits.parse().ok()?));
     }
-    let (num, size) = reg_by_name(body)?;
+    let (num, size) = reg_by_name(&fold_reg_case(body))?;
     if num >= 16 || size == AsmRegSize::Byte {
         return None;
     }
@@ -3006,20 +3107,38 @@ fn resolve_evex(
                 | AsmOpnd::SymMem { .. }
         )
     };
+    // A vector register or memory in the leading position rules out the
+    // immediate-led shapes; anything else there admits one, an operand
+    // reference included -- it is substituted after this point, and every
+    // immediate-led shape takes its immediate there. This is what tells apart
+    // the rows of a name the ISA gives both an immediate-controlled and an
+    // index-vector-controlled member.
+    let lead_vec_or_mem = operands.first().is_some_and(&is_mem)
+        || matches!(operands.first(), Some(&AsmOpnd::Reg { reg, .. }) if reg >= XMM_BASE);
+    let lead_imm = !lead_vec_or_mem;
     let evex_only_operand = match mnemonic {
         Mnemonic::VexShiftImm { var_opcode, .. } => {
             let count_mem = operands.first().is_some_and(&is_mem);
             operands.iter().any(is_mem) && !(var_opcode.is_some() && count_mem)
         }
+        // The element broadcasts read a general register under EVEX only.
+        Mnemonic::Vex2 { .. } => {
+            matches!(operands.first(), Some(&AsmOpnd::Reg { reg, .. }) if reg < 16)
+        }
+        // An immediate-led VEX shape reading a vector register or memory in
+        // that position: the index-vector-controlled permutes have no VEX
+        // form.
+        Mnemonic::VexImm2 { .. } => lead_vec_or_mem,
         _ => false,
     };
     let mut f = match mnemonic {
-        Mnemonic::Evex(f) => f,
-        _ if evex_reg || evex_only_operand || decor.any() => {
-            super::evex::op(name).ok_or_else(|| {
+        // The name-only lookup that built this mnemonic could not see the
+        // operands, so a name with more than one row resolves here.
+        Mnemonic::Evex(f) => super::evex::op(name, lead_imm).unwrap_or(f),
+        _ if evex_reg || evex_only_operand || decor.any() => super::evex::op(name, lead_imm)
+            .ok_or_else(|| {
                 format!("inline asm: `{name}` has no EVEX (AVX-512) form these operands can take")
-            })?
-        }
+            })?,
         _ => return Ok(mnemonic),
     };
     (f.mask, f.zeroing, f.bcast) = (decor.mask, decor.zeroing, decor.bcast);
@@ -4513,6 +4632,11 @@ fn encode_bespoke(
             // 2-operand VEX move (VEX.vvvv = 1111, passed as 0 to `emit_vex`).
             let [src, dst] = two(ops)?;
             if let Some((d, dy)) = vec_reg(&dst) {
+                let Some(load_op) = load_op else {
+                    return Err(String::from(
+                        "inline asm: a non-temporal store takes a memory destination",
+                    ));
+                };
                 // reg-reg or load: the destination register rides ModRM.reg.
                 match &src {
                     _ if vec_reg(&src).is_some() => {
@@ -4640,6 +4764,7 @@ fn encode_bespoke(
         Mnemonic::VexImm3 {
             pp,
             map,
+            w,
             opcode,
             is4,
         } => {
@@ -4674,7 +4799,7 @@ fn encode_bespoke(
                 _ if vec_reg(src2).is_some() => {
                     let (s2, s2y) = vec_reg(src2).unwrap();
                     let l = u8::from(dy || s1y || s2y || leady);
-                    emit_vex(code, d >= 8, false, s2 >= 8, map, false, s1, l, pp);
+                    emit_vex(code, d >= 8, false, s2 >= 8, map, w, s1, l, pp);
                     code.push(opcode);
                     code.push(modrm_reg(d & 7, s2 & 7));
                 }
@@ -4685,7 +4810,7 @@ fn encode_bespoke(
                         ));
                     };
                     let l = u8::from(dy || s1y || leady);
-                    emit_vex(code, d >= 8, mr.rex_x(), mr.rex_b(), map, false, s1, l, pp);
+                    emit_vex(code, d >= 8, mr.rex_x(), mr.rex_b(), map, w, s1, l, pp);
                     code.push(opcode);
                     mr.emit(code, mode, addr, d & 7)?;
                 }
@@ -4696,8 +4821,10 @@ fn encode_bespoke(
         Mnemonic::VexImm2 {
             pp,
             map,
+            w,
             opcode,
             store,
+            l256,
         } => {
             // `v-op $imm, %src, %dst`: a 2-operand VEX (VEX.vvvv = 1111) + imm.
             // ModRM.reg holds the AT&T destination, or the source for a lane
@@ -4718,11 +4845,16 @@ fn encode_bespoke(
                     "inline asm: VEX shuffle register operand must be xmm/ymm",
                 ));
             };
+            let l = u8::from(ry || vec_reg(in_rm).is_some_and(|(_, my)| my && !store));
+            if l256 && l == 0 {
+                return Err(String::from(
+                    "inline asm: this instruction has no 128-bit form",
+                ));
+            }
             match in_rm {
                 _ if vec_reg(in_rm).is_some() => {
-                    let (m, my) = vec_reg(in_rm).unwrap();
-                    let l = u8::from(ry || (my && !store));
-                    emit_vex(code, r >= 8, false, m >= 8, map, false, 0, l, pp);
+                    let (m, _) = vec_reg(in_rm).unwrap();
+                    emit_vex(code, r >= 8, false, m >= 8, map, w, 0, l, pp);
                     code.push(opcode);
                     code.push(modrm_reg(r & 7, m & 7));
                 }
@@ -4732,17 +4864,7 @@ fn encode_bespoke(
                             "inline asm: VEX shuffle source must be xmm/ymm or memory",
                         ));
                     };
-                    emit_vex(
-                        code,
-                        r >= 8,
-                        mr.rex_x(),
-                        mr.rex_b(),
-                        map,
-                        false,
-                        0,
-                        u8::from(ry),
-                        pp,
-                    );
+                    emit_vex(code, r >= 8, mr.rex_x(), mr.rex_b(), map, w, 0, l, pp);
                     code.push(opcode);
                     mr.emit(code, mode, addr, r & 7)?;
                 }
@@ -6559,11 +6681,11 @@ mod tests {
         // `x` operands take xmm0, xmm1, ... from a file independent of the GPRs,
         // so a mixed GP + xmm operand list assigns each from its own pool.
         let ops = [op(C::Reg), op(C::Fp), op(C::Reg), op(C::Fp)];
-        let a = assign_operand_regs(&ops, 0, 0).unwrap();
+        let a = assign_operand_regs(&ops, 0, 0, &|_| None).unwrap();
         assert_eq!(a, [Some(0), Some(0), Some(3), Some(1)]); // rax, xmm0, rbx, xmm1
         // An xmm named in the clobber list is skipped: xmm0 clobbered pushes the
         // first `x` operand onto xmm1.
-        let a = assign_operand_regs(&[op(C::Fp), op(C::Fp)], 0, 1 << 0).unwrap();
+        let a = assign_operand_regs(&[op(C::Fp), op(C::Fp)], 0, 1 << 0, &|_| None).unwrap();
         assert_eq!(a, [Some(1), Some(2)]);
     }
 
@@ -6583,7 +6705,7 @@ mod tests {
         // reusing a clobbered register.
         let clob = (1 << 0) | (1 << 3) | (1 << 1) | (1 << 2);
         let gp = [op(C::Reg), op(C::Reg), op(C::Reg)];
-        let a = assign_operand_regs(&gp, clob, 0).unwrap();
+        let a = assign_operand_regs(&gp, clob, 0, &|_| None).unwrap();
         assert_eq!(a, [Some(6), Some(7), Some(8)]);
         // An asm that calls out clobbers the caller-saved bank
         // (rax rcx rdx rsi rdi r8 r9); its `r` operands then take the
@@ -6593,14 +6715,47 @@ mod tests {
             .iter()
             .fold(0u32, |m, &r| m | (1 << r));
         let five = [op(C::Reg), op(C::Reg), op(C::Reg), op(C::Reg), op(C::Reg)];
-        let a = assign_operand_regs(&five, caller_saved, 0).unwrap();
+        let a = assign_operand_regs(&five, caller_saved, 0, &|_| None).unwrap();
         assert_eq!(a, [Some(3), Some(12), Some(13), Some(14), Some(15)]);
         // A clobber list covering every pool register leaves nothing to assign;
         // reject rather than reuse a clobbered register.
         let all = [0u8, 3, 1, 2, 6, 7, 8, 9, 12, 13, 14, 15]
             .iter()
             .fold(0u32, |m, &r| m | (1 << r));
-        assert!(assign_operand_regs(&[op(C::Reg)], all, 0).is_err());
+        assert!(assign_operand_regs(&[op(C::Reg)], all, 0, &|_| None).is_err());
+    }
+
+    #[test]
+    fn register_or_immediate_operands_take_a_register_only_without_a_constant() {
+        use crate::c5::ir::{AsmConstraint as C, AsmOperand, AsmSeg};
+        let op = |constraint: C| AsmOperand {
+            constraint,
+            is_output: false,
+            is_rw: false,
+            width: 8,
+            seg: AsmSeg::None,
+        };
+        let any = C::RegOrImm {
+            reg: None,
+            imm: 'i',
+        };
+        let rcx = C::RegOrImm {
+            reg: Some(1),
+            imm: 'i',
+        };
+        let shift = C::RegOrImm {
+            reg: None,
+            imm: 'I',
+        };
+        let ops = [op(any), op(rcx), op(shift), op(shift), op(C::Reg)];
+        // Every value a constant: operands 0..2 are immediates, 3 is outside
+        // the `I` range and is loaded, 4 is a register operand.
+        let consts = [Some(5), Some(7), Some(3), Some(40), Some(0)];
+        let a = assign_operand_regs(&ops, 0, 0, &|i| consts[i]).unwrap();
+        assert_eq!(a, [None, None, None, Some(0), Some(3)]);
+        // No constants: the named register and the pool.
+        let a = assign_operand_regs(&ops, 0, 0, &|_| None).unwrap();
+        assert_eq!(a, [Some(0), Some(1), Some(3), Some(2), Some(6)]);
     }
 
     #[test]
@@ -6669,6 +6824,7 @@ mod tests {
                 Mnemonic::VexImm3 {
                     pp: 0,
                     map: 1,
+                    w: false,
                     opcode: 0xC6,
                     is4: false
                 },
@@ -6682,8 +6838,10 @@ mod tests {
                 Mnemonic::VexImm2 {
                     pp: 1,
                     map: 1,
+                    w: false,
                     opcode: 0x70,
-                    store: false
+                    store: false,
+                    l256: false
                 },
                 None,
                 &[Concrete::Imm(0x1b), xmm(1), xmm(0)]
@@ -6714,6 +6872,7 @@ mod tests {
             Some(Mnemonic::VexImm3 {
                 pp: 0,
                 map: 1,
+                w: false,
                 opcode: 0xC6,
                 is4: false
             })
@@ -6730,7 +6889,7 @@ mod tests {
         };
         let vmov = |pp, load_op, store_op| Mnemonic::VexMov {
             pp,
-            load_op,
+            load_op: Some(load_op),
             store_op,
         };
         // vmovdqu %ymm1,%ymm0 (F3, L=1): c5 fe 6f c1.
@@ -6771,7 +6930,7 @@ mod tests {
             vex_op("vmovdqu"),
             Some(Mnemonic::VexMov {
                 pp: 2,
-                load_op: 0x6F,
+                load_op: Some(0x6F),
                 store_op: 0x7F
             })
         );
@@ -7080,6 +7239,7 @@ mod tests {
             Some(Mnemonic::VexImm3 {
                 pp: 1,
                 map: 3,
+                w: false,
                 opcode: 0x4C,
                 is4: true
             })
@@ -7089,6 +7249,7 @@ mod tests {
             Some(Mnemonic::VexImm3 {
                 pp: 1,
                 map: 3,
+                w: false,
                 opcode: 0x4A,
                 is4: true
             })
@@ -7098,6 +7259,7 @@ mod tests {
             Some(Mnemonic::VexImm3 {
                 pp: 1,
                 map: 3,
+                w: false,
                 opcode: 0x4B,
                 is4: true
             })
@@ -7107,6 +7269,7 @@ mod tests {
             Some(Mnemonic::VexImm3 {
                 pp: 1,
                 map: 3,
+                w: false,
                 opcode: 0x0E,
                 is4: false
             })
@@ -7140,6 +7303,129 @@ mod tests {
     /// (VEX.66.0F38.W0). Both take an xmm or memory source and set VEX.L from
     /// the destination width; the lane broadcasts have no register-source
     /// form. Bytes measured with GNU as 2.46.1.
+    /// The lane-crossing quadword permutes: VEX gives them a 256-bit,
+    /// W1 member on the 0F3A map and no 128-bit one. Bytes from GNU as.
+    #[test]
+    fn vex_lane_permute_ops() {
+        let xmm = |n: u8| Concrete::Reg {
+            reg: XMM_BASE + n,
+            size: AsmRegSize::Quad,
+        };
+        let ymm = |n: u8| Concrete::Reg {
+            reg: YMM_BASE + n,
+            size: AsmRegSize::Quad,
+        };
+        let mem = |base: u8, disp: i32| Concrete::Mem {
+            base,
+            index: None,
+            scale: 1,
+            disp,
+            size: AsmRegSize::Quad,
+        };
+        let e = |name: &str, ops: &[Concrete]| enc(vex_op(name).unwrap(), None, ops);
+        let i = Concrete::Imm;
+        assert_eq!(
+            e("vpermq", &[i(0x2), ymm(3), ymm(10)]),
+            [0xC4, 0x63, 0xFD, 0x00, 0xD3, 0x02]
+        );
+        assert_eq!(
+            e("vpermq", &[i(0xb1), ymm(0), ymm(1)]),
+            [0xC4, 0xE3, 0xFD, 0x00, 0xC8, 0xB1]
+        );
+        assert_eq!(
+            e("vpermq", &[i(0x2), ymm(12), ymm(8)]),
+            [0xC4, 0x43, 0xFD, 0x00, 0xC4, 0x02]
+        );
+        assert_eq!(
+            e("vpermq", &[i(0x39), mem(0, 0), ymm(0)]),
+            [0xC4, 0xE3, 0xFD, 0x00, 0x00, 0x39]
+        );
+        assert_eq!(
+            e(
+                "vpermq",
+                &[
+                    i(0x39),
+                    Concrete::Mem {
+                        base: 11,
+                        index: Some(1),
+                        scale: 4,
+                        disp: 0x40,
+                        size: AsmRegSize::Quad,
+                    },
+                    ymm(9),
+                ]
+            ),
+            [0xC4, 0x43, 0xFD, 0x00, 0x4C, 0x8B, 0x40, 0x39]
+        );
+        assert_eq!(
+            e("vpermpd", &[i(0x1b), ymm(2), ymm(3)]),
+            [0xC4, 0xE3, 0xFD, 0x01, 0xDA, 0x1B]
+        );
+        assert_eq!(
+            e("vpermpd", &[i(0x1b), mem(7, 0), ymm(15)]),
+            [0xC4, 0x63, 0xFD, 0x01, 0x3F, 0x1B]
+        );
+        assert_eq!(
+            e("vpermpd", &[i(0x0), ymm(8), ymm(9)]),
+            [0xC4, 0x43, 0xFD, 0x01, 0xC8, 0x00]
+        );
+        // The leading operand settles which member of a two-shape name an
+        // instruction names: a vector register there is the index-vector
+        // control, which is EVEX-only, while an operand reference is not yet
+        // substituted and keeps the immediate-led VEX form.
+        let vec_opnd = |reg| AsmOpnd::Reg {
+            reg,
+            size: AsmRegSize::Quad,
+        };
+        let route = |name: &str, ops: &[AsmOpnd]| {
+            resolve_evex(vex_op(name).unwrap(), name, ops, EvexDecor::default()).unwrap()
+        };
+        assert!(matches!(
+            route(
+                "vpermq",
+                &[
+                    vec_opnd(YMM_BASE + 2),
+                    vec_opnd(YMM_BASE + 1),
+                    vec_opnd(YMM_BASE)
+                ]
+            ),
+            Mnemonic::Evex(_)
+        ));
+        assert!(matches!(
+            route(
+                "vpermq",
+                &[AsmOpnd::Imm(2), vec_opnd(YMM_BASE + 1), vec_opnd(YMM_BASE)]
+            ),
+            Mnemonic::VexImm2 { .. }
+        ));
+        assert!(matches!(
+            route(
+                "vpshufd",
+                &[
+                    AsmOpnd::Ref { idx: 0, size: None },
+                    vec_opnd(XMM_BASE + 1),
+                    vec_opnd(XMM_BASE)
+                ]
+            ),
+            Mnemonic::VexImm2 { .. }
+        ));
+        // Neither permute has a 128-bit member, and neither do the 128-bit
+        // lane extracts, whose ModRM.reg source is the 256-bit operand.
+        for (name, ops) in [
+            ("vpermq", [Concrete::Imm(0x2), xmm(3), xmm(10)]),
+            ("vpermpd", [Concrete::Imm(0x1b), xmm(2), xmm(3)]),
+            ("vextracti128", [Concrete::Imm(0), xmm(1), xmm(0)]),
+            ("vextractf128", [Concrete::Imm(0), xmm(1), xmm(0)]),
+        ] {
+            let mut c = Vec::new();
+            let r = encode(&mut c, 8, vex_op(name).unwrap(), None, &ops);
+            assert!(
+                r.is_err_and(|e| e.contains("no 128-bit form")),
+                "{name} encoded a 128-bit form"
+            );
+        }
+    }
+
     #[test]
     fn vex_lane_broadcast_and_extend_ops() {
         let xmm = |n: u8| Concrete::Reg {
@@ -7260,6 +7546,64 @@ mod tests {
             (b"pextrw $7, %%xmm9, %%r10d", &[0x66, 0x45, 0x0F, 0xC5, 0xD1, 0x07]),
             (b"pinsrw $2, %%eax, %%xmm3", &[0x66, 0x0F, 0xC4, 0xD8, 0x02]),
             (b"pinsrw $5, %%r11d, %%xmm12", &[0x66, 0x45, 0x0F, 0xC4, 0xE3, 0x05]),
+        ];
+        for (tmpl, want) in cases {
+            assert_eq!(
+                asm_bytes(tmpl),
+                *want,
+                "{}",
+                core::str::from_utf8(tmpl).unwrap()
+            );
+        }
+    }
+
+    /// GFNI outside AVX-512: the legacy-SSE forms (128-bit, xmm0..15) and the
+    /// VEX ones (128/256-bit). The affine transforms operate on qword
+    /// elements, which VEX spells as W=1 and the legacy encoding leaves
+    /// implicit; the field multiply operates on bytes and takes W=0. Bytes
+    /// measured with GNU as 2.46.1.
+    #[test]
+    fn gfni_ops() {
+        #[rustfmt::skip]
+        let cases: &[(&[u8], &[u8])] = &[
+            (b"gf2p8affineqb $0x2c, %%xmm4, %%xmm5", &[0x66, 0x0F, 0x3A, 0xCE, 0xEC, 0x2C]),
+            (b"gf2p8affineqb $0x00, %%xmm12, %%xmm3",
+             &[0x66, 0x41, 0x0F, 0x3A, 0xCE, 0xDC, 0x00]),
+            (b"gf2p8affineinvqb $0xe2, %%xmm2, %%xmm13",
+             &[0x66, 0x44, 0x0F, 0x3A, 0xCF, 0xEA, 0xE2]),
+            (b"gf2p8affineinvqb $0x63, %%xmm11, %%xmm14",
+             &[0x66, 0x45, 0x0F, 0x3A, 0xCF, 0xF3, 0x63]),
+            (b"gf2p8affineqb $0x5a, 64(%%rdi), %%xmm7",
+             &[0x66, 0x0F, 0x3A, 0xCE, 0x7F, 0x40, 0x5A]),
+            (b"gf2p8affineqb $0x5a, 8(%%rax,%%r13,4), %%xmm9",
+             &[0x66, 0x46, 0x0F, 0x3A, 0xCE, 0x4C, 0xA8, 0x08, 0x5A]),
+            (b"gf2p8affineinvqb $0xff, (%%r12), %%xmm0",
+             &[0x66, 0x41, 0x0F, 0x3A, 0xCF, 0x04, 0x24, 0xFF]),
+            (b"gf2p8mulb %%xmm1, %%xmm0", &[0x66, 0x0F, 0x38, 0xCF, 0xC1]),
+            (b"gf2p8mulb %%xmm9, %%xmm10", &[0x66, 0x45, 0x0F, 0x38, 0xCF, 0xD1]),
+            (b"gf2p8mulb 32(%%r12), %%xmm3", &[0x66, 0x41, 0x0F, 0x38, 0xCF, 0x5C, 0x24, 0x20]),
+            (b"gf2p8mulb (%%rbp,%%rsi,8), %%xmm15",
+             &[0x66, 0x44, 0x0F, 0x38, 0xCF, 0x7C, 0xF5, 0x00]),
+            (b"vgf2p8affineqb $0x2c, %%xmm4, %%xmm15, %%xmm15",
+             &[0xC4, 0x63, 0x81, 0xCE, 0xFC, 0x2C]),
+            (b"vgf2p8affineinvqb $0x00, %%xmm2, %%xmm15, %%xmm15",
+             &[0xC4, 0x63, 0x81, 0xCF, 0xFA, 0x00]),
+            (b"vgf2p8affineqb $0x05, %%xmm1, %%xmm14, %%xmm14",
+             &[0xC4, 0x63, 0x89, 0xCE, 0xF1, 0x05]),
+            (b"vgf2p8affineqb $0x2c, %%ymm4, %%ymm15, %%ymm15",
+             &[0xC4, 0x63, 0x85, 0xCE, 0xFC, 0x2C]),
+            (b"vgf2p8affineinvqb $0xe2, %%ymm0, %%ymm13, %%ymm13",
+             &[0xC4, 0x63, 0x95, 0xCF, 0xE8, 0xE2]),
+            (b"vgf2p8affineqb $0x5a, 48(%%rdx), %%ymm1, %%ymm10",
+             &[0xC4, 0x63, 0xF5, 0xCE, 0x52, 0x30, 0x5A]),
+            (b"vgf2p8affineinvqb $0x5a, 8(%%r14,%%r13,4), %%xmm0, %%xmm15",
+             &[0xC4, 0x03, 0xF9, 0xCF, 0x7C, 0xAE, 0x08, 0x5A]),
+            (b"vgf2p8mulb %%xmm1, %%xmm2, %%xmm3", &[0xC4, 0xE2, 0x69, 0xCF, 0xD9]),
+            (b"vgf2p8mulb %%xmm11, %%xmm12, %%xmm13", &[0xC4, 0x42, 0x19, 0xCF, 0xEB]),
+            (b"vgf2p8mulb %%ymm11, %%ymm12, %%ymm13", &[0xC4, 0x42, 0x1D, 0xCF, 0xEB]),
+            (b"vgf2p8mulb (%%rax), %%ymm0, %%ymm15", &[0xC4, 0x62, 0x7D, 0xCF, 0x38]),
+            (b"vgf2p8mulb 64(%%r12,%%rbx,2), %%ymm8, %%ymm9",
+             &[0xC4, 0x42, 0x3D, 0xCF, 0x4C, 0x5C, 0x40]),
         ];
         for (tmpl, want) in cases {
             assert_eq!(

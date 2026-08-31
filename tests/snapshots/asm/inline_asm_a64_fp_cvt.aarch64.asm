@@ -17,12 +17,12 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30
-               	mov	x1, #0x2a               // =42
-               	sub	x0, x29, #0x8
+               	mov	x0, #0x2a               // =42
+               	sub	x1, x29, #0x8
                	str	x0, [sp, #0x10]
                	str	d0, [sp, #0x18]
-               	str	x0, [sp]
-               	str	x1, [sp, #0x8]
+               	str	x1, [sp]
+               	str	x0, [sp, #0x8]
                	ldr	x0, [sp, #0x8]
                	scvtf	d0, x0
                	ldr	x16, [sp]
@@ -31,6 +31,7 @@ Disassembly of section .text:
                	ldr	d0, [sp, #0x18]
                	sub	x16, x29, #0x8
                	ldr	d0, [x16]
+               	sub	x0, x29, #0x8
                	str	x0, [sp, #0x10]
                	str	d0, [sp, #0x18]
                	str	x0, [sp]

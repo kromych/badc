@@ -2297,7 +2297,17 @@ def install_cmd(arch, packages: list[Path], extra: str = "") -> str:
 
 def new_kernel_errors(base: dict, cur: dict) -> list[str] | None:
     """KERN_ERR-or-worse lines the kernel under test logged and the stock boot
-    of the same image did not. None when either log was unreadable."""
+    of the same image did not. None when either log was unreadable.
+
+    The baseline is the distribution's own shipped kernel: a different version,
+    built from a different configuration, probing a different module set. A
+    line present here is therefore a difference between two kernels, not
+    evidence about the compiler, and attributing one to codegen takes separate
+    work. Observed on fedora/x86_64: `Driver 'pcspkr' is already registered`
+    appears because `drivers/input/misc/pcspkr.c` and `sound/drivers/pcsp/
+    pcsp.c` both name their platform driver "pcspkr" and the distribution
+    ships both as modules, so whichever loads second fails to register. The
+    gate reports these; it does not fail on them."""
     if base.get("dmesg_err") is None or cur.get("dmesg_err") is None:
         return None
     seen = set(base["dmesg_err"])

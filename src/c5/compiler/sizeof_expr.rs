@@ -300,7 +300,10 @@ impl Compiler {
     /// declared array, string literal or compound literal is the whole
     /// object. An array member of a declared object is bounded by the
     /// object; through a pointer the whole object is unknown and the
-    /// member answers its size unless `member_is_unbounded`.
+    /// member answers its size unless `member_is_unbounded`. A member
+    /// with no declared bound answers the space remaining in the object
+    /// holding it, for the subobject forms as well as the whole-object
+    /// ones, since it has no extent of its own to narrow to.
     pub(super) fn parse_object_size_builtin(&mut self) -> Result<(), C5Error> {
         // The call dispatch consumed `__builtin_object_size (`.
         let saved_ty = self.ty;
@@ -336,12 +339,15 @@ impl Compiler {
             return Err(self.compile_err("`)` expected to close `__builtin_object_size`"));
         }
         self.next()?;
+        // `-1` marks an array with no declared bound: a flexible array
+        // member (C99 6.7.2.1p16) or a zero-length one.
+        let flexible = array_count < 0;
         let known: Option<i64> = if array_bytes > 0 {
             Some(array_bytes)
         } else if array_count > 0 {
             let elem_ty = expr_ty - Ty::Ptr as i64;
             Some(array_count * self.size_of_type(elem_ty) as i64)
-        } else if array_count < 0 {
+        } else if flexible {
             // Zero-length array: a known object of 0 bytes.
             Some(0)
         } else {
@@ -353,6 +359,15 @@ impl Compiler {
             // TODO: a row reached through a pointer to an array answers
             // the row's size, where the object holding it is unknown.
             (Some(n), None) => n,
+            // A member with no declared bound has no extent of its own, so
+            // the closest surrounding subobject with one is the object that
+            // holds it: the subobject forms answer what the whole-object
+            // forms do, the space from the member to the end of the
+            // declared object. Answering the member's nominal 0 instead
+            // reports that no byte may be written, which is what
+            // FORTIFY_SOURCE reads to reject every write into a flexible
+            // array member.
+            (Some(_), Some(m)) if flexible => m.decl_remaining.unwrap_or(unknown),
             (Some(n), Some(m)) if kind & 1 == 1 => {
                 if m.unbounded {
                     unknown

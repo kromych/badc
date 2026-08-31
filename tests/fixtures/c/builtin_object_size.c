@@ -9,7 +9,9 @@
  * any array that is the last member of the pointed-to struct, of a
  * union inside it, or a row of one. A member of a declared object is
  * bounded by the object: its own size for types 1 and 3, the bytes
- * left in the object for types 0 and 2. Every expected value is gcc
+ * left in the object for types 0 and 2 -- except a member with no
+ * declared bound, which has no extent of its own and answers the bytes
+ * left in the object for every type. Every expected value is gcc
  * 16's at -O2. */
 typedef unsigned long long usize;
 
@@ -24,6 +26,17 @@ struct outer { int n; struct four f; };
 struct anon_union { int n; union { char buf[4]; int x; }; };
 struct anon_struct { int n; struct { int m; char buf[4]; }; };
 struct rows { int n; char buf[2][4]; };
+/* A flexible array member with space after it: the union's other
+ * member makes the object larger than the member's own struct, so
+ * the bytes from the member to the end of the object are not zero.
+ * This is the shape the kernel's fortified writes take. */
+struct fam_union {
+    int id;
+    union {
+        struct { int len; unsigned char payload[]; } lz;
+        unsigned char buf[136];
+    };
+};
 
 static struct flex flex_s;
 static struct zero zero_s;
@@ -34,6 +47,7 @@ static struct outer outer_s;
 static struct anon_union anon_union_s;
 static struct anon_struct anon_struct_s;
 static struct rows rows_s;
+static struct fam_union fam_union_s;
 
 #define CHECK4(expr, t0, t1, t2, t3, code)                                  \
     if (__builtin_object_size(expr, 0) != (usize)(t0)                       \
@@ -75,6 +89,12 @@ static int declared(void) {
     CHECK4(anon_struct_s.buf, 4, 4, 4, 4, 37)
     CHECK4(rows_s.buf, 8, 8, 8, 8, 38)
     CHECK4(local.buf, 8, 4, 8, 4, 39)
+    /* A member with no declared bound has no extent of its own, so
+     * every form answers the bytes left in the object holding it --
+     * not the member's nominal zero, which would report that no byte
+     * may be written there. */
+    CHECK4(fam_union_s.lz.payload, 132, 132, 132, 132, 40)
+    CHECK4(fam_union_s.buf, 136, 136, 136, 136, 41)
     return 0;
 }
 

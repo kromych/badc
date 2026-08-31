@@ -303,6 +303,7 @@ any time; the table gives the manual undo for each, should the record be lost.
 | 1 | The rollback snapshot | `/var/lib/badc-hwprep/` | yes | `sudo rm -rf /var/lib/badc-hwprep` -- it only records |
 | 2 | Watchdog drop-in | `/etc/systemd/system.conf.d/badc-watchdog.conf` | yes | `sudo rm` it, then `sudo systemctl daemon-reexec` |
 | 3 | Kernel package | rpm database, `/boot`, `/lib/modules` | yes | `sudo rpm -e kernel-<version>` -- takes its BLS entry with it |
+| 3a | **The default entry, moved by the package** | grubenv | yes | `sudo grubby --set-default=/boot/vmlinuz-<stock>` -- `install` does this itself |
 | 4 | Arguments on the badc entry | that entry's BLS file only | yes | `sudo grubby --update-kernel=/boot/vmlinuz-<version> --remove-args="..."` |
 | 5 | One-shot boot selection | `next_entry` in the grubenv | no, one boot | `sudo grub2-editenv - unset next_entry` |
 | 6 | pstore records left by a crash | EFI variable store, via `/sys/fs/pstore` | yes | `sudo rm -f /sys/fs/pstore/*` |
@@ -316,7 +317,16 @@ sit there. That is the intended behaviour -- it is what makes an unattended
 badc boot recoverable -- but it applies machine-wide, and it is live from the
 moment `arm` runs, not from the first badc boot.
 
-Items 3 through 6 touch the badc entry alone. Nothing in this lane modifies
+Item 3a is not something the preparation asks for. Fedora's kernel package
+makes the kernel it just installed the default, so `rpm -i` alone leaves the
+machine one reboot away from starting a kernel that may not come back --
+without anyone having chosen that. `install` captures the default beforehand,
+notices when the package has moved it to a kernel this tool installed, and puts
+it back, reporting both. The invariant check that follows would catch it
+regardless, but detecting a hazard whose window is a reboot wide is not as good
+as not opening it.
+
+Items 3 through 6 otherwise touch the badc entry alone. Nothing in this lane modifies
 `/etc/default/grub`, the stock kernels, their command lines, the default boot
 entry, or the root filesystem.
 

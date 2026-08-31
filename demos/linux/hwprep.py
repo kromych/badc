@@ -309,6 +309,7 @@ class Prep:
             print(f"! no such package: {pkg}")
             return 1
         before = {v for v, _ in self.kernels()}
+        default_before = self.default_kernel()
         if pkg.endswith(".rpm"):
             cmd = ["rpm", "-ivh", "--oldpackage", pkg]
         elif pkg.endswith(".deb"):
@@ -332,8 +333,31 @@ class Prep:
             self.record_action(
                 action="install", version=v, package=os.path.basename(pkg)
             )
+        self.restore_default(default_before)
         print()
         return 0 if self.check_invariant() else 1
+
+    def restore_default(self, default_before):
+        """Put the default boot entry back where it was.
+
+        A distribution's kernel install scripts make the kernel they just
+        installed the default: on Fedora, `rpm -i` of a kernel package leaves
+        the machine one reboot away from starting a kernel that may not come
+        back. Detecting that after the fact is not enough when the window is
+        a reboot wide, so it is undone here."""
+        if not default_before:
+            return
+        now = self.default_kernel()
+        if not now or now == default_before:
+            return
+        version = os.path.basename(now)[len("vmlinuz-"):]
+        if not self.is_badc_kernel(version):
+            return
+        print(f"  the package took the default: {now}")
+        print(f"  restoring {default_before}")
+        r = self.run(["grubby", f"--set-default={default_before}"], check=False)
+        if r.returncode != 0:
+            print(r.stdout + r.stderr)
 
     # -- entry ------------------------------------------------------------
 

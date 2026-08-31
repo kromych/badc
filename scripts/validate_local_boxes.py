@@ -22,9 +22,11 @@ Each lane:
   5. Run the gating demos (`GATING_DEMOS` below) through
      `scripts/run_demos.py`, which runs them concurrently; every demo the
      lane's kind selects runs, `--demo-jobs` bounds only how many at once.
-  6. On Linux lanes, regenerate `tests/snapshots/` and fail on drift, as
+  6. Check the compile-throughput counters over the QuickJS corpus the
+     demos just fetched, as CI's perf job does.
+  7. On Linux lanes, regenerate `tests/snapshots/` and fail on drift, as
      CI's `snapshots clean` job does. Skip with `--no-snapshots`.
-  7. On Linux lanes, compile, link and boot the pinned `defconfig` kernel
+  8. On Linux lanes, compile, link and boot the pinned `defconfig` kernel
      with badc -- CI's kernel corpus -- under the box's own emulator, the
      same four boots plus displacement probes CI runs. A box without that
      emulator keeps the compile + link cover and says so in its summary
@@ -397,6 +399,11 @@ def posix_steps(
         )
     if demos:
         steps.append("step " + demo_command(box, jobs, "python3"))
+        # After the demos, which fetch the QuickJS corpus the counters
+        # measure. Both are ratios taken within the run, so the lane's
+        # own speed cancels and one set of ceilings covers every box;
+        # CI's perf job runs the same check.
+        steps.append("step python3 scripts/compile_throughput.py --check")
     # The macOS host regenerates snapshots after every commit through the
     # post-commit hook, so the drift check adds cover on the Linux lanes
     # only. The kernel corpus is Linux-only.

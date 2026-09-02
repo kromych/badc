@@ -489,7 +489,7 @@ pub(super) fn emit_tls_addr(
         }
     };
     if emitted {
-        spill_local_addr_to_dst(code, dst, rd, frame);
+        store_spilled_int(code, frame, dst, rd);
     }
     emitted
 }
@@ -826,7 +826,7 @@ pub(super) fn emit_local_addr(
     // `rd = sp + region_off`, through the shared sp-relative helper so an
     // offset past the immediate reach materialises rather than truncating.
     emit_sp_plus_off(code, rd, region_off.max(0) as u32);
-    spill_local_addr_to_dst(code, dst, rd, frame);
+    store_spilled_int(code, frame, dst, rd);
     true
 }
 
@@ -857,7 +857,7 @@ fn emit_fp_addr_bytes(code: &mut Vec<u8>, dst: Place, bytes: i64, frame: Frame) 
         } else {
             emit(code, enc_sub_imm(rd, Reg(29), imm));
         }
-        spill_local_addr_to_dst(code, dst, rd, frame);
+        store_spilled_int(code, frame, dst, rd);
         return true;
     }
     // 24-bit reach via two add/sub-imm: shift-12 hi half + plain
@@ -888,7 +888,7 @@ fn emit_fp_addr_bytes(code: &mut Vec<u8>, dst: Place, bytes: i64, frame: Frame) 
                 emit(code, enc_sub_imm(rd, base, lo as u32));
             }
         }
-        spill_local_addr_to_dst(code, dst, rd, frame);
+        store_spilled_int(code, frame, dst, rd);
         return true;
     }
     // Past the 24-bit immediate reach: build the displacement and apply
@@ -899,7 +899,7 @@ fn emit_fp_addr_bytes(code: &mut Vec<u8>, dst: Place, bytes: i64, frame: Frame) 
     } else {
         emit(code, super::encode::enc_sub_reg(rd, Reg(29), rd));
     }
-    spill_local_addr_to_dst(code, dst, rd, frame);
+    store_spilled_int(code, frame, dst, rd);
     true
 }
 
@@ -916,17 +916,18 @@ pub(super) fn int_or_spill_scratch(dst: Place, scratch: &ScratchPool) -> Option<
     }
 }
 
-/// Persist the just-computed LocalAddr value into its spill slot
-/// when the allocator placed it there. No-op for register places
-/// (the address already landed in the chosen reg).
-pub(super) fn spill_local_addr_to_dst(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) {
+/// Store an integer result into its spill slot when the allocator placed
+/// the value there; a register place already holds it.
+pub(super) fn store_spilled_int(code: &mut Vec<u8>, frame: Frame, dst: Place, src: Reg) {
     if let Place::Spill(slot) = dst {
-        let sp_off = spill_off(frame, slot);
-        // `emit_local_addr` already chose `src` from the scratch pool;
-        // the other scratch carries the base when the slot is beyond
-        // the scaled-imm12 reach.
-        let addr_scratch = if src.0 == 16 { Reg(17) } else { Reg(16) };
-        emit_spill_str_x(code, frame, src, sp_off, addr_scratch);
+        emit_spill_str_x_auto(code, frame, src, spill_off(frame, slot));
+    }
+}
+
+/// The floating-point counterpart of [`store_spilled_int`].
+pub(super) fn store_spilled_fp(code: &mut Vec<u8>, frame: Frame, dst: Place, src: u8) {
+    if let Place::Spill(slot) = dst {
+        emit_spill_str_d_auto(code, frame, src, spill_off(frame, slot));
     }
 }
 

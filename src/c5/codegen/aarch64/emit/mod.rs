@@ -112,3 +112,9 @@ fn bail(reason: &str, value: u32, place: Place) {
     }
     let _ = (reason, value, place);
 }
+
+/// The allocator's location for `v`; `Place::None` for a value it never
+/// placed.
+pub(super) fn place_of(alloc: &Allocation, v: u32) -> Place {
+    alloc.places.get(v as usize).copied().unwrap_or(Place::None)
+}

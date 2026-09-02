@@ -37,7 +37,7 @@ pub(super) fn emit_extend(
         }
     };
     emit(code, enc);
-    spill_local_addr_to_dst(code, dst, rd, frame);
+    store_spilled_int(code, frame, dst, rd);
     true
 }
 
@@ -102,7 +102,7 @@ pub(super) fn emit_copy(
     if rd != rn {
         emit(code, super::encode::enc_mov_reg(rd, rn));
     }
-    spill_local_addr_to_dst(code, dst, rd, frame);
+    store_spilled_int(code, frame, dst, rd);
     true
 }
 
@@ -144,7 +144,7 @@ pub(super) fn emit_bswap(
         4 => emit(code, super::encode::enc_rev32(rd, rn)),
         _ => emit(code, super::encode::enc_rev64(rd, rn)),
     }
-    spill_local_addr_to_dst(code, dst, rd, frame);
+    store_spilled_int(code, frame, dst, rd);
     true
 }
 

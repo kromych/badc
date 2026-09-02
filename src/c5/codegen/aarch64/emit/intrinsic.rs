@@ -416,7 +416,7 @@ pub(super) fn emit_intrinsic(
             );
             emit(code, super::encode::enc_b_cond(super::encode::Cond::Ne, -3));
             emit(code, enc_add_imm(Reg(31), rd, 0));
-            spill_local_addr_to_dst(code, dst, rd, frame);
+            store_spilled_int(code, frame, dst, rd);
             true
         }
         I::AllocaSave => {
@@ -430,7 +430,7 @@ pub(super) fn emit_intrinsic(
                 return false;
             };
             emit(code, enc_add_imm(rd, Reg(31), 0));
-            spill_local_addr_to_dst(code, dst, rd, frame);
+            store_spilled_int(code, frame, dst, rd);
             true
         }
         I::AllocaRestore => {
@@ -499,7 +499,7 @@ pub(super) fn emit_intrinsic(
             if rd.0 != 19 {
                 emit_mov_reg(code, rd, Reg(19));
             }
-            spill_local_addr_to_dst(code, dst, rd, frame);
+            store_spilled_int(code, frame, dst, rd);
             true
         }
         I::LongjmpAArch64 => {
@@ -757,7 +757,7 @@ pub(super) fn emit_intrinsic(
                 }
             };
             emit(code, enc_add_imm(rd, Reg(29), 0));
-            spill_local_addr_to_dst(code, dst, rd, frame);
+            store_spilled_int(code, frame, dst, rd);
             true
         }
         I::StackPointer => {
@@ -772,7 +772,7 @@ pub(super) fn emit_intrinsic(
                 }
             };
             emit(code, enc_add_imm(rd, Reg(31), 0));
-            spill_local_addr_to_dst(code, dst, rd, frame);
+            store_spilled_int(code, frame, dst, rd);
             true
         }
         I::ReturnAddress => {
@@ -819,7 +819,7 @@ pub(super) fn emit_intrinsic(
             emit(code, enc_ldr_imm(Reg(30), fp, 8));
             emit(code, super::encode::XPACLRI);
             emit_mov_reg(code, rd, Reg(30));
-            spill_local_addr_to_dst(code, dst, rd, frame);
+            store_spilled_int(code, frame, dst, rd);
             true
         }
         I::Clz

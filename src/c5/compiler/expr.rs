@@ -1124,2333 +1124,73 @@ impl Compiler {
     }
 
     fn expr_inner(&mut self, lev: i64) -> Result<(), C5Error> {
-        let mut t: i64;
+        self.parse_unary()?;
+        while self.lex.tk >= lev || self.lex.tk == '(' {
+            self.parse_operator()?;
+        }
+        self.end_expression();
+        Ok(())
+    }
 
+    /// C99 6.5.1-6.5.3: a primary expression, or a unary operator applied
+    /// to one; the postfix operators are read by the precedence-climbing
+    /// loop, except a call on a bare identifier, which the identifier arm
+    /// takes so it can read the callee's declaration.
+    fn parse_unary(&mut self) -> Result<(), C5Error> {
         if self.lex.tk == 0 {
-            return Err(self.compile_err("unexpected eof in expression"));
+            Err(self.compile_err("unexpected eof in expression"))
         } else if self.lex.tk == Token::Num {
-            let val = self.lex.ival;
-            self.emit_imm(val);
-            self.ty = self.num_token_type(val);
-            self.ast_emit_int_lit(val, self.ty);
-            self.next()?;
+            self.parse_int_literal()
         } else if self.lex.tk == Token::FloatNum {
-            // C99 6.4.4.2p4: an unsuffixed floating constant has
-            // type double, `f`/`F` float, `l`/`L` long double
-            // (represented as f64 in c5). The lexer stored the
-            // value -- already rounded to single precision for
-            // `f`/`F` -- as `f64::to_bits()` cast to i64 in `ival`.
-            let bits = self.lex.ival as u64;
-            self.emit_imm(self.lex.ival);
-            self.ty = if self.lex.float_suffix_f32 {
-                Ty::Float as i64
-            } else {
-                Ty::Double as i64
-            };
-            self.ast_emit_float_lit(bits, self.ty);
-            self.next()?;
+            self.parse_float_literal()
         } else if self.lex.tk == '"' {
-            // C99 6.4.5 paragraph 6: a string literal has type
-            // `char[N+1]` where the +1 is the trailing NUL. The
-            // value decays to `char *` in this expression context,
-            // but `sizeof("...")` reads the full array size --
-            // surface the byte count via `last_array_decay_bytes`
-            // so `sizeof_operand_bytes` returns N+1 instead of the
-            // decayed pointer's 8.
-            let start_offset = self.lex.ival;
-            // A wide literal carries its own `wchar_t`-width terminator
-            // from the lexer (which also absorbs adjacent `L"..."`
-            // parts); a narrow literal does not, so the single trailing
-            // NUL is added here. Capture the kind before `next()`
-            // re-lexes the following token.
-            let is_wide = self.lex.str_is_wide;
-            self.emit_data_imm(start_offset);
-            self.next()?;
-            // C concatenates adjacent string literals -- `"a" "b"` is one
-            // string. The lexer leaves the narrow NUL off so the bytes
-            // flow straight together; the trailing NUL is added below.
-            while self.lex.tk == '"' {
-                self.next()?;
-            }
-            if !is_wide {
-                self.push_literal_nul();
-            }
-            // The object boundary was recorded when the first part was
-            // lexed (see `Compiler::next`).
-            self.pending.last_array_decay_bytes = (self.data.len() as i64) - start_offset;
-            self.ty = Ty::Ptr as i64;
-            // Dual-emit: capture the decayed `char *` rvalue so
-            // the wrapping expression (typically a call argument,
-            // initializer, or assignment) finds the address on
-            // `ast_acc`.
-            self.ast_emit_str_lit(start_offset, self.ty);
+            self.parse_string_literal()
         } else if self.lex.tk == Token::Sizeof {
-            // C99 6.5.3.4: `sizeof(<type>)`, `sizeof(<expr>)`, or
-            // `sizeof <unary-expr>`. The shared helper handles
-            // all three shapes; this site just emits the result
-            // as a runtime immediate typed `size_t` (6.5.3.4p4).
-            self.next()?;
-            let total_bytes = self.sizeof_operand_bytes()?;
-            self.emit_imm(total_bytes);
-            self.ty = self.size_t_ty();
-            // C99 6.5.3.4p2: `sizeof` of a variable-length array is a
-            // runtime value -- emit a load of the VLA's byte-count
-            // slot. Every other operand folds to a compile-time
-            // constant; seed the accumulator with the matching IntLit.
-            if let Some(size_slot) = self.pending.sizeof_vla_size_slot.take() {
-                self.ast_emit_vla_sizeof(size_slot);
-            } else {
-                self.ast_emit_int_lit(total_bytes, self.ty);
-            }
+            self.parse_sizeof_expr()
         } else if self.lex.tk == Token::Alignof {
-            // C11 6.5.3.4: `_Alignof ( type-name )`, a compile-time
-            // constant typed `size_t`, matching the `sizeof` site.
-            self.next()?;
-            let align = self.alignof_operand_bytes()?;
-            self.emit_imm(align);
-            self.ty = self.size_t_ty();
-            self.ast_emit_int_lit(align, self.ty);
+            self.parse_alignof_expr()
         } else if self.lex.tk == Token::Generic {
-            // C11 6.5.1.1 generic selection `_Generic(expr, T1: e1, ...)`.
-            self.parse_generic_selection()?;
+            self.parse_generic_selection()
         } else if self.lex.tk == Token::BuiltinTypesCompatible {
-            // GCC `__builtin_types_compatible_p(T1, T2)`: an integer
-            // constant, emitted like the `sizeof` / `_Alignof` results.
-            self.next()?;
-            let v = self.parse_types_compatible_p()?;
-            self.emit_imm(v);
-            self.ty = Ty::Int as i64;
-            self.ast_emit_int_lit(v, self.ty);
+            self.parse_types_compatible_expr()
         } else if self.lex.tk == Token::BuiltinOffsetof {
-            // GCC `__builtin_offsetof(T, member)`: the member's byte offset, a
-            // `size_t`-typed integer. Constant unless the designator carries a
-            // runtime array subscript (a GCC extension), which the parser then
-            // emits onto the accumulator directly.
-            self.next()?;
-            match self.parse_builtin_offsetof(true)? {
-                Some(v) => {
-                    self.emit_imm(v);
-                    self.ty = self.size_t_ty();
-                    self.ast_emit_int_lit(v, self.ty);
-                }
-                None => {
-                    // Runtime offset already emitted; the type is size_t.
-                    self.ty = self.size_t_ty();
-                }
-            }
+            self.parse_offsetof_expr()
         } else if self.is_func_name_ident() {
-            // C99 6.4.2.2: __func__ is implicitly declared as
-            // `static const char __func__[] = "function-name";` at the
-            // start of every function body; __FUNCTION__ /
-            // __PRETTY_FUNCTION__ are the GCC aliases. The bytes live in
-            // the data segment and the expression decays to a pointer.
-            let offset = self.intern_func_name();
-            self.emit_data_imm(offset);
-            self.next()?;
-            self.ty = Ty::Char as i64 + Ty::Ptr as i64;
-            // `__func__` is a `char[]` of length strlen + 1 (C99
-            // 6.4.2.2); surface that to an enclosing `sizeof` the same
-            // way a decayed array does, so `sizeof(__func__)` is the
-            // array size, not the decayed pointer's.
-            self.pending.last_array_decay_size = self.current_function_name.len() as i64 + 1;
-            // Dual-emit the decayed `char *` value so the walker
-            // sees the address on `ast_acc` (identical shape to a
-            // plain string literal -- the same `Expr::StrLit`
-            // carrier).
-            self.ast_emit_str_lit(offset, self.ty);
+            self.parse_func_name()
         } else if let Some(v) = self.try_fold_string_compare_builtin()? {
             // A string comparison of two literals is a constant here as
             // well as in a constant expression, which is what makes a
             // comparison against a literal a translation-time selector.
-            self.emit_imm(v);
-            self.ty = Ty::Int as i64;
-            self.ast_emit_int_lit(v, self.ty);
+            self.emit_int_constant(v, Ty::Int as i64);
+            Ok(())
         } else if let Some(v) = self.try_fold_strlen_builtin()? {
             // Likewise the length of a literal, which gcc folds at every
             // optimization level. Folding it here and not only in the
             // constant-expression parser is what lets a `sizeof` on an
             // expression built from it see an integer constant.
-            let (val, ty) = (v.as_int(), self.size_t_ty());
-            self.emit_imm(val);
-            self.ty = ty;
-            self.ast_emit_int_lit(val, ty);
+            let ty = self.size_t_ty();
+            self.emit_int_constant(v.as_int(), ty);
+            Ok(())
         } else if self.lex.tk == Token::Id {
-            let mut id_idx = self.lex.curr_id_idx;
-            self.next()?;
-            if self.lex.tk == '(' {
-                self.next()?;
-                // A `__builtin_*` name equivalent to a library function
-                // binds to that function here rather than through a
-                // header macro, so the unit's own macro of the library
-                // name cannot capture the builtin spelling.
-                if self.symbols[id_idx].class == 0 {
-                    let alias = super::super::preprocessor::builtins::library_alias(
-                        &self.symbols[id_idx].name,
-                    );
-                    if let Some(fn_name) = alias {
-                        id_idx = self.resolve_symbol_named(fn_name);
-                        id_idx = self.builtin_library_symbol(id_idx);
-                    }
-                }
-                // C89 6.3.2.2 implicit declaration, restricted to the
-                // names the driver listed: the link set defines them,
-                // so the call binds `extern int name();` and resolves
-                // against the user's definition rather than through a
-                // header's library binding.
-                if self.symbols[id_idx].class == 0
-                    && !self.implicit_extern_fns.is_empty()
-                    && self
-                        .implicit_extern_fns
-                        .iter()
-                        .any(|n| n == &self.symbols[id_idx].name)
-                {
-                    // The implicit declaration lands in the innermost
-                    // block containing the call (C89 6.3.2.2) and
-                    // unbinds at its exit; the entity survives on the
-                    // slot for link resolution.
-                    self.rebind_scoped(id_idx)?;
-                    self.symbols[id_idx].class = Token::Fun as i64;
-                    self.symbols[id_idx].scoped_fn_decl = true;
-                    self.symbols[id_idx].type_ = Ty::Int as i64;
-                    self.symbols[id_idx].implicit_return_int = true;
-                    self.symbols[id_idx].linkage = crate::c5::symbol::Linkage::External;
-                    self.symbols[id_idx].defined_here = false;
-                }
-                // C11 7.17 atomic operations and the other compiler
-                // builtins share the `#pragma intrinsic` registry
-                // (`<stdatomic.h>` declares the atomics). An atomic op is
-                // lowered at the call site to load / store /
-                // read-modify-write, but only when the name is not bound
-                // to a real function, in which case the call is left to
-                // the normal path.
-                let intrinsic_id = self.pp_intrinsics.get(&self.symbols[id_idx].name).copied();
-                let not_real_fn = self.symbols[id_idx].class != Token::Fun as i64
-                    && self.symbols[id_idx].class != Token::Sys as i64;
-                let atomic_kind = if not_real_fn {
-                    intrinsic_id.and_then(atomic_kind_from_intrinsic)
-                } else {
-                    None
-                };
-                // GCC `__atomic_*` / `__sync_*` builtins are compiler-
-                // provided (no header) and lowered at the call site like
-                // the C11 7.17 atomics. Recognize them by name prefix when
-                // the name is not bound to a real function.
-                let is_gcc_atomic = not_real_fn
-                    && (self.symbols[id_idx].name.starts_with("__atomic_")
-                        || self.symbols[id_idx].name.starts_with("__sync_"));
-                // GCC checked-arithmetic builtins, lowered at the call
-                // site to a wrapped store plus an overflow test.
-                let is_overflow = not_real_fn
-                    && (matches!(
-                        self.symbols[id_idx].name.as_str(),
-                        "__builtin_add_overflow"
-                            | "__builtin_sub_overflow"
-                            | "__builtin_mul_overflow"
-                    ) || typed_overflow_builtin(&self.symbols[id_idx].name).is_some());
-                // GCC `__builtin_object_size`, folded to a constant at
-                // the call site (the pointer operand is unevaluated).
-                let is_object_size =
-                    not_real_fn && self.symbols[id_idx].name == "__builtin_object_size";
-                // GCC `__builtin_choose_expr`: the chosen operand is the
-                // expression, with its exact type.
-                let is_choose_expr =
-                    not_real_fn && self.symbols[id_idx].name == "__builtin_choose_expr";
-                // GCC `__builtin_constant_p(x)`: an `int` (0 or 1), 1 when
-                // the unevaluated operand folds to a constant expression.
-                let is_constant_p =
-                    not_real_fn && self.symbols[id_idx].name == "__builtin_constant_p";
-                // GCC `__builtin_has_attribute`: folded to 0, unevaluated
-                // operands (badc does not model the queried attributes).
-                let is_has_attribute =
-                    not_real_fn && self.symbols[id_idx].name == "__builtin_has_attribute";
-                // x86 SIMD builtins, expanded at the call site to the
-                // instruction the table row names.
-                let simd_op = if not_real_fn {
-                    super::super::x86_simd::lookup(self.symbols[id_idx].name.as_str())
-                } else {
-                    None
-                };
-                // GCC memory transfers, expanded inline when the byte
-                // count is an integer constant expression.
-                let mem_transfer = if not_real_fn {
-                    mem_transfer_op(self.symbols[id_idx].name.as_str())
-                } else {
-                    None
-                };
-                if let Some(sop) = simd_op {
-                    let name = self.symbols[id_idx].name.clone();
-                    self.parse_x86_simd_builtin(sop, &name)?;
-                } else if let Some(mop) = mem_transfer {
-                    let name = self.symbols[id_idx].name.clone();
-                    self.parse_mem_transfer_builtin(mop, &name)?;
-                } else if is_choose_expr {
-                    self.parse_choose_expr_builtin()?;
-                } else if is_constant_p {
-                    self.parse_constant_p_builtin()?;
-                } else if is_has_attribute {
-                    self.parse_has_attribute_builtin()?;
-                } else if is_object_size {
-                    self.parse_object_size_builtin()?;
-                } else if is_overflow {
-                    let name = self.symbols[id_idx].name.clone();
-                    self.parse_overflow_builtin(&name)?;
-                } else if is_gcc_atomic {
-                    let name = self.symbols[id_idx].name.clone();
-                    self.parse_gcc_atomic_builtin(&name, id_idx)?;
-                } else if let Some(akind) = atomic_kind {
-                    self.parse_atomic_builtin(akind, id_idx)?;
-                } else if let Some(intrinsic_id) = intrinsic_id {
-                    let fn_name = self.symbols[id_idx].name.clone();
-                    // `__builtin_trap()` is the only nullary intrinsic;
-                    // every other one needs at least one argument.
-                    if self.lex.tk == ')' && intrinsic_id != crate::c5::op::Intrinsic::Trap as i64 {
-                        return Err(self
-                            .compile_err(format!("intrinsic `{fn_name}` requires one argument")));
-                    }
-                    let longjmp_id = crate::c5::op::Intrinsic::LongjmpAArch64 as i64;
-                    let setjmp_id = crate::c5::op::Intrinsic::SetjmpAArch64 as i64;
-                    let alloca_id = crate::c5::op::Intrinsic::Alloca as i64;
-                    let va_start_id = crate::c5::op::Intrinsic::VaStart as i64;
-                    let va_arg_id = crate::c5::op::Intrinsic::VaArg as i64;
-                    let va_end_id = crate::c5::op::Intrinsic::VaEnd as i64;
-                    let va_copy_id = crate::c5::op::Intrinsic::VaCopy as i64;
-                    let fma_id = crate::c5::op::Intrinsic::Fma as i64;
-                    let fmaf_id = crate::c5::op::Intrinsic::Fmaf as i64;
-                    let trap_id = crate::c5::op::Intrinsic::Trap as i64;
-                    let frame_address_id = crate::c5::op::Intrinsic::FrameAddress as i64;
-                    let return_address_id = crate::c5::op::Intrinsic::ReturnAddress as i64;
-                    let intr_kind = crate::c5::op::Intrinsic::from_i64(intrinsic_id);
-                    let is_fp_unary = intr_kind.is_some_and(|i| i.is_fp_unary());
-                    let is_int_bit_unary = intr_kind.is_some_and(|i| i.is_int_bit_unary());
-                    let is_bit_unary_64 = intr_kind.is_some_and(|i| i.is_bit_unary_64());
-                    let is_bswap = intr_kind.is_some_and(|i| i.is_bswap());
-                    // Set for va_arg: the requested argument type. After
-                    // the intrinsic node is built the result is wrapped
-                    // in a load of this type (GCC value semantics).
-                    let mut va_arg_result_ty: Option<i64> = None;
-                    // A level above 0 of either frame builtin: how many
-                    // saved-frame-pointer loads wrap the intrinsic node, and
-                    // whether the return slot of the frame reached is read.
-                    let mut frame_walk_levels: i64 = 0;
-                    let mut walked_return_slot = false;
-                    let mut ast_intrinsic_args: alloc::vec::Vec<super::super::ast::ExprId> =
-                        alloc::vec::Vec::new();
-                    if intrinsic_id == trap_id {
-                        // __builtin_trap() -- no arguments.
-                    } else if intrinsic_id == fma_id || intrinsic_id == fmaf_id {
-                        // fma(x, y, z) / fmaf(x, y, z) -- C99 7.12.13.1.
-                        // Three FP arguments, each cast to the result
-                        // precision so the fused node sees uniform-width
-                        // operands (6.3.1.4 / 6.3.1.5). The walker lowers
-                        // the call to a single `Inst::Fma`.
-                        let elem_ty = if intrinsic_id == fmaf_id {
-                            Ty::Float as i64
-                        } else {
-                            Ty::Double as i64
-                        };
-                        let mut count = 0;
-                        loop {
-                            self.expr(Token::Assign as i64)?;
-                            if let Some(child) = self.ast_acc {
-                                let pos = self.ast_src_pos();
-                                let cast_id = self.ast.push_expr(
-                                    super::super::ast::Expr::Cast {
-                                        child,
-                                        to_ty: elem_ty,
-                                    },
-                                    pos,
-                                );
-                                ast_intrinsic_args.push(cast_id);
-                            }
-                            count += 1;
-                            if self.lex.tk == ',' {
-                                self.next()?;
-                                continue;
-                            }
-                            break;
-                        }
-                        if count != 3 {
-                            return Err(
-                                self.compile_err(format!("intrinsic `{fn_name}` takes (x, y, z)"))
-                            );
-                        }
-                    } else if is_fp_unary {
-                        // sqrt / fabs / floor / ceil / trunc and their
-                        // single-precision partners -- one FP argument cast
-                        // to the result precision (6.3.1.4 / 6.3.1.5). The
-                        // walker lowers the call to a single
-                        // `Inst::Intrinsic` that emits the hardware
-                        // instruction.
-                        let elem_ty = if intr_kind.is_some_and(|i| i.is_single_precision()) {
-                            Ty::Float as i64
-                        } else {
-                            Ty::Double as i64
-                        };
-                        self.expr(Token::Assign as i64)?;
-                        if let Some(child) = self.ast_acc {
-                            let pos = self.ast_src_pos();
-                            let cast_id = self.ast.push_expr(
-                                super::super::ast::Expr::Cast {
-                                    child,
-                                    to_ty: elem_ty,
-                                },
-                                pos,
-                            );
-                            ast_intrinsic_args.push(cast_id);
-                        }
-                    } else if is_int_bit_unary || is_bswap {
-                        // __builtin_clz / ctz / popcount (+ ll forms) and
-                        // __builtin_bswap16 / 32 / 64 -- one integer argument.
-                        // Cast to the unsigned form of the operation width so
-                        // the value reaches the walker zero-extended (clz /
-                        // popcount count over the full width; bswap reverses
-                        // exactly that many bytes).
-                        let is_clrsb = intr_kind.is_some_and(|i| i.is_clrsb());
-                        let elem_ty = if is_bswap {
-                            let base = match intr_kind {
-                                Some(crate::c5::op::Intrinsic::Bswap16) => Ty::Short as i64,
-                                Some(crate::c5::op::Intrinsic::Bswap64) => Ty::LongLong as i64,
-                                _ => Ty::Int as i64,
-                            };
-                            base | super::types::UNSIGNED_BIT
-                        } else if is_clrsb {
-                            // clrsb counts sign bits: the operand is signed,
-                            // so sign-extend into the register.
-                            if is_bit_unary_64 {
-                                Ty::LongLong as i64
-                            } else {
-                                Ty::Int as i64
-                            }
-                        } else if is_bit_unary_64 {
-                            Ty::LongLong as i64 | super::types::UNSIGNED_BIT
-                        } else {
-                            Ty::Int as i64 | super::types::UNSIGNED_BIT
-                        };
-                        self.expr(Token::Assign as i64)?;
-                        if let Some(child) = self.ast_acc {
-                            let pos = self.ast_src_pos();
-                            let cast_id = self.ast.push_expr(
-                                super::super::ast::Expr::Cast {
-                                    child,
-                                    to_ty: elem_ty,
-                                },
-                                pos,
-                            );
-                            ast_intrinsic_args.push(cast_id);
-                        }
-                    } else if intrinsic_id == va_arg_id {
-                        // `__builtin_va_arg(ap, T)` -- ap names the
-                        // va_list, T is the argument's type-name. The
-                        // first operand is reduced to the storage
-                        // address and pushed; the second is the packed
-                        // descriptor `(kind << 16) | size` (kind 0 =
-                        // integer / pointer, 1 = floating) the
-                        // per-target codegen reads from the
-                        // accumulator. The System V x86_64 ABI (3.5.7)
-                        // routes the read to the gp or fp save area by
-                        // `kind`; the cursor targets ignore the
-                        // descriptor.
-                        self.expr(Token::Assign as i64)?;
-                        self.va_list_operand_address();
-                        if let Some(a) = self.ast_acc {
-                            ast_intrinsic_args.push(a);
-                        }
-                        if self.lex.tk != ',' {
-                            return Err(
-                                self.compile_err(format!("intrinsic `{fn_name}` takes (ap, type)"))
-                            );
-                        }
-                        self.next()?;
-                        if !self.lex_is_type_start() {
-                            return Err(self.compile_err(format!(
-                                "intrinsic `{fn_name}` second operand must be a type name"
-                            )));
-                        }
-                        // Parse the type-name with optional pointer
-                        // decoration (C99 6.7.6 abstract declarator), the
-                        // same machinery `sizeof(<type>)` uses. A pointer
-                        // type collapses to an 8-byte integer-class slot.
-                        let mut arg_ty = self.parse_decl_base_type()?;
-                        let _ = core::mem::take(&mut self.pending.typedef_base_array_size);
-                        let mut is_pointer = false;
-                        while self.lex.tk == Token::MulOp {
-                            self.next()?;
-                            arg_ty += Ty::Ptr as i64;
-                            is_pointer = true;
-                            while self.lex.tk == Token::TypeQual {
-                                self.next()?;
-                            }
-                        }
-                        let size = self.size_of_type(arg_ty) as i64;
-                        // C99 6.5.2.2p6: a floating-point argument that
-                        // survives default argument promotions is `double`
-                        // and rides the fp save area; a pointer or integer
-                        // rides the gp save area. `kind` 1 = floating,
-                        // 0 = integer / pointer.
-                        let kind = if !is_pointer && is_floating_scalar(arg_ty) {
-                            1i64
-                        } else {
-                            0i64
-                        };
-                        let descriptor = (kind << 16) | (size & 0xffff);
-                        let desc_id = self.ast_emit_int_lit(descriptor, Ty::Int as i64);
-                        ast_intrinsic_args.push(desc_id);
-                        va_arg_result_ty = Some(arg_ty);
-                    } else if intrinsic_id == va_start_id || intrinsic_id == va_copy_id {
-                        // Two operands: the va_list, then the rightmost
-                        // fixed parameter (va_start, C99 7.15.1.4) or
-                        // the source va_list (va_copy). Both reach the
-                        // intrinsic as addresses; the helpers reduce
-                        // the GCC-shaped operands (`ap`, `last`) and
-                        // explicit-address spellings alike.
-                        self.expr(Token::Assign as i64)?;
-                        self.va_list_operand_address();
-                        if let Some(a) = self.ast_acc {
-                            ast_intrinsic_args.push(a);
-                        }
-                        self.ast_psh();
-                        if self.lex.tk != ',' {
-                            return Err(self
-                                .compile_err(format!("intrinsic `{fn_name}` takes two operands")));
-                        }
-                        self.next()?;
-                        self.expr(Token::Assign as i64)?;
-                        if intrinsic_id == va_copy_id {
-                            self.va_list_operand_address();
-                        } else {
-                            self.va_operand_take_address();
-                        }
-                        if let Some(a) = self.ast_acc {
-                            ast_intrinsic_args.push(a);
-                        }
-                    } else if intrinsic_id == va_end_id {
-                        // One operand: the va_list, reduced to its
-                        // storage address.
-                        self.expr(Token::Assign as i64)?;
-                        self.va_list_operand_address();
-                        if let Some(a) = self.ast_acc {
-                            ast_intrinsic_args.push(a);
-                        }
-                    } else if intrinsic_id == longjmp_id {
-                        // Two-arg shape: env then val. The first
-                        // gets pushed; the second lands in the
-                        // accumulator so the AArch64 lowering can
-                        // pop env and read val without extra
-                        // shuffling.
-                        self.expr(Token::Assign as i64)?;
-                        if let Some(a) = self.ast_acc {
-                            ast_intrinsic_args.push(a);
-                        }
-                        self.ast_psh();
-                        if self.lex.tk != ',' {
-                            return Err(
-                                self.compile_err(format!("intrinsic `{fn_name}` takes (env, val)"))
-                            );
-                        }
-                        self.next()?;
-                        self.expr(Token::Assign as i64)?;
-                        if let Some(a) = self.ast_acc {
-                            ast_intrinsic_args.push(a);
-                        }
-                        if is_floating_scalar(self.ty) {
-                            self.ast_fpcast();
-                            self.ty = Ty::Int as i64;
-                        }
-                    } else if intrinsic_id == frame_address_id || intrinsic_id == return_address_id
-                    {
-                        // GCC defines the operand as the number of frames to
-                        // walk up and requires it to be a constant. Level 0
-                        // reads this function's own frame record. Above 0,
-                        // both walk the saved frame-pointer chain that far,
-                        // and `__builtin_return_address` then reads the
-                        // return slot of the record reached. The level is
-                        // consumed at parse time and reaches no operand.
-                        self.expr(Token::Assign as i64)?;
-                        let level = self.ast_acc.and_then(|a| self.expr_const_int(a));
-                        match level {
-                            Some(0) => {}
-                            Some(n) if n > 0 => {
-                                frame_walk_levels = n;
-                                walked_return_slot = intrinsic_id == return_address_id;
-                            }
-                            Some(n) => {
-                                return Err(self.compile_err(format!(
-                                    "invalid argument to `{fn_name}`: \
-                                     the level must not be negative, got {n}"
-                                )));
-                            }
-                            None => {
-                                return Err(self.compile_err(format!(
-                                    "invalid argument to `{fn_name}`: \
-                                     the level must be an integer constant"
-                                )));
-                            }
-                        }
-                        self.ast_acc = None;
-                    } else {
-                        self.expr(Token::Assign as i64)?;
-                        if let Some(a) = self.ast_acc {
-                            ast_intrinsic_args.push(a);
-                        }
-                        // Coerce a float argument to int when the
-                        // intrinsic expects an integer size (alloca
-                        // and SetjmpAArch64 are both pointer-shape
-                        // inputs).
-                        if is_floating_scalar(self.ty) {
-                            self.ast_fpcast();
-                            self.ty = Ty::Int as i64;
-                        }
-                    }
-                    if self.lex.tk != ')' {
-                        return Err(self.compile_err(format!(
-                            "intrinsic `{fn_name}` arity mismatch at close paren"
-                        )));
-                    }
-                    self.next()?;
-                    self.mark_emit_other();
-                    // Flag the function for the alloca-arena
-                    // patch-up at function-end. We don't reserve
-                    // the alloca-top slot here -- the function
-                    // might still grow more regular locals after
-                    // this point, and the slot must sit just
-                    // below them so the arena ends up at the
-                    // deepest part of the frame.
-                    if intrinsic_id == alloca_id {
-                        self.uses_alloca_in_current_fn = true;
-                    }
-                    // Result type: alloca returns `void *`,
-                    // SetjmpAArch64 returns `int`, LongjmpAArch64
-                    // has no real return (control never reaches
-                    // the next statement) but the parser still
-                    // typechecks downstream uses as `int`.
-                    // __builtin_va_start / __builtin_va_end /
-                    // __builtin_va_copy don't return a useful
-                    // value, but the parser threads them through
-                    // as int so a statement-context call
-                    // typechecks.
-                    if intrinsic_id == trap_id {
-                        // `__builtin_trap` and `__builtin_unreachable` are
-                        // declared `void`, so `return __builtin_unreachable();`
-                        // in a void function is the 6.8.6.4p1 void-operand
-                        // form rather than a returned value.
-                        self.ty = super::types::void_ty();
-                    } else if intrinsic_id == setjmp_id
-                        || intrinsic_id == longjmp_id
-                        || intrinsic_id == va_start_id
-                        || intrinsic_id == va_end_id
-                        || intrinsic_id == va_copy_id
-                    {
-                        self.ty = Ty::Int as i64;
-                    } else if intrinsic_id == va_arg_id {
-                        // __builtin_va_arg returns `void *`
-                        // pointing at the just-vacated 8-byte
-                        // slot. The <stdarg.h> macro dereferences
-                        // as the requested type.
-                        self.ty = (Ty::Char as i64) + (Ty::Ptr as i64);
-                    } else if intrinsic_id == fma_id {
-                        self.ty = Ty::Double as i64;
-                    } else if intrinsic_id == fmaf_id {
-                        self.ty = Ty::Float as i64;
-                    } else if is_fp_unary {
-                        self.ty = if intr_kind.is_some_and(|i| i.is_single_precision()) {
-                            Ty::Float as i64
-                        } else {
-                            Ty::Double as i64
-                        };
-                    } else if is_int_bit_unary {
-                        // C99 has no such builtin; GCC defines the result
-                        // type as `int` for every form.
-                        self.ty = Ty::Int as i64;
-                    } else if is_bswap {
-                        // GCC types the result as the unsigned operand
-                        // width: uint16_t / uint32_t / uint64_t.
-                        self.ty = match intr_kind {
-                            Some(crate::c5::op::Intrinsic::Bswap16) => Ty::Short as i64,
-                            Some(crate::c5::op::Intrinsic::Bswap64) => Ty::LongLong as i64,
-                            _ => Ty::Int as i64,
-                        } | super::types::UNSIGNED_BIT;
-                    } else {
-                        self.ty = (Ty::Char as i64) + (Ty::Ptr as i64);
-                    }
-                    // Dual-emit `Expr::Intrinsic { kind, args, ty }`.
-                    // The walker dispatches by `kind` to the matching
-                    // `Inst::Intrinsic` op. Args carry through in
-                    // source order.
-                    let intr_ty = self.ty;
-                    let pos = self.ast_src_pos();
-                    // A walked return address starts from the frame address.
-                    let node_kind = if walked_return_slot {
-                        frame_address_id
-                    } else {
-                        intrinsic_id
-                    };
-                    let id = self.ast.push_expr(
-                        super::super::ast::Expr::Intrinsic {
-                            kind: node_kind,
-                            args: ast_intrinsic_args,
-                            ty: intr_ty,
-                        },
-                        pos,
-                    );
-                    self.ast_acc = Some(id);
-                    // GCC semantics: `__builtin_va_arg(ap, T)` yields
-                    // the next argument as a value of type T. The
-                    // intrinsic returns the slot address; wrap it in
-                    // the `*(T *)...` shape <stdarg.h>'s va_arg used
-                    // to spell out.
-                    if let Some(res_ty) = va_arg_result_ty {
-                        if let Some(child) = self.ast_acc {
-                            self.ast_emit_cast(child, res_ty + Ty::Ptr as i64);
-                        }
-                        if !(is_struct_value_ty(res_ty)) {
-                            self.mark_emit_scalar_load();
-                        }
-                        self.ty = res_ty;
-                        self.ast_apply_unary(super::super::ast::UnOp::Deref);
-                    }
-                    // A level N > 0 of either frame builtin. A frame record
-                    // holds the caller's frame pointer at offset 0, so each
-                    // level is one load through the level below it. This is
-                    // the sequence gcc emits on both supported targets for
-                    // `__builtin_frame_address`; `__builtin_return_address`
-                    // then reads the return slot of the record reached, which
-                    // the level-0 intrinsic does when given that frame.
-                    let void_ptr_ty = (Ty::Char as i64) + (Ty::Ptr as i64);
-                    for _ in 0..frame_walk_levels {
-                        if let Some(child) = self.ast_acc {
-                            self.ast_emit_cast(child, void_ptr_ty + Ty::Ptr as i64);
-                        }
-                        self.mark_emit_scalar_load();
-                        self.ty = void_ptr_ty;
-                        self.ast_apply_unary(super::super::ast::UnOp::Deref);
-                    }
-                    if walked_return_slot && let Some(walked) = self.ast_acc {
-                        let pos = self.ast_src_pos();
-                        let id = self.ast.push_expr(
-                            super::super::ast::Expr::Intrinsic {
-                                kind: return_address_id,
-                                args: alloc::vec![walked],
-                                ty: void_ptr_ty,
-                            },
-                            pos,
-                        );
-                        self.ast_acc = Some(id);
-                        self.ty = void_ptr_ty;
-                    }
-                } else {
-                    // Snapshot the declared signature up front: the per-arg
-                    // type checks read from `expected_params` and `is_variadic`,
-                    // and we don't want a recursive call to clobber them via
-                    // self-mutation. Cloning the Vec is cheap (typically 1-3
-                    // i64s) compared to the cost of the type check itself.
-                    let expected_params = self.symbols[id_idx].params.clone();
-                    let is_variadic = self.symbols[id_idx].is_variadic;
-                    let fn_name_for_warn = self.symbols[id_idx].name.clone();
-                    // A Token::Sys callee is a libc import: it reads each
-                    // argument at the platform-ABI register width and never
-                    // re-narrows to its declared parameter type. A c5
-                    // (Token::Fun) callee instead truncates each argument in
-                    // its prologue via the typed parameter load, so the
-                    // caller-side narrowing below is needed only for Sys
-                    // calls to satisfy the C99 6.5.2.2p4 conversion.
-                    let is_sys_call = self.symbols[id_idx].class == Token::Sys as i64;
-                    // A callee whose return type is the implicit `int`
-                    // default -- a `#pragma binding` with no prototype, or
-                    // a C89 implicit declaration -- truncates the result to
-                    // 32 bits if it really returns a pointer or wider type.
-                    // Warn once so the source (or a header) declares it.
-                    if self.symbols[id_idx].implicit_return_int
-                        && self.warned_implicit_ret.insert(id_idx)
-                    {
-                        let name = self.symbols[id_idx].name.clone();
-                        let line = self.lex.line;
-                        self.warn_at(
-                            line,
-                            alloc::format!(
-                                "`{name}` is called without a return-type prototype; assuming `int`"
-                            ),
-                        );
-                    }
-                    // Struct-returning callees use a hidden out-pointer
-                    // arg at val=2: the caller pre-allocates a temp for
-                    // the result and passes its address as arg 0; the
-                    // callee's `return s` writes to *(out_pointer)
-                    // before Lev. The result expression's value (in
-                    // `a`) becomes the temp's address so an enclosing
-                    // `lhs = call(...)` Mcpy reads from there.
-                    let callee_ret_ty = self.symbols[id_idx].type_;
-                    let callee_returns_struct = self.symbols[id_idx].class == Token::Fun as i64
-                        && is_struct_value_ty(callee_ret_ty);
-                    // A Token::Sys (dylib-bound) call returning a struct by
-                    // value is lowered through the native SSA path: the
-                    // walker tags the CallExt with `ret_agg` and the emitter
-                    // gathers the result from the platform-ABI return
-                    // registers into the result temp (HFA in v0..vN, x0/x1
-                    // for a small aggregate, x8 indirect for > 16 bytes).
-                    let mut nargs = 0;
-                    // Snapshot the AST parser-side vstack depth so
-                    // the call's per-arg emit sequence (per-arg
-                    // address-of-temp setup, the right-to-left
-                    // re-push, the optional struct-return
-                    // out-pointer push) can leak transient pushes
-                    // without polluting the outer expression's
-                    // lvalue stack. The matching pops on the AST
-                    // side route through `ast_apply_assign` for
-                    // the per-arg `*temp = arg` shape (the only
-                    // store in this region), which consumes one
-                    // vstack slot per store. The right-to-left
-                    // re-push and the out-pointer push are pure
-                    // leaks -- truncate the vstack back to this
-                    // depth right before `ast_emit_call` so the
-                    // outer scalar assign's `ast_apply_assign`
-                    // sees the lvalue it pushed.
-                    let saved_ast_vstack_depth = self.ast_vstack.len();
-                    // For struct returns, allocate a result temp now
-                    // so its address can be pushed before the
-                    // declared-arg pushes.
-                    let saved_loc_offs_for_result = self.loc_offs;
-                    let result_temp_off: i64 = if callee_returns_struct {
-                        let slots = self.slots_of_type(callee_ret_ty);
-                        let off = self.reserve_slots(slots);
-                        if slots >= 1 {
-                            self.multi_cell_temps.push((off, slots));
-                        }
-                        off
-                    } else {
-                        0
-                    };
-                    // c5 uses cdecl-style arg passing: args are pushed
-                    // right-to-left so the i'th declared param sits at
-                    // `[bp + 16*(i+1)]`. The parser still has to evaluate
-                    // args left-to-right (so observable side effects
-                    // happen in source order), so each arg gets parked in
-                    // a transient temp local and we re-emit the pushes in
-                    // reverse once they're all evaluated.
-                    let saved_loc_offs = self.loc_offs;
-                    let mut temp_offsets: Vec<i64> = Vec::new();
-                    // Per-arg AST ExprId, captured at evaluation time
-                    // (post-conversion, pre-store). Empty slot when
-                    // the dual-emit hasn't wired the arg expression
-                    // yet; the call-site Call node accepts only the
-                    // wired ones today and skips Call build if any
-                    // arg is unwired.
-                    let mut ast_arg_ids: Vec<Option<super::super::ast::ExprId>> = Vec::new();
-                    while self.lex.tk != ')' {
-                        let arg_line = self.lex.line;
-                        // Allocate a temp slot for this arg.
-                        let temp_off = self.reserve_slots(1);
-                        temp_offsets.push(temp_off);
-
-                        // Emit the `*temp = expr;` shape that c5's
-                        // assignment path already supports: address
-                        // first, push, then RHS, then Si.
-                        self.emit_lea(temp_off);
-                        self.ast_psh();
-                        self.expr(Token::Assign as i64)?;
-
-                        // A `long double` that reaches a platform-libc callee
-                        // as a `long double` is decoded there in the target
-                        // ABI's wider format, not the binary64 c5 supplies.
-                        // The declared parameter decides: an argument
-                        // converted to a `double` parameter is exact, which is
-                        // how <math.h> binds the `l` entry points. Past the
-                        // fixed parameters -- a variadic tail, or a callee
-                        // with no prototype -- 6.5.2.2p6 leaves the type
-                        // alone, so the argument's own type governs.
-                        let reaches_callee_as_long_double =
-                            match expected_params.get(nargs as usize) {
-                                Some(want) => is_long_double_ty(*want),
-                                None => is_long_double_ty(self.ty),
-                            };
-                        if is_sys_call
-                            && reaches_callee_as_long_double
-                            && let Some(platform_fmt) = self.target.platform_long_double_abi()
-                        {
-                            self.warn_at(
-                                arg_line,
-                                format!(
-                                    "`long double` argument {} of `{}` is passed as 8-byte \
-                                     binary64; this target's ABI passes {platform_fmt}",
-                                    nargs + 1,
-                                    fn_name_for_warn,
-                                ),
-                            );
-                        }
-
-                        // Type-check before the Si overwrites self.ty.
-                        if (nargs as usize) < expected_params.len() {
-                            let want = expected_params[nargs as usize];
-                            let arg_ty = self.ty;
-                            let zero = self.last_emit_is_zero();
-                            let untyped = self.last_emit_was_indirect_call();
-                            // A GNU `transparent_union` parameter accepts an
-                            // argument compatible with any member and takes it
-                            // as that member, with no diagnostic.
-                            let tu_member =
-                                Self::transparent_union_member(&self.structs, want, self.ty, zero);
-                            if tu_member.is_none()
-                                && let Some(m) = Self::type_warning_with_flags(
-                                    &self.structs,
-                                    want,
-                                    self.ty,
-                                    zero,
-                                    untyped,
-                                )
-                            {
-                                let got = self.ty;
-                                let want_s = format_type(want, &self.structs);
-                                let got_s = format_type(got, &self.structs);
-                                let text = format!(
-                                    "{} in argument {} of `{}` (param={want_s}, arg={got_s})",
-                                    m.reason,
-                                    nargs + 1,
-                                    fn_name_for_warn,
-                                );
-                                // A Token::Sys prototype approximates the
-                                // platform libc (`char *` for `void *`, `int`
-                                // for `size_t`) and accepts a by-value struct
-                                // through the ABI packing path, so only a
-                                // declared prototype is authoritative enough
-                                // to raise the 6.5.2.2p2 constraint.
-                                if m.no_conversion && !is_sys_call {
-                                    return Err(self.compile_err_at(arg_line, text));
-                                }
-                                self.warn_at(arg_line, text);
-                            }
-                            // C99 6.5.2.2p7: declared-parameter call
-                            // arguments undergo the same assignment
-                            // conversion as the `= expr` rule. If the
-                            // prototype expects `double` and the
-                            // actual is an integer, lift through
-                            // the int-to-float cast so the IEEE-754
-                            // bit pattern reaches the FP-arg register
-                            // the codegen routes through (xmm_N / d_N).
-                            // Without this, the integer bit pattern
-                            // lands in the GPR-arg register and libm
-                            // reads garbage out of the FP register.
-                            if let Some(member_ty) = tu_member {
-                                // Materialize the member into an anonymous
-                                // union object (same staging the arg temps
-                                // use), so every backend passes the argument
-                                // per the aggregate convention -- GCC passes
-                                // it as the union containing the member.
-                                self.convert_assign_rhs(member_ty);
-                                let slots = self.slots_of_type(want);
-                                let off = self.reserve_slots(slots);
-                                if slots >= 1 {
-                                    self.multi_cell_temps.push((off, slots));
-                                }
-                                if let Some(value) = self.ast_acc.take() {
-                                    let init = super::super::ast::LocalInit::Runtime {
-                                        zero_init: None,
-                                        elements: alloc::vec![
-                                            super::super::ast::RuntimeInitElement {
-                                                offset: 0,
-                                                value: super::super::ast::RuntimeInitValue::Expr(
-                                                    value,
-                                                ),
-                                                ty: member_ty,
-                                                bitfield: None,
-                                            }
-                                        ],
-                                    };
-                                    self.ast_emit_compound_literal(off, want, 0, init);
-                                }
-                                self.ty = want;
-                            } else {
-                                self.convert_assign_rhs(want);
-                            }
-                            // C99 6.5.2.2p4: the argument is converted to the
-                            // declared parameter type. For a Sys (libc) callee
-                            // the conversion must happen here -- the import
-                            // reads the argument at the full register width and
-                            // never re-narrows. A c5 callee truncates in its
-                            // typed parameter load, so this is Sys-only, and
-                            // only when the argument is wider than the integer
-                            // parameter (an in-width argument needs no mask).
-                            if is_sys_call
-                                && !is_pointer_ty(want)
-                                && !is_floating_scalar(want)
-                                && !is_struct_ty(want)
-                                && self.size_of_type(arg_ty) > self.size_of_type(want)
-                            {
-                                self.renormalize_to_width(want);
-                            }
-                        } else {
-                            if !expected_params.is_empty() && !is_variadic {
-                                self.warn_at(
-                                    arg_line,
-                                    format!(
-                                        "too many arguments to `{}` (expected {}, got at least {})",
-                                        fn_name_for_warn,
-                                        expected_params.len(),
-                                        nargs + 1,
-                                    ),
-                                );
-                            }
-                            // C99 6.5.2.2p6-7: arguments beyond the
-                            // declared parameters (the variadic tail, or
-                            // any argument to a function with no
-                            // prototype) undergo the default argument
-                            // promotions. A `float` is promoted to
-                            // `double` so it reaches the FP-arg register
-                            // as the 8-byte value the callee reads;
-                            // `char` / `short` already ride the int
-                            // accumulator.
-                            if is_float_ty(self.ty) {
-                                self.convert_assign_rhs(Ty::Double as i64);
-                            }
-                        }
-
-                        // A struct passed by value to a Token::Sys callee is
-                        // packed into the platform-ABI argument registers by
-                        // the walker + emitter (the same host-ABI path c5-to-c5
-                        // calls use); the by-value struct argument is no longer
-                        // rejected here.
-                        // Snapshot the arg's AST ExprId before the
-                        // Si consumes both vstack and acc. The Call
-                        // node built below uses these in source
-                        // order regardless of the c5 right-to-left
-                        // push.
-                        ast_arg_ids.push(self.ast_acc);
-                        self.ast_assign();
-                        nargs += 1;
-                        self.accept(',')?;
-                    }
-                    // Push from temp slots right-to-left so the first
-                    // declared param ends up on top of the c5 stack.
-                    for &temp_off in temp_offsets.iter().rev() {
-                        self.emit_lea(temp_off);
-                        self.mark_emit_other();
-                        self.ast_psh();
-                    }
-                    // For struct-returning callees, push the hidden
-                    // out-pointer (address of the result temp) so it
-                    // lands at val=2 -- ahead of the first declared
-                    // arg in the c5 stack walk. The callee's `return
-                    // s` writes through it; on return we set `a` to
-                    // the temp's address so the enclosing assignment
-                    // can Mcpy from it.
-                    if callee_returns_struct {
-                        self.emit_lea(result_temp_off);
-                        self.ast_psh();
-                    }
-                    // Release the staging slots; they'll be reused by
-                    // the next call in this function. The result-temp
-                    // slot stays alive (loc_offs not reset to it) until
-                    // the enclosing expression consumes it.
-                    let target_loc_offs = if callee_returns_struct {
-                        saved_loc_offs_for_result + self.slots_of_type(callee_ret_ty)
-                    } else {
-                        saved_loc_offs
-                    };
-                    // Never drop below block-lifetime storage a compound
-                    // literal reserved while evaluating these arguments
-                    // (C99 6.5.2.5p5); reclaiming it would alias the literal
-                    // with a later full-expression's temporaries.
-                    self.loc_offs = target_loc_offs.max(self.committed_loc_offs);
-                    // Arity underflow check (after the loop, when nargs is
-                    // final). Only fires for non-variadic functions with a
-                    // recorded signature.
-                    if !is_variadic
-                        && !expected_params.is_empty()
-                        && (nargs as usize) < expected_params.len()
-                    {
-                        let line = self.lex.line;
-                        self.warn_at(
-                            line,
-                            format!(
-                                "too few arguments to `{}` (expected {}, got {})",
-                                fn_name_for_warn,
-                                expected_params.len(),
-                                nargs,
-                            ),
-                        );
-                    }
-                    self.next()?;
-                    if self.symbols[id_idx].class == Token::Sys as i64 {
-                        // External library call. The walker emits
-                        // Inst::CallExt keyed on the binding's flat
-                        // index (taken from Symbol::val); the
-                        // codegen lowers it to the per-target GOT /
-                        // import-table reference.
-                        self.flush_pending_stores();
-                        self.pending.last_emit_was_indirect_call = false;
-                        self.ast_acc = None;
-                    } else if self.symbols[id_idx].class == Token::Fun as i64 {
-                        // Direct call to a c5 user function. The
-                        // walker resolves Inst::Call::target_pc
-                        // through live_fun_val and the linker's
-                        // extern_call_refs channel.
-                        self.symbols[id_idx].was_referenced = true;
-                        self.flush_pending_stores();
-                        self.pending.last_emit_was_indirect_call = false;
-                        self.ast_acc = None;
-                    } else if self.symbols[id_idx].class == Token::Loc as i64
-                        || self.symbols[id_idx].class == Token::Glo as i64
-                    {
-                        // Indirect call through a function pointer:
-                        // a Loc / Glo whose value is the target's
-                        // ent_pc. Mark the symbol as read for the
-                        // dead-store diagnostic; the walker emits
-                        // Inst::CallIndirect from the AST.
-                        if self.symbols[id_idx].class == Token::Loc as i64 {
-                            self.symbols[id_idx].was_referenced = true;
-                            self.symbols[id_idx].was_read = true;
-                        } else {
-                            self.glo_imm_refs.push(id_idx);
-                        }
-                        self.flush_pending_stores();
-                        self.pending.last_emit_was_indirect_call = true;
-                        self.ast_acc = None;
-                    } else {
-                        let name = self.symbols[id_idx].name.clone();
-                        let suggestion = self.include_hint(&name);
-                        return Err(
-                            self.compile_err(format!("unknown function `{name}`{suggestion}"))
-                        );
-                    }
-                    // Drop the AST parser-side vstack pushes that
-                    // the call's emit sequence leaked (right-to-
-                    // left re-push, optional struct-return out-
-                    // pointer push) before the outer expression's
-                    // `ast_apply_assign` runs. See the matching
-                    // `saved_ast_vstack_depth` snapshot above.
-                    self.ast_vstack.truncate(saved_ast_vstack_depth);
-                    // Dual-emit the call's AST: build a callee
-                    // Ident node from the call-site symbol idx and
-                    // pair with the per-arg ExprIds captured above.
-                    // Struct-returning calls skip the AST build for
-                    // now; the hidden out-pointer doesn't fit the
-                    // canonical `Call { callee, args, ty }` shape.
-                    // For a direct (Fun / Sys) call the symbol's `type_`
-                    // is the return type. For a call through a
-                    // function-pointer variable (Loc / Glo) `type_` is
-                    // the pointer's type, which encodes the return type
-                    // plus one pointer level for the fn-pointer; the
-                    // result type is that minus one level (`int (*)()` ->
-                    // int, `struct S *(*)()` -> struct S *). A variable
-                    // that is not a fn-pointer falls back to int.
-                    let is_var_call = self.symbols[id_idx].class == Token::Loc as i64
-                        || self.symbols[id_idx].class == Token::Glo as i64;
-                    let result_ty = if is_var_call {
-                        let vt = self.symbols[id_idx].type_;
-                        if self.symbols[id_idx].fn_ptr_indirection > 0 && is_pointer_ty(vt) {
-                            vt - Ty::Ptr as i64
-                        } else {
-                            Ty::Int as i64
-                        }
-                    } else {
-                        callee_ret_ty
-                    };
-                    // For a struct-returning callee the `Expr::Call
-                    // { ty: <struct> }` makes the walker allocate a
-                    // synthetic local for the hidden out-pointer,
-                    // prepend its address to the arg list, and return
-                    // the address as the call's value (the c5 ABI's
-                    // address-as-value rule).
-                    let callee_ty = self.symbols[id_idx].type_;
-                    let callee_id = self.ast_synthesize_callee(id_idx as u32, callee_ty);
-                    // A call through a variadic function-pointer
-                    // variable records its fixed count at parse time,
-                    // while the block-scope binding is live: the
-                    // walker runs after scope exit restored the outer
-                    // signature, so the symbol no longer carries the
-                    // pointer's prototype (C99 6.2.1p4).
-                    if is_var_call && self.symbols[id_idx].is_variadic {
-                        self.ast
-                            .variadic_indirect_callees
-                            .push((callee_id, self.symbols[id_idx].params.len() as u32));
-                    }
-                    if is_var_call
-                        && self.symbols[id_idx].conv != crate::c5::codegen::CallConv::Target
-                    {
-                        self.ast
-                            .conv_indirect_callees
-                            .push((callee_id, self.symbols[id_idx].conv));
-                    }
-                    self.ast_emit_call(callee_id, ast_arg_ids.clone(), result_ty);
-                    // For struct-returning callees, the result lives
-                    // in the caller-allocated temp. After the call,
-                    // load the temp's address into `a` so the
-                    // expression's value (struct-rvalue semantics:
-                    // address-as-value) flows into the enclosing
-                    // assignment / `.field` access.
-                    if callee_returns_struct {
-                        self.emit_lea(result_temp_off);
-                    }
-                    self.ty = result_ty;
-                    // C99 6.5.2.2: the call's value is its return type, not an
-                    // array-decayed argument. Drop the hint an array / string
-                    // argument left pending (the fix for `typeof(f("s"))`).
-                    self.drop_operand_array_decay();
-                    // A callee whose return type is itself a function
-                    // pointer (`int (*f())()`) leaves a fn-pointer
-                    // rvalue, so a following unary `*` is the C99
-                    // 6.3.2.1p4 decay no-op. The lineage is recorded on
-                    // the function symbol by the declarator; for a call
-                    // through a fn-pointer variable the return lineage
-                    // rides its own field.
-                    if self.symbols[id_idx].class == Token::Fun as i64
-                        && self.symbols[id_idx].fn_ptr_indirection > 0
-                    {
-                        self.pending.fn_ptr_chain_depth = 0;
-                    } else if is_var_call && self.symbols[id_idx].fn_ptr_ret_indirection > 0 {
-                        self.pending.fn_ptr_chain_depth =
-                            self.symbols[id_idx].fn_ptr_ret_indirection - 1;
-                    }
-                } // close intrinsic-vs-normal-call else branch
-            } else if self.symbols[id_idx].class == Token::Num as i64 {
-                let val = self.symbols[id_idx].val;
-                self.emit_imm(val);
-                // The registration typed the constant: `int` normally,
-                // wider / unsigned for enum values outside `int`'s range
-                // (GCC extension). Typing such a value `int` would break
-                // the invariant that a value's register pattern is its
-                // type's extension, and comparisons then misread it.
-                self.ty = self.symbols[id_idx].type_;
-                // Dual-emit the resolved constant so a wrapping
-                // expression (assignment, call argument, binop)
-                // captures the value on `ast_acc`. Enum
-                // constants and `#define`-via-const-decl idioms
-                // both go through this path; the walker's
-                // `IntLit` arm emits `Inst::Imm(val)`.
-                self.ast_emit_int_lit(val, self.ty);
-            } else if self.symbols[id_idx].class == Token::Fun as i64 {
-                self.symbols[id_idx].was_referenced = true;
-                // Bare function reference (e.g. `fp = add;`). The value
-                // becomes a user-visible pointer, so it gets the CODE_BASE
-                // bias -- that lets the VM tell apart "function pointer"
-                // from "data pointer", and refuse to deref the former.
-                // The integer-literal placeholder runs only to keep the
-                // trailing-emit peek flags honest; the walker's
-                // `imm_code_extern` / `imm_code` emit resolves the
-                // function-pointer literal on the SSA side.
-                self.emit_imm(CODE_BASE as i64 + self.symbols[id_idx].val);
-                // Encode the function-pointer type as the callee's return
-                // type plus one pointer level, so an inline call through
-                // the value (`(cond ? f : g)(x)`) recovers the real
-                // result type instead of defaulting to `int` and
-                // narrowing a wider return.
-                self.ty = self.symbols[id_idx].type_ + Ty::Ptr as i64;
-                // Dual-emit: an Ident node so the wrapping shape
-                // (call-arg, assignment, cast) sees the function
-                // reference on `ast_acc`. The walker's
-                // `load_ident_rvalue` for `Token::Fun` emits the
-                // matching `imm_code(val)`.
-                self.ast_emit_ident(id_idx as u32, self.ty);
-                // The value is already a function pointer; a following
-                // unary `*` is the C99 6.3.2.1p4 decay no-op at every
-                // level (`(****g)(...)` calls `g`). Depth 0 marks "at
-                // the fn-ptr level" for the `*` handler.
-                self.pending.fn_ptr_chain_depth = 0;
-            } else if self.symbols[id_idx].class == Token::Sys as i64 {
-                // Bare imported-function reference -- `fp = strcmp;`.
-                // There is no compile-time address to fold in, so the
-                // walker emits `Inst::ImmExtCode(binding_idx)`; the
-                // codegen materializes the import's shared PLT-stub
-                // address (RIP-relative `lea` on x86_64, `adrp + add`
-                // on aarch64), the same stub a call to the import
-                // reaches. The Sys symbol's `val` is the binding index.
-                self.emit_imm(CODE_BASE as i64);
-                self.ty = self.symbols[id_idx].type_ + Ty::Ptr as i64;
-                // Dual-emit: push the Sys Ident so wrapping shapes
-                // (static-init, assign, call-arg) see the address
-                // producer on `ast_acc`. The walker's
-                // `address_of_ident` / `load_ident_rvalue`
-                // `Token::Sys` arm emits the `imm_ext_code(val)`.
-                self.ast_emit_ident(id_idx as u32, self.ty);
-                // Same fn-pointer decay as the `Token::Fun` branch: a
-                // following unary `*` is a no-op.
-                self.pending.fn_ptr_chain_depth = 0;
-            } else if self.symbols[id_idx].class == Token::Loc as i64
-                && matches!(
-                    self.symbols[id_idx].asm_register,
-                    Some(
-                        crate::c5::symbol::AsmRegister::StackPointer
-                            | crate::c5::symbol::AsmRegister::FramePointer
-                    )
-                )
-            {
-                // A stack- / frame-pointer register variable: the read is
-                // a direct register move, no storage behind it. Writes
-                // have no meaning; reject them here where the following
-                // token is visible.
-                if self.lex.tk == Token::Assign
-                    || self.lex.tk == Token::AssignOp
-                    || self.lex.tk == Token::Inc
-                    || self.lex.tk == Token::Dec
-                {
-                    return Err(self.compile_err(format!(
-                        "cannot write register variable `{}`",
-                        self.symbols[id_idx].name
-                    )));
-                }
-                self.symbols[id_idx].was_referenced = true;
-                self.symbols[id_idx].was_read = true;
-                self.mark_emit_other();
-                self.ty = self.symbols[id_idx].type_;
-                let kind = match self.symbols[id_idx].asm_register {
-                    Some(crate::c5::symbol::AsmRegister::FramePointer) => {
-                        crate::c5::op::Intrinsic::FrameAddress
-                    }
-                    _ => crate::c5::op::Intrinsic::StackPointer,
-                };
-                let args = alloc::vec::Vec::new();
-                let intr_ty = self.ty;
-                let pos = self.ast_src_pos();
-                let id = self.ast.push_expr(
-                    super::super::ast::Expr::Intrinsic {
-                        kind: kind as i64,
-                        args,
-                        ty: intr_ty,
-                    },
-                    pos,
-                );
-                self.ast_acc = Some(id);
-            } else {
-                let identifier_is_local = self.symbols[id_idx].class == Token::Loc as i64;
-                if identifier_is_local {
-                    self.symbols[id_idx].was_referenced = true;
-                    self.emit_lea(self.symbols[id_idx].val);
-                } else if self.symbols[id_idx].class == Token::Glo as i64
-                    && self.symbols[id_idx].is_thread_local
-                {
-                    // `_Thread_local` global: emit through the
-                    // TLS-address path so the codegen lowers via
-                    // the per-target TLS sequence (TPIDR_EL0 +
-                    // offset on aarch64, fs:0 + offset on x86_64).
-                    // The operand is the byte offset within the
-                    // program's TLS block.
-                    self.mark_emit_other();
-                } else if self.symbols[id_idx].class == Token::Glo as i64 {
-                    self.emit_data_imm(self.symbols[id_idx].val);
-                    self.glo_imm_refs.push(id_idx);
-                } else {
-                    return Err(self
-                        .compile_err(format!("undefined variable {}", self.symbols[id_idx].name)));
-                }
-                self.ty = self.symbols[id_idx].type_;
-                let is_struct_value = is_struct_value_ty(self.ty);
-                // A declared struct object starts a member chain.
-                self.pending.member_base = if is_struct_value {
-                    Some(super::MemberBase {
-                        decl_size: Some(self.size_of_type(self.ty) as i64),
-                        ..super::MemberBase::UNKNOWN
-                    })
-                } else {
-                    None
-                };
-                let is_array_var =
-                    self.symbols[id_idx].array_size != 0 || self.symbols[id_idx].is_zero_len_array;
-                let is_vla_var = self.symbols[id_idx].is_vla;
-                // A function-pointer variable carries its callee parameter
-                // types so the dereferenced-call shape `(*fp)(args)` (which
-                // reaches the postfix path rather than the direct-identifier
-                // call path) narrows each argument to its declared type.
-                // Only a function pointer carries params on a Loc / Glo
-                // symbol; the array case is handled at its decay below.
-                if !is_array_var && !is_struct_value && !self.symbols[id_idx].params.is_empty() {
-                    self.pending.indirect_callee_params = Some(self.symbols[id_idx].params.clone());
-                    self.pending.indirect_callee_is_variadic = self.symbols[id_idx].is_variadic;
-                    self.pending.indirect_callee_conv = self.symbols[id_idx].conv;
-                    self.pending.indirect_callee_fn_ptr_depth =
-                        self.symbols[id_idx].fn_ptr_indirection;
-                    self.pending.indirect_callee_ret_fn_ptr =
-                        self.symbols[id_idx].fn_ptr_ret_indirection;
-                }
-                // Array variables decay to a pointer to the first
-                // element: the symbol's address IS its value, no
-                // load. Bump the type by one pointer level so
-                // downstream pointer arithmetic / indexing scales
-                // correctly. Struct values follow the same
-                // "address-as-value" rule but keep their type
-                // because the `.field` operator needs the struct's
-                // value type to look up offsets.
-                if is_vla_var {
-                    // C99 6.3.2.1p3: a VLA decays to a pointer to its
-                    // first element -- the runtime base pointer, loaded
-                    // from the hidden slot, not a fixed frame address.
-                    let ptr_slot = self.symbols[id_idx].vla_ptr_slot;
-                    self.ty += Ty::Ptr as i64;
-                    self.ast_emit_vla_base(ptr_slot, self.ty);
-                } else if is_array_var {
-                    if identifier_is_local {
-                        // Array decay produces the array's
-                        // address rather than a scalar value, so
-                        // the load-op path below never runs. The
-                        // address can be indexed, passed to a
-                        // helper, or stored into a pointer; none
-                        // of those are tracked here. Mark
-                        // `address_escaped` so the unused-symbol
-                        // analysis at scope exit conservatively
-                        // treats the array as read.
-                        self.symbols[id_idx].address_escaped = true;
-                    }
-                    self.ty += Ty::Ptr as i64;
-                    // C99 6.3.2.1p3 array-to-pointer decay: the
-                    // symbol's address IS the rvalue; no trailing
-                    // load runs. Dual-emit an `Expr::Ident` typed
-                    // at the decayed pointer level so a wrapping
-                    // index / call-arg / assignment site finds the
-                    // array on `ast_acc`. Walker's
-                    // `load_ident_rvalue` for Loc / Glo with this
-                    // shape still routes through `load_local` /
-                    // `imm_data` + load, which is wrong for arrays
-                    // -- the array AST tag is the address-as-value
-                    // rule; the walker's Index / call-arg arms
-                    // re-walk the same Ident and need just the
-                    // address. Push the node; the walker arm fix
-                    // lives separately.
-                    self.ast_emit_ident(id_idx as u32, self.ty);
-                    // Stash the array's element count so a
-                    // surrounding `sizeof(<arr>)` can compute
-                    // `count * sizeof(elem)` instead of the
-                    // decayed pointer's `sizeof(T*) = 8`.
-                    // `array_size = -1` marks `extern T x[];` whose
-                    // size is unknown at this TU (C99 6.7.5.2); leave
-                    // the sizeof hint at zero so the operand falls
-                    // through to the bare-pointer size, matching the
-                    // standard's incomplete-type rule.
-                    if self.symbols[id_idx].array_size > 0 {
-                        self.pending.last_array_decay_size = self.symbols[id_idx].array_size;
-                    } else if self.symbols[id_idx].is_zero_len_array {
-                        // Zero-length array: signal the array-ness to a
-                        // surrounding `sizeof` / `typeof` with the `-1`
-                        // sentinel (element count is genuinely 0, which the
-                        // `> 0` recovery paths read as "no array hint").
-                        self.pending.last_array_decay_size = -1;
-                    }
-                    // N-dim-array decay: seed strides for each of
-                    // the N-1 levels of multi-dim subscript. The
-                    // first stride goes into `pending_index_stride`
-                    // (consumed by the next Brak); the rest queue
-                    // in `pending_index_strides_tail` and shift
-                    // down per Brak.
-                    let elem_ty = self.symbols[id_idx].type_;
-                    let elem_size = self.size_of_type(elem_ty) as i64;
-                    let dims = self.symbols[id_idx].array_dims.clone();
-                    // Record the full dimension list so a wrapping `&arr` /
-                    // `typeof` can rebuild the undecayed array type. A 1D
-                    // symbol records no dims list; a zero-length array's
-                    // exact bound rides here so `typeof` reads `T[0]`.
-                    self.pending.last_array_decay_dims =
-                        if dims.is_empty() && self.symbols[id_idx].is_zero_len_array {
-                            alloc::vec![0]
-                        } else {
-                            dims.clone()
-                        };
-                    self.seed_multi_dim_strides(&dims, elem_size);
-                    // A function-pointer array element keeps the element's
-                    // parameter types so a following `arr[i](args)` narrows
-                    // each argument to its declared type. Empty params means
-                    // the element is not a prototyped function pointer.
-                    // The element's function-pointer decay depth rides
-                    // along as well: `(*arr[i])(...)` must treat the
-                    // `*` as the C99 6.3.2.1p4 no-op rather than load
-                    // through the code address (the subscript consumes
-                    // an array level, not an indirection level).
-                    let fpi = self.symbols[id_idx].fn_ptr_indirection;
-                    if fpi > 0 {
-                        self.pending.fn_ptr_chain_depth = fpi - 1;
-                        self.pending.fn_ptr_depth_is_array_elem = true;
-                    }
-                    if fpi > 0 || !self.symbols[id_idx].params.is_empty() {
-                        self.pending.indirect_callee_params =
-                            Some(self.symbols[id_idx].params.clone());
-                        self.pending.indirect_callee_is_variadic = self.symbols[id_idx].is_variadic;
-                        self.pending.indirect_callee_conv = self.symbols[id_idx].conv;
-                        self.pending.indirect_callee_fn_ptr_depth = fpi;
-                        self.pending.indirect_callee_ret_fn_ptr =
-                            self.symbols[id_idx].fn_ptr_ret_indirection;
-                    }
-                } else if is_struct_value {
-                    if identifier_is_local {
-                        // Struct value rvalue: the symbol's
-                        // address is the rvalue, no Li runs. Field
-                        // access through `.f` emits its own Li
-                        // against the field offset; treat the
-                        // struct itself as address-escaped so the
-                        // unused-symbol analysis stays conservative.
-                        self.symbols[id_idx].address_escaped = true;
-                    }
-                    // Dual-emit: like the array-decay branch, the
-                    // address is the rvalue (C99 6.7.2.1 struct
-                    // assignment semantics + c5's
-                    // address-as-value rule). Push the Ident so
-                    // wrapping shapes (`.field`, call-arg copy,
-                    // struct-to-struct assign) see the producer
-                    // on `ast_acc`. Walker treats Ident-of-struct
-                    // as an address-only producer (no load).
-                    self.ast_emit_ident(id_idx as u32, self.ty);
-                } else {
-                    // Pointers to structs and every scalar type go
-                    // through the normal load_op_for path.
-                    self.mark_emit_scalar_load();
-                    // The AST node is a single `Expr::Ident` keyed
-                    // on the symbol-table index. The address-of /
-                    // assignment paths re-interpret the same node
-                    // as an lvalue.
-                    self.ast_emit_ident(id_idx as u32, self.ty);
-                    if identifier_is_local {
-                        // Tentative: the load survives by default,
-                        // so the symbol's value is being read. The
-                        // assignment / address-of helpers revert
-                        // `was_read` and `pending_stores` to their
-                        // prior state (preserving genuine earlier
-                        // reads and prior dead-store entries) if
-                        // they retract the load before it
-                        // executes. `last_loaded_local`
-                        // lets those helpers know which symbol the
-                        // trailing load belonged to.
-                        self.pending.last_loaded_local = Some(id_idx);
-                        self.pending.last_loaded_local_prior_was_read =
-                            self.symbols[id_idx].was_read;
-                        self.pending.last_loaded_local_prior_pending =
-                            core::mem::take(&mut self.symbols[id_idx].pending_stores);
-                        self.symbols[id_idx].was_read = true;
-                    }
-                    // Seed the fn-pointer chain depth from
-                    // the symbol's recorded indirection.
-                    // `mark_emit_scalar_load` just cleared the
-                    // field; re-set it now so the surrounding
-                    // unary-`*` chain can recognise function-
-                    // pointer decay. `fn_ptr_indirection`
-                    // is "indirection above fn-ptr, plus 1"; depth
-                    // after the load is one less (the load itself
-                    // consumed one indirection level).
-                    let fpi = self.symbols[id_idx].fn_ptr_indirection;
-                    if fpi > 0 {
-                        self.pending.fn_ptr_chain_depth = fpi - 1;
-                    }
-                    // N-dim-array parameter decay: a parameter
-                    // declared as `T name[A][B][C]` carries
-                    // `array_dims = [A, B, C]` on its symbol but
-                    // the function-param binder wiped `array_size`
-                    // to 0 (per C99 6.7.5.3p7 the outermost
-                    // dimension decays to a pointer, and params
-                    // don't own storage). The loaded value is
-                    // already a pointer (one level less than the
-                    // array would have been), so the pointee size
-                    // is `pointee_size(self.ty)` rather than the
-                    // element size; the strides for `[i]`, `[j]`,
-                    // ... `[N-1]` are seeded into the pending
-                    // queue.
-                    let dims = self.symbols[id_idx].array_dims.clone();
-                    if !dims.is_empty() && is_pointer_ty(self.ty) {
-                        if dims[0] == 0 {
-                            // Array-sugar parameter (`T name[][M...]`, C99
-                            // 6.7.5.3p7): the outermost dimension decayed to a
-                            // single pointer, so `type_` carries one Ptr above
-                            // the scalar base. Keep that pointer as the running
-                            // type and seed the inner-dimension strides from the
-                            // scalar element size; each subscript peels one
-                            // level, the innermost decaying to the element.
-                            let scalar_ty = self.symbols[id_idx].type_ - (Ty::Ptr as i64);
-                            let elem_size = self.size_of_type(scalar_ty) as i64;
-                            self.seed_multi_dim_strides(&dims, elem_size);
-                        } else {
-                            let elem_size = self.pointee_size(self.ty);
-                            self.seed_multi_dim_strides(&dims, elem_size);
-                        }
-                    }
-                }
-            }
+            self.parse_identifier()
         } else if self.lex.tk == '(' {
-            self.next()?;
-            if self.lex.tk == '{' {
-                // GCC statement expression `({ ... })`: the value is
-                // that of the enclosed compound's last
-                // expression-statement.
-                self.parse_stmt_expr_body()?;
-            } else if self.lex_is_type_start() {
-                // C-style cast: `(<type>)expr`. Accepts int, char,
-                // float, double, or struct base, with any number of
-                // `*` markers and pointer-level qualifiers.
-                t = self.parse_decl_base_type()?;
-                self.note_cast_type_name(t);
-                // An array typedef (`typedef T A[N]`, e.g. `sigjmp_buf`)
-                // contributes its element count here; a single `*` below
-                // forms a pointer-to-array whose deref is the C99 6.3.2.1p3
-                // decay (no load), not a dereference. Capture the count and
-                // element type before the pointer loop rewrites `t`.
-                let cast_array_elem_ty = t;
-                let cast_typedef_array = core::mem::take(&mut self.pending.typedef_base_array_size);
-                let cast_typedef_dims = core::mem::take(&mut self.pending.typedef_base_array_dims);
-                let mut cast_ptr_levels: i64 = 0;
-                // Fn-pointer lineage: if the base type came from a
-                // typedef-of-fn-pointer, parse_decl_base_type seeded
-                // `pending_fn_ptr_indirection`; the leading `*`s
-                // below add directly to that count. The abstract
-                // fn-ptr branch further down overrides this when a
-                // `(*)(args)` shape is present in the cast.
-                let mut cast_fpi = self.pending.fn_ptr_indirection.take();
-                // The cast spells a flat type; its result carries no
-                // declarator-recorded return lineage.
-                self.pending.fn_ptr_ret_indirection = 0;
-                // A function-TYPE typedef already encodes one pointer
-                // level, so the first `*` in `(F *)x` forms the
-                // pointer-to-function rather than adding a level (matching
-                // the declarator path). Take and clear the flag so it does
-                // not leak into a later declarator.
-                let mut absorb_fn_type_ptr =
-                    core::mem::take(&mut self.pending.base_is_function_type);
-                while self.lex.tk == Token::MulOp {
-                    self.next()?;
-                    if absorb_fn_type_ptr {
-                        absorb_fn_type_ptr = false;
-                    } else {
-                        t += Ty::Ptr as i64;
-                        cast_ptr_levels += 1;
-                        if let Some(fpi) = cast_fpi {
-                            cast_fpi = Some(fpi + 1);
-                        }
-                    }
-                    while self.lex.tk == Token::TypeQual {
-                        t = apply_qual_bits(t, self.lex_qualifier_bits());
-                        self.next()?;
-                    }
-                }
-                // Top-level array brackets in the abstract declarator:
-                // `(int[]){...}` / `(char[N]){...}` / `(s8[2][3]){...}`.
-                // Only a compound literal (detected after the `)`) gives
-                // these meaning; `t` stays the element type and
-                // `cast_array_dims` records the counts outermost first
-                // (`-1` when the leading bracket is empty and the
-                // initializer determines it; C99 6.7.5.2 completes only
-                // the outermost dimension that way).
-                let mut cast_array_dims: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
-                while self.lex.tk == Token::Brak {
-                    self.next()?;
-                    if self.lex.tk == ']' {
-                        if !cast_array_dims.is_empty() {
-                            return Err(
-                                self.compile_err("array type has an incomplete inner dimension")
-                            );
-                        }
-                        cast_array_dims.push(-1);
-                        self.next()?;
-                    } else {
-                        cast_array_dims.push(self.parse_constant_int()?);
-                        self.accept(']')?;
-                    }
-                }
-                // Function-pointer cast inside a cast expression:
-                // any abstract function-pointer declarator after
-                // the base type. Common shapes:
-                //   `(int (*)(args))expr`
-                //   `(void (*)(void))expr`
-                //   `(void(*(*)(args))(void))expr`  -- function
-                //       returning function pointer
-                // c5's type representation is base + pointer-level,
-                // so we treat the entire abstract-declarator tail
-                // as a no-op pointer level. Counted-parens scan
-                // until the cast's outer `)` so even nested fp
-                // shapes consume cleanly.
-                let mut cast_fn_proto = None;
-                if self.lex.tk == '(' {
-                    let (nested_ptrs, proto, dims) = self.parse_abstract_ptr_declarator(true)?;
-                    // `T (*)[N]`: fold the pointee dimensions into the
-                    // aggregate-backed tag so the pointee keeps its size,
-                    // matching the named declarator `T (*p)[N]`.
-                    if !dims.is_empty() && nested_ptrs > 0 {
-                        t = self.array_agg_type(t, &dims) + nested_ptrs * (Ty::Ptr as i64);
-                    } else {
-                        t += nested_ptrs * (Ty::Ptr as i64);
-                    }
-                    // Abstract fn-ptr declarator: the inner `*`
-                    // count IS the indirection from the cast's
-                    // result down to the fn-ptr rvalue, plus 1
-                    // (matching `Symbol::fn_ptr_indirection`).
-                    if nested_ptrs > 0 {
-                        cast_fpi = Some(nested_ptrs);
-                    }
-                    cast_fn_proto = proto;
-                }
-                if self.lex.tk == ')' {
-                    self.next()?;
-                } else {
-                    return Err(self.compile_err("bad cast"));
-                }
-                if self.lex.tk == '{' {
-                    // C99 6.5.2.5 compound literal: `(type){ init }`.
-                    // The `(type)` parsed above is the literal's
-                    // type, not a cast operator. An array typedef's
-                    // dimensions complete the type from the inside:
-                    // `(row[2]){...}` with `typedef int row[3]` is
-                    // `int[2][3]` (C99 6.7.7); a `*` absorbed the
-                    // typedef array into the pointee instead.
-                    let mut literal_dims = cast_array_dims.clone();
-                    if cast_typedef_array > 0 && cast_ptr_levels == 0 && cast_fn_proto.is_none() {
-                        if cast_typedef_dims.is_empty() {
-                            literal_dims.push(cast_typedef_array);
-                        } else {
-                            literal_dims.extend_from_slice(&cast_typedef_dims);
-                        }
-                    }
-                    self.parse_block_compound_literal(t, &literal_dims)?;
-                } else {
-                    self.expr(Token::Inc as i64)?;
-                    let cast_child_ast = self.ast_acc;
-                    // FP-vs-int casts emit conversion ops so the bit
-                    // pattern in r13 is consistent with the new type.
-                    // Same-class casts (int<->ptr, float<->double) are
-                    // bit-pattern-compatible and need no conversion.
-                    let target_is_fp = is_floating_scalar(t);
-                    let source_is_fp = is_floating_scalar(self.ty);
-                    if target_is_fp ^ source_is_fp {
-                        // Mixed FP / int cast: route through ast_fpcast
-                        // regardless of direction. The shared call is
-                        // the AST shape for `int -> fp` *and* `fp ->
-                        // int`; the actual register conversion lives in
-                        // the per-arch emit.
-                        self.ast_fpcast();
-                    } else if !target_is_fp
-                        && !source_is_fp
-                        && !is_pointer_ty(t)
-                        && !is_pointer_ty(self.ty)
-                    {
-                        // Cast to a non-pointer integer narrower than
-                        // 8 bytes: re-extend the accumulator to the
-                        // target storage width. c5 keeps every value
-                        // sign- or zero-extended to 64 bits in the
-                        // accumulator, so a cast that narrows in C99
-                        // is otherwise invisible until the value lands
-                        // in a typed slot.
-                        //
-                        // Unsigned target -> mask the high bits.
-                        // Signed target  -> shift-left then arith-shift-
-                        //                   right by (64 - width*8) so
-                        //                   the high bit of the target
-                        //                   propagates.
-                        let target_size = self.size_of_type(t);
-                        let source_size = self.size_of_type(self.ty);
-                        if is_unsigned_ty(t) {
-                            let mask: i64 = match target_size {
-                                1 => 0xff,
-                                2 => 0xffff,
-                                4 => 0xffff_ffff,
-                                _ => -1,
-                            };
-                            if mask != -1 {
-                                self.emit_binop_with_imm(crate::c5::ir::BinOp::And, mask);
-                            }
-                        } else if target_size == 1 || target_size == 2 || target_size == 4 {
-                            // Signed cast: shift-pair to mask + sign-extend
-                            // to the target storage width. Fires when:
-                            //  * the cast genuinely narrows (target_size <
-                            //    source_size) -- e.g. `(signed char)int_val`,
-                            //  * source is unsigned at the same width as the
-                            //    signed target -- the accumulator is zero-
-                            //    extended, but `(signed char)(unsigned char)`
-                            //    has to flip values >= 0x80 to negative per
-                            //    C99 6.3.1.3.
-                            // Skipped for same-width signed-to-signed casts
-                            // (already correctly sign-extended in the
-                            //  accumulator) and widening signed casts (the
-                            //  source-side load did the extension).
-                            let source_is_unsigned = is_unsigned_ty(self.ty);
-                            let needs_extend = target_size < source_size
-                                || (target_size == source_size && source_is_unsigned);
-                            if needs_extend {
-                                let bits = 64i64 - (target_size as i64) * 8;
-                                self.emit_binop_with_imm(crate::c5::ir::BinOp::Shl, bits);
-                                self.emit_binop_with_imm(crate::c5::ir::BinOp::Shr, bits);
-                            }
-                        }
-                    }
-                    // `(A *)e` for an array typedef `A` names a
-                    // pointer-to-array; rebuild the flat tag into the
-                    // aggregate-backed form (extra `*`s add levels).
-                    // Pointer casts convert no bits, so only the result
-                    // type changes; a following `*` / `[i]` then takes
-                    // the array-decay path off the type.
-                    if cast_typedef_array > 0
-                        && cast_ptr_levels >= 1
-                        && cast_fn_proto.is_none()
-                        && cast_array_dims.is_empty()
-                    {
-                        let dims: alloc::vec::Vec<i64> = if cast_typedef_dims.len() >= 2 {
-                            cast_typedef_dims.clone()
-                        } else {
-                            alloc::vec![cast_typedef_array]
-                        };
-                        let agg = self.array_agg_type(cast_array_elem_ty, &dims);
-                        t = (agg + cast_ptr_levels * (Ty::Ptr as i64))
-                            | (t & super::types::VOLATILE_MASK);
-                    }
-                    self.ty = t;
-                    // A cast yields a value of the cast type, not a
-                    // decayed-array rvalue (C99 6.5.4): drop the operand's
-                    // array-decay hint so `sizeof`/`typeof` of the cast read
-                    // the cast type (`typeof((T *)arr)` is `T *`, not `T[]`).
-                    self.pending.last_array_decay_size = 0;
-                    self.pending.last_array_decay_bytes = 0;
-                    // Overwrite the AST acc with a canonical Cast
-                    // node so any intermediate Binary nodes the
-                    // conversion-shaping sequence pushed don't surface
-                    // as the cast's value. The dropped nodes have no
-                    // consumers; the SSA walker won't visit them.
-                    if let Some(child) = cast_child_ast {
-                        self.ast_emit_cast(child, t);
-                    }
-                    // Re-seed the fn-ptr chain depth from the
-                    // cast destination so a unary `*` chain that
-                    // follows a `(fn_t*)expr` cast (e.g.
-                    // `(**(finder_type*)pVfs->pAppData)(...)`) can
-                    // recognise the decay. The cast result lives
-                    // in `a`, so the depth is `cast_fpi - 1`.
-                    if let Some(fpi) = cast_fpi
-                        && fpi > 0
-                    {
-                        self.pending.fn_ptr_chain_depth = fpi - 1;
-                    }
-                    // C99 6.5.2.2p7: a call through the cast pointer
-                    // uses the cast's prototype. Override the operand's
-                    // recorded callee channel so a following call
-                    // narrows each argument and splits the variadic
-                    // tail per the cast, whatever the operand's own
-                    // declared type said. `typeof(<cast>)` recovers the
-                    // same prototype through `last_fn_ptr_cast`, keyed
-                    // to the cast's flat tag.
-                    if let Some(pp) = cast_fn_proto {
-                        self.pending.last_fn_ptr_cast = Some((
-                            t,
-                            pp.types.clone(),
-                            pp.is_variadic,
-                            cast_fpi.unwrap_or(1).max(1),
-                        ));
-                        self.pending.indirect_callee_is_variadic = pp.is_variadic;
-                        self.pending.indirect_callee_conv =
-                            core::mem::take(&mut self.pending.attr_call_conv);
-                        self.pending.indirect_callee_fn_ptr_depth = cast_fpi.unwrap_or(1).max(1);
-                        self.pending.indirect_callee_ret_fn_ptr = 0;
-                        self.pending.indirect_callee_params = if pp.types.is_empty() {
-                            None
-                        } else {
-                            Some(pp.types)
-                        };
-                    }
-                }
-            } else {
-                self.expr(Token::Assign as i64)?;
-                // Comma operator within parens: `(a, b, c)` evaluates
-                // each subexpression for its side effects and yields
-                // the last. Outside parens, comma stays a separator
-                // (function args, declarators) -- this branch only
-                // fires inside `(...)` because expr(Assign) doesn't
-                // consume `,`. Build `Expr::Comma { lhs, rhs }`
-                // chains on the AST so the walker visits the lhs
-                // before producing the rhs's value; without the
-                // chain the dropped lhs expressions take their
-                // side effects with them when the walker drives the
-                // codegen.
-                while self.lex.tk == ',' {
-                    let lhs_ast = self.ast_acc;
-                    self.next()?;
-                    self.expr(Token::Assign as i64)?;
-                    let rhs_ast = self.ast_acc;
-                    if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
-                        let pos = self.ast_src_pos();
-                        let ty = self.ty;
-                        let id = self
-                            .ast
-                            .push_expr(super::super::ast::Expr::Comma { lhs, rhs, ty }, pos);
-                        self.ast_acc = Some(id);
-                    }
-                }
-                if self.lex.tk == ')' {
-                    self.next()?;
-                } else {
-                    return Err(self.compile_err("close paren expected"));
-                }
-                // Forward the inner expr's exit snapshot into the
-                // active multi-dim queue so the outer expression's
-                // postfix can keep striding through, e.g.,
-                // `(*p)[k]` on a pointer-to-array (the unary `*`
-                // consumed one dim, the `[k]` should pick up the
-                // next). Without this transfer the inner expr's
-                // defensive clear strands the remaining strides.
-                self.pending.index_stride = core::mem::take(&mut self.pending.end_of_expr_stride);
-                self.pending.index_strides_tail =
-                    core::mem::take(&mut self.pending.end_of_expr_strides_tail);
-            }
+            self.parse_parenthesized()
         } else if self.lex.tk == Token::MulOp {
-            self.next()?;
-            // Stash whatever the surrounding scope had in the
-            // "end-of-expr" capture slots so the recursive expr()
-            // that parses our operand can populate them fresh.
-            // After the parse, the new values tell us what
-            // strides the operand left unconsumed -- the signal
-            // we use to decide whether `*p` is a pointer-to-array
-            // row deref. The outer snapshot is restored afterwards
-            // so a containing operator's view isn't disturbed.
-            let saved_eos_stride = core::mem::take(&mut self.pending.end_of_expr_stride);
-            let saved_eos_tail = core::mem::take(&mut self.pending.end_of_expr_strides_tail);
-            self.expr(Token::Inc as i64)?;
-            let leftover_stride = core::mem::take(&mut self.pending.end_of_expr_stride);
-            let leftover_tail = core::mem::take(&mut self.pending.end_of_expr_strides_tail);
-            self.pending.end_of_expr_stride = saved_eos_stride;
-            self.pending.end_of_expr_strides_tail = saved_eos_tail;
-            // C function-pointer decay (6.3.2.1 / 6.3.4): `*` on
-            // a function-pointer rvalue is a no-op -- it yields
-            // back the same function pointer. The chain-depth
-            // side-channel marks the operand as already at the
-            // fn-ptr level, so we suppress the load and leave
-            // both the type and the accumulator unchanged. Next
-            // `*` keeps decaying; eventually the postfix `(`
-            // call-site reads `a` as the function pointer.
-            //
-            // Without this branch the existing handler emits a
-            // spurious `Li` that loads through the function
-            // pointer's bit pattern, hits unmapped memory, and
-            // SIGBUSes when called. The conservative pop in the
-            // call-site path catches this only when the result
-            // type drops to a non-pointer; if the function's
-            // return type is itself a pointer (e.g. an
-            // `io_methods *`-returning fn-ptr typedef)
-            // the pop is short-circuited and the
-            // garbage call target slips through.
-            if let Some(id) = self.ptr_array_id_depth1(self.ty) {
-                // Tested ahead of the function-pointer decay below: a
-                // pointer-to-array tag is never a function pointer, and a
-                // cast leaves the chain depth at 0, which would otherwise
-                // take the decay branch and drop the dereference.
-                //
-                // Pointer-to-array at the last level: `*p` reaches the
-                // array itself, which decays to the element pointer
-                // (C99 6.3.2.1p3). The operand's load already produced
-                // the row address; no further load, no Ptr peel.
-                self.decay_ptr_array_value(id);
-            } else if self.pending.fn_ptr_chain_depth == 0 {
-                // Decay no-op. Keep depth at 0: the decayed
-                // result is itself a fn-ptr rvalue, so any
-                // further `*`s also decay. No scalar load fired,
-                // so the chain depth is preserved.
-            } else if let Some(id) = self.ptr_array_id_depth1(self.ty) {
-                // Pointer-to-array at the last level: `*p` reaches the
-                // array itself, which decays to the element pointer
-                // (C99 6.3.2.1p3). The operand's load already produced
-                // the row address; no further load, no Ptr peel.
-                self.decay_ptr_array_value(id);
-            } else if leftover_stride > 0 {
-                // Pointer-to-array operand: `*p` is the row
-                // deref, equivalent to `p[0]`. The row's address
-                // is already in `a` -- no load, no Ptr peel.
-                // Consume the head stride (we just stepped over
-                // one dim at index 0) and shift the rest into
-                // the active queue so a following postfix `[k]`
-                // strides correctly. Surface the row's byte
-                // size via `last_array_decay_bytes` so an
-                // enclosing `sizeof` recovers it.
-                self.pending.last_array_decay_bytes = leftover_stride;
-                let mut tail = leftover_tail;
-                self.pending.index_stride = if tail.is_empty() { 0 } else { tail.remove(0) };
-                self.pending.index_strides_tail = tail;
-            } else {
-                if is_pointer_ty(self.ty) {
-                    self.ty -= Ty::Ptr as i64;
-                } else {
-                    return Err(self.compile_err("bad dereference"));
-                }
-                // `*p` where `p` is a struct pointer yields a struct
-                // *value*. c5 represents struct values address-as-
-                // value: the address goes in `a`, no load. The next
-                // op (`.field`, `= rhs` lowering Mcpy, etc.) reads
-                // the address from `a` directly.
-                let result_is_struct_value = is_struct_value_ty(self.ty);
-                // Capture the operand snapshot before
-                // `mark_emit_scalar_load` clears the chain-depth
-                // state; the snapshot is the deref's child for
-                // the Unary node below.
-                let deref_child_ast = self.ast_acc;
-                if !result_is_struct_value {
-                    let prior_depth = self.pending.fn_ptr_chain_depth;
-                    self.mark_emit_scalar_load();
-                    // `mark_emit_scalar_load` cleared the chain
-                    // depth. Restore it one level deeper if the
-                    // operand was tracked:
-                    // a real deref consumes one level of indirection
-                    // toward the fn-ptr. (-1 stays -1.)
-                    if prior_depth > 0 {
-                        self.pending.fn_ptr_chain_depth = prior_depth - 1;
-                    }
-                }
-                // Push `Expr::Unary { op: Deref, child, ty }`. For
-                // struct-value `*p` the result type is the struct
-                // and the address-as-value rule means no load
-                // happened; the same Unary node still lets a
-                // wrapping `.field` / `= rhs` lookup the AST shape.
-                if let Some(child) = deref_child_ast {
-                    let result_ty = self.ty;
-                    let pos = self.ast_src_pos();
-                    let id = self.ast.push_expr(
-                        super::super::ast::Expr::Unary {
-                            op: super::super::ast::UnOp::Deref,
-                            child,
-                            ty: result_ty,
-                        },
-                        pos,
-                    );
-                    self.ast_acc = Some(id);
-                }
-                // The operand may have been an array-decayed pointer
-                // (e.g. `*arr` where `arr` is `T arr[N]`), in which
-                // case the identifier-load path seeded
-                // `last_array_decay_size` with the array's element
-                // count. After the `*` consumed that decay, the
-                // value is no longer the array-of-T shape but the
-                // T-shaped first element, so an enclosing
-                // `sizeof(*arr)` must compute `sizeof(T)` rather
-                // than `N * sizeof(T)`. Clear the marker.
-                self.pending.last_array_decay_size = 0;
-                self.pending.last_array_decay_bytes = 0;
-            }
+            self.parse_deref()
         } else if self.lex.tk == Token::Lan {
-            // GCC labels-as-values: `&&label` yields the address of a
-            // local label as a `void *`. The label may be defined later
-            // in the function (forward reference); `ast_label_by_name`
-            // interns it and the walker resolves it to the block.
-            let label = self.parse_label_addr_operand()?;
-            let pos = self.ast_src_pos();
-            let id = self
-                .ast
-                .push_expr(super::super::ast::Expr::LabelAddr(label), pos);
-            self.ast_acc = Some(id);
-            // GCC types `&&label` as `void *`; c5 encodes a void
-            // pointer as `char *` (Ty::Char + Ty::Ptr).
-            self.ty = Ty::Char as i64 + Ty::Ptr as i64;
+            self.parse_label_address()
         } else if self.lex.tk == Token::AndOp {
-            self.next()?;
-            self.expr(Token::Inc as i64)?;
-            // Order matters here: a struct-value rvalue (`p->mutex`
-            // where `mutex` is a struct field, or `*p` where `p`
-            // is a struct pointer) leaves the field's address in
-            // `a` *without* emitting a trailing Li for the load
-            // that produced the address. But the parser may still
-            // have emitted an Li for *something earlier in the
-            // chain* (e.g. the `Li` that loaded `p`'s value to
-            // reach `p->mutex`). Popping that Li would unwind one
-            // step too far and yield `&p` instead of `&p->mutex`.
-            //
-            // So check the resulting type *first*: if `&expr`
-            // yields a struct value, the underlying address is
-            // already in `a` and we leave the IR alone. Only the
-            // remaining scalar / pointer-rvalue cases pop the
-            // trailing load.
-            // Bump `self.ty` by one pointer level FIRST so the
-            // dual-emit helper called from
-            // `pop_trailing_scalar_load` captures the post-`&`
-            // type. Without the pre-bump the AST `Expr::Unary {
-            // op: AddrOf, ty }` carried the pre-`&` scalar /
-            // pointer type, and a wrapping `(T *)&x` cast saw
-            // the wrong source kind in the walker (e.g. `float`
-            // instead of `float *`, which made the cast walker
-            // pick `FpCast(FpToInt)` instead of the integer
-            // pass-through).
-            let pre_addr_ty = self.ty;
-            let _ = pre_addr_ty;
-            self.ty += Ty::Ptr as i64;
-            if is_struct_value_ty(pre_addr_ty) {
-                // Struct value -- the parser already left the address
-                // in `a` (no final-load Li), so the bytecode path needs
-                // no change. Record the pointer result type in the
-                // dual-emit AST by wrapping the operand in
-                // `Expr::Unary { op: AddrOf, ty: struct* }`, so a
-                // consumer (e.g. a variadic argument) distinguishes a
-                // struct pointer from a by-value struct. The walker's
-                // AddrOf arm takes the child's lvalue address, which for
-                // a struct lvalue is its rvalue, leaving the value
-                // unchanged. Limit the wrap to the lvalue forms
-                // `walk_expr_lvalue` handles; a struct rvalue with no
-                // lvalue (a call result) keeps the address-as-value
-                // representation and its struct type. A compound
-                // literal is an lvalue (C99 6.5.2.5p4) and is wrapped,
-                // so a consumer (e.g. the call-argument classifiers)
-                // types `&(T){...}` as a pointer, not a by-value `T`.
-                let wrappable = match self.ast_acc {
-                    Some(id) => matches!(
-                        self.ast.expr(id),
-                        super::super::ast::Expr::Ident { .. }
-                            | super::super::ast::Expr::Member { .. }
-                            | super::super::ast::Expr::Index { .. }
-                            | super::super::ast::Expr::Binary { .. }
-                            | super::super::ast::Expr::CompoundLiteral { .. }
-                            | super::super::ast::Expr::Unary {
-                                op: super::super::ast::UnOp::Deref,
-                                ..
-                            }
-                    ),
-                    None => false,
-                };
-                if wrappable {
-                    self.ast_apply_unary(super::super::ast::UnOp::AddrOf);
-                }
-            } else if self.pop_trailing_scalar_load() {
-                // Scalar / pointer lvalue: dropped the trailing
-                // load so what's left is the address-producing op.
-            } else if is_pointer_ty(pre_addr_ty) {
-                // Array-decay shape: `&arr` and `&pPager->dbFileVers`
-                // when `dbFileVers` is a `char[16]` field. The
-                // expression already yielded the array's address as
-                // its rvalue (no Li was emitted), so `&` is a no-op
-                // at the IR level; the type bump above tracks the
-                // extra pointer level.
-                //
-                // C99 6.5.3.2p3: `&arr` has type pointer-to-array, not
-                // the decayed element pointer. For a known-size 1D array
-                // (`index_stride == 0`; multi-dim seeds a nonzero stride)
-                // rebuild the pointer-to-array aggregate so `(*p)[i]`,
-                // `sizeof(&arr)`, and `typeof(&arr)` see a real
-                // pointer-to-array rather than the element type.
-                let n = self.pending.last_array_decay_size;
-                let decay_dims = core::mem::take(&mut self.pending.last_array_decay_dims);
-                if decay_dims.len() >= 2 {
-                    // `&arr` on a multi-dimensional array yields a pointer to
-                    // the whole array aggregate `T[D0][D1]...`, so `(*p)[i]
-                    // [j]...` and `typeof(&arr)` see the multi-dim shape. The
-                    // seeded per-level strides belong to the decayed operand,
-                    // not to the pointer-to-array result; clear them so a
-                    // following subscript uses the aggregate's own decay.
-                    let elem_ty = pre_addr_ty - Ty::Ptr as i64;
-                    let agg = self.array_agg_type(elem_ty, &decay_dims);
-                    self.ty = agg + Ty::Ptr as i64;
-                    self.pending.index_stride = 0;
-                    self.pending.index_strides_tail.clear();
-                } else if n > 0 && self.pending.index_stride == 0 {
-                    let elem_ty = pre_addr_ty - Ty::Ptr as i64;
-                    let agg = self.array_agg_type(elem_ty, &[n]);
-                    self.ty = agg + Ty::Ptr as i64;
-                }
-                // The result is a pointer; drop the operand's array-decay
-                // hint so a surrounding `sizeof` / `typeof` does not size
-                // or type it as the array itself (mirrors the `*` arm).
-                self.pending.last_array_decay_size = 0;
-                self.pending.last_array_decay_bytes = 0;
-            } else if matches!(
-                self.ast_acc,
-                Some(id) if matches!(
-                    self.ast.expr(id),
-                    super::super::ast::Expr::CompoundLiteral { .. }
-                )
-            ) {
-                // C99 6.5.2.5p4: a compound literal is an lvalue -- an
-                // unnamed object with automatic storage. A scalar literal's
-                // value was materialized without a trailing load, so there
-                // was nothing for `pop_trailing_scalar_load` to drop; wrap
-                // the literal in `AddrOf` and let the walker's lvalue path
-                // emit the init and yield the slot address. Struct / array
-                // literals reach `&` through the branches above.
-                self.ast_apply_unary(super::super::ast::UnOp::AddrOf);
-            } else {
-                return Err(self.compile_err("bad address-of"));
-            }
-            // The pointer-level bump was applied above before
-            // `pop_trailing_scalar_load` so the dual-emit
-            // captured the post-`&` type.
-            // `&` adds one pointer level toward the fn-ptr
-            // for any chain we were tracking. -1 (untracked) stays
-            // -1.
-            if self.pending.fn_ptr_chain_depth >= 0 {
-                self.pending.fn_ptr_chain_depth += 1;
-            }
+            self.parse_address_of()
         } else if self.lex.tk == '!' {
-            self.next()?;
-            self.expr(Token::Inc as i64)?;
-            // C99 6.5.3.3p1 requires a scalar operand; the GCC vector
-            // extension does not extend `!` to a vector either.
-            if is_struct_value_ty(self.ty) && !self.is_int128_ty(self.ty) {
-                return Err(self.compile_err("invalid operand to unary `!` (aggregate type)"));
-            }
-            self.emit_binop_with_imm(crate::c5::ir::BinOp::Eq, 0);
-            self.ty = Ty::Int as i64;
+            self.parse_logical_not()
         } else if self.lex.tk == '~' {
-            self.next()?;
-            self.expr(Token::Inc as i64)?;
-            // GCC vector extension: `~v` is element-wise over an integer
-            // vector and the result keeps the vector type (no promotion).
-            if is_vector_ty(&self.structs, self.ty) {
-                let elem_ty = self.structs[struct_id_of(self.ty)].fields[0].ty;
-                if is_floating_scalar(elem_ty) {
-                    return Err(self.compile_err("invalid operand to unary `~` (vector of float)"));
-                }
-                self.ast_apply_unary(super::super::ast::UnOp::BitNot);
-            } else {
-                self.emit_binop_with_imm(crate::c5::ir::BinOp::Xor, -1);
-                // C99 6.5.3.3p4: `~` applies the integer promotions and the
-                // result has the promoted operand type. `unsigned char` /
-                // `unsigned short` promote to signed `int`. A `long` /
-                // `long long` (signed or unsigned) keeps its width and
-                // signedness -- forcing `Ty::Int` here would both narrow it
-                // and drop the unsigned bit, so a following `>>` would pick
-                // an arithmetic shift on `~(unsigned long)x`. A 4-byte
-                // unsigned result needs the high half masked back to 32
-                // bits because `XOR -1` sets the full 64-bit register.
-                let promoted = integer_promote(self.ty);
-                if is_unsigned_ty(promoted) && self.size_of_type(promoted) == 4 {
-                    self.emit_binop_with_imm(crate::c5::ir::BinOp::And, 0xffff_ffff);
-                }
-                self.ty = promoted;
-            }
+            self.parse_bit_not()
         } else if self.lex.tk == Token::AddOp {
-            // Unary `+`: a no-op per C99 6.5.3.3p2; the result has the
-            // integer-promoted operand type. Integer promotion only
-            // widens sub-int operands (char / short -> int); types of
-            // rank int and above (unsigned, long, long long) keep their
-            // type, so forcing `int` here would drop the width and
-            // signedness and run a later comparison or shift on the
-            // wrong type. FP operands keep their FP type -- otherwise
-            // `+0.5` poses as an integer and a later `r + (+0.5)` lowers
-            // to `BinOp::Add` instead of `BinOp::Fadd`.
-            self.next()?;
-            self.expr(Token::Inc as i64)?;
-            if !is_floating_scalar(self.ty) {
-                self.ty = integer_promote(self.ty);
-            }
+            self.parse_unary_plus()
         } else if self.lex.tk == Token::SubOp {
-            self.next()?;
-            // Constant-fold `-<int-literal>` into the negated
-            // integer literal. Float literals don't qualify --
-            // floating negation must apply to the parsed f64 bit
-            // pattern, not a sign flip on the integer-shaped operand.
-            if self.lex.tk == Token::Num {
-                let val = self.lex.ival;
-                // C99 6.5.3.3p3: unary `-` returns the integer-
-                // promoted operand type. The literal's type comes
-                // from C99 6.4.4.1p5 (first of int / long / long
-                // long that holds the magnitude), so a value past
-                // INT_MAX must not stay at `int` here -- otherwise
-                // the post-Add/Sub mask in `convert.rs` truncates
-                // a downstream `-MAX - 1` back to 32 bits and
-                // yields 0 instead of `INT64_MIN`.
-                self.ty = integer_promote(self.num_token_type(val));
-                // 6.2.5p9: the negation is evaluated in that type, so
-                // an unsigned result wraps modulo 2^N. `-1U` is
-                // UINT_MAX, not the 64-bit -1 a wider compare reads.
-                let negated = narrow_const_int(
-                    self.size_of_type(self.ty),
-                    is_unsigned_ty(self.ty),
-                    false,
-                    i128::from(val.wrapping_neg()),
-                ) as i64;
-                self.emit_imm(negated);
-                // Dual-emit: the constant-folded `-N` collapses
-                // the unary-minus on the AST side too. Seed
-                // `ast_acc` with the matching IntLit so a
-                // wrapping expression (cast, call-arg, assignment)
-                // finds the folded value on the accumulator
-                // instead of whatever stale id the caller left.
-                self.ast_emit_int_lit(negated, self.ty);
-                self.next()?;
-            } else {
-                self.expr(Token::Inc as i64)?;
-                if is_vector_ty(&self.structs, self.ty) {
-                    // GCC vector extension: `-v` is element-wise and the
-                    // result keeps the vector type (no promotion).
-                    self.ast_apply_unary(super::super::ast::UnOp::Neg);
-                } else if is_floating_scalar(self.ty) {
-                    self.ast_fneg();
-                    // self.ty already matches the operand's FP type
-                } else {
-                    // C99 6.5.3.3 paragraph 3: the integer promotions
-                    // are performed on the operand of unary `-`, and
-                    // the result has the promoted operand type.
-                    // Forcing `Ty::Int` here would drop the high half
-                    // of a `long long` / `unsigned long long` operand
-                    // and run any subsequent comparison or shift on
-                    // the negated value in `int`.
-                    let operand_ty = self.ty;
-                    self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, -1);
-                    self.ty = integer_promote(operand_ty);
-                    // C99 6.5.3.3p3: result has the promoted operand type and
-                    // follows that type's overflow rules. Negating the
-                    // type-minimum overflows past the type width, so a 32-bit
-                    // result is renormalized to its declared width -- otherwise
-                    // `-INT_MIN` leaves the high half clear and a later 64-bit
-                    // read (Shr, widen to long) sees the wrong value.
-                    if self.size_of_type(self.ty) == 4 {
-                        self.renormalize_to_width(self.ty);
-                    }
-                }
-            }
+            self.parse_unary_minus()
         } else if self.lex.tk == Token::Inc || self.lex.tk == Token::Dec {
-            t = self.lex.tk.raw();
-            self.next()?;
-            self.expr(Token::Inc as i64)?;
-            // Snapshot the lvalue's AST node before the emit
-            // sequence below: rewrite + reload + Psh + Imm +
-            // Add/Sub + store_op all run through `ast_apply_*`
-            // helpers that pop the vstack regardless of whether the
-            // build succeeded, so by the time `ast_emit_pre_inc`
-            // fires the lvalue would otherwise be gone.
-            let bf_pre = self.direct_inc_lvalue();
-            if let Some((lv, ety)) = bf_pre {
-                let by = if t == Token::Inc as i64 { 1 } else { -1 };
-                let src = self.ast_src_pos();
-                let id = self.ast.push_expr(
-                    super::super::ast::Expr::PreInc {
-                        lvalue: lv,
-                        by,
-                        ty: ety,
-                    },
-                    src,
-                );
-                self.ast_acc = Some(id);
-                self.ty = ety;
-            } else {
-                let pre_inc_lvalue = self.ast_acc;
-                let fn_ptr_step = self.value_is_function_pointer();
-                self.rewrite_trailing_load_as_psh()
-                    .ok_or_else(|| self.compile_err("bad lvalue in pre-increment"))?;
-                // ++/-- reads the prior value and stores a new one.
-                // `take_last_loaded_local` restored was_read to its
-                // pre-load state; force it true because the reload
-                // below re-emits the load. The read clears any
-                // pending dead-store entries; the subsequent store
-                // pushes a fresh one.
-                let line = self.lex.line;
-                if let Some(idx) = self.take_last_loaded_local() {
-                    self.symbols[idx].was_read = true;
-                    self.symbols[idx].was_written = true;
-                    self.record_local_read(idx);
-                    self.record_local_store(idx, line);
-                }
-                self.mark_emit_other();
-                self.ast_psh();
-                // A pointer-to-array (`T (*p)[N]`) looks like a plain
-                // `T*` in the flat type, so `pointee_step` would scale by
-                // `sizeof(T)`. The correct step is the array's size,
-                // seeded into the stride snapshot when the operand was
-                // loaded (the operand was parsed via a nested `expr()`,
-                // so it sits in `end_of_expr_stride`).
-                let step = if fn_ptr_step {
-                    1
-                } else {
-                    self.pointer_to_array_arith_stride(
-                        self.pending.end_of_expr_stride,
-                        self.ty,
-                        self.pointee_step(self.ty),
-                    )
-                };
-                self.emit_imm(step);
-                self.ast_binop(if t == Token::Inc as i64 {
-                    super::super::ir::BinOp::Add
-                } else {
-                    super::super::ir::BinOp::Sub
-                });
-                self.ast_assign();
-                // Build the AST `Expr::PreInc` whose `by` is signed
-                // by the op direction so the walker routes to a
-                // single `binop_imm(Add, lvalue, by)` rather than
-                // matching the sign separately. The lvalue producer
-                // is already on the parser-side vstack from the
-                // trailing-load rewrite.
-                let pre_inc_step = if t == Token::Inc as i64 { step } else { -step };
-                let pre_inc_ty = self.ty;
-                if let Some(lvalue) = pre_inc_lvalue {
-                    self.ast_emit_pre_inc(lvalue, pre_inc_step, pre_inc_ty);
-                }
-            }
+            self.parse_prefix_inc_dec()
         } else {
             // The parse-error message includes the enclosing function
             // name and (for `Token::Id`) the identifier name -- those
@@ -3463,16 +1203,2415 @@ impl Compiler {
             } else {
                 String::new()
             };
-            return Err(self.compile_err(format!(
+            Err(self.compile_err(format!(
                 "bad expression: got {}{id_suffix} (in {func})",
                 super::super::token::describe(self.lex.tk),
+            )))
+        }
+    }
+
+    /// An integer constant: the immediate, the type, and the AST literal.
+    fn emit_int_constant(&mut self, val: i64, ty: i64) {
+        self.emit_imm(val);
+        self.ty = ty;
+        self.ast_emit_int_lit(val, ty);
+    }
+
+    fn parse_int_literal(&mut self) -> Result<(), C5Error> {
+        let val = self.lex.ival;
+        let ty = self.num_token_type(val);
+        self.emit_int_constant(val, ty);
+        self.next()
+    }
+
+    fn parse_float_literal(&mut self) -> Result<(), C5Error> {
+        // C99 6.4.4.2p4: an unsuffixed floating constant has
+        // type double, `f`/`F` float, `l`/`L` long double
+        // (represented as f64 in c5). The lexer stored the
+        // value -- already rounded to single precision for
+        // `f`/`F` -- as `f64::to_bits()` cast to i64 in `ival`.
+        let bits = self.lex.ival as u64;
+        self.emit_imm(self.lex.ival);
+        self.ty = if self.lex.float_suffix_f32 {
+            Ty::Float as i64
+        } else {
+            Ty::Double as i64
+        };
+        self.ast_emit_float_lit(bits, self.ty);
+        self.next()?;
+        Ok(())
+    }
+
+    fn parse_string_literal(&mut self) -> Result<(), C5Error> {
+        // C99 6.4.5 paragraph 6: a string literal has type
+        // `char[N+1]` where the +1 is the trailing NUL. The
+        // value decays to `char *` in this expression context,
+        // but `sizeof("...")` reads the full array size --
+        // surface the byte count via `last_array_decay_bytes`
+        // so `sizeof_operand_bytes` returns N+1 instead of the
+        // decayed pointer's 8.
+        let start_offset = self.lex.ival;
+        // A wide literal carries its own `wchar_t`-width terminator
+        // from the lexer (which also absorbs adjacent `L"..."`
+        // parts); a narrow literal does not, so the single trailing
+        // NUL is added here. Capture the kind before `next()`
+        // re-lexes the following token.
+        let is_wide = self.lex.str_is_wide;
+        self.emit_data_imm(start_offset);
+        self.next()?;
+        // C concatenates adjacent string literals -- `"a" "b"` is one
+        // string. The lexer leaves the narrow NUL off so the bytes
+        // flow straight together; the trailing NUL is added below.
+        while self.lex.tk == '"' {
+            self.next()?;
+        }
+        if !is_wide {
+            self.push_literal_nul();
+        }
+        // The object boundary was recorded when the first part was
+        // lexed (see `Compiler::next`).
+        self.pending.last_array_decay_bytes = (self.data.len() as i64) - start_offset;
+        self.ty = Ty::Ptr as i64;
+        // Dual-emit: capture the decayed `char *` rvalue so
+        // the wrapping expression (typically a call argument,
+        // initializer, or assignment) finds the address on
+        // `ast_acc`.
+        self.ast_emit_str_lit(start_offset, self.ty);
+        Ok(())
+    }
+
+    fn parse_sizeof_expr(&mut self) -> Result<(), C5Error> {
+        // C99 6.5.3.4: `sizeof(<type>)`, `sizeof(<expr>)`, or
+        // `sizeof <unary-expr>`. The shared helper handles
+        // all three shapes; this site just emits the result
+        // as a runtime immediate typed `size_t` (6.5.3.4p4).
+        self.next()?;
+        let total_bytes = self.sizeof_operand_bytes()?;
+        self.emit_imm(total_bytes);
+        self.ty = self.size_t_ty();
+        // C99 6.5.3.4p2: `sizeof` of a variable-length array is a
+        // runtime value -- emit a load of the VLA's byte-count
+        // slot. Every other operand folds to a compile-time
+        // constant; seed the accumulator with the matching IntLit.
+        if let Some(size_slot) = self.pending.sizeof_vla_size_slot.take() {
+            self.ast_emit_vla_sizeof(size_slot);
+        } else {
+            self.ast_emit_int_lit(total_bytes, self.ty);
+        }
+        Ok(())
+    }
+
+    fn parse_alignof_expr(&mut self) -> Result<(), C5Error> {
+        // C11 6.5.3.4: `_Alignof ( type-name )`, a compile-time
+        // constant typed `size_t`, matching the `sizeof` site.
+        self.next()?;
+        let align = self.alignof_operand_bytes()?;
+        self.emit_imm(align);
+        self.ty = self.size_t_ty();
+        self.ast_emit_int_lit(align, self.ty);
+        Ok(())
+    }
+
+    fn parse_types_compatible_expr(&mut self) -> Result<(), C5Error> {
+        // GCC `__builtin_types_compatible_p(T1, T2)`: an integer
+        // constant, emitted like the `sizeof` / `_Alignof` results.
+        self.next()?;
+        let v = self.parse_types_compatible_p()?;
+        self.emit_imm(v);
+        self.ty = Ty::Int as i64;
+        self.ast_emit_int_lit(v, self.ty);
+        Ok(())
+    }
+
+    fn parse_offsetof_expr(&mut self) -> Result<(), C5Error> {
+        // GCC `__builtin_offsetof(T, member)`: the member's byte offset, a
+        // `size_t`-typed integer. Constant unless the designator carries a
+        // runtime array subscript (a GCC extension), which the parser then
+        // emits onto the accumulator directly.
+        self.next()?;
+        match self.parse_builtin_offsetof(true)? {
+            Some(v) => {
+                self.emit_imm(v);
+                self.ty = self.size_t_ty();
+                self.ast_emit_int_lit(v, self.ty);
+            }
+            None => {
+                // Runtime offset already emitted; the type is size_t.
+                self.ty = self.size_t_ty();
+            }
+        }
+        Ok(())
+    }
+
+    fn parse_func_name(&mut self) -> Result<(), C5Error> {
+        // C99 6.4.2.2: __func__ is implicitly declared as
+        // `static const char __func__[] = "function-name";` at the
+        // start of every function body; __FUNCTION__ /
+        // __PRETTY_FUNCTION__ are the GCC aliases. The bytes live in
+        // the data segment and the expression decays to a pointer.
+        let offset = self.intern_func_name();
+        self.emit_data_imm(offset);
+        self.next()?;
+        self.ty = Ty::Char as i64 + Ty::Ptr as i64;
+        // `__func__` is a `char[]` of length strlen + 1 (C99
+        // 6.4.2.2); surface that to an enclosing `sizeof` the same
+        // way a decayed array does, so `sizeof(__func__)` is the
+        // array size, not the decayed pointer's.
+        self.pending.last_array_decay_size = self.current_function_name.len() as i64 + 1;
+        // Dual-emit the decayed `char *` value so the walker
+        // sees the address on `ast_acc` (identical shape to a
+        // plain string literal -- the same `Expr::StrLit`
+        // carrier).
+        self.ast_emit_str_lit(offset, self.ty);
+        Ok(())
+    }
+
+    fn parse_identifier(&mut self) -> Result<(), C5Error> {
+        let id_idx = self.lex.curr_id_idx;
+        self.next()?;
+        if self.lex.tk == '(' {
+            self.next()?;
+            return self.parse_call(id_idx);
+        }
+        let class = self.symbols[id_idx].class;
+        if class == Token::Num as i64 {
+            self.parse_enum_constant(id_idx)
+        } else if class == Token::Fun as i64 || class == Token::Sys as i64 {
+            self.parse_function_designator(id_idx)
+        } else if class == Token::Loc as i64
+            && matches!(
+                self.symbols[id_idx].asm_register,
+                Some(
+                    crate::c5::symbol::AsmRegister::StackPointer
+                        | crate::c5::symbol::AsmRegister::FramePointer
+                )
+            )
+        {
+            self.parse_register_variable(id_idx)
+        } else {
+            self.parse_variable(id_idx)
+        }
+    }
+
+    /// A call on a bare identifier, the `(` consumed: a builtin lowered
+    /// at the call site, or a call to the declared function.
+    fn parse_call(&mut self, id_idx: usize) -> Result<(), C5Error> {
+        let id_idx = self.bind_call_target(id_idx)?;
+        match self.builtin_call(id_idx) {
+            Some(BuiltinCall::Simd(op)) => {
+                let name = self.symbols[id_idx].name.clone();
+                self.parse_x86_simd_builtin(op, &name)
+            }
+            Some(BuiltinCall::MemTransfer(op)) => {
+                let name = self.symbols[id_idx].name.clone();
+                self.parse_mem_transfer_builtin(op, &name)
+            }
+            Some(BuiltinCall::ChooseExpr) => self.parse_choose_expr_builtin(),
+            Some(BuiltinCall::ConstantP) => self.parse_constant_p_builtin(),
+            Some(BuiltinCall::HasAttribute) => self.parse_has_attribute_builtin(),
+            Some(BuiltinCall::ObjectSize) => self.parse_object_size_builtin(),
+            Some(BuiltinCall::Overflow) => {
+                let name = self.symbols[id_idx].name.clone();
+                self.parse_overflow_builtin(&name)
+            }
+            Some(BuiltinCall::GccAtomic) => {
+                let name = self.symbols[id_idx].name.clone();
+                self.parse_gcc_atomic_builtin(&name, id_idx)
+            }
+            Some(BuiltinCall::Atomic(kind)) => self.parse_atomic_builtin(kind, id_idx),
+            Some(BuiltinCall::Intrinsic(id)) => self.parse_intrinsic_call(id_idx, id),
+            None => self.parse_direct_call(id_idx),
+        }
+    }
+
+    /// The symbol a call binds to: a `__builtin_*` alias of a library
+    /// function binds to that function, and a name the driver listed for
+    /// C89 6.3.2.2 implicit declaration is declared here.
+    fn bind_call_target(&mut self, id_idx: usize) -> Result<usize, C5Error> {
+        let mut id_idx = id_idx;
+        // A `__builtin_*` name equivalent to a library function
+        // binds to that function here rather than through a
+        // header macro, so the unit's own macro of the library
+        // name cannot capture the builtin spelling.
+        if self.symbols[id_idx].class == 0 {
+            let alias =
+                super::super::preprocessor::builtins::library_alias(&self.symbols[id_idx].name);
+            if let Some(fn_name) = alias {
+                id_idx = self.resolve_symbol_named(fn_name);
+                id_idx = self.builtin_library_symbol(id_idx);
+            }
+        }
+        // C89 6.3.2.2 implicit declaration, restricted to the
+        // names the driver listed: the link set defines them,
+        // so the call binds `extern int name();` and resolves
+        // against the user's definition rather than through a
+        // header's library binding.
+        if self.symbols[id_idx].class == 0
+            && !self.implicit_extern_fns.is_empty()
+            && self
+                .implicit_extern_fns
+                .iter()
+                .any(|n| n == &self.symbols[id_idx].name)
+        {
+            // The implicit declaration lands in the innermost
+            // block containing the call (C89 6.3.2.2) and
+            // unbinds at its exit; the entity survives on the
+            // slot for link resolution.
+            self.rebind_scoped(id_idx)?;
+            self.symbols[id_idx].class = Token::Fun as i64;
+            self.symbols[id_idx].scoped_fn_decl = true;
+            self.symbols[id_idx].type_ = Ty::Int as i64;
+            self.symbols[id_idx].implicit_return_int = true;
+            self.symbols[id_idx].linkage = crate::c5::symbol::Linkage::External;
+            self.symbols[id_idx].defined_here = false;
+        }
+        Ok(id_idx)
+    }
+
+    /// The builtin a call on `id_idx` lowers to, or `None` for a call to
+    /// a declared function. A name bound to a real function is not a
+    /// builtin, except that a registered intrinsic is lowered whatever
+    /// the name is bound to.
+    fn builtin_call(&self, id_idx: usize) -> Option<BuiltinCall> {
+        let name = self.symbols[id_idx].name.as_str();
+        let class = self.symbols[id_idx].class;
+        let intrinsic_id = self.pp_intrinsics.get(name).copied();
+        let not_real_fn = class != Token::Fun as i64 && class != Token::Sys as i64;
+        if not_real_fn {
+            if let Some(op) = super::super::x86_simd::lookup(name) {
+                return Some(BuiltinCall::Simd(op));
+            }
+            if let Some(op) = mem_transfer_op(name) {
+                return Some(BuiltinCall::MemTransfer(op));
+            }
+            match name {
+                "__builtin_choose_expr" => return Some(BuiltinCall::ChooseExpr),
+                "__builtin_constant_p" => return Some(BuiltinCall::ConstantP),
+                "__builtin_has_attribute" => return Some(BuiltinCall::HasAttribute),
+                "__builtin_object_size" => return Some(BuiltinCall::ObjectSize),
+                "__builtin_add_overflow" | "__builtin_sub_overflow" | "__builtin_mul_overflow" => {
+                    return Some(BuiltinCall::Overflow);
+                }
+                _ => {}
+            }
+            if typed_overflow_builtin(name).is_some() {
+                return Some(BuiltinCall::Overflow);
+            }
+            if name.starts_with("__atomic_") || name.starts_with("__sync_") {
+                return Some(BuiltinCall::GccAtomic);
+            }
+            if let Some(kind) = intrinsic_id.and_then(atomic_kind_from_intrinsic) {
+                return Some(BuiltinCall::Atomic(kind));
+            }
+        }
+        intrinsic_id.map(BuiltinCall::Intrinsic)
+    }
+
+    fn parse_intrinsic_call(&mut self, id_idx: usize, intrinsic_id: i64) -> Result<(), C5Error> {
+        use crate::c5::op::Intrinsic;
+        let is = |k: Intrinsic| intrinsic_id == k as i64;
+        let fn_name = self.symbols[id_idx].name.clone();
+        // `__builtin_trap()` is the only nullary intrinsic;
+        // every other one needs at least one argument.
+        if self.lex.tk == ')' && intrinsic_id != crate::c5::op::Intrinsic::Trap as i64 {
+            return Err(self.compile_err(format!("intrinsic `{fn_name}` requires one argument")));
+        }
+        let IntrinsicOperands {
+            args: ast_intrinsic_args,
+            va_arg_result_ty,
+            frame_walk_levels,
+            walked_return_slot,
+        } = self.parse_intrinsic_operands(intrinsic_id, &fn_name)?;
+        if self.lex.tk != ')' {
+            return Err(self.compile_err(format!(
+                "intrinsic `{fn_name}` arity mismatch at close paren"
             )));
         }
-
-        while self.lex.tk >= lev || self.lex.tk == '(' {
-            self.parse_operator()?;
+        self.next()?;
+        self.mark_emit_other();
+        // Flag the function for the alloca-arena
+        // patch-up at function-end. We don't reserve
+        // the alloca-top slot here -- the function
+        // might still grow more regular locals after
+        // this point, and the slot must sit just
+        // below them so the arena ends up at the
+        // deepest part of the frame.
+        if is(Intrinsic::Alloca) {
+            self.uses_alloca_in_current_fn = true;
         }
-        self.end_expression();
+        self.ty = self.intrinsic_result_ty(intrinsic_id);
+        // Dual-emit `Expr::Intrinsic { kind, args, ty }`.
+        // The walker dispatches by `kind` to the matching
+        // `Inst::Intrinsic` op. Args carry through in
+        // source order.
+        let intr_ty = self.ty;
+        let pos = self.ast_src_pos();
+        // A walked return address starts from the frame address.
+        let node_kind = if walked_return_slot {
+            Intrinsic::FrameAddress as i64
+        } else {
+            intrinsic_id
+        };
+        let id = self.ast.push_expr(
+            super::super::ast::Expr::Intrinsic {
+                kind: node_kind,
+                args: ast_intrinsic_args,
+                ty: intr_ty,
+            },
+            pos,
+        );
+        self.ast_acc = Some(id);
+        // GCC semantics: `__builtin_va_arg(ap, T)` yields
+        // the next argument as a value of type T. The
+        // intrinsic returns the slot address; wrap it in
+        // the `*(T *)...` shape <stdarg.h>'s va_arg used
+        // to spell out.
+        if let Some(res_ty) = va_arg_result_ty {
+            if let Some(child) = self.ast_acc {
+                self.ast_emit_cast(child, res_ty + Ty::Ptr as i64);
+            }
+            if !(is_struct_value_ty(res_ty)) {
+                self.mark_emit_scalar_load();
+            }
+            self.ty = res_ty;
+            self.ast_apply_unary(super::super::ast::UnOp::Deref);
+        }
+        // A level N > 0 of either frame builtin. A frame record
+        // holds the caller's frame pointer at offset 0, so each
+        // level is one load through the level below it. This is
+        // the sequence gcc emits on both supported targets for
+        // `__builtin_frame_address`; `__builtin_return_address`
+        // then reads the return slot of the record reached, which
+        // the level-0 intrinsic does when given that frame.
+        let void_ptr_ty = (Ty::Char as i64) + (Ty::Ptr as i64);
+        for _ in 0..frame_walk_levels {
+            if let Some(child) = self.ast_acc {
+                self.ast_emit_cast(child, void_ptr_ty + Ty::Ptr as i64);
+            }
+            self.mark_emit_scalar_load();
+            self.ty = void_ptr_ty;
+            self.ast_apply_unary(super::super::ast::UnOp::Deref);
+        }
+        if walked_return_slot && let Some(walked) = self.ast_acc {
+            let pos = self.ast_src_pos();
+            let id = self.ast.push_expr(
+                super::super::ast::Expr::Intrinsic {
+                    kind: Intrinsic::ReturnAddress as i64,
+                    args: alloc::vec![walked],
+                    ty: void_ptr_ty,
+                },
+                pos,
+            );
+            self.ast_acc = Some(id);
+            self.ty = void_ptr_ty;
+        }
+        Ok(())
+    }
+
+    /// The operands of an intrinsic call, parsed in source order with the
+    /// conversions the intrinsic's operand types call for.
+    fn parse_intrinsic_operands(
+        &mut self,
+        intrinsic_id: i64,
+        fn_name: &str,
+    ) -> Result<IntrinsicOperands, C5Error> {
+        use crate::c5::op::Intrinsic;
+        let is = |k: Intrinsic| intrinsic_id == k as i64;
+        let intr_kind = crate::c5::op::Intrinsic::from_i64(intrinsic_id);
+        let is_fp_unary = intr_kind.is_some_and(|i| i.is_fp_unary());
+        let is_int_bit_unary = intr_kind.is_some_and(|i| i.is_int_bit_unary());
+        let is_bit_unary_64 = intr_kind.is_some_and(|i| i.is_bit_unary_64());
+        let is_bswap = intr_kind.is_some_and(|i| i.is_bswap());
+        // Set for va_arg: the requested argument type. After
+        // the intrinsic node is built the result is wrapped
+        // in a load of this type (GCC value semantics).
+        let mut va_arg_result_ty: Option<i64> = None;
+        // A level above 0 of either frame builtin: how many
+        // saved-frame-pointer loads wrap the intrinsic node, and
+        // whether the return slot of the frame reached is read.
+        let mut frame_walk_levels: i64 = 0;
+        let mut walked_return_slot = false;
+        let mut ast_intrinsic_args: alloc::vec::Vec<super::super::ast::ExprId> =
+            alloc::vec::Vec::new();
+        if is(Intrinsic::Trap) {
+            // __builtin_trap() -- no arguments.
+        } else if is(Intrinsic::Fma) || is(Intrinsic::Fmaf) {
+            // fma(x, y, z) / fmaf(x, y, z) -- C99 7.12.13.1.
+            // Three FP arguments, each cast to the result
+            // precision so the fused node sees uniform-width
+            // operands (6.3.1.4 / 6.3.1.5). The walker lowers
+            // the call to a single `Inst::Fma`.
+            let elem_ty = if is(Intrinsic::Fmaf) {
+                Ty::Float as i64
+            } else {
+                Ty::Double as i64
+            };
+            let mut count = 0;
+            loop {
+                self.parse_converted_operand(elem_ty, &mut ast_intrinsic_args)?;
+                count += 1;
+                if self.lex.tk == ',' {
+                    self.next()?;
+                    continue;
+                }
+                break;
+            }
+            if count != 3 {
+                return Err(self.compile_err(format!("intrinsic `{fn_name}` takes (x, y, z)")));
+            }
+        } else if is_fp_unary {
+            // sqrt / fabs / floor / ceil / trunc and their
+            // single-precision partners -- one FP argument cast
+            // to the result precision (6.3.1.4 / 6.3.1.5). The
+            // walker lowers the call to a single
+            // `Inst::Intrinsic` that emits the hardware
+            // instruction.
+            let elem_ty = if intr_kind.is_some_and(|i| i.is_single_precision()) {
+                Ty::Float as i64
+            } else {
+                Ty::Double as i64
+            };
+            self.parse_converted_operand(elem_ty, &mut ast_intrinsic_args)?;
+        } else if is_int_bit_unary || is_bswap {
+            // __builtin_clz / ctz / popcount (+ ll forms) and
+            // __builtin_bswap16 / 32 / 64 -- one integer argument.
+            // Cast to the unsigned form of the operation width so
+            // the value reaches the walker zero-extended (clz /
+            // popcount count over the full width; bswap reverses
+            // exactly that many bytes).
+            let is_clrsb = intr_kind.is_some_and(|i| i.is_clrsb());
+            let elem_ty = if is_bswap {
+                let base = match intr_kind {
+                    Some(crate::c5::op::Intrinsic::Bswap16) => Ty::Short as i64,
+                    Some(crate::c5::op::Intrinsic::Bswap64) => Ty::LongLong as i64,
+                    _ => Ty::Int as i64,
+                };
+                base | super::types::UNSIGNED_BIT
+            } else if is_clrsb {
+                // clrsb counts sign bits: the operand is signed,
+                // so sign-extend into the register.
+                if is_bit_unary_64 {
+                    Ty::LongLong as i64
+                } else {
+                    Ty::Int as i64
+                }
+            } else if is_bit_unary_64 {
+                Ty::LongLong as i64 | super::types::UNSIGNED_BIT
+            } else {
+                Ty::Int as i64 | super::types::UNSIGNED_BIT
+            };
+            self.parse_converted_operand(elem_ty, &mut ast_intrinsic_args)?;
+        } else if is(Intrinsic::VaArg) {
+            va_arg_result_ty = Some(self.parse_va_arg_operands(fn_name, &mut ast_intrinsic_args)?);
+        } else if is(Intrinsic::VaStart) || is(Intrinsic::VaCopy) {
+            // Two operands: the va_list, then the rightmost
+            // fixed parameter (va_start, C99 7.15.1.4) or
+            // the source va_list (va_copy). Both reach the
+            // intrinsic as addresses; the helpers reduce
+            // the GCC-shaped operands (`ap`, `last`) and
+            // explicit-address spellings alike.
+            self.expr(Token::Assign as i64)?;
+            self.va_list_operand_address();
+            if let Some(a) = self.ast_acc {
+                ast_intrinsic_args.push(a);
+            }
+            self.ast_psh();
+            if self.lex.tk != ',' {
+                return Err(self.compile_err(format!("intrinsic `{fn_name}` takes two operands")));
+            }
+            self.next()?;
+            self.expr(Token::Assign as i64)?;
+            if is(Intrinsic::VaCopy) {
+                self.va_list_operand_address();
+            } else {
+                self.va_operand_take_address();
+            }
+            if let Some(a) = self.ast_acc {
+                ast_intrinsic_args.push(a);
+            }
+        } else if is(Intrinsic::VaEnd) {
+            // One operand: the va_list, reduced to its
+            // storage address.
+            self.expr(Token::Assign as i64)?;
+            self.va_list_operand_address();
+            if let Some(a) = self.ast_acc {
+                ast_intrinsic_args.push(a);
+            }
+        } else if is(Intrinsic::LongjmpAArch64) {
+            // Two-arg shape: env then val. The first
+            // gets pushed; the second lands in the
+            // accumulator so the AArch64 lowering can
+            // pop env and read val without extra
+            // shuffling.
+            self.expr(Token::Assign as i64)?;
+            if let Some(a) = self.ast_acc {
+                ast_intrinsic_args.push(a);
+            }
+            self.ast_psh();
+            if self.lex.tk != ',' {
+                return Err(self.compile_err(format!("intrinsic `{fn_name}` takes (env, val)")));
+            }
+            self.next()?;
+            self.expr(Token::Assign as i64)?;
+            if let Some(a) = self.ast_acc {
+                ast_intrinsic_args.push(a);
+            }
+            if is_floating_scalar(self.ty) {
+                self.ast_fpcast();
+                self.ty = Ty::Int as i64;
+            }
+        } else if is(Intrinsic::FrameAddress) || is(Intrinsic::ReturnAddress) {
+            // GCC defines the operand as the number of frames to
+            // walk up and requires it to be a constant. Level 0
+            // reads this function's own frame record. Above 0,
+            // both walk the saved frame-pointer chain that far,
+            // and `__builtin_return_address` then reads the
+            // return slot of the record reached. The level is
+            // consumed at parse time and reaches no operand.
+            let level = self.parse_frame_level(fn_name)?;
+            if level > 0 {
+                frame_walk_levels = level;
+                walked_return_slot = is(Intrinsic::ReturnAddress);
+            }
+        } else {
+            self.expr(Token::Assign as i64)?;
+            if let Some(a) = self.ast_acc {
+                ast_intrinsic_args.push(a);
+            }
+            // Coerce a float argument to int when the
+            // intrinsic expects an integer size (alloca
+            // and SetjmpAArch64 are both pointer-shape
+            // inputs).
+            if is_floating_scalar(self.ty) {
+                self.ast_fpcast();
+                self.ty = Ty::Int as i64;
+            }
+        }
+        Ok(IntrinsicOperands {
+            args: ast_intrinsic_args,
+            va_arg_result_ty,
+            frame_walk_levels,
+            walked_return_slot,
+        })
+    }
+
+    /// One operand converted to `to_ty` (C99 6.3.1.4 / 6.3.1.5), so the
+    /// node sees operands of the width it computes in.
+    fn parse_converted_operand(
+        &mut self,
+        to_ty: i64,
+        args: &mut alloc::vec::Vec<super::super::ast::ExprId>,
+    ) -> Result<(), C5Error> {
+        self.expr(Token::Assign as i64)?;
+        if let Some(child) = self.ast_acc {
+            let pos = self.ast_src_pos();
+            let cast_id = self
+                .ast
+                .push_expr(super::super::ast::Expr::Cast { child, to_ty }, pos);
+            args.push(cast_id);
+        }
+        Ok(())
+    }
+
+    /// The operands of `__builtin_va_arg(ap, T)`: the `va_list` address
+    /// and the packed descriptor of `T`. Returns `T`.
+    fn parse_va_arg_operands(
+        &mut self,
+        fn_name: &str,
+        args: &mut alloc::vec::Vec<super::super::ast::ExprId>,
+    ) -> Result<i64, C5Error> {
+        // `__builtin_va_arg(ap, T)` -- ap names the
+        // va_list, T is the argument's type-name. The
+        // first operand is reduced to the storage
+        // address and pushed; the second is the packed
+        // descriptor `(kind << 16) | size` (kind 0 =
+        // integer / pointer, 1 = floating) the
+        // per-target codegen reads from the
+        // accumulator. The System V x86_64 ABI (3.5.7)
+        // routes the read to the gp or fp save area by
+        // `kind`; the cursor targets ignore the
+        // descriptor.
+        self.expr(Token::Assign as i64)?;
+        self.va_list_operand_address();
+        if let Some(a) = self.ast_acc {
+            args.push(a);
+        }
+        if self.lex.tk != ',' {
+            return Err(self.compile_err(format!("intrinsic `{fn_name}` takes (ap, type)")));
+        }
+        self.next()?;
+        if !self.lex_is_type_start() {
+            return Err(self.compile_err(format!(
+                "intrinsic `{fn_name}` second operand must be a type name"
+            )));
+        }
+        // Parse the type-name with optional pointer
+        // decoration (C99 6.7.6 abstract declarator), the
+        // same machinery `sizeof(<type>)` uses. A pointer
+        // type collapses to an 8-byte integer-class slot.
+        let mut arg_ty = self.parse_decl_base_type()?;
+        let _ = core::mem::take(&mut self.pending.typedef_base_array_size);
+        let mut is_pointer = false;
+        while self.lex.tk == Token::MulOp {
+            self.next()?;
+            arg_ty += Ty::Ptr as i64;
+            is_pointer = true;
+            while self.lex.tk == Token::TypeQual {
+                self.next()?;
+            }
+        }
+        let size = self.size_of_type(arg_ty) as i64;
+        // C99 6.5.2.2p6: a floating-point argument that
+        // survives default argument promotions is `double`
+        // and rides the fp save area; a pointer or integer
+        // rides the gp save area. `kind` 1 = floating,
+        // 0 = integer / pointer.
+        let kind = if !is_pointer && is_floating_scalar(arg_ty) {
+            1i64
+        } else {
+            0i64
+        };
+        let descriptor = (kind << 16) | (size & 0xffff);
+        let desc_id = self.ast_emit_int_lit(descriptor, Ty::Int as i64);
+        args.push(desc_id);
+        Ok(arg_ty)
+    }
+
+    /// The level operand of `__builtin_frame_address` /
+    /// `__builtin_return_address`: a non-negative integer constant,
+    /// consumed at parse time.
+    fn parse_frame_level(&mut self, fn_name: &str) -> Result<i64, C5Error> {
+        self.expr(Token::Assign as i64)?;
+        let level = self.ast_acc.and_then(|a| self.expr_const_int(a));
+        self.ast_acc = None;
+        match level {
+            Some(n) if n >= 0 => Ok(n),
+            Some(n) => Err(self.compile_err(format!(
+                "invalid argument to `{fn_name}`: the level must not be negative, got {n}"
+            ))),
+            None => Err(self.compile_err(format!(
+                "invalid argument to `{fn_name}`: the level must be an integer constant"
+            ))),
+        }
+    }
+
+    /// The type of an intrinsic call's value.
+    fn intrinsic_result_ty(&self, intrinsic_id: i64) -> i64 {
+        use crate::c5::op::Intrinsic;
+        let is = |k: Intrinsic| intrinsic_id == k as i64;
+        let intr_kind = crate::c5::op::Intrinsic::from_i64(intrinsic_id);
+        let is_fp_unary = intr_kind.is_some_and(|i| i.is_fp_unary());
+        let is_int_bit_unary = intr_kind.is_some_and(|i| i.is_int_bit_unary());
+        let is_bswap = intr_kind.is_some_and(|i| i.is_bswap());
+        // Result type: alloca returns `void *`,
+        // SetjmpAArch64 returns `int`, LongjmpAArch64
+        // has no real return (control never reaches
+        // the next statement) but the parser still
+        // typechecks downstream uses as `int`.
+        // __builtin_va_start / __builtin_va_end /
+        // __builtin_va_copy don't return a useful
+        // value, but the parser threads them through
+        // as int so a statement-context call
+        // typechecks.
+        if is(Intrinsic::Trap) {
+            // `__builtin_trap` and `__builtin_unreachable` are
+            // declared `void`, so `return __builtin_unreachable();`
+            // in a void function is the 6.8.6.4p1 void-operand
+            // form rather than a returned value.
+            super::types::void_ty()
+        } else if is(Intrinsic::SetjmpAArch64)
+            || is(Intrinsic::LongjmpAArch64)
+            || is(Intrinsic::VaStart)
+            || is(Intrinsic::VaEnd)
+            || is(Intrinsic::VaCopy)
+        {
+            Ty::Int as i64
+        } else if is(Intrinsic::VaArg) {
+            // __builtin_va_arg returns `void *`
+            // pointing at the just-vacated 8-byte
+            // slot. The <stdarg.h> macro dereferences
+            // as the requested type.
+            (Ty::Char as i64) + (Ty::Ptr as i64)
+        } else if is(Intrinsic::Fma) {
+            Ty::Double as i64
+        } else if is(Intrinsic::Fmaf) {
+            Ty::Float as i64
+        } else if is_fp_unary {
+            if intr_kind.is_some_and(|i| i.is_single_precision()) {
+                Ty::Float as i64
+            } else {
+                Ty::Double as i64
+            }
+        } else if is_int_bit_unary {
+            // C99 has no such builtin; GCC defines the result
+            // type as `int` for every form.
+            Ty::Int as i64
+        } else if is_bswap {
+            // GCC types the result as the unsigned operand
+            // width: uint16_t / uint32_t / uint64_t.
+            (match intr_kind {
+                Some(crate::c5::op::Intrinsic::Bswap16) => Ty::Short as i64,
+                Some(crate::c5::op::Intrinsic::Bswap64) => Ty::LongLong as i64,
+                _ => Ty::Int as i64,
+            }) | super::types::UNSIGNED_BIT
+        } else {
+            (Ty::Char as i64) + (Ty::Ptr as i64)
+        }
+    }
+
+    fn parse_direct_call(&mut self, id_idx: usize) -> Result<(), C5Error> {
+        let callee = DirectCallee {
+            params: self.symbols[id_idx].params.clone(),
+            is_variadic: self.symbols[id_idx].is_variadic,
+            name: self.symbols[id_idx].name.clone(),
+            is_sys_call: self.symbols[id_idx].class == Token::Sys as i64,
+            ret_ty: self.symbols[id_idx].type_,
+            returns_struct: self.symbols[id_idx].class == Token::Fun as i64
+                && is_struct_value_ty(self.symbols[id_idx].type_),
+        };
+        // A callee whose return type is the implicit `int`
+        // default -- a `#pragma binding` with no prototype, or
+        // a C89 implicit declaration -- truncates the result to
+        // 32 bits if it really returns a pointer or wider type.
+        // Warn once so the source (or a header) declares it.
+        if self.symbols[id_idx].implicit_return_int && self.warned_implicit_ret.insert(id_idx) {
+            let name = self.symbols[id_idx].name.clone();
+            let line = self.lex.line;
+            self.warn_at(
+                line,
+                alloc::format!(
+                    "`{name}` is called without a return-type prototype; assuming `int`"
+                ),
+            );
+        }
+        // A Token::Sys (dylib-bound) call returning a struct by
+        // value is lowered through the native SSA path: the
+        // walker tags the CallExt with `ret_agg` and the emitter
+        // gathers the result from the platform-ABI return
+        // registers into the result temp (HFA in v0..vN, x0/x1
+        // for a small aggregate, x8 indirect for > 16 bytes).
+        let mut nargs = 0;
+        // Snapshot the AST parser-side vstack depth so
+        // the call's per-arg emit sequence (per-arg
+        // address-of-temp setup, the right-to-left
+        // re-push, the optional struct-return
+        // out-pointer push) can leak transient pushes
+        // without polluting the outer expression's
+        // lvalue stack. The matching pops on the AST
+        // side route through `ast_apply_assign` for
+        // the per-arg `*temp = arg` shape (the only
+        // store in this region), which consumes one
+        // vstack slot per store. The right-to-left
+        // re-push and the out-pointer push are pure
+        // leaks -- truncate the vstack back to this
+        // depth right before `ast_emit_call` so the
+        // outer scalar assign's `ast_apply_assign`
+        // sees the lvalue it pushed.
+        let saved_ast_vstack_depth = self.ast_vstack.len();
+        // For struct returns, allocate a result temp now
+        // so its address can be pushed before the
+        // declared-arg pushes.
+        let saved_loc_offs_for_result = self.loc_offs;
+        let result_temp_off: i64 = if callee.returns_struct {
+            let slots = self.slots_of_type(callee.ret_ty);
+            let off = self.reserve_slots(slots);
+            if slots >= 1 {
+                self.multi_cell_temps.push((off, slots));
+            }
+            off
+        } else {
+            0
+        };
+        // c5 uses cdecl-style arg passing: args are pushed
+        // right-to-left so the i'th declared param sits at
+        // `[bp + 16*(i+1)]`. The parser still has to evaluate
+        // args left-to-right (so observable side effects
+        // happen in source order), so each arg gets parked in
+        // a transient temp local and we re-emit the pushes in
+        // reverse once they're all evaluated.
+        let saved_loc_offs = self.loc_offs;
+        let mut temp_offsets: Vec<i64> = Vec::new();
+        // Per-arg AST ExprId, captured at evaluation time
+        // (post-conversion, pre-store). Empty slot when
+        // the dual-emit hasn't wired the arg expression
+        // yet; the call-site Call node accepts only the
+        // wired ones today and skips Call build if any
+        // arg is unwired.
+        let mut ast_arg_ids: Vec<Option<super::super::ast::ExprId>> = Vec::new();
+        while self.lex.tk != ')' {
+            let (temp_off, arg_ast) = self.parse_call_argument(&callee, nargs)?;
+            temp_offsets.push(temp_off);
+            ast_arg_ids.push(arg_ast);
+            nargs += 1;
+            self.accept(',')?;
+        }
+        // Push from temp slots right-to-left so the first
+        // declared param ends up on top of the c5 stack.
+        for &temp_off in temp_offsets.iter().rev() {
+            self.emit_lea(temp_off);
+            self.mark_emit_other();
+            self.ast_psh();
+        }
+        // For struct-returning callees, push the hidden
+        // out-pointer (address of the result temp) so it
+        // lands at val=2 -- ahead of the first declared
+        // arg in the c5 stack walk. The callee's `return
+        // s` writes through it; on return we set `a` to
+        // the temp's address so the enclosing assignment
+        // can Mcpy from it.
+        if callee.returns_struct {
+            self.emit_lea(result_temp_off);
+            self.ast_psh();
+        }
+        // Release the staging slots; they'll be reused by
+        // the next call in this function. The result-temp
+        // slot stays alive (loc_offs not reset to it) until
+        // the enclosing expression consumes it.
+        let target_loc_offs = if callee.returns_struct {
+            saved_loc_offs_for_result + self.slots_of_type(callee.ret_ty)
+        } else {
+            saved_loc_offs
+        };
+        // Never drop below block-lifetime storage a compound
+        // literal reserved while evaluating these arguments
+        // (C99 6.5.2.5p5); reclaiming it would alias the literal
+        // with a later full-expression's temporaries.
+        self.loc_offs = target_loc_offs.max(self.committed_loc_offs);
+        // Arity underflow check (after the loop, when nargs is
+        // final). Only fires for non-variadic functions with a
+        // recorded signature.
+        if !callee.is_variadic
+            && !callee.params.is_empty()
+            && (nargs as usize) < callee.params.len()
+        {
+            let line = self.lex.line;
+            self.warn_at(
+                line,
+                format!(
+                    "too few arguments to `{}` (expected {}, got {})",
+                    callee.name,
+                    callee.params.len(),
+                    nargs,
+                ),
+            );
+        }
+        self.next()?;
+        if self.symbols[id_idx].class == Token::Sys as i64 {
+            // External library call. The walker emits
+            // Inst::CallExt keyed on the binding's flat
+            // index (taken from Symbol::val); the
+            // codegen lowers it to the per-target GOT /
+            // import-table reference.
+            self.flush_pending_stores();
+            self.pending.last_emit_was_indirect_call = false;
+            self.ast_acc = None;
+        } else if self.symbols[id_idx].class == Token::Fun as i64 {
+            // Direct call to a c5 user function. The
+            // walker resolves Inst::Call::target_pc
+            // through live_fun_val and the linker's
+            // extern_call_refs channel.
+            self.symbols[id_idx].was_referenced = true;
+            self.flush_pending_stores();
+            self.pending.last_emit_was_indirect_call = false;
+            self.ast_acc = None;
+        } else if self.symbols[id_idx].class == Token::Loc as i64
+            || self.symbols[id_idx].class == Token::Glo as i64
+        {
+            // Indirect call through a function pointer:
+            // a Loc / Glo whose value is the target's
+            // ent_pc. Mark the symbol as read for the
+            // dead-store diagnostic; the walker emits
+            // Inst::CallIndirect from the AST.
+            if self.symbols[id_idx].class == Token::Loc as i64 {
+                self.symbols[id_idx].was_referenced = true;
+                self.symbols[id_idx].was_read = true;
+            } else {
+                self.glo_imm_refs.push(id_idx);
+            }
+            self.flush_pending_stores();
+            self.pending.last_emit_was_indirect_call = true;
+            self.ast_acc = None;
+        } else {
+            let name = self.symbols[id_idx].name.clone();
+            let suggestion = self.include_hint(&name);
+            return Err(self.compile_err(format!("unknown function `{name}`{suggestion}")));
+        }
+        // Drop the AST parser-side vstack pushes that
+        // the call's emit sequence leaked (right-to-
+        // left re-push, optional struct-return out-
+        // pointer push) before the outer expression's
+        // `ast_apply_assign` runs. See the matching
+        // `saved_ast_vstack_depth` snapshot above.
+        self.ast_vstack.truncate(saved_ast_vstack_depth);
+        self.emit_direct_call_ast(id_idx, &callee, ast_arg_ids, result_temp_off);
+        Ok(())
+    }
+
+    /// One argument of a direct call, evaluated into its staging slot.
+    /// Returns the slot and the argument's AST node.
+    fn parse_call_argument(
+        &mut self,
+        callee: &DirectCallee,
+        nargs: i64,
+    ) -> Result<(i64, Option<super::super::ast::ExprId>), C5Error> {
+        let arg_line = self.lex.line;
+        // Allocate a temp slot for this arg.
+        let temp_off = self.reserve_slots(1);
+
+        // Emit the `*temp = expr;` shape that c5's
+        // assignment path already supports: address
+        // first, push, then RHS, then Si.
+        self.emit_lea(temp_off);
+        self.ast_psh();
+        self.expr(Token::Assign as i64)?;
+
+        // A `long double` that reaches a platform-libc callee
+        // as a `long double` is decoded there in the target
+        // ABI's wider format, not the binary64 c5 supplies.
+        // The declared parameter decides: an argument
+        // converted to a `double` parameter is exact, which is
+        // how <math.h> binds the `l` entry points. Past the
+        // fixed parameters -- a variadic tail, or a callee
+        // with no prototype -- 6.5.2.2p6 leaves the type
+        // alone, so the argument's own type governs.
+        let reaches_callee_as_long_double = match callee.params.get(nargs as usize) {
+            Some(want) => is_long_double_ty(*want),
+            None => is_long_double_ty(self.ty),
+        };
+        if callee.is_sys_call
+            && reaches_callee_as_long_double
+            && let Some(platform_fmt) = self.target.platform_long_double_abi()
+        {
+            self.warn_at(
+                arg_line,
+                format!(
+                    "`long double` argument {} of `{}` is passed as 8-byte \
+                         binary64; this target's ABI passes {platform_fmt}",
+                    nargs + 1,
+                    callee.name,
+                ),
+            );
+        }
+
+        // Type-check before the Si overwrites self.ty.
+        if (nargs as usize) < callee.params.len() {
+            self.convert_declared_argument(callee, nargs, arg_line)?;
+        } else {
+            if !callee.params.is_empty() && !callee.is_variadic {
+                self.warn_at(
+                    arg_line,
+                    format!(
+                        "too many arguments to `{}` (expected {}, got at least {})",
+                        callee.name,
+                        callee.params.len(),
+                        nargs + 1,
+                    ),
+                );
+            }
+            // C99 6.5.2.2p6-7: arguments beyond the
+            // declared parameters (the variadic tail, or
+            // any argument to a function with no
+            // prototype) undergo the default argument
+            // promotions. A `float` is promoted to
+            // `double` so it reaches the FP-arg register
+            // as the 8-byte value the callee reads;
+            // `char` / `short` already ride the int
+            // accumulator.
+            if is_float_ty(self.ty) {
+                self.convert_assign_rhs(Ty::Double as i64);
+            }
+        }
+
+        // A struct passed by value to a Token::Sys callee is
+        // packed into the platform-ABI argument registers by
+        // the walker + emitter (the same host-ABI path c5-to-c5
+        // calls use); the by-value struct argument is no longer
+        // rejected here.
+        // Snapshot the arg's AST ExprId before the
+        // Si consumes both vstack and acc. The Call
+        // node built below uses these in source
+        // order regardless of the c5 right-to-left
+        // push.
+        let arg_ast = self.ast_acc;
+        self.ast_assign();
+        Ok((temp_off, arg_ast))
+    }
+
+    /// C99 6.5.2.2p7: an argument to a declared parameter undergoes the
+    /// assignment conversion to the parameter type; a GNU `transparent_union`
+    /// parameter takes the member the argument converts to.
+    fn convert_declared_argument(
+        &mut self,
+        callee: &DirectCallee,
+        nargs: i64,
+        arg_line: usize,
+    ) -> Result<(), C5Error> {
+        let want = callee.params[nargs as usize];
+        let arg_ty = self.ty;
+        let zero = self.last_emit_is_zero();
+        let untyped = self.last_emit_was_indirect_call();
+        // A GNU `transparent_union` parameter accepts an
+        // argument compatible with any member and takes it
+        // as that member, with no diagnostic.
+        let tu_member = Self::transparent_union_member(&self.structs, want, self.ty, zero);
+        if tu_member.is_none()
+            && let Some(m) =
+                Self::type_warning_with_flags(&self.structs, want, self.ty, zero, untyped)
+        {
+            let got = self.ty;
+            let want_s = format_type(want, &self.structs);
+            let got_s = format_type(got, &self.structs);
+            let text = format!(
+                "{} in argument {} of `{}` (param={want_s}, arg={got_s})",
+                m.reason,
+                nargs + 1,
+                callee.name,
+            );
+            // A Token::Sys prototype approximates the
+            // platform libc (`char *` for `void *`, `int`
+            // for `size_t`) and accepts a by-value struct
+            // through the ABI packing path, so only a
+            // declared prototype is authoritative enough
+            // to raise the 6.5.2.2p2 constraint.
+            if m.no_conversion && !callee.is_sys_call {
+                return Err(self.compile_err_at(arg_line, text));
+            }
+            self.warn_at(arg_line, text);
+        }
+        // C99 6.5.2.2p7: declared-parameter call
+        // arguments undergo the same assignment
+        // conversion as the `= expr` rule. If the
+        // prototype expects `double` and the
+        // actual is an integer, lift through
+        // the int-to-float cast so the IEEE-754
+        // bit pattern reaches the FP-arg register
+        // the codegen routes through (xmm_N / d_N).
+        // Without this, the integer bit pattern
+        // lands in the GPR-arg register and libm
+        // reads garbage out of the FP register.
+        if let Some(member_ty) = tu_member {
+            // Materialize the member into an anonymous
+            // union object (same staging the arg temps
+            // use), so every backend passes the argument
+            // per the aggregate convention -- GCC passes
+            // it as the union containing the member.
+            self.convert_assign_rhs(member_ty);
+            let slots = self.slots_of_type(want);
+            let off = self.reserve_slots(slots);
+            if slots >= 1 {
+                self.multi_cell_temps.push((off, slots));
+            }
+            if let Some(value) = self.ast_acc.take() {
+                let init = super::super::ast::LocalInit::Runtime {
+                    zero_init: None,
+                    elements: alloc::vec![super::super::ast::RuntimeInitElement {
+                        offset: 0,
+                        value: super::super::ast::RuntimeInitValue::Expr(value,),
+                        ty: member_ty,
+                        bitfield: None,
+                    }],
+                };
+                self.ast_emit_compound_literal(off, want, 0, init);
+            }
+            self.ty = want;
+        } else {
+            self.convert_assign_rhs(want);
+        }
+        // C99 6.5.2.2p4: the argument is converted to the
+        // declared parameter type. For a Sys (libc) callee
+        // the conversion must happen here -- the import
+        // reads the argument at the full register width and
+        // never re-narrows. A c5 callee truncates in its
+        // typed parameter load, so this is Sys-only, and
+        // only when the argument is wider than the integer
+        // parameter (an in-width argument needs no mask).
+        if callee.is_sys_call
+            && !is_pointer_ty(want)
+            && !is_floating_scalar(want)
+            && !is_struct_ty(want)
+            && self.size_of_type(arg_ty) > self.size_of_type(want)
+        {
+            self.renormalize_to_width(want);
+        }
+        Ok(())
+    }
+
+    fn emit_direct_call_ast(
+        &mut self,
+        id_idx: usize,
+        callee: &DirectCallee,
+        ast_arg_ids: Vec<Option<super::super::ast::ExprId>>,
+        result_temp_off: i64,
+    ) {
+        // Dual-emit the call's AST: build a callee
+        // Ident node from the call-site symbol idx and
+        // pair with the per-arg ExprIds captured above.
+        // Struct-returning calls skip the AST build for
+        // now; the hidden out-pointer doesn't fit the
+        // canonical `Call { callee, args, ty }` shape.
+        // For a direct (Fun / Sys) call the symbol's `type_`
+        // is the return type. For a call through a
+        // function-pointer variable (Loc / Glo) `type_` is
+        // the pointer's type, which encodes the return type
+        // plus one pointer level for the fn-pointer; the
+        // result type is that minus one level (`int (*)()` ->
+        // int, `struct S *(*)()` -> struct S *). A variable
+        // that is not a fn-pointer falls back to int.
+        let is_var_call = self.symbols[id_idx].class == Token::Loc as i64
+            || self.symbols[id_idx].class == Token::Glo as i64;
+        let result_ty = if is_var_call {
+            let vt = self.symbols[id_idx].type_;
+            if self.symbols[id_idx].fn_ptr_indirection > 0 && is_pointer_ty(vt) {
+                vt - Ty::Ptr as i64
+            } else {
+                Ty::Int as i64
+            }
+        } else {
+            callee.ret_ty
+        };
+        // For a struct-returning callee the `Expr::Call
+        // { ty: <struct> }` makes the walker allocate a
+        // synthetic local for the hidden out-pointer,
+        // prepend its address to the arg list, and return
+        // the address as the call's value (the c5 ABI's
+        // address-as-value rule).
+        let callee_ty = self.symbols[id_idx].type_;
+        let callee_id = self.ast_synthesize_callee(id_idx as u32, callee_ty);
+        // A call through a variadic function-pointer
+        // variable records its fixed count at parse time,
+        // while the block-scope binding is live: the
+        // walker runs after scope exit restored the outer
+        // signature, so the symbol no longer carries the
+        // pointer's prototype (C99 6.2.1p4).
+        if is_var_call && self.symbols[id_idx].is_variadic {
+            self.ast
+                .variadic_indirect_callees
+                .push((callee_id, self.symbols[id_idx].params.len() as u32));
+        }
+        if is_var_call && self.symbols[id_idx].conv != crate::c5::codegen::CallConv::Target {
+            self.ast
+                .conv_indirect_callees
+                .push((callee_id, self.symbols[id_idx].conv));
+        }
+        self.ast_emit_call(callee_id, ast_arg_ids.clone(), result_ty);
+        // For struct-returning callees, the result lives
+        // in the caller-allocated temp. After the call,
+        // load the temp's address into `a` so the
+        // expression's value (struct-rvalue semantics:
+        // address-as-value) flows into the enclosing
+        // assignment / `.field` access.
+        if callee.returns_struct {
+            self.emit_lea(result_temp_off);
+        }
+        self.ty = result_ty;
+        // C99 6.5.2.2: the call's value is its return type, not an
+        // array-decayed argument. Drop the hint an array / string
+        // argument left pending (the fix for `typeof(f("s"))`).
+        self.drop_operand_array_decay();
+        // A callee whose return type is itself a function
+        // pointer (`int (*f())()`) leaves a fn-pointer
+        // rvalue, so a following unary `*` is the C99
+        // 6.3.2.1p4 decay no-op. The lineage is recorded on
+        // the function symbol by the declarator; for a call
+        // through a fn-pointer variable the return lineage
+        // rides its own field.
+        if self.symbols[id_idx].class == Token::Fun as i64
+            && self.symbols[id_idx].fn_ptr_indirection > 0
+        {
+            self.pending.fn_ptr_chain_depth = 0;
+        } else if is_var_call && self.symbols[id_idx].fn_ptr_ret_indirection > 0 {
+            self.pending.fn_ptr_chain_depth = self.symbols[id_idx].fn_ptr_ret_indirection - 1;
+        }
+    }
+
+    fn parse_enum_constant(&mut self, id_idx: usize) -> Result<(), C5Error> {
+        let val = self.symbols[id_idx].val;
+        // The registration typed the constant: `int` normally,
+        // wider / unsigned for enum values outside `int`'s range
+        // (GCC extension). Typing such a value `int` would break
+        // the invariant that a value's register pattern is its
+        // type's extension, and comparisons then misread it.
+        let ty = self.symbols[id_idx].type_;
+        self.emit_int_constant(val, ty);
+        Ok(())
+    }
+
+    /// A function name used as a value (C99 6.3.2.1p4): the function's
+    /// address, typed as the return type at one pointer level. A `Token::Sys`
+    /// import has no compile-time address; the walker materializes its stub.
+    fn parse_function_designator(&mut self, id_idx: usize) -> Result<(), C5Error> {
+        if self.symbols[id_idx].class == Token::Fun as i64 {
+            self.symbols[id_idx].was_referenced = true;
+            // Bare function reference (e.g. `fp = add;`). The value
+            // becomes a user-visible pointer, so it gets the CODE_BASE
+            // bias -- that lets the VM tell apart "function pointer"
+            // from "data pointer", and refuse to deref the former.
+            // The integer-literal placeholder runs only to keep the
+            // trailing-emit peek flags honest; the walker's
+            // `imm_code_extern` / `imm_code` emit resolves the
+            // function-pointer literal on the SSA side.
+            self.emit_imm(CODE_BASE as i64 + self.symbols[id_idx].val);
+            // Encode the function-pointer type as the callee's return
+            // type plus one pointer level, so an inline call through
+            // the value (`(cond ? f : g)(x)`) recovers the real
+            // result type instead of defaulting to `int` and
+            // narrowing a wider return.
+            self.ty = self.symbols[id_idx].type_ + Ty::Ptr as i64;
+            // Dual-emit: an Ident node so the wrapping shape
+            // (call-arg, assignment, cast) sees the function
+            // reference on `ast_acc`. The walker's
+            // `load_ident_rvalue` for `Token::Fun` emits the
+            // matching `imm_code(val)`.
+            self.ast_emit_ident(id_idx as u32, self.ty);
+            // The value is already a function pointer; a following
+            // unary `*` is the C99 6.3.2.1p4 decay no-op at every
+            // level (`(****g)(...)` calls `g`). Depth 0 marks "at
+            // the fn-ptr level" for the `*` handler.
+            self.pending.fn_ptr_chain_depth = 0;
+        } else {
+            // Bare imported-function reference -- `fp = strcmp;`.
+            // There is no compile-time address to fold in, so the
+            // walker emits `Inst::ImmExtCode(binding_idx)`; the
+            // codegen materializes the import's shared PLT-stub
+            // address (RIP-relative `lea` on x86_64, `adrp + add`
+            // on aarch64), the same stub a call to the import
+            // reaches. The Sys symbol's `val` is the binding index.
+            self.emit_imm(CODE_BASE as i64);
+            self.ty = self.symbols[id_idx].type_ + Ty::Ptr as i64;
+            // Dual-emit: push the Sys Ident so wrapping shapes
+            // (static-init, assign, call-arg) see the address
+            // producer on `ast_acc`. The walker's
+            // `address_of_ident` / `load_ident_rvalue`
+            // `Token::Sys` arm emits the `imm_ext_code(val)`.
+            self.ast_emit_ident(id_idx as u32, self.ty);
+            // Same fn-pointer decay as the `Token::Fun` branch: a
+            // following unary `*` is a no-op.
+            self.pending.fn_ptr_chain_depth = 0;
+        }
+        Ok(())
+    }
+
+    fn parse_register_variable(&mut self, id_idx: usize) -> Result<(), C5Error> {
+        // A stack- / frame-pointer register variable: the read is
+        // a direct register move, no storage behind it. Writes
+        // have no meaning; reject them here where the following
+        // token is visible.
+        if self.lex.tk == Token::Assign
+            || self.lex.tk == Token::AssignOp
+            || self.lex.tk == Token::Inc
+            || self.lex.tk == Token::Dec
+        {
+            return Err(self.compile_err(format!(
+                "cannot write register variable `{}`",
+                self.symbols[id_idx].name
+            )));
+        }
+        self.symbols[id_idx].was_referenced = true;
+        self.symbols[id_idx].was_read = true;
+        self.mark_emit_other();
+        self.ty = self.symbols[id_idx].type_;
+        let kind = match self.symbols[id_idx].asm_register {
+            Some(crate::c5::symbol::AsmRegister::FramePointer) => {
+                crate::c5::op::Intrinsic::FrameAddress
+            }
+            _ => crate::c5::op::Intrinsic::StackPointer,
+        };
+        let args = alloc::vec::Vec::new();
+        let intr_ty = self.ty;
+        let pos = self.ast_src_pos();
+        let id = self.ast.push_expr(
+            super::super::ast::Expr::Intrinsic {
+                kind: kind as i64,
+                args,
+                ty: intr_ty,
+            },
+            pos,
+        );
+        self.ast_acc = Some(id);
+        Ok(())
+    }
+
+    fn parse_variable(&mut self, id_idx: usize) -> Result<(), C5Error> {
+        let identifier_is_local = self.symbols[id_idx].class == Token::Loc as i64;
+        if identifier_is_local {
+            self.symbols[id_idx].was_referenced = true;
+            self.emit_lea(self.symbols[id_idx].val);
+        } else if self.symbols[id_idx].class == Token::Glo as i64
+            && self.symbols[id_idx].is_thread_local
+        {
+            // `_Thread_local` global: emit through the
+            // TLS-address path so the codegen lowers via
+            // the per-target TLS sequence (TPIDR_EL0 +
+            // offset on aarch64, fs:0 + offset on x86_64).
+            // The operand is the byte offset within the
+            // program's TLS block.
+            self.mark_emit_other();
+        } else if self.symbols[id_idx].class == Token::Glo as i64 {
+            self.emit_data_imm(self.symbols[id_idx].val);
+            self.glo_imm_refs.push(id_idx);
+        } else {
+            return Err(
+                self.compile_err(format!("undefined variable {}", self.symbols[id_idx].name))
+            );
+        }
+        self.ty = self.symbols[id_idx].type_;
+        let is_struct_value = is_struct_value_ty(self.ty);
+        // A declared struct object starts a member chain.
+        self.pending.member_base = if is_struct_value {
+            Some(super::MemberBase {
+                decl_size: Some(self.size_of_type(self.ty) as i64),
+                ..super::MemberBase::UNKNOWN
+            })
+        } else {
+            None
+        };
+        let is_array_var =
+            self.symbols[id_idx].array_size != 0 || self.symbols[id_idx].is_zero_len_array;
+        let is_vla_var = self.symbols[id_idx].is_vla;
+        // A function-pointer variable carries its callee parameter
+        // types so the dereferenced-call shape `(*fp)(args)` (which
+        // reaches the postfix path rather than the direct-identifier
+        // call path) narrows each argument to its declared type.
+        // Only a function pointer carries params on a Loc / Glo
+        // symbol; the array case is handled at its decay below.
+        if !is_array_var && !is_struct_value && !self.symbols[id_idx].params.is_empty() {
+            self.pending.indirect_callee_params = Some(self.symbols[id_idx].params.clone());
+            self.pending.indirect_callee_is_variadic = self.symbols[id_idx].is_variadic;
+            self.pending.indirect_callee_conv = self.symbols[id_idx].conv;
+            self.pending.indirect_callee_fn_ptr_depth = self.symbols[id_idx].fn_ptr_indirection;
+            self.pending.indirect_callee_ret_fn_ptr = self.symbols[id_idx].fn_ptr_ret_indirection;
+        }
+        // Array variables decay to a pointer to the first
+        // element: the symbol's address IS its value, no
+        // load. Bump the type by one pointer level so
+        // downstream pointer arithmetic / indexing scales
+        // correctly. Struct values follow the same
+        // "address-as-value" rule but keep their type
+        // because the `.field` operator needs the struct's
+        // value type to look up offsets.
+        if is_vla_var {
+            // C99 6.3.2.1p3: a VLA decays to a pointer to its
+            // first element -- the runtime base pointer, loaded
+            // from the hidden slot, not a fixed frame address.
+            let ptr_slot = self.symbols[id_idx].vla_ptr_slot;
+            self.ty += Ty::Ptr as i64;
+            self.ast_emit_vla_base(ptr_slot, self.ty);
+        } else if is_array_var {
+            self.decay_array_variable(id_idx, identifier_is_local);
+        } else if is_struct_value {
+            if identifier_is_local {
+                // Struct value rvalue: the symbol's
+                // address is the rvalue, no Li runs. Field
+                // access through `.f` emits its own Li
+                // against the field offset; treat the
+                // struct itself as address-escaped so the
+                // unused-symbol analysis stays conservative.
+                self.symbols[id_idx].address_escaped = true;
+            }
+            // Dual-emit: like the array-decay branch, the
+            // address is the rvalue (C99 6.7.2.1 struct
+            // assignment semantics + c5's
+            // address-as-value rule). Push the Ident so
+            // wrapping shapes (`.field`, call-arg copy,
+            // struct-to-struct assign) see the producer
+            // on `ast_acc`. Walker treats Ident-of-struct
+            // as an address-only producer (no load).
+            self.ast_emit_ident(id_idx as u32, self.ty);
+        } else {
+            self.load_scalar_variable(id_idx, identifier_is_local);
+        }
+        Ok(())
+    }
+
+    /// C99 6.3.2.1p3: an array object used as a value is the address of
+    /// its first element, typed one pointer level up, with the shape
+    /// left for an enclosing `sizeof`, `typeof` or subscript to read.
+    fn decay_array_variable(&mut self, id_idx: usize, identifier_is_local: bool) {
+        if identifier_is_local {
+            // Array decay produces the array's
+            // address rather than a scalar value, so
+            // the load-op path below never runs. The
+            // address can be indexed, passed to a
+            // helper, or stored into a pointer; none
+            // of those are tracked here. Mark
+            // `address_escaped` so the unused-symbol
+            // analysis at scope exit conservatively
+            // treats the array as read.
+            self.symbols[id_idx].address_escaped = true;
+        }
+        self.ty += Ty::Ptr as i64;
+        // C99 6.3.2.1p3 array-to-pointer decay: the
+        // symbol's address IS the rvalue; no trailing
+        // load runs. Dual-emit an `Expr::Ident` typed
+        // at the decayed pointer level so a wrapping
+        // index / call-arg / assignment site finds the
+        // array on `ast_acc`. Walker's
+        // `load_ident_rvalue` for Loc / Glo with this
+        // shape still routes through `load_local` /
+        // `imm_data` + load, which is wrong for arrays
+        // -- the array AST tag is the address-as-value
+        // rule; the walker's Index / call-arg arms
+        // re-walk the same Ident and need just the
+        // address. Push the node; the walker arm fix
+        // lives separately.
+        self.ast_emit_ident(id_idx as u32, self.ty);
+        // Stash the array's element count so a
+        // surrounding `sizeof(<arr>)` can compute
+        // `count * sizeof(elem)` instead of the
+        // decayed pointer's `sizeof(T*) = 8`.
+        // `array_size = -1` marks `extern T x[];` whose
+        // size is unknown at this TU (C99 6.7.5.2); leave
+        // the sizeof hint at zero so the operand falls
+        // through to the bare-pointer size, matching the
+        // standard's incomplete-type rule.
+        if self.symbols[id_idx].array_size > 0 {
+            self.pending.last_array_decay_size = self.symbols[id_idx].array_size;
+        } else if self.symbols[id_idx].is_zero_len_array {
+            // Zero-length array: signal the array-ness to a
+            // surrounding `sizeof` / `typeof` with the `-1`
+            // sentinel (element count is genuinely 0, which the
+            // `> 0` recovery paths read as "no array hint").
+            self.pending.last_array_decay_size = -1;
+        }
+        // N-dim-array decay: seed strides for each of
+        // the N-1 levels of multi-dim subscript. The
+        // first stride goes into `pending_index_stride`
+        // (consumed by the next Brak); the rest queue
+        // in `pending_index_strides_tail` and shift
+        // down per Brak.
+        let elem_ty = self.symbols[id_idx].type_;
+        let elem_size = self.size_of_type(elem_ty) as i64;
+        let dims = self.symbols[id_idx].array_dims.clone();
+        // Record the full dimension list so a wrapping `&arr` /
+        // `typeof` can rebuild the undecayed array type. A 1D
+        // symbol records no dims list; a zero-length array's
+        // exact bound rides here so `typeof` reads `T[0]`.
+        self.pending.last_array_decay_dims =
+            if dims.is_empty() && self.symbols[id_idx].is_zero_len_array {
+                alloc::vec![0]
+            } else {
+                dims.clone()
+            };
+        self.seed_multi_dim_strides(&dims, elem_size);
+        // A function-pointer array element keeps the element's
+        // parameter types so a following `arr[i](args)` narrows
+        // each argument to its declared type. Empty params means
+        // the element is not a prototyped function pointer.
+        // The element's function-pointer decay depth rides
+        // along as well: `(*arr[i])(...)` must treat the
+        // `*` as the C99 6.3.2.1p4 no-op rather than load
+        // through the code address (the subscript consumes
+        // an array level, not an indirection level).
+        let fpi = self.symbols[id_idx].fn_ptr_indirection;
+        if fpi > 0 {
+            self.pending.fn_ptr_chain_depth = fpi - 1;
+            self.pending.fn_ptr_depth_is_array_elem = true;
+        }
+        if fpi > 0 || !self.symbols[id_idx].params.is_empty() {
+            self.pending.indirect_callee_params = Some(self.symbols[id_idx].params.clone());
+            self.pending.indirect_callee_is_variadic = self.symbols[id_idx].is_variadic;
+            self.pending.indirect_callee_conv = self.symbols[id_idx].conv;
+            self.pending.indirect_callee_fn_ptr_depth = fpi;
+            self.pending.indirect_callee_ret_fn_ptr = self.symbols[id_idx].fn_ptr_ret_indirection;
+        }
+    }
+
+    /// A scalar or pointer object: its value is loaded, and the load is
+    /// left as the trailing emit so an assignment or `&` can retract it.
+    fn load_scalar_variable(&mut self, id_idx: usize, identifier_is_local: bool) {
+        // Pointers to structs and every scalar type go
+        // through the normal load_op_for path.
+        self.mark_emit_scalar_load();
+        // The AST node is a single `Expr::Ident` keyed
+        // on the symbol-table index. The address-of /
+        // assignment paths re-interpret the same node
+        // as an lvalue.
+        self.ast_emit_ident(id_idx as u32, self.ty);
+        if identifier_is_local {
+            // Tentative: the load survives by default,
+            // so the symbol's value is being read. The
+            // assignment / address-of helpers revert
+            // `was_read` and `pending_stores` to their
+            // prior state (preserving genuine earlier
+            // reads and prior dead-store entries) if
+            // they retract the load before it
+            // executes. `last_loaded_local`
+            // lets those helpers know which symbol the
+            // trailing load belonged to.
+            self.pending.last_loaded_local = Some(id_idx);
+            self.pending.last_loaded_local_prior_was_read = self.symbols[id_idx].was_read;
+            self.pending.last_loaded_local_prior_pending =
+                core::mem::take(&mut self.symbols[id_idx].pending_stores);
+            self.symbols[id_idx].was_read = true;
+        }
+        // Seed the fn-pointer chain depth from
+        // the symbol's recorded indirection.
+        // `mark_emit_scalar_load` just cleared the
+        // field; re-set it now so the surrounding
+        // unary-`*` chain can recognise function-
+        // pointer decay. `fn_ptr_indirection`
+        // is "indirection above fn-ptr, plus 1"; depth
+        // after the load is one less (the load itself
+        // consumed one indirection level).
+        let fpi = self.symbols[id_idx].fn_ptr_indirection;
+        if fpi > 0 {
+            self.pending.fn_ptr_chain_depth = fpi - 1;
+        }
+        // N-dim-array parameter decay: a parameter
+        // declared as `T name[A][B][C]` carries
+        // `array_dims = [A, B, C]` on its symbol but
+        // the function-param binder wiped `array_size`
+        // to 0 (per C99 6.7.5.3p7 the outermost
+        // dimension decays to a pointer, and params
+        // don't own storage). The loaded value is
+        // already a pointer (one level less than the
+        // array would have been), so the pointee size
+        // is `pointee_size(self.ty)` rather than the
+        // element size; the strides for `[i]`, `[j]`,
+        // ... `[N-1]` are seeded into the pending
+        // queue.
+        let dims = self.symbols[id_idx].array_dims.clone();
+        if !dims.is_empty() && is_pointer_ty(self.ty) {
+            if dims[0] == 0 {
+                // Array-sugar parameter (`T name[][M...]`, C99
+                // 6.7.5.3p7): the outermost dimension decayed to a
+                // single pointer, so `type_` carries one Ptr above
+                // the scalar base. Keep that pointer as the running
+                // type and seed the inner-dimension strides from the
+                // scalar element size; each subscript peels one
+                // level, the innermost decaying to the element.
+                let scalar_ty = self.symbols[id_idx].type_ - (Ty::Ptr as i64);
+                let elem_size = self.size_of_type(scalar_ty) as i64;
+                self.seed_multi_dim_strides(&dims, elem_size);
+            } else {
+                let elem_size = self.pointee_size(self.ty);
+                self.seed_multi_dim_strides(&dims, elem_size);
+            }
+        }
+    }
+
+    fn parse_parenthesized(&mut self) -> Result<(), C5Error> {
+        self.next()?;
+        if self.lex.tk == '{' {
+            // GCC statement expression `({ ... })`: the value is
+            // that of the enclosed compound's last
+            // expression-statement.
+            self.parse_stmt_expr_body()?;
+        } else if self.lex_is_type_start() {
+            self.parse_cast_or_compound_literal()?;
+        } else {
+            self.expr(Token::Assign as i64)?;
+            // Comma operator within parens: `(a, b, c)` evaluates
+            // each subexpression for its side effects and yields
+            // the last. Outside parens, comma stays a separator
+            // (function args, declarators) -- this branch only
+            // fires inside `(...)` because expr(Assign) doesn't
+            // consume `,`. Build `Expr::Comma { lhs, rhs }`
+            // chains on the AST so the walker visits the lhs
+            // before producing the rhs's value; without the
+            // chain the dropped lhs expressions take their
+            // side effects with them when the walker drives the
+            // codegen.
+            while self.lex.tk == ',' {
+                let lhs_ast = self.ast_acc;
+                self.next()?;
+                self.expr(Token::Assign as i64)?;
+                let rhs_ast = self.ast_acc;
+                if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
+                    let pos = self.ast_src_pos();
+                    let ty = self.ty;
+                    let id = self
+                        .ast
+                        .push_expr(super::super::ast::Expr::Comma { lhs, rhs, ty }, pos);
+                    self.ast_acc = Some(id);
+                }
+            }
+            if self.lex.tk == ')' {
+                self.next()?;
+            } else {
+                return Err(self.compile_err("close paren expected"));
+            }
+            // Forward the inner expr's exit snapshot into the
+            // active multi-dim queue so the outer expression's
+            // postfix can keep striding through, e.g.,
+            // `(*p)[k]` on a pointer-to-array (the unary `*`
+            // consumed one dim, the `[k]` should pick up the
+            // next). Without this transfer the inner expr's
+            // defensive clear strands the remaining strides.
+            self.pending.index_stride = core::mem::take(&mut self.pending.end_of_expr_stride);
+            self.pending.index_strides_tail =
+                core::mem::take(&mut self.pending.end_of_expr_strides_tail);
+        }
+        Ok(())
+    }
+
+    fn parse_cast_or_compound_literal(&mut self) -> Result<(), C5Error> {
+        let mut t: i64;
+        // C-style cast: `(<type>)expr`. Accepts int, char,
+        // float, double, or struct base, with any number of
+        // `*` markers and pointer-level qualifiers.
+        t = self.parse_decl_base_type()?;
+        self.note_cast_type_name(t);
+        // An array typedef (`typedef T A[N]`, e.g. `sigjmp_buf`)
+        // contributes its element count here; a single `*` below
+        // forms a pointer-to-array whose deref is the C99 6.3.2.1p3
+        // decay (no load), not a dereference. Capture the count and
+        // element type before the pointer loop rewrites `t`.
+        let cast_array_elem_ty = t;
+        let cast_typedef_array = core::mem::take(&mut self.pending.typedef_base_array_size);
+        let cast_typedef_dims = core::mem::take(&mut self.pending.typedef_base_array_dims);
+        let mut cast_ptr_levels: i64 = 0;
+        // Fn-pointer lineage: if the base type came from a
+        // typedef-of-fn-pointer, parse_decl_base_type seeded
+        // `pending_fn_ptr_indirection`; the leading `*`s
+        // below add directly to that count. The abstract
+        // fn-ptr branch further down overrides this when a
+        // `(*)(args)` shape is present in the cast.
+        let mut cast_fpi = self.pending.fn_ptr_indirection.take();
+        // The cast spells a flat type; its result carries no
+        // declarator-recorded return lineage.
+        self.pending.fn_ptr_ret_indirection = 0;
+        // A function-TYPE typedef already encodes one pointer
+        // level, so the first `*` in `(F *)x` forms the
+        // pointer-to-function rather than adding a level (matching
+        // the declarator path). Take and clear the flag so it does
+        // not leak into a later declarator.
+        let mut absorb_fn_type_ptr = core::mem::take(&mut self.pending.base_is_function_type);
+        while self.lex.tk == Token::MulOp {
+            self.next()?;
+            if absorb_fn_type_ptr {
+                absorb_fn_type_ptr = false;
+            } else {
+                t += Ty::Ptr as i64;
+                cast_ptr_levels += 1;
+                if let Some(fpi) = cast_fpi {
+                    cast_fpi = Some(fpi + 1);
+                }
+            }
+            while self.lex.tk == Token::TypeQual {
+                t = apply_qual_bits(t, self.lex_qualifier_bits());
+                self.next()?;
+            }
+        }
+        // Top-level array brackets in the abstract declarator:
+        // `(int[]){...}` / `(char[N]){...}` / `(s8[2][3]){...}`.
+        // Only a compound literal (detected after the `)`) gives
+        // these meaning; `t` stays the element type and
+        // `cast_array_dims` records the counts outermost first
+        // (`-1` when the leading bracket is empty and the
+        // initializer determines it; C99 6.7.5.2 completes only
+        // the outermost dimension that way).
+        let mut cast_array_dims: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
+        while self.lex.tk == Token::Brak {
+            self.next()?;
+            if self.lex.tk == ']' {
+                if !cast_array_dims.is_empty() {
+                    return Err(self.compile_err("array type has an incomplete inner dimension"));
+                }
+                cast_array_dims.push(-1);
+                self.next()?;
+            } else {
+                cast_array_dims.push(self.parse_constant_int()?);
+                self.accept(']')?;
+            }
+        }
+        // Function-pointer cast inside a cast expression:
+        // any abstract function-pointer declarator after
+        // the base type. Common shapes:
+        //   `(int (*)(args))expr`
+        //   `(void (*)(void))expr`
+        //   `(void(*(*)(args))(void))expr`  -- function
+        //       returning function pointer
+        // c5's type representation is base + pointer-level,
+        // so we treat the entire abstract-declarator tail
+        // as a no-op pointer level. Counted-parens scan
+        // until the cast's outer `)` so even nested fp
+        // shapes consume cleanly.
+        let mut cast_fn_proto = None;
+        if self.lex.tk == '(' {
+            let (nested_ptrs, proto, dims) = self.parse_abstract_ptr_declarator(true)?;
+            // `T (*)[N]`: fold the pointee dimensions into the
+            // aggregate-backed tag so the pointee keeps its size,
+            // matching the named declarator `T (*p)[N]`.
+            if !dims.is_empty() && nested_ptrs > 0 {
+                t = self.array_agg_type(t, &dims) + nested_ptrs * (Ty::Ptr as i64);
+            } else {
+                t += nested_ptrs * (Ty::Ptr as i64);
+            }
+            // Abstract fn-ptr declarator: the inner `*`
+            // count IS the indirection from the cast's
+            // result down to the fn-ptr rvalue, plus 1
+            // (matching `Symbol::fn_ptr_indirection`).
+            if nested_ptrs > 0 {
+                cast_fpi = Some(nested_ptrs);
+            }
+            cast_fn_proto = proto;
+        }
+        if self.lex.tk == ')' {
+            self.next()?;
+        } else {
+            return Err(self.compile_err("bad cast"));
+        }
+        if self.lex.tk == '{' {
+            // C99 6.5.2.5 compound literal: `(type){ init }`.
+            // The `(type)` parsed above is the literal's
+            // type, not a cast operator. An array typedef's
+            // dimensions complete the type from the inside:
+            // `(row[2]){...}` with `typedef int row[3]` is
+            // `int[2][3]` (C99 6.7.7); a `*` absorbed the
+            // typedef array into the pointee instead.
+            let mut literal_dims = cast_array_dims.clone();
+            if cast_typedef_array > 0 && cast_ptr_levels == 0 && cast_fn_proto.is_none() {
+                if cast_typedef_dims.is_empty() {
+                    literal_dims.push(cast_typedef_array);
+                } else {
+                    literal_dims.extend_from_slice(&cast_typedef_dims);
+                }
+            }
+            self.parse_block_compound_literal(t, &literal_dims)?;
+        } else {
+            self.expr(Token::Inc as i64)?;
+            let cast_child_ast = self.ast_acc;
+            // FP-vs-int casts emit conversion ops so the bit
+            // pattern in r13 is consistent with the new type.
+            // Same-class casts (int<->ptr, float<->double) are
+            // bit-pattern-compatible and need no conversion.
+            let target_is_fp = is_floating_scalar(t);
+            let source_is_fp = is_floating_scalar(self.ty);
+            if target_is_fp ^ source_is_fp {
+                // Mixed FP / int cast: route through ast_fpcast
+                // regardless of direction. The shared call is
+                // the AST shape for `int -> fp` *and* `fp ->
+                // int`; the actual register conversion lives in
+                // the per-arch emit.
+                self.ast_fpcast();
+            } else if !target_is_fp && !source_is_fp && !is_pointer_ty(t) && !is_pointer_ty(self.ty)
+            {
+                // Cast to a non-pointer integer narrower than
+                // 8 bytes: re-extend the accumulator to the
+                // target storage width. c5 keeps every value
+                // sign- or zero-extended to 64 bits in the
+                // accumulator, so a cast that narrows in C99
+                // is otherwise invisible until the value lands
+                // in a typed slot.
+                //
+                // Unsigned target -> mask the high bits.
+                // Signed target  -> shift-left then arith-shift-
+                //                   right by (64 - width*8) so
+                //                   the high bit of the target
+                //                   propagates.
+                let target_size = self.size_of_type(t);
+                let source_size = self.size_of_type(self.ty);
+                if is_unsigned_ty(t) {
+                    let mask: i64 = match target_size {
+                        1 => 0xff,
+                        2 => 0xffff,
+                        4 => 0xffff_ffff,
+                        _ => -1,
+                    };
+                    if mask != -1 {
+                        self.emit_binop_with_imm(crate::c5::ir::BinOp::And, mask);
+                    }
+                } else if target_size == 1 || target_size == 2 || target_size == 4 {
+                    // Signed cast: shift-pair to mask + sign-extend
+                    // to the target storage width. Fires when:
+                    //  * the cast genuinely narrows (target_size <
+                    //    source_size) -- e.g. `(signed char)int_val`,
+                    //  * source is unsigned at the same width as the
+                    //    signed target -- the accumulator is zero-
+                    //    extended, but `(signed char)(unsigned char)`
+                    //    has to flip values >= 0x80 to negative per
+                    //    C99 6.3.1.3.
+                    // Skipped for same-width signed-to-signed casts
+                    // (already correctly sign-extended in the
+                    //  accumulator) and widening signed casts (the
+                    //  source-side load did the extension).
+                    let source_is_unsigned = is_unsigned_ty(self.ty);
+                    let needs_extend = target_size < source_size
+                        || (target_size == source_size && source_is_unsigned);
+                    if needs_extend {
+                        let bits = 64i64 - (target_size as i64) * 8;
+                        self.emit_binop_with_imm(crate::c5::ir::BinOp::Shl, bits);
+                        self.emit_binop_with_imm(crate::c5::ir::BinOp::Shr, bits);
+                    }
+                }
+            }
+            // `(A *)e` for an array typedef `A` names a
+            // pointer-to-array; rebuild the flat tag into the
+            // aggregate-backed form (extra `*`s add levels).
+            // Pointer casts convert no bits, so only the result
+            // type changes; a following `*` / `[i]` then takes
+            // the array-decay path off the type.
+            if cast_typedef_array > 0
+                && cast_ptr_levels >= 1
+                && cast_fn_proto.is_none()
+                && cast_array_dims.is_empty()
+            {
+                let dims: alloc::vec::Vec<i64> = if cast_typedef_dims.len() >= 2 {
+                    cast_typedef_dims.clone()
+                } else {
+                    alloc::vec![cast_typedef_array]
+                };
+                let agg = self.array_agg_type(cast_array_elem_ty, &dims);
+                t = (agg + cast_ptr_levels * (Ty::Ptr as i64)) | (t & super::types::VOLATILE_MASK);
+            }
+            self.ty = t;
+            // A cast yields a value of the cast type, not a
+            // decayed-array rvalue (C99 6.5.4): drop the operand's
+            // array-decay hint so `sizeof`/`typeof` of the cast read
+            // the cast type (`typeof((T *)arr)` is `T *`, not `T[]`).
+            self.pending.last_array_decay_size = 0;
+            self.pending.last_array_decay_bytes = 0;
+            // Overwrite the AST acc with a canonical Cast
+            // node so any intermediate Binary nodes the
+            // conversion-shaping sequence pushed don't surface
+            // as the cast's value. The dropped nodes have no
+            // consumers; the SSA walker won't visit them.
+            if let Some(child) = cast_child_ast {
+                self.ast_emit_cast(child, t);
+            }
+            // Re-seed the fn-ptr chain depth from the
+            // cast destination so a unary `*` chain that
+            // follows a `(fn_t*)expr` cast (e.g.
+            // `(**(finder_type*)pVfs->pAppData)(...)`) can
+            // recognise the decay. The cast result lives
+            // in `a`, so the depth is `cast_fpi - 1`.
+            if let Some(fpi) = cast_fpi
+                && fpi > 0
+            {
+                self.pending.fn_ptr_chain_depth = fpi - 1;
+            }
+            // C99 6.5.2.2p7: a call through the cast pointer
+            // uses the cast's prototype. Override the operand's
+            // recorded callee channel so a following call
+            // narrows each argument and splits the variadic
+            // tail per the cast, whatever the operand's own
+            // declared type said. `typeof(<cast>)` recovers the
+            // same prototype through `last_fn_ptr_cast`, keyed
+            // to the cast's flat tag.
+            if let Some(pp) = cast_fn_proto {
+                self.pending.last_fn_ptr_cast = Some((
+                    t,
+                    pp.types.clone(),
+                    pp.is_variadic,
+                    cast_fpi.unwrap_or(1).max(1),
+                ));
+                self.pending.indirect_callee_is_variadic = pp.is_variadic;
+                self.pending.indirect_callee_conv =
+                    core::mem::take(&mut self.pending.attr_call_conv);
+                self.pending.indirect_callee_fn_ptr_depth = cast_fpi.unwrap_or(1).max(1);
+                self.pending.indirect_callee_ret_fn_ptr = 0;
+                self.pending.indirect_callee_params = if pp.types.is_empty() {
+                    None
+                } else {
+                    Some(pp.types)
+                };
+            }
+        }
+        Ok(())
+    }
+
+    fn parse_deref(&mut self) -> Result<(), C5Error> {
+        self.next()?;
+        // Stash whatever the surrounding scope had in the
+        // "end-of-expr" capture slots so the recursive expr()
+        // that parses our operand can populate them fresh.
+        // After the parse, the new values tell us what
+        // strides the operand left unconsumed -- the signal
+        // we use to decide whether `*p` is a pointer-to-array
+        // row deref. The outer snapshot is restored afterwards
+        // so a containing operator's view isn't disturbed.
+        let saved_eos_stride = core::mem::take(&mut self.pending.end_of_expr_stride);
+        let saved_eos_tail = core::mem::take(&mut self.pending.end_of_expr_strides_tail);
+        self.expr(Token::Inc as i64)?;
+        let leftover_stride = core::mem::take(&mut self.pending.end_of_expr_stride);
+        let leftover_tail = core::mem::take(&mut self.pending.end_of_expr_strides_tail);
+        self.pending.end_of_expr_stride = saved_eos_stride;
+        self.pending.end_of_expr_strides_tail = saved_eos_tail;
+        // C function-pointer decay (6.3.2.1 / 6.3.4): `*` on
+        // a function-pointer rvalue is a no-op -- it yields
+        // back the same function pointer. The chain-depth
+        // side-channel marks the operand as already at the
+        // fn-ptr level, so we suppress the load and leave
+        // both the type and the accumulator unchanged. Next
+        // `*` keeps decaying; eventually the postfix `(`
+        // call-site reads `a` as the function pointer.
+        //
+        // Without this branch the existing handler emits a
+        // spurious `Li` that loads through the function
+        // pointer's bit pattern, hits unmapped memory, and
+        // SIGBUSes when called. The conservative pop in the
+        // call-site path catches this only when the result
+        // type drops to a non-pointer; if the function's
+        // return type is itself a pointer (e.g. an
+        // `io_methods *`-returning fn-ptr typedef)
+        // the pop is short-circuited and the
+        // garbage call target slips through.
+        if let Some(id) = self.ptr_array_id_depth1(self.ty) {
+            // Tested ahead of the function-pointer decay below: a
+            // pointer-to-array tag is never a function pointer, and a
+            // cast leaves the chain depth at 0, which would otherwise
+            // take the decay branch and drop the dereference.
+            //
+            // Pointer-to-array at the last level: `*p` reaches the
+            // array itself, which decays to the element pointer
+            // (C99 6.3.2.1p3). The operand's load already produced
+            // the row address; no further load, no Ptr peel.
+            self.decay_ptr_array_value(id);
+        } else if self.pending.fn_ptr_chain_depth == 0 {
+            // Decay no-op. Keep depth at 0: the decayed
+            // result is itself a fn-ptr rvalue, so any
+            // further `*`s also decay. No scalar load fired,
+            // so the chain depth is preserved.
+        } else if let Some(id) = self.ptr_array_id_depth1(self.ty) {
+            // Pointer-to-array at the last level: `*p` reaches the
+            // array itself, which decays to the element pointer
+            // (C99 6.3.2.1p3). The operand's load already produced
+            // the row address; no further load, no Ptr peel.
+            self.decay_ptr_array_value(id);
+        } else if leftover_stride > 0 {
+            // Pointer-to-array operand: `*p` is the row
+            // deref, equivalent to `p[0]`. The row's address
+            // is already in `a` -- no load, no Ptr peel.
+            // Consume the head stride (we just stepped over
+            // one dim at index 0) and shift the rest into
+            // the active queue so a following postfix `[k]`
+            // strides correctly. Surface the row's byte
+            // size via `last_array_decay_bytes` so an
+            // enclosing `sizeof` recovers it.
+            self.pending.last_array_decay_bytes = leftover_stride;
+            let mut tail = leftover_tail;
+            self.pending.index_stride = if tail.is_empty() { 0 } else { tail.remove(0) };
+            self.pending.index_strides_tail = tail;
+        } else {
+            if is_pointer_ty(self.ty) {
+                self.ty -= Ty::Ptr as i64;
+            } else {
+                return Err(self.compile_err("bad dereference"));
+            }
+            // `*p` where `p` is a struct pointer yields a struct
+            // *value*. c5 represents struct values address-as-
+            // value: the address goes in `a`, no load. The next
+            // op (`.field`, `= rhs` lowering Mcpy, etc.) reads
+            // the address from `a` directly.
+            let result_is_struct_value = is_struct_value_ty(self.ty);
+            // Capture the operand snapshot before
+            // `mark_emit_scalar_load` clears the chain-depth
+            // state; the snapshot is the deref's child for
+            // the Unary node below.
+            let deref_child_ast = self.ast_acc;
+            if !result_is_struct_value {
+                let prior_depth = self.pending.fn_ptr_chain_depth;
+                self.mark_emit_scalar_load();
+                // `mark_emit_scalar_load` cleared the chain
+                // depth. Restore it one level deeper if the
+                // operand was tracked:
+                // a real deref consumes one level of indirection
+                // toward the fn-ptr. (-1 stays -1.)
+                if prior_depth > 0 {
+                    self.pending.fn_ptr_chain_depth = prior_depth - 1;
+                }
+            }
+            // Push `Expr::Unary { op: Deref, child, ty }`. For
+            // struct-value `*p` the result type is the struct
+            // and the address-as-value rule means no load
+            // happened; the same Unary node still lets a
+            // wrapping `.field` / `= rhs` lookup the AST shape.
+            if let Some(child) = deref_child_ast {
+                let result_ty = self.ty;
+                let pos = self.ast_src_pos();
+                let id = self.ast.push_expr(
+                    super::super::ast::Expr::Unary {
+                        op: super::super::ast::UnOp::Deref,
+                        child,
+                        ty: result_ty,
+                    },
+                    pos,
+                );
+                self.ast_acc = Some(id);
+            }
+            // The operand may have been an array-decayed pointer
+            // (e.g. `*arr` where `arr` is `T arr[N]`), in which
+            // case the identifier-load path seeded
+            // `last_array_decay_size` with the array's element
+            // count. After the `*` consumed that decay, the
+            // value is no longer the array-of-T shape but the
+            // T-shaped first element, so an enclosing
+            // `sizeof(*arr)` must compute `sizeof(T)` rather
+            // than `N * sizeof(T)`. Clear the marker.
+            self.pending.last_array_decay_size = 0;
+            self.pending.last_array_decay_bytes = 0;
+        }
+        Ok(())
+    }
+
+    fn parse_label_address(&mut self) -> Result<(), C5Error> {
+        // GCC labels-as-values: `&&label` yields the address of a
+        // local label as a `void *`. The label may be defined later
+        // in the function (forward reference); `ast_label_by_name`
+        // interns it and the walker resolves it to the block.
+        let label = self.parse_label_addr_operand()?;
+        let pos = self.ast_src_pos();
+        let id = self
+            .ast
+            .push_expr(super::super::ast::Expr::LabelAddr(label), pos);
+        self.ast_acc = Some(id);
+        // GCC types `&&label` as `void *`; c5 encodes a void
+        // pointer as `char *` (Ty::Char + Ty::Ptr).
+        self.ty = Ty::Char as i64 + Ty::Ptr as i64;
+        Ok(())
+    }
+
+    fn parse_address_of(&mut self) -> Result<(), C5Error> {
+        self.next()?;
+        self.expr(Token::Inc as i64)?;
+        // Order matters here: a struct-value rvalue (`p->mutex`
+        // where `mutex` is a struct field, or `*p` where `p`
+        // is a struct pointer) leaves the field's address in
+        // `a` *without* emitting a trailing Li for the load
+        // that produced the address. But the parser may still
+        // have emitted an Li for *something earlier in the
+        // chain* (e.g. the `Li` that loaded `p`'s value to
+        // reach `p->mutex`). Popping that Li would unwind one
+        // step too far and yield `&p` instead of `&p->mutex`.
+        //
+        // So check the resulting type *first*: if `&expr`
+        // yields a struct value, the underlying address is
+        // already in `a` and we leave the IR alone. Only the
+        // remaining scalar / pointer-rvalue cases pop the
+        // trailing load.
+        // Bump `self.ty` by one pointer level FIRST so the
+        // dual-emit helper called from
+        // `pop_trailing_scalar_load` captures the post-`&`
+        // type. Without the pre-bump the AST `Expr::Unary {
+        // op: AddrOf, ty }` carried the pre-`&` scalar /
+        // pointer type, and a wrapping `(T *)&x` cast saw
+        // the wrong source kind in the walker (e.g. `float`
+        // instead of `float *`, which made the cast walker
+        // pick `FpCast(FpToInt)` instead of the integer
+        // pass-through).
+        let pre_addr_ty = self.ty;
+        let _ = pre_addr_ty;
+        self.ty += Ty::Ptr as i64;
+        if is_struct_value_ty(pre_addr_ty) {
+            // Struct value -- the parser already left the address
+            // in `a` (no final-load Li), so the bytecode path needs
+            // no change. Record the pointer result type in the
+            // dual-emit AST by wrapping the operand in
+            // `Expr::Unary { op: AddrOf, ty: struct* }`, so a
+            // consumer (e.g. a variadic argument) distinguishes a
+            // struct pointer from a by-value struct. The walker's
+            // AddrOf arm takes the child's lvalue address, which for
+            // a struct lvalue is its rvalue, leaving the value
+            // unchanged. Limit the wrap to the lvalue forms
+            // `walk_expr_lvalue` handles; a struct rvalue with no
+            // lvalue (a call result) keeps the address-as-value
+            // representation and its struct type. A compound
+            // literal is an lvalue (C99 6.5.2.5p4) and is wrapped,
+            // so a consumer (e.g. the call-argument classifiers)
+            // types `&(T){...}` as a pointer, not a by-value `T`.
+            let wrappable = match self.ast_acc {
+                Some(id) => matches!(
+                    self.ast.expr(id),
+                    super::super::ast::Expr::Ident { .. }
+                        | super::super::ast::Expr::Member { .. }
+                        | super::super::ast::Expr::Index { .. }
+                        | super::super::ast::Expr::Binary { .. }
+                        | super::super::ast::Expr::CompoundLiteral { .. }
+                        | super::super::ast::Expr::Unary {
+                            op: super::super::ast::UnOp::Deref,
+                            ..
+                        }
+                ),
+                None => false,
+            };
+            if wrappable {
+                self.ast_apply_unary(super::super::ast::UnOp::AddrOf);
+            }
+        } else if self.pop_trailing_scalar_load() {
+            // Scalar / pointer lvalue: dropped the trailing
+            // load so what's left is the address-producing op.
+        } else if is_pointer_ty(pre_addr_ty) {
+            // Array-decay shape: `&arr` and `&pPager->dbFileVers`
+            // when `dbFileVers` is a `char[16]` field. The
+            // expression already yielded the array's address as
+            // its rvalue (no Li was emitted), so `&` is a no-op
+            // at the IR level; the type bump above tracks the
+            // extra pointer level.
+            //
+            // C99 6.5.3.2p3: `&arr` has type pointer-to-array, not
+            // the decayed element pointer. For a known-size 1D array
+            // (`index_stride == 0`; multi-dim seeds a nonzero stride)
+            // rebuild the pointer-to-array aggregate so `(*p)[i]`,
+            // `sizeof(&arr)`, and `typeof(&arr)` see a real
+            // pointer-to-array rather than the element type.
+            let n = self.pending.last_array_decay_size;
+            let decay_dims = core::mem::take(&mut self.pending.last_array_decay_dims);
+            if decay_dims.len() >= 2 {
+                // `&arr` on a multi-dimensional array yields a pointer to
+                // the whole array aggregate `T[D0][D1]...`, so `(*p)[i]
+                // [j]...` and `typeof(&arr)` see the multi-dim shape. The
+                // seeded per-level strides belong to the decayed operand,
+                // not to the pointer-to-array result; clear them so a
+                // following subscript uses the aggregate's own decay.
+                let elem_ty = pre_addr_ty - Ty::Ptr as i64;
+                let agg = self.array_agg_type(elem_ty, &decay_dims);
+                self.ty = agg + Ty::Ptr as i64;
+                self.pending.index_stride = 0;
+                self.pending.index_strides_tail.clear();
+            } else if n > 0 && self.pending.index_stride == 0 {
+                let elem_ty = pre_addr_ty - Ty::Ptr as i64;
+                let agg = self.array_agg_type(elem_ty, &[n]);
+                self.ty = agg + Ty::Ptr as i64;
+            }
+            // The result is a pointer; drop the operand's array-decay
+            // hint so a surrounding `sizeof` / `typeof` does not size
+            // or type it as the array itself (mirrors the `*` arm).
+            self.pending.last_array_decay_size = 0;
+            self.pending.last_array_decay_bytes = 0;
+        } else if matches!(
+            self.ast_acc,
+            Some(id) if matches!(
+                self.ast.expr(id),
+                super::super::ast::Expr::CompoundLiteral { .. }
+            )
+        ) {
+            // C99 6.5.2.5p4: a compound literal is an lvalue -- an
+            // unnamed object with automatic storage. A scalar literal's
+            // value was materialized without a trailing load, so there
+            // was nothing for `pop_trailing_scalar_load` to drop; wrap
+            // the literal in `AddrOf` and let the walker's lvalue path
+            // emit the init and yield the slot address. Struct / array
+            // literals reach `&` through the branches above.
+            self.ast_apply_unary(super::super::ast::UnOp::AddrOf);
+        } else {
+            return Err(self.compile_err("bad address-of"));
+        }
+        // The pointer-level bump was applied above before
+        // `pop_trailing_scalar_load` so the dual-emit
+        // captured the post-`&` type.
+        // `&` adds one pointer level toward the fn-ptr
+        // for any chain we were tracking. -1 (untracked) stays
+        // -1.
+        if self.pending.fn_ptr_chain_depth >= 0 {
+            self.pending.fn_ptr_chain_depth += 1;
+        }
+        Ok(())
+    }
+
+    fn parse_logical_not(&mut self) -> Result<(), C5Error> {
+        self.next()?;
+        self.expr(Token::Inc as i64)?;
+        // C99 6.5.3.3p1 requires a scalar operand; the GCC vector
+        // extension does not extend `!` to a vector either.
+        if is_struct_value_ty(self.ty) && !self.is_int128_ty(self.ty) {
+            return Err(self.compile_err("invalid operand to unary `!` (aggregate type)"));
+        }
+        self.emit_binop_with_imm(crate::c5::ir::BinOp::Eq, 0);
+        self.ty = Ty::Int as i64;
+        Ok(())
+    }
+
+    fn parse_bit_not(&mut self) -> Result<(), C5Error> {
+        self.next()?;
+        self.expr(Token::Inc as i64)?;
+        // GCC vector extension: `~v` is element-wise over an integer
+        // vector and the result keeps the vector type (no promotion).
+        if is_vector_ty(&self.structs, self.ty) {
+            let elem_ty = self.structs[struct_id_of(self.ty)].fields[0].ty;
+            if is_floating_scalar(elem_ty) {
+                return Err(self.compile_err("invalid operand to unary `~` (vector of float)"));
+            }
+            self.ast_apply_unary(super::super::ast::UnOp::BitNot);
+        } else {
+            self.emit_binop_with_imm(crate::c5::ir::BinOp::Xor, -1);
+            // C99 6.5.3.3p4: `~` applies the integer promotions and the
+            // result has the promoted operand type. `unsigned char` /
+            // `unsigned short` promote to signed `int`. A `long` /
+            // `long long` (signed or unsigned) keeps its width and
+            // signedness -- forcing `Ty::Int` here would both narrow it
+            // and drop the unsigned bit, so a following `>>` would pick
+            // an arithmetic shift on `~(unsigned long)x`. A 4-byte
+            // unsigned result needs the high half masked back to 32
+            // bits because `XOR -1` sets the full 64-bit register.
+            let promoted = integer_promote(self.ty);
+            if is_unsigned_ty(promoted) && self.size_of_type(promoted) == 4 {
+                self.emit_binop_with_imm(crate::c5::ir::BinOp::And, 0xffff_ffff);
+            }
+            self.ty = promoted;
+        }
+        Ok(())
+    }
+
+    fn parse_unary_plus(&mut self) -> Result<(), C5Error> {
+        // Unary `+`: a no-op per C99 6.5.3.3p2; the result has the
+        // integer-promoted operand type. Integer promotion only
+        // widens sub-int operands (char / short -> int); types of
+        // rank int and above (unsigned, long, long long) keep their
+        // type, so forcing `int` here would drop the width and
+        // signedness and run a later comparison or shift on the
+        // wrong type. FP operands keep their FP type -- otherwise
+        // `+0.5` poses as an integer and a later `r + (+0.5)` lowers
+        // to `BinOp::Add` instead of `BinOp::Fadd`.
+        self.next()?;
+        self.expr(Token::Inc as i64)?;
+        if !is_floating_scalar(self.ty) {
+            self.ty = integer_promote(self.ty);
+        }
+        Ok(())
+    }
+
+    fn parse_unary_minus(&mut self) -> Result<(), C5Error> {
+        self.next()?;
+        // Constant-fold `-<int-literal>` into the negated
+        // integer literal. Float literals don't qualify --
+        // floating negation must apply to the parsed f64 bit
+        // pattern, not a sign flip on the integer-shaped operand.
+        if self.lex.tk == Token::Num {
+            let val = self.lex.ival;
+            // C99 6.5.3.3p3: unary `-` returns the integer-
+            // promoted operand type. The literal's type comes
+            // from C99 6.4.4.1p5 (first of int / long / long
+            // long that holds the magnitude), so a value past
+            // INT_MAX must not stay at `int` here -- otherwise
+            // the post-Add/Sub mask in `convert.rs` truncates
+            // a downstream `-MAX - 1` back to 32 bits and
+            // yields 0 instead of `INT64_MIN`.
+            self.ty = integer_promote(self.num_token_type(val));
+            // 6.2.5p9: the negation is evaluated in that type, so
+            // an unsigned result wraps modulo 2^N. `-1U` is
+            // UINT_MAX, not the 64-bit -1 a wider compare reads.
+            let negated = narrow_const_int(
+                self.size_of_type(self.ty),
+                is_unsigned_ty(self.ty),
+                false,
+                i128::from(val.wrapping_neg()),
+            ) as i64;
+            self.emit_imm(negated);
+            // Dual-emit: the constant-folded `-N` collapses
+            // the unary-minus on the AST side too. Seed
+            // `ast_acc` with the matching IntLit so a
+            // wrapping expression (cast, call-arg, assignment)
+            // finds the folded value on the accumulator
+            // instead of whatever stale id the caller left.
+            self.ast_emit_int_lit(negated, self.ty);
+            self.next()?;
+        } else {
+            self.expr(Token::Inc as i64)?;
+            if is_vector_ty(&self.structs, self.ty) {
+                // GCC vector extension: `-v` is element-wise and the
+                // result keeps the vector type (no promotion).
+                self.ast_apply_unary(super::super::ast::UnOp::Neg);
+            } else if is_floating_scalar(self.ty) {
+                self.ast_fneg();
+                // self.ty already matches the operand's FP type
+            } else {
+                // C99 6.5.3.3 paragraph 3: the integer promotions
+                // are performed on the operand of unary `-`, and
+                // the result has the promoted operand type.
+                // Forcing `Ty::Int` here would drop the high half
+                // of a `long long` / `unsigned long long` operand
+                // and run any subsequent comparison or shift on
+                // the negated value in `int`.
+                let operand_ty = self.ty;
+                self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, -1);
+                self.ty = integer_promote(operand_ty);
+                // C99 6.5.3.3p3: result has the promoted operand type and
+                // follows that type's overflow rules. Negating the
+                // type-minimum overflows past the type width, so a 32-bit
+                // result is renormalized to its declared width -- otherwise
+                // `-INT_MIN` leaves the high half clear and a later 64-bit
+                // read (Shr, widen to long) sees the wrong value.
+                if self.size_of_type(self.ty) == 4 {
+                    self.renormalize_to_width(self.ty);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn parse_prefix_inc_dec(&mut self) -> Result<(), C5Error> {
+        let tok = self.lex.tk.raw();
+        self.next()?;
+        self.expr(Token::Inc as i64)?;
+        // Snapshot the lvalue's AST node before the emit
+        // sequence below: rewrite + reload + Psh + Imm +
+        // Add/Sub + store_op all run through `ast_apply_*`
+        // helpers that pop the vstack regardless of whether the
+        // build succeeded, so by the time `ast_emit_pre_inc`
+        // fires the lvalue would otherwise be gone.
+        let bf_pre = self.direct_inc_lvalue();
+        if let Some((lv, ety)) = bf_pre {
+            let by = if tok == Token::Inc as i64 { 1 } else { -1 };
+            let src = self.ast_src_pos();
+            let id = self.ast.push_expr(
+                super::super::ast::Expr::PreInc {
+                    lvalue: lv,
+                    by,
+                    ty: ety,
+                },
+                src,
+            );
+            self.ast_acc = Some(id);
+            self.ty = ety;
+        } else {
+            let pre_inc_lvalue = self.ast_acc;
+            let fn_ptr_step = self.value_is_function_pointer();
+            self.rewrite_trailing_load_as_psh()
+                .ok_or_else(|| self.compile_err("bad lvalue in pre-increment"))?;
+            // ++/-- reads the prior value and stores a new one.
+            // `take_last_loaded_local` restored was_read to its
+            // pre-load state; force it true because the reload
+            // below re-emits the load. The read clears any
+            // pending dead-store entries; the subsequent store
+            // pushes a fresh one.
+            let line = self.lex.line;
+            if let Some(idx) = self.take_last_loaded_local() {
+                self.symbols[idx].was_read = true;
+                self.symbols[idx].was_written = true;
+                self.record_local_read(idx);
+                self.record_local_store(idx, line);
+            }
+            self.mark_emit_other();
+            self.ast_psh();
+            // A pointer-to-array (`T (*p)[N]`) looks like a plain
+            // `T*` in the flat type, so `pointee_step` would scale by
+            // `sizeof(T)`. The correct step is the array's size,
+            // seeded into the stride snapshot when the operand was
+            // loaded (the operand was parsed via a nested `expr()`,
+            // so it sits in `end_of_expr_stride`).
+            let step = if fn_ptr_step {
+                1
+            } else {
+                self.pointer_to_array_arith_stride(
+                    self.pending.end_of_expr_stride,
+                    self.ty,
+                    self.pointee_step(self.ty),
+                )
+            };
+            self.emit_imm(step);
+            self.ast_binop(if tok == Token::Inc as i64 {
+                super::super::ir::BinOp::Add
+            } else {
+                super::super::ir::BinOp::Sub
+            });
+            self.ast_assign();
+            // Build the AST `Expr::PreInc` whose `by` is signed
+            // by the op direction so the walker routes to a
+            // single `binop_imm(Add, lvalue, by)` rather than
+            // matching the sign separately. The lvalue producer
+            // is already on the parser-side vstack from the
+            // trailing-load rewrite.
+            let pre_inc_step = if tok == Token::Inc as i64 {
+                step
+            } else {
+                -step
+            };
+            let pre_inc_ty = self.ty;
+            if let Some(lvalue) = pre_inc_lvalue {
+                self.ast_emit_pre_inc(lvalue, pre_inc_step, pre_inc_ty);
+            }
+        }
         Ok(())
     }
 
@@ -6298,6 +6437,47 @@ fn vector_binop_op(tk: i64) -> super::super::ir::BinOp {
 /// The operand and per-level state a subscript's index parse hands back:
 /// the index expression, the row stride the operand seeded for this
 /// level, and the function-pointer decay depth parked across the parse.
+/// A builtin recognized at a call on a bare identifier.
+enum BuiltinCall {
+    Simd(u32),
+    MemTransfer(super::super::ast::MemTransferOp),
+    ChooseExpr,
+    ConstantP,
+    HasAttribute,
+    ObjectSize,
+    Overflow,
+    GccAtomic,
+    Atomic(super::super::ast::AtomicKind),
+    Intrinsic(i64),
+}
+
+/// What the intrinsic-operand parse hands the node build: the operands,
+/// the type `__builtin_va_arg` yields, and the frame-walk level of the
+/// frame builtins.
+struct IntrinsicOperands {
+    args: alloc::vec::Vec<super::super::ast::ExprId>,
+    va_arg_result_ty: Option<i64>,
+    frame_walk_levels: i64,
+    walked_return_slot: bool,
+}
+
+/// The declaration of a direct call's callee, read once before the
+/// arguments are parsed: a recursive call cannot change it under the
+/// per-argument checks.
+struct DirectCallee {
+    params: Vec<i64>,
+    is_variadic: bool,
+    name: String,
+    /// A libc import reads each argument at the ABI register width and
+    /// never re-narrows to its declared parameter type, so the caller
+    /// narrows for it; a c5 callee narrows in its own prologue.
+    is_sys_call: bool,
+    ret_ty: i64,
+    /// The struct result goes through a hidden out-pointer the caller
+    /// allocates.
+    returns_struct: bool,
+}
+
 struct SubscriptIndex {
     idx_ast: Option<super::super::ast::ExprId>,
     multi_dim_stride: i64,

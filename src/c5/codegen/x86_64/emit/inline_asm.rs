@@ -1498,40 +1498,14 @@ fn differing_run(a: &[u8], b: &[u8]) -> Option<(usize, usize)> {
 /// Each round either grows the set or is final, the rule
 /// `measure_asm_section_offsets` applies to a pushed section's branches.
 pub(super) fn emit_inline_asm(
-    code: &mut Vec<u8>,
+    out: &mut Out,
     asm: &super::super::ir::AsmBlock,
     args: &[u32],
-    func: &FunctionSsa,
-    alloc: &Allocation,
-    frame: Frame,
-    fixups: &mut Vec<super::encode::Fixup>,
-    name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
-    extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
-    extern_code_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
-    asm_sections: &mut crate::c5::asm::AsmSectionSink,
-    asm_extern_call_sites: &mut Vec<super::UserExternCallSite>,
-    asm_sym_fixups: &mut Vec<super::AsmSymFixup>,
-    data_fixups: &mut Vec<DataFixup>,
-    pending_func_fixups: &mut Vec<(usize, usize)>,
-    user_extern_data_refs: &mut Vec<super::UserExternDataRef>,
-    asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
-    asm_text_abs_refs: &mut Vec<super::AsmTextAbsRef>,
-    asm_text_labels: &mut Vec<super::AsmTextLabel>,
-    text_align: &mut usize,
+    fcx: &FnCtx,
     mut goto_ctx: Option<AsmGotoCtx<'_>>,
 ) -> bool {
     let mut long_sites: alloc::collections::BTreeSet<usize> = alloc::collections::BTreeSet::new();
-    let base = (
-        code.len(),
-        fixups.len(),
-        asm_extern_call_sites.len(),
-        asm_sym_fixups.len(),
-        data_fixups.len(),
-        pending_func_fixups.len(),
-        user_extern_data_refs.len(),
-        *text_align,
-    );
-    let sink_base = asm_sections.snapshot();
+    let base = out.mark();
     loop {
         let known = long_sites.len();
         let round_ctx = goto_ctx.as_mut().map(|c| AsmGotoCtx {
@@ -1539,44 +1513,13 @@ pub(super) fn emit_inline_asm(
             branch_fixups: &mut *c.branch_fixups,
             branch_short: c.branch_short,
         });
-        if !emit_inline_asm_once(
-            code,
-            asm,
-            args,
-            func,
-            alloc,
-            frame,
-            fixups,
-            name2entpc,
-            extern_data_names,
-            extern_code_names,
-            asm_sections,
-            asm_extern_call_sites,
-            asm_sym_fixups,
-            data_fixups,
-            pending_func_fixups,
-            user_extern_data_refs,
-            asm_section_text_refs,
-            asm_text_abs_refs,
-            asm_text_labels,
-            text_align,
-            round_ctx,
-            &mut long_sites,
-        ) {
+        if !emit_inline_asm_once(out, asm, args, fcx, round_ctx, &mut long_sites) {
             return false;
         }
         if long_sites.len() == known {
             return true;
         }
-        code.truncate(base.0);
-        fixups.truncate(base.1);
-        asm_extern_call_sites.truncate(base.2);
-        asm_sym_fixups.truncate(base.3);
-        data_fixups.truncate(base.4);
-        pending_func_fixups.truncate(base.5);
-        user_extern_data_refs.truncate(base.6);
-        *text_align = base.7;
-        asm_sections.restore(&sink_base);
+        out.restore(&base);
     }
 }
 
@@ -1585,31 +1528,37 @@ pub(super) fn emit_inline_asm(
 /// when a short branch does not reach; the driver above rolls back what
 /// the attempt emitted.
 fn emit_inline_asm_once(
-    code: &mut Vec<u8>,
+    out: &mut Out,
     asm: &super::super::ir::AsmBlock,
     args: &[u32],
-    func: &FunctionSsa,
-    alloc: &Allocation,
-    frame: Frame,
-    fixups: &mut Vec<super::encode::Fixup>,
-    name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
-    extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
-    extern_code_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
-    asm_sections: &mut crate::c5::asm::AsmSectionSink,
-    asm_extern_call_sites: &mut Vec<super::UserExternCallSite>,
-    asm_sym_fixups: &mut Vec<super::AsmSymFixup>,
-    data_fixups: &mut Vec<DataFixup>,
-    pending_func_fixups: &mut Vec<(usize, usize)>,
-    user_extern_data_refs: &mut Vec<super::UserExternDataRef>,
-    asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
-    asm_text_abs_refs: &mut Vec<super::AsmTextAbsRef>,
-    asm_text_labels: &mut Vec<super::AsmTextLabel>,
-    text_align: &mut usize,
+    fcx: &FnCtx,
     mut goto_ctx: Option<AsmGotoCtx<'_>>,
     long_sites: &mut alloc::collections::BTreeSet<usize>,
 ) -> bool {
     use super::super::ir::{AsmConstraint, AsmRegSize, AsmSeg};
     use super::asm::{AsmOpnd, Concrete};
+    let FnCtx {
+        func,
+        alloc,
+        frame,
+        name2entpc,
+        extern_data_names,
+        extern_code_names,
+        ..
+    } = *fcx;
+    let cx = &mut *out.cx;
+    let fixups = &mut *out.fixups;
+    let asm_section_text_refs = &mut *out.asm_section_text_refs;
+    let asm_text_abs_refs = &mut *out.asm_text_abs_refs;
+    let asm_text_labels = &mut *out.asm_text_labels;
+    let code = &mut *cx.code;
+    let asm_sections = &mut *cx.asm_sections;
+    let asm_extern_call_sites = &mut *cx.asm_extern_call_sites;
+    let asm_sym_fixups = &mut *cx.asm_sym_fixups;
+    let data_fixups = &mut *cx.data_fixups;
+    let pending_func_fixups = &mut *cx.pending_func_fixups;
+    let user_extern_data_refs = &mut *cx.user_extern_data_refs;
+    let text_align = &mut *cx.text_align;
     // A statement that lowers to nothing keeps only its IR-level ordering
     // effect; the operand staging around zero bytes of code is dead, and
     // `asm_scratch_bytes` reserved no region for it.

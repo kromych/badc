@@ -239,18 +239,12 @@ fn invert_cc(cc: Cc) -> Option<Cc> {
 }
 
 pub(super) fn emit_inst(
-    cx: &mut super::ssa::emit_common::EmitCtx,
+    out: &mut Out,
     inst: &Inst,
     v: super::super::ir::ValueId,
     dst: Place,
     fcx: &FnCtx,
-    fixups: &mut Vec<Fixup>,
-    asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
-    asm_text_abs_refs: &mut Vec<super::AsmTextAbsRef>,
-    asm_text_labels: &mut Vec<super::AsmTextLabel>,
 ) -> bool {
-    // Unpack the read-only per-function context into the per-field names the
-    // lowering below uses, so the body is unchanged.
     let FnCtx {
         func,
         alloc,
@@ -261,23 +255,19 @@ pub(super) fn emit_inst(
         variadic_targets,
         conv_targets,
         extern_tls_names,
-        extern_data_names,
-        extern_code_names,
         tls_total_size,
         param_from_home,
         param_plan,
-        name2entpc,
+        ..
     } = *fcx;
-    // The bundled emit output now arrives in `cx`; recreate the per-field
-    // names as disjoint reborrows so the per-`Inst` lowering below is unchanged.
+    let cx = &mut *out.cx;
+    let fixups = &mut *out.fixups;
     let code = &mut *cx.code;
     let plt_call_fixups = &mut *cx.plt_call_fixups;
     let data_fixups = &mut *cx.data_fixups;
-    let user_extern_data_refs = &mut *cx.user_extern_data_refs;
     let pending_func_fixups = &mut *cx.pending_func_fixups;
     let tls_index_fixups = &mut *cx.tls_index_fixups;
     let elf_tpoff_fixups = &mut *cx.elf_tpoff_fixups;
-    let asm_sections = &mut *cx.asm_sections;
     let asm_extern_call_sites = &mut *cx.asm_extern_call_sites;
     match inst {
         Inst::AllocaInit(slot) => {
@@ -680,29 +670,7 @@ pub(super) fn emit_inst(
             emit_intrinsic(code, *kind, args, dst, v, func, alloc, frame, abi)
         }
         Inst::X86Simd { op, imm, args } => emit_x86_simd(code, *op, *imm, args, alloc, frame),
-        Inst::InlineAsm { asm, args } => emit_inline_asm(
-            code,
-            asm,
-            args,
-            func,
-            alloc,
-            frame,
-            fixups,
-            name2entpc,
-            extern_data_names,
-            extern_code_names,
-            asm_sections,
-            asm_extern_call_sites,
-            &mut *cx.asm_sym_fixups,
-            data_fixups,
-            pending_func_fixups,
-            user_extern_data_refs,
-            asm_section_text_refs,
-            asm_text_abs_refs,
-            asm_text_labels,
-            cx.text_align,
-            None,
-        ),
+        Inst::InlineAsm { asm, args } => emit_inline_asm(out, asm, args, fcx, None),
         Inst::Fneg(value) => emit_fneg(code, dst, v, *value, alloc, frame),
         Inst::Fma {
             a,

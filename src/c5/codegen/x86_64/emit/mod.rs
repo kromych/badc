@@ -385,3 +385,83 @@ struct FnCtx<'a> {
     /// bare symbol into a relocation.
     name2entpc: &'a alloc::collections::BTreeMap<alloc::string::String, usize>,
 }
+
+/// The output buffers a function's lowering appends to: the bundle shared
+/// with the aarch64 backend and the x86_64-only vectors passed beside it.
+struct Out<'a, 'b> {
+    cx: &'b mut super::ssa::emit_common::EmitCtx<'a>,
+    fixups: &'b mut Vec<Fixup>,
+    asm_section_text_refs: &'b mut Vec<super::AsmSectionTextRef>,
+    asm_text_abs_refs: &'b mut Vec<super::AsmTextAbsRef>,
+    asm_text_labels: &'b mut Vec<super::AsmTextLabel>,
+}
+
+/// The length of every output buffer at one point of the emission.
+struct OutputMark {
+    code: usize,
+    fixups: usize,
+    plt_call_fixups: usize,
+    data_fixups: usize,
+    user_extern_data_refs: usize,
+    pending_func_fixups: usize,
+    tls_index_fixups: usize,
+    elf_tpoff_fixups: usize,
+    ssa_line_rows: usize,
+    asm_sections: crate::c5::asm::AsmSectionsSnapshot,
+    asm_extern_call_sites: usize,
+    asm_sym_fixups: usize,
+    text_align: usize,
+    mcount_sites: usize,
+    asm_section_text_refs: usize,
+    asm_text_abs_refs: usize,
+    asm_text_labels: usize,
+}
+
+impl Out<'_, '_> {
+    fn mark(&self) -> OutputMark {
+        OutputMark {
+            code: self.cx.code.len(),
+            fixups: self.fixups.len(),
+            plt_call_fixups: self.cx.plt_call_fixups.len(),
+            data_fixups: self.cx.data_fixups.len(),
+            user_extern_data_refs: self.cx.user_extern_data_refs.len(),
+            pending_func_fixups: self.cx.pending_func_fixups.len(),
+            tls_index_fixups: self.cx.tls_index_fixups.len(),
+            elf_tpoff_fixups: self.cx.elf_tpoff_fixups.len(),
+            ssa_line_rows: self.cx.ssa_line_rows.len(),
+            asm_sections: self.cx.asm_sections.snapshot(),
+            asm_extern_call_sites: self.cx.asm_extern_call_sites.len(),
+            asm_sym_fixups: self.cx.asm_sym_fixups.len(),
+            text_align: *self.cx.text_align,
+            mcount_sites: self.cx.mcount_sites.len(),
+            asm_section_text_refs: self.asm_section_text_refs.len(),
+            asm_text_abs_refs: self.asm_text_abs_refs.len(),
+            asm_text_labels: self.asm_text_labels.len(),
+        }
+    }
+
+    /// Drop everything appended since `m` was taken.
+    fn restore(&mut self, m: &OutputMark) {
+        self.cx.code.truncate(m.code);
+        self.fixups.truncate(m.fixups);
+        self.cx.plt_call_fixups.truncate(m.plt_call_fixups);
+        self.cx.data_fixups.truncate(m.data_fixups);
+        self.cx
+            .user_extern_data_refs
+            .truncate(m.user_extern_data_refs);
+        self.cx.pending_func_fixups.truncate(m.pending_func_fixups);
+        self.cx.tls_index_fixups.truncate(m.tls_index_fixups);
+        self.cx.elf_tpoff_fixups.truncate(m.elf_tpoff_fixups);
+        self.cx.ssa_line_rows.truncate(m.ssa_line_rows);
+        self.cx.asm_sections.restore(&m.asm_sections);
+        self.cx
+            .asm_extern_call_sites
+            .truncate(m.asm_extern_call_sites);
+        self.cx.asm_sym_fixups.truncate(m.asm_sym_fixups);
+        *self.cx.text_align = m.text_align;
+        self.cx.mcount_sites.truncate(m.mcount_sites);
+        self.asm_section_text_refs.truncate(m.asm_section_text_refs);
+        self.asm_text_abs_refs.truncate(m.asm_text_abs_refs);
+        self.asm_text_labels.truncate(m.asm_text_labels);
+    }
+}

@@ -1888,11 +1888,7 @@ fn emit_return(
     if let Some(ai) = func.ret_agg {
         let desc = &func.agg_descs[ai as usize];
         let size = desc.size;
-        let place = alloc
-            .places
-            .get(value as usize)
-            .copied()
-            .unwrap_or(Place::None);
+        let place = place_of(alloc, value);
         let saddr = materialize_int(code, place, scratch.primary, frame).unwrap_or(scratch.primary);
         if saddr.0 != scratch.primary.0 {
             emit_mov_reg(code, scratch.primary, saddr);
@@ -1984,11 +1980,7 @@ fn emit_return(
         // materialise + mov. NO_VALUE marks an implicit return with
         // no live accumulator -- harmless because c5 calls never
         // read the result of a void-returning function.
-        let place = alloc
-            .places
-            .get(value as usize)
-            .copied()
-            .unwrap_or(Place::None);
+        let place = place_of(alloc, value);
         // A floating-point scalar result is returned in d0 (C99
         // 6.2.5p10 / AAPCS64 6.4.2). A `float` result occupies s0, the
         // low 32 bits of d0, which a d-register copy / 8-byte FP load

@@ -159,10 +159,7 @@ pub(super) fn emit_inst(
                 None => return false,
             };
             load_imm64(code, rd, *value as u64);
-            if let Place::Spill(slot) = dst {
-                let sp_off = spill_off(frame, slot);
-                emit_spill_str_x_auto(code, frame, rd, sp_off);
-            }
+            store_spilled_int(code, frame, dst, rd);
             true
         }
         Inst::ImmData(offset) => {
@@ -182,10 +179,7 @@ pub(super) fn emit_inst(
                 data_offset: *offset as u64,
                 part: AddrPart::Whole,
             });
-            if let Place::Spill(slot) = dst {
-                let sp_off = spill_off(frame, slot);
-                emit_spill_str_x_auto(code, frame, rd, sp_off);
-            }
+            store_spilled_int(code, frame, dst, rd);
             true
         }
         Inst::ImmCode(target_ent_pc) => {
@@ -197,10 +191,7 @@ pub(super) fn emit_inst(
             emit(code, enc_adrp(rd, 0));
             emit(code, enc_add_imm(rd, rd, 0));
             pending_func_fixups.push((instr_offset, *target_ent_pc));
-            if let Place::Spill(slot) = dst {
-                let sp_off = spill_off(frame, slot);
-                emit_spill_str_x_auto(code, frame, rd, sp_off);
-            }
+            store_spilled_int(code, frame, dst, rd);
             true
         }
         Inst::ImmExtCode(binding_idx) => {
@@ -227,10 +218,7 @@ pub(super) fn emit_inst(
             });
             emit(code, enc_adrp(rd, 0));
             emit(code, enc_add_imm(rd, rd, 0));
-            if let Place::Spill(slot) = dst {
-                let sp_off = spill_off(frame, slot);
-                emit_spill_str_x_auto(code, frame, rd, sp_off);
-            }
+            store_spilled_int(code, frame, dst, rd);
             true
         }
         // Inst::BlockAddr is handled in emit_function's block loop
@@ -443,11 +431,7 @@ pub(super) fn emit_inst(
             emit_intrinsic(code, func, abi, *kind, args, dst, v, alloc, frame, scratch)
         }
         Inst::Fneg(src) => {
-            let src_place = alloc
-                .places
-                .get(*src as usize)
-                .copied()
-                .unwrap_or(Place::None);
+            let src_place = place_of(alloc, *src);
             // C99 6.3.1.8: negation of a `float` is single-precision;
             // the result's f32 marker mirrors the operand's.
             let is_f32 = alloc.is_f32(v);
@@ -476,10 +460,7 @@ pub(super) fn emit_inst(
             } else {
                 emit(code, enc_fneg_d(dd, dn));
             }
-            if let Place::Spill(slot) = dst {
-                let sp_off = spill_off(frame, slot);
-                emit_spill_str_d_auto(code, frame, dd, sp_off);
-            }
+            store_spilled_fp(code, frame, dst, dd);
             true
         }
         Inst::Fma {
@@ -492,21 +473,9 @@ pub(super) fn emit_inst(
             // C99 6.5p8 / FP_CONTRACT: the fused form rounds once. The
             // result width follows the operands; the marker mirrors `a`.
             let is_f32 = alloc.is_f32(v);
-            let a_place = alloc
-                .places
-                .get(*a as usize)
-                .copied()
-                .unwrap_or(Place::None);
-            let b_place = alloc
-                .places
-                .get(*b as usize)
-                .copied()
-                .unwrap_or(Place::None);
-            let c_place = alloc
-                .places
-                .get(*c as usize)
-                .copied()
-                .unwrap_or(Place::None);
+            let a_place = place_of(alloc, *a);
+            let b_place = place_of(alloc, *b);
+            let c_place = place_of(alloc, *c);
             // Each operand resolves to its own d-reg or, when spilled, a
             // dedicated scratch outside the allocator's banks.
             let da = match materialize_fp_for(code, *a, a_place, frame.fp_scratch[0], frame, alloc)
@@ -540,10 +509,7 @@ pub(super) fn emit_inst(
                 code,
                 super::encode::enc_fma(dd, da, dm, dc, is_f32, *neg_product, *neg_addend),
             );
-            if let Place::Spill(slot) = dst {
-                let sp_off = spill_off(frame, slot);
-                emit_spill_str_d_auto(code, frame, dd, sp_off);
-            }
+            store_spilled_fp(code, frame, dst, dd);
             true
         }
         Inst::Extend { value, kind } => {
@@ -555,11 +521,7 @@ pub(super) fn emit_inst(
         Inst::Copy { value, is_fp } => emit_copy(code, dst, *value, *is_fp, alloc, frame, scratch),
         Inst::FpCast { kind, value } => {
             use super::super::ir::FpCastKind;
-            let src_place = alloc
-                .places
-                .get(*value as usize)
-                .copied()
-                .unwrap_or(Place::None);
+            let src_place = place_of(alloc, *value);
             match kind {
                 FpCastKind::IntToFp | FpCastKind::UIntToFp => {
                     let rn = match materialize_int(code, src_place, scratch.primary, frame) {
@@ -585,10 +547,7 @@ pub(super) fn emit_inst(
                         (false, false) => enc_scvtf_d_x(dd, rn),
                     };
                     emit(code, enc);
-                    if let Place::Spill(slot) = dst {
-                        let sp_off = spill_off(frame, slot);
-                        emit_spill_str_d_auto(code, frame, dd, sp_off);
-                    }
+                    store_spilled_fp(code, frame, dst, dd);
                     true
                 }
                 FpCastKind::FpToInt | FpCastKind::UFpToInt => {
@@ -620,10 +579,7 @@ pub(super) fn emit_inst(
                         (false, false) => enc_fcvtzs_x_d(rd, dn),
                     };
                     emit(code, enc);
-                    if let Place::Spill(slot) = dst {
-                        let sp_off = spill_off(frame, slot);
-                        emit_spill_str_x_auto(code, frame, rd, sp_off);
-                    }
+                    store_spilled_int(code, frame, dst, rd);
                     true
                 }
                 // C99 6.3.1.5: widen single to double (`fcvt Dd, Sn`)
@@ -643,10 +599,7 @@ pub(super) fn emit_inst(
                         _ => return false,
                     };
                     emit(code, enc_fcvt_d_s(dd, dn));
-                    if let Place::Spill(slot) = dst {
-                        let sp_off = spill_off(frame, slot);
-                        emit_spill_str_d_auto(code, frame, dd, sp_off);
-                    }
+                    store_spilled_fp(code, frame, dst, dd);
                     true
                 }
                 FpCastKind::F64ToF32 => {
@@ -660,10 +613,7 @@ pub(super) fn emit_inst(
                         _ => return false,
                     };
                     emit(code, enc_fcvt_s_d(dd, dn));
-                    if let Place::Spill(slot) = dst {
-                        let sp_off = spill_off(frame, slot);
-                        emit_spill_str_d_auto(code, frame, dd, sp_off);
-                    }
+                    store_spilled_fp(code, frame, dst, dd);
                     true
                 }
             }

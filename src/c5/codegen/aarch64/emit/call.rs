@@ -611,11 +611,7 @@ pub(super) fn emit_call_indirect(
     ret_slot_off: i64,
 ) -> bool {
     let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
-    let target_place = alloc
-        .places
-        .get(target as usize)
-        .copied()
-        .unwrap_or(Place::None);
+    let target_place = place_of(alloc, target);
     // Collect the registers currently holding arg-source values
     // for this call. AAPCS64 doesn't assign these scratch
     // registers to int-arg slots, but the SSA allocator's

@@ -85,17 +85,17 @@ pub(super) fn emit_intrinsic(
                 .filter(|q| matches!(q, super::ArgPlacement::Stack(_)))
                 .count() as u32
                 * 8;
-            emit_sp_plus_off_from_fp(
+            emit_fp_plus_off(
                 code,
                 scratch.secondary,
                 16 + AARCH64_VA_SAVE_BYTES + named_stack_bytes,
             );
             emit(code, enc_str_imm(scratch.secondary, ap, 0));
             // __gr_top (+8) = fp + 16 + 64 (high edge of the general area).
-            emit_sp_plus_off_from_fp(code, scratch.secondary, 16 + AARCH64_GR_SAVE_BYTES);
+            emit_fp_plus_off(code, scratch.secondary, 16 + AARCH64_GR_SAVE_BYTES);
             emit(code, enc_str_imm(scratch.secondary, ap, 8));
             // __vr_top (+16) = fp + 16 + 192 (high edge of the vector area).
-            emit_sp_plus_off_from_fp(code, scratch.secondary, 16 + AARCH64_VA_SAVE_BYTES);
+            emit_fp_plus_off(code, scratch.secondary, 16 + AARCH64_VA_SAVE_BYTES);
             emit(code, enc_str_imm(scratch.secondary, ap, 16));
             // __gr_offs (+24) = -(8 - named_int) * 8. A named integer
             // parameter past the eight argument registers overflows to the
@@ -152,7 +152,7 @@ pub(super) fn emit_intrinsic(
                     "win-arm64 variadic callee assumes named params fit the int arg bank"
                 );
                 let off = 16 + (func.n_params as u32) * 8;
-                emit_sp_plus_off_from_fp(code, scratch.secondary, off);
+                emit_fp_plus_off(code, scratch.secondary, off);
                 emit(code, enc_str_imm(scratch.secondary, ap_r, 0));
                 return true;
             }
@@ -185,7 +185,7 @@ pub(super) fn emit_intrinsic(
                     0,
                     "va_start: c5 cdecl cell region must keep fp 16-aligned"
                 );
-                emit_sp_plus_off_from_fp(code, scratch.secondary, off);
+                emit_fp_plus_off(code, scratch.secondary, off);
                 emit(code, enc_str_imm(scratch.secondary, ap_r, 0));
                 return true;
             }
@@ -738,10 +738,7 @@ pub(super) fn emit_intrinsic(
                 _ => enc_frintz_d(dd, dn),
             };
             emit(code, inst);
-            if let Place::Spill(slot) = dst {
-                let sp_off = spill_off(frame, slot);
-                emit_spill_str_d_auto(code, frame, dd, sp_off);
-            }
+            store_spilled_fp(code, frame, dst, dd);
             true
         }
         I::FrameAddress => {
@@ -791,11 +788,7 @@ pub(super) fn emit_intrinsic(
             let fp = match args {
                 [] => Reg(29),
                 [walked] => {
-                    let place = alloc
-                        .places
-                        .get(*walked as usize)
-                        .copied()
-                        .unwrap_or(Place::None);
+                    let place = place_of(alloc, *walked);
                     match materialize_int(code, place, scratch.primary, frame) {
                         Some(r) => r,
                         None => {
@@ -878,16 +871,8 @@ pub(super) fn emit_mcpy(
         bail_msg("Mcpy: negative size");
         return false;
     }
-    let dst_place_in = alloc
-        .places
-        .get(dst_val as usize)
-        .copied()
-        .unwrap_or(Place::None);
-    let src_place_in = alloc
-        .places
-        .get(src_val as usize)
-        .copied()
-        .unwrap_or(Place::None);
+    let dst_place_in = place_of(alloc, dst_val);
+    let src_place_in = place_of(alloc, src_val);
     let dst_r = match materialize_int(code, dst_place_in, scratch.primary, frame) {
         Some(r) => r,
         None => return false,
@@ -979,9 +964,8 @@ pub(super) fn emit_mcpy(
         if rd.0 != dst_r.0 {
             emit_mov_reg(code, rd, dst_r);
         }
-    } else if let Place::Spill(slot) = dst_place {
-        let sp_off = spill_off(frame, slot);
-        emit_spill_str_x_auto(code, frame, dst_r, sp_off);
+    } else {
+        store_spilled_int(code, frame, dst_place, dst_r);
     }
     true
 }
@@ -1034,11 +1018,7 @@ fn atomic_operand_into(
     sp_shift: u32,
     alloc: &Allocation,
 ) -> bool {
-    let place = alloc
-        .places
-        .get(value as usize)
-        .copied()
-        .unwrap_or(Place::None);
+    let place = place_of(alloc, value);
     // An operand the allocator placed in a borrowed working register
     // (x9..x12) may already have been overwritten by an earlier
     // operand move; read its saved copy from the save area instead
@@ -1260,11 +1240,7 @@ fn atomic128_operand_into(
     frame: Frame,
     alloc: &Allocation,
 ) -> bool {
-    let place = alloc
-        .places
-        .get(value as usize)
-        .copied()
-        .unwrap_or(Place::None);
+    let place = place_of(alloc, value);
     if let Place::IntReg(r) = place
         && (9..=15).contains(&r)
     {

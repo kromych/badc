@@ -2282,6 +2282,13 @@ fn type_name_forms() {
 }
 
 #[test]
+fn binary_operator_order() {
+    // C99 6.5.5-6.5.14 precedence and associativity, and the sequence
+    // points of `&&` / `||` (6.5.13p4, 6.5.14p4).
+    assert_eq!(run_fixture("binary_operator_order.c"), 0);
+}
+
+#[test]
 fn sizeof_abstract_fn_ptr() {
     // `sizeof` of an abstract function-pointer type-name `int (*)(int)`
     // is the pointer width, in both the runtime and constant-expression

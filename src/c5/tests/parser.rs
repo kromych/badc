@@ -2966,3 +2966,85 @@ fn sizeof_of_an_incomplete_array_type_name_is_rejected() {
     .compile()
     .expect("a pointer to an incomplete array is a complete type");
 }
+
+#[test]
+fn type_name_abstract_declarators_parse_in_every_consumer() {
+    // C99 6.7.6: one type-name grammar serves the cast, `sizeof`,
+    // `_Alignof`, a `_Generic` association and `__builtin_va_arg`, with
+    // the pointer, array, pointer-to-array and function-pointer abstract
+    // declarators and qualifiers before and after the `*`.
+    Compiler::new(
+        "typedef __builtin_va_list va_list;\n\
+         struct s { int a; };\n\
+         typedef int row[3];\n\
+         int f(int x) { return x; }\n\
+         long g(int n, ...) {\n\
+             va_list ap; long t = 0;\n\
+             __builtin_va_start(ap, n);\n\
+             while (n-- > 0) {\n\
+                 const char *s = __builtin_va_arg(ap, const char *);\n\
+                 int (*h)(int) = __builtin_va_arg(ap, int (*)(int));\n\
+                 int (*r)[3] = __builtin_va_arg(ap, int (*)[3]);\n\
+                 t += h(s[0]) + (*r)[1];\n\
+             }\n\
+             __builtin_va_end(ap);\n\
+             return t;\n\
+         }\n\
+         int main(void) {\n\
+             int (*rp)[3] = (int (*)[3])0;\n\
+             int (*fp)(int) = (int (*)(int))f;\n\
+             const char *const *cp = (const char *const *)0;\n\
+             unsigned long ul = (unsigned long const)1;\n\
+             row *pr = (row *)0;\n\
+             char a[sizeof(int[4][2]) == 32 && sizeof(int (*)[4]) == sizeof(void *) ? 1 : -1];\n\
+             char b[_Alignof(struct s *) == _Alignof(void *) && _Alignof(row) == _Alignof(int) ? 1 : -1];\n\
+             int sel = _Generic(fp, int (*)(int): 0, default: 1)\n\
+                 + _Generic(rp, int (*)[3]: 0, default: 1)\n\
+                 + _Generic(pr, row *: 0, default: 1);\n\
+             return sel + (rp == 0 && fp(0) == 0 && cp == 0 && ul == 1 && a[0] + b[0] == 0 ? 0 : 1);\n\
+         }"
+            .to_string(),
+    )
+    .compile()
+    .expect("every type-name consumer takes an abstract declarator");
+}
+
+#[test]
+fn type_name_array_bound_constraints() {
+    // C99 6.7.5.2p1: a bound in a type name is a constant expression
+    // greater than zero, and only the outermost bound may be omitted;
+    // 6.5.3.4p1: `_Alignof` does not apply to an incomplete type, an
+    // array of an incomplete struct included.
+    expect_compile_error(
+        "int main(void) { return (int)sizeof(int[-1]); }",
+        "must not be negative",
+    );
+    expect_compile_error(
+        "int main(void) { return (int)sizeof(int[3][]); }",
+        "incomplete inner dimension",
+    );
+    expect_compile_error(
+        "struct t;\n\
+         int main(void) { return (int)_Alignof(struct t[2]); }",
+        "applied to an incomplete type",
+    );
+}
+
+#[test]
+fn binary_operator_operand_constraints() {
+    // C99 6.5.5p2: `%` takes integer operands, on either side; 6.5.6p2:
+    // an aggregate is not an operand of `+`.
+    expect_compile_error(
+        "int main(void) { double d = 1; int x = 2; return (int)(d % x); }",
+        "`%` is not defined on floating-point operands",
+    );
+    expect_compile_error(
+        "int main(void) { double d = 1; int x = 2; return (int)(x % d); }",
+        "`%` is not defined on floating-point operands",
+    );
+    expect_compile_error(
+        "struct s { int a; };\n\
+         int main(void) { struct s x = {1}, y = {2}; return (x + y).a; }",
+        "invalid operands to binary operator",
+    );
+}

@@ -769,6 +769,16 @@ impl<'a> Exp<'a> {
         true
     }
 
+    /// Whether the body token at `at` sits in a plain parameter
+    /// position: neither operand of `##` nor the operand of `#` (C99
+    /// 6.10.3.1p1), so a parameter there substitutes its argument after
+    /// expansion. Read both by the plain-use pre-count and by the
+    /// substitution loop, so the two cannot disagree.
+    fn plain_position(&self, body: &[Tok], at: usize) -> bool {
+        !body.get(at + 1).is_some_and(|&n| self.is_punct(n, "##"))
+            && !(at > 0 && (self.is_punct(body[at - 1], "##") || self.is_punct(body[at - 1], "#")))
+    }
+
     /// Replacement-list substitution (C99 6.10.3.1-6.10.3.3): `#` and
     /// `##` operands read the unexpanded argument, ordinary parameter
     /// positions read the argument expanded once (memoized, moved on
@@ -805,9 +815,7 @@ impl<'a> Exp<'a> {
         let mut plain_uses: Vec<u32> = alloc::vec![0; raw_args.len()];
         for (bi, &bt) in body.iter().enumerate() {
             if bt.kind == TokKind::Ident
-                && !body.get(bi + 1).is_some_and(|&n| self.is_punct(n, "##"))
-                && !(bi > 0
-                    && (self.is_punct(body[bi - 1], "##") || self.is_punct(body[bi - 1], "#")))
+                && self.plain_position(&body, bi)
                 && let Some(idx) = self.param_index(def, bt)
                 && idx < plain_uses.len()
             {
@@ -880,9 +888,9 @@ impl<'a> Exp<'a> {
                 continue;
             }
             if t.kind == TokKind::Ident {
-                let followed_by_paste = body.get(i + 1).is_some_and(|&n| self.is_punct(n, "##"));
+                let plain = self.plain_position(&body, i);
                 if self.is_va(def, t) {
-                    let src = if followed_by_paste {
+                    let src = if !plain {
                         raw_va.clone()
                     } else {
                         match &exp_va {
@@ -900,7 +908,7 @@ impl<'a> Exp<'a> {
                     continue;
                 }
                 if let Some(idx) = self.param_index(def, t) {
-                    let src = if followed_by_paste {
+                    let src = if !plain {
                         raw_args.get(idx).cloned().unwrap_or_default()
                     } else if idx < raw_args.len() {
                         if exp_args[idx].is_none() {

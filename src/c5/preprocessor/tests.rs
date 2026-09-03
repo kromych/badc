@@ -3701,3 +3701,15 @@ fn directives_are_recognised_by_their_whole_name() {
         assert_eq!(directive_kind(line), want, "#{line}");
     }
 }
+
+/// C99 6.10.3.1p1: a parameter next to `#` or `##` substitutes its
+/// argument unexpanded, every other position substitutes it expanded.
+/// `subst` decides that twice -- once to count the plain uses whose
+/// memoized expansion can be moved rather than cloned, once while
+/// substituting -- and the two must agree.
+#[test]
+fn a_parameter_position_reads_the_same_argument_twice() {
+    let out = process("#define V 7\n#define M(a) #a | a | a ## Z | a | Q ## a\nM(V)\n");
+    let line = out.lines().last().expect("output");
+    assert_eq!(line.replace(' ', ""), "\"V\"|7|VZ|7|QV", "{out}");
+}

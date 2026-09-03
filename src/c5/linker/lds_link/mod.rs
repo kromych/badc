@@ -408,6 +408,34 @@ struct OutSec {
     chunks: Vec<(u64, u64, ChunkSrc)>,
 }
 
+impl OutSec {
+    /// A section with nothing laid yet.
+    fn empty(name: String) -> OutSec {
+        OutSec {
+            name,
+            address: None,
+            stype: None,
+            at: None,
+            align_attr: None,
+            pieces: Vec::new(),
+            phdrs: Vec::new(),
+            fill: None,
+            orphan: false,
+            addr: 0,
+            lma: 0,
+            size: 0,
+            align: 1,
+            flags: 0,
+            shtype: SHT_PROGBITS,
+            entsize: 0,
+            alloc: false,
+            removed: false,
+            file_bytes: false,
+            chunks: Vec::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 enum ChunkSrc {
     Input(usize),

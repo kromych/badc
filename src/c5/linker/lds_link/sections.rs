@@ -16,8 +16,7 @@ use super::inputs::RawSym;
 use super::{
     InSecId, LdsEmit, LdsLinker, OrphanHandling, OutSec, Piece, Placement, SHF_ALLOC,
     SHF_EXECINSTR, SHF_GNU_RETAIN, SHF_WRITE, SHN_ABS, SHN_COMMON, SHN_UNDEF, SHT_NOBITS,
-    SHT_PROGBITS, STB_GLOBAL, STB_LOCAL, STB_WEAK, STT_OBJECT, SYNTH_COMMON, SecFate, Stmt,
-    align_up, err,
+    STB_GLOBAL, STB_LOCAL, STB_WEAK, STT_OBJECT, SYNTH_COMMON, SecFate, Stmt, align_up, err,
 };
 
 /// bfd's orphan buckets, in layout order: code, read-only data,
@@ -224,26 +223,13 @@ impl<'a> LdsLinker<'a> {
                 SectionsItem::Output(o) => {
                     let idx = self.outs.len();
                     self.outs.push(OutSec {
-                        name: o.name.clone(),
                         address: o.address.clone(),
                         stype: o.stype,
                         at: o.at.clone(),
                         align_attr: o.align.clone(),
-                        pieces: Vec::new(),
                         phdrs: o.phdrs.clone(),
                         fill: o.fill.clone(),
-                        orphan: false,
-                        addr: 0,
-                        lma: 0,
-                        size: 0,
-                        align: 1,
-                        flags: 0,
-                        shtype: SHT_PROGBITS,
-                        entsize: 0,
-                        alloc: false,
-                        removed: false,
-                        file_bytes: false,
-                        chunks: Vec::new(),
+                        ..OutSec::empty(o.name.clone())
                     });
                     self.build_section_pieces(idx, o)?;
                     self.stmts.push(Stmt::Open(idx));
@@ -631,26 +617,9 @@ impl<'a> LdsLinker<'a> {
         }
         let new_out = self.outs.len();
         self.outs.push(OutSec {
-            name,
-            address: None,
-            stype: None,
-            at: None,
-            align_attr: None,
             pieces: alloc::vec![Piece::Inputs(alloc::vec![i])],
-            phdrs: Vec::new(),
-            fill: None,
             orphan: true,
-            addr: 0,
-            lma: 0,
-            size: 0,
-            align: 1,
-            flags: 0,
-            shtype: SHT_PROGBITS,
-            entsize: 0,
-            alloc: false,
-            removed: false,
-            file_bytes: false,
-            chunks: Vec::new(),
+            ..OutSec::empty(name)
         });
         let pos = insert_after.map(|s| s + 1).unwrap_or(self.stmts.len());
         self.stmts.insert(pos, Stmt::Open(new_out));

@@ -343,6 +343,134 @@ impl<'a> Walker<'a> {
         let lost = b.binop_imm(BinOp::Xor, fits, 1);
         Ok(b.binop(BinOp::Or, ovf, lost))
     }
+
+    /// A compiler builtin call in value position.
+    pub(super) fn walk_intrinsic(
+        &mut self,
+        b: &mut SsaBuilder,
+        kind: i64,
+        args: &'a [ExprId],
+    ) -> Result<ValueId, WalkError> {
+        // Deferred `__builtin_constant_p`: under `-O` lower the
+        // side-effect-free operand for the SSA folds; otherwise
+        // the answer is 0 and the operand stays unevaluated.
+        if kind == Intrinsic::ConstantP as i64 {
+            if !self.optimize {
+                return Ok(b.imm(0));
+            }
+            let v = self.walk_expr_rvalue(b, args[0])?;
+            return Ok(b.intrinsic(kind, alloc::vec![v]));
+        }
+        // The va_* intrinsics receive the ADDRESS of the va_list
+        // storage. The `__va_list_self(ap)` macro spells this as
+        // `(ap)` on System V / AAPCS64 (the array decays to its
+        // address) and `&(ap)` on the cursor targets. When `ap`
+        // is `*pva` (a va_list reached through a pointer) the
+        // System V form is a bare deref whose rvalue would load
+        // the list's first eightbyte; the address wanted is the
+        // pointer itself, so take the deref's lvalue. Operand
+        // positions: arg 0 for va_start / va_arg / va_end, args 0
+        // and 1 for va_copy.
+        use crate::c5::op::Intrinsic as VaI;
+        let va_addr_operand = |i: usize| match VaI::from_i64(kind) {
+            Some(VaI::VaStart) | Some(VaI::VaArg) | Some(VaI::VaEnd) => i == 0,
+            Some(VaI::VaCopy) => i == 0 || i == 1,
+            _ => false,
+        };
+        let mut arg_vals: alloc::vec::Vec<ValueId> = alloc::vec::Vec::with_capacity(args.len());
+        for (i, &a) in args.iter().enumerate() {
+            let v = if va_addr_operand(i)
+                && matches!(
+                    self.ast.expr(a),
+                    Expr::Unary {
+                        op: UnOp::Deref,
+                        ..
+                    }
+                ) {
+                self.walk_expr_lvalue(b, a)?
+            } else {
+                self.walk_expr_rvalue(b, a)?
+            };
+            arg_vals.push(v);
+        }
+        // fma / fmaf (C99 7.12.13.1) lower to the fused node so
+        // the three operands round once. The parser has already
+        // coerced the arguments to the matching FP width.
+        let fma_kind = Intrinsic::Fma as i64;
+        let fmaf_kind = Intrinsic::Fmaf as i64;
+        if kind == fma_kind || kind == fmaf_kind {
+            let v = b.fma(arg_vals[0], arg_vals[1], arg_vals[2], false, false);
+            if kind == fmaf_kind {
+                return Ok(b.mark_f32(v));
+            }
+            return Ok(v);
+        }
+        // The integer bit-count builtins lower to a portable
+        // shift / mask sequence here rather than a dedicated
+        // instruction, so the result is identical across the
+        // interpreter and every target. clz / ctz at zero are
+        // undefined in GCC; this lowering returns the bit width.
+        if let Some(i) = Intrinsic::from_i64(kind)
+            && i.is_int_bit_unary()
+        {
+            use crate::c5::op::Intrinsic as I;
+            let x = arg_vals[0];
+            let w64 = i.is_bit_unary_64();
+            return Ok(match i {
+                I::Clz | I::Clzll => lower_clz(b, x, w64),
+                I::Ctz | I::Ctzll => lower_ctz(b, x, w64),
+                I::Clrsb | I::Clrsbll => lower_clrsb(b, x, w64),
+                I::Ffs | I::Ffsll => lower_ffs(b, x, w64),
+                I::Parity | I::Parityll => {
+                    let pc = lower_popcount(b, x, w64);
+                    b.binop_imm(BinOp::And, pc, 1)
+                }
+                _ => lower_popcount(b, x, w64),
+            });
+        }
+        // Byte reversal is a single instruction on every
+        // supported target, so it lowers to a dedicated inst
+        // rather than a portable shift / mask sequence.
+        if let Some(i) = Intrinsic::from_i64(kind)
+            && i.is_bswap()
+        {
+            use crate::c5::op::Intrinsic as I;
+            let width = match i {
+                I::Bswap16 => 2,
+                I::Bswap64 => 8,
+                _ => 4,
+            };
+            return Ok(b.bswap(arg_vals[0], width));
+        }
+        // The unary FP math intrinsics produce an FP value; tag the
+        // single-precision forms so the codegen picks the f32
+        // instruction and width.
+        let single = Intrinsic::from_i64(kind).is_some_and(|i| i.is_single_precision());
+        let v = b.intrinsic(kind, arg_vals);
+        if single {
+            return Ok(b.mark_f32(v));
+        }
+        Ok(v)
+    }
+
+    /// GCC extended inline asm in value position.
+    pub(super) fn walk_inline_asm(
+        &mut self,
+        b: &mut SsaBuilder,
+        idx: u32,
+    ) -> Result<ValueId, WalkError> {
+        // GCC extended asm. Each operand expression is an output
+        // destination address (the parser applied `&`) or an
+        // input value; the block descriptor carries the template
+        // and per-operand constraints for the per-arch lowering.
+        let asm = self.ast.asm_blocks[idx as usize].clone();
+        let mut args: alloc::vec::Vec<ValueId> =
+            alloc::vec::Vec::with_capacity(asm.operand_exprs.len());
+        for &e in &asm.operand_exprs {
+            args.push(self.walk_expr_rvalue(b, e)?);
+        }
+        Ok(b.inline_asm(alloc::boxed::Box::new(asm.block), args))
+    }
 }
 
 // Portable lowering of the GCC bit-count builtins (`__builtin_clz` /

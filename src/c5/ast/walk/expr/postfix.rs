@@ -1,7 +1,8 @@
 //! Postfix expressions: calls, member access, subscripting,
 //! postfix increment and compound literals (C99 6.5.2).
 
-use super::super::access::{load_kind_for, load_kind_width, load_place, store_kind_for};
+use super::super::access::{load_kind_for, load_kind_width, load_place};
+use super::super::atomic::RmwOpen;
 use super::super::types::{
     arg_value_ty, extend_scalar_call_result, is_float_ty, is_floating_scalar,
 };
@@ -323,19 +324,34 @@ impl<'a> Walker<'a> {
             if callee_variadic && i < nparams {
                 continue;
             }
-            if let Some(desc) = crate::c5::compiler::host_abi_agg_desc_conv(
-                self.structs,
-                self.target,
-                args.conv,
-                ty_tag,
-            ) {
-                if arg_aggs.is_empty() {
-                    arg_aggs = alloc::vec![None; args.vals.len()];
-                }
-                arg_aggs[i] = Some(b.intern_agg_desc(desc));
-            }
+            self.record_arg_agg(b, &mut arg_aggs, args, i, ty_tag);
         }
         arg_aggs
+    }
+
+    /// Record argument `i`'s host-ABI aggregate layout in `aggs`, which
+    /// stays empty until some argument needs one. Inert on the ABIs and
+    /// sizes the classifier declines.
+    fn record_arg_agg(
+        &self,
+        b: &mut SsaBuilder,
+        aggs: &mut alloc::vec::Vec<Option<u32>>,
+        args: &CallArgs<'_>,
+        i: usize,
+        ty_tag: i64,
+    ) {
+        let Some(desc) = crate::c5::compiler::host_abi_agg_desc_conv(
+            self.structs,
+            self.target,
+            args.conv,
+            ty_tag,
+        ) else {
+            return;
+        };
+        if aggs.is_empty() {
+            *aggs = alloc::vec![None; args.vals.len()];
+        }
+        aggs[i] = Some(b.intern_agg_desc(desc));
     }
 
     /// Reserve the frame temp an aggregate return lands in, with its
@@ -651,17 +667,7 @@ impl<'a> Walker<'a> {
             if !is_struct_value_ty(aty) {
                 continue;
             }
-            if let Some(desc) = crate::c5::compiler::host_abi_agg_desc_conv(
-                self.structs,
-                self.target,
-                args.conv,
-                aty,
-            ) {
-                if arg_aggs.is_empty() {
-                    arg_aggs = alloc::vec![None; args.vals.len()];
-                }
-                arg_aggs[i] = Some(b.intern_agg_desc(desc));
-            }
+            self.record_arg_agg(b, &mut arg_aggs, args, i, aty);
         }
         arg_aggs
     }
@@ -779,11 +785,13 @@ impl<'a> Walker<'a> {
         if self.is_int128_value_ty(ty) || self.is_wide_unit_bitfield(lvalue) {
             return self.walk_int128_inc(b, lvalue, by, post);
         }
-        let kind = load_kind_for(ty, self.target);
-        let store_kind = store_kind_for(ty, self.target);
-        let place = self.rmw_place(b, lvalue, ty)?;
-        let vol = self.rmw_is_volatile(&place, ty, lvalue);
-        let old = place.load(b, kind, vol);
+        let RmwOpen {
+            place,
+            load_kind: kind,
+            store_kind,
+            vol,
+            old,
+        } = self.rmw_open(b, lvalue, ty)?;
         let stepped = self.increment_value(b, old, by, ty);
         place.store(b, stepped, store_kind, vol);
         if post {

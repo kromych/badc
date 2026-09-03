@@ -690,6 +690,28 @@ impl<'a> Walker<'a> {
         Ok(false)
     }
 
+    /// Walk a loop body in `body_blk`, with `break` leaving to `after`
+    /// and `continue` entering `next` (C99 6.8.6.2 / 6.8.6.3). A body
+    /// that does not terminate falls through to `next`. The caller
+    /// switches to the block its own layout continues in.
+    fn walk_loop_body(
+        &mut self,
+        b: &mut SsaBuilder,
+        body_blk: BlockId,
+        body: StmtId,
+        next: BlockId,
+        after: BlockId,
+    ) -> Result<(), WalkError> {
+        b.switch_to(body_blk);
+        self.loop_ctx.push((after, next));
+        let terminated = self.walk_stmt(b, body)?;
+        self.loop_ctx.pop();
+        if !terminated {
+            b.jmp(next);
+        }
+        Ok(())
+    }
+
     /// C99 6.8.5.1 `while` loop.
     pub(super) fn walk_while(
         &mut self,
@@ -704,14 +726,7 @@ impl<'a> Walker<'a> {
         b.switch_to(header);
         let cond_v = self.walk_cond_value(b, cond)?;
         b.branch_zero(cond_v, after, body_blk);
-        let body_id = body;
-        b.switch_to(body_blk);
-        self.loop_ctx.push((after, header));
-        let terminated = self.walk_stmt(b, body_id)?;
-        self.loop_ctx.pop();
-        if !terminated {
-            b.jmp(header);
-        }
+        self.walk_loop_body(b, body_blk, body, header, after)?;
         b.switch_to(after);
         Ok(false)
     }
@@ -727,14 +742,7 @@ impl<'a> Walker<'a> {
         let cond_blk = b.new_block();
         let after = b.new_block();
         b.jmp(body_blk);
-        b.switch_to(body_blk);
-        let body_id = body;
-        self.loop_ctx.push((after, cond_blk));
-        let terminated = self.walk_stmt(b, body_id)?;
-        self.loop_ctx.pop();
-        if !terminated {
-            b.jmp(cond_blk);
-        }
+        self.walk_loop_body(b, body_blk, body, cond_blk, after)?;
         b.switch_to(cond_blk);
         let cond_v = self.walk_cond_value(b, cond)?;
         b.branch_nonzero(cond_v, body_blk, after);
@@ -751,17 +759,13 @@ impl<'a> Walker<'a> {
         post: Option<ExprId>,
         body: StmtId,
     ) -> Result<bool, WalkError> {
-        let init_clone = init;
-        let cond_clone = cond;
-        let post_clone = post;
-        let body_clone = body;
         // C99 6.8.5.3: for-init is either an expression
         // (`BlockItem::Stmt`) or a declaration
         // (`BlockItem::Decl`). The init runs once before
         // the cond / body / post loop; without walking
         // the declaration path the loop counter stays
         // uninitialised on every iteration.
-        match init_clone {
+        match init {
             Some(BlockItem::Stmt(s)) => {
                 let _ = self.walk_stmt(b, s)?;
             }
@@ -776,7 +780,7 @@ impl<'a> Walker<'a> {
         let after = b.new_block();
         b.jmp(header);
         b.switch_to(header);
-        let cond_v = match cond_clone {
+        let cond_v = match cond {
             Some(c) => self.walk_cond_value(b, c)?,
             None => b.imm(1),
         };
@@ -789,17 +793,11 @@ impl<'a> Walker<'a> {
         // block's terminator routes execution in the C99
         // order regardless of inst-vec layout.
         b.switch_to(post_blk);
-        if let Some(p) = post_clone {
+        if let Some(p) = post {
             let _ = self.walk_expr_rvalue(b, p)?;
         }
         b.jmp(header);
-        b.switch_to(body_blk);
-        self.loop_ctx.push((after, post_blk));
-        let body_terminated = self.walk_stmt(b, body_clone)?;
-        self.loop_ctx.pop();
-        if !body_terminated {
-            b.jmp(post_blk);
-        }
+        self.walk_loop_body(b, body_blk, body, post_blk, after)?;
         b.switch_to(after);
         Ok(false)
     }

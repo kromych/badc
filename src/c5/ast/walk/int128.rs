@@ -730,17 +730,19 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// Lower `++E` / `--E` (and their postfix forms) on a 128-bit
-    /// object. `by` carries the direction's sign, so both spellings are
-    /// one 128-bit add. C99 6.5.2.4p2 / 6.5.3.1p2: the postfix form's
-    /// value is the object's prior value, which is copied out before the
-    /// update since a 128-bit value is carried as an address.
-    pub(super) fn walk_int128_inc(
+    /// Read-modify-write a 128-bit object in place, evaluating the
+    /// lvalue once (C99 6.5.2.4p2 / 6.5.16.2p3). `update` derives the
+    /// new value from the old one. With `keep_old` the prior value is
+    /// copied out before the update and is the result, as the postfix
+    /// operators require; otherwise the result is the stored value --
+    /// the object's address for a whole object, and the field's value
+    /// form for a bitfield.
+    fn int128_rmw(
         &mut self,
         b: &mut SsaBuilder,
         lvalue: ExprId,
-        by: i64,
-        postfix: bool,
+        keep_old: bool,
+        update: impl FnOnce(&mut Self, &mut SsaBuilder, Halves) -> Result<Halves, WalkError>,
     ) -> Result<ValueId, WalkError> {
         // The 128-bit halves are accessed through the generic space,
         // which carries no segment.
@@ -755,12 +757,8 @@ impl<'a> Walker<'a> {
         if let Some((unit, bf)) = self.wide_bitfield_place(b, lvalue)? {
             let vol = self.expr_is_volatile(lvalue);
             let old = self.bitfield_extract_128(b, unit, bf, vol);
-            let saved = postfix.then(|| self.bitfield_value_form(b, bf, old));
-            let step = {
-                let lo = b.imm(by);
-                (lo, b.imm(by >> 63))
-            };
-            let new = Self::int128_add(b, old, step);
+            let saved = keep_old.then(|| self.bitfield_value_form(b, bf, old));
+            let new = update(self, b, old)?;
             let masked = Self::int128_and_imm(b, new, bitfield_mask_halves(bf.bit_width, 0));
             self.bitfield_insert_128(b, unit, bf, masked, vol);
             let stored = self.bitfield_sign_extend_128(b, bf, masked);
@@ -769,20 +767,30 @@ impl<'a> Walker<'a> {
         }
         let addr = self.walk_expr_lvalue(b, lvalue)?;
         let old = self.int128_load(b, addr);
-        let saved = postfix.then(|| self.int128_materialize(b, old));
-        let step = {
-            let lo = b.imm(by);
-            (lo, b.imm(by >> 63))
-        };
-        let new = Self::int128_add(b, old, step);
+        let saved = keep_old.then(|| self.int128_materialize(b, old));
+        let new = update(self, b, old)?;
         self.int128_store(b, addr, new);
         Ok(saved.unwrap_or(addr))
     }
 
-    /// Lower `E1 op= E2` where `E1` is a 128-bit object: evaluate the
-    /// lvalue once (C99 6.5.16.2p3), apply the operator to its value,
-    /// and store back. The expression's value is the object's address,
-    /// the same shape a 128-bit rvalue takes everywhere else.
+    /// Lower `++E` / `--E` (and their postfix forms) on a 128-bit
+    /// object. `by` carries the direction's sign, so both spellings are
+    /// one 128-bit add.
+    pub(super) fn walk_int128_inc(
+        &mut self,
+        b: &mut SsaBuilder,
+        lvalue: ExprId,
+        by: i64,
+        postfix: bool,
+    ) -> Result<ValueId, WalkError> {
+        self.int128_rmw(b, lvalue, postfix, |_, b, old| {
+            let lo = b.imm(by);
+            let step = (lo, b.imm(by >> 63));
+            Ok(Self::int128_add(b, old, step))
+        })
+    }
+
+    /// Lower `E1 op= E2` where `E1` is a 128-bit object.
     pub(super) fn walk_int128_compound_assign(
         &mut self,
         b: &mut SsaBuilder,
@@ -790,30 +798,9 @@ impl<'a> Walker<'a> {
         lhs: ExprId,
         rhs: ExprId,
     ) -> Result<ValueId, WalkError> {
-        // The 128-bit halves are accessed through the generic space,
-        // which carries no segment.
-        if expr_ty(self.ast.expr(lhs)).is_some_and(|t| segment_of_object_ty(t).is_some()) {
-            return Err(WalkError::UnsupportedExpr {
-                id: lhs,
-                kind: "128-bit access in a named address space",
-            });
-        }
-        // A bitfield target reads and writes its slice of the storage
-        // unit rather than the whole 16 bytes.
-        if let Some((unit, bf)) = self.wide_bitfield_place(b, lhs)? {
-            let vol = self.expr_is_volatile(lhs);
-            let a = self.bitfield_extract_128(b, unit, bf, vol);
-            let pair = self.int128_binary_pair(b, op, a, lhs, rhs)?;
-            let masked = Self::int128_and_imm(b, pair, bitfield_mask_halves(bf.bit_width, 0));
-            self.bitfield_insert_128(b, unit, bf, masked, vol);
-            let stored = self.bitfield_sign_extend_128(b, bf, masked);
-            return Ok(self.bitfield_value_form(b, bf, stored));
-        }
-        let addr = self.walk_expr_lvalue(b, lhs)?;
-        let a = self.int128_load(b, addr);
-        let pair = self.int128_binary_pair(b, op, a, lhs, rhs)?;
-        self.int128_store(b, addr, pair);
-        Ok(addr)
+        self.int128_rmw(b, lhs, false, |this, b, a| {
+            this.int128_binary_pair(b, op, a, lhs, rhs)
+        })
     }
 
     /// Shift count for a 128-bit shift: a scalar rvalue, or the low

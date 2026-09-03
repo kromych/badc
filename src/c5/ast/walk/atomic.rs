@@ -260,6 +260,28 @@ impl<'a> Walker<'a> {
         }
     }
 
+    /// Resolve a read-modify-write target and read its current value.
+    /// The lvalue is evaluated once (C99 6.5.2.4p2 / 6.5.16.2p3).
+    pub(super) fn rmw_open(
+        &mut self,
+        b: &mut SsaBuilder,
+        lvalue: ExprId,
+        ty: i64,
+    ) -> Result<RmwOpen, WalkError> {
+        let load_kind = load_kind_for(ty, self.target);
+        let store_kind = store_kind_for(ty, self.target);
+        let place = self.rmw_place(b, lvalue, ty)?;
+        let vol = self.rmw_is_volatile(&place, ty, lvalue);
+        let old = place.load(b, load_kind, vol);
+        Ok(RmwOpen {
+            place,
+            load_kind,
+            store_kind,
+            vol,
+            old,
+        })
+    }
+
     /// Resolve where a read-modify-write operator targets its lvalue. A
     /// non-thread-local `Token::Loc` Ident keeps its frame slot so
     /// mem2reg can promote it; every non-local lvalue materializes an
@@ -324,6 +346,16 @@ impl<'a> Walker<'a> {
         let align = self.lvalue_align(lvalue, store_kind_width(store_kind_for(ty, self.target)));
         Ok(RmwPlace::Addr { addr, seg, align })
     }
+}
+
+/// A read-modify-write target with its access kinds and the value read
+/// from it.
+pub(super) struct RmwOpen {
+    pub(super) place: RmwPlace,
+    pub(super) load_kind: LoadKind,
+    pub(super) store_kind: StoreKind,
+    pub(super) vol: bool,
+    pub(super) old: ValueId,
 }
 
 /// Where a read-modify-write operator (`++` / `--` / `op=`) reads and

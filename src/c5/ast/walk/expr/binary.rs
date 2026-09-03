@@ -1,7 +1,8 @@
 //! Binary, assignment and compound-assignment expressions
 //! (C99 6.5.5 - 6.5.16).
 
-use super::super::access::{load_kind_for, store_kind_for, store_kind_width, store_place};
+use super::super::access::{store_kind_for, store_kind_width, store_place};
+use super::super::atomic::RmwOpen;
 use super::super::types::{
     expr_ty, fold_int_binop, imm_safe_binop, is_comparison_op, is_floating_scalar, is_fp_arith_op,
     is_fp_comparison_op, is_imm_arith_op, type_size_bytes, unsigned_narrow_mask,
@@ -440,11 +441,13 @@ impl<'a> Walker<'a> {
         if self.is_int128_value_ty(ty) || self.is_wide_unit_bitfield(lhs) {
             return self.walk_int128_compound_assign(b, op, lhs, rhs);
         }
-        let load_kind = load_kind_for(ty, self.target);
-        let store_kind = store_kind_for(ty, self.target);
-        let place = self.rmw_place(b, lhs, ty)?;
-        let vol = self.rmw_is_volatile(&place, ty, lhs);
-        let old = place.load(b, load_kind, vol);
+        let RmwOpen {
+            place,
+            load_kind,
+            store_kind,
+            vol,
+            old,
+        } = self.rmw_open(b, lhs, ty)?;
         // Constant-rhs short-circuit (mirror of the
         // `Expr::Binary` path): an integer-literal rhs
         // routes through `binop_imm` so the per-arch

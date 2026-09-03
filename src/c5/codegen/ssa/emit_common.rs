@@ -2108,3 +2108,30 @@ fn record_coalesced_slots(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{Unsupported, unsupported_error};
+
+    /// `unsupported_error` reads only the `Unsupported` it is given, so the
+    /// text below is what every feature configuration reports, `no_std`
+    /// included.
+    #[test]
+    fn a_named_reason_reaches_the_diagnostic_verbatim() {
+        let e = Unsupported::new("inline asm: unsupported instruction `Add`");
+        assert_eq!(
+            alloc::format!("{}", unsupported_error(&e, "x86_64", "main", 0)),
+            "error: inline asm: unsupported instruction `Add` (x86_64, function `main`)"
+        );
+    }
+
+    #[test]
+    fn an_unnamed_failure_reports_the_generic_text() {
+        let e = Unsupported::unspecified();
+        assert_eq!(
+            alloc::format!("{}", unsupported_error(&e, "aarch64", "f", 7)),
+            "error: internal compiler error: ssa emit (aarch64): function `f` \
+             (ent_pc 7) contains an op outside the implemented subset"
+        );
+    }
+}

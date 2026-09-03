@@ -35,6 +35,26 @@ fn unsupported_inline_asm_reports_the_specific_form() {
 }
 
 #[test]
+fn unsupported_inline_asm_reports_the_specific_form_x86_64() {
+    use crate::{NativeOptions, Target};
+    // The x86_64 counterpart of the case above: `add` takes two operands,
+    // so a three-operand spelling has no encoding.
+    let program = super::compile_str(
+        "int main(void){ __asm__ volatile(\"add %rax, %rbx, %rcx\" ::: \"rax\"); return 0; }",
+    );
+    let err = crate::c5::object::emit_native_single_tu_for_test(
+        &program,
+        Target::LinuxX64,
+        NativeOptions::default(),
+    )
+    .expect_err("add with three operands is not encodable");
+    assert_eq!(
+        format!("{err}"),
+        "error: inline asm: unsupported instruction `Add` (x86_64, function `main`)"
+    );
+}
+
+#[test]
 fn deliberate_walker_rejection_is_not_an_internal_error() {
     use crate::{NativeOptions, Target};
     // A construct the backend does not provide is the caller's to work

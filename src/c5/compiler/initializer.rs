@@ -66,6 +66,14 @@ pub(super) enum DataStore {
     ThreadLocal,
 }
 
+/// What the head of an array initializer turned out to be.
+enum ArrayInitHead {
+    /// A string literal (C99 6.7.8p14/p15); these are its elements.
+    String(Vec<(i128, InitElemReloc)>),
+    /// A brace list, inside this many still-open grouping parens.
+    BraceList(usize),
+}
+
 /// One parsed array-designator subscript: `[lo]`, or the GNU range form
 /// `[lo ... hi]` with `ranged` set (`hi == lo` for the single form).
 pub(super) struct DesignatorSubscript {
@@ -806,20 +814,16 @@ impl Compiler {
         Ok(Some(desig))
     }
 
-    fn collect_array_initializer_inner(
+    /// The head of an array initializer: a string literal, optionally
+    /// brace-wrapped (C99 6.7.8p14) or parenthesized, or the `{` of a brace
+    /// list -- stripping a compound literal's cast and reporting how many
+    /// grouping parens stay open around it.
+    fn take_array_initializer_head(
         &mut self,
         elem_ty: i64,
-    ) -> Result<Vec<(i128, InitElemReloc)>, C5Error> {
-        // 2D inner-dim hint -- callers set this when the declarator
-        // shape is `T xs[N][M]` so a nested `{ row }` that lists
-        // fewer than M values gets zero-padded per C99 6.7.8p21
-        // (the remaining elements of an aggregate are initialised
-        // implicitly to zero). Without padding, subsequent rows
-        // shift into the previous row's tail and `xs[i][j]` reads
-        // garbage. Read-and-clear so a recursive call into an
-        // inner brace doesn't inherit it.
-        let inner_dims = core::mem::take(&mut self.pending.init_inner_dims);
-        let target_size = core::mem::take(&mut self.pending.init_target_array_size);
+        inner_dims: &[i64],
+        target_size: i64,
+    ) -> Result<ArrayInitHead, C5Error> {
         // C99 6.7.8p14: a string-literal initializer for a character
         // array may be enclosed in braces (`char x[] = {"abc"}`).
         // Unwrap a single brace whose first token is a string literal so
@@ -897,7 +901,7 @@ impl Compiler {
                 self.expect_close_brace_after_wrapped_string()?;
             }
             self.expect_close_parens(paren_depth)?;
-            return Ok(elems);
+            return Ok(ArrayInitHead::String(elems));
         }
         // GCC "Compound Literals": an array initialized by a compound
         // literal of array type takes the literal's brace list, for static
@@ -907,6 +911,28 @@ impl Compiler {
         if self.lex.tk == '(' && self.skip_opt_compound_literal_cast()? {
             paren_depth += core::mem::take(&mut self.pending.compound_lit_close_parens) as usize;
         }
+        Ok(ArrayInitHead::BraceList(paren_depth))
+    }
+
+    fn collect_array_initializer_inner(
+        &mut self,
+        elem_ty: i64,
+    ) -> Result<Vec<(i128, InitElemReloc)>, C5Error> {
+        // 2D inner-dim hint -- callers set this when the declarator
+        // shape is `T xs[N][M]` so a nested `{ row }` that lists
+        // fewer than M values gets zero-padded per C99 6.7.8p21
+        // (the remaining elements of an aggregate are initialised
+        // implicitly to zero). Without padding, subsequent rows
+        // shift into the previous row's tail and `xs[i][j]` reads
+        // garbage. Read-and-clear so a recursive call into an
+        // inner brace doesn't inherit it.
+        let inner_dims = core::mem::take(&mut self.pending.init_inner_dims);
+        let target_size = core::mem::take(&mut self.pending.init_target_array_size);
+        let paren_depth =
+            match self.take_array_initializer_head(elem_ty, &inner_dims, target_size)? {
+                ArrayInitHead::String(elems) => return Ok(elems),
+                ArrayInitHead::BraceList(depth) => depth,
+            };
         if self.lex.tk != '{' {
             return Err(
                 self.compile_err("array initializer must be a string literal or `{{ ... }}`")
@@ -1636,270 +1662,7 @@ impl Compiler {
         // with the cast dropped. Otherwise it's a parenthesized
         // constant expression -- evaluate it and expect `)`.
         if self.lex.tk == '(' {
-            // Cast / float-content detection both need to look
-            // past the `(`. Snapshot so we can rewind for the
-            // integer-expression fall-through, which has to see
-            // `(` to absorb both the parenthesised sub-expression
-            // *and* any trailing operators -- a struct initialiser
-            // entry like `{ (127-13) << 23 }` needs the integer
-            // const-expr evaluator to start outside the parens so
-            // the `<< 23` after `)` joins the chain.
-            let snap = self.lex.snapshot();
-            self.next()?;
-            if self.lex_is_type_start() {
-                let name = self.parse_const_type_name()?;
-                let cast_ty = name.ty;
-                // C99 6.5.2.5 array-typed compound literal:
-                // `(T[]){...}` / `(T[N]){...}`. The array name decays to a
-                // pointer to its first element, so the literal contributes
-                // an anonymous static array and the element stores its
-                // address. Distinguished from a plain cast by the `[`, or
-                // for an array typedef (`(row){...}`) by the `{` past `)`.
-                if self.lex.tk == Token::Brak || self.at_typedef_array_literal(&name)? {
-                    let (v, reloc, _) =
-                        self.parse_array_compound_literal(cast_ty, &name.base_dims)?;
-                    if let InitElemReloc::Data(Some(sym)) = reloc {
-                        self.symbols[sym].storage_is_const = name.object_is_const;
-                        self.reject_automatic_compound_literal(sym)?;
-                    }
-                    return Ok((v, reloc));
-                }
-                // C99 6.5.2.5 scalar-typed compound literal `(T){ v }`: the
-                // brace holds a single value; the result is that value
-                // converted to `T`, keeping any relocation it carries.
-                if self.lex.tk == ')' && !is_struct_value_ty(cast_ty) {
-                    let paren_snap = self.lex.snapshot();
-                    // The peeked token may be a string literal whose bytes
-                    // the lexer stages; reclaim them on the non-`{` path.
-                    let paren_data = self.data.len();
-                    self.next()?;
-                    if self.lex.tk == '{' {
-                        self.next()?;
-                        let (v, reloc) = self.parse_constant_init_value()?;
-                        self.accept(',')?;
-                        if self.lex.tk != '}' {
-                            return Err(
-                                self.compile_err("scalar compound literal holds a single value")
-                            );
-                        }
-                        self.next()?;
-                        let target_fp = matches!(
-                            strip_unsigned(cast_ty),
-                            t if t == Ty::Float as i64 || t == Ty::Double as i64
-                        );
-                        return Ok(match reloc {
-                            InitElemReloc::None if target_fp => {
-                                ((v as f64).to_bits() as i128, InitElemReloc::Float64Bits)
-                            }
-                            InitElemReloc::Float64Bits if !target_fp => {
-                                let bytes = self.size_of_type(cast_ty);
-                                let is_bool = strip_unsigned(cast_ty) == Ty::Bool as i64;
-                                let n = f64::from_bits(v as u64) as i128;
-                                (
-                                    narrow_const_int(bytes, is_unsigned_ty(cast_ty), is_bool, n),
-                                    InitElemReloc::None,
-                                )
-                            }
-                            InitElemReloc::None => {
-                                let bytes = self.size_of_type(cast_ty);
-                                let is_bool = strip_unsigned(cast_ty) == Ty::Bool as i64;
-                                (
-                                    narrow_const_int(bytes, is_unsigned_ty(cast_ty), is_bool, v),
-                                    InitElemReloc::None,
-                                )
-                            }
-                            _ => (v, reloc),
-                        });
-                    }
-                    self.restore_lex(paren_snap);
-                    self.truncate_data(paren_data);
-                }
-                // Fold the whole element with the cast applied first: a cast
-                // participating in arithmetic (`(char *)&s.b - (char *)&s.a`
-                // strides by the cast's pointee, C99 6.5.6) must not be
-                // discarded by the reloc-leaf shortcut below. Authoritative
-                // only for an arithmetic result that consumed the whole
-                // element and staged nothing: a parse that appended data (a
-                // string literal, a compound literal) folded an address that
-                // needs its relocation, so it falls through to the paths
-                // that keep one.
-                {
-                    let cp = self.init_checkpoint();
-                    let data_before = self.data.len();
-                    self.restore_lex(snap);
-                    let whole = self.parse_const_expr_cond_val();
-                    let done = (self.lex.tk == ','
-                        || self.lex.tk == '}'
-                        || self.lex.tk == ';'
-                        || self.lex.tk == ')'
-                        || self.lex.tk == ':')
-                        && self.data.len() == data_before;
-                    match whole {
-                        Ok(ConstVal::Float(f)) if done => {
-                            return Ok((f.to_bits() as i128, InitElemReloc::Float64Bits));
-                        }
-                        Ok(v @ ConstVal::Int { .. }) if done => {
-                            return Ok((v.as_i128(), InitElemReloc::None));
-                        }
-                        _ => self.restore_init_checkpoint(cp),
-                    }
-                }
-                // A cast of an arithmetic operand converts to the target
-                // type (C99 6.5.4, 6.3.1.3); route the element through the
-                // constant-expression evaluator, which applies every cast
-                // in the chain at its own width, so
-                // `(long)(int)0x92492493` sign-extends through `int`.
-                // Only a cast of a relocation-bearing leaf keeps the
-                // skip-and-recurse path below, where the value is the
-                // leaf's address and the cast merely retypes it.
-                if !self.post_cast_is_reloc_leaf()? {
-                    self.restore_lex(snap);
-                    return self.parse_constant_init_scalar();
-                }
-                // Optional function-pointer abstract declarator
-                // `(*)(args)` after the base type. Same treatment
-                // as in the expression-level cast handler: scan
-                // counted parens until the cast's outer `)`,
-                // then skip the trailing `(args)` arg-list shape.
-                if self.lex.tk == '(' {
-                    let mut depth: i64 = 1;
-                    self.next()?;
-                    while depth > 0 && self.lex.tk != 0 {
-                        if self.lex.tk == '(' {
-                            depth += 1;
-                        } else if self.lex.tk == ')' {
-                            depth -= 1;
-                            if depth == 0 {
-                                self.next()?;
-                                break;
-                            }
-                        }
-                        self.next()?;
-                    }
-                    if self.lex.tk == '(' {
-                        self.next()?;
-                        self.skip_balanced_parens_after_open()?;
-                    }
-                }
-                if self.lex.tk != ')' {
-                    return Err(self.compile_err("close paren expected after cast in initializer"));
-                }
-                self.next()?;
-                return self.parse_constant_init_value();
-            }
-            // `(cond ? A : B)` -- a constant conditional whose arms may be
-            // address constants (C99 6.6: a conditional expression with a
-            // constant condition is itself a constant expression). The
-            // integer evaluator below can fold the value but not carry an
-            // address-valued arm's relocation, so select the arm here and
-            // keep its reloc. Falls through when the parens hold a plain
-            // arithmetic expression.
-            if let Some((v, reloc)) = self.try_const_cond_init_value()? {
-                // A pure-integer parenthesized conditional may be followed by
-                // any binary operator (`(cond ? a : b) * N`, `(cond ? a : b)
-                // | N << 8`) or another `?:`; continue the full const-expr
-                // chain so the trailing operators are absorbed rather than
-                // left for the brace list to misread as extra elements.
-                // `parse_const_expr_cond_from` returns the seed unchanged
-                // when no operator follows. An address-valued arm is
-                // returned as-is.
-                if matches!(reloc, InitElemReloc::None) {
-                    let folded = self.parse_const_expr_cond_from(ConstVal::Int {
-                        val: v,
-                        ty: Ty::Int as i64,
-                    })?;
-                    return Ok((folded.as_i128(), InitElemReloc::None));
-                }
-                return Ok((v, reloc));
-            }
-            // A parenthesised relocation-bearing leaf -- `(func)`,
-            // `(&global)`, possibly multiply parenthesised, as produced
-            // by the `(PyCFunction)(((void(*)(void))((fn))))` method-table
-            // idiom. Recurse on the inner value and consume the matching
-            // `)` when it carries a relocation; a parenthesised arithmetic
-            // constant rewinds and falls through to the folders below,
-            // which must start outside the parens to absorb trailing
-            // operators.
-            {
-                let inner_snap = self.lex.snapshot();
-                let (v, reloc) = self.parse_constant_init_value()?;
-                if !matches!(reloc, InitElemReloc::None | InitElemReloc::Float64Bits)
-                    && self.lex.tk == ')'
-                {
-                    self.next()?; // consume the matching `)`
-                    return Ok((v, reloc));
-                }
-                self.restore_lex(inner_snap);
-            }
-            // Sub-expression in parens. Peek for any FloatNum
-            // token inside (up to the matching `)`); if present,
-            // fold the whole sub-expression in f64 precision so
-            // shapes like `(1.0f + 2.0f) * 4.0f` round-trip
-            // exactly. Pure-integer parens fall through to the
-            // integer expression evaluator below so trailing
-            // `<<`, `+`, ... operators after `)` are absorbed too.
-            if self.contents_until_close_paren_have_float()? {
-                let seed = self.parse_const_expr_unary_val()?;
-                let v = self.parse_const_expr_add_from(seed)?.as_float();
-                if self.lex.tk != ')' {
-                    return Err(self.compile_err("close paren expected in initializer"));
-                }
-                self.next()?;
-                // The result of the parens is itself a float
-                // value; any trailing `+ / - / * / /` continues
-                // the float expression chain.
-                if self.tk_is_float_arith_op() {
-                    let folded = self
-                        .parse_const_expr_add_from(ConstVal::Float(v))?
-                        .as_float();
-                    return Ok((folded.to_bits() as i128, InitElemReloc::Float64Bits));
-                }
-                return Ok((v.to_bits() as i128, InitElemReloc::Float64Bits));
-            }
-            // Nested cast around a string literal:
-            // `((const T *)"...")` is a common header idiom for
-            // building a pointer-typed constant from a string
-            // literal. The outer `(` isn't a cast start, but the
-            // inner one is, and the cast wraps a string literal
-            // -- so the result must carry a Data reloc. The
-            // integer evaluator would drop the reloc and bake
-            // the parse-time data offset into the slot. Peek for
-            // the exact shape `(<type-tokens>*) "..."` before
-            // routing through the recursive primary parser.
-            if self.lex.tk == '(' {
-                let peek_snap = self.lex.snapshot();
-                // The peek may lex the string literal itself, staging its
-                // bytes; reclaim them so only the real parse's copy stays.
-                let peek_data = self.data.len();
-                self.next()?; // consume inner `(`
-                let inner_is_cast = self.lex_is_type_start();
-                let mut is_cast_of_string = false;
-                if inner_is_cast {
-                    let _ = self.parse_const_type_name()?;
-                    if self.lex.tk == ')' {
-                        self.next()?;
-                        is_cast_of_string = self.lex.tk == '"';
-                    }
-                }
-                self.restore_lex(peek_snap);
-                self.truncate_data(peek_data);
-                if is_cast_of_string {
-                    let (value, reloc) = self.parse_constant_init_value()?;
-                    if self.lex.tk != ')' {
-                        return Err(self.compile_err("close paren expected in initializer"));
-                    }
-                    self.next()?;
-                    return Ok((value, reloc));
-                }
-            }
-            // Rewind so the integer evaluator below absorbs the
-            // whole `(expr) op rhs` chain as one expression. The
-            // string-literal and offsetof primaries are picked up
-            // through `parse_const_expr_primary_val`, so a static
-            // initializer can use `((char *)"...")` and
-            // `&((T *)0)->field` shapes inside arithmetic.
-            self.restore_lex(snap);
-            return self.parse_constant_init_scalar();
+            return self.parse_const_init_paren();
         }
         if self.lex.tk == '"' {
             let cp = self.init_checkpoint();
@@ -1945,160 +1708,446 @@ impl Compiler {
             return Ok((a.value as i128, Self::init_elem_reloc_of(a)));
         }
         if self.lex.tk == Token::Id {
-            let idx = self.lex.curr_id_idx;
-            let class = self.symbols[idx].class;
-            // C99 6.4.2.2: __func__ / __FUNCTION__ / __PRETTY_FUNCTION__
-            // decay to a pointer to the enclosing function's name; resolve
-            // them here so the undeclared name is not taken as a forward fn.
-            if self.is_func_name_ident() {
-                let off = self.intern_func_name();
-                self.next()?;
-                return Ok((off as i128, InitElemReloc::Data(None)));
-            }
-            // A name with no declaration is either a builtin the constant
-            // evaluator folds (C99 6.6p10) or undeclared; the evaluator
-            // tells the two apart and diagnoses whichever holds. A fold may
-            // select an address constant (`__builtin_choose_expr` over an
-            // array), which carries its relocation.
-            if class == 0 {
-                return self.parse_constant_init_scalar();
-            }
-            // A declared name followed by `(` is a call, not the symbol's
-            // address: taking the branches below would consume the name
-            // alone and leave the argument list to be misread as further
-            // elements. A static initializer admits a call only when it
-            // folds (a library function over a literal), so defer to the
-            // evaluator and fall through when it cannot, leaving the
-            // diagnostics below to report the shape.
-            if self.lex.peek_after_whitespace(b'(') {
-                let snap = self.lex.snapshot();
-                let data_snap = self.data.len();
-                let nonconst = self.pending.const_expr_nonconst;
-                if let Ok(v) = self.parse_constant_i128() {
-                    return Ok((v, InitElemReloc::None));
-                }
-                self.restore_lex(snap);
-                self.truncate_data(data_snap);
-                self.pending.const_expr_nonconst = nonconst;
-            }
-            if class == Token::Fun as i64 {
-                self.symbols[idx].was_referenced = true;
-                let ent_pc = self.symbols[idx].val;
-                self.next()?;
-                return Ok((ent_pc as i128, InitElemReloc::Code(idx)));
-            }
-            if class == Token::Num as i64 {
-                // Integer constant -- either a bare enum / macro
-                // value or the head of a constant arithmetic
-                // expression (`E_A | E_B`, `K << 4`, ...). Defer
-                // to the full integer-constant evaluator so any
-                // trailing operator chain is folded in per C99
-                // 6.6, instead of returning the head value and
-                // leaving the operator to fail downstream.
-                let v = self.parse_constant_i128()?;
-                return Ok((v, InitElemReloc::None));
-            }
-            if class == Token::Sys as i64 {
-                // Address of a libc binding in a static initializer.
-                // The real address lives in the loader's GOT/IAT and
-                // can't be folded in at compile time, so we route the
-                // slot through a per-Sys trampoline (a tiny synthetic
-                // c5 function that re-pushes its declared args and
-                // re-dispatches via an external call. The CodeReloc
-                // points at the trampoline's synthetic symbol; its
-                // `.val` holds the trampoline's `ent_pc` once
-                // [`Compiler::emit_sys_trampolines`] runs in the
-                // post-parse fixup pass. From the call site's view
-                // -- e.g., a vtable consumer reading
-                // `dispatch_table[7].pCurrent` through an
-                // `(int(*)(...))` cast and invoking it -- it's an
-                // ordinary function pointer.
-                let tr_idx = self.ensure_sys_trampoline_sym(idx);
-                self.next()?;
-                return Ok((0, InitElemReloc::Code(tr_idx)));
-            }
-            if class == Token::Glo as i64 {
-                // A scalar global names its value, not its address (the
-                // address spelling is `&name`): defer to the shared
-                // evaluator, which folds a const-qualified object the
-                // way gcc does and rejects the rest, absorbing any
-                // trailing operator chain. Only an array (including a
-                // zero-length one) decays here.
-                if self.symbols[idx].array_size == 0 && !self.symbols[idx].is_zero_len_array {
-                    return self.parse_constant_init_scalar();
-                }
-                // Bare global identifier in a static initializer.
-                // For array globals (`static const char name[] =
-                // "..."`) this is the array-decay rule: the value
-                // is the array's data-segment offset; a DataReloc
-                // patches it to the runtime address.
-                let mut off = self.symbols[idx].val;
-                let array_size = self.symbols[idx].array_size;
-                let inner_dim = self.symbols[idx].inner_array_size;
-                let elem_ty = self.symbols[idx].type_;
-                self.next()?;
-                // Optional `[N]...` postfixes -- decay-to-address-
-                // of-element. `arr[N]` is equivalent to `&arr[N]`
-                // in a constant initializer (C99 6.3.2.1p3 array-
-                // to-pointer conversion); a chain of `[N]`s
-                // navigates further into a multi-dim array
-                // before taking its address.
-                //
-                // c5 only tracks `inner_array_size` (the second
-                // dim of `T name[A][B]`), so for the third index
-                // of a 3D `T name[A][B][C]` we don't have a stride
-                // to multiply by. The common static-init shape is
-                // `arr[0][0]` (a row pointer through a 2D or 3D
-                // table) which only matters as the base address;
-                // we accept further `[0]` postfixes without error
-                // and reject `[non-zero]` past the second index.
-                let mut depth: usize = 0;
-                while self.lex.tk == Token::Brak {
-                    self.next()?;
-                    let n = self.parse_constant_int_folding_const_objects()?;
-                    if self.lex.tk != ']' {
-                        return Err(self.compile_err(format!(
-                            "close bracket expected in `{}[...]` initializer",
-                            self.symbols[idx].name
-                        )));
-                    }
-                    self.next()?;
-                    let stride: i64 = if depth == 0 {
-                        if inner_dim > 0 {
-                            // 2D / 3D: first index strides over rows.
-                            inner_dim * self.size_of_type(elem_ty) as i64
-                        } else if array_size > 0 {
-                            self.size_of_type(elem_ty) as i64
-                        } else {
-                            1
-                        }
-                    } else if depth == 1 {
-                        // Second index: scalar element stride.
-                        self.size_of_type(elem_ty) as i64
-                    } else {
-                        // Beyond 2D, c5 has no per-dim stride.
-                        if n != 0 {
-                            return Err(self.compile_err(format!(
-                                "static initializer index past 2D for `{}` -- \
-                                 c5 only tracks two dimensions, only `[0]` is \
-                                 accepted beyond that",
-                                self.symbols[idx].name
-                            )));
-                        }
-                        0
-                    };
-                    off += n * stride;
-                    depth += 1;
-                }
-                return Ok((off as i128, InitElemReloc::Data(Some(idx))));
-            }
-            return Err(self.compile_err(format!(
-                "identifier `{}` is not a constant-expression value",
-                self.symbols[idx].name
-            )));
+            return self.parse_const_init_identifier();
         }
         // Fall back to the shared constant evaluator.
         self.parse_constant_init_scalar()
+    }
+
+    /// A parenthesized constant initializer leaf (C99 6.6): a `(T)expr`
+    /// cast, a compound literal `(T){...}` of array, scalar or struct type,
+    /// or a parenthesized constant expression. The cursor is on the `(`.
+    fn parse_const_init_paren(&mut self) -> Result<(i128, InitElemReloc), C5Error> {
+        // Cast / float-content detection both need to look
+        // past the `(`. Snapshot so we can rewind for the
+        // integer-expression fall-through, which has to see
+        // `(` to absorb both the parenthesised sub-expression
+        // *and* any trailing operators -- a struct initialiser
+        // entry like `{ (127-13) << 23 }` needs the integer
+        // const-expr evaluator to start outside the parens so
+        // the `<< 23` after `)` joins the chain.
+        let snap = self.lex.snapshot();
+        self.next()?;
+        if self.lex_is_type_start() {
+            return self.parse_const_init_cast(snap);
+        }
+        // `(cond ? A : B)` -- a constant conditional whose arms may be
+        // address constants (C99 6.6: a conditional expression with a
+        // constant condition is itself a constant expression). The
+        // integer evaluator below can fold the value but not carry an
+        // address-valued arm's relocation, so select the arm here and
+        // keep its reloc. Falls through when the parens hold a plain
+        // arithmetic expression.
+        if let Some((v, reloc)) = self.try_const_cond_init_value()? {
+            // A pure-integer parenthesized conditional may be followed by
+            // any binary operator (`(cond ? a : b) * N`, `(cond ? a : b)
+            // | N << 8`) or another `?:`; continue the full const-expr
+            // chain so the trailing operators are absorbed rather than
+            // left for the brace list to misread as extra elements.
+            // `parse_const_expr_cond_from` returns the seed unchanged
+            // when no operator follows. An address-valued arm is
+            // returned as-is.
+            if matches!(reloc, InitElemReloc::None) {
+                let folded = self.parse_const_expr_cond_from(ConstVal::Int {
+                    val: v,
+                    ty: Ty::Int as i64,
+                })?;
+                return Ok((folded.as_i128(), InitElemReloc::None));
+            }
+            return Ok((v, reloc));
+        }
+        // A parenthesised relocation-bearing leaf -- `(func)`,
+        // `(&global)`, possibly multiply parenthesised, as produced
+        // by the `(PyCFunction)(((void(*)(void))((fn))))` method-table
+        // idiom. Recurse on the inner value and consume the matching
+        // `)` when it carries a relocation; a parenthesised arithmetic
+        // constant rewinds and falls through to the folders below,
+        // which must start outside the parens to absorb trailing
+        // operators.
+        {
+            let inner_snap = self.lex.snapshot();
+            let (v, reloc) = self.parse_constant_init_value()?;
+            if !matches!(reloc, InitElemReloc::None | InitElemReloc::Float64Bits)
+                && self.lex.tk == ')'
+            {
+                self.next()?; // consume the matching `)`
+                return Ok((v, reloc));
+            }
+            self.restore_lex(inner_snap);
+        }
+        // Sub-expression in parens. Peek for any FloatNum
+        // token inside (up to the matching `)`); if present,
+        // fold the whole sub-expression in f64 precision so
+        // shapes like `(1.0f + 2.0f) * 4.0f` round-trip
+        // exactly. Pure-integer parens fall through to the
+        // integer expression evaluator below so trailing
+        // `<<`, `+`, ... operators after `)` are absorbed too.
+        if self.contents_until_close_paren_have_float()? {
+            let seed = self.parse_const_expr_unary_val()?;
+            let v = self.parse_const_expr_add_from(seed)?.as_float();
+            if self.lex.tk != ')' {
+                return Err(self.compile_err("close paren expected in initializer"));
+            }
+            self.next()?;
+            // The result of the parens is itself a float
+            // value; any trailing `+ / - / * / /` continues
+            // the float expression chain.
+            if self.tk_is_float_arith_op() {
+                let folded = self
+                    .parse_const_expr_add_from(ConstVal::Float(v))?
+                    .as_float();
+                return Ok((folded.to_bits() as i128, InitElemReloc::Float64Bits));
+            }
+            return Ok((v.to_bits() as i128, InitElemReloc::Float64Bits));
+        }
+        // Nested cast around a string literal:
+        // `((const T *)"...")` is a common header idiom for
+        // building a pointer-typed constant from a string
+        // literal. The outer `(` isn't a cast start, but the
+        // inner one is, and the cast wraps a string literal
+        // -- so the result must carry a Data reloc. The
+        // integer evaluator would drop the reloc and bake
+        // the parse-time data offset into the slot. Peek for
+        // the exact shape `(<type-tokens>*) "..."` before
+        // routing through the recursive primary parser.
+        if self.lex.tk == '(' {
+            let peek_snap = self.lex.snapshot();
+            // The peek may lex the string literal itself, staging its
+            // bytes; reclaim them so only the real parse's copy stays.
+            let peek_data = self.data.len();
+            self.next()?; // consume inner `(`
+            let inner_is_cast = self.lex_is_type_start();
+            let mut is_cast_of_string = false;
+            if inner_is_cast {
+                let _ = self.parse_const_type_name()?;
+                if self.lex.tk == ')' {
+                    self.next()?;
+                    is_cast_of_string = self.lex.tk == '"';
+                }
+            }
+            self.restore_lex(peek_snap);
+            self.truncate_data(peek_data);
+            if is_cast_of_string {
+                let (value, reloc) = self.parse_constant_init_value()?;
+                if self.lex.tk != ')' {
+                    return Err(self.compile_err("close paren expected in initializer"));
+                }
+                self.next()?;
+                return Ok((value, reloc));
+            }
+        }
+        // Rewind so the integer evaluator below absorbs the
+        // whole `(expr) op rhs` chain as one expression. The
+        // string-literal and offsetof primaries are picked up
+        // through `parse_const_expr_primary_val`, so a static
+        // initializer can use `((char *)"...")` and
+        // `&((T *)0)->field` shapes inside arithmetic.
+        self.restore_lex(snap);
+        self.parse_constant_init_scalar()
+    }
+
+    /// The `(T)` head of a parenthesized constant leaf: a compound literal
+    /// `(T){...}` of array, scalar or struct type, or a cast applied to a
+    /// constant operand (C99 6.5.2.5, 6.6). `snap` is the cursor at the `(`,
+    /// restored where the leaf turns out to be an arithmetic expression the
+    /// const-expr evaluator has to read whole.
+    fn parse_const_init_cast(
+        &mut self,
+        snap: LexerSnapshot,
+    ) -> Result<(i128, InitElemReloc), C5Error> {
+        let name = self.parse_const_type_name()?;
+        let cast_ty = name.ty;
+        // C99 6.5.2.5 array-typed compound literal:
+        // `(T[]){...}` / `(T[N]){...}`. The array name decays to a
+        // pointer to its first element, so the literal contributes
+        // an anonymous static array and the element stores its
+        // address. Distinguished from a plain cast by the `[`, or
+        // for an array typedef (`(row){...}`) by the `{` past `)`.
+        if self.lex.tk == Token::Brak || self.at_typedef_array_literal(&name)? {
+            let (v, reloc, _) = self.parse_array_compound_literal(cast_ty, &name.base_dims)?;
+            if let InitElemReloc::Data(Some(sym)) = reloc {
+                self.symbols[sym].storage_is_const = name.object_is_const;
+                self.reject_automatic_compound_literal(sym)?;
+            }
+            return Ok((v, reloc));
+        }
+        // C99 6.5.2.5 scalar-typed compound literal `(T){ v }`: the
+        // brace holds a single value; the result is that value
+        // converted to `T`, keeping any relocation it carries.
+        if self.lex.tk == ')' && !is_struct_value_ty(cast_ty) {
+            let paren_snap = self.lex.snapshot();
+            // The peeked token may be a string literal whose bytes
+            // the lexer stages; reclaim them on the non-`{` path.
+            let paren_data = self.data.len();
+            self.next()?;
+            if self.lex.tk == '{' {
+                self.next()?;
+                let (v, reloc) = self.parse_constant_init_value()?;
+                self.accept(',')?;
+                if self.lex.tk != '}' {
+                    return Err(self.compile_err("scalar compound literal holds a single value"));
+                }
+                self.next()?;
+                let target_fp = matches!(
+                    strip_unsigned(cast_ty),
+                    t if t == Ty::Float as i64 || t == Ty::Double as i64
+                );
+                return Ok(match reloc {
+                    InitElemReloc::None if target_fp => {
+                        ((v as f64).to_bits() as i128, InitElemReloc::Float64Bits)
+                    }
+                    InitElemReloc::Float64Bits if !target_fp => {
+                        let bytes = self.size_of_type(cast_ty);
+                        let is_bool = strip_unsigned(cast_ty) == Ty::Bool as i64;
+                        let n = f64::from_bits(v as u64) as i128;
+                        (
+                            narrow_const_int(bytes, is_unsigned_ty(cast_ty), is_bool, n),
+                            InitElemReloc::None,
+                        )
+                    }
+                    InitElemReloc::None => {
+                        let bytes = self.size_of_type(cast_ty);
+                        let is_bool = strip_unsigned(cast_ty) == Ty::Bool as i64;
+                        (
+                            narrow_const_int(bytes, is_unsigned_ty(cast_ty), is_bool, v),
+                            InitElemReloc::None,
+                        )
+                    }
+                    _ => (v, reloc),
+                });
+            }
+            self.restore_lex(paren_snap);
+            self.truncate_data(paren_data);
+        }
+        // Fold the whole element with the cast applied first: a cast
+        // participating in arithmetic (`(char *)&s.b - (char *)&s.a`
+        // strides by the cast's pointee, C99 6.5.6) must not be
+        // discarded by the reloc-leaf shortcut below. Authoritative
+        // only for an arithmetic result that consumed the whole
+        // element and staged nothing: a parse that appended data (a
+        // string literal, a compound literal) folded an address that
+        // needs its relocation, so it falls through to the paths
+        // that keep one.
+        {
+            let cp = self.init_checkpoint();
+            let data_before = self.data.len();
+            self.restore_lex(snap);
+            let whole = self.parse_const_expr_cond_val();
+            let done = (self.lex.tk == ','
+                || self.lex.tk == '}'
+                || self.lex.tk == ';'
+                || self.lex.tk == ')'
+                || self.lex.tk == ':')
+                && self.data.len() == data_before;
+            match whole {
+                Ok(ConstVal::Float(f)) if done => {
+                    return Ok((f.to_bits() as i128, InitElemReloc::Float64Bits));
+                }
+                Ok(v @ ConstVal::Int { .. }) if done => {
+                    return Ok((v.as_i128(), InitElemReloc::None));
+                }
+                _ => self.restore_init_checkpoint(cp),
+            }
+        }
+        // A cast of an arithmetic operand converts to the target
+        // type (C99 6.5.4, 6.3.1.3); route the element through the
+        // constant-expression evaluator, which applies every cast
+        // in the chain at its own width, so
+        // `(long)(int)0x92492493` sign-extends through `int`.
+        // Only a cast of a relocation-bearing leaf keeps the
+        // skip-and-recurse path below, where the value is the
+        // leaf's address and the cast merely retypes it.
+        if !self.post_cast_is_reloc_leaf()? {
+            self.restore_lex(snap);
+            return self.parse_constant_init_scalar();
+        }
+        // Optional function-pointer abstract declarator
+        // `(*)(args)` after the base type. Same treatment
+        // as in the expression-level cast handler: scan
+        // counted parens until the cast's outer `)`,
+        // then skip the trailing `(args)` arg-list shape.
+        if self.lex.tk == '(' {
+            let mut depth: i64 = 1;
+            self.next()?;
+            while depth > 0 && self.lex.tk != 0 {
+                if self.lex.tk == '(' {
+                    depth += 1;
+                } else if self.lex.tk == ')' {
+                    depth -= 1;
+                    if depth == 0 {
+                        self.next()?;
+                        break;
+                    }
+                }
+                self.next()?;
+            }
+            if self.lex.tk == '(' {
+                self.next()?;
+                self.skip_balanced_parens_after_open()?;
+            }
+        }
+        if self.lex.tk != ')' {
+            return Err(self.compile_err("close paren expected after cast in initializer"));
+        }
+        self.next()?;
+        self.parse_constant_init_value()
+    }
+
+    /// An identifier as a constant initializer leaf: `__func__`, an enum
+    /// constant, a function designator, a `static const` object whose value
+    /// folds, or an array / function name that decays to its address.
+    fn parse_const_init_identifier(&mut self) -> Result<(i128, InitElemReloc), C5Error> {
+        let idx = self.lex.curr_id_idx;
+        let class = self.symbols[idx].class;
+        // C99 6.4.2.2: __func__ / __FUNCTION__ / __PRETTY_FUNCTION__
+        // decay to a pointer to the enclosing function's name; resolve
+        // them here so the undeclared name is not taken as a forward fn.
+        if self.is_func_name_ident() {
+            let off = self.intern_func_name();
+            self.next()?;
+            return Ok((off as i128, InitElemReloc::Data(None)));
+        }
+        // A name with no declaration is either a builtin the constant
+        // evaluator folds (C99 6.6p10) or undeclared; the evaluator
+        // tells the two apart and diagnoses whichever holds. A fold may
+        // select an address constant (`__builtin_choose_expr` over an
+        // array), which carries its relocation.
+        if class == 0 {
+            return self.parse_constant_init_scalar();
+        }
+        // A declared name followed by `(` is a call, not the symbol's
+        // address: taking the branches below would consume the name
+        // alone and leave the argument list to be misread as further
+        // elements. A static initializer admits a call only when it
+        // folds (a library function over a literal), so defer to the
+        // evaluator and fall through when it cannot, leaving the
+        // diagnostics below to report the shape.
+        if self.lex.peek_after_whitespace(b'(') {
+            let snap = self.lex.snapshot();
+            let data_snap = self.data.len();
+            let nonconst = self.pending.const_expr_nonconst;
+            if let Ok(v) = self.parse_constant_i128() {
+                return Ok((v, InitElemReloc::None));
+            }
+            self.restore_lex(snap);
+            self.truncate_data(data_snap);
+            self.pending.const_expr_nonconst = nonconst;
+        }
+        if class == Token::Fun as i64 {
+            self.symbols[idx].was_referenced = true;
+            let ent_pc = self.symbols[idx].val;
+            self.next()?;
+            return Ok((ent_pc as i128, InitElemReloc::Code(idx)));
+        }
+        if class == Token::Num as i64 {
+            // Integer constant -- either a bare enum / macro
+            // value or the head of a constant arithmetic
+            // expression (`E_A | E_B`, `K << 4`, ...). Defer
+            // to the full integer-constant evaluator so any
+            // trailing operator chain is folded in per C99
+            // 6.6, instead of returning the head value and
+            // leaving the operator to fail downstream.
+            let v = self.parse_constant_i128()?;
+            return Ok((v, InitElemReloc::None));
+        }
+        if class == Token::Sys as i64 {
+            // Address of a libc binding in a static initializer.
+            // The real address lives in the loader's GOT/IAT and
+            // can't be folded in at compile time, so we route the
+            // slot through a per-Sys trampoline (a tiny synthetic
+            // c5 function that re-pushes its declared args and
+            // re-dispatches via an external call. The CodeReloc
+            // points at the trampoline's synthetic symbol; its
+            // `.val` holds the trampoline's `ent_pc` once
+            // [`Compiler::emit_sys_trampolines`] runs in the
+            // post-parse fixup pass. From the call site's view
+            // -- e.g., a vtable consumer reading
+            // `dispatch_table[7].pCurrent` through an
+            // `(int(*)(...))` cast and invoking it -- it's an
+            // ordinary function pointer.
+            let tr_idx = self.ensure_sys_trampoline_sym(idx);
+            self.next()?;
+            return Ok((0, InitElemReloc::Code(tr_idx)));
+        }
+        if class == Token::Glo as i64 {
+            // A scalar global names its value, not its address (the
+            // address spelling is `&name`): defer to the shared
+            // evaluator, which folds a const-qualified object the
+            // way gcc does and rejects the rest, absorbing any
+            // trailing operator chain. Only an array (including a
+            // zero-length one) decays here.
+            if self.symbols[idx].array_size == 0 && !self.symbols[idx].is_zero_len_array {
+                return self.parse_constant_init_scalar();
+            }
+            // Bare global identifier in a static initializer.
+            // For array globals (`static const char name[] =
+            // "..."`) this is the array-decay rule: the value
+            // is the array's data-segment offset; a DataReloc
+            // patches it to the runtime address.
+            let mut off = self.symbols[idx].val;
+            let array_size = self.symbols[idx].array_size;
+            let inner_dim = self.symbols[idx].inner_array_size;
+            let elem_ty = self.symbols[idx].type_;
+            self.next()?;
+            // Optional `[N]...` postfixes -- decay-to-address-
+            // of-element. `arr[N]` is equivalent to `&arr[N]`
+            // in a constant initializer (C99 6.3.2.1p3 array-
+            // to-pointer conversion); a chain of `[N]`s
+            // navigates further into a multi-dim array
+            // before taking its address.
+            //
+            // c5 only tracks `inner_array_size` (the second
+            // dim of `T name[A][B]`), so for the third index
+            // of a 3D `T name[A][B][C]` we don't have a stride
+            // to multiply by. The common static-init shape is
+            // `arr[0][0]` (a row pointer through a 2D or 3D
+            // table) which only matters as the base address;
+            // we accept further `[0]` postfixes without error
+            // and reject `[non-zero]` past the second index.
+            let mut depth: usize = 0;
+            while self.lex.tk == Token::Brak {
+                self.next()?;
+                let n = self.parse_constant_int_folding_const_objects()?;
+                if self.lex.tk != ']' {
+                    return Err(self.compile_err(format!(
+                        "close bracket expected in `{}[...]` initializer",
+                        self.symbols[idx].name
+                    )));
+                }
+                self.next()?;
+                let stride: i64 = if depth == 0 {
+                    if inner_dim > 0 {
+                        // 2D / 3D: first index strides over rows.
+                        inner_dim * self.size_of_type(elem_ty) as i64
+                    } else if array_size > 0 {
+                        self.size_of_type(elem_ty) as i64
+                    } else {
+                        1
+                    }
+                } else if depth == 1 {
+                    // Second index: scalar element stride.
+                    self.size_of_type(elem_ty) as i64
+                } else {
+                    // Beyond 2D, c5 has no per-dim stride.
+                    if n != 0 {
+                        return Err(self.compile_err(format!(
+                            "static initializer index past 2D for `{}` -- \
+                             c5 only tracks two dimensions, only `[0]` is \
+                             accepted beyond that",
+                            self.symbols[idx].name
+                        )));
+                    }
+                    0
+                };
+                off += n * stride;
+                depth += 1;
+            }
+            return Ok((off as i128, InitElemReloc::Data(Some(idx))));
+        }
+        Err(self.compile_err(format!(
+            "identifier `{}` is not a constant-expression value",
+            self.symbols[idx].name
+        )))
     }
 
     /// A scalar initializer element folded by the shared constant

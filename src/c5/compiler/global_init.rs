@@ -321,90 +321,10 @@ impl Compiler {
         // runtime cast handler in `expr()` uses; if the inner token
         // isn't a type start, this is a parenthesised expression --
         // recurse on the inner and require the closing `)`.
-        if self.lex.tk == '(' {
-            let pre_paren = self.lex.snapshot();
-            self.next()?;
-            if self.lex_is_type_start() {
-                // Fold the whole expression with the cast applied first: a
-                // cast participating in arithmetic (`(char *)&s.b -
-                // (char *)&s.a` strides by the cast's pointee, C99 6.5.6)
-                // must not be discarded by the reloc-leaf shortcut below.
-                // An arithmetic result that consumes the whole initializer
-                // routes to the shared evaluator tail, which refolds it.
-                let cp = self.init_checkpoint();
-                let data_before = self.data.len();
-                self.restore_lex(pre_paren);
-                let whole = self.parse_const_expr_cond_val();
-                // A parse that staged data (a string or compound literal)
-                // folded an address needing its relocation; only a
-                // stage-free arithmetic result takes the evaluator tail.
-                let arithmetic = matches!(whole, Ok(ConstVal::Int { .. }) | Ok(ConstVal::Float(_)))
-                    && self.at_initializer_end()
-                    && self.data.len() == data_before;
-                self.restore_init_checkpoint(cp);
-                if arithmetic {
-                    self.restore_lex(pre_paren);
-                } else
-                // A leading `(TYPE)` cast. When it applies to a
-                // relocation leaf (`&x`, a string, a function or
-                // global-array name) the value is the leaf's address and
-                // the cast type is irrelevant, so skip the cast tokens and
-                // recurse (the abstract-declarator grammar need not be
-                // modelled twice). When it casts an arithmetic operand the
-                // cast narrows (C99 6.3.1.3), so route the whole expression
-                // through the const-expr evaluator below, which applies the
-                // narrowing, instead of discarding the cast.
-                if self.post_cast_is_reloc_leaf()? {
-                    let mut depth: i64 = 1;
-                    while depth > 0 && self.lex.tk != 0 {
-                        if self.lex.tk == '(' {
-                            depth += 1;
-                        } else if self.lex.tk == ')' {
-                            depth -= 1;
-                            if depth == 0 {
-                                self.next()?;
-                                break;
-                            }
-                        }
-                        self.next()?;
-                    }
-                    return self.parse_global_initializer(var_ty, var_offset, is_thread_local);
-                }
-                self.restore_lex(pre_paren);
-            } else {
-                // Parenthesised expression. Peek past the matching `)`: a
-                // trailing operator means the parentheses wrap a sub-operand of a
-                // larger constant expression (`(1) << 5`), which the
-                // constant-expression evaluator below folds with full operator
-                // precedence. A complete value -- `(&x)`, `(func)`, `(123)`, with
-                // `,` / `;` / `}` next -- keeps the local recursion that handles
-                // address and function-reference constants.
-                let after_open = self.lex.snapshot();
-                let mut depth: i64 = 1;
-                while depth > 0 && self.lex.tk != 0 {
-                    if self.lex.tk == '(' {
-                        depth += 1;
-                    } else if self.lex.tk == ')' {
-                        depth -= 1;
-                    }
-                    self.next()?;
-                }
-                let trailing_operator = !(self.lex.tk == ','
-                    || self.lex.tk == ';'
-                    || self.lex.tk == '}'
-                    || self.lex.tk == ')'
-                    || self.lex.tk == 0);
-                if trailing_operator {
-                    // Re-parse the whole initializer through the float / integer
-                    // constant-expression path below.
-                    self.restore_lex(pre_paren);
-                } else {
-                    self.restore_lex(after_open);
-                    self.parse_global_initializer(var_ty, var_offset, is_thread_local)?;
-                    self.accept(')')?;
-                    return Ok(());
-                }
-            }
+        if self.lex.tk == '('
+            && self.write_global_paren_initializer(var_ty, var_offset, is_thread_local)?
+        {
+            return Ok(());
         }
         // Bare function reference in a global initializer:
         // `static int (*fp)() = func;`. The value is the function's
@@ -559,6 +479,114 @@ impl Compiler {
             }
         }
 
+        self.write_global_scalar_initializer(var_ty, var_offset, is_thread_local, line)
+    }
+
+    /// A parenthesized scalar initializer: a `(T)expr` cast, an array or
+    /// struct compound literal whose address the slot takes, or a
+    /// parenthesized constant expression (C99 6.6).
+    fn write_global_paren_initializer(
+        &mut self,
+        var_ty: i64,
+        var_offset: i64,
+        is_thread_local: bool,
+    ) -> Result<bool, C5Error> {
+        let pre_paren = self.lex.snapshot();
+        self.next()?;
+        if self.lex_is_type_start() {
+            // Fold the whole expression with the cast applied first: a
+            // cast participating in arithmetic (`(char *)&s.b -
+            // (char *)&s.a` strides by the cast's pointee, C99 6.5.6)
+            // must not be discarded by the reloc-leaf shortcut below.
+            // An arithmetic result that consumes the whole initializer
+            // routes to the shared evaluator tail, which refolds it.
+            let cp = self.init_checkpoint();
+            let data_before = self.data.len();
+            self.restore_lex(pre_paren);
+            let whole = self.parse_const_expr_cond_val();
+            // A parse that staged data (a string or compound literal)
+            // folded an address needing its relocation; only a
+            // stage-free arithmetic result takes the evaluator tail.
+            let arithmetic = matches!(whole, Ok(ConstVal::Int { .. }) | Ok(ConstVal::Float(_)))
+                && self.at_initializer_end()
+                && self.data.len() == data_before;
+            self.restore_init_checkpoint(cp);
+            if arithmetic {
+                self.restore_lex(pre_paren);
+            } else
+            // A leading `(TYPE)` cast. When it applies to a
+            // relocation leaf (`&x`, a string, a function or
+            // global-array name) the value is the leaf's address and
+            // the cast type is irrelevant, so skip the cast tokens and
+            // recurse (the abstract-declarator grammar need not be
+            // modelled twice). When it casts an arithmetic operand the
+            // cast narrows (C99 6.3.1.3), so route the whole expression
+            // through the const-expr evaluator below, which applies the
+            // narrowing, instead of discarding the cast.
+            if self.post_cast_is_reloc_leaf()? {
+                let mut depth: i64 = 1;
+                while depth > 0 && self.lex.tk != 0 {
+                    if self.lex.tk == '(' {
+                        depth += 1;
+                    } else if self.lex.tk == ')' {
+                        depth -= 1;
+                        if depth == 0 {
+                            self.next()?;
+                            break;
+                        }
+                    }
+                    self.next()?;
+                }
+                self.parse_global_initializer(var_ty, var_offset, is_thread_local)?;
+                return Ok(true);
+            }
+            self.restore_lex(pre_paren);
+        } else {
+            // Parenthesised expression. Peek past the matching `)`: a
+            // trailing operator means the parentheses wrap a sub-operand of a
+            // larger constant expression (`(1) << 5`), which the
+            // constant-expression evaluator below folds with full operator
+            // precedence. A complete value -- `(&x)`, `(func)`, `(123)`, with
+            // `,` / `;` / `}` next -- keeps the local recursion that handles
+            // address and function-reference constants.
+            let after_open = self.lex.snapshot();
+            let mut depth: i64 = 1;
+            while depth > 0 && self.lex.tk != 0 {
+                if self.lex.tk == '(' {
+                    depth += 1;
+                } else if self.lex.tk == ')' {
+                    depth -= 1;
+                }
+                self.next()?;
+            }
+            let trailing_operator = !(self.lex.tk == ','
+                || self.lex.tk == ';'
+                || self.lex.tk == '}'
+                || self.lex.tk == ')'
+                || self.lex.tk == 0);
+            if trailing_operator {
+                // Re-parse the whole initializer through the float / integer
+                // constant-expression path below.
+                self.restore_lex(pre_paren);
+            } else {
+                self.restore_lex(after_open);
+                self.parse_global_initializer(var_ty, var_offset, is_thread_local)?;
+                self.accept(')')?;
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    /// The scalar tail: fold the initializer as an arithmetic or address
+    /// constant expression and write it into the object's slot.
+    fn write_global_scalar_initializer(
+        &mut self,
+        var_ty: i64,
+        var_offset: i64,
+        is_thread_local: bool,
+        line: usize,
+    ) -> Result<(), C5Error> {
         // Float / double scalar global with a constant-foldable
         // float expression: `static float gamma = 1.0f / 2.2f;` and
         // similar. The integer constant evaluator can't see through

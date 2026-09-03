@@ -353,37 +353,24 @@ pub(super) fn parse_directive(rest: &str, asm: bool) -> Directive<'_> {
     if let Some(after) = strip_keyword(rest, "if") {
         return Directive::If(after);
     }
-    if rest.trim_start().starts_with("else") {
-        let tail = rest.trim_start().trim_start_matches("else");
-        if tail.is_empty() || tail.starts_with(char::is_whitespace) {
-            return Directive::Else;
-        }
+    if strip_keyword(rest, "else").is_some() {
+        return Directive::Else;
     }
-    if rest.trim_start().starts_with("endif") {
-        let tail = rest.trim_start().trim_start_matches("endif");
-        if tail.is_empty() || tail.starts_with(char::is_whitespace) {
-            return Directive::Endif;
-        }
+    if strip_keyword(rest, "endif").is_some() {
+        return Directive::Endif;
     }
     if let Some(after) = strip_keyword(rest, "pragma") {
         return Directive::Pragma(after.trim());
     }
-    if let Some(after) = rest.strip_prefix("error") {
-        // Accept `#error` with no message and `#error <text>`. C99
-        // doesn't actually require any message text -- the
-        // diagnostic is the directive itself -- but most users
-        // expect to be able to write `#error "must be x86"`.
-        if after.is_empty() || after.starts_with(char::is_whitespace) {
-            return Directive::Error(after.trim_start());
-        }
+    // C99 6.10.5 leaves the message optional -- the diagnostic is the
+    // directive itself -- so `#error` with no operand is accepted.
+    if let Some(after) = strip_keyword(rest, "error") {
+        return Directive::Error(after.trim_start());
     }
-    if let Some(after) = rest.strip_prefix("warning") {
-        // `#warning <message>` -- emits a warning and continues.
-        // gcc/clang extension; standardised by C23. Same shape as
-        // `#error`, just a different severity.
-        if after.is_empty() || after.starts_with(char::is_whitespace) {
-            return Directive::Warning(after.trim_start());
-        }
+    // `#warning <message>` -- gcc/clang extension standardised in C23:
+    // the `#error` shape at a lower severity.
+    if let Some(after) = strip_keyword(rest, "warning") {
+        return Directive::Warning(after.trim_start());
     }
     if let Some(after) = strip_keyword(rest, "line") {
         let trimmed = after.trim();

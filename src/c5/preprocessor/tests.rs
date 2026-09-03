@@ -3585,3 +3585,46 @@ fn retry_reuse_follows_the_counter_position() {
     std::fs::remove_file(&hdr).ok();
     std::fs::remove_dir(&dir).ok();
 }
+
+/// C99 6.10 makes the directive name one preprocessing token: a longer
+/// identifier names no directive, and a punctuator ends the name the way
+/// white space does. gcc and clang reject `#elseelse`, read `#else(x)`
+/// as `#else`, and report `#error(x)` as the diagnostic `(x)`.
+#[test]
+fn a_directive_name_is_one_preprocessing_token() {
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let out = pp
+        .process("#if 1\nA\n#elseelse\nB\n#endif\n")
+        .expect("preprocess");
+    assert!(out.contains('A') && out.contains('B'), "{out}");
+    assert!(
+        pp.warnings.iter().any(|w| w.contains("`#elseelse`")),
+        "{:?}",
+        pp.warnings
+    );
+
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let err = pp
+        .process("#if 1\nA\n#endifendif\n")
+        .expect_err("the conditional stays open");
+    assert!(format!("{err}").contains("unterminated"), "{err}");
+
+    // A punctuator after the name leaves the directive with an operand.
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let out = pp
+        .process("#if 0\nA\n#else(x)\nB\n#endif(y)\n")
+        .expect("preprocess");
+    assert!(!out.contains('A') && out.contains('B'), "{out}");
+    assert!(pp.warnings.is_empty(), "{:?}", pp.warnings);
+
+    let err = process_err("#error(x)\n");
+    assert!(err.contains("#error (x)"), "{err}");
+
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    pp.process("#warning(x)\nint v;\n").expect("preprocess");
+    assert!(
+        pp.warnings.iter().any(|w| w.contains("#warning (x)")),
+        "{:?}",
+        pp.warnings
+    );
+}

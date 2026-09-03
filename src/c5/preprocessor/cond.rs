@@ -1,5 +1,6 @@
 use super::Preprocessor;
 use super::builtins;
+use super::directive::header_name;
 use super::include::IncludeForm;
 use super::text::{
     is_ident_byte, literal_prefix_len, pp_number_len, skip_literal, strip_c_comments,
@@ -78,26 +79,20 @@ impl Preprocessor {
         filename: &str,
         line_no: usize,
     ) -> Option<bool> {
-        let literal = |t: &str| {
-            let t = t.trim();
-            t.strip_prefix('<')
-                .and_then(|s| s.strip_suffix('>'))
-                .map(|n| (n, false))
-                .or_else(|| {
-                    t.strip_prefix('"')
-                        .and_then(|s| s.strip_suffix('"'))
-                        .map(|n| (n, true))
-                })
-                .map(|(n, quoted)| (n.trim().to_string(), quoted))
+        let expanded;
+        let (name, quoted) = match header_name(operand) {
+            Some(literal) => literal,
+            None => {
+                expanded = self.substitute_spelling(operand, filename, line_no);
+                header_name(&expanded)?
+            }
         };
-        let (name, quoted) = literal(operand)
-            .or_else(|| literal(&self.substitute_spelling(operand, filename, line_no)))?;
         let form = if next {
             IncludeForm::next(quoted)
         } else {
             IncludeForm::plain(quoted)
         };
-        Some(self.resolve_include(&name, form, filename).is_some())
+        Some(self.resolve_include(name, form, filename).is_some())
     }
 
     pub(super) fn eval_condition(

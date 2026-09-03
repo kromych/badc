@@ -1693,18 +1693,8 @@ impl Preprocessor {
                             // header name.
                             let expanded = self.substitute_spelling(args, filename, line_no);
                             let trimmed = expanded.trim();
-                            let name = trimmed
-                                .strip_prefix('<')
-                                .and_then(|s| s.strip_suffix('>'))
-                                .map(|n| (n, false))
-                                .or_else(|| {
-                                    trimmed
-                                        .strip_prefix('"')
-                                        .and_then(|s| s.strip_suffix('"'))
-                                        .map(|n| (n, true))
-                                });
-                            if let Some((n, quoted)) = name {
-                                self.process_include(n.trim(), line_no, filename, quoted, out)?;
+                            if let Some((n, quoted)) = header_name(trimmed) {
+                                self.process_include(n, line_no, filename, quoted, out)?;
                                 out.push_str(&format_line_marker(source_line + 1, &current_file));
                                 source_line += 1;
                                 idx_iter += 1;
@@ -2159,7 +2149,7 @@ mod tests;
 use builtins::is_operator_name;
 use directive::{
     CondFrame, Directive, IncludeGuardScan, apply_elif, apply_else, apply_endif, elif_eligible,
-    format_line_marker, parse_directive,
+    format_line_marker, header_name, parse_directive,
 };
 use expand::JoinScan;
 pub use include::{IncludeOrigin, IncludeRecord, IncludeStatus};

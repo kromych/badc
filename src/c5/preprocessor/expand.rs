@@ -779,6 +779,23 @@ impl<'a> Exp<'a> {
             && !(at > 0 && (self.is_punct(body[at - 1], "##") || self.is_punct(body[at - 1], "#")))
     }
 
+    /// Plain-position use count per parameter. The memoized expansion of
+    /// an argument is moved out on its last use rather than cloned;
+    /// arguments can be large.
+    fn plain_use_counts(&self, body: &[Tok], def: &FnMacro, nargs: usize) -> Vec<u32> {
+        let mut uses: Vec<u32> = alloc::vec![0; nargs];
+        for (bi, &bt) in body.iter().enumerate() {
+            if bt.kind == TokKind::Ident
+                && self.plain_position(body, bi)
+                && let Some(idx) = self.param_index(def, bt)
+                && idx < uses.len()
+            {
+                uses[idx] += 1;
+            }
+        }
+        uses
+    }
+
     /// Replacement-list substitution (C99 6.10.3.1-6.10.3.3): `#` and
     /// `##` operands read the unexpanded argument, ordinary parameter
     /// positions read the argument expanded once (memoized, moved on
@@ -809,19 +826,7 @@ impl<'a> Exp<'a> {
         let mut exp_args: Vec<Option<Vec<Tok>>> = raw_args.iter().map(|_| None).collect();
         let mut exp_va: Option<Vec<Tok>> = None;
 
-        // Plain-position use count per parameter: the memoized
-        // expansion is moved out on its last use instead of cloned
-        // (arguments can be huge).
-        let mut plain_uses: Vec<u32> = alloc::vec![0; raw_args.len()];
-        for (bi, &bt) in body.iter().enumerate() {
-            if bt.kind == TokKind::Ident
-                && self.plain_position(&body, bi)
-                && let Some(idx) = self.param_index(def, bt)
-                && idx < plain_uses.len()
-            {
-                plain_uses[idx] += 1;
-            }
-        }
+        let mut plain_uses = self.plain_use_counts(&body, def, raw_args.len());
 
         let mut out: Vec<Tok> = self.take_vec();
         out.reserve(body.len());

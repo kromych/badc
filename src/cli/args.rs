@@ -324,7 +324,8 @@ impl Parser {
         Ok(self.mode_option(arg, iter)?
             || self.preprocess_option(arg, iter)?
             || self.assembler_option(arg, iter)?
-            || self.codegen_option(arg, iter)?
+            || self.codegen_option(arg)?
+            || self.hardening_option(arg, iter)?
             || self.link_option(arg, iter)?)
     }
 
@@ -671,7 +672,7 @@ impl Parser {
     }
 
     /// Optimization, machine and hardening options.
-    fn codegen_option(&mut self, arg: &str, iter: &mut Args) -> Result<bool, ParseError> {
+    fn codegen_option(&mut self, arg: &str) -> Result<bool, ParseError> {
         let code = &mut self.codegen;
         match arg {
             // The optimizer has a single level; every `-O<n>` form maps
@@ -723,6 +724,112 @@ impl Parser {
             // an alignment fault instead of being fixed up.
             "-mstrict-align" => code.strict_align = true,
             "-mno-strict-align" => code.strict_align = false,
+            // Position-independent relocatable output: no absolute
+            // relocation reaches the object, so a consumer that relocates
+            // it wholesale at load can take it. badc's final images are
+            // always position-independent, so the flag only chooses the
+            // `-c` object's relocation shapes.
+            "-fPIC" | "-fpic" | "-fPIE" | "-fpie" => {
+                code.fpic = true;
+                code.fno_pic = false;
+            }
+            "-fno-pic" | "-fno-PIC" | "-fno-pie" | "-fno-PIE" => {
+                code.fpic = false;
+                code.fno_pic = true;
+            }
+            // gcc / clang `-fno-jump-tables`: a switch never dispatches
+            // through a table, only through the compare tree. Kernels
+            // built with retpoline or indirect-branch tracking pass it
+            // because a table dispatch is an indirect branch those
+            // configurations must not take.
+            "-fjump-tables" => code.jump_tables = true,
+            "-fno-jump-tables" => code.jump_tables = false,
+            // gcc `-fmin-function-alignment=N`: every function entry
+            // lands on a multiple of N, which is how a kernel states
+            // CONFIG_FUNCTION_ALIGNMENT. Unlike `-falign-functions` gcc
+            // never skips a large gap under it, and badc never does
+            // either.
+            s if s.starts_with("-fmin-function-alignment=") => {
+                let spec = &s["-fmin-function-alignment=".len()..];
+                code.min_function_alignment = match spec.parse::<u32>() {
+                    Ok(n) if n.is_power_of_two() => n,
+                    _ => {
+                        return Err(ParseError::diag(format!(
+                            "badc: error: `-fmin-function-alignment=` takes a \
+                             power of two, got `{spec}`"
+                        )));
+                    }
+                };
+            }
+            // gcc `-fpatchable-function-entry=N[,M]`: N NOPs at every
+            // function entry, M of them ahead of the symbol, recorded per
+            // function in `__patchable_function_entries`.
+            s if s.starts_with("-fpatchable-function-entry=") => {
+                let spec = &s["-fpatchable-function-entry=".len()..];
+                let (n, m) = spec.split_once(',').unwrap_or((spec, "0"));
+                code.patchable_function_entry = match (n.parse::<u32>(), m.parse::<u32>()) {
+                    (Ok(nops), Ok(before)) if before <= nops => {
+                        badc::PatchableEntry { nops, before }
+                    }
+                    _ => {
+                        return Err(ParseError::diag(format!(
+                            "badc: error: `-fpatchable-function-entry=` takes `N[,M]` \
+                             with M <= N, got `{spec}`"
+                        )));
+                    }
+                };
+            }
+            "-pg" => code.profiling.enabled = true,
+            "-mfentry" | "-mno-fentry" => {
+                code.profiling.fentry = arg == "-mfentry";
+                self.mcount_modifiers.push(arg.to_string());
+            }
+            "-mrecord-mcount" | "-mno-record-mcount" => {
+                code.profiling.record_mcount = arg == "-mrecord-mcount";
+                self.mcount_modifiers.push(arg.to_string());
+            }
+            "-mnop-mcount" | "-mno-nop-mcount" => {
+                code.profiling.nop_mcount = arg == "-mnop-mcount";
+                self.mcount_modifiers.push(arg.to_string());
+            }
+            // Code model for `-c` objects. `small` is the default;
+            // `kernel` switches external-address materialization to the
+            // sign-extended 32-bit absolute form and is validated against
+            // the target below. The remaining psABI models are not
+            // implemented.
+            s if s.starts_with("-mcmodel=") => {
+                code.code_model = match &s["-mcmodel=".len()..] {
+                    "small" => badc::CodeModel::Small,
+                    "kernel" => badc::CodeModel::Kernel,
+                    // aarch64 `tiny` narrows the layout contract to
+                    // +/-1MiB; the small-model form stays valid under it,
+                    // so it lowers as small. Validated against the target
+                    // below.
+                    "tiny" => {
+                        self.code_model_tiny = true;
+                        badc::CodeModel::Small
+                    }
+                    other => {
+                        return Err(ParseError::diag(format!(
+                            "badc: error: unsupported code model `{other}` in \
+                             `-mcmodel=` (supported: small, kernel; \
+                             aarch64 also: tiny)"
+                        )));
+                    }
+                };
+            }
+            _ => return Ok(false),
+        }
+        Ok(true)
+    }
+
+    /// Speculative-execution mitigations and the stack protector, in
+    /// gcc's spellings. An argument that is not implemented is rejected
+    /// rather than ignored: a hardening flag that compiles but does
+    /// nothing leaves the caller believing the output is mitigated.
+    fn hardening_option(&mut self, arg: &str, iter: &mut Args) -> Result<bool, ParseError> {
+        let code = &mut self.codegen;
+        match arg {
             // Speculative-execution mitigations, in gcc's spellings. An
             // argument that is not implemented is rejected rather than
             // ignored: a hardening flag that compiles but does nothing
@@ -825,26 +932,6 @@ impl Parser {
                     }
                 }
             }
-            // Position-independent relocatable output: no absolute
-            // relocation reaches the object, so a consumer that relocates
-            // it wholesale at load can take it. badc's final images are
-            // always position-independent, so the flag only chooses the
-            // `-c` object's relocation shapes.
-            "-fPIC" | "-fpic" | "-fPIE" | "-fpie" => {
-                code.fpic = true;
-                code.fno_pic = false;
-            }
-            "-fno-pic" | "-fno-PIC" | "-fno-pie" | "-fno-PIE" => {
-                code.fpic = false;
-                code.fno_pic = true;
-            }
-            // gcc / clang `-fno-jump-tables`: a switch never dispatches
-            // through a table, only through the compare tree. Kernels
-            // built with retpoline or indirect-branch tracking pass it
-            // because a table dispatch is an indirect branch those
-            // configurations must not take.
-            "-fjump-tables" => code.jump_tables = true,
-            "-fno-jump-tables" => code.jump_tables = false,
             // gcc `-fstack-protector*`: which functions carry a stack
             // canary. The per-function rule is gcc's, applied to the
             // declared automatic objects.
@@ -923,80 +1010,6 @@ impl Parser {
                             badc::GuardSymbol::CAP
                         ))
                     })?;
-            }
-            // gcc `-fmin-function-alignment=N`: every function entry
-            // lands on a multiple of N, which is how a kernel states
-            // CONFIG_FUNCTION_ALIGNMENT. Unlike `-falign-functions` gcc
-            // never skips a large gap under it, and badc never does
-            // either.
-            s if s.starts_with("-fmin-function-alignment=") => {
-                let spec = &s["-fmin-function-alignment=".len()..];
-                code.min_function_alignment = match spec.parse::<u32>() {
-                    Ok(n) if n.is_power_of_two() => n,
-                    _ => {
-                        return Err(ParseError::diag(format!(
-                            "badc: error: `-fmin-function-alignment=` takes a \
-                             power of two, got `{spec}`"
-                        )));
-                    }
-                };
-            }
-            // gcc `-fpatchable-function-entry=N[,M]`: N NOPs at every
-            // function entry, M of them ahead of the symbol, recorded per
-            // function in `__patchable_function_entries`.
-            s if s.starts_with("-fpatchable-function-entry=") => {
-                let spec = &s["-fpatchable-function-entry=".len()..];
-                let (n, m) = spec.split_once(',').unwrap_or((spec, "0"));
-                code.patchable_function_entry = match (n.parse::<u32>(), m.parse::<u32>()) {
-                    (Ok(nops), Ok(before)) if before <= nops => {
-                        badc::PatchableEntry { nops, before }
-                    }
-                    _ => {
-                        return Err(ParseError::diag(format!(
-                            "badc: error: `-fpatchable-function-entry=` takes `N[,M]` \
-                             with M <= N, got `{spec}`"
-                        )));
-                    }
-                };
-            }
-            "-pg" => code.profiling.enabled = true,
-            "-mfentry" | "-mno-fentry" => {
-                code.profiling.fentry = arg == "-mfentry";
-                self.mcount_modifiers.push(arg.to_string());
-            }
-            "-mrecord-mcount" | "-mno-record-mcount" => {
-                code.profiling.record_mcount = arg == "-mrecord-mcount";
-                self.mcount_modifiers.push(arg.to_string());
-            }
-            "-mnop-mcount" | "-mno-nop-mcount" => {
-                code.profiling.nop_mcount = arg == "-mnop-mcount";
-                self.mcount_modifiers.push(arg.to_string());
-            }
-            // Code model for `-c` objects. `small` is the default;
-            // `kernel` switches external-address materialization to the
-            // sign-extended 32-bit absolute form and is validated against
-            // the target below. The remaining psABI models are not
-            // implemented.
-            s if s.starts_with("-mcmodel=") => {
-                code.code_model = match &s["-mcmodel=".len()..] {
-                    "small" => badc::CodeModel::Small,
-                    "kernel" => badc::CodeModel::Kernel,
-                    // aarch64 `tiny` narrows the layout contract to
-                    // +/-1MiB; the small-model form stays valid under it,
-                    // so it lowers as small. Validated against the target
-                    // below.
-                    "tiny" => {
-                        self.code_model_tiny = true;
-                        badc::CodeModel::Small
-                    }
-                    other => {
-                        return Err(ParseError::diag(format!(
-                            "badc: error: unsupported code model `{other}` in \
-                             `-mcmodel=` (supported: small, kernel; \
-                             aarch64 also: tiny)"
-                        )));
-                    }
-                };
             }
             _ => return Ok(false),
         }

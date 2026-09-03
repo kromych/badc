@@ -26,9 +26,8 @@ use super::stats::LinkStats;
 /// variadic libc imports, `#pragma` exports, and `_Thread_local`
 /// storage in each format's native shape: ELF PT_TLS, the PE TLS
 /// directory + `_tls_index`, the Mach-O TLV descriptors. Mach-O
-/// auto-codesigning lives in `post_write_native`. Only `--jit` /
-/// `--interp` (handled above) and `-c` / `--ar` (below) stay out
-/// of this path.
+/// auto-codesigning lives in `post_write_native`. `--jit` / `--interp`
+/// and `-c` / `--ar` take their own paths.
 pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
     let Inputs {
         sources,
@@ -48,11 +47,6 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
     // relocated `const` cannot ride the read-only prefix and must not
     // cost the unit's pure `const` objects their place in it.
     let reloc_opts = cli.codegen.relocatable_options(cli.front.optimize, true);
-    // Per-source progress and diagnostics match the JIT / interp paths:
-    // a multi-source build prints `info: compiling <path>` per unit, the
-    // resolved `#include` trace under `-H`, and the compiler's warnings
-    // (parser type-mismatch, AST validator, dead-store) to stderr.
-    //
     // `.c` -> in-memory native ELF64 ET_REL: each source compiles
     // straight to ET_REL bytes that `parse_native_elf` reads back, so no
     // intermediate `.o` is written to disk.
@@ -84,7 +78,10 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
     let mut source_auto_includes: Vec<Vec<String>> = Vec::with_capacity(sources.len());
     // Compile every source (concurrently under `--jobs`), then fold
     // the per-unit facts in source order so entry / subsystem
-    // resolution and object order stay scheduling-independent.
+    // resolution and object order stay scheduling-independent. A
+    // multi-source build prints `info: compiling <path>` per unit, the
+    // resolved `#include` trace under `-H`, and the compiler's warnings
+    // to stderr, as the JIT / interp paths do.
     let workers = worker_count(cli.jobs, sources.len());
     let tus = compile_units(&sources, workers, |_, src| {
         compile_native_tu(src, &[], &cfg)

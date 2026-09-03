@@ -209,6 +209,7 @@ const NUM_DATA_DIRS: u32 = 16;
 /// them. Absolute VAs live in the TLS directory and in
 /// address-of-static initializers, so `.reloc` follows their
 /// presence.
+#[derive(Default)]
 struct SectionPlan {
     rdata: bool,
     data: bool,
@@ -323,357 +324,429 @@ const RT_ENTRY: &str = "__c5_entry";
 // Top-level writer.
 // ----------------------------------------------------------------
 
+/// One entry of the PE DWARF layout: the section name (`/<offset>`
+/// into the COFF string table for the full `.debug_*` name), the
+/// section's RVA and file offset, and the payload.
+struct DwarfPeSlot {
+    name: [u8; 8],
+    rva: u32,
+    file_off: u32,
+    bytes: Vec<u8>,
+}
+
+/// RVAs, file offsets and payloads of every section, settled before
+/// any byte is written.
+#[derive(Default)]
+struct PeLayout<'a> {
+    ro_len: u32,
+    relro_total: u32,
+    relro_size: u32,
+    file_data_len: u32,
+    ro_head: u32,
+    relro_head_len: u32,
+    data_head_len: u32,
+    bss_head: u32,
+    /// What `.rdata` keeps of the two read-only families once their
+    /// named runs move out.
+    rdata_prefix_len: u32,
+    jt_base_in_rdata: u32,
+    provenance: Vec<u8>,
+    marker_base_in_rdata: u32,
+    rdata_size: u32,
+    rdata_present: bool,
+    data_present: bool,
+    reloc_present: bool,
+    edata_present: bool,
+    dwarf_present: bool,
+    text_rva: u32,
+    dwarf_blobs: Vec<(&'static str, Vec<u8>)>,
+    plan: SectionPlan,
+    headers_size: u32,
+    text_file_off: u32,
+    text_size: u32,
+    text_raw_size: u32,
+    pdata_rva: u32,
+    pdata_file_off: u32,
+    pdata_bytes: Vec<u8>,
+    pdata_directory_size: u32,
+    pdata_raw_size: u32,
+    idata_rva: u32,
+    idata_file_off: u32,
+    idata: IDataLayout,
+    idata_raw_size: u32,
+    rdata_rva: u32,
+    rdata_file_off: u32,
+    rdata_raw_size: u32,
+    tls: TlsLayout,
+    /// File-backed content of `.data`; `data_vsize` adds the zero-init
+    /// `.bss` tail past it.
+    data_size: u32,
+    data_vsize: u32,
+    data_rva: u32,
+    data_file_off: u32,
+    data_raw_size: u32,
+    named_out: Vec<NamedOut<'a>>,
+    named_file_end: u32,
+    named_rva_end: u32,
+    text_abs_fields: Vec<AbsTextField>,
+    reloc_rva: u32,
+    reloc_file_off: u32,
+    tls_sites: Vec<(usize, u64)>,
+    reloc_bytes: Vec<u8>,
+    reloc_raw_size: u32,
+    edata_rva: u32,
+    edata_file_off: u32,
+    edata_bytes: Vec<u8>,
+    edata_raw_size: u32,
+    pre_dwarf_end_file_off: u32,
+    pre_dwarf_end_rva: u32,
+    coff_strtab: Vec<u8>,
+    dwarf_sections: Vec<DwarfPeSlot>,
+    dwarf_end_file_off: u32,
+    dwarf_end_rva: u32,
+    coff_symbols: Vec<u8>,
+    coff_symtab_file_off: u32,
+    coff_strtab_file_off: u32,
+    total_file_size: usize,
+    image_size: u32,
+}
+
+/// One PE image's writer. [`write`] runs the phases in order: the
+/// entry stub and the import list, the section layout, the `.text`
+/// bytes with every fixup applied, then the headers and each section
+/// body.
+struct PeWriter<'a> {
+    program: &'a Program,
+    build: &'a Build,
+    machine: Machine,
+    target: super::Target,
+    is_dll: bool,
+    subsystem: u16,
+    passthrough_entry: bool,
+    stub: EntryStub,
+    imports: Vec<(String, String)>,
+    dlls: Vec<DllGroup>,
+    /// The stub occupies a span rounded up to the alignment
+    /// `build.text`'s own input sections claim; the section starts at
+    /// SECTION_ALIGNMENT, so the span places `build.text[0]` on that
+    /// alignment absolutely.
+    text_prologue_len: u32,
+    layout: PeLayout<'a>,
+    text_bytes: Vec<u8>,
+    jt_bytes: Vec<u8>,
+    out: Vec<u8>,
+}
+
 pub(super) fn write(
     program: &Program,
     build: &Build,
     machine: Machine,
     target: super::Target,
 ) -> Result<Vec<u8>, C5Error> {
-    let is_dll = build.output_kind == super::OutputKind::SharedLibrary;
-    // PE optional-header Subsystem -- determined here once so the
-    // entry-stub builder and the optional-header writer agree on
-    // the shape. The mapping mirrors `<winnt.h>`'s
-    // `IMAGE_SUBSYSTEM_*` constants; `Console` is the historical
-    // default for `None`, matching today's behavior for programs
-    // that don't carry `#pragma subsystem(...)`.
-    use crate::c5::preprocessor::Subsystem;
-    let subsystem = match program.subsystem {
-        Some(Subsystem::Windows) => IMAGE_SUBSYSTEM_WINDOWS_GUI,
-        Some(Subsystem::Native) => IMAGE_SUBSYSTEM_NATIVE,
-        Some(Subsystem::EfiApplication) => IMAGE_SUBSYSTEM_EFI_APPLICATION,
-        Some(Subsystem::EfiBootServiceDriver) => IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER,
-        Some(Subsystem::EfiRuntimeDriver) => IMAGE_SUBSYSTEM_EFI_RUNTIME_DRIVER,
-        Some(Subsystem::EfiRom) => IMAGE_SUBSYSTEM_EFI_ROM,
-        Some(Subsystem::Console) | None => IMAGE_SUBSYSTEM_WINDOWS_CUI,
-    };
+    let mut w = PeWriter::new(program, build, machine, target);
+    w.layout_code_sections()?;
+    w.layout_data_sections()?;
+    w.layout_reloc_and_export_sections()?;
+    w.layout_dwarf_and_coff();
+    w.build_text()?;
+    w.emit_headers()?;
+    w.emit_sections()
+}
 
-    // 1) Build the entry stub before laying out the imports so its
-    //    stub-only imports can be spliced onto the program's
-    //    `#pragma binding(...)` set below.
-    //
-    //    The stub is suppressed (empty bytes, no stub imports) when:
-    //      * `--shared` output declares its own `DllMain`. The
-    //        loader calls the user's body directly; the default
-    //        `mov eax, 1; ret` stub would only shift fixups.
-    //      * Subsystem is NT-native or one of the UEFI flavours.
-    //        Those loaders invoke the entry with a platform-native
-    //        argument shape, and msvcrt isn't available.
-    //    Otherwise the stub matches the subsystem (console / GUI)
-    //    or emits the boilerplate DllMain for `--shared` without a
-    //    user DllMain.
-    let user_dllmain = is_dll && build.dllmain_pc.is_some();
-    let passthrough_entry = subsystem_uses_passthrough_entry(subsystem) && !is_dll;
-    let stub = if user_dllmain || passthrough_entry {
-        EntryStub::empty()
-    } else {
-        build_entry_stub(machine, is_dll)
-    };
-
-    // 2) Combined imports list. Index N becomes IAT slot N. The
-    //    program's resolved imports occupy `0..n_program_imports`;
-    //    The entry stub adds no imports of its own: the CRT /
-    //    kernel32 entries it relies on ride the embedded runtime
-    //    TU's `#pragma binding`, so they already sit in
-    //    `build.imports`.
-    let n_program_imports = build.imports.imports.len();
-    let mut imports: Vec<(String, String)> = Vec::with_capacity(n_program_imports);
-    for imp in &build.imports.imports {
-        let dll = build.imports.dylibs[imp.dylib_index].path.clone();
-        imports.push((imp.real_symbol.clone(), dll));
+impl<'a> PeWriter<'a> {
+    fn new(
+        program: &'a Program,
+        build: &'a Build,
+        machine: Machine,
+        target: super::Target,
+    ) -> Self {
+        use crate::c5::preprocessor::Subsystem;
+        let is_dll = build.output_kind == super::OutputKind::SharedLibrary;
+        // `Console` is the default for a program without
+        // `#pragma subsystem(...)`.
+        let subsystem = match program.subsystem {
+            Some(Subsystem::Windows) => IMAGE_SUBSYSTEM_WINDOWS_GUI,
+            Some(Subsystem::Native) => IMAGE_SUBSYSTEM_NATIVE,
+            Some(Subsystem::EfiApplication) => IMAGE_SUBSYSTEM_EFI_APPLICATION,
+            Some(Subsystem::EfiBootServiceDriver) => IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER,
+            Some(Subsystem::EfiRuntimeDriver) => IMAGE_SUBSYSTEM_EFI_RUNTIME_DRIVER,
+            Some(Subsystem::EfiRom) => IMAGE_SUBSYSTEM_EFI_ROM,
+            Some(Subsystem::Console) | None => IMAGE_SUBSYSTEM_WINDOWS_CUI,
+        };
+        // The stub is suppressed for `--shared` output declaring its own
+        // `DllMain` (the loader calls the user's body directly) and for
+        // the NT-native and UEFI subsystems, whose loaders invoke the
+        // entry with a platform-native argument shape.
+        let user_dllmain = is_dll && build.dllmain_pc.is_some();
+        let passthrough_entry = subsystem_uses_passthrough_entry(subsystem) && !is_dll;
+        let stub = if user_dllmain || passthrough_entry {
+            EntryStub::empty()
+        } else {
+            build_entry_stub(machine, is_dll)
+        };
+        // Index N becomes IAT slot N. The CRT / kernel32 entries the
+        // stub relies on ride the embedded runtime TU's `#pragma
+        // binding`, so they already sit in `build.imports`.
+        let imports: Vec<(String, String)> = build
+            .imports
+            .imports
+            .iter()
+            .map(|imp| {
+                (
+                    imp.real_symbol.clone(),
+                    build.imports.dylibs[imp.dylib_index].path.clone(),
+                )
+            })
+            .collect();
+        let dlls = group_imports_by_dll(&imports);
+        let text_align = build.text_align.max(16) as u32;
+        let text_prologue_len = round_up(stub.bytes.len() as u32, text_align);
+        PeWriter {
+            program,
+            build,
+            machine,
+            target,
+            is_dll,
+            subsystem,
+            passthrough_entry,
+            stub,
+            imports,
+            dlls,
+            text_prologue_len,
+            layout: PeLayout::default(),
+            text_bytes: Vec::new(),
+            jt_bytes: Vec::new(),
+            out: Vec::new(),
+        }
     }
 
-    // 3) Group imports by DLL while preserving each one's IAT index.
-    //    `dlls` holds (dll_name, [import_index, ...]); the IAT is
-    //    laid out DLL-by-DLL so we keep the per-DLL slot offsets to
-    //    recover the global IAT slot of each import.
-    let dlls = group_imports_by_dll(&imports);
+    fn internal(msg: String) -> C5Error {
+        C5Error::Compile(crate::c5::error::fmt_internal_err(&msg))
+    }
 
-    // 4) Compute layout. Combined .text is `entry stub |
-    //    build.text`; the program's `mprotect` calls go through
-    //    the regular IAT lookup just like every other libc call.
-    let stub_len = stub.bytes.len() as u32;
-    // The stub is the first input section of `.text` and `build.text`
-    // the second, so the stub occupies a span rounded up to the
-    // alignment `build.text`'s own input sections claim. The section
-    // starts at SECTION_ALIGNMENT, so the span places `build.text[0]`
-    // on that alignment absolutely.
-    let text_align = build.text_align.max(16) as u32;
-    let text_prologue_len = round_up(stub_len, text_align);
-
-    // `.rdata` carries `build.data[..data_relro_len]`: the read-only
-    // prefix (no relocated slot) followed by the relro region, whose
-    // slots the loader writes via `.reloc` before the entry point runs.
-    // The section is `MEM_READ` without `MEM_WRITE`; base relocations
-    // into such a section are what link.exe emits for the same content.
-    // The switch-table blob sits at an 8-aligned tail past it and the
-    // producer fingerprint last -- mingw gcc's ident placement
-    // (`.rdata$zzz`). The fingerprint keeps the section non-empty, so
-    // it is always present.
-    let ro_len: u32 = build.data_ro_len.min(build.data.len()) as u32;
-    let relro_total: u32 = build
-        .data_relro_len
-        .clamp(build.data_ro_len, build.data.len()) as u32;
-    let relro_size: u32 = relro_total - ro_len;
-    let file_data_len: u32 = build.data.len() as u32;
-    // A PE section RVA is SectionAlignment-aligned, so a named section
-    // cannot sit inside its family's range: each takes a slot past
-    // `.data` and the family sections close the gap.
-    let named: Vec<&crate::c5::codegen::NamedSection> = build.named_sections.iter().collect();
-    let named_family = |n: &crate::c5::codegen::NamedSection| {
+    /// Family whose region holds a named section's bytes.
+    fn named_family(&self, n: &crate::c5::codegen::NamedSection) -> NamedFamily {
         if n.bss {
             NamedFamily::Bss
-        } else if n.offset < ro_len as u64 {
+        } else if n.offset < self.layout.ro_len as u64 {
             NamedFamily::RoData
-        } else if n.offset < relro_total as u64 {
+        } else if n.offset < self.layout.relro_total as u64 {
             NamedFamily::RelRo
         } else {
             NamedFamily::Data
         }
-    };
-    let head_of = |f: NamedFamily, full: u32| -> u32 {
-        named
+    }
+
+    fn head_of(&self, f: NamedFamily, full: u32) -> u32 {
+        self.build
+            .named_sections
             .iter()
-            .filter(|n| named_family(n) == f)
+            .filter(|n| self.named_family(n) == f)
             .map(|n| n.offset as u32)
             .min()
             .unwrap_or(full)
-    };
-    let ro_head: u32 = head_of(NamedFamily::RoData, ro_len);
-    let relro_head_len: u32 = head_of(NamedFamily::RelRo, relro_total) - ro_len;
-    let data_head_len: u32 = head_of(NamedFamily::Data, file_data_len) - relro_total;
-    let bss_head: u32 = head_of(NamedFamily::Bss, build.bss_size as u32);
-    // What `.rdata` keeps of the two read-only families once their
-    // named runs move out.
-    let rdata_prefix_len: u32 = ro_head + relro_head_len;
-    let jt_base_in_rdata: u32 = if build.rodata.bytes.is_empty() {
-        rdata_prefix_len
-    } else {
-        round_up(rdata_prefix_len, 8)
-    };
-    let provenance = super::provenance_comment();
-    let marker_base_in_rdata: u32 = round_up(jt_base_in_rdata + build.rodata.bytes.len() as u32, 8);
-    let rdata_size: u32 = marker_base_in_rdata + provenance.len() as u32;
-    let rdata_section_present = rdata_size > 0;
-    // The `.data` section is present when the c5 program has
-    // writable initialized or zero-fill data OR any `_Thread_local`
-    // globals (the TLS directory + `_tls_index` slot live at the
-    // tail of `.data`). A wholly read-only data image leaves it out
-    // -- the loader rejects a zero-extent section.
-    // The `.reloc` section is present when the program declares
-    // any `_Thread_local` global -- those are the only absolute
-    // VAs the writer emits (inside `IMAGE_TLS_DIRECTORY64`), and
-    // the ASLR-aware loader uses `.reloc` to fix them up after
-    // sliding the image.
-    let data_section_present = data_head_len > 0 || !build.tls_data.is_empty() || bss_head > 0;
-    // `.reloc` is needed when the image carries any absolute
-    // pointer the loader has to fix up after sliding -- today
-    // that's the three TLS-directory VAs (when TLS is
-    // present) plus one entry per `int *p = &x;`-style data
-    // reloc.
-    let reloc_section_present = !build.tls_data.is_empty()
-        || !build.data_relocs.is_empty()
-        || !build.code_relocs.is_empty()
-        || !build.label_relocs.is_empty()
-        || !build.text_abs_relocs.is_empty();
-    // `.edata` is present whenever the image exports anything: a
-    // `#pragma export` set (shared library or executable, matching the
-    // ELF `.dynsym` behaviour) or an executable's `--export-all` /
-    // `--export-data` dynamic exports. A PE executable may legally carry
-    // an export directory; GetProcAddress resolves against it, which is
-    // what a plugin host loading modules relies on.
-    let edata_section_present = !build.exports.is_empty() || !build.dynamic_exports.is_empty();
-    // Emit DWARF debug sections in PE images so lldb /
-    // gdb can resolve user-function names + types in PE
-    // backtraces. Suppressed when the user passed `--no-debug` /
-    // `-g0` -- the section headers + payload + COFF
-    // string table are all skipped, `pointer_to_symbol_table`
-    // returns to 0, and `SizeOfImage` shrinks accordingly.
-    let dwarf_section_present = build.debug_info;
-    let text_rva: u32 = SECTION_ALIGNMENT;
-    // Build the DWARF section payloads up front so the section-
-    // header count is known before the layout pass. The Windows
-    // image loader rejects an image with ERROR_BAD_EXE_FORMAT
-    // (193) when two SizeOfRawData == 0 sections share a
-    // VirtualAddress, so empty blobs are dropped here and never
-    // reach the section table. Multi-TU link path:
-    // `.debug_info` / `.debug_abbrev` / `.debug_line` /
-    // `.debug_str` come from the linker-merged streams;
-    // `.debug_frame` regenerates fresh from the synth-Build's
-    // per-function metadata that `synth_build` populates from
-    // every Text-section defined symbol.
-    let dwarf_sections_raw = if let Some(md) = &build.merged_dwarf {
-        // The linker leaves text-targeting placeholders cleared
-        // because the writer commits the merged-text runtime
-        // address. Apply them here against the actual `text_rva +
-        // text_prologue_len` so DW_AT_low_pc / line-program
-        // addresses point at the function bodies in the final
-        // image.
-        let text_vmaddr = IMAGE_BASE + (text_rva + text_prologue_len) as u64;
-        let mut debug_info = md.debug_info.clone();
-        let mut debug_line = md.debug_line.clone();
-        for r in &md.debug_info_text_relocs {
-            super::apply_merged_dwarf_text_reloc(&mut debug_info, r, text_vmaddr)?;
-        }
-        for r in &md.debug_line_text_relocs {
-            super::apply_merged_dwarf_text_reloc(&mut debug_line, r, text_vmaddr)?;
-        }
-        let fresh = dwarf::emit(
-            program,
-            build,
-            target,
-            text_vmaddr,
-            &program.source_path,
-            None,
-        );
-        dwarf::DwarfSections {
-            debug_info,
-            debug_abbrev: md.debug_abbrev.clone(),
-            debug_line,
-            debug_str: md.debug_str.clone(),
-            debug_frame: fresh.debug_frame,
-        }
-    } else if dwarf_section_present {
-        dwarf::emit(
-            program,
-            build,
-            target,
-            IMAGE_BASE + (text_rva + text_prologue_len) as u64,
-            &program.source_path,
-            None,
-        )
-    } else {
-        dwarf::DwarfSections {
-            debug_info: Vec::new(),
-            debug_abbrev: Vec::new(),
-            debug_line: Vec::new(),
-            debug_str: Vec::new(),
-            debug_frame: Vec::new(),
-        }
-    };
-    // Order matches the original `DWARF_LONG_NAMES` table below;
-    // changing the order would change which section names land in
-    // the COFF string table.
-    let mut dwarf_blobs: [(&'static str, Vec<u8>); 5] = [
-        (".debug_info", dwarf_sections_raw.debug_info.clone()),
-        (".debug_abbrev", dwarf_sections_raw.debug_abbrev.clone()),
-        (".debug_line", dwarf_sections_raw.debug_line.clone()),
-        (".debug_str", dwarf_sections_raw.debug_str.clone()),
-        (".debug_frame", dwarf_sections_raw.debug_frame.clone()),
-    ];
-    let dwarf_section_count = if dwarf_section_present {
-        dwarf_blobs.iter().filter(|(_, b)| !b.is_empty()).count()
-    } else {
-        0
-    };
-    // One description of which sections this image carries. The header
-    // size, the COFF header's count and the emitted table all read it, so
-    // adding a section cannot leave one of the three behind.
-    let plan = SectionPlan {
-        rdata: rdata_section_present,
-        data: data_section_present,
-        reloc: reloc_section_present,
-        edata: edata_section_present,
-        dwarf: dwarf_section_count,
-        named: named.len(),
-    };
-    let headers_size = headers_raw_size(&plan) as u32;
+    }
 
-    let text_file_off: u32 = headers_size;
-    let text_size: u32 = text_prologue_len + build.text.len() as u32;
-    let text_raw_size: u32 = round_up(text_size, FILE_ALIGNMENT);
+    /// RVA of the code body, past the entry stub.
+    fn text_body_rva(&self) -> u32 {
+        self.layout.text_rva + self.text_prologue_len
+    }
 
-    // 64-bit Windows requires a `.pdata` Exception Directory
-    // between `.text` and `.idata` on both x86_64 and AArch64. The
-    // builder dispatches on machine: AArch64 uses packed-unwind
-    // RUNTIME_FUNCTIONs; x86_64 uses begin/end/UNWIND_INFO triples
-    // with a co-located UNWIND_INFO blob in the same section.
-    //
-    // The Exception Directory entry in the data directories must
-    // span exactly the RUNTIME_FUNCTION array -- the loader divides
-    // `Size / sizeof(RUNTIME_FUNCTION)` to count entries, so any
-    // trailing bytes (e.g. an x86_64 UNWIND_INFO blob) live inside
-    // the section but outside the directory range. The builder
-    // returns both numbers so we wire the section header and the
-    // data directory entry up separately.
-    let pdata_rva: u32 = round_up(text_rva + text_size, SECTION_ALIGNMENT);
-    let pdata_file_off: u32 = text_file_off + text_raw_size;
-    let pdata = build_pdata(
-        machine,
-        text_rva,
-        text_size,
-        pdata_rva,
-        text_prologue_len,
-        &build.fn_unwind,
-    );
-    let pdata_bytes = pdata.bytes;
-    let pdata_size: u32 = pdata_bytes.len() as u32;
-    let pdata_directory_size: u32 = pdata.directory_size;
-    let pdata_raw_size: u32 = round_up(pdata_size, FILE_ALIGNMENT);
-
-    let idata_rva: u32 = round_up(pdata_rva + pdata_size, SECTION_ALIGNMENT);
-    let idata_file_off: u32 = pdata_file_off + pdata_raw_size;
-
-    let idata_layout = plan_idata(&dlls, &imports, idata_rva);
-    let idata_bytes = idata_layout.bytes;
-    let idata_size: u32 = idata_bytes.len() as u32;
-    let idata_raw_size: u32 = round_up(idata_size, FILE_ALIGNMENT);
-
-    // The `.data` section only appears when the c5 program has at
-    // least one byte of initialized data (string literals or
-    // globals) OR any `_Thread_local` storage. An empty section
-    // is a real-Windows-kernel reject reason: CreateProcess
-    // returns ERROR_BAD_EXE_FORMAT for any image that lists a
-    // zero-sized section. wine is more tolerant, which is how
-    // this slipped past the local test lanes for so long.
-    //
-    // TLS layout (when `build.tls_data` is non-empty) appends
-    // three blobs after `build.data` inside the same `.data`
-    // section: (1) a 4-byte `_tls_index` slot the loader fills
-    // in at module-init time, (2) the 40-byte
-    // IMAGE_TLS_DIRECTORY64, and (3) the initialised TLS image
-    // (the first `build.tls_init_size` bytes of
-    // `build.tls_data`). The zero-fill TLS bytes
-    // (`build.tls_data.len() - build.tls_init_size`) live only
-    // in `IMAGE_TLS_DIRECTORY64.SizeOfZeroFill`; the loader
-    // zero-fills them per-thread.
-    // `.rdata` sits between `.idata` and `.data`.
-    let rdata_rva: u32 = round_up(idata_rva + idata_size, SECTION_ALIGNMENT);
-    let rdata_file_off: u32 = idata_file_off + idata_raw_size;
-    let rdata_raw_size: u32 = if rdata_section_present {
-        round_up(rdata_size, FILE_ALIGNMENT)
-    } else {
-        0
-    };
-    // `.data` carries the writable remainder past the `.rdata` prefix.
-    let tls_layout = compute_tls_layout(build, data_head_len);
-    // File-backed content of `.data` (writable program data + the TLS
-    // blob); `data_vsize` adds the no-file zero-init `.bss` tail past it.
-    let data_size: u32 = data_head_len + tls_layout.tls_blob_size;
-    let data_vsize: u32 = data_size + bss_head;
-    let data_rva: u32 = if rdata_section_present {
-        round_up(rdata_rva + rdata_size, SECTION_ALIGNMENT)
-    } else {
-        rdata_rva
-    };
-    let data_file_off: u32 = rdata_file_off + rdata_raw_size;
-    let data_raw_size: u32 = if data_section_present {
-        round_up(data_size, FILE_ALIGNMENT)
-    } else {
-        0
-    };
-    // Each named section follows `.data` on its own RVA page; a
-    // zero-fill one carries no file bytes.
-    let named_out: Vec<NamedOut> = {
-        let mut rva = if data_section_present {
-            round_up(data_rva + data_vsize, SECTION_ALIGNMENT)
+    /// The data families and which sections the image carries, the
+    /// DWARF payloads (built first so the section-header count is known
+    /// before the layout; empty blobs are dropped, since the loader
+    /// rejects two `SizeOfRawData == 0` sections sharing an RVA), then
+    /// `.text`, `.pdata` and `.idata`.
+    ///
+    /// `.rdata` carries `build.data[..data_relro_len]`: the read-only
+    /// prefix followed by the relro region, whose slots the loader
+    /// writes via `.reloc` before the entry point runs (a base
+    /// relocation into a `MEM_READ` section is what link.exe emits for
+    /// the same content), the switch-table blob at an 8-aligned tail
+    /// and the producer fingerprint last, as mingw's `.rdata$zzz`. The
+    /// fingerprint keeps the section non-empty. `.data` is present when
+    /// the program has writable initialized, zero-fill or
+    /// `_Thread_local` storage: a real Windows kernel rejects an image
+    /// listing a zero-sized section. `.reloc` is present when the image
+    /// holds any absolute pointer the loader fixes up after the slide.
+    /// `.edata` is present whenever the image exports anything; a PE
+    /// executable may carry an export directory.
+    ///
+    /// `.pdata` is the Exception Directory, mandatory under the 64-bit
+    /// ABI; the directory entry spans exactly the `RUNTIME_FUNCTION`
+    /// array, an x86_64 `UNWIND_INFO` blob following it inside the
+    /// section but outside the directory range.
+    fn layout_code_sections(&mut self) -> Result<(), C5Error> {
+        let (program, build) = (self.program, self.build);
+        let l = &mut self.layout;
+        l.ro_len = build.data_ro_len.min(build.data.len()) as u32;
+        l.relro_total = build
+            .data_relro_len
+            .clamp(build.data_ro_len, build.data.len()) as u32;
+        l.relro_size = l.relro_total - l.ro_len;
+        l.file_data_len = build.data.len() as u32;
+        let (ro_len, relro_total, file_data_len) = (l.ro_len, l.relro_total, l.file_data_len);
+        let ro_head = self.head_of(NamedFamily::RoData, ro_len);
+        let relro_head_len = self.head_of(NamedFamily::RelRo, relro_total) - ro_len;
+        let data_head_len = self.head_of(NamedFamily::Data, file_data_len) - relro_total;
+        let bss_head = self.head_of(NamedFamily::Bss, build.bss_size as u32);
+        let l = &mut self.layout;
+        l.ro_head = ro_head;
+        l.relro_head_len = relro_head_len;
+        l.data_head_len = data_head_len;
+        l.bss_head = bss_head;
+        l.rdata_prefix_len = ro_head + relro_head_len;
+        l.jt_base_in_rdata = if build.rodata.bytes.is_empty() {
+            l.rdata_prefix_len
         } else {
-            data_rva
+            round_up(l.rdata_prefix_len, 8)
         };
-        let mut file_off = data_file_off + data_raw_size;
-        named
+        l.provenance = super::provenance_comment();
+        l.marker_base_in_rdata = round_up(l.jt_base_in_rdata + build.rodata.bytes.len() as u32, 8);
+        l.rdata_size = l.marker_base_in_rdata + l.provenance.len() as u32;
+        l.rdata_present = l.rdata_size > 0;
+        l.data_present = data_head_len > 0 || !build.tls_data.is_empty() || bss_head > 0;
+        l.reloc_present = !build.tls_data.is_empty()
+            || !build.data_relocs.is_empty()
+            || !build.code_relocs.is_empty()
+            || !build.label_relocs.is_empty()
+            || !build.text_abs_relocs.is_empty();
+        l.edata_present = !build.exports.is_empty() || !build.dynamic_exports.is_empty();
+        l.dwarf_present = build.debug_info;
+        l.text_rva = SECTION_ALIGNMENT;
+        // A multi-TU link hands over the linker-merged streams with the
+        // text-targeting placeholders unresolved, applied here against
+        // the committed text address; `.debug_frame` regenerates from
+        // the synth-Build.
+        let text_vmaddr = IMAGE_BASE + (l.text_rva + self.text_prologue_len) as u64;
+        let fresh = || {
+            dwarf::emit(
+                program,
+                build,
+                self.target,
+                text_vmaddr,
+                &program.source_path,
+                None,
+            )
+        };
+        let raw = if let Some(md) = &build.merged_dwarf {
+            let mut debug_info = md.debug_info.clone();
+            let mut debug_line = md.debug_line.clone();
+            for r in &md.debug_info_text_relocs {
+                super::apply_merged_dwarf_text_reloc(&mut debug_info, r, text_vmaddr)?;
+            }
+            for r in &md.debug_line_text_relocs {
+                super::apply_merged_dwarf_text_reloc(&mut debug_line, r, text_vmaddr)?;
+            }
+            dwarf::DwarfSections {
+                debug_info,
+                debug_abbrev: md.debug_abbrev.clone(),
+                debug_line,
+                debug_str: md.debug_str.clone(),
+                debug_frame: fresh().debug_frame,
+            }
+        } else if l.dwarf_present {
+            fresh()
+        } else {
+            dwarf::DwarfSections::default()
+        };
+        l.dwarf_blobs = alloc::vec![
+            (".debug_info", raw.debug_info),
+            (".debug_abbrev", raw.debug_abbrev),
+            (".debug_line", raw.debug_line),
+            (".debug_str", raw.debug_str),
+            (".debug_frame", raw.debug_frame),
+        ];
+        let dwarf_section_count = if l.dwarf_present {
+            l.dwarf_blobs.iter().filter(|(_, b)| !b.is_empty()).count()
+        } else {
+            0
+        };
+        // The header size, the COFF header's count and the emitted
+        // table all read the plan.
+        l.plan = SectionPlan {
+            rdata: l.rdata_present,
+            data: l.data_present,
+            reloc: l.reloc_present,
+            edata: l.edata_present,
+            dwarf: dwarf_section_count,
+            named: build.named_sections.len(),
+        };
+        l.headers_size = headers_raw_size(&l.plan) as u32;
+        l.text_file_off = l.headers_size;
+        l.text_size = self.text_prologue_len + build.text.len() as u32;
+        l.text_raw_size = round_up(l.text_size, FILE_ALIGNMENT);
+        l.pdata_rva = round_up(l.text_rva + l.text_size, SECTION_ALIGNMENT);
+        l.pdata_file_off = l.text_file_off + l.text_raw_size;
+        let pdata = build_pdata(
+            self.machine,
+            l.text_rva,
+            l.text_size,
+            l.pdata_rva,
+            self.text_prologue_len,
+            &build.fn_unwind,
+        );
+        l.pdata_directory_size = pdata.directory_size;
+        l.pdata_raw_size = round_up(pdata.bytes.len() as u32, FILE_ALIGNMENT);
+        l.idata_rva = round_up(l.pdata_rva + pdata.bytes.len() as u32, SECTION_ALIGNMENT);
+        l.pdata_bytes = pdata.bytes;
+        l.idata_file_off = l.pdata_file_off + l.pdata_raw_size;
+        l.idata = plan_idata(&self.dlls, &self.imports, l.idata_rva);
+        l.idata_raw_size = round_up(l.idata.bytes.len() as u32, FILE_ALIGNMENT);
+        Ok(())
+    }
+
+    /// `.rdata`, `.data` (the writable head, then under TLS the 4-byte
+    /// `_tls_index` slot, the 40-byte `IMAGE_TLS_DIRECTORY64` and the
+    /// TLS template) and the named sections, each on its own RVA page
+    /// past `.data` since a PE section RVA is SectionAlignment-aligned
+    /// and cannot sit inside its family's range. The data-targeting
+    /// DWARF placeholders of a merged link resolve once `.data`'s RVA
+    /// is settled.
+    fn layout_data_sections(&mut self) -> Result<(), C5Error> {
+        let build = self.build;
+        let l = &mut self.layout;
+        l.rdata_rva = round_up(l.idata_rva + l.idata.bytes.len() as u32, SECTION_ALIGNMENT);
+        l.rdata_file_off = l.idata_file_off + l.idata_raw_size;
+        l.rdata_raw_size = if l.rdata_present {
+            round_up(l.rdata_size, FILE_ALIGNMENT)
+        } else {
+            0
+        };
+        l.tls = compute_tls_layout(build, l.data_head_len);
+        l.data_size = l.data_head_len + l.tls.tls_blob_size;
+        l.data_vsize = l.data_size + l.bss_head;
+        l.data_rva = if l.rdata_present {
+            round_up(l.rdata_rva + l.rdata_size, SECTION_ALIGNMENT)
+        } else {
+            l.rdata_rva
+        };
+        l.data_file_off = l.rdata_file_off + l.rdata_raw_size;
+        l.data_raw_size = if l.data_present {
+            round_up(l.data_size, FILE_ALIGNMENT)
+        } else {
+            0
+        };
+        let mut rva = if l.data_present {
+            round_up(l.data_rva + l.data_vsize, SECTION_ALIGNMENT)
+        } else {
+            l.data_rva
+        };
+        let mut file_off = l.data_file_off + l.data_raw_size;
+        let (ro_len, relro_total) = (l.ro_len as u64, l.relro_total as u64);
+        let named_out: Vec<NamedOut<'a>> = build
+            .named_sections
             .iter()
             .map(|n| {
-                let family = named_family(n);
+                let family = if n.bss {
+                    NamedFamily::Bss
+                } else if n.offset < ro_len {
+                    NamedFamily::RoData
+                } else if n.offset < relro_total {
+                    NamedFamily::RelRo
+                } else {
+                    NamedFamily::Data
+                };
                 let size = n.size as u32;
                 let raw_size = if family == NamedFamily::Bss {
                     0
@@ -693,877 +766,738 @@ pub(super) fn write(
                 file_off += raw_size;
                 out
             })
-            .collect()
-    };
-    // A data offset inside a named section resolves against it; the
-    // rest name a byte of `.rdata` (the read-only prefix, then the
-    // relro region) or of `.data` (the writable head, then the TLS
-    // blob, then the zero-fill `.bss` tail).
-    // A group's extent is closed at both ends: the merge leaves slack
-    // behind each, so an offset at one group's end names that group
-    // rather than the next one's first byte. Padding a moved run left
-    // behind is addressed by nothing; it resolves to the family's end.
-    let named_base = |n: &NamedOut| -> u32 {
-        n.start
-            + if n.family == NamedFamily::Bss {
-                file_data_len
-            } else {
-                0
+            .collect();
+        l.named_file_end =
+            l.data_file_off + l.data_raw_size + named_out.iter().map(|n| n.raw_size).sum::<u32>();
+        l.named_rva_end = match named_out.last() {
+            Some(n) => round_up(n.rva + n.size.max(1), SECTION_ALIGNMENT),
+            None => l.data_rva + l.data_vsize,
+        };
+        l.named_out = named_out;
+        if let Some(md) = &build.merged_dwarf {
+            let mut info = core::mem::take(&mut self.layout.dwarf_blobs[0].1);
+            for r in &md.debug_info_data_relocs {
+                super::apply_merged_dwarf_data_reloc(&mut info, r, &|off| {
+                    IMAGE_BASE + self.data_off_to_rva(off as u32) as u64
+                })?;
             }
-    };
-    let data_off_to_rva = |off: u32| -> u32 {
-        if let Some(n) = named_out
+            self.layout.dwarf_blobs[0].1 = info;
+        }
+        Ok(())
+    }
+
+    /// A data offset inside a named section resolves against it; the
+    /// rest name a byte of `.rdata` (the read-only prefix, then the
+    /// relro region) or of `.data` (the writable head, then the TLS
+    /// blob, then the zero-fill `.bss` tail). A group's extent is
+    /// closed at both ends: the merge leaves slack behind each, so an
+    /// offset at one group's end names that group rather than the next
+    /// one's first byte. Padding a moved run left behind is addressed
+    /// by nothing; it resolves to the family's end.
+    fn data_off_to_rva(&self, off: u32) -> u32 {
+        let l = &self.layout;
+        let named_base = |n: &NamedOut| -> u32 {
+            n.start
+                + if n.family == NamedFamily::Bss {
+                    l.file_data_len
+                } else {
+                    0
+                }
+        };
+        if let Some(n) = l
+            .named_out
             .iter()
             .find(|n| off >= named_base(n) && off <= named_base(n) + n.size)
         {
             return n.rva + (off - named_base(n));
         }
-        if off < ro_head {
-            rdata_rva + off
-        } else if off < ro_len {
-            rdata_rva + ro_head
-        } else if off < ro_len + relro_head_len {
-            rdata_rva + ro_head + (off - ro_len)
-        } else if off < relro_total {
-            rdata_rva + rdata_prefix_len
-        } else if off < relro_total + data_head_len {
-            data_rva + (off - relro_total)
-        } else if off < file_data_len {
-            data_rva + data_head_len
-        } else if off < file_data_len + bss_head {
-            data_rva + data_size + (off - file_data_len)
+        if off < l.ro_head {
+            l.rdata_rva + off
+        } else if off < l.ro_len {
+            l.rdata_rva + l.ro_head
+        } else if off < l.ro_len + l.relro_head_len {
+            l.rdata_rva + l.ro_head + (off - l.ro_len)
+        } else if off < l.relro_total {
+            l.rdata_rva + l.rdata_prefix_len
+        } else if off < l.relro_total + l.data_head_len {
+            l.data_rva + (off - l.relro_total)
+        } else if off < l.file_data_len {
+            l.data_rva + l.data_head_len
+        } else if off < l.file_data_len + l.bss_head {
+            l.data_rva + l.data_size + (off - l.file_data_len)
         } else {
-            data_rva + data_size + bss_head
-        }
-    };
-    // Data-targeting DWARF placeholders resolve here rather than with
-    // the text ones above: `.data`'s RVA is only settled now, and
-    // patching in place leaves every section size unchanged.
-    if let Some(md) = &build.merged_dwarf {
-        let to_vmaddr = |off: u64| -> u64 { IMAGE_BASE + data_off_to_rva(off as u32) as u64 };
-        for r in &md.debug_info_data_relocs {
-            super::apply_merged_dwarf_data_reloc(&mut dwarf_blobs[0].1, r, &to_vmaddr)?;
+            l.data_rva + l.data_size + l.bss_head
         }
     }
-    // Where the sections past the data families start.
-    let named_file_end: u32 =
-        data_file_off + data_raw_size + named_out.iter().map(|n| n.raw_size).sum::<u32>();
-    let named_rva_end: u32 = match named_out.last() {
-        Some(n) => round_up(n.rva + n.size.max(1), SECTION_ALIGNMENT),
-        None => data_rva + data_vsize,
-    };
 
-    // Absolute fields inside the code section, resolved once so the
-    // `.reloc` block below and the field writes further down agree on
-    // every site's width and target.
-    let text_abs_fields: Vec<AbsTextField> = build
-        .text_abs_relocs
-        .iter()
-        .map(|r| {
-            let site_off = r.site_text_offset as usize + text_prologue_len as usize;
-            let (width, check) = abs_field(machine, r.rtype).ok_or_else(|| {
-                C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
-                    "PE: text absolute field {site_off:#x} carries relocation type {} with no \
-                     field width",
-                    r.rtype
-                )))
-            })?;
-            let target_rva = if r.target_in_text {
-                text_rva + text_prologue_len + r.target_offset as u32
-            } else {
-                data_off_to_rva(r.target_offset as u32)
-            };
-            Ok(AbsTextField {
-                site_off,
-                site_rva: text_rva + site_off as u32,
-                width,
-                check,
-                target_rva,
+    /// `.reloc` (one `IMAGE_BASE_RELOCATION` block per page holding an
+    /// absolute pointer: the TLS directory's three VAs, the template's
+    /// address constants, every pointer initializer, and the absolute
+    /// fields in `.text`) and `.edata`, the export directory with every
+    /// export resolved to its RVA. A `#pragma export` entry wins over a
+    /// dynamic export of the same name.
+    fn layout_reloc_and_export_sections(&mut self) -> Result<(), C5Error> {
+        let build = self.build;
+        let machine = self.machine;
+        let text_body_rva = self.text_body_rva();
+        let text_abs_fields: Vec<AbsTextField> = build
+            .text_abs_relocs
+            .iter()
+            .map(|r| {
+                let site_off = r.site_text_offset as usize + self.text_prologue_len as usize;
+                let (width, check) = abs_field(machine, r.rtype).ok_or_else(|| {
+                    Self::internal(format!(
+                        "PE: text absolute field {site_off:#x} carries relocation type {} with no \
+                         field width",
+                        r.rtype
+                    ))
+                })?;
+                let target_rva = if r.target_in_text {
+                    text_body_rva + r.target_offset as u32
+                } else {
+                    self.data_off_to_rva(r.target_offset as u32)
+                };
+                Ok(AbsTextField {
+                    site_off,
+                    site_rva: self.layout.text_rva + site_off as u32,
+                    width,
+                    check,
+                    target_rva,
+                })
             })
-        })
-        .collect::<Result<_, C5Error>>()?;
-
-    // `.reloc` carries one IMAGE_BASE_RELOCATION block with
-    // three IMAGE_REL_BASED_DIR64 entries -- one per absolute
-    // VA in the TLS directory. The block is fixed-size (16
-    // bytes: 8-byte header + 4 entries * 2 bytes, last entry a
-    // zero-pad ABSOLUTE so the block ends on a 4-byte boundary
-    // as required by `SizeOfBlock`). The bytes are computed
-    // here so we can size the file image; the actual on-disk
-    // emission happens after `.data`.
-    let reloc_rva: u32 = if reloc_section_present {
-        round_up(named_rva_end, SECTION_ALIGNMENT)
-    } else {
-        0
-    };
-    let reloc_file_off: u32 = if reloc_section_present {
-        named_file_end
-    } else {
-        0
-    };
-    let tls_sites = tls_reloc_sites(build, &data_off_to_rva, text_rva + text_prologue_len)?;
-    let reloc_bytes: Vec<u8> = if reloc_section_present {
-        build_reloc_section(
-            data_rva,
-            &data_off_to_rva,
-            &tls_layout,
-            !build.tls_data.is_empty(),
-            &build.data_relocs,
-            &build.code_relocs,
-            &build.label_relocs,
-            &text_abs_fields,
-            &tls_sites,
-        )
-    } else {
-        Vec::new()
-    };
-    let reloc_size: u32 = reloc_bytes.len() as u32;
-    let reloc_raw_size: u32 = if reloc_section_present {
-        round_up(reloc_size, FILE_ALIGNMENT)
-    } else {
-        0
-    };
-
-    // `.edata` holds the IMAGE_EXPORT_DIRECTORY plus the
-    // arrays it references -- function RVAs, name RVAs,
-    // ordinals, plus the image name and each export name.
-    // Present when the image exports anything (see
-    // `edata_section_present` above, computed early so the
-    // headers-size pass knew about it).
-    let edata_rva: u32 = if edata_section_present {
-        round_up(
-            if reloc_section_present {
-                reloc_rva + reloc_size
-            } else if data_section_present || !named_out.is_empty() {
-                named_rva_end
-            } else if rdata_section_present {
-                rdata_rva + rdata_size
-            } else {
-                idata_rva + idata_size
-            },
-            SECTION_ALIGNMENT,
-        )
-    } else {
-        0
-    };
-    let edata_file_off: u32 = if edata_section_present {
-        if reloc_section_present {
-            reloc_file_off + reloc_raw_size
-        } else if data_section_present || !named_out.is_empty() {
-            named_file_end
+            .collect::<Result<_, C5Error>>()?;
+        let tls_sites = tls_reloc_sites(build, &|off| self.data_off_to_rva(off), text_body_rva)?;
+        let l = &self.layout;
+        let reloc_present = l.reloc_present;
+        let (reloc_rva, reloc_file_off) = if reloc_present {
+            (
+                round_up(l.named_rva_end, SECTION_ALIGNMENT),
+                l.named_file_end,
+            )
         } else {
-            rdata_file_off + rdata_raw_size
-        }
-    } else {
-        0
-    };
-    let edata_bytes: Vec<u8> = if edata_section_present {
-        // Resolve every export to its runtime RVA. `#pragma export`
-        // entries carry a bc PC that maps through `pc_to_native`;
-        // dynamic exports already carry a byte offset within
-        // `build.text` / `build.data`. Names may overlap when
-        // `--export-all` re-covers a `#pragma export` symbol; the
-        // pragma entry wins (both resolve to the same address).
-        let mut entries: Vec<(String, u32)> = Vec::new();
-        for exp in &build.exports {
-            let native_off = build
-                .pc_to_native
-                .get(exp.ent_pc)
-                .copied()
-                .unwrap_or(usize::MAX);
-            if native_off == usize::MAX {
-                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                    &format!(
+            (0, 0)
+        };
+        let reloc_bytes: Vec<u8> = if reloc_present {
+            build_reloc_section(
+                l.data_rva,
+                &|off| self.data_off_to_rva(off),
+                &l.tls,
+                !build.tls_data.is_empty(),
+                &build.data_relocs,
+                &build.code_relocs,
+                &build.label_relocs,
+                &text_abs_fields,
+                &tls_sites,
+            )
+        } else {
+            Vec::new()
+        };
+        let reloc_size = reloc_bytes.len() as u32;
+        let reloc_raw_size = if reloc_present {
+            round_up(reloc_size, FILE_ALIGNMENT)
+        } else {
+            0
+        };
+        let edata_present = l.edata_present;
+        let edata_rva: u32 = if edata_present {
+            round_up(
+                if reloc_present {
+                    reloc_rva + reloc_size
+                } else if l.data_present || !l.named_out.is_empty() {
+                    l.named_rva_end
+                } else if l.rdata_present {
+                    l.rdata_rva + l.rdata_size
+                } else {
+                    l.idata_rva + l.idata.bytes.len() as u32
+                },
+                SECTION_ALIGNMENT,
+            )
+        } else {
+            0
+        };
+        let edata_file_off: u32 = if edata_present {
+            if reloc_present {
+                reloc_file_off + reloc_raw_size
+            } else if l.data_present || !l.named_out.is_empty() {
+                l.named_file_end
+            } else {
+                l.rdata_file_off + l.rdata_raw_size
+            }
+        } else {
+            0
+        };
+        let edata_bytes: Vec<u8> = if edata_present {
+            let mut entries: Vec<(String, u32)> = Vec::new();
+            for exp in &build.exports {
+                let native_off = build
+                    .pc_to_native
+                    .get(exp.ent_pc)
+                    .copied()
+                    .unwrap_or(usize::MAX);
+                if native_off == usize::MAX {
+                    return Err(Self::internal(format!(
                         "PE: exported function `{}` (bc PC {}) doesn't \
                      align with any native instruction",
                         exp.name, exp.ent_pc
-                    ),
+                    )));
+                }
+                entries.push((exp.name.clone(), text_body_rva + native_off as u32));
+            }
+            for d in &build.dynamic_exports {
+                if entries.iter().any(|(n, _)| n == &d.name) {
+                    continue;
+                }
+                let rva = match d.section {
+                    super::DynamicExportSection::Text => text_body_rva + d.offset as u32,
+                    super::DynamicExportSection::Data => {
+                        if !l.data_present {
+                            return Err(Self::internal(format!(
+                                "PE: data export `{}` without a .data section",
+                                d.name
+                            )));
+                        }
+                        self.data_off_to_rva(d.offset as u32)
+                    }
+                };
+                entries.push((d.name.clone(), rva));
+            }
+            build_export_directory(edata_rva, entries, build.shared_lib_name.as_deref())?
+        } else {
+            Vec::new()
+        };
+        let edata_raw_size = if edata_present {
+            round_up(edata_bytes.len() as u32, FILE_ALIGNMENT)
+        } else {
+            0
+        };
+        let l = &mut self.layout;
+        l.text_abs_fields = text_abs_fields;
+        l.tls_sites = tls_sites;
+        l.reloc_rva = reloc_rva;
+        l.reloc_file_off = reloc_file_off;
+        l.reloc_bytes = reloc_bytes;
+        l.reloc_raw_size = reloc_raw_size;
+        l.edata_rva = edata_rva;
+        l.edata_file_off = edata_file_off;
+        l.edata_bytes = edata_bytes;
+        l.edata_raw_size = edata_raw_size;
+        Ok(())
+    }
+
+    /// The DWARF sections past the last loaded one, each named through
+    /// the COFF string table (`/<offset>`, the mingw-w64 convention for
+    /// names over 8 bytes, with `number_of_symbols = 0` unless the
+    /// trampoline symbols below are present) and `MEM_DISCARDABLE`;
+    /// then the COFF symbol table naming each PLT trampoline, which a
+    /// debugger's `b malloc` resolves to, and its string table at the
+    /// file tail, each with the sizes the headers read.
+    fn layout_dwarf_and_coff(&mut self) {
+        let build = self.build;
+        let text_body_rva = self.text_body_rva();
+        let l = &mut self.layout;
+        l.pre_dwarf_end_file_off = if l.edata_present {
+            l.edata_file_off + l.edata_raw_size
+        } else if l.reloc_present {
+            l.reloc_file_off + l.reloc_raw_size
+        } else if l.data_present || !l.named_out.is_empty() {
+            l.named_file_end
+        } else {
+            l.rdata_file_off + l.rdata_raw_size
+        };
+        l.pre_dwarf_end_rva = if l.edata_present {
+            l.edata_rva + l.edata_bytes.len() as u32
+        } else if l.reloc_present {
+            l.reloc_rva + l.reloc_bytes.len() as u32
+        } else if l.data_present || !l.named_out.is_empty() {
+            l.named_rva_end
+        } else if l.rdata_present {
+            l.rdata_rva + l.rdata_size
+        } else {
+            l.idata_rva + l.idata.bytes.len() as u32
+        };
+        let emit_plt_coff_symbols = !build.plt_trampoline_offsets.is_empty();
+        let need_coff_strtab = l.dwarf_present || emit_plt_coff_symbols;
+        let mut coff_strtab: Vec<u8> = Vec::new();
+        if need_coff_strtab {
+            // The 4-byte size header covers the whole table.
+            coff_strtab.extend_from_slice(&0u32.to_le_bytes());
+        }
+        let mut dwarf_sections: Vec<DwarfPeSlot> = Vec::new();
+        if l.dwarf_present {
+            let mut next_rva = round_up(l.pre_dwarf_end_rva, SECTION_ALIGNMENT);
+            let mut next_file_off = l.pre_dwarf_end_file_off;
+            for (long_name, bytes) in l.dwarf_blobs.iter() {
+                if bytes.is_empty() {
+                    continue;
+                }
+                let strtab_offset = coff_strtab.len() as u32;
+                coff_strtab.extend_from_slice(long_name.as_bytes());
+                coff_strtab.push(0);
+                let mut name_field = [0u8; 8];
+                let formatted = format!("/{strtab_offset}");
+                let n = formatted.len().min(8);
+                name_field[..n].copy_from_slice(&formatted.as_bytes()[..n]);
+                let raw_size = round_up(bytes.len() as u32, FILE_ALIGNMENT);
+                dwarf_sections.push(DwarfPeSlot {
+                    name: name_field,
+                    rva: next_rva,
+                    file_off: next_file_off,
+                    bytes: bytes.clone(),
+                });
+                next_rva = round_up(next_rva + raw_size, SECTION_ALIGNMENT);
+                next_file_off += raw_size;
+            }
+        }
+        l.dwarf_end_file_off = dwarf_sections
+            .last()
+            .map(|s| s.file_off + round_up(s.bytes.len() as u32, FILE_ALIGNMENT))
+            .unwrap_or(l.pre_dwarf_end_file_off);
+        l.dwarf_end_rva = dwarf_sections
+            .last()
+            .map(|s| round_up(s.rva + s.bytes.len() as u32, SECTION_ALIGNMENT))
+            .unwrap_or(l.pre_dwarf_end_rva);
+        l.dwarf_sections = dwarf_sections;
+        // One `IMAGE_SYMBOL` per trampoline, `IMAGE_SYM_CLASS_EXTERNAL`
+        // so name lookups keep it (some tool versions filter STATIC out
+        // of `b malloc`). A name over 8 bytes lands in the string table.
+        let mut coff_symbols: Vec<u8> = Vec::new();
+        if emit_plt_coff_symbols {
+            for (imp, off) in build
+                .imports
+                .imports
+                .iter()
+                .zip(build.plt_trampoline_offsets.iter())
+            {
+                // A data import has no trampoline.
+                let Some(tramp_offset) = *off else {
+                    continue;
+                };
+                let trampoline_rva = text_body_rva + tramp_offset as u32;
+                let mut name_field = [0u8; 8];
+                let name_bytes = imp.local_name.as_bytes();
+                if name_bytes.len() <= 8 {
+                    name_field[..name_bytes.len()].copy_from_slice(name_bytes);
+                } else {
+                    let strtab_offset = coff_strtab.len() as u32;
+                    coff_strtab.extend_from_slice(name_bytes);
+                    coff_strtab.push(0);
+                    name_field[0..4].copy_from_slice(&0u32.to_le_bytes());
+                    name_field[4..8].copy_from_slice(&strtab_offset.to_le_bytes());
+                }
+                coff_symbols.extend_from_slice(&name_field);
+                coff_symbols.extend_from_slice(&trampoline_rva.to_le_bytes());
+                coff_symbols.extend_from_slice(&1u16.to_le_bytes()); // .text = section 1
+                coff_symbols.extend_from_slice(&IMAGE_SYM_TYPE_FUNCTION.to_le_bytes());
+                coff_symbols.push(IMAGE_SYM_CLASS_EXTERNAL);
+                coff_symbols.push(0); // no aux entries
+            }
+        }
+        if need_coff_strtab {
+            let strtab_size = coff_strtab.len() as u32;
+            coff_strtab[..4].copy_from_slice(&strtab_size.to_le_bytes());
+        }
+        l.coff_symtab_file_off = if need_coff_strtab {
+            l.dwarf_end_file_off
+        } else {
+            0
+        };
+        l.coff_strtab_file_off = if need_coff_strtab {
+            l.coff_symtab_file_off + coff_symbols.len() as u32
+        } else {
+            0
+        };
+        l.total_file_size =
+            (l.dwarf_end_file_off + coff_symbols.len() as u32 + coff_strtab.len() as u32) as usize;
+        l.image_size = if l.dwarf_present {
+            l.dwarf_end_rva
+        } else if l.edata_present {
+            round_up(l.edata_rva + l.edata_bytes.len() as u32, SECTION_ALIGNMENT)
+        } else if l.reloc_present {
+            round_up(l.reloc_rva + l.reloc_bytes.len() as u32, SECTION_ALIGNMENT)
+        } else if l.data_present || !l.named_out.is_empty() {
+            round_up(l.named_rva_end, SECTION_ALIGNMENT)
+        } else if l.rdata_present {
+            round_up(l.rdata_rva + l.rdata_size, SECTION_ALIGNMENT)
+        } else {
+            round_up(l.idata_rva + l.idata.bytes.len() as u32, SECTION_ALIGNMENT)
+        };
+        l.coff_strtab = coff_strtab;
+        l.coff_symbols = coff_symbols;
+    }
+
+    /// `.text`: the entry stub, an `int3` pad, `build.text`, with every
+    /// fixup applied. The stub's direct calls reach `main` and the
+    /// `__c5_*` runtime helpers; program-side sites are offset by the
+    /// stub prologue. A GOT fixup lands on the IAT slot (a data import
+    /// reads the slot's value, a distinct x86_64 instruction form);
+    /// data and function-pointer references are address loads;
+    /// assembler pc-relative words receive `S + A - P` as RVAs, absolute
+    /// fields `S + A` as a preferred VA checked against the field width;
+    /// switch-table bases reach the blob in `.rdata`, whose entries are
+    /// patched as `target - table_base`; each `_tls_index` lookup
+    /// reaches the slot at the tail of `.data`.
+    fn build_text(&mut self) -> Result<(), C5Error> {
+        let build = self.build;
+        let machine = self.machine;
+        let l = &self.layout;
+        let text_rva = l.text_rva;
+        let prologue = self.text_prologue_len;
+        let mut text: Vec<u8> = Vec::with_capacity(l.text_size as usize);
+        text.extend_from_slice(&self.stub.bytes);
+        text.resize(prologue as usize, 0xCC);
+        text.extend_from_slice(&build.text);
+        // The absolute-slot form is relocatable-only.
+        if !build.rodata.abs64.is_empty() {
+            return Err(Self::internal(String::from(
+                "PE: absolute table slots reached a final-image build",
+            )));
+        }
+        if let Some(call_off) = self.stub.direct_call_main_offset {
+            patch_direct_call(
+                machine,
+                &mut text,
+                call_off,
+                prologue + build.entry_offset as u32,
+            )?;
+        }
+        for &(call_off, name) in &self.stub.direct_call_runtime {
+            let target = runtime_symbol_offset(build, name)?;
+            patch_direct_call(machine, &mut text, call_off, prologue + target)?;
+        }
+        for f in &build.got_fixups {
+            let instr_off = (f.instr_offset as u32) + prologue;
+            let target_rva = l.idata.iat_rva_for_import[f.import_index];
+            if f.is_data_load && machine == Machine::X86_64 {
+                crate::c5::codegen::require_whole_addr(f.part, "PE: IAT data load")?;
+                patch_iat_data_load(machine, &mut text, instr_off, text_rva, target_rva)?;
+            } else {
+                patch_iat_lookup(machine, &mut text, instr_off, text_rva, target_rva, f.part)?;
+            }
+        }
+        if !build.got_base_fixups.is_empty() {
+            return Err(C5Error::Compile(crate::c5::error::fmt_link_err(
+                "`_GLOBAL_OFFSET_TABLE_` names an ELF construct; a PE image has no GOT",
+            )));
+        }
+        for f in &build.data_fixups {
+            let instr_off = (f.instr_offset as u32) + prologue;
+            let target_rva = self.data_off_to_rva(f.data_offset as u32);
+            patch_addr_load(machine, &mut text, instr_off, text_rva, target_rva, f.part)?;
+        }
+        for f in &build.func_fixups {
+            let instr_off = (f.instr_offset as u32) + prologue;
+            let target_rva = text_rva + prologue + f.target_native_offset as u32;
+            patch_addr_load(machine, &mut text, instr_off, text_rva, target_rva, f.part)?;
+        }
+        for r in &build.text_pcrel_relocs {
+            let site = r.site_text_offset as usize + prologue as usize;
+            let width = r.width as usize;
+            if site + width > text.len() {
+                return Err(Self::internal(format!(
+                    "PE: text pcrel field {site:#x} past end of .text ({})",
+                    text.len()
                 )));
             }
-            entries.push((
-                exp.name.clone(),
-                text_rva + text_prologue_len + native_off as u32,
-            ));
-        }
-        for d in &build.dynamic_exports {
-            if entries.iter().any(|(n, _)| n == &d.name) {
-                continue;
-            }
-            let rva = match d.section {
-                super::DynamicExportSection::Text => text_rva + text_prologue_len + d.offset as u32,
-                super::DynamicExportSection::Data => {
-                    if !data_section_present {
-                        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                            &format!("PE: data export `{}` without a .data section", d.name),
-                        )));
-                    }
-                    data_off_to_rva(d.offset as u32)
-                }
-            };
-            entries.push((d.name.clone(), rva));
-        }
-        build_export_directory(edata_rva, entries, build.shared_lib_name.as_deref())?
-    } else {
-        Vec::new()
-    };
-    let edata_size: u32 = edata_bytes.len() as u32;
-    let edata_raw_size: u32 = if edata_section_present {
-        round_up(edata_size, FILE_ALIGNMENT)
-    } else {
-        0
-    };
-
-    // Compute the end of the last loaded / pre-DWARF section
-    // -- where DWARF sections start. The chain falls through
-    // from `.edata` -> `.reloc` -> `.data` -> `.idata` to the
-    // first one present.
-    let pre_dwarf_end_file_off: u32 = if edata_section_present {
-        edata_file_off + edata_raw_size
-    } else if reloc_section_present {
-        reloc_file_off + reloc_raw_size
-    } else if data_section_present || !named_out.is_empty() {
-        named_file_end
-    } else {
-        rdata_file_off + rdata_raw_size
-    };
-    let pre_dwarf_end_rva: u32 = if edata_section_present {
-        edata_rva + edata_size
-    } else if reloc_section_present {
-        reloc_rva + reloc_size
-    } else if data_section_present || !named_out.is_empty() {
-        named_rva_end
-    } else if rdata_section_present {
-        rdata_rva + rdata_size
-    } else {
-        idata_rva + idata_size
-    };
-
-    // `dwarf_sections_raw` + `dwarf_blobs` were built earlier so
-    // the section-table count is known before the layout pass; the
-    // mingw-w64 PE convention drops the leading dot from each
-    // name to fit PE's 8-char `Name` field, and the COFF long-name
-    // strtab below carries the full names that lldb / gdb /
-    // `llvm-dwarfdump` walk by content. Each section is
-    // `IMAGE_SCN_MEM_DISCARDABLE`, so the loader skips them at
-    // runtime even though they occupy RVA range.
-    /// One entry of the PE DWARF layout: section name (`/<offset>`
-    /// indirection into the COFF string table for the full
-    /// `.debug_*` name), the section's RVA + file offset, and the
-    /// raw byte payload.
-    struct DwarfPeSlot {
-        name: [u8; 8],
-        rva: u32,
-        file_off: u32,
-        bytes: Vec<u8>,
-    }
-    // PE/COFF caps section names at 8 bytes, so full DWARF
-    // section names (".debug_info" = 11 chars, ".debug_abbrev"
-    // = 13, etc.) don't fit literally. The standard PE
-    // workaround is `/N` indirection: the section's name field
-    // holds an ASCII slash followed by the byte offset (in
-    // decimal) of the real name in the COFF string table. The
-    // COFF string table begins at `CoffHeader.pointer_to_symbol_table`
-    // (with `number_of_symbols = 0` so consumers don't try to
-    // parse symbols ahead of the strings) and is laid out as a
-    // 4-byte size header followed by NUL-terminated names.
-    //
-    // mingw-w64's `x86_64-w64-mingw32-gcc -g` produces the same
-    // shape, which is why `llvm-dwarfdump` and `lldb` accept it.
-    // The long names live in `dwarf_blobs` above; the per-section
-    // loop below copies each one into the strtab when it emits
-    // the corresponding section header.
-    let mut coff_strtab: Vec<u8> = Vec::new();
-    let mut dwarf_section_names: Vec<[u8; 8]> = Vec::with_capacity(5);
-    // Build a per-trampoline COFF symbol table so a
-    // debugger's `b malloc` resolves to the local PLT trampoline
-    // rather than getting lost in msvcrt's macro expansions. The
-    // symbol table sits at `pointer_to_symbol_table` (= start of
-    // the post-DWARF area); the COFF string table follows
-    // immediately after, exactly the layout consumers expect
-    // (`strtab_off = pointer_to_symbol_table + n_symbols * 18`).
-    //
-    // We emit when there are trampolines, even on `--no-debug`
-    // builds, so the COFF strtab may now be present without DWARF.
-    // The 4-byte size prefix is reserved up-front and patched at
-    // the end.
-    let emit_plt_coff_symbols = !build.plt_trampoline_offsets.is_empty();
-    let need_coff_strtab = dwarf_section_present || emit_plt_coff_symbols;
-    if need_coff_strtab {
-        // 4-byte size header, patched at the end.
-        coff_strtab.extend_from_slice(&0u32.to_le_bytes());
-    }
-    // Per-blob COFF long-name entries are emitted only for the
-    // non-empty payloads so each section header maps to a real
-    // section. Empty blobs were dropped from the count above; this
-    // loop keeps the names aligned with the surviving entries.
-    let mut dwarf_pe_sections: Vec<DwarfPeSlot> = Vec::new();
-    if dwarf_section_present {
-        let mut next_rva = round_up(pre_dwarf_end_rva, SECTION_ALIGNMENT);
-        let mut next_file_off = pre_dwarf_end_file_off;
-        for (long_name, bytes) in dwarf_blobs.iter() {
-            if bytes.is_empty() {
-                continue;
-            }
-            let strtab_offset = coff_strtab.len() as u32;
-            coff_strtab.extend_from_slice(long_name.as_bytes());
-            coff_strtab.push(0);
-            let mut name_field = [0u8; 8];
-            let formatted = format!("/{strtab_offset}");
-            let n = formatted.len().min(8);
-            name_field[..n].copy_from_slice(&formatted.as_bytes()[..n]);
-            dwarf_section_names.push(name_field);
-            let raw_size = round_up(bytes.len() as u32, FILE_ALIGNMENT);
-            dwarf_pe_sections.push(DwarfPeSlot {
-                name: name_field,
-                rva: next_rva,
-                file_off: next_file_off,
-                bytes: bytes.clone(),
-            });
-            next_rva = round_up(next_rva + raw_size, SECTION_ALIGNMENT);
-            next_file_off += raw_size;
-        }
-    }
-    let dwarf_end_file_off = dwarf_pe_sections
-        .last()
-        .map(|s| s.file_off + round_up(s.bytes.len() as u32, FILE_ALIGNMENT))
-        .unwrap_or(pre_dwarf_end_file_off);
-    let dwarf_end_rva = dwarf_pe_sections
-        .last()
-        .map(|s| round_up(s.rva + s.bytes.len() as u32, SECTION_ALIGNMENT))
-        .unwrap_or(pre_dwarf_end_rva);
-
-    // Build the COFF symbol-table payload now that the
-    // long-name strtab offsets are stable. Each trampoline gets
-    // one IMAGE_SYMBOL whose Value is the trampoline's RVA and
-    // whose SectionNumber is 1 (.text). Names <= 8 bytes inline
-    // into the ShortName field; longer ones land in the strtab
-    // and the symbol references them by 4-byte zero + offset.
-    //
-    // Using `IMAGE_SYM_CLASS_EXTERNAL` keeps the names visible to
-    // gdb / lldb / windbg name-lookup; STATIC gets filtered out
-    // of `b malloc` resolution by some tool versions.
-    let mut coff_symbols: Vec<u8> = Vec::new();
-    if emit_plt_coff_symbols {
-        for (imp, off) in build
-            .imports
-            .imports
-            .iter()
-            .zip(build.plt_trampoline_offsets.iter())
-        {
-            // A data import (bound through the IAT) has no trampoline;
-            // a text symbol for it would mislabel the code at the
-            // fabricated RVA.
-            let Some(tramp_offset) = *off else {
-                continue;
-            };
-            let trampoline_rva = text_rva + text_prologue_len + tramp_offset as u32;
-            let mut name_field = [0u8; 8];
-            let name_bytes = imp.local_name.as_bytes();
-            if name_bytes.len() <= 8 {
-                name_field[..name_bytes.len()].copy_from_slice(name_bytes);
+            let site_rva = text_rva as i64 + site as i64;
+            let value = self.data_off_to_rva(r.target_data_offset as u32) as i64 - site_rva;
+            if width == 8 {
+                text[site..site + 8].copy_from_slice(&value.to_le_bytes());
             } else {
-                // Long-name form: 4-byte zero + 4-byte strtab offset.
-                let strtab_offset = coff_strtab.len() as u32;
-                coff_strtab.extend_from_slice(name_bytes);
-                coff_strtab.push(0);
-                name_field[0..4].copy_from_slice(&0u32.to_le_bytes());
-                name_field[4..8].copy_from_slice(&strtab_offset.to_le_bytes());
+                let Ok(v) = i32::try_from(value) else {
+                    return Err(Self::internal(format!(
+                        "PE: text pcrel field {site:#x}: displacement {value:#x} exceeds 32 bits"
+                    )));
+                };
+                text[site..site + 4].copy_from_slice(&v.to_le_bytes());
             }
-            // 18 bytes: name(8) + value(4) + sectnum(2) + type(2)
-            //         + class(1) + naux(1).
-            coff_symbols.extend_from_slice(&name_field);
-            coff_symbols.extend_from_slice(&trampoline_rva.to_le_bytes());
-            coff_symbols.extend_from_slice(&1u16.to_le_bytes()); // .text = section 1
-            coff_symbols.extend_from_slice(&IMAGE_SYM_TYPE_FUNCTION.to_le_bytes());
-            coff_symbols.push(IMAGE_SYM_CLASS_EXTERNAL);
-            coff_symbols.push(0); // no aux entries
         }
-    }
-    let n_coff_symbols = (coff_symbols.len() as u32) / IMAGE_SYMBOL_SIZE;
-
-    // Patch the COFF strtab's leading 4-byte size (it's the total
-    // strtab length including the size header itself).
-    if need_coff_strtab {
-        let strtab_size = coff_strtab.len() as u32;
-        coff_strtab[..4].copy_from_slice(&strtab_size.to_le_bytes());
-    }
-
-    // The COFF symbol table + string table sit at the very end
-    // of the file (after the DWARF section payloads). Consumers
-    // read `pointer_to_symbol_table` to find symbols, then
-    // `pointer_to_symbol_table + n_symbols * 18` to find the
-    // string table.
-    let coff_symtab_file_off = if need_coff_strtab {
-        dwarf_end_file_off
-    } else {
-        0
-    };
-    let coff_strtab_file_off = if need_coff_strtab {
-        coff_symtab_file_off + coff_symbols.len() as u32
-    } else {
-        0
-    };
-    let total_file_size =
-        (dwarf_end_file_off + coff_symbols.len() as u32 + coff_strtab.len() as u32) as usize;
-    let image_size = if dwarf_section_present {
-        dwarf_end_rva
-    } else if edata_section_present {
-        round_up(edata_rva + edata_size, SECTION_ALIGNMENT)
-    } else if reloc_section_present {
-        round_up(reloc_rva + reloc_size, SECTION_ALIGNMENT)
-    } else if data_section_present || !named_out.is_empty() {
-        round_up(named_rva_end, SECTION_ALIGNMENT)
-    } else if rdata_section_present {
-        round_up(rdata_rva + rdata_size, SECTION_ALIGNMENT)
-    } else {
-        round_up(idata_rva + idata_size, SECTION_ALIGNMENT)
-    };
-
-    // 5) Stitch the .text bytes together and patch every fixup
-    //    that references something outside the section.
-    let mut text_bytes: Vec<u8> = Vec::with_capacity(text_size as usize);
-    text_bytes.extend_from_slice(&stub.bytes);
-    // Alignment pad between the stub and `build.text`; never executed
-    // (the stub exits through its own tail).
-    text_bytes.resize(text_prologue_len as usize, 0xCC);
-    text_bytes.extend_from_slice(&build.text);
-    // The absolute-slot form is relocatable-only; an image build
-    // carries difference slots exclusively.
-    if !build.rodata.abs64.is_empty() {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-            "PE: absolute table slots reached a final-image build",
-        )));
-    }
-
-    // Stub-internal fixup: the direct call to main. Only
-    // present in executable output; the DLL stub
-    // (`mov eax, 1; ret`) has no call-main step.
-    if let Some(call_off) = stub.direct_call_main_offset {
-        patch_direct_call(
-            machine,
-            &mut text_bytes,
-            call_off,
-            text_prologue_len + build.entry_offset as u32,
-        )?;
-    }
-
-    // Stub-emitted direct calls to embedded-runtime helpers. Empty
-    // for the DllMain stub; two for console (`__c5_getmainargs`,
-    // `__c5_exit`); three for GUI (`__c5_getmodulehandle`,
-    // `__c5_getcommandline`, `__c5_exit`). Each resolves to a
-    // native offset in `build.text`, shifted past the stub prologue.
-    for &(call_off, name) in &stub.direct_call_runtime {
-        let target = runtime_symbol_offset(build, name)?;
-        patch_direct_call(
-            machine,
-            &mut text_bytes,
-            call_off,
-            text_prologue_len + target,
-        )?;
-    }
-
-    // Program-side fixups land inside build.text, which is offset
-    // by text_prologue_len in the combined .text. All libc calls
-    // -- including `mprotect` -- now go through the regular IAT
-    // slot;
-    // the per-target header's `#pragma binding` decides whether
-    // mprotect resolves at all (POSIX targets bind it, Windows
-    // doesn't, sources gate the call on `__BADC_WINDOWS__`).
-    for f in &build.got_fixups {
-        let instr_off = (f.instr_offset as u32) + text_prologue_len;
-        let target_rva = idata_layout.iat_rva_for_import[f.import_index];
-        // A data import has no call thunk: its reference reads the
-        // IAT slot's value. On x86_64 that is a distinct instruction
-        // form (mov vs the call/lea the lookup helper emits), so it
-        // routes to `patch_iat_data_load`. aarch64's adrp + ldr in
-        // `patch_aarch64_adrp_ldr` already loads the slot for both
-        // call thunks and data references.
-        if f.is_data_load && machine == Machine::X86_64 {
-            crate::c5::codegen::require_whole_addr(f.part, "PE: IAT data load")?;
-            patch_iat_data_load(machine, &mut text_bytes, instr_off, text_rva, target_rva)?;
-        } else {
-            patch_iat_lookup(
+        for f in &l.text_abs_fields {
+            let width = f.width as usize;
+            if f.site_off + width > text.len() {
+                return Err(Self::internal(format!(
+                    "PE: text absolute field {:#x} past end of .text ({})",
+                    f.site_off,
+                    text.len()
+                )));
+            }
+            let value = IMAGE_BASE as i64 + f.target_rva as i64;
+            if !f.check.admits(value, f.width) {
+                return Err(C5Error::Compile(crate::c5::error::fmt_link_err(&format!(
+                    "relocation truncated to fit: .text+{:#x} needs the absolute address {value:#x}, \
+                     which does not fit a {width}-byte field",
+                    f.site_off,
+                ))));
+            }
+            text[f.site_off..f.site_off + width].copy_from_slice(&value.to_le_bytes()[..width]);
+        }
+        let jt_rva = l.rdata_rva + l.jt_base_in_rdata;
+        for f in &build.rodata.addr_fixups {
+            let instr_off = (f.code_offset as u32) + prologue;
+            let target_rva = jt_rva + f.rodata_offset as u32;
+            patch_addr_load(
                 machine,
-                &mut text_bytes,
+                &mut text,
                 instr_off,
                 text_rva,
                 target_rva,
-                f.part,
+                AddrPart::Whole,
             )?;
         }
-    }
-    if !build.got_base_fixups.is_empty() {
-        return Err(C5Error::Compile(crate::c5::error::fmt_link_err(
-            "`_GLOBAL_OFFSET_TABLE_` names an ELF construct; a PE image has no GOT",
-        )));
-    }
-    for f in &build.data_fixups {
-        let instr_off = (f.instr_offset as u32) + text_prologue_len;
-        patch_addr_load(
-            machine,
-            &mut text_bytes,
-            instr_off,
-            text_rva,
-            data_off_to_rva(f.data_offset as u32),
-            f.part,
-        )?;
-    }
-    for f in &build.func_fixups {
-        let instr_off = (f.instr_offset as u32) + text_prologue_len;
-        // Function-pointer literals point at offsets within
-        // build.text -- shift by text_prologue_len to land in the
-        // combined .text past the entry stub.
-        let target_rva = text_rva + text_prologue_len + f.target_native_offset as u32;
-        patch_addr_load(
-            machine,
-            &mut text_bytes,
-            instr_off,
-            text_rva,
-            target_rva,
-            f.part,
-        )?;
-    }
-
-    // Assembler pc-relative data words in executable sections
-    // (`.long x - .` / `.quad x - .`): the field receives `S + A - P`
-    // as RVAs (the image base cancels), so ASLR needs no `.reloc`.
-    for r in &build.text_pcrel_relocs {
-        let site = r.site_text_offset as usize + text_prologue_len as usize;
-        let width = r.width as usize;
-        if site + width > text_bytes.len() {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!(
-                    "PE: text pcrel field {site:#x} past end of .text ({})",
-                    text_bytes.len()
-                ),
-            )));
-        }
-        let site_rva = text_rva as i64 + site as i64;
-        let value = data_off_to_rva(r.target_data_offset as u32) as i64 - site_rva;
-        if width == 8 {
-            text_bytes[site..site + 8].copy_from_slice(&value.to_le_bytes());
-        } else {
+        let mut jt_bytes = build.rodata.bytes.clone();
+        for r in &build.rodata.rel32 {
+            let value = (text_rva as i64 + prologue as i64 + r.text_offset as i64)
+                - (jt_rva as i64 + r.base_offset as i64);
             let Ok(v) = i32::try_from(value) else {
-                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                    &format!(
-                        "PE: text pcrel field {site:#x}: displacement {value:#x} exceeds 32 bits"
-                    ),
-                )));
-            };
-            text_bytes[site..site + 4].copy_from_slice(&v.to_le_bytes());
-        }
-    }
-
-    // Absolute fields in executable sections (`movq $sym, %rax` from
-    // an object assembler, a `.quad sym` word): the field holds
-    // `S + A` as a preferred VA and the `.reloc` entry recorded above
-    // carries it across a slide. A field too narrow for the value is
-    // reported, not truncated.
-    for f in &text_abs_fields {
-        let width = f.width as usize;
-        if f.site_off + width > text_bytes.len() {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!(
-                    "PE: text absolute field {:#x} past end of .text ({})",
-                    f.site_off,
-                    text_bytes.len()
-                ),
-            )));
-        }
-        let value = IMAGE_BASE as i64 + f.target_rva as i64;
-        if !f.check.admits(value, f.width) {
-            return Err(C5Error::Compile(crate::c5::error::fmt_link_err(&format!(
-                "relocation truncated to fit: .text+{:#x} needs the absolute address {value:#x}, \
-                 which does not fit a {width}-byte field",
-                f.site_off,
-            ))));
-        }
-        text_bytes[f.site_off..f.site_off + width].copy_from_slice(&value.to_le_bytes()[..width]);
-    }
-
-    // Read-only blob references (switch dispatch): the site
-    // materializes the table base inside `.rdata`.
-    let jt_rva = rdata_rva + jt_base_in_rdata;
-    for f in &build.rodata.addr_fixups {
-        let instr_off = (f.code_offset as u32) + text_prologue_len;
-        let target_rva = jt_rva + f.rodata_offset as u32;
-        patch_addr_load(
-            machine,
-            &mut text_bytes,
-            instr_off,
-            text_rva,
-            target_rva,
-            AddrPart::Whole,
-        )?;
-    }
-    // Table entries: `target - table_base` as RVAs -- the image base
-    // cancels, so the value is ASLR-invariant and needs no `.reloc`
-    // entry. Patched into the table blob before it lands in `.rdata`.
-    let mut jt_bytes = build.rodata.bytes.clone();
-    for r in &build.rodata.rel32 {
-        let value = (text_rva as i64 + text_prologue_len as i64 + r.text_offset as i64)
-            - (jt_rva as i64 + r.base_offset as i64);
-        let Ok(v) = i32::try_from(value) else {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!(
+                return Err(Self::internal(format!(
                     "PE: rodata rel32 slot {:#x}: displacement {value:#x} exceeds 32 bits",
                     r.slot_offset,
-                ),
-            )));
-        };
-        let off = r.slot_offset as usize;
-        jt_bytes[off..off + 4].copy_from_slice(&v.to_le_bytes());
+                )));
+            };
+            let off = r.slot_offset as usize;
+            jt_bytes[off..off + 4].copy_from_slice(&v.to_le_bytes());
+        }
+        if !build.tls_index_fixups.is_empty() {
+            let tls_index_rva = l.data_rva + l.tls.tls_index_offset_in_data;
+            for f in &build.tls_index_fixups {
+                let instr_off = (f.instr_offset as u32) + prologue;
+                patch_tls_index_lookup(machine, &mut text, instr_off, text_rva, tls_index_rva)?;
+            }
+        }
+        self.text_bytes = text;
+        self.jt_bytes = jt_bytes;
+        Ok(())
     }
 
-    // TLS-index fixups. Every `Inst::TlsAddr` lowering recorded
-    // a code site
-    // that needs the address of the `_tls_index` DWORD slot the
-    // loader fills in. The slot lives at the tail of `.data` (see
-    // `tls_layout` and the data emission below). Each per-arch
-    // patcher rewrites the disp/imm fields with the offset to the
-    // slot.
-    if !build.tls_index_fixups.is_empty() {
-        let tls_index_rva = data_rva + tls_layout.tls_index_offset_in_data;
-        for f in &build.tls_index_fixups {
-            let instr_off = (f.instr_offset as u32) + text_prologue_len;
-            patch_tls_index_lookup(machine, &mut text_bytes, instr_off, text_rva, tls_index_rva)?;
+    /// `AddressOfEntryPoint`: the stub at the start of `.text`, or the
+    /// user's body when `--shared` output defines `DllMain` or a
+    /// passthrough subsystem invokes the entry directly.
+    fn entry_rva(&self) -> Result<u32, C5Error> {
+        let build = self.build;
+        let l = &self.layout;
+        if let Some(pc) = build.dllmain_pc.filter(|_| self.is_dll) {
+            let off = build.pc_to_native.get(pc).copied().ok_or_else(|| {
+                Self::internal(format!(
+                    "PE writer: user-defined DllMain at ent_pc {pc} \
+                     has no entry in pc_to_native -- the lowering \
+                     dropped the function?"
+                ))
+            })?;
+            Ok(l.text_rva + self.text_prologue_len + off as u32)
+        } else if self.passthrough_entry {
+            Ok(l.text_rva + self.text_prologue_len + build.entry_offset as u32)
+        } else {
+            Ok(l.text_rva)
         }
     }
 
-    // 6) Assemble the final image.
-    let mut out: Vec<u8> = Vec::with_capacity(total_file_size);
-    write_dos_header_and_stub(&mut out);
-    write_pe_signature(&mut out);
-    write_coff_header(
-        &mut out,
-        OPTIONAL64_HEADER_SIZE,
-        machine,
-        plan.count(),
-        coff_symtab_file_off,
-        n_coff_symbols,
-        coff_strtab_file_off,
-        is_dll,
-    );
-    let tls_present = !build.tls_data.is_empty();
-    let (tls_table_rva, tls_table_size) = if tls_present {
-        (
-            data_rva + tls_layout.directory_offset_in_data,
-            IMAGE_TLS_DIRECTORY64_SIZE,
-        )
-    } else {
-        (0, 0)
-    };
-    // `AddressOfEntryPoint`. The stub (when present) sits at the
-    // start of `.text`, so the default is `text_rva`. Two cases
-    // bypass the stub and target the user's entry function inside
-    // `build.text`:
-    //   * `--shared` output with a user-defined `DllMain` -- the
-    //     loader's `DLL_PROCESS_ATTACH` callback lands directly on
-    //     the user body at `pc_to_native[dllmain_pc]`.
-    //   * Passthrough subsystems (NT-native, UEFI) -- the loader
-    //     invokes the entry at `build.entry_offset` directly.
-    // `text_prologue_len` is zero in both bypass cases; it stays
-    // in the formula for symmetry with the other text-relative
-    // computations in this writer.
-    let entry_rva = if let Some(pc) = build.dllmain_pc.filter(|_| is_dll) {
-        let off = build.pc_to_native.get(pc).copied().ok_or_else(|| {
-            C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
-                "PE writer: user-defined DllMain at ent_pc {pc} \
-                     has no entry in pc_to_native -- the lowering \
-                     dropped the function?"
-            )))
-        })?;
-        text_rva + text_prologue_len + off as u32
-    } else if passthrough_entry {
-        text_rva + text_prologue_len + build.entry_offset as u32
-    } else {
-        text_rva
-    };
-    write_optional_header(
-        &mut out,
-        OptionalHeaderInputs {
-            entry_rva,
-            base_of_code: text_rva,
-            size_of_code: text_size,
-            size_of_initialized_data: idata_size + rdata_size + data_size + reloc_size,
-            size_of_image: image_size,
-            size_of_headers: headers_size,
-            import_table_rva: idata_layout.import_directory_rva,
-            import_table_size: idata_layout.import_directory_size,
-            exception_table_rva: pdata_rva,
-            exception_table_size: pdata_directory_size,
-            base_reloc_rva: reloc_rva,
-            base_reloc_size: reloc_size,
-            iat_rva: idata_layout.iat_rva_base,
-            iat_size: idata_layout.iat_size,
-            tls_table_rva,
-            tls_table_size,
-            export_table_rva: edata_rva,
-            export_table_size: edata_size,
-            // Resolved at the top of `write` so the optional-header
-            // value and the stub-shape decision share one source.
-            subsystem,
-        },
-    );
-    let mut sections: Vec<SectionHeader> = Vec::with_capacity(plan.count());
-    sections.push(SectionHeader {
-        name: *b".text\0\0\0",
-        virtual_size: text_size,
-        virtual_address: text_rva,
-        size_of_raw_data: text_raw_size,
-        pointer_to_raw_data: text_file_off,
-        characteristics: IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_MEM_READ,
-    });
-    sections.push(SectionHeader {
-        name: *b".pdata\0\0",
-        virtual_size: pdata_size,
-        virtual_address: pdata_rva,
-        size_of_raw_data: pdata_raw_size,
-        pointer_to_raw_data: pdata_file_off,
-        characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ,
-    });
-    sections.push(SectionHeader {
-        name: *b".idata\0\0",
-        virtual_size: idata_size,
-        virtual_address: idata_rva,
-        size_of_raw_data: idata_raw_size,
-        pointer_to_raw_data: idata_file_off,
-        characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_WRITE,
-    });
-    if rdata_section_present {
+    /// The DOS header and stub, the PE signature, the COFF and
+    /// optional headers, and the section table, whose length is checked
+    /// against the plan the header size and the COFF count were
+    /// computed from.
+    fn emit_headers(&mut self) -> Result<(), C5Error> {
+        let build = self.build;
+        let l = &self.layout;
+        let entry_rva = self.entry_rva()?;
+        let mut out: Vec<u8> = Vec::with_capacity(l.total_file_size);
+        write_dos_header_and_stub(&mut out);
+        write_pe_signature(&mut out);
+        write_coff_header(
+            &mut out,
+            OPTIONAL64_HEADER_SIZE,
+            self.machine,
+            l.plan.count(),
+            l.coff_symtab_file_off,
+            (l.coff_symbols.len() as u32) / IMAGE_SYMBOL_SIZE,
+            l.coff_strtab_file_off,
+            self.is_dll,
+        );
+        let (tls_table_rva, tls_table_size) = if !build.tls_data.is_empty() {
+            (
+                l.data_rva + l.tls.directory_offset_in_data,
+                IMAGE_TLS_DIRECTORY64_SIZE,
+            )
+        } else {
+            (0, 0)
+        };
+        let reloc_size = l.reloc_bytes.len() as u32;
+        write_optional_header(
+            &mut out,
+            OptionalHeaderInputs {
+                entry_rva,
+                base_of_code: l.text_rva,
+                size_of_code: l.text_size,
+                size_of_initialized_data: l.idata.bytes.len() as u32
+                    + l.rdata_size
+                    + l.data_size
+                    + reloc_size,
+                size_of_image: l.image_size,
+                size_of_headers: l.headers_size,
+                import_table_rva: l.idata.import_directory_rva,
+                import_table_size: l.idata.import_directory_size,
+                exception_table_rva: l.pdata_rva,
+                exception_table_size: l.pdata_directory_size,
+                base_reloc_rva: l.reloc_rva,
+                base_reloc_size: reloc_size,
+                iat_rva: l.idata.iat_rva_base,
+                iat_size: l.idata.iat_size,
+                tls_table_rva,
+                tls_table_size,
+                export_table_rva: l.edata_rva,
+                export_table_size: l.edata_bytes.len() as u32,
+                subsystem: self.subsystem,
+            },
+        );
+        write_section_headers(&mut out, &self.section_headers()?);
+        self.out = out;
+        Ok(())
+    }
+
+    /// One header per section, in the plan's order.
+    fn section_headers(&self) -> Result<Vec<SectionHeader>, C5Error> {
+        let l = &self.layout;
+        let reloc_size = l.reloc_bytes.len() as u32;
+        let mut sections: Vec<SectionHeader> = Vec::with_capacity(l.plan.count());
         sections.push(SectionHeader {
-            name: *b".rdata\0\0",
-            virtual_size: rdata_size,
-            virtual_address: rdata_rva,
-            size_of_raw_data: rdata_raw_size,
-            pointer_to_raw_data: rdata_file_off,
+            name: *b".text\0\0\0",
+            virtual_size: l.text_size,
+            virtual_address: l.text_rva,
+            size_of_raw_data: l.text_raw_size,
+            pointer_to_raw_data: l.text_file_off,
+            characteristics: IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_MEM_READ,
+        });
+        sections.push(SectionHeader {
+            name: *b".pdata\0\0",
+            virtual_size: l.pdata_bytes.len() as u32,
+            virtual_address: l.pdata_rva,
+            size_of_raw_data: l.pdata_raw_size,
+            pointer_to_raw_data: l.pdata_file_off,
             characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ,
         });
-    }
-    if data_section_present {
         sections.push(SectionHeader {
-            name: *b".data\0\0\0",
-            virtual_size: data_vsize,
-            virtual_address: data_rva,
-            size_of_raw_data: data_raw_size,
-            pointer_to_raw_data: data_file_off,
+            name: *b".idata\0\0",
+            virtual_size: l.idata.bytes.len() as u32,
+            virtual_address: l.idata_rva,
+            size_of_raw_data: l.idata_raw_size,
+            pointer_to_raw_data: l.idata_file_off,
             characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA
                 | IMAGE_SCN_MEM_READ
                 | IMAGE_SCN_MEM_WRITE,
         });
-    }
-    // Read-only families keep `.rdata`'s protection, the writable ones
-    // `.data`'s. A base relocation into a read-only section is what
-    // link.exe emits for the same content: the loader applies fixups
-    // before it drops write permission.
-    for n in &named_out {
-        let mut name = [0u8; 8];
-        let bytes = n.name.as_bytes();
-        name[..bytes.len().min(8)].copy_from_slice(&bytes[..bytes.len().min(8)]);
-        let writable = matches!(n.family, NamedFamily::Data | NamedFamily::Bss);
-        let zerofill = n.family == NamedFamily::Bss;
-        sections.push(SectionHeader {
-            name,
-            virtual_size: n.size,
-            virtual_address: n.rva,
-            size_of_raw_data: n.raw_size,
-            pointer_to_raw_data: n.file_off,
-            characteristics: if zerofill {
-                IMAGE_SCN_CNT_UNINITIALIZED_DATA
-            } else {
-                IMAGE_SCN_CNT_INITIALIZED_DATA
-            } | IMAGE_SCN_MEM_READ
-                | if writable { IMAGE_SCN_MEM_WRITE } else { 0 },
-        });
-    }
-    if reloc_section_present {
-        sections.push(SectionHeader {
-            name: *b".reloc\0\0",
-            virtual_size: reloc_size,
-            virtual_address: reloc_rva,
-            size_of_raw_data: reloc_raw_size,
-            pointer_to_raw_data: reloc_file_off,
-            characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA
-                | IMAGE_SCN_MEM_READ
-                | IMAGE_SCN_MEM_DISCARDABLE,
-        });
-    }
-    if edata_section_present {
-        sections.push(SectionHeader {
-            name: *b".edata\0\0",
-            virtual_size: edata_size,
-            virtual_address: edata_rva,
-            size_of_raw_data: edata_raw_size,
-            pointer_to_raw_data: edata_file_off,
-            characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ,
-        });
-    }
-    // DWARF debug sections. DISCARDABLE so the loader
-    // skips them at runtime; lldb / gdb / llvm-dwarfdump read
-    // them from the file image.
-    for slot in &dwarf_pe_sections {
-        let raw_size = round_up(slot.bytes.len() as u32, FILE_ALIGNMENT);
-        sections.push(SectionHeader {
-            name: slot.name,
-            virtual_size: slot.bytes.len() as u32,
-            virtual_address: slot.rva,
-            size_of_raw_data: raw_size,
-            pointer_to_raw_data: slot.file_off,
-            characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA
-                | IMAGE_SCN_MEM_READ
-                | IMAGE_SCN_MEM_DISCARDABLE,
-        });
-    }
-    // The header size and the COFF count were both computed from `plan`
-    // before the table existed; the table is the ground truth.
-    if sections.len() != plan.count() {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-            &format!(
+        if l.rdata_present {
+            sections.push(SectionHeader {
+                name: *b".rdata\0\0",
+                virtual_size: l.rdata_size,
+                virtual_address: l.rdata_rva,
+                size_of_raw_data: l.rdata_raw_size,
+                pointer_to_raw_data: l.rdata_file_off,
+                characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ,
+            });
+        }
+        if l.data_present {
+            sections.push(SectionHeader {
+                name: *b".data\0\0\0",
+                virtual_size: l.data_vsize,
+                virtual_address: l.data_rva,
+                size_of_raw_data: l.data_raw_size,
+                pointer_to_raw_data: l.data_file_off,
+                characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA
+                    | IMAGE_SCN_MEM_READ
+                    | IMAGE_SCN_MEM_WRITE,
+            });
+        }
+        // Read-only families keep `.rdata`'s protection, the writable
+        // ones `.data`'s.
+        for n in &l.named_out {
+            let mut name = [0u8; 8];
+            let bytes = n.name.as_bytes();
+            name[..bytes.len().min(8)].copy_from_slice(&bytes[..bytes.len().min(8)]);
+            let writable = matches!(n.family, NamedFamily::Data | NamedFamily::Bss);
+            let zerofill = n.family == NamedFamily::Bss;
+            sections.push(SectionHeader {
+                name,
+                virtual_size: n.size,
+                virtual_address: n.rva,
+                size_of_raw_data: n.raw_size,
+                pointer_to_raw_data: n.file_off,
+                characteristics: if zerofill {
+                    IMAGE_SCN_CNT_UNINITIALIZED_DATA
+                } else {
+                    IMAGE_SCN_CNT_INITIALIZED_DATA
+                } | IMAGE_SCN_MEM_READ
+                    | if writable { IMAGE_SCN_MEM_WRITE } else { 0 },
+            });
+        }
+        if l.reloc_present {
+            sections.push(SectionHeader {
+                name: *b".reloc\0\0",
+                virtual_size: reloc_size,
+                virtual_address: l.reloc_rva,
+                size_of_raw_data: l.reloc_raw_size,
+                pointer_to_raw_data: l.reloc_file_off,
+                characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA
+                    | IMAGE_SCN_MEM_READ
+                    | IMAGE_SCN_MEM_DISCARDABLE,
+            });
+        }
+        if l.edata_present {
+            sections.push(SectionHeader {
+                name: *b".edata\0\0",
+                virtual_size: l.edata_bytes.len() as u32,
+                virtual_address: l.edata_rva,
+                size_of_raw_data: l.edata_raw_size,
+                pointer_to_raw_data: l.edata_file_off,
+                characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ,
+            });
+        }
+        for slot in &l.dwarf_sections {
+            sections.push(SectionHeader {
+                name: slot.name,
+                virtual_size: slot.bytes.len() as u32,
+                virtual_address: slot.rva,
+                size_of_raw_data: round_up(slot.bytes.len() as u32, FILE_ALIGNMENT),
+                pointer_to_raw_data: slot.file_off,
+                characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA
+                    | IMAGE_SCN_MEM_READ
+                    | IMAGE_SCN_MEM_DISCARDABLE,
+            });
+        }
+        if sections.len() != l.plan.count() {
+            return Err(Self::internal(format!(
                 "PE: emitted {} section headers, layout reserved {}",
                 sections.len(),
-                plan.count()
-            ),
-        )));
+                l.plan.count()
+            )));
+        }
+        Ok(sections)
     }
-    write_section_headers(&mut out, &sections);
-    pad_to(&mut out, text_file_off as usize)?;
-    out.extend_from_slice(&text_bytes);
-    pad_to(&mut out, (text_file_off + text_raw_size) as usize)?;
-    out.extend_from_slice(&pdata_bytes);
-    pad_to(&mut out, (pdata_file_off + pdata_raw_size) as usize)?;
-    out.extend_from_slice(&idata_bytes);
-    pad_to(&mut out, (idata_file_off + idata_raw_size) as usize)?;
-    // Every relocated slot lies at or past `ro_len`, so one buffer
-    // covers them all; it is split at `relro_size` below, the head
-    // completing `.rdata` and the tail becoming `.data`. Each slot
-    // holds the preferred VA (ImageBase + RVA) and the `.reloc` block
-    // lists it so the loader adds the slide delta after mapping.
-    let data_with_relocs = {
-        let mut data_with_relocs = build.data[ro_len as usize..].to_vec();
+
+    /// Every section body at its file offset. One buffer covers every
+    /// relocated data slot (all lie at or past `ro_len`), split at the
+    /// relro boundary between `.rdata` and `.data`; each slot holds the
+    /// preferred VA the `.reloc` block lists. The TLS directory's
+    /// template covers the whole `tls_data` rather than an init prefix
+    /// plus `SizeOfZeroFill`: a Windows ARM64 loader path skips a
+    /// directory whose template is empty, leaving `_tls_index` zero.
+    /// The data image past the read-only prefix with every pointer
+    /// initializer at its link-time address and every pc-relative slot
+    /// holding its displacement.
+    fn bake_data_image(&self) -> Result<Vec<u8>, C5Error> {
+        let build = self.build;
+        let text_body_rva = self.text_body_rva();
+        let ro_len = self.layout.ro_len;
+        let mut data = build.data[ro_len as usize..].to_vec();
         for r in &build.data_relocs {
-            // `.data` and its zero-fill tail are separated by the TLS
-            // blob; the anchor picks the region, the signed
-            // displacement rides on the address.
-            let preferred_va = (IMAGE_BASE + data_off_to_rva(r.target_anchor as u32) as u64)
+            let preferred_va = (IMAGE_BASE + self.data_off_to_rva(r.target_anchor as u32) as u64)
                 .wrapping_add(r.target_offset.wrapping_sub(r.target_anchor));
             let off = super::reloc_slot_in_data("PE", r.data_offset, ro_len as u64, "data")?;
-            if off + 8 > data_with_relocs.len() {
-                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                    &format!(
-                        "PE: data reloc offset {off:#x} past end of the relocated data span ({})",
-                        data_with_relocs.len()
-                    ),
+            if off + 8 > data.len() {
+                return Err(Self::internal(format!(
+                    "PE: data reloc offset {off:#x} past end of the relocated data span ({})",
+                    data.len()
                 )));
             }
-            data_with_relocs[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
+            data[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
         }
-        // Function-pointer initializers: pre-fill the slot with the
-        // preferred VA (ImageBase + text_prologue_rva + native code
-        // offset). text_prologue_rva accounts for the entry stub
-        // sitting at the start of the .text section -- build.text
-        // begins after it. The `.reloc` block below lists the slot
-        // so the Windows loader adds the slide delta when ASLR
-        // moves the image.
         for r in &build.code_relocs {
             let ent_pc = r.target_ent_pc as usize;
             let native_off = build
@@ -1572,225 +1506,173 @@ pub(super) fn write(
                 .copied()
                 .unwrap_or(usize::MAX);
             if native_off == usize::MAX {
-                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                    &format!("PE: code reloc references missing ent_pc {ent_pc}"),
+                return Err(Self::internal(format!(
+                    "PE: code reloc references missing ent_pc {ent_pc}"
                 )));
             }
-            let preferred_va =
-                IMAGE_BASE + (text_rva + text_prologue_len + native_off as u32) as u64;
+            let preferred_va = IMAGE_BASE + (text_body_rva + native_off as u32) as u64;
             let off = super::reloc_slot_in_data("PE", r.data_offset, ro_len as u64, "code")?;
-            if off + 8 > data_with_relocs.len() {
-                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                    &format!(
-                        "PE: code reloc offset {off:#x} past end of the relocated data span ({})",
-                        data_with_relocs.len()
-                    ),
+            if off + 8 > data.len() {
+                return Err(Self::internal(format!(
+                    "PE: code reloc offset {off:#x} past end of the relocated data span ({})",
+                    data.len()
                 )));
             }
-            data_with_relocs[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
+            data[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
         }
-        // `&&label` initializers: the label's text offset is already
-        // resolved, so the preferred VA is the text base plus it. The
-        // `.reloc` block lists the slot for the ASLR slide.
         for r in &build.label_relocs {
-            let preferred_va =
-                IMAGE_BASE + (text_rva + text_prologue_len + r.text_offset as u32) as u64;
+            let preferred_va = IMAGE_BASE + (text_body_rva + r.text_offset as u32) as u64;
             let off = super::reloc_slot_in_data("PE", r.data_offset, ro_len as u64, "label")?;
-            if off + 8 > data_with_relocs.len() {
-                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                    &format!(
-                        "PE: label reloc offset {off:#x} past end of the relocated data span ({})",
-                        data_with_relocs.len()
-                    ),
+            if off + 8 > data.len() {
+                return Err(Self::internal(format!(
+                    "PE: label reloc offset {off:#x} past end of the relocated data span ({})",
+                    data.len()
                 )));
             }
-            data_with_relocs[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
+            data[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
         }
-        // Object-linked pc-relative slots in the data stream: each
-        // holds `target - slot` as RVAs (the image base cancels) at
-        // the recorded width, so ASLR needs no `.reloc` entry.
+        // Object-linked pc-relative slots hold `target - slot` as RVAs
+        // (the image base cancels) at the recorded width.
         for r in &build.data_pcrel_relocs {
             let target = if r.target_in_data {
-                // `.data` and its zero-fill tail are separated by the TLS
-                // blob, so an addend that moves the target out of the
-                // anchor's object is applied to the RVA, not the offset.
-                data_off_to_rva(r.target_anchor as u32) as i64
+                self.data_off_to_rva(r.target_anchor as u32) as i64
                     + (r.target_offset as i64 - r.target_anchor as i64)
             } else {
-                (text_rva + text_prologue_len) as i64 + r.target_offset as i64
+                text_body_rva as i64 + r.target_offset as i64
             };
-            let slot_rva = data_off_to_rva(r.slot_data_offset as u32) as i64;
+            let slot_rva = self.data_off_to_rva(r.slot_data_offset as u32) as i64;
             let off = super::reloc_slot_in_data("PE", r.slot_data_offset, ro_len as u64, "pcrel")?;
             let width = r.width as usize;
-            if off + width > data_with_relocs.len() {
-                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                    &format!(
-                        "PE: data pcrel slot {off:#x} past end of the relocated data span ({})",
-                        data_with_relocs.len()
-                    ),
+            if off + width > data.len() {
+                return Err(Self::internal(format!(
+                    "PE: data pcrel slot {off:#x} past end of the relocated data span ({})",
+                    data.len()
                 )));
             }
             let value = target - slot_rva;
             if width == 8 {
-                data_with_relocs[off..off + 8].copy_from_slice(&value.to_le_bytes());
+                data[off..off + 8].copy_from_slice(&value.to_le_bytes());
                 continue;
             }
             let Ok(v) = i32::try_from(value) else {
-                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                    &format!(
-                        "PE: data pcrel slot {off:#x}: displacement {value:#x} exceeds 32 bits"
-                    ),
+                return Err(Self::internal(format!(
+                    "PE: data pcrel slot {off:#x}: displacement {value:#x} exceeds 32 bits"
                 )));
             };
-            data_with_relocs[off..off + 4].copy_from_slice(&v.to_le_bytes());
+            data[off..off + 4].copy_from_slice(&v.to_le_bytes());
         }
-        data_with_relocs
-    };
-    if rdata_section_present {
-        // `.rdata`: the read-only data prefix, then the relro region
-        // (patched above, rewritten by the loader through `.reloc`),
-        // then the switch-table blob at its 8-aligned tail, then the
-        // fingerprint.
-        out.extend_from_slice(&build.data[..ro_head as usize]);
-        out.extend_from_slice(&data_with_relocs[..relro_head_len as usize]);
-        pad_to(&mut out, (rdata_file_off + jt_base_in_rdata) as usize)?;
-        out.extend_from_slice(&jt_bytes);
-        pad_to(&mut out, (rdata_file_off + marker_base_in_rdata) as usize)?;
-        out.extend_from_slice(&provenance);
-        pad_to(&mut out, (rdata_file_off + rdata_raw_size) as usize)?;
+        Ok(data)
     }
-    if data_section_present {
-        let head = (relro_size + data_head_len) as usize;
-        out.extend_from_slice(&data_with_relocs[relro_size as usize..head]);
-        if !build.tls_data.is_empty() {
-            // Pad to where the `_tls_index` slot starts (4-byte
-            // alignment).
+
+    fn emit_sections(mut self) -> Result<Vec<u8>, C5Error> {
+        let build = self.build;
+        let data = self.bake_data_image()?;
+        let l = &self.layout;
+        let ro_len = l.ro_len;
+        let mut out = core::mem::take(&mut self.out);
+        pad_to(&mut out, l.text_file_off as usize)?;
+        out.extend_from_slice(&self.text_bytes);
+        pad_to(&mut out, (l.text_file_off + l.text_raw_size) as usize)?;
+        out.extend_from_slice(&l.pdata_bytes);
+        pad_to(&mut out, (l.pdata_file_off + l.pdata_raw_size) as usize)?;
+        out.extend_from_slice(&l.idata.bytes);
+        pad_to(&mut out, (l.idata_file_off + l.idata_raw_size) as usize)?;
+        if l.rdata_present {
+            out.extend_from_slice(&build.data[..l.ro_head as usize]);
+            out.extend_from_slice(&data[..l.relro_head_len as usize]);
+            pad_to(&mut out, (l.rdata_file_off + l.jt_base_in_rdata) as usize)?;
+            out.extend_from_slice(&self.jt_bytes);
             pad_to(
                 &mut out,
-                (data_file_off + tls_layout.tls_index_offset_in_data) as usize,
+                (l.rdata_file_off + l.marker_base_in_rdata) as usize,
             )?;
-            // `_tls_index` -- 4-byte slot, zero-initialised; the
-            // Windows loader writes the chosen slot index here at
-            // module-init time.
-            out.extend_from_slice(&[0u8; 4]);
-            // Pad to where IMAGE_TLS_DIRECTORY64 starts (8-byte
-            // alignment).
-            pad_to(
-                &mut out,
-                (data_file_off + tls_layout.directory_offset_in_data) as usize,
-            )?;
-            // IMAGE_TLS_DIRECTORY64. Layout:
-            //   StartAddressOfRawData : u64  -- VA of init data start
-            //   EndAddressOfRawData   : u64  -- VA of init data end
-            //   AddressOfIndex        : u64  -- VA of `_tls_index`
-            //   AddressOfCallBacks    : u64  -- VA of callback array (NULL)
-            //   SizeOfZeroFill        : u32  -- bytes after End to zero
-            //   Characteristics       : u32  -- 0
-            // VAs are absolute addresses (ImageBase + RVA); the
-            // `.reloc` block we emit fixes them up after any
-            // ASLR slide.
-            //
-            // We deliberately emit the entire `tls_data` as
-            // template bytes (init data) rather than splitting
-            // it into a `tls_init_size`-byte template plus a
-            // `(tls_data.len() - tls_init_size)`-byte
-            // SizeOfZeroFill tail. Reason: at least one
-            // Windows ARM64 loader path skips processing a TLS
-            // directory whose template is empty
-            // (Start == End), leaving `_tls_index` at zero. A
-            // subsequent `tls_array[0] + offset` then lands
-            // inside another module's per-thread storage and
-            // reads non-zero data, which trips
-            // the "counter != 0" check in a per-thread test.
-            // The frontend may produce non-zero TLS init bytes
-            // (`_Thread_local int x = 5;`); `build.tls_data`
-            // already holds the init template followed by the
-            // zero-init tail, so emitting the whole block as
-            // template bytes carries both correctly and sidesteps
-            // the empty-template edge case.
-            let tls_init_start_va =
-                IMAGE_BASE + (data_rva + tls_layout.tls_init_offset_in_data) as u64;
-            let tls_init_end_va = tls_init_start_va + build.tls_data.len() as u64;
-            let tls_index_va = IMAGE_BASE + (data_rva + tls_layout.tls_index_offset_in_data) as u64;
-            let zero_fill: u32 = 0;
-            out.extend_from_slice(&tls_init_start_va.to_le_bytes());
-            out.extend_from_slice(&tls_init_end_va.to_le_bytes());
-            out.extend_from_slice(&tls_index_va.to_le_bytes());
-            out.extend_from_slice(&0u64.to_le_bytes()); // AddressOfCallBacks
-            out.extend_from_slice(&zero_fill.to_le_bytes());
-            out.extend_from_slice(&0u32.to_le_bytes()); // Characteristics
-            // TLS template -- copied verbatim into each thread's
-            // per-thread region by the loader. `tls_data` holds the
-            // initialised bytes followed by the zero-init tail.
-            // Address-constant initializers hold the preferred VA and
-            // carry a `.reloc` DIR64 entry sited in the template, which
-            // the loader applies before any thread's block is created.
-            let mut tls_with_relocs = build.tls_data.clone();
-            for &(off, va) in &tls_sites {
-                if off + 8 > tls_with_relocs.len() {
-                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                        &format!(
+            out.extend_from_slice(&l.provenance);
+            pad_to(&mut out, (l.rdata_file_off + l.rdata_raw_size) as usize)?;
+        }
+        if l.data_present {
+            let head = (l.relro_size + l.data_head_len) as usize;
+            out.extend_from_slice(&data[l.relro_size as usize..head]);
+            if !build.tls_data.is_empty() {
+                pad_to(
+                    &mut out,
+                    (l.data_file_off + l.tls.tls_index_offset_in_data) as usize,
+                )?;
+                // `_tls_index`: the loader writes the chosen slot here.
+                out.extend_from_slice(&[0u8; 4]);
+                pad_to(
+                    &mut out,
+                    (l.data_file_off + l.tls.directory_offset_in_data) as usize,
+                )?;
+                let tls_init_start_va =
+                    IMAGE_BASE + (l.data_rva + l.tls.tls_init_offset_in_data) as u64;
+                let tls_init_end_va = tls_init_start_va + build.tls_data.len() as u64;
+                let tls_index_va =
+                    IMAGE_BASE + (l.data_rva + l.tls.tls_index_offset_in_data) as u64;
+                out.extend_from_slice(&tls_init_start_va.to_le_bytes());
+                out.extend_from_slice(&tls_init_end_va.to_le_bytes());
+                out.extend_from_slice(&tls_index_va.to_le_bytes());
+                out.extend_from_slice(&0u64.to_le_bytes()); // AddressOfCallBacks
+                out.extend_from_slice(&0u32.to_le_bytes()); // SizeOfZeroFill
+                out.extend_from_slice(&0u32.to_le_bytes()); // Characteristics
+                let mut tls = build.tls_data.clone();
+                for &(off, va) in &l.tls_sites {
+                    if off + 8 > tls.len() {
+                        return Err(Self::internal(format!(
                             "PE: TLS reloc offset {off:#x} past end of the TLS template ({})",
-                            tls_with_relocs.len()
-                        ),
-                    )));
+                            tls.len()
+                        )));
+                    }
+                    tls[off..off + 8].copy_from_slice(&va.to_le_bytes());
                 }
-                tls_with_relocs[off..off + 8].copy_from_slice(&va.to_le_bytes());
+                out.extend_from_slice(&tls);
             }
-            out.extend_from_slice(&tls_with_relocs);
         }
-    }
-    // A read-only family's bytes come straight from `build.data`; the
-    // relro and writable ones from the relocated span.
-    for n in &named_out {
-        if n.raw_size == 0 {
-            continue;
+        // A read-only family's bytes come straight from `build.data`;
+        // the relro and writable ones from the relocated span.
+        for n in &l.named_out {
+            if n.raw_size == 0 {
+                continue;
+            }
+            pad_to(&mut out, n.file_off as usize)?;
+            let (start, end) = (n.start as usize, (n.start + n.size) as usize);
+            if n.family == NamedFamily::RoData {
+                out.extend_from_slice(&build.data[start..end]);
+            } else {
+                let base = ro_len as usize;
+                out.extend_from_slice(&data[start - base..end - base]);
+            }
+            pad_to(&mut out, (n.file_off + n.raw_size) as usize)?;
         }
-        pad_to(&mut out, n.file_off as usize)?;
-        let (start, end) = (n.start as usize, (n.start + n.size) as usize);
-        if n.family == NamedFamily::RoData {
-            out.extend_from_slice(&build.data[start..end]);
-        } else {
-            let base = ro_len as usize;
-            out.extend_from_slice(&data_with_relocs[start - base..end - base]);
+        if l.reloc_present {
+            pad_to(&mut out, l.reloc_file_off as usize)?;
+            out.extend_from_slice(&l.reloc_bytes);
         }
-        pad_to(&mut out, (n.file_off + n.raw_size) as usize)?;
-    }
-    if reloc_section_present {
-        pad_to(&mut out, reloc_file_off as usize)?;
-        out.extend_from_slice(&reloc_bytes);
-    }
-    if edata_section_present {
-        pad_to(&mut out, edata_file_off as usize)?;
-        out.extend_from_slice(&edata_bytes);
-    }
-    // DWARF debug sections come last in the file image
-    // (before the COFF string table that names them).
-    for slot in &dwarf_pe_sections {
-        pad_to(&mut out, slot.file_off as usize)?;
-        out.extend_from_slice(&slot.bytes);
-    }
-    // COFF symbol table immediately before its string
-    // table. Both live at the file tail (post-DWARF). Emitted
-    // when there are PLT trampolines; absent otherwise.
-    if !coff_symbols.is_empty() {
-        pad_to(&mut out, coff_symtab_file_off as usize)?;
-        out.extend_from_slice(&coff_symbols);
-    }
-    if !coff_strtab.is_empty() {
-        pad_to(&mut out, coff_strtab_file_off as usize)?;
-        out.extend_from_slice(&coff_strtab);
-    }
-    pad_to(&mut out, total_file_size)?;
-    if out.len() != total_file_size {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-            &format!(
-                "PE layout drift: emitted {:#x} bytes, layout computed {total_file_size:#x}",
+        if l.edata_present {
+            pad_to(&mut out, l.edata_file_off as usize)?;
+            out.extend_from_slice(&l.edata_bytes);
+        }
+        for slot in &l.dwarf_sections {
+            pad_to(&mut out, slot.file_off as usize)?;
+            out.extend_from_slice(&slot.bytes);
+        }
+        if !l.coff_symbols.is_empty() {
+            pad_to(&mut out, l.coff_symtab_file_off as usize)?;
+            out.extend_from_slice(&l.coff_symbols);
+        }
+        if !l.coff_strtab.is_empty() {
+            pad_to(&mut out, l.coff_strtab_file_off as usize)?;
+            out.extend_from_slice(&l.coff_strtab);
+        }
+        pad_to(&mut out, l.total_file_size)?;
+        if out.len() != l.total_file_size {
+            return Err(Self::internal(format!(
+                "PE layout drift: emitted {:#x} bytes, layout computed {:#x}",
                 out.len(),
-            ),
-        )));
+                l.total_file_size,
+            )));
+        }
+        Ok(out)
     }
-    Ok(out)
 }
 
 /// Build the `.reloc` section bytes. Emits one
@@ -2062,6 +1944,7 @@ fn build_reloc_section(
 /// `build.data` (the user-side initialised data). When
 /// `build.tls_data` is empty, every field is zero and
 /// `tls_blob_size` is zero.
+#[derive(Default)]
 struct TlsLayout {
     /// Total bytes appended to `.data` for TLS support
     /// (excluding the zero-fill, which the loader handles).
@@ -2585,6 +2468,7 @@ fn group_imports_by_dll(imports: &[(String, String)]) -> Vec<DllGroup> {
     groups
 }
 
+#[derive(Default)]
 struct IDataLayout {
     bytes: Vec<u8>,
     import_directory_rva: u32,

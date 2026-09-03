@@ -31,8 +31,12 @@ use alloc::vec::Vec;
 
 use crate::c5::error::C5Error;
 
+use super::internal_err;
 use super::mach_o_object::mach_o_machine;
 use super::object::{NativeMachine, SharedLibrary};
+
+/// The tag this module's diagnostics carry.
+const MODULE: &str = "linker::mach_o_shared";
 
 const MH_MAGIC_64: u32 = 0xFEED_FACF;
 const MH_DYLIB: u32 = 0x6;
@@ -43,12 +47,6 @@ const LC_REQ_DYLD: u32 = 0x8000_0000;
 const LC_DYLD_INFO: u32 = 0x22;
 const LC_DYLD_INFO_ONLY: u32 = 0x22 | LC_REQ_DYLD;
 const LC_DYLD_EXPORTS_TRIE: u32 = 0x33 | LC_REQ_DYLD;
-
-fn err(msg: &str) -> C5Error {
-    C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
-        "linker::mach_o_shared: {msg}",
-    )))
-}
 
 fn u32le(bytes: &[u8], off: usize) -> Option<u32> {
     let b = bytes.get(off..off + 4)?;
@@ -71,24 +69,31 @@ pub fn is_mach_o_dylib(bytes: &[u8]) -> bool {
 /// empty and a data reference relies on its GOT relocation kind.
 pub fn parse_mach_o_dylib(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
     if !is_mach_o_dylib(bytes) {
-        return Err(err("not a 64-bit little-endian Mach-O dylib"));
+        return Err(internal_err(
+            MODULE,
+            "not a 64-bit little-endian Mach-O dylib",
+        ));
     }
     let need = |off: usize, what: &str| -> Result<u32, C5Error> {
-        u32le(bytes, off).ok_or_else(|| err(&format!("{what} runs past end of file")))
+        u32le(bytes, off)
+            .ok_or_else(|| internal_err(MODULE, &format!("{what} runs past end of file")))
     };
     let cputype = need(4, "header")?;
     let machine = mach_o_machine(cputype).ok_or_else(|| {
-        err(&format!(
-            "dylib has unhandled cputype {}",
-            super::mach_o_object::mach_o_cputype_desc(cputype)
-        ))
+        internal_err(
+            MODULE,
+            &format!(
+                "dylib has unhandled cputype {}",
+                super::mach_o_object::mach_o_cputype_desc(cputype)
+            ),
+        )
     })?;
     let ncmds = need(16, "header")? as usize;
     let sizeofcmds = need(20, "header")? as usize;
     let cmds_end = MACH_HEADER_64_SIZE
         .checked_add(sizeofcmds)
         .filter(|&e| e <= bytes.len())
-        .ok_or_else(|| err("load commands run past end of file"))?;
+        .ok_or_else(|| internal_err(MODULE, "load commands run past end of file"))?;
     let mut soname = String::new();
     let mut trie: Option<(usize, usize)> = None;
     let mut off = MACH_HEADER_64_SIZE;
@@ -96,7 +101,7 @@ pub fn parse_mach_o_dylib(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
         let cmd = need(off, "load command")?;
         let cmdsize = need(off + 4, "load command")? as usize;
         if cmdsize < 8 || off + cmdsize > cmds_end {
-            return Err(err("load command size out of range"));
+            return Err(internal_err(MODULE, "load command size out of range"));
         }
         match cmd {
             LC_ID_DYLIB => {
@@ -106,7 +111,7 @@ pub fn parse_mach_o_dylib(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
                 let start = off
                     .checked_add(name_off)
                     .filter(|&s| s < off + cmdsize)
-                    .ok_or_else(|| err("LC_ID_DYLIB name offset out of range"))?;
+                    .ok_or_else(|| internal_err(MODULE, "LC_ID_DYLIB name offset out of range"))?;
                 let field = &bytes[start..off + cmdsize];
                 let end = field.iter().position(|&b| b == 0).unwrap_or(field.len());
                 soname = String::from_utf8_lossy(&field[..end]).into_owned();
@@ -134,7 +139,7 @@ pub fn parse_mach_o_dylib(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
     {
         let data = bytes
             .get(t_off..t_off.saturating_add(t_size))
-            .ok_or_else(|| err("export trie extent runs past end of file"))?;
+            .ok_or_else(|| internal_err(MODULE, "export trie extent runs past end of file"))?;
         walk_export_trie(data, &mut exports)?;
     }
     Ok(SharedLibrary {
@@ -157,10 +162,13 @@ fn walk_export_trie(trie: &[u8], out: &mut BTreeSet<String>) -> Result<(), C5Err
         loop {
             let b = *trie
                 .get(*at)
-                .ok_or_else(|| err("export trie truncated in a uleb128"))?;
+                .ok_or_else(|| internal_err(MODULE, "export trie truncated in a uleb128"))?;
             *at += 1;
             if shift >= 63 && b > 1 {
-                return Err(err("export trie uleb128 overflows 64 bits"));
+                return Err(internal_err(
+                    MODULE,
+                    "export trie uleb128 overflows 64 bits",
+                ));
             }
             v |= u64::from(b & 0x7F) << shift;
             if b & 0x80 == 0 {
@@ -181,29 +189,35 @@ fn walk_export_trie(trie: &[u8], out: &mut BTreeSet<String>) -> Result<(), C5Err
         let term = uleb(trie, &mut at)? as usize;
         if term > 0 {
             if at + term > trie.len() {
-                return Err(err("export trie terminal payload truncated"));
+                return Err(internal_err(
+                    MODULE,
+                    "export trie terminal payload truncated",
+                ));
             }
-            let name =
-                core::str::from_utf8(&prefix).map_err(|_| err("export trie name is not UTF-8"))?;
+            let name = core::str::from_utf8(&prefix)
+                .map_err(|_| internal_err(MODULE, "export trie name is not UTF-8"))?;
             out.insert(name.strip_prefix('_').unwrap_or(name).to_string());
             at += term;
         }
         let children = *trie
             .get(at)
-            .ok_or_else(|| err("export trie truncated at a child count"))?;
+            .ok_or_else(|| internal_err(MODULE, "export trie truncated at a child count"))?;
         at += 1;
         for _ in 0..children {
             let rest = &trie[at.min(trie.len())..];
             let end = rest
                 .iter()
                 .position(|&b| b == 0)
-                .ok_or_else(|| err("export trie edge label not terminated"))?;
+                .ok_or_else(|| internal_err(MODULE, "export trie edge label not terminated"))?;
             let mut label = prefix.clone();
             label.extend_from_slice(&rest[..end]);
             at += end + 1;
             let child = uleb(trie, &mut at)? as usize;
             if child >= trie.len() {
-                return Err(err("export trie child offset out of range"));
+                return Err(internal_err(
+                    MODULE,
+                    "export trie child offset out of range",
+                ));
             }
             stack.push((child, label));
         }
@@ -243,14 +257,15 @@ pub fn parse_tbd(text: &str, arch: &str, platform: &str) -> Result<SharedLibrary
         "arm64" => NativeMachine::Aarch64,
         "x86_64" => NativeMachine::X86_64,
         other => {
-            return Err(err(&format!(
-                "tbd arch `{other}` is not one of arm64 / x86_64"
-            )));
+            return Err(internal_err(
+                MODULE,
+                &format!("tbd arch `{other}` is not one of arm64 / x86_64"),
+            ));
         }
     };
     let docs = scan_tbd_documents(text)?;
     let Some(primary) = docs.first() else {
-        return Err(err("tbd holds no document"));
+        return Err(internal_err(MODULE, "tbd holds no document"));
     };
     let exact = format!("{arch}-{platform}");
     let fallback = if arch == "arm64" {
@@ -265,11 +280,14 @@ pub fn parse_tbd(text: &str, arch: &str, platform: &str) -> Result<SharedLibrary
                 .is_some_and(|f| targets.iter().any(|t| t == f))
     };
     if !matches(&primary.targets) {
-        return Err(err(&format!(
-            "tbd for `{}` has no {exact} target (targets: {})",
-            primary.install_name,
-            primary.targets.join(", "),
-        )));
+        return Err(internal_err(
+            MODULE,
+            &format!(
+                "tbd for `{}` has no {exact} target (targets: {})",
+                primary.install_name,
+                primary.targets.join(", "),
+            ),
+        ));
     }
     let mut exports: BTreeSet<String> = BTreeSet::new();
     let mut pending: Vec<&TbdDoc> = alloc::vec![primary];
@@ -320,9 +338,12 @@ fn scan_tbd_documents(text: &str) -> Result<Vec<TbdDoc>, C5Error> {
         if line.starts_with("---") {
             let tag = line.trim_start_matches('-').trim();
             if !tag.is_empty() && tag != "!tapi-tbd" {
-                return Err(err(&format!(
-                    "unsupported tbd document tag `{tag}` (only !tapi-tbd version 4 is read)",
-                )));
+                return Err(internal_err(
+                    MODULE,
+                    &format!(
+                        "unsupported tbd document tag `{tag}` (only !tapi-tbd version 4 is read)",
+                    ),
+                ));
             }
             if let Some(doc) = current.take() {
                 docs.push(scan_tbd_document(&doc)?);
@@ -359,11 +380,14 @@ fn scan_tbd_document(lines: &[&str]) -> Result<TbdDoc, C5Error> {
         }
         open += bracket_balance(line);
         if open < 0 {
-            return Err(err("unbalanced `]` in a tbd flow list"));
+            return Err(internal_err(MODULE, "unbalanced `]` in a tbd flow list"));
         }
     }
     if open != 0 {
-        return Err(err("unterminated `[` flow list in a tbd document"));
+        return Err(internal_err(
+            MODULE,
+            "unterminated `[` flow list in a tbd document",
+        ));
     }
 
     let mut doc = TbdDoc {
@@ -407,9 +431,12 @@ fn scan_tbd_document(lines: &[&str]) -> Result<TbdDoc, C5Error> {
                 "tbd-version" => {
                     section = Section::None;
                     if value != "4" {
-                        return Err(err(&format!(
-                            "tbd-version {value} is not supported (only version 4 is read)",
-                        )));
+                        return Err(internal_err(
+                            MODULE,
+                            &format!(
+                                "tbd-version {value} is not supported (only version 4 is read)",
+                            ),
+                        ));
                     }
                     version_ok = true;
                 }
@@ -456,10 +483,13 @@ fn scan_tbd_document(lines: &[&str]) -> Result<TbdDoc, C5Error> {
         }
     }
     if !version_ok {
-        return Err(err("tbd document carries no `tbd-version: 4`"));
+        return Err(internal_err(
+            MODULE,
+            "tbd document carries no `tbd-version: 4`",
+        ));
     }
     if doc.install_name.is_empty() {
-        return Err(err("tbd document carries no install-name"));
+        return Err(internal_err(MODULE, "tbd document carries no install-name"));
     }
     Ok(doc)
 }
@@ -492,7 +522,12 @@ fn flow_list(value: &str) -> Result<Vec<String>, C5Error> {
     let inner = value
         .strip_prefix('[')
         .and_then(|v| v.strip_suffix(']'))
-        .ok_or_else(|| err(&format!("expected a `[ ... ]` flow list, got `{value}`")))?;
+        .ok_or_else(|| {
+            internal_err(
+                MODULE,
+                &format!("expected a `[ ... ]` flow list, got `{value}`"),
+            )
+        })?;
     let mut out = Vec::new();
     let mut item = String::new();
     let mut quote: Option<char> = None;
@@ -519,7 +554,10 @@ fn flow_list(value: &str) -> Result<Vec<String>, C5Error> {
         }
     }
     if quote.is_some() {
-        return Err(err("unterminated quote in a tbd flow list"));
+        return Err(internal_err(
+            MODULE,
+            "unterminated quote in a tbd flow list",
+        ));
     }
     let t = item.trim();
     if !t.is_empty() {

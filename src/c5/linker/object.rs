@@ -26,8 +26,12 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use super::internal_err;
 use crate::c5::codegen::BinaryFormat;
 use crate::c5::error::C5Error;
+
+/// The tag this module's diagnostics carry.
+const MODULE: &str = "linker::object";
 
 /// One concatenated file-backed stream: its bytes, the alignment the
 /// merged blob must be placed at, and each contributing section's base
@@ -96,10 +100,13 @@ const _: () = {
 pub(crate) fn read_struct<T: Copy>(bytes: &[u8], off: usize) -> Result<T, C5Error> {
     let n = core::mem::size_of::<T>();
     if off.checked_add(n).is_none_or(|end| end > bytes.len()) {
-        return Err(err(&alloc::format!(
-            "ELF record at offset 0x{off:x} (size {n}) past end of file (len {})",
-            bytes.len(),
-        )));
+        return Err(internal_err(
+            MODULE,
+            &alloc::format!(
+                "ELF record at offset 0x{off:x} (size {n}) past end of file (len {})",
+                bytes.len(),
+            ),
+        ));
     }
     // SAFETY: `T` is `Copy + #[repr(C)]` per call site; bounds
     // checked above; little-endian field order matches the
@@ -290,9 +297,12 @@ fn elf_machine(e_machine: u16) -> Result<NativeMachine, C5Error> {
     match e_machine {
         EM_X86_64 => Ok(NativeMachine::X86_64),
         EM_AARCH64 => Ok(NativeMachine::Aarch64),
-        other => Err(err(&format!(
-            "ELF e_machine {other} is not one of EM_X86_64 ({EM_X86_64}) / EM_AARCH64 ({EM_AARCH64})",
-        ))),
+        other => Err(internal_err(
+            MODULE,
+            &format!(
+                "ELF e_machine {other} is not one of EM_X86_64 ({EM_X86_64}) / EM_AARCH64 ({EM_AARCH64})",
+            ),
+        )),
     }
 }
 
@@ -958,7 +968,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     let roles = classify_sections(&shdrs, shstrtab_bytes)?;
     let symtab_sh_i = roles
         .symtab
-        .ok_or_else(|| err("ELF object has no `.symtab` section"))?;
+        .ok_or_else(|| internal_err(MODULE, "ELF object has no `.symtab` section"))?;
     let blobs = concat_families(bytes, &shdrs, &roles)?;
     let sections = input_section_records(&shdrs, shstrtab_bytes, roles.tdata.len(), &blobs)?;
     let (symbols, shndx_map) = decode_symbols(bytes, &shdrs, symtab_sh_i, &blobs, &roles)?;
@@ -1019,29 +1029,42 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
 /// order does not matter past this point.
 fn read_elf_headers(bytes: &[u8]) -> Result<(NativeMachine, Vec<Elf64Shdr>, &[u8]), C5Error> {
     if bytes.len() < 4 || &bytes[0..4] != b"\x7fELF" {
-        return Err(err("not an ELF object (missing 0x7F ELF magic)"));
+        return Err(internal_err(
+            MODULE,
+            "not an ELF object (missing 0x7F ELF magic)",
+        ));
     }
     if bytes.len() < ELF64_EHDR_SIZE {
-        return Err(err(&format!(
-            "ELF object truncated: have {} bytes, need at least {} for the header",
-            bytes.len(),
-            ELF64_EHDR_SIZE,
-        )));
+        return Err(internal_err(
+            MODULE,
+            &format!(
+                "ELF object truncated: have {} bytes, need at least {} for the header",
+                bytes.len(),
+                ELF64_EHDR_SIZE,
+            ),
+        ));
     }
     let ehdr: Elf64Ehdr = read_struct(bytes, 0)?;
     if ehdr.e_ident[4] != ELF_CLASS_64 {
-        return Err(err("ELF object is not 64-bit (ELFCLASS64 expected)"));
+        return Err(internal_err(
+            MODULE,
+            "ELF object is not 64-bit (ELFCLASS64 expected)",
+        ));
     }
     if ehdr.e_ident[5] != ELF_DATA_LSB {
-        return Err(err(
+        return Err(internal_err(
+            MODULE,
             "ELF object is not little-endian (ELFDATA2LSB expected)",
         ));
     }
     if ehdr.e_type != ET_REL {
-        return Err(err(&format!(
-            "ELF object is not relocatable (e_type = {}, expected ET_REL = {ET_REL})",
-            ehdr.e_type,
-        )));
+        return Err(internal_err(
+            MODULE,
+            &format!(
+                "ELF object is not relocatable (e_type = {}, expected ET_REL = {ET_REL})",
+                ehdr.e_type,
+            ),
+        ));
     }
     let machine = elf_machine(ehdr.e_machine)?;
     let e_shoff = ehdr.e_shoff as usize;
@@ -1049,9 +1072,10 @@ fn read_elf_headers(bytes: &[u8]) -> Result<(NativeMachine, Vec<Elf64Shdr>, &[u8
     let e_shnum = ehdr.e_shnum as usize;
     let e_shstrndx = ehdr.e_shstrndx as usize;
     if e_shentsize != ELF64_SHDR_SIZE {
-        return Err(err(&format!(
-            "section header entry size is {e_shentsize}, expected {ELF64_SHDR_SIZE}",
-        )));
+        return Err(internal_err(
+            MODULE,
+            &format!("section header entry size is {e_shentsize}, expected {ELF64_SHDR_SIZE}",),
+        ));
     }
     // e_shoff / e_shnum are attacker-controlled; compute the table end
     // with checked arithmetic so a wrapping product cannot slip past the
@@ -1062,7 +1086,10 @@ fn read_elf_headers(bytes: &[u8]) -> Result<(NativeMachine, Vec<Elf64Shdr>, &[u8
         .and_then(|tbl| e_shoff.checked_add(tbl))
         .is_none_or(|end| end > bytes.len())
     {
-        return Err(err("section header table runs past end of file"));
+        return Err(internal_err(
+            MODULE,
+            "section header table runs past end of file",
+        ));
     }
     let mut shdrs: Vec<Elf64Shdr> = Vec::with_capacity(e_shnum);
     for i in 0..e_shnum {
@@ -1070,12 +1097,13 @@ fn read_elf_headers(bytes: &[u8]) -> Result<(NativeMachine, Vec<Elf64Shdr>, &[u8
         shdrs.push(read_struct(bytes, off)?);
     }
     let shstrtab = shdrs.get(e_shstrndx).ok_or_else(|| {
-        err(&format!(
-            "e_shstrndx ({e_shstrndx}) past end of section header table"
-        ))
+        internal_err(
+            MODULE,
+            &format!("e_shstrndx ({e_shstrndx}) past end of section header table"),
+        )
     })?;
     if shstrtab.sh_type != SHT_STRTAB {
-        return Err(err(".shstrtab section is not SHT_STRTAB"));
+        return Err(internal_err(MODULE, ".shstrtab section is not SHT_STRTAB"));
     }
     let shstrtab_bytes = section_slice(bytes, shstrtab)?;
     Ok((machine, shdrs, shstrtab_bytes))
@@ -1257,9 +1285,12 @@ fn concat_families(
     for &sh_i in &roles.text {
         let sh = &shdrs[sh_i];
         if sh.sh_type == SHT_NOBITS {
-            return Err(err(&format!(
-                "text-family section at index {sh_i} has sh_type SHT_NOBITS (must hold file bytes)",
-            )));
+            return Err(internal_err(
+                MODULE,
+                &format!(
+                    "text-family section at index {sh_i} has sh_type SHT_NOBITS (must hold file bytes)",
+                ),
+            ));
         }
         // Pad to the section's alignment (at least instruction
         // alignment): the `.text` tail carries an odd-length version
@@ -1284,17 +1315,23 @@ fn concat_families(
         for &sh_i in indices {
             let sh = &shdrs[sh_i];
             if sh.sh_type == SHT_NOBITS {
-                return Err(err(&format!(
-                    "{what}-family section at index {sh_i} has sh_type SHT_NOBITS \
+                return Err(internal_err(
+                    MODULE,
+                    &format!(
+                        "{what}-family section at index {sh_i} has sh_type SHT_NOBITS \
                      (must hold file bytes)",
-                )));
+                    ),
+                ));
             }
             let align = sh.sh_addralign.max(1) as usize;
             if !align.is_power_of_two() {
-                return Err(err(&format!(
-                    "{what}-family section at index {sh_i} has non-power-of-two \
+                return Err(internal_err(
+                    MODULE,
+                    &format!(
+                        "{what}-family section at index {sh_i} has non-power-of-two \
                      sh_addralign {align}",
-                )));
+                    ),
+                ));
             }
             out_align = out_align.max(align);
             out.resize(out.len().next_multiple_of(align), 0);
@@ -1312,18 +1349,22 @@ fn concat_families(
     for &sh_i in &roles.bss {
         let sh = &shdrs[sh_i];
         if sh.sh_type != SHT_NOBITS {
-            return Err(err(&format!(
-                "bss-family section at index {sh_i} is not SHT_NOBITS",
-            )));
+            return Err(internal_err(
+                MODULE,
+                &format!("bss-family section at index {sh_i} is not SHT_NOBITS",),
+            ));
         }
         // Same rule as the data-family loop above: honor sh_addralign
         // when concatenating and carry the maximum outward, so the
         // linker aligns this object's base in the merged `.bss`.
         let align = sh.sh_addralign.max(1) as usize;
         if !align.is_power_of_two() {
-            return Err(err(&format!(
-                "bss-family section at index {sh_i} has non-power-of-two sh_addralign {align}",
-            )));
+            return Err(internal_err(
+                MODULE,
+                &format!(
+                    "bss-family section at index {sh_i} has non-power-of-two sh_addralign {align}",
+                ),
+            ));
         }
         bss_align = bss_align.max(align);
         bss_size = bss_size.next_multiple_of(align);
@@ -1335,9 +1376,12 @@ fn concat_families(
     for &sh_i in &roles.tdata {
         let sh = &shdrs[sh_i];
         if sh.sh_type == SHT_NOBITS {
-            return Err(err(&format!(
-                "tdata-family section at index {sh_i} has sh_type SHT_NOBITS (must hold file bytes)",
-            )));
+            return Err(internal_err(
+                MODULE,
+                &format!(
+                    "tdata-family section at index {sh_i} has sh_type SHT_NOBITS (must hold file bytes)",
+                ),
+            ));
         }
         let base = tls_data.len() as u64;
         tls_bases.push((sh_i, base));
@@ -1347,9 +1391,10 @@ fn concat_families(
     for &sh_i in &roles.tbss {
         let sh = &shdrs[sh_i];
         if sh.sh_type != SHT_NOBITS {
-            return Err(err(&format!(
-                "tbss-family section at index {sh_i} is not SHT_NOBITS",
-            )));
+            return Err(internal_err(
+                MODULE,
+                &format!("tbss-family section at index {sh_i} is not SHT_NOBITS",),
+            ));
         }
         tls_bases.push((sh_i, (tls_data.len() + tls_bss_size) as u64));
         tls_bss_size += sh.sh_size as usize;
@@ -1428,19 +1473,26 @@ fn decode_symbols(
     // `.symtab` -> linked `.strtab` lives at `sh_link`.
     let strtab_sh_i = symtab_sh.sh_link as usize;
     let strtab_sh = shdrs.get(strtab_sh_i).ok_or_else(|| {
-        err(&format!(
-            ".symtab's sh_link ({strtab_sh_i}) is not a valid section index"
-        ))
+        internal_err(
+            MODULE,
+            &format!(".symtab's sh_link ({strtab_sh_i}) is not a valid section index"),
+        )
     })?;
     if strtab_sh.sh_type != SHT_STRTAB {
-        return Err(err(".symtab's linked .strtab section is not SHT_STRTAB"));
+        return Err(internal_err(
+            MODULE,
+            ".symtab's linked .strtab section is not SHT_STRTAB",
+        ));
     }
     let strtab_bytes = section_slice(bytes, strtab_sh)?;
     if symtab_sh.sh_entsize != ELF64_SYM_SIZE as u64 {
-        return Err(err(&format!(
-            ".symtab entry size is {} bytes; expected {ELF64_SYM_SIZE}",
-            symtab_sh.sh_entsize,
-        )));
+        return Err(internal_err(
+            MODULE,
+            &format!(
+                ".symtab entry size is {} bytes; expected {ELF64_SYM_SIZE}",
+                symtab_sh.sh_entsize,
+            ),
+        ));
     }
     let symtab_bytes = section_slice(bytes, symtab_sh)?;
     let n_syms = symtab_bytes.len() / ELF64_SYM_SIZE;
@@ -1505,15 +1557,19 @@ fn decode_relocs(
     for &rela_sh_i in rela_sections {
         let rela_sh = &shdrs[rela_sh_i];
         if rela_sh.sh_type != SHT_RELA {
-            return Err(err(&format!(
-                ".rela.* section at index {rela_sh_i} is not SHT_RELA",
-            )));
+            return Err(internal_err(
+                MODULE,
+                &format!(".rela.* section at index {rela_sh_i} is not SHT_RELA",),
+            ));
         }
         if rela_sh.sh_entsize != ELF64_RELA_SIZE as u64 {
-            return Err(err(&format!(
-                ".rela.* entry size at index {rela_sh_i} is {} bytes; expected {ELF64_RELA_SIZE}",
-                rela_sh.sh_entsize,
-            )));
+            return Err(internal_err(
+                MODULE,
+                &format!(
+                    ".rela.* entry size at index {rela_sh_i} is {} bytes; expected {ELF64_RELA_SIZE}",
+                    rela_sh.sh_entsize,
+                ),
+            ));
         }
         let target_shndx = rela_sh.sh_info as usize;
         let (target_base, dest) = match shndx_map.lookup(target_shndx as u16) {
@@ -1524,10 +1580,13 @@ fn decode_relocs(
             // `_Thread_local` object patches the initialization template.
             (NativeSymSection::Tls, base) => (base, &mut relocs.tls),
             (other, _) => {
-                return Err(err(&format!(
-                    ".rela.* section at index {rela_sh_i} targets section {target_shndx} \
+                return Err(internal_err(
+                    MODULE,
+                    &format!(
+                        ".rela.* section at index {rela_sh_i} targets section {target_shndx} \
                      ({other:?}), which carries no patchable merged bytes",
-                )));
+                    ),
+                ));
             }
         };
         let rela_bytes = section_slice(bytes, rela_sh)?;
@@ -1566,10 +1625,13 @@ fn decode_init_arrays(
             .filter(|s| s.sh_type == SHT_RELA && s.sh_info as usize == shndx)
         {
             if rela_sh.sh_entsize != ELF64_RELA_SIZE as u64 {
-                return Err(err(&format!(
-                    ".rela for init/fini section {shndx} has entry size {}; expected {ELF64_RELA_SIZE}",
-                    rela_sh.sh_entsize,
-                )));
+                return Err(internal_err(
+                    MODULE,
+                    &format!(
+                        ".rela for init/fini section {shndx} has entry size {}; expected {ELF64_RELA_SIZE}",
+                        rela_sh.sh_entsize,
+                    ),
+                ));
             }
             let rela_bytes = section_slice(bytes, rela_sh)?;
             let n = rela_bytes.len() / ELF64_RELA_SIZE;
@@ -1577,12 +1639,16 @@ fn decode_init_arrays(
                 let rela: Elf64Rela = read_struct(rela_bytes, j * ELF64_RELA_SIZE)?;
                 let sym_idx = (rela.r_info >> 32) as usize;
                 let sym = symbols.get(sym_idx).ok_or_else(|| {
-                    err(&format!(
-                        "init/fini reloc references symbol {sym_idx} past the symbol table",
-                    ))
+                    internal_err(
+                        MODULE,
+                        &format!(
+                            "init/fini reloc references symbol {sym_idx} past the symbol table",
+                        ),
+                    )
                 })?;
                 if !matches!(sym.section, NativeSymSection::Text) {
-                    return Err(err(
+                    return Err(internal_err(
+                        MODULE,
                         "init/fini array entry must reference a defined function (.text symbol)",
                     ));
                 }
@@ -1857,11 +1923,14 @@ fn parse_rela(bytes: &[u8], sh: &Elf64Shdr) -> Result<Vec<NativeReloc>, C5Error>
     let body = section_slice(bytes, sh)?;
     let entsize = ELF64_RELA_SIZE;
     if !body.len().is_multiple_of(entsize) {
-        return Err(err(&format!(
-            ".rela section size {} is not a multiple of {}",
-            body.len(),
-            entsize,
-        )));
+        return Err(internal_err(
+            MODULE,
+            &format!(
+                ".rela section size {} is not a multiple of {}",
+                body.len(),
+                entsize,
+            ),
+        ));
     }
     let count = body.len() / entsize;
     let mut out = Vec::with_capacity(count);
@@ -1881,12 +1950,6 @@ fn parse_rela(bytes: &[u8], sh: &Elf64Shdr) -> Result<Vec<NativeReloc>, C5Error>
 
 // ---- Internal helpers ----
 
-fn err(msg: &str) -> C5Error {
-    C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
-        "linker::object: {msg}",
-    )))
-}
-
 pub(crate) fn section_slice<'a>(bytes: &'a [u8], sh: &Elf64Shdr) -> Result<&'a [u8], C5Error> {
     if sh.sh_type == SHT_NOBITS {
         return Ok(&[]);
@@ -1897,27 +1960,33 @@ pub(crate) fn section_slice<'a>(bytes: &'a [u8], sh: &Elf64Shdr) -> Result<&'a [
     // whose sum wraps would pass a plain `off + size > len` check and then
     // panic on the slice bound. Compute the end with checked arithmetic.
     if off.checked_add(size).is_none_or(|end| end > bytes.len()) {
-        return Err(err(&format!(
-            "section runs past end of file (offset 0x{off:x} + size 0x{size:x} > len {})",
-            bytes.len(),
-        )));
+        return Err(internal_err(
+            MODULE,
+            &format!(
+                "section runs past end of file (offset 0x{off:x} + size 0x{size:x} > len {})",
+                bytes.len(),
+            ),
+        ));
     }
     Ok(&bytes[off..off + size])
 }
 
 pub(crate) fn strtab_str(strtab: &[u8], off: usize) -> Result<&str, C5Error> {
     if off >= strtab.len() {
-        return Err(err(&format!(
-            "string offset 0x{off:x} past end of strtab (len {})",
-            strtab.len(),
-        )));
+        return Err(internal_err(
+            MODULE,
+            &format!(
+                "string offset 0x{off:x} past end of strtab (len {})",
+                strtab.len(),
+            ),
+        ));
     }
     let end = strtab[off..]
         .iter()
         .position(|&b| b == 0)
-        .ok_or_else(|| err("strtab string is not NUL-terminated"))?;
+        .ok_or_else(|| internal_err(MODULE, "strtab string is not NUL-terminated"))?;
     core::str::from_utf8(&strtab[off..off + end])
-        .map_err(|e| err(&format!("strtab string is not UTF-8: {e}")))
+        .map_err(|e| internal_err(MODULE, &format!("strtab string is not UTF-8: {e}")))
 }
 
 /// Dense `shndx -> (merged section kind, rebase offset)` table. The
@@ -2108,9 +2177,10 @@ fn classify_section(
     if sh_flags & SHF_TLS != 0 {
         // `_Thread_local` storage under a non-standard name: the merged
         // TLS block is built from `.tdata` / `.tbss` only.
-        return Err(err(&format!(
-            "section `{name}` is SHF_TLS but not a `.tdata` / `.tbss` family name"
-        )));
+        return Err(internal_err(
+            MODULE,
+            &format!("section `{name}` is SHF_TLS but not a `.tdata` / `.tbss` family name"),
+        ));
     }
     match sh_type {
         SHT_PROGBITS if sh_flags & SHF_EXECINSTR != 0 => Ok(SectionFamily::Text),
@@ -2121,10 +2191,13 @@ fn classify_section(
         // header table the merged image builds itself; there is no
         // stream to concatenate its bytes into.
         SHT_NOTE => Ok(SectionFamily::Discard),
-        _ => Err(err(&format!(
-            "allocatable section `{name}` has unhandled sh_type {sh_type} \
+        _ => Err(internal_err(
+            MODULE,
+            &format!(
+                "allocatable section `{name}` has unhandled sh_type {sh_type} \
              (flags {sh_flags:#x}); the merge has no stream for it"
-        ))),
+            ),
+        )),
     }
 }
 

@@ -2,15 +2,16 @@
 
 use crate::c5::error::C5Error;
 use crate::c5::linker::lds::PhdrDef;
+use crate::c5::linker::link_err;
 use alloc::format;
 use alloc::vec::Vec;
 use hashbrown::{HashMap, HashSet};
 
 use super::{
-    EM_AARCH64, Elf64Phdr, LdsLinker, PF_R, PF_W, PF_X, PT_DYNAMIC, PT_GNU_EH_FRAME,
+    EM_AARCH64, Elf64Phdr, LdsLinker, MODULE, PF_R, PF_W, PF_X, PT_DYNAMIC, PT_GNU_EH_FRAME,
     PT_GNU_PROPERTY, PT_GNU_STACK, PT_INTERP, PT_LOAD, PT_NOTE, PT_PHDR, SHF_EXECINSTR, SHF_TLS,
     SHF_WRITE, SHT_NOBITS, SHT_NOTE, SYNTH_DYNAMIC, SYNTH_EH_FRAME_HDR, SYNTH_GNU_PROPERTY,
-    SYNTH_INTERP, Stmt, align_up, err,
+    SYNTH_INTERP, Stmt, align_up,
 };
 
 impl<'a> LdsLinker<'a> {
@@ -110,10 +111,13 @@ impl<'a> LdsLinker<'a> {
                     match name_idx.get(n.as_str()) {
                         Some(&k) => set.push(k),
                         None => {
-                            return Err(err(&format!(
-                                "output section `{}' names unknown program header `{n}'",
-                                self.outs[oi].name
-                            )));
+                            return Err(link_err(
+                                MODULE,
+                                &format!(
+                                    "output section `{}' names unknown program header `{n}'",
+                                    self.outs[oi].name
+                                ),
+                            ));
                         }
                     }
                 }

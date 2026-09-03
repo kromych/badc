@@ -13,9 +13,10 @@ use super::got::R_X86_64_GOTPCRELX;
 use super::inputs::RawReloc;
 use super::sections::{is_debug_section, is_unwind_section};
 use super::{
-    EM_386, EM_AARCH64, EM_X86_64, EmittedReloc, LdsLinker, R_NONE, SHN_ABS, SHN_COMMON, SHN_UNDEF,
-    SHT_NOBITS, STB_LOCAL, STB_WEAK, SecFate, err,
+    EM_386, EM_AARCH64, EM_X86_64, EmittedReloc, LdsLinker, MODULE, R_NONE, SHN_ABS, SHN_COMMON,
+    SHN_UNDEF, SHT_NOBITS, STB_LOCAL, STB_WEAK, SecFate,
 };
+use crate::c5::linker::link_err;
 
 impl<'a> LdsLinker<'a> {
     pub(super) fn apply_relocations(
@@ -98,7 +99,7 @@ impl<'a> LdsLinker<'a> {
         }
         if !errors.is_empty() {
             errors.truncate(40);
-            return Err(err(&errors.join("\n")));
+            return Err(link_err(MODULE, &errors.join("\n")));
         }
         Ok(())
     }

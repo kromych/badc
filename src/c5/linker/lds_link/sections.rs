@@ -14,10 +14,11 @@ use hashbrown::HashMap;
 
 use super::inputs::RawSym;
 use super::{
-    InSecId, LdsEmit, LdsLinker, OrphanHandling, OutSec, Piece, Placement, SHF_ALLOC,
+    InSecId, LdsEmit, LdsLinker, MODULE, OrphanHandling, OutSec, Piece, Placement, SHF_ALLOC,
     SHF_EXECINSTR, SHF_GNU_RETAIN, SHF_WRITE, SHN_ABS, SHN_COMMON, SHN_UNDEF, SHT_NOBITS,
-    STB_GLOBAL, STB_LOCAL, STB_WEAK, STT_OBJECT, SYNTH_COMMON, SecFate, Stmt, align_up, err,
+    STB_GLOBAL, STB_LOCAL, STB_WEAK, STT_OBJECT, SYNTH_COMMON, SecFate, Stmt, align_up,
 };
+use crate::c5::linker::link_err;
 
 /// bfd's orphan buckets, in layout order: code, read-only data,
 /// writable data, `.bss`, then everything unallocated.
@@ -143,10 +144,13 @@ impl<'a> LdsLinker<'a> {
                         if s.binding() == STB_WEAK {
                             weak.entry(s.name.clone()).or_insert((oi, si));
                         } else if let Some(&(poi, _)) = strong.get(&s.name) {
-                            return Err(err(&format!(
-                                "multiple definition of `{}` (in {} and {})",
-                                s.name, self.objects[poi].source, self.objects[oi].source
-                            )));
+                            return Err(link_err(
+                                MODULE,
+                                &format!(
+                                    "multiple definition of `{}` (in {} and {})",
+                                    s.name, self.objects[poi].source, self.objects[oi].source
+                                ),
+                            ));
                         } else {
                             strong.insert(s.name.clone(), (oi, si));
                         }
@@ -214,7 +218,7 @@ impl<'a> LdsLinker<'a> {
 
     pub(super) fn build_statements(&mut self) -> Result<(), C5Error> {
         let Some(items) = self.script.sections() else {
-            return Err(err("script has no SECTIONS command"));
+            return Err(link_err(MODULE, "script has no SECTIONS command"));
         };
         for item in items {
             match item {
@@ -553,7 +557,7 @@ impl<'a> LdsLinker<'a> {
             if orphan_list.len() > 20 {
                 msg.push_str(&format!("\n  ... {} total", orphan_list.len()));
             }
-            return Err(err(&msg));
+            return Err(link_err(MODULE, &msg));
         }
         if self.opts.orphan_handling == OrphanHandling::Discard {
             for &i in &orphan_list {

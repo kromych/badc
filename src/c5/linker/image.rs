@@ -36,8 +36,12 @@ use crate::c5::object::elf_reloc_types::{R_AARCH64_JUMP_SLOT, R_X86_64_JUMP_SLOT
 
 use super::link::MergedNative;
 use super::object::{NativeMachine, NativeSymSection};
+use super::{internal_err, link_err};
 use crate::c5::layout::round_up;
 use crate::c5::object::elf_reloc_types::AbsCheck;
+
+/// The tag this module's diagnostics carry.
+const MODULE: &str = "";
 
 /// Page-align `n` up to the next multiple of [`PAGE_SIZE`].
 fn round_up_page(n: u64) -> u64 {
@@ -112,15 +116,19 @@ pub fn write_executable_elf64(merged: &MergedNative, entry_name: &str) -> Result
 fn write_static_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8>, C5Error> {
     // Resolve the entry function's text-segment offset.
     let entry_sym = merged.defined.get(entry_name).ok_or_else(|| {
-        link_err(&format!(
-            "entry symbol `{entry_name}` not defined in any input object"
-        ))
+        link_err(
+            MODULE,
+            &format!("entry symbol `{entry_name}` not defined in any input object"),
+        )
     })?;
     if !matches!(entry_sym.section, NativeSymSection::Text) {
-        return Err(link_err(&format!(
-            "entry symbol `{entry_name}` is not in .text (found {:?})",
-            entry_sym.section
-        )));
+        return Err(link_err(
+            MODULE,
+            &format!(
+                "entry symbol `{entry_name}` is not in .text (found {:?})",
+                entry_sym.section
+            ),
+        ));
     }
     let entry_text_offset = entry_sym.value as usize;
 
@@ -304,11 +312,14 @@ fn patch_data_abs_relocs(
     for r in relocs {
         let slot = r.slot_offset as usize;
         if slot + 8 > data.len() {
-            return Err(err(&format!(
-                "data abs reloc at slot 0x{:x} extends past .data (len 0x{:x})",
-                slot,
-                data.len()
-            )));
+            return Err(internal_err(
+                MODULE,
+                &format!(
+                    "data abs reloc at slot 0x{:x} extends past .data (len 0x{:x})",
+                    slot,
+                    data.len()
+                ),
+            ));
         }
         // `MergedTarget::Data` spans the file-backed data and the
         // zero-fill tail past it in one offset space, so `.bss` needs
@@ -336,11 +347,14 @@ fn patch_data_pcrel_relocs(
         let slot = r.slot_offset as usize;
         let width = r.width as usize;
         if slot + width > data.len() {
-            return Err(err(&format!(
-                "data pcrel reloc at slot 0x{:x} extends past .data (len 0x{:x})",
-                slot,
-                data.len()
-            )));
+            return Err(internal_err(
+                MODULE,
+                &format!(
+                    "data pcrel reloc at slot 0x{:x} extends past .data (len 0x{:x})",
+                    slot,
+                    data.len()
+                ),
+            ));
         }
         // `MergedTarget::Data` spans the file-backed data and the
         // zero-fill tail past it in one offset space (as in
@@ -355,9 +369,12 @@ fn patch_data_pcrel_relocs(
             continue;
         }
         let Ok(v) = i32::try_from(value) else {
-            return Err(err(&format!(
-                "data pcrel reloc at slot 0x{slot:x}: displacement 0x{value:x} exceeds 32 bits",
-            )));
+            return Err(internal_err(
+                MODULE,
+                &format!(
+                    "data pcrel reloc at slot 0x{slot:x}: displacement 0x{value:x} exceeds 32 bits",
+                ),
+            ));
         };
         data[slot..slot + 4].copy_from_slice(&v.to_le_bytes());
     }
@@ -510,14 +527,6 @@ fn aarch64_start_stub(
     buf
 }
 
-fn err(msg: &str) -> C5Error {
-    C5Error::Compile(crate::c5::error::fmt_internal_err(msg))
-}
-
-fn link_err(msg: &str) -> C5Error {
-    C5Error::Compile(crate::c5::error::fmt_link_err(msg))
-}
-
 /// Emit a dynamically-linked ELF64 ET_EXEC for `merged` whose
 /// imports are resolved against libc.so.6 at startup by the
 /// system dynamic linker (DT_BIND_NOW eager binding).
@@ -651,15 +660,19 @@ fn write_dynamic_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8
 /// The entry symbol's `.text` offset.
 fn dynamic_entry_offset(merged: &MergedNative, entry_name: &str) -> Result<usize, C5Error> {
     let entry_sym = merged.defined.get(entry_name).ok_or_else(|| {
-        link_err(&format!(
-            "entry symbol `{entry_name}` not defined in any input object"
-        ))
+        link_err(
+            MODULE,
+            &format!("entry symbol `{entry_name}` not defined in any input object"),
+        )
     })?;
     if !matches!(entry_sym.section, NativeSymSection::Text) {
-        return Err(link_err(&format!(
-            "entry symbol `{entry_name}` is not in .text (found {:?})",
-            entry_sym.section
-        )));
+        return Err(link_err(
+            MODULE,
+            &format!(
+                "entry symbol `{entry_name}` is not in .text (found {:?})",
+                entry_sym.section
+            ),
+        ));
     }
     Ok(entry_sym.value as usize)
 }
@@ -1012,10 +1025,13 @@ fn patch_data_refs(
             | NativeSymSection::DebugAbbrev
             | NativeSymSection::DebugLine
             | NativeSymSection::DebugStr => {
-                return Err(err(&format!(
-                    "parked reloc at text[{:#x}] has unexpected target section {:?}",
-                    r.text_offset, r.target_section,
-                )));
+                return Err(internal_err(
+                    MODULE,
+                    &format!(
+                        "parked reloc at text[{:#x}] has unexpected target section {:?}",
+                        r.text_offset, r.target_section,
+                    ),
+                ));
             }
         };
         let target_vaddr = target_base + r.addend;
@@ -1041,10 +1057,13 @@ fn patch_data_refs(
             .or_else(|| super::link::pcrel_data_field(machine, r.rtype))
             .map_or(4, |(w, _)| w as usize);
         if site.checked_add(width).is_none_or(|end| end > text.len()) {
-            return Err(err(&format!(
-                "data-ref reloc patch offset {site:#x} past end of text (len {})",
-                text.len(),
-            )));
+            return Err(internal_err(
+                MODULE,
+                &format!(
+                    "data-ref reloc patch offset {site:#x} past end of text (len {})",
+                    text.len(),
+                ),
+            ));
         }
         // `R_AARCH64_LDST<n>_ABS_LO12_NC` writes bits [11:log2(n)] of
         // `S + A` into the unsigned-offset load/store imm12, which the
@@ -1205,10 +1224,13 @@ fn patch_plt_trampoline(
             let rip = tramp_vaddr + 6;
             let disp = (slot_vaddr as i64) - (rip as i64);
             let disp32 = i32::try_from(disp).map_err(|_| {
-                err(&format!(
-                    "PLT trampoline at {tramp_offset:#x}: GOT slot disp32 out of range \
+                internal_err(
+                    MODULE,
+                    &format!(
+                        "PLT trampoline at {tramp_offset:#x}: GOT slot disp32 out of range \
                      ({disp:#x})"
-                ))
+                    ),
+                )
             })?;
             text[tramp_offset + 2..tramp_offset + 6].copy_from_slice(&disp32.to_le_bytes());
             Ok(())
@@ -1232,10 +1254,13 @@ fn patch_plt_trampoline(
             text[tramp_offset..tramp_offset + 4].copy_from_slice(&adrp_word.to_le_bytes());
             let page_off = (slot_vaddr & 0xfff) as u32;
             if !page_off.is_multiple_of(8) {
-                return Err(err(&format!(
-                    "PLT trampoline at {tramp_offset:#x}: GOT slot offset {page_off} is not \
+                return Err(internal_err(
+                    MODULE,
+                    &format!(
+                        "PLT trampoline at {tramp_offset:#x}: GOT slot offset {page_off} is not \
                      8-byte aligned"
-                )));
+                    ),
+                ));
             }
             let imm12 = (page_off >> 3) & 0xfff;
             let mut ldr_word =

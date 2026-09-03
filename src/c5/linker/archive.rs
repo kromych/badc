@@ -30,8 +30,12 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
+use super::internal_err;
 use crate::c5::error::C5Error;
 use crate::c5::layout::write_struct;
+
+/// The tag this module's diagnostics carry.
+const MODULE: &str = "";
 
 /// ar(5) member header: a fixed 60-byte record of space-padded ASCII
 /// fields, identical in the regular `!<arch>` and thin `!<thin>`
@@ -57,7 +61,7 @@ fn read_header(bytes: &[u8], off: usize) -> Result<ArHeader, C5Error> {
         .checked_add(AR_HEADER_SIZE)
         .is_none_or(|end| end > bytes.len())
     {
-        return Err(err("ar header truncated"));
+        return Err(internal_err(MODULE, "ar header truncated"));
     }
     // SAFETY: bounds checked above; `ArHeader` is `#[repr(C)]` of byte
     // arrays (align 1), so any offset reads cleanly and the in-memory
@@ -98,7 +102,7 @@ enum MemberSource {
 fn parse_archive_members(blob: &[u8]) -> Result<Vec<(String, MemberSource)>, C5Error> {
     let thin = blob.len() >= 8 && &blob[..8] == b"!<thin>\n";
     if !thin && (blob.len() < 8 || &blob[..8] != b"!<arch>\n") {
-        return Err(err("missing ar(5) magic `!<arch>\\n`"));
+        return Err(internal_err(MODULE, "missing ar(5) magic `!<arch>\\n`"));
     }
     let mut cursor = 8usize;
     let mut long_names: Vec<u8> = Vec::new();
@@ -113,9 +117,10 @@ fn parse_archive_members(blob: &[u8]) -> Result<Vec<(String, MemberSource)>, C5E
         }
         let hdr = read_header(blob, cursor)?;
         if hdr.fmag != [0x60, 0x0a] {
-            return Err(err(&format!(
-                "ar header magic mismatch at offset 0x{cursor:x}"
-            )));
+            return Err(internal_err(
+                MODULE,
+                &format!("ar header magic mismatch at offset 0x{cursor:x}"),
+            ));
         }
         let raw_name = trim_ascii(&hdr.name);
         let size = parse_dec(&trim_ascii(&hdr.size), "size")?;
@@ -130,7 +135,7 @@ fn parse_archive_members(blob: &[u8]) -> Result<Vec<(String, MemberSource)>, C5E
         let inline = !thin || is_meta;
         let mut body: &[u8] = if inline {
             if cursor + size > blob.len() {
-                return Err(err("ar member body truncated"));
+                return Err(internal_err(MODULE, "ar member body truncated"));
             }
             let b = &blob[cursor..cursor + size];
             cursor += size;
@@ -164,9 +169,9 @@ fn parse_archive_members(blob: &[u8]) -> Result<Vec<(String, MemberSource)>, C5E
             // and a trailing `/`, so read the leading digit run and
             // ignore the rest -- matching binutils' ar reader.
             let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
-            let offset: usize = digits
-                .parse()
-                .map_err(|_| err(&format!("bad GNU long-name offset in `{raw_name}`")))?;
+            let offset: usize = digits.parse().map_err(|_| {
+                internal_err(MODULE, &format!("bad GNU long-name offset in `{raw_name}`"))
+            })?;
             extract_long_name(&long_names, offset)?
         } else if let Some(stripped) = raw_name.strip_suffix('/') {
             stripped.to_string()
@@ -201,7 +206,8 @@ pub fn read_archive(blob: &[u8]) -> Result<Vec<ArchiveMember>, C5Error> {
         match src {
             MemberSource::Inline(bytes) => out.push(ArchiveMember { name, bytes }),
             MemberSource::External(_) => {
-                return Err(err(
+                return Err(internal_err(
+                    MODULE,
                     "thin archive member requires a base directory (use read_archive_at)",
                 ));
             }
@@ -230,11 +236,14 @@ pub fn read_archive_at(
                     _ => p.to_path_buf(),
                 };
                 std::fs::read(&resolved).map_err(|e| {
-                    err(&format!(
-                        "thin archive member `{}`: cannot read `{}`: {e}",
-                        name,
-                        resolved.display()
-                    ))
+                    internal_err(
+                        MODULE,
+                        &format!(
+                            "thin archive member `{}`: cannot read `{}`: {e}",
+                            name,
+                            resolved.display()
+                        ),
+                    )
                 })?
             }
         };
@@ -398,28 +407,33 @@ fn parse_dec(s: &str, what: &str) -> Result<usize, C5Error> {
         return Ok(0);
     }
     s.parse::<usize>()
-        .map_err(|_| err(&format!("bad ar {what} field `{s}`")))
+        .map_err(|_| internal_err(MODULE, &format!("bad ar {what} field `{s}`")))
 }
 
 /// Split a BSD `#1/<len>` member: `field` is the header text after the
 /// `#1/` prefix, `body` the member's bytes. Returns the name (trailing
 /// NUL padding removed) and the content that follows it.
 fn split_bsd_name<'a>(field: &str, body: &'a [u8]) -> Result<(String, &'a [u8]), C5Error> {
-    let len: usize = field
-        .trim()
-        .parse()
-        .map_err(|_| err(&format!("bad BSD inline-name length in `#1/{field}`")))?;
+    let len: usize = field.trim().parse().map_err(|_| {
+        internal_err(
+            MODULE,
+            &format!("bad BSD inline-name length in `#1/{field}`"),
+        )
+    })?;
     if len > body.len() {
-        return Err(err(&format!(
-            "BSD inline name of {len} bytes exceeds the {}-byte member body",
-            body.len()
-        )));
+        return Err(internal_err(
+            MODULE,
+            &format!(
+                "BSD inline name of {len} bytes exceeds the {}-byte member body",
+                body.len()
+            ),
+        ));
     }
     let (name, rest) = body.split_at(len);
     let name = &name[..name.iter().position(|&b| b == 0).unwrap_or(len)];
     Ok((
         core::str::from_utf8(name)
-            .map_err(|_| err("BSD inline name is not valid UTF-8"))?
+            .map_err(|_| internal_err(MODULE, "BSD inline name is not valid UTF-8"))?
             .to_string(),
         rest,
     ))
@@ -436,24 +450,20 @@ fn is_bsd_symbol_index(name: &str) -> bool {
 
 fn extract_long_name(table: &[u8], off: usize) -> Result<String, C5Error> {
     if off >= table.len() {
-        return Err(err("GNU long-name offset out of range"));
+        return Err(internal_err(MODULE, "GNU long-name offset out of range"));
     }
     // GNU names end with `\n` or `/\n`. We tolerate both.
     let end = table[off..]
         .iter()
         .position(|&b| b == b'\n')
-        .ok_or_else(|| err("GNU long-name not terminated"))?;
+        .ok_or_else(|| internal_err(MODULE, "GNU long-name not terminated"))?;
     let mut slice = &table[off..off + end];
     if let Some(s) = slice.strip_suffix(b"/") {
         slice = s;
     }
     Ok(core::str::from_utf8(slice)
-        .map_err(|_| err("GNU long-name not valid UTF-8"))?
+        .map_err(|_| internal_err(MODULE, "GNU long-name not valid UTF-8"))?
         .to_string())
-}
-
-fn err(msg: &str) -> C5Error {
-    C5Error::Compile(crate::c5::error::fmt_internal_err(msg))
 }
 
 #[cfg(all(test, feature = "std"))]

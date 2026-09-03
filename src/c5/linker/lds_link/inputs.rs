@@ -2,6 +2,7 @@
 //! flags and relocations.
 
 use crate::c5::error::C5Error;
+use crate::c5::linker::link_err;
 use crate::c5::linker::object::{
     Elf32Ehdr, Elf32Rel, Elf32Rela, Elf32Shdr, Elf32Sym, Elf64Ehdr, Elf64Rel, Elf64Shdr, ElfClass,
     elf_reloc_desc, elf_reloc_field_width, implicit_addend, read_struct,
@@ -12,8 +13,8 @@ use alloc::vec::Vec;
 use hashbrown::HashMap;
 
 use super::{
-    Elf64Rela, Elf64Sym, R_NONE, SHF_EXCLUDE, SHN_XINDEX, SHT_GROUP, SHT_LLVM_ADDRSIG, SHT_NOBITS,
-    SHT_REL, SHT_RELA, SHT_STRTAB, SHT_SYMTAB, SHT_SYMTAB_SHNDX, err,
+    Elf64Rela, Elf64Sym, MODULE, R_NONE, SHF_EXCLUDE, SHN_XINDEX, SHT_GROUP, SHT_LLVM_ADDRSIG,
+    SHT_NOBITS, SHT_REL, SHT_RELA, SHT_STRTAB, SHT_SYMTAB, SHT_SYMTAB_SHNDX,
 };
 
 /// One relocation, as read from a `.rela.<sec>` table.
@@ -101,10 +102,13 @@ impl LdsObject {
 /// structured form; addrsig metadata is dropped.
 pub fn parse_lds_object(source: &str, bytes: Vec<u8>) -> Result<LdsObject, C5Error> {
     if bytes.len() < 52 || &bytes[0..4] != b"\x7fELF" {
-        return Err(err(&format!("{source}: not an ELF object")));
+        return Err(link_err(MODULE, &format!("{source}: not an ELF object")));
     }
     let Some(class) = ElfClass::from_ei_class(bytes[4]).filter(|_| bytes[5] == 1) else {
-        return Err(err(&format!("{source}: not a little-endian ELF object")));
+        return Err(link_err(
+            MODULE,
+            &format!("{source}: not a little-endian ELF object"),
+        ));
     };
     let read_shdr = |off: usize| -> Result<Elf64Shdr, C5Error> {
         match class {
@@ -117,10 +121,13 @@ pub fn parse_lds_object(source: &str, bytes: Vec<u8>) -> Result<LdsObject, C5Err
         ElfClass::Elf64 => read_struct::<Elf64Ehdr>(&bytes, 0)?,
     };
     if ehdr.e_type != 1 {
-        return Err(err(&format!(
-            "{source}: not a relocatable object (e_type {})",
-            ehdr.e_type
-        )));
+        return Err(link_err(
+            MODULE,
+            &format!(
+                "{source}: not a relocatable object (e_type {})",
+                ehdr.e_type
+            ),
+        ));
     }
     let shdr_size = class.shdr_size() as usize;
     let shoff = ehdr.e_shoff as usize;
@@ -224,10 +231,13 @@ pub fn parse_lds_object(source: &str, bytes: Vec<u8>) -> Result<LdsObject, C5Err
             match end {
                 Some(e) if e <= bytes.len() => sh.sh_offset as usize,
                 _ => {
-                    return Err(err(&format!(
-                        "{source}: section {} extends past end of file",
-                        sec_name(sh)
-                    )));
+                    return Err(link_err(
+                        MODULE,
+                        &format!(
+                            "{source}: section {} extends past end of file",
+                            sec_name(sh)
+                        ),
+                    ));
                 }
             }
         };
@@ -315,7 +325,10 @@ pub fn parse_lds_object(source: &str, bytes: Vec<u8>) -> Result<LdsObject, C5Err
         }
         let raw = section_bytes(&bytes, Some(sh), source)?;
         if raw.len() < 4 || raw.len() % 4 != 0 {
-            return Err(err(&format!("{source}: malformed SHT_GROUP body")));
+            return Err(link_err(
+                MODULE,
+                &format!("{source}: malformed SHT_GROUP body"),
+            ));
         }
         let word = |i: usize| u32::from_le_bytes(raw[i..i + 4].try_into().unwrap());
         let signature = symbols
@@ -357,18 +370,24 @@ fn rel_addend(
         return Ok(0);
     }
     let Some(width) = elf_reloc_field_width(machine, rtype) else {
-        return Err(err(&format!(
-            "{source}: {} in `{}' has no implicit-addend field",
-            elf_reloc_desc(machine, rtype),
-            sec.name
-        )));
+        return Err(link_err(
+            MODULE,
+            &format!(
+                "{source}: {} in `{}' has no implicit-addend field",
+                elf_reloc_desc(machine, rtype),
+                sec.name
+            ),
+        ));
     };
     let end = offset + width as u64;
     if sec.shtype == SHT_NOBITS || end > sec.size {
-        return Err(err(&format!(
-            "{source}: relocation offset 0x{offset:x} outside `{}'",
-            sec.name
-        )));
+        return Err(link_err(
+            MODULE,
+            &format!(
+                "{source}: relocation offset 0x{offset:x} outside `{}'",
+                sec.name
+            ),
+        ));
     }
     let at = sec.data_off + offset as usize;
     Ok(implicit_addend(&bytes[at..at + width as usize]))
@@ -379,7 +398,7 @@ fn section_bytes<'a>(
     sh: Option<&Elf64Shdr>,
     source: &str,
 ) -> Result<&'a [u8], C5Error> {
-    let sh = sh.ok_or_else(|| err(&format!("{source}: missing section header")))?;
+    let sh = sh.ok_or_else(|| link_err(MODULE, &format!("{source}: missing section header")))?;
     if sh.sh_type == SHT_NOBITS {
         return Ok(&[]);
     }
@@ -387,7 +406,12 @@ fn section_bytes<'a>(
     let end = start
         .checked_add(sh.sh_size as usize)
         .filter(|&e| e <= bytes.len())
-        .ok_or_else(|| err(&format!("{source}: section extends past end of file")))?;
+        .ok_or_else(|| {
+            link_err(
+                MODULE,
+                &format!("{source}: section extends past end of file"),
+            )
+        })?;
     Ok(&bytes[start..end])
 }
 

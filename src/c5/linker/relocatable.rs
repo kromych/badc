@@ -28,12 +28,16 @@ use crate::c5::object::strtab::build_string_table;
 use super::attributes;
 use super::comdat::{self, SecId};
 use super::gnu_property;
+use super::internal_err;
 use super::lds::{
     BinOp, DataWidth, Expr, LinkerScript, SectionContent, SectionsItem, SortKind, UnOp,
 };
 use super::object::{
     Elf64Ehdr, Elf64Shdr, elf_reloc_desc, elf_reloc_field_width, implicit_addend, read_struct,
 };
+
+/// The tag this module's diagnostics carry.
+const MODULE: &str = "linker::relocatable";
 
 pub const EM_386: u16 = 3;
 pub const EM_X86_64: u16 = 62;
@@ -97,12 +101,6 @@ const ELF64_SHDR_SIZE: usize = 64;
 const ELF64_SYM_SIZE: usize = 24;
 const ELF64_RELA_SIZE: usize = 24;
 const ELF64_REL_SIZE: usize = 16;
-
-fn err(msg: &str) -> C5Error {
-    C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
-        "linker::relocatable: {msg}",
-    )))
-}
 
 /// An input shape the relocatable link declines rather than a broken
 /// invariant: the reader's own diagnostics stay internal errors.
@@ -219,7 +217,7 @@ fn cstr(bytes: &[u8], off: usize) -> Result<String, C5Error> {
         .iter()
         .position(|&b| b == 0)
         .map(|p| start + p)
-        .ok_or_else(|| err("unterminated string-table entry"))?;
+        .ok_or_else(|| internal_err(MODULE, "unterminated string-table entry"))?;
     Ok(String::from_utf8_lossy(&bytes[start..end]).into_owned())
 }
 
@@ -230,9 +228,10 @@ fn section_slice<'a>(bytes: &'a [u8], sh: &Elf64Shdr) -> Result<&'a [u8], C5Erro
     let off = sh.sh_offset as usize;
     let size = sh.sh_size as usize;
     if off.checked_add(size).is_none_or(|end| end > bytes.len()) {
-        return Err(err(&format!(
-            "section at offset 0x{off:x} size 0x{size:x} runs past end of file",
-        )));
+        return Err(internal_err(
+            MODULE,
+            &format!("section at offset 0x{off:x} size 0x{size:x} runs past end of file",),
+        ));
     }
     Ok(&bytes[off..off + size])
 }
@@ -242,7 +241,10 @@ fn section_slice<'a>(bytes: &'a [u8], sh: &Elf64Shdr) -> Result<&'a [u8], C5Erro
 /// sections are consumed into structured form rather than carried.
 pub fn parse_et_rel(bytes: &[u8], source: &str) -> Result<EtRel, C5Error> {
     if bytes.len() < 4 || &bytes[0..4] != b"\x7fELF" {
-        return Err(err(&format!("{source}: not an ELF object")));
+        return Err(internal_err(
+            MODULE,
+            &format!("{source}: not an ELF object"),
+        ));
     }
     let ehdr: Elf64Ehdr = read_struct(bytes, 0)?;
     if ehdr.e_ident[4] != 2 {
@@ -256,16 +258,19 @@ pub fn parse_et_rel(bytes: &[u8], source: &str) -> Result<EtRel, C5Error> {
         )));
     }
     if ehdr.e_type != ET_REL {
-        return Err(err(&format!(
-            "{source}: e_type {} is not ET_REL",
-            ehdr.e_type
-        )));
+        return Err(internal_err(
+            MODULE,
+            &format!("{source}: e_type {} is not ET_REL", ehdr.e_type),
+        ));
     }
     if ehdr.e_shentsize as usize != ELF64_SHDR_SIZE {
-        return Err(err(&format!(
-            "{source}: section header entry size {} != {ELF64_SHDR_SIZE}",
-            ehdr.e_shentsize
-        )));
+        return Err(internal_err(
+            MODULE,
+            &format!(
+                "{source}: section header entry size {} != {ELF64_SHDR_SIZE}",
+                ehdr.e_shentsize
+            ),
+        ));
     }
     // Extended numbering: a section count that does not fit e_shnum
     // lives in section header 0's sh_size and the header-name index in
@@ -282,9 +287,10 @@ pub fn parse_et_rel(bytes: &[u8], source: &str) -> Result<EtRel, C5Error> {
         .and_then(|t| e_shoff.checked_add(t))
         .is_none_or(|end| end > bytes.len())
     {
-        return Err(err(&format!(
-            "{source}: section header table runs past end of file"
-        )));
+        return Err(internal_err(
+            MODULE,
+            &format!("{source}: section header table runs past end of file"),
+        ));
     }
     let mut shdrs: Vec<Elf64Shdr> = Vec::with_capacity(shnum);
     for i in 0..shnum {
@@ -296,7 +302,7 @@ pub fn parse_et_rel(bytes: &[u8], source: &str) -> Result<EtRel, C5Error> {
     };
     let shstr = shdrs
         .get(shstrndx)
-        .ok_or_else(|| err(&format!("{source}: e_shstrndx out of range")))?;
+        .ok_or_else(|| internal_err(MODULE, &format!("{source}: e_shstrndx out of range")))?;
     let shstr_bytes = section_slice(bytes, shstr)?;
 
     // First walk: pick the symtab, classify each header as carried or
@@ -310,7 +316,10 @@ pub fn parse_et_rel(bytes: &[u8], source: &str) -> Result<EtRel, C5Error> {
         match sh.sh_type {
             SHT_SYMTAB => {
                 if symtab_idx.replace(i).is_some() {
-                    return Err(err(&format!("{source}: more than one SHT_SYMTAB")));
+                    return Err(internal_err(
+                        MODULE,
+                        &format!("{source}: more than one SHT_SYMTAB"),
+                    ));
                 }
             }
             SHT_SYMTAB_SHNDX => {
@@ -353,11 +362,14 @@ pub fn parse_et_rel(bytes: &[u8], source: &str) -> Result<EtRel, C5Error> {
     if let Some(si) = symtab_idx {
         let symtab_sh = &shdrs[si];
         if symtab_sh.sh_entsize != ELF64_SYM_SIZE as u64 {
-            return Err(err(&format!("{source}: .symtab entry size mismatch")));
+            return Err(internal_err(
+                MODULE,
+                &format!("{source}: .symtab entry size mismatch"),
+            ));
         }
-        let strtab_sh = shdrs
-            .get(symtab_sh.sh_link as usize)
-            .ok_or_else(|| err(&format!("{source}: .symtab sh_link out of range")))?;
+        let strtab_sh = shdrs.get(symtab_sh.sh_link as usize).ok_or_else(|| {
+            internal_err(MODULE, &format!("{source}: .symtab sh_link out of range"))
+        })?;
         let strtab = section_slice(bytes, strtab_sh)?;
         let symtab = section_slice(bytes, symtab_sh)?;
         // Extended section indices, one word per symbol.
@@ -392,9 +404,12 @@ pub fn parse_et_rel(bytes: &[u8], source: &str) -> Result<EtRel, C5Error> {
                 SHN_XINDEX => {
                     let at = j * 4;
                     if at + 4 > ext.len() {
-                        return Err(err(&format!(
-                            "{source}: SHN_XINDEX symbol {j} past the SHT_SYMTAB_SHNDX table"
-                        )));
+                        return Err(internal_err(
+                            MODULE,
+                            &format!(
+                                "{source}: SHN_XINDEX symbol {j} past the SHT_SYMTAB_SHNDX table"
+                            ),
+                        ));
                     }
                     section_ref(u32::from_le_bytes(ext[at..at + 4].try_into().unwrap()))
                 }
@@ -437,7 +452,10 @@ pub fn parse_et_rel(bytes: &[u8], source: &str) -> Result<EtRel, C5Error> {
         let ent = if rel { ELF64_REL_SIZE } else { ELF64_RELA_SIZE };
         if sh.sh_entsize != ent as u64 {
             let kind = if rel { "SHT_REL" } else { "SHT_RELA" };
-            return Err(err(&format!("{source}: {kind} entry size mismatch")));
+            return Err(internal_err(
+                MODULE,
+                &format!("{source}: {kind} entry size mismatch"),
+            ));
         }
         let Some(ci) = carried.get(sh.sh_info as usize).copied().flatten() else {
             continue; // relocations for a consumed section carry nothing
@@ -471,7 +489,10 @@ pub fn parse_et_rel(bytes: &[u8], source: &str) -> Result<EtRel, C5Error> {
         let sh = &shdrs[gi];
         let body = section_slice(bytes, sh)?;
         if body.len() < 4 || body.len() % 4 != 0 {
-            return Err(err(&format!("{source}: malformed SHT_GROUP body")));
+            return Err(internal_err(
+                MODULE,
+                &format!("{source}: malformed SHT_GROUP body"),
+            ));
         }
         let flags = u32::from_le_bytes(body[0..4].try_into().unwrap());
         let signature = symbols
@@ -532,10 +553,13 @@ fn rel_addend(
     };
     let end = offset + width as u64;
     if sec.sh_type == SHT_NOBITS || end > sec.bytes.len() as u64 {
-        return Err(err(&format!(
-            "{source}: relocation offset 0x{offset:x} outside `{}'",
-            sec.name
-        )));
+        return Err(internal_err(
+            MODULE,
+            &format!(
+                "{source}: relocation offset 0x{offset:x} outside `{}'",
+                sec.name
+            ),
+        ));
     }
     Ok(implicit_addend(&sec.bytes[offset as usize..end as usize]))
 }
@@ -984,15 +1008,18 @@ fn link_relocatable_inner(
     want_map: bool,
 ) -> Result<(Vec<u8>, Vec<(String, Vec<super::map::RelocRow>)>), C5Error> {
     if objs.is_empty() {
-        return Err(err("no input objects"));
+        return Err(internal_err(MODULE, "no input objects"));
     }
     let machine = opts.expect_machine.unwrap_or(objs[0].machine);
     for o in objs {
         if o.machine != machine {
-            return Err(err(&format!(
-                "{}: machine {} does not match the link's machine {}",
-                o.source, o.machine, machine
-            )));
+            return Err(internal_err(
+                MODULE,
+                &format!(
+                    "{}: machine {} does not match the link's machine {}",
+                    o.source, o.machine, machine
+                ),
+            ));
         }
     }
     let comdat::Dedup {
@@ -1249,7 +1276,9 @@ fn push_side_sections(
             .map(|(o, b)| (o.source.as_str(), *b))
             .collect();
         let fmt = attributes::format_for(machine, a.sh_type);
-        let Some(bytes) = attributes::merge(name, fmt, &inputs).map_err(|e| err(&e))? else {
+        let Some(bytes) =
+            attributes::merge(name, fmt, &inputs).map_err(|e| internal_err(MODULE, &e))?
+        else {
             continue;
         };
         let mut out = OutSec::new(name, exec_fill);
@@ -1408,10 +1437,13 @@ fn resolve_globals(
                     _ => {
                         let new_weak = sym.binding == STB_WEAK;
                         if !weak && !new_weak {
-                            return Err(err(&format!(
-                                "multiple definition of `{name}' in {} and {}",
-                                objs[obj].source, o.source
-                            )));
+                            return Err(internal_err(
+                                MODULE,
+                                &format!(
+                                    "multiple definition of `{name}' in {} and {}",
+                                    objs[obj].source, o.source
+                                ),
+                            ));
                         }
                         if weak && !new_weak {
                             GState::Def {
@@ -1433,10 +1465,13 @@ fn resolve_globals(
     for (idx, out) in outsecs.iter().enumerate() {
         for (name, off) in &out.defined_syms {
             if let Some(GState::Def { obj, .. }) = globals.get(name) {
-                return Err(err(&format!(
-                    "multiple definition of `{name}' (linker script and {})",
-                    objs[*obj].source
-                )));
+                return Err(internal_err(
+                    MODULE,
+                    &format!(
+                        "multiple definition of `{name}' (linker script and {})",
+                        objs[*obj].source
+                    ),
+                ));
             }
             if !globals.contains_key(name) {
                 order.push(name.clone());
@@ -1612,10 +1647,13 @@ fn build_symtab<'g>(
                         EtSymRef::Abs => (OutRef::Abs, s.value),
                         EtSymRef::Section(si) => {
                             let &(outsec, off) = placed.get(&(*obj, si)).ok_or_else(|| {
-                                err(&format!(
-                                    "{}: definition of `{}' in a discarded section",
-                                    objs[*obj].source, name
-                                ))
+                                internal_err(
+                                    MODULE,
+                                    &format!(
+                                        "{}: definition of `{}' in a discarded section",
+                                        objs[*obj].source, name
+                                    ),
+                                )
                             })?;
                             (OutRef::Sec(outsec as u32), s.value + off)
                         }
@@ -1672,29 +1710,35 @@ fn map_reloc_symbol(
 ) -> Result<(u32, i64), C5Error> {
     let o = &objs[oi];
     let sym = o.symbols.get(r.sym as usize).ok_or_else(|| {
-        err(&format!(
-            "{}: relocation references symbol {} past the symbol table",
-            o.source, r.sym
-        ))
+        internal_err(
+            MODULE,
+            &format!(
+                "{}: relocation references symbol {} past the symbol table",
+                o.source, r.sym
+            ),
+        )
     })?;
     if r.sym == 0 {
         return Ok((0, r.addend));
     }
     if sym.kind == STT_SECTION {
         let EtSymRef::Section(si) = sym.sec else {
-            return Err(err(&format!(
-                "{}: section symbol {} has no section",
-                o.source, r.sym
-            )));
+            return Err(internal_err(
+                MODULE,
+                &format!("{}: section symbol {} has no section", o.source, r.sym),
+            ));
         };
         let Some(&(outsec, off)) = placed.get(&(oi, si)) else {
             if !allocated {
                 return Ok((0, 0));
             }
-            return Err(err(&format!(
-                "{}: relocation against discarded section `{}'",
-                o.source, o.sections[si].name
-            )));
+            return Err(internal_err(
+                MODULE,
+                &format!(
+                    "{}: relocation against discarded section `{}'",
+                    o.source, o.sections[si].name
+                ),
+            ));
         };
         return Ok((symtab.secsym_of_outsec[outsec], r.addend + off as i64));
     }
@@ -1715,19 +1759,25 @@ fn map_reloc_symbol(
         if !allocated {
             return Ok((0, 0));
         }
-        return Err(err(&format!(
-            "{}: relocation against discarded local `{}'",
-            o.source, sym.name
-        )));
+        return Err(internal_err(
+            MODULE,
+            &format!(
+                "{}: relocation against discarded local `{}'",
+                o.source, sym.name
+            ),
+        ));
     }
     let Some(idx) = symtab.global_index.get(sym.name.as_str()) else {
         if !allocated {
             return Ok((0, 0));
         }
-        return Err(err(&format!(
-            "{}: relocation against unmapped global `{}'",
-            o.source, sym.name
-        )));
+        return Err(internal_err(
+            MODULE,
+            &format!(
+                "{}: relocation against unmapped global `{}'",
+                o.source, sym.name
+            ),
+        ));
     };
     Ok((*idx, r.addend))
 }

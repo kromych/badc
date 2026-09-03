@@ -50,8 +50,12 @@ use crate::c5::object::elf_reloc_types::{
 use crate::c5::object::write_native_image;
 use crate::c5::program::{CodeReloc, DataReloc, ExportedFunction, Program};
 
+use super::internal_err;
 use super::link::{DataAbsReloc, DebugTextReloc, MergedNative, MergedTarget, PltTrampoline};
 use super::object::{NativeMachine, NativeSymSection, STT_FUNC, STT_OBJECT, STV_DEFAULT};
+
+/// The tag this module's diagnostics carry.
+const MODULE: &str = "";
 
 /// Synthesize a Program + Build for `merged` against `target` and
 /// produce the per-format native image bytes. `entry_name` resolves
@@ -459,10 +463,13 @@ fn synth_copy_relocs(merged: &MergedNative, target: Target) -> Result<Vec<CopyRe
             continue;
         };
         if !elf_target {
-            return Err(synth_err(&alloc::format!(
-                "`{local}` is bound as a data import of `{host}` but the image also \
+            return Err(internal_err(
+                MODULE,
+                &alloc::format!(
+                    "`{local}` is bound as a data import of `{host}` but the image also \
                  defines it; remove the definition or the `#pragma binding(data ...)`"
-            )));
+                ),
+            ));
         }
         let is_bss = matches!(sym.section, NativeSymSection::Bss);
         if !is_bss && !matches!(sym.section, NativeSymSection::Data) {
@@ -685,24 +692,31 @@ fn check_target_machine(target: Target, machine: NativeMachine) -> Result<(), C5
         Target::LinuxX64 | Target::WindowsX64 => NativeMachine::X86_64,
     };
     if expect != machine {
-        return Err(synth_err(&alloc::format!(
-            "synthesizer: target {target:?} expects {expect:?}, merged image is {machine:?}"
-        )));
+        return Err(internal_err(
+            MODULE,
+            &alloc::format!(
+                "synthesizer: target {target:?} expects {expect:?}, merged image is {machine:?}"
+            ),
+        ));
     }
     Ok(())
 }
 
 fn resolve_entry_offset(merged: &MergedNative, entry_name: &str) -> Result<usize, C5Error> {
     let sym = merged.defined.get(entry_name).ok_or_else(|| {
-        synth_err(&alloc::format!(
-            "entry symbol `{entry_name}` not defined in any input object"
-        ))
+        internal_err(
+            MODULE,
+            &alloc::format!("entry symbol `{entry_name}` not defined in any input object"),
+        )
     })?;
     if !matches!(sym.section, NativeSymSection::Text) {
-        return Err(synth_err(&alloc::format!(
-            "entry symbol `{entry_name}` is not in .text (found {:?})",
-            sym.section
-        )));
+        return Err(internal_err(
+            MODULE,
+            &alloc::format!(
+                "entry symbol `{entry_name}` is not in .text (found {:?})",
+                sym.section
+            ),
+        ));
     }
     Ok(sym.value as usize)
 }
@@ -751,10 +765,13 @@ fn synth_imports(merged: &MergedNative, target: Target) -> Result<ResolvedImport
             Some(&idx) => idx as usize,
             None if flat_lookup || dylibs.len() <= 1 => 0,
             None => {
-                return Err(synth_err(&alloc::format!(
-                    "import `{name}` carries no dylib routing ({} dylibs in the image)",
-                    dylibs.len(),
-                )));
+                return Err(internal_err(
+                    MODULE,
+                    &alloc::format!(
+                        "import `{name}` carries no dylib routing ({} dylibs in the image)",
+                        dylibs.len(),
+                    ),
+                ));
             }
         };
         imports.push(ResolvedImport {
@@ -955,7 +972,8 @@ fn project_aarch64_pending(
         // knows, and this writer has no fixup that carries it, so it
         // falls through to the declined arm.
         R_AARCH64_CALL26 | R_AARCH64_JUMP26 if reloc.target_section == NativeSymSection::Undef => {
-            return Err(synth_err(
+            return Err(internal_err(
+                MODULE,
                 "synthesizer: an aarch64 branch reloc is still pending after the PLT \
                  pass -- emit_aarch64_plt should have drained it",
             ));
@@ -1095,7 +1113,7 @@ fn project_x86_64_pending(
     let instr_offset = (reloc.text_offset as usize)
         .checked_sub(instr_back_off)
         .ok_or_else(|| {
-            synth_err(&alloc::format!(
+            internal_err(MODULE, &alloc::format!(
                 "synthesizer: x86_64 reloc text_offset {} underflows instr-start adjustment by {}",
                 reloc.text_offset,
                 instr_back_off
@@ -1147,9 +1165,10 @@ fn project_x86_64_pending(
             });
             Ok(())
         }
-        other => Err(synth_err(&alloc::format!(
-            "synthesizer: x86_64 reloc targeting {other:?} not supported"
-        ))),
+        other => Err(internal_err(
+            MODULE,
+            &alloc::format!("synthesizer: x86_64 reloc targeting {other:?} not supported"),
+        )),
     }
 }
 
@@ -1299,19 +1318,18 @@ fn synth_plt_offsets(
     let mut offsets = alloc::vec![None; merged.imports.len()];
     for t in plt {
         if t.import_index >= offsets.len() {
-            return Err(synth_err(&alloc::format!(
-                "PLT trampoline references import index {} out of range ({} imports)",
-                t.import_index,
-                offsets.len(),
-            )));
+            return Err(internal_err(
+                MODULE,
+                &alloc::format!(
+                    "PLT trampoline references import index {} out of range ({} imports)",
+                    t.import_index,
+                    offsets.len(),
+                ),
+            ));
         }
         offsets[t.import_index] = Some(t.text_offset);
     }
     Ok(offsets)
-}
-
-fn synth_err(msg: &str) -> C5Error {
-    C5Error::Compile(crate::c5::error::fmt_internal_err(msg))
 }
 
 #[cfg(test)]

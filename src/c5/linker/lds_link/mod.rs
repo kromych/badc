@@ -38,6 +38,10 @@ mod veneers;
 mod write;
 
 use super::comdat::SecId;
+use super::link_err;
+
+/// The tag this module's diagnostics carry.
+pub(super) const MODULE: &str = "";
 use super::dynamic::{DynTables, HashStyle, VerDef};
 use super::gnu_property;
 use super::lds::{Assignment, DataWidth, Expr, LinkerScript, OutputSectionType};
@@ -52,10 +56,6 @@ use hashbrown::{HashMap, HashSet};
 use inputs::RawSection;
 pub use inputs::{LdsObject, parse_lds_object};
 use sections::is_debug_section;
-
-fn err(msg: &str) -> C5Error {
-    C5Error::Compile(format!("error: {msg}"))
-}
 
 // ELF constants.
 const SHT_PROGBITS: u32 = 1;
@@ -778,24 +778,30 @@ impl<'a> LdsLinker<'a> {
         opts: LdsOptions,
     ) -> Result<Self, C5Error> {
         if objects.is_empty() {
-            return Err(err("no input objects"));
+            return Err(link_err(MODULE, "no input objects"));
         }
         let machine = objects[0].machine;
         for o in &objects[1..] {
             if o.machine != machine {
-                return Err(err(&format!(
-                    "{}: machine {} differs from {}'s {}",
-                    o.source, o.machine, objects[0].source, machine
-                )));
+                return Err(link_err(
+                    MODULE,
+                    &format!(
+                        "{}: machine {} differs from {}'s {}",
+                        o.source, o.machine, objects[0].source, machine
+                    ),
+                ));
             }
         }
         for o in &objects {
             if o.class != class_for_machine(machine) {
-                return Err(err(&format!(
-                    "{}: ELF class does not match machine {}",
-                    o.source,
-                    super::relocatable::elf_machine_desc(machine)
-                )));
+                return Err(link_err(
+                    MODULE,
+                    &format!(
+                        "{}: ELF class does not match machine {}",
+                        o.source,
+                        super::relocatable::elf_machine_desc(machine)
+                    ),
+                ));
             }
         }
         // Property notes are merged into one synthesized note rather
@@ -971,11 +977,11 @@ impl<'a> LdsLinker<'a> {
             self.phdrs = n;
         }
         if !converged {
-            return Err(err("script layout did not converge"));
+            return Err(link_err(MODULE, "script layout did not converge"));
         }
         self.layout_pass(true)?;
         if !self.errors.is_empty() {
-            return Err(err(&self.errors.join("\n")));
+            return Err(link_err(MODULE, &self.errors.join("\n")));
         }
         if !self.undefined.is_empty() {
             let list: Vec<String> = self
@@ -989,14 +995,14 @@ impl<'a> LdsLinker<'a> {
             } else {
                 String::new()
             };
-            return Err(err(&format!("{}{}", list.join("\n"), extra)));
+            return Err(link_err(MODULE, &format!("{}{}", list.join("\n"), extra)));
         }
         let res = self.finish()?;
         // Writing the image can fail on its own: an `.eh_frame` the FDE
         // scan cannot read, or a synthesized table that outgrew the
         // section sized for it.
         if !self.errors.is_empty() {
-            return Err(err(&self.errors.join("\n")));
+            return Err(link_err(MODULE, &self.errors.join("\n")));
         }
         Ok(res)
     }

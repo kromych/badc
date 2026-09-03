@@ -1,6 +1,7 @@
 //! The output symbol table.
 
 use crate::c5::error::C5Error;
+use crate::c5::linker::link_err;
 use crate::c5::object::elf_reloc_types::GOT_BASE_SYMBOL as GOT_SYMBOL;
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::format;
@@ -9,10 +10,10 @@ use alloc::vec::Vec;
 use hashbrown::HashMap;
 
 use super::{
-    Att, EM_AARCH64, EmittedReloc, FinalSym, LdsEmit, LdsLinker, Piece, SHF_EXECINSTR, SHF_MERGE,
-    SHN_ABS, SHN_COMMON, SHN_UNDEF, STB_GLOBAL, STB_LOCAL, STB_WEAK, STT_FILE, STT_FUNC,
+    Att, EM_AARCH64, EmittedReloc, FinalSym, LdsEmit, LdsLinker, MODULE, Piece, SHF_EXECINSTR,
+    SHF_MERGE, SHN_ABS, SHN_COMMON, SHN_UNDEF, STB_GLOBAL, STB_LOCAL, STB_WEAK, STT_FILE, STT_FUNC,
     STT_NOTYPE, STT_OBJECT, STT_SECTION, STV_DEFAULT, STV_HIDDEN, ScriptSym, SecFate, SymIndex,
-    err, machine_uses_rela,
+    machine_uses_rela,
 };
 
 /// Name bfd gives a synthesized file symbol: the input's base name,
@@ -396,7 +397,7 @@ impl<'a> LdsLinker<'a> {
             out.push((oi, body));
         }
         if !unresolved.is_empty() {
-            return Err(err(&unresolved.join("\n")));
+            return Err(link_err(MODULE, &unresolved.join("\n")));
         }
         Ok(out)
     }

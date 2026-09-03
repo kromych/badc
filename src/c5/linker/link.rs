@@ -36,6 +36,7 @@ use crate::c5::layout::{pad_to_align as align_up, round_up as align_usize};
 // `R_X86_64_REX_GOTPCRELX` is the relaxable variant of GOTPCREL marking
 // a `REX mov reg, [rip+disp32]` GOT load (psABI B.2); emitted by c5's
 // writer and other toolchains.
+use super::{internal_err, link_err};
 use crate::c5::object::elf_reloc_types::AbsCheck;
 use crate::c5::object::elf_reloc_types::{
     R_AARCH64_ABS32, R_AARCH64_ABS64, R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_GOT_PAGE,
@@ -46,6 +47,9 @@ use crate::c5::object::elf_reloc_types::{
     R_X86_64_REX_GOTPCRELX, R_X86_64_TPOFF32, aarch64_ldst_lo12_scale, aarch64_movw_field,
     aarch64_pcrel_data_field, aarch64_pcrel_imm_field, x86_64_abs_field, x86_64_pcrel_data_field,
 };
+
+/// The tag this module's diagnostics carry.
+const MODULE: &str = "";
 
 pub(crate) use crate::c5::object::elf_reloc_types::GOT_BASE_SYMBOL;
 
@@ -412,10 +416,13 @@ fn merged_target(
         | NativeSymSection::Tls
         | NativeSymSection::DebugAbbrev
         | NativeSymSection::DebugLine
-        | NativeSymSection::DebugStr => Err(err(&format!(
-            "link_native_objects: reference resolves to {section:?}, which has no merged \
+        | NativeSymSection::DebugStr => Err(internal_err(
+            MODULE,
+            &format!(
+                "link_native_objects: reference resolves to {section:?}, which has no merged \
              text or data offset"
-        ))),
+            ),
+        )),
     }
 }
 
@@ -885,15 +892,21 @@ impl<'a> Link<'a> {
         shared_libs: &'a [SharedLibrary],
     ) -> Result<Link<'a>, C5Error> {
         if objs.is_empty() {
-            return Err(err("link_native_objects: no input objects"));
+            return Err(internal_err(
+                MODULE,
+                "link_native_objects: no input objects",
+            ));
         }
         let machine = objs[0].machine;
         for (i, obj) in objs.iter().enumerate().skip(1) {
             if obj.machine != machine {
-                return Err(err(&format!(
-                    "link_native_objects: object {i}'s machine {:?} differs from object 0's {:?}",
-                    obj.machine, machine,
-                )));
+                return Err(internal_err(
+                    MODULE,
+                    &format!(
+                        "link_native_objects: object {i}'s machine {:?} differs from object 0's {:?}",
+                        obj.machine, machine,
+                    ),
+                ));
             }
         }
         Ok(Link {
@@ -996,6 +1009,7 @@ impl<'a> Link<'a> {
             .collect();
         if !uses_tlv && !elf_tpoff_resolved && tls_objs.len() > 1 {
             return Err(link_err(
+                MODULE,
                 "link_native_objects: more than one input object carries \
                  `_Thread_local` storage -- merging multiple TLS blocks needs \
                  per-unit TPOFF relocations against the merged layout, which \
@@ -1326,10 +1340,13 @@ impl<'a> Link<'a> {
                         .insert(sym.name.as_str(), sym.value as i64)
                         && prev != sym.value as i64
                     {
-                        return Err(link_err(&format!(
-                            "multiple definition of `{}` (first {prev:#x}, also {:#x})",
-                            sym.name, sym.value,
-                        )));
+                        return Err(link_err(
+                            MODULE,
+                            &format!(
+                                "multiple definition of `{}` (first {prev:#x}, also {:#x})",
+                                sym.name, sym.value,
+                            ),
+                        ));
                     }
                     continue;
                 }
@@ -1368,10 +1385,13 @@ impl<'a> Link<'a> {
                     continue;
                 }
                 if let Some(prev) = self.defined.get(sym.name.as_str()) {
-                    return Err(link_err(&format!(
-                        "multiple definition of `{}` (first at offset 0x{:x}, also at 0x{:x})",
-                        sym.name, prev.value, merged.value,
-                    )));
+                    return Err(link_err(
+                        MODULE,
+                        &format!(
+                            "multiple definition of `{}` (first at offset 0x{:x}, also at 0x{:x})",
+                            sym.name, prev.value, merged.value,
+                        ),
+                    ));
                 }
                 self.defined
                     .insert(Cow::Borrowed(sym.name.as_str()), merged);
@@ -1586,7 +1606,7 @@ impl<'a> Link<'a> {
             let origin = RelocOrigin::in_object(obj, SectionFamily::Text);
             for reloc in &obj.text_relocs {
                 let sym = obj.symbols.get(reloc.sym_idx).ok_or_else(|| {
-                    err(&format!(
+                    internal_err(MODULE, &format!(
                         "link_native_objects: object {i} reloc references symbol index {} out of \
                          range ({} symbols)",
                         reloc.sym_idx,
@@ -1711,7 +1731,7 @@ impl<'a> Link<'a> {
                 // gave this name a `.bss` slot, so the merged table
                 // already answers where it lands.
                 let def = *self.defined.get(sym.name.as_str()).ok_or_else(|| {
-                    err(&format!(
+                    internal_err(MODULE, &format!(
                         "link_native_objects: SHN_COMMON `{}` not coalesced (internal: Pass 2.5 missed it)",
                         sym.name,
                     ))
@@ -1720,11 +1740,14 @@ impl<'a> Link<'a> {
                     merged_target(def.section, def.value as i64, reloc.addend, self.data.len())?;
                 self.place_target(patch_offset, reloc, target, site)
             }
-            NativeSymSection::Tls => Err(link_err(&format!(
-                "reloc against `_Thread_local` symbol `{}` -- \
+            NativeSymSection::Tls => Err(link_err(
+                MODULE,
+                &format!(
+                    "reloc against `_Thread_local` symbol `{}` -- \
                  native-linker TLS lowering not yet wired",
-                sym.name,
-            ))),
+                    sym.name,
+                ),
+            )),
             // `.rela.text` shouldn't target a DWARF section symbol; the
             // producer routes those through `.rela.debug_info` /
             // `.rela.debug_line` instead. No input symbol carries the
@@ -1737,10 +1760,13 @@ impl<'a> Link<'a> {
             | NativeSymSection::RoData
             | NativeSymSection::RelRo
             | NativeSymSection::Data
-            | NativeSymSection::Bss => Err(err(&format!(
-                "link_native_objects: `.rela.text` reloc targets {:?} symbol",
-                sym.section,
-            ))),
+            | NativeSymSection::Bss => Err(internal_err(
+                MODULE,
+                &format!(
+                    "link_native_objects: `.rela.text` reloc targets {:?} symbol",
+                    sym.section,
+                ),
+            )),
         }
     }
 
@@ -1776,11 +1802,14 @@ impl<'a> Link<'a> {
             let target =
                 merged_target(def.section, def.value as i64, reloc.addend, self.data.len())
                     .map_err(|_| {
-                        err(&format!(
-                            "link_native_objects: defined entry for `{}` has \
+                        internal_err(
+                            MODULE,
+                            &format!(
+                                "link_native_objects: defined entry for `{}` has \
                          non-progbits section {:?}",
-                            sym.name, def.section,
-                        ))
+                                sym.name, def.section,
+                            ),
+                        )
                     })?;
             return self.place_target(patch_offset, reloc, target, site);
         }
@@ -1789,11 +1818,14 @@ impl<'a> Link<'a> {
         }
         if sym.name.is_empty() {
             // Every reloc the writer emits points at a named symbol.
-            return Err(err(&format!(
-                "link_native_objects: reloc at object {unit} offset 0x{:x} points at \
+            return Err(internal_err(
+                MODULE,
+                &format!(
+                    "link_native_objects: reloc at object {unit} offset 0x{:x} points at \
                  unnamed UNDEF symbol",
-                reloc.offset,
-            )));
+                    reloc.offset,
+                ),
+            ));
         }
         self.admit_import(sym, reloc, patch_offset)
     }
@@ -1855,7 +1887,10 @@ impl<'a> Link<'a> {
             && !shlib_exported
             && !routed
         {
-            return Err(link_err(&format!("undefined reference to `{}`", sym.name,)));
+            return Err(link_err(
+                MODULE,
+                &format!("undefined reference to `{}`", sym.name,),
+            ));
         }
         // A global UNDEF admitted here has no dylib routing; mark it
         // flat so the writer emits a load-time flat-namespace import. A
@@ -1934,19 +1969,25 @@ impl<'a> Link<'a> {
                         match self.tls_symbol_offsets.get(name.as_str()) {
                             Some(o) => *o,
                             None => {
-                                return Err(err(&format!(
-                                    "link_native_objects: TLS access references undefined \
+                                return Err(internal_err(
+                                    MODULE,
+                                    &format!(
+                                        "link_native_objects: TLS access references undefined \
                                  `_Thread_local` symbol `{name}`",
-                                )));
+                                    ),
+                                ));
                             }
                         }
                     }
                 };
                 let patch = self.text_bases[i] + *text_off as usize;
                 if patch + 4 > self.text.len() {
-                    return Err(err(&format!(
-                        "link_native_objects: TLS fixup offset 0x{text_off:x} out of range in object {i}",
-                    )));
+                    return Err(internal_err(
+                        MODULE,
+                        &format!(
+                            "link_native_objects: TLS fixup offset 0x{text_off:x} out of range in object {i}",
+                        ),
+                    ));
                 }
                 match self.machine {
                     NativeMachine::X86_64 => {
@@ -1957,10 +1998,13 @@ impl<'a> Link<'a> {
                         // `merged_offset - merged_size`.
                         let value = if win_teb {
                             if merged_offset > i32::MAX as u64 {
-                                return Err(err(&format!(
-                                    "link_native_objects: TLS offset 0x{merged_offset:x} exceeds the \
+                                return Err(internal_err(
+                                    MODULE,
+                                    &format!(
+                                        "link_native_objects: TLS offset 0x{merged_offset:x} exceeds the \
                                      i32 immediate",
-                                )));
+                                    ),
+                                ));
                             }
                             merged_offset as i64
                         } else {
@@ -1975,10 +2019,13 @@ impl<'a> Link<'a> {
                             merged_offset + 16
                         };
                         if tpoff >= (1 << 24) {
-                            return Err(err(&format!(
-                                "link_native_objects: TLS TPOFF 0x{tpoff:x} exceeds the \
+                            return Err(internal_err(
+                                MODULE,
+                                &format!(
+                                    "link_native_objects: TLS TPOFF 0x{tpoff:x} exceeds the \
                                  hi12/lo12 range",
-                            )));
+                                ),
+                            ));
                         }
                         let patch_imm12 = |text: &mut [u8], at: usize, imm: u32| {
                             let mut insn = u32::from_le_bytes([
@@ -1993,20 +2040,26 @@ impl<'a> Link<'a> {
                         if win_teb {
                             // TEB sequence: a single `add rd, x16, #imm12`.
                             if tpoff >= 4096 {
-                                return Err(err(&format!(
-                                    "link_native_objects: TLS offset 0x{tpoff:x} exceeds the 12-bit \
+                                return Err(internal_err(
+                                    MODULE,
+                                    &format!(
+                                        "link_native_objects: TLS offset 0x{tpoff:x} exceeds the 12-bit \
                                      `add` immediate",
-                                )));
+                                    ),
+                                ));
                             }
                             patch_imm12(&mut self.text, patch, tpoff as u32);
                         } else {
                             // Variant-1 local-exec pair: `add #hi12, lsl 12`
                             // at the fixup, `add #lo12` right after it.
                             if patch + 8 > self.text.len() {
-                                return Err(err(&format!(
-                                    "link_native_objects: TLS fixup offset 0x{text_off:x} out of \
+                                return Err(internal_err(
+                                    MODULE,
+                                    &format!(
+                                        "link_native_objects: TLS fixup offset 0x{text_off:x} out of \
                                      range in object {i}",
-                                )));
+                                    ),
+                                ));
                             }
                             patch_imm12(&mut self.text, patch, (tpoff >> 12) as u32);
                             patch_imm12(&mut self.text, patch + 4, (tpoff & 0xFFF) as u32);
@@ -2078,10 +2131,13 @@ impl<'a> Link<'a> {
         in_tls: bool,
     ) -> Result<(), C5Error> {
         if reloc.sym_idx >= obj.symbols.len() {
-            return Err(err(&format!(
-                "link_native_objects: .rela.data sym_idx {} out of range in object {unit}",
-                reloc.sym_idx,
-            )));
+            return Err(internal_err(
+                MODULE,
+                &format!(
+                    "link_native_objects: .rela.data sym_idx {} out of range in object {unit}",
+                    reloc.sym_idx,
+                ),
+            ));
         }
         let sym = &obj.symbols[reloc.sym_idx];
         // A pc-relative slot in the data stream (a switch dispatch
@@ -2152,12 +2208,15 @@ impl<'a> Link<'a> {
                         || self.import_idx_for_name.contains_key(sym.name.as_str()) =>
                     {
                         if in_tls {
-                            return Err(link_err(&format!(
-                                "`_Thread_local` initializer names imported symbol `{}`: \
+                            return Err(link_err(
+                                MODULE,
+                                &format!(
+                                    "`_Thread_local` initializer names imported symbol `{}`: \
                                  the template is resolved at image load, before the \
                                  import's stub address is known",
-                                sym.name,
-                            )));
+                                    sym.name,
+                                ),
+                            ));
                         }
                         let idx = self.record_import(sym.name.as_str());
                         self.flat_imports.insert(sym.name.clone());
@@ -2170,19 +2229,22 @@ impl<'a> Link<'a> {
                         } else {
                             "data initializer"
                         };
-                        return Err(link_err(&format!(
-                            "undefined reference to `{}` ({site})",
-                            sym.name,
-                        )));
+                        return Err(link_err(
+                            MODULE,
+                            &format!("undefined reference to `{}` ({site})", sym.name,),
+                        ));
                     }
                 }
             }
             NativeSymSection::Tls => {
-                return Err(link_err(&format!(
-                    ".rela.data targets `_Thread_local` symbol `{}` -- \
+                return Err(link_err(
+                    MODULE,
+                    &format!(
+                        ".rela.data targets `_Thread_local` symbol `{}` -- \
                      native-linker TLS lowering not yet wired",
-                    sym.name,
-                )));
+                        sym.name,
+                    ),
+                ));
             }
             other => other,
         };
@@ -2200,32 +2262,44 @@ impl<'a> Link<'a> {
             NativeSymSection::Bss => self.bss_map[unit].at(sym.value) as i64,
             NativeSymSection::Text => self.text_bases[unit] as i64 + sym.value as i64,
             NativeSymSection::Tls => {
-                return Err(link_err(&format!(
-                    ".rela.data points at `_Thread_local` symbol `{}` -- \
+                return Err(link_err(
+                    MODULE,
+                    &format!(
+                        ".rela.data points at `_Thread_local` symbol `{}` -- \
                      native-linker TLS lowering not yet wired",
-                    sym.name,
-                )));
+                        sym.name,
+                    ),
+                ));
             }
             NativeSymSection::Abs => {
-                return Err(err(&format!(
-                    "link_native_objects: .rela.data ABS symbol `{}` reached the \
+                return Err(internal_err(
+                    MODULE,
+                    &format!(
+                        "link_native_objects: .rela.data ABS symbol `{}` reached the \
                      section-relative path",
-                    sym.name,
-                )));
+                        sym.name,
+                    ),
+                ));
             }
             NativeSymSection::Got => {
-                return Err(err(&format!(
-                    "link_native_objects: input symbol `{}` carries the GOT section",
-                    sym.name,
-                )));
+                return Err(internal_err(
+                    MODULE,
+                    &format!(
+                        "link_native_objects: input symbol `{}` carries the GOT section",
+                        sym.name,
+                    ),
+                ));
             }
             NativeSymSection::DebugAbbrev
             | NativeSymSection::DebugLine
             | NativeSymSection::DebugStr => {
-                return Err(err(&format!(
-                    "link_native_objects: .rela.data points at {:?} symbol `{}`",
-                    sym.section, sym.name,
-                )));
+                return Err(internal_err(
+                    MODULE,
+                    &format!(
+                        "link_native_objects: .rela.data points at {:?} symbol `{}`",
+                        sym.section, sym.name,
+                    ),
+                ));
             }
         };
         let target = merged_target(
@@ -2235,10 +2309,13 @@ impl<'a> Link<'a> {
             self.data.len(),
         )
         .map_err(|_| {
-            err(&format!(
-                "link_native_objects: .rela.data target `{}` lives in {:?}",
-                sym.name, resolved_section,
-            ))
+            internal_err(
+                MODULE,
+                &format!(
+                    "link_native_objects: .rela.data target `{}` lives in {:?}",
+                    sym.name, resolved_section,
+                ),
+            )
         })?;
         // The anchor is the resolved symbol alone; the addend may
         // displace `target` outside the image (a negative addend below
@@ -2252,9 +2329,10 @@ impl<'a> Link<'a> {
             MergedTarget::Text(o) | MergedTarget::Data(o) => o,
         };
         if off < 0 {
-            return Err(err(&format!(
-                "link_native_objects: .rela.data resolved to negative offset {off}",
-            )));
+            return Err(internal_err(
+                MODULE,
+                &format!("link_native_objects: .rela.data resolved to negative offset {off}",),
+            ));
         }
         let dest = if in_tls {
             &mut self.tls_abs_relocs
@@ -2282,30 +2360,39 @@ impl<'a> Link<'a> {
         let (section, value) = match sym.section {
             NativeSymSection::Undef | NativeSymSection::Common => {
                 let d = self.defined.get(sym.name.as_str()).ok_or_else(|| {
-                    link_err(&format!(
-                        "undefined reference to `{}` (pc-relative data slot)",
-                        sym.name,
-                    ))
+                    link_err(
+                        MODULE,
+                        &format!(
+                            "undefined reference to `{}` (pc-relative data slot)",
+                            sym.name,
+                        ),
+                    )
                 })?;
                 (d.section, d.value as i64)
             }
             other => match self.unit_symbol_offset(unit, other, sym.value) {
                 Some(v) => (other, v as i64),
                 None => {
-                    return Err(err(&format!(
-                        "pc-relative data slot targets {other:?} symbol `{}`",
-                        sym.name,
-                    )));
+                    return Err(internal_err(
+                        MODULE,
+                        &format!(
+                            "pc-relative data slot targets {other:?} symbol `{}`",
+                            sym.name,
+                        ),
+                    ));
                 }
             },
         };
         if in_tls {
-            return Err(link_err(&format!(
-                "pc-relative relocation against `{}` in the `_Thread_local` \
+            return Err(link_err(
+                MODULE,
+                &format!(
+                    "pc-relative relocation against `{}` in the `_Thread_local` \
                  initialization template: the template is copied per thread, \
                  so a displacement from it has no fixed value",
-                sym.name,
-            )));
+                    sym.name,
+                ),
+            ));
         }
         self.data_pcrel_relocs.push(DataPcRel {
             slot_offset,
@@ -2332,10 +2419,13 @@ impl<'a> Link<'a> {
             &mut self.data
         };
         if slot + 8 > seg.len() {
-            return Err(err(&format!(
-                "{what} data reloc slot 0x{slot:x} past end of segment (len {})",
-                seg.len(),
-            )));
+            return Err(internal_err(
+                MODULE,
+                &format!(
+                    "{what} data reloc slot 0x{slot:x} past end of segment (len {})",
+                    seg.len(),
+                ),
+            ));
         }
         seg[slot..slot + 8].copy_from_slice(&value.to_le_bytes());
         Ok(())
@@ -2379,11 +2469,14 @@ impl<'a> Link<'a> {
             }
             for (name, idx) in &obj.import_dylib_map {
                 let merged_idx = local_to_merged.get(*idx as usize).copied().ok_or_else(|| {
-                    link_err(&format!(
-                        "object {i}: import `{name}` routes to dylib index {idx} \
+                    link_err(
+                        MODULE,
+                        &format!(
+                            "object {i}: import `{name}` routes to dylib index {idx} \
                          out of range ({} dylibs declared)",
-                        obj.dylibs.len(),
-                    ))
+                            obj.dylibs.len(),
+                        ),
+                    )
                 })?;
                 match import_dylib_map.get(name) {
                     None => {
@@ -2391,10 +2484,13 @@ impl<'a> Link<'a> {
                     }
                     Some(&prev) if prev == merged_idx => {}
                     Some(&prev) => {
-                        return Err(link_err(&format!(
-                            "import `{name}` routed to `{}` by one object and `{}` by another",
-                            dylibs[prev as usize], dylibs[merged_idx as usize],
-                        )));
+                        return Err(link_err(
+                            MODULE,
+                            &format!(
+                                "import `{name}` routed to `{}` by one object and `{}` by another",
+                                dylibs[prev as usize], dylibs[merged_idx as usize],
+                            ),
+                        ));
                     }
                 }
             }
@@ -2465,9 +2561,10 @@ impl<'a> Link<'a> {
             for (di, &off) in obj.macho_tlv_descriptors.iter().enumerate() {
                 let resolved = match sym_for.get(&di) {
                     Some(name) => *self.tls_symbol_offsets.get(*name).ok_or_else(|| {
-                        link_err(&format!(
-                            "unresolved `extern _Thread_local` reference to `{name}`",
-                        ))
+                        link_err(
+                            MODULE,
+                            &format!("unresolved `extern _Thread_local` reference to `{name}`",),
+                        )
                     })?,
                     None => self.tls_bases[i] as u64 + off,
                 };
@@ -2568,11 +2665,14 @@ impl<'a> Link<'a> {
             let unit_idx = units[i];
             let obj = &self.objs[unit_idx];
             let sym = obj.symbols.get(reloc.sym_idx).ok_or_else(|| {
-                err(&format!(
-                    "link_native_objects: {} reloc references symbol index {} out of range",
-                    &name[1..],
-                    reloc.sym_idx,
-                ))
+                internal_err(
+                    MODULE,
+                    &format!(
+                        "link_native_objects: {} reloc references symbol index {} out of range",
+                        &name[1..],
+                        reloc.sym_idx,
+                    ),
+                )
             })?;
             self.resolve_debug_reloc(
                 section,
@@ -2609,17 +2709,23 @@ impl<'a> Link<'a> {
         ) {
             let end = patch_off + 8;
             if end > section_bytes.len() {
-                return Err(err(&format!(
-                    "link_native_objects: DWARF reloc patch at 0x{patch_off:x}+8 past section end \
+                return Err(internal_err(
+                    MODULE,
+                    &format!(
+                        "link_native_objects: DWARF reloc patch at 0x{patch_off:x}+8 past section end \
                      ({} bytes)",
-                    section_bytes.len(),
-                )));
+                        section_bytes.len(),
+                    ),
+                ));
             }
             if sym.section != NativeSymSection::Tls {
-                return Err(link_err(&format!(
-                    "thread-block offset in debug info against non-TLS symbol `{}`",
-                    sym.name,
-                )));
+                return Err(link_err(
+                    MODULE,
+                    &format!(
+                        "thread-block offset in debug info against non-TLS symbol `{}`",
+                        sym.name,
+                    ),
+                ));
             }
             let value = (self.tls_bases[unit_idx] as u64)
                 .wrapping_add(sym.value)
@@ -2692,16 +2798,19 @@ impl<'a> Link<'a> {
             }
         };
         let end = patch_off.checked_add(width as usize).ok_or_else(|| {
-            err(&format!(
+            internal_err(MODULE, &format!(
                 "link_native_objects: DWARF reloc offset 0x{patch_off:x} + width {width} overflows",
             ))
         })?;
         if end > section_bytes.len() {
-            return Err(err(&format!(
-                "link_native_objects: DWARF reloc patch at 0x{patch_off:x}+{width} past section end \
+            return Err(internal_err(
+                MODULE,
+                &format!(
+                    "link_native_objects: DWARF reloc patch at 0x{patch_off:x}+{width} past section end \
                  ({} bytes)",
-                section_bytes.len(),
-            )));
+                    section_bytes.len(),
+                ),
+            ));
         }
         if resolvable && in_text && width == 8 {
             // A 64-bit text reference is a runtime address: stash the
@@ -3041,12 +3150,15 @@ fn emit_plt(
             continue;
         }
         if !plt_eligible(machine, reloc.rtype) {
-            return Err(link_err(&format!(
-                "unsupported {} against import `{}`: an imported symbol is reachable \
+            return Err(link_err(
+                MODULE,
+                &format!(
+                    "unsupported {} against import `{}`: an imported symbol is reachable \
                  only through a PLT-eligible relocation",
-                reloc_desc(machine, reloc.rtype),
-                import_name(merged, reloc.import_index),
-            )));
+                    reloc_desc(machine, reloc.rtype),
+                    import_name(merged, reloc.import_index),
+                ),
+            ));
         }
         if let alloc::collections::btree_map::Entry::Vacant(e) =
             tramp_for_import.entry(reloc.import_index)
@@ -3103,10 +3215,13 @@ fn emit_plt(
 /// byte offset within the merged text.
 pub fn emit_x86_64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>, C5Error> {
     if merged.machine != NativeMachine::X86_64 {
-        return Err(err(&format!(
-            "emit_x86_64_plt: only NativeMachine::X86_64 is supported, got {:?}",
-            merged.machine,
-        )));
+        return Err(internal_err(
+            MODULE,
+            &format!(
+                "emit_x86_64_plt: only NativeMachine::X86_64 is supported, got {:?}",
+                merged.machine,
+            ),
+        ));
     }
     emit_plt(merged, |merged, reloc, tramp, _parked| {
         let name = import_name(merged, reloc.import_index).to_string();
@@ -3135,10 +3250,13 @@ pub fn emit_x86_64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>, 
 /// vmaddr, exactly like a function-pointer literal.
 pub fn emit_aarch64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>, C5Error> {
     if merged.machine != NativeMachine::Aarch64 {
-        return Err(err(&format!(
-            "emit_aarch64_plt: only NativeMachine::Aarch64 is supported, got {:?}",
-            merged.machine,
-        )));
+        return Err(internal_err(
+            MODULE,
+            &format!(
+                "emit_aarch64_plt: only NativeMachine::Aarch64 is supported, got {:?}",
+                merged.machine,
+            ),
+        ));
     }
     emit_plt(merged, |merged, reloc, tramp, parked_back| {
         match reloc.rtype {
@@ -3200,18 +3318,22 @@ fn resolve_weak_undef_to_zero(
     name: &str,
 ) -> Result<(), C5Error> {
     let unsupported = |what: &str| {
-        link_err(&format!(
-            "unresolved weak reference to `{name}`: cannot resolve {what} to address 0",
-        ))
+        link_err(
+            MODULE,
+            &format!("unresolved weak reference to `{name}`: cannot resolve {what} to address 0",),
+        )
     };
     if patch_offset
         .checked_add(4)
         .is_none_or(|end| end > text.len())
     {
-        return Err(err(&format!(
-            "relocation patch offset 0x{patch_offset:x} past end of text (len {})",
-            text.len(),
-        )));
+        return Err(internal_err(
+            MODULE,
+            &format!(
+                "relocation patch offset 0x{patch_offset:x} past end of text (len {})",
+                text.len(),
+            ),
+        ));
     }
     use crate::c5::object::weak_undef as wu;
     let ok = match (machine, reloc.rtype) {
@@ -3257,10 +3379,13 @@ fn resolve_weak_undef_to_zero(
 /// stream before indexing rather than panicking on the slice bound.
 fn check_patch_bounds(text: &[u8], offset: usize, width: usize) -> Result<(), C5Error> {
     if offset.checked_add(width).is_none_or(|end| end > text.len()) {
-        return Err(err(&format!(
-            "relocation patch offset 0x{offset:x} past end of text (len {})",
-            text.len(),
-        )));
+        return Err(internal_err(
+            MODULE,
+            &format!(
+                "relocation patch offset 0x{offset:x} past end of text (len {})",
+                text.len(),
+            ),
+        ));
     }
     Ok(())
 }
@@ -3388,8 +3513,12 @@ fn patch_aarch64_pcrel(
     target: i64,
     site: &RelocSite<'_>,
 ) -> Result<(), C5Error> {
-    let (lsb, width, scale) = aarch64_pcrel_imm_field(site.rtype)
-        .ok_or_else(|| err("patch_aarch64_pcrel: type carries no PC-relative immediate"))?;
+    let (lsb, width, scale) = aarch64_pcrel_imm_field(site.rtype).ok_or_else(|| {
+        internal_err(
+            MODULE,
+            "patch_aarch64_pcrel: type carries no PC-relative immediate",
+        )
+    })?;
     check_patch_bounds(text, offset, 4)?;
     let disp = target - offset as i64;
     if disp.rem_euclid(scale as i64) != 0 {
@@ -3427,13 +3556,23 @@ fn patch_x86_64_pc32(
 }
 
 fn patch_aarch64_adr_pg(text: &mut [u8], offset: usize, target: i64) -> Result<(), C5Error> {
-    crate::c5::codegen::aarch64::patch::patch_adrp(text, offset, offset as i64, target)
-        .map_err(|e| err(&e.describe(&format!("ADR_PREL_PG_HI21 at 0x{offset:x}"))))
+    crate::c5::codegen::aarch64::patch::patch_adrp(text, offset, offset as i64, target).map_err(
+        |e| {
+            internal_err(
+                MODULE,
+                &e.describe(&format!("ADR_PREL_PG_HI21 at 0x{offset:x}")),
+            )
+        },
+    )
 }
 
 fn patch_aarch64_add_lo12(text: &mut [u8], offset: usize, target: i64) -> Result<(), C5Error> {
-    crate::c5::codegen::aarch64::patch::patch_lo12(text, offset, target)
-        .map_err(|e| err(&e.describe(&format!("ADD_ABS_LO12_NC at 0x{offset:x}"))))
+    crate::c5::codegen::aarch64::patch::patch_lo12(text, offset, target).map_err(|e| {
+        internal_err(
+            MODULE,
+            &e.describe(&format!("ADD_ABS_LO12_NC at 0x{offset:x}")),
+        )
+    })
 }
 
 /// The `adrp` + low-12 pair materializes an address from the target
@@ -3577,14 +3716,6 @@ fn resolve_merged_target(
 }
 
 // ---- helpers ----
-
-fn err(msg: &str) -> C5Error {
-    C5Error::Compile(crate::c5::error::fmt_internal_err(msg))
-}
-
-fn link_err(msg: &str) -> C5Error {
-    C5Error::Compile(crate::c5::error::fmt_link_err(msg))
-}
 
 #[cfg(test)]
 mod tests {

@@ -26,10 +26,14 @@ use crate::c5::object::elf_reloc_types::{
     R_AARCH64_PREL64,
 };
 
+use super::internal_err;
 use super::object::{
     InputSection, NativeInitFunc, NativeMachine, NativeObject, NativeReloc, NativeSymSection,
     NativeSymbol, STT_FUNC, STT_NOTYPE, STT_OBJECT, SectionFamily,
 };
+
+/// The tag this module's diagnostics carry.
+const MODULE: &str = "linker::mach_o_object";
 
 const MH_MAGIC_64: u32 = 0xFEED_FACF;
 const MH_OBJECT: u32 = 0x1;
@@ -200,18 +204,12 @@ fn u64le(bytes: &[u8], off: usize) -> Option<u64> {
     ]))
 }
 
-fn err(msg: &str) -> C5Error {
-    C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
-        "linker::mach_o_object: {msg}",
-    )))
-}
-
 fn need_u32(bytes: &[u8], off: usize, what: &str) -> Result<u32, C5Error> {
-    u32le(bytes, off).ok_or_else(|| err(&format!("{what} runs past end of file")))
+    u32le(bytes, off).ok_or_else(|| internal_err(MODULE, &format!("{what} runs past end of file")))
 }
 
 fn need_u64(bytes: &[u8], off: usize, what: &str) -> Result<u64, C5Error> {
-    u64le(bytes, off).ok_or_else(|| err(&format!("{what} runs past end of file")))
+    u64le(bytes, off).ok_or_else(|| internal_err(MODULE, &format!("{what} runs past end of file")))
 }
 
 /// A 16-byte `segname` / `sectname` field, NUL-padded and not
@@ -219,19 +217,19 @@ fn need_u64(bytes: &[u8], off: usize, what: &str) -> Result<u64, C5Error> {
 fn fixed_name(bytes: &[u8], off: usize) -> Result<String, C5Error> {
     let raw = bytes
         .get(off..off + 16)
-        .ok_or_else(|| err("section name field runs past end of file"))?;
+        .ok_or_else(|| internal_err(MODULE, "section name field runs past end of file"))?;
     let end = raw.iter().position(|&b| b == 0).unwrap_or(raw.len());
     core::str::from_utf8(&raw[..end])
         .map(|s| s.to_string())
-        .map_err(|_| err("section name is not UTF-8"))
+        .map_err(|_| internal_err(MODULE, "section name is not UTF-8"))
 }
 
 fn cstr(strtab: &[u8], off: usize) -> Result<&str, C5Error> {
     let rest = strtab
         .get(off..)
-        .ok_or_else(|| err("string offset past end of string table"))?;
+        .ok_or_else(|| internal_err(MODULE, "string offset past end of string table"))?;
     let end = rest.iter().position(|&b| b == 0).unwrap_or(rest.len());
-    core::str::from_utf8(&rest[..end]).map_err(|_| err("symbol name is not UTF-8"))
+    core::str::from_utf8(&rest[..end]).map_err(|_| internal_err(MODULE, "symbol name is not UTF-8"))
 }
 
 /// One `section_64`, plus the family and merged-blob base the parse
@@ -266,11 +264,14 @@ impl Sect {
         let off = self.offset as usize;
         let size = self.size as usize;
         if off.checked_add(size).is_none_or(|end| end > bytes.len()) {
-            return Err(err(&format!(
-                "section `{}` content runs past end of file (offset {off:#x} + size {size:#x} > len {})",
-                self.label(),
-                bytes.len(),
-            )));
+            return Err(internal_err(
+                MODULE,
+                &format!(
+                    "section `{}` content runs past end of file (offset {off:#x} + size {size:#x} > len {})",
+                    self.label(),
+                    bytes.len(),
+                ),
+            ));
         }
         Ok(&bytes[off..off + size])
     }
@@ -294,11 +295,14 @@ fn classify(sect: &Sect, has_relocs: bool) -> Result<SectionFamily, C5Error> {
         return Ok(SectionFamily::Discard);
     }
     if (S_THREAD_LOCAL_FIRST..=S_THREAD_LOCAL_LAST).contains(&kind) {
-        return Err(err(&format!(
-            "section `{}` holds thread-local storage (section type {kind:#x}); \
+        return Err(internal_err(
+            MODULE,
+            &format!(
+                "section `{}` holds thread-local storage (section type {kind:#x}); \
              the Mach-O reader does not model TLS",
-            sect.label(),
-        )));
+                sect.label(),
+            ),
+        ));
     }
     match kind {
         S_ZEROFILL | S_GB_ZEROFILL => return Ok(SectionFamily::Bss),
@@ -319,10 +323,13 @@ fn classify(sect: &Sect, has_relocs: bool) -> Result<SectionFamily, C5Error> {
             SectionFamily::Data
         }
     } else {
-        return Err(err(&format!(
-            "section `{}` is in a segment the merge has no stream for",
-            sect.label(),
-        )));
+        return Err(internal_err(
+            MODULE,
+            &format!(
+                "section `{}` is in a segment the merge has no stream for",
+                sect.label(),
+            ),
+        ));
     };
     Ok(if family == SectionFamily::RoData && has_relocs {
         SectionFamily::RelRo
@@ -350,10 +357,13 @@ fn read_relocs(bytes: &[u8], sect: &Sect) -> Result<Vec<Reloc>, C5Error> {
             .checked_add(n * RELOCATION_INFO_SIZE)
             .is_none_or(|e| e > bytes.len())
     {
-        return Err(err(&format!(
-            "section `{}` relocation table runs past end of file",
-            sect.label(),
-        )));
+        return Err(internal_err(
+            MODULE,
+            &format!(
+                "section `{}` relocation table runs past end of file",
+                sect.label(),
+            ),
+        ));
     }
     let mut out = Vec::with_capacity(n);
     for i in 0..n {
@@ -361,11 +371,14 @@ fn read_relocs(bytes: &[u8], sect: &Sect) -> Result<Vec<Reloc>, C5Error> {
         let address = need_u32(bytes, off, "relocation")?;
         let info = need_u32(bytes, off + 4, "relocation")?;
         if address & R_SCATTERED != 0 {
-            return Err(err(&format!(
-                "section `{}` carries a scattered relocation; the Mach-O reader \
+            return Err(internal_err(
+                MODULE,
+                &format!(
+                    "section `{}` carries a scattered relocation; the Mach-O reader \
                  handles only the `relocation_info` form",
-                sect.label(),
-            )));
+                    sect.label(),
+                ),
+            ));
         }
         out.push(Reloc {
             address,
@@ -401,27 +414,32 @@ fn pageoff12_rtype(insn: u32, site: &str) -> Result<u32, C5Error> {
             _ => R_AARCH64_LDST64_ABS_LO12_NC,
         });
     }
-    Err(err(&format!(
-        "{site}: ARM64_RELOC_PAGEOFF12 patches instruction {insn:#010x}, \
+    Err(internal_err(
+        MODULE,
+        &format!(
+            "{site}: ARM64_RELOC_PAGEOFF12 patches instruction {insn:#010x}, \
          which is neither an `add` immediate nor a load / store",
-    )))
+        ),
+    ))
 }
 
 /// Read the `length`-coded field a Mach-O relocation stores its
 /// implicit addend in.
 fn stored_addend(content: &[u8], at: usize, length: u8, site: &str) -> Result<i64, C5Error> {
     let short = || {
-        err(&format!(
-            "{site}: relocation field runs past section content"
-        ))
+        internal_err(
+            MODULE,
+            &format!("{site}: relocation field runs past section content"),
+        )
     };
     Ok(match length {
         3 => u64le(content, at).ok_or_else(short)? as i64,
         2 => u32le(content, at).ok_or_else(short)? as i32 as i64,
         _ => {
-            return Err(err(&format!(
-                "{site}: relocation length code {length} is not a 4- or 8-byte field",
-            )));
+            return Err(internal_err(
+                MODULE,
+                &format!("{site}: relocation length code {length} is not a 4- or 8-byte field",),
+            ));
         }
     })
 }
@@ -433,11 +451,10 @@ pub fn parse_native_mach_o(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         let has_relocs = s.nreloc != 0;
         s.family = classify(s, has_relocs)?;
         if s.align > 32 {
-            return Err(err(&format!(
-                "section `{}` requests 2^{} alignment",
-                s.label(),
-                s.align,
-            )));
+            return Err(internal_err(
+                MODULE,
+                &format!("section `{}` requests 2^{} alignment", s.label(), s.align,),
+            ));
         }
     }
     let blobs = concat_families(bytes, &mut sects)?;
@@ -501,36 +518,47 @@ type SymtabCommand = (u32, u32, u32, u32);
 /// `LC_SEGMENT_64`, and the symbol table command.
 fn read_load_commands(bytes: &[u8]) -> Result<(NativeMachine, Vec<Sect>, SymtabCommand), C5Error> {
     if bytes.len() < MACH_HEADER_64_SIZE {
-        return Err(err(&format!(
-            "Mach-O object truncated: have {} bytes, need at least {MACH_HEADER_64_SIZE} \
+        return Err(internal_err(
+            MODULE,
+            &format!(
+                "Mach-O object truncated: have {} bytes, need at least {MACH_HEADER_64_SIZE} \
              for the header",
-            bytes.len(),
-        )));
+                bytes.len(),
+            ),
+        ));
     }
     if need_u32(bytes, 0, "header")? != MH_MAGIC_64 {
-        return Err(err(
+        return Err(internal_err(
+            MODULE,
             "not a 64-bit little-endian Mach-O object (MH_MAGIC_64 expected)",
         ));
     }
     let filetype = need_u32(bytes, 12, "header")?;
     if filetype != MH_OBJECT {
-        return Err(err(&format!(
-            "Mach-O file is not relocatable (filetype {filetype}, expected MH_OBJECT = {MH_OBJECT})",
-        )));
+        return Err(internal_err(
+            MODULE,
+            &format!(
+                "Mach-O file is not relocatable (filetype {filetype}, expected MH_OBJECT = {MH_OBJECT})",
+            ),
+        ));
     }
     let cputype = need_u32(bytes, 4, "header")?;
     let machine = match mach_o_machine(cputype) {
         Some(NativeMachine::Aarch64) => NativeMachine::Aarch64,
         Some(NativeMachine::X86_64) => {
-            return Err(err(
+            return Err(internal_err(
+                MODULE,
                 "Mach-O object is x86_64; the Mach-O reader translates arm64 relocations only",
             ));
         }
         None => {
-            return Err(err(&format!(
-                "Mach-O object has unhandled cputype {}",
-                mach_o_cputype_desc(cputype)
-            )));
+            return Err(internal_err(
+                MODULE,
+                &format!(
+                    "Mach-O object has unhandled cputype {}",
+                    mach_o_cputype_desc(cputype)
+                ),
+            ));
         }
     };
     let ncmds = need_u32(bytes, 16, "header")?;
@@ -542,9 +570,10 @@ fn read_load_commands(bytes: &[u8]) -> Result<(NativeMachine, Vec<Sect>, SymtabC
         let cmd = need_u32(bytes, off, "load command")?;
         let cmdsize = need_u32(bytes, off + 4, "load command")? as usize;
         if cmdsize < 8 || off.checked_add(cmdsize).is_none_or(|e| e > bytes.len()) {
-            return Err(err(&format!(
-                "load command {i} has size {cmdsize} and runs past end of file",
-            )));
+            return Err(internal_err(
+                MODULE,
+                &format!("load command {i} has size {cmdsize} and runs past end of file",),
+            ));
         }
         match cmd {
             LC_SEGMENT_64 => {
@@ -552,7 +581,10 @@ fn read_load_commands(bytes: &[u8]) -> Result<(NativeMachine, Vec<Sect>, SymtabC
                 for s in 0..nsects {
                     let p = off + 72 + s * SECTION_64_SIZE;
                     if p + SECTION_64_SIZE > off + cmdsize {
-                        return Err(err("LC_SEGMENT_64 section table overruns the command"));
+                        return Err(internal_err(
+                            MODULE,
+                            "LC_SEGMENT_64 section table overruns the command",
+                        ));
                     }
                     sects.push(Sect {
                         name: fixed_name(bytes, p)?,
@@ -581,7 +613,7 @@ fn read_load_commands(bytes: &[u8]) -> Result<(NativeMachine, Vec<Sect>, SymtabC
         }
         off += cmdsize;
     }
-    let symtab = symtab.ok_or_else(|| err("Mach-O object has no LC_SYMTAB"))?;
+    let symtab = symtab.ok_or_else(|| internal_err(MODULE, "Mach-O object has no LC_SYMTAB"))?;
     Ok((machine, sects, symtab))
 }
 
@@ -644,12 +676,15 @@ fn concat_families(bytes: &[u8], sects: &mut [Sect]) -> Result<FamilyBlobs, C5Er
                 let b = blob.len() as u64;
                 let content = s.content(bytes)?;
                 if content.len() as u64 != s.size {
-                    return Err(err(&format!(
-                        "section `{}` content is {} bytes, header says {}",
-                        s.label(),
-                        content.len(),
-                        s.size,
-                    )));
+                    return Err(internal_err(
+                        MODULE,
+                        &format!(
+                            "section `{}` content is {} bytes, header says {}",
+                            s.label(),
+                            content.len(),
+                            s.size,
+                        ),
+                    ));
                 }
                 blob.extend_from_slice(content);
                 b
@@ -681,9 +716,10 @@ fn place_symbol(
         .get(idx.wrapping_sub(1))
         .filter(|_| idx >= 1)
         .ok_or_else(|| {
-            err(&format!(
-                "symbol names section {n_sect}, which does not exist"
-            ))
+            internal_err(
+                MODULE,
+                &format!("symbol names section {n_sect}, which does not exist"),
+            )
         })?;
     let sec = match s.family {
         SectionFamily::Text => NativeSymSection::Text,
@@ -697,10 +733,13 @@ fn place_symbol(
         // would be a reference the merge cannot honor.
         _ if !ext => return Ok((NativeSymSection::Abs, 0)),
         _ => {
-            return Err(err(&format!(
-                "external symbol is defined in section `{}`, which carries no merged payload",
-                s.label(),
-            )));
+            return Err(internal_err(
+                MODULE,
+                &format!(
+                    "external symbol is defined in section `{}`, which carries no merged payload",
+                    s.label(),
+                ),
+            ));
         }
     };
     Ok((sec, s.base + value.saturating_sub(s.addr)))
@@ -719,14 +758,17 @@ fn decode_symbols(
 ) -> Result<(Vec<NativeSymbol>, usize), C5Error> {
     let strtab = bytes
         .get(stroff as usize..(stroff as usize).saturating_add(strsize as usize))
-        .ok_or_else(|| err("LC_SYMTAB string table runs past end of file"))?;
+        .ok_or_else(|| internal_err(MODULE, "LC_SYMTAB string table runs past end of file"))?;
     let symbase = symoff as usize;
     if (nsyms as usize)
         .checked_mul(NLIST_64_SIZE)
         .and_then(|n| symbase.checked_add(n))
         .is_none_or(|e| e > bytes.len())
     {
-        return Err(err("LC_SYMTAB symbol table runs past end of file"));
+        return Err(internal_err(
+            MODULE,
+            "LC_SYMTAB symbol table runs past end of file",
+        ));
     }
     let mut symbols = alloc::vec![NativeSymbol {
         name: String::new(),
@@ -776,9 +818,10 @@ fn decode_symbols(
                 } else {
                     "of an unhandled type"
                 };
-                return Err(err(&format!(
-                    "symbol `{name}` is {what}; the Mach-O reader does not model it",
-                )));
+                return Err(internal_err(
+                    MODULE,
+                    &format!("symbol `{name}` is {what}; the Mach-O reader does not model it",),
+                ));
             }
         };
         let weak = n_desc & N_WEAK_DEF != 0 || n_desc & N_WEAK_REF != 0;
@@ -879,14 +922,18 @@ fn translate_relocs(
             if is_init {
                 let site = format!("section `{}` offset {:#x}", sect.label(), r.address);
                 let target = symbols.get(sym_idx).ok_or_else(|| {
-                    err(&format!(
-                        "{site}: init entry names a symbol past the symbol table"
-                    ))
+                    internal_err(
+                        MODULE,
+                        &format!("{site}: init entry names a symbol past the symbol table"),
+                    )
                 })?;
                 if target.section != NativeSymSection::Text {
-                    return Err(err(&format!(
-                        "{site}: init / fini entry must reference a function defined in this object",
-                    )));
+                    return Err(internal_err(
+                        MODULE,
+                        &format!(
+                            "{site}: init / fini entry must reference a function defined in this object",
+                        ),
+                    ));
                 }
                 init_entries.push((r.address, (target.value as i64 + addend) as u64));
                 continue;
@@ -896,12 +943,15 @@ fn translate_relocs(
                 SectionFamily::RelRo => &mut out.relro,
                 SectionFamily::Data => &mut out.data,
                 _ => {
-                    return Err(err(&format!(
-                        "section `{}` offset {:#x}: section carries relocations but joins the \
+                    return Err(internal_err(
+                        MODULE,
+                        &format!(
+                            "section `{}` offset {:#x}: section carries relocations but joins the \
                          read-only stream",
-                        sect.label(),
-                        r.address,
-                    )));
+                            sect.label(),
+                            r.address,
+                        ),
+                    ));
                 }
             };
             dest.push(NativeReloc {
@@ -912,10 +962,13 @@ fn translate_relocs(
             });
         }
         if walk.pending_sub.is_some() || walk.pending_addend.is_some() {
-            return Err(err(&format!(
-                "section `{}` ends with an ARM64_RELOC_ADDEND / SUBTRACTOR that modifies nothing",
-                sect.label(),
-            )));
+            return Err(internal_err(
+                MODULE,
+                &format!(
+                    "section `{}` ends with an ARM64_RELOC_ADDEND / SUBTRACTOR that modifies nothing",
+                    sect.label(),
+                ),
+            ));
         }
         if is_init {
             init_entries.sort_by_key(|&(slot, _)| slot);
@@ -960,9 +1013,10 @@ fn translate_reloc(
         .checked_add(1 << r.length.min(3))
         .is_none_or(|e| e > content.len())
     {
-        return Err(err(&format!(
-            "{site}: relocation lies outside section content"
-        )));
+        return Err(internal_err(
+            MODULE,
+            &format!("{site}: relocation lies outside section content"),
+        ));
     }
 
     // Resolve the target: an extern relocation names a symbol, a
@@ -971,10 +1025,13 @@ fn translate_reloc(
     let (sym_idx, mut addend) = if r.extern_ {
         let idx = r.symbolnum as usize + 1;
         if idx >= sect_sym_base {
-            return Err(err(&format!(
-                "{site}: relocation names symbol {} past the symbol table",
-                r.symbolnum,
-            )));
+            return Err(internal_err(
+                MODULE,
+                &format!(
+                    "{site}: relocation names symbol {} past the symbol table",
+                    r.symbolnum,
+                ),
+            ));
         }
         (idx, 0i64)
     } else {
@@ -982,10 +1039,13 @@ fn translate_reloc(
             .get((r.symbolnum as usize).wrapping_sub(1))
             .filter(|_| r.symbolnum >= 1)
             .ok_or_else(|| {
-                err(&format!(
-                    "{site}: relocation names section {}, which does not exist",
-                    r.symbolnum
-                ))
+                internal_err(
+                    MODULE,
+                    &format!(
+                        "{site}: relocation names section {}, which does not exist",
+                        r.symbolnum
+                    ),
+                )
             })?;
         let stored = stored_addend(content, at, r.length, &site)?;
         (
@@ -1004,15 +1064,21 @@ fn translate_reloc(
                 // + (K + r_address - B's offset in this section)`,
                 // which needs B to sit in the section being patched.
                 if !sub.extern_ {
-                    return Err(err(&format!(
-                        "{site}: ARM64_RELOC_SUBTRACTOR subtracts a section, not a symbol",
-                    )));
+                    return Err(internal_err(
+                        MODULE,
+                        &format!(
+                            "{site}: ARM64_RELOC_SUBTRACTOR subtracts a section, not a symbol",
+                        ),
+                    ));
                 }
                 let b = symbols.get(sub.symbolnum as usize + 1).ok_or_else(|| {
-                    err(&format!(
-                        "{site}: SUBTRACTOR names symbol {} past the symbol table",
-                        sub.symbolnum
-                    ))
+                    internal_err(
+                        MODULE,
+                        &format!(
+                            "{site}: SUBTRACTOR names symbol {} past the symbol table",
+                            sub.symbolnum
+                        ),
+                    )
                 })?;
                 let same_section = matches!(
                     (b.section, sect.family),
@@ -1023,12 +1089,15 @@ fn translate_reloc(
                 ) && b.value >= sect.base
                     && b.value < sect.base + sect.size.max(1);
                 if !same_section {
-                    return Err(err(&format!(
-                        "{site}: ARM64_RELOC_SUBTRACTOR subtracts `{}`, which is not \
+                    return Err(internal_err(
+                        MODULE,
+                        &format!(
+                            "{site}: ARM64_RELOC_SUBTRACTOR subtracts `{}`, which is not \
                          defined in the section being patched; the Mach-O reader lowers \
                          only a difference against the patch site",
-                        b.name,
-                    )));
+                            b.name,
+                        ),
+                    ));
                 }
                 addend += r.address as i64 - (b.value - sect.base) as i64;
                 if r.length == 3 {
@@ -1041,11 +1110,14 @@ fn translate_reloc(
             } else if r.length == 2 {
                 R_AARCH64_ABS32
             } else {
-                return Err(err(&format!(
-                    "{site}: ARM64_RELOC_UNSIGNED has length code {}, which is not a \
+                return Err(internal_err(
+                    MODULE,
+                    &format!(
+                        "{site}: ARM64_RELOC_UNSIGNED has length code {}, which is not a \
                      4- or 8-byte field",
-                    r.length,
-                )));
+                        r.length,
+                    ),
+                ));
             }
         }
         ARM64_RELOC_BRANCH26
@@ -1054,15 +1126,22 @@ fn translate_reloc(
         | ARM64_RELOC_GOT_LOAD_PAGE21
         | ARM64_RELOC_GOT_LOAD_PAGEOFF12 => {
             if !r.extern_ {
-                return Err(err(&format!(
-                    "{site}: instruction relocation type {} is section-relative; the \
+                return Err(internal_err(
+                    MODULE,
+                    &format!(
+                        "{site}: instruction relocation type {} is section-relative; the \
                      Mach-O reader handles the symbol form only",
-                    r.rtype,
-                )));
+                        r.rtype,
+                    ),
+                ));
             }
             addend = walk.pending_addend.unwrap_or(0);
-            let insn = u32le(content, at)
-                .ok_or_else(|| err(&format!("{site}: instruction runs past section content")))?;
+            let insn = u32le(content, at).ok_or_else(|| {
+                internal_err(
+                    MODULE,
+                    &format!("{site}: instruction runs past section content"),
+                )
+            })?;
             match r.rtype {
                 ARM64_RELOC_BRANCH26 => R_AARCH64_CALL26,
                 ARM64_RELOC_PAGE21 => R_AARCH64_ADR_PREL_PG_HI21,
@@ -1072,11 +1151,14 @@ fn translate_reloc(
             }
         }
         other => {
-            return Err(err(&format!(
-                "{site}: relocation type {other} (pcrel={}, length={}, extern={}) is not \
+            return Err(internal_err(
+                MODULE,
+                &format!(
+                    "{site}: relocation type {other} (pcrel={}, length={}, extern={}) is not \
                  one the Mach-O reader translates",
-                r.pcrel as u8, r.length, r.extern_ as u8,
-            )));
+                    r.pcrel as u8, r.length, r.extern_ as u8,
+                ),
+            ));
         }
     };
     walk.pending_addend = None;

@@ -69,6 +69,25 @@ mod synth_build;
 #[cfg(feature = "std")]
 pub(crate) mod target_libc;
 
+/// A diagnostic the linker raises: `internal_err` for an inconsistency
+/// in its own bookkeeping, `link_err` for a failure the inputs caused.
+/// A non-empty `module` prefixes the message with the module's name.
+pub(crate) fn internal_err(module: &str, msg: &str) -> crate::c5::error::C5Error {
+    crate::c5::error::C5Error::Compile(crate::c5::error::fmt_internal_err(&tagged(module, msg)))
+}
+
+pub(crate) fn link_err(module: &str, msg: &str) -> crate::c5::error::C5Error {
+    crate::c5::error::C5Error::Compile(crate::c5::error::fmt_link_err(&tagged(module, msg)))
+}
+
+fn tagged(module: &str, msg: &str) -> alloc::string::String {
+    if module.is_empty() {
+        alloc::string::ToString::to_string(msg)
+    } else {
+        alloc::format!("{module}: {msg}")
+    }
+}
+
 #[cfg(feature = "std")]
 pub use archive::read_archive_at;
 pub use archive::{ArchiveMember, read_archive, write_archive};

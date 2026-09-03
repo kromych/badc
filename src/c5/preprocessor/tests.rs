@@ -3628,3 +3628,76 @@ fn a_directive_name_is_one_preprocessing_token() {
         pp.warnings
     );
 }
+
+/// The directive a `#` line names, as a stable label.
+fn directive_kind(line: &str) -> &'static str {
+    match parse_directive(line, false) {
+        Directive::Define(..) => "define",
+        Directive::DefineFn(..) => "define-fn",
+        Directive::Undef(_) => "undef",
+        Directive::Ifdef(_) => "ifdef",
+        Directive::Ifndef(_) => "ifndef",
+        Directive::If(_) => "if",
+        Directive::Elif(_) => "elif",
+        Directive::Else => "else",
+        Directive::Endif => "endif",
+        Directive::Pragma(_) => "pragma",
+        Directive::Include { .. } => "include",
+        Directive::IncludeNext { .. } => "include_next",
+        Directive::IncludeMacro(_) => "include-macro",
+        Directive::Line { .. } => "line",
+        Directive::LineMacro(_) => "line-macro",
+        Directive::Error(_) => "error",
+        Directive::Warning(_) => "warning",
+        Directive::Shebang => "shebang",
+        Directive::Other => "other",
+    }
+}
+
+/// Directive recognition, including the spellings that share a prefix
+/// with another directive. The whole name decides, so the answer cannot
+/// depend on the order the names are tried in.
+#[test]
+fn directives_are_recognised_by_their_whole_name() {
+    for (line, want) in [
+        ("define A 1", "define"),
+        ("define A(x) x", "define-fn"),
+        ("defined A", "other"),
+        ("undef A", "undef"),
+        ("undefine A", "other"),
+        ("if 1", "if"),
+        ("ifdef A", "ifdef"),
+        ("ifndef A", "ifndef"),
+        ("ifdefined(A)", "other"),
+        ("elif 1", "elif"),
+        // C23 spells a `defined` conditional this way; badc has no such
+        // directive, and `elif` must not swallow the name.
+        ("elifdef A", "other"),
+        ("else", "else"),
+        ("elseelse", "other"),
+        ("endif", "endif"),
+        ("endif GUARD", "endif"),
+        ("endifendif", "other"),
+        ("pragma once", "pragma"),
+        ("pragmatic", "other"),
+        ("include <stdio.h>", "include"),
+        ("include \"a.h\"", "include"),
+        ("include HEADER", "include-macro"),
+        ("include_next <stdio.h>", "include_next"),
+        ("include_nextx <stdio.h>", "other"),
+        ("includex <stdio.h>", "other"),
+        ("line 5", "line"),
+        ("line 5 \"a.c\"", "line"),
+        ("line LINENO", "line-macro"),
+        ("linear 5", "other"),
+        ("error boom", "error"),
+        ("errors boom", "other"),
+        ("warning careful", "warning"),
+        ("warnings careful", "other"),
+        ("1 \"a.c\"", "line"),
+        ("!/usr/bin/env badc", "shebang"),
+        ("", "other"),
+    ] {
+        assert_eq!(directive_kind(line), want, "#{line}");
+    }
+}

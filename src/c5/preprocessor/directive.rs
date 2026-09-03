@@ -292,171 +292,118 @@ pub(super) fn format_line_marker(line: usize, file: &str) -> String {
     format!("# {line} \"{escaped}\"\n")
 }
 
-/// Strip a directive keyword, requiring a word boundary after it. C99
-/// 6.10 makes the directive name one preprocessing token, so `#undefX`
-/// names no directive rather than meaning `#undef X`.
-fn strip_keyword<'a>(rest: &'a str, kw: &str) -> Option<&'a str> {
-    let after = rest.strip_prefix(kw)?;
-    after
-        .chars()
-        .next()
-        .is_none_or(|c| !c.is_ascii_alphanumeric() && c != '_')
-        .then_some(after)
+/// `#define`'s operand. The function-like form needs the `(` flush
+/// against the name (C99 6.10.3p10; a space makes it object-like with
+/// `(` opening the body). An unclosed parameter list falls back to the
+/// object-like reading, as the lexer would see a broken `#define`.
+fn define_operand(after: &str) -> Directive<'_> {
+    let (name, rest_after_name) = split_ident(after.trim_start());
+    // Comments were removed in translation phase 3 (C99 5.1.1.2) before
+    // directives execute, so a `//` or `/*` still here can only be
+    // string- or char-literal content and must stay.
+    if let Some(after_paren) = rest_after_name.strip_prefix('(')
+        && let Some(close) = after_paren.find(')')
+    {
+        let params_str = &after_paren[..close];
+        let params: Vec<&str> = if params_str.trim().is_empty() {
+            Vec::new()
+        } else {
+            params_str.split(',').map(|p| p.trim()).collect()
+        };
+        return Directive::DefineFn(name, params, after_paren[close + 1..].trim());
+    }
+    Directive::Define(name, rest_after_name.trim())
 }
 
-/// Classify the text after a `#`. `asm` selects assembler-with-cpp rules,
-/// which differ in one place: the keyword-less line marker below.
+/// A `<header>` or `"header"` operand with the form that selects the
+/// search rule (C99 6.10.2p2-p3). Shared with the `#include` /
+/// `__has_include` operands that reach their literal form only after
+/// macro expansion.
+pub(super) fn header_name(s: &str) -> Option<(&str, bool)> {
+    let trimmed = s.trim();
+    trimmed
+        .strip_prefix('<')
+        .and_then(|n| n.strip_suffix('>'))
+        .map(|n| (n.trim(), false))
+        .or_else(|| {
+            trimmed
+                .strip_prefix('"')
+                .and_then(|n| n.strip_suffix('"'))
+                .map(|n| (n.trim(), true))
+        })
+}
+
+/// `#line`'s operand: `N` with an optional `"file"` (C99 6.10.4). An
+/// operand that is no digit sequence is macro-expanded and reparsed by
+/// the handler; an empty one names no directive.
+fn line_operand(after: &str) -> Option<Directive<'_>> {
+    let trimmed = after.trim();
+    let mut split = trimmed.splitn(2, char::is_whitespace);
+    if let Some(num) = split.next()
+        && let Ok(line) = num.parse::<usize>()
+    {
+        // A malformed file operand (an unclosed quote) leaves the file
+        // unset, as every other malformed operand is dropped.
+        let file = split.next().and_then(|tail| {
+            let t = tail.trim();
+            t.strip_prefix('"').and_then(|s| s.strip_suffix('"'))
+        });
+        return Some(Directive::Line { line, file });
+    }
+    (!trimmed.is_empty()).then_some(Directive::LineMacro(trimmed))
+}
+
+/// Classify the text after a `#`. `asm` selects assembler-with-cpp
+/// rules, which differ in one place: the keyword-less line marker below.
+///
+/// C99 6.10 makes the directive name one preprocessing token, so the
+/// leading identifier is taken whole. The arms are therefore mutually
+/// exclusive whatever order they appear in: `include_next` never reads
+/// as `include`, nor `ifdef` as `if`.
 pub(super) fn parse_directive(rest: &str, asm: bool) -> Directive<'_> {
-    if let Some(after) = strip_keyword(rest, "define") {
-        let after = after.trim_start();
-        let (name, rest_after_name) = split_ident(after);
-        // Comments were removed in translation phase 3 (C99 5.1.1.2)
-        // before directives execute, so `//` or `/*` remaining here
-        // can only be string- or char-literal content and must stay.
-        // Function-like form: name immediately followed by `(`. The
-        // C standard requires no whitespace between the name and the
-        // open paren -- a space turns it into an object-like macro
-        // whose body starts with `(`. An unclosed paren falls through
-        // to the object-like branch with the whole tail as the body,
-        // matching how the lexer would see a syntactically broken
-        // `#define`.
-        if let Some(after_paren) = rest_after_name.strip_prefix('(')
-            && let Some(close) = after_paren.find(')')
-        {
-            let params_str = &after_paren[..close];
-            let body = after_paren[close + 1..].trim();
-            let params: Vec<&str> = if params_str.trim().is_empty() {
-                Vec::new()
-            } else {
-                params_str.split(',').map(|p| p.trim()).collect()
-            };
-            return Directive::DefineFn(name, params, body);
+    let (name, after) = split_ident(rest);
+    let parsed = match name {
+        "define" => Some(define_operand(after)),
+        "undef" => Some(Directive::Undef(after.trim())),
+        "ifdef" => Some(Directive::Ifdef(after.trim())),
+        "ifndef" => Some(Directive::Ifndef(after.trim())),
+        "if" => Some(Directive::If(after)),
+        "elif" => Some(Directive::Elif(after)),
+        "else" => Some(Directive::Else),
+        "endif" => Some(Directive::Endif),
+        "pragma" => Some(Directive::Pragma(after.trim())),
+        "error" => Some(Directive::Error(after.trim_start())),
+        "warning" => Some(Directive::Warning(after.trim_start())),
+        "line" => line_operand(after),
+        "include" => header_name(after)
+            .map(|(name, quoted)| Directive::Include { name, quoted })
+            .or_else(|| {
+                // C99 6.10.2p4: an operand in neither literal form is
+                // macro-expanded and reparsed by the handler, which has
+                // the macro table.
+                let trimmed = after.trim();
+                (!trimmed.is_empty()).then_some(Directive::IncludeMacro(trimmed))
+            }),
+        "include_next" => {
+            header_name(after).map(|(name, quoted)| Directive::IncludeNext { name, quoted })
         }
-        return Directive::Define(name, rest_after_name.trim());
-    }
-    if let Some(after) = strip_keyword(rest, "undef") {
-        return Directive::Undef(after.trim());
-    }
-    if let Some(after) = strip_keyword(rest, "ifdef") {
-        return Directive::Ifdef(after.trim());
-    }
-    if let Some(after) = strip_keyword(rest, "ifndef") {
-        return Directive::Ifndef(after.trim());
-    }
-    if let Some(after) = strip_keyword(rest, "elif") {
-        // `#elif EXPR` -- treated as `#else` followed by a re-evaluated
-        // `#if EXPR`, but only if no preceding branch was taken.
-        return Directive::Elif(after);
-    }
-    // `#ifdef` / `#ifndef` were caught above; the word boundary keeps
-    // them out of this branch anyway.
-    if let Some(after) = strip_keyword(rest, "if") {
-        return Directive::If(after);
-    }
-    if strip_keyword(rest, "else").is_some() {
-        return Directive::Else;
-    }
-    if strip_keyword(rest, "endif").is_some() {
-        return Directive::Endif;
-    }
-    if let Some(after) = strip_keyword(rest, "pragma") {
-        return Directive::Pragma(after.trim());
-    }
-    // C99 6.10.5 leaves the message optional -- the diagnostic is the
-    // directive itself -- so `#error` with no operand is accepted.
-    if let Some(after) = strip_keyword(rest, "error") {
-        return Directive::Error(after.trim_start());
-    }
-    // `#warning <message>` -- gcc/clang extension standardised in C23:
-    // the `#error` shape at a lower severity.
-    if let Some(after) = strip_keyword(rest, "warning") {
-        return Directive::Warning(after.trim_start());
-    }
-    if let Some(after) = strip_keyword(rest, "line") {
-        let trimmed = after.trim();
-        // Line number is required.
-        let mut split = trimmed.splitn(2, char::is_whitespace);
-        if let Some(num) = split.next()
-            && let Ok(line) = num.parse::<usize>()
-        {
-            // Optional `"file"` -- strip surrounding quotes if
-            // present. Anything malformed (e.g. unclosed quote)
-            // falls through to `Other` and gets silently dropped,
-            // matching how every other malformed directive is
-            // handled.
-            let file = split.next().and_then(|tail| {
-                let t = tail.trim();
-                t.strip_prefix('"').and_then(|s| s.strip_suffix('"'))
-            });
-            return Directive::Line { line, file };
-        }
-        // C99 6.10.4: the operand is not already a digit sequence, so
-        // its tokens are macro-expanded and reparsed in the handler.
-        if !trimmed.is_empty() {
-            return Directive::LineMacro(trimmed);
-        }
-    }
-    // `include_next` must be tested before `include`: the latter is a
-    // prefix of the former, so the `include` branch would otherwise treat
-    // `_next <...>` as a macro-form operand.
-    if let Some(after) = strip_keyword(rest, "include_next") {
-        let trimmed = after.trim();
-        if let Some(name) = trimmed.strip_prefix('<').and_then(|s| s.strip_suffix('>')) {
-            return Directive::IncludeNext {
-                name: name.trim(),
-                quoted: false,
-            };
-        }
-        if let Some(name) = trimmed.strip_prefix('"').and_then(|s| s.strip_suffix('"')) {
-            return Directive::IncludeNext {
-                name: name.trim(),
-                quoted: true,
-            };
-        }
-    }
-    if let Some(after) = strip_keyword(rest, "include") {
-        let trimmed = after.trim();
-        // Strip the `<...>` or `"..."` wrapping when the operand
-        // is already in one of the two literal forms, recording which
-        // form so the handler can apply the quoted-include source-dir
-        // search.
-        if let Some(name) = trimmed.strip_prefix('<').and_then(|s| s.strip_suffix('>')) {
-            return Directive::Include {
-                name: name.trim(),
-                quoted: false,
-            };
-        }
-        if let Some(name) = trimmed.strip_prefix('"').and_then(|s| s.strip_suffix('"')) {
-            return Directive::Include {
-                name: name.trim(),
-                quoted: true,
-            };
-        }
-        // C99 6.10.2p4: `#include <pp-tokens>` -- when the operand
-        // isn't already a `<...>` or `"..."` literal, the
-        // preprocessor expands the tokens and re-parses the
-        // result as one of the two literal forms. Defer the
-        // expansion to the include handler so the caller's
-        // macro table is available.
-        if !trimmed.is_empty() {
-            return Directive::IncludeMacro(trimmed);
-        }
+        _ => None,
+    };
+    if let Some(directive) = parsed {
+        return directive;
     }
     if rest.starts_with('!') {
         return Directive::Shebang;
     }
-    // GNU-style line marker: `# N "file" [flags]` -- the C99 form
-    // is `#line N "file"` (handled above), but the amalgamator
-    // and historic gcc preprocessors emit the keyword-less variant
-    // too. Recognise it as `Directive::Line` so it doesn't trip
-    // the unknown-directive warning. Trailing flag digits (1 2 3
-    // 4) are GNU's enter / leave / system / extern markers; we
-    // ignore them since c5 only tracks (file, line).
+    // GNU-style line marker: `# N "file" [flags]`. The C99 form is
+    // `#line N "file"` (above); the amalgamator and historic gcc
+    // preprocessors emit the keyword-less variant too. Trailing flag
+    // digits are GNU's enter / leave / system / extern markers, ignored
+    // since c5 tracks only (file, line).
     //
-    // Assembler input keeps it as text: `#` opens a comment for several
-    // assemblers, so GNU cpp passes every `# <n> ...` line through there
-    // and honors only `#line`. A hand-written `.S` carrying one gets the
-    // line assembled rather than its diagnostics re-homed.
+    // Assembler input keeps the line as text: `#` opens a comment for
+    // several assemblers, so GNU cpp passes every `# <n> ...` through
+    // there and honors only `#line`.
     let trimmed = rest.trim();
     if !asm && trimmed.chars().next().is_some_and(|c| c.is_ascii_digit()) {
         let mut split = trimmed.splitn(2, char::is_whitespace);
@@ -465,12 +412,10 @@ pub(super) fn parse_directive(rest: &str, asm: bool) -> Directive<'_> {
         {
             let file = split.next().and_then(|tail| {
                 let t = tail.trim_start();
-                t.strip_prefix('"').and_then(|s| {
-                    // Trailing flags after the closing quote are
-                    // optional -- match up to the next quote and
-                    // discard the rest.
-                    s.find('"').map(|end| &s[..end])
-                })
+                // Trailing flags after the closing quote are optional --
+                // match up to the next quote and discard the rest.
+                t.strip_prefix('"')
+                    .and_then(|s| s.find('"').map(|end| &s[..end]))
             });
             return Directive::Line { line, file };
         }

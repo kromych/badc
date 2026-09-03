@@ -10,10 +10,12 @@ mod primary;
 mod unary;
 
 use super::types::{
-    expr_ty, fold_int_binop, imm_safe_binop, is_bool_scalar, is_comparison_op, is_float_ty,
-    is_floating_scalar, lvalue_shape_label, narrow_const_to_ty, type_size_bytes,
+    fold_int_binop, is_bool_scalar, is_float_ty, is_floating_scalar, lvalue_shape_label,
+    narrow_const_to_ty, type_size_bytes,
 };
 use super::*;
+use crate::c5::ast::expr_ty;
+use crate::c5::ir::{imm_safe_binop, is_comparison_op};
 use postfix::MemberRef;
 
 impl<'a> Walker<'a> {

@@ -2,8 +2,9 @@
 //! builtins.
 
 use super::access::{load_kind_for, store_kind_for};
-use super::types::{expr_ty, is_float_ty, is_floating_scalar};
+use super::types::{is_float_ty, is_floating_scalar};
 use super::*;
+use crate::c5::ast::expr_ty;
 
 impl<'a> Walker<'a> {
     /// Element type and lane count of the GCC vector type `ty`.

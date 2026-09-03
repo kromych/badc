@@ -940,7 +940,7 @@ impl Ast {
     /// statement-expression parser to type `({ ...; expr; })` from
     /// its last expression-statement.
     pub(crate) fn expr_value_ty(&self, id: ExprId) -> i64 {
-        walk::expr_ty(self.expr(id)).unwrap_or(crate::c5::token::Ty::Int as i64)
+        expr_ty(self.expr(id)).unwrap_or(crate::c5::token::Ty::Int as i64)
     }
 
     pub(crate) fn stmt(&self, id: StmtId) -> &Stmt {
@@ -1150,6 +1150,27 @@ impl Ast {
 /// `impl Ast` block so callers can also use them on raw type
 /// tags carried outside the AST (e.g. `FinishedFunction::param_tys`,
 /// `Symbol::type_`).
+/// Read the type tag off an expression node. Returns `None` for
+/// shapes that don't carry one (`Sizeof` is constant-evaluated
+/// and the walker doesn't peek into the result; intrinsics carry
+/// their own `ty`).
+pub(crate) fn expr_ty(e: &Expr) -> Option<i64> {
+    match e {
+        plain_ty_expr!(ty) => Some(*ty),
+        Expr::Cast { to_ty, .. } => Some(*to_ty),
+        Expr::Sizeof(s) => Some(s.result_ty),
+        // `sizeof <vla>` is a runtime `size_t`; c5 types it as `int`.
+        Expr::VlaSizeof { .. } => Some(crate::c5::token::Ty::Int as i64),
+        Expr::CompoundLiteral { ty, .. } => Some(*ty),
+        // `&&label` is a `void *` (char-pointer encoding).
+        Expr::LabelAddr(_) => {
+            Some(crate::c5::token::Ty::Char as i64 + crate::c5::token::Ty::Ptr as i64)
+        }
+        // An asm statement carries no value type.
+        Expr::InlineAsm(_) => None,
+    }
+}
+
 pub(crate) fn remap_struct_ty(ty: i64, remap: &[usize]) -> i64 {
     use crate::c5::compiler::types::{STRUCT_BASE, STRUCT_STRIDE, UNSIGNED_BIT, strip_unsigned};
     let unsigned = ty & UNSIGNED_BIT;

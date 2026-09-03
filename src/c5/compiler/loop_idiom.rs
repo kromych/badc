@@ -62,7 +62,7 @@
 use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
 
-use super::super::ast::walk::expr_ty;
+use super::super::ast::expr_ty;
 use super::super::ast::{
     BlockItem, Decl, Expr, ExprId, LocalInit, MemTransferOp, SLOT_ALIGN, SrcPos, Stmt, StmtId, UnOp,
 };

@@ -1,8 +1,9 @@
 //! Statement lowering (C99 6.8): the control flow, the switch dispatch
 //! and the label blocks.
 
-use super::types::{expr_ty, is_floating_scalar, type_size_bytes};
+use super::types::{is_floating_scalar, type_size_bytes};
 use super::*;
+use crate::c5::ast::expr_ty;
 
 impl<'a> Walker<'a> {
     /// Walk a statement. Returns `true` when the statement

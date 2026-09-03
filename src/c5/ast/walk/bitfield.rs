@@ -2,8 +2,9 @@
 //! and merging a value back into it.
 
 use super::access::{load_kind_for_width, load_place, store_kind_for_width, store_place};
-use super::types::{expr_ty, is_bool_scalar, is_floating_scalar};
+use super::types::{is_bool_scalar, is_floating_scalar};
 use super::*;
+use crate::c5::ast::expr_ty;
 
 impl<'a> Walker<'a> {
     /// [`Self::access_seg`] for a bitfield's storage unit. A 16-byte

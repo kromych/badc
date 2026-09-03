@@ -4,11 +4,12 @@
 use super::super::access::{store_kind_for, store_kind_width, store_place};
 use super::super::atomic::RmwOpen;
 use super::super::types::{
-    expr_ty, fold_int_binop, imm_safe_binop, is_comparison_op, is_floating_scalar, is_fp_arith_op,
-    is_fp_comparison_op, is_imm_arith_op, type_size_bytes, unsigned_narrow_mask,
+    fold_int_binop, is_floating_scalar, is_fp_arith_op, type_size_bytes, unsigned_narrow_mask,
 };
 use super::super::*;
 use super::postfix::MemberRef;
+use crate::c5::ast::expr_ty;
+use crate::c5::ir::{imm_safe_binop, is_comparison_op, is_fp_comparison_op, is_imm_arith_op};
 impl<'a> Walker<'a> {
     /// Lower `&&` / `||` (C99 6.5.13 / 6.5.14): evaluate lhs, skip rhs
     /// when it decides the result, and merge through a synthetic local

@@ -1,8 +1,8 @@
 //! Type queries over the walker's type tags, and the constant
 //! arithmetic that follows them.
 
-use super::super::plain_ty_expr;
 use super::*;
+use crate::c5::ast::expr_ty;
 
 impl<'a> Walker<'a> {
     /// Byte size of the struct type encoded by `ty`, looked up by the
@@ -58,43 +58,9 @@ impl<'a> Walker<'a> {
     }
 }
 
-/// Integer relational and equality operators (C99 6.5.8 / 6.5.9),
-/// signed and unsigned.
-pub(crate) fn is_int_comparison_op(op: BinOp) -> bool {
-    matches!(
-        op,
-        BinOp::Eq
-            | BinOp::Ne
-            | BinOp::Lt
-            | BinOp::Gt
-            | BinOp::Le
-            | BinOp::Ge
-            | BinOp::Ult
-            | BinOp::Ugt
-            | BinOp::Ule
-            | BinOp::Uge
-    )
-}
-
-/// Floating-point relational and equality operators (C99 6.5.8 /
-/// 6.5.9).
-pub(crate) fn is_fp_comparison_op(op: BinOp) -> bool {
-    matches!(
-        op,
-        BinOp::Feq | BinOp::Fne | BinOp::Flt | BinOp::Fgt | BinOp::Fle | BinOp::Fge
-    )
-}
-
 /// Floating-point arithmetic operators (C99 6.5.5 / 6.5.6).
 pub(crate) fn is_fp_arith_op(op: BinOp) -> bool {
     matches!(op, BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv)
-}
-
-/// True for a relational or equality operator (integer or
-/// floating-point). The result is `int` (C99 6.5.8 / 6.5.9) regardless
-/// of operand type.
-pub(crate) fn is_comparison_op(op: BinOp) -> bool {
-    is_int_comparison_op(op) || is_fp_comparison_op(op)
 }
 
 /// Test for floating-point scalar types.
@@ -152,27 +118,6 @@ pub(super) fn extend_scalar_call_result(
         let bits = 64i64 - (rs as i64) * 8;
         let shifted = b.binop_imm(BinOp::Shl, v, bits);
         b.binop_imm(BinOp::Shr, shifted, bits)
-    }
-}
-
-/// Read the type tag off an expression node. Returns `None` for
-/// shapes that don't carry one (`Sizeof` is constant-evaluated
-/// and the walker doesn't peek into the result; intrinsics carry
-/// their own `ty`).
-pub(crate) fn expr_ty(e: &Expr) -> Option<i64> {
-    match e {
-        plain_ty_expr!(ty) => Some(*ty),
-        Expr::Cast { to_ty, .. } => Some(*to_ty),
-        Expr::Sizeof(s) => Some(s.result_ty),
-        // `sizeof <vla>` is a runtime `size_t`; c5 types it as `int`.
-        Expr::VlaSizeof { .. } => Some(crate::c5::token::Ty::Int as i64),
-        Expr::CompoundLiteral { ty, .. } => Some(*ty),
-        // `&&label` is a `void *` (char-pointer encoding).
-        Expr::LabelAddr(_) => {
-            Some(crate::c5::token::Ty::Char as i64 + crate::c5::token::Ty::Ptr as i64)
-        }
-        // An asm statement carries no value type.
-        Expr::InlineAsm(_) => None,
     }
 }
 
@@ -235,30 +180,6 @@ pub(super) fn unsigned_narrow_mask(ty: i64) -> i64 {
     } else {
         0
     }
-}
-
-/// Arithmetic, bitwise and shift operators the per-arch `BinopI`
-/// immediate lowering covers. Excludes Div / Divu / Mod / Modu, which
-/// `fold_int_binop` evaluates but the immediate path does not lower.
-pub(crate) fn is_imm_arith_op(op: BinOp) -> bool {
-    matches!(
-        op,
-        BinOp::Add
-            | BinOp::Sub
-            | BinOp::Mul
-            | BinOp::And
-            | BinOp::Or
-            | BinOp::Xor
-            | BinOp::Shl
-            | BinOp::Shr
-            | BinOp::Shru
-    )
-}
-
-/// Ops whose two-constant fold and per-arch `BinopI` immediate
-/// lowering are both defined.
-pub(crate) fn imm_safe_binop(op: BinOp) -> bool {
-    is_imm_arith_op(op) || is_int_comparison_op(op)
 }
 
 /// Narrow a folded integer constant to the storage width and

@@ -882,6 +882,64 @@ pub(crate) struct DivByZero;
 /// opcodes are not C operators and are not covered here.
 /// TODO: the SSA builder's immediate fold keeps its own copy of these
 /// arms.
+/// Integer relational and equality operators (C99 6.5.8 / 6.5.9),
+/// signed and unsigned.
+pub(crate) fn is_int_comparison_op(op: BinOp) -> bool {
+    matches!(
+        op,
+        BinOp::Eq
+            | BinOp::Ne
+            | BinOp::Lt
+            | BinOp::Gt
+            | BinOp::Le
+            | BinOp::Ge
+            | BinOp::Ult
+            | BinOp::Ugt
+            | BinOp::Ule
+            | BinOp::Uge
+    )
+}
+
+/// Floating-point relational and equality operators (C99 6.5.8 /
+/// 6.5.9).
+pub(crate) fn is_fp_comparison_op(op: BinOp) -> bool {
+    matches!(
+        op,
+        BinOp::Feq | BinOp::Fne | BinOp::Flt | BinOp::Fgt | BinOp::Fle | BinOp::Fge
+    )
+}
+
+/// True for a relational or equality operator (integer or
+/// floating-point). The result is `int` (C99 6.5.8 / 6.5.9) regardless
+/// of operand type.
+pub(crate) fn is_comparison_op(op: BinOp) -> bool {
+    is_int_comparison_op(op) || is_fp_comparison_op(op)
+}
+
+/// Arithmetic, bitwise and shift operators the per-arch `BinopI`
+/// immediate lowering covers. Excludes Div / Divu / Mod / Modu, which
+/// `fold_int_binop` evaluates but the immediate path does not lower.
+pub(crate) fn is_imm_arith_op(op: BinOp) -> bool {
+    matches!(
+        op,
+        BinOp::Add
+            | BinOp::Sub
+            | BinOp::Mul
+            | BinOp::And
+            | BinOp::Or
+            | BinOp::Xor
+            | BinOp::Shl
+            | BinOp::Shr
+            | BinOp::Shru
+    )
+}
+
+/// Ops whose two-constant fold and per-arch `BinopI` immediate
+/// lowering are both defined.
+pub(crate) fn imm_safe_binop(op: BinOp) -> bool {
+    is_imm_arith_op(op) || is_int_comparison_op(op)
+}
+
 pub(crate) fn eval_int_binop(op: BinOp, lhs: i64, rhs: i64) -> Result<i64, DivByZero> {
     let v = match op {
         BinOp::Add => lhs.wrapping_add(rhs),

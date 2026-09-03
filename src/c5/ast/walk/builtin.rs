@@ -3,8 +3,9 @@
 //! bit-count lowerings.
 
 use super::access::{load_kind_for_width, store_kind_for, store_kind_for_width, store_place};
-use super::types::{expr_ty, type_size_bytes};
+use super::types::type_size_bytes;
 use super::*;
+use crate::c5::ast::expr_ty;
 
 impl<'a> Walker<'a> {
     /// Expand a GCC `__builtin_memcpy` / `__builtin_memmove` /

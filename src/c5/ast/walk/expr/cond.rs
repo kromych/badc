@@ -2,8 +2,10 @@
 //! the statements share (C99 6.5.15).
 
 use super::super::access::{load_kind_for, store_kind_for};
-use super::super::types::{expr_ty, is_comparison_op, is_floating_scalar};
+use super::super::types::is_floating_scalar;
 use super::super::*;
+use crate::c5::ast::expr_ty;
+use crate::c5::ir::is_comparison_op;
 impl<'a> Walker<'a> {
     /// True when `cond`'s truthiness is decided as a floating value,
     /// i.e. the C99 controlling-expression comparison is `!= 0.0`. A

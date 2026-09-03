@@ -3,6 +3,7 @@
 use super::super::access::{load_kind_for, load_place};
 use super::super::types::{is_float_ty, is_floating_scalar};
 use super::super::*;
+use crate::c5::ast::expr_ty;
 impl<'a> Walker<'a> {
     /// Walk an `Expr::Unary` rvalue. AddrOf hands off to the lvalue
     /// walk and Deref loads through the address; Neg, BitNot and LogNot

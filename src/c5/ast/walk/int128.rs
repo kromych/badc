@@ -3,8 +3,9 @@
 //! built from 64-bit operations.
 
 use super::bitfield::bitfield_mask_halves;
-use super::types::{expr_ty, is_int_comparison_op};
 use super::*;
+use crate::c5::ast::expr_ty;
+use crate::c5::ir::is_int_comparison_op;
 
 impl<'a> Walker<'a> {
     /// Load the two 64-bit halves of the 128-bit object at `addr`

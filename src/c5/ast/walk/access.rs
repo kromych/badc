@@ -2,8 +2,8 @@
 //! its address space, and the aggregate copies.
 
 use super::atomic::RmwPlace;
-use super::types::expr_ty;
 use super::*;
+use crate::c5::ast::expr_ty;
 
 impl<'a> Walker<'a> {
     /// Alignment the address of the member at `field_off` in the

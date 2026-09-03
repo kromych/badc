@@ -1,8 +1,9 @@
 //! Block-scope declarations (C99 6.7) and the initializers they carry.
 
 use super::access::{access_align, repeat_byte, store_kind_for, store_kind_for_width};
-use super::types::{expr_ty, is_floating_scalar};
+use super::types::is_floating_scalar;
 use super::*;
+use crate::c5::ast::expr_ty;
 
 impl<'a> Walker<'a> {
     /// Walk a local declaration, on the initializer's shape: no

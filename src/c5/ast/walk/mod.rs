@@ -46,7 +46,7 @@ mod types;
 mod vector;
 
 pub(crate) use function::walk_function;
-pub(crate) use types::{expr_ty, fold_int_binop, imm_safe_binop, is_comparison_op};
+pub(crate) use types::fold_int_binop;
 
 /// The low and high 64-bit halves of a 128-bit value, in that order.
 type Halves = (ValueId, ValueId);

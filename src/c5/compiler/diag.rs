@@ -8,10 +8,11 @@
 //! Warnings are accumulated on `Compiler::warnings` and never fail
 //! the compile.
 
-use super::super::ast::walk::{fold_int_binop, imm_safe_binop};
+use super::super::ast::walk::fold_int_binop;
 use super::super::ast::{BlockItem, Expr, ExprId, Stmt, StmtId, UnOp};
 use super::super::error::C5Error;
 use super::super::ir::BinOp;
+use super::super::ir::imm_safe_binop;
 use super::super::token::Ty;
 use super::Compiler;
 use super::types::{

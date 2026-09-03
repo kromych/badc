@@ -31,7 +31,7 @@ use alloc::format;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::initializer::InitTarget;
+use super::initializer::{DataStore, DesignatorRule, DesignatorSubscript, InitTarget};
 use super::types::{
     apply_qual_bits, is_float_ty, is_floating_scalar, is_long_double_ty, is_pointer_ty,
     is_struct_value_ty, is_vector_ty, struct_id_of,
@@ -861,22 +861,16 @@ impl Compiler {
         // `.tbss`), like a file-scope thread-local, not in `.data`.
         let is_tls = self.symbols[loc_idx].is_thread_local;
         if array_size != -1 {
-            if is_tls {
-                let off = self.tls_data.len() as i64;
-                self.symbols[loc_idx].val = off;
-                for _ in 0..bytes {
-                    self.tls_data.push(0);
-                }
+            let store = if is_tls {
+                DataStore::ThreadLocal
             } else {
-                if self.size_of_type(ty) > 1 {
-                    self.align_data_to_8();
-                }
-                let off = self.data.len() as i64;
-                self.symbols[loc_idx].val = off;
+                DataStore::Static
+            };
+            let align = self.data_placement_align(ty, 0);
+            let off = self.reserve_data_bytes(store, align, bytes as usize);
+            self.symbols[loc_idx].val = off;
+            if !is_tls {
                 self.symbols[loc_idx].reserved_data_bytes = bytes;
-                for _ in 0..bytes {
-                    self.data.push(0);
-                }
             }
         }
 
@@ -940,14 +934,10 @@ impl Compiler {
                     // Reserve before consuming `{`: lexing the first element
                     // token may append a string literal's bytes, whose
                     // parser-added NUL must land right after them.
-                    self.align_data_to_8();
-                    let off = self.data.len() as i64;
+                    let reserved = count * inner_dim * elem_size as i64;
+                    let off = self.reserve_data_bytes(DataStore::Static, 8, reserved as usize);
                     self.symbols[loc_idx].val = off;
-                    self.symbols[loc_idx].reserved_data_bytes =
-                        count * inner_dim * elem_size as i64;
-                    for _ in 0..(count * inner_dim * elem_size as i64) {
-                        self.data.push(0);
-                    }
+                    self.symbols[loc_idx].reserved_data_bytes = reserved;
                     self.next()?;
                     // Multi-dimensional struct array: fill the rows below the
                     // deferred outer dimension through the shared struct-array
@@ -1019,15 +1009,10 @@ impl Compiler {
                 let final_size = elements.len() as i64;
                 let total_bytes = (self.size_of_type(ty) as i64) * final_size;
                 let aligned = ((total_bytes + 7) / 8) * 8;
-                if self.size_of_type(ty) > 1 {
-                    self.align_data_to_8();
-                }
-                let off = self.data.len() as i64;
+                let align = self.data_placement_align(ty, 0);
+                let off = self.reserve_data_bytes(DataStore::Static, align, aligned as usize);
                 self.symbols[loc_idx].val = off;
                 self.symbols[loc_idx].reserved_data_bytes = aligned;
-                for _ in 0..aligned {
-                    self.data.push(0);
-                }
                 self.write_array_init_into_data(off, ty, &elements)?;
                 self.set_deferred_static_local_count(loc_idx, final_size);
             } else if array_size > 0 && self.is_traversable_aggregate_ty(ty) {
@@ -1154,13 +1139,9 @@ impl Compiler {
         } else {
             // Deferred size: count the elements and reserve zeroed storage.
             let (c, _) = self.scan_array_init()?;
-            self.align_data_to_8();
-            let off = self.data.len() as i64;
+            let off = self.reserve_data_bytes(DataStore::Static, 8, (c * elem_size) as usize);
             self.symbols[loc_idx].val = off;
             self.symbols[loc_idx].array_size = c;
-            for _ in 0..(c * elem_size) {
-                self.data.push(0);
-            }
             while !self.data.len().is_multiple_of(8) {
                 self.data.push(0);
             }
@@ -1186,33 +1167,11 @@ impl Compiler {
             // range fills every slot in `[a, b]` with the same value.
             let mut range_end = i;
             if self.lex.tk == Token::Brak {
-                self.next()?;
-                let a = self.parse_constant_int_folding_const_objects()?;
-                if a < 0 {
-                    return Err(self.compile_err(format!(
-                        "array designator index must be non-negative (got {a})"
-                    )));
-                }
-                let mut b = a;
-                if self.lex.tk == Token::Ellipsis {
-                    self.next()?;
-                    b = self.parse_constant_int_folding_const_objects()?;
-                    if b < a {
-                        return Err(self.compile_err(format!(
-                            "array range designator high {b} below low {a}"
-                        )));
-                    }
-                }
-                if self.lex.tk != ']' {
-                    return Err(self.compile_err("`]` expected after array designator index"));
-                }
-                self.next()?;
-                if self.lex.tk != Token::Assign {
-                    return Err(self.compile_err("`=` expected after array designator"));
-                }
-                self.next()?;
-                i = a;
-                range_end = b;
+                let sub = self.take_designator_subscript(DesignatorRule::Ordered)?;
+                self.expect_designator_close()?;
+                self.expect_designator_assign()?;
+                i = sub.lo;
+                range_end = sub.hi;
             }
             if range_end >= count {
                 return Err(self.compile_err(format!(
@@ -1480,11 +1439,7 @@ impl Compiler {
         inner_dims: &[i64],
         bytes: usize,
     ) -> Result<(), C5Error> {
-        self.align_data_to_8();
-        let staged = self.data.len();
-        for _ in 0..bytes {
-            self.data.push(0);
-        }
+        let staged = self.stage_template_bytes(bytes);
         let mut dims = alloc::vec::Vec::with_capacity(inner_dims.len() + 1);
         dims.push(rows);
         dims.extend_from_slice(inner_dims);
@@ -1508,22 +1463,9 @@ impl Compiler {
         if self.lex.tk != Token::Brak {
             return Ok(None);
         }
-        self.next()?; // `[`
-        let idx = self.parse_constant_int_folding_const_objects()?;
-        let mut hi = idx;
-        if self.lex.tk == Token::Ellipsis {
-            self.next()?;
-            hi = self.parse_constant_int_folding_const_objects()?;
-        }
-        if idx < 0 || hi < idx || hi >= count {
-            return Err(self.compile_err(format!(
-                "array designator index {idx}..{hi} out of bounds [0, {count})"
-            )));
-        }
-        if self.lex.tk != ']' {
-            return Err(self.compile_err("`]` expected after array designator index"));
-        }
-        self.next()?; // `]`
+        let DesignatorSubscript { lo: idx, hi, .. } =
+            self.take_designator_subscript(DesignatorRule::Extent(count))?;
+        self.expect_designator_close()?;
         if self.lex.tk == Token::Dot || self.lex.tk == Token::Brak {
             return Ok(Some((idx, hi, true)));
         }
@@ -1712,11 +1654,7 @@ impl Compiler {
                     // Zero the whole slot (6.7.8p19 omitted-entries rule),
                     // then overlay each element's explicit fields through
                     // the shared runtime walker.
-                    self.align_data_to_8();
-                    let zero_off = self.data.len();
-                    for _ in 0..(total as usize * elem_size) {
-                        self.data.push(0);
-                    }
+                    let zero_off = self.stage_template_bytes(total as usize * elem_size);
                     self.emit_local_array_init(local_val, zero_off, total as usize * elem_size);
                     self.emit_local_array_init_runtime(
                         local_val,
@@ -1737,11 +1675,7 @@ impl Compiler {
                 // first element token may append a string literal's bytes,
                 // whose parser-added NUL must land right after them, not
                 // inside or past the block.
-                self.align_data_to_8();
-                let staged_off = self.data.len();
-                for _ in 0..(total * elem_size as i64) {
-                    self.data.push(0);
-                }
+                let staged_off = self.stage_template_bytes((total * elem_size as i64) as usize);
                 let mut dims = alloc::vec::Vec::with_capacity(inner_dims.len() + 1);
                 dims.push(count);
                 dims.extend_from_slice(&inner_dims);
@@ -1786,11 +1720,7 @@ impl Compiler {
                     // static-storage zero-init. Seed the slot from a staged
                     // zero block before the per-element stores.
                     let full_bytes = self.size_of_type(ty) * final_size.max(0) as usize;
-                    self.align_data_to_8();
-                    let zero_off = self.data.len();
-                    for _ in 0..full_bytes {
-                        self.data.push(0);
-                    }
+                    let zero_off = self.stage_template_bytes(full_bytes);
                     self.emit_local_array_init(local_val, zero_off, full_bytes);
                     self.emit_local_array_init_runtime(
                         local_val, 0, ty, final_size, &inner, &var_name,
@@ -1845,11 +1775,8 @@ impl Compiler {
                     // outer brace list works the same way as a
                     // single-struct `{ ... }` initializer.
                     let needs_runtime = self.struct_init_needs_runtime()?;
-                    self.align_data_to_8();
-                    let staged_off = self.data.len();
-                    for _ in 0..(declared_array_size as usize * elem_size) {
-                        self.data.push(0);
-                    }
+                    let staged_off =
+                        self.stage_template_bytes(declared_array_size as usize * elem_size);
                     if needs_runtime {
                         // Zero the entire array slot in one Mcpy
                         // (the "omitted entries are zero" rule of
@@ -1891,20 +1818,12 @@ impl Compiler {
                         // multi-dimensional `[i][j]... = { ... }` indexes every
                         // dimension down to a single struct element.
                         if self.lex.tk == Token::Brak {
-                            self.next()?; // `[`
-                            let desig = self.parse_constant_int_folding_const_objects()?;
-                            // GNU range designator `[lo ... hi]`.
-                            let mut desig_hi = desig;
-                            if self.lex.tk == Token::Ellipsis {
-                                self.next()?;
-                                desig_hi = self.parse_constant_int_folding_const_objects()?;
-                            }
-                            if self.lex.tk != ']' {
-                                return Err(
-                                    self.compile_err("`]` expected after array designator index")
-                                );
-                            }
-                            self.next()?; // `]`
+                            let DesignatorSubscript {
+                                lo: desig,
+                                hi: desig_hi,
+                                ..
+                            } = self.take_designator_subscript(DesignatorRule::Deferred)?;
+                            self.expect_designator_close()?;
                             if desig < 0 || desig_hi < desig || desig_hi >= group_count {
                                 return Err(self.compile_err(format!(
                                     "array designator index {desig}..{desig_hi} out of bounds [0, {group_count})"
@@ -1917,14 +1836,10 @@ impl Compiler {
                                 let mut elem = desig * inner_product;
                                 let mut d = 0usize;
                                 while self.lex.tk == Token::Brak {
-                                    self.next()?; // `[`
-                                    let n = self.parse_constant_int_folding_const_objects()?;
-                                    if self.lex.tk != ']' {
-                                        return Err(self.compile_err(
-                                            "`]` expected after array designator index",
-                                        ));
-                                    }
-                                    self.next()?; // `]`
+                                    let n = self
+                                        .take_designator_subscript(DesignatorRule::SingleIndex)?
+                                        .lo;
+                                    self.expect_designator_close()?;
                                     if d >= inner_dims.len() || n < 0 || n >= inner_dims[d] {
                                         return Err(self.compile_err(format!(
                                             "array designator index {n} out of bounds"
@@ -2055,11 +1970,7 @@ impl Compiler {
                     // with a Mcpy from a staged zero block
                     // before the per-element runtime stores
                     // overlay the explicit prefix.
-                    self.align_data_to_8();
-                    let zero_off = self.data.len();
-                    for _ in 0..full_bytes {
-                        self.data.push(0);
-                    }
+                    let zero_off = self.stage_template_bytes(full_bytes);
                     self.emit_local_array_init(local_val, zero_off, full_bytes);
                     let inner = self.inner_dims_of(loc_idx);
                     self.emit_local_array_init_runtime(
@@ -2111,11 +2022,7 @@ impl Compiler {
                 let sid = struct_id_of(ty);
                 let needs_runtime = self.struct_init_needs_runtime()?;
                 let elem_size = self.size_of_type(ty);
-                self.align_data_to_8();
-                let staged_off = self.data.len();
-                for _ in 0..elem_size {
-                    self.data.push(0);
-                }
+                let staged_off = self.stage_template_bytes(elem_size);
                 if needs_runtime {
                     self.emit_local_array_init(local_val, staged_off, elem_size);
                     self.emit_struct_runtime_at(local_val, 0, sid, true)?;
@@ -2271,11 +2178,7 @@ impl Compiler {
                 slot = self.reserve_slots(self.local_storage_slots(elem_ty, count));
                 let full = elem_size * count as usize;
                 if needs_runtime {
-                    self.align_data_to_8();
-                    let zero_off = self.data.len();
-                    for _ in 0..full {
-                        self.data.push(0);
-                    }
+                    let zero_off = self.stage_template_bytes(full);
                     self.emit_local_array_init(slot, zero_off, full);
                     self.emit_local_array_init_runtime(
                         slot,
@@ -2315,11 +2218,7 @@ impl Compiler {
                         self.array_init_needs_runtime()?
                     };
                 if needs_runtime {
-                    self.align_data_to_8();
-                    let zero_off = self.data.len();
-                    for _ in 0..full {
-                        self.data.push(0);
-                    }
+                    let zero_off = self.stage_template_bytes(full);
                     self.emit_local_array_init(slot, zero_off, full);
                     self.emit_local_array_init_runtime(
                         slot,
@@ -2381,11 +2280,7 @@ impl Compiler {
                 self.multi_cell_temps.push((slot, cl_slots));
             }
             let needs_runtime = self.struct_init_needs_runtime()?;
-            self.align_data_to_8();
-            let staged = self.data.len();
-            for _ in 0..elem_size {
-                self.data.push(0);
-            }
+            let staged = self.stage_template_bytes(elem_size);
             if needs_runtime {
                 self.emit_local_array_init(slot, staged, elem_size);
                 self.emit_struct_runtime_at(slot, 0, sid, true)?;

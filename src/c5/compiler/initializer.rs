@@ -58,6 +58,37 @@ pub(super) struct ArrayDesignator {
     pub(super) element_chain: bool,
 }
 
+/// The image an object's storage is reserved in.
+pub(super) enum DataStore {
+    /// The unit's `.data` image.
+    Static,
+    /// The thread-local block that becomes `.tdata` / `.tbss`.
+    ThreadLocal,
+}
+
+/// One parsed array-designator subscript: `[lo]`, or the GNU range form
+/// `[lo ... hi]` with `ranged` set (`hi == lo` for the single form).
+pub(super) struct DesignatorSubscript {
+    pub(super) lo: i64,
+    pub(super) hi: i64,
+    pub(super) ranged: bool,
+}
+
+/// What a brace level accepts in one subscript, and the index check it
+/// applies before the closing `]` is required.
+pub(super) enum DesignatorRule {
+    /// `0 <= lo <= hi < extent`, reported as one out-of-bounds message.
+    Extent(i64),
+    /// `lo >= 0` and `hi >= lo`, each reported on its own. Levels whose
+    /// extent is not yet known (a deferred array size) use this.
+    Ordered,
+    /// No check here: the caller applies its own once the `]` is consumed.
+    Deferred,
+    /// One index, no GNU range. A `...` is left unconsumed, so the `]`
+    /// step reports it.
+    SingleIndex,
+}
+
 /// A string literal staged in the data segment, ready to fill an
 /// array-shaped destination. Every string-literal initializer -- bare
 /// or brace-wrapped array, multi-dimensional row, struct member,
@@ -214,6 +245,54 @@ pub(crate) struct PendingLabelReloc {
 }
 
 impl Compiler {
+    /// C99 6.2.8 placement alignment of an object with static storage
+    /// duration: the declared alignment when it is stricter, and otherwise
+    /// the 8-byte boundary every object wider than a single byte takes.
+    pub(super) fn data_placement_align(&self, ty: i64, decl_align: usize) -> usize {
+        if decl_align > 8 {
+            decl_align
+        } else if self.size_of_type(ty) > 1 {
+            8
+        } else {
+            1
+        }
+    }
+
+    /// Reserve `bytes` zeroed bytes in `store`, first padding it so the
+    /// object starts on an `align`-byte boundary. Returns the offset of its
+    /// first byte. Callers pass [`Self::data_placement_align`] for an
+    /// object's own storage, or the transfer width for a template a later
+    /// block copy reads.
+    pub(super) fn reserve_data_bytes(
+        &mut self,
+        store: DataStore,
+        align: usize,
+        bytes: usize,
+    ) -> i64 {
+        match store {
+            DataStore::Static => {
+                if align > 1 {
+                    self.align_data_to(align);
+                }
+                let off = self.data.len();
+                self.data.resize(off + bytes, 0);
+                off as i64
+            }
+            DataStore::ThreadLocal => {
+                let off = self.tls_data.len().next_multiple_of(align.max(1));
+                self.tls_data.resize(off + bytes, 0);
+                off as i64
+            }
+        }
+    }
+
+    /// Reserve `bytes` zeroed bytes in `.data` for a template a block copy
+    /// reads into a frame slot. The copy transfers in units up to 8 bytes,
+    /// so the template starts on the same boundary.
+    pub(super) fn stage_template_bytes(&mut self, bytes: usize) -> usize {
+        self.reserve_data_bytes(DataStore::Static, 8, bytes) as usize
+    }
+
     /// Push the relocation entry that an initializer element needs
     /// at byte offset `here` within `self.data`.
     ///   * `None`        -- plain integer constant, no entry.
@@ -621,6 +700,62 @@ impl Compiler {
         })
     }
 
+    /// Consume `[` and one array designator's index, plus the GNU
+    /// `... index` range when it follows (C99 6.7.8p6). The cursor must be
+    /// on the `[` and is left on the `]`, which
+    /// [`Self::expect_designator_close`] consumes once the level has
+    /// applied whatever further check it makes.
+    pub(super) fn take_designator_subscript(
+        &mut self,
+        rule: DesignatorRule,
+    ) -> Result<DesignatorSubscript, C5Error> {
+        self.next()?; // consume `[`
+        let lo = self.parse_constant_int_folding_const_objects()?;
+        if matches!(rule, DesignatorRule::Ordered) && lo < 0 {
+            return Err(self.compile_err(format!(
+                "array designator index must be non-negative (got {lo})"
+            )));
+        }
+        let mut hi = lo;
+        let ranged = self.lex.tk == Token::Ellipsis && !matches!(rule, DesignatorRule::SingleIndex);
+        if ranged {
+            self.next()?;
+            hi = self.parse_constant_int_folding_const_objects()?;
+            if matches!(rule, DesignatorRule::Ordered) && hi < lo {
+                return Err(
+                    self.compile_err(format!("array range designator high {hi} below low {lo}"))
+                );
+            }
+        }
+        if let DesignatorRule::Extent(extent) = rule
+            && (lo < 0 || hi < lo || hi >= extent)
+        {
+            return Err(self.compile_err(format!(
+                "array designator index {lo}..{hi} out of bounds [0, {extent})"
+            )));
+        }
+        Ok(DesignatorSubscript { lo, hi, ranged })
+    }
+
+    /// Consume the `]` closing an array designator's subscript.
+    pub(super) fn expect_designator_close(&mut self) -> Result<(), C5Error> {
+        if self.lex.tk != ']' {
+            return Err(self.compile_err("`]` expected after array designator index"));
+        }
+        self.next()?;
+        Ok(())
+    }
+
+    /// Consume the `=` introducing the value of an array designator whose
+    /// list ends at the subscript (C99 6.7.8p6).
+    pub(super) fn expect_designator_assign(&mut self) -> Result<(), C5Error> {
+        if self.lex.tk != Token::Assign {
+            return Err(self.compile_err("`=` expected after array designator"));
+        }
+        self.next()?;
+        Ok(())
+    }
+
     /// Consume a chained array designator `[a][b]...` at a brace level
     /// whose dimensions below are `inner_dims` (C99 6.7.8p6; the GNU
     /// `[lo ... hi]` range only on the last subscript). Subscript `d`
@@ -640,31 +775,12 @@ impl Compiler {
         let mut range_end: i64 = 0;
         let mut depth: usize = 0;
         loop {
-            self.next()?; // consume `[`
-            let n = self.parse_constant_int_folding_const_objects()?;
-            if n < 0 {
-                return Err(self.compile_err(format!(
-                    "array designator index must be non-negative (got {n})"
-                )));
-            }
+            let sub = self.take_designator_subscript(DesignatorRule::Ordered)?;
             let scale: i64 = inner_dims.iter().skip(depth).product::<i64>().max(1);
-            let mut hi = n;
-            if self.lex.tk == Token::Ellipsis {
-                self.next()?;
-                hi = self.parse_constant_int_folding_const_objects()?;
-                if hi < n {
-                    return Err(
-                        self.compile_err(format!("array range designator high {hi} below low {n}"))
-                    );
-                }
-            }
-            if self.lex.tk != ']' {
-                return Err(self.compile_err("`]` expected after array designator index"));
-            }
-            self.next()?; // consume `]`
-            base += n * scale;
-            if hi > n {
-                range_end = base + (hi - n) * scale + scale;
+            self.expect_designator_close()?;
+            base += sub.lo * scale;
+            if sub.hi > sub.lo {
+                range_end = base + (sub.hi - sub.lo) * scale + scale;
             }
             depth += 1;
             if self.lex.tk == Token::Brak && depth <= inner_dims.len() {
@@ -973,21 +1089,16 @@ impl Compiler {
         elements: &[(i128, InitElemReloc)],
     ) -> Result<(usize, usize), C5Error> {
         let elem_size = self.size_of_type(elem_ty);
-        // The staged template's only consumer is an `Inst::Mcpy` into an
-        // 8-byte-slotted frame local, which transfers in units up to 8
-        // bytes; the source must satisfy the same alignment.
-        self.align_data_to_8();
-        let start_addr = self.data.len();
+        let bytes = elements.len() * elem_size;
+        let start_addr = self.stage_template_bytes(bytes);
         if elem_size == 1 {
-            for &(v, _) in elements {
-                self.data.push(v as u8);
+            for (idx, &(v, _)) in elements.iter().enumerate() {
+                self.data[start_addr + idx] = v as u8;
             }
         } else {
-            // Grow once to the final size, then lay bytes by index
-            // so we can share the LE-write + reloc-push helpers
-            // with `write_array_init_into_data` and
+            // Lay the bytes by index so the LE-write and reloc-push
+            // helpers are shared with `write_array_init_into_data` and
             // `write_init_value`.
-            self.data.resize(start_addr + elements.len() * elem_size, 0);
             for (idx, &(v, reloc)) in elements.iter().enumerate() {
                 let here = start_addr + idx * elem_size;
                 let bits = self.to_storage_bits(v, reloc, elem_ty);
@@ -995,7 +1106,7 @@ impl Compiler {
                 self.push_init_reloc(here, v as i64, reloc)?;
             }
         }
-        Ok((start_addr, elements.len() * elem_size))
+        Ok((start_addr, bytes))
     }
 
     /// Parse one constant-expression initializer value, returning
@@ -2115,11 +2226,7 @@ impl Compiler {
         let mut full_dims = alloc::vec::Vec::with_capacity(dims.len());
         full_dims.push(rows);
         full_dims.extend_from_slice(&dims[1..]);
-        self.align_data_to_8();
-        let off = self.data.len() as i64;
-        for _ in 0..(count * elem_size) {
-            self.data.push(0);
-        }
+        let off = self.reserve_data_bytes(DataStore::Static, 8, count * elem_size);
         if elem_is_struct {
             self.collect_struct_array_data(elem_ty, off, &full_dims)?;
         } else {
@@ -2216,16 +2323,11 @@ impl Compiler {
         &mut self,
         cl_ty: i64,
     ) -> Result<(i64, usize), C5Error> {
-        self.align_data_to_8();
         // A zero-sized type still takes a slot: the literal is a distinct
         // unnamed object (C99 6.5.2.5p3) and the data-object model
         // identifies an object by its start offset.
         let size = self.size_of_type(cl_ty).max(1);
-        let aligned = size.div_ceil(8) * 8;
-        let off = self.data.len() as i64;
-        for _ in 0..aligned {
-            self.data.push(0);
-        }
+        let off = self.reserve_data_bytes(DataStore::Static, 8, size.div_ceil(8) * 8);
         let sym_idx = self.intern_compound_literal_symbol(off, cl_ty, size as i64);
         self.collect_struct_initializer(struct_id_of(cl_ty), off)?;
         Ok((off, sym_idx))
@@ -2242,13 +2344,9 @@ impl Compiler {
         &mut self,
         cl_ty: i64,
     ) -> Result<(i64, usize), C5Error> {
-        self.align_data_to_8();
         let size = self.size_of_type(cl_ty).max(1);
-        let off = self.data.len() as i64;
         // The scalar initializer writes whole 8-byte slots.
-        for _ in 0..size.div_ceil(8) * 8 {
-            self.data.push(0);
-        }
+        let off = self.reserve_data_bytes(DataStore::Static, 8, size.div_ceil(8) * 8);
         let sym_idx = self.intern_compound_literal_symbol(off, cl_ty, size as i64);
         self.parse_global_initializer(cl_ty, off, false)?;
         Ok((off, sym_idx))
@@ -2321,20 +2419,16 @@ impl Compiler {
                     alloc::vec![arr.array_size]
                 };
                 let inner: i64 = dims[1..].iter().product::<i64>().max(1);
-                self.next()?;
-                let m = self.parse_constant_int_folding_const_objects()?;
-                // GNU range designator `[lo ... hi]`: one entry value fills
-                // every index in the range. A later step adds a constant
-                // offset to each, so the run is carried as (count, stride)
-                // and applied by the caller's re-parse loop.
-                let mut hi = m;
-                if self.lex.tk == Token::Ellipsis {
-                    if extra != 0 {
-                        return Err(self
-                            .compile_err("two `[lo ... hi]` designators in one designator list"));
-                    }
-                    self.next()?;
-                    hi = self.parse_constant_int_folding_const_objects()?;
+                // A GNU range designator `[lo ... hi]` has one entry value
+                // fill every index in the range. A later step adds a
+                // constant offset to each, so the run is carried as
+                // (count, stride) and applied by the caller's re-parse loop.
+                let DesignatorSubscript { lo: m, hi, ranged } =
+                    self.take_designator_subscript(DesignatorRule::Deferred)?;
+                if ranged && extra != 0 {
+                    return Err(
+                        self.compile_err("two `[lo ... hi]` designators in one designator list")
+                    );
                 }
                 if m < 0 || hi < m || hi >= dims[0] {
                     return Err(self.compile_err(format!(
@@ -2900,22 +2994,9 @@ impl Compiler {
         if self.lex.tk != Token::Brak {
             return Ok(None);
         }
-        self.next()?; // `[`
-        let lo = self.parse_constant_int_folding_const_objects()?;
-        let mut hi = lo;
-        if self.lex.tk == Token::Ellipsis {
-            self.next()?;
-            hi = self.parse_constant_int_folding_const_objects()?;
-        }
-        if lo < 0 || hi < lo || hi >= count {
-            return Err(self.compile_err(format!(
-                "array designator index {lo}..{hi} out of bounds [0, {count})"
-            )));
-        }
-        if self.lex.tk != ']' {
-            return Err(self.compile_err("`]` expected after array designator index"));
-        }
-        self.next()?; // `]`
+        let DesignatorSubscript { lo, hi, .. } =
+            self.take_designator_subscript(DesignatorRule::Extent(count))?;
+        self.expect_designator_close()?;
         if self.lex.tk == Token::Brak || self.lex.tk == Token::Dot {
             if hi > lo && self.lex.tk == Token::Brak {
                 return Err(
@@ -2952,18 +3033,16 @@ impl Compiler {
                 // on a struct element is invalid).
                 return Err(self.compile_err("`[` designator on a non-array element"));
             }
-            self.next()?; // `[`
-            let n = self.parse_constant_int_folding_const_objects()?;
+            let n = self
+                .take_designator_subscript(DesignatorRule::SingleIndex)?
+                .lo;
             if n < 0 || n >= dims_below[0] {
                 return Err(self.compile_err(format!(
                     "array designator index {n} out of bounds [0, {})",
                     dims_below[0]
                 )));
             }
-            if self.lex.tk != ']' {
-                return Err(self.compile_err("`]` expected after array designator index"));
-            }
-            self.next()?; // `]`
+            self.expect_designator_close()?;
             let stride = elem_size * dims_below[1..].iter().product::<i64>().max(1);
             return self.fill_struct_array_designated(elem_ty, at + n * stride, &dims_below[1..]);
         }
@@ -3294,33 +3373,11 @@ impl Compiler {
             // value fills; a positional element continues after it.
             let mut range_hi = idx;
             if self.lex.tk == Token::Brak {
-                self.next()?; // consume `[`
-                let n = self.parse_constant_int_folding_const_objects()?;
-                if n < 0 {
-                    return Err(self.compile_err(format!(
-                        "array designator index must be non-negative (got {n})"
-                    )));
-                }
-                let mut hi = n;
-                if self.lex.tk == Token::Ellipsis {
-                    self.next()?;
-                    hi = self.parse_constant_int_folding_const_objects()?;
-                    if hi < n {
-                        return Err(self.compile_err(format!(
-                            "array range designator high {hi} below low {n}"
-                        )));
-                    }
-                }
-                if self.lex.tk != ']' {
-                    return Err(self.compile_err("`]` expected after array designator index"));
-                }
-                self.next()?; // consume `]`
-                if self.lex.tk != Token::Assign {
-                    return Err(self.compile_err("`=` expected after array designator"));
-                }
-                self.next()?; // consume `=`
-                idx = n as usize;
-                range_hi = hi as usize;
+                let sub = self.take_designator_subscript(DesignatorRule::Ordered)?;
+                self.expect_designator_close()?;
+                self.expect_designator_assign()?;
+                idx = sub.lo as usize;
+                range_hi = sub.hi as usize;
             }
             if elem_is_struct {
                 let here = field_base + idx * elem_size;

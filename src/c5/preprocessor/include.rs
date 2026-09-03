@@ -115,18 +115,14 @@ impl IncludeRecord {
 }
 
 impl Preprocessor {
-    /// `#include <name>` / `#include "name"` -- splice the named
-    /// header's processed contents into the output.
-    ///
-    /// The header is looked up on the search paths and then in
-    /// [`crate::c5::headers::embedded_header`]. An unknown name is an
-    /// error, as in gcc / clang: the directive cannot perform the
-    /// replacement C99 6.10.2 requires. Cyclic `#include` returns an
-    /// error; repeat inclusion of a header that previously declared
-    /// `#pragma once` returns an empty string. With
-    /// [`Self::set_track_includes`] on the resolution is appended to
-    /// `include_records`, which renders the gcc-`-H` shape (`. file`,
-    /// `.. nested`, `! missing`).
+    /// `#include <name>` / `#include "name"`: splice the named header's
+    /// processed contents into the output. The search runs the `-I`
+    /// paths then [`crate::c5::headers::embedded_header`]; an unknown
+    /// name is an error, as in gcc and clang, since the directive
+    /// cannot perform the C99 6.10.2 replacement. A repeat include of a
+    /// `#pragma once` header contributes nothing. With
+    /// [`Self::set_track_includes`] on, each resolution is appended to
+    /// `include_records`.
     pub(super) fn process_include(
         &mut self,
         name: &str,
@@ -135,20 +131,6 @@ impl Preprocessor {
         quoted: bool,
         out: &mut String,
     ) -> Result<(), C5Error> {
-        // Resolution order:
-        //   1. Filesystem search paths added via `add_search_path`
-        //      (= the CLI's `-I` flag plus any built-in defaults).
-        //      Lets a user override a bundled header by dropping
-        //      the modified file at `./include/<name>` without
-        //      rebuilding badc.
-        //   2. Bundled in-binary header (the include_str! set in
-        //      `headers.rs`).
-        //   3. Missed -- emit a warning and resolve to "". The
-        //      compile keeps going so a header that exists at
-        //      runtime but wasn't bundled in the test binary
-        //      isn't a hard failure; the user sees the warning
-        //      and can decide whether the missing surface
-        //      matters.
         let resolved = self.resolve_include(name, IncludeForm::plain(quoted), filename);
         self.finish_include(resolved, name, line_no, filename, out)
     }
@@ -174,10 +156,9 @@ impl Preprocessor {
     /// `#include` / `#include_next` and by the `__has_include` /
     /// `__has_include_next` operators, which keep only the answer.
     ///
-    /// The body is an owned `String` because filesystem-loaded bodies
-    /// have no static lifetime; the embedded path copies its
-    /// `&'static str` into one. The second element is the path the body
-    /// resolved to, threaded as the new file's name so a nested quoted
+    /// [`Resolved::body`] is owned because a filesystem-loaded body has
+    /// no static lifetime; the embedded path copies its `&'static str`.
+    /// [`Resolved::key`] becomes the new file's name, so a nested quoted
     /// include resolves against the right directory.
     pub(super) fn resolve_include(
         &self,

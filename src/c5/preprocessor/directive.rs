@@ -18,9 +18,8 @@ pub(super) struct CondFrame {
 }
 
 impl CondFrame {
-    // Suppress the unused field warning on `this_branch_taken` --
-    // it's part of the struct's vocabulary and might be reached by
-    // a future `#elif`.
+    // `this_branch_taken` is written by every transition and read by
+    // none; kept because it is what the frame means.
     #[allow(dead_code)]
     fn _retain_field(&self) -> bool {
         self.this_branch_taken

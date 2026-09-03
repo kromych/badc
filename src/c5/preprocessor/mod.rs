@@ -14,17 +14,14 @@
 //!   definition. The CLI's `-D NAME` predefines with body `1` and
 //!   `-D NAME=` with an empty body (see [`Preprocessor::define`]).
 //! * `#ifdef` / `#ifndef` / `#if` / `#elif` / `#else` / `#endif`,
-//!   nestable. The `#if` / `#elif` operand is a C integer constant
-//!   expression evaluated at 64 bits: `defined(NAME)` / `defined
-//!   NAME`, the ternary `?:`, `||`, `&&`, `| ^ &`, `== !=`,
-//!   `< > <= >=`, `<< >>`, `+ - * / %`, unary `! ~ - +`, integer and
-//!   character constants, and parentheses. An identifier that is not
-//!   a macro evaluates to 0 (C99 6.10.1).
-//! * `#include <name.h>` / `#include "name.h"` -- resolved through the
-//!   filesystem search paths first (a quoted form also searches the
-//!   including file's directory), then the embedded-header registry
-//!   (see [`super::headers`]). Cyclic `#include` is rejected; a repeat
-//!   include is dropped once the header has used `#pragma once`.
+//!   nestable. The operand is a C integer constant expression
+//!   evaluated at 64 bits, plus `defined(NAME)` / `defined NAME`; an
+//!   identifier that is no macro evaluates to 0 (C99 6.10.1).
+//! * `#include <name.h>` / `#include "name.h"` -- the filesystem
+//!   search paths first (the quoted form also searching the including
+//!   file's directory), then the embedded registry (see
+//!   [`super::headers`]). A repeat include is dropped once the header
+//!   has used `#pragma once`.
 //! * `#error MESSAGE` aborts compilation; `#warning MESSAGE` reports a
 //!   diagnostic and continues; `#line` (and the GNU `# NN "file"`
 //!   marker) adjusts the reported line number and file name.
@@ -38,10 +35,8 @@
 //!   (`libc.so.6`, `/usr/lib/libSystem.B.dylib`, `msvcrt.dll`).
 //! * `#pragma binding(dylib_name::local_name, "real_symbol")` -- bind
 //!   the c5-side identifier `local_name` to `real_symbol` exported by
-//!   `dylib_name`, so a call to `local_name` lands on that import. The
-//!   explicit cross-reference replaced an earlier positional "current
-//!   dylib" form so reordering directives cannot rebind a function to
-//!   the wrong dylib.
+//!   `dylib_name`, so a call to `local_name` lands on that import.
+//!   Naming the dylib makes the pair order-independent.
 //! * `#pragma pack(push|pop|N)` -- struct field alignment.
 //! * `#pragma GCC visibility push(vis)` / `pop` -- ELF visibility for the
 //!   declarations in the pragma's extent.
@@ -66,19 +61,15 @@ use super::error::C5Error;
 /// reference this dylib through its `name`.
 #[derive(Debug, Clone)]
 pub struct DylibSpec {
-    /// c5-side identifier for this dylib (e.g. `libc`, `kernel32`).
-    /// Bindings reference it via their `name::c4_fn` left-hand
-    /// side, so directive ordering in the header doesn't matter --
-    /// a binding can sit anywhere relative to its dylib's
-    /// declaration.
+    /// c5-side identifier for this dylib (`libc`, `kernel32`), named by
+    /// each binding's `name::c4_fn` left-hand side.
     pub name: String,
-    /// Path or loader-search name (e.g. `/usr/lib/libSystem.B.dylib`
-    /// on macOS, `libc.so.6` on Linux, `msvcrt.dll` on Windows).
-    /// The codegen passes this through to the IAT entry / DT_NEEDED
-    /// record verbatim.
+    /// Path or loader-search name (`/usr/lib/libSystem.B.dylib`,
+    /// `libc.so.6`, `msvcrt.dll`), passed through to the IAT entry /
+    /// DT_NEEDED record verbatim.
     ///
-    /// Read by tests; the codegen reaches the same path through the
-    /// `ResolvedDylib` view it builds during import resolution.
+    /// Read by tests; the codegen reads the same path through the
+    /// `ResolvedDylib` view built during import resolution.
     #[allow(dead_code)]
     pub path: String,
     /// Bindings whose qualifier referenced `Self::name`.
@@ -89,66 +80,45 @@ pub struct DylibSpec {
 /// Owned by the [`DylibSpec`] whose `name` matched the qualifier.
 #[derive(Debug, Clone)]
 pub struct Binding {
-    /// `true` if the function's prototype ended with `, ...)` --
-    /// e.g. `int printf(char *fmt, ...);`. The lowering reads
-    /// this to decide whether the call site needs the
-    /// platform's variadic-ABI handling (macOS arm64 stack
-    /// packing, SysV `xor eax, eax`). Set by the parser when it
-    /// folds a Sys symbol's prototype onto the binding; the
-    /// preprocessor doesn't know about prototypes so it leaves
-    /// this `false`.
+    // The prototype fields below are filled by the parser when it folds
+    // a Sys symbol's prototype onto the binding; the preprocessor sees
+    // no prototypes and leaves them at their defaults.
+    /// The prototype ended with `, ...)`, so the call site needs the
+    /// platform's variadic ABI (macOS arm64 stack packing, SysV
+    /// `xor eax, eax`).
     pub is_variadic: bool,
-    /// Number of fixed (non-variadic) parameters from the
-    /// prototype. macOS arm64 passes those in registers per
-    /// standard AAPCS64; only the variadic tail spills to the
-    /// stack. Set by the parser alongside `is_variadic`;
-    /// meaningful only when `is_variadic == true` (otherwise
-    /// the codegen reads the c5 stack directly without the
-    /// register/stack split).
+    /// Fixed (non-variadic) parameter count, meaningful only with
+    /// `is_variadic`: AAPCS64 passes those in registers and spills only
+    /// the variadic tail.
     pub fixed_args: usize,
-    /// Return type tag (encoded the same way as `Symbol::type_` --
-    /// `Ty::Char`/`Ty::Int`/`Ty::Long`/... with the unsigned bit
-    /// optionally OR'd in). Set by the parser when the prototype
-    /// is folded onto the binding. The codegen reads it after a
-    /// libc call to decide whether the return needs sign- or
-    /// zero-extension into the c5 accumulator -- msvcrt's int
-    /// returns leave the upper 32 bits of RAX undefined per the
-    /// Win64 ABI, so a downstream 64-bit comparison sees garbage
-    /// without an explicit extension. `0` (= `Ty::Char`) when
-    /// the prototype hasn't been seen yet; the codegen treats
-    /// that as "no extension needed".
+    /// Return type, encoded as `Symbol::type_` is. The codegen reads it
+    /// to decide whether a libc return needs sign- or zero-extension --
+    /// the Win64 ABI leaves the upper 32 bits of RAX undefined for an
+    /// `int` return, which a 64-bit comparison would then read. `0`
+    /// (= `Ty::Char`) means no prototype yet, and no extension.
     pub return_type_tag: i64,
-    /// True when the prototype's return type was spelled `long
-    /// double`. The encoded `return_type_tag` is still
-    /// `Ty::Double` (c5 stores both as f64), but the libc-call
-    /// codegen needs this flag to read the result out of x87
-    /// `st(0)` on SysV x86_64 instead of XMM0. False for plain
-    /// `double` returns and for everything that isn't a floating
-    /// scalar.
+    /// The return type was spelled `long double`. `return_type_tag`
+    /// stays `Ty::Double` (c5 stores both as f64); the libc-call codegen
+    /// needs this to read the result from x87 `st(0)` on SysV x86-64
+    /// rather than XMM0.
     pub returns_long_double: bool,
-    /// Per-fixed-parameter type tags from the prototype (same
-    /// encoding as `return_type_tag`). Captured by the parser at
-    /// the same fold-site that fills `fixed_args` / `is_variadic`,
-    /// then carried into `ResolvedImport` so the DWARF emitter
-    /// can give each PLT trampoline a `DW_TAG_subprogram` with
-    /// `DW_TAG_formal_parameter` children typed accurately
-    /// Empty when the parser hasn't seen the prototype.
+    /// Per-fixed-parameter type tags, encoded as `return_type_tag` is.
+    /// Carried into `ResolvedImport` so the DWARF emitter can type each
+    /// PLT trampoline's `DW_TAG_formal_parameter` children.
     pub param_types: Vec<i64>,
     /// c5-side name the source uses (e.g. `printf`).
     pub local_name: String,
-    /// Symbol name exported by the dylib. Differs from `local_name`
-    /// on macOS (leading `_`) and for Windows aliases like
-    /// `mprotect` -> `VirtualProtect`.
+    /// Symbol name exported by the dylib. Differs from `local_name` on
+    /// macOS (leading `_`) and for Windows aliases (`mprotect` ->
+    /// `VirtualProtect`).
     ///
-    /// Read by tests; the codegen consumes the same string through
-    /// the `ResolvedImport` view it builds during import resolution.
+    /// Read by tests; the codegen reads the same string through the
+    /// `ResolvedImport` view built during import resolution.
     #[allow(dead_code)]
     pub real_symbol: String,
-    /// `true` when the binding names a data object rather than a
-    /// callable function -- the `#pragma binding(data <lib>::<name>,
-    /// "...")` form. A data import resolves to a COPY relocation that
-    /// binds the host's data symbol into the image, not a PLT/GOT call
-    /// slot.
+    /// The `#pragma binding(data <lib>::<name>, "...")` form: a data
+    /// object, which resolves to a COPY relocation binding the host's
+    /// symbol into the image rather than to a PLT/GOT call slot.
     pub is_data: bool,
 }
 
@@ -174,10 +144,9 @@ struct FnMacro {
 /// Output of a successful preprocessor run: the substituted source
 /// for the lexer plus the side data the codegen will pick up later.
 pub(crate) struct Preprocessor {
-    // Hash maps rather than BTreeMaps because the preprocessor probes
-    // `macros` once per source identifier -- a tree walk's log-N
-    // string-prefix compares were the leftover frontend hot spot
-    // after the symbol-table fix went in.
+    // Hash maps rather than BTreeMaps: `macros` is probed once per
+    // source identifier, where a tree walk's log-N string-prefix
+    // compares measured as the frontend's hot spot.
     macros: HashMap<String, String>,
     /// Compilation target; Windows include resolution is
     /// case-insensitive, matching its filesystems.
@@ -200,15 +169,11 @@ pub(crate) struct Preprocessor {
     /// binding` looks its dylib up here; `parse_pragma_dylib` is the
     /// only site that appends to either.
     dylib_index: HashMap<String, usize>,
-    /// One entry per `#pragma export(<name>)` directive, in
-    /// declaration order. The compiler validates each name
-    /// resolves to a function defined in this translation
-    /// unit and threads the list onto `Program::exports`; the
-    /// shared-object writers (Mach-O dylib, ELF .so, PE DLL)
-    /// promote those symbols to externally visible entries
-    /// in the symbol / export tables. Names not produced by
-    /// `#pragma export(...)` keep file-scope-static linkage
-    /// (the c5 default).
+    /// One entry per `#pragma export(<name>)`, in declaration order.
+    /// The compiler checks each name against a function defined in this
+    /// unit and threads the list onto `Program::exports`, which the
+    /// shared-object writers promote to externally visible symbols.
+    /// Everything else keeps the c5 default, file-scope-static linkage.
     pub exports: Vec<String>,
     /// Membership half of `exports`, which keeps its declaration order
     /// because the export tables are written in it.
@@ -222,24 +187,18 @@ pub(crate) struct Preprocessor {
     /// dropped instead of being read and scanned again (C99 6.10.2; the
     /// same optimization gcc and clang apply).
     include_guards: HashMap<String, String>,
-    /// Headers currently being expanded: the include spelling plus
-    /// whether the body came from the compiler's own header set (the
-    /// embedded registry or an own-header root) rather than a search
-    /// path. Pushed on `#include`, popped when the header finishes.
-    /// The flag drives the closed-set resolution rule in
-    /// `find_include`: only a file actually served from the own set
-    /// resolves its includes there first, so a foreign header whose
-    /// spelling collides with a bundled name keeps `-I` order.
+    /// Headers being expanded: the include spelling plus whether the
+    /// body came from the compiler's own set rather than a search path.
+    /// `find_include` reads the flag for its closed-set rule -- only a
+    /// file served from the own set resolves its includes there first,
+    /// so a foreign header whose spelling collides with a bundled name
+    /// keeps `-I` order.
     include_stack: Vec<(String, bool)>,
-    /// Filesystem search paths for `#include`. Probed in order
-    /// before falling back to the bundled in-binary headers, so
-    /// an on-disk copy of a bundled header overrides it without
-    /// rebuilding badc. Plumbed in from the CLI's `-I path` flag
-    /// and the driver's overlays (the source tree's
-    /// `libc/include`, `$BADC_HOME/include`). Filesystem reads are
-    /// gated behind `cfg(feature = "std")`; the no_std build
-    /// keeps the field but never reads from it (the embedded
-    /// headers are always available).
+    /// `#include` search paths (the CLI's `-I` plus the driver's
+    /// overlays), probed in order before the bundled in-binary headers,
+    /// so an on-disk copy of a bundled header overrides it. Read only
+    /// under `cfg(feature = "std")`; the no_std build keeps the field
+    /// and resolves from the embedded set.
     search_paths: SearchPaths,
     /// On-disk copies of the compiler's own header set, probed by name
     /// ahead of the in-binary bodies. See `add_own_header_root`.
@@ -248,50 +207,35 @@ pub(crate) struct Preprocessor {
     /// scope), after the including file's directory and before
     /// `search_paths`. An angle include never reads them.
     quote_search_paths: SearchPaths,
-    /// System header directories probed only *after* the bundled
-    /// in-binary headers, so a third-party header the embedded set
-    /// lacks (`zlib.h`, `libfdt.h`) resolves against the host system
-    /// while a standard header (`stdlib.h`, `stdio.h`) still comes from
-    /// the embedded set -- the embedded copy carries the `#pragma
-    /// binding` metadata the system copy does not, and the system copy
-    /// may use constructs the dialect does not parse. Populated for a
-    /// hosted native build (the driver's implicit system include path,
-    /// as a compiler driver adds `/usr/include`); a cross build or a
-    /// `--freestanding` / `--nostdinc` build leaves it empty.
+    /// System header directories, probed only after the bundled headers:
+    /// a third-party header the embedded set lacks (`zlib.h`,
+    /// `libfdt.h`) resolves against the host, while a standard header
+    /// keeps the embedded copy, which carries the `#pragma binding`
+    /// metadata the system copy lacks. Populated for a hosted native
+    /// build; empty for a cross, `--freestanding` or `--nostdinc` one.
     system_fallback_paths: SearchPaths,
-    /// `-nostdinc`: withdraw the standard library headers from
-    /// `#include` resolution. The bundled set and `system_fallback_paths`
-    /// leave the search, so a name no `-I` / `-iquote` path carries is an
-    /// error instead of resolving to badc's own libc. The compiler-owned
-    /// headers ([`crate::c5::headers::COMPILER_OWNED_HEADERS`]) stay, as
-    /// gcc's builtins do.
+    /// `-nostdinc`: the bundled set and `system_fallback_paths` leave
+    /// the search, so a name no `-I` / `-iquote` path carries is an
+    /// error rather than badc's own libc. The compiler-owned headers
+    /// ([`crate::c5::headers::COMPILER_OWNED_HEADERS`]) stay, as gcc's
+    /// builtins do.
     nostdinc: bool,
     /// `-fno-builtin`: `#pragma intrinsic(name)` registers nothing, so a
     /// call spelled with the library name lowers as a call rather than as
     /// the instruction badc has for it.
     no_builtin: bool,
-    /// Headers to splice in front of the user's translation unit,
-    /// before any source line is preprocessed. Mirrors gcc /
-    /// clang's `-include FILE` flag: each name resolves through
-    /// the same search-path / embedded-header chain as a regular
-    /// `#include "name"` and is processed exactly as if the user
-    /// had written that directive at the top of their source.
-    /// Plumbed in from the CLI's `-include FILE` flag.
+    /// The `-include FILE` set: headers processed as if the user had
+    /// written `#include "name"` at the top of the unit, resolved
+    /// through the same chain.
     force_includes: Vec<String>,
-    /// Filename label used for the top-level translation unit's
-    /// `#line 1 "..."` marker. Defaults to `"<source>"` -- the CLI
-    /// overrides it with the real argv path so error / warning
-    /// messages report `./hello.c:5: error: ...` instead of the
-    /// `<source>:5: ...` placeholder. The DWARF emitter still
-    /// uses `Program::source_path` separately; this is purely the
-    /// preprocessor / lexer / diagnostics view.
+    /// Filename for the unit's opening `#line 1 "..."` marker, hence for
+    /// every diagnostic naming it. `"<source>"` until the CLI supplies
+    /// the argv path. The DWARF emitter reads `Program::source_path`
+    /// instead.
     source_label: String,
-    /// Diagnostics accumulated during preprocessing. Drained into
-    /// `Compiler::warnings` so a single `Program::warnings` list
-    /// surfaces every `<file>:<line>: warning: ...` line the
-    /// front end produced -- preprocessor and parser alike. Mirrors
-    /// gcc / clang shape so editors' jump-to-error works out of
-    /// the box.
+    /// Diagnostics from this pass, drained into `Compiler::warnings` so
+    /// one `Program::warnings` list carries every front-end
+    /// `<file>:<line>: warning: ...` line, in the gcc / clang shape.
     pub warnings: Vec<String>,
     /// Include resolutions in directive order. Populated only when
     /// [`Self::set_track_includes`] is on. Renders the gcc `-H` trace
@@ -308,26 +252,18 @@ pub(crate) struct Preprocessor {
     /// macro-expanded, as GNU cpp does for assembler input; in C such
     /// a line is diagnosed and dropped.
     asm_source: bool,
-    /// Source-declared entry-point name (`#pragma entrypoint(<id>)`).
-    /// `None` means the default `main` is used; set via
-    /// the pragma to opt the translation unit into a non-`main`
-    /// entry like `WinMain` (Win32 `--gui`) or a custom `_start`.
-    /// The compile pass reads this when resolving `entry_pc`; the
-    /// PE writer reads it for the optional-header AddressOfEntryPoint.
+    /// `#pragma entrypoint(<id>)`: a non-`main` entry such as `WinMain`
+    /// or a custom `_start`. `None` keeps `main`. Read by the compile
+    /// pass for `entry_pc` and by the PE writer for
+    /// AddressOfEntryPoint.
     pub entrypoint: Option<String>,
-    /// Source-declared Windows subsystem (`#pragma subsystem(<kind>)`).
-    /// `None` means the default `console`. Recognised
-    /// kinds today: `console` (IMAGE_SUBSYSTEM_WINDOWS_CUI = 3) and
-    /// `windows` (IMAGE_SUBSYSTEM_WINDOWS_GUI = 2). The PE writer
-    /// reads this to set the optional header's Subsystem field;
-    /// non-PE targets keep the field at `None` and ignore it.
+    /// `#pragma subsystem(<kind>)`, read by the PE writer for the
+    /// optional header's Subsystem field. `None` keeps `console`;
+    /// non-PE targets ignore it.
     pub subsystem: Option<Subsystem>,
-    /// Monotonically-increasing per-translation-unit counter for
-    /// the MSVC / GCC `__COUNTER__` predefine. Each expansion
-    /// produces the current value as an integer literal and
-    /// post-increments, letting macros mint unique identifiers
-    /// per call site. Lives in a `Cell` because the substitution
-    /// path takes `&self`.
+    /// The `__COUNTER__` predefine's per-unit counter: each expansion
+    /// yields the current value and post-increments. A `Cell` because
+    /// the substitution path takes `&self`.
     pub(crate) counter: Cell<i64>,
     /// First macro-expansion diagnostic of a substitution pass (C99
     /// 6.10.3p4 argument/parameter count mismatch). The substitution path
@@ -343,31 +279,22 @@ pub(crate) struct Preprocessor {
     hs_singletons: RefCell<hashbrown::HashMap<String, alloc::rc::Rc<expand::Hideset>>>,
     /// Expansion-arena storage reused across lines.
     exp_scratch: RefCell<expand::ExpScratch>,
-    /// MSVC-style `#pragma warning(disable : N)` IDs currently
-    /// suppressed. Push/pop variants nest via `warning_stack`.
-    /// c5 doesn't number its own warnings, so the IDs in here
-    /// don't currently filter anything -- but the parse is real
-    /// (typos raise a warning) and tests can read this set, which
-    /// gives visibility into what the source asked to silence.
+    /// MSVC `#pragma warning(disable : N)` IDs in force, nesting through
+    /// `warning_stack`. c5 numbers no warnings of its own, so the set
+    /// filters nothing today; the parse is real and the set is
+    /// readable, so what the source asked to silence is visible.
     pub(crate) warning_disabled: BTreeSet<u32>,
     /// Stack of `warning_disabled` snapshots taken at each
     /// `#pragma warning(push)`; popped by `#pragma warning(pop)`.
     pub(crate) warning_stack: Vec<BTreeSet<u32>>,
-    /// Borland / Watcom-style `#pragma warn -<code>` requests.
-    /// Holds the 3-letter (or longer) code strings that the source
-    /// asked to disable -- the `-` form. Like `warning_disabled`
-    /// above, c5 doesn't currently filter against these but the
-    /// parse is real (so typos surface) and the recorded set is
-    /// visible for future per-code filtering.
+    /// Borland / Watcom `#pragma warn -<code>` codes the source asked to
+    /// disable. Recorded, not yet filtered against, like
+    /// `warning_disabled`.
     pub(crate) warn_disabled: BTreeSet<alloc::string::String>,
-    /// `#pragma intrinsic("name")` declarations -- a map from
-    /// callable identifier to the `Intrinsic` discriminant the
-    /// frontend should stamp on the matching `Symbol::intrinsic`
-    /// at declaration time. Today's surface is small (`alloca`
-    /// / `__builtin_alloca`); future atomics / cpuid / vector
-    /// builtins plug in by adding a new `Intrinsic` enum
-    /// variant in `op.rs` and a one-line entry in
-    /// [`Self::parse_pragma_intrinsic`].
+    /// `#pragma intrinsic("name")`: callable identifier to the
+    /// `Intrinsic` discriminant the frontend stamps on the matching
+    /// `Symbol::intrinsic`. A new one needs an `Intrinsic` variant in
+    /// `op.rs` and an entry in [`Self::parse_pragma_intrinsic`].
     pub intrinsics: alloc::collections::BTreeMap<String, i64>,
     /// Recording state for the source pass of a compile that may retry
     /// with an extended force-include list; see [`Self::process_recording`].
@@ -506,29 +433,18 @@ std::thread_local! {
     pub(crate) static FULL_SOURCE_PASSES: Cell<usize> = const { Cell::new(0) };
 }
 
-/// Windows PE subsystem selector; mirrors the `IMAGE_SUBSYSTEM_*`
-/// constants from `<winnt.h>`. The PE writer uses this both for
-/// the optional-header `Subsystem` field and to pick the entry
-/// stub shape:
+/// Windows PE subsystem selector, mirroring `<winnt.h>`'s
+/// `IMAGE_SUBSYSTEM_*`. The PE writer reads it for the optional
+/// header's `Subsystem` field and for the entry stub:
 ///
-/// * `Console` / `Windows` -- hosted Win32 programs. The writer
-///   emits a CRT-flavoured stub that imports
-///   `msvcrt!__getmainargs` / `msvcrt!exit` and calls the entry
-///   with `(argc, argv)` (console) or the WinMain argument set
-///   (windows).
-///
-/// * `Native` (alias `driver`) -- NT-native usermode programs and
-///   kernel-mode drivers. The loader invokes the entry directly
-///   with the platform-native signature (`NtProcessStartup(PPEB)`
-///   for usermode; `DriverEntry(PDRIVER_OBJECT, PUNICODE_STRING)`
-///   for drivers). The PE writer suppresses the stub and points
-///   `AddressOfEntryPoint` at the user's entry function.
-///
-/// * `EfiApplication` / `EfiBootServiceDriver` /
-///   `EfiRuntimeDriver` / `EfiRom` -- UEFI binaries. The firmware
-///   loader invokes the entry with
-///   `(EFI_HANDLE, EFI_SYSTEM_TABLE *)`. Same passthrough
-///   handling as `Native`.
+/// * `Console` / `Windows` take a CRT stub importing
+///   `msvcrt!__getmainargs` / `msvcrt!exit`, which calls the entry with
+///   `(argc, argv)` or the WinMain argument set.
+/// * `Native` (alias `driver`) and the `Efi*` kinds take no stub: the
+///   loader invokes the entry directly with the platform signature
+///   (`NtProcessStartup(PPEB)`, `DriverEntry(PDRIVER_OBJECT,
+///   PUNICODE_STRING)`, `(EFI_HANDLE, EFI_SYSTEM_TABLE *)`), so
+///   `AddressOfEntryPoint` points at the user's function.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Subsystem {
     /// `IMAGE_SUBSYSTEM_WINDOWS_CUI` (3) -- console subsystem.
@@ -549,15 +465,13 @@ pub enum Subsystem {
     EfiRom,
 }
 
-/// C99 5.2.4.2.2 floating-point characteristics, in the `__FLT_*` /
-/// `__DBL_*` / `__LDBL_*` spellings gcc and clang predefine and that
-/// third-party headers test directly. badc's `float` is IEEE binary32
-/// and `double` is IEEE binary64 on every target; the `__LDBL_*` row
-/// describes the target ABI's `long double` storage format (x87
-/// 80-bit on System V x86-64, binary128 on AAPCS64 ELF, binary64
-/// elsewhere), values matching gcc's per target. `<float.h>` derives
-/// its `FLT_*` / `DBL_*` / `LDBL_*` names from these, which keeps one
-/// source of truth.
+/// C99 5.2.4.2.2 floating-point characteristics in the gcc / clang
+/// `__FLT_*` / `__DBL_*` / `__LDBL_*` spellings, which third-party
+/// headers test directly and `<float.h>` derives its own names from.
+/// `float` is IEEE binary32 and `double` binary64 everywhere; the
+/// `__LDBL_*` row follows the target ABI's `long double` (x87 80-bit
+/// on System V x86-64, binary128 on AAPCS64 ELF, binary64 elsewhere),
+/// matching gcc per target.
 fn install_float_characteristics(macros: &mut HashMap<String, String>, target: Target) {
     const COMMON: &[(&str, &str)] = &[
         ("__FLT_RADIX__", "2"),
@@ -702,16 +616,12 @@ fn install_float_characteristics(macros: &mut HashMap<String, String>, target: T
 /// names, so re-selecting leaves nothing from the other model behind.
 ///
 /// `Elf32` on an x86 target is `-m16` / `-m32`, which gcc preprocesses
-/// as i386: `__i386__` for `__x86_64__`, ILP32 for LP64, 32-bit pointer
-/// / `long` / `size_t` / `wchar_t` spelling, no `__int128`, and the
-/// `__code_model_32__` name for whichever `-mcmodel` names otherwise.
-/// `-m16` is `-m32` code generation with a 16-bit default operand size
-/// and shares its predefines. An `Elf32` AArch64 object would be
-/// AArch32, which badc neither encodes nor describes; the driver
-/// refuses the flag there and the target's own model stands.
+/// as i386: `__i386__` for `__x86_64__`, ILP32 for LP64, 32-bit
+/// pointer / `long` / `size_t` / `wchar_t`, no `__int128`, and
+/// `__code_model_32__`. `Elf32` never reaches an AArch64 target, which
+/// would mean AArch32; the driver refuses the flag there.
 ///
-/// `short_wchar` is `-fshort-wchar`, which narrows `wchar_t` to an
-/// unsigned 16-bit type on any target; see [`Target::wchar_type`].
+/// `short_wchar` is `-fshort-wchar`; see [`Target::wchar_type`].
 fn install_data_model(
     macros: &mut HashMap<String, String>,
     target: Target,
@@ -847,40 +757,33 @@ static PREDEFINES: &[(PredefOn, &[(&str, &str)])] = &[
     (
         PredefOn::Every,
         &[
-            // C99 6.10.8. `__DATE__` / `__TIME__` are seeded at badc
-            // build time: C99 has them reflect the time of translation,
-            // and for an embedded library that is badc's own build.
-            // `__STDC_HOSTED__` holds because every supported target
-            // binds the host libc. `__STDC_VERSION__` reports C11 --
-            // the surface is C99 plus the C11 features real code gates
-            // on this macro (`_Static_assert`, `_Noreturn`, `_Atomic`,
-            // `_Thread_local`, anonymous members, `<stdatomic.h>`).
+            // C99 6.10.8. `__DATE__` / `__TIME__` carry badc's own
+            // build time, the translation time for an embedded library.
+            // `__STDC_HOSTED__` holds because every target binds the
+            // host libc. `__STDC_VERSION__` reports C11: the surface is
+            // C99 plus the C11 features real code gates on this macro.
             ("__STDC__", "1"),
             ("__STDC_HOSTED__", "1"),
             ("__STDC_VERSION__", "201112L"),
             ("__DATE__", concat!("\"", env!("BADC_BUILD_DATE"), "\"")),
             ("__TIME__", concat!("\"", env!("BADC_BUILD_TIME"), "\"")),
-            // C11 6.10.8.3 conditional-feature macros: an implementation
-            // reporting `__STDC_VERSION__ == 201112L` defines one per
-            // optional feature it lacks, and library code gates on them
-            // to pick a portable fallback. badc has no `_Complex` /
-            // `_Imaginary`. `__STDC_NO_THREADS__` stays undefined: real
-            // code gates `_Thread_local` on it (the two are independent
-            // in C11, but the conflation is widespread) and badc does
-            // support `_Thread_local`. `<stdatomic.h>` is provided, so
-            // `__STDC_NO_ATOMICS__` stays undefined too, and C99 6.7.6.2
-            // variable-length arrays are supported, so does
-            // `__STDC_NO_VLA__`.
+            // C11 6.10.8.3: one macro per optional feature the
+            // implementation lacks, which library code gates a portable
+            // fallback on. `__STDC_NO_THREADS__` stays undefined
+            // although badc ships no `<threads.h>`: real code gates
+            // `_Thread_local` on it, and that badc does support.
+            // `<stdatomic.h>` and C99 6.7.6.2 variable-length arrays are
+            // provided, so their macros stay undefined too.
             ("__STDC_NO_COMPLEX__", "1"),
             // C11 6.10.8.2: `char16_t` / `char32_t` hold the UTF-16 /
             // UTF-32 code units of the character, which is what `u"..."`
             // and `U"..."` encode here.
             ("__STDC_UTF_16__", "1"),
             ("__STDC_UTF_32__", "1"),
-            // Memory-order arguments to the `__atomic_*` builtins. badc
-            // always emits sequential consistency, so the value only has
-            // to satisfy the source's `#if` and comparison uses; the
-            // canonical GCC encoding keeps those exact.
+            // Memory-order arguments to the `__atomic_*` builtins, in
+            // GCC's encoding. badc always emits sequential consistency,
+            // so the values only have to satisfy the source's own `#if`
+            // and comparison uses.
             ("__ATOMIC_RELAXED", "0"),
             ("__ATOMIC_CONSUME", "1"),
             ("__ATOMIC_ACQUIRE", "2"),
@@ -897,10 +800,9 @@ static PREDEFINES: &[(PredefOn, &[(&str, &str)])] = &[
             ("__ORDER_PDP_ENDIAN__", "3412"),
             ("__BYTE_ORDER__", "__ORDER_LITTLE_ENDIAN__"),
             ("__LITTLE_ENDIAN__", "1"),
-            // Type sizes no data model moves, so portable code can select
-            // widths without <limits.h>; the rest come from
-            // `install_data_model`. C99 5.2.4.2.1 fixes CHAR_BIT at 8 on
-            // every supported target.
+            // Type sizes no data model moves; the rest come from
+            // `install_data_model`. C99 5.2.4.2.1 fixes CHAR_BIT at 8
+            // on every supported target.
             ("__CHAR_BIT__", "8"),
             ("__SIZEOF_SHORT__", "2"),
             ("__SIZEOF_INT__", "4"),
@@ -911,9 +813,8 @@ static PREDEFINES: &[(PredefOn, &[(&str, &str)])] = &[
             ("__WINT_TYPE__", "int"),
             ("__SIZEOF_WINT_T__", "4"),
             // C11 6.4.4.4p2-p4 / 7.28: `char16_t` is `uint_least16_t`
-            // and `char32_t` is `uint_least32_t`. Neither tracks
-            // `wchar_t`, so both hold on every target, and they name the
-            // types `u'c'` and `U'c'` take.
+            // and `char32_t` is `uint_least32_t`, the types `u'c'` and
+            // `U'c'` take. Neither tracks `wchar_t`.
             ("__CHAR16_TYPE__", "unsigned short"),
             ("__CHAR32_TYPE__", "unsigned int"),
             // The largest fundamental alignment: what a bare
@@ -963,13 +864,11 @@ static PREDEFINES: &[(PredefOn, &[(&str, &str)])] = &[
             // for a gcc/clang build here. A 2.17 baseline.
             ("__GLIBC__", "2"),
             ("__GLIBC_MINOR__", "17"),
-            // The feature-test state glibc's <features.h> derives when no
-            // request macro is set. The bundled headers stand in for
-            // glibc's, so the derivation must come from here or a header
-            // keying on it (a `struct timeval` fallback guarded by
-            // `!defined(_POSIX_C_SOURCE)`) misreads the environment.
-            // Overridable like any predefine, and installed before the
-            // CLI's own lists so `-D` / `-U` win.
+            // The feature-test state glibc's <features.h> derives with
+            // no request macro set. The bundled headers stand in for
+            // glibc's, so it has to come from here or a header keying
+            // on it misreads the environment. Installed before the CLI's
+            // lists, so `-D` / `-U` win.
             ("_DEFAULT_SOURCE", "1"),
             ("_POSIX_SOURCE", "1"),
             ("_POSIX_C_SOURCE", "200809L"),
@@ -1021,15 +920,13 @@ struct PredefEnv<'a> {
     crate_version: &'a str,
 }
 
-/// Function-like predefines. The `__counted_by` family annotates a
-/// flexible array member with its element-count field (a GCC 15 / Clang
-/// bounds hint badc does not implement); defining them empty is the
-/// fallback the kernel UAPI headers use when the compiler lacks the
-/// attribute, which `__has_attribute(counted_by)` also reports as 0.
-/// `__builtin_expect(exp, c)` is a GCC builtin available with no header
-/// and its value is the first operand; predefining it here lets a unit
-/// that never triggers the `<_builtins.h>` auto-include compile, and
-/// that header's identical definition harmlessly re-registers it.
+/// Function-like predefines. The `__counted_by` family is a GCC 15 /
+/// Clang bounds hint badc does not implement; empty is the fallback the
+/// kernel UAPI headers take when the compiler lacks it, and
+/// `__has_attribute(counted_by)` reports 0 to match.
+/// `__builtin_expect(exp, c)` is a GCC builtin needing no header, its
+/// value the first operand; it is here so a unit that never triggers
+/// the `<_builtins.h>` auto-include still compiles.
 static PREDEFINED_FN_MACROS: &[(&str, &[&str], &str)] = &[
     ("__counted_by", &["m"], ""),
     ("__counted_by_le", &["m"], ""),
@@ -1146,34 +1043,22 @@ impl Preprocessor {
         }
     }
 
-    /// Define the GCC identity macros (`--gnu`). badc claims `__GNUC__`
-    /// only on request because it implements most, but not all, of the
-    /// GNU C surface (the x86 SIMD intrinsics are absent). Exactly one
-    /// of `__GNUC_STDC_INLINE__` /
-    /// `__GNUC_GNU_INLINE__` reports which inline linkage model is in
-    /// force, per `gnu89_inline`; headers key the spelling of their
-    /// inline declarations off it.
-    /// `__VERSION__` is the compiler-identification string embedded by
-    /// code such as `Py_GetCompiler`. `__STRICT_ANSI__` reports strict
-    /// ISO conformance alongside `__GNUC__`, exactly as
-    /// `gcc`/`clang -std=c11` does, so portable code uses the standard
-    /// path for the GNU-only features badc lacks.
+    /// Define the GCC identity macros (`--gnu`), which badc claims only
+    /// on request: it implements most of the GNU C surface but not all
+    /// of it. Exactly one of `__GNUC_STDC_INLINE__` /
+    /// `__GNUC_GNU_INLINE__` reports the inline linkage model headers
+    /// key their inline declarations on. `__STRICT_ANSI__` accompanies
+    /// `__GNUC__` as under `gcc -std=c11`, so portable code takes the
+    /// standard path for the GNU-only features badc lacks.
     pub fn enable_gnu(&mut self, gnu89_inline: bool, strict_ansi: bool) {
-        // The claimed version (`crate::GNU_COMPAT_VERSION`) is 4.3.0:
-        // every feature GCC 4.3 documents is backed -- `__builtin_bswap32`
-        // / `__builtin_bswap64`, the `hot` / `cold` / `alloc_size` /
-        // `error` / `warning` attributes, `__COUNTER__` -- and later
-        // features that real code gates on their own capability macros
-        // rather than on the version (`__atomic_*`, `asm goto`,
-        // `_Static_assert`, `_Generic`, `__has_attribute`,
-        // `__builtin_*_overflow`) are backed too.
-        // The two things 4.4 adds that real code selects on the version
-        // are now backed: per-function `__attribute__((target(...)))` and
-        // the x86 intrinsic header family, over the SSE2 / SSSE3 /
-        // SSE4.1 / AES-NI / PCLMUL / RDRAND subset the headers carry.
-        // TODO: raise the claim, which needs the forced-claim measurement
-        // over a corpus at each rung between 4.4 and the chosen version,
-        // not just at the intrinsic surface.
+        // `crate::GNU_COMPAT_VERSION` claims 4.3.0, every feature of
+        // which is backed. What 4.4 adds and real code selects on the
+        // version -- per-function `__attribute__((target(...)))` and the
+        // x86 intrinsic headers over the SSE2 / SSSE3 / SSE4.1 / AES-NI
+        // / PCLMUL / RDRAND subset -- is backed as well.
+        // TODO: raise the claim. That needs a forced-claim measurement
+        // over a corpus at each rung above 4.4, not only at the
+        // intrinsic surface.
         let mut compat = crate::GNU_COMPAT_VERSION.split('.');
         for name in ["__GNUC__", "__GNUC_MINOR__", "__GNUC_PATCHLEVEL__"] {
             let component = compat.next().expect("GNU_COMPAT_VERSION is x.y.z");
@@ -1367,18 +1252,12 @@ impl Preprocessor {
         Ok(out)
     }
 
-    /// -include FILE plumbing: synthesize an `#include "name"`
-    /// line per registered force-include and process them as a
-    /// preamble before the user's source. Each force-include
-    /// header runs with the same line-counter / `__FILE__` /
-    /// search-path machinery as a regular `#include`, so a
-    /// failure inside the header (say a typo'd `#pragma`) gets
-    /// a diagnostic naming that header rather than the user's
-    /// source. The synthesized preamble itself uses
-    /// `<force-include>` as its filename label so any
-    /// diagnostic targeting one of the synthesized lines
-    /// points at that label and the line in the original
-    /// source isn't shifted from the user's perspective.
+    /// Process one synthesized `#include "name"` per `-include FILE`
+    /// ahead of the user's source, through the same machinery a written
+    /// `#include` takes, so a failure inside such a header names that
+    /// header. The synthesized buffer is labelled `<force-include>`, so
+    /// a diagnostic on one of its lines does not claim a line of the
+    /// user's source.
     fn process_preamble(&mut self, out: &mut String) -> Result<(), C5Error> {
         if self.force_includes.is_empty() {
             return Ok(());
@@ -1446,14 +1325,12 @@ impl Preprocessor {
 
     /// Run `process` for a force-include list extending the one `prior`
     /// was recorded under, reusing `prior`'s source pass when the
-    /// extension provably cannot change it. `None` when reuse cannot be
-    /// shown sound; the caller then runs a full pass on a fresh
-    /// preprocessor. On `Some`, this preprocessor's side outputs are
-    /// what the full run would leave.
+    /// extension cannot change it. `None` when that cannot be shown, and
+    /// the caller runs a full pass on a fresh preprocessor; on `Some`,
+    /// this preprocessor's side outputs are what a full run would leave.
     ///
-    /// Beyond its own text and the filesystem (stable across a retry by
-    /// the same assumption the full re-run makes), the source pass reads
-    /// the macro tables, the once / include-guard registries, the
+    /// Beyond its own text and the filesystem, the source pass reads the
+    /// macro tables, the once / include-guard registries, the
     /// `__COUNTER__` position and the pragma-warning state, and appends
     /// to the side outputs. Each read is checked below against what the
     /// recorded pass observed; the appends are replayed.
@@ -2127,17 +2004,16 @@ impl<'p, 's> LinePass<'p, 's> {
     }
 
     /// Join the lines a function-like macro invocation spans into one
-    /// buffer, returning it and the input lines consumed. Per-line
-    /// substitution would leave the call's `(` unmatched and the macro
-    /// unexpanded.
+    /// buffer, returning it and the input lines consumed; per-line
+    /// substitution would leave the call's `(` unmatched.
     ///
     /// A directive inside the argument list works on the same
-    /// conditional stack as a top-level one -- an `#if` opened there may
-    /// close after the call's `)`, and the reverse (C99 6.10.3p11 leaves
-    /// the case undefined; gcc and clang process such directives as if
-    /// the invocation were not present, and real code relies on it).
-    /// Directive lines never become argument text; content lines join
-    /// only while the current branch is active.
+    /// conditional stack as a top-level one, so an `#if` opened there
+    /// may close after the call's `)` and the reverse. C99 6.10.3p11
+    /// leaves the case undefined; gcc and clang process such directives
+    /// as if the invocation were not present. Directive lines never
+    /// become argument text; content lines join only while the current
+    /// branch is active.
     fn join_invocation(&mut self, first: &str) -> Result<(String, usize), C5Error> {
         let mut buffer = String::from(first);
         let mut consumed = 1usize;

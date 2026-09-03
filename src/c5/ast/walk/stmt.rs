@@ -13,105 +13,7 @@ impl<'a> Walker<'a> {
         let src = self.ast.stmt_src[id as usize];
         b.set_src(src.line, src.file as u32);
         match self.ast.stmt(id) {
-            Stmt::Return(Some(e)) => {
-                // C99 6.8.6.4p3: the operand converts as if by assignment. A
-                // scalar returned through the 128-bit integer carrier is a
-                // value, not an address, so widen it into a 16-byte object
-                // first -- the aggregate paths below read an address.
-                let widened = if self.is_int128_value_ty(self.scalar_return_ty)
-                    && !self.expr_is_int128_value(*e)
-                {
-                    let pair = self.int128_operand(b, *e)?;
-                    Some(self.int128_materialize(b, pair))
-                } else {
-                    None
-                };
-                if self.ret_in_regs || self.ret_indirect {
-                    // C99 6.8.6.4 + AAPCS64 6.9 host-ABI struct return:
-                    // yield the struct's address. The codegen scatters
-                    // the eightbytes into the result registers (<= 16
-                    // bytes) or copies the value through the x8 result
-                    // pointer (> 16 bytes); the VM copies it into the
-                    // caller's result temp.
-                    let v = match widened {
-                        Some(addr) => addr,
-                        None => self.walk_copy_operand(b, *e)?,
-                    };
-                    b.return_(v);
-                    return Ok(true);
-                }
-                if self.returns_struct {
-                    // C99 6.8.6.4 + the c5 out-pointer convention: the
-                    // callee receives the caller's result-temp address
-                    // in `slot 2`. `return s;` copies `sizeof(struct
-                    // T)` bytes from `s`'s address into that
-                    // out-pointer and returns it so the call site has a
-                    // stable value to chain into the surrounding
-                    // assignment / Mcpy.
-                    let out_ptr = b.load_local(2, LoadKind::I64);
-                    let src = match widened {
-                        Some(addr) => addr,
-                        None => self.walk_copy_operand(b, *e)?,
-                    };
-                    if self.return_struct_size > 0 {
-                        // The out-pointer is the caller's result temp, so
-                        // only the returned type's own alignment holds.
-                        let align = match widened {
-                            Some(_) => self.struct_align(self.scalar_return_ty),
-                            None => expr_ty(self.ast.expr(*e))
-                                .map(|t| self.struct_align(t))
-                                .unwrap_or(1),
-                        };
-                        b.mcpy(out_ptr, src, self.return_struct_size, align);
-                    }
-                    b.return_(out_ptr);
-                    return Ok(true);
-                }
-                let mut v = self.walk_copy_operand(b, *e)?;
-                // C99 6.8.6.4 / 6.3.1.1: the return value is converted to the
-                // function's return type. A body evaluated in 64-bit registers
-                // can leave bits above the type width set -- a signed constant
-                // or arithmetic sign-extends past bit 31, an unsigned source
-                // zero-extends -- so a char/short/int (and LLP64 long) return
-                // is narrowed to its declared width: zero-extend when unsigned,
-                // sign-extend when signed. Same-unit callers read the result
-                // register directly and do not re-narrow. `_Bool` is excluded:
-                // 6.3.1.2 already normalized it to 0/1.
-                let stripped = strip_unsigned(self.scalar_return_ty);
-                let rs = type_size_bytes(self.scalar_return_ty, self.target);
-                if !is_floating_scalar(self.scalar_return_ty)
-                    && !is_pointer_ty(self.scalar_return_ty)
-                    && stripped != Ty::Bool as i64
-                    && (rs == 1 || rs == 2 || rs == 4)
-                {
-                    let unsigned = (self.scalar_return_ty & UNSIGNED_BIT) != 0;
-                    let bits = 64i64 - (rs as i64) * 8;
-                    let mask: i64 = match rs {
-                        1 => 0xff,
-                        2 => 0xffff,
-                        _ => 0xffff_ffff,
-                    };
-                    if let Some(k) = b.peek_imm(v) {
-                        // A constant is its own narrowing: fold it, and leave
-                        // the value untouched when it already fits the type.
-                        let narrowed = if unsigned {
-                            k & mask
-                        } else {
-                            (k << bits) >> bits
-                        };
-                        if narrowed != k {
-                            v = b.imm(narrowed);
-                        }
-                    } else if unsigned {
-                        v = b.binop_imm(BinOp::And, v, mask);
-                    } else {
-                        let shifted = b.binop_imm(BinOp::Shl, v, bits);
-                        v = b.binop_imm(BinOp::Shr, shifted, bits);
-                    }
-                }
-                b.return_(v);
-                Ok(true)
-            }
+            Stmt::Return(Some(e)) => self.walk_return(b, *e),
             Stmt::Return(None) => {
                 let zero = b.imm(0);
                 b.return_(zero);
@@ -145,203 +47,20 @@ impl<'a> Walker<'a> {
                 }
                 Ok(false)
             }
-            Stmt::Compound(items) => {
-                for item in items {
-                    match item {
-                        BlockItem::Stmt(s) => {
-                            // A previous item closed the current
-                            // block (Return / Goto / Break /
-                            // Continue / If-both-arms-return). If
-                            // this item is a `Stmt::Labeled`, the
-                            // walker below resumes at its label
-                            // block so any earlier `goto label`,
-                            // `case <val>:`, or `default:` lands
-                            // somewhere walkable. Non-label dead
-                            // code per C99 6.8.6 is still walked
-                            // into a fresh synthetic block so the
-                            // SSA covers the unreachable region;
-                            // the resolver later prunes anything
-                            // the codegen can elide.
-                            if !b.is_block_open()
-                                && !matches!(
-                                    self.ast.stmt(*s),
-                                    Stmt::Labeled { .. } | Stmt::Case { .. } | Stmt::Default { .. },
-                                )
-                            {
-                                let dead = b.new_block();
-                                b.switch_to(dead);
-                            }
-                            if self.walk_stmt(b, *s)? {
-                                continue;
-                            }
-                        }
-                        BlockItem::Decl(d) => {
-                            // Decls in dead-code regions still go
-                            // through walk_decl so the walker's
-                            // local-slot bookkeeping mirrors what
-                            // the parser stamped (per-decl
-                            // initialiser side effects land in the
-                            // same trailing dead block).
-                            if !b.is_block_open() {
-                                let dead = b.new_block();
-                                b.switch_to(dead);
-                            }
-                            let d = *d;
-                            self.walk_decl(b, d)?;
-                        }
-                    }
-                }
-                Ok(!b.is_block_open())
-            }
+            Stmt::Compound(items) => self.walk_compound(b, items),
             Stmt::If {
                 cond,
                 then_s,
                 else_s,
-            } => {
-                // A constant controlling expression selects one branch
-                // at translation time (C99 6.8.4.1); emit only that
-                // branch so the dead branch's side effects and
-                // undefined-symbol references are never emitted. Skip
-                // the fold when the dead branch defines a label a goto
-                // or switch could target -- dropping its block would
-                // leave the jump unresolved. Matches gcc's front-end
-                // fold at -O0.
-                if let Some(c) = self.const_fold_int(*cond) {
-                    let dead = if c != 0 { *else_s } else { Some(*then_s) };
-                    if !dead.is_some_and(|s| self.stmt_defines_label(s)) {
-                        if c != 0 {
-                            return self.walk_stmt(b, *then_s);
-                        }
-                        return match *else_s {
-                            Some(else_id) => self.walk_stmt(b, else_id),
-                            None => Ok(false),
-                        };
-                    }
-                }
-                let cond_v = self.walk_cond_value(b, *cond)?;
-                let then_blk = b.new_block();
-                let after_blk = b.new_block();
-                let else_blk = if else_s.is_some() {
-                    b.new_block()
-                } else {
-                    after_blk
-                };
-                // C99 6.8.4.1: branch-when-zero to the else (or
-                // after) block; fall through to then.
-                b.branch_zero(cond_v, else_blk, then_blk);
-                b.switch_to(then_blk);
-                let then_id = *then_s;
-                let else_id = *else_s;
-                let then_terminated = self.walk_stmt(b, then_id)?;
-                if !then_terminated {
-                    b.jmp(after_blk);
-                }
-                if let Some(else_id) = else_id {
-                    b.switch_to(else_blk);
-                    let else_terminated = self.walk_stmt(b, else_id)?;
-                    if !else_terminated {
-                        b.jmp(after_blk);
-                    }
-                }
-                b.switch_to(after_blk);
-                Ok(false)
-            }
-            Stmt::While { cond, body } => {
-                let header = b.new_block();
-                let body_blk = b.new_block();
-                let after = b.new_block();
-                b.jmp(header);
-                b.switch_to(header);
-                let cond_v = self.walk_cond_value(b, *cond)?;
-                b.branch_zero(cond_v, after, body_blk);
-                let body_id = *body;
-                b.switch_to(body_blk);
-                self.loop_ctx.push((after, header));
-                let terminated = self.walk_stmt(b, body_id)?;
-                self.loop_ctx.pop();
-                if !terminated {
-                    b.jmp(header);
-                }
-                b.switch_to(after);
-                Ok(false)
-            }
-            Stmt::DoWhile { body, cond } => {
-                let body_blk = b.new_block();
-                let cond_blk = b.new_block();
-                let after = b.new_block();
-                b.jmp(body_blk);
-                b.switch_to(body_blk);
-                let body_id = *body;
-                self.loop_ctx.push((after, cond_blk));
-                let terminated = self.walk_stmt(b, body_id)?;
-                self.loop_ctx.pop();
-                if !terminated {
-                    b.jmp(cond_blk);
-                }
-                b.switch_to(cond_blk);
-                let cond_v = self.walk_cond_value(b, *cond)?;
-                b.branch_nonzero(cond_v, body_blk, after);
-                b.switch_to(after);
-                Ok(false)
-            }
+            } => self.walk_if(b, *cond, *then_s, *else_s),
+            Stmt::While { cond, body } => self.walk_while(b, *cond, *body),
+            Stmt::DoWhile { body, cond } => self.walk_do_while(b, *body, *cond),
             Stmt::For {
                 init,
                 cond,
                 post,
                 body,
-            } => {
-                let init_clone = *init;
-                let cond_clone = *cond;
-                let post_clone = *post;
-                let body_clone = *body;
-                // C99 6.8.5.3: for-init is either an expression
-                // (`BlockItem::Stmt`) or a declaration
-                // (`BlockItem::Decl`). The init runs once before
-                // the cond / body / post loop; without walking
-                // the declaration path the loop counter stays
-                // uninitialised on every iteration.
-                match init_clone {
-                    Some(BlockItem::Stmt(s)) => {
-                        let _ = self.walk_stmt(b, s)?;
-                    }
-                    Some(BlockItem::Decl(d)) => {
-                        self.walk_decl(b, d)?;
-                    }
-                    None => {}
-                }
-                let header = b.new_block();
-                let post_blk = b.new_block();
-                let body_blk = b.new_block();
-                let after = b.new_block();
-                b.jmp(header);
-                b.switch_to(header);
-                let cond_v = match cond_clone {
-                    Some(c) => self.walk_cond_value(b, c)?,
-                    None => b.imm(1),
-                };
-                b.branch_zero(cond_v, after, body_blk);
-                // C99 6.8.5.3 specifies the *evaluation* order
-                // (cond, body, post) but leaves layout open. Walk
-                // post before body so the SSA Inst ordering
-                // matches the layout the call-fixup resolver
-                // expects. Control flow is unaffected -- each
-                // block's terminator routes execution in the C99
-                // order regardless of inst-vec layout.
-                b.switch_to(post_blk);
-                if let Some(p) = post_clone {
-                    let _ = self.walk_expr_rvalue(b, p)?;
-                }
-                b.jmp(header);
-                b.switch_to(body_blk);
-                self.loop_ctx.push((after, post_blk));
-                let body_terminated = self.walk_stmt(b, body_clone)?;
-                self.loop_ctx.pop();
-                if !body_terminated {
-                    b.jmp(post_blk);
-                }
-                b.switch_to(after);
-                Ok(false)
-            }
+            } => self.walk_for(b, *init, *cond, *post, *body),
             Stmt::Break => {
                 let Some(&(brk, _)) = self.loop_ctx.last() else {
                     return Err(WalkError::InvalidStmt { id, kind: "Break" });
@@ -410,121 +129,7 @@ impl<'a> Walker<'a> {
                 let body_id = *body;
                 self.walk_stmt(b, body_id)
             }
-            Stmt::Switch { disc, body } => {
-                let disc_val = self.walk_expr_rvalue(b, *disc)?;
-                let body_id = *body;
-                let after_blk = b.new_block();
-
-                // Reserve a block for every case value and for default
-                // (C99 6.8.4.2: case labels at any depth scope to the
-                // nearest switch). The body walk below jumps to these
-                // blocks at each marker, so a marker inside a nested
-                // loop is still reachable from the dispatcher.
-                let mut cases: alloc::vec::Vec<(i64, BlockId)> = alloc::vec::Vec::new();
-                let mut ranges: alloc::vec::Vec<(i64, i64, BlockId)> = alloc::vec::Vec::new();
-                let mut default_blk: Option<BlockId> = None;
-                self.collect_switch_cases(b, body_id, &mut cases, &mut ranges, &mut default_blk);
-
-                // Dispatcher: a balanced binary search over the sorted
-                // case values. Each internal node branches on `<` (one
-                // conditional branch) and a leaf tests equality, so a
-                // dispatch is O(log n) branches where a linear compare
-                // chain is O(n). Case values are distinct (C99 6.8.4.2);
-                // the discriminant's signedness selects the ordering and
-                // the comparison so an unsigned discriminant with the
-                // high bit set still sorts correctly.
-                let deflt = default_blk.unwrap_or(after_blk);
-                let disc_ty = expr_ty(self.ast.expr(*disc)).unwrap_or(Ty::Int as i64);
-                let disc_unsigned = disc_ty & UNSIGNED_BIT != 0;
-                let mut sorted = cases.clone();
-                if disc_unsigned {
-                    // C99 6.8.4.2p1 + p5: the controlling expression is
-                    // integer-promoted, then each case label is converted to
-                    // that promoted type. A 4-byte unsigned controlling type
-                    // (`unsigned int`, and `unsigned long` on LLP64) promotes
-                    // to itself, so a negative label wraps modulo 2^32 and
-                    // must match the zero-extended discriminant -- mask it to
-                    // 32 bits. An 8-byte unsigned type keeps the full-width
-                    // value, which already matches. (Sub-`int` unsigned types
-                    // promote to signed `int`, so a negative label stays
-                    // negative and never matches a zero-extended value; those
-                    // are reported as unsigned by `disc_ty` but take the plain
-                    // path here with no masking.)
-                    if type_size_bytes(disc_ty, self.target) == 4 {
-                        for c in sorted.iter_mut() {
-                            c.0 = (c.0 as u32) as i64;
-                        }
-                    }
-                    sorted.sort_by_key(|p| p.0 as u64);
-                } else {
-                    // Signed controlling type: a 4-byte type promotes to
-                    // itself and a sub-int type to signed `int`, so the
-                    // label converts by sign-truncation to 32 bits --
-                    // `case 0x80000000:` on an `int` switch must match
-                    // the sign-extended INT_MIN discriminant. An 8-byte
-                    // type keeps the full-width label.
-                    if type_size_bytes(disc_ty, self.target) <= 4 {
-                        for c in sorted.iter_mut() {
-                            c.0 = (c.0 as i32) as i64;
-                        }
-                    }
-                    sorted.sort_by_key(|p| p.0);
-                }
-                // Range cases (`case lo ... hi`): each is dispatched by an
-                // explicit `lo <= disc <= hi` test before the single-value
-                // search, so a wide range needs no per-value expansion. The
-                // bounds convert to the promoted type exactly like the
-                // single-value labels above.
-                let (ge_op, le_op) = if disc_unsigned {
-                    (BinOp::Uge, BinOp::Ule)
-                } else {
-                    (BinOp::Ge, BinOp::Le)
-                };
-                let disc_bytes = type_size_bytes(disc_ty, self.target);
-                for &(mut lo, mut hi, blk) in &ranges {
-                    if disc_unsigned {
-                        if disc_bytes == 4 {
-                            lo = (lo as u32) as i64;
-                            hi = (hi as u32) as i64;
-                        }
-                    } else if disc_bytes <= 4 {
-                        lo = (lo as i32) as i64;
-                        hi = (hi as i32) as i64;
-                    }
-                    let ge_lo = b.binop_imm(ge_op, disc_val, lo);
-                    let hi_chk = b.new_block();
-                    let next = b.new_block();
-                    b.branch_nonzero(ge_lo, hi_chk, next);
-                    b.switch_to(hi_chk);
-                    let le_hi = b.binop_imm(le_op, disc_val, hi);
-                    b.branch_nonzero(le_hi, blk, next);
-                    b.switch_to(next);
-                }
-                let lt_op = if disc_unsigned { BinOp::Ult } else { BinOp::Lt };
-                if !self.jump_tables || !self.emit_switch_table(b, disc_val, &sorted, deflt) {
-                    self.emit_switch_search(b, disc_val, &sorted, lt_op, deflt);
-                }
-
-                // Walk the body linearly. The opening block is reachable
-                // only by a goto into the switch ahead of the first case
-                // (C99 6.8.1); the dispatcher never targets it.
-                let fallin = b.new_block();
-                b.switch_to(fallin);
-
-                // `break` leaves the switch; `continue` is invalid in a
-                // bare switch, so propagate the enclosing loop's target.
-                let prev_continue = self.loop_ctx.last().map(|&(_, c)| c).unwrap_or(after_blk);
-                self.loop_ctx.push((after_blk, prev_continue));
-                self.switch_dispatch.push((cases, ranges, default_blk));
-                let terminated = self.walk_stmt(b, body_id)?;
-                self.switch_dispatch.pop();
-                self.loop_ctx.pop();
-                if !terminated {
-                    b.jmp(after_blk);
-                }
-                b.switch_to(after_blk);
-                Ok(false)
-            }
+            Stmt::Switch { disc, body } => self.walk_switch(b, *disc, *body),
             // A case / default marker inside the active switch jumps to
             // the block the case-collection pass reserved for it, so the
             // dispatcher can target it and a preceding statement falls
@@ -864,5 +469,454 @@ impl<'a> Walker<'a> {
             Stmt::Switch { body, .. } => self.stmt_defines_external_label(*body, true),
             _ => false,
         }
+    }
+
+    /// C99 6.8.6.4: return the operand, converted as if by assignment to the
+    /// function's return type.
+    pub(super) fn walk_return(&mut self, b: &mut SsaBuilder, e: ExprId) -> Result<bool, WalkError> {
+        // C99 6.8.6.4p3: the operand converts as if by assignment. A
+        // scalar returned through the 128-bit integer carrier is a
+        // value, not an address, so widen it into a 16-byte object
+        // first -- the aggregate paths below read an address.
+        let widened =
+            if self.is_int128_value_ty(self.scalar_return_ty) && !self.expr_is_int128_value(e) {
+                let pair = self.int128_operand(b, e)?;
+                Some(self.int128_materialize(b, pair))
+            } else {
+                None
+            };
+        if self.ret_in_regs || self.ret_indirect {
+            // C99 6.8.6.4 + AAPCS64 6.9 host-ABI struct return:
+            // yield the struct's address. The codegen scatters
+            // the eightbytes into the result registers (<= 16
+            // bytes) or copies the value through the x8 result
+            // pointer (> 16 bytes); the VM copies it into the
+            // caller's result temp.
+            let v = match widened {
+                Some(addr) => addr,
+                None => self.walk_copy_operand(b, e)?,
+            };
+            b.return_(v);
+            return Ok(true);
+        }
+        if self.returns_struct {
+            // C99 6.8.6.4 + the c5 out-pointer convention: the
+            // callee receives the caller's result-temp address
+            // in `slot 2`. `return s;` copies `sizeof(struct
+            // T)` bytes from `s`'s address into that
+            // out-pointer and returns it so the call site has a
+            // stable value to chain into the surrounding
+            // assignment / Mcpy.
+            let out_ptr = b.load_local(2, LoadKind::I64);
+            let src = match widened {
+                Some(addr) => addr,
+                None => self.walk_copy_operand(b, e)?,
+            };
+            if self.return_struct_size > 0 {
+                // The out-pointer is the caller's result temp, so
+                // only the returned type's own alignment holds.
+                let align = match widened {
+                    Some(_) => self.struct_align(self.scalar_return_ty),
+                    None => expr_ty(self.ast.expr(e))
+                        .map(|t| self.struct_align(t))
+                        .unwrap_or(1),
+                };
+                b.mcpy(out_ptr, src, self.return_struct_size, align);
+            }
+            b.return_(out_ptr);
+            return Ok(true);
+        }
+        let mut v = self.walk_copy_operand(b, e)?;
+        // C99 6.8.6.4 / 6.3.1.1: the return value is converted to the
+        // function's return type. A body evaluated in 64-bit registers
+        // can leave bits above the type width set -- a signed constant
+        // or arithmetic sign-extends past bit 31, an unsigned source
+        // zero-extends -- so a char/short/int (and LLP64 long) return
+        // is narrowed to its declared width: zero-extend when unsigned,
+        // sign-extend when signed. Same-unit callers read the result
+        // register directly and do not re-narrow. `_Bool` is excluded:
+        // 6.3.1.2 already normalized it to 0/1.
+        let stripped = strip_unsigned(self.scalar_return_ty);
+        let rs = type_size_bytes(self.scalar_return_ty, self.target);
+        if !is_floating_scalar(self.scalar_return_ty)
+            && !is_pointer_ty(self.scalar_return_ty)
+            && stripped != Ty::Bool as i64
+            && (rs == 1 || rs == 2 || rs == 4)
+        {
+            let unsigned = (self.scalar_return_ty & UNSIGNED_BIT) != 0;
+            let bits = 64i64 - (rs as i64) * 8;
+            let mask: i64 = match rs {
+                1 => 0xff,
+                2 => 0xffff,
+                _ => 0xffff_ffff,
+            };
+            if let Some(k) = b.peek_imm(v) {
+                // A constant is its own narrowing: fold it, and leave
+                // the value untouched when it already fits the type.
+                let narrowed = if unsigned {
+                    k & mask
+                } else {
+                    (k << bits) >> bits
+                };
+                if narrowed != k {
+                    v = b.imm(narrowed);
+                }
+            } else if unsigned {
+                v = b.binop_imm(BinOp::And, v, mask);
+            } else {
+                let shifted = b.binop_imm(BinOp::Shl, v, bits);
+                v = b.binop_imm(BinOp::Shr, shifted, bits);
+            }
+        }
+        b.return_(v);
+        Ok(true)
+    }
+
+    /// C99 6.8.2: a block's items in source order. A statement that closed the
+    /// current block leaves the rest of the block unreachable.
+    pub(super) fn walk_compound(
+        &mut self,
+        b: &mut SsaBuilder,
+        items: &'a [BlockItem],
+    ) -> Result<bool, WalkError> {
+        for item in items {
+            match item {
+                BlockItem::Stmt(s) => {
+                    // A previous item closed the current
+                    // block (Return / Goto / Break /
+                    // Continue / If-both-arms-return). If
+                    // this item is a `Stmt::Labeled`, the
+                    // walker below resumes at its label
+                    // block so any earlier `goto label`,
+                    // `case <val>:`, or `default:` lands
+                    // somewhere walkable. Non-label dead
+                    // code per C99 6.8.6 is still walked
+                    // into a fresh synthetic block so the
+                    // SSA covers the unreachable region;
+                    // the resolver later prunes anything
+                    // the codegen can elide.
+                    if !b.is_block_open()
+                        && !matches!(
+                            self.ast.stmt(*s),
+                            Stmt::Labeled { .. } | Stmt::Case { .. } | Stmt::Default { .. },
+                        )
+                    {
+                        let dead = b.new_block();
+                        b.switch_to(dead);
+                    }
+                    if self.walk_stmt(b, *s)? {
+                        continue;
+                    }
+                }
+                BlockItem::Decl(d) => {
+                    // Decls in dead-code regions still go
+                    // through walk_decl so the walker's
+                    // local-slot bookkeeping mirrors what
+                    // the parser stamped (per-decl
+                    // initialiser side effects land in the
+                    // same trailing dead block).
+                    if !b.is_block_open() {
+                        let dead = b.new_block();
+                        b.switch_to(dead);
+                    }
+                    let d = *d;
+                    self.walk_decl(b, d)?;
+                }
+            }
+        }
+        Ok(!b.is_block_open())
+    }
+
+    /// C99 6.8.4.1 selection statement.
+    pub(super) fn walk_if(
+        &mut self,
+        b: &mut SsaBuilder,
+        cond: ExprId,
+        then_s: StmtId,
+        else_s: Option<StmtId>,
+    ) -> Result<bool, WalkError> {
+        // A constant controlling expression selects one branch
+        // at translation time (C99 6.8.4.1); emit only that
+        // branch so the dead branch's side effects and
+        // undefined-symbol references are never emitted. Skip
+        // the fold when the dead branch defines a label a goto
+        // or switch could target -- dropping its block would
+        // leave the jump unresolved. Matches gcc's front-end
+        // fold at -O0.
+        if let Some(c) = self.const_fold_int(cond) {
+            let dead = if c != 0 { else_s } else { Some(then_s) };
+            if !dead.is_some_and(|s| self.stmt_defines_label(s)) {
+                if c != 0 {
+                    return self.walk_stmt(b, then_s);
+                }
+                return match else_s {
+                    Some(else_id) => self.walk_stmt(b, else_id),
+                    None => Ok(false),
+                };
+            }
+        }
+        let cond_v = self.walk_cond_value(b, cond)?;
+        let then_blk = b.new_block();
+        let after_blk = b.new_block();
+        let else_blk = if else_s.is_some() {
+            b.new_block()
+        } else {
+            after_blk
+        };
+        // C99 6.8.4.1: branch-when-zero to the else (or
+        // after) block; fall through to then.
+        b.branch_zero(cond_v, else_blk, then_blk);
+        b.switch_to(then_blk);
+        let then_id = then_s;
+        let else_id = else_s;
+        let then_terminated = self.walk_stmt(b, then_id)?;
+        if !then_terminated {
+            b.jmp(after_blk);
+        }
+        if let Some(else_id) = else_id {
+            b.switch_to(else_blk);
+            let else_terminated = self.walk_stmt(b, else_id)?;
+            if !else_terminated {
+                b.jmp(after_blk);
+            }
+        }
+        b.switch_to(after_blk);
+        Ok(false)
+    }
+
+    /// C99 6.8.5.1 `while` loop.
+    pub(super) fn walk_while(
+        &mut self,
+        b: &mut SsaBuilder,
+        cond: ExprId,
+        body: StmtId,
+    ) -> Result<bool, WalkError> {
+        let header = b.new_block();
+        let body_blk = b.new_block();
+        let after = b.new_block();
+        b.jmp(header);
+        b.switch_to(header);
+        let cond_v = self.walk_cond_value(b, cond)?;
+        b.branch_zero(cond_v, after, body_blk);
+        let body_id = body;
+        b.switch_to(body_blk);
+        self.loop_ctx.push((after, header));
+        let terminated = self.walk_stmt(b, body_id)?;
+        self.loop_ctx.pop();
+        if !terminated {
+            b.jmp(header);
+        }
+        b.switch_to(after);
+        Ok(false)
+    }
+
+    /// C99 6.8.5.2 `do` loop.
+    pub(super) fn walk_do_while(
+        &mut self,
+        b: &mut SsaBuilder,
+        body: StmtId,
+        cond: ExprId,
+    ) -> Result<bool, WalkError> {
+        let body_blk = b.new_block();
+        let cond_blk = b.new_block();
+        let after = b.new_block();
+        b.jmp(body_blk);
+        b.switch_to(body_blk);
+        let body_id = body;
+        self.loop_ctx.push((after, cond_blk));
+        let terminated = self.walk_stmt(b, body_id)?;
+        self.loop_ctx.pop();
+        if !terminated {
+            b.jmp(cond_blk);
+        }
+        b.switch_to(cond_blk);
+        let cond_v = self.walk_cond_value(b, cond)?;
+        b.branch_nonzero(cond_v, body_blk, after);
+        b.switch_to(after);
+        Ok(false)
+    }
+
+    /// C99 6.8.5.3 `for` loop.
+    pub(super) fn walk_for(
+        &mut self,
+        b: &mut SsaBuilder,
+        init: Option<BlockItem>,
+        cond: Option<ExprId>,
+        post: Option<ExprId>,
+        body: StmtId,
+    ) -> Result<bool, WalkError> {
+        let init_clone = init;
+        let cond_clone = cond;
+        let post_clone = post;
+        let body_clone = body;
+        // C99 6.8.5.3: for-init is either an expression
+        // (`BlockItem::Stmt`) or a declaration
+        // (`BlockItem::Decl`). The init runs once before
+        // the cond / body / post loop; without walking
+        // the declaration path the loop counter stays
+        // uninitialised on every iteration.
+        match init_clone {
+            Some(BlockItem::Stmt(s)) => {
+                let _ = self.walk_stmt(b, s)?;
+            }
+            Some(BlockItem::Decl(d)) => {
+                self.walk_decl(b, d)?;
+            }
+            None => {}
+        }
+        let header = b.new_block();
+        let post_blk = b.new_block();
+        let body_blk = b.new_block();
+        let after = b.new_block();
+        b.jmp(header);
+        b.switch_to(header);
+        let cond_v = match cond_clone {
+            Some(c) => self.walk_cond_value(b, c)?,
+            None => b.imm(1),
+        };
+        b.branch_zero(cond_v, after, body_blk);
+        // C99 6.8.5.3 specifies the *evaluation* order
+        // (cond, body, post) but leaves layout open. Walk
+        // post before body so the SSA Inst ordering
+        // matches the layout the call-fixup resolver
+        // expects. Control flow is unaffected -- each
+        // block's terminator routes execution in the C99
+        // order regardless of inst-vec layout.
+        b.switch_to(post_blk);
+        if let Some(p) = post_clone {
+            let _ = self.walk_expr_rvalue(b, p)?;
+        }
+        b.jmp(header);
+        b.switch_to(body_blk);
+        self.loop_ctx.push((after, post_blk));
+        let body_terminated = self.walk_stmt(b, body_clone)?;
+        self.loop_ctx.pop();
+        if !body_terminated {
+            b.jmp(post_blk);
+        }
+        b.switch_to(after);
+        Ok(false)
+    }
+
+    /// C99 6.8.4.2 `switch`: the case dispatch and the body it jumps into.
+    pub(super) fn walk_switch(
+        &mut self,
+        b: &mut SsaBuilder,
+        disc: ExprId,
+        body: StmtId,
+    ) -> Result<bool, WalkError> {
+        let disc_val = self.walk_expr_rvalue(b, disc)?;
+        let body_id = body;
+        let after_blk = b.new_block();
+
+        // Reserve a block for every case value and for default
+        // (C99 6.8.4.2: case labels at any depth scope to the
+        // nearest switch). The body walk below jumps to these
+        // blocks at each marker, so a marker inside a nested
+        // loop is still reachable from the dispatcher.
+        let mut cases: alloc::vec::Vec<(i64, BlockId)> = alloc::vec::Vec::new();
+        let mut ranges: alloc::vec::Vec<(i64, i64, BlockId)> = alloc::vec::Vec::new();
+        let mut default_blk: Option<BlockId> = None;
+        self.collect_switch_cases(b, body_id, &mut cases, &mut ranges, &mut default_blk);
+
+        // Dispatcher: a balanced binary search over the sorted
+        // case values. Each internal node branches on `<` (one
+        // conditional branch) and a leaf tests equality, so a
+        // dispatch is O(log n) branches where a linear compare
+        // chain is O(n). Case values are distinct (C99 6.8.4.2);
+        // the discriminant's signedness selects the ordering and
+        // the comparison so an unsigned discriminant with the
+        // high bit set still sorts correctly.
+        let deflt = default_blk.unwrap_or(after_blk);
+        let disc_ty = expr_ty(self.ast.expr(disc)).unwrap_or(Ty::Int as i64);
+        let disc_unsigned = disc_ty & UNSIGNED_BIT != 0;
+        let mut sorted = cases.clone();
+        if disc_unsigned {
+            // C99 6.8.4.2p1 + p5: the controlling expression is
+            // integer-promoted, then each case label is converted to
+            // that promoted type. A 4-byte unsigned controlling type
+            // (`unsigned int`, and `unsigned long` on LLP64) promotes
+            // to itself, so a negative label wraps modulo 2^32 and
+            // must match the zero-extended discriminant -- mask it to
+            // 32 bits. An 8-byte unsigned type keeps the full-width
+            // value, which already matches. (Sub-`int` unsigned types
+            // promote to signed `int`, so a negative label stays
+            // negative and never matches a zero-extended value; those
+            // are reported as unsigned by `disc_ty` but take the plain
+            // path here with no masking.)
+            if type_size_bytes(disc_ty, self.target) == 4 {
+                for c in sorted.iter_mut() {
+                    c.0 = (c.0 as u32) as i64;
+                }
+            }
+            sorted.sort_by_key(|p| p.0 as u64);
+        } else {
+            // Signed controlling type: a 4-byte type promotes to
+            // itself and a sub-int type to signed `int`, so the
+            // label converts by sign-truncation to 32 bits --
+            // `case 0x80000000:` on an `int` switch must match
+            // the sign-extended INT_MIN discriminant. An 8-byte
+            // type keeps the full-width label.
+            if type_size_bytes(disc_ty, self.target) <= 4 {
+                for c in sorted.iter_mut() {
+                    c.0 = (c.0 as i32) as i64;
+                }
+            }
+            sorted.sort_by_key(|p| p.0);
+        }
+        // Range cases (`case lo ... hi`): each is dispatched by an
+        // explicit `lo <= disc <= hi` test before the single-value
+        // search, so a wide range needs no per-value expansion. The
+        // bounds convert to the promoted type exactly like the
+        // single-value labels above.
+        let (ge_op, le_op) = if disc_unsigned {
+            (BinOp::Uge, BinOp::Ule)
+        } else {
+            (BinOp::Ge, BinOp::Le)
+        };
+        let disc_bytes = type_size_bytes(disc_ty, self.target);
+        for &(mut lo, mut hi, blk) in &ranges {
+            if disc_unsigned {
+                if disc_bytes == 4 {
+                    lo = (lo as u32) as i64;
+                    hi = (hi as u32) as i64;
+                }
+            } else if disc_bytes <= 4 {
+                lo = (lo as i32) as i64;
+                hi = (hi as i32) as i64;
+            }
+            let ge_lo = b.binop_imm(ge_op, disc_val, lo);
+            let hi_chk = b.new_block();
+            let next = b.new_block();
+            b.branch_nonzero(ge_lo, hi_chk, next);
+            b.switch_to(hi_chk);
+            let le_hi = b.binop_imm(le_op, disc_val, hi);
+            b.branch_nonzero(le_hi, blk, next);
+            b.switch_to(next);
+        }
+        let lt_op = if disc_unsigned { BinOp::Ult } else { BinOp::Lt };
+        if !self.jump_tables || !self.emit_switch_table(b, disc_val, &sorted, deflt) {
+            self.emit_switch_search(b, disc_val, &sorted, lt_op, deflt);
+        }
+
+        // Walk the body linearly. The opening block is reachable
+        // only by a goto into the switch ahead of the first case
+        // (C99 6.8.1); the dispatcher never targets it.
+        let fallin = b.new_block();
+        b.switch_to(fallin);
+
+        // `break` leaves the switch; `continue` is invalid in a
+        // bare switch, so propagate the enclosing loop's target.
+        let prev_continue = self.loop_ctx.last().map(|&(_, c)| c).unwrap_or(after_blk);
+        self.loop_ctx.push((after_blk, prev_continue));
+        self.switch_dispatch.push((cases, ranges, default_blk));
+        let terminated = self.walk_stmt(b, body_id)?;
+        self.switch_dispatch.pop();
+        self.loop_ctx.pop();
+        if !terminated {
+            b.jmp(after_blk);
+        }
+        b.switch_to(after_blk);
+        Ok(false)
     }
 }

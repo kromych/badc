@@ -10,9 +10,10 @@
 
 use alloc::string::String;
 
-use super::super::codegen::Target;
-use super::super::codegen::offset_align;
 use super::super::codegen::ssa::build::SsaBuilder;
+use super::super::codegen::{
+    ArgPlacement, LongDoubleKind, Target, effective_fp_arg_mask, offset_align, plan_param_regs_aggs,
+};
 use super::super::compiler::types::{
     STRUCT_BASE, STRUCT_STRIDE, Segment, UNSIGNED_BIT, is_long_double_scalar, is_pointer_ty,
     is_struct_ty, is_struct_value_ty, is_unsigned_ty, is_vector_ty, is_volatile_object_ty,
@@ -20,11 +21,17 @@ use super::super::compiler::types::{
     struct_ptr_depth,
 };
 use super::super::ir::{
-    AsmSeg, AtomicRmwOp, BinOp, FpCastKind, FunctionSsa, LoadKind, StoreKind, ValueId,
+    AsmSeg, AtomicRmwOp, BinOp, BlockId, FpCastKind, FunctionSsa, LoadKind, StoreKind, ValueId,
 };
+use super::super::op::Intrinsic;
 use super::super::symbol::Symbol;
 use super::super::token::{Token, Ty};
-use super::{AtomicKind, Expr, ExprId, FinishedFunction, SLOT_ALIGN, Stmt, StmtId, UnOp};
+use super::{
+    Ast, AtomicKind, BitfieldDesc, BlockItem, Decl, DeclId, Expr, ExprId, FinishedFunction,
+    LabelId, LocalInit, LocalInitPrelude, MAX_MEM_FILL_ACCESSES, MemTransferOp, RuntimeInitValue,
+    SLOT_ALIGN, ShortCircuitOp, Stmt, StmtId, UnOp, bitfield_slice_mask, mem_transfer_accesses,
+    mem_transfer_chunks,
+};
 
 /// The low and high 64-bit halves of a 128-bit value, in that order.
 type Halves = (ValueId, ValueId);
@@ -135,7 +142,7 @@ pub(crate) fn walk_function(
     let (is_variadic, n_locals) = (*is_variadic, *n_locals);
     let (returns_struct, return_struct_size) = (*returns_struct, *return_struct_size);
     let (return_ty, alloca_top_slot) = (*return_ty, *alloca_top_slot);
-    let mut b = super::super::codegen::ssa::build::SsaBuilder::new(ent_pc, n_params, is_variadic);
+    let mut b = SsaBuilder::new(ent_pc, n_params, is_variadic);
     b.set_conv(*conv);
     b.set_end_pc(end_pc);
     b.set_ssp(*ssp);
@@ -307,11 +314,7 @@ pub(crate) fn walk_function(
         // contiguous register prefix, so such a function falls back to
         // the all-integer ABI. The caller applies the same predicate to
         // its `fp_arg_mask`, so the two ends stay in agreement.
-        let eff = super::super::codegen::effective_fp_arg_mask(
-            param_tys.len(),
-            b.param_fp_mask(),
-            abi_target.abi(),
-        );
+        let eff = effective_fp_arg_mask(param_tys.len(), b.param_fp_mask(), abi_target.abi());
         b.set_param_fp_mask(eff);
     }
     // Per-parameter incoming-register plan, resolved once for both the
@@ -319,18 +322,14 @@ pub(crate) fn walk_function(
     // floating-point parameter is seeded with an FP `ParamRef` only
     // when the plan placed it in an FP register; one that overflowed to
     // the host stack reads its c5 cdecl cell instead.
-    let param_plan = super::super::codegen::plan_param_regs_aggs(
+    let param_plan = plan_param_regs_aggs(
         param_tys.len(),
         b.param_fp_mask(),
         abi_target.abi(),
         &param_arg_aggs,
     );
-    let param_in_fp_reg = |i: usize| -> bool {
-        matches!(
-            param_plan.placements.get(i),
-            Some(super::super::codegen::ArgPlacement::FpReg(_))
-        )
-    };
+    let param_in_fp_reg =
+        |i: usize| -> bool { matches!(param_plan.placements.get(i), Some(ArgPlacement::FpReg(_))) };
     // Parameter-slot promotion seed: for each non-relocated,
     // non-struct, non-float-narrowed parameter, emit a `ParamRef`
     // + `StoreLocal` to the c5 cdecl arg slot. The store gives
@@ -380,8 +379,8 @@ pub(crate) fn walk_function(
             if is_double {
                 if param_in_fp_reg(i) {
                     let arg_slot = (i as i64) + arg_slot_base;
-                    let pr = b.param_ref(i as u32, super::super::ir::LoadKind::F64);
-                    b.store_local(arg_slot, pr, super::super::ir::StoreKind::F64);
+                    let pr = b.param_ref(i as u32, LoadKind::F64);
+                    b.store_local(arg_slot, pr, StoreKind::F64);
                 }
                 continue;
             }
@@ -395,10 +394,7 @@ pub(crate) fn walk_function(
             // would fit by position onto the host stack; such a parameter
             // has no incoming register and reads its c5 cdecl cell, which
             // the prologue restripes from the incoming stack.
-            if !matches!(
-                param_plan.placements.get(i),
-                Some(super::super::codegen::ArgPlacement::IntReg(_))
-            ) {
+            if !matches!(param_plan.placements.get(i), Some(ArgPlacement::IntReg(_))) {
                 continue;
             }
             // An unsigned-tagged parameter keeps the full 8-byte
@@ -409,28 +405,13 @@ pub(crate) fn walk_function(
             use crate::c5::token::Ty;
             let unsigned = pty & UNSIGNED_BIT != 0;
             let (store_kind, load_kind) = if unsigned {
-                (
-                    super::super::ir::StoreKind::I64,
-                    super::super::ir::LoadKind::I64,
-                )
+                (StoreKind::I64, LoadKind::I64)
             } else {
                 match stripped {
-                    s if s == Ty::Char as i64 => (
-                        super::super::ir::StoreKind::I8,
-                        super::super::ir::LoadKind::I8,
-                    ),
-                    s if s == Ty::Short as i64 => (
-                        super::super::ir::StoreKind::I16,
-                        super::super::ir::LoadKind::I16,
-                    ),
-                    s if s == Ty::Int as i64 => (
-                        super::super::ir::StoreKind::I32,
-                        super::super::ir::LoadKind::I32,
-                    ),
-                    _ => (
-                        super::super::ir::StoreKind::I64,
-                        super::super::ir::LoadKind::I64,
-                    ),
+                    s if s == Ty::Char as i64 => (StoreKind::I8, LoadKind::I8),
+                    s if s == Ty::Short as i64 => (StoreKind::I16, LoadKind::I16),
+                    s if s == Ty::Int as i64 => (StoreKind::I32, LoadKind::I32),
+                    _ => (StoreKind::I64, LoadKind::I64),
                 }
             };
             let arg_slot = (i as i64) + arg_slot_base;
@@ -463,7 +444,7 @@ pub(crate) fn walk_function(
             let align = structs[id].align.max(1) as u32;
             let arg_slot = (i as i64) + arg_slot_base;
             let dst = b.local_addr(local_slot);
-            let src = b.load_local(arg_slot, super::super::ir::LoadKind::I64);
+            let src = b.load_local(arg_slot, LoadKind::I64);
             b.mcpy(dst, src, size, align);
             continue;
         }
@@ -480,9 +461,9 @@ pub(crate) fn walk_function(
                 // that cell stays unobserved and the prologue's spill of
                 // it is elided. A direct `StoreLocal` (not the
                 // address-taken form) keeps the slot mem2reg-promotable.
-                let pr = b.param_ref(i as u32, super::super::ir::LoadKind::F32);
+                let pr = b.param_ref(i as u32, LoadKind::F32);
                 b.mark_f32(pr);
-                b.store_local(local_slot, pr, super::super::ir::StoreKind::F32);
+                b.store_local(local_slot, pr, StoreKind::F32);
             } else if b.param_fp_mask() != 0 {
                 // Host-stack-overflow `float` parameter (more than eight
                 // preceding FP parameters) under the FP-register ABI: the
@@ -490,8 +471,8 @@ pub(crate) fn walk_function(
                 // cell. Read the cell as `F32` (widening to f64) and
                 // narrow back into the local.
                 let arg_slot = (i as i64) + arg_slot_base;
-                let val = b.load_local(arg_slot, super::super::ir::LoadKind::F32);
-                b.store_local(local_slot, val, super::super::ir::StoreKind::F32);
+                let val = b.load_local(arg_slot, LoadKind::F32);
+                b.store_local(local_slot, val, StoreKind::F32);
             } else {
                 // Variadic / struct-returning callees keep the c5 cdecl
                 // shape: the caller widened the `float` to an 8-byte
@@ -499,8 +480,8 @@ pub(crate) fn walk_function(
                 // I64 (preserving the bit pattern) and narrow back via a
                 // `StoreKind::F32` into the local.
                 let arg_slot = (i as i64) + arg_slot_base;
-                let val = b.load_local(arg_slot, super::super::ir::LoadKind::I64);
-                b.store_local(local_slot, val, super::super::ir::StoreKind::F32);
+                let val = b.load_local(arg_slot, LoadKind::I64);
+                b.store_local(local_slot, val, StoreKind::F32);
             }
         }
     }
@@ -580,19 +561,19 @@ struct AddrConst {
 /// continue targets across nested loops + switches and intern
 /// `LabelId -> BlockId` for cross-stmt gotos.
 struct Walker<'a> {
-    ast: &'a super::Ast,
+    ast: &'a Ast,
     symbols: &'a [Symbol],
     structs: &'a [crate::c5::compiler::StructDef],
     target: Target,
     /// Stack of `(break_target, continue_target)` block ids, one
     /// frame per enclosing loop / switch. Break/Continue stmts
     /// jump to the top-of-stack entries.
-    loop_ctx: alloc::vec::Vec<(super::super::ir::BlockId, super::super::ir::BlockId)>,
+    loop_ctx: alloc::vec::Vec<(BlockId, BlockId)>,
     /// SSA `BlockId` reserved for each AST label's body, indexed by
     /// `LabelId` (dense over the function's `Ast::goto_targets`).
     /// Filled lazily by either a Goto's forward reference or the
     /// matching Labeled stmt -- both sides see the same block.
-    label_blocks: alloc::vec::Vec<Option<super::super::ir::BlockId>>,
+    label_blocks: alloc::vec::Vec<Option<BlockId>>,
     /// Per enclosing `switch` (innermost last): the block reserved for
     /// each `case` value and for `default`. A `case` / `default` marker
     /// reached while walking the switch body jumps to its block, so the
@@ -603,9 +584,9 @@ struct Walker<'a> {
     /// before the dispatcher emits.
     #[allow(clippy::type_complexity)]
     switch_dispatch: alloc::vec::Vec<(
-        alloc::vec::Vec<(i64, super::super::ir::BlockId)>,
-        alloc::vec::Vec<(i64, i64, super::super::ir::BlockId)>,
-        Option<super::super::ir::BlockId>,
+        alloc::vec::Vec<(i64, BlockId)>,
+        alloc::vec::Vec<(i64, i64, BlockId)>,
+        Option<BlockId>,
     )>,
     /// True when the function's declared return type is a struct
     /// value returned through the c5 out-pointer convention. `return
@@ -704,7 +685,7 @@ impl<'a> Walker<'a> {
     /// A callee with no statically-known prototype defaults to
     /// non-variadic with every argument fixed (`arg_count`), which
     /// keeps the host-ABI placement identical to a plain call.
-    fn indirect_callee_proto(&self, callee: super::ExprId, arg_count: usize) -> (bool, usize) {
+    fn indirect_callee_proto(&self, callee: ExprId, arg_count: usize) -> (bool, usize) {
         // A variadic callee whose prototype was not recoverable from its
         // symbol -- a struct-field, array-element, or dereferenced
         // function pointer -- is recorded at parse time with its fixed
@@ -736,7 +717,7 @@ impl<'a> Walker<'a> {
     /// Every ABI question the call site asks -- argument placement,
     /// aggregate argument and return classification, the variadic
     /// dialect -- is asked of this, not of the target's own convention.
-    fn callee_conv(&self, callee: super::ExprId) -> crate::c5::codegen::CallConv {
+    fn callee_conv(&self, callee: ExprId) -> crate::c5::codegen::CallConv {
         if let Expr::Ident { sym, class, .. } = self.ast.expr(callee)
             && *class == Token::Fun as i64
             && let Some(s) = self.symbols.get(*sym as usize)
@@ -752,7 +733,7 @@ impl<'a> Walker<'a> {
     /// declared type carries `__attribute__((ms_abi))` /
     /// `((sysv_abi))`; the entry is already normalised against the
     /// target, so anything listed differs from the target's own.
-    fn indirect_callee_conv(&self, callee: super::ExprId) -> crate::c5::codegen::CallConv {
+    fn indirect_callee_conv(&self, callee: ExprId) -> crate::c5::codegen::CallConv {
         if let Some(&(_, conv)) = self
             .ast
             .conv_indirect_callees
@@ -1006,7 +987,7 @@ impl<'a> Walker<'a> {
         align: u32,
         vol: bool,
     ) {
-        for (off, width) in super::mem_transfer_chunks(size, align) {
+        for (off, width) in mem_transfer_chunks(size, align) {
             let at = |b: &mut SsaBuilder, base: ValueId| {
                 if off == 0 {
                     base
@@ -1067,7 +1048,7 @@ impl<'a> Walker<'a> {
         &self,
         id: ExprId,
         ty: i64,
-        bf: super::super::ast::BitfieldDesc,
+        bf: BitfieldDesc,
     ) -> Result<AsmSeg, WalkError> {
         let seg = self.access_seg(id, ty)?;
         if seg != AsmSeg::None && bf.unit_size == 16 {
@@ -1312,12 +1293,12 @@ impl<'a> Walker<'a> {
 
     fn walk_vector_chunked(
         &mut self,
-        b: &mut super::super::codegen::ssa::build::SsaBuilder,
+        b: &mut SsaBuilder,
         op: BinOp,
         lhs: ExprId,
         rhs: ExprId,
         ty: i64,
-    ) -> Result<super::super::ir::ValueId, WalkError> {
+    ) -> Result<ValueId, WalkError> {
         let lhs_addr = self.walk_copy_operand(b, lhs)?;
         let rhs_addr = self.walk_copy_operand(b, rhs)?;
         let size = self.struct_size(ty);
@@ -1851,10 +1832,10 @@ impl<'a> Walker<'a> {
         // precision here; the scaling below is exact, so narrowing the
         // scaled product back to `float` does not round again.
         let d = if to_float {
-            let f = b.fp_cast_to_f32(super::super::ir::FpCastKind::UIntToFp, t);
+            let f = b.fp_cast_to_f32(FpCastKind::UIntToFp, t);
             b.fp_widen_to_f64(f)
         } else {
-            b.fp_cast(super::super::ir::FpCastKind::UIntToFp, t)
+            b.fp_cast(FpCastKind::UIntToFp, t)
         };
         // Scale by +/- 2^sh, assembled as an IEEE-754 double: `sh` is
         // at most 64, so the biased exponent stays in range.
@@ -2175,11 +2156,7 @@ impl<'a> Walker<'a> {
     /// terminates the current block (an unconditional return /
     /// jmp), letting the caller stop iterating siblings that
     /// would otherwise emit dead code.
-    fn walk_stmt(
-        &mut self,
-        b: &mut super::super::codegen::ssa::build::SsaBuilder,
-        id: StmtId,
-    ) -> Result<bool, WalkError> {
+    fn walk_stmt(&mut self, b: &mut SsaBuilder, id: StmtId) -> Result<bool, WalkError> {
         let src = self.ast.stmt_src[id as usize];
         b.set_src(src.line, src.file as u32);
         match self.ast.stmt(id) {
@@ -2218,7 +2195,7 @@ impl<'a> Walker<'a> {
                     // out-pointer and returns it so the call site has a
                     // stable value to chain into the surrounding
                     // assignment / Mcpy.
-                    let out_ptr = b.load_local(2, super::super::ir::LoadKind::I64);
+                    let out_ptr = b.load_local(2, LoadKind::I64);
                     let src = match widened {
                         Some(addr) => addr,
                         None => self.walk_copy_operand(b, *e)?,
@@ -2318,7 +2295,7 @@ impl<'a> Walker<'a> {
             Stmt::Compound(items) => {
                 for item in items {
                     match item {
-                        super::BlockItem::Stmt(s) => {
+                        BlockItem::Stmt(s) => {
                             // A previous item closed the current
                             // block (Return / Goto / Break /
                             // Continue / If-both-arms-return). If
@@ -2345,7 +2322,7 @@ impl<'a> Walker<'a> {
                                 continue;
                             }
                         }
-                        super::BlockItem::Decl(d) => {
+                        BlockItem::Decl(d) => {
                             // Decls in dead-code regions still go
                             // through walk_decl so the walker's
                             // local-slot bookkeeping mirrors what
@@ -2471,10 +2448,10 @@ impl<'a> Walker<'a> {
                 // the declaration path the loop counter stays
                 // uninitialised on every iteration.
                 match init_clone {
-                    Some(super::BlockItem::Stmt(s)) => {
+                    Some(BlockItem::Stmt(s)) => {
                         let _ = self.walk_stmt(b, s)?;
                     }
-                    Some(super::BlockItem::Decl(d)) => {
+                    Some(BlockItem::Decl(d)) => {
                         self.walk_decl(b, d)?;
                     }
                     None => {}
@@ -2536,7 +2513,7 @@ impl<'a> Walker<'a> {
                 // follow in label-list order, sharing the C-label
                 // machinery with `goto` (forward references included).
                 let asm = self.ast.asm_blocks[*idx as usize].clone();
-                let mut args: alloc::vec::Vec<super::super::ir::ValueId> =
+                let mut args: alloc::vec::Vec<ValueId> =
                     alloc::vec::Vec::with_capacity(asm.operand_exprs.len());
                 for &e in &asm.operand_exprs {
                     args.push(self.walk_expr_rvalue(b, e)?);
@@ -2590,11 +2567,9 @@ impl<'a> Walker<'a> {
                 // nearest switch). The body walk below jumps to these
                 // blocks at each marker, so a marker inside a nested
                 // loop is still reachable from the dispatcher.
-                let mut cases: alloc::vec::Vec<(i64, super::super::ir::BlockId)> =
-                    alloc::vec::Vec::new();
-                let mut ranges: alloc::vec::Vec<(i64, i64, super::super::ir::BlockId)> =
-                    alloc::vec::Vec::new();
-                let mut default_blk: Option<super::super::ir::BlockId> = None;
+                let mut cases: alloc::vec::Vec<(i64, BlockId)> = alloc::vec::Vec::new();
+                let mut ranges: alloc::vec::Vec<(i64, i64, BlockId)> = alloc::vec::Vec::new();
+                let mut default_blk: Option<BlockId> = None;
                 self.collect_switch_cases(b, body_id, &mut cases, &mut ranges, &mut default_blk);
 
                 // Dispatcher: a balanced binary search over the sorted
@@ -2741,19 +2716,13 @@ impl<'a> Walker<'a> {
             // reclaimed (per loop iteration for a loop body).
             Stmt::VlaScopeEnter { save_slot } => {
                 let slot = *save_slot;
-                let top = b.intrinsic(
-                    super::super::op::Intrinsic::AllocaSave as i64,
-                    alloc::vec::Vec::new(),
-                );
-                b.store_local(slot, top, super::super::ir::StoreKind::I64);
+                let top = b.intrinsic(Intrinsic::AllocaSave as i64, alloc::vec::Vec::new());
+                b.store_local(slot, top, StoreKind::I64);
                 Ok(false)
             }
             Stmt::VlaScopeExit { save_slot } => {
-                let saved = b.load_local(*save_slot, super::super::ir::LoadKind::I64);
-                b.intrinsic(
-                    super::super::op::Intrinsic::AllocaRestore as i64,
-                    alloc::vec![saved],
-                );
+                let saved = b.load_local(*save_slot, LoadKind::I64);
+                b.intrinsic(Intrinsic::AllocaRestore as i64, alloc::vec![saved]);
                 Ok(false)
             }
         }
@@ -2767,13 +2736,9 @@ impl<'a> Walker<'a> {
     ///   emit `Inst::Mcpy { dst = local_addr, src = imm_data,
     ///   size }` for a brace-list whose every element folded to
     ///   a compile-time constant.
-    fn walk_decl(
-        &mut self,
-        b: &mut super::super::codegen::ssa::build::SsaBuilder,
-        id: super::super::ast::DeclId,
-    ) -> Result<(), WalkError> {
+    fn walk_decl(&mut self, b: &mut SsaBuilder, id: DeclId) -> Result<(), WalkError> {
         match self.ast.decl(id) {
-            super::super::ast::Decl::Local {
+            Decl::Local {
                 sym: _,
                 ty,
                 slot_off,
@@ -2784,7 +2749,7 @@ impl<'a> Walker<'a> {
                 let init_clone = init.clone();
                 self.emit_local_init(b, slot, ty, &init_clone)
             }
-            super::super::ast::Decl::Vla {
+            Decl::Vla {
                 elem_size,
                 ptr_slot,
                 size_slot,
@@ -2806,18 +2771,15 @@ impl<'a> Walker<'a> {
                 } else {
                     b.binop_imm(BinOp::Mul, n, elem_size)
                 };
-                b.store_local(size_slot, bytes, super::super::ir::StoreKind::I64);
-                let ptr = b.intrinsic(
-                    super::super::op::Intrinsic::Alloca as i64,
-                    alloc::vec![bytes],
-                );
-                b.store_local(ptr_slot, ptr, super::super::ir::StoreKind::I64);
+                b.store_local(size_slot, bytes, StoreKind::I64);
+                let ptr = b.intrinsic(Intrinsic::Alloca as i64, alloc::vec![bytes]);
+                b.store_local(ptr_slot, ptr, StoreKind::I64);
                 if let Some(byte) = fill {
                     self.fill_loop(b, ptr, bytes, byte);
                 }
                 Ok(())
             }
-            super::super::ast::Decl::StaticLocal { .. } => {
+            Decl::StaticLocal { .. } => {
                 // C99 6.2.4p3 + 6.7.8p4: storage + initializer
                 // live in the data segment; nothing to emit in
                 // the function body. The matching symbol-table
@@ -2844,9 +2806,9 @@ impl<'a> Walker<'a> {
     /// [`Self::fp_to_int128`], which fills both halves.
     fn store_scalar_as_int128(
         &mut self,
-        b: &mut super::super::codegen::ssa::build::SsaBuilder,
-        dst_addr: super::super::ir::ValueId,
-        v: super::super::ir::ValueId,
+        b: &mut SsaBuilder,
+        dst_addr: ValueId,
+        v: ValueId,
         src_ty: i64,
         dst_ty: i64,
     ) {
@@ -2871,13 +2833,7 @@ impl<'a> Walker<'a> {
 
     /// Copy the `size` bytes staged at `src_data_off` into the local at
     /// `slot`.
-    fn init_from_template(
-        &mut self,
-        b: &mut super::super::codegen::ssa::build::SsaBuilder,
-        slot: i64,
-        src_data_off: i64,
-        size: i64,
-    ) {
+    fn init_from_template(&mut self, b: &mut SsaBuilder, slot: i64, src_data_off: i64, size: i64) {
         let dst = b.local_addr(slot);
         let src = b.imm_data(src_data_off);
         b.mcpy(dst, src, size, offset_align(SLOT_ALIGN, src_data_off));
@@ -2887,23 +2843,17 @@ impl<'a> Walker<'a> {
     /// in place of copying a staged template. A frame slot is
     /// `SLOT_ALIGN`-aligned, so the fill runs in whole units down to the
     /// tail; past the inline bound it runs as a loop.
-    fn init_fill(
-        &mut self,
-        b: &mut super::super::codegen::ssa::build::SsaBuilder,
-        slot: i64,
-        size: i64,
-        byte: u8,
-    ) {
+    fn init_fill(&mut self, b: &mut SsaBuilder, slot: i64, size: i64, byte: u8) {
         if size <= 0 {
             return;
         }
         let dst = b.local_addr(slot);
-        if super::mem_transfer_accesses(size, SLOT_ALIGN) > super::MAX_MEM_FILL_ACCESSES {
+        if mem_transfer_accesses(size, SLOT_ALIGN) > MAX_MEM_FILL_ACCESSES {
             let bytes = b.imm(size);
             self.fill_loop(b, dst, bytes, byte);
             return;
         }
-        for (off, width) in super::mem_transfer_chunks(size, SLOT_ALIGN) {
+        for (off, width) in mem_transfer_chunks(size, SLOT_ALIGN) {
             let p = if off == 0 {
                 dst
             } else {
@@ -2920,13 +2870,7 @@ impl<'a> Walker<'a> {
     /// that and start 8-aligned, so the rounded run stays inside the
     /// object's own storage. The cursor lives in a synthetic slot the
     /// `-O` promotion lifts into a register.
-    fn fill_loop(
-        &mut self,
-        b: &mut super::super::codegen::ssa::build::SsaBuilder,
-        dst: super::super::ir::ValueId,
-        bytes: super::super::ir::ValueId,
-        byte: u8,
-    ) {
+    fn fill_loop(&mut self, b: &mut SsaBuilder, dst: ValueId, bytes: ValueId, byte: u8) {
         let cursor = b.alloc_synthetic_local();
         let rounded = b.binop_imm(BinOp::Add, bytes, 7);
         let rounded = b.binop_imm(BinOp::And, rounded, -8);
@@ -2951,14 +2895,14 @@ impl<'a> Walker<'a> {
 
     fn emit_local_init(
         &mut self,
-        b: &mut super::super::codegen::ssa::build::SsaBuilder,
+        b: &mut SsaBuilder,
         slot: i64,
         ty: i64,
-        init: &super::super::ast::LocalInit,
+        init: &LocalInit,
     ) -> Result<(), WalkError> {
         match init {
-            super::super::ast::LocalInit::None => Ok(()),
-            super::super::ast::LocalInit::Scalar(init_id) => {
+            LocalInit::None => Ok(()),
+            LocalInit::Scalar(init_id) => {
                 let v = self.walk_copy_operand(b, *init_id)?;
                 // C99 6.7.8p13 struct-value initializer: copy the source's
                 // bytes into the slot via Mcpy. `v` is the source address
@@ -2984,29 +2928,29 @@ impl<'a> Walker<'a> {
                 b.store_local_vol(slot, v, kind, is_volatile_object_ty(ty));
                 Ok(())
             }
-            super::super::ast::LocalInit::Aggregate {
+            LocalInit::Aggregate {
                 src_data_off,
                 size_bytes,
             } => {
                 self.init_from_template(b, slot, *src_data_off, *size_bytes);
                 Ok(())
             }
-            super::super::ast::LocalInit::Fill { byte, size_bytes } => {
+            LocalInit::Fill { byte, size_bytes } => {
                 self.init_fill(b, slot, *size_bytes, *byte);
                 Ok(())
             }
-            super::super::ast::LocalInit::Runtime {
+            LocalInit::Runtime {
                 zero_init,
                 elements,
             } => {
                 // C99 6.7.8p19 zero prelude (if the parser emitted one),
                 // ahead of the per-element stores.
                 match zero_init {
-                    Some(super::super::ast::LocalInitPrelude::Template {
+                    Some(LocalInitPrelude::Template {
                         src_data_off,
                         size_bytes,
                     }) => self.init_from_template(b, slot, *src_data_off, *size_bytes),
-                    Some(super::super::ast::LocalInitPrelude::Fill { byte, size_bytes }) => {
+                    Some(LocalInitPrelude::Fill { byte, size_bytes }) => {
                         self.init_fill(b, slot, *size_bytes, *byte)
                     }
                     None => {}
@@ -3018,7 +2962,7 @@ impl<'a> Walker<'a> {
                         // copy, not a value conversion, so scalar widths use
                         // integer load/store kinds (an f32 sNaN round-trip
                         // through a float register would quieten it).
-                        super::super::ast::RuntimeInitValue::Copy { src_off, bytes } => {
+                        RuntimeInitValue::Copy { src_off, bytes } => {
                             debug_assert!(elem.bitfield.is_none());
                             let base = b.local_addr(slot);
                             let dst = if elem.offset == 0 {
@@ -3057,7 +3001,7 @@ impl<'a> Walker<'a> {
                             }
                             continue;
                         }
-                        super::super::ast::RuntimeInitValue::Expr(value) => value,
+                        RuntimeInitValue::Expr(value) => value,
                     };
                     let v = match elem.bitfield {
                         Some(bf) => self.bitfield_store_value(b, bf, value)?,
@@ -3115,7 +3059,7 @@ impl<'a> Walker<'a> {
         &mut self,
         b: &mut SsaBuilder,
         addr: ValueId,
-        bf: super::super::ast::BitfieldDesc,
+        bf: BitfieldDesc,
         seg: AsmSeg,
         vol: bool,
         align: u8,
@@ -3148,7 +3092,7 @@ impl<'a> Walker<'a> {
         &mut self,
         b: &mut SsaBuilder,
         addr: ValueId,
-        bf: super::super::ast::BitfieldDesc,
+        bf: BitfieldDesc,
         value: ValueId,
         seg: AsmSeg,
         vol: bool,
@@ -3183,7 +3127,7 @@ impl<'a> Walker<'a> {
     fn bitfield_store_value(
         &mut self,
         b: &mut SsaBuilder,
-        bf: super::super::ast::BitfieldDesc,
+        bf: BitfieldDesc,
         rhs: ExprId,
     ) -> Result<ValueId, WalkError> {
         if bf.is_wide_value() {
@@ -3212,7 +3156,7 @@ impl<'a> Walker<'a> {
         &mut self,
         b: &mut SsaBuilder,
         addr: ValueId,
-        bf: super::super::ast::BitfieldDesc,
+        bf: BitfieldDesc,
         vol: bool,
     ) -> Halves {
         let unit = self.int128_load_vol(b, addr, vol);
@@ -3227,7 +3171,7 @@ impl<'a> Walker<'a> {
         &mut self,
         b: &mut SsaBuilder,
         addr: ValueId,
-        bf: super::super::ast::BitfieldDesc,
+        bf: BitfieldDesc,
         masked: Halves,
         vol: bool,
     ) {
@@ -3247,7 +3191,7 @@ impl<'a> Walker<'a> {
     fn bitfield_sign_extend_128(
         &mut self,
         b: &mut SsaBuilder,
-        bf: super::super::ast::BitfieldDesc,
+        bf: BitfieldDesc,
         v: Halves,
     ) -> Halves {
         let w = bf.bit_width as i64;
@@ -3261,12 +3205,7 @@ impl<'a> Walker<'a> {
     /// A 128-bit unit's extracted value in the form the access yields:
     /// a fresh 128-bit object's address for a 128-bit access, the low
     /// half for one the integer promotions narrow.
-    fn bitfield_value_form(
-        &mut self,
-        b: &mut SsaBuilder,
-        bf: super::super::ast::BitfieldDesc,
-        v: Halves,
-    ) -> ValueId {
+    fn bitfield_value_form(&mut self, b: &mut SsaBuilder, bf: BitfieldDesc, v: Halves) -> ValueId {
         if bf.is_wide_value() {
             self.int128_materialize(b, v)
         } else {
@@ -3304,7 +3243,7 @@ impl<'a> Walker<'a> {
         &mut self,
         b: &mut SsaBuilder,
         lvalue: ExprId,
-    ) -> Result<Option<(ValueId, super::super::ast::BitfieldDesc)>, WalkError> {
+    ) -> Result<Option<(ValueId, BitfieldDesc)>, WalkError> {
         let Expr::Member {
             obj,
             field_off,
@@ -3330,11 +3269,7 @@ impl<'a> Walker<'a> {
     /// Allocate or reuse the SSA block reserved for the given AST
     /// label id. Goto's forward reference and the matching Labeled
     /// stmt both look up through this so they share the same block.
-    fn block_for_label(
-        &mut self,
-        b: &mut super::super::codegen::ssa::build::SsaBuilder,
-        label: super::super::ast::LabelId,
-    ) -> super::super::ir::BlockId {
+    fn block_for_label(&mut self, b: &mut SsaBuilder, label: LabelId) -> BlockId {
         if let Some(blk) = self.label_blocks[label as usize] {
             return blk;
         }
@@ -3353,10 +3288,10 @@ impl<'a> Walker<'a> {
     /// by their true unsigned distance regardless of signedness.
     fn emit_switch_table(
         &mut self,
-        b: &mut super::super::codegen::ssa::build::SsaBuilder,
-        disc: super::super::ir::ValueId,
-        cases: &[(i64, super::super::ir::BlockId)],
-        deflt: super::super::ir::BlockId,
+        b: &mut SsaBuilder,
+        disc: ValueId,
+        cases: &[(i64, BlockId)],
+        deflt: BlockId,
     ) -> bool {
         const MIN_CASES: usize = 8;
         if cases.len() < MIN_CASES {
@@ -3406,11 +3341,11 @@ impl<'a> Walker<'a> {
     /// discriminant matches no case.
     fn emit_switch_search(
         &mut self,
-        b: &mut super::super::codegen::ssa::build::SsaBuilder,
-        disc: super::super::ir::ValueId,
-        cases: &[(i64, super::super::ir::BlockId)],
+        b: &mut SsaBuilder,
+        disc: ValueId,
+        cases: &[(i64, BlockId)],
         lt_op: BinOp,
-        deflt: super::super::ir::BlockId,
+        deflt: BlockId,
     ) {
         match cases {
             [] => b.jmp(deflt),
@@ -3441,11 +3376,11 @@ impl<'a> Walker<'a> {
     #[allow(clippy::type_complexity)]
     fn collect_switch_cases(
         &mut self,
-        b: &mut super::super::codegen::ssa::build::SsaBuilder,
-        stmt_id: super::super::ast::StmtId,
-        cases: &mut alloc::vec::Vec<(i64, super::super::ir::BlockId)>,
-        ranges: &mut alloc::vec::Vec<(i64, i64, super::super::ir::BlockId)>,
-        default_blk: &mut Option<super::super::ir::BlockId>,
+        b: &mut SsaBuilder,
+        stmt_id: StmtId,
+        cases: &mut alloc::vec::Vec<(i64, BlockId)>,
+        ranges: &mut alloc::vec::Vec<(i64, i64, BlockId)>,
+        default_blk: &mut Option<BlockId>,
     ) {
         match self.ast.stmt(stmt_id) {
             Stmt::Case { val, hi, body } => {
@@ -3478,7 +3413,7 @@ impl<'a> Walker<'a> {
             Stmt::Compound(items) => {
                 let items = items.clone();
                 for item in items {
-                    if let super::BlockItem::Stmt(s) = item {
+                    if let BlockItem::Stmt(s) = item {
                         self.collect_switch_cases(b, s, cases, ranges, default_blk);
                     }
                 }
@@ -3513,25 +3448,23 @@ impl<'a> Walker<'a> {
     /// it. The value is the destination address.
     fn walk_mem_transfer(
         &mut self,
-        b: &mut super::super::codegen::ssa::build::SsaBuilder,
-        op: super::MemTransferOp,
+        b: &mut SsaBuilder,
+        op: MemTransferOp,
         dst_expr: ExprId,
         src_expr: ExprId,
         size: i64,
         align: u32,
-    ) -> Result<super::super::ir::ValueId, WalkError> {
-        use super::MemTransferOp;
+    ) -> Result<ValueId, WalkError> {
         let dst = self.walk_expr_rvalue(b, dst_expr)?;
         let src = self.walk_expr_rvalue(b, src_expr)?;
         if op == MemTransferOp::Copy {
             b.mcpy(dst, src, size, align);
             return Ok(dst);
         }
-        let chunks: alloc::vec::Vec<(i64, LoadKind, StoreKind)> =
-            super::mem_transfer_chunks(size, align)
-                .into_iter()
-                .map(|(off, w)| (off, load_kind_for_width(w), store_kind_for_width(w)))
-                .collect();
+        let chunks: alloc::vec::Vec<(i64, LoadKind, StoreKind)> = mem_transfer_chunks(size, align)
+            .into_iter()
+            .map(|(off, w)| (off, load_kind_for_width(w), store_kind_for_width(w)))
+            .collect();
         if op == MemTransferOp::Fill {
             // C99 7.21.6.1p2 converts the fill value to `unsigned char`;
             // the splat repeats that byte across the store width.
@@ -3554,7 +3487,7 @@ impl<'a> Walker<'a> {
             }
             return Ok(dst);
         }
-        let loaded: alloc::vec::Vec<(i64, StoreKind, super::super::ir::ValueId)> = chunks
+        let loaded: alloc::vec::Vec<(i64, StoreKind, ValueId)> = chunks
             .into_iter()
             .map(|(off, lk, sk)| {
                 let p = b.binop_imm(BinOp::Add, src, off);
@@ -3578,13 +3511,13 @@ impl<'a> Walker<'a> {
     /// goes through [`Self::walk_checked_arith_128`].
     fn walk_checked_arith(
         &mut self,
-        b: &mut super::super::codegen::ssa::build::SsaBuilder,
+        b: &mut SsaBuilder,
         op: i64,
         a_expr: ExprId,
         b_expr: ExprId,
         dst_expr: ExprId,
         elem_ty: i64,
-    ) -> Result<super::super::ir::ValueId, WalkError> {
+    ) -> Result<ValueId, WalkError> {
         let store_kind = store_kind_for(elem_ty, self.target);
         let w = type_size_bytes(elem_ty, self.target);
         if self.is_int128_value_ty(elem_ty)
@@ -3856,22 +3789,22 @@ impl<'a> Walker<'a> {
     /// statement for a single-item block.
     fn walk_stmt_expr(
         &mut self,
-        b: &mut super::super::codegen::ssa::build::SsaBuilder,
+        b: &mut SsaBuilder,
         block: StmtId,
         value_item: u32,
-    ) -> Result<super::super::ir::ValueId, WalkError> {
-        let items: alloc::vec::Vec<super::BlockItem> = match self.ast.stmt(block) {
+    ) -> Result<ValueId, WalkError> {
+        let items: alloc::vec::Vec<BlockItem> = match self.ast.stmt(block) {
             Stmt::Compound(items) => items.clone(),
-            _ => alloc::vec![super::BlockItem::Stmt(block)],
+            _ => alloc::vec![BlockItem::Stmt(block)],
         };
-        let mut result: Option<super::super::ir::ValueId> = None;
+        let mut result: Option<ValueId> = None;
         for (i, item) in items.into_iter().enumerate() {
             if !b.is_block_open() {
                 let dead = b.new_block();
                 b.switch_to(dead);
             }
             match item {
-                super::BlockItem::Stmt(mut s) => {
+                BlockItem::Stmt(mut s) => {
                     // The scope-exit statements after it are walked for
                     // effect only, which is C's scope-exit order.
                     let carries_value = i as u32 == value_item;
@@ -3899,7 +3832,7 @@ impl<'a> Walker<'a> {
                         let _ = self.walk_stmt(b, s)?;
                     }
                 }
-                super::BlockItem::Decl(d) => {
+                BlockItem::Decl(d) => {
                     self.walk_decl(b, d)?;
                 }
             }
@@ -3924,11 +3857,7 @@ impl<'a> Walker<'a> {
     /// Walk an expression in rvalue position. Returns the
     /// `ValueId` whose runtime value is the C99 6.5p1 evaluation
     /// of the expression.
-    fn walk_expr_rvalue(
-        &mut self,
-        b: &mut super::super::codegen::ssa::build::SsaBuilder,
-        id: ExprId,
-    ) -> Result<super::super::ir::ValueId, WalkError> {
+    fn walk_expr_rvalue(&mut self, b: &mut SsaBuilder, id: ExprId) -> Result<ValueId, WalkError> {
         match self.ast.expr(id) {
             Expr::IntLit { val, .. } => Ok(b.imm(*val)),
             Expr::FloatLit { bits, ty } => {
@@ -4411,16 +4340,9 @@ impl<'a> Walker<'a> {
                 // a single instruction. The fused ops keep the synthetic
                 // merge slot mem2reg-promotable, unlike `LocalAddr` +
                 // `Store`. Everything else stays on the I64 fast path.
-                let is_fp = matches!(
-                    load_kind,
-                    super::super::ir::LoadKind::F32 | super::super::ir::LoadKind::F64
-                );
-                let arm_store = |b: &mut super::super::codegen::ssa::build::SsaBuilder, v| {
-                    let kind = if is_fp {
-                        store_kind
-                    } else {
-                        super::super::ir::StoreKind::I64
-                    };
+                let is_fp = matches!(load_kind, LoadKind::F32 | LoadKind::F64);
+                let arm_store = |b: &mut SsaBuilder, v| {
+                    let kind = if is_fp { store_kind } else { StoreKind::I64 };
                     b.store_local(slot, v, kind);
                 };
                 b.switch_to(then_blk);
@@ -4439,11 +4361,7 @@ impl<'a> Walker<'a> {
                 arm_store(b, else_v);
                 b.jmp(after_blk);
                 b.switch_to(after_blk);
-                let read_kind = if is_fp {
-                    load_kind
-                } else {
-                    super::super::ir::LoadKind::I64
-                };
+                let read_kind = if is_fp { load_kind } else { LoadKind::I64 };
                 Ok(b.load_local(slot, read_kind))
             }
             Expr::Call { callee, args, ty } => {
@@ -4483,9 +4401,9 @@ impl<'a> Walker<'a> {
                     // pointer args are routed.
                     let addr = b.local_addr(result_slot);
                     let temp = b.alloc_synthetic_local();
-                    b.store_local(temp, addr, super::super::ir::StoreKind::I64);
-                    let out_arg = b.load_local(temp, super::super::ir::LoadKind::I64);
-                    let mut all_args: alloc::vec::Vec<super::super::ir::ValueId> =
+                    b.store_local(temp, addr, StoreKind::I64);
+                    let out_arg = b.load_local(temp, LoadKind::I64);
+                    let mut all_args: alloc::vec::Vec<ValueId> =
                         alloc::vec::Vec::with_capacity(args.len() + 1);
                     all_args.push(out_arg);
                     for a in args {
@@ -4504,8 +4422,8 @@ impl<'a> Walker<'a> {
                         {
                             let widened = b.fp_widen_to_f64(v);
                             let slot = b.alloc_synthetic_local();
-                            b.store_local(slot, widened, super::super::ir::StoreKind::I64);
-                            v = b.load_local(slot, super::super::ir::LoadKind::I64);
+                            b.store_local(slot, widened, StoreKind::I64);
+                            v = b.load_local(slot, LoadKind::I64);
                         }
                         all_args.push(v);
                     }
@@ -4564,13 +4482,13 @@ impl<'a> Walker<'a> {
                 // indirect-call site (the per-class branches
                 // below dispatch to b.call / b.call_ext) so they
                 // don't walk the callee at all.
-                let indirect_target: Option<super::super::ir::ValueId> =
+                let indirect_target: Option<ValueId> =
                     if let Expr::Ident { .. } = self.ast.expr(*callee) {
                         None
                     } else {
                         Some(self.walk_expr_rvalue(b, *callee)?)
                     };
-                let mut arg_vals: alloc::vec::Vec<super::super::ir::ValueId> =
+                let mut arg_vals: alloc::vec::Vec<ValueId> =
                     alloc::vec::Vec::with_capacity(args.len());
                 // C99 6.5.2.2p7 + ABI: each FP-typed argument
                 // routes through d0..d7 (or the host's variadic
@@ -4667,8 +4585,7 @@ impl<'a> Walker<'a> {
                                             if is_struct_value_ty(aty)
                                                 && self.struct_size(aty) <= 8 =>
                                         {
-                                            arg_vals[i] = b
-                                                .load(arg_vals[i], super::super::ir::LoadKind::I64);
+                                            arg_vals[i] = b.load(arg_vals[i], LoadKind::I64);
                                             None
                                         }
                                         other => other,
@@ -4850,11 +4767,7 @@ impl<'a> Walker<'a> {
                         // `fp_arg_mask = 0`. The same widening covers a
                         // non-variadic callee whose register/stack
                         // placement would interleave.
-                        let eff_fp_arg_mask = super::super::codegen::effective_fp_arg_mask(
-                            args.len(),
-                            fp_arg_mask,
-                            abi,
-                        );
+                        let eff_fp_arg_mask = effective_fp_arg_mask(args.len(), fp_arg_mask, abi);
                         let force_int =
                             callee_variadic || (fp_arg_mask != 0 && eff_fp_arg_mask == 0);
                         let call_fp_arg_mask = if force_int {
@@ -4865,9 +4778,8 @@ impl<'a> Walker<'a> {
                                 if arg_is_fp {
                                     let widened = b.fp_widen_to_f64(arg_vals[i]);
                                     let slot = b.alloc_synthetic_local();
-                                    b.store_local(slot, widened, super::super::ir::StoreKind::I64);
-                                    arg_vals[i] =
-                                        b.load_local(slot, super::super::ir::LoadKind::I64);
+                                    b.store_local(slot, widened, StoreKind::I64);
+                                    arg_vals[i] = b.load_local(slot, LoadKind::I64);
                                 }
                             }
                             0
@@ -5011,9 +4923,9 @@ impl<'a> Walker<'a> {
                             // codegen routes it via the host integer arg register.
                             let addr = b.local_addr(result_slot);
                             let temp = b.alloc_synthetic_local();
-                            b.store_local(temp, addr, super::super::ir::StoreKind::I64);
-                            let out_arg = b.load_local(temp, super::super::ir::LoadKind::I64);
-                            let mut shifted: alloc::vec::Vec<super::super::ir::ValueId> =
+                            b.store_local(temp, addr, StoreKind::I64);
+                            let out_arg = b.load_local(temp, LoadKind::I64);
+                            let mut shifted: alloc::vec::Vec<ValueId> =
                                 alloc::vec::Vec::with_capacity(arg_vals.len() + 1);
                             shifted.push(out_arg);
                             shifted.extend_from_slice(&arg_vals);
@@ -5155,9 +5067,9 @@ impl<'a> Walker<'a> {
                     let result_slot = b.alloc_synthetic_struct(result_size);
                     let addr = b.local_addr(result_slot);
                     let temp = b.alloc_synthetic_local();
-                    b.store_local(temp, addr, super::super::ir::StoreKind::I64);
-                    let out_arg = b.load_local(temp, super::super::ir::LoadKind::I64);
-                    let mut all_args: alloc::vec::Vec<super::super::ir::ValueId> =
+                    b.store_local(temp, addr, StoreKind::I64);
+                    let out_arg = b.load_local(temp, LoadKind::I64);
+                    let mut all_args: alloc::vec::Vec<ValueId> =
                         alloc::vec::Vec::with_capacity(arg_vals.len() + 1);
                     all_args.push(out_arg);
                     // The all-integer cdecl reads a floating-point parameter as
@@ -5172,8 +5084,8 @@ impl<'a> Walker<'a> {
                         {
                             let widened = b.fp_widen_to_f64(arg_vals[i]);
                             let slot = b.alloc_synthetic_local();
-                            b.store_local(slot, widened, super::super::ir::StoreKind::I64);
-                            arg_vals[i] = b.load_local(slot, super::super::ir::LoadKind::I64);
+                            b.store_local(slot, widened, StoreKind::I64);
+                            arg_vals[i] = b.load_local(slot, LoadKind::I64);
                         }
                     }
                     all_args.extend_from_slice(&arg_vals);
@@ -5315,8 +5227,7 @@ impl<'a> Walker<'a> {
                 // clear, so their variadic indirect lowering is
                 // unchanged (macOS took the `variadic_on_stack` branch
                 // above).
-                let eff_fp_arg_mask =
-                    super::super::codegen::effective_fp_arg_mask(args.len(), fp_arg_mask, abi);
+                let eff_fp_arg_mask = effective_fp_arg_mask(args.len(), fp_arg_mask, abi);
                 let force_int_indirect =
                     callee_variadic && abi.variadic_int_only && fp_arg_mask != 0;
                 let call_fp_arg_mask =
@@ -5328,8 +5239,8 @@ impl<'a> Walker<'a> {
                             if arg_is_fp {
                                 let widened = b.fp_widen_to_f64(arg_vals[i]);
                                 let slot = b.alloc_synthetic_local();
-                                b.store_local(slot, widened, super::super::ir::StoreKind::I64);
-                                arg_vals[i] = b.load_local(slot, super::super::ir::LoadKind::I64);
+                                b.store_local(slot, widened, StoreKind::I64);
+                                arg_vals[i] = b.load_local(slot, LoadKind::I64);
                             }
                         }
                         0
@@ -5558,13 +5469,13 @@ impl<'a> Walker<'a> {
                         // type; convert the loaded integer up, apply the op,
                         // then convert the result back to the lvalue's
                         // integer type before the store.
-                        let lv = b.fp_cast(super::super::ir::FpCastKind::IntToFp, old);
+                        let lv = b.fp_cast(FpCastKind::IntToFp, old);
                         let mut rv = self.walk_expr_rvalue(b, *rhs)?;
                         if b.is_f32(rv) {
                             rv = b.fp_widen_to_f64(rv);
                         }
                         let res = b.binop(*op, lv, rv);
-                        b.fp_cast(super::super::ir::FpCastKind::FpToInt, res)
+                        b.fp_cast(FpCastKind::FpToInt, res)
                     } else if matches!(*op, BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv) {
                         // C99 6.5.16.2: `E1 op= E2` computes `E1 op E2` in
                         // the operands' common type, then converts to E1's
@@ -5691,14 +5602,10 @@ impl<'a> Walker<'a> {
             // C99 6.3.2.1p3: a VLA lvalue decays to a pointer to its
             // first element -- the runtime base pointer the matching
             // `Decl::Vla` stored into `ptr_slot`.
-            Expr::VlaBase { ptr_slot, .. } => {
-                Ok(b.load_local(*ptr_slot, super::super::ir::LoadKind::I64))
-            }
+            Expr::VlaBase { ptr_slot, .. } => Ok(b.load_local(*ptr_slot, LoadKind::I64)),
             // C99 6.5.3.4p2: `sizeof <vla>` is the runtime byte count
             // the matching `Decl::Vla` stored into `size_slot`.
-            Expr::VlaSizeof { size_slot } => {
-                Ok(b.load_local(*size_slot, super::super::ir::LoadKind::I64))
-            }
+            Expr::VlaSizeof { size_slot } => Ok(b.load_local(*size_slot, LoadKind::I64)),
             Expr::CompoundLiteral {
                 slot_off,
                 ty,
@@ -5772,7 +5679,7 @@ impl<'a> Walker<'a> {
                 // Deferred `__builtin_constant_p`: under `-O` lower the
                 // side-effect-free operand for the SSA folds; otherwise
                 // the answer is 0 and the operand stays unevaluated.
-                if intr_kind == super::super::op::Intrinsic::ConstantP as i64 {
+                if intr_kind == Intrinsic::ConstantP as i64 {
                     if !self.optimize {
                         return Ok(b.imm(0));
                     }
@@ -5789,13 +5696,13 @@ impl<'a> Walker<'a> {
                 // pointer itself, so take the deref's lvalue. Operand
                 // positions: arg 0 for va_start / va_arg / va_end, args 0
                 // and 1 for va_copy.
-                use super::super::op::Intrinsic as VaI;
+                use crate::c5::op::Intrinsic as VaI;
                 let va_addr_operand = |i: usize| match VaI::from_i64(intr_kind) {
                     Some(VaI::VaStart) | Some(VaI::VaArg) | Some(VaI::VaEnd) => i == 0,
                     Some(VaI::VaCopy) => i == 0 || i == 1,
                     _ => false,
                 };
-                let mut arg_vals: alloc::vec::Vec<super::super::ir::ValueId> =
+                let mut arg_vals: alloc::vec::Vec<ValueId> =
                     alloc::vec::Vec::with_capacity(args.len());
                 for (i, a) in args.clone().into_iter().enumerate() {
                     let v = if va_addr_operand(i)
@@ -5815,8 +5722,8 @@ impl<'a> Walker<'a> {
                 // fma / fmaf (C99 7.12.13.1) lower to the fused node so
                 // the three operands round once. The parser has already
                 // coerced the arguments to the matching FP width.
-                let fma_kind = super::super::op::Intrinsic::Fma as i64;
-                let fmaf_kind = super::super::op::Intrinsic::Fmaf as i64;
+                let fma_kind = Intrinsic::Fma as i64;
+                let fmaf_kind = Intrinsic::Fmaf as i64;
                 if intr_kind == fma_kind || intr_kind == fmaf_kind {
                     let v = b.fma(arg_vals[0], arg_vals[1], arg_vals[2], false, false);
                     if intr_kind == fmaf_kind {
@@ -5829,10 +5736,10 @@ impl<'a> Walker<'a> {
                 // instruction, so the result is identical across the
                 // interpreter and every target. clz / ctz at zero are
                 // undefined in GCC; this lowering returns the bit width.
-                if let Some(i) = super::super::op::Intrinsic::from_i64(intr_kind)
+                if let Some(i) = Intrinsic::from_i64(intr_kind)
                     && i.is_int_bit_unary()
                 {
-                    use super::super::op::Intrinsic as I;
+                    use crate::c5::op::Intrinsic as I;
                     let x = arg_vals[0];
                     let w64 = i.is_bit_unary_64();
                     return Ok(match i {
@@ -5850,10 +5757,10 @@ impl<'a> Walker<'a> {
                 // Byte reversal is a single instruction on every
                 // supported target, so it lowers to a dedicated inst
                 // rather than a portable shift / mask sequence.
-                if let Some(i) = super::super::op::Intrinsic::from_i64(intr_kind)
+                if let Some(i) = Intrinsic::from_i64(intr_kind)
                     && i.is_bswap()
                 {
-                    use super::super::op::Intrinsic as I;
+                    use crate::c5::op::Intrinsic as I;
                     let width = match i {
                         I::Bswap16 => 2,
                         I::Bswap64 => 8,
@@ -5864,8 +5771,8 @@ impl<'a> Walker<'a> {
                 // The unary FP math intrinsics produce an FP value; tag the
                 // single-precision forms so the codegen picks the f32
                 // instruction and width.
-                let single = super::super::op::Intrinsic::from_i64(intr_kind)
-                    .is_some_and(|i| i.is_single_precision());
+                let single =
+                    Intrinsic::from_i64(intr_kind).is_some_and(|i| i.is_single_precision());
                 let v = b.intrinsic(intr_kind, arg_vals);
                 if single {
                     return Ok(b.mark_f32(v));
@@ -5878,7 +5785,7 @@ impl<'a> Walker<'a> {
                 // input value; the block descriptor carries the template
                 // and per-operand constraints for the per-arch lowering.
                 let asm = self.ast.asm_blocks[*idx as usize].clone();
-                let mut args: alloc::vec::Vec<super::super::ir::ValueId> =
+                let mut args: alloc::vec::Vec<ValueId> =
                     alloc::vec::Vec::with_capacity(asm.operand_exprs.len());
                 for &e in &asm.operand_exprs {
                     args.push(self.walk_expr_rvalue(b, e)?);
@@ -5916,11 +5823,11 @@ impl<'a> Walker<'a> {
     /// element type in bytes.
     fn walk_atomic(
         &mut self,
-        b: &mut super::super::codegen::ssa::build::SsaBuilder,
+        b: &mut SsaBuilder,
         kind: AtomicKind,
         args: &[ExprId],
         elem_ty: i64,
-    ) -> Result<super::super::ir::ValueId, WalkError> {
+    ) -> Result<ValueId, WalkError> {
         let load_kind = load_kind_for(elem_ty, self.target);
         let store_kind = store_kind_for(elem_ty, self.target);
         let width = type_size_bytes(elem_ty, self.target) as u8;
@@ -6063,13 +5970,7 @@ impl<'a> Walker<'a> {
     /// whose value has the converted type of the left operand
     /// (6.5.16p3 / 6.5.16.2 / 6.5.2.4 / 6.5.3.1) and so must carry the
     /// narrowed value when a wider enclosing expression reads it.
-    fn narrow_int_to_ty(
-        &self,
-        b: &mut super::super::codegen::ssa::build::SsaBuilder,
-        v: super::super::ir::ValueId,
-        src_ty: i64,
-        to_ty: i64,
-    ) -> super::super::ir::ValueId {
+    fn narrow_int_to_ty(&self, b: &mut SsaBuilder, v: ValueId, src_ty: i64, to_ty: i64) -> ValueId {
         if is_floating_scalar(to_ty) || is_struct_ty(to_ty) {
             return v;
         }
@@ -6101,12 +6002,7 @@ impl<'a> Walker<'a> {
         }
     }
 
-    fn extend_atomic_result(
-        &self,
-        b: &mut super::super::codegen::ssa::build::SsaBuilder,
-        v: super::super::ir::ValueId,
-        elem_ty: i64,
-    ) -> super::super::ir::ValueId {
+    fn extend_atomic_result(&self, b: &mut SsaBuilder, v: ValueId, elem_ty: i64) -> ValueId {
         if is_pointer_ty(elem_ty) {
             return v;
         }
@@ -6135,13 +6031,7 @@ impl<'a> Walker<'a> {
     /// lvalues take the immediate-form add; a real floating lvalue (C99
     /// 6.5.3.1 / 6.5.2.4) adds `1.0` of its own precision through the FP
     /// path, since `BinOp::Add` would operate on the bit pattern.
-    fn increment_value(
-        &mut self,
-        b: &mut super::super::codegen::ssa::build::SsaBuilder,
-        old: super::super::ir::ValueId,
-        by: i64,
-        ty: i64,
-    ) -> super::super::ir::ValueId {
+    fn increment_value(&mut self, b: &mut SsaBuilder, old: ValueId, by: i64, ty: i64) -> ValueId {
         if !is_floating_scalar(ty) {
             return b.binop_imm(BinOp::Add, old, by);
         }
@@ -6167,7 +6057,7 @@ impl<'a> Walker<'a> {
     /// register-resident, not just `i = i + k`.
     fn rmw_place(
         &mut self,
-        b: &mut super::super::codegen::ssa::build::SsaBuilder,
+        b: &mut SsaBuilder,
         lvalue: ExprId,
         ty: i64,
     ) -> Result<RmwPlace, WalkError> {
@@ -6224,11 +6114,7 @@ impl<'a> Walker<'a> {
         Ok(RmwPlace::Addr { addr, seg, align })
     }
 
-    fn walk_expr_lvalue(
-        &mut self,
-        b: &mut super::super::codegen::ssa::build::SsaBuilder,
-        id: ExprId,
-    ) -> Result<super::super::ir::ValueId, WalkError> {
+    fn walk_expr_lvalue(&mut self, b: &mut SsaBuilder, id: ExprId) -> Result<ValueId, WalkError> {
         match self.ast.expr(id) {
             Expr::Ident { .. } => self.ident_address(b, id),
             Expr::Unary {
@@ -6364,10 +6250,10 @@ impl<'a> Walker<'a> {
             Expr::ShortCircuit { op, lhs, rhs, .. } => {
                 let l = self.const_fold_int(*lhs)?;
                 match op {
-                    super::ShortCircuitOp::Lan if l == 0 => Some(0),
-                    super::ShortCircuitOp::Lan => Some((self.const_fold_int(*rhs)? != 0) as i64),
-                    super::ShortCircuitOp::Lor if l != 0 => Some(1),
-                    super::ShortCircuitOp::Lor => Some((self.const_fold_int(*rhs)? != 0) as i64),
+                    ShortCircuitOp::Lan if l == 0 => Some(0),
+                    ShortCircuitOp::Lan => Some((self.const_fold_int(*rhs)? != 0) as i64),
+                    ShortCircuitOp::Lor if l != 0 => Some(1),
+                    ShortCircuitOp::Lor => Some((self.const_fold_int(*rhs)? != 0) as i64),
                 }
             }
             Expr::Ternary {
@@ -6408,7 +6294,7 @@ impl<'a> Walker<'a> {
             // dead-branch fold sees it as a constant condition. Under `-O`
             // it is not known yet and the branch stays.
             Expr::Intrinsic { kind, .. }
-                if *kind == super::super::op::Intrinsic::ConstantP as i64 && !self.optimize =>
+                if *kind == Intrinsic::ConstantP as i64 && !self.optimize =>
             {
                 Some(0)
             }
@@ -6600,8 +6486,8 @@ impl<'a> Walker<'a> {
                 !cases_owned || self.stmt_defines_external_label(*body, cases_owned)
             }
             Stmt::Compound(items) => items.iter().any(|it| match it {
-                super::BlockItem::Stmt(s) => self.stmt_defines_external_label(*s, cases_owned),
-                super::BlockItem::Decl(_) => false,
+                BlockItem::Stmt(s) => self.stmt_defines_external_label(*s, cases_owned),
+                BlockItem::Decl(_) => false,
             }),
             Stmt::If { then_s, else_s, .. } => {
                 self.stmt_defines_external_label(*then_s, cases_owned)
@@ -6620,11 +6506,11 @@ impl<'a> Walker<'a> {
     /// `?:` then-arm, which reuses the condition's value.
     fn convert_scalar_value(
         &mut self,
-        b: &mut super::super::codegen::ssa::build::SsaBuilder,
-        v: super::super::ir::ValueId,
+        b: &mut SsaBuilder,
+        v: ValueId,
         src_ty: i64,
         to_ty: i64,
-    ) -> super::super::ir::ValueId {
+    ) -> ValueId {
         let target_is_fp = is_floating_scalar(to_ty);
         let source_is_fp = is_floating_scalar(src_ty);
         // C99 6.3.1.2: a conversion to `_Bool` yields 0 when the source
@@ -6666,9 +6552,9 @@ impl<'a> Walker<'a> {
                 return b.imm(d.to_bits() as i64);
             }
             let kind = if unsigned_64 {
-                super::super::ir::FpCastKind::UIntToFp
+                FpCastKind::UIntToFp
             } else {
-                super::super::ir::FpCastKind::IntToFp
+                FpCastKind::IntToFp
             };
             // A `float` target converts directly to single precision; a
             // `double` target stays f64.
@@ -6686,9 +6572,9 @@ impl<'a> Walker<'a> {
                 && (stripped_to == Ty::Long as i64 || stripped_to == Ty::LongLong as i64);
             if target_unsigned_64 {
                 let d = b.fp_widen_to_f64(v);
-                return b.fp_cast(super::super::ir::FpCastKind::UFpToInt, d);
+                return b.fp_cast(FpCastKind::UFpToInt, d);
             }
-            return b.fp_cast(super::super::ir::FpCastKind::FpToInt, v);
+            return b.fp_cast(FpCastKind::FpToInt, v);
         }
         // FP-to-FP cast (C99 6.3.1.5): `(double)f` widens, `(float)d`
         // narrows; a no-op when the source already has the target width.
@@ -6706,12 +6592,7 @@ impl<'a> Walker<'a> {
     /// Value to test against zero for `cond`'s truthiness. A floating
     /// operand is reduced to `cond != 0.0` (0 or 1) so `-0.0` reads as
     /// false; an integer operand passes through and is tested directly.
-    fn cond_truthy(
-        &mut self,
-        b: &mut super::super::codegen::ssa::build::SsaBuilder,
-        val: super::super::ir::ValueId,
-        cond: ExprId,
-    ) -> super::super::ir::ValueId {
+    fn cond_truthy(&mut self, b: &mut SsaBuilder, val: ValueId, cond: ExprId) -> ValueId {
         if self.cond_is_float(cond) {
             let d = b.fp_widen_to_f64(val);
             let zero = b.imm(0);
@@ -6729,17 +6610,17 @@ impl<'a> Walker<'a> {
 
     fn walk_short_circuit(
         &mut self,
-        b: &mut super::super::codegen::ssa::build::SsaBuilder,
+        b: &mut SsaBuilder,
         id: ExprId,
         normalize: bool,
-    ) -> Result<super::super::ir::ValueId, WalkError> {
+    ) -> Result<ValueId, WalkError> {
         let (op, lhs, rhs) = match self.ast.expr(id) {
             Expr::ShortCircuit { op, lhs, rhs, .. } => (*op, *lhs, *rhs),
             _ => unreachable!("walk_short_circuit on non-ShortCircuit"),
         };
         let slot = b.alloc_synthetic_local();
-        let kind_l = super::super::ir::LoadKind::I64;
-        let kind_s = super::super::ir::StoreKind::I64;
+        let kind_l = LoadKind::I64;
+        let kind_s = StoreKind::I64;
         let lhs_val = self.walk_expr_rvalue(b, lhs)?;
         // The deciding value is the lhs truthiness; a floating operand
         // compares against 0.0 so `-0.0` is false rather than a non-zero
@@ -6749,8 +6630,8 @@ impl<'a> Walker<'a> {
         // in branch context that value suffices.
         let short_val = if normalize {
             match op {
-                super::ShortCircuitOp::Lor => b.imm(1),
-                super::ShortCircuitOp::Lan => b.imm(0),
+                ShortCircuitOp::Lor => b.imm(1),
+                ShortCircuitOp::Lan => b.imm(0),
             }
         } else {
             lhs_t
@@ -6760,15 +6641,15 @@ impl<'a> Walker<'a> {
         let after_blk = b.new_block();
         match op {
             // `a && b`: skip rhs when lhs == 0.
-            super::ShortCircuitOp::Lan => b.branch_zero(lhs_t, after_blk, rhs_blk),
+            ShortCircuitOp::Lan => b.branch_zero(lhs_t, after_blk, rhs_blk),
             // `a || b`: skip rhs when lhs != 0.
-            super::ShortCircuitOp::Lor => b.branch_nonzero(lhs_t, after_blk, rhs_blk),
+            ShortCircuitOp::Lor => b.branch_nonzero(lhs_t, after_blk, rhs_blk),
         }
         b.switch_to(rhs_blk);
         let rhs_val = self.walk_expr_rvalue(b, rhs)?;
         let rhs_t = self.cond_truthy(b, rhs_val, rhs);
         let stored = if normalize {
-            b.binop_imm(super::super::ir::BinOp::Ne, rhs_t, 0)
+            b.binop_imm(BinOp::Ne, rhs_t, 0)
         } else {
             rhs_t
         };
@@ -6782,11 +6663,7 @@ impl<'a> Walker<'a> {
     /// to test against zero. A top-level `&&` / `||` is lowered without
     /// normalizing its result, since only its truthiness is observed;
     /// any other expression is walked normally.
-    fn walk_cond_value(
-        &mut self,
-        b: &mut super::super::codegen::ssa::build::SsaBuilder,
-        cond: ExprId,
-    ) -> Result<super::super::ir::ValueId, WalkError> {
+    fn walk_cond_value(&mut self, b: &mut SsaBuilder, cond: ExprId) -> Result<ValueId, WalkError> {
         if matches!(self.ast.expr(cond), Expr::ShortCircuit { .. }) {
             return self.walk_short_circuit(b, cond, false);
         }
@@ -6820,11 +6697,11 @@ impl<'a> Walker<'a> {
     /// immediate.
     fn walk_unary(
         &mut self,
-        b: &mut super::super::codegen::ssa::build::SsaBuilder,
+        b: &mut SsaBuilder,
         op: UnOp,
         child: ExprId,
         ty: i64,
-    ) -> Result<super::super::ir::ValueId, WalkError> {
+    ) -> Result<ValueId, WalkError> {
         // GCC vector extension: `-v` / `~v` are element-wise.
         if matches!(op, UnOp::Neg | UnOp::BitNot) && is_vector_ty(self.structs, ty) {
             return self.walk_vector_unary(b, op, child, ty);
@@ -6879,11 +6756,7 @@ impl<'a> Walker<'a> {
     /// to an `imm_code` against the function's ent_pc.
     /// Token::Sys and TLS variants surface as unsupported until
     /// their walker arms land.
-    fn ident_address(
-        &mut self,
-        b: &mut super::super::codegen::ssa::build::SsaBuilder,
-        id: ExprId,
-    ) -> Result<super::super::ir::ValueId, WalkError> {
+    fn ident_address(&mut self, b: &mut SsaBuilder, id: ExprId) -> Result<ValueId, WalkError> {
         let Expr::Ident {
             sym,
             class,
@@ -6954,7 +6827,7 @@ impl<'a> Walker<'a> {
     #[allow(clippy::too_many_arguments)]
     fn load_ident_rvalue(
         &mut self,
-        b: &mut super::super::codegen::ssa::build::SsaBuilder,
+        b: &mut SsaBuilder,
         id: ExprId,
         _sym: u32,
         ty: i64,
@@ -6962,7 +6835,7 @@ impl<'a> Walker<'a> {
         val: i64,
         is_thread_local: bool,
         array_size: i64,
-    ) -> Result<super::super::ir::ValueId, WalkError> {
+    ) -> Result<ValueId, WalkError> {
         // The parser snapshotted `val` as the function's
         // entry-PC at emit time; for `Token::Fun` references the
         // live PC lives on `self.symbols[sym].val` (sys
@@ -7086,7 +6959,7 @@ enum RmwPlace {
     /// A materialized address, with the segment override every access
     /// to the lvalue rides (`AsmSeg::None` for the generic space).
     Addr {
-        addr: super::super::ir::ValueId,
+        addr: ValueId,
         seg: AsmSeg,
         align: u8,
     },
@@ -7096,20 +6969,15 @@ enum RmwPlace {
     /// other bits. The passed `LoadKind` / `StoreKind` are ignored; the
     /// unit width comes from the descriptor.
     Bitfield {
-        addr: super::super::ir::ValueId,
-        bf: super::super::ast::BitfieldDesc,
+        addr: ValueId,
+        bf: BitfieldDesc,
         seg: AsmSeg,
         align: u8,
     },
 }
 
 impl RmwPlace {
-    fn load(
-        &self,
-        b: &mut super::super::codegen::ssa::build::SsaBuilder,
-        kind: LoadKind,
-        vol: bool,
-    ) -> super::super::ir::ValueId {
+    fn load(&self, b: &mut SsaBuilder, kind: LoadKind, vol: bool) -> ValueId {
         match *self {
             RmwPlace::Slot(off) => b.load_local_vol(off, kind, vol),
             RmwPlace::Addr { addr, seg, align } => load_place(b, addr, kind, seg, vol, align),
@@ -7139,13 +7007,7 @@ impl RmwPlace {
         }
     }
 
-    fn store(
-        &self,
-        b: &mut super::super::codegen::ssa::build::SsaBuilder,
-        value: super::super::ir::ValueId,
-        kind: StoreKind,
-        vol: bool,
-    ) {
+    fn store(&self, b: &mut SsaBuilder, value: ValueId, kind: StoreKind, vol: bool) {
         match *self {
             RmwPlace::Slot(off) => {
                 b.store_local_vol(off, value, kind, vol);
@@ -7173,14 +7035,14 @@ impl RmwPlace {
 /// Every narrow bitfield store reaches this: assignment, compound
 /// assignment, increment, and the runtime initializer.
 fn merge_into_bitfield(
-    b: &mut super::super::codegen::ssa::build::SsaBuilder,
-    addr: super::super::ir::ValueId,
-    bf: super::super::ast::BitfieldDesc,
-    value: super::super::ir::ValueId,
+    b: &mut SsaBuilder,
+    addr: ValueId,
+    bf: BitfieldDesc,
+    value: ValueId,
     seg: AsmSeg,
     vol: bool,
     align: u8,
-) -> super::super::ir::ValueId {
+) -> ValueId {
     let (load_kind, store_kind) = (bitfield_load_kind(bf), bitfield_store_kind(bf));
     // C99 6.5.16.1p2 converts the value to the field's declared type.
     // The width mask below is that conversion for every integer type;
@@ -7210,19 +7072,19 @@ fn merge_into_bitfield(
 /// A bitfield's slice mask as the low and high halves of a 128-bit
 /// storage unit. A unit of 8 bytes or less uses the low half alone.
 fn bitfield_mask_halves(width: u8, offset: u8) -> (i64, i64) {
-    let m = super::bitfield_slice_mask(width as u32, offset as u32);
+    let m = bitfield_slice_mask(width as u32, offset as u32);
     (m as u64 as i64, (m >> 64) as u64 as i64)
 }
 
 /// Load kind for a bitfield's addressable storage unit (C99 6.7.2.1p11).
 /// The unsigned kinds keep the unit's bits at their storage positions so
 /// the extraction's shift and mask see no sign extension from above.
-fn bitfield_load_kind(bf: super::BitfieldDesc) -> LoadKind {
+fn bitfield_load_kind(bf: BitfieldDesc) -> LoadKind {
     load_kind_for_width(bf.unit_size as u32)
 }
 
 /// Store kind for a bitfield's addressable storage unit.
-fn bitfield_store_kind(bf: super::BitfieldDesc) -> StoreKind {
+fn bitfield_store_kind(bf: BitfieldDesc) -> StoreKind {
     store_kind_for_width(bf.unit_size as u32)
 }
 
@@ -7346,9 +7208,9 @@ fn load_kind_for(ty: i64, target: Target) -> LoadKind {
     // compute path carries as it loads.
     if is_long_double_scalar(ty) {
         match target.long_double() {
-            super::super::codegen::LongDoubleKind::X87 => return LoadKind::F80,
-            super::super::codegen::LongDoubleKind::Binary128 => return LoadKind::F128,
-            super::super::codegen::LongDoubleKind::F64 => {}
+            LongDoubleKind::X87 => return LoadKind::F80,
+            LongDoubleKind::Binary128 => return LoadKind::F128,
+            LongDoubleKind::F64 => {}
         }
     }
     // The SSA backend loads a `double` into an FP register.
@@ -7417,9 +7279,9 @@ fn store_kind_for(ty: i64, target: Target) -> StoreKind {
     // the storage format.
     if is_long_double_scalar(ty) {
         match target.long_double() {
-            super::super::codegen::LongDoubleKind::X87 => return StoreKind::F80,
-            super::super::codegen::LongDoubleKind::Binary128 => return StoreKind::F128,
-            super::super::codegen::LongDoubleKind::F64 => {}
+            LongDoubleKind::X87 => return StoreKind::F80,
+            LongDoubleKind::Binary128 => return StoreKind::F128,
+            LongDoubleKind::F64 => {}
         }
     }
     // A store width carries no signedness, so the bare band type is enough;
@@ -7503,13 +7365,7 @@ fn is_bool_scalar(ty: i64) -> bool {
 /// (C99 6.3.1.1 / 6.5.2.2). Idempotent for an already-extended
 /// value. Floating-point, pointer, `_Bool`, struct, and full-width
 /// integer results are left unchanged.
-fn extend_scalar_call_result(
-    b: &mut super::super::codegen::ssa::build::SsaBuilder,
-    v: super::super::ir::ValueId,
-    ty: i64,
-    target: Target,
-) -> super::super::ir::ValueId {
-    use super::super::ir::BinOp;
+fn extend_scalar_call_result(b: &mut SsaBuilder, v: ValueId, ty: i64, target: Target) -> ValueId {
     let stripped = strip_unsigned(ty);
     let rs = type_size_bytes(ty, target);
     if is_floating_scalar(ty) || is_pointer_ty(ty) || !(rs == 1 || rs == 2 || rs == 4) {
@@ -7541,8 +7397,8 @@ fn extend_scalar_call_result(
 // low 32 bits (the operand reaches here zero-extended from the parser's
 // unsigned cast).
 
-type Bld = super::super::codegen::ssa::build::SsaBuilder;
-type Val = super::super::ir::ValueId;
+type Bld = SsaBuilder;
+type Val = ValueId;
 
 /// Count set bits via the standard SWAR reduction. Right shifts are
 /// logical (`BinOp::Shru`) so the masks see clean bits regardless of

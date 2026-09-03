@@ -1,25 +1,8 @@
-//! Shared `sizeof` operand-parsing logic.
-//!
-//! Both the runtime `sizeof` primary (`compiler/mod.rs`) and the
-//! constant-expression `sizeof` (`compiler/const_expr.rs`) need
-//! to disambiguate the same three operand shapes:
-//!
-//!   1. `sizeof(<type-name>)` -- a type, optionally with `*`s.
-//!   2. `sizeof(<id>)` / `sizeof <id>` -- a bare identifier
-//!      (array or scalar). Looked up directly so an array uses
-//!      its total byte count rather than the decayed pointer's
-//!      `sizeof(T*) = 8`.
-//!   3. `sizeof <expr>` -- everything else (`sizeof(p->field)`,
-//!      `sizeof(arr[i])`, `sizeof(*p)`, ...). Falls back to the
-//!      regular expression parser, drops the emitted code (the
-//!      operand is unevaluated per C99 6.5.3.4), and picks up
-//!      the type plus any multi-dim row-size hint from the
-//!      side-channel set by the array-decay paths.
-//!
-//! Returns the byte count; the caller emits the immediate /
-//! updates `self.ty` as it sees fit. `self.ty` is saved across
-//! the helper so both call sites see the same pre-sizeof state
-//! on return.
+//! `sizeof` and `_Alignof` operands (C99 6.5.3.4), shared by the
+//! runtime and constant-expression parsers, and the GCC builtins that
+//! read an operand unevaluated: `__builtin_object_size`,
+//! `__builtin_choose_expr`, `__builtin_has_attribute`,
+//! `__builtin_constant_p`.
 
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
@@ -28,15 +11,10 @@ use super::types::{is_struct_value_ty, struct_id_of, struct_ptr_depth};
 use super::{Compiler, StructField};
 
 impl Compiler {
-    /// Parse the operand of a `sizeof` and return its byte
-    /// count. The `sizeof` keyword has already been consumed.
-    /// Lookahead for the `sizeof ( id )` fast path: true only when the
-    /// identifier is immediately followed by `)` and no postfix
-    /// operator (`[`, `.`, `->`) trails the close paren. Otherwise the
-    /// parens wrap a postfix unary-expression (`sizeof(a)[i]` parses as
-    /// `sizeof((a)[i])` per C99 6.5.3.4), which must route through the
-    /// general expression parse. Snapshots and restores the lexer so
-    /// token position is unchanged.
+    /// Whether `sizeof ( id )` is the bare-identifier form: the identifier
+    /// is followed by `)` and no postfix operator follows that. Otherwise
+    /// the parentheses belong to a unary-expression (`sizeof(a)[i]` is
+    /// `sizeof((a)[i])`, C99 6.5.3.4). The lexer position is unchanged.
     fn sizeof_bare_id_paren_ok(&mut self) -> Result<bool, C5Error> {
         let snap = self.lex.snapshot();
         self.next()?; // past the identifier
@@ -63,34 +41,24 @@ impl Compiler {
         }
     }
 
+    /// The byte count of a `sizeof` operand, the keyword consumed: a
+    /// parenthesized type name, a bare identifier, or a unary-expression
+    /// parsed unevaluated. `self.ty` is restored on return.
     pub(super) fn sizeof_operand_bytes(&mut self) -> Result<i64, C5Error> {
         // Cleared each call; set only when the operand is a VLA whose
         // size the `sizeof` site must read at runtime (C99 6.5.3.4p2).
         self.pending.sizeof_vla_size_slot = None;
-        // Snapshot the lex state before any speculative paren
-        // consumption so the operand-shape dispatch below can
-        // restore when `sizeof (expr)->m` turns out to wrap the
-        // outer parens around a unary-expression rather than a
-        // type-name. C99 6.5.3.4 admits two operand shapes:
-        // `sizeof unary-expression` and `sizeof ( type-name )`;
-        // an eagerly-consumed `(` for the latter has to be put
-        // back when it really belongs to the former so any
-        // trailing postfix (`->`, `.`, `[`) stays attached to
-        // the unary-expression instead of dangling against the
-        // surrounding `int` result.
+        // C99 6.5.3.4 admits `sizeof unary-expression` and
+        // `sizeof ( type-name )`: a `(` consumed for a type name is put back
+        // when the content is an expression, so a trailing `->` / `.` / `[`
+        // stays with the operand.
         let pre_paren_snap = self.lex.snapshot();
         let leading_paren = self.lex.tk == '(';
         if leading_paren {
             self.next()?;
         }
         let saved_ty = self.ty;
-        // `had_paren` is the "sizeof actually owns this paren and
-        // will consume the matching `)` at the end" tracker. It
-        // starts equal to `leading_paren` and is cleared in the
-        // general-expression branch when the inner content turns
-        // out to be a unary-expression rather than a type-name --
-        // in that case the paren belongs to the operand and is
-        // matched by the regular parser's `(` -> `)` rule.
+        // `had_paren`: the closing `)` is this operator's to consume.
         let mut had_paren = leading_paren;
         let total: i64 = if had_paren && self.lex_is_type_start() {
             let type_name = self.parse_type_name()?;
@@ -102,18 +70,9 @@ impl Compiler {
             && !self.lex.peek_after_whitespace(b'[')
             && (!had_paren || self.sizeof_bare_id_paren_ok()?)
         {
-            // Bare identifier: short-circuit symbol lookup so an
-            // array variable uses its `array_size * sizeof(elem)`
-            // total rather than the decayed pointer. Scalars fall
-            // through to `size_of_type(var_ty)`. Postfix shapes
-            // (`name->field`, `name.field`, `name[i]`) fail the
-            // peek and route through the expression path. C99
-            // 6.5.1p2: an identifier used as a primary expression
-            // must be declared; gating on `class != 0` keeps the
-            // fast path for declared symbols and routes an
-            // undeclared name to the general-expression branch,
-            // whose existing primary-Id arm surfaces the
-            // "undefined variable" diagnostic.
+            // A declared identifier is looked up directly, so an array yields
+            // its whole size; a postfix form or an undeclared name (C99 6.5.1p2)
+            // takes the expression path and its diagnostics.
             let idx = self.lex.curr_id_idx;
             let var_ty = self.symbols[idx].type_;
             let arr = self.symbols[idx].array_size;
@@ -124,17 +83,15 @@ impl Compiler {
             if arr < 0 && !self.symbols[idx].is_zero_len_array {
                 return Err(self.compile_err("`sizeof` applied to an incomplete type"));
             }
-            // C99 6.5.3.4p2: `sizeof` of a VLA is the runtime byte
-            // count. Signal the caller to load it from the VLA's
-            // size slot; the returned constant is unused in that case.
+            // C99 6.5.3.4p2: `sizeof` of a VLA is loaded from its size slot;
+            // the constant returned is unused then.
             if self.symbols[idx].is_vla {
                 self.pending.sizeof_vla_size_slot = Some(self.symbols[idx].vla_size_slot);
             }
             self.next()?;
             if self.symbols[idx].is_zero_len_array {
-                // `T x[] = {}`: zero elements, so the whole object is
-                // 0 bytes (the `array_size == 0` scalar encoding would
-                // otherwise report `sizeof(T)`).
+                // `T x[] = {}`: 0 bytes; the `array_size == 0` scalar encoding
+                // would report `sizeof(T)`.
                 0
             } else if arr > 0 {
                 arr * self.size_of_type(var_ty) as i64
@@ -142,34 +99,14 @@ impl Compiler {
                 self.size_of_type(var_ty) as i64
             }
         } else {
-            // General expression: run the regular parser to learn
-            // the type, then discard everything the parse pushed
-            // (the operand is unevaluated per C99 6.5.3.4). The
-            // `last_array_decay_*` side-channel surfaces shape
-            // info the array-decay paths set so a decayed array
-            // recovers its real size instead of the pointer's 8.
-            //
-            // Anything the parser appended to `self` that points
-            // into `text` by PC has to be rewound in lockstep --
-            // otherwise the stale entry references a dead PC and
-            // later passes corrupt unrelated code when they fire.
-            // `source_functions` is parallel to `text` and feeds
-            // DWARF subprogram DIEs; `code_reloc_sym_idx` is the
-            // parser-symbol shadow that
-            // [`Compiler::resolve_code_relocs`] zips against
-            // `code_relocs` post-parse, so dropping the trailing
-            // entry keeps the two arrays the same length.
+            // The operand is parsed and everything it emitted dropped (C99
+            // 6.5.3.4: unevaluated); the array-decay hints carry a decayed
+            // array's shape. The PC counter and the relocation symbol shadow,
+            // parallel to the relocations, are rewound with the code.
             let saved_text_len = self.next_ent_pc;
             let saved_code_reloc_sym_idx = self.code_reloc_sym_idx.len();
-            // If sizeof consumed a leading `(` but the inner
-            // content is not a type-name, the paren belongs to a
-            // surrounding unary-expression. Restore the snapshot
-            // so the regular parser sees the original `(...)` and
-            // its postfix loop can chain through `->` / `.` / `[`
-            // after the matching `)`. Clear `had_paren` so the
-            // trailing `)` consumer at the end of this function
-            // does not consume a paren that was never sizeof's
-            // to begin with.
+            // The `(` belongs to the operand: restore it for the expression
+            // parser's own postfix loop.
             if had_paren {
                 self.restore_lex(pre_paren_snap);
                 had_paren = false;
@@ -182,9 +119,6 @@ impl Compiler {
             let array_count = self.pending.last_array_decay_size;
             let array_bytes = self.pending.last_array_decay_bytes;
             let expr_ty = self.ty;
-            // Drop any PC reservation the operand's parse
-            // recorded; sizeof emits nothing live so the saved
-            // counter must be restored verbatim.
             self.next_ent_pc = saved_text_len;
             self.clear_recent_emits();
             self.code_reloc_sym_idx.truncate(saved_code_reloc_sym_idx);
@@ -192,22 +126,15 @@ impl Compiler {
             self.pending.last_array_decay_bytes = 0;
             self.pending.last_array_decay_member = None;
             if array_bytes > 0 {
-                // Multi-dim pointer-to-array subscript or `*p`
-                // row deref: the row's byte size is known
-                // directly. The row's shape can be itself multi-
-                // dim, which c5's flat type encoding can't
-                // represent as `count * sizeof(elem_ty)`, so
-                // trust the byte count.
+                // A row of a pointer to an array or of a multi-dimensional array:
+                // its byte count, which the flat type cannot express.
                 array_bytes
             } else if array_count > 0 {
-                // Decayed 1D array: `expr_ty` is `T*` but we
-                // want `N * sizeof(T)`.
+                // A decayed 1D array: `N * sizeof(T)` from the `T *` type.
                 let elem_ty = expr_ty - Ty::Ptr as i64;
                 array_count * self.size_of_type(elem_ty) as i64
             } else if array_count < 0 {
-                // Decayed zero-length array (`T x[] = {}`): the `-1`
-                // sentinel marks a genuine zero element count, so the
-                // whole object is 0 bytes.
+                // A decayed zero-length array: 0 bytes.
                 0
             } else {
                 // An expression operand reaches the same constraint
@@ -539,20 +466,12 @@ impl Compiler {
         }
     }
 
-    /// C11 6.5.3.4: `_Alignof ( type-name )`. The operand is always a
-    /// parenthesized type name (an expression operand is a constraint
-    /// violation), so the dual operand-shape dispatch `sizeof` needs is
-    /// not required here. The alignment of an array type is the
-    /// alignment of its element type (C11 6.2.8), and pointer / abstract
-    /// declarators collapse to a pointer's alignment, so the abstract
-    /// declarator suffixes are consumed but do not change the result
-    /// beyond the pointer decoration.
+    /// C11 6.5.3.4 `_Alignof ( type-name )`, and GCC's `__alignof__` on an
+    /// expression (both spellings share the token). An array's alignment
+    /// is its element's (C11 6.2.8); a pointer's is the pointer's.
     pub(super) fn alignof_operand_bytes(&mut self) -> Result<i64, C5Error> {
-        // C11 6.5.3.4 requires `_Alignof ( type-name )`; GCC's `__alignof__`
-        // (both spellings share the token) also accepts an unparenthesized
-        // expression operand, whose alignment is that of its type. Parse it
-        // unevaluated at unary precedence, like `sizeof`, and discard the
-        // emit.
+        // An unparenthesized operand: an expression, parsed unevaluated at
+        // unary precedence as for `sizeof`.
         if self.lex.tk != '(' {
             if let Some(align) = self.alignof_object_walk(false)? {
                 return Ok(align);
@@ -570,10 +489,7 @@ impl Compiler {
             return Ok(self.align_of_type(expr_ty) as i64);
         }
         self.next()?;
-        // C11 6.5.3.4 takes a type-name; GCC's `__alignof__` also accepts a
-        // parenthesized expression, whose alignment is that of its type. The
-        // operand is unevaluated, so parse it, read the type, and discard
-        // everything the parse pushed (mirroring `sizeof`'s expression path).
+        // A parenthesized expression, parsed unevaluated.
         if !self.lex_is_type_start() {
             if let Some(align) = self.alignof_object_walk(true)? {
                 self.next()?; // consume `)`

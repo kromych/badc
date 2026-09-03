@@ -1,30 +1,13 @@
 //! Local-declaration handlers for function bodies.
 //!
-//! Four related methods cluster here, all dealing with the
-//! "reserve frame storage + emit any initializer" responsibilities
-//! of a local declaration line at function-body scope:
-//!
-//!   * `parse_local_decl` -- parse one declaration
-//!     line at the top of a function body. Drives the per-
-//!     declarator allocator dispatch (static-promote vs. stack-
-//!     local).
-//!   * `allocate_static_local` -- promote a `static T name;` to a
-//!     `Glo`-class symbol with persistent data-segment storage and
-//!     parse any initializer following file-scope rules.
-//!   * `allocate_local_with_init` -- reserve frame storage for a
-//!     stack local and emit any initializer that follows. Handles
-//!     the three shapes (non-array, known-size array, deferred-
-//!     size array) plus the special `struct T xs[] = {...};` and
-//!     `struct T s = {...};` paths that stage bytes through
-//!     `self.data` so the runtime Mcpy ends up with the right
-//!     contents.
-//!   * `local_storage_slots` -- per-declarator slot count, honoring
-//!     array dimension if present.
-//!
-//! Sibling to the initializer / aggregate / declarator modules
-//! because the stack-frame allocation logic is the natural unit
-//! to keep together; nothing outside this cluster cares about
-//! `loc_offs` book-keeping.
+//! One declaration line at block scope: the specifiers, then each
+//! declarator's storage and its initializer. A declarator resolves to
+//! one of four allocators -- a frame slot, a variable-length array's
+//! runtime carve, a `static` promoted to data-segment storage, or a
+//! block-scope `extern` that reserves none -- and the initializer of
+//! each takes the same aggregate walk as a file-scope object's, with
+//! runtime stores standing in for constant bytes where an element's
+//! value is not known until the program runs.
 
 use alloc::format;
 
@@ -295,8 +278,8 @@ impl Compiler {
     }
 
     /// Placement alignment of a block-scope static's storage: the
-    /// requirement [`Self::apply_static_local_align`] recorded, widened by
-    /// what the type itself asks for.
+    /// requirement [`Self::apply_static_local_align`] recorded, floored
+    /// at the boundary every object wider than one byte takes.
     fn static_local_placement_align(&self, loc_idx: usize, ty: i64) -> usize {
         let decl_align = self.symbols[loc_idx].data_align.max(0) as usize;
         self.data_placement_align(ty, decl_align)
@@ -825,19 +808,6 @@ impl Compiler {
         Ok(saw)
     }
 
-    /// Promote a `static T name [ = init];` local to a Glo-class
-    /// global with persistent storage in the data segment. The
-    /// symbol's binding lives only inside the current function's
-    /// scope (the function-body cleanup pass restores `h_class`
-    /// etc.); the storage itself stays allocated for the program
-    /// lifetime, so subsequent calls re-enter the same slot.
-    ///
-    /// The initializer follows file-scope rules -- integer
-    /// constants, string literals, &globals, or a brace list for
-    /// arrays. Function-pointer init values aren't yet supported
-    /// for static locals (the file-scope path handles them, but
-    /// the routing through `parse_global_initializer` here only
-    /// covers scalars).
     /// Push the persistent emission record of a block-scope static: a
     /// `name.<n>` internal symbol carrying the object's offset, extent,
     /// and `used` / `section` attributes past the scope-exit restore of
@@ -921,6 +891,12 @@ impl Compiler {
         self.reserve_zero_length_array_slot(loc_idx);
     }
 
+    /// Promote a `static T name [ = init];` local to a Glo-class symbol
+    /// with persistent storage. C99 6.2.4p3: the storage lasts for the
+    /// program run, so a later call re-enters the same slot, while the
+    /// binding lives only inside the current function's scope, which the
+    /// function-body cleanup pass restores. The initializer takes the
+    /// file-scope rules.
     pub(super) fn allocate_static_local(
         &mut self,
         loc_idx: usize,
@@ -966,11 +942,9 @@ impl Compiler {
             }
         }
 
-        // The initializer path below writes into `.data`; a thread-local's
-        // slot is in `tls_data`, so an initialized block-scope thread-local
-        // would land in the wrong segment. It is not needed by current
-        // consumers (which declare uninitialized `static __thread` objects),
-        // so reject it rather than mis-place the bytes.
+        // TODO: the initializer path below writes into `.data` while a
+        // thread-local's slot is in `tls_data`, so an initialized
+        // block-scope thread-local is rejected rather than mis-placed.
         if is_tls && self.lex.tk == Token::Assign {
             return Err(self.compile_err(
                 "an initializer on a block-scope `_Thread_local` object is not yet supported",
@@ -1202,23 +1176,17 @@ impl Compiler {
     }
 
     /// Fill a static-local array whose initializer mixes a `&&label`
-    /// element with one whose value only the running program knows, using
+    /// element with one only the running program can value, using
     /// runtime stores at the declaration point. The data image holds
-    /// zeros; each element is parsed through the expression grammar (so
-    /// `&&label` yields a block-address node) and stored into `arr[i]` via
-    /// an `Expr::Assign` the walker lowers to a global address store. A
-    /// constant element is stored the same way. An initializer whose
-    /// elements are all link-time constants goes through the data image
-    /// and its relocations instead.
+    /// zeros and each element is parsed through the expression grammar,
+    /// so `&&label` yields a block address. An initializer whose
+    /// elements are all link-time constants takes the data image instead.
     ///
-    /// C99 6.2.4p3: static storage duration means one initialization for
-    /// the whole program run, so the stores are wrapped in a hidden
-    /// once-guard: a guard byte placed directly after the array's storage
-    /// (same data object -- no object start in between -- so data DCE and
-    /// linker rebase move it with the array). The whole declaration
-    /// lowers to a single statement `guard ? 0 : (e0, ..., en, guard = 1)`
-    /// because the enclosing declaration parse captures every pushed
-    /// stmt id as a top-level block item.
+    /// C99 6.2.4p3 gives static storage duration one initialization per
+    /// program run, so the stores sit behind a guard byte placed directly
+    /// after the array's storage -- the same data object, so data DCE and
+    /// the linker rebase move it with the array. The declaration lowers
+    /// to one statement, `guard ? 0 : (e0, ..., en, guard = 1)`.
     pub(super) fn emit_static_array_init_runtime(
         &mut self,
         loc_idx: usize,
@@ -1373,19 +1341,6 @@ impl Compiler {
         Ok(())
     }
 
-    /// Reserve frame storage for a local declarator and emit any
-    /// initializer that follows. Three shapes:
-    ///   * non-array: `slots_of_type(ty)` slots; optional scalar /
-    ///     pointer / struct initializer via `emit_local_init_store`.
-    ///   * known-size array (`int xs[5] = {...};` /
-    ///     `char buf[16] = "...";`): allocate `array_size *
-    ///     elem_size` bytes; the optional initializer populates the
-    ///     leading positions, the rest is left in whatever state
-    ///     the stack frame had on entry (c5 doesn't yet zero-init
-    ///     local arrays beyond what the initializer covers).
-    ///   * deferred-size array (`int xs[] = {...};`): the
-    ///     initializer determines the dimension first, then storage
-    ///     is reserved.
     /// C99 6.7.6.2 variable-length array local. Reserves two hidden
     /// frame slots -- the runtime base pointer and the runtime byte
     /// count -- and records a `Decl::Vla`; the walker allocates the
@@ -1668,6 +1623,14 @@ impl Compiler {
         Ok(rec)
     }
 
+    /// Reserve frame storage for a local declarator and emit any
+    /// initializer that follows, in three shapes: a non-array object of
+    /// `slots_of_type(ty)` slots, a known-size array, and a
+    /// deferred-size array whose initializer settles the dimension
+    /// before the storage is reserved. C99 6.7.8p21 zero-fills the
+    /// positions an initializer leaves; an uninitialized object keeps
+    /// whatever the frame held, subject to
+    /// `-ftrivial-auto-var-init`.
     pub(super) fn allocate_local_with_init(
         &mut self,
         loc_idx: usize,
@@ -1824,9 +1787,9 @@ impl Compiler {
             // encoding `T x[] = {}` uses; a slot is still reserved so
             // the object has an address of its own.
             //
-            // Empty brackets without an initializer leave the type
-            // incomplete. c5 completes it to one element rather than
-            // diagnosing it.
+            // TODO: empty brackets with no initializer leave the type
+            // incomplete (C99 6.7.5.2p4); the bound is completed to one
+            // element rather than diagnosed.
             let zero_len = self.pending.declarator_zero_len_array;
             self.symbols[loc_idx].array_size = if zero_len { 0 } else { 1 };
             self.symbols[loc_idx].is_zero_len_array = zero_len;
@@ -2212,17 +2175,15 @@ impl Compiler {
         self.pending_local_init_ast = Some(self.ast.push_expr(expr, pos));
     }
 
-    /// Parse a C99 6.5.2.5 block-scope compound literal `(type){
-    /// init }`. The `(type)` has already been parsed (`t` is the
-    /// element / scalar / struct type; `array_dims` lists the bracket
-    /// counts outermost first, empty for a non-array literal, with
-    /// `array_dims[0] == -1` for the size-from-initializer `[]` form).
-    /// The lexer is at the opening `{`. Reserves an anonymous frame
-    /// slot (automatic storage, 6.5.2.5p5), captures the initializer
-    /// through the shared local-init helpers, and emits an
-    /// `Expr::CompoundLiteral` whose value is the object's address
-    /// (array decays per 6.3.2.1p3, struct yields its address) or the
-    /// loaded scalar.
+    /// Parse a C99 6.5.2.5 block-scope compound literal `(type){ init }`
+    /// with the cursor on the `{` and the `(type)` already parsed: `t` is
+    /// the element, scalar or struct type and `array_dims` the bracket
+    /// counts outermost first, empty for a non-array literal and
+    /// `array_dims[0] == -1` for the size-from-initializer form. The
+    /// literal is an unnamed object with automatic storage (6.5.2.5p5),
+    /// so it takes an anonymous frame slot; the emitted
+    /// `Expr::CompoundLiteral` yields its address for an array or struct
+    /// (6.3.2.1p3) and the loaded value for a scalar.
     // The literal's three outputs come from one multi-branch decision;
     // binding them to its value folds that chain into a tuple expression.
     #[allow(clippy::needless_late_init)]
@@ -2668,21 +2629,14 @@ impl Compiler {
         Ok((count, needs_runtime))
     }
 
-    /// Pre-scan an array initializer's brace list (current token
-    /// must be `{`) for any element that isn't a compile-time
-    /// constant. Returns true if the initializer needs the
-    /// per-element runtime store path; false if the existing
-    /// pack-into-data + Mcpy path suffices. The scan snapshots /
-    /// restores the lexer so token position is unchanged on
-    /// return.
-    ///
-    /// Constants for this check: integer / float / string
-    /// literals, enum / `#define` constants (class == Num), bare
-    /// file-scope scalar constants, and any cast or paren
-    /// expression composed of the same. Runtime values: Loc-class
-    /// references, indexed reads (`id[...]`), member access
-    /// (`.` / `->`), calls, and any address (`&id`, a function
-    /// name, an array's decay -- see `init_id_needs_runtime`).
+    /// True when an element of the array initializer under the cursor
+    /// is not a compile-time constant, so the initializer needs the
+    /// per-element runtime store path rather than packed bytes plus one
+    /// copy. The lexer position is unchanged on return. Constant here
+    /// means a literal, an enum or macro constant, a bare file-scope
+    /// scalar constant, and casts and parentheses over the same;
+    /// everything else -- a `Loc`-class reference, an indexed read,
+    /// member access, a call, an address -- is a runtime value.
     pub(super) fn array_init_needs_runtime(&mut self) -> Result<bool, C5Error> {
         Ok(self.scan_array_init()?.1)
     }
@@ -2902,21 +2856,14 @@ impl Compiler {
         Ok(())
     }
 
-    /// Pre-scan a struct initializer's brace list (current token
-    /// must be `{`) for any field whose value isn't a compile-
-    /// time constant. Returns true if the initializer needs the
-    /// per-field runtime store path; false if the existing
-    /// stage-into-data + Mcpy path suffices. The scan snapshots
-    /// / restores the lexer so token position is unchanged on
-    /// return.
-    ///
-    /// Designators (`.field = ...` and `[N] = ...`) at the top
-    /// of an entry are skipped before checking the value -- they
-    /// don't make the initializer non-constant on their own.
-    /// Non-constants for this check mirror the array scanner:
-    /// references to Loc-class symbols, function calls, indexed
-    /// reads, and member access through a non-designator dot /
-    /// arrow.
+    /// True when a field of the struct initializer under the cursor
+    /// holds a value that is not a compile-time constant, so the
+    /// initializer needs the per-field runtime store path rather than
+    /// staged bytes plus one copy. The lexer position is unchanged on
+    /// return. A leading designator is skipped before the value is
+    /// checked; non-constants are the ones the array scanner takes --
+    /// a `Loc`-class reference, a call, an indexed read, and member
+    /// access through a dot or arrow that is not a designator.
     pub(super) fn struct_init_needs_runtime(&mut self) -> Result<bool, C5Error> {
         debug_assert!(self.lex.tk == '{');
         let snap = self.lex.snapshot();

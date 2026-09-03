@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use super::diag::TuLog;
 
 /// What the `-M` flag family asked the driver to produce.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum DepKind {
     /// `-M` / `-MM`: write the dependency rule and compile nothing.
     Only,

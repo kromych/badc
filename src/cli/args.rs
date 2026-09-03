@@ -1625,3 +1625,699 @@ impl Codegen {
         opts
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn argv(args: &[&str]) -> Vec<String> {
+        core::iter::once("badc")
+            .chain(args.iter().copied())
+            .map(String::from)
+            .collect()
+    }
+
+    /// The options `args` parses to. Panics on any other outcome.
+    fn parse(args: &[&str]) -> Cli {
+        match parse_args(argv(args)) {
+            Ok(Parsed::Run(cli)) => *cli,
+            other => panic!("{args:?}: expected a run, got {}", outcome(&other)),
+        }
+    }
+
+    /// The diagnostic and the status the driver exits with for a
+    /// rejected command line.
+    fn reject(args: &[&str]) -> (String, i32) {
+        match parse_args(argv(args)) {
+            Err(e) => (e.message, ParseError::STATUS),
+            other => panic!("{args:?}: expected a rejection, got {}", outcome(&other)),
+        }
+    }
+
+    fn outcome(o: &Result<Parsed, ParseError>) -> String {
+        match o {
+            Ok(Parsed::Run(_)) => "a run".to_string(),
+            Ok(Parsed::Print(_)) => "printed text".to_string(),
+            Ok(Parsed::Install { .. }) => "an install".to_string(),
+            Err(e) => format!("a rejection: {}", e.message),
+        }
+    }
+
+    /// Targets every lane resolves the same way, so the checks that
+    /// depend on one do not follow the build host.
+    const X64: &str = "--target=linux-x64";
+    const A64: &str = "--target=linux-aarch64";
+
+    #[test]
+    fn output_path_takes_a_separate_operand() {
+        assert_eq!(
+            parse(&["-o", "out.bin", "a.c"]).output_path.unwrap(),
+            PathBuf::from("out.bin")
+        );
+        assert_eq!(
+            reject(&["-o"]),
+            ("badc: error: -o requires a path argument".to_string(), 1)
+        );
+    }
+
+    #[test]
+    fn compile_only_has_two_spellings() {
+        assert!(parse(&["-c", "a.c"]).compile_only);
+        assert!(parse(&["--compile-only", "a.c"]).compile_only);
+        assert!(!parse(&["a.c"]).compile_only);
+    }
+
+    #[test]
+    fn defines_and_undefines_take_both_spellings() {
+        let cli = parse(&["-DA", "-DB=2", "-D", "C=3", "-UD", "-U", "E", "a.c"]);
+        assert_eq!(
+            cli.front.defines,
+            vec![
+                ("A".to_string(), "1".to_string()),
+                ("B".to_string(), "2".to_string()),
+                ("C".to_string(), "3".to_string()),
+            ]
+        );
+        assert_eq!(cli.front.undefines, vec!["D".to_string(), "E".to_string()]);
+        assert_eq!(
+            reject(&["-D"]),
+            ("badc: error: -D requires NAME[=VALUE]".to_string(), 1)
+        );
+        assert_eq!(
+            reject(&["-U"]),
+            ("badc: error: -U requires a NAME".to_string(), 1)
+        );
+    }
+
+    #[test]
+    fn include_paths_keep_the_two_scopes_apart() {
+        let cli = parse(&["-Iinc", "-I", "inc2", "-iquoteq", "-iquote", "q2", "a.c"]);
+        assert_eq!(
+            cli.front.include_paths,
+            vec!["inc".to_string(), "inc2".to_string()]
+        );
+        assert_eq!(
+            cli.front.quote_include_paths,
+            vec!["q".to_string(), "q2".to_string()]
+        );
+        assert_eq!(
+            reject(&["-I"]),
+            ("badc: error: -I requires a path argument".to_string(), 1)
+        );
+        assert_eq!(
+            reject(&["-iquote"]),
+            (
+                "badc: error: -iquote requires a path argument".to_string(),
+                1
+            )
+        );
+        assert_eq!(
+            reject(&["-include"]),
+            (
+                "badc: error: -include requires a header name".to_string(),
+                1
+            )
+        );
+    }
+
+    #[test]
+    fn libraries_take_both_spellings() {
+        let cli = parse(&["-Ldir", "-L", "dir2", "-lm", "-l", "c", "a.c"]);
+        assert_eq!(
+            cli.link.library_paths,
+            vec!["dir".to_string(), "dir2".to_string()]
+        );
+        assert_eq!(cli.link.lib_names, vec!["m".to_string(), "c".to_string()]);
+        assert_eq!(
+            reject(&["-L"]),
+            ("badc: error: -L requires a directory".to_string(), 1)
+        );
+        assert_eq!(
+            reject(&["-l"]),
+            ("badc: error: -l requires a library name".to_string(), 1)
+        );
+    }
+
+    #[test]
+    fn every_optimization_level_selects_the_one_optimizer() {
+        for flag in [
+            "-O",
+            "-O1",
+            "-O2",
+            "-O3",
+            "-Os",
+            "-Oz",
+            "-Ofast",
+            "-Og",
+            "--optimize",
+        ] {
+            assert!(parse(&[flag, "a.c"]).front.optimize, "{flag}");
+        }
+        assert!(!parse(&["-O2", "-O0", "a.c"]).front.optimize);
+        assert!(parse(&["-O0", "-O2", "a.c"]).front.optimize);
+    }
+
+    #[test]
+    fn debug_info_is_last_flag_wins() {
+        assert!(parse(&["-g", "a.c"]).codegen.emit_debug_info);
+        assert!(parse(&["--debug", "a.c"]).codegen.emit_debug_info);
+        assert!(!parse(&["-g", "-g0", "a.c"]).codegen.emit_debug_info);
+        assert!(parse(&["-g0", "-g", "a.c"]).codegen.emit_debug_info);
+    }
+
+    #[test]
+    fn target_selects_the_image_format() {
+        assert_eq!(parse(&[X64, "a.c"]).target, Target::LinuxX64);
+        assert_eq!(parse(&[A64, "a.c"]).target, Target::LinuxAarch64);
+        assert_eq!(
+            parse(&["--target=windows-x64", "a.c"]).target,
+            Target::WindowsX64
+        );
+        assert!(reject(&["--target=nope", "a.c"]).0.contains("nope"));
+    }
+
+    #[test]
+    fn dead_store_warning_is_opt_in() {
+        assert!(!parse(&["a.c"]).front.warn_dead_store);
+        assert!(parse(&["-Wdead-store", "a.c"]).front.warn_dead_store);
+        assert!(
+            !parse(&["-Wdead-store", "-Wno-dead-store", "a.c"])
+                .front
+                .warn_dead_store
+        );
+    }
+
+    #[test]
+    fn preprocessor_payload_carries_the_dependency_request() {
+        let cli = parse(&["-Wp,-MMD,dep.d", "-Wp,-MP", "-c", "a.c"]);
+        let deps = cli.deps.unwrap();
+        assert_eq!(deps.kind, DepKind::WithOutput);
+        assert!(!deps.system);
+        assert_eq!(deps.file.as_deref(), Some("dep.d"));
+        assert!(deps.phony);
+        assert!(!deps.target_from_output);
+        assert_eq!(
+            reject(&["-Wp,-MD", "a.c"]),
+            (
+                "badc: error: `-Wp,-MD` requires a file operand".to_string(),
+                1
+            )
+        );
+        assert_eq!(
+            reject(&["-Wp,-nope", "a.c"]),
+            (
+                "badc: error: unsupported preprocessor option `-nope` in `-Wp,-nope`".to_string(),
+                1
+            )
+        );
+    }
+
+    #[test]
+    fn assembler_options_are_checked_against_what_the_assembler_does() {
+        assert!(parse(&["-Wa,-L", "a.c"]).codegen.keep_local_labels);
+        assert!(
+            parse(&["-Xassembler", "--keep-locals", "a.c"])
+                .codegen
+                .keep_local_labels
+        );
+        assert!(
+            !parse(&["-Wa,--fatal-warnings,-march=x86-64", "a.c"])
+                .codegen
+                .keep_local_labels
+        );
+        assert_eq!(
+            reject(&["-Wa,--nope", "a.c"]),
+            (
+                "badc: error: unsupported assembler option `--nope`".to_string(),
+                1
+            )
+        );
+        assert_eq!(
+            reject(&["-Xassembler"]),
+            ("badc: error: -Xassembler requires an option".to_string(), 1)
+        );
+    }
+
+    #[test]
+    fn dependency_family_picks_kind_and_system_headers() {
+        for (flag, kind, system, from_output) in [
+            ("-M", DepKind::Only, true, false),
+            ("-MM", DepKind::Only, false, false),
+            ("-MD", DepKind::WithOutput, true, true),
+            ("-MMD", DepKind::WithOutput, false, true),
+        ] {
+            let cli = parse(&[flag, "-c", "a.c"]);
+            let deps = cli.deps.unwrap();
+            assert_eq!(deps.kind, kind, "{flag}");
+            assert_eq!(deps.system, system, "{flag}");
+            assert_eq!(deps.target_from_output, from_output, "{flag}");
+        }
+        let cli = parse(&["-M", "-MF", "d.mk", "-MT", "t", "-MQ", "q$x", "-MP", "a.c"]);
+        let deps = cli.deps.unwrap();
+        assert_eq!(deps.file.as_deref(), Some("d.mk"));
+        assert_eq!(deps.targets, vec!["t".to_string(), badc::dep_escape("q$x")]);
+        assert!(deps.phony);
+        assert_eq!(
+            reject(&["-MF"]),
+            ("badc: error: -MF requires an argument".to_string(), 1)
+        );
+        // Under `-E` the `-o` operand names the preprocessed text, so
+        // the rule keeps the source-derived default.
+        assert!(
+            !parse(&["-MD", "-E", "a.c"])
+                .deps
+                .unwrap()
+                .target_from_output
+        );
+    }
+
+    #[test]
+    fn jobs_takes_every_spelling_and_rejects_zero() {
+        for args in [
+            &["--jobs", "4"][..],
+            &["--jobs=4"][..],
+            &["-j", "4"][..],
+            &["-j4"][..],
+        ] {
+            let mut v = args.to_vec();
+            v.push("a.c");
+            assert_eq!(parse(&v).jobs, Some(4), "{args:?}");
+        }
+        assert_eq!(parse(&["a.c"]).jobs, None);
+        assert_eq!(
+            reject(&["--jobs", "0", "a.c"]),
+            (
+                "badc: error: --jobs (-j) requires a positive integer, got `0`".to_string(),
+                1
+            )
+        );
+        assert_eq!(
+            reject(&["-j"]),
+            (
+                "badc: error: --jobs (-j) requires a positive integer N".to_string(),
+                1
+            )
+        );
+        // A non-digit suffix is an unknown option, not a job count.
+        assert_eq!(
+            reject(&["-jx", "a.c"]),
+            ("badc: error: unknown option `-jx`".to_string(), 1)
+        );
+    }
+
+    #[test]
+    fn f_family_reaches_the_front_end_and_the_emitter() {
+        let cli = parse(&[
+            "-fPIC",
+            "-fno-jump-tables",
+            "-fsigned-char",
+            "-fshort-wchar",
+            "-fstrict-flex-arrays=2",
+            "-ftrivial-auto-var-init=zero",
+            "-fgnu89-inline",
+            "-fno-builtin-memcpy",
+            "-ffreestanding",
+            "-fmin-function-alignment=16",
+            "a.c",
+        ]);
+        assert!(cli.codegen.fpic && !cli.codegen.fno_pic);
+        assert!(!cli.codegen.jump_tables);
+        assert_eq!(cli.front.char_signed, Some(true));
+        assert!(cli.front.short_wchar);
+        assert_eq!(cli.front.strict_flex_arrays, 2);
+        assert_eq!(cli.front.auto_var_init, badc::AutoVarInit::Zero);
+        assert!(cli.front.gnu89_inline);
+        assert_eq!(cli.front.no_builtin_fns, vec!["memcpy".to_string()]);
+        assert!(cli.front.no_builtin);
+        assert_eq!(cli.codegen.min_function_alignment, 16);
+        assert!(parse(&["-fno-pic", "a.c"]).codegen.fno_pic);
+        assert_eq!(
+            reject(&["-fstrict-flex-arrays=9", "a.c"]).0,
+            "badc: error: `-fstrict-flex-arrays=` takes a level 0..=3, got `9`"
+        );
+        assert_eq!(
+            reject(&["-fmin-function-alignment=3", "a.c"]).0,
+            "badc: error: `-fmin-function-alignment=` takes a power of two, got `3`"
+        );
+        assert_eq!(
+            reject(&["-ffixed-", "a.c"]),
+            (
+                "badc: error: `-ffixed-` requires a register name".to_string(),
+                1
+            )
+        );
+    }
+
+    #[test]
+    fn m_family_is_checked_against_the_target() {
+        let cli = parse(&[X64, "-m32", "-mno-sse", "-mcmodel=kernel", "-c", "a.c"]);
+        assert_eq!(cli.codegen.code_mode_flag.as_deref(), Some("-m32"));
+        assert!(cli.codegen.no_fp_regs);
+        assert_eq!(cli.codegen.code_model, badc::CodeModel::Kernel);
+        assert_eq!(cli.codegen.elf_class, badc::ElfClass::Elf32);
+        assert_eq!(
+            parse(&[X64, "a.c"]).codegen.elf_class,
+            badc::ElfClass::Elf64
+        );
+        assert_eq!(
+            reject(&["-m31", "a.c"]),
+            (
+                "badc: error: `-m31` selects an ABI badc does not emit".to_string(),
+                1
+            )
+        );
+        assert_eq!(
+            reject(&[X64, "-mcpu=generic", "a.c"]),
+            (
+                "badc: error: `-mcpu=` names an AArch64 CPU; the x86-64 targets take none"
+                    .to_string(),
+                1
+            )
+        );
+        // `+crypto` predefines both feature macros.
+        let cli = parse(&[A64, "-mcpu=generic+crypto", "-c", "a.c"]);
+        for name in [
+            "__ARM_FEATURE_AES",
+            "__ARM_FEATURE_SHA2",
+            "__ARM_FEATURE_CRYPTO",
+        ] {
+            assert!(cli.front.defines.iter().any(|(n, _)| n == name), "{name}");
+        }
+        assert_eq!(
+            reject(&[A64, "-mcpu=generic+nope", "-c", "a.c"]).0,
+            "badc: error: `-mcpu=` extension `nope` is not implemented; badc implements \
+             `crypto`, `aes`, `sha2` and their `no` forms"
+        );
+        assert_eq!(
+            reject(&[X64, "-mcmodel=tiny", "-c", "a.c"]).0,
+            "badc: error: `-mcmodel=tiny` requires an aarch64 ELF target (--target=linux-aarch64)"
+        );
+        // The kernel model shapes relocatable objects only.
+        assert_eq!(
+            reject(&[X64, "-mcmodel=kernel", "a.c"]).0,
+            "badc: error: `-mcmodel=kernel` shapes relocatable objects; it requires `-c` or `--ar`"
+        );
+    }
+
+    #[test]
+    fn hardening_flags_reject_what_is_not_emitted() {
+        let cli = parse(&[
+            X64,
+            "-mharden-sls=all",
+            "-fcf-protection=branch",
+            "-c",
+            "a.c",
+        ]);
+        assert!(cli.codegen.hardening.sls_return && cli.codegen.hardening.sls_indirect_jmp);
+        assert!(cli.codegen.hardening.cf_protection_branch);
+        assert_eq!(
+            reject(&["-fcf-protection=full", "a.c"]).0,
+            "badc: error: unsupported argument `full` to `-fcf-protection=` \
+             (supported: none, branch)"
+        );
+        assert_eq!(
+            reject(&["-mbranch-protection=gcs", "a.c"]).0,
+            "badc: error: unsupported feature `gcs` in `-mbranch-protection=` \
+             (supported: none, bti, pac-ret, standard)"
+        );
+    }
+
+    #[test]
+    fn stack_protector_needs_a_compiled_output_and_a_reachable_guard() {
+        let cli = parse(&[
+            X64,
+            "-fstack-protector-strong",
+            "--param",
+            "ssp-buffer-size=4",
+            "-c",
+            "a.c",
+        ]);
+        assert_eq!(cli.codegen.stack_protect.mode, badc::StackProtector::Strong);
+        assert_eq!(cli.codegen.stack_protect.buffer_size, 4);
+        assert_eq!(
+            reject(&["-fstack-protector", "--jit", "a.c"]).0,
+            "badc: error: `-fstack-protector*` needs a compiled output: \
+             `--jit` and `--interp` execute in this process and reach no \
+             `__stack_chk_fail`"
+        );
+        // On x86-64 a named register implies gcc's `tls` default.
+        assert_eq!(
+            reject(&[X64, "-mstack-protector-guard-reg=r15", "a.c"]).0,
+            "badc: error: unsupported argument `r15` to \
+             `-mstack-protector-guard-reg=` under `=tls` (supported: fs, gs)"
+        );
+        // Elsewhere the operands only make sense with the form flag.
+        assert_eq!(
+            reject(&[A64, "-mstack-protector-guard-reg=sp_el0", "a.c"]).0,
+            "badc: error: `-mstack-protector-guard-reg=` / \
+             `-mstack-protector-guard-offset=` need `-mstack-protector-guard=`"
+        );
+        assert_eq!(
+            reject(&["--param", "nope=1", "a.c"]).0,
+            "badc: error: unsupported `--param` name `nope` (supported: ssp-buffer-size)"
+        );
+    }
+
+    #[test]
+    fn freestanding_and_shared_pick_the_image_shape() {
+        assert!(parse(&["--freestanding", "a.c"]).freestanding);
+        assert_eq!(parse(&["--shared", "a.c"]).mode, Mode::SharedLibrary);
+        assert_eq!(parse(&["-shared", "a.c"]).mode, Mode::SharedLibrary);
+        assert_eq!(parse(&["a.c"]).mode, Mode::NativeExecutable);
+    }
+
+    #[test]
+    fn install_is_decided_before_the_target() {
+        match parse_args(argv(&["--install", "/tmp/dest"])) {
+            Ok(Parsed::Install { dir, quiet }) => {
+                assert_eq!(dir.unwrap(), PathBuf::from("/tmp/dest"));
+                assert!(!quiet);
+            }
+            other => panic!("expected an install, got {}", outcome(&other)),
+        }
+        match parse_args(argv(&["--install", "-q"])) {
+            Ok(Parsed::Install { dir, quiet }) => {
+                assert!(dir.is_none());
+                assert!(quiet);
+            }
+            other => panic!("expected an install, got {}", outcome(&other)),
+        }
+    }
+
+    #[test]
+    fn vm_modes_take_their_own_flags() {
+        let cli = parse(&["--interp", "--track-pointers", "--trace", "a.c"]);
+        assert_eq!(cli.mode, Mode::Interp);
+        assert!(cli.track_pointers && cli.trace);
+        assert_eq!(parse(&["--jit", "a.c"]).mode, Mode::Jit);
+        assert_eq!(
+            reject(&["--track-pointers", "a.c"]).0,
+            "badc: --track-pointers / --trace require --interp (current mode is (default))"
+        );
+        assert_eq!(
+            reject(&["--jit", "-o", "x", "a.c"]).0,
+            "badc: -o is only meaningful for native compilation (current mode is --jit)"
+        );
+    }
+
+    #[test]
+    fn preprocess_only_has_two_spellings() {
+        assert_eq!(parse(&["-E", "a.c"]).mode, Mode::DumpPp);
+        assert_eq!(parse(&["--dump-pp", "a.c"]).mode, Mode::DumpPp);
+    }
+
+    #[test]
+    fn link_map_takes_both_spellings_and_requires_a_link() {
+        assert_eq!(
+            parse(&["-Map=link.map", "a.c"]).link.map_path.unwrap(),
+            PathBuf::from("link.map")
+        );
+        assert_eq!(
+            parse(&["-Map", "link.map", "a.c"]).link.map_path.unwrap(),
+            PathBuf::from("link.map")
+        );
+        assert!(parse(&["--print-map", "a.c"]).link.print_map);
+        assert_eq!(
+            reject(&["-Map"]),
+            ("badc: error: -Map requires a file argument".to_string(), 1)
+        );
+        assert_eq!(
+            reject(&["-c", "-Map=x.map", "a.c"]).0,
+            "badc: -Map / --print-map require a link (current mode is -c)"
+        );
+    }
+
+    #[test]
+    fn at_most_one_mode_flag_applies() {
+        assert_eq!(
+            reject(&["--jit", "--interp", "a.c"]).0,
+            "badc: --interp can't be combined with --jit -- both pick an \
+             output mode (Mode::Interp vs Mode::Jit). See --help."
+        );
+    }
+
+    #[test]
+    fn help_and_version_stop_reading_the_rest() {
+        for flag in ["-h", "--help"] {
+            match parse_args(argv(&[flag, "--no-such-option"])) {
+                Ok(Parsed::Print(text)) => assert!(text.starts_with("usage: badc")),
+                other => panic!("{flag}: expected the usage, got {}", outcome(&other)),
+            }
+        }
+        for flag in ["-v", "--version"] {
+            match parse_args(argv(&[flag, "--no-such-option"])) {
+                Ok(Parsed::Print(text)) => assert_eq!(text, badc::BUILD_INFO),
+                other => panic!("{flag}: expected the build info, got {}", outcome(&other)),
+            }
+        }
+    }
+
+    #[test]
+    fn an_unknown_dash_token_is_an_option_not_an_input() {
+        assert_eq!(
+            reject(&["--no-such-option", "a.c"]),
+            (
+                "badc: error: unknown option `--no-such-option`".to_string(),
+                1
+            )
+        );
+        // `-` alone is the stdin source and stays a positional.
+        assert_eq!(
+            parse(&["-c", "-"]).positional,
+            vec!["badc".to_string(), "-".to_string()]
+        );
+    }
+
+    #[test]
+    fn the_ld_option_surface_reaches_the_link_options() {
+        let cli = parse(&[
+            "-T",
+            "link.ld",
+            "--orphan-handling=warn",
+            "--build-id=sha1",
+            "-z",
+            "max-page-size=0x1000",
+            "-z",
+            "pack-relative-relocs",
+            "--emit-relocs",
+            "--export-all",
+            "--export-data",
+            "-X",
+            "--discard-none",
+            "--no-apply-dynamic-relocs",
+            "--strip-debug",
+            "--fix-cortex-a53-843419",
+            "a.o",
+        ]);
+        assert_eq!(cli.link.script_path.unwrap(), PathBuf::from("link.ld"));
+        assert_eq!(cli.link.orphan_handling, badc::OrphanHandling::Warn);
+        assert!(cli.link.build_id_sha1);
+        assert_eq!(cli.link.max_page_size, Some(0x1000));
+        assert!(cli.link.pack_relative_relocs);
+        assert!(cli.link.emit_relocs && cli.link.export_all && cli.link.export_data);
+        assert!(cli.link.discard_locals && cli.link.discard_none);
+        assert!(!cli.link.apply_dynamic_relocs);
+        assert!(cli.link.strip_debug && cli.link.fix_cortex_a53_843419);
+        assert_eq!(
+            parse(&["--script=x.ld", "a.o"]).link.script_path.unwrap(),
+            PathBuf::from("x.ld")
+        );
+        assert_eq!(
+            parse(&["-Tx.ld", "a.o"]).link.script_path.unwrap(),
+            PathBuf::from("x.ld")
+        );
+        assert_eq!(
+            reject(&["-z", "nope", "a.o"]),
+            ("badc: error: unknown -z keyword `nope`".to_string(), 1)
+        );
+        assert_eq!(
+            reject(&["-z", "max-page-size=3", "a.o"]),
+            (
+                "badc: error: -z max-page-size requires a power of two".to_string(),
+                1
+            )
+        );
+        assert_eq!(
+            reject(&["-T"]),
+            (
+                "badc: error: -T/--script requires a file argument".to_string(),
+                1
+            )
+        );
+    }
+
+    #[test]
+    fn ld_emulation_names_a_target_only_when_none_was_given() {
+        assert_eq!(parse(&["-melf_x86_64", "a.c"]).target, Target::LinuxX64);
+        assert_eq!(
+            parse(&["-m", "aarch64linux", "a.c"]).target,
+            Target::LinuxAarch64
+        );
+        assert_eq!(
+            parse(&[X64, "-maarch64linux", "a.c"]).target,
+            Target::LinuxX64
+        );
+        assert_eq!(
+            reject(&["-m", "nope", "a.c"]),
+            ("badc: error: unknown emulation `nope`".to_string(), 1)
+        );
+        assert_eq!(
+            reject(&["-m"]),
+            ("badc: error: -m requires an emulation name".to_string(), 1)
+        );
+    }
+
+    #[test]
+    fn whole_archive_spans_the_positionals_it_encloses() {
+        // `positional[0]` is argv[0], so the span covers `b.a` alone.
+        let cli = parse(&["a.o", "--whole-archive", "b.a", "--no-whole-archive", "c.a"]);
+        assert_eq!(cli.link.whole_archive, vec![(2, 3)]);
+        // An unclosed span runs to the end of the command line.
+        let cli = parse(&["a.o", "--whole-archive", "b.a", "c.a"]);
+        assert_eq!(cli.link.whole_archive, vec![(2, 4)]);
+    }
+
+    #[test]
+    fn entry_and_subsystem_override_the_source_pragmas() {
+        let cli = parse(&["--entry=start", "--subsystem=efi_application", "a.o"]);
+        assert_eq!(cli.link.entry.as_deref(), Some("start"));
+        assert_eq!(cli.link.subsystem, Some(badc::Subsystem::EfiApplication));
+        assert!(
+            reject(&["--subsystem=nope", "a.o"])
+                .0
+                .contains("unknown kind `nope`")
+        );
+    }
+
+    #[test]
+    fn dialect_selects_only_strict_conformance() {
+        assert!(parse(&["-std=gnu11", "a.c"]).front.gnu_dialect);
+        assert!(!parse(&["-std=c99", "a.c"]).front.gnu_dialect);
+        assert!(!parse(&["-std=iso9899:1999", "a.c"]).front.gnu_dialect);
+        assert!(parse(&["--gnu", "a.c"]).front.gnu);
+        assert!(parse(&["-nostdinc", "a.c"]).front.nostdinc);
+        assert_eq!(
+            reject(&["-std=fortran", "a.c"]),
+            (
+                "badc: error: unknown C dialect `fortran` (-std=)".to_string(),
+                1
+            )
+        );
+    }
+
+    #[test]
+    fn quiet_and_include_tracing_are_flags_of_the_run() {
+        assert!(parse(&["-q", "a.c"]).quiet);
+        assert!(parse(&["--quiet", "a.c"]).quiet);
+        assert!(parse(&["-H", "a.c"]).front.show_includes);
+        assert!(parse(&["--show-includes", "a.c"]).front.show_includes);
+        assert_eq!(parse(&["--inline-cap=7", "a.c"]).codegen.inline_cap, 7);
+        assert_eq!(
+            reject(&["--inline-cap=x", "a.c"]),
+            (
+                "badc: error: --inline-cap=N requires a non-negative integer".to_string(),
+                1
+            )
+        );
+    }
+}

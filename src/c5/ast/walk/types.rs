@@ -61,10 +61,9 @@ impl<'a> Walker<'a> {
     }
 }
 
-/// True for a relational or equality operator (integer or
-/// floating-point). The result is `int` (C99 6.5.8 / 6.5.9) regardless
-/// of operand type.
-pub(crate) fn is_comparison_op(op: BinOp) -> bool {
+/// Integer relational and equality operators (C99 6.5.8 / 6.5.9),
+/// signed and unsigned.
+pub(crate) fn is_int_comparison_op(op: BinOp) -> bool {
     matches!(
         op,
         BinOp::Eq
@@ -77,13 +76,28 @@ pub(crate) fn is_comparison_op(op: BinOp) -> bool {
             | BinOp::Ugt
             | BinOp::Ule
             | BinOp::Uge
-            | BinOp::Feq
-            | BinOp::Fne
-            | BinOp::Flt
-            | BinOp::Fgt
-            | BinOp::Fle
-            | BinOp::Fge
     )
+}
+
+/// Floating-point relational and equality operators (C99 6.5.8 /
+/// 6.5.9).
+pub(crate) fn is_fp_comparison_op(op: BinOp) -> bool {
+    matches!(
+        op,
+        BinOp::Feq | BinOp::Fne | BinOp::Flt | BinOp::Fgt | BinOp::Fle | BinOp::Fge
+    )
+}
+
+/// Floating-point arithmetic operators (C99 6.5.5 / 6.5.6).
+pub(crate) fn is_fp_arith_op(op: BinOp) -> bool {
+    matches!(op, BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv)
+}
+
+/// True for a relational or equality operator (integer or
+/// floating-point). The result is `int` (C99 6.5.8 / 6.5.9) regardless
+/// of operand type.
+pub(crate) fn is_comparison_op(op: BinOp) -> bool {
+    is_int_comparison_op(op) || is_fp_comparison_op(op)
 }
 
 /// Test for floating-point scalar types.
@@ -233,12 +247,10 @@ pub(super) fn unsigned_narrow_mask(ty: i64) -> i64 {
     }
 }
 
-/// Ops whose two-constant fold and per-arch `BinopI` immediate
-/// lowering are both defined: arithmetic, bitwise, shift, and
-/// integer comparison. Excludes Div / Divu / Mod / Modu (which
-/// `fold_int_binop` evaluates but the immediate path does not
-/// cover) and every FP op.
-pub(crate) fn imm_safe_binop(op: BinOp) -> bool {
+/// Arithmetic, bitwise and shift operators the per-arch `BinopI`
+/// immediate lowering covers. Excludes Div / Divu / Mod / Modu, which
+/// `fold_int_binop` evaluates but the immediate path does not lower.
+pub(crate) fn is_imm_arith_op(op: BinOp) -> bool {
     matches!(
         op,
         BinOp::Add
@@ -250,17 +262,13 @@ pub(crate) fn imm_safe_binop(op: BinOp) -> bool {
             | BinOp::Shl
             | BinOp::Shr
             | BinOp::Shru
-            | BinOp::Eq
-            | BinOp::Ne
-            | BinOp::Lt
-            | BinOp::Gt
-            | BinOp::Le
-            | BinOp::Ge
-            | BinOp::Ult
-            | BinOp::Ugt
-            | BinOp::Ule
-            | BinOp::Uge
     )
+}
+
+/// Ops whose two-constant fold and per-arch `BinopI` immediate
+/// lowering are both defined.
+pub(crate) fn imm_safe_binop(op: BinOp) -> bool {
+    is_imm_arith_op(op) || is_int_comparison_op(op)
 }
 
 /// Narrow a folded integer constant to the storage width and

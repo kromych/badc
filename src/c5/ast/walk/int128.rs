@@ -3,7 +3,7 @@
 //! built from 64-bit operations.
 
 use super::bitfield::bitfield_mask_halves;
-use super::types::expr_ty;
+use super::types::{expr_ty, is_int_comparison_op};
 use super::*;
 
 impl<'a> Walker<'a> {
@@ -654,16 +654,7 @@ impl<'a> Walker<'a> {
         rhs: ExprId,
     ) -> Result<ValueId, WalkError> {
         match op {
-            BinOp::Eq
-            | BinOp::Ne
-            | BinOp::Lt
-            | BinOp::Gt
-            | BinOp::Le
-            | BinOp::Ge
-            | BinOp::Ult
-            | BinOp::Ugt
-            | BinOp::Ule
-            | BinOp::Uge => {
+            _ if is_int_comparison_op(op) => {
                 let a = self.int128_operand(b, lhs)?;
                 let c = self.int128_operand(b, rhs)?;
                 Ok(Self::int128_cmp(b, op, a, c))

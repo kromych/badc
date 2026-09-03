@@ -3,8 +3,8 @@
 
 use super::super::access::{load_kind_for, store_kind_for, store_kind_width, store_place};
 use super::super::types::{
-    expr_ty, fold_int_binop, imm_safe_binop, is_comparison_op, is_floating_scalar, type_size_bytes,
-    unsigned_narrow_mask,
+    expr_ty, fold_int_binop, imm_safe_binop, is_comparison_op, is_floating_scalar, is_fp_arith_op,
+    is_fp_comparison_op, is_imm_arith_op, type_size_bytes, unsigned_narrow_mask,
 };
 use super::super::*;
 use super::postfix::MemberRef;
@@ -84,6 +84,120 @@ impl<'a> Walker<'a> {
         }
     }
 
+    /// Re-derive `op` from the operand types when either is
+    /// floating-point. The parser tags the op from the operand types;
+    /// when that tracking is clouded by the surrounding expression it
+    /// can emit the integer comparison against an operand that lowers
+    /// to an FP register, which the integer paths cannot compare. A
+    /// comparison operand counts as integer: its result is `int` (C99
+    /// 6.5.8) even when its node carries the operand type.
+    fn fp_comparison_for_operands(&self, op: BinOp, lhs: ExprId, rhs: ExprId) -> BinOp {
+        let operand_is_fp = |id: ExprId| -> bool {
+            let e = self.ast.expr(id);
+            if let Expr::Binary { op, .. } = e
+                && is_comparison_op(*op)
+            {
+                return false;
+            }
+            expr_ty(e).is_some_and(is_floating_scalar)
+        };
+        if !operand_is_fp(lhs) && !operand_is_fp(rhs) {
+            return op;
+        }
+        match op {
+            BinOp::Eq => BinOp::Feq,
+            BinOp::Ne => BinOp::Fne,
+            BinOp::Lt => BinOp::Flt,
+            BinOp::Gt => BinOp::Fgt,
+            BinOp::Le => BinOp::Fle,
+            BinOp::Ge => BinOp::Fge,
+            other => other,
+        }
+    }
+
+    /// Mask both operands of an unsigned relational compare need before
+    /// the compare, or 0 when they need none. C99 6.3.1.8 converts a
+    /// signed operand to the unsigned common type, discarding the
+    /// sign-extended high bits it carries in the 64-bit register; left
+    /// in place they make the unsigned compare read a huge value. An
+    /// unsigned operand is already zero-extended, a non-negative
+    /// literal has no high bits set, and an 8-byte operand fills the
+    /// register, so those need nothing.
+    fn unsigned_cmp_mask(&self, op: BinOp, lhs: ExprId, rhs: ExprId) -> i64 {
+        if !matches!(op, BinOp::Ult | BinOp::Ugt | BinOp::Ule | BinOp::Uge) {
+            return 0;
+        }
+        let needs = |id: ExprId| -> (bool, usize) {
+            let e = self.ast.expr(id);
+            let ty = expr_ty(e);
+            let sz = ty.map_or(8, |t| type_size_bytes(t, self.target));
+            let signed = ty.is_some_and(|t| t & UNSIGNED_BIT == 0);
+            let nonneg_lit = matches!(e, Expr::IntLit { val, .. } if *val >= 0);
+            (signed && !nonneg_lit, sz)
+        };
+        let (l_needs, lsz) = needs(lhs);
+        let (r_needs, rsz) = needs(rhs);
+        if lsz <= 4 && rsz <= 4 && (l_needs || r_needs) {
+            0xffff_ffffi64
+        } else {
+            0
+        }
+    }
+
+    /// Lower a floating-point binop over already-walked operands. C99
+    /// 6.3.1.8 keeps the op single precision only when both operands
+    /// are f32; any f64 operand promotes the op and widens the other
+    /// operand (6.3.1.5). The f32 markers the builder carries are the
+    /// bit-accurate signal, since an operand's C type can diverge from
+    /// its representation after an intervening widening.
+    fn walk_fp_binop(&self, b: &mut SsaBuilder, op: BinOp, lv: ValueId, rv: ValueId) -> ValueId {
+        if b.is_f32(lv) && b.is_f32(rv) {
+            let res = b.binop(op, lv, rv);
+            // Arithmetic produces a `float`; a comparison produces an
+            // `int` and stays untagged.
+            if is_fp_arith_op(op) {
+                return b.mark_f32(res);
+            }
+            return res;
+        }
+        let lv = b.fp_widen_to_f64(lv);
+        let rv = b.fp_widen_to_f64(rv);
+        b.binop(op, lv, rv)
+    }
+
+    /// Route a binop through the per-arch `BinopI` form when a walked
+    /// operand turned out to be an immediate, so the immediate-form
+    /// peepholes fire and the literal never spills to a register. The
+    /// producing `Imm` inst becomes dead and DCE drops it. An lhs
+    /// immediate needs the operands swapped, which holds for a
+    /// commutative operator and for an ordered comparison once the
+    /// direction is flipped (`K < x` becomes `x > K`).
+    fn binop_imm_form(b: &mut SsaBuilder, op: BinOp, lv: ValueId, rv: ValueId) -> Option<ValueId> {
+        if let Some(rk) = b.peek_imm(rv) {
+            return Some(b.binop_imm(op, lv, rk));
+        }
+        let swapped = match op {
+            BinOp::Add
+            | BinOp::Mul
+            | BinOp::And
+            | BinOp::Or
+            | BinOp::Xor
+            | BinOp::Eq
+            | BinOp::Ne => op,
+            BinOp::Lt => BinOp::Gt,
+            BinOp::Gt => BinOp::Lt,
+            BinOp::Le => BinOp::Ge,
+            BinOp::Ge => BinOp::Le,
+            BinOp::Ult => BinOp::Ugt,
+            BinOp::Ugt => BinOp::Ult,
+            BinOp::Ule => BinOp::Uge,
+            BinOp::Uge => BinOp::Ule,
+            _ => return None,
+        };
+        let lk = b.peek_imm(lv)?;
+        Some(b.binop_imm(swapped, rv, lk))
+    }
+
     /// C99 6.5.5 - 6.5.14: a binary operator over two operands.
     pub(super) fn walk_binary(
         &mut self,
@@ -106,104 +220,29 @@ impl<'a> Walker<'a> {
         if self.is_int128_binary(lhs, rhs) {
             return self.walk_int128_binary(b, op, lhs, rhs);
         }
-        // A comparison whose operand is a floating-point value must
-        // use the FP comparison. The parser tags the op from the
-        // operand types; when that tracking is clouded by the
-        // surrounding expression it can emit the integer variant
-        // against an operand that lowers to an FP register, which
-        // the integer paths cannot compare. Re-derive the op from
-        // the operand types so the FP path below handles it.
-        let op_remapped = {
-            // An operand's value is floating-point when its node
-            // carries a floating type tag -- except a comparison,
-            // whose result is `int` even though its node may carry
-            // the operand type. Treat a comparison operand as int.
-            let operand_is_fp = |id: ExprId| -> bool {
-                let e = self.ast.expr(id);
-                if let Expr::Binary { op, .. } = e
-                    && is_comparison_op(*op)
-                {
-                    return false;
-                }
-                expr_ty(e).is_some_and(is_floating_scalar)
-            };
-            let lhs_fp = operand_is_fp(lhs);
-            let rhs_fp = operand_is_fp(rhs);
-            if lhs_fp || rhs_fp {
-                match op {
-                    BinOp::Eq => BinOp::Feq,
-                    BinOp::Ne => BinOp::Fne,
-                    BinOp::Lt => BinOp::Flt,
-                    BinOp::Gt => BinOp::Fgt,
-                    BinOp::Le => BinOp::Fle,
-                    BinOp::Ge => BinOp::Fge,
-                    other => other,
-                }
-            } else {
-                op
-            }
-        };
-        let op = op_remapped;
-        let mask = unsigned_narrow_mask(ty);
-        let needs_divmod_mask = mask != 0 && matches!(op, BinOp::Divu | BinOp::Modu);
-        // An unsigned relational compare at a common type narrower
-        // than the register where one operand is signed: the signed
-        // operand carries its sign-extended high bits in the 64-bit
-        // register, but C99 6.3.1.8 converts it to the unsigned
-        // common type (zero-extended), so those bits must be cleared
-        // or the unsigned compare reads a huge value. The common
-        // type is unsigned (the front end picked the U-op) and
-        // 4-byte unless an operand is 8 bytes, in which case the
-        // value already fills the register. Two unsigned operands
-        // are already zero-extended and need no mask. Mask both
-        // operands to the common width.
-        let cmp_mask = if matches!(op, BinOp::Ult | BinOp::Ugt | BinOp::Ule | BinOp::Uge) {
-            // An operand carries sign-extended high bits only when it
-            // is signed and not a non-negative literal: an unsigned
-            // operand is zero-extended, and a non-negative constant
-            // has no high bits set. The latter keeps the common
-            // `unsigned < positive-literal` loop test on the
-            // immediate path.
-            let needs = |id: ExprId, this: &Self| -> (bool, usize) {
-                let e = this.ast.expr(id);
-                let ty = expr_ty(e);
-                let sz = ty.map_or(8, |t| type_size_bytes(t, this.target));
-                let signed = ty.is_some_and(|t| t & UNSIGNED_BIT == 0);
-                let nonneg_lit = matches!(e, Expr::IntLit { val, .. } if *val >= 0);
-                (signed && !nonneg_lit, sz)
-            };
-            let (l_needs, lsz) = needs(lhs, self);
-            let (r_needs, rsz) = needs(rhs, self);
-            if lsz <= 4 && rsz <= 4 && (l_needs || r_needs) {
-                0xffff_ffffi64
-            } else {
-                0
-            }
+        let op = self.fp_comparison_for_operands(op, lhs, rhs);
+        // C99 6.3.1.3 + 6.3.1.8: unsigned divide / modulo at a common
+        // type narrower than the register masks each operand to that
+        // width first. A signed operand promoted to the unsigned
+        // common type carries its sign-extended high half, and without
+        // the mask `udiv` / `umod` operate on the wider pattern.
+        let divmod_mask = if matches!(op, BinOp::Divu | BinOp::Modu) {
+            unsigned_narrow_mask(ty)
         } else {
             0
         };
-        // Constant-rhs short-circuit: when the AST rhs is
-        // an integer literal and the per-arch BinopI
-        // lowering covers `op`, route through
-        // `binop_imm`. The per-arch emit picks the
-        // existing immediate-form peepholes
-        // (`add r, imm`, `shl r, imm8`, sxtw/sxth/sxtb,
-        // and so on) instead of materialising the literal
-        // into a register first. Ops whose BinopI path
-        // bails (Mod / Modu / Div / Divu / every FP op)
-        // stay on the register-rhs path so the SSA emit
-        // doesn't fall back to the pool path.
-        let imm_safe_op = imm_safe_binop(op);
+        let cmp_mask = self.unsigned_cmp_mask(op, lhs, rhs);
         // Operands that need masking take the register path so the
         // mask below applies; the immediate fast paths skip it.
-        let imm_safe_op = imm_safe_op && cmp_mask == 0;
-        // C99 6.6: a constant expression evaluates at
-        // translation time. The parser doesn't fold the
-        // synthesised pointer-arithmetic scaling
-        // (`arr[K]` lowers to `arr + (K * sizeof(*arr))`
-        // with K and the size both literals), so do the
-        // fold here. Skip ops the per-arch BinopI lowering
-        // doesn't cover.
+        let imm_safe_op = imm_safe_binop(op) && cmp_mask == 0;
+        debug_assert!(
+            !(imm_safe_op && divmod_mask != 0),
+            "imm_safe_binop should exclude Divu/Modu"
+        );
+        // C99 6.6: a constant expression evaluates at translation
+        // time. The parser does not fold the synthesised
+        // pointer-arithmetic scaling (`arr[K]` lowers to `arr + (K *
+        // sizeof(*arr))` with K and the size both literals).
         if imm_safe_op
             && let Expr::IntLit { val: lv_imm, .. } = *self.ast.expr(lhs)
             && let Expr::IntLit { val: rv_imm, .. } = *self.ast.expr(rhs)
@@ -212,140 +251,36 @@ impl<'a> Walker<'a> {
         }
         let mut lv = self.walk_expr_rvalue(b, lhs)?;
         if imm_safe_op && let Expr::IntLit { val, .. } = self.ast.expr(rhs) {
-            // C99 6.3.1.3 + 6.3.1.8: unsigned divide /
-            // modulo at a narrower-than-register common
-            // type needs each operand masked first. The
-            // `imm_safe_op` set excludes Divu / Modu so
-            // this branch never carries the divmod mask
-            // path; the literal flows through unchanged.
-            debug_assert!(!needs_divmod_mask, "imm_safe_op should exclude Divu/Modu");
             return Ok(b.binop_imm(op, lv, *val));
         }
         let mut rv = self.walk_expr_rvalue(b, rhs)?;
-        // Floating-point binops (C99 6.3.1.8). `float op float`
-        // is single precision; any `double` operand promotes the
-        // op (and the other operand) to double. The parser
-        // already chose Fadd/.../Feq and set `ty` to the result
-        // type; the walker decides the operand / result width.
-        if matches!(
-            op,
-            BinOp::Fadd
-                | BinOp::Fsub
-                | BinOp::Fmul
-                | BinOp::Fdiv
-                | BinOp::Feq
-                | BinOp::Fne
-                | BinOp::Flt
-                | BinOp::Fgt
-                | BinOp::Fle
-                | BinOp::Fge
-        ) {
-            // C99 6.3.1.8: the op is single precision only when
-            // both operands are already f32; any f64 operand
-            // promotes the op (and the f32 operand) to double.
-            // The walker tags each `float`-typed value f32 as it
-            // is produced, so the operands' f32 markers are the
-            // bit-accurate signal -- the operand AST's C type can
-            // diverge from the value's representation after an
-            // intervening widening.
-            let op_is_f32 = b.is_f32(lv) && b.is_f32(rv);
-            if op_is_f32 {
-                let res = b.binop(op, lv, rv);
-                // Arithmetic produces a `float`; tag it. A
-                // comparison produces an `int` and is left
-                // untagged.
-                if matches!(op, BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv) {
-                    return Ok(b.mark_f32(res));
-                }
-                return Ok(res);
-            }
-            // Double-precision op: any f32 operand widens to
-            // double first (6.3.1.5).
-            lv = b.fp_widen_to_f64(lv);
-            rv = b.fp_widen_to_f64(rv);
-            return Ok(b.binop(op, lv, rv));
+        if is_fp_arith_op(op) || is_fp_comparison_op(op) {
+            return Ok(self.walk_fp_binop(b, op, lv, rv));
         }
-        // The rhs AST shape isn't an `IntLit`, but walking
-        // it may have constant-folded down to one (e.g.
-        // `K * sizeof(*arr)` with both K and the size as
-        // literals). Inspect the SSA value the walker
-        // returned and route through `binop_imm` when it
-        // names an `Imm`. The producing inst becomes dead
-        // (use_counts drops to 0) and DCE skips it.
-        if imm_safe_op && let Some(rk) = b.peek_imm(rv) {
-            debug_assert!(!needs_divmod_mask, "imm_safe_op should exclude Divu/Modu");
-            return Ok(b.binop_imm(op, lv, rk));
+        if imm_safe_op && let Some(v) = Self::binop_imm_form(b, op, lv, rv) {
+            return Ok(v);
         }
-        // For commutative ops where the constant landed on
-        // lhs (C99 source order `4 * i`), swap operands and
-        // emit BinopI so the literal never spills to a
-        // register. Bit ops Eq / Ne are commutative; ordered
-        // comparisons Lt / Gt / Le / Ge / Ult / Ugt / Ule /
-        // Uge are not, but swapping operands flips the
-        // comparison direction, so `K < x` rewrites to
-        // `x > K` (and so on), still routing through
-        // BinopI.
-        let commutative = matches!(
-            op,
-            BinOp::Add | BinOp::Mul | BinOp::And | BinOp::Or | BinOp::Xor | BinOp::Eq | BinOp::Ne
-        );
-        let reversed_cmp = match op {
-            BinOp::Lt => Some(BinOp::Gt),
-            BinOp::Gt => Some(BinOp::Lt),
-            BinOp::Le => Some(BinOp::Ge),
-            BinOp::Ge => Some(BinOp::Le),
-            BinOp::Ult => Some(BinOp::Ugt),
-            BinOp::Ugt => Some(BinOp::Ult),
-            BinOp::Ule => Some(BinOp::Uge),
-            BinOp::Uge => Some(BinOp::Ule),
-            _ => None,
-        };
-        if imm_safe_op
-            && commutative
-            && let Some(lk) = b.peek_imm(lv)
-        {
-            debug_assert!(!needs_divmod_mask, "imm_safe_op should exclude Divu/Modu");
-            return Ok(b.binop_imm(op, rv, lk));
-        }
-        if imm_safe_op
-            && let Some(swapped_op) = reversed_cmp
-            && let Some(lk) = b.peek_imm(lv)
-        {
-            debug_assert!(!needs_divmod_mask, "imm_safe_op should exclude Divu/Modu");
-            return Ok(b.binop_imm(swapped_op, rv, lk));
-        }
-        // C99 6.3.1.3 + 6.3.1.8: unsigned divide / modulo
-        // at a narrower-than-register common type needs
-        // each operand masked to that width *before* the
-        // op. A signed operand promoted to the unsigned
-        // common type carries its sign-extended high
-        // half in the 64-bit register; without the mask,
-        // `udiv` / `umod` operate on the wider pattern
-        // and produce the wrong order of magnitude.
-        if needs_divmod_mask || cmp_mask != 0 {
-            let m = if needs_divmod_mask { mask } else { cmp_mask };
+        if divmod_mask != 0 || cmp_mask != 0 {
+            let m = if divmod_mask != 0 {
+                divmod_mask
+            } else {
+                cmp_mask
+            };
             lv = b.binop_imm(BinOp::And, lv, m);
             rv = b.binop_imm(BinOp::And, rv, m);
         }
-        // Strength-reduce divide / modulo by a constant divisor
-        // to shifts, masks and reciprocal multiplies. This is
-        // the only constant-divisor fast path: the per-arch
-        // `BinopI` emit does not lower Div / Mod, so they are
-        // otherwise excluded from `imm_safe_op` and divide
-        // through the register path.
+        // The only constant-divisor fast path: the per-arch `BinopI`
+        // emit does not lower Div / Mod, so `imm_safe_binop` excludes
+        // them and they otherwise divide through the register path.
         if let Some(w) = self.divmod_operand_width(op, ty, lhs, rhs)
             && let Some(reduced) = b.divmod_const(op, lv, rv, w)
         {
             return Ok(reduced);
         }
-        // The parser's `maybe_mask_to_unsigned_width`
-        // already pushes the explicit narrow mask /
-        // signed `Shl K; Shr K` pair as additional
-        // `Expr::Binary` nodes through the dual-emit
-        // binop tracker. Re-applying the narrowing here
-        // would double-shift (or double-mask) the
-        // result; walker just emits the raw `Binop` and
-        // lets those wrapping Binary nodes do the rest.
+        // The parser's `maybe_mask_to_unsigned_width` already pushes
+        // the explicit narrow mask (or the signed `Shl K; Shr K` pair)
+        // as additional `Expr::Binary` nodes, so narrowing the result
+        // here would double-shift it.
         Ok(b.binop(op, lv, rv))
     }
 
@@ -518,21 +453,8 @@ impl<'a> Walker<'a> {
         // FP / Div / Divu / Mod / Modu stay on the
         // register-rhs path because the per-arch BinopI
         // lowering bails on them.
-        let imm_safe = matches!(
-            op,
-            BinOp::Add
-                | BinOp::Sub
-                | BinOp::Mul
-                | BinOp::And
-                | BinOp::Or
-                | BinOp::Xor
-                | BinOp::Shl
-                | BinOp::Shr
-                | BinOp::Shru
-        );
-        let new_val = if matches!(op, BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv)
-            && !is_floating_scalar(ty)
-        {
+        let imm_safe = is_imm_arith_op(op);
+        let new_val = if is_fp_arith_op(op) && !is_floating_scalar(ty) {
             // C99 6.5.16.2: an integer lvalue with a floating
             // operand. The operation runs in the floating common
             // type; convert the loaded integer up, apply the op,
@@ -545,7 +467,7 @@ impl<'a> Walker<'a> {
             }
             let res = b.binop(op, lv, rv);
             b.fp_cast(FpCastKind::FpToInt, res)
-        } else if matches!(op, BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv) {
+        } else if is_fp_arith_op(op) {
             // C99 6.5.16.2: `E1 op= E2` computes `E1 op E2` in
             // the operands' common type, then converts to E1's
             // type. `old` (the lvalue) is `float` when the store

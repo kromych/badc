@@ -18,6 +18,21 @@ pub(super) struct MemberRef {
     pub ty: i64,
 }
 
+/// One call site's arguments and the ABI facts that place them.
+struct CallArgs<'e> {
+    /// Argument expressions in source order.
+    exprs: &'e [ExprId],
+    /// The value each argument lowered to.
+    vals: alloc::vec::Vec<ValueId>,
+    /// Bit per argument, set when the argument is a floating-point scalar,
+    /// so `plan_call_args` places it in the right register bank.
+    fp_mask: u32,
+    /// The convention the callee declares.
+    conv: crate::c5::codegen::CallConv,
+    /// The call expression's type.
+    ty: i64,
+}
+
 impl<'a> Walker<'a> {
     /// C99 6.5.2.2 function call.
     pub(super) fn walk_call(
@@ -36,87 +51,13 @@ impl<'a> Walker<'a> {
         // returns (registers / x8) carry no hidden argument and
         // fall through to the normal call path below, which
         // tags the call's `ret_agg` / `ret_slot`.
-        if is_struct_ty(ty)
-            && struct_ptr_depth(ty) == 0
-            && matches!(
-                crate::c5::compiler::struct_return_abi_conv(
-                    self.structs,
-                    self.target,
-                    callee_conv,
-                    ty
-                ),
-                crate::c5::compiler::StructReturnAbi::OutPtr
-            )
+        if self.returns_through_out_ptr(callee_conv, ty)
             && let Expr::Ident {
                 sym, class, val, ..
             } = self.ast.expr(callee)
             && *class == Token::Fun as i64
         {
-            // The callee writes the whole struct through the
-            // out-pointer, so the result temp must hold
-            // `sizeof(struct)` bytes, not a single slot.
-            let result_size = self.struct_size(ty);
-            let result_slot = b.alloc_synthetic_struct(result_size);
-            // Spill the out-pointer through an int-typed
-            // temp so the codegen routes it via the host
-            // int arg register, matching the way FP and
-            // pointer args are routed.
-            let addr = b.local_addr(result_slot);
-            let temp = b.alloc_synthetic_local();
-            b.store_local(temp, addr, StoreKind::I64);
-            let out_arg = b.load_local(temp, LoadKind::I64);
-            let mut all_args: alloc::vec::Vec<ValueId> =
-                alloc::vec::Vec::with_capacity(args.len() + 1);
-            all_args.push(out_arg);
-            for a in args {
-                let mut v = self.walk_expr_rvalue(b, *a)?;
-                // The all-integer cdecl carries each argument in an
-                // 8-byte integer slot, where the callee reads a
-                // floating-point parameter as a double. A `double`
-                // already occupies eight bytes; a `float` must be
-                // widened to that pattern and reloaded through an
-                // integer slot, or the marshal moves only its 4-byte
-                // form into the low half and the f64 read sees noise in
-                // the high half.
-                if arg_value_ty(self.ast.expr(*a))
-                    .map(is_float_ty)
-                    .unwrap_or(false)
-                {
-                    let widened = b.fp_widen_to_f64(v);
-                    let slot = b.alloc_synthetic_local();
-                    b.store_local(slot, widened, StoreKind::I64);
-                    v = b.load_local(slot, LoadKind::I64);
-                }
-                all_args.push(v);
-            }
-            let target_pc = self.live_fun_val(*sym, *val);
-            // Struct-returning callee: the result is an
-            // address (the c5 address-as-value rule), never
-            // an FP scalar, so `fp_return` is false. The callee
-            // keeps the c5 cdecl shape (excluded from
-            // `param_fp_mask` because the hidden out-pointer
-            // shifts every parameter cell), so its arguments
-            // ride the integer bank: `fp_arg_mask` is 0.
-            // The hidden out-pointer is a fixed argument. A
-            // variadic struct-returning callee (e.g. a printf-style
-            // error helper returning a 16-byte value) still passes
-            // its variadic tail on the host stack, so fixed_args
-            // counts the out-pointer plus the callee's named
-            // parameters; the emit detects the variadic callee from
-            // its target and places `args[fixed_args..]` per the
-            // host variadic ABI. A non-variadic callee keeps every
-            // argument fixed.
-            let fixed_args = if self.fun_is_variadic(*sym) {
-                1 + self.fun_fixed_args(*sym)
-            } else {
-                all_args.len()
-            };
-            if target_pc == 0 {
-                let _ = b.call_extern(*sym, all_args, fixed_args, false, 0);
-            } else {
-                let _ = b.call(target_pc as usize, all_args, fixed_args, false, 0);
-            }
-            return Ok(b.local_addr(result_slot));
+            return self.call_direct_out_ptr(b, *sym, *val, args, ty);
         }
         // Lower each arg as an rvalue, then dispatch
         // through the callee's class. Direct
@@ -173,747 +114,571 @@ impl<'a> Walker<'a> {
                 fp_arg_mask |= 1u32 << i;
             }
         }
+        let call_args = CallArgs {
+            exprs: args,
+            vals: arg_vals,
+            fp_mask: fp_arg_mask,
+            conv: callee_conv,
+            ty,
+        };
         if let Expr::Ident {
             sym, class, val, ..
         } = self.ast.expr(callee)
         {
             if *class == Token::Fun as i64 {
-                // C99 6.5.2.2p7 + the host ABI: a floating-point
-                // scalar argument rides an FP argument register
-                // (xmm0..xmm7 / d0..d7). The value left in
-                // `arg_vals[i]` is already FP-classed; the
-                // per-arch `marshal_args` places it in the FP
-                // bank per `plan_call_args` using `fp_arg_mask`.
-                // A `float` argument stays at single precision
-                // (no widen-to-double); the callee narrows back
-                // from the s-register view.
-                //
-                // A variadic c5 callee is the exception: it keeps
-                // the c5 cdecl stack shape (its prologue skips the
-                // host-arg-reg spill and reads args off the
-                // 16-byte-stride stack as raw 8-byte patterns).
-                // C99 6.5.2.2p6 default argument promotions widen
-                // a `float` argument to `double`; route every FP
-                // argument through the integer register class as a
-                // widened 8-byte double, matching what the callee
-                // reads back, and pass `fp_arg_mask = 0`.
-                let callee_variadic = self.fun_is_variadic(*sym);
-                let abi = self.target.abi_for(callee_conv);
-                // Named (fixed) parameter count of the callee.
-                // For a variadic callee the prototype records the
-                // pre-ellipsis parameters in `Symbol::params`;
-                // `args[fixed_args..]` are the variadic arguments.
-                // For a non-variadic callee every argument is
-                // fixed.
-                let fixed_args = if callee_variadic {
-                    self.fun_fixed_args(*sym).min(args.len())
-                } else {
-                    args.len()
-                };
-                // C99 6.5.2.2 + the host ABI: a struct passed as
-                // a variadic argument rides by value -- its
-                // eightbyte occupies the save area / stack slot
-                // `va_arg` reads -- not via the c5 address-as-
-                // value pointer that `walk_expr_rvalue` left in
-                // `arg_vals`. Replace each small struct variadic
-                // argument's address with its loaded eightbyte.
-                // A struct larger than one eightbyte is left on
-                // the address path. TODO: pass its second
-                // eightbyte.
-                // Host-ABI aggregate arguments (AAPCS64 6.8.2 /
-                // System V 3.2.3): tag each by-value struct argument
-                // with its layout so the caller marshals it into the
-                // argument registers / stack slots the callee reads.
-                // A fixed parameter classifies by its declared type;
-                // a variadic argument by its own type. A variadic
-                // struct of at most one eightbyte rides as a single
-                // loaded integer in the variadic slot (C99 6.5.2.2);
-                // a larger aggregate routes through the host-ABI
-                // placement so `plan_call_args_aggs` lays its
-                // eightbytes down all-or-nothing and the callee's
-                // `va_arg` reads them contiguously. Inert on ABIs /
-                // sizes the classifier declines.
-                let mut arg_aggs: alloc::vec::Vec<Option<u32>> = alloc::vec::Vec::new();
-                {
-                    let nparams = self.symbols[*sym as usize].params.len();
-                    for i in 0..arg_vals.len() {
-                        let agg_ty = if i < nparams {
-                            Some(self.symbols[*sym as usize].params[i])
-                        } else {
-                            match arg_value_ty(self.ast.expr(args[i])) {
-                                Some(aty)
-                                    if is_struct_value_ty(aty) && self.struct_size(aty) <= 8 =>
-                                {
-                                    arg_vals[i] = b.load(arg_vals[i], LoadKind::I64);
-                                    None
-                                }
-                                other => other,
-                            }
-                        };
-                        let Some(ty_tag) = agg_ty else {
-                            continue;
-                        };
-                        // A variadic callee's named aggregate parameter
-                        // rides the c5 by-address convention: the callee
-                        // reads it from the passed address (its prologue
-                        // does not scatter an incoming aggregate
-                        // register pair into the parameter local). Host-
-                        // ABI by-value placement for a named aggregate
-                        // of a variadic callee is not yet lowered on the
-                        // register-save variadic ABIs, so keep both ends
-                        // on the by-address shape.
-                        if callee_variadic && i < self.symbols[*sym as usize].params.len() {
-                            continue;
-                        }
-                        if let Some(desc) = crate::c5::compiler::host_abi_agg_desc_conv(
-                            self.structs,
-                            self.target,
-                            callee_conv,
-                            ty_tag,
-                        ) {
-                            if arg_aggs.is_empty() {
-                                arg_aggs = alloc::vec![None; arg_vals.len()];
-                            }
-                            arg_aggs[i] = Some(b.intern_agg_desc(desc));
-                        }
-                    }
-                }
-                // macOS arm64's variadic ABI (Apple "Writing
-                // ARM64 Code for Apple Platforms") passes the
-                // named arguments per AAPCS64 6.4.1 (int bank +
-                // FP bank) and every variadic argument on the
-                // stack at 8-byte stride. The codegen marshals
-                // this exactly like a libc variadic call, so the
-                // named FP arguments keep their FP-bank placement;
-                // only the variadic `float` arguments are widened
-                // to `double` per C99 6.5.2.2p6 (kept FP-classed
-                // so the 8-byte stack store reads back as a
-                // double).
-                if callee_variadic && abi.variadic_on_stack {
-                    for (i, a) in args.iter().enumerate() {
-                        if i < fixed_args {
-                            continue;
-                        }
-                        let arg_is_fp = arg_value_ty(self.ast.expr(*a))
-                            .map(is_floating_scalar)
-                            .unwrap_or(false);
-                        if arg_is_fp {
-                            arg_vals[i] = b.fp_widen_to_f64(arg_vals[i]);
-                        }
-                    }
-                    let fp_return = is_floating_scalar(ty);
-                    let target_pc = self.live_fun_val(*sym, *val);
-                    let call = if target_pc == 0 {
-                        b.call_extern(*sym, arg_vals, fixed_args, fp_return, fp_arg_mask)
-                    } else {
-                        b.call(
-                            target_pc as usize,
-                            arg_vals,
-                            fixed_args,
-                            fp_return,
-                            fp_arg_mask,
-                        )
-                    };
-                    if !arg_aggs.is_empty() {
-                        b.set_call_arg_aggs(call, arg_aggs);
-                    }
-                    if let crate::c5::compiler::StructReturnAbi::Regs(desc)
-                    | crate::c5::compiler::StructReturnAbi::Indirect(desc) =
-                        crate::c5::compiler::struct_return_abi_conv(
-                            self.structs,
-                            self.target,
-                            callee_conv,
-                            ty,
-                        )
-                    {
-                        let ridx = b.intern_agg_desc(desc.clone());
-                        let slot = b.alloc_synthetic_struct(desc.size as i64);
-                        b.set_call_ret_agg(call, ridx, slot);
-                        return Ok(b.local_addr(slot));
-                    }
-                    if is_float_ty(ty) {
-                        return Ok(b.mark_f32(call));
-                    }
-                    // An external (`target_pc == 0`) callee may per
-                    // AAPCS leave a narrow return's high bits
-                    // undefined; extend to keep the walker's
-                    // sign/zero-extended-to-64-bits invariant. An
-                    // intra-TU callee already returns full width.
-                    return Ok(if !self.symbols[*sym as usize].defined_here {
-                        extend_scalar_call_result(b, call, ty, self.target)
-                    } else {
-                        call
-                    });
-                }
-                // Register-save host variadic ABI (System V AMD64
-                // on Linux x86_64, AAPCS64 on Linux aarch64): a
-                // variadic callee receives its floating-point
-                // arguments in the FP argument-register bank
-                // (xmm0..xmm7 / d0..d7), so the call passes the
-                // real `fp_arg_mask` rather than force-routing FP
-                // arguments through the integer bank. Variadic
-                // `float` arguments are still widened to `double`
-                // (C99 6.5.2.2p6 default argument promotions) but
-                // kept FP-classed so they ride an FP register.
-                if callee_variadic && (abi.sysv_host_variadic() || abi.aarch64_host_variadic()) {
-                    for (i, a) in args.iter().enumerate() {
-                        if i < fixed_args {
-                            continue;
-                        }
-                        let arg_is_fp = arg_value_ty(self.ast.expr(*a))
-                            .map(is_floating_scalar)
-                            .unwrap_or(false);
-                        if arg_is_fp {
-                            arg_vals[i] = b.fp_widen_to_f64(arg_vals[i]);
-                        }
-                    }
-                    let fp_return = is_floating_scalar(ty);
-                    let target_pc = self.live_fun_val(*sym, *val);
-                    let call = if target_pc == 0 {
-                        b.call_extern(*sym, arg_vals, fixed_args, fp_return, fp_arg_mask)
-                    } else {
-                        b.call(
-                            target_pc as usize,
-                            arg_vals,
-                            fixed_args,
-                            fp_return,
-                            fp_arg_mask,
-                        )
-                    };
-                    if !arg_aggs.is_empty() {
-                        b.set_call_arg_aggs(call, arg_aggs);
-                    }
-                    if let crate::c5::compiler::StructReturnAbi::Regs(desc)
-                    | crate::c5::compiler::StructReturnAbi::Indirect(desc) =
-                        crate::c5::compiler::struct_return_abi_conv(
-                            self.structs,
-                            self.target,
-                            callee_conv,
-                            ty,
-                        )
-                    {
-                        let ridx = b.intern_agg_desc(desc.clone());
-                        let slot = b.alloc_synthetic_struct(desc.size as i64);
-                        b.set_call_ret_agg(call, ridx, slot);
-                        return Ok(b.local_addr(slot));
-                    }
-                    if is_float_ty(ty) {
-                        return Ok(b.mark_f32(call));
-                    }
-                    // An external (`target_pc == 0`) callee may per
-                    // AAPCS leave a narrow return's high bits
-                    // undefined; extend to keep the walker's
-                    // sign/zero-extended-to-64-bits invariant. An
-                    // intra-TU callee already returns full width.
-                    return Ok(if !self.symbols[*sym as usize].defined_here {
-                        extend_scalar_call_result(b, call, ty, self.target)
-                    } else {
-                        call
-                    });
-                }
-                // A variadic callee reaching here is a
-                // `variadic_int_only` host (Win64 / Windows arm64,
-                // the Microsoft calling conventions): the macOS
-                // arm64 (`variadic_on_stack`) and System V /
-                // AAPCS64 register-save hosts returned above. Its
-                // named and variadic arguments ride the integer
-                // register bank -- a floating-point argument as its
-                // raw bit pattern -- so widen every FP argument to
-                // an 8-byte double in an integer slot, matching
-                // what the callee reads back, and pass
-                // `fp_arg_mask = 0`. The same widening covers a
-                // non-variadic callee whose register/stack
-                // placement would interleave.
-                let eff_fp_arg_mask = effective_fp_arg_mask(args.len(), fp_arg_mask, abi);
-                let force_int = callee_variadic || (fp_arg_mask != 0 && eff_fp_arg_mask == 0);
-                let call_fp_arg_mask = if force_int {
-                    for (i, a) in args.iter().enumerate() {
-                        let arg_is_fp = arg_value_ty(self.ast.expr(*a))
-                            .map(is_floating_scalar)
-                            .unwrap_or(false);
-                        if arg_is_fp {
-                            let widened = b.fp_widen_to_f64(arg_vals[i]);
-                            let slot = b.alloc_synthetic_local();
-                            b.store_local(slot, widened, StoreKind::I64);
-                            arg_vals[i] = b.load_local(slot, LoadKind::I64);
-                        }
-                    }
-                    0
-                } else {
-                    eff_fp_arg_mask
-                };
-                // C99 6.2.5p10: a call to a function whose
-                // return type is a floating-point scalar
-                // yields its value in the FP return register.
-                // Tag the call so the codegen reads the result
-                // from there and FP-classes the value.
-                let fp_return = is_floating_scalar(ty);
-                let target_pc = self.live_fun_val(*sym, *val);
-                // Host-ABI aggregate return (AAPCS64 6.9):
-                // reserve the result temp before the call. Its
-                // frame slot rides on the call instruction, so it
-                // survives value renumbering and needs no SSA
-                // operand.
-                let ret_temp = if let crate::c5::compiler::StructReturnAbi::Regs(desc)
-                | crate::c5::compiler::StructReturnAbi::Indirect(desc) =
-                    crate::c5::compiler::struct_return_abi_conv(
-                        self.structs,
-                        self.target,
-                        callee_conv,
-                        ty,
-                    ) {
-                    let ridx = b.intern_agg_desc(desc.clone());
-                    let slot = b.alloc_synthetic_struct(desc.size as i64);
-                    Some((ridx, slot))
-                } else {
-                    None
-                };
-                let call = if target_pc == 0 {
-                    b.call_extern(*sym, arg_vals, fixed_args, fp_return, call_fp_arg_mask)
-                } else {
-                    b.call(
-                        target_pc as usize,
-                        arg_vals,
-                        fixed_args,
-                        fp_return,
-                        call_fp_arg_mask,
-                    )
-                };
-                if !arg_aggs.is_empty() {
-                    b.set_call_arg_aggs(call, arg_aggs);
-                }
-                // Tag the call's `ret_agg` / `ret_slot` and yield
-                // the result temp's address. The codegen reads
-                // the eightbytes from x0/x1 (<= 16 bytes) or has
-                // the callee write through x8 (> 16 bytes); the
-                // VM copies the returned struct into the temp.
-                if let Some((ridx, slot)) = ret_temp {
-                    b.set_call_ret_agg(call, ridx, slot);
-                    return Ok(b.local_addr(slot));
-                }
-                // A `float`-returning callee yields a single-
-                // precision value (C99 6.2.5p10 / 6.3.1.8); tag it.
-                if is_float_ty(ty) {
-                    return Ok(b.mark_f32(call));
-                }
-                // An external (`target_pc == 0`) callee may per
-                // AAPCS leave a narrow return's high bits undefined;
-                // extend to keep the walker's sign/zero-extended-to-
-                // 64-bits invariant. An intra-TU callee already
-                // returns full width.
-                return Ok(if !self.symbols[*sym as usize].defined_here {
-                    extend_scalar_call_result(b, call, ty, self.target)
-                } else {
-                    call
-                });
+                return self.call_direct(b, *sym, *val, call_args);
             }
             if *class == Token::Sys as i64 {
-                // A returns-twice callee (setjmp family /
-                // vfork) disables spill-slot sharing in this
-                // function; see FunctionSsa::has_returns_twice_call.
-                if crate::c5::ir::returns_twice_fn_name(&self.symbols[*sym as usize].name) {
-                    b.mark_returns_twice();
-                }
-                // The Ident's `val` is the binding's
-                // flat index across all `#pragma
-                // binding(...)` directives -- exactly
-                // what `Inst::CallExt::binding_idx`
-                // wants. `fp_arg_mask` is the per-arg
-                // FP-ness bit set we built above. A
-                // floating-point return is FP-classed (C99
-                // 6.2.5p10) so the result rides d0 / xmm0
-                // without a GPR bridge; a `float` result
-                // additionally carries the f32 tag.
-                // A by-value struct argument to a libc binding is
-                // packed into the platform-ABI argument registers
-                // (SysV / AAPCS64: <= 16 bytes), not passed by the
-                // c5-internal address convention. Tag each struct arg
-                // so the emitter classifies and marshals it.
-                let mut ext_arg_aggs: alloc::vec::Vec<Option<u32>> = alloc::vec::Vec::new();
-                let nparams = self.symbols[*sym as usize].params.len();
-                for i in 0..arg_vals.len() {
-                    let arg_ty = if i < nparams {
-                        self.symbols[*sym as usize].params[i]
-                    } else {
-                        match arg_value_ty(self.ast.expr(args[i])) {
-                            Some(t) => t,
-                            None => continue,
-                        }
-                    };
-                    if is_struct_value_ty(arg_ty)
-                        && let Some(desc) = crate::c5::compiler::host_abi_agg_desc(
-                            self.structs,
-                            self.target,
-                            arg_ty,
-                        )
-                    {
-                        if ext_arg_aggs.is_empty() {
-                            ext_arg_aggs = alloc::vec![None; arg_vals.len()];
-                        }
-                        ext_arg_aggs[i] = Some(b.intern_agg_desc(desc));
-                    }
-                }
-                // System V AMD64 MEMORY class / Win64 oversize
-                // (StructReturnAbi::OutPtr): the caller allocates the
-                // result buffer and passes its address as the hidden
-                // first integer argument; the callee writes through it
-                // and returns it in rax. Prepend the out-pointer to the
-                // argument vector and shift the FP-arg mask and the
-                // aggregate descriptors one slot to follow it. AArch64
-                // returns this size through x8 (StructReturnAbi::Indirect,
-                // handled by the ret_agg path below).
-                if is_struct_ty(ty)
-                    && struct_ptr_depth(ty) == 0
-                    && matches!(
-                        crate::c5::compiler::struct_return_abi(self.structs, self.target, ty),
-                        crate::c5::compiler::StructReturnAbi::OutPtr
-                    )
-                {
-                    let result_size = self.struct_size(ty);
-                    let result_slot = b.alloc_synthetic_struct(result_size);
-                    // Spill the out-pointer through an int temp so the
-                    // codegen routes it via the host integer arg register.
-                    let addr = b.local_addr(result_slot);
-                    let temp = b.alloc_synthetic_local();
-                    b.store_local(temp, addr, StoreKind::I64);
-                    let out_arg = b.load_local(temp, LoadKind::I64);
-                    let mut shifted: alloc::vec::Vec<ValueId> =
-                        alloc::vec::Vec::with_capacity(arg_vals.len() + 1);
-                    shifted.push(out_arg);
-                    shifted.extend_from_slice(&arg_vals);
-                    let call = b.call_ext(*val, shifted, fp_arg_mask << 1, false);
-                    if !ext_arg_aggs.is_empty() {
-                        let mut s = alloc::vec![None; arg_vals.len() + 1];
-                        for (i, a) in ext_arg_aggs.iter().enumerate() {
-                            s[i + 1] = *a;
-                        }
-                        b.set_call_arg_aggs(call, s);
-                    }
-                    return Ok(b.local_addr(result_slot));
-                }
-                // A by-value struct return follows the platform ABI:
-                // reserve the result temp and tag the call's
-                // `ret_agg` so the emitter gathers the return
-                // registers (HFA in v0..vN, x0/x1 for a small
-                // aggregate, x8 indirect for > 16 bytes). The Mcpy at
-                // the use site copies from this temp's address.
-                let ret_temp = if let crate::c5::compiler::StructReturnAbi::Regs(desc)
-                | crate::c5::compiler::StructReturnAbi::Indirect(desc) =
-                    crate::c5::compiler::struct_return_abi_conv(
-                        self.structs,
-                        self.target,
-                        callee_conv,
-                        ty,
-                    ) {
-                    let ridx = b.intern_agg_desc(desc.clone());
-                    let slot = b.alloc_synthetic_struct(desc.size as i64);
-                    Some((ridx, slot))
-                } else {
-                    None
-                };
-                let fp_return = is_floating_scalar(ty);
-                let call = b.call_ext(*val, arg_vals, fp_arg_mask, fp_return);
-                if !ext_arg_aggs.is_empty() {
-                    b.set_call_arg_aggs(call, ext_arg_aggs);
-                }
-                if let Some((ridx, slot)) = ret_temp {
-                    b.set_call_ret_agg(call, ridx, slot);
-                    return Ok(b.local_addr(slot));
-                }
-                if is_float_ty(ty) {
-                    return Ok(b.mark_f32(call));
-                }
-                // A libc / bound (`Sys`) callee's narrow return is
-                // extended by `return_extension` at the CallExt
-                // lowering, keyed on the binding's declared return
-                // type -- which correctly leaves an unprototyped
-                // binding (return_type_tag == 0) unextended rather
-                // than truncating a value that is really a pointer.
-                return Ok(call);
+                return self.call_binding(b, *sym, *val, call_args);
             }
         }
-        // Determine the pointed-to function's variadic-ness
-        // and named-parameter count from the callee's static
-        // type. A fn-pointer Ident (`cb(...)` where `cb` is a
-        // variadic-fn-pointer variable) carries the prototype
-        // on its symbol (propagated from the typedef at
-        // declaration). A callee with no statically-known
-        // prototype (e.g. the result of a comma operator)
-        // defaults to non-variadic, all-fixed.
-        //
-        // TODO: a variadic call through a function pointer whose
-        // prototype is not statically recoverable here (a pointer
-        // received as a parameter, or loaded through a non-typedef
-        // path) takes the all-fixed default and, under the host
-        // variadic ABI (`variadic_on_stack`), places the variadic
-        // tail in registers rather than on the stack the callee's
-        // va_arg walks. Carrying the prototype on the pointer's
-        // type rather than the variable symbol would close this.
-        let (callee_variadic, callee_fixed) = self.indirect_callee_proto(callee, args.len());
-        // The pointed-to function's own calling convention drives
-        // the argument placement, so every ABI question below --
-        // which variadic dialect applies, whether a floating-point
-        // argument rides the FP bank -- is asked of it rather than
-        // of the target's default.
-        let abi = self.target.abi_for(callee_conv);
-        let target = match indirect_target {
-            Some(t) => t,
-            None => self.walk_expr_rvalue(b, callee)?,
-        };
-        let fp_return = is_floating_scalar(ty);
-        // Aggregate arguments through a function pointer classify by
-        // the pointed-to prototype's parameter types (System V AMD64
-        // 3.2.3 / AAPCS64 6.4 / 6.8.2). The parser narrows each
-        // argument to its parameter type before the call, so the
-        // argument's own type is that parameter type; classify from
-        // it. A variadic aggregate keeps the by-address convention
-        // (matching the direct-call variadic handling). Inert on the
-        // ABIs / sizes / by-address aggregates the classifier
-        // declines.
-        let mut arg_aggs: alloc::vec::Vec<Option<u32>> = alloc::vec::Vec::new();
-        for i in 0..arg_vals.len() {
-            if callee_variadic && i >= callee_fixed {
-                continue;
+        self.call_through_pointer(b, callee, indirect_target, call_args)
+    }
+
+    /// True when the call returns its aggregate through the c5
+    /// out-pointer convention: the caller allocates the result object
+    /// and passes its address as the hidden first argument.
+    fn returns_through_out_ptr(&self, conv: crate::c5::codegen::CallConv, ty: i64) -> bool {
+        matches!(
+            crate::c5::compiler::struct_return_abi_conv(self.structs, self.target, conv, ty),
+            crate::c5::compiler::StructReturnAbi::OutPtr
+        )
+    }
+
+    /// A direct call whose c5 out-pointer return prepends the result
+    /// address as argument 0. The expression yields the result temp's
+    /// address, per the c5 address-as-value rule for struct rvalues.
+    fn call_direct_out_ptr(
+        &mut self,
+        b: &mut SsaBuilder,
+        sym: u32,
+        val: i64,
+        args: &'a [ExprId],
+        ty: i64,
+    ) -> Result<ValueId, WalkError> {
+        let (result_slot, out_arg) = self.out_ptr_arg(b, ty);
+        let mut all_args: alloc::vec::Vec<ValueId> = alloc::vec::Vec::with_capacity(args.len() + 1);
+        all_args.push(out_arg);
+        for a in args {
+            let mut v = self.walk_expr_rvalue(b, *a)?;
+            // The all-integer cdecl carries each argument in an 8-byte
+            // integer cell, where the callee reads a floating-point
+            // parameter as a double. A `double` already occupies eight
+            // bytes; a `float` must be widened to that pattern and reloaded
+            // through an integer slot, or only its 4-byte form reaches the
+            // low half and the f64 read sees noise in the high half.
+            if arg_value_ty(self.ast.expr(*a))
+                .map(is_float_ty)
+                .unwrap_or(false)
+            {
+                let widened = b.fp_widen_to_f64(v);
+                let slot = b.alloc_synthetic_local();
+                b.store_local(slot, widened, StoreKind::I64);
+                v = b.load_local(slot, LoadKind::I64);
             }
-            let Some(aty) = arg_value_ty(self.ast.expr(args[i])) else {
+            all_args.push(v);
+        }
+        let target_pc = self.live_fun_val(sym, val);
+        // The result is an address, never an FP scalar, so `fp_return` is
+        // false; the callee keeps the c5 cdecl shape -- the hidden
+        // out-pointer shifts every parameter cell, which excludes it from
+        // `param_fp_mask` -- so `fp_arg_mask` is 0.
+        //
+        // The out-pointer is a fixed argument. A variadic struct-returning
+        // callee still passes its variadic tail per the host variadic ABI,
+        // so `fixed_args` counts the out-pointer plus the callee's named
+        // parameters; a non-variadic callee keeps every argument fixed.
+        let fixed_args = if self.fun_is_variadic(sym) {
+            1 + self.fun_fixed_args(sym)
+        } else {
+            all_args.len()
+        };
+        let _ = emit_direct_call(b, target_pc, sym, all_args, fixed_args, false, 0);
+        Ok(b.local_addr(result_slot))
+    }
+
+    /// A direct call to a function this unit declares (`Token::Fun`).
+    fn call_direct(
+        &mut self,
+        b: &mut SsaBuilder,
+        sym: u32,
+        val: i64,
+        mut args: CallArgs<'a>,
+    ) -> Result<ValueId, WalkError> {
+        let (conv, ty, fp_mask) = (args.conv, args.ty, args.fp_mask);
+        let callee_variadic = self.fun_is_variadic(sym);
+        let abi = self.target.abi_for(conv);
+        // A variadic callee's prototype records the pre-ellipsis
+        // parameters in `Symbol::params`; `exprs[fixed_args..]` are the
+        // variadic arguments. Every argument of a non-variadic callee is
+        // fixed.
+        let fixed_args = if callee_variadic {
+            self.fun_fixed_args(sym).min(args.exprs.len())
+        } else {
+            args.exprs.len()
+        };
+        let arg_aggs = self.direct_arg_aggs(b, sym, &mut args, callee_variadic);
+        // C99 6.5.2.2p7 + the host ABI: a floating-point scalar argument
+        // rides an FP argument register, and a `float` stays at single
+        // precision -- the callee narrows back from the s-register view.
+        //
+        // Under a host variadic ABI the variadic floating-point arguments
+        // widen to `double` (C99 6.5.2.2p6 default argument promotions) but
+        // stay FP-classed: on the register-save hosts (System V AMD64 on
+        // Linux x86_64, AAPCS64 on Linux aarch64) they ride an FP argument
+        // register, and on macOS arm64, which places every variadic
+        // argument on the stack at 8-byte stride, the 8-byte store reads
+        // back as a double. The named arguments keep their FP-bank
+        // placement either way, so the call passes the real `fp_mask`.
+        if callee_variadic
+            && (abi.variadic_on_stack || abi.sysv_host_variadic() || abi.aarch64_host_variadic())
+        {
+            self.widen_variadic_fp(b, &mut args, fixed_args);
+            let fp_return = is_floating_scalar(ty);
+            let target_pc = self.live_fun_val(sym, val);
+            let call =
+                emit_direct_call(b, target_pc, sym, args.vals, fixed_args, fp_return, fp_mask);
+            if !arg_aggs.is_empty() {
+                b.set_call_arg_aggs(call, arg_aggs);
+            }
+            let ret_temp = self.call_ret_temp(b, conv, ty);
+            let extend = !self.symbols[sym as usize].defined_here;
+            return Ok(self.call_result(b, call, ret_temp, ty, extend));
+        }
+        // A variadic callee reaching here is on a `variadic_int_only` host
+        // (the Microsoft calling conventions): its named and variadic
+        // arguments ride the integer register bank, a floating-point
+        // argument as its raw bit pattern. The same widening covers a
+        // non-variadic callee whose register / stack placement would
+        // interleave, which the c5 cdecl cell layout does not admit.
+        let eff_fp_mask = effective_fp_arg_mask(args.exprs.len(), fp_mask, abi);
+        let call_fp_mask = if callee_variadic || (fp_mask != 0 && eff_fp_mask == 0) {
+            self.widen_fp_through_int(b, &mut args, is_floating_scalar);
+            0
+        } else {
+            eff_fp_mask
+        };
+        // C99 6.2.5p10: a floating-point return rides the FP return
+        // register; tag the call so the codegen reads it there.
+        let fp_return = is_floating_scalar(ty);
+        let target_pc = self.live_fun_val(sym, val);
+        // Reserve the aggregate return temp before the call: its frame slot
+        // rides on the call instruction, so it survives value renumbering
+        // and needs no SSA operand.
+        let ret_temp = self.call_ret_temp(b, conv, ty);
+        let call = emit_direct_call(
+            b,
+            target_pc,
+            sym,
+            args.vals,
+            fixed_args,
+            fp_return,
+            call_fp_mask,
+        );
+        if !arg_aggs.is_empty() {
+            b.set_call_arg_aggs(call, arg_aggs);
+        }
+        let extend = !self.symbols[sym as usize].defined_here;
+        Ok(self.call_result(b, call, ret_temp, ty, extend))
+    }
+
+    /// Tag each by-value aggregate argument of a direct call with its
+    /// host-ABI layout, so the caller marshals it into the argument
+    /// registers and stack slots the callee reads (AAPCS64 6.8.2 / System V
+    /// 3.2.3). A named parameter classifies by its declared type and a
+    /// variadic argument by its own; a variadic aggregate of at most one
+    /// eightbyte rides as a single loaded integer in the variadic slot
+    /// (C99 6.5.2.2), and a larger one routes through the host-ABI
+    /// placement so `va_arg` reads its eightbytes contiguously. A variadic
+    /// callee's named aggregate keeps the c5 by-address convention, which
+    /// its prologue expects. Inert on the ABIs and sizes the classifier
+    /// declines.
+    ///
+    /// TODO: pass the second eightbyte of a variadic aggregate wider than
+    /// one eightbyte, which stays on the address path.
+    fn direct_arg_aggs(
+        &mut self,
+        b: &mut SsaBuilder,
+        sym: u32,
+        args: &mut CallArgs<'_>,
+        callee_variadic: bool,
+    ) -> alloc::vec::Vec<Option<u32>> {
+        let mut arg_aggs: alloc::vec::Vec<Option<u32>> = alloc::vec::Vec::new();
+        let nparams = self.symbols[sym as usize].params.len();
+        for i in 0..args.vals.len() {
+            let agg_ty = if i < nparams {
+                Some(self.symbols[sym as usize].params[i])
+            } else {
+                match arg_value_ty(self.ast.expr(args.exprs[i])) {
+                    Some(aty) if is_struct_value_ty(aty) && self.struct_size(aty) <= 8 => {
+                        args.vals[i] = b.load(args.vals[i], LoadKind::I64);
+                        None
+                    }
+                    other => other,
+                }
+            };
+            let Some(ty_tag) = agg_ty else {
                 continue;
             };
-            if !(is_struct_value_ty(aty)) {
+            if callee_variadic && i < nparams {
                 continue;
             }
             if let Some(desc) = crate::c5::compiler::host_abi_agg_desc_conv(
                 self.structs,
                 self.target,
-                callee_conv,
-                aty,
+                args.conv,
+                ty_tag,
             ) {
                 if arg_aggs.is_empty() {
-                    arg_aggs = alloc::vec![None; arg_vals.len()];
+                    arg_aggs = alloc::vec![None; args.vals.len()];
                 }
                 arg_aggs[i] = Some(b.intern_agg_desc(desc));
             }
         }
-        // Host-ABI out-pointer struct return through a function
-        // pointer (SysV x86_64 > 16 bytes, Win64 aggregates outside
-        // {1,2,4,8} bytes). Mirror the direct-call path: allocate
-        // the result temp, pass its address as a hidden first
-        // integer argument, and yield the temp's address; the
-        // callee writes the struct through the pointer and returns
-        // it. An out-pointer-returning function uses the all-integer
-        // cdecl (its prologue skips the FP bank), so the call is
-        // non-variadic with FP mask 0.
+        arg_aggs
+    }
+
+    /// Reserve the frame temp an aggregate return lands in, with its
+    /// interned descriptor. `None` when the return is not an aggregate the
+    /// host ABI hands back in the result registers or through the
+    /// indirect-result register.
+    fn call_ret_temp(
+        &self,
+        b: &mut SsaBuilder,
+        conv: crate::c5::codegen::CallConv,
+        ty: i64,
+    ) -> Option<(u32, i64)> {
+        if let crate::c5::compiler::StructReturnAbi::Regs(desc)
+        | crate::c5::compiler::StructReturnAbi::Indirect(desc) =
+            crate::c5::compiler::struct_return_abi_conv(self.structs, self.target, conv, ty)
+        {
+            let ridx = b.intern_agg_desc(desc.clone());
+            let slot = b.alloc_synthetic_struct(desc.size as i64);
+            return Some((ridx, slot));
+        }
+        None
+    }
+
+    /// The value a call expression yields. An aggregate return is the
+    /// temp's address, which the codegen fills from the result registers or
+    /// has the callee write through the indirect-result pointer; a `float`
+    /// result is tagged single-precision (C99 6.2.5p10 / 6.3.1.8). `extend`
+    /// widens a narrow scalar return whose high bits the callee may leave
+    /// undefined.
+    fn call_result(
+        &self,
+        b: &mut SsaBuilder,
+        call: ValueId,
+        ret_temp: Option<(u32, i64)>,
+        ty: i64,
+        extend: bool,
+    ) -> ValueId {
+        if let Some((ridx, slot)) = ret_temp {
+            b.set_call_ret_agg(call, ridx, slot);
+            return b.local_addr(slot);
+        }
+        if is_float_ty(ty) {
+            return b.mark_f32(call);
+        }
+        if extend {
+            return extend_scalar_call_result(b, call, ty, self.target);
+        }
+        call
+    }
+
+    /// C99 6.5.2.2p6: widen each variadic floating-point argument to
+    /// `double`, kept FP-classed.
+    fn widen_variadic_fp(&self, b: &mut SsaBuilder, args: &mut CallArgs<'_>, fixed: usize) {
+        for (i, a) in args.exprs.iter().enumerate() {
+            if i < fixed {
+                continue;
+            }
+            if arg_value_ty(self.ast.expr(*a))
+                .map(is_floating_scalar)
+                .unwrap_or(false)
+            {
+                args.vals[i] = b.fp_widen_to_f64(args.vals[i]);
+            }
+        }
+    }
+
+    /// Route each selected floating-point argument through an integer slot
+    /// as a widened `double`, which is the 8-byte pattern the all-integer
+    /// cdecl reads a floating-point parameter from. Without the round trip
+    /// a `float` reaches the callee as its 4-byte form in the low half.
+    fn widen_fp_through_int(
+        &self,
+        b: &mut SsaBuilder,
+        args: &mut CallArgs<'_>,
+        select: fn(i64) -> bool,
+    ) {
+        for (i, a) in args.exprs.iter().enumerate() {
+            if arg_value_ty(self.ast.expr(*a)).map(select).unwrap_or(false) {
+                let widened = b.fp_widen_to_f64(args.vals[i]);
+                let slot = b.alloc_synthetic_local();
+                b.store_local(slot, widened, StoreKind::I64);
+                args.vals[i] = b.load_local(slot, LoadKind::I64);
+            }
+        }
+    }
+
+    /// A call to a libc binding (`Token::Sys`), which follows the host
+    /// ABI rather than the c5 cdecl shape. `val` is the binding's flat
+    /// index across the `#pragma binding(...)` directives, which is what
+    /// `Inst::CallExt` takes.
+    fn call_binding(
+        &mut self,
+        b: &mut SsaBuilder,
+        sym: u32,
+        val: i64,
+        args: CallArgs<'a>,
+    ) -> Result<ValueId, WalkError> {
+        // A returns-twice callee (the setjmp family, vfork) disables
+        // spill-slot sharing in this function; see
+        // `FunctionSsa::has_returns_twice_call`.
+        if crate::c5::ir::returns_twice_fn_name(&self.symbols[sym as usize].name) {
+            b.mark_returns_twice();
+        }
+        // A by-value struct argument to a libc binding is packed into the
+        // platform-ABI argument registers (System V / AAPCS64: at most 16
+        // bytes), not passed by the c5 address convention. Tag each so the
+        // emitter classifies and marshals it.
+        let mut arg_aggs: alloc::vec::Vec<Option<u32>> = alloc::vec::Vec::new();
+        let nparams = self.symbols[sym as usize].params.len();
+        for i in 0..args.vals.len() {
+            let arg_ty = if i < nparams {
+                self.symbols[sym as usize].params[i]
+            } else {
+                match arg_value_ty(self.ast.expr(args.exprs[i])) {
+                    Some(t) => t,
+                    None => continue,
+                }
+            };
+            if is_struct_value_ty(arg_ty)
+                && let Some(desc) =
+                    crate::c5::compiler::host_abi_agg_desc(self.structs, self.target, arg_ty)
+            {
+                if arg_aggs.is_empty() {
+                    arg_aggs = alloc::vec![None; args.vals.len()];
+                }
+                arg_aggs[i] = Some(b.intern_agg_desc(desc));
+            }
+        }
+        let (ty, fp_mask) = (args.ty, args.fp_mask);
+        // System V AMD64 MEMORY class / Win64 oversize: the caller
+        // allocates the result buffer and passes its address as the hidden
+        // first integer argument; the callee writes through it and returns
+        // it. The FP-argument mask and the aggregate descriptors shift one
+        // slot to follow it. AArch64 returns this size through the
+        // indirect-result register, which the `ret_agg` path below covers.
         if matches!(
-            crate::c5::compiler::struct_return_abi_conv(self.structs, self.target, callee_conv, ty),
+            crate::c5::compiler::struct_return_abi(self.structs, self.target, ty),
             crate::c5::compiler::StructReturnAbi::OutPtr
         ) {
-            // The callee writes the whole struct through the
-            // out-pointer, so the result temp must hold
-            // `sizeof(struct)` bytes.
-            let result_size = self.struct_size(ty);
-            let result_slot = b.alloc_synthetic_struct(result_size);
-            let addr = b.local_addr(result_slot);
-            let temp = b.alloc_synthetic_local();
-            b.store_local(temp, addr, StoreKind::I64);
-            let out_arg = b.load_local(temp, LoadKind::I64);
-            let mut all_args: alloc::vec::Vec<ValueId> =
-                alloc::vec::Vec::with_capacity(arg_vals.len() + 1);
-            all_args.push(out_arg);
-            // The all-integer cdecl reads a floating-point parameter as
-            // a double from its 8-byte integer slot. A `double` already
-            // occupies eight bytes; a `float` must be widened to that
-            // pattern and reloaded through an integer slot so it is not
-            // passed as its 4-byte form in the low half of the slot.
-            for i in 0..arg_vals.len() {
-                if arg_value_ty(self.ast.expr(args[i]))
-                    .map(is_float_ty)
-                    .unwrap_or(false)
-                {
-                    let widened = b.fp_widen_to_f64(arg_vals[i]);
-                    let slot = b.alloc_synthetic_local();
-                    b.store_local(slot, widened, StoreKind::I64);
-                    arg_vals[i] = b.load_local(slot, LoadKind::I64);
-                }
-            }
-            all_args.extend_from_slice(&arg_vals);
-            let fixed = all_args.len();
-            let call = b.call_indirect(target, all_args, false, fixed, false, 0, callee_conv);
+            let (result_slot, out_arg) = self.out_ptr_arg(b, ty);
+            let mut shifted: alloc::vec::Vec<ValueId> =
+                alloc::vec::Vec::with_capacity(args.vals.len() + 1);
+            shifted.push(out_arg);
+            shifted.extend_from_slice(&args.vals);
+            let call = b.call_ext(val, shifted, fp_mask << 1, false);
             if !arg_aggs.is_empty() {
-                // `all_args` prepends the hidden out-pointer, so the
-                // aggregate descriptors shift by one slot.
+                let mut s = alloc::vec![None; args.vals.len() + 1];
+                s[1..].clone_from_slice(&arg_aggs);
+                b.set_call_arg_aggs(call, s);
+            }
+            return Ok(b.local_addr(result_slot));
+        }
+        // A floating-point return is FP-classed (C99 6.2.5p10) so the
+        // result rides d0 / xmm0 without a GPR bridge.
+        let ret_temp = self.call_ret_temp(b, args.conv, ty);
+        let fp_return = is_floating_scalar(ty);
+        let call = b.call_ext(val, args.vals, fp_mask, fp_return);
+        if !arg_aggs.is_empty() {
+            b.set_call_arg_aggs(call, arg_aggs);
+        }
+        // A narrow return is extended by `return_extension` at the CallExt
+        // lowering, keyed on the binding's declared return type, which
+        // leaves an unprototyped binding unextended rather than truncating
+        // a value that is really a pointer.
+        Ok(self.call_result(b, call, ret_temp, ty, false))
+    }
+
+    /// A call through a function pointer: the pointed-to prototype
+    /// drives the argument placement and the variadic dialect.
+    fn call_through_pointer(
+        &mut self,
+        b: &mut SsaBuilder,
+        callee: ExprId,
+        indirect_target: Option<ValueId>,
+        mut args: CallArgs<'a>,
+    ) -> Result<ValueId, WalkError> {
+        let (conv, ty, fp_mask) = (args.conv, args.ty, args.fp_mask);
+        // The pointed-to function's variadic-ness and named-parameter count
+        // come from the callee's static type: a function-pointer Ident
+        // carries the prototype on its symbol, propagated from the typedef
+        // at declaration. A callee with no statically known prototype -- the
+        // result of a comma operator, say -- defaults to non-variadic and
+        // all-fixed.
+        //
+        // TODO: a variadic call through a function pointer whose prototype
+        // is not statically recoverable here (a pointer received as a
+        // parameter, or loaded through a non-typedef path) takes the
+        // all-fixed default and, under `variadic_on_stack`, places the
+        // variadic tail in registers rather than on the stack the callee's
+        // va_arg walks. Carrying the prototype on the pointer's type rather
+        // than on the variable symbol would close this.
+        let (callee_variadic, callee_fixed) = self.indirect_callee_proto(callee, args.exprs.len());
+        // Every ABI question below -- which variadic dialect applies,
+        // whether a floating-point argument rides the FP bank -- is asked of
+        // the pointed-to function's own convention, not the target's
+        // default.
+        let abi = self.target.abi_for(conv);
+        let target = match indirect_target {
+            Some(t) => t,
+            None => self.walk_expr_rvalue(b, callee)?,
+        };
+        let fp_return = is_floating_scalar(ty);
+        let arg_aggs = self.indirect_arg_aggs(b, &args, callee_variadic, callee_fixed);
+        // An out-pointer-returning function uses the all-integer cdecl --
+        // its prologue skips the FP bank -- so the call is non-variadic with
+        // FP mask 0 and every argument, the hidden out-pointer included, is
+        // fixed.
+        if self.returns_through_out_ptr(conv, ty) {
+            let (result_slot, out_arg) = self.out_ptr_arg(b, ty);
+            self.widen_fp_through_int(b, &mut args, is_float_ty);
+            let mut all_args: alloc::vec::Vec<ValueId> =
+                alloc::vec::Vec::with_capacity(args.vals.len() + 1);
+            all_args.push(out_arg);
+            all_args.extend_from_slice(&args.vals);
+            let fixed = all_args.len();
+            let call = b.call_indirect(target, all_args, false, fixed, false, 0, conv);
+            if !arg_aggs.is_empty() {
+                // The hidden out-pointer takes slot 0, so the aggregate
+                // descriptors shift by one.
                 let mut shifted = alloc::vec![None; arg_aggs.len() + 1];
                 shifted[1..].clone_from_slice(&arg_aggs);
                 b.set_call_arg_aggs(call, shifted);
             }
             return Ok(b.local_addr(result_slot));
         }
-        // Host-ABI aggregate return through a function pointer:
-        // mirror the direct-call path. Reserve the result temp and
-        // tag the call so the codegen reads the eightbytes from
-        // x0/x1 (<= 16 bytes) or has the callee write through x8
-        // (> 16 bytes on aarch64); the VM copies the returned
-        // struct into the temp.
-        let ret_temp = if let crate::c5::compiler::StructReturnAbi::Regs(desc)
-        | crate::c5::compiler::StructReturnAbi::Indirect(desc) =
-            crate::c5::compiler::struct_return_abi_conv(self.structs, self.target, callee_conv, ty)
+        let ret_temp = self.call_ret_temp(b, conv, ty);
+        // Under a host variadic ABI the variadic floating-point arguments
+        // widen to `double` (C99 6.5.2.2p6) but stay FP-classed: the
+        // register-save hosts (System V AMD64 on Linux x86_64, AAPCS64 on
+        // Linux aarch64) place them in xmm0..xmm7 / d0..d7, and macOS arm64
+        // stores them on the stack at 8-byte stride where the read is a
+        // double. The named arguments keep their AAPCS64 placement, so the
+        // call passes the real `fp_mask`; on x86_64 the emit sets `al` to
+        // the XMM-argument count at the call site.
+        if callee_variadic
+            && (abi.variadic_on_stack || abi.sysv_host_variadic() || abi.aarch64_host_variadic())
         {
-            let ridx = b.intern_agg_desc(desc.clone());
-            let slot = b.alloc_synthetic_struct(desc.size as i64);
-            Some((ridx, slot))
-        } else {
-            None
-        };
-        if callee_variadic && abi.variadic_on_stack {
-            // macOS arm64 variadic ABI: named arguments follow
-            // AAPCS64 (int / FP bank), variadic arguments on the
-            // stack at 8-byte stride. Widen variadic `float`
-            // arguments to `double` per C99 6.5.2.2p6, kept
-            // FP-classed so the 8-byte stack store is a double;
-            // the named FP arguments keep their FP-bank
-            // placement through the real `fp_arg_mask`.
-            for (i, a) in args.iter().enumerate() {
-                if i < callee_fixed {
-                    continue;
-                }
-                let arg_is_fp = arg_value_ty(self.ast.expr(*a))
-                    .map(is_floating_scalar)
-                    .unwrap_or(false);
-                if arg_is_fp {
-                    arg_vals[i] = b.fp_widen_to_f64(arg_vals[i]);
-                }
-            }
+            self.widen_variadic_fp(b, &mut args, callee_fixed);
             let call = b.call_indirect(
                 target,
-                arg_vals,
+                args.vals,
                 true,
                 callee_fixed,
                 fp_return,
-                fp_arg_mask,
-                callee_conv,
+                fp_mask,
+                conv,
             );
             if !arg_aggs.is_empty() {
                 b.set_call_arg_aggs(call, arg_aggs);
             }
-            if let Some((ridx, slot)) = ret_temp {
-                b.set_call_ret_agg(call, ridx, slot);
-                return Ok(b.local_addr(slot));
-            }
-            // A `float`-returning callee yields a single-precision
-            // value (C99 6.2.5p10 / 6.3.1.8); tag it so the result
-            // store reads the s-register view instead of narrowing
-            // the d-register a second time.
-            if is_float_ty(ty) {
-                return Ok(b.mark_f32(call));
-            }
-            return Ok(extend_scalar_call_result(b, call, ty, self.target));
+            return Ok(self.call_result(b, call, ret_temp, ty, true));
         }
-        // Register-save host variadic ABI (System V AMD64 on Linux
-        // x86_64, AAPCS64 on Linux aarch64): a variadic callee
-        // through a function pointer receives its floating-point
-        // arguments in xmm0..xmm7 / d0..d7, so pass the real
-        // `fp_arg_mask` and widen the variadic `float` arguments to
-        // `double` (C99 6.5.2.2p6) kept FP-classed. On x86_64 the
-        // emit sets `al` to the XMM-argument count at the call site.
-        if callee_variadic && (abi.sysv_host_variadic() || abi.aarch64_host_variadic()) {
-            for (i, a) in args.iter().enumerate() {
-                if i < callee_fixed {
-                    continue;
-                }
-                let arg_is_fp = arg_value_ty(self.ast.expr(*a))
-                    .map(is_floating_scalar)
-                    .unwrap_or(false);
-                if arg_is_fp {
-                    arg_vals[i] = b.fp_widen_to_f64(arg_vals[i]);
-                }
-            }
-            let call = b.call_indirect(
-                target,
-                arg_vals,
-                true,
-                callee_fixed,
-                fp_return,
-                fp_arg_mask,
-                callee_conv,
-            );
-            if !arg_aggs.is_empty() {
-                b.set_call_arg_aggs(call, arg_aggs);
-            }
-            if let Some((ridx, slot)) = ret_temp {
-                b.set_call_ret_agg(call, ridx, slot);
-                return Ok(b.local_addr(slot));
-            }
-            // A `float`-returning callee yields a single-precision
-            // value (C99 6.2.5p10 / 6.3.1.8); tag it so the result
-            // store reads the s-register view instead of narrowing
-            // the d-register a second time.
-            if is_float_ty(ty) {
-                return Ok(b.mark_f32(call));
-            }
-            return Ok(extend_scalar_call_result(b, call, ty, self.target));
-        }
-        // A function-pointer callee whose register/stack
-        // placement would interleave keeps the all-integer c5
-        // cdecl ABI (the pointed-to function applied the same
-        // predicate to its `param_fp_mask`); widen its FP
-        // arguments through the integer slots and pass mask 0.
+        // A callee whose register / stack placement would interleave keeps
+        // the all-integer c5 cdecl ABI -- the pointed-to function applied
+        // the same predicate to its `param_fp_mask` -- so its floating-point
+        // arguments go through the integer slots and the call passes mask 0.
         //
-        // A variadic callee through a function pointer compiled
-        // for a `variadic_int_only` host (Win64 x86_64 or Windows
-        // aarch64) reads its named parameters from the integer
-        // home / gr-save cells the prologue spills (its
-        // `param_fp_mask` is 0) and the variadic tail rides the
-        // integer register bank then the stack. Route every
-        // floating-point argument through the integer registers
-        // as a widened double so the call site and the callee
-        // agree; SysV / Linux / macOS leave `variadic_int_only`
-        // clear, so their variadic indirect lowering is
-        // unchanged (macOS took the `variadic_on_stack` branch
-        // above).
-        let eff_fp_arg_mask = effective_fp_arg_mask(args.len(), fp_arg_mask, abi);
-        let force_int_indirect = callee_variadic && abi.variadic_int_only && fp_arg_mask != 0;
-        let call_fp_arg_mask = if force_int_indirect || (fp_arg_mask != 0 && eff_fp_arg_mask == 0) {
-            for (i, a) in args.iter().enumerate() {
-                let arg_is_fp = arg_value_ty(self.ast.expr(*a))
-                    .map(is_floating_scalar)
-                    .unwrap_or(false);
-                if arg_is_fp {
-                    let widened = b.fp_widen_to_f64(arg_vals[i]);
-                    let slot = b.alloc_synthetic_local();
-                    b.store_local(slot, widened, StoreKind::I64);
-                    arg_vals[i] = b.load_local(slot, LoadKind::I64);
-                }
-            }
+        // A variadic callee compiled for a `variadic_int_only` host (the
+        // Microsoft conventions) reads its named parameters from the integer
+        // home cells its prologue spills and takes its variadic tail in the
+        // integer register bank, so the same routing applies. The
+        // register-save and stack hosts returned above.
+        let eff_fp_mask = effective_fp_arg_mask(args.exprs.len(), fp_mask, abi);
+        let force_int = callee_variadic && abi.variadic_int_only && fp_mask != 0;
+        let call_fp_mask = if force_int || (fp_mask != 0 && eff_fp_mask == 0) {
+            self.widen_fp_through_int(b, &mut args, is_floating_scalar);
             0
         } else {
-            eff_fp_arg_mask
+            eff_fp_mask
         };
-        // Non-macOS targets keep the c5 cdecl stack-push shape
-        // for the indirect call regardless of `callee_variadic`
-        // (`fixed_args` is unused there); pass the prototype
-        // through so only the macOS path consults it.
+        // Non-macOS targets keep the c5 cdecl stack-push shape for the
+        // indirect call regardless of `callee_variadic` (`fixed_args` is
+        // unused there); the prototype is passed through so only the macOS
+        // path consults it.
         let call = b.call_indirect(
             target,
-            arg_vals,
+            args.vals,
             callee_variadic,
             callee_fixed,
             fp_return,
-            call_fp_arg_mask,
-            callee_conv,
+            call_fp_mask,
+            conv,
         );
         if !arg_aggs.is_empty() {
             b.set_call_arg_aggs(call, arg_aggs);
         }
-        if let Some((ridx, slot)) = ret_temp {
-            b.set_call_ret_agg(call, ridx, slot);
-            return Ok(b.local_addr(slot));
+        Ok(self.call_result(b, call, ret_temp, ty, true))
+    }
+
+    /// Tag each by-value aggregate argument of an indirect call with its
+    /// host-ABI layout. The arguments classify by the pointed-to
+    /// prototype's parameter types (System V AMD64 3.2.3 / AAPCS64 6.4,
+    /// 6.8.2): the parser narrows each argument to its parameter type
+    /// before the call, so the argument's own type is that parameter type.
+    /// A variadic argument keeps the by-address convention, matching the
+    /// direct-call path. Inert on the ABIs, sizes and by-address aggregates
+    /// the classifier declines.
+    fn indirect_arg_aggs(
+        &mut self,
+        b: &mut SsaBuilder,
+        args: &CallArgs<'_>,
+        callee_variadic: bool,
+        callee_fixed: usize,
+    ) -> alloc::vec::Vec<Option<u32>> {
+        let mut arg_aggs: alloc::vec::Vec<Option<u32>> = alloc::vec::Vec::new();
+        for i in 0..args.vals.len() {
+            if callee_variadic && i >= callee_fixed {
+                continue;
+            }
+            let Some(aty) = arg_value_ty(self.ast.expr(args.exprs[i])) else {
+                continue;
+            };
+            if !is_struct_value_ty(aty) {
+                continue;
+            }
+            if let Some(desc) = crate::c5::compiler::host_abi_agg_desc_conv(
+                self.structs,
+                self.target,
+                args.conv,
+                aty,
+            ) {
+                if arg_aggs.is_empty() {
+                    arg_aggs = alloc::vec![None; args.vals.len()];
+                }
+                arg_aggs[i] = Some(b.intern_agg_desc(desc));
+            }
         }
-        // A `float`-returning callee yields a single-precision value
-        // (C99 6.2.5p10 / 6.3.1.8); tag it so the result store reads
-        // the s-register view instead of narrowing the d-register a
-        // second time.
-        if is_float_ty(ty) {
-            return Ok(b.mark_f32(call));
-        }
-        Ok(extend_scalar_call_result(b, call, ty, self.target))
+        arg_aggs
+    }
+
+    /// Allocate the result object a c5 out-pointer return writes through,
+    /// and route its address via an integer slot so the codegen passes it in
+    /// a host integer argument register the way every other pointer argument
+    /// goes. Returns the object's frame slot and the argument value.
+    fn out_ptr_arg(&self, b: &mut SsaBuilder, ty: i64) -> (i64, ValueId) {
+        // The callee writes the whole struct through the pointer, so the
+        // object holds `sizeof(struct)` bytes, not a single slot.
+        let result_size = self.struct_size(ty);
+        let result_slot = b.alloc_synthetic_struct(result_size);
+        let addr = b.local_addr(result_slot);
+        let temp = b.alloc_synthetic_local();
+        b.store_local(temp, addr, StoreKind::I64);
+        (result_slot, b.load_local(temp, LoadKind::I64))
     }
 
     /// C99 6.5.2.3 member access.
@@ -1057,5 +822,24 @@ impl<'a> Walker<'a> {
             let kind = load_kind_for(ty, self.target);
             Ok(b.load_local_vol(slot_off, kind, is_volatile_object_ty(ty)))
         }
+    }
+}
+
+/// Emit a direct call: an entry point in this unit goes through `b.call`
+/// on its `ent_pc`; one the linker resolves goes through `b.call_extern`
+/// on its symbol.
+fn emit_direct_call(
+    b: &mut SsaBuilder,
+    target_pc: i64,
+    sym: u32,
+    vals: alloc::vec::Vec<ValueId>,
+    fixed_args: usize,
+    fp_return: bool,
+    fp_mask: u32,
+) -> ValueId {
+    if target_pc == 0 {
+        b.call_extern(sym, vals, fixed_args, fp_return, fp_mask)
+    } else {
+        b.call(target_pc as usize, vals, fixed_args, fp_return, fp_mask)
     }
 }

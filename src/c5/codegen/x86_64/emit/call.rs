@@ -13,7 +13,7 @@ fn marshal_args(
     frame: Frame,
     abi: super::Abi,
     site: &str,
-) -> bool {
+) -> Emit {
     let m = Marshal {
         plan,
         args,
@@ -22,16 +22,13 @@ fn marshal_args(
         abi,
         site,
     };
-    if !m.stack_args(code)
-        || !m.struct_stack_args(code)
-        || !m.fp_args(code)
-        || !m.sse_aggs(code)
-        || !m.int_args(code)
-    {
-        return false;
-    }
+    m.stack_args(code)?;
+    m.struct_stack_args(code)?;
+    m.fp_args(code)?;
+    m.sse_aggs(code)?;
+    m.int_args(code)?;
     m.agg_eightbytes(code);
-    true
+    Ok(())
 }
 
 /// One call's argument marshalling: the plan and the operands it reads.
@@ -59,8 +56,8 @@ impl Marshal<'_> {
         place_of(self.alloc, self.args[i])
     }
 
-    fn fail(&self, m: &str) -> bool {
-        fail(&alloc::format!("{}: {m}", self.site))
+    fn fail<T>(&self, m: &str) -> Emit<T> {
+        fail(alloc::format!("{}: {m}", self.site))
     }
 
     /// Read `args[i]` into an integer register: its own when it holds one,
@@ -76,18 +73,19 @@ impl Marshal<'_> {
         )
     }
 
-    /// Read `args[i]` into `scratch`.
-    fn arg_into(&self, code: &mut Vec<u8>, i: usize, scratch: Reg) -> bool {
+    /// Read `args[i]` into `scratch`. The failure names no reason; each
+    /// caller names its own.
+    fn arg_into(&self, code: &mut Vec<u8>, i: usize, scratch: Reg) -> Emit {
         let Some(src) = self.arg_int(code, i, scratch) else {
-            return false;
+            return Err(Unsupported::unspecified());
         };
         if src.0 != scratch.0 {
             emit_mov_rr(code, scratch, src);
         }
-        true
+        Ok(())
     }
 
-    fn stack_args(&self, code: &mut Vec<u8>) -> bool {
+    fn stack_args(&self, code: &mut Vec<u8>) -> Emit {
         for (i, &placement) in self.plan.placements.iter().enumerate() {
             if let super::ArgPlacement::Stack(off) = placement {
                 let Some(src) = self.arg_int(code, i, SCRATCH_R10) else {
@@ -96,18 +94,18 @@ impl Marshal<'_> {
                 emit_mov_mem_r(code, Reg::RSP, off as i32, src);
             }
         }
-        true
+        Ok(())
     }
 
     /// Aggregates passed on the outgoing stack (System V AMD64 MEMORY class),
     /// copied while their base address, possibly in an argument register the
     /// register moves overwrite, is still live.
-    fn struct_stack_args(&self, code: &mut Vec<u8>) -> bool {
+    fn struct_stack_args(&self, code: &mut Vec<u8>) -> Emit {
         for (i, &placement) in self.plan.placements.iter().enumerate() {
             let super::ArgPlacement::StructStack { off, size, align } = placement else {
                 continue;
             };
-            if !self.arg_into(code, i, SCRATCH_R10) {
+            if self.arg_into(code, i, SCRATCH_R10).is_err() {
                 return self.fail("by-stack aggregate base not in int reg / spill");
             }
             // The outgoing slot is 8-aligned (System V AMD64 3.2.3); the
@@ -125,13 +123,13 @@ impl Marshal<'_> {
                 super::encode::emit_mov_mem8_r(code, Reg::RSP, off as i32 + o, SCRATCH_R11);
             }
         }
-        true
+        Ok(())
     }
 
     /// FP register placements: the xmm-to-xmm moves as a parallel copy first,
     /// so every xmm source is consumed before a spilled or integer source
     /// lands in its target xmm; the second FP scratch breaks a cycle.
-    fn fp_args(&self, code: &mut Vec<u8>) -> bool {
+    fn fp_args(&self, code: &mut Vec<u8>) -> Emit {
         let mut fp_moves: Vec<(u8, u8)> = Vec::new();
         for (i, &placement) in self.plan.placements.iter().enumerate() {
             if let super::ArgPlacement::FpReg(r) = placement
@@ -164,14 +162,14 @@ impl Marshal<'_> {
                 }
             }
         }
-        true
+        Ok(())
     }
 
     /// System V aggregates whose eightbytes are all SSE: no integer eightbyte
     /// register can hold the base, so it goes through a scratch GPR. A mixed
     /// aggregate waits for the integer parallel move, since its integer
     /// eightbyte targets may still be another argument's pending source.
-    fn sse_aggs(&self, code: &mut Vec<u8>) -> bool {
+    fn sse_aggs(&self, code: &mut Vec<u8>) -> Emit {
         for (i, &placement) in self.plan.placements.iter().enumerate() {
             let super::ArgPlacement::StructRegs { regs, n, align } = placement else {
                 continue;
@@ -179,7 +177,7 @@ impl Marshal<'_> {
             if n == 0 || !regs.iter().take(n as usize).all(|c| c.is_fp) {
                 continue;
             }
-            if !self.arg_into(code, i, SCRATCH_R10) {
+            if self.arg_into(code, i, SCRATCH_R10).is_err() {
                 return self.fail("fp aggregate base not in int reg / spill");
             }
             for (k, cr) in regs.iter().take(n as usize).enumerate() {
@@ -194,7 +192,7 @@ impl Marshal<'_> {
                 );
             }
         }
-        true
+        Ok(())
     }
 
     /// Integer register placements and aggregate base addresses as one
@@ -202,7 +200,7 @@ impl Marshal<'_> {
     /// base through its own first integer eightbyte register, so no
     /// aggregate's loads clobber another's pending base. The sources not
     /// register-resident then materialise into their targets.
-    fn int_args(&self, code: &mut Vec<u8>) -> bool {
+    fn int_args(&self, code: &mut Vec<u8>) -> Emit {
         let mut int_moves: Vec<(u8, u8)> = Vec::new();
         for (i, &placement) in self.plan.placements.iter().enumerate() {
             match placement {
@@ -231,7 +229,7 @@ impl Marshal<'_> {
                 match self.arg_place(i) {
                     Place::IntReg(_) => {}
                     Place::Spill(_) | Place::None => {
-                        if !self.arg_into(code, i, Reg(r)) {
+                        if self.arg_into(code, i, Reg(r)).is_err() {
                             return self.fail("int arg not in int reg / spill");
                         }
                     }
@@ -248,12 +246,12 @@ impl Marshal<'_> {
             if let super::ArgPlacement::StructRegs { regs, n, .. } = placement
                 && let Some(dst) = agg_base_reg(&regs, n)
                 && !matches!(self.arg_place(i), Place::IntReg(_))
-                && !self.arg_into(code, i, Reg(dst))
+                && self.arg_into(code, i, Reg(dst)).is_err()
             {
                 return self.fail("aggregate base not in int reg / spill");
             }
         }
-        true
+        Ok(())
     }
 
     /// Load each aggregate's eightbytes from its base register: SSE eightbytes
@@ -458,7 +456,7 @@ pub(super) fn emit_call(
     ret_agg: Option<u32>,
     ret_slot_local: i64,
     func: &FunctionSsa,
-) -> bool {
+) -> Emit {
     // With no tagged aggregate `aggs` is empty and `plan_call_args_aggs`
     // reduces to the scalar placement, so every branch runs the aggregate
     // planner.
@@ -490,9 +488,7 @@ pub(super) fn emit_call(
     if plan.scratch_bytes > 0 {
         emit_stack_alloc(code, plan.scratch_bytes, None);
     }
-    if !marshal_args(code, &plan, args, alloc, frame, abi, site) {
-        return false;
-    }
+    marshal_args(code, &plan, args, alloc, frame, abi, site)?;
     if let Some(n) = xmm_count {
         super::encode::emit_mov_al_imm8(code, n);
     }
@@ -503,7 +499,7 @@ pub(super) fn emit_call(
     // A <= 16-byte aggregate return arrives classified; larger ones keep the
     // out-pointer convention and never set `ret_agg`.
     if store_ret_agg(code, ret_agg, agg_descs, ret_slot_local, func, frame, abi) {
-        return true;
+        return Ok(());
     }
     // An integer result lives in rax, an FP result in xmm0 (C99 6.2.5p10).
     if fp_return {
@@ -513,7 +509,7 @@ pub(super) fn emit_call(
     } else {
         int_result_to_dst(code, dst, Reg::RAX, frame);
     }
-    true
+    Ok(())
 }
 
 pub(super) fn emit_call_ext(
@@ -533,9 +529,9 @@ pub(super) fn emit_call_ext(
     ret_agg: Option<u32>,
     ret_slot_local: i64,
     func: &FunctionSsa,
-) -> bool {
+) -> Emit {
     let Some(import_index) = imports.index_of_binding(binding_idx) else {
-        return false;
+        return Err(Unsupported::unspecified());
     };
     let imp = &imports.imports[import_index];
     let fixed = if imp.is_variadic {
@@ -552,9 +548,7 @@ pub(super) fn emit_call_ext(
     if plan.scratch_bytes > 0 {
         emit_stack_alloc(code, plan.scratch_bytes, None);
     }
-    if !marshal_args(code, &plan, args, alloc, frame, abi, "CallExt") {
-        return false;
-    }
+    marshal_args(code, &plan, args, alloc, frame, abi, "CallExt")?;
     // System V AMD64 3.2.3: a variadic callee reads the XMM argument count
     // from `al`; a non-variadic one ignores it, zeroed for determinism.
     // Win64 clears `variadic_zero_xmm_count`.
@@ -579,7 +573,7 @@ pub(super) fn emit_call_ext(
     // A register-returned aggregate (System V AMD64 3.2.3) stores into the
     // caller's result temp; > 16-byte returns take the out-pointer path.
     if store_ret_agg(code, ret_agg, agg_descs, ret_slot_local, func, frame, abi) {
-        return true;
+        return Ok(());
     }
     // A sub-word integer return is extended into rax; an FP return arrives
     // in xmm0 and routes to the allocated place. A System V long double
@@ -601,18 +595,18 @@ pub(super) fn emit_call_ext(
         emit_mov_r_mem(code, scratch, Reg::RSP, 0);
         emit_add_rsp_imm32(code, 16);
         int_result_to_dst(code, dst, scratch, frame);
-        return true;
+        return Ok(());
     }
     if ty_helpers::is_float_ty(bare) || ty_helpers::is_double_ty(bare) {
         // An f32 result is the single in the low 32 bits of xmm0, the form the
         // FP casts and `StoreLocal F32` consume, so it routes without widening.
         xmm0_result_to_dst(code, dst, frame);
-        return true;
+        return Ok(());
     }
     let ext = super::return_extension(return_type_tag, target);
     super::encode::emit_extend_rax_for_return(code, ext);
     mirror_int_dst(code, dst, Reg::RAX, frame);
-    true
+    Ok(())
 }
 
 /// The ABI a call site marshals to: the callee's own convention, the
@@ -650,7 +644,7 @@ pub(super) fn emit_call_indirect(
     ret_slot_local: i64,
     func: &super::super::ir::FunctionSsa,
     extern_sites: &mut Vec<super::UserExternCallSite>,
-) -> bool {
+) -> Emit {
     let target_place = place_of(alloc, target);
     // A Win64 variadic indirect call splits the arguments into the named
     // prefix, placed by position, and the variadic tail at 8-byte stride past
@@ -716,9 +710,7 @@ pub(super) fn emit_call_indirect(
         if plan.scratch_bytes > 0 {
             emit_stack_alloc(code, plan.scratch_bytes, None);
         }
-        if !marshal_args(code, &plan, args, alloc, frame, abi, "CallIndirect") {
-            return false;
-        }
+        marshal_args(code, &plan, args, alloc, frame, abi, "CallIndirect")?;
         if sysv_variadic_call {
             super::encode::emit_mov_al_imm8(code, xmm_used);
         }
@@ -743,9 +735,7 @@ pub(super) fn emit_call_indirect(
         // reloads.
         let mut shifted = plan.clone();
         shifted.scratch_bytes = plan.scratch_bytes + slot_bytes;
-        if !marshal_args(code, &shifted, args, alloc, frame, abi, "CallIndirect") {
-            return false;
-        }
+        marshal_args(code, &shifted, args, alloc, frame, abi, "CallIndirect")?;
         // The target slot sits just above the marshal's scratch
         // window, at [rsp + scratch_bytes] after the second sub.
         emit_mov_r_mem(code, SCRATCH_R10, Reg::RSP, plan.scratch_bytes as i32);
@@ -761,7 +751,7 @@ pub(super) fn emit_call_indirect(
     // A register-returned aggregate (System V AMD64 3.2.3) stores into the
     // caller's result temp.
     if store_ret_agg(code, ret_agg, agg_descs, ret_slot_local, func, frame, abi) {
-        return true;
+        return Ok(());
     }
     // A floating-point return rides xmm0 (C99 6.2.5p10); an integer
     // / pointer return rides rax. `fp_return` selects the source for
@@ -771,7 +761,7 @@ pub(super) fn emit_call_indirect(
     } else {
         int_result_to_dst(code, dst, Reg::RAX, frame);
     }
-    true
+    Ok(())
 }
 
 /// System V AMD64 `va_arg` (ABI 3.5.7). `args[0]` is the `__va_list_tag`
@@ -788,7 +778,7 @@ pub(super) fn emit_va_arg_sysv(
     func: &FunctionSsa,
     alloc: &Allocation,
     frame: Frame,
-) -> bool {
+) -> Emit {
     if args.len() != 2 {
         return fail("VaArg: expected 2 args (ap, descriptor)");
     }
@@ -856,7 +846,7 @@ pub(super) fn emit_va_arg_sysv(
     let rel_to_done = (done - (jmp_rel32_at + 4)) as i32;
     code[jmp_rel32_at..jmp_rel32_at + 4].copy_from_slice(&rel_to_done.to_le_bytes());
     int_result_to_dst(code, dst, SCRATCH_R10, frame);
-    true
+    Ok(())
 }
 
 /// `Some((call_pc, target_pc, args))` when `block` returns the value of
@@ -954,7 +944,7 @@ pub(super) fn emit_tail_call(
     fp_arg_mask: u32,
     extern_sites: &mut Vec<super::UserExternCallSite>,
     extern_data_refs: &mut Vec<super::UserExternDataRef>,
-) -> bool {
+) -> Emit {
     debug_assert!(
         !frame.dynamic_sp,
         "detect_tail_call rejects dynamic-sp frames"
@@ -979,9 +969,7 @@ pub(super) fn emit_tail_call(
     // this function's caller), so rsp has not moved and the marshal's
     // sp shift must be zero.
     plan.scratch_bytes = 0;
-    if !marshal_args(code, &plan, args, alloc, frame, abi, "TailCall") {
-        return false;
-    }
+    marshal_args(code, &plan, args, alloc, frame, abi, "TailCall")?;
     // `emit_return`'s epilogue without the return-value staging.
     emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
     restore_callee_saved(code, alloc, frame);
@@ -1003,5 +991,5 @@ pub(super) fn emit_tail_call(
         kind: super::encode::BranchKind::Jmp,
     });
     super::encode::emit_jmp_rel32(code, 0);
-    true
+    Ok(())
 }

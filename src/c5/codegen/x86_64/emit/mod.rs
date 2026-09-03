@@ -17,8 +17,9 @@
 //   saved callee-saved GPRs       rsp
 // ```
 //
-// [`emit_function`] returns `false` when it meets a shape outside the
-// implemented subset; `x86_64::lower` turns that into a compile error.
+// [`emit_function`] returns an `Unsupported` when it meets a shape
+// outside the implemented subset; `x86_64::lower` turns that into a
+// compile error.
 
 #![allow(dead_code, clippy::too_many_arguments)]
 
@@ -55,8 +56,8 @@ use super::encode::{
     emit_vfnmsub231ss, emit_xchg_mem_r, emit_xchg_rr, emit_xorpd, emit_xorps,
 };
 use super::ssa::emit_common::{
-    MAX_UNPROBED_STACK_STEP, STACK_PROBE_PAGE, STACK_PROBE_UNROLL_MAX, build_arg_aggs,
-    c5_slot_to_fp_offset, place_same_loc,
+    Emit, MAX_UNPROBED_STACK_STEP, STACK_PROBE_PAGE, STACK_PROBE_UNROLL_MAX, Unsupported,
+    build_arg_aggs, c5_slot_to_fp_offset, place_same_loc,
 };
 use super::ssa::reg_alloc::{Allocation, Place};
 use super::table::Mnem;
@@ -78,19 +79,16 @@ use inst::*;
 use intrinsic::*;
 use mem::*;
 
-fn bail_msg(reason: &str) {
-    super::ssa::emit_common::bail_msg("x86_64", reason);
+/// A form outside the implemented subset, named by `reason`.
+fn unsupported(reason: impl Into<alloc::borrow::Cow<'static, str>>) -> Unsupported {
+    let reason = reason.into();
+    super::ssa::emit_common::trace_bail("x86_64", &reason);
+    Unsupported::new(reason)
 }
 
-fn fail(reason: &str) -> bool {
-    bail_msg(reason);
-    false
-}
-
-/// `fail` for a helper that returns its result as an `Option`.
-fn failed<T>(reason: &str) -> Option<T> {
-    bail_msg(reason);
-    None
+/// [`unsupported`] as an emit result.
+fn fail<T>(reason: impl Into<alloc::borrow::Cow<'static, str>>) -> Emit<T> {
+    Err(unsupported(reason))
 }
 
 /// A value's allocated `Place`, `Place::None` when out of range.

@@ -11,7 +11,7 @@ pub(super) fn emit_x86_simd(
     args: &[super::super::ir::ValueId],
     alloc: &Allocation,
     frame: Frame,
-) -> bool {
+) -> Emit {
     use super::asm::{Concrete, XMM_BASE};
     use crate::c5::ir::AsmRegSize;
     use crate::c5::x86_simd::{self, Form};
@@ -38,19 +38,18 @@ pub(super) fn emit_x86_simd(
     };
     // The x86 assembler's own tables encode every form; a name it does
     // not special-case resolves in the generated catalogue.
-    let insn = |code: &mut Vec<u8>, mnem: &'static str, ops: &[Concrete]| -> bool {
+    let insn = |code: &mut Vec<u8>, mnem: &'static str, ops: &[Concrete]| -> Emit {
         let m = super::asm::mnemonic_by_name(mnem).unwrap_or(super::asm::Mnemonic::Table(mnem));
         if let Err(e) = super::asm::encode(code, 8, m, None, ops) {
-            bail_msg(&alloc::format!("x86 simd: {e}"));
-            return false;
+            return fail(alloc::format!("x86 simd: {e}"));
         }
-        true
+        Ok(())
     };
     // 128-bit transfers between an address in `addr` and xmm `n`.
-    let load128 = |code: &mut Vec<u8>, n: u8, addr: Reg| -> bool {
+    let load128 = |code: &mut Vec<u8>, n: u8, addr: Reg| -> Emit {
         insn(code, "movdqu", &[at(addr, AsmRegSize::Quad), xmm(n)])
     };
-    let store128 = |code: &mut Vec<u8>, addr: Reg, n: u8| -> bool {
+    let store128 = |code: &mut Vec<u8>, addr: Reg, n: u8| -> Emit {
         insn(code, "movdqu", &[xmm(n), at(addr, AsmRegSize::Quad)])
     };
     let int_size = |w: u8| match w {
@@ -78,48 +77,34 @@ pub(super) fn emit_x86_simd(
             let Some(a) = operand(code, 1, SCRATCH_R10) else {
                 return fail("x86 simd: operand 1 has no place");
             };
-            if !load128(code, dst_x, a) {
-                return false;
-            }
+            load128(code, dst_x, a)?;
             let Some(b) = operand(code, 2, SCRATCH_R10) else {
                 return fail("x86 simd: operand 2 has no place");
             };
-            if !load128(code, src_x, b) {
-                return false;
-            }
-            let ok = if row.form == Form::Vv {
+            load128(code, src_x, b)?;
+            if row.form == Form::Vv {
                 insn(code, row.mnem, &[xmm(src_x), xmm(dst_x)])
             } else {
                 insn(code, row.mnem, &[imm8, xmm(src_x), xmm(dst_x)])
-            };
-            if !ok {
-                return false;
-            }
+            }?;
         }
         Form::V | Form::VI => {
             let Some(a) = operand(code, 1, SCRATCH_R10) else {
                 return fail("x86 simd: operand 1 has no place");
             };
-            if !load128(code, src_x, a) {
-                return false;
-            }
-            let ok = if row.form == Form::V {
+            load128(code, src_x, a)?;
+            if row.form == Form::V {
                 insn(code, row.mnem, &[xmm(src_x), xmm(dst_x)])
             } else {
                 insn(code, row.mnem, &[imm8, xmm(src_x), xmm(dst_x)])
-            };
-            if !ok {
-                return false;
-            }
+            }?;
         }
         Form::Shift => {
             let Some(a) = operand(code, 1, SCRATCH_R10) else {
                 return fail("x86 simd: operand 1 has no place");
             };
-            if !load128(code, dst_x, a) {
-                return false;
-            }
-            let ok = match imm {
+            load128(code, dst_x, a)?;
+            match imm {
                 Some(_) => insn(code, row.mnem, &[imm8, xmm(dst_x)]),
                 None => {
                     let Some(c) = operand(code, 2, SCRATCH_R10) else {
@@ -128,26 +113,19 @@ pub(super) fn emit_x86_simd(
                     super::encode::emit_movq_xmm_r(code, Reg(src_x), c);
                     insn(code, row.mnem, &[xmm(src_x), xmm(dst_x)])
                 }
-            };
-            if !ok {
-                return false;
-            }
+            }?;
         }
         Form::Load => {
             let Some(p) = operand(code, 1, SCRATCH_R10) else {
                 return fail("x86 simd: pointer operand has no place");
             };
-            if !load128(code, dst_x, p) {
-                return false;
-            }
+            load128(code, dst_x, p)?;
         }
         Form::Store => {
             let Some(a) = operand(code, 1, SCRATCH_R10) else {
                 return fail("x86 simd: source operand has no place");
             };
-            if !load128(code, dst_x, a) {
-                return false;
-            }
+            load128(code, dst_x, a)?;
             let Some(p) = operand(code, 0, SCRATCH_R10) else {
                 return fail("x86 simd: pointer operand has no place");
             };
@@ -157,18 +135,14 @@ pub(super) fn emit_x86_simd(
             let Some(a) = operand(code, 1, SCRATCH_R10) else {
                 return fail("x86 simd: operand 1 has no place");
             };
-            if !load128(code, src_x, a) {
-                return false;
-            }
+            load128(code, src_x, a)?;
             // `pextrw` zero-extends into the 32-bit register; `pextrd`
             // writes all 32 bits. Both leave a zero-extended `int`.
-            if !insn(
+            insn(
                 code,
                 row.mnem,
                 &[imm8, xmm(src_x), gpr(SCRATCH_R11, AsmRegSize::Long)],
-            ) {
-                return false;
-            }
+            )?;
             let Some(d) = operand(code, 0, SCRATCH_R10) else {
                 return fail("x86 simd: destination has no place");
             };
@@ -182,33 +156,25 @@ pub(super) fn emit_x86_simd(
             let Some(a) = operand(code, 1, SCRATCH_R10) else {
                 return fail("x86 simd: operand 1 has no place");
             };
-            if !load128(code, dst_x, a) {
-                return false;
-            }
+            load128(code, dst_x, a)?;
             let Some(x) = operand(code, 2, SCRATCH_R10) else {
                 return fail("x86 simd: value operand has no place");
             };
             // Every `pinsr` narrower than a quadword reads a 32-bit
             // register and uses the low lanes of it.
             let size = int_size(row.int_width.max(4));
-            if !insn(code, row.mnem, &[imm8, gpr(x, size), xmm(dst_x)]) {
-                return false;
-            }
+            insn(code, row.mnem, &[imm8, gpr(x, size), xmm(dst_x)])?;
         }
         Form::MoveMask => {
             let Some(a) = operand(code, 1, SCRATCH_R10) else {
                 return fail("x86 simd: operand 1 has no place");
             };
-            if !load128(code, src_x, a) {
-                return false;
-            }
-            if !insn(
+            load128(code, src_x, a)?;
+            insn(
                 code,
                 row.mnem,
                 &[xmm(src_x), gpr(SCRATCH_R11, AsmRegSize::Long)],
-            ) {
-                return false;
-            }
+            )?;
             let Some(d) = operand(code, 0, SCRATCH_R10) else {
                 return fail("x86 simd: destination has no place");
             };
@@ -225,20 +191,17 @@ pub(super) fn emit_x86_simd(
             };
             // `rdrand` sets the carry flag when the value is valid; the
             // stores in between leave the flags alone.
-            if !insn(code, "rdrand", &[gpr(SCRATCH_R10, size)])
-                || !insn(code, "mov", &[gpr(SCRATCH_R10, size), at(p, size)])
-                || !insn(code, "setc", &[gpr(SCRATCH_R10, AsmRegSize::Byte)])
-                || !insn(
-                    code,
-                    "movzx",
-                    &[
-                        gpr(SCRATCH_R10, AsmRegSize::Byte),
-                        gpr(SCRATCH_R10, AsmRegSize::Long),
-                    ],
-                )
-            {
-                return false;
-            }
+            insn(code, "rdrand", &[gpr(SCRATCH_R10, size)])?;
+            insn(code, "mov", &[gpr(SCRATCH_R10, size), at(p, size)])?;
+            insn(code, "setc", &[gpr(SCRATCH_R10, AsmRegSize::Byte)])?;
+            insn(
+                code,
+                "movzx",
+                &[
+                    gpr(SCRATCH_R10, AsmRegSize::Byte),
+                    gpr(SCRATCH_R10, AsmRegSize::Long),
+                ],
+            )?;
             let Some(d) = operand(code, 0, SCRATCH_R11) else {
                 return fail("x86 simd: destination has no place");
             };
@@ -255,7 +218,7 @@ pub(super) fn emit_x86_simd(
     if row.form.returns_vector() {
         store128(code, d, dst_x)
     } else {
-        true
+        Ok(())
     }
 }
 
@@ -274,7 +237,7 @@ pub(super) fn emit_intrinsic(
     alloc: &Allocation,
     frame: Frame,
     abi: super::Abi,
-) -> bool {
+) -> Emit {
     use crate::c5::op::Intrinsic as I;
     let Some(intrinsic) = I::from_i64(kind) else {
         return fail("intrinsic: unknown discriminant");
@@ -297,7 +260,7 @@ pub(super) fn emit_intrinsic(
         I::VaStart => emit_va_start_cursor(code, args, alloc, frame),
         I::VaArg => emit_va_arg_cursor(code, args, dst, alloc, frame),
         // No teardown for the cursor model.
-        I::VaEnd => true,
+        I::VaEnd => Ok(()),
         I::VaCopy => emit_va_copy_cursor(code, args, alloc, frame),
         I::Alloca => emit_alloca(code, args, dst, alloc, frame),
         I::AllocaSave => emit_alloca_save(code, dst, frame),
@@ -310,17 +273,17 @@ pub(super) fn emit_intrinsic(
         // `ud2`: #UD, execution does not continue past it.
         I::Trap => {
             code.extend_from_slice(&[0x0F, 0x0B]);
-            true
+            Ok(())
         }
         // `pause`, the spin-loop hint.
         I::CpuRelax => {
             code.extend_from_slice(&[0xF3, 0x90]);
-            true
+            Ok(())
         }
         // `mfence`, a full barrier (C11 7.17.4 seq_cst).
         I::AtomicThreadFence => {
             code.extend_from_slice(&[0x0F, 0xAE, 0xF0]);
-            true
+            Ok(())
         }
         I::X87StoreControlWord
         | I::X87LoadControlWord
@@ -417,10 +380,10 @@ pub(super) fn emit_intrinsic(
 
 /// The place of `args[i]`, for an intrinsic whose operands are addresses
 /// or values the allocator placed.
-fn arg_place(alloc: &Allocation, args: &[u32], i: usize, what: &str) -> Option<Place> {
+fn arg_place(alloc: &Allocation, args: &[u32], i: usize, what: &'static str) -> Emit<Place> {
     match alloc.places.get(args[i] as usize).copied() {
-        Some(p) => Some(p),
-        None => failed(what),
+        Some(p) => Ok(p),
+        None => fail(what),
     }
 }
 
@@ -436,7 +399,7 @@ fn emit_va_start_sysv(
     alloc: &Allocation,
     frame: Frame,
     abi: super::Abi,
-) -> bool {
+) -> Emit {
     if args.len() != 2 {
         return fail("VaStart: expected 2 args");
     }
@@ -460,9 +423,7 @@ fn emit_va_start_sysv(
     } else {
         SYSV_GP_SAVE_BYTES + named_fp.min(8) * 16
     };
-    let Some(ap_place) = arg_place(alloc, args, 0, "VaStart: &ap value id out of range") else {
-        return false;
-    };
+    let ap_place = arg_place(alloc, args, 0, "VaStart: &ap value id out of range")?;
     let Some(ap) = materialize_int(code, ap_place, SCRATCH_R11, frame) else {
         return fail("VaStart: &ap not in int reg / spill");
     };
@@ -481,26 +442,22 @@ fn emit_va_start_sysv(
     emit_mov_mem_r(code, ap, 8, SCRATCH_R10);
     emit_lea_r_mem(code, SCRATCH_R10, Reg::RBP, frame.va_reg_save_off);
     emit_mov_mem_r(code, ap, 16, SCRATCH_R10);
-    true
+    Ok(())
 }
 
 /// System V `va_copy`: the 24-byte `__va_list_tag` copy (ABI 3.5.7),
 /// `args[0]` = &dst, `args[1]` = &src. The pointers ride r10 / r11; the
 /// copied word borrows a pool register around a push / pop pair, the spill
 /// loads running before the push.
-fn emit_va_copy_sysv(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, frame: Frame) -> bool {
+fn emit_va_copy_sysv(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, frame: Frame) -> Emit {
     if args.len() != 2 {
         return fail("VaCopy: expected 2 args");
     }
-    let Some(src_place) = arg_place(alloc, args, 1, "VaCopy: &src value id out of range") else {
-        return false;
-    };
+    let src_place = arg_place(alloc, args, 1, "VaCopy: &src value id out of range")?;
     let Some(src_p) = materialize_int(code, src_place, SCRATCH_R11, frame) else {
         return fail("VaCopy: &src not in int reg / spill");
     };
-    let Some(dst_place) = arg_place(alloc, args, 0, "VaCopy: &dst value id out of range") else {
-        return false;
-    };
+    let dst_place = arg_place(alloc, args, 0, "VaCopy: &dst value id out of range")?;
     let Some(dst_p) = materialize_int(code, dst_place, SCRATCH_R10, frame) else {
         return fail("VaCopy: &dst not in int reg / spill");
     };
@@ -517,7 +474,7 @@ fn emit_va_copy_sysv(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, frame
         emit_mov_mem_r(code, dst_p, off, temp);
     }
     emit_pop_r(code, temp);
-    true
+    Ok(())
 }
 
 /// Win64 `va_start(&ap, &last)`: `*ap = &last + stride`. Each pointer
@@ -528,16 +485,12 @@ fn emit_va_start_cursor(
     args: &[u32],
     alloc: &Allocation,
     frame: Frame,
-) -> bool {
+) -> Emit {
     if args.len() != 2 {
         return fail("VaStart: expected 2 args");
     }
-    let Some(ap_place) = arg_place(alloc, args, 0, "VaStart: &ap value id out of range") else {
-        return false;
-    };
-    let Some(last_place) = arg_place(alloc, args, 1, "VaStart: &last value id out of range") else {
-        return false;
-    };
+    let ap_place = arg_place(alloc, args, 0, "VaStart: &ap value id out of range")?;
+    let last_place = arg_place(alloc, args, 1, "VaStart: &last value id out of range")?;
     let Some(ap) = materialize_int(code, ap_place, SCRATCH_R11, frame) else {
         return fail("VaStart: &ap not in int reg / spill");
     };
@@ -547,7 +500,7 @@ fn emit_va_start_cursor(
     let advance = SCRATCH_R10;
     emit_lea_r_mem(code, advance, last, VA_CURSOR_STRIDE);
     emit_mov_mem_r(code, ap, 0, advance);
-    true
+    Ok(())
 }
 
 /// Win64 `va_arg`: returns `*ap` and advances it by the stride (`args[1]`,
@@ -561,13 +514,11 @@ fn emit_va_arg_cursor(
     dst: Place,
     alloc: &Allocation,
     frame: Frame,
-) -> bool {
+) -> Emit {
     if args.is_empty() {
         return fail("VaArg: expected at least the ap argument");
     }
-    let Some(ap_place) = arg_place(alloc, args, 0, "VaArg: &ap value id out of range") else {
-        return false;
-    };
+    let ap_place = arg_place(alloc, args, 0, "VaArg: &ap value id out of range")?;
     let ap = match ap_place {
         Place::IntReg(r) => {
             let work_aliases = matches!(dst, Place::IntReg(d) if d == r);
@@ -603,22 +554,18 @@ fn emit_va_arg_cursor(
         emit_mov_mem_r(code, ap, 0, advance);
         spill_dst_to_slot(code, dst, work, frame);
     }
-    true
+    Ok(())
 }
 
 /// Win64 `va_copy(&dst, &src)`: `*dst = *src`. The source value loads into
 /// r10 before the destination pointer materializes, so r11 serves both
 /// pointers in turn.
-fn emit_va_copy_cursor(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, frame: Frame) -> bool {
+fn emit_va_copy_cursor(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, frame: Frame) -> Emit {
     if args.len() != 2 {
         return fail("VaCopy: expected 2 args");
     }
-    let Some(dst_place) = arg_place(alloc, args, 0, "VaCopy: &dst value id out of range") else {
-        return false;
-    };
-    let Some(src_place) = arg_place(alloc, args, 1, "VaCopy: &src value id out of range") else {
-        return false;
-    };
+    let dst_place = arg_place(alloc, args, 0, "VaCopy: &dst value id out of range")?;
+    let src_place = arg_place(alloc, args, 1, "VaCopy: &src value id out of range")?;
     let Some(src_p) = materialize_int(code, src_place, SCRATCH_R11, frame) else {
         return fail("VaCopy: &src not in int reg / spill");
     };
@@ -628,7 +575,7 @@ fn emit_va_copy_cursor(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, fra
         return fail("VaCopy: &dst not in int reg / spill");
     };
     emit_mov_mem_r(code, dst_p, 0, scratch);
-    true
+    Ok(())
 }
 
 /// `alloca(n)`: rsp moves down by `n` rounded up to 16 and is returned; the
@@ -642,7 +589,7 @@ fn emit_alloca(
     dst: Place,
     alloc: &Allocation,
     frame: Frame,
-) -> bool {
+) -> Emit {
     if !frame.dynamic_sp {
         return fail("Alloca: AllocaInit didn't run for this function");
     }
@@ -690,11 +637,11 @@ fn emit_alloca(
     code[skip_at..skip_at + 4].copy_from_slice(&skip.to_le_bytes());
     emit_mov_rr(code, Reg::RSP, rd_phys);
     spill_dst_to_slot(code, dst, rd_phys, frame);
-    true
+    Ok(())
 }
 
 /// Snapshot rsp for a VLA block (C99 6.2.4p2).
-fn emit_alloca_save(code: &mut Vec<u8>, dst: Place, frame: Frame) -> bool {
+fn emit_alloca_save(code: &mut Vec<u8>, dst: Place, frame: Frame) -> Emit {
     if !frame.dynamic_sp {
         return fail("AllocaSave: AllocaInit didn't run for this function");
     }
@@ -708,12 +655,12 @@ fn emit_alloca_save(code: &mut Vec<u8>, dst: Place, frame: Frame) -> bool {
     };
     emit_mov_rr(code, rd_phys, Reg::RSP);
     spill_dst_to_slot(code, dst, rd_phys, frame);
-    true
+    Ok(())
 }
 
 /// Restore the saved rsp on VLA block exit, reclaiming the block's storage
 /// (per iteration for a loop body).
-fn emit_alloca_restore(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, frame: Frame) -> bool {
+fn emit_alloca_restore(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, frame: Frame) -> Emit {
     if !frame.dynamic_sp {
         return fail("AllocaRestore: AllocaInit didn't run for this function");
     }
@@ -725,7 +672,7 @@ fn emit_alloca_restore(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, fra
         return fail("AllocaRestore: arg not int reg / spill / fp");
     };
     emit_mov_rr(code, Reg::RSP, v);
-    true
+    Ok(())
 }
 
 /// The single-memory-operand x87 / system forms: the operand address is
@@ -740,19 +687,17 @@ fn emit_mem_operand_insn(
     args: &[u32],
     alloc: &Allocation,
     frame: Frame,
-) -> bool {
+) -> Emit {
     use crate::c5::op::Intrinsic as I;
     if args.len() != 1 {
         return fail("single-memory-operand intrinsic expects 1 arg");
     }
-    let Some(place) = arg_place(
+    let place = arg_place(
         alloc,
         args,
         0,
         "single-memory-operand intrinsic: arg place missing",
-    ) else {
-        return false;
-    };
+    )?;
     let Some(addr) = materialize_int(code, place, SCRATCH_R10, frame) else {
         return fail("single-memory-operand intrinsic: arg not an int register");
     };
@@ -776,7 +721,7 @@ fn emit_mem_operand_insn(
     code.push(0x41); // REX.B for r10
     code.extend_from_slice(opc);
     code.push((reg_field << 3) | 0x02); // mod=00, reg=field, rm=r10
-    true
+    Ok(())
 }
 
 /// Unsigned 128/64 division (`udiv_qrnnd`): `div` reads rdx:rax = n1:n0
@@ -784,7 +729,7 @@ fn emit_mem_operand_insn(
 /// `[q_addr, rem_addr, n0, n1, d]`. rax / rdx are preserved and the output
 /// addresses pushed (remainder popped first); each operand is read through
 /// the rsp shift the pushes produced.
-fn emit_divq128(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, frame: Frame) -> bool {
+fn emit_divq128(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, frame: Frame) -> Emit {
     const RAX: Reg = Reg(0);
     const RDX: Reg = Reg(2);
     const R10: Reg = Reg(10);
@@ -833,17 +778,23 @@ fn emit_divq128(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, frame: Fra
     super::encode::emit_mov_mem_r(code, R11, 0, RAX);
     super::encode::emit_pop_r(code, RDX);
     super::encode::emit_pop_r(code, RAX);
-    true
+    Ok(())
 }
 
 /// The value of `src` (rbp or rsp) into the destination.
-fn emit_reg_read(code: &mut Vec<u8>, dst: Place, frame: Frame, src: Reg, no_dst: &str) -> bool {
+fn emit_reg_read(
+    code: &mut Vec<u8>,
+    dst: Place,
+    frame: Frame,
+    src: Reg,
+    no_dst: &'static str,
+) -> Emit {
     let Some(rd) = int_or_spill_dst(dst) else {
         return fail(no_dst);
     };
     emit_mov_rr(code, rd, src);
     spill_dst_to_slot(code, dst, rd, frame);
-    true
+    Ok(())
 }
 
 /// `__builtin_return_address`: the return address a frame record holds at
@@ -855,7 +806,7 @@ fn emit_return_address(
     dst: Place,
     alloc: &Allocation,
     frame: Frame,
-) -> bool {
+) -> Emit {
     let Some(rd) = int_or_spill_dst(dst) else {
         return fail("ReturnAddress: dst not int reg / spill");
     };
@@ -871,7 +822,7 @@ fn emit_return_address(
     };
     emit_mov_r_mem(code, rd, fp, 8);
     spill_dst_to_slot(code, dst, rd, frame);
-    true
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -885,7 +836,7 @@ pub(super) fn emit_mcpy(
     strict_align: bool,
     alloc: &Allocation,
     frame: Frame,
-) -> bool {
+) -> Emit {
     if size < 0 {
         return fail("Mcpy: negative size");
     }
@@ -938,7 +889,7 @@ pub(super) fn emit_mcpy(
         Place::Spill(_) => spill_dst_to_slot(code, dst_place, dst_r, frame),
         _ => {}
     }
-    true
+    Ok(())
 }
 
 /// Write the result `src` of an atomic op into the inst's `dst`
@@ -1013,7 +964,7 @@ pub(super) fn emit_atomic_rmw(
     width: u8,
     alloc: &Allocation,
     frame: Frame,
-) -> bool {
+) -> Emit {
     use super::super::ir::AtomicRmwOp as Op;
     let a = SCRATCH_R11;
     let val = SCRATCH_R10;
@@ -1028,7 +979,7 @@ pub(super) fn emit_atomic_rmw(
             }
             emit_xchg_mem_r(code, a, 0, val, width);
             write_atomic_result(code, dst, val, frame);
-            true
+            Ok(())
         }
         Op::Add | Op::Sub => {
             emit_push_r(code, Reg::RAX);
@@ -1046,7 +997,7 @@ pub(super) fn emit_atomic_rmw(
             emit_mov_rr(code, val, Reg::RAX);
             emit_pop_r(code, Reg::RAX);
             write_atomic_result(code, dst, val, frame);
-            true
+            Ok(())
         }
         Op::And | Op::Or | Op::Xor => {
             // CMPXCHG retry: load the current value into RAX, compute the
@@ -1078,7 +1029,7 @@ pub(super) fn emit_atomic_rmw(
             emit_pop_r(code, temp);
             emit_pop_r(code, Reg::RAX);
             write_atomic_result(code, dst, val, frame);
-            true
+            Ok(())
         }
     }
 }
@@ -1097,7 +1048,7 @@ pub(super) fn emit_atomic_cas(
     width: u8,
     alloc: &Allocation,
     frame: Frame,
-) -> bool {
+) -> Emit {
     let a = SCRATCH_R11;
     let des = SCRATCH_R10;
     let exp = Reg::RCX;
@@ -1125,5 +1076,5 @@ pub(super) fn emit_atomic_cas(
     emit_pop_r(code, exp);
     emit_pop_r(code, Reg::RAX);
     write_atomic_result(code, dst, a, frame);
-    true
+    Ok(())
 }

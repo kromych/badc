@@ -14,7 +14,7 @@ pub(super) fn emit_tls_addr(
     extern_tls_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     tls_total_size: usize,
     frame: Frame,
-) -> bool {
+) -> Emit {
     let Some(rd) = int_or_spill_dst(dst) else {
         return fail("TlsAddr: dst not int reg / spill");
     };
@@ -68,7 +68,7 @@ pub(super) fn emit_tls_addr(
                 },
             });
             spill_dst_to_slot(code, dst, rd, frame);
-            true
+            Ok(())
         }
         Target::WindowsX64 => {
             if !(i32::MIN as i64..=i32::MAX as i64).contains(&offset) {
@@ -137,7 +137,7 @@ pub(super) fn emit_tls_addr(
                 },
             });
             spill_dst_to_slot(code, dst, rd, frame);
-            true
+            Ok(())
         }
         _ => fail("TlsAddr: target not x86_64"),
     }
@@ -266,13 +266,13 @@ fn emit_load_fp_mem(
     frame: Frame,
     bound: Option<u32>,
     site: &str,
-) -> bool {
+) -> Emit {
     let Some(dd) = fp_or_spill_dst(dst, frame) else {
-        return fail(&alloc::format!("{site}: dst not fp reg / spill"));
+        return fail(alloc::format!("{site}: dst not fp reg / spill"));
     };
     if matches!(kind, LoadKind::F80 | LoadKind::F128) {
         if !matches!(kind, LoadKind::F80) {
-            return fail(&alloc::format!("{site}: binary128 load on x86-64"));
+            return fail(alloc::format!("{site}: binary128 load on x86-64"));
         }
         // `fld m80` + `fstp m64` narrows the stored x87 value to the
         // f64 the compute path carries, through the red zone (no call
@@ -285,7 +285,7 @@ fn emit_load_fp_mem(
         super::encode::emit_fstp_m64(code, Reg::RSP, -8);
         emit_movsd_xmm_mem(code, dd, Reg::RSP, -8);
         fp_spill_dst_to_slot(code, dst, dd, frame);
-        return true;
+        return Ok(());
     }
     // A bounded access composes in a GPR and crosses via `movq`, which
     // zeroes the register above the composed bytes exactly as the
@@ -298,7 +298,7 @@ fn emit_load_fp_mem(
             emit_cvtss2sd(code, dd, dd);
         }
         fp_spill_dst_to_slot(code, dst, dd, frame);
-        return true;
+        return Ok(());
     }
     // Segment override precedes the mandatory SSE prefix and the opcode.
     if let Some(p) = seg {
@@ -313,7 +313,7 @@ fn emit_load_fp_mem(
         emit_movsd_xmm_mem(code, dd, base, disp);
     }
     fp_spill_dst_to_slot(code, dst, dd, frame);
-    true
+    Ok(())
 }
 
 /// FP store `*(f32/f64*)[base + disp] = value`: `movss` for a single
@@ -333,15 +333,13 @@ fn emit_store_fp_mem(
     frame: Frame,
     bound: Option<u32>,
     site: &str,
-) -> bool {
+) -> Emit {
     let Some(dn) = materialize_fp(code, value_place, Reg(frame.fp_scratch[0]), frame) else {
-        return fail(&alloc::format!(
-            "{site}: value not fp reg / spill / int reg"
-        ));
+        return fail(alloc::format!("{site}: value not fp reg / spill / int reg"));
     };
     if matches!(kind, StoreKind::F80 | StoreKind::F128) {
         if !matches!(kind, StoreKind::F80) {
-            return fail(&alloc::format!("{site}: binary128 store on x86-64"));
+            return fail(alloc::format!("{site}: binary128 store on x86-64"));
         }
         // `fld m64` widens the f64 exactly; `fstp m80` writes the 10
         // significant bytes and leaves the object's padding untouched,
@@ -353,7 +351,7 @@ fn emit_store_fp_mem(
         }
         super::encode::emit_fstp_m80(code, base, disp);
         mirror_fp_dst(code, dst, dn, frame);
-        return true;
+        return Ok(());
     }
     // Emit the segment override immediately before the store opcode, past any
     // value materialisation / narrowing the branches do first.
@@ -390,7 +388,7 @@ fn emit_store_fp_mem(
         }
     }
     mirror_fp_dst(code, dst, dn, frame);
-    true
+    Ok(())
 }
 
 /// Base register and displacement of a local slot. An over-aligned object
@@ -428,7 +426,7 @@ pub(super) fn emit_load_local(
     frame: Frame,
     func: &FunctionSsa,
     abi: super::Abi,
-) -> bool {
+) -> Emit {
     let (base, bytes) = local_slot_base_disp(off, func, frame, abi);
     let Ok(disp) = i32::try_from(bytes) else {
         return fail("LoadLocal: offset doesn't fit in disp32");
@@ -452,7 +450,7 @@ pub(super) fn emit_load_local(
     };
     emit_load_kind_mem(code, kind, rd, base, disp, None);
     spill_dst_to_slot(code, dst, rd, frame);
-    true
+    Ok(())
 }
 
 /// The kinds that load through an xmm register.
@@ -486,7 +484,7 @@ pub(super) fn emit_store_local(
     frame: Frame,
     func: &FunctionSsa,
     abi: super::Abi,
-) -> bool {
+) -> Emit {
     let (base, bytes) = local_slot_base_disp(off, func, frame, abi);
     let Ok(disp) = i32::try_from(bytes) else {
         return fail("StoreLocal: offset doesn't fit in disp32");
@@ -530,7 +528,7 @@ pub(super) fn emit_store_local(
     emit_store_kind_mem(code, kind, base, disp, rv, None);
     // Mirror the store value into the destination Place.
     mirror_int_dst(code, dst, rv, frame);
-    true
+    Ok(())
 }
 
 /// Lower `Inst::LoadIndexed`: `dst = *(kind*)(base + index * scale)`.
@@ -547,7 +545,7 @@ pub(super) fn emit_load_indexed(
     kind: LoadKind,
     alloc: &Allocation,
     frame: Frame,
-) -> bool {
+) -> Emit {
     if is_fp_load(kind) {
         return fail("LoadIndexed: FP not implemented");
     }
@@ -582,7 +580,7 @@ pub(super) fn emit_load_indexed(
         LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => unreachable!(),
     }
     spill_dst_to_slot(code, dst, rd, frame);
-    true
+    Ok(())
 }
 
 /// Lower `Inst::StoreIndexed`: `*(kind*)(base + index * scale) = value`.
@@ -597,7 +595,7 @@ pub(super) fn emit_store_indexed(
     kind: StoreKind,
     alloc: &Allocation,
     frame: Frame,
-) -> bool {
+) -> Emit {
     if is_fp_store(kind) {
         return fail("StoreIndexed: FP not implemented");
     }
@@ -676,7 +674,7 @@ pub(super) fn emit_store_indexed(
     }
     // c5 store-op leaves the value in the accumulator.
     mirror_int_dst(code, dst, rv, frame);
-    true
+    Ok(())
 }
 
 pub(super) fn emit_load(
@@ -690,7 +688,7 @@ pub(super) fn emit_load(
     alloc: &Allocation,
     frame: Frame,
     bound: Option<u32>,
-) -> bool {
+) -> Emit {
     let addr_place = place_of(alloc, addr);
     // Spill-tolerant base materialisation: load a spilled address
     // into r10 first, write into rd next, then spill rd to its
@@ -712,7 +710,7 @@ pub(super) fn emit_load(
         None => emit_load_kind_mem(code, kind, rd, base, disp, seg),
     }
     spill_dst_to_slot(code, dst, rd, frame);
-    true
+    Ok(())
 }
 
 pub(super) fn emit_store(
@@ -727,7 +725,7 @@ pub(super) fn emit_store(
     alloc: &Allocation,
     frame: Frame,
     bound: Option<u32>,
-) -> bool {
+) -> Emit {
     let addr_place = place_of(alloc, addr);
     let value_place = place_of(alloc, value);
     // r10 for a spilled address, r11 for a spilled value: both are reserved
@@ -773,7 +771,7 @@ pub(super) fn emit_store(
         Place::Spill(_) => spill_dst_to_slot(code, dst, rs, frame),
         _ => {}
     }
-    true
+    Ok(())
 }
 
 pub(super) fn emit_imm_data(
@@ -782,7 +780,7 @@ pub(super) fn emit_imm_data(
     offset: i64,
     data_fixups: &mut Vec<DataFixup>,
     frame: Frame,
-) -> bool {
+) -> Emit {
     let Some(rd) = int_or_spill_dst(dst) else {
         return fail("ImmData: dst not int reg / spill");
     };
@@ -796,7 +794,7 @@ pub(super) fn emit_imm_data(
     // disp32 once the data segment's runtime address is known.
     super::encode::emit_lea_r_rip32(code, rd, 0);
     spill_dst_to_slot(code, dst, rd, frame);
-    true
+    Ok(())
 }
 
 pub(super) fn emit_imm_code(
@@ -805,7 +803,7 @@ pub(super) fn emit_imm_code(
     target_ent_pc: usize,
     pending_func_fixups: &mut Vec<(usize, usize)>,
     frame: Frame,
-) -> bool {
+) -> Emit {
     let Some(rd) = int_or_spill_dst(dst) else {
         return fail("ImmCode: dst not int reg / spill");
     };
@@ -813,7 +811,7 @@ pub(super) fn emit_imm_code(
     pending_func_fixups.push((instr_offset, target_ent_pc));
     super::encode::emit_lea_r_rip32(code, rd, 0);
     spill_dst_to_slot(code, dst, rd, frame);
-    true
+    Ok(())
 }
 
 /// `Inst::ImmExtCode`: `lea rd, [rip+disp32]` of a dynamically imported
@@ -827,7 +825,7 @@ pub(super) fn emit_imm_ext_code(
     plt_call_fixups: &mut Vec<PltCallFixup>,
     imports: &super::ResolvedImports,
     frame: Frame,
-) -> bool {
+) -> Emit {
     let Some(rd) = int_or_spill_dst(dst) else {
         return fail("ImmExtCode: dst not int reg / spill");
     };
@@ -842,7 +840,7 @@ pub(super) fn emit_imm_ext_code(
     });
     super::encode::emit_lea_r_rip32(code, rd, 0);
     spill_dst_to_slot(code, dst, rd, frame);
-    true
+    Ok(())
 }
 
 /// One load / store pair of `width` bytes (8, 4, 2 or 1) moving

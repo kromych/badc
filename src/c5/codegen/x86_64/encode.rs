@@ -1939,9 +1939,7 @@ impl super::ssa::emit_common::LowerTarget for X64Lower<'_> {
             })
             .collect();
         let mut cx = fe.cx;
-        #[cfg(feature = "std")]
-        let _ = super::ssa::emit_common::take_bail();
-        let ok = super::emit::emit_function(
+        super::emit::emit_function(
             func,
             alloc_for,
             target,
@@ -1969,8 +1967,7 @@ impl super::ssa::emit_common::LowerTarget for X64Lower<'_> {
             native.stack_protect.resolved_for(target),
             entry,
             native.fixed_regs,
-        );
-        super::ssa::emit_common::emit_result(ok)
+        )
     }
 
     fn after_functions(

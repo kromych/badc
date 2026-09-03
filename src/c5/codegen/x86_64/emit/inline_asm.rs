@@ -1,6 +1,5 @@
 use super::*;
 
-/// Report a bail and yield the handler's `false` result.
 /// Placeholder for a `$LABEL` immediate: outside the signed-byte range, so
 /// form selection takes the 32-bit immediate field the relocation needs, and
 /// distinctive enough to confirm the field landed at the end of the encoding.
@@ -1537,7 +1536,7 @@ pub(super) fn emit_inline_asm(
     args: &[u32],
     fcx: &FnCtx,
     mut goto_ctx: Option<AsmGotoCtx<'_>>,
-) -> bool {
+) -> Emit {
     let mut long_sites: alloc::collections::BTreeSet<usize> = alloc::collections::BTreeSet::new();
     let base = out.mark();
     loop {
@@ -1547,11 +1546,9 @@ pub(super) fn emit_inline_asm(
             branch_fixups: &mut *c.branch_fixups,
             branch_short: c.branch_short,
         });
-        if !emit_inline_asm_once(out, asm, args, fcx, round_ctx, &mut long_sites) {
-            return false;
-        }
+        emit_inline_asm_once(out, asm, args, fcx, round_ctx, &mut long_sites)?;
         if long_sites.len() == known {
-            return true;
+            return Ok(());
         }
         out.restore(&base);
     }
@@ -1622,10 +1619,10 @@ fn prepare_template(
     stmt: &AsmStmt,
     asm_sections: &mut crate::c5::asm::AsmSectionSink,
     goto_row: Option<&[super::super::ir::BlockId]>,
-) -> Option<AsmTemplate> {
+) -> Emit<AsmTemplate> {
     let asm = stmt.asm;
     let Ok(raw_text) = core::str::from_utf8(&asm.template) else {
-        return failed("inline asm: non-UTF8 template");
+        return fail("inline asm: non-UTF8 template");
     };
     let stripped = crate::c5::asm::strip_asm_comments(raw_text, crate::c5::asm::AsmComments::X86);
     let raw_text = stripped.as_deref().unwrap_or(raw_text);
@@ -1639,7 +1636,7 @@ fn prepare_template(
             .and_then(|op| super::asm::att_size_suffix(op.width))
     }) {
         Ok(s) => s,
-        Err(m) => return failed(&m),
+        Err(m) => return fail(m),
     };
     let text = sized.as_deref().unwrap_or(text);
     // The register assignment serves the code stream and, ahead of it, the
@@ -1652,27 +1649,27 @@ fn prepare_template(
         &|i| stmt.const_of(i as u8),
     ) {
         Ok(r) => r,
-        Err(m) => return failed(&m),
+        Err(m) => return fail(m),
     };
     let gas = match crate::c5::asm::expand_asm_gas_macros(text, 4, &|tok| {
         gas_operand_subst(stmt, &op_reg, tok)
     }) {
         Ok(e) => e,
-        Err(m) => return failed(&m),
+        Err(m) => return fail(m),
     };
     let text = gas.as_deref().unwrap_or(text);
     let mut extracted = match crate::c5::asm::extract_asm_sections(text, false) {
         Ok(e) => e,
-        Err(m) => return failed(&m),
+        Err(m) => return fail(m),
     };
     if let Some(ex) = &extracted {
         if let Err(m) = crate::c5::asm::reject_unit_symbol_items(&ex.blocks) {
-            return failed(&m);
+            return fail(m);
         }
         // The template's symbol directives declare names of the unit; the
         // object writer applies them, where every definition is known.
         if let Err(m) = asm_sections.push_sym_decls(&ex.sym_items) {
-            return failed(&m);
+            return fail(m);
         }
     }
     // A `%lK` goto branch in a replacement instruction resolves through the
@@ -1691,7 +1688,7 @@ fn prepare_template(
             &asm.operands,
         )
     {
-        return failed(&m);
+        return fail(m);
     }
     let (code, blocks) = match extracted {
         Some(ex) => (ex.code, ex.blocks),
@@ -1699,12 +1696,12 @@ fn prepare_template(
     };
     let insns = match super::asm::parse_template(code.as_bytes()) {
         Ok(i) => i,
-        Err(m) => return failed(&m),
+        Err(m) => return fail(m),
     };
     if let Err(m) = super::asm::check_operand_refs(&insns, asm.operands.len()) {
-        return failed(&m);
+        return fail(m);
     }
-    Some(AsmTemplate {
+    Ok(AsmTemplate {
         op_reg,
         code,
         blocks,
@@ -1773,11 +1770,11 @@ struct AsmScratch {
 }
 
 impl AsmScratch {
-    fn new(stmt: &AsmStmt, op_reg: &[Option<u8>]) -> Option<AsmScratch> {
+    fn new(stmt: &AsmStmt, op_reg: &[Option<u8>]) -> Emit<AsmScratch> {
         let (used, fp_used, stage) =
             match asm_save_masks_and_stage(stmt.asm, op_reg, stmt.frame.fixed_regs) {
                 Ok(t) => t,
-                Err(m) => return failed(&m),
+                Err(m) => return fail(m),
             };
         let save_list: alloc::vec::Vec<u8> = (0u8..16).filter(|r| used & (1 << r) != 0).collect();
         let fp_save_list: alloc::vec::Vec<u8> =
@@ -1788,7 +1785,7 @@ impl AsmScratch {
             base != 0 || (fp_area == 0 && save_list.is_empty() && stmt.asm.operands.is_empty()),
             "inline asm without a frame scratch region"
         );
-        Some(AsmScratch {
+        Ok(AsmScratch {
             base,
             fp_area,
             save_list,
@@ -1835,7 +1832,7 @@ impl AsmScratch {
     /// (r10 and r11 both held by operands or clobbers) may itself be some
     /// operand's register, so register-resident operands are captured in a
     /// first pass, before a spill load writes the stage.
-    fn emit_captures(&self, code: &mut Vec<u8>, stmt: &AsmStmt) -> bool {
+    fn emit_captures(&self, code: &mut Vec<u8>, stmt: &AsmStmt) -> Emit {
         let passes = if self.stage == SCRATCH_R10 || self.stage == SCRATCH_R11 {
             1
         } else {
@@ -1855,7 +1852,7 @@ impl AsmScratch {
                 super::encode::emit_mov_mem_r(code, Reg::RBP, self.cap_off(i), r);
             }
         }
-        true
+        Ok(())
     }
 
     /// Load the inputs into their registers; a `+` output loads its current
@@ -2027,15 +2024,15 @@ impl AsmPass<'_> {
 
     /// The jcc condition of a branch mnemonic, `None` for `jmp`; a
     /// non-branch is refused.
-    fn branch_cc(insn: &super::asm::AsmInsn) -> Option<Option<Cc>> {
+    fn branch_cc(insn: &super::asm::AsmInsn) -> Emit<Option<Cc>> {
         let super::asm::Mnemonic::Table(name) = insn.mnemonic else {
-            return failed("inline asm: label operand on a non-jump");
+            return fail("inline asm: label operand on a non-jump");
         };
         let cc = jcc_cond(name);
         if cc.is_none() && !matches!(name, "jmp" | "jmpq") {
-            return failed("inline asm: label operand on a non-jump");
+            return fail("inline asm: label operand on a non-jump");
         }
-        Some(cc)
+        Ok(cc)
     }
 
     fn emit_insn(
@@ -2045,7 +2042,7 @@ impl AsmPass<'_> {
         out: &mut Out,
         layout: &mut AsmLayout,
         long_sites: &mut alloc::collections::BTreeSet<usize>,
-    ) -> bool {
+    ) -> Emit {
         let pending_at = if matches!(insn.mnemonic, super::asm::Mnemonic::Prefix(_)) {
             layout.prefix_run.get_or_insert(out.cx.code.len());
             None
@@ -2061,9 +2058,7 @@ impl AsmPass<'_> {
         if let Some(ok) = self.emit_branch(ii, insn, out, layout, long_sites) {
             return ok;
         }
-        let Some(resolved) = self.resolve_operands(insn, out.cx.code.len(), layout) else {
-            return false;
-        };
+        let resolved = self.resolve_operands(insn, out.cx.code.len(), layout)?;
         self.encode_insn(insn, resolved, pending_at, out, layout)
     }
 
@@ -2075,12 +2070,12 @@ impl AsmPass<'_> {
         code: &mut Vec<u8>,
         text_align: &mut usize,
         layout: &mut AsmLayout,
-    ) -> Option<bool> {
+    ) -> Option<Emit> {
         use super::asm::{AsmOpnd, Mnemonic};
         // A local-label definition marks the current offset.
         if let Some(num) = insn.label_def {
             layout.label_defs.push((num, code.len()));
-            return Some(true);
+            return Some(Ok(()));
         }
         // `.align` / `.p2align` / `.balign` pad the unit's text stream to the
         // boundary as GNU as does section-relative, raising the section
@@ -2105,23 +2100,23 @@ impl AsmPass<'_> {
                 .filter(|&off| off <= at as i64)
             }) {
                 Ok(n) => n,
-                Err(e) => return Some(fail(&e)),
+                Err(e) => return Some(fail(e)),
             };
             *text_align = (*text_align).max(n as usize);
             let gap = crate::c5::asm::align_gap(at as i64, n as i64, *max) as usize;
             if let Err(e) =
                 crate::c5::asm::push_align_fill(code, gap, *fill, true, *nops, layout.after_insn)
             {
-                return Some(fail(&e));
+                return Some(fail(e));
             }
-            return Some(true);
+            return Some(Ok(()));
         }
         // A raw-byte piece (a hex-byte run or a `.byte` family directive) is
         // data as far as alignment is concerned.
         if insn.mnemonic == Mnemonic::RawBytes {
             code.extend_from_slice(&insn.bytes);
             layout.after_insn = false;
-            return Some(true);
+            return Some(Ok(()));
         }
         // `.skip count, fill`: `count` resolves against the section
         // replacement length and the template labels already emitted (the
@@ -2144,7 +2139,7 @@ impl AsmPass<'_> {
                 code.extend_from_slice(unit);
             }
             layout.after_insn = false;
-            return Some(true);
+            return Some(Ok(()));
         }
         // A data directive with operand references (`.long %c0`): each
         // argument is a compile-time constant or a value over template
@@ -2180,7 +2175,7 @@ impl AsmPass<'_> {
                 code.extend_from_slice(&(v as u64).to_le_bytes()[..w as usize]);
             }
             layout.after_insn = false;
-            return Some(true);
+            return Some(Ok(()));
         }
         None
     }
@@ -2194,7 +2189,7 @@ impl AsmPass<'_> {
         insn: &super::asm::AsmInsn,
         code: &mut Vec<u8>,
         layout: &mut AsmLayout,
-    ) -> Option<bool> {
+    ) -> Option<Emit> {
         use super::asm::{AsmOpnd, Mnemonic};
         let (k, idx) = insn
             .operands
@@ -2251,7 +2246,7 @@ impl AsmPass<'_> {
             }
         }
         layout.after_insn = true;
-        Some(true)
+        Some(Ok(()))
     }
 
     /// The direct-branch forms: a jmp / jcc to a local label, a label `lea`,
@@ -2264,7 +2259,7 @@ impl AsmPass<'_> {
         out: &mut Out,
         layout: &mut AsmLayout,
         long_sites: &mut alloc::collections::BTreeSet<usize>,
-    ) -> Option<bool> {
+    ) -> Option<Emit> {
         use super::asm::{AsmOpnd, Mnemonic};
         let code = &mut *out.cx.code;
         // The direct-branch forms carry no REX byte, so a prefix on one
@@ -2282,8 +2277,9 @@ impl AsmPass<'_> {
         // stream defines relaxes to the rel8 form unless a round lengthened
         // it; a target outside the stream keeps rel32 for the section pass.
         if let Some(&AsmOpnd::Label { num, forward }) = insn.operands.first() {
-            let Some(cc) = Self::branch_cc(insn) else {
-                return Some(false);
+            let cc = match Self::branch_cc(insn) {
+                Ok(cc) => cc,
+                Err(e) => return Some(Err(e)),
             };
             if let Some(n) = self.weak_target_name(num) {
                 emit_rel32_branch(code, cc);
@@ -2294,7 +2290,7 @@ impl AsmPass<'_> {
                     addend: -4,
                 });
                 layout.after_insn = true;
-                return Some(true);
+                return Some(Ok(()));
             }
             let in_stream = self.stream_defs.iter().any(|&(n, di)| {
                 n == num
@@ -2315,19 +2311,20 @@ impl AsmPass<'_> {
                 .label_fixups
                 .push((code.len() - width as usize, num, forward, width, ii));
             layout.after_insn = true;
-            return Some(true);
+            return Some(Ok(()));
         }
         // `lea LABEL(%rip), %reg`: the RIP-relative form with a zero rel32
         // the label fixup pass patches like a jump displacement.
         if let Some(&AsmOpnd::LabelAddr { num, forward }) = insn.operands.first() {
-            let Some(width) = self.emit_label_lea(insn, code) else {
-                return Some(false);
+            let width = match self.emit_label_lea(insn, code) {
+                Ok(w) => w,
+                Err(e) => return Some(Err(e)),
             };
             layout
                 .label_fixups
                 .push((code.len() - 4, num, forward, width, ii));
             layout.after_insn = true;
-            return Some(true);
+            return Some(Ok(()));
         }
         // A jmp / jcc to an `asm goto` label (`%lK`): the rel32 form; the
         // site is patched to its exit below.
@@ -2338,8 +2335,9 @@ impl AsmPass<'_> {
             if 1 + k as usize >= row.len() {
                 return Some(fail("inline asm: `%l` label index out of range"));
             }
-            let Some(cc) = Self::branch_cc(insn) else {
-                return Some(false);
+            let cc = match Self::branch_cc(insn) {
+                Ok(cc) => cc,
+                Err(e) => return Some(Err(e)),
             };
             let site = code.len();
             emit_rel32_branch(code, cc);
@@ -2349,7 +2347,7 @@ impl AsmPass<'_> {
             };
             layout.goto_sites.push((site, kind, k as usize));
             layout.after_insn = true;
-            return Some(true);
+            return Some(Ok(()));
         }
         // A direct `call` / `jmp` to a symbol: E8 / E9 with a rel32 the fixup
         // pass patches once every function's address is final. Other
@@ -2366,7 +2364,7 @@ impl AsmPass<'_> {
                 &|i| self.stmt.const_of(i),
             ) {
                 Ok(n) => n,
-                Err(e) => return Some(fail(&e)),
+                Err(e) => return Some(fail(e)),
             };
             // The code stream's branch channels name a symbol with no addend.
             // TODO carry an addend on the call site and the fixup.
@@ -2398,7 +2396,7 @@ impl AsmPass<'_> {
             code.push(if is_call { 0xE8 } else { 0xE9 });
             code.extend_from_slice(&[0u8; 4]);
             layout.after_insn = true;
-            return Some(true);
+            return Some(Ok(()));
         }
         // A `jcc` to a bare symbol resolves against a section label; only
         // file-scope section code carries that resolution.
@@ -2414,14 +2412,14 @@ impl AsmPass<'_> {
     }
 
     /// `lea LABEL(%rip), %reg`: returns the width of the displacement field.
-    fn emit_label_lea(&self, insn: &super::asm::AsmInsn, code: &mut Vec<u8>) -> Option<u8> {
+    fn emit_label_lea(&self, insn: &super::asm::AsmInsn, code: &mut Vec<u8>) -> Emit<u8> {
         use super::super::ir::{AsmConstraint, AsmRegSize};
         use super::asm::AsmOpnd;
         if !matches!(insn.mnemonic, super::asm::Mnemonic::Table("lea")) {
-            return failed("inline asm: a label address requires `lea`");
+            return fail("inline asm: a label address requires `lea`");
         }
         let [_, dst] = insn.operands.as_slice() else {
-            return failed("inline asm: `lea` needs a destination register");
+            return fail("inline asm: `lea` needs a destination register");
         };
         let operands = &self.stmt.asm.operands;
         let (reg, width) = match *dst {
@@ -2439,9 +2437,9 @@ impl AsmPass<'_> {
                             .bytes(),
                     )
                 }
-                _ => return failed("inline asm: `lea` destination must be a register"),
+                _ => return fail("inline asm: `lea` destination must be a register"),
             },
-            _ => return failed("inline asm: `lea` destination must be a register"),
+            _ => return fail("inline asm: `lea` destination must be a register"),
         };
         let tops = [
             super::table::Opnd::Reg { num: reg, width },
@@ -2449,9 +2447,9 @@ impl AsmPass<'_> {
         ];
         match super::table::encode(super::table::Mnem::Lea, None, &tops) {
             Ok(bytes) => code.extend_from_slice(&bytes),
-            Err(m) => return failed(&m),
+            Err(m) => return fail(m),
         }
-        Some(4)
+        Ok(4)
     }
 
     /// Resolve the operands to concrete registers, immediates and memory
@@ -2461,7 +2459,7 @@ impl AsmPass<'_> {
         insn: &super::asm::AsmInsn,
         at: usize,
         layout: &AsmLayout,
-    ) -> Option<ResolvedOperands> {
+    ) -> Emit<ResolvedOperands> {
         use super::asm::AsmOpnd;
         let mut r = ResolvedOperands {
             concrete: alloc::vec::Vec::new(),
@@ -2488,7 +2486,7 @@ impl AsmPass<'_> {
             let c = self.resolve_operand(o, insn, at, layout, has_imm_operand, &mut r)?;
             r.concrete.push(c);
         }
-        Some(r)
+        Ok(r)
     }
 
     fn resolve_operand(
@@ -2499,16 +2497,16 @@ impl AsmPass<'_> {
         layout: &AsmLayout,
         has_imm_operand: bool,
         r: &mut ResolvedOperands,
-    ) -> Option<super::asm::Concrete> {
+    ) -> Emit<super::asm::Concrete> {
         use super::asm::{AsmOpnd, Concrete};
         let stmt = self.stmt;
-        Some(match *o {
+        Ok(match *o {
             AsmOpnd::Imm(val) => Concrete::Imm(val),
             AsmOpnd::HighReg(n) => Concrete::HighReg(n),
             AsmOpnd::HighRef(idx) => {
                 match super::asm::resolve_high_ref(idx, &stmt.asm.operands, &self.tpl.op_reg) {
                     Ok(c) => c,
-                    Err(m) => return failed(&m),
+                    Err(m) => return fail(m),
                 }
             }
             // `%cN` / `%PN` with a compile-time constant (the address case
@@ -2516,7 +2514,7 @@ impl AsmPass<'_> {
             AsmOpnd::RefConst { idx, .. } => match stmt.const_of(idx) {
                 Some(v) => Concrete::Imm(v),
                 None => {
-                    return failed(&alloc::format!(
+                    return fail(alloc::format!(
                         "inline asm: non-constant `%c`/`%P` operand `%{idx}`: the operand is {}",
                         stmt.operand_form(idx)
                     ));
@@ -2540,7 +2538,7 @@ impl AsmPass<'_> {
             // instruction. A symbol address needs a relocation the
             // function-body stream does not carry.
             AsmOpnd::AbsMem { sym: Some(_), .. } => {
-                return failed(
+                return fail(
                     "inline asm: an absolute symbol address is only supported in \
                      file-scope asm",
                 );
@@ -2569,12 +2567,12 @@ impl AsmPass<'_> {
                 sym,
             } => {
                 if sym.is_some() {
-                    return failed(
+                    return fail(
                         "inline asm: a symbol-displacement memory operand is only supported in file-scope asm",
                     );
                 }
                 let Some(index) = self.address_reg(index) else {
-                    return failed("inline asm: memory index must be a register operand");
+                    return fail("inline asm: memory index must be a register operand");
                 };
                 Concrete::IndexMem {
                     index,
@@ -2604,7 +2602,7 @@ impl AsmPass<'_> {
                     .get(expr as usize)
                     .and_then(|e| crate::c5::asm::asm_expr_sym_addend(e))
                 else {
-                    return failed(
+                    return fail(
                         "inline asm: a memory displacement over a label difference is only \
                          supported in file-scope asm",
                     );
@@ -2615,7 +2613,7 @@ impl AsmPass<'_> {
             // A `$expr` immediate, under the same rule as a displacement.
             AsmOpnd::ImmSym { expr } => {
                 let Some(text) = insn.sym_exprs.get(expr as usize) else {
-                    return failed("inline asm: symbol immediate expression is missing");
+                    return fail("inline asm: symbol immediate expression is missing");
                 };
                 match self.expr_value(text, at, layout) {
                     Some(v) => Concrete::Imm(v),
@@ -2624,7 +2622,7 @@ impl AsmPass<'_> {
                         Concrete::Imm(ABS_LABEL_PLACEHOLDER)
                     }
                     None => {
-                        return failed(
+                        return fail(
                             "inline asm: `$symbol` address immediate is only supported in \
                              file-scope asm",
                         );
@@ -2637,7 +2635,7 @@ impl AsmPass<'_> {
             // Handled by `emit_branch`; a label reaching operand resolution
             // rode an unsupported form.
             AsmOpnd::Label { .. } | AsmOpnd::LabelAddr { .. } | AsmOpnd::GotoLabel(_) => {
-                return failed("inline asm: misplaced label reference");
+                return fail("inline asm: misplaced label reference");
             }
         })
     }
@@ -2671,18 +2669,18 @@ impl AsmPass<'_> {
         insn: &super::asm::AsmInsn,
         riprel: bool,
         r: &mut ResolvedOperands,
-    ) -> Option<super::asm::Concrete> {
+    ) -> Emit<super::asm::Concrete> {
         use super::asm::Concrete;
         let size = self.mem_size_or_quad(insn);
         let stmt = self.stmt;
-        Some(match stmt.const_of(idx) {
+        Ok(match stmt.const_of(idx) {
             Some(v) => match (i32::try_from(v), riprel) {
                 (Ok(disp), true) => Concrete::RipRel { disp, size },
                 (Ok(disp), false) => Concrete::AbsMem { disp, size },
                 (Err(_), true) => {
-                    return failed("inline asm: RIP-relative displacement out of range");
+                    return fail("inline asm: RIP-relative displacement out of range");
                 }
-                (Err(_), false) => return failed("inline asm: absolute displacement out of range"),
+                (Err(_), false) => return fail("inline asm: absolute displacement out of range"),
             },
             None => match stmt.riprel_target(idx) {
                 Some(sym) => {
@@ -2695,7 +2693,7 @@ impl AsmPass<'_> {
                     } else {
                         "memory operand"
                     };
-                    return failed(&alloc::format!(
+                    return fail(alloc::format!(
                         "inline asm: `%c`/`%P` {what} `%{idx}` is not a constant or address: \
                          the operand is {}",
                         stmt.operand_form(idx)
@@ -2716,13 +2714,13 @@ impl AsmPass<'_> {
         insn: &super::asm::AsmInsn,
         has_imm_operand: bool,
         r: &mut ResolvedOperands,
-    ) -> Option<super::asm::Concrete> {
+    ) -> Emit<super::asm::Concrete> {
         use super::super::ir::{AsmConstraint, AsmRegSize, AsmSeg};
         use super::asm::Concrete;
         let stmt = self.stmt;
         let op = &stmt.asm.operands[idx as usize];
         let width = op.width;
-        Some(match self.tpl.op_reg[idx as usize] {
+        Ok(match self.tpl.op_reg[idx as usize] {
             Some(reg) if matches!(op.constraint, AsmConstraint::Mem) => {
                 // The C operand type is only the default width.
                 let size = self
@@ -2766,7 +2764,7 @@ impl AsmPass<'_> {
             // A `%N` naming an operand with no register: its constant value.
             None => match stmt.const_of(idx) {
                 Some(v) => Concrete::Imm(v),
-                None => return failed("inline asm: non-constant immediate operand"),
+                None => return fail("inline asm: non-constant immediate operand"),
             },
         })
     }
@@ -2783,7 +2781,7 @@ impl AsmPass<'_> {
         disp: i32,
         insn: &super::asm::AsmInsn,
         r: &mut ResolvedOperands,
-    ) -> Option<super::asm::Concrete> {
+    ) -> Emit<super::asm::Concrete> {
         use super::asm::{AsmMemBase, Concrete};
         let stmt = self.stmt;
         let size = self.mem_size(None, insn);
@@ -2795,27 +2793,27 @@ impl AsmPass<'_> {
             (Some(b), _) => b,
             (None, Some(sym)) => {
                 r.riprel_reloc = Some((sym, disp as i64));
-                return Some(Concrete::RipRel {
+                return Ok(Concrete::RipRel {
                     disp: 0,
                     size: size.unwrap_or(super::super::ir::AsmRegSize::Quad),
                 });
             }
             (None, None) => {
                 let AsmMemBase::Ref(bi) = base else {
-                    return failed("inline asm: memory base must be a register");
+                    return fail("inline asm: memory base must be a register");
                 };
                 let abs = stmt
                     .const_of(bi)
                     .filter(|_| index.is_none())
                     .and_then(|v| i32::try_from(v.checked_add(disp as i64)?).ok());
                 let Some(disp) = abs else {
-                    return failed(&alloc::format!(
+                    return fail(alloc::format!(
                         "inline asm: memory base `%{bi}` is not a register, a \
                          constant or a link-time address: the operand is {}",
                         stmt.operand_form(bi)
                     ));
                 };
-                return Some(Concrete::AbsMem {
+                return Ok(Concrete::AbsMem {
                     disp,
                     size: size.unwrap_or(super::super::ir::AsmRegSize::Quad),
                 });
@@ -2824,11 +2822,11 @@ impl AsmPass<'_> {
         let index = match index {
             Some(i) => match self.address_reg(i) {
                 Some(r) => Some(r),
-                None => return failed("inline asm: memory index must be a register operand"),
+                None => return fail("inline asm: memory index must be a register operand"),
             },
             None => None,
         };
-        Some(Concrete::Mem {
+        Ok(Concrete::Mem {
             base,
             index,
             scale,
@@ -2849,20 +2847,20 @@ impl AsmPass<'_> {
         at: usize,
         layout: &AsmLayout,
         r: &mut ResolvedOperands,
-    ) -> Option<super::asm::Concrete> {
+    ) -> Emit<super::asm::Concrete> {
         use super::asm::{AsmMemBase, Concrete};
         let sym_only = "inline asm: a symbol-displacement memory operand is only \
                         supported in file-scope asm";
         let Some(text) = insn.sym_exprs.get(expr as usize) else {
-            return failed(sym_only);
+            return fail(sym_only);
         };
         if !crate::c5::asm::is_template_label_expr(text, self.label_names) {
-            return failed(sym_only);
+            return fail(sym_only);
         }
         let disp = match self.expr_value(text, at, layout) {
             Some(v) => match i32::try_from(v) {
                 Ok(d) => d,
-                Err(_) => return failed("inline asm: displacement out of range"),
+                Err(_) => return fail("inline asm: displacement out of range"),
             },
             None => {
                 r.disp_expr = Some(text.clone());
@@ -2876,12 +2874,12 @@ impl AsmPass<'_> {
             }
         };
         let (Some(base), index) = (reg_of(base), index.map(reg_of)) else {
-            return failed("inline asm: memory base is not a register");
+            return fail("inline asm: memory base is not a register");
         };
         if index == Some(None) {
-            return failed("inline asm: memory index is not a register");
+            return fail("inline asm: memory index is not a register");
         }
-        Some(Concrete::Mem {
+        Ok(Concrete::Mem {
             base,
             index: index.flatten(),
             scale,
@@ -2901,7 +2899,7 @@ impl AsmPass<'_> {
         pending_at: Option<usize>,
         out: &mut Out,
         layout: &mut AsmLayout,
-    ) -> bool {
+    ) -> Emit {
         use super::asm::{AsmOpnd, Concrete};
         let abs_label = match insn.operands.first() {
             Some(&AsmOpnd::ImmLabel { num, forward }) => Some((num, forward)),
@@ -2929,14 +2927,14 @@ impl AsmPass<'_> {
         let addr = super::asm::addr_size(insn, super::table::Mode::Bits64);
         let mut body = alloc::vec::Vec::new();
         if let Err(m) = super::asm::encode(&mut body, addr, insn.mnemonic, insn.suffix, concrete) {
-            return fail(&m);
+            return fail(m);
         }
         let sizes = push_legacy_prefixes(code, &body, insn.seg.or(resolved.operand_seg), &pending);
         code.extend_from_slice(&body[sizes..]);
         if let Some(rex) = insn.rex
             && let Err(m) = super::asm::splice_rex(code, insn_at, rex)
         {
-            return fail(&m);
+            return fail(m);
         }
         // Each placeholder occupies the last four bytes; it confirms the
         // chosen form put the field there.
@@ -2999,23 +2997,22 @@ impl AsmPass<'_> {
             }
         }
         layout.after_insn = true;
-        true
+        Ok(())
     }
 
     /// Settle each deferred expression field: the layout is final, so a
     /// forward reference now has its definition.
-    fn settle_expr_fixups(&self, code: &mut [u8], layout: &AsmLayout) -> bool {
+    fn settle_expr_fixups(&self, code: &mut [u8], layout: &AsmLayout) -> Emit {
         for (site, at, width, text) in &layout.expr_fixups {
             let Some(v) = self.expr_value(text, *site, layout) else {
-                bail_msg(&alloc::format!(
+                return fail(alloc::format!(
                     "inline asm: expression `{text}` is not a constant"
                 ));
-                return false;
             };
             let w = *width as usize;
             code[*at..*at + w].copy_from_slice(&(v as u64).to_le_bytes()[..w]);
         }
-        true
+        Ok(())
     }
 
     /// The main-stream definition a label reference at `at` binds to: a
@@ -3074,7 +3071,7 @@ impl AsmPass<'_> {
         code: &mut [u8],
         layout: &AsmLayout,
         asm_text_abs_refs: &mut Vec<super::AsmTextAbsRef>,
-    ) -> Option<DeferredRefs> {
+    ) -> Emit<DeferredRefs> {
         let mut deferred = DeferredRefs {
             branches: alloc::vec::Vec::new(),
             addresses: alloc::vec::Vec::new(),
@@ -3088,7 +3085,7 @@ impl AsmPass<'_> {
                 }
                 // Only a target this stream defines takes the short form.
                 None if width == 4 => deferred.branches.push((at, num, forward)),
-                None => return failed("inline asm: undefined local label"),
+                None => return fail("inline asm: undefined local label"),
             }
         }
         for &(at, num, forward) in &layout.abs_label_fixups {
@@ -3100,7 +3097,7 @@ impl AsmPass<'_> {
                 None => deferred.addresses.push((at, num, forward)),
             }
         }
-        Some(deferred)
+        Ok(deferred)
     }
 
     /// A named label defined in the main stream is a definition of the unit,
@@ -3111,7 +3108,7 @@ impl AsmPass<'_> {
         &self,
         layout: &AsmLayout,
         asm_text_labels: &mut Vec<super::AsmTextLabel>,
-    ) -> bool {
+    ) -> Emit {
         for &(num, off) in &layout.label_defs {
             if num < super::asm::NAMED_LABEL_BASE {
                 continue;
@@ -3126,17 +3123,16 @@ impl AsmPass<'_> {
                 continue;
             }
             if asm_text_labels.iter().any(|l| l.name == name) {
-                bail_msg(&alloc::format!(
+                return fail(alloc::format!(
                     "inline asm: symbol `{name}` is already defined"
                 ));
-                return false;
             }
             asm_text_labels.push(super::AsmTextLabel {
                 name: alloc::string::String::from(name),
                 text_offset: off,
             });
         }
-        true
+        Ok(())
     }
 
     /// Materialize the `.pushsection` blocks, every label offset now known,
@@ -3149,7 +3145,7 @@ impl AsmPass<'_> {
         out: &mut Out,
         layout: &AsmLayout,
         deferred: DeferredRefs,
-    ) -> bool {
+    ) -> Emit {
         use crate::c5::asm::LabelLoc;
         let undefined = "inline asm: undefined local label";
         let no_abs = "inline asm: `$LABEL` address immediate names no local label";
@@ -3160,7 +3156,7 @@ impl AsmPass<'_> {
             if !deferred.addresses.is_empty() {
                 return fail(no_abs);
             }
-            return true;
+            return Ok(());
         }
         let names = self.label_names;
         let label_off = |name: &str| -> Option<LabelLoc> {
@@ -3202,7 +3198,7 @@ impl AsmPass<'_> {
             out.cx.asm_sections,
         ) {
             Ok(d) => d,
-            Err(m) => return fail(&m),
+            Err(m) => return fail(m),
         };
         let label_name = |num: u32| -> Option<alloc::string::String> {
             if num >= super::asm::NAMED_LABEL_BASE {
@@ -3252,14 +3248,14 @@ impl AsmPass<'_> {
                 kind: crate::c5::asm::AsmRelocKind::Data,
             });
         }
-        true
+        Ok(())
     }
 
     /// Flag outputs: the template's condition flags are still live here,
     /// so each `=@cc<cond>` materializes with `set<cond>` into its
     /// register's low byte, zero-extended. Runs before the store-backs,
     /// whose `mov`s would otherwise follow the template first.
-    fn emit_flag_outputs(&self, code: &mut Vec<u8>) -> bool {
+    fn emit_flag_outputs(&self, code: &mut Vec<u8>) -> Emit {
         use super::super::ir::AsmConstraint;
         for (i, op) in self.stmt.asm.operands.iter().enumerate() {
             let AsmConstraint::Flags(nibble) = op.constraint else {
@@ -3274,7 +3270,7 @@ impl AsmPass<'_> {
             super::encode::emit_setcc_r8(code, cc, Reg(r));
             super::encode::emit_movzx_r_r8(code, Reg(r), Reg(r));
         }
-        true
+        Ok(())
     }
 
     /// The store-backs and restores of the fall-through path, then the
@@ -3377,11 +3373,11 @@ fn emit_inline_asm_once(
     fcx: &FnCtx,
     mut goto_ctx: Option<AsmGotoCtx<'_>>,
     long_sites: &mut alloc::collections::BTreeSet<usize>,
-) -> bool {
+) -> Emit {
     // A statement that lowers to nothing keeps only its IR-level ordering
     // effect; `asm_scratch_bytes` reserved no region for it.
     if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::X86) {
-        return true;
+        return Ok(());
     }
     let stmt = AsmStmt {
         asm,
@@ -3394,9 +3390,7 @@ fn emit_inline_asm_once(
         extern_code_names: fcx.extern_code_names,
     };
     let goto_row = goto_ctx.as_ref().map(|c| c.row);
-    let Some(tpl) = prepare_template(&stmt, out.cx.asm_sections, goto_row) else {
-        return false;
-    };
+    let tpl = prepare_template(&stmt, out.cx.asm_sections, goto_row)?;
     let label_names = super::asm::scan_label_names(&tpl.code);
     let weak_names = crate::c5::asm::asm_weak_only_names(&tpl.blocks, out.cx.asm_sections);
     let stream_defs: alloc::vec::Vec<(u32, usize)> = tpl
@@ -3405,14 +3399,10 @@ fn emit_inline_asm_once(
         .enumerate()
         .filter_map(|(ii, insn)| insn.label_def.map(|n| (n, ii)))
         .collect();
-    let Some(scratch) = AsmScratch::new(&stmt, &tpl.op_reg) else {
-        return false;
-    };
+    let scratch = AsmScratch::new(&stmt, &tpl.op_reg)?;
     let goto_direct = scratch.goto_direct(asm);
     scratch.emit_saves(out.cx.code);
-    if !scratch.emit_captures(out.cx.code, &stmt) {
-        return false;
-    }
+    scratch.emit_captures(out.cx.code, &stmt)?;
     scratch.emit_loads(out.cx.code, asm, &tpl.op_reg);
     // Measured against the sink the sections merge into, so this and the
     // materialization settle every branch form the same way.
@@ -3423,7 +3413,7 @@ fn emit_inline_asm_once(
         out.cx.asm_sections,
     ) {
         Ok(m) => m,
-        Err(m) => return fail(&m),
+        Err(m) => return fail(m),
     };
     let pass = AsmPass {
         stmt: &stmt,
@@ -3442,30 +3432,18 @@ fn emit_inline_asm_once(
         ..Default::default()
     };
     for (ii, insn) in tpl.insns.iter().enumerate() {
-        if !pass.emit_insn(ii, insn, out, &mut layout, long_sites) {
-            return false;
-        }
+        pass.emit_insn(ii, insn, out, &mut layout, long_sites)?;
     }
-    if !pass.settle_expr_fixups(out.cx.code, &layout) {
-        return false;
-    }
+    pass.settle_expr_fixups(out.cx.code, &layout)?;
     if pass.grow_long_sites(&layout, long_sites) {
-        return true;
+        return Ok(());
     }
-    let Some(deferred) = pass.patch_label_refs(out.cx.code, &layout, out.asm_text_abs_refs) else {
-        return false;
-    };
-    if !pass.record_text_labels(&layout, out.asm_text_labels) {
-        return false;
-    }
-    if !pass.materialize_sections(out, &layout, deferred) {
-        return false;
-    }
-    if !pass.emit_flag_outputs(out.cx.code) {
-        return false;
-    }
+    let deferred = pass.patch_label_refs(out.cx.code, &layout, out.asm_text_abs_refs)?;
+    pass.record_text_labels(&layout, out.asm_text_labels)?;
+    pass.materialize_sections(out, &layout, deferred)?;
+    pass.emit_flag_outputs(out.cx.code)?;
     pass.emit_exits(out.cx.code, &layout, goto_direct, goto_ctx.as_mut());
-    true
+    Ok(())
 }
 
 /// Map a conditional-jump mnemonic to its condition code, folding the

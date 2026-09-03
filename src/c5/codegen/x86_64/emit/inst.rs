@@ -240,7 +240,7 @@ pub(super) fn emit_inst(
     v: super::super::ir::ValueId,
     dst: Place,
     fcx: &FnCtx,
-) -> bool {
+) -> Emit {
     let FnCtx {
         func,
         alloc,
@@ -266,7 +266,7 @@ pub(super) fn emit_inst(
             // carries the fact to the spill addressing, the alloca
             // intrinsics, and the epilogue. No code either way.
             let _ = slot;
-            true
+            Ok(())
         }
         Inst::ParamRef { idx, kind } => emit_param_ref(code, *idx, *kind, dst, v, fcx),
         Inst::Imm(value) => {
@@ -275,7 +275,7 @@ pub(super) fn emit_inst(
             };
             emit_mov_r_imm64(code, rd, *value);
             spill_dst_to_slot(code, dst, rd, frame);
-            true
+            Ok(())
         }
         Inst::LocalAddr(off) => {
             let Some(rd) = int_or_spill_dst(dst) else {
@@ -290,7 +290,7 @@ pub(super) fn emit_inst(
             };
             emit_lea_r_mem(code, rd, base, disp);
             spill_dst_to_slot(code, dst, rd, frame);
-            true
+            Ok(())
         }
         Inst::Load { .. }
         | Inst::Store { .. }
@@ -403,15 +403,14 @@ pub(super) fn emit_inst(
         Inst::Phi { .. } => {
             // The predecessor-exit moves before each branch into this block leave
             // the merged value in the allocated place.
-            true
+            Ok(())
         }
         other => {
-            bail_msg(&alloc::format!(
+            let _ = frame;
+            fail(alloc::format!(
                 "inst variant not yet covered: {}",
                 other.variant_name()
-            ));
-            let _ = frame;
-            false
+            ))
         }
     }
 }
@@ -423,7 +422,7 @@ fn emit_mem_inst(
     v: super::super::ir::ValueId,
     dst: Place,
     fcx: &FnCtx,
-) -> bool {
+) -> Emit {
     let FnCtx {
         func,
         alloc,
@@ -529,7 +528,7 @@ fn emit_mem_inst(
 }
 
 /// The call instructions.
-fn emit_call_inst(out: &mut Out, inst: &Inst, dst: Place, fcx: &FnCtx) -> bool {
+fn emit_call_inst(out: &mut Out, inst: &Inst, dst: Place, fcx: &FnCtx) -> Emit {
     let FnCtx {
         func,
         alloc,
@@ -657,7 +656,7 @@ fn emit_param_ref(
     dst: Place,
     v: super::super::ir::ValueId,
     fcx: &FnCtx,
-) -> bool {
+) -> Emit {
     let FnCtx {
         alloc,
         frame,
@@ -689,7 +688,7 @@ fn emit_param_ref(
                 }
                 _ => return fail("ParamRef: FP param dst not fp reg / spill"),
             }
-            return true;
+            return Ok(());
         }
         let Some(super::ArgPlacement::FpReg(x)) = param_plan.get(i).copied() else {
             return fail("ParamRef: FP param not in an FP argument register");
@@ -704,7 +703,7 @@ fn emit_param_ref(
             Place::Spill(_) => fp_spill_dst_to_slot(code, dst, xmm, frame),
             _ => return fail("ParamRef: FP param dst not fp reg / spill"),
         }
-        return true;
+        return Ok(());
     }
     let arg_reg = match param_plan.get(i).copied() {
         Some(super::ArgPlacement::IntReg(r)) => Reg(r),
@@ -742,5 +741,5 @@ fn emit_param_ref(
         }
         _ => return fail("ParamRef: dst not int reg / spill"),
     }
-    true
+    Ok(())
 }

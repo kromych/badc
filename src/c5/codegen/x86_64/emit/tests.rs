@@ -207,7 +207,7 @@ mod mul_add_tests {
         let frame = compute_frame(&func, &alloc, target.abi());
         let mut code = Vec::new();
         assert!(
-            emit_mul_add(&mut code, dst, v, a, b, c, neg_product, &alloc, frame),
+            emit_mul_add(&mut code, dst, v, a, b, c, neg_product, &alloc, frame).is_ok(),
             "emit_mul_add bailed",
         );
         code

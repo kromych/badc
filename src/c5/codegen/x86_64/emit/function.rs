@@ -33,7 +33,7 @@ fn emit_phi_predecessor_moves(
 /// leaves (destinations no pending move reads) first; when only cycles
 /// remain, one cycle source is saved in `hold` and every move reading it
 /// redirected there, exposing a new leaf. `hold` and `stage` lie outside
-/// the allocator's bank. Returns false for an FP or `None` operand.
+/// the allocator's bank. An FP or `None` operand is an `Err`.
 fn schedule_place_moves(
     code: &mut Vec<u8>,
     moves: &mut Vec<(Place, Place)>,
@@ -200,10 +200,10 @@ pub(super) fn schedule_int_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8
     }
 }
 
-/// Lower `func` to machine code appended to `cx.code`. Returns `false`,
-/// with every output buffer rolled back to its length on entry, when the
-/// function contains a shape outside the implemented subset; the caller
-/// turns that into a compile error.
+/// Lower `func` to machine code appended to `cx.code`. A shape outside
+/// the implemented subset is an `Unsupported` naming it, with every output
+/// buffer rolled back to its length on entry; the caller turns that into a
+/// compile error.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn emit_function(
     func: &FunctionSsa,
@@ -233,7 +233,7 @@ pub(crate) fn emit_function(
     stack_protect: super::StackProtect,
     entry: super::FunctionEntry,
     fixed_regs: super::FixedRegs,
-) -> bool {
+) -> Emit {
     let abi = {
         let mut a = target.abi_for(func.conv);
         a.no_fp_varargs = no_fp_regs;
@@ -245,23 +245,20 @@ pub(crate) fn emit_function(
         a
     };
     if let Some(bytes) = super::ssa::emit_common::locals_bytes_over_limit(func) {
-        bail_msg(&super::ssa::emit_common::frame_too_large_msg(bytes));
-        return false;
+        return fail(super::ssa::emit_common::frame_too_large_msg(bytes));
     }
     let frame = compute_frame(func, alloc, abi);
     if let Some(why) = super::ssa::reg_alloc::fp_scratch_shortfall(func, frame.fp_scratch) {
-        bail_msg(why);
-        return false;
+        return fail(why);
     }
     if frame.canary_bytes > 0 {
         cx.canary_frame_bytes
             .insert(func.ent_pc, frame.canary_bytes);
     }
     if frame.frame_bytes > super::ssa::emit_common::MAX_FRAME_BYTES {
-        bail_msg(&super::ssa::emit_common::frame_too_large_msg(
+        return fail(super::ssa::emit_common::frame_too_large_msg(
             frame.frame_bytes as i64,
         ));
-        return false;
     }
     let param_from_home = compute_param_from_home(func, alloc, abi);
     let param_plan = param_placements(func, abi);
@@ -311,13 +308,13 @@ pub(crate) fn emit_function(
         jump_table_fixups: Vec::new(),
     };
     match fe.run(rodata) {
-        Some(uw) => {
+        Ok(uw) => {
             fn_unwind.push(uw);
-            true
+            Ok(())
         }
-        None => {
+        Err(e) => {
             fe.out.restore(&entry_mark);
-            false
+            Err(e)
         }
     }
 }
@@ -350,7 +347,7 @@ struct FnEmit<'a, 'b> {
 
 impl FnEmit<'_, '_> {
     /// Returns the function's unwind record, or `None` on a bail.
-    fn run(&mut self, rodata: &mut super::RodataBuild) -> Option<super::FnUnwind> {
+    fn run(&mut self, rodata: &mut super::RodataBuild) -> Emit<super::FnUnwind> {
         let func = self.fcx.func;
         let mut uw = self.emit_entry();
         uw.begin = self.start as u32;
@@ -373,13 +370,9 @@ impl FnEmit<'_, '_> {
             self.out.cx.prologue_native,
             self.out.cx.code.len(),
         );
-        if !self.place_entry_params() {
-            return None;
-        }
+        self.place_entry_params()?;
         let body = self.emit_body()?;
-        if !self.patch_block_addrs() {
-            return None;
-        }
+        self.patch_block_addrs()?;
         for r in &func.label_data_relocs {
             self.out.cx.label_relocs.push(super::LabelReloc {
                 data_offset: r.data_offset,
@@ -393,12 +386,10 @@ impl FnEmit<'_, '_> {
             &body.asm_sections,
             &|bid| self.block_offsets[bid as usize],
         );
-        if !self.patch_branches() {
-            return None;
-        }
+        self.patch_branches()?;
         self.materialize_jump_tables(rodata);
         uw.end = self.out.cx.code.len() as u32;
-        Some(uw)
+        Ok(uw)
     }
 
     /// The function entry: a naked function's body is its whole machine
@@ -448,7 +439,7 @@ impl FnEmit<'_, '_> {
     /// otherwise each `ParamRef` is placed in program order, which the
     /// allocator's self-home hint keeps sound (`verify_allocation` checks it
     /// under `codegen_test`).
-    fn place_entry_params(&mut self) -> bool {
+    fn place_entry_params(&mut self) -> Emit {
         let FnCtx {
             func,
             alloc,
@@ -497,13 +488,11 @@ impl FnEmit<'_, '_> {
         let homes_distinct = (0..homes.len())
             .all(|a| ((a + 1)..homes.len()).all(|b| !place_same_loc(homes[a], homes[b])));
         if moves.is_empty() || !homes_distinct {
-            return true;
+            return Ok(());
         }
         // r10 / r11 are never argument registers nor in the allocator's
         // bank, so they cannot collide with a pending source or target.
-        if schedule_place_moves(code, &mut moves, frame, SCRATCH_R10, SCRATCH_R11).is_err() {
-            return false;
-        }
+        schedule_place_moves(code, &mut moves, frame, SCRATCH_R10, SCRATCH_R11)?;
         for (dst, kind) in exts {
             let ext = |code: &mut Vec<u8>, r: Reg| match kind {
                 LoadKind::I8 => super::encode::emit_movsx_r_r8(code, r, r),
@@ -525,22 +514,20 @@ impl FnEmit<'_, '_> {
         for vid in vids {
             self.param_prebatched[vid] = true;
         }
-        true
+        Ok(())
     }
 
     /// The block loop. It runs once with every local branch in the rel32
     /// form and, when `relax_branches` finds shortenable branches, once
     /// more against the shortened layout, re-recording every offset-keyed
     /// datum. Returns the mark taken where the body begins.
-    fn emit_body(&mut self) -> Option<OutputMark> {
+    fn emit_body(&mut self) -> Emit<OutputMark> {
         let body = self.out.mark();
         loop {
             self.block_addr_fixups.clear();
             self.jump_table_fixups.clear();
             for block_idx in 0..self.fcx.func.blocks.len() {
-                if !self.emit_block(block_idx) {
-                    return None;
-                }
+                self.emit_block(block_idx)?;
             }
             if !self.branch_short.is_empty() {
                 break;
@@ -565,10 +552,10 @@ impl FnEmit<'_, '_> {
             self.block_offsets.fill(0);
             self.branch_fixups.clear();
         }
-        Some(body)
+        Ok(body)
     }
 
-    fn emit_block(&mut self, block_idx: usize) -> bool {
+    fn emit_block(&mut self, block_idx: usize) -> Emit {
         let FnCtx {
             func,
             alloc,
@@ -605,22 +592,16 @@ impl FnEmit<'_, '_> {
             target,
         );
         for v in block.inst_range.clone() {
-            if !self.emit_block_inst(block, v, tail_call) {
-                return false;
-            }
+            self.emit_block_inst(block, v, tail_call)?;
         }
         // Predecessor-exit moves for the phis at every successor's head.
-        if emit_phi_predecessor_moves(
+        emit_phi_predecessor_moves(
             self.out.cx.code,
             block_idx as super::super::ir::BlockId,
             func,
             alloc,
             frame,
-        )
-        .is_err()
-        {
-            return false;
-        }
+        )?;
         self.emit_terminator(block_idx, block, tail_call)
     }
 
@@ -629,7 +610,7 @@ impl FnEmit<'_, '_> {
         block: &super::super::ir::Block,
         v: super::super::ir::ValueId,
         tail_call: Option<(usize, usize, &[u32])>,
-    ) -> bool {
+    ) -> Emit {
         let FnCtx {
             func,
             alloc,
@@ -641,19 +622,19 @@ impl FnEmit<'_, '_> {
         let place = place_of(alloc, v);
         // A naked function's machine code is exactly its inline asm.
         if func.is_naked && !matches!(inst, Inst::InlineAsm { .. }) {
-            return true;
+            return Ok(());
         }
         if super::ssa::emit_common::is_dead_pure(inst, v, alloc) {
-            return true;
+            return Ok(());
         }
         if self.param_prebatched[v as usize] {
-            return true;
+            return Ok(());
         }
         // The tail call's argument setup is part of the terminator.
         if let Some((tail_pc, _, _)) = tail_call
             && (v as usize) == tail_pc
         {
-            return true;
+            return Ok(());
         }
         super::ssa::emit_common::record_inst_src(
             func,
@@ -672,7 +653,7 @@ impl FnEmit<'_, '_> {
             super::encode::emit_lea_r_rip32(code, rd, 0);
             self.block_addr_fixups.push((lea_start, *tb));
             spill_dst_to_slot(code, place, rd, frame);
-            return true;
+            return Ok(());
         }
         // `asm goto`: the label branches patch through this function's
         // branch fixups, which `emit_inst` has no access to.
@@ -692,7 +673,7 @@ impl FnEmit<'_, '_> {
             );
         }
         let data_fixups_pre_inst = self.out.cx.data_fixups.len();
-        if !emit_inst(&mut self.out, inst, v, place, &self.fcx) {
+        emit_inst(&mut self.out, inst, v, place, &self.fcx).inspect_err(|_| {
             #[cfg(feature = "codegen_test")]
             if std::env::var("BADC_DUMP_SSA").is_ok() {
                 eprintln!(
@@ -700,8 +681,7 @@ impl FnEmit<'_, '_> {
                     inst, place,
                 );
             }
-            return false;
-        }
+        })?;
         // An `ImmData` naming a cross-TU symbol: its local `.data` fixup
         // becomes a named reference.
         if let Inst::ImmData(_) = inst
@@ -718,7 +698,7 @@ impl FnEmit<'_, '_> {
                     direct_pcrel: None,
                 });
         }
-        true
+        Ok(())
     }
 
     fn emit_terminator(
@@ -726,7 +706,7 @@ impl FnEmit<'_, '_> {
         block_idx: usize,
         block: &super::super::ir::Block,
         tail_call: Option<(usize, usize, &[u32])>,
-    ) -> bool {
+    ) -> Emit {
         let FnCtx {
             func,
             alloc,
@@ -737,7 +717,7 @@ impl FnEmit<'_, '_> {
         } = self.fcx;
         match block.terminator {
             // A naked function's inline-asm body provides its own return.
-            Terminator::Return(_) if func.is_naked => true,
+            Terminator::Return(_) if func.is_naked => Ok(()),
             Terminator::Return(v) => {
                 if let Some((tail_pc, target_pc, args)) = tail_call {
                     let fp_arg_mask = match &func.insts[tail_pc] {
@@ -768,12 +748,12 @@ impl FnEmit<'_, '_> {
                         self.out.cx.asm_extern_call_sites,
                         self.out.cx.user_extern_data_refs,
                     );
-                    true
+                    Ok(())
                 }
             }
             Terminator::Jmp(t) | Terminator::FallThrough(t) => {
                 self.jump_unless_next(block_idx, t);
-                true
+                Ok(())
             }
             Terminator::Bz {
                 cond,
@@ -794,7 +774,7 @@ impl FnEmit<'_, '_> {
                     return fail("GotoIndirect: target Place not int reg / spill");
                 };
                 emit_hardened_jmp_r(code, rt, abi, self.out.cx.asm_extern_call_sites);
-                true
+                Ok(())
             }
             // Table dispatch through the read-only blob; the preceding
             // bounds check proves the index in range. An image reads a
@@ -818,14 +798,14 @@ impl FnEmit<'_, '_> {
                 }
                 emit_hardened_jmp_r(code, SCRATCH_R10, abi, self.out.cx.asm_extern_call_sites);
                 self.jump_table_fixups.push((lea_start, table));
-                true
+                Ok(())
             }
             // The label branches were lowered inside the `Inst::InlineAsm`;
             // only the fall-through edge (row entry 0) is emitted here.
             Terminator::AsmGoto { table } => {
                 let fall = func.jump_tables[table as usize][0];
                 self.jump_unless_next(block_idx, fall);
-                true
+                Ok(())
             }
             // A sys-trampoline body: the indirect call already placed every
             // argument, so control forwards through the PLT slot and the
@@ -841,13 +821,13 @@ impl FnEmit<'_, '_> {
                     is_addr: false,
                 });
                 super::encode::emit_jmp_rel32(self.out.cx.code, 0);
-                true
+                Ok(())
             }
             // Sealed after a noreturn call (C11 6.7.4p8): `ud2` so a
             // mis-marked returning call faults instead of running on.
             Terminator::Unreachable => {
                 self.out.cx.code.extend_from_slice(&[0x0F, 0x0B]);
-                true
+                Ok(())
             }
         }
     }
@@ -861,7 +841,7 @@ impl FnEmit<'_, '_> {
         target: super::super::ir::BlockId,
         fall_through: super::super::ir::BlockId,
         negate: bool,
-    ) -> bool {
+    ) -> Emit {
         let FnCtx {
             func, alloc, frame, ..
         } = self.fcx;
@@ -889,7 +869,7 @@ impl FnEmit<'_, '_> {
             self.emit_local(LocalBranchKind::Jcc(cc), target);
         }
         self.jump_unless_next(block_idx, fall_through);
-        true
+        Ok(())
     }
 
     fn emit_local(&mut self, kind: LocalBranchKind, target: super::super::ir::BlockId) {
@@ -911,7 +891,7 @@ impl FnEmit<'_, '_> {
 
     /// Patch each `&&label` lea: the disp32 sits 3 bytes into the 7-byte
     /// instruction and is measured from its end.
-    fn patch_block_addrs(&mut self) -> bool {
+    fn patch_block_addrs(&mut self) -> Emit {
         for &(lea_start, target_block) in &self.block_addr_fixups {
             let target_off = self.block_offsets[target_block as usize] as i64;
             let rel = target_off - (lea_start as i64 + super::encode::LEA_RIP32_LEN as i64);
@@ -920,13 +900,13 @@ impl FnEmit<'_, '_> {
             };
             self.out.cx.code[lea_start + 3..lea_start + 7].copy_from_slice(&imm.to_le_bytes());
         }
-        true
+        Ok(())
     }
 
     /// Patch the recorded branches. The displacement is measured from the
     /// byte after the field: `site + 1` for rel8, `site + 4` for rel32;
     /// `relax_branches` guarantees a short branch's target is in range.
-    fn patch_branches(&mut self) -> bool {
+    fn patch_branches(&mut self) -> Emit {
         let code = &mut *self.out.cx.code;
         for fx in &self.branch_fixups {
             let target_off = self.block_offsets[fx.target as usize];
@@ -944,7 +924,7 @@ impl FnEmit<'_, '_> {
                 code[fx.site..fx.site + 4].copy_from_slice(&imm.to_le_bytes());
             }
         }
-        true
+        Ok(())
     }
 
     /// Materialize each jump table into the read-only blob: an address fixup

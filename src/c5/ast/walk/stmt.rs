@@ -139,10 +139,16 @@ impl<'a> Walker<'a> {
                 let val = *val;
                 let body_id = *body;
                 let blk = self.switch_dispatch.last().and_then(|d| {
-                    d.0.iter()
+                    d.cases
+                        .iter()
                         .find(|(v, _)| *v == val)
                         .map(|&(_, b)| b)
-                        .or_else(|| d.1.iter().find(|(lo, _, _)| *lo == val).map(|&(_, _, b)| b))
+                        .or_else(|| {
+                            d.ranges
+                                .iter()
+                                .find(|(lo, _, _)| *lo == val)
+                                .map(|&(_, _, b)| b)
+                        })
                 });
                 if let Some(blk) = blk {
                     if b.is_block_open() {
@@ -154,7 +160,7 @@ impl<'a> Walker<'a> {
             }
             Stmt::Default { body } => {
                 let body_id = *body;
-                let blk = self.switch_dispatch.last().and_then(|d| d.2);
+                let blk = self.switch_dispatch.last().and_then(|d| d.default);
                 if let Some(blk) = blk {
                     if b.is_block_open() {
                         b.jmp(blk);
@@ -909,7 +915,11 @@ impl<'a> Walker<'a> {
         // bare switch, so propagate the enclosing loop's target.
         let prev_continue = self.loop_ctx.last().map(|&(_, c)| c).unwrap_or(after_blk);
         self.loop_ctx.push((after_blk, prev_continue));
-        self.switch_dispatch.push((cases, ranges, default_blk));
+        self.switch_dispatch.push(SwitchLabels {
+            cases,
+            ranges,
+            default: default_blk,
+        });
         let terminated = self.walk_stmt(b, body_id)?;
         self.switch_dispatch.pop();
         self.loop_ctx.pop();

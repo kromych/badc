@@ -145,6 +145,17 @@ struct AddrConst {
     off: i64,
 }
 
+/// The blocks one `switch` reserved for its labels.
+#[derive(Default)]
+struct SwitchLabels {
+    /// `(value, block)` per `case`.
+    cases: alloc::vec::Vec<(i64, BlockId)>,
+    /// `(low, high, block)` per GNU `case lo ... hi`.
+    ranges: alloc::vec::Vec<(i64, i64, BlockId)>,
+    /// The block for `default`, when the switch has one.
+    default: Option<BlockId>,
+}
+
 /// Per-walk context. Mutable so the walker can stack break /
 /// continue targets across nested loops + switches and intern
 /// `LabelId -> BlockId` for cross-stmt gotos.
@@ -170,12 +181,7 @@ struct Walker<'a> {
     /// depth; the loop's back edge re-enters the body at its first case
     /// block). The blocks are allocated once by the case-collection pass
     /// before the dispatcher emits.
-    #[allow(clippy::type_complexity)]
-    switch_dispatch: alloc::vec::Vec<(
-        alloc::vec::Vec<(i64, BlockId)>,
-        alloc::vec::Vec<(i64, i64, BlockId)>,
-        Option<BlockId>,
-    )>,
+    switch_dispatch: alloc::vec::Vec<SwitchLabels>,
     /// True when the function's declared return type is a struct
     /// value returned through the c5 out-pointer convention. `return
     /// s;` loads the hidden out-pointer from `slot 2`, Mcpy

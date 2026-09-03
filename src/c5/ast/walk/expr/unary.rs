@@ -77,43 +77,8 @@ impl<'a> Walker<'a> {
         // truncation the SSA emitter already handles
         // through the Store / Load kinds at the
         // surrounding sites.
-        let src_ty = match self.ast.expr(child) {
-            Expr::IntLit { ty, .. }
-            | Expr::FloatLit { ty, .. }
-            | Expr::Ident { ty, .. }
-            | Expr::Unary { ty, .. }
-            | Expr::Binary { ty, .. }
-            | Expr::Ternary { ty, .. }
-            | Expr::Call { ty, .. }
-            | Expr::Member { ty, .. }
-            | Expr::Index { ty, .. }
-            | Expr::Assign { ty, .. }
-            | Expr::BitfieldAssign { ty, .. }
-            | Expr::CompoundAssign { ty, .. }
-            | Expr::PreInc { ty, .. }
-            | Expr::PostInc { ty, .. }
-            | Expr::Comma { ty, .. }
-            | Expr::ShortCircuit { ty, .. } => *ty,
-            Expr::Cast { to_ty: t, .. } => *t,
-            Expr::Sizeof(s) => s.result_ty,
-            Expr::CompoundLiteral { ty, .. } => *ty,
-            Expr::StrLit { ty, .. } => *ty,
-            Expr::Intrinsic { ty, .. } => *ty,
-            Expr::Atomic { ty, .. } => *ty,
-            Expr::VlaBase { ty, .. } => *ty,
-            Expr::VlaSizeof { .. } => Ty::Int as i64,
-            Expr::StmtExpr { ty, .. } => *ty,
-            Expr::CheckedArith { ty, .. } => *ty,
-            Expr::X86Simd { ty, .. } => *ty,
-            Expr::MemTransfer { ty, .. } => *ty,
-            // `&&label` is a `void *` (char-pointer encoding).
-            Expr::LabelAddr(_) => {
-                crate::c5::token::Ty::Char as i64 + crate::c5::token::Ty::Ptr as i64
-            }
-            // An asm statement yields no value; it is never a
-            // cast operand.
-            Expr::InlineAsm(_) => Ty::Int as i64,
-        };
+        // An asm statement yields no value, and is never a cast operand.
+        let src_ty = expr_ty(self.ast.expr(child)).unwrap_or(Ty::Int as i64);
         // A 128-bit `__int128` rvalue is carried as its address
         // (the struct-rvalue address-as-value rule). A cast to an
         // integer or pointer loads the object's low 8 bytes (its

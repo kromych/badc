@@ -9,6 +9,29 @@ fn empty_symbols() -> alloc::vec::Vec<Symbol> {
     alloc::vec::Vec::new()
 }
 
+/// Walk one function body against `syms` for the aarch64 target, without
+/// the optimization passes.
+fn walk(
+    ast: Ast,
+    n_locals: i64,
+    return_ty: i64,
+    syms: &[Symbol],
+) -> Result<FunctionSsa, WalkError> {
+    walk_function(
+        &FinishedFunction {
+            ast,
+            n_locals,
+            return_ty,
+            ..Default::default()
+        },
+        syms,
+        &[],
+        Target::LinuxAarch64,
+        false,
+        true,
+    )
+}
+
 /// `return 7 + 3;` -- both operands are integer literals,
 /// so C99 6.6 constant evaluation kicks in and the walker
 /// emits a single `Imm(10)` without producing the binop at
@@ -31,20 +54,7 @@ fn return_constant_add() {
     let __ret = ast.push_stmt(Stmt::Return(Some(add)), src);
     ast.body = Some(__ret);
 
-    let func = walk_function(
-        &FinishedFunction {
-            ast,
-            n_locals: 0,
-            return_ty: Ty::Int as i64,
-            ..Default::default()
-        },
-        &empty_symbols(),
-        &[],
-        Target::LinuxAarch64,
-        false,
-        true,
-    )
-    .expect("walk");
+    let func = walk(ast, 0, Ty::Int as i64, &empty_symbols()).expect("walk");
     let immediates: alloc::vec::Vec<i64> = func
         .insts
         .iter()
@@ -92,19 +102,7 @@ fn local_int_ident_loads() {
     let __ret = ast.push_stmt(Stmt::Return(Some(x)), src);
     ast.body = Some(__ret);
 
-    let func = walk_function(
-        &FinishedFunction {
-            ast,
-            n_locals: 8,
-            ..Default::default()
-        },
-        &syms,
-        &[],
-        Target::LinuxAarch64,
-        false,
-        true,
-    )
-    .expect("walk");
+    let func = walk(ast, 8, 0, &syms).expect("walk");
     let loads: alloc::vec::Vec<_> = func
         .insts
         .iter()
@@ -160,19 +158,7 @@ fn local_int_assign_emits_store() {
     let __ret = ast.push_stmt(Stmt::Return(Some(assign)), src);
     ast.body = Some(__ret);
 
-    let func = walk_function(
-        &FinishedFunction {
-            ast,
-            n_locals: 8,
-            ..Default::default()
-        },
-        &syms,
-        &[],
-        Target::LinuxAarch64,
-        false,
-        true,
-    )
-    .expect("walk");
+    let func = walk(ast, 8, 0, &syms).expect("walk");
     let store_kinds: alloc::vec::Vec<_> = func
         .insts
         .iter()
@@ -220,19 +206,7 @@ fn unary_neg_lowers_to_sub() {
     let __ret = ast.push_stmt(Stmt::Return(Some(neg)), src);
     ast.body = Some(__ret);
 
-    let func = walk_function(
-        &FinishedFunction {
-            ast,
-            n_locals: 0,
-            ..Default::default()
-        },
-        &empty_symbols(),
-        &[],
-        Target::LinuxAarch64,
-        false,
-        true,
-    )
-    .expect("walk");
+    let func = walk(ast, 0, 0, &empty_symbols()).expect("walk");
     let binops: alloc::vec::Vec<BinOp> = func
         .insts
         .iter()
@@ -260,19 +234,7 @@ fn unsupported_stmt_returns_error() {
     );
     ast.body = Some(asm_id);
 
-    let err = walk_function(
-        &FinishedFunction {
-            ast,
-            n_locals: 0,
-            ..Default::default()
-        },
-        &empty_symbols(),
-        &[],
-        Target::LinuxAarch64,
-        false,
-        true,
-    )
-    .expect_err("Asm must surface as unsupported");
+    let err = walk(ast, 0, 0, &empty_symbols()).expect_err("Asm must surface as unsupported");
     assert!(matches!(err, WalkError::InvalidStmt { kind: "Asm", .. }));
     assert!(err.is_internal());
 }

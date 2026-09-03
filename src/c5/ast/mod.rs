@@ -1167,32 +1167,43 @@ pub(crate) fn remap_struct_ty(ty: i64, remap: &[usize]) -> i64 {
     rebased | unsigned
 }
 
+/// The expression variants whose type tag is a plain `ty` field, bound as
+/// `$t`. One list, so a reader and a rewriter of the tags cannot drift
+/// apart. `Cast` and `CompoundLiteral` are excluded: each carries its tag
+/// under another name or alongside a nested initializer.
+macro_rules! plain_ty_expr {
+    ($t:ident) => {
+        Expr::IntLit { ty: $t, .. }
+            | Expr::FloatLit { ty: $t, .. }
+            | Expr::StrLit { ty: $t, .. }
+            | Expr::Ident { ty: $t, .. }
+            | Expr::Unary { ty: $t, .. }
+            | Expr::Binary { ty: $t, .. }
+            | Expr::Ternary { ty: $t, .. }
+            | Expr::Call { ty: $t, .. }
+            | Expr::Member { ty: $t, .. }
+            | Expr::Index { ty: $t, .. }
+            | Expr::Assign { ty: $t, .. }
+            | Expr::BitfieldAssign { ty: $t, .. }
+            | Expr::CompoundAssign { ty: $t, .. }
+            | Expr::PreInc { ty: $t, .. }
+            | Expr::PostInc { ty: $t, .. }
+            | Expr::Comma { ty: $t, .. }
+            | Expr::ShortCircuit { ty: $t, .. }
+            | Expr::Intrinsic { ty: $t, .. }
+            | Expr::Atomic { ty: $t, .. }
+            | Expr::VlaBase { ty: $t, .. }
+            | Expr::StmtExpr { ty: $t, .. }
+            | Expr::CheckedArith { ty: $t, .. }
+            | Expr::X86Simd { ty: $t, .. }
+            | Expr::MemTransfer { ty: $t, .. }
+    };
+}
+pub(crate) use plain_ty_expr;
+
 fn visit_expr_ty(expr: &mut Expr, f: &mut impl FnMut(&mut i64)) {
     match expr {
-        Expr::IntLit { ty, .. }
-        | Expr::FloatLit { ty, .. }
-        | Expr::StrLit { ty, .. }
-        | Expr::Ident { ty, .. }
-        | Expr::Unary { ty, .. }
-        | Expr::Binary { ty, .. }
-        | Expr::Ternary { ty, .. }
-        | Expr::Call { ty, .. }
-        | Expr::Member { ty, .. }
-        | Expr::Index { ty, .. }
-        | Expr::Assign { ty, .. }
-        | Expr::BitfieldAssign { ty, .. }
-        | Expr::CompoundAssign { ty, .. }
-        | Expr::PreInc { ty, .. }
-        | Expr::PostInc { ty, .. }
-        | Expr::Comma { ty, .. }
-        | Expr::ShortCircuit { ty, .. }
-        | Expr::Intrinsic { ty, .. }
-        | Expr::Atomic { ty, .. }
-        | Expr::VlaBase { ty, .. }
-        | Expr::StmtExpr { ty, .. }
-        | Expr::CheckedArith { ty, .. }
-        | Expr::X86Simd { ty, .. }
-        | Expr::MemTransfer { ty, .. } => f(ty),
+        plain_ty_expr!(ty) => f(ty),
         Expr::VlaSizeof { .. } => {}
         Expr::Cast { to_ty, .. } => f(to_ty),
         Expr::CompoundLiteral { ty, init, .. } => {

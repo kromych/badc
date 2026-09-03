@@ -1,6 +1,7 @@
 //! Type queries over the walker's type tags, and the constant
 //! arithmetic that follows them.
 
+use super::super::plain_ty_expr;
 use super::*;
 
 impl<'a> Walker<'a> {
@@ -152,30 +153,7 @@ pub(super) fn extend_scalar_call_result(
 /// their own `ty`).
 pub(crate) fn expr_ty(e: &Expr) -> Option<i64> {
     match e {
-        Expr::IntLit { ty, .. }
-        | Expr::FloatLit { ty, .. }
-        | Expr::StrLit { ty, .. }
-        | Expr::Ident { ty, .. }
-        | Expr::Unary { ty, .. }
-        | Expr::Binary { ty, .. }
-        | Expr::Ternary { ty, .. }
-        | Expr::Call { ty, .. }
-        | Expr::Member { ty, .. }
-        | Expr::Index { ty, .. }
-        | Expr::Assign { ty, .. }
-        | Expr::BitfieldAssign { ty, .. }
-        | Expr::CompoundAssign { ty, .. }
-        | Expr::PreInc { ty, .. }
-        | Expr::PostInc { ty, .. }
-        | Expr::Comma { ty, .. }
-        | Expr::ShortCircuit { ty, .. }
-        | Expr::Intrinsic { ty, .. }
-        | Expr::Atomic { ty, .. }
-        | Expr::VlaBase { ty, .. }
-        | Expr::StmtExpr { ty, .. }
-        | Expr::CheckedArith { ty, .. }
-        | Expr::X86Simd { ty, .. }
-        | Expr::MemTransfer { ty, .. } => Some(*ty),
+        plain_ty_expr!(ty) => Some(*ty),
         Expr::Cast { to_ty, .. } => Some(*to_ty),
         Expr::Sizeof(s) => Some(s.result_ty),
         // `sizeof <vla>` is a runtime `size_t`; c5 types it as `int`.

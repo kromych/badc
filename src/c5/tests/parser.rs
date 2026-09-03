@@ -2696,7 +2696,7 @@ fn struct_array_compound_literal_counts_elements_not_leaves() {
         "struct s { int a; int b; };\n\
          int main(void) { const struct s *p = (const struct s[2]){ [5] = {1,2} };\n\
              return p[0].a; }",
-        "array designator index 5..5 out of bounds [0, 2)",
+        "array designator index 5 out of bounds [0, 2)",
     );
 }
 
@@ -3307,5 +3307,185 @@ fn a_qualifier_may_follow_the_pointer_in_a_type_name() {
     assert_eq!(
         run_main("int main(void) { return (int)sizeof(int *const); }"),
         8
+    );
+}
+
+#[test]
+fn an_array_designator_reads_the_same_at_every_scope() {
+    // C99 6.7.8p6: `[constant-expression]`, and the GNU `[lo ... hi]` range,
+    // select the element the following value initializes. File scope, block
+    // scope, a block-scope static and a compound literal read the subscript
+    // through one parser, so each form is accepted the same way and a later
+    // designator overrides what an earlier range wrote (6.7.8p19).
+    assert_eq!(
+        run_main(
+            "int g[6] = { [0 ... 3] = 7, [2] = 9 };\n\
+             int main(void) { return g[0] + g[2] + g[3] + g[4]; }"
+        ),
+        23
+    );
+    assert_eq!(
+        run_main(
+            "int main(void) { int a[6] = { [0 ... 3] = 7, [2] = 9 };\n\
+                 return a[0] + a[2] + a[3] + a[4]; }"
+        ),
+        23
+    );
+    assert_eq!(
+        run_main(
+            "int main(void) { static int a[6] = { [0 ... 3] = 7, [2] = 9 };\n\
+                 return a[0] + a[2] + a[3] + a[4]; }"
+        ),
+        23
+    );
+    assert_eq!(
+        run_main(
+            "int main(void) { int *a = (int[6]){ [0 ... 3] = 7, [2] = 9 };\n\
+                 return a[0] + a[2] + a[3] + a[4]; }"
+        ),
+        23
+    );
+    // A nested array of struct indexes every dimension, then continues into
+    // the element with a `.field` step.
+    assert_eq!(
+        run_main(
+            "struct s { int a, b; };\n\
+             struct s g2[2][3] = { [1][2].a = 5, [0][1] = { 3, 4 }, [1][2].b = 6 };\n\
+             int main(void) {\n\
+                 return g2[1][2].a + g2[1][2].b + g2[0][1].a + g2[0][1].b; }"
+        ),
+        18
+    );
+    assert_eq!(
+        run_main(
+            "struct s { int a, b; };\n\
+             int main(void) {\n\
+                 struct s v[2][3] = { [1][2].a = 5, [0][1] = { 3, 4 }, [1][2].b = 6 };\n\
+                 return v[1][2].a + v[1][2].b + v[0][1].a + v[0][1].b; }"
+        ),
+        18
+    );
+    // A range over the outer dimension of an array of struct, and a member
+    // array's own designator inside a struct initializer.
+    assert_eq!(
+        run_main(
+            "struct s { int a, b; };\n\
+             struct s g3[4] = { [0 ... 2] = { 1, 2 }, [1].b = 9 };\n\
+             int main(void) { return g3[0].b + g3[1].b + g3[2].b + g3[3].b; }"
+        ),
+        13
+    );
+    assert_eq!(
+        run_main(
+            "struct s { int v[4]; };\n\
+             int main(void) { struct s x = { .v[1 ... 2] = 3, .v[2] = 4 };\n\
+                 return x.v[0] + x.v[1] + x.v[2] + x.v[3]; }"
+        ),
+        7
+    );
+}
+
+#[test]
+fn a_rejected_array_designator_reports_one_diagnostic() {
+    // C99 6.7.8p6 requires a constant expression naming an element of the
+    // array. Every scope applies the same three checks -- non-negative,
+    // ordered range, in extent -- so the diagnostics do not vary with where
+    // the initializer was written.
+    for scope in [
+        "int a[4] = { DESIG };",
+        "int f(void) { int a[4] = { DESIG }; return a[0]; }",
+        "int f(void) { static int a[4] = { DESIG }; return a[0]; }",
+        "int f(void) { return (int[4]){ DESIG }[0]; }",
+    ] {
+        expect_compile_error(
+            &scope.replace("DESIG", "[-1] = 1"),
+            "array designator index must be non-negative (got -1)",
+        );
+        expect_compile_error(
+            &scope.replace("DESIG", "[3 ... 1] = 1"),
+            "array range designator high 1 below low 3",
+        );
+        expect_compile_error(
+            &scope.replace("DESIG", "[1 = 1"),
+            "`]` expected after array designator index",
+        );
+        expect_compile_error(&scope.replace("DESIG", "[1] 1"), "`=` expected after `[N]`");
+    }
+    // A non-constant index reaches the same constant-expression evaluator at
+    // every scope; at file scope the object has no value to fold either.
+    expect_compile_error(
+        "int n; int a[4] = { [n] = 1 };",
+        "constant integer expected (got identifier `n`)",
+    );
+    expect_compile_error(
+        "int f(int n) { int a[4] = { [n] = 1 }; return a[0]; }",
+        "constant integer expected (got identifier `n`)",
+    );
+    expect_compile_error(
+        "int f(int n) { static int a[4] = { [n] = 1 }; return a[0]; }",
+        "constant integer expected (got identifier `n`)",
+    );
+    expect_compile_error(
+        "int f(int n) { return (int[4]){ [n] = 1 }[0]; }",
+        "constant integer expected (got identifier `n`)",
+    );
+    // An index past the declared extent of a named array is reported as the
+    // element count the initializer would need; the levels that know the
+    // extent when the subscript is parsed report it as the bound.
+    expect_compile_error(
+        "int a[4] = { [9] = 1 };",
+        "too many initializers for array `a` (10 > 4)",
+    );
+    expect_compile_error(
+        "int f(void) { return (int[4]){ [9] = 1 }[0]; }",
+        "too many initializers for compound literal (10 > 4)",
+    );
+    for scope in [
+        "struct s { int v[3]; }; struct s x = { DESIG };",
+        "struct s { int v[3]; }; int f(void) { struct s x = { DESIG }; return x.v[0]; }",
+        "struct s { int v[3]; };\n\
+         int f(void) { static struct s x = { DESIG }; return x.v[0]; }",
+    ] {
+        expect_compile_error(
+            &scope.replace("DESIG", ".v[7] = 1"),
+            "array designator index 7 out of bounds [0, 3)",
+        );
+        expect_compile_error(
+            &scope.replace("DESIG", ".v[1 ... 7] = 1"),
+            "array designator index 1..7 out of bounds [0, 3)",
+        );
+    }
+    for scope in [
+        "struct s { int a; }; struct s x[2][3] = { DESIG };",
+        "struct s { int a; }; int f(void) { struct s x[2][3] = { DESIG }; return x[0][0].a; }",
+    ] {
+        expect_compile_error(
+            &scope.replace("DESIG", "[1][9].a = 1"),
+            "array designator index 9 out of bounds [0, 3)",
+        );
+        expect_compile_error(
+            &scope.replace("DESIG", "[1][-1].a = 1"),
+            "array designator index -1 out of bounds [0, 3)",
+        );
+        // A subscript past the last dimension names a struct element, which
+        // takes a `.field` step instead.
+        expect_compile_error(
+            &scope.replace("DESIG", "[1][2][0].a = 1"),
+            "`[` designator on a non-array element",
+        );
+    }
+    // Only the last subscript of a designator list may be a range.
+    expect_compile_error(
+        "struct s { int v[2][2]; }; struct s x = { .v[0 ... 1][0 ... 1] = 1 };",
+        "two `[lo ... hi]` designators in one designator list",
+    );
+    expect_compile_error(
+        "int a[2][2] = { [0 ... 1][0 ... 1] = 1 };",
+        "range designator must be the last subscript",
+    );
+    // A `[N]` designator needs an array to index.
+    expect_compile_error(
+        "struct s { int v; }; struct s x = { .v[0] = 1 };",
+        "`[N]` designator on a non-array field",
     );
 }

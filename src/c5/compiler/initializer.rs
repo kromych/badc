@@ -750,14 +750,33 @@ impl Compiler {
                 );
             }
         }
-        if let DesignatorRule::Extent(extent) = rule
-            && (lo < 0 || hi < lo || hi >= extent)
-        {
-            return Err(self.compile_err(format!(
-                "array designator index {lo}..{hi} out of bounds [0, {extent})"
-            )));
+        if let DesignatorRule::Extent(extent) = rule {
+            self.check_designator_extent(lo, hi, extent)?;
         }
         Ok(DesignatorSubscript { lo, hi, ranged })
+    }
+
+    /// C99 6.7.8p6: an array designator's index, and every index a GNU
+    /// `[lo ... hi]` range covers, names an element of the array being
+    /// initialized. Levels that learn the extent only after the subscript
+    /// is parsed call this once they have it.
+    pub(super) fn check_designator_extent(
+        &self,
+        lo: i64,
+        hi: i64,
+        extent: i64,
+    ) -> Result<(), C5Error> {
+        if lo < 0 || hi < lo || hi >= extent {
+            let index = if hi == lo {
+                format!("{lo}")
+            } else {
+                format!("{lo}..{hi}")
+            };
+            return Err(self.compile_err(format!(
+                "array designator index {index} out of bounds [0, {extent})"
+            )));
+        }
+        Ok(())
     }
 
     /// Consume the `]` closing an array designator's subscript.
@@ -2493,12 +2512,7 @@ impl Compiler {
                         self.compile_err("two `[lo ... hi]` designators in one designator list")
                     );
                 }
-                if m < 0 || hi < m || hi >= dims[0] {
-                    return Err(self.compile_err(format!(
-                        "array designator index {m}..{hi} out of bounds [0, {})",
-                        dims[0]
-                    )));
-                }
+                self.check_designator_extent(m, hi, dims[0])?;
                 if self.lex.tk != ']' {
                     return Err(self.compile_err("`]` expected after sub-designator index"));
                 }
@@ -3099,12 +3113,7 @@ impl Compiler {
             let n = self
                 .take_designator_subscript(DesignatorRule::SingleIndex)?
                 .lo;
-            if n < 0 || n >= dims_below[0] {
-                return Err(self.compile_err(format!(
-                    "array designator index {n} out of bounds [0, {})",
-                    dims_below[0]
-                )));
-            }
+            self.check_designator_extent(n, n, dims_below[0])?;
             self.expect_designator_close()?;
             let stride = elem_size * dims_below[1..].iter().product::<i64>().max(1);
             return self.fill_struct_array_designated(elem_ty, at + n * stride, &dims_below[1..]);

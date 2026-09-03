@@ -2036,11 +2036,7 @@ impl Compiler {
                     ..
                 } = self.take_designator_subscript(DesignatorRule::Deferred)?;
                 self.expect_designator_close()?;
-                if desig < 0 || desig_hi < desig || desig_hi >= group_count {
-                    return Err(self.compile_err(format!(
-                                "array designator index {desig}..{desig_hi} out of bounds [0, {group_count})"
-                            )));
-                }
+                self.check_designator_extent(desig, desig_hi, group_count)?;
                 if self.lex.tk == Token::Brak && desig_hi == desig {
                     // Each inner subscript scales by the product of
                     // the dimensions below it; the outer `desig`
@@ -2052,10 +2048,13 @@ impl Compiler {
                             .take_designator_subscript(DesignatorRule::SingleIndex)?
                             .lo;
                         self.expect_designator_close()?;
-                        if d >= inner_dims.len() || n < 0 || n >= inner_dims[d] {
-                            return Err(self
-                                .compile_err(format!("array designator index {n} out of bounds")));
+                        // Past the last dimension the sub-object is a struct
+                        // element, which takes a `.field` step, not a
+                        // subscript; the file-scope walker reports the same.
+                        if d >= inner_dims.len() {
+                            return Err(self.compile_err("`[` designator on a non-array element"));
                         }
+                        self.check_designator_extent(n, n, inner_dims[d])?;
                         let scale: i64 = inner_dims.iter().skip(d + 1).product::<i64>().max(1);
                         elem += n * scale;
                         d += 1;

@@ -4352,6 +4352,24 @@ fn thread_local_initializer() {
 }
 
 #[test]
+fn designator_scopes() {
+    // C99 6.7.8p6/p19: one parser reads an array designator's subscript for
+    // file scope, block scope, a block-scope static and a compound literal,
+    // so each form -- single index, GNU range, a range a later designator
+    // overwrites, a chain into a nested array of struct, a struct member's
+    // own array -- resolves the same way at every one of them.
+    assert_eq!(run_fixture("designator_scopes.c"), 0);
+}
+
+#[test]
+fn overaligned_vector_object() {
+    // C11 6.7.5: `_Alignas(N)` places an object of a GCC `vector_size`
+    // type on an N-byte boundary, at file scope, as a block-scope static
+    // and as an automatic object.
+    assert_eq!(run_fixture("overaligned_vector_object.c"), 0);
+}
+
+#[test]
 fn thread_local_object_alignment() {
     // C99 6.2.8: an object with thread storage duration sits on its type's
     // boundary. The thread-local block has no per-object placement record,

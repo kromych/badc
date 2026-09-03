@@ -1,4 +1,10 @@
+use std::io::{IsTerminal, Read};
+
 use badc::Target;
+
+use super::args::Cli;
+use super::options::Mode;
+use super::script_link::LinkInputCli;
 
 use super::diag::{TuLog, eprint_diagnostic};
 
@@ -382,5 +388,218 @@ mod ld_script_tests {
             ],
             "OUTPUT_FORMAT argument and keywords must not appear as file entries",
         );
+    }
+}
+
+/// The positional inputs classified by extension, the libraries `-l`
+/// resolved, and the C library a hosted link imports from.
+pub(crate) struct Inputs {
+    pub(crate) sources: Vec<String>,
+    pub(crate) objects: Vec<String>,
+    pub(crate) archives: Vec<String>,
+    /// Objects and archives in command-line order for the script link.
+    pub(crate) link_inputs: Vec<LinkInputCli>,
+    /// Index into `Cli::positional` where the program's own argv starts;
+    /// only `--jit` / `--interp` have one.
+    pub(crate) prog_args_start: usize,
+    pub(crate) shared_libs: Vec<badc::SharedLibrary>,
+    pub(crate) target_libc: Option<badc::TargetCLibrary>,
+}
+
+impl Inputs {
+    /// Classify every positional input by extension: `.c`, and a name
+    /// with no extension, is a C source; `.s` / `.S` / `.sx` an
+    /// assembler source; `.o` a relocatable object; `.a` a static
+    /// archive; `-` the stdin source. Under `--jit` / `--interp` the
+    /// first unrecognised entry starts the program's own argv; every
+    /// other mode reports it.
+    pub(crate) fn classify(cli: &Cli) -> Self {
+        let mut sources: Vec<String> = Vec::new();
+        let mut objects: Vec<String> = Vec::new();
+        let mut archives: Vec<String> = Vec::new();
+        // Objects and archives in command-line order for the script link.
+        let mut link_inputs: Vec<LinkInputCli> = Vec::new();
+        let mut prog_args_start: usize = cli.positional.len();
+        // Program argv is consumed only by --jit / --interp; every other
+        // mode links or preprocesses its inputs and has no argv tail.
+        let takes_prog_args = matches!(cli.mode, Mode::Jit | Mode::Interp);
+        for (i, a) in cli.positional.iter().enumerate().skip(1) {
+            if a == "-" {
+                sources.push(a.clone());
+                continue;
+            }
+            let ext = std::path::Path::new(a)
+                .extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or("");
+            match ext {
+                "c" | "" | "s" | "S" | "sx" => sources.push(a.clone()),
+                "o" => {
+                    objects.push(a.clone());
+                    link_inputs.push(LinkInputCli::Object(a.clone()));
+                }
+                "a" => {
+                    let whole = cli.link.whole_archive.iter().any(|&(s, e)| s <= i && i < e);
+                    archives.push(a.clone());
+                    link_inputs.push(LinkInputCli::Archive {
+                        path: a.clone(),
+                        whole,
+                    });
+                }
+                _ => {
+                    // In --jit / --interp the first unrecognised entry marks
+                    // the boundary; everything after it is the program's argv
+                    // (so `badc --jit foo.c arg1 arg2` still works). Every
+                    // other mode links or preprocesses its inputs and has no
+                    // argv, so an unrecognised extension is a mistyped or
+                    // unsupported input and is reported rather than silently
+                    // dropped along with every input after it.
+                    if takes_prog_args {
+                        prog_args_start = i;
+                        break;
+                    }
+                    eprint_diagnostic(format!(
+                        "badc: error: unrecognized input file extension: `{a}` \
+                     (expected a `.c` / `.s` / `.S` source, `.o` object, or \
+                     `.a` archive)"
+                    ));
+                    std::process::exit(1);
+                }
+            }
+        }
+        Self {
+            sources,
+            objects,
+            archives,
+            link_inputs,
+            prog_args_start,
+            shared_libs: Vec::new(),
+            target_libc: None,
+        }
+    }
+
+    /// Resolve `-l<name>` against the `-L<dir>` paths, then the standard
+    /// system directories for the target's format. A shared library
+    /// (`lib<name>.so` / `.dylib` / `.tbd`) is preferred over a static
+    /// archive (`lib<name>.a`), matching `ld`'s default search order:
+    /// the shared library becomes a load-time dependency whose exports
+    /// resolve otherwise-undefined references, the `.a` a positional
+    /// archive whose members are pulled on demand.
+    pub(crate) fn resolve_libraries(&mut self, cli: &Cli) {
+        let mut search_paths: Vec<String> = cli.link.library_paths.clone();
+        // The host's library directories hold this platform's libraries, so
+        // they are the target's only when linking for the host platform --
+        // the rule the system include path already follows. A cross link
+        // names its own sysroot through `-L`.
+        let native_link = cli.target == badc::Target::host();
+        if native_link {
+            if cli.target.binary_format() == badc::BinaryFormat::MachO {
+                // ld64's defaults. The runtime dylibs live in the dyld shared
+                // cache, not on disk, so the SDK's stub directory is the one
+                // that resolves the system libraries.
+                for d in ["/usr/local/lib", "/usr/lib"] {
+                    search_paths.push(d.to_string());
+                }
+                if let Some(sdk_lib) = macos_sdk_lib_dir() {
+                    search_paths.push(sdk_lib);
+                }
+            } else {
+                for d in [
+                    "/usr/lib64",
+                    "/lib64",
+                    "/usr/lib",
+                    "/lib",
+                    "/usr/lib/x86_64-linux-gnu",
+                    "/usr/lib/aarch64-linux-gnu",
+                ] {
+                    search_paths.push(d.to_string());
+                }
+            }
+        }
+        for name in &cli.link.lib_names {
+            match find_library(name, &search_paths, cli.target) {
+                Some(p) => {
+                    if let Err(e) = ingest_linker_input(
+                        &p,
+                        &search_paths,
+                        cli.target,
+                        &mut self.shared_libs,
+                        &mut self.archives,
+                        0,
+                    ) {
+                        eprintln!("badc: error: {e}");
+                        std::process::exit(1);
+                    }
+                }
+                None => {
+                    let [shared, archive] = library_spellings(name, cli.target);
+                    eprintln!(
+                        "badc: cannot find `{shared}` or `{archive}` on any search path \
+                     ({} probed)",
+                        search_paths.len()
+                    );
+                    std::process::exit(1);
+                }
+            }
+        }
+        // A hosted executable link resolves undefined references against the
+        // C library implicitly, the way a compiler driver's implicit `-lc`
+        // (or ld64's `-lSystem`) does: a reference from a foreign object, or
+        // one C99 7.1.4p2 let the source declare without its header, becomes
+        // a load-time import rather than a link error. The library is the
+        // target's, described by the bundled headers' binding set rather
+        // than read off the link host (see `TargetCLibrary`), so the image
+        // is a function of the sources, the flags and the target alone. The
+        // set is materialized during symbol selection below, once the
+        // undefined names are known.
+        self.target_libc = (cli.mode == Mode::NativeExecutable && !cli.freestanding)
+            .then(|| badc::TargetCLibrary::new(cli.target))
+            .flatten();
+    }
+    /// Fall back to stdin when no positional source was given
+    /// and stdin isn't a terminal -- the `cat foo.c | badc`
+    /// pipeline.
+    pub(crate) fn fall_back_to_stdin(&mut self) {
+        if self.sources.is_empty()
+            && self.objects.is_empty()
+            && self.archives.is_empty()
+            && !std::io::stdin().is_terminal()
+        {
+            self.sources.push("-".to_string());
+        }
+        if self.sources.is_empty() && self.objects.is_empty() && self.archives.is_empty() {
+            eprint_diagnostic("badc: error: no files");
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Stdin is consumed exactly once: `--dump-pp`, the VM modes and the
+/// native-link path can each ask for it, so the bytes are cached and
+/// every later reader sees the same source rather than an empty stream
+/// off the drained pipe.
+#[derive(Default)]
+pub(crate) struct StdinSource {
+    cache: std::cell::RefCell<Option<String>>,
+}
+
+impl StdinSource {
+    pub(crate) fn read(&self) -> String {
+        if let Some(s) = self.cache.borrow().as_ref() {
+            return s.clone();
+        }
+        let mut s = String::new();
+        if let Err(e) = std::io::stdin().read_to_string(&mut s) {
+            eprint_diagnostic(format!("badc: error: error reading stdin: {e}"));
+            std::process::exit(1);
+        }
+        *self.cache.borrow_mut() = Some(s.clone());
+        s
+    }
+
+    /// The pre-read bytes for a `-` among `srcs`, so a `--jobs` worker
+    /// never touches the process stream.
+    pub(crate) fn for_sources(&self, srcs: &[String]) -> Option<String> {
+        srcs.iter().any(|s| s == "-").then(|| self.read())
     }
 }

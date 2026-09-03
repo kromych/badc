@@ -3732,3 +3732,13 @@ fn export_and_dylib_declarations_are_ordered_and_unique() {
     assert_eq!(pp.dylibs[1].bindings.len(), 1);
     assert!(pp.dylibs[0].bindings.is_empty());
 }
+
+/// The lexed-body cache is keyed by macro name; a redefinition must
+/// re-lex even when the new body is the same length as the old.
+#[test]
+fn a_redefinition_replaces_the_cached_body() {
+    let out = process("#define X 111\nX\n#define X 222\nX\n");
+    assert!(out.contains("111") && out.contains("222"), "{out}");
+    let out = process("#define M(a) (a + 1)\nM(9)\n#undef M\n#define M(a) (a - 1)\nM(9)\n");
+    assert!(out.contains("(9 + 1)") && out.contains("(9 - 1)"), "{out}");
+}

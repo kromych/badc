@@ -25,8 +25,8 @@ use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::decl_base;
 use super::types::{
-    apply_qual_bits, format_signature, is_decl_modifier, is_pointer_ty, is_struct_ty,
-    is_struct_value_ty, is_void_ty, strip_unsigned, struct_id_of, struct_ptr_depth,
+    format_signature, is_pointer_ty, is_struct_ty, is_struct_value_ty, is_void_ty, strip_unsigned,
+    struct_id_of, struct_ptr_depth,
 };
 
 impl Compiler {
@@ -303,6 +303,43 @@ impl Compiler {
         Ok(())
     }
 
+    /// Clear the state one file-scope declaration owns: the `const` and
+    /// spelling carriers, the attribute results and the function-specifier
+    /// flags. `inline` matters even without a body -- an inline prototype
+    /// must not mark the following declaration as inline when the linkage
+    /// rule reads the flag.
+    fn reset_file_scope_decl_state(&mut self) {
+        self.pending.base_is_const = false;
+        let _ = self.take_base_spelling();
+        self.pending_noreturn = false;
+        self.pending.attr_thread_local = false;
+        self.pending.attr_dllexport = false;
+        self.pending.attr_align = 0;
+        self.pending.attr_alignas = 0;
+        self.pending.type_align = 0;
+        self.pending.attr_vector_size = 0;
+        self.pending.attr_constructor = false;
+        self.pending.attr_destructor = false;
+        self.pending.attr_init_priority = None;
+        self.pending.attr_cleanup = None;
+        self.pending.attr_uninitialized = false;
+        self.pending.attr_weak = false;
+        self.pending.attr_call_conv = crate::c5::codegen::CallConv::Target;
+        self.pending.attr_used = false;
+        self.pending.attr_visibility = None;
+        self.pending.attr_section = None;
+        self.pending.attr_patchable_entry = None;
+        self.pending.attr_no_instrument = false;
+        self.pending.attr_alias = None;
+        self.pending.saw_register_storage = false;
+        self.pending.auto_type_single_declarator = false;
+        self.pending_is_inline = false;
+        self.pending_is_always_inline = false;
+        self.pending_saw_inline_specifier = false;
+        self.pending_is_gnu_inline = false;
+        self.pending_is_naked = false;
+    }
+
     pub(super) fn run_compile(&mut self) -> Result<(), C5Error> {
         self.next()?;
         while self.lex.tk != 0 {
@@ -321,323 +358,16 @@ impl Compiler {
                 self.parse_file_scope_asm()?;
                 continue;
             }
-            let mut bt = Ty::Int as i64;
-            // Set when the base type is an `enum`; recorded on a
-            // typedef so an enum bitfield declared through it reads
-            // unsigned.
-            let mut base_is_enum = false;
-            // Reset the bare-`void` side channel for this
-            // declaration. Set further down if the base-type loop
-            // matches `Token::Void`; consumed by the function-decl
-            // path to mark `Symbol::returns_void`.
-            self.pending.base_was_void = false;
-            // Same reset for the long-double marker. A previous
-            // declaration that consumed `long double` would
-            // otherwise stamp this iteration's binding with the
-            // wrong x87 return convention.
-            self.pending.base_was_long_double = false;
-            // Same reset for the typedef-array dimension carrier
-            // so a previous declaration's typedef base does not
-            // leak its array count into this iteration's
-            // declarator binding.
-            self.pending.typedef_base_array_size = 0;
-            self.pending.typedef_base_zero_len = false;
-            // Reset the const carrier so a prior declaration's `const`
-            // base does not leak onto this iteration's declarators.
-            self.pending.base_is_const = false;
-            let _ = self.take_base_spelling();
-            // Storage-class prefixes -- can appear in any order
-            // and any combination before the type. C lets you
-            // mix `static extern` (silly but legal in some
-            // compilers) and `_Thread_local extern` (legal),
-            // so we accept any ordering. `extern` and `static`
-            // are no-ops in c5 (every symbol already has
-            // internal linkage and there's no separate
-            // translation-unit story); `_Thread_local` flips
-            // the per-thread storage flag. The int-modifier
-            // soup (`signed`, `unsigned`, `short`, `long*`,
-            // `_Bool`) flows through the shared `IntModifiers`
-            // accumulator so `parse_decl_base_type` and the
-            // file-scope path interpret it identically.
-            let mut thread_local = false;
-            let mut is_typedef = false;
-            let mut static_seen = false;
-            let mut extern_seen = false;
-            let mut atomic_base: Option<i64> = None;
-            let mut qual_bits: i64 = 0;
-            let mut m = decl_base::IntModifiers::default();
-            // `_Noreturn`, `__declspec(thread)`, `__declspec(dllexport)`, and
-            // `inline` scope to this declaration; clear the carriers so they
-            // cannot leak onto the next one. `inline` matters even without a
-            // body: an inline prototype must not mark the following
-            // declaration as inline when the linkage rule reads the flag.
-            self.pending_noreturn = false;
-            self.pending.attr_thread_local = false;
-            self.pending.attr_dllexport = false;
-            self.pending.attr_align = 0;
-            self.pending.attr_alignas = 0;
-            self.pending.type_align = 0;
-            self.pending.attr_vector_size = 0;
-            self.pending.attr_constructor = false;
-            self.pending.attr_destructor = false;
-            self.pending.attr_init_priority = None;
-            self.pending.attr_cleanup = None;
-            self.pending.attr_uninitialized = false;
-            self.pending.attr_weak = false;
-            self.pending.attr_call_conv = crate::c5::codegen::CallConv::Target;
-            self.pending.attr_used = false;
-            self.pending.attr_visibility = None;
-            self.pending.attr_section = None;
-            self.pending.attr_patchable_entry = None;
-            self.pending.attr_no_instrument = false;
-            self.pending.attr_alias = None;
-            self.pending.saw_register_storage = false;
-            self.pending.auto_type_single_declarator = false;
-            self.pending_is_inline = false;
-            self.pending_is_always_inline = false;
-            self.pending_saw_inline_specifier = false;
-            self.pending_is_gnu_inline = false;
-            self.pending_is_naked = false;
-            loop {
-                if self.lex.tk == Token::ThreadLocal {
-                    thread_local = true;
-                    self.next()?;
-                } else if self.lex.tk == Token::Typedef {
-                    is_typedef = true;
-                    self.next()?;
-                } else if self.try_consume_int_modifier(&mut m)? {
-                    // Consumed an int modifier; the helper already
-                    // advanced the lexer.
-                } else if self.lex.tk == Token::Static {
-                    static_seen = true;
-                    self.next()?;
-                } else if self.lex.tk == Token::Extern {
-                    extern_seen = true;
-                    self.next()?;
-                } else if self.lex.tk == Token::Atomic && self.lex.peek_after_whitespace(b'(') {
-                    // C11 6.7.2.4 atomic type specifier `_Atomic(type-name)`:
-                    // the inner type-name names the base type (distinct from
-                    // the `_Atomic` qualifier consumed as a no-op below).
-                    atomic_base = self.try_parse_atomic_type_specifier()?;
-                } else if self.lex.tk == Token::Attribute
-                    || (self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'['))
-                {
-                    self.skip_attribute_specifiers()?;
-                    // `__declspec(thread)` in the specifier run -> thread-local.
-                    if self.pending.attr_thread_local {
-                        thread_local = true;
-                        self.pending.attr_thread_local = false;
-                    }
-                } else if is_decl_modifier(self.lex.tk) {
-                    if self.lex.tk == Token::Inline || self.lex.tk == Token::ForceInline {
-                        self.pending_is_inline = true;
-                        self.pending_saw_inline_specifier = true;
-                        if self.lex.tk == Token::ForceInline {
-                            self.pending_is_always_inline = true;
-                        }
-                    }
-                    if self.lex.tk == Token::Noreturn {
-                        self.pending_noreturn = true;
-                    }
-                    if self.lex_is_register_storage() {
-                        self.pending.saw_register_storage = true;
-                    }
-                    // `volatile` qualifies the declared type (C99 6.7.3);
-                    // `const` is recorded out-of-band for value folding.
-                    qual_bits |= self.lex_qualifier_bits();
-                    self.pending.base_is_const |= self.lex_is_const_qual();
-                    self.pending.spell_base_restrict |= self.lex_is_restrict_qual();
-                    self.pending.spell_base_const |= self.lex_is_const_qual();
-                    self.next()?;
-                } else {
-                    break;
-                }
-            }
-            if let Some(inner) = atomic_base {
-                bt = inner;
-            } else if self.lex.tk == Token::Typeof {
-                // `typeof` / `__typeof__` (C23 6.7.2.5, long a GCC
-                // extension) names the type of a parenthesized type-name or
-                // unevaluated expression. The block-scope declaration path
-                // (parse_decl_base_type) already routes through the same
-                // helper; handle it identically at file scope.
-                bt = self.parse_typeof_specifier()?;
-            } else if self.lex.tk == Token::AutoType {
-                // `__auto_type` at file scope: the initializer supplies
-                // the type, recovered by the same pre-scan the
-                // block-scope path uses.
-                bt = self.parse_auto_type_specifier()?;
-            } else if let Some(scalar) = self.parse_scalar_base_specifier(&m)? {
-                bt = scalar;
-            } else if self.lex.tk == Token::Enum {
-                bt = self.parse_enum_decl()?;
-                base_is_enum = true;
-            } else if self.lex.tk == Token::Struct || self.lex.tk == Token::Union {
-                // Aggregate (struct or union) declaration. Three
-                // shapes:
-                //   <kw> Name { ... };           -- definition only
-                //   <kw> Name;                   -- forward declaration
-                //   <kw> Name *p;                -- type use, declarators follow
-                //   typedef <kw> Name {...} Name; -- definition + typedef alias
-                bt = self.parse_aggregate_base_type()?;
-            } else if self.is_lex_int128_spelling() {
-                // GCC `__int128` / `__uint128_t` at file scope: a 16-byte
-                // integer type, modeled as a 16-byte aggregate.
-                bt = self.lex_int128_tag(m.saw_unsigned);
-                self.next()?;
-            } else if self.is_lex_va_list_spelling() {
-                // GCC `__builtin_va_list` at file scope: the target's
-                // `va_list` representation, usable with no header.
-                self.next()?;
-                bt = self.builtin_va_list_tag();
-            } else if self.is_lex_typedef_name() {
-                // Typedef-name as base type at file scope: `Foo bar;`
-                // where `Foo` was bound by a prior `typedef`.
-                bt = self.symbols[self.lex.curr_id_idx].type_;
-                self.pending.spell_base_typedef = Some(self.lex.curr_id_idx as u32);
-                // Carry the typedef's fn-ptr lineage forward so a
-                // declarator like `fn_t fp` (no leading `*`) still
-                // gets `Symbol::fn_ptr_indirection = 1`. The
-                // declarator itself, if it adds leading `*`s, will
-                // bump this further before the symbol is bound.
-                let typedef_fpi = self.symbols[self.lex.curr_id_idx].fn_ptr_indirection;
-                if typedef_fpi > 0 {
-                    self.pending.fn_ptr_indirection = Some(typedef_fpi);
-                    self.pending.fn_ptr_ret_indirection =
-                        self.symbols[self.lex.curr_id_idx].fn_ptr_ret_indirection;
-                    self.pending.base_is_function_type =
-                        self.symbols[self.lex.curr_id_idx].is_function_type;
-                    // A function-pointer typedef records the pointed-to
-                    // function's prototype (`params` + `is_variadic`).
-                    // Carry it to the bound declarator so an indirect
-                    // call through the variable narrows each argument to
-                    // its declared parameter type and splits fixed vs
-                    // variadic arguments per the host variadic ABI.
-                    self.pending.typedef_fn_proto = Some((
-                        self.symbols[self.lex.curr_id_idx].params.len(),
-                        self.symbols[self.lex.curr_id_idx].is_variadic,
-                    ));
-                    self.pending.fn_ptr_param_types =
-                        Some(self.symbols[self.lex.curr_id_idx].params.clone());
-                }
-                // C99 6.7.7 paragraph 3: a typedef whose alias is
-                // an array contributes its dimension to the
-                // bound declarator.
-                let typedef_array = self.symbols[self.lex.curr_id_idx].array_size;
-                if typedef_array != 0 {
-                    self.pending.typedef_base_array_size = typedef_array;
-                    self.pending.typedef_base_array_dims =
-                        self.symbols[self.lex.curr_id_idx].array_dims.clone();
-                    self.pending.typedef_base_zero_len =
-                        self.symbols[self.lex.curr_id_idx].is_zero_len_array;
-                }
-                // Carry the typedef's explicit type alignment (GNU
-                // `aligned(N)`) so a declaration through it -- including a
-                // typedef of a typedef -- honors the requested boundary.
-                let typedef_align = self.symbols[self.lex.curr_id_idx].type_align;
-                if typedef_align > 0 {
-                    self.pending.type_align = typedef_align;
-                }
-                self.next()?;
-            } else if m.saw_int_mod {
-                // Bare modifier(s) without an explicit type keyword:
-                // `unsigned x;` / `short x;` / `long x;` /
-                // `long long x;` (the implicit-int rule).
-                bt = m.int_base();
-            } else if self.lex.tk == Token::Id {
-                // Identifier in base-type position with no matching
-                // typedef. C89 6.5.2 / C99 6.7.2p2 (deprecated)
-                // "implicit int": a declaration without a type
-                // specifier infers `int`. Common at file scope for
-                // `main() { ... }` and K&R-shaped third-party C.
-                // Honour the implicit-int rule only when the
-                // identifier looks like the declarator itself --
-                // i.e. the next non-whitespace byte is `(` (a
-                // function declarator) or `;` / `,` / `=` (a
-                // simple-variable declarator). Other shapes
-                // (`Foo bar;` where `Foo` is supposed to be a type)
-                // continue to error so a typo in a type name is
-                // surfaced at the declaration, not silently
-                // accepted as `int Foo bar;`.
-                if self.lex.peek_after_whitespace(b'(')
-                    || self.lex.peek_after_whitespace(b';')
-                    || self.lex.peek_after_whitespace(b',')
-                    || self.lex.peek_after_whitespace(b'=')
-                {
-                    bt = Ty::Int as i64;
-                } else {
-                    let name = self.symbols[self.lex.curr_id_idx].name.clone();
-                    return Err(self.compile_err(format!("unknown type name `{name}`")));
-                }
-            }
-            // Trailing qualifiers / int modifiers between the base
-            // type and the declarators -- `Foo const *p`, `int long
-            // x`, etc. The base type is already chosen; a trailing
-            // `volatile` still qualifies it (C99 6.7.3).
-            while is_decl_modifier(self.lex.tk) {
-                if self.lex.tk == Token::Attribute {
-                    self.skip_attribute_specifiers()?;
-                    continue;
-                }
-                if self.lex_is_register_storage() {
-                    self.pending.saw_register_storage = true;
-                }
-                qual_bits |= self.lex_qualifier_bits();
-                self.pending.base_is_const |= self.lex_is_const_qual();
-                self.pending.spell_base_restrict |= self.lex_is_restrict_qual();
-                self.pending.spell_base_const |= self.lex_is_const_qual();
-                self.next()?;
-            }
-            // `__attribute__((vector_size(N)))` rebuilds the base type into a
-            // GCC vector of N bytes (C extension) before qualifiers apply.
-            if self.pending.attr_vector_size > 0 {
-                let n = core::mem::take(&mut self.pending.attr_vector_size);
-                bt = self.make_vector_type(bt, n);
-            }
-            if let Some(m) = self.pending.attr_mode.take() {
-                bt = self.apply_mode_to_type(bt, m)?;
-            }
-
-            // C99 6.7.1: declaration specifiers may appear in any order, so a
-            // storage-class specifier, type qualifier, or function specifier
-            // may trail the type specifier (`INTN STATIC f (...)`,
-            // `int const x`). Consume any that follow the base type before the
-            // declarator; a following `*` or identifier ends the run.
-            loop {
-                if self.lex.tk == Token::Static {
-                    static_seen = true;
-                    self.next()?;
-                } else if self.lex.tk == Token::Extern {
-                    extern_seen = true;
-                    self.next()?;
-                } else if self.lex.tk == Token::ThreadLocal {
-                    thread_local = true;
-                    self.next()?;
-                } else if self.lex.tk == Token::Inline || self.lex.tk == Token::ForceInline {
-                    self.pending_is_inline = true;
-                    self.pending_saw_inline_specifier = true;
-                    if self.lex.tk == Token::ForceInline {
-                        self.pending_is_always_inline = true;
-                    }
-                    self.next()?;
-                } else if self.lex.tk == Token::Noreturn {
-                    self.pending_noreturn = true;
-                    self.next()?;
-                } else if self.lex.tk == Token::TypeQual {
-                    qual_bits |= self.lex_qualifier_bits();
-                    self.pending.base_is_const |= self.lex_is_const_qual();
-                    self.pending.spell_base_restrict |= self.lex_is_restrict_qual();
-                    self.pending.spell_base_const |= self.lex_is_const_qual();
-                    self.next()?;
-                } else if self.lex.tk == Token::Attribute
-                    || (self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'['))
-                {
-                    self.skip_attribute_specifiers()?;
-                } else {
-                    break;
-                }
-            }
-            bt = apply_qual_bits(bt, qual_bits);
+            let mut storage = decl_base::DeclStorage::default();
+            self.reset_file_scope_decl_state();
+            let bt = self.parse_decl_specifiers(Some(&mut storage))?;
+            let decl_base::DeclStorage {
+                is_typedef,
+                is_static: static_seen,
+                is_extern: extern_seen,
+                is_thread_local: thread_local,
+                base_is_enum,
+            } = storage;
             let base_spelling = self.take_base_spelling();
 
             // A function-pointer typedef base type contributes its lineage

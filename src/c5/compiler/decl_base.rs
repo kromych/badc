@@ -9,22 +9,12 @@
 //! `float`, `double`, `enum`, `struct`, `union`) or a typedef
 //! name, returning the resulting `ty`-encoded type.
 //!
-//! Two flavours of caller exist:
-//!
-//!   * Mid-stream callers ([`Compiler::parse_decl_base_type`])
-//!     -- inside sizeof / cast / function-param /
-//!     block-local-decl. They consume any decl-modifier they
-//!     encounter; storage-class prefixes (`extern`, `static`,
-//!     `typedef`, `_Thread_local`) are illegal here and would be
-//!     classified upstream.
-//!
-//!   * The file-scope caller (`run_compile` in mod.rs) which
-//!     ALSO has to accept storage-class prefixes and stash
-//!     the `typedef` / `_Thread_local` flags. It reaches for the
-//!     same [`IntModifiers`] accumulator + [`Compiler::try_consume_int_modifier`]
-//!     primitives so the int-modifier soup ("`unsigned long long
-//!     int`", "`short signed int`", `_Bool`, ...) only has one
-//!     copy of the truth.
+//! One parser serves every context
+//! ([`Compiler::parse_decl_specifiers`]). A declaration context --
+//! file scope, block scope -- passes a [`DeclStorage`] accumulator for
+//! the storage-class and linkage keywords it owns; a type-name context
+//! (cast, `sizeof`, `_Generic`, member, parameter) passes none, and
+//! there a storage-class keyword ends the specifier run.
 
 use alloc::format;
 
@@ -165,6 +155,20 @@ impl IntModifiers {
     }
 }
 
+/// The storage-class, linkage and enum facts a declaration collects
+/// alongside its type specifiers (C99 6.7.1). A type-name context owns
+/// none of them and passes no accumulator.
+#[derive(Default)]
+pub(super) struct DeclStorage {
+    pub is_typedef: bool,
+    pub is_static: bool,
+    pub is_extern: bool,
+    pub is_thread_local: bool,
+    /// The base type is an `enum`; a typedef of it records that an enum
+    /// bitfield declared through the alias reads unsigned.
+    pub base_is_enum: bool,
+}
+
 impl Compiler {
     /// Consume the current token if it's one of the int modifiers
     /// (`signed`, `unsigned`, `short`, `long`, `_Bool`),
@@ -259,22 +263,6 @@ impl Compiler {
         Ok(struct_ty_for(id))
     }
 
-    /// Parse a C base type (modifiers + keyword) and return its
-    /// `ty` encoding. Most callers also expect the bare-`void`
-    /// side channel (`pending_base_was_void`) and the typedef
-    /// fn-pointer-lineage side channel
-    /// (`pending_fn_ptr_indirection`) to be (re)set; this helper
-    /// sets both as appropriate.
-    ///
-    /// Examples of input shapes accepted:
-    ///   * `int`, `unsigned int`, `signed long long`, `short`
-    ///   * `char`, `signed char`, `unsigned char`
-    ///   * `void`
-    ///   * `float`, `double`, `long double`
-    ///   * `enum [Tag] [{ ... }]` (treated as plain `int`)
-    ///   * `struct Tag`, `union Tag`, `struct Tag { ... }`,
-    ///     `struct { ... }` (anonymous)
-    ///   * a typedef name bound earlier in the translation unit
     /// C11 6.7.2.4 atomic type specifier `_Atomic ( type-name )`. When the
     /// current token is `_Atomic` immediately followed by `(`, consume the
     /// whole specifier and return the inner type-name's type. c5 does not
@@ -1683,113 +1671,96 @@ impl Compiler {
         }
     }
 
+    /// Parse a C base type (modifiers + keyword) and return its `ty`
+    /// encoding. Most callers also expect the bare-`void` side channel
+    /// (`pending.base_was_void`) and the typedef fn-pointer-lineage side
+    /// channel (`pending.fn_ptr_indirection`) to be (re)set; this helper
+    /// sets both as appropriate.
+    ///
+    /// Examples of input shapes accepted:
+    ///   * `int`, `unsigned int`, `signed long long`, `short`
+    ///   * `char`, `signed char`, `unsigned char`
+    ///   * `void`
+    ///   * `float`, `double`, `long double`
+    ///   * `enum [Tag] [{ ... }]` (treated as plain `int`)
+    ///   * `struct Tag`, `union Tag`, `struct Tag { ... }`,
+    ///     `struct { ... }` (anonymous)
+    ///   * a typedef name bound earlier in the translation unit
     pub(super) fn parse_decl_base_type(&mut self) -> Result<i64, C5Error> {
-        // Reset the void side channel up front so a previous
-        // declaration's bare-void base doesn't leak into this one.
-        self.pending.base_was_void = false;
-        // Same for the function-type-typedef marker: a cast or sizeof
-        // operand whose base was a function-type typedef must not leave
-        // the flag set for a following declarator.
-        self.pending.base_is_function_type = false;
-        // Same reset for the long-double marker -- a binding
-        // declared `double f(...)` after one declared `long
-        // double g(...)` must not inherit g's marker.
-        self.pending.base_was_long_double = false;
-        // Same reset for the array-typedef dimension carrier: a
-        // previous declaration that consumed a typedef-array base
-        // (parameter parsing, abstract-declarator casts, ...)
-        // may not have routed through the per-declarator
-        // consumer, so clear here to keep the channel scoped to
-        // this one base-type parse.
-        self.pending.typedef_base_array_size = 0;
-        self.pending.typedef_base_zero_len = false;
-        // Same for the type-alignment carrier: a typedef whose alias
-        // carries an `aligned(N)` type attribute seeds it below, scoped
-        // to this one base-type parse.
-        self.pending.type_align = 0;
-        self.pending.typedef_fn_proto = None;
-        self.pending.fn_ptr_param_types = None;
-        // Leading modifier soup -- the order doesn't matter; we
-        // collect everything we see, then look at the next token
-        // for the type keyword.
+        self.parse_decl_specifiers(None)
+    }
+
+    /// C99 6.7 declaration specifiers: type specifiers, type qualifiers,
+    /// function specifiers and -- for a declaration context -- storage-class
+    /// specifiers, in any order (6.7.1p1, 6.7.2p2). Returns the base type.
+    ///
+    /// `storage` collects the storage-class and linkage keywords for the
+    /// contexts that own them, and selects the implicit-int rule for a
+    /// declaration with no type specifier. A type-name context passes none:
+    /// there a storage-class keyword ends the specifier run and a missing
+    /// type specifier is an error.
+    pub(super) fn parse_decl_specifiers(
+        &mut self,
+        mut storage: Option<&mut DeclStorage>,
+    ) -> Result<i64, C5Error> {
+        self.reset_base_type_carriers();
         let mut m = IntModifiers::default();
         let mut qual_bits: i64 = 0;
+        let mut atomic_base: Option<i64> = None;
         loop {
-            // C23 6.7.13 `[[...]]` and GNU `__attribute__`/`__declspec`
-            // may lead the declaration specifiers.
-            if self.lex.tk == Token::Attribute
-                || (self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'['))
-            {
+            // C23 6.7.13 `[[...]]` and the GNU / MSVC attribute keywords may
+            // lead the declaration specifiers.
+            if self.at_attribute_specifier() {
                 self.skip_attribute_specifiers()?;
+                self.adopt_declspec_thread_local(storage.as_deref_mut());
+                continue;
+            }
+            if self.consume_storage_class(storage.as_deref_mut())? {
                 continue;
             }
             if !is_decl_modifier(self.lex.tk) {
                 break;
             }
-            // C11 6.7.2.4 atomic type specifier `_Atomic ( type-name )`.
-            // Distinct from the `_Atomic` qualifier handled below: here
-            // `_Atomic` names the type rather than qualifying a later
-            // one. c5 does not model atomicity, so the declared type is
-            // the unqualified inner type-name (base plus any abstract
-            // pointer declarator inside the parentheses).
+            // C11 6.7.2.4 `_Atomic ( type-name )` names the type; the
+            // `_Atomic` qualifier below does not. c5 does not model
+            // atomicity, so the declared type is the unqualified inner
+            // type-name.
             if let Some(inner) = self.try_parse_atomic_type_specifier()? {
-                return Ok(inner);
+                atomic_base = Some(inner);
+                continue;
             }
-            if self.lex.tk == Token::Inline || self.lex.tk == Token::ForceInline {
-                self.pending_is_inline = true;
-                self.pending_saw_inline_specifier = true;
-                if self.lex.tk == Token::ForceInline {
-                    self.pending_is_always_inline = true;
-                }
-            }
-            if self.lex.tk == Token::Noreturn {
-                self.pending_noreturn = true;
-            }
-            if self.lex_is_register_storage() {
-                self.pending.saw_register_storage = true;
-            }
+            self.note_decl_specifier_flags();
             if !self.try_consume_int_modifier(&mut m)? {
-                // `volatile` sets the tag's qualifier bit (C99 6.7.3);
-                // `const` is recorded out-of-band for value folding;
-                // restrict / _Atomic / etc. are no-ops.
-                qual_bits |= self.lex_qualifier_bits();
-                self.pending.base_is_const |= self.lex_is_const_qual();
-                self.pending.spell_base_restrict |= self.lex_is_restrict_qual();
-                self.pending.spell_base_const |= self.lex_is_const_qual();
+                self.note_base_qualifier(&mut qual_bits);
                 self.next()?;
             }
-        }
-
-        // `typeof` / `__typeof__` (C23 6.7.2.5) names the type of a
-        // parenthesized type-name or unevaluated expression operand.
-        // The operand supplies the complete type, so the int-modifier
-        // soup collected above does not apply.
-        if self.lex.tk == Token::Typeof {
-            let mut ty = self.parse_typeof_specifier()?;
-            // A qualifier may trail the specifier, as after any base type
-            // (`typeof(x) __seg_gs *`, `typeof(x) const`); fold it in.
-            while self.lex.tk == Token::TypeQual {
-                ty = apply_qual_bits(ty, self.lex_qualifier_bits());
-                self.next()?;
-            }
-            return Ok(ty);
-        }
-        if self.lex.tk == Token::AutoType {
-            return self.parse_auto_type_specifier();
         }
 
         let base_tok = self.lex.tk;
-        let mut bt = if let Some(scalar) = self.parse_scalar_base_specifier(&m)? {
+        let mut bt = if let Some(inner) = atomic_base {
+            inner
+        } else if self.lex.tk == Token::Typeof {
+            // `typeof` / `__typeof__` (C23 6.7.2.5) takes its type from a
+            // parenthesized type-name or unevaluated expression operand, so
+            // the int modifiers collected above do not apply.
+            self.parse_typeof_specifier()?
+        } else if self.lex.tk == Token::AutoType {
+            // `__auto_type`: the initializer supplies the type.
+            self.parse_auto_type_specifier()?
+        } else if let Some(scalar) = self.parse_scalar_base_specifier(&m)? {
             scalar
         } else if self.lex.tk == Token::Enum {
-            // `enum [Tag] [{ ... }]` is `int`, or the packed underlying
-            // type for `enum __attribute__((packed))`; the shared
-            // parse_enum_decl captures the tag + body for DWARF.
+            // `enum [Tag] [{ ... }]` is `int`, or the packed underlying type
+            // for `enum __attribute__((packed))`; the shared parse_enum_decl
+            // captures the tag + body for DWARF.
+            if let Some(s) = storage.as_deref_mut() {
+                s.base_is_enum = true;
+            }
             self.parse_enum_decl()?
         } else if self.lex.tk == Token::Struct || self.lex.tk == Token::Union {
             self.parse_aggregate_base_type()?
         } else if self.is_lex_int128_spelling() {
-            // GCC `__int128` / `__int128_t` / `__uint128_t` (and, via the
+            // GCC `__int128` / `__int128_t` / `__uint128_t` (and, through the
             // modifier soup, `unsigned __int128`): a 16-byte integer type,
             // modeled as a 16-byte aggregate for layout / sizeof / copy.
             let tag = self.lex_int128_tag(m.saw_unsigned);
@@ -1801,95 +1772,28 @@ impl Compiler {
             self.next()?;
             self.builtin_va_list_tag()
         } else if !m.saw_int_mod && self.is_lex_typedef_name() {
-            // Typedef-name as base type. Resolve to the aliased
-            // type and consume the identifier. Guarded by
-            // `!saw_int_mod`: C99 6.7.2p2 forbids combining a
-            // typedef-name with `unsigned`/`short`/`long`/`signed`,
-            // so once an int-modifier is seen the following
-            // typedef-name is the declarator identifier (a redeclared
-            // name), not a second type-specifier.
-            let aliased = self.symbols[self.lex.curr_id_idx].type_;
-            // The alias resolves to its underlying type here, so the
-            // spelling would otherwise be lost; record it for debug
-            // info (DWARF 4 5.3 names it with a DW_TAG_typedef DIE).
-            self.pending.spell_base_typedef = Some(self.lex.curr_id_idx as u32);
-            // A function / function-pointer typedef carries the
-            // pointed-to function's calling convention; a declarator
-            // through the alias inherits it unless the declaration names
-            // one of its own.
-            if self.symbols[self.lex.curr_id_idx].conv != crate::c5::codegen::CallConv::Target
-                && self.pending.attr_call_conv == crate::c5::codegen::CallConv::Target
-            {
-                self.pending.attr_call_conv = self.symbols[self.lex.curr_id_idx].conv;
-            }
-            // Carry the typedef's fn-pointer lineage forward (gh
-            // #19) so a later `fn_t fp` declaration ends up with
-            // the right indirection count.
-            let typedef_fpi = self.symbols[self.lex.curr_id_idx].fn_ptr_indirection;
-            if typedef_fpi > 0 {
-                self.pending.fn_ptr_indirection = Some(typedef_fpi);
-                self.pending.fn_ptr_ret_indirection =
-                    self.symbols[self.lex.curr_id_idx].fn_ptr_ret_indirection;
-                self.pending.base_is_function_type =
-                    self.symbols[self.lex.curr_id_idx].is_function_type;
-                // A function-pointer typedef records the pointed-to
-                // function's prototype; carry it to the bound declarator
-                // so an indirect call through the variable narrows each
-                // argument to its declared parameter type and splits
-                // fixed vs variadic arguments per the host variadic ABI.
-                self.pending.typedef_fn_proto = Some((
-                    self.symbols[self.lex.curr_id_idx].params.len(),
-                    self.symbols[self.lex.curr_id_idx].is_variadic,
-                ));
-                self.pending.fn_ptr_param_types =
-                    Some(self.symbols[self.lex.curr_id_idx].params.clone());
-            }
-            // Propagate the bare-void flag through the typedef so
-            // `(VOID)` in parameter position is recognised as the
-            // no-parameter idiom.
-            if self.symbols[self.lex.curr_id_idx].is_void_typedef {
-                self.pending.base_was_void = true;
-            }
-            // Propagate the typedef's array dimension (C99 6.7.7
-            // paragraph 3). `typedef long jmp_buf[64]; jmp_buf b;`
-            // must bind `b` as `long b[64]`, not as a scalar.
-            let typedef_array = self.symbols[self.lex.curr_id_idx].array_size;
-            // Non-zero covers a fixed dimension and the `-1` deferred-array
-            // marker (`typedef T X[]`); a parameter of the latter still decays
-            // to a pointer to the element (C99 6.7.5.3p7).
-            if typedef_array != 0 {
-                self.pending.typedef_base_array_size = typedef_array;
-                self.pending.typedef_base_array_dims =
-                    self.symbols[self.lex.curr_id_idx].array_dims.clone();
-                self.pending.typedef_base_zero_len =
-                    self.symbols[self.lex.curr_id_idx].is_zero_len_array;
-            }
-            // Carry the typedef's explicit type alignment (GNU
-            // `aligned(N)` on the alias) so a struct field / object /
-            // `__alignof__` through it honors the requested boundary.
-            let typedef_align = self.symbols[self.lex.curr_id_idx].type_align;
-            if typedef_align > 0 {
-                self.pending.type_align = typedef_align;
-            }
-            self.next()?;
-            aliased
+            // C99 6.7.2p2 forbids combining a typedef-name with
+            // `unsigned` / `short` / `long` / `signed`, so once an int
+            // modifier is seen the identifier here is the declarator name (a
+            // redeclaration), not a second type specifier.
+            self.typedef_name_base_type()?
         } else if m.saw_int_mod {
-            // Bare `unsigned x;` / `long x;` / `long long x;` /
-            // `short x;` / `_Bool x;` -- the C implicit-int rule
-            // applies for int-modifier-only decls.
+            // Bare `unsigned x;` / `long x;` / `long long x;` / `short x;`
+            // -- the implicit-int rule for int-modifier-only declarations.
             m.int_base()
+        } else if storage.is_some() {
+            self.implicit_int_base_type()?
         } else {
             return Err(self.compile_err("type expected"));
         };
 
-        // Trailing specifiers: C99 6.7.2p2 admits the specifier
-        // multiset in any order, so `int long`, `int unsigned`,
-        // `char unsigned`, `double long` re-derive the base tag from
-        // the folded modifiers; trailing qualifiers fold into the
-        // qualifier bits. A non-scalar base (typedef, struct, enum)
-        // has no valid int-modifier combination; the tokens are
-        // consumed as before.
-        let (saw_int_mod, trailing_quals) = self.consume_trailing_decl_modifiers(&mut m)?;
+        // Trailing specifiers: C99 6.7.2p2 admits the specifier multiset in
+        // any order, so `int long`, `int unsigned`, `char unsigned`,
+        // `double long` re-derive the base tag from the folded modifiers.
+        // A non-scalar base (typedef, struct, enum) has no valid
+        // int-modifier combination; the tokens are consumed as before.
+        let (saw_int_mod, trailing_quals) =
+            self.consume_trailing_decl_modifiers(&mut m, storage)?;
         qual_bits |= trailing_quals;
         if saw_int_mod {
             if base_tok == Token::Int {
@@ -1906,8 +1810,7 @@ impl Compiler {
         }
 
         // `__attribute__((vector_size(N)))` rebuilds the base type into a GCC
-        // vector of N bytes before qualifiers apply, matching the file-scope
-        // path in `run_compile.rs`.
+        // vector of N bytes before qualifiers apply.
         if self.pending.attr_vector_size > 0 {
             let n = core::mem::take(&mut self.pending.attr_vector_size);
             bt = self.make_vector_type(bt, n);
@@ -1919,43 +1822,194 @@ impl Compiler {
         Ok(apply_qual_bits(bt, qual_bits))
     }
 
-    /// Consume the specifiers that may trail the base-type keyword:
-    /// int modifiers fold into `m` (the caller re-derives the base
-    /// tag), qualifier bits are returned for the caller to fold into
-    /// the type, and `const` / `inline` / `_Noreturn` set the same
-    /// pending flags as in leading position.
+    /// Clear the side channels one base-type parse writes, so a previous
+    /// declaration's carrier cannot reach this one's declarators. A cast,
+    /// `sizeof` operand or parameter list parses a base type of its own and
+    /// leaves the carriers set for a following declarator otherwise.
+    fn reset_base_type_carriers(&mut self) {
+        self.pending.base_was_void = false;
+        self.pending.base_is_function_type = false;
+        self.pending.base_was_long_double = false;
+        self.pending.typedef_base_array_size = 0;
+        self.pending.typedef_base_zero_len = false;
+        self.pending.type_align = 0;
+        self.pending.typedef_fn_proto = None;
+        self.pending.fn_ptr_param_types = None;
+    }
+
+    /// Consume a storage-class or linkage keyword into `storage`. Returns
+    /// false, consuming nothing, for any other token and for the type-name
+    /// contexts that pass no accumulator.
+    fn consume_storage_class(
+        &mut self,
+        storage: Option<&mut DeclStorage>,
+    ) -> Result<bool, C5Error> {
+        let Some(s) = storage else {
+            return Ok(false);
+        };
+        if self.lex.tk == Token::Static {
+            s.is_static = true;
+        } else if self.lex.tk == Token::Extern {
+            s.is_extern = true;
+        } else if self.lex.tk == Token::ThreadLocal {
+            s.is_thread_local = true;
+        } else if self.lex.tk == Token::Typedef {
+            s.is_typedef = true;
+        } else {
+            return Ok(false);
+        }
+        self.next()?;
+        Ok(true)
+    }
+
+    /// `__declspec(thread)` among the declaration specifiers is the MSVC
+    /// spelling of `_Thread_local`.
+    fn adopt_declspec_thread_local(&mut self, storage: Option<&mut DeclStorage>) {
+        if !core::mem::take(&mut self.pending.attr_thread_local) {
+            return;
+        }
+        if let Some(s) = storage {
+            s.is_thread_local = true;
+        }
+    }
+
+    /// Record the function specifiers and the `register` storage class the
+    /// current token names (C99 6.7.1, 6.7.4). The token itself is consumed
+    /// by the caller's modifier run.
+    fn note_decl_specifier_flags(&mut self) {
+        if self.lex.tk == Token::Inline || self.lex.tk == Token::ForceInline {
+            self.pending_is_inline = true;
+            self.pending_saw_inline_specifier = true;
+            if self.lex.tk == Token::ForceInline {
+                self.pending_is_always_inline = true;
+            }
+        }
+        if self.lex.tk == Token::Noreturn {
+            self.pending_noreturn = true;
+        }
+        if self.lex_is_register_storage() {
+            self.pending.saw_register_storage = true;
+        }
+    }
+
+    /// Fold the current type qualifier into the base type's qualifier bits
+    /// and the spelling carriers: `volatile` qualifies the tag (C99 6.7.3),
+    /// `const` is recorded out of band for value folding, `restrict` for
+    /// debug info.
+    fn note_base_qualifier(&mut self, qual_bits: &mut i64) {
+        *qual_bits |= self.lex_qualifier_bits();
+        self.pending.base_is_const |= self.lex_is_const_qual();
+        self.pending.spell_base_restrict |= self.lex_is_restrict_qual();
+        self.pending.spell_base_const |= self.lex_is_const_qual();
+    }
+
+    /// C89 6.5.2 implicit int: a declaration with no type specifier declares
+    /// `int`. An identifier in type-specifier position is the declarator
+    /// only when a declarator punctuator follows it; any other shape is a
+    /// type name that does not resolve, and is reported as one rather than
+    /// silently accepted as `int`.
+    fn implicit_int_base_type(&mut self) -> Result<i64, C5Error> {
+        if self.lex.tk == Token::Id
+            && !self.lex.peek_after_whitespace(b'(')
+            && !self.lex.peek_after_whitespace(b';')
+            && !self.lex.peek_after_whitespace(b',')
+            && !self.lex.peek_after_whitespace(b'=')
+        {
+            let name = self.symbols[self.lex.curr_id_idx].name.clone();
+            return Err(self.compile_err(format!("unknown type name `{name}`")));
+        }
+        Ok(Ty::Int as i64)
+    }
+
+    /// Resolve the typedef-name at the cursor to its aliased type and seed
+    /// the carriers a declarator through the alias reads: the spelling for
+    /// debug info, the calling convention, the fn-pointer lineage and
+    /// prototype, the array dimensions (C99 6.7.7p3) and the type alignment.
+    /// Consumes the identifier.
+    fn typedef_name_base_type(&mut self) -> Result<i64, C5Error> {
+        let idx = self.lex.curr_id_idx;
+        let aliased = self.symbols[idx].type_;
+        // The alias resolves to its underlying type here, so the spelling
+        // would otherwise be lost; DWARF 4 5.3 names it with a
+        // DW_TAG_typedef DIE.
+        self.pending.spell_base_typedef = Some(idx as u32);
+        // A function / function-pointer typedef carries the pointed-to
+        // function's calling convention; a declarator through the alias
+        // inherits it unless the declaration names one of its own.
+        if self.symbols[idx].conv != crate::c5::codegen::CallConv::Target
+            && self.pending.attr_call_conv == crate::c5::codegen::CallConv::Target
+        {
+            self.pending.attr_call_conv = self.symbols[idx].conv;
+        }
+        let typedef_fpi = self.symbols[idx].fn_ptr_indirection;
+        if typedef_fpi > 0 {
+            self.pending.fn_ptr_indirection = Some(typedef_fpi);
+            self.pending.fn_ptr_ret_indirection = self.symbols[idx].fn_ptr_ret_indirection;
+            self.pending.base_is_function_type = self.symbols[idx].is_function_type;
+            // The pointed-to function's prototype travels to the bound
+            // declarator so an indirect call through the variable narrows
+            // each argument to its declared parameter type and splits fixed
+            // from variadic arguments per the host variadic ABI.
+            self.pending.typedef_fn_proto = Some((
+                self.symbols[idx].params.len(),
+                self.symbols[idx].is_variadic,
+            ));
+            self.pending.fn_ptr_param_types = Some(self.symbols[idx].params.clone());
+        }
+        // `(VOID)` in parameter position is the no-parameter idiom.
+        if self.symbols[idx].is_void_typedef {
+            self.pending.base_was_void = true;
+        }
+        // C99 6.7.7p3: `typedef long jmp_buf[64]; jmp_buf b;` binds `b` as
+        // `long b[64]`. Non-zero covers a fixed dimension and the `-1`
+        // deferred-array marker (`typedef T X[]`); a parameter of the latter
+        // still decays to a pointer to the element (6.7.5.3p7).
+        let typedef_array = self.symbols[idx].array_size;
+        if typedef_array != 0 {
+            self.pending.typedef_base_array_size = typedef_array;
+            self.pending.typedef_base_array_dims = self.symbols[idx].array_dims.clone();
+            self.pending.typedef_base_zero_len = self.symbols[idx].is_zero_len_array;
+        }
+        // A GNU `aligned(N)` on the alias sets the boundary a struct field /
+        // object / `__alignof__` through it honors.
+        let typedef_align = self.symbols[idx].type_align;
+        if typedef_align > 0 {
+            self.pending.type_align = typedef_align;
+        }
+        self.next()?;
+        Ok(aliased)
+    }
+
+    /// Consume the specifiers that may trail the base-type keyword: int
+    /// modifiers fold into `m` (the caller re-derives the base tag),
+    /// qualifier bits are returned for the caller to fold into the type, and
+    /// the storage-class, function-specifier and `const` spellings set the
+    /// same state as in leading position.
     pub(super) fn consume_trailing_decl_modifiers(
         &mut self,
         m: &mut IntModifiers,
+        mut storage: Option<&mut DeclStorage>,
     ) -> Result<(bool, i64), C5Error> {
         let mut saw_int_mod = false;
         let mut qual_bits = 0i64;
-        while is_decl_modifier(self.lex.tk) {
-            if self.lex.tk == Token::Attribute {
+        loop {
+            if self.at_attribute_specifier() {
                 self.skip_attribute_specifiers()?;
+                self.adopt_declspec_thread_local(storage.as_deref_mut());
                 continue;
             }
-            if self.lex.tk == Token::Inline || self.lex.tk == Token::ForceInline {
-                self.pending_is_inline = true;
-                self.pending_saw_inline_specifier = true;
-                if self.lex.tk == Token::ForceInline {
-                    self.pending_is_always_inline = true;
-                }
+            if self.consume_storage_class(storage.as_deref_mut())? {
+                continue;
             }
-            if self.lex.tk == Token::Noreturn {
-                self.pending_noreturn = true;
+            if !is_decl_modifier(self.lex.tk) {
+                break;
             }
-            if self.lex_is_register_storage() {
-                self.pending.saw_register_storage = true;
-            }
+            self.note_decl_specifier_flags();
             if self.try_consume_int_modifier(m)? {
                 saw_int_mod = true;
                 continue;
             }
-            qual_bits |= self.lex_qualifier_bits();
-            self.pending.base_is_const |= self.lex_is_const_qual();
-            self.pending.spell_base_restrict |= self.lex_is_restrict_qual();
-            self.pending.spell_base_const |= self.lex_is_const_qual();
+            self.note_base_qualifier(&mut qual_bits);
             self.next()?;
         }
         Ok((saw_int_mod, qual_bits))

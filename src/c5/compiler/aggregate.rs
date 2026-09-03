@@ -415,7 +415,8 @@ impl Compiler {
             // Trailing specifiers: C99 6.7.2p2 admits any order, so
             // `int long` / `char unsigned` fields re-derive the base
             // tag from the folded modifiers.
-            let (saw_int_mod, trailing_quals) = self.consume_trailing_decl_modifiers(&mut mods)?;
+            let (saw_int_mod, trailing_quals) =
+                self.consume_trailing_decl_modifiers(&mut mods, None)?;
             if saw_int_mod {
                 if field_base_tok == Token::Int {
                     field_base = mods.int_base();

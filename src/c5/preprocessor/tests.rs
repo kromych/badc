@@ -3713,3 +3713,22 @@ fn a_parameter_position_reads_the_same_argument_twice() {
     let line = out.lines().last().expect("output");
     assert_eq!(line.replace(' ', ""), "\"V\"|7|VZ|7|QV", "{out}");
 }
+
+/// `#pragma export` and `#pragma dylib` keep declaration order and
+/// admit each name once; the export tables and the import records are
+/// written in that order.
+#[test]
+fn export_and_dylib_declarations_are_ordered_and_unique() {
+    let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    pp.process(
+        "#pragma export(beta)\n#pragma export(alpha)\n#pragma export(beta)\n\
+         #pragma dylib(libb, \"libb.so\")\n#pragma dylib(liba, \"liba.so\")\n\
+         #pragma dylib(libb, \"libb.so\")\n#pragma binding(liba::f, \"f_impl\")\n",
+    )
+    .expect("preprocess");
+    assert_eq!(pp.exports, ["beta", "alpha"]);
+    let names: Vec<&str> = pp.dylibs.iter().map(|d| d.name.as_str()).collect();
+    assert_eq!(names, ["libb", "liba"]);
+    assert_eq!(pp.dylibs[1].bindings.len(), 1);
+    assert!(pp.dylibs[0].bindings.is_empty());
+}

@@ -196,6 +196,10 @@ pub(crate) struct Preprocessor {
     /// declared. Each entry collects the bindings whose
     /// `name::c4_fn` qualifier referenced its [`DylibSpec::name`].
     pub dylibs: Vec<DylibSpec>,
+    /// Index of `dylibs` by [`DylibSpec::name`]. Every `#pragma
+    /// binding` looks its dylib up here; `parse_pragma_dylib` is the
+    /// only site that appends to either.
+    dylib_index: HashMap<String, usize>,
     /// One entry per `#pragma export(<name>)` directive, in
     /// declaration order. The compiler validates each name
     /// resolves to a function defined in this translation
@@ -206,6 +210,9 @@ pub(crate) struct Preprocessor {
     /// `#pragma export(...)` keep file-scope-static linkage
     /// (the c5 default).
     pub exports: Vec<String>,
+    /// Membership half of `exports`, which keeps its declaration order
+    /// because the export tables are written in it.
+    export_names: BTreeSet<String>,
     /// Headers that opted in to single-inclusion via `#pragma once`.
     /// A subsequent `#include` of a name in this set is dropped.
     pragma_once_files: BTreeSet<String>,
@@ -233,14 +240,14 @@ pub(crate) struct Preprocessor {
     /// gated behind `cfg(feature = "std")`; the no_std build
     /// keeps the field but never reads from it (the embedded
     /// headers are always available).
-    search_paths: Vec<String>,
+    search_paths: SearchPaths,
     /// On-disk copies of the compiler's own header set, probed by name
     /// ahead of the in-binary bodies. See `add_own_header_root`.
-    own_header_roots: Vec<String>,
+    own_header_roots: SearchPaths,
     /// Directories probed for `#include "..."` only (the gcc `-iquote`
     /// scope), after the including file's directory and before
     /// `search_paths`. An angle include never reads them.
-    quote_search_paths: Vec<String>,
+    quote_search_paths: SearchPaths,
     /// System header directories probed only *after* the bundled
     /// in-binary headers, so a third-party header the embedded set
     /// lacks (`zlib.h`, `libfdt.h`) resolves against the host system
@@ -251,7 +258,7 @@ pub(crate) struct Preprocessor {
     /// hosted native build (the driver's implicit system include path,
     /// as a compiler driver adds `/usr/include`); a cross build or a
     /// `--freestanding` / `--nostdinc` build leaves it empty.
-    system_fallback_paths: Vec<String>,
+    system_fallback_paths: SearchPaths,
     /// `-nostdinc`: withdraw the standard library headers from
     /// `#include` resolution. The bundled set and `system_fallback_paths`
     /// leave the search, so a name no `-I` / `-iquote` path carries is an
@@ -366,6 +373,29 @@ pub(crate) struct Preprocessor {
     /// with an extended force-include list; see [`Self::process_recording`].
     /// `None` outside that pass.
     reuse: Option<Box<ReuseRecorder>>,
+}
+
+/// Insertion-ordered set of directories. `#include` probes them in
+/// order, so the sequence is part of the resolution rule; the set half
+/// keeps a repeated `-I` out without scanning what is already there.
+#[derive(Default)]
+pub(crate) struct SearchPaths {
+    order: Vec<String>,
+    seen: BTreeSet<String>,
+}
+
+impl SearchPaths {
+    fn add(&mut self, path: &str) {
+        if !self.seen.contains(path) {
+            self.seen.insert(path.to_string());
+            self.order.push(path.to_string());
+        }
+    }
+
+    #[cfg(feature = "std")]
+    pub(super) fn iter(&self) -> impl Iterator<Item = &String> {
+        self.order.iter()
+    }
 }
 
 /// Identifier-membership filter for the pass-reuse check. A bit set
@@ -1051,14 +1081,16 @@ impl Preprocessor {
             char_signed: target.plain_char_signed(),
             fn_macros,
             dylibs: Vec::new(),
+            dylib_index: HashMap::new(),
             exports: Vec::new(),
+            export_names: BTreeSet::new(),
             pragma_once_files: BTreeSet::new(),
             include_guards: HashMap::new(),
             include_stack: Vec::new(),
-            search_paths: Vec::new(),
-            own_header_roots: Vec::new(),
-            quote_search_paths: Vec::new(),
-            system_fallback_paths: Vec::new(),
+            search_paths: SearchPaths::default(),
+            own_header_roots: SearchPaths::default(),
+            quote_search_paths: SearchPaths::default(),
+            system_fallback_paths: SearchPaths::default(),
             nostdinc: false,
             no_builtin: false,
             force_includes: Vec::new(),
@@ -1236,9 +1268,7 @@ impl Preprocessor {
     /// can be added the same way at startup so users don't have
     /// to repeat them on every invocation.
     pub fn add_search_path(&mut self, path: &str) {
-        if !self.search_paths.iter().any(|p| p == path) {
-            self.search_paths.push(path.to_string());
-        }
+        self.search_paths.add(path);
     }
 
     /// Append an on-disk copy of the compiler's own header set (the
@@ -1247,18 +1277,14 @@ impl Preprocessor {
     /// identity per header name so `#pragma once` and the include
     /// guards see a single file however the include was reached.
     pub fn add_own_header_root(&mut self, path: &str) {
-        if !self.own_header_roots.iter().any(|p| p == path) {
-            self.own_header_roots.push(path.to_string());
-        }
+        self.own_header_roots.add(path);
     }
 
     /// Append a `#include "..."`-only search path (the gcc `-iquote`
     /// scope). Probed after the including file's directory and before
     /// the `-I` paths; angle includes never read it.
     pub fn add_quote_path(&mut self, path: &str) {
-        if !self.quote_search_paths.iter().any(|p| p == path) {
-            self.quote_search_paths.push(path.to_string());
-        }
+        self.quote_search_paths.add(path);
     }
 
     /// Append a system header directory probed only after the bundled
@@ -1268,9 +1294,7 @@ impl Preprocessor {
     /// system include path resolves third-party headers without
     /// shadowing the standard headers.
     pub fn add_system_fallback_path(&mut self, path: &str) {
-        if !self.system_fallback_paths.iter().any(|p| p == path) {
-            self.system_fallback_paths.push(path.to_string());
-        }
+        self.system_fallback_paths.add(path);
     }
 
     /// gcc / clang `-nostdinc`: take the standard library headers off the

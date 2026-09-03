@@ -641,7 +641,7 @@ impl Preprocessor {
                 ),
             )));
         }
-        if !self.exports.iter().any(|e| e == name) {
+        if self.export_names.insert(name.to_string()) {
             self.exports.push(name.to_string());
         }
         Ok(())
@@ -684,7 +684,8 @@ impl Preprocessor {
                 ),
             )));
         }
-        if let Some(existing) = self.dylibs.iter().find(|d| d.name == name) {
+        if let Some(&at) = self.dylib_index.get(name) {
+            let existing = &self.dylibs[at];
             // Re-declaring an identical dylib is fine -- standard
             // headers (`<stdio.h>`, `<string.h>`) all bind to the
             // same `libc` / `msvcrt`, so a source that includes
@@ -702,6 +703,7 @@ impl Preprocessor {
             }
             return Ok(());
         }
+        self.dylib_index.insert(name.to_string(), self.dylibs.len());
         self.dylibs.push(DylibSpec {
             name: name.to_string(),
             path: path.to_string(),
@@ -757,7 +759,7 @@ impl Preprocessor {
                 "`#pragma binding(...)` arg is empty",
             )));
         }
-        let Some(dylib) = self.dylibs.iter_mut().find(|d| d.name == dylib_name) else {
+        let Some(&at) = self.dylib_index.get(dylib_name) else {
             return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
                 filename,
                 line_no,
@@ -767,7 +769,7 @@ impl Preprocessor {
                 ),
             )));
         };
-        dylib.bindings.push(Binding {
+        self.dylibs[at].bindings.push(Binding {
             is_variadic: false,
             fixed_args: 0,
             return_type_tag: 0,

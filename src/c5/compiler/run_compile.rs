@@ -1,20 +1,10 @@
-//! File-scope declaration driver.
+//! File-scope declarations.
 //!
-//! `run_compile()` is the outer loop of the parser: read the next
-//! top-level item (declaration, definition, `_Static_assert`,
-//! `typedef`) and dispatch into the matching sub-parser. It owns
-//! the storage-class prefix soup (`extern`, `static`,
-//! `_Thread_local`, `typedef`), the base-type matcher (`int`,
-//! `char`, `void`, `float`, `double`, `struct`, `union`, `enum`,
-//! typedef-name), and the per-declarator binding step (function
-//! definition vs global variable, with or without an initializer).
-//!
-//! Lives in its own file because at ~900 lines it dwarfs every
-//! other parser routine that isn't [`super::Compiler::expr`]. The
-//! shared int-modifier soup and aggregate-base parser live in
-//! `compiler/decl_base.rs`; this file is the only direct caller
-//! that needs the full storage-class superset (`Token::Typedef`,
-//! `Token::Extern`, `Token::Static`, `Token::ThreadLocal`).
+//! [`Compiler::run_compile`] is the outer loop of the parser: each
+//! iteration takes one top-level item -- a `_Static_assert`, a file-scope
+//! `asm`, or a declaration -- and the declaration path parses the
+//! specifiers through the shared `decl_base`, then binds each declarator
+//! as a typedef, a function or an object.
 
 use alloc::format;
 use alloc::string::String;
@@ -531,27 +521,11 @@ impl Compiler {
         // identifier load can seed the chain-depth tracker.
         let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
         let fn_ptr_ret_indirection = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
-        // A typedef whose alias is an array contributes its
-        // dimension when the declarator did not supply
-        // one. The multi-dim composition rule (`arr_t
-        // four[4]` -> `long four[4][64]` per C99 6.7.7)
-        // needs the `array_dims` chain and is out of
-        // scope here; the single-dim case is the common
-        // one and is what the immediate fix unblocks.
-        //
-        // The dimension belongs to the base type and must
-        // remain visible across every declarator in a
-        // comma list: `typedef i64 gf[16]; static const gf
-        // a, b = { 1 };` -- both `a` and `b` are `i64[16]`.
-        // The carrier is reset at the top of the next
-        // declaration loop iteration, so a peek here is
-        // sufficient.
-        // A declarator that added pointer levels (`T *p`
-        // for an array typedef `T`) names a pointer to
-        // the typedef's element type; the array dimension
-        // is part of the pointee and must not re-apply to
-        // the declarator (C99 6.7.7p3 + 6.7.6.1). Skip
-        // the carrier in that case.
+        // C99 6.7.7p3: an array typedef contributes its dimension to a declarator
+        // that supplied none. It belongs to the base type, so every declarator of
+        // the list reads it; one that added a pointer level names a pointer to the
+        // element type and does not (6.7.6.1). TODO: compose the multi-dimensional
+        // case (`arr_t four[4]` -> `long four[4][64]`) through `array_dims`.
         let typedef_dim = self.pending.typedef_base_array_size;
         // Declarator-added dimensions over an over-aligned element
         // are rejected here for objects and typedef aliases alike.
@@ -602,20 +576,10 @@ impl Compiler {
         // call-site argument type-check a spurious mismatch.
         let fnptr_proto = self.pending.typedef_fn_proto.take();
         let mut fnptr_param_types = self.pending.fn_ptr_param_types.take();
-        // `fn_ptr_param_types` is the pointee signature of a
-        // fn-pointer typedef used as this declarator's type. It
-        // describes a fn-pointer OBJECT (`cb x;` -- a callback
-        // variable an indirect call reads its parameter shape
-        // from). A declarator that is itself a function whose
-        // return type is that typedef (`cb f(args)`) has its own
-        // parameter list, installed below; a following `(` marks
-        // it, so the return type's pointee params must not stand
-        // in as the function's own.
-        // A bare function-type declarator (`extern typeof(f) f;`)
-        // declares a function, so its list belongs to the function
-        // path below and installing it here would overwrite the prior
-        // signature that path compares against. A typedef alias of a
-        // function type has no function path and keeps this install.
+        // The carrier holds the pointee signature of a fn-pointer typedef, so it
+        // describes an object (`cb x;`) -- not a function whose return type is that
+        // typedef (`cb f(args)`), and not a bare function-type declarator (`extern
+        // typeof(f) f;`); both of those install a list of their own.
         let carrier_names_object = !bare_function_type || is_typedef;
         if self.lex.tk != '(' && carrier_names_object {
             if let Some(types) = fnptr_param_types.take() {
@@ -721,22 +685,10 @@ impl Compiler {
             ..
         } = b;
 
-        // C99 function-type typedef: `typedef RET NAME(args);`.
-        // The declarator stopped at NAME; the `(args)`
-        // that follows is the function's parameter
-        // list. Parse it and bind NAME as a function-
-        // pointer alias (fpi=1, type bumped by one
-        // Ptr) -- every real use is through `NAME cb`
-        // (decays to fn-ptr per C99 6.3.2.1p4) or
-        // `NAME *cb` (already fn-ptr), so the two
-        // spellings collapse to the same effective
-        // shape in c5's model.
-        //
-        // parse_function_params binds each named parameter
-        // as a Loc symbol (it's shared with function-decl
-        // parsing). For a typedef there's no body to put
-        // those locals into scope for, so we restore each
-        // param's shadowed binding right after.
+        // `typedef RET NAME(args);` names a function type. It binds as a
+        // function-pointer alias, since every use decays to one (C99 6.3.2.1p4).
+        // The shared parameter parse binds each named parameter as a local; a
+        // typedef has no body to scope them to, so each is restored right after.
         let (typedef_ty, typedef_fpi, typedef_params, typedef_is_fn_type) =
             if self.lex.tk == '(' && preconsumed_params.is_none() {
                 self.next()?; // consume `(`
@@ -842,16 +794,10 @@ impl Compiler {
         let &FileScopeDecl { base_spelling, .. } = decl;
         let &DeclaratorBinding { id_idx, ty, .. } = b;
 
-        // Sys-class predefined symbols (the per-target
-        // header's libc bindings) are allowed to be
-        // *re-declared* as prototypes -- the source uses the
-        // declaration to teach the parser the type signature
-        // without overriding the function's binding-driven
-        // class/val. Function symbols with no body yet
-        // (Token::Fun, val == 0) can also be re-declared
-        // -- amalgamated translation units include the
-        // same prototype many times. A second body for
-        // the same Fun is still a real duplicate.
+        // A `Sys` binding may be re-declared as a prototype: the declaration
+        // teaches the parser the signature without overriding the binding. A
+        // bodyless function may be too -- an amalgamated unit repeats prototypes.
+        // A second body for one function is still a duplicate.
         let was_sys = self.symbols[id_idx].class == Token::Sys as i64;
         // Forward / repeat function declarations: allowed
         // either when the next token is `(` (the regular
@@ -861,27 +807,10 @@ impl Compiler {
         // depending on prototype-vs-definition).
         let was_fwd_fun = self.symbols[id_idx].class == Token::Fun as i64
             && (self.lex.tk == '(' || has_preconsumed_params);
-        // Tentative-definition merge (C11 6.9.2): a prior
-        // `T x;` (no `=`, no `extern`) becomes the defining
-        // declaration when re-declared, optionally with an
-        // initializer this time. Function-shaped re-decls
-        // never go through this path.
-        //
-        // An earlier extern-only declaration is split into
-        // two sub-cases by whether storage was allocated:
-        //
-        //   * `extern T x;` / `extern const T x;` -- the
-        //     extern code path allocated `sizeof(T)` bytes
-        //     at `sym.val`. Any code already emitted that
-        //     refers to `&x` has that offset baked in.
-        //     Reuse the storage when the definition lands
-        //     so later refs see the same offset.
-        //
-        //   * `extern T x[];` -- deferred-size, no storage,
-        //     `defined_here == false`. A reuse would write
-        //     the initializer at `data[0..N]` and alias
-        //     every following defining decl. Allocate
-        //     fresh.
+        // C11 6.9.2: a prior `T x;` becomes the defining declaration when
+        // re-declared, and the definition reuses the storage it reserved so a
+        // reference already emitted against that offset still resolves. A prior
+        // `extern T x[];` reserved none, so its definition takes fresh bytes.
         let was_extern_redecl = self.symbols[id_idx].class == Token::Glo as i64
             && !self.symbols[id_idx].has_initializer
             && self.symbols[id_idx].is_extern_decl
@@ -967,13 +896,8 @@ impl Compiler {
         if !was_sys {
             self.record_function_declaration(id_idx, static_seen, extern_seen);
         }
-        // Only warn on user-vs-user redeclarations.
-        // Sys symbols (the per-target header's libc
-        // bindings) start out with stub signatures
-        // that the user's `<stdio.h>` etc. is *expected*
-        // to refine -- complaining about every printf
-        // / memcpy / fcntl in the standard library
-        // would drown real bugs.
+        // A `Sys` binding starts with a stub signature the unit's own header is
+        // expected to refine, so only user-vs-user redeclarations are compared.
         // Capture the long-double return-type marker
         // before parameter parsing, which calls
         // `parse_decl_base_type` per param and clears
@@ -997,14 +921,9 @@ impl Compiler {
             self.skip_attribute_specifiers()?;
         }
 
-        // Stash the signature on the function symbol so
-        // call sites can type-check arguments later. For
-        // both prototypes and bodied definitions.
-        //
-        // C99 6.7.5.3p14: an empty list outside a definition
-        // supplies no parameter information, so the composite type
-        // (6.2.7p4) keeps the prior list. In a definition the same
-        // spelling does specify "no parameters".
+        // C99 6.7.5.3p14: an empty list outside a definition supplies no parameter
+        // information, so the composite type keeps the prior list (6.2.7p4); in a
+        // definition the same spelling does specify "no parameters".
         let is_defining_declarator = self.lex.tk != ';' && self.lex.tk != ',';
         let keeps_prior_list =
             !params.is_prototyped && !is_defining_declarator && !prior_params.is_empty();
@@ -1014,15 +933,9 @@ impl Compiler {
         }
         self.symbols[id_idx].params = params.types.clone();
         self.symbols[id_idx].is_variadic = params.is_variadic;
-        // C11 6.7.4: `_Noreturn` on any declaration of the
-        // function marks the symbol so the reachability
-        // analysis treats a call to it as not reaching its
-        // continuation. The standard non-returning library
-        // functions carry `_Noreturn` in the bundled
-        // headers, so a name reused without that declaration
-        // is not flagged. The flag is sticky -- a later
-        // plain redeclaration of an already-`_Noreturn`
-        // function keeps it.
+        // C11 6.7.4: `_Noreturn` on any declaration marks the symbol, and the
+        // reachability analysis then treats a call to it as not reaching its
+        // continuation. The mark is sticky across later declarations.
         if self.pending_noreturn {
             self.symbols[id_idx].is_noreturn = true;
         }
@@ -1030,15 +943,9 @@ impl Compiler {
         // this declarator (leading or trailing) mark the
         // symbol; the object writers read them off it.
         self.apply_symbol_attributes(id_idx);
-        // Carry the bare-`void` return marker onto the
-        // symbol so the body-emit path zeroes the
-        // accumulator before the trailing return, and so a
-        // future call-site check can reject value-
-        // context use of a void callee. Prototypes
-        // pick it up too -- a later body that
-        // re-declares with a different bare-void-ness
-        // is itself a C99 6.7p4 redecl violation
-        // covered by the parameter-list check above.
+        // The body-emit path reads this to zero the accumulator before the
+        // trailing return. A prototype records it too; a body that then disagrees
+        // is a C99 6.7p4 violation the signature check above reports.
         if declarator_is_bare_void {
             self.symbols[id_idx].returns_void = true;
         }
@@ -1113,22 +1020,10 @@ impl Compiler {
         if extern_seen {
             self.symbols[id_idx].is_extern_decl = true;
         }
-        // Leave `val` untouched. For a first-time
-        // prototype it stays at the Symbol default
-        // (0); the walker reads the live
-        // `Symbol::val` through `live_fun_val`
-        // when it lowers a call to this name, so
-        // a call placed before the body sees the
-        // post-body `ent_pc` once the body has
-        // been parsed. For a
-        // redeclaration after the body has been
-        // emitted, `val` already points at the
-        // real `ent_pc` and must not be
-        // clobbered -- a previous version of this
-        // code wrote `val = self.next_ent_pc`
-        // whenever val was 0, which silently
-        // broke any function whose body
-        // legitimately started at PC 0.
+        // `val` stays as it is: the walker reads it through `live_fun_val` when it
+        // lowers a call, so a call placed before the body still sees the entry pc
+        // the body records, and a redeclaration after the body must not overwrite
+        // it.
     }
 
     /// C99 6.7p4 requires the declarations of one function to be
@@ -1145,27 +1040,9 @@ impl Compiler {
         params: &super::function::ParsedParams,
         prior_was_known: bool,
     ) {
-        // Warn if a redeclaration disagrees with the
-        // prior signature. C99 6.7p4 requires
-        // compatibility (same return type + same
-        // parameter list, modulo unprototyped forms);
-        // amalgamated translation units occasionally
-        // disagree by accident (a header was edited
-        // but one .c forgot to pick it up), which is
-        // a real bug worth surfacing -- but not one
-        // the c5 codegen is in a position to refuse,
-        // since it only has the redeclaration in scope.
-        // C99 6.7.5.3p14: an empty list in a non-defining
-        // function declarator means "no information about
-        // the number or types of the parameters is
-        // supplied" -- not a claim about a particular
-        // signature. Comparing such an unspecified-shape
-        // prototype against a fully-specified one isn't a
-        // mismatch under the standard, so we skip the
-        // parameter-list check when either side is empty.
-        // Two `static`-scope-but-amalgamated definitions
-        // that fully specify different parameters still
-        // warn, because both sides specify them.
+        // C99 6.7.5.3p14: an empty list in a non-defining declarator supplies no
+        // parameter information, so it is not a claim about a signature and
+        // cannot disagree with one.
         let either_unspecified = prior_params.is_empty() || params.types.is_empty();
         let return_differs = prior_return_ty != ty;
         let variadic_differs = prior_is_variadic != params.is_variadic;
@@ -1312,18 +1189,10 @@ impl Compiler {
         self.copy_by_value_parameters(&params);
         self.parse_function_body_items()?;
         self.finish_function_body(ent_pc, &params)?;
-        // Snapshot the function's locals +
-        // formal parameters before `restore_shadowed_symbol`
-        // unwinds the bindings. The DWARF emitter groups
-        // these by `function_bc_pc` (the Ent's PC) and
-        // emits `DW_TAG_formal_parameter` /
-        // `DW_TAG_variable` DIEs as children of the
-        // matching subprogram, with `DW_OP_fbreg` locations
-        // derived from `fp_slot * 8`. Slots `0..2` cover
-        // the saved-x29 / saved-x30 area and don't
-        // correspond to a user-visible name; everything
-        // else is either a parameter (val >= 2) or a
-        // local (val < 0).
+        // The capture runs before the scope unwind restores the outer bindings.
+        // DWARF 5 3.3.4 groups the DIEs by the subprogram's entry pc and locates
+        // each at `fp_slot * 8`; slots 0 and 1 are the saved frame and return
+        // address, so a parameter is `val >= 2` and a local `val < 0`.
         let param_set: alloc::collections::BTreeSet<usize> =
             params.indices.iter().copied().collect();
         let bound = self.take_scope_bound();
@@ -1412,25 +1281,11 @@ impl Compiler {
         self.current_function_name = self.symbols[id_idx].name.clone();
         self.current_func_conv = self.symbols[id_idx].conv;
 
-        // c5 callers push args right-to-left (cdecl-style), so
-        // the i'th declared param ends up at `[bp + 16*(i+1)]`,
-        // i.e. val = i + 2: the first declared param is at the
-        // shallowest c5 stack slot, the last is deepest.
-        // Variadic args follow after the last declared, at
-        // val = N+2, N+3, ... -- which is what stdarg.h walks.
-        //
-        // A function returning a struct value through the c5
-        // out-pointer convention gets a hidden out-pointer at
-        // val=2 (the caller pre-allocates a result temp and
-        // pushes its address as the first arg); declared params
-        // start at val=3. Host-ABI returns (AAPCS64 registers
-        // or x8) carry no hidden argument, so their params start
-        // at val=2 like any other function.
-        // The convention decides it: a by-value aggregate
-        // return the Microsoft x64 convention passes through a
-        // hidden pointer is one System V may still return in
-        // registers, and the slot numbering has to match what
-        // the codegen places.
+        // Callers push right to left, so the i'th declared parameter sits at slot
+        // i + 2 and the variadic tail follows it. A struct return through the
+        // out-pointer convention takes slot 2 for the hidden pointer and pushes the
+        // declared parameters to 3; a host-ABI register return does not, and the
+        // calling convention -- not the type alone -- decides which.
         let param_base = if matches!(
             super::struct_return_abi_conv(
                 &self.structs,
@@ -1462,19 +1317,9 @@ impl Compiler {
         self.ast_reset();
 
         let ent_pc = self.next_ent_pc;
-        // Point the symbol at the real `ent_pc`. The
-        // walker reads Symbol::val through live_fun_val
-        // when it lowers a call to this name, so any
-        // call placed before the body sees the post-body
-        // ent_pc once parsing reaches here.
-        //
-        // When a parameter shares the function's name (C99
-        // 6.2.1: the parameter shadows the function inside
-        // the body), the live binding at `id_idx` is the
-        // parameter, holding its stack slot. Write the entry
-        // pc onto the shadowed function binding (`h_val`),
-        // which the function-exit cleanup restores, so the
-        // parameter's slot survives the body.
+        // C99 6.2.1: a parameter sharing the function's name shadows it inside the
+        // body, so the entry pc goes onto the shadowed binding the function-exit
+        // cleanup restores, leaving the parameter its slot.
         if params.indices.contains(&id_idx) {
             self.symbols[id_idx].h_val = ent_pc as i64;
         } else {
@@ -1509,19 +1354,9 @@ impl Compiler {
     }
 
     fn copy_by_value_parameters(&mut self, params: &super::function::ParsedParams) {
-        // Struct-value parameters: the caller pushed
-        // the struct's *address* into the param slot
-        // (matching the "address is the value" rule
-        // for struct rvalues). Without a copy the
-        // function body's `p.field = v` would land in
-        // the caller's storage, which isn't C
-        // by-value. Memcpy each struct param into a
-        // freshly allocated local and re-point the
-        // param's symbol so subsequent accesses inside
-        // the function go to the local copy. The
-        // sequence reuses the struct-copy intrinsic so
-        // neither codegen needs new shapes for
-        // parameter passing.
+        // C99 6.5.2.2: a struct parameter is passed by value, but the caller pushed
+        // its address. Copy it into a fresh local through the struct-copy intrinsic
+        // and repoint the symbol, so a body-side `p.field = v` writes the copy.
         for &idx in params.indices.iter() {
             let pty = self.symbols[idx].type_;
             if !is_struct_ty(pty) || struct_ptr_depth(pty) != 0 {
@@ -1546,29 +1381,10 @@ impl Compiler {
             self.symbols[idx].val = local_val;
         }
 
-        // `float` parameters get the same "rebind to a
-        // freshly allocated local" treatment as struct
-        // by-value params, but for a different reason:
-        // c5's call ABI passes every arg as an 8-byte
-        // c5-stack slot holding the value's `f64::to_bits`
-        // (the caller's `expr` left an `f64` in the
-        // accumulator and `Si` wrote all 8 bytes). With
-        // `sizeof(float) == 4`, the matching `LoadKind::F32`
-        // load that the body would emit reads only the
-        // *low* 4 bytes of the slot, which for a typical
-        // `double`-shaped bit pattern is the *low* half
-        // of the mantissa -- garbage, not the f32 of the
-        // passed value. The fix: at function entry,
-        // narrow each `float`-typed param through the
-        // 4-byte store path (the 8-byte load reads the
-        // caller's f64 bits, the 4-byte store narrows
-        // to f32 and writes 4 bytes into a fresh local
-        // slot). The
-        // symbol is repointed to that local; every
-        // subsequent body access goes through the
-        // narrow-storage path the rest of the
-        // float-typed code expects, and the load/store
-        // semantics stay consistent.
+        // A `float` parameter arrives as the 8-byte `f64::to_bits` of its value,
+        // which the body's 4-byte load would read the low half of. Narrow it into
+        // a fresh local at entry -- an 8-byte load of the slot through a 4-byte
+        // store -- and repoint the symbol at that local.
         for &idx in params.indices.iter() {
             let pty = strip_unsigned(self.symbols[idx].type_);
             if pty != Ty::Float as i64 {
@@ -1732,18 +1548,10 @@ impl Compiler {
         ent_pc: usize,
         params: &super::function::ParsedParams,
     ) -> Result<(), C5Error> {
-        // C99 6.8.6.4p3: a `void`-returning function
-        // doesn't produce a value. Zero the accumulator
-        // before the trailing synthetic return so a
-        // caller that misclassifies the prototype (or
-        // invokes the function through a typed
-        // function-pointer table whose slot was set
-        // from a value-returning cast) reads `0`
-        // instead of whatever the function body
-        // happened to leave in the accumulator.
-        // A naked function has no synthetic return value: its
-        // inline-asm body is the entire function and returns on its
-        // own (e.g. `iretq`), so emit no accumulator zeroing.
+        // C99 6.8.6.4p3: a `void` function produces no value, so the accumulator
+        // is zeroed before the synthetic return -- a caller that misclassifies the
+        // prototype then reads 0 rather than whatever the body left. A naked
+        // function returns from its own asm and takes no synthetic return.
         if self.current_func_returns_void {
             self.emit_imm(0);
         }
@@ -1780,14 +1588,8 @@ impl Compiler {
             0
         };
 
-        // Patch Ent's local-slot count. With alloca,
-        // bump it by 1 (the alloca-top bookkeeping
-        // slot) plus the fixed arena slot count so the
-        // prologue reserves the arena alongside the
-        // regular locals. The alloca-top slot sits at
-        // index `max_loc_offs + 1` (just below all
-        // regular locals); the arena occupies indices
-        // `[max_loc_offs + 2, max_loc_offs + 1 + ARENA_SLOTS]`.
+        // With alloca the prologue also reserves the bookkeeping slot just below
+        // the regular locals, and the arena above it.
         let regular_locals = self.max_loc_offs.max(self.loc_offs);
         let alloca_top_slot_finish: i64 = if self.uses_alloca_in_current_fn {
             regular_locals + 1
@@ -1908,21 +1710,12 @@ impl Compiler {
     }
 
     fn classify_function_frame(&mut self, vars_start: usize) -> Result<(), C5Error> {
-        // Record declared aggregate locals (any cell count) and
-        // multi-cell scalars. A declared local at frame slot
-        // `fp_slot` (most-negative cell) occupying `cells` 8-byte
-        // cells covers `fp_slot ..= fp_slot + cells - 1`; slot
-        // coalescing reserves the interior cells, which carry no
-        // direct slot reference, and the scalar promotion reads
-        // the list as its candidate set -- a one-cell aggregate's
-        // members are split targets like any other's. Computed
-        // from the per-function variable list assembled just
-        // above (`local_storage_slots` mirrors the parser's
-        // reservation). Patches the `FinishedFunction` pushed by
-        // `ast_finish_function`. A struct-by-value parameter
-        // keeps its body-visible copy in a negative slot too
-        // (C99 6.5.2.2 + the host ABI), so `fp_slot < 0` -- not
-        // `!is_parameter` -- selects every such local.
+        // A local at frame slot `fp_slot` occupying `cells` cells covers
+        // `fp_slot ..= fp_slot + cells - 1`: slot coalescing reserves the interior
+        // cells, which carry no slot reference of their own, and scalar promotion
+        // reads the list as its candidate set. A struct-by-value parameter keeps
+        // its body-visible copy in a negative slot too (C99 6.5.2.2), so the test
+        // is `fp_slot < 0`, not `!is_parameter`.
         let mut multi_cell: Vec<(i64, i64)> = Vec::new();
         // Stack-protector classification of the same declared
         // objects: what the `-fstack-protector*` modes select on.
@@ -1978,16 +1771,10 @@ impl Compiler {
         bound: &[u32],
         param_set: &alloc::collections::BTreeSet<usize>,
     ) {
-        // Collect unused-parameter and unused-local
-        // diagnostics for the function's top-level
-        // bindings. Inner-block locals were already
-        // checked in `parse_block_stmt` at their
-        // block exit. Must run before the loop below
-        // restores the outer binding -- once `class`
-        // is overwritten the Token::Loc test no
-        // longer holds. Names starting with `_` are
-        // suppressed (gcc / clang `-Wunused`
-        // convention).
+        // The function's own bindings only: an inner block reports its locals at
+        // its own exit. Runs before the scope unwind, which overwrites the class
+        // this test reads. A leading `_` suppresses the diagnostic, as under gcc
+        // and clang.
         enum UnusedKind {
             Variable,
             Parameter,
@@ -2016,17 +1803,9 @@ impl Compiler {
             if !is_param && sym.val >= 0 {
                 continue;
             }
-            // `was_referenced` distinguishes "never
-            // mentioned in any expression" (the only
-            // write, if any, was the declaration
-            // initializer) from "mentioned, but every
-            // mention was a write". The latter is the
-            // dead-store case. Parameters skip the
-            // ValueSet diagnostic -- a parameter is
-            // always implicitly written at call entry,
-            // and warning "set but never used" on
-            // every unused parameter would just be
-            // noise.
+            // `was_referenced` separates "never mentioned" from "mentioned, but every
+            // mention was a write" -- the dead-store case. A parameter is written at
+            // call entry, so it takes the unused-parameter diagnostic instead.
             let kind = if sym.was_referenced && sym.was_written && !is_param {
                 UnusedKind::ValueSet
             } else if is_param {
@@ -2092,21 +1871,12 @@ impl Compiler {
         }
         let decl_align = self.object_alignment(id_idx, ty, base_type_align, thread_local)?;
         let was_extern_only_decl = extern_seen && self.lex.tk != Token::Assign && array_size != -1;
-        // `extern struct S s;` whose `struct S` has no fixed
-        // size at the declaration cannot reserve storage: an
-        // incomplete struct (size unknown), or one with a
-        // flexible array member (C99 6.7.2.1 -- the element
-        // count comes from the defining initializer). C99 6.9.2
-        // makes it a pure declaration anyway. Record an
-        // undefined external reference; the defining
-        // declaration allocates the bytes. Without this the
-        // permissive single-TU fallback below reserves a
-        // wrong-sized slot, and either the next global overlaps
-        // it (fixed part too small) or the definition allocating
-        // fresh strands references emitted against the slot.
-        // C99 6.2.2p4: after a prior definition (tentative or
-        // initialized) the extern redeclares the same object;
-        // flipping it undefined here would drop the symbol.
+        // `extern struct S s;` whose tag has no fixed size -- incomplete, or with a
+        // flexible array member whose count the defining initializer fixes (C99
+        // 6.7.2.1) -- reserves nothing: C99 6.9.2 makes it a pure declaration, and
+        // a wrong-sized slot here would either overlap the next global or strand
+        // the references emitted against it. After a prior definition the extern
+        // is a redeclaration of it (6.2.2p4), which keeps its storage.
         if was_extern_only_decl
             && !self.symbols[id_idx].defined_here
             && is_struct_value_ty(ty)
@@ -2289,16 +2059,11 @@ impl Compiler {
                 super::MAX_STATIC_ALIGN
             )));
         }
-        // The object's alignment is the wider of what this
-        // declarator asked for and what its type already
-        // requires: an `aligned(64)` member raises its whole
-        // aggregate, so `struct S g;` needs a 64-aligned slot
-        // with no attribute in sight.
-        // A GNU `aligned(N)` type attribute on the object's
-        // typedef base raises its placement like an explicit
-        // request; a reducing one is absorbed by the type's
-        // natural alignment. A pointer object keeps pointer
-        // alignment.
+        // The object takes the wider of what the declarator asks for and what its
+        // type requires: an `aligned(64)` member raises its whole aggregate, so
+        // `struct S g;` needs a 64-aligned slot with no attribute in sight. A
+        // typedef-carried `aligned(N)` raises it the same way; a pointer object
+        // keeps pointer alignment.
         let type_align = if is_pointer_ty(ty) {
             0
         } else {
@@ -2598,14 +2363,9 @@ impl Compiler {
         // bytes, whose parser-added NUL must land right
         // after them.
         self.next()?;
-        // Multi-dimensional struct array `T xs[][M]... = {
-        // ... }`: fill the rows below the deferred outer
-        // dimension through the shared struct-array walker
-        // (designators at every level). The pre-scan counts
-        // each top-level entry as a row, but an entry after
-        // a chained designator resumes mid-row (C99
-        // 6.7.8p17), so the walker's extent is the real
-        // outer count (p22).
+        // `T xs[][M] = { ... }`: the pre-scan counts each top-level entry as a
+        // row, but an entry after a chained designator resumes mid-row (C99
+        // 6.7.8p17), so the walker's extent is the real outer count (p22).
         if inner_dim > 1 {
             let mut dims = alloc::vec::Vec::new();
             dims.push(count);
@@ -2688,34 +2448,15 @@ impl Compiler {
             self.symbols[id_idx].fam_init_bytes = fam_tail;
             bytes = ((bytes + fam_tail + 7) / 8) * 8;
         }
-        // `extern T x;` -- C99 6.9.2 says no
-        // tentative definition. We still
-        // allocate storage here so the single-TU
-        // `Compiler::compile()` path stays
-        // permissive (writing through `a` in
-        // `extern int a; a = 1;` works without a
-        // link partner). In a multi-TU build the
-        // walker emits a `GloAddr::Extern` reference
-        // for an `extern`-marked Glo with no
-        // initializer, so the defining TU's bytes
-        // are the ones in play and this local
-        // storage is only the single-TU fallback.
+        // C99 6.9.2: `extern T x;` is no tentative definition. Storage is still
+        // reserved so the single-unit compile can write through the name; a
+        // multi-unit build references the defining unit's bytes instead, leaving
+        // this slot as the fallback.
         let _ = was_extern_only_decl;
-        // Tentative-merge: reuse the storage that was
-        // already allocated for the prior declaration.
-        // The initializer (if any) writes into the
-        // existing slot. Mismatched array sizes between
-        // the prior tentative and the new defining
-        // declaration aren't merged here -- the prior
-        // allocation would be too small or too large.
-        // Reuse the prior storage on a tentative merge,
-        // and also when a redundant tentative declaration
-        // (no initializer) follows an already-defined
-        // global -- C99 6.9.2 makes the later `T x;` a
-        // redeclaration of the same object, so allocating
-        // fresh zeroed storage would discard its value.
-        // The two-initializer case already errored at the
-        // duplicate-definition check above.
+        // C99 6.9.2: the definition writes into the storage the tentative
+        // definition reserved, and a redundant `T x;` after a definition is a
+        // redeclaration of the same object, so neither takes fresh zeroed bytes.
+        // A second initializer already failed the duplicate-definition check.
         let obj_align = self.symbols[id_idx].data_align.max(1);
         let reuse_eligible = was_tentative_glo
             || (self.symbols[id_idx].defined_here && self.lex.tk != Token::Assign);
@@ -2783,18 +2524,8 @@ impl Compiler {
             self.symbols[id_idx].defined_here = true;
         }
 
-        // Optional initializer. For non-arrays, the
-        // restricted constant-expression path
-        // (parse_global_initializer) handles
-        // integer / NULL / address-of-global. For
-        // known-size arrays, a string literal or a
-        // brace list populates the leading bytes;
-        // the rest stays zero (the allocation
-        // pre-zeroed self.data). For struct-value
-        // globals, a `{ ... }` brace list with
-        // designators or positional entries
-        // populates per-field; unspecified fields
-        // stay zero.
+        // The storage is already zeroed, so each form below fills only what the
+        // initializer names.
         if self.lex.tk == Token::Assign {
             self.parse_object_initializer(id_idx, ty, array_size, var_offset, thread_local)?;
         }
@@ -2813,16 +2544,10 @@ impl Compiler {
         thread_local: bool,
     ) -> Result<(), C5Error> {
         self.next()?;
-        // A file-scope aggregate may be initialised by a
-        // compound literal naming its own type (C99
-        // 6.5.2.5): `static T g = (T){ ... };`. Drop the
-        // redundant `(T)` so the brace dispatch below sees
-        // `{ ... }`. Only for an aggregate object: the
-        // cast is not redundant when the object is a
-        // scalar, where `T *p = (T[]){ ... }` decays to
-        // the address of an anonymous array and
-        // `int x = (int){ v }` converts a value. Both are
-        // the constant evaluator's, which needs the type.
+        // C99 6.5.2.5: `static T g = (T){ ... }` initialises the aggregate from a
+        // compound literal of its own type; dropping the redundant cast leaves the
+        // brace list below. A scalar object keeps it -- `T *p = (T[]){ ... }` and
+        // `int x = (int){ v }` are the constant evaluator's, which needs the type.
         if array_size > 0 || self.is_traversable_aggregate_ty(ty) {
             self.skip_opt_compound_literal_cast()?;
         }

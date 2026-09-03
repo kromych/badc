@@ -1,16 +1,9 @@
-//! Struct / union body parser.
+//! Struct / union bodies.
 //!
-//! Lives next to `compiler/mod.rs` because the recursive descent for
-//! a `struct Foo { ... }` definition is the longest single method in
-//! the parser and is fully self-contained -- it consumes the body
-//! tokens, runs the field-layout pass (with bitfield bit-packing
-//! state), and registers the struct in `self.structs`. Nothing else
-//! in the compiler reaches into the layout state, so isolating it
-//! here keeps the bit-packing invariants in one place.
-//!
-//! Caller is `parse_decl_base_type` in `compiler/mod.rs`, which
-//! recognises `struct Tag { ... }` / `union Tag { ... }` at the
-//! base-type position and dispatches here.
+//! `parse_aggregate_base_type` dispatches here on `struct Tag { ... }` /
+//! `union Tag { ... }` at a base-type position. The body parse consumes the
+//! member list and lays it out: nothing outside this module reads the
+//! layout state, so the bit-packing rules stay in one place.
 
 use alloc::format;
 use alloc::string::ToString;
@@ -97,23 +90,12 @@ struct MemberPlacement {
 }
 
 impl Compiler {
-    /// Parse a `struct Name { ... }` / `union Name { ... }` body.
-    /// Pre-registers `name` (or recycles a forward declaration) so
-    /// self-referential pointer fields can find the aggregate
-    /// mid-definition. Field offsets are placed at each field's
-    /// natural alignment (`int` packs at 4, `long` / pointer at 8,
-    /// `char` at 1), or at an explicit `aligned(N)` / `_Alignas(N)`
-    /// request; the aggregate's own alignment is the max of its
-    /// fields' alignments.
+    /// Parse a `struct Name { ... }` / `union Name { ... }` body and lay it
+    /// out. A member is placed at its own alignment, or at the `aligned(N)` /
+    /// `_Alignas(N)` one it asks for; the aggregate takes the maximum. A
+    /// union places every member at offset 0 and takes the maximum size.
     ///
-    /// On entry `tk` is `{`; on exit `tk` is the token AFTER the
-    /// closing `}` (typically `;`).
-    ///
-    /// Layout pass shared by `struct` and `union` definitions. The
-    /// only difference is that union members all sit at offset 0
-    /// and the aggregate's size is `max(field size)` rather than
-    /// the sum. Member access otherwise reuses the struct field
-    /// path.
+    /// On entry `tk` is `{`; on exit it is the token after the closing `}`.
     pub(super) fn parse_aggregate_body(
         &mut self,
         name: &str,
@@ -233,18 +215,10 @@ impl Compiler {
             type_align_override,
             ..
         } = base;
-        // One or more comma-separated declarators sharing the prefix.
-        // Routed through `parse_declarator` so function-pointer
-        // fields (`int (*xCompare)(int, int);`) and array fields
-        // (`int counts[8];`) parse with the same rules as locals
-        // and globals.
-        //
-        // A function-pointer typedef base (`fn_t a, b;`) seeds its
-        // lineage once into `self.pending`; the per-declarator
-        // `.take()` below would zero it for declarators after the
-        // first. Capture and re-seed each iteration. Only the two
-        // typedef-derived fields are restored; `fn_ptr_param_types`
-        // is a per-declarator output of `parse_declarator`.
+        // A function-pointer typedef base (`fn_t a, b;`) seeds its lineage
+        // into `self.pending` once, and the per-declarator `.take()` below
+        // would leave the later declarators without it; capture it here and
+        // re-seed each iteration.
         let base_field_fn_ptr_indirection = self.pending.fn_ptr_indirection;
         let base_field_fn_ptr_ret_indirection = self.pending.fn_ptr_ret_indirection;
         let base_field_is_function_type = self.pending.base_is_function_type;
@@ -494,7 +468,7 @@ impl Compiler {
             layout.bf_active = false;
         } else if is_union {
             // A union member occupies its own storage from
-            // layout.offset 0; the bits round up to whole bytes.
+            // offset 0; the bits round up to whole bytes.
             layout.offset = layout.offset.max((width as usize).div_ceil(8));
         } else {
             place_bitfield(
@@ -630,31 +604,16 @@ impl Compiler {
             // aligned for a new field.
             layout.bf_active = false;
 
-            // Layout: struct fields advance the cursor at
-            // their natural alignment (M31). `int` fields
-            // pack 4 bytes; `long` / pointer fields use 8;
-            // `char` packs at 1; struct fields inherit
-            // their nested alignment. Union fields all sit
-            // at layout.offset 0 and contribute their size to the
-            // running max.
-            //
-            // `#pragma pack(N)` clamps each field's natural
-            // alignment by N (and the aggregate's overall
-            // alignment). The lexer tracks the active pack
-            // value via [`Lexer::current_pack`]; default is
-            // 8 (no-op) so unpacked structs lay out exactly
-            // as before.
-            // `__attribute__((packed))` and `#pragma pack(N)` clamp
-            // different things. The attribute drops a member's
-            // NATURAL alignment to 1 but leaves an explicit
-            // `aligned(N)` on that member standing; the pragma
-            // clamps the finished value, explicit request included.
-            // GCC and clang agree on both.
+            // `__attribute__((packed))` and `#pragma pack(N)` clamp different
+            // things, as they do under GCC and clang: the attribute drops a
+            // member's natural alignment to 1 and leaves an explicit
+            // `aligned(N)` on that member standing, while the pragma clamps
+            // the finished value, explicit request included.
             let pack = self.lex.current_pack();
             let elem_size = self.size_of_type(field_ty);
             // A complete but empty `struct {}` member contributes no
             // storage (GCC), so the following member shares its
-            // layout.offset -- which is what the `__DECLARE_FLEX_ARRAY`
+            // offset -- which is what the `__DECLARE_FLEX_ARRAY`
             // idiom (`struct {} __empty; T arr[];`) relies on. Its
             // alignment still applies: an empty type carrying
             // `aligned(N)` places the member, and raises the
@@ -1167,7 +1126,7 @@ impl Compiler {
         // Struct alignment tops out at `MAX_STATIC_ALIGN` -- the widest the
         // data section and static-object placement honor. `#pragma pack(N)`
         // further clamps the cap; field-level clamping above already prevents
-        // layout.align from exceeding pack, but cap here too so an empty
+        // the member alignment from exceeding pack, but cap here too so an empty
         // struct under `pack(1)` still ends up with align=1.
         // NOTE: an automatic (stack) object of an over-aligned type is
         // rejected at its declaration -- the frame uses 8-byte slots and

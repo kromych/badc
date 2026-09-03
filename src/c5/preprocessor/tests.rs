@@ -3742,3 +3742,108 @@ fn a_redefinition_replaces_the_cached_body() {
     let out = process("#define M(a) (a + 1)\nM(9)\n#undef M\n#define M(a) (a - 1)\nM(9)\n");
     assert!(out.contains("(9 + 1)") && out.contains("(9 - 1)"), "{out}");
 }
+
+const PREDEFINE_TARGETS: [(&str, Target); 5] = [
+    ("linux-x64", Target::LinuxX64),
+    ("linux-aarch64", Target::LinuxAarch64),
+    ("macos-aarch64", Target::MacOSAarch64),
+    ("windows-x64", Target::WindowsX64),
+    ("windows-aarch64", Target::WindowsAarch64),
+];
+
+/// `Preprocessor::new` installs exactly the predefine rows covering the
+/// unit's target, and no row it does not cover unless another row of the
+/// same name does.
+#[test]
+fn the_predefine_table_drives_every_target() {
+    for (spec, target) in PREDEFINE_TARGETS {
+        let pp = Preprocessor::new(spec, target, "0.1.0");
+        for (on, rows) in PREDEFINES {
+            for (name, body) in *rows {
+                if on.covers(target) {
+                    assert_eq!(
+                        pp.macros.get(*name).map(String::as_str),
+                        Some(*body),
+                        "{spec} {name}"
+                    );
+                } else if !PREDEFINES
+                    .iter()
+                    .any(|(o, r)| o.covers(target) && r.iter().any(|(n, _)| n == name))
+                {
+                    assert!(!pp.macros.contains_key(*name), "{spec} defines {name}");
+                }
+            }
+        }
+    }
+}
+
+/// The target-keyed predefines, per target, in both directions: a name
+/// its target defines with that body and no other target defines at all.
+/// Adding one here is a promise about that target's surface.
+#[test]
+fn target_predefines_are_locked() {
+    const AARCH64: &[(&str, &str)] = &[
+        ("__aarch64__", "1"),
+        ("__arm64__", "1"),
+        ("__AARCH64EL__", "1"),
+    ];
+    const X86_64: &[(&str, &str)] = &[("__SEG_FS", "1"), ("__SEG_GS", "1")];
+    const MACOS: &[(&str, &str)] = &[
+        ("__APPLE__", "1"),
+        ("__MACH__", "1"),
+        ("__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__", "110000"),
+    ];
+    const LINUX: &[(&str, &str)] = &[
+        ("__linux__", "1"),
+        ("__unix__", "1"),
+        ("__GLIBC__", "2"),
+        ("__GLIBC_MINOR__", "17"),
+        ("_DEFAULT_SOURCE", "1"),
+        ("_POSIX_SOURCE", "1"),
+        ("_POSIX_C_SOURCE", "200809L"),
+    ];
+    const WINDOWS: &[(&str, &str)] = &[
+        ("_WIN32", "1"),
+        ("_WIN64", "1"),
+        ("__BADC_WINDOWS__", "1"),
+        ("__int8", "char"),
+        ("__int16", "short"),
+        ("__int32", "int"),
+        ("__int64", "long long"),
+    ];
+    let every: Vec<(&str, &str)> = AARCH64
+        .iter()
+        .chain(X86_64)
+        .chain(MACOS)
+        .chain(LINUX)
+        .chain(WINDOWS)
+        .copied()
+        .collect();
+    for (spec, target) in PREDEFINE_TARGETS {
+        let want: Vec<(&str, &str)> = match target {
+            Target::LinuxX64 => X86_64.iter().chain(LINUX).copied().collect(),
+            Target::LinuxAarch64 => AARCH64.iter().chain(LINUX).copied().collect(),
+            Target::MacOSAarch64 => AARCH64.iter().chain(MACOS).copied().collect(),
+            Target::WindowsX64 => X86_64.iter().chain(WINDOWS).copied().collect(),
+            Target::WindowsAarch64 => AARCH64.iter().chain(WINDOWS).copied().collect(),
+        };
+        let pp = Preprocessor::new(spec, target, "0.1.0");
+        for (name, _) in &every {
+            let got = pp.macros.get(*name).map(String::as_str);
+            let expect = want.iter().find(|(n, _)| n == name).map(|(_, b)| *b);
+            assert_eq!(got, expect, "{spec} {name}");
+        }
+        // Plain `char`'s signedness and `long double`'s storage size
+        // follow the target ABI, so their predefines do too.
+        assert_eq!(
+            pp.macros.contains_key("__CHAR_UNSIGNED__"),
+            !target.plain_char_signed(),
+            "{spec} __CHAR_UNSIGNED__"
+        );
+        assert_eq!(
+            pp.macros.get("__SIZEOF_LONG_DOUBLE__").map(String::as_str),
+            Some(target.long_double().size().to_string().as_str()),
+            "{spec} __SIZEOF_LONG_DOUBLE__"
+        );
+    }
+}

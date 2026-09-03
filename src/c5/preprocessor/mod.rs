@@ -804,218 +804,262 @@ fn install_data_model(
     }
 }
 
-impl Preprocessor {
-    /// Build a preprocessor with the standard predefines set.
-    ///
-    /// Naming follows the gcc / clang / msvc convention of double
-    /// underscores around tool-supplied macros so they don't
-    /// collide with user identifiers:
-    ///
-    /// * `__BADC_VERSION__` -- the crate version, as a string
-    ///   literal. Source can write `#if __BADC_VERSION__ == "0.1.0"`.
-    /// * `__BADC_TARGET__` -- the canonical target id (e.g.
-    ///   `"macos-aarch64"`), as a string literal. Used to gate
-    ///   target-specific code at the source level.
-    ///
-    /// Comparing these string-literal predefines with `#if X == "..."`
-    /// is a c5 extension over C99 6.10.1p4, which restricts a `#if`
-    /// controlling expression to an integer constant expression; see
-    /// doc/std-conformance.md.
-    /// * CPU-architecture macros, all defined to `1` when active so
-    ///   `#if __aarch64__` works the same way it does in gcc/clang:
-    ///   * AArch64 targets get `__aarch64__` and `__arm64__` (the
-    ///     latter is the Apple/clang spelling).
-    ///   * x86_64 targets get `__x86_64__` and `__amd64__`.
-    /// * OS macros, also defined to `1` when active, mirroring the
-    ///   gcc / clang / msvc spelling so cross-platform headers
-    ///   (`#ifdef __APPLE__`, `#ifdef __linux__`, `#ifdef _WIN32`)
-    ///   work the way users already expect:
-    ///   * macOS targets get `__APPLE__` and `__MACH__`.
-    ///   * Linux targets get `__linux__` and `__unix__`.
-    ///   * Windows targets get `_WIN32` (and `_WIN64`, since both of
-    ///     our Windows targets are 64-bit) plus the legacy
-    ///     `__BADC_WINDOWS__` we used before this commit.
-    pub fn new(target_spec: &str, target: Target, crate_version: &str) -> Self {
-        let mut macros: HashMap<String, String> = HashMap::new();
-        let mut fn_macros: HashMap<String, FnMacro> = HashMap::new();
-        let intrinsics: alloc::collections::BTreeMap<String, i64> = builtins::preseeded(target)
-            .map(|(name, id)| (name.to_string(), id))
-            .collect();
-        // GCC `__attribute__((...))` and MSVC `__declspec(...)` are
-        // declaration decorators carrying hints the dialect does not act
-        // on, except for the `packed` attribute, which changes aggregate
-        // layout. Both are lexer tokens parsed by
-        // `skip_attribute_specifiers` rather than preprocessed away, so
-        // `packed` reaches the parser and the rest is consumed in place.
-        macros.insert(
-            "__BADC_VERSION__".to_string(),
-            format!("\"{crate_version}\""),
-        );
-        macros.insert("__BADC_TARGET__".to_string(), format!("\"{target_spec}\""));
-        // Standard predefines (C99 sec 6.10.8). `__DATE__` and `__TIME__`
-        // are seeded at badc build time; C99 says they reflect "the date
-        // and time of translation", and the closest analogue for an
-        // embedded library is the build time of badc itself.
-        // `__STDC_HOSTED__` reflects that every supported target binds the
-        // host libc, so the dialect is hosted. `__STDC_VERSION__` reports
-        // C11 (201112L): the implemented surface is C99 plus the C11
-        // features real code gates on this macro (`_Static_assert`,
-        // `_Noreturn`, `_Atomic`, `_Thread_local`, anonymous members, and
-        // `<stdatomic.h>`).
-        macros.insert("__STDC__".to_string(), "1".to_string());
-        macros.insert("__STDC_HOSTED__".to_string(), "1".to_string());
-        macros.insert("__STDC_VERSION__".to_string(), "201112L".to_string());
-        // Memory-order arguments to the __atomic_* builtins. badc always
-        // emits sequential consistency, so the value only has to satisfy
-        // the source's `#if`/comparison uses; the canonical GCC encoding
-        // (relaxed=0 .. seq_cst=5) keeps those exact.
-        for (name, val) in [
+/// The targets one predefine row covers.
+#[derive(Clone, Copy)]
+enum PredefOn {
+    Every,
+    Aarch64,
+    X86_64,
+    MacOS,
+    Linux,
+    Windows,
+    /// Targets whose plain `char` is unsigned. C99 6.2.5p15 leaves the
+    /// choice to the implementation; gcc and clang report it here.
+    UnsignedChar,
+}
+
+impl PredefOn {
+    fn covers(self, target: Target) -> bool {
+        match self {
+            PredefOn::Every => true,
+            PredefOn::Aarch64 => matches!(
+                target,
+                Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64
+            ),
+            PredefOn::X86_64 => target.is_x86_64(),
+            PredefOn::MacOS => matches!(target, Target::MacOSAarch64),
+            PredefOn::Linux => matches!(target, Target::LinuxAarch64 | Target::LinuxX64),
+            PredefOn::Windows => matches!(target, Target::WindowsX64 | Target::WindowsAarch64),
+            PredefOn::UnsignedChar => !target.plain_char_signed(),
+        }
+    }
+}
+
+/// Object-like predefines with a fixed replacement list, grouped by the
+/// targets they cover. Naming follows the gcc / clang / msvc convention
+/// of double underscores around tool-supplied macros so they cannot
+/// collide with user identifiers. Predefines whose spelling or value
+/// follows the unit's model are installed by
+/// [`install_float_characteristics`] and [`install_data_model`] instead,
+/// which own those names; the GCC identity set is opt-in through
+/// [`Preprocessor::enable_gnu`].
+static PREDEFINES: &[(PredefOn, &[(&str, &str)])] = &[
+    (
+        PredefOn::Every,
+        &[
+            // C99 6.10.8. `__DATE__` / `__TIME__` are seeded at badc
+            // build time: C99 has them reflect the time of translation,
+            // and for an embedded library that is badc's own build.
+            // `__STDC_HOSTED__` holds because every supported target
+            // binds the host libc. `__STDC_VERSION__` reports C11 --
+            // the surface is C99 plus the C11 features real code gates
+            // on this macro (`_Static_assert`, `_Noreturn`, `_Atomic`,
+            // `_Thread_local`, anonymous members, `<stdatomic.h>`).
+            ("__STDC__", "1"),
+            ("__STDC_HOSTED__", "1"),
+            ("__STDC_VERSION__", "201112L"),
+            ("__DATE__", concat!("\"", env!("BADC_BUILD_DATE"), "\"")),
+            ("__TIME__", concat!("\"", env!("BADC_BUILD_TIME"), "\"")),
+            // C11 6.10.8.3 conditional-feature macros: an implementation
+            // reporting `__STDC_VERSION__ == 201112L` defines one per
+            // optional feature it lacks, and library code gates on them
+            // to pick a portable fallback. badc has no `_Complex` /
+            // `_Imaginary`. `__STDC_NO_THREADS__` stays undefined: real
+            // code gates `_Thread_local` on it (the two are independent
+            // in C11, but the conflation is widespread) and badc does
+            // support `_Thread_local`. `<stdatomic.h>` is provided, so
+            // `__STDC_NO_ATOMICS__` stays undefined too, and C99 6.7.6.2
+            // variable-length arrays are supported, so does
+            // `__STDC_NO_VLA__`.
+            ("__STDC_NO_COMPLEX__", "1"),
+            // C11 6.10.8.2: `char16_t` / `char32_t` hold the UTF-16 /
+            // UTF-32 code units of the character, which is what `u"..."`
+            // and `U"..."` encode here.
+            ("__STDC_UTF_16__", "1"),
+            ("__STDC_UTF_32__", "1"),
+            // Memory-order arguments to the `__atomic_*` builtins. badc
+            // always emits sequential consistency, so the value only has
+            // to satisfy the source's `#if` and comparison uses; the
+            // canonical GCC encoding keeps those exact.
             ("__ATOMIC_RELAXED", "0"),
             ("__ATOMIC_CONSUME", "1"),
             ("__ATOMIC_ACQUIRE", "2"),
             ("__ATOMIC_RELEASE", "3"),
             ("__ATOMIC_ACQ_REL", "4"),
             ("__ATOMIC_SEQ_CST", "5"),
-        ] {
-            macros.insert(name.to_string(), val.to_string());
-        }
-        // `__GNUC__` and the rest of the GCC identity are opt-in
-        // (`--gnu`, [`Self::enable_gnu`]). badc implements the GNU C
-        // extensions real code gates on `__GNUC__`, but not all of them
-        // (the x86 SIMD intrinsics are absent), so it does not claim the
-        // macro by default; code that gates an intrinsic path on
-        // `__GNUC__` plus an x86 target would otherwise fail to compile.
-        // Byte-order predefines (GCC/clang form). Every supported target
-        // is little-endian.
-        macros.insert("__ORDER_LITTLE_ENDIAN__".to_string(), "1234".to_string());
-        macros.insert("__ORDER_BIG_ENDIAN__".to_string(), "4321".to_string());
-        macros.insert("__ORDER_PDP_ENDIAN__".to_string(), "3412".to_string());
-        macros.insert(
-            "__BYTE_ORDER__".to_string(),
-            "__ORDER_LITTLE_ENDIAN__".to_string(),
-        );
-        // gcc/clang also define `__LITTLE_ENDIAN__` (to 1) on a
-        // little-endian target; byte-order-detecting code commonly gates on
-        // `#ifdef __LITTLE_ENDIAN__` directly rather than comparing
-        // `__BYTE_ORDER__`. `__BIG_ENDIAN__` stays undefined.
-        macros.insert("__LITTLE_ENDIAN__".to_string(), "1".to_string());
-        // `__counted_by(m)` and its endian variants annotate a flexible
-        // array member with its element-count field (a bounds hint, GCC 15 /
-        // Clang). badc does not implement the attribute; predefine the macros
-        // empty, the same fallback the kernel UAPI headers use when the
-        // compiler lacks it (`__has_attribute(counted_by)` is likewise 0), so
-        // a header that reaches for them without its own guard still compiles.
-        for name in ["__counted_by", "__counted_by_le", "__counted_by_be"] {
-            fn_macros.insert(
-                name.to_string(),
-                FnMacro {
-                    params: alloc::vec!["m".to_string()],
-                    body: String::new(),
-                    is_variadic: false,
-                    va_name: None,
-                },
-            );
-        }
-        // `__builtin_expect(exp, c)` is a compiler builtin in GCC,
-        // available with no header; its value is the first operand.
-        // Predefined here so code that never triggers the
-        // `<_builtins.h>` auto-include still compiles; that header's
-        // identical definition harmlessly re-registers it.
-        fn_macros.insert(
-            "__builtin_expect".to_string(),
-            FnMacro {
-                params: alloc::vec!["exp".to_string(), "c".to_string()],
-                body: "(exp)".to_string(),
-                is_variadic: false,
-                va_name: None,
-            },
-        );
-        // C11 6.10.8.3 conditional-feature macros. An implementation that
-        // reports `__STDC_VERSION__ == 201112L` defines each of these for an
-        // optional feature it does not provide; library code gates on them
-        // to pick a portable fallback. badc has no variable length arrays
-        // and no `_Complex` / `_Imaginary`, so it advertises both.
-        // `__STDC_NO_THREADS__` is deliberately left undefined: although
-        // badc ships no `<threads.h>`, real code gates the `_Thread_local`
-        // storage classifier on `!defined(__STDC_NO_THREADS__)` (the two are
-        // independent in C11, but the conflation is widespread), and badc
-        // does support `_Thread_local`; defining the macro would suppress
-        // thread-local storage. GCC and clang made the same choice while
-        // they lacked `<threads.h>`. `<stdatomic.h>` is provided, so
-        // `__STDC_NO_ATOMICS__` also stays undefined.
-        // `__STDC_NO_VLA__` stays undefined: c5 supports C99 6.7.6.2
-        // variable-length arrays (single dimension, block scope).
-        macros.insert("__STDC_NO_COMPLEX__".to_string(), "1".to_string());
-        // C11 6.10.8.2: `char16_t` / `char32_t` values are the UTF-16 /
-        // UTF-32 code units of the character, which is what `u"..."` and
-        // `U"..."` encode here.
-        macros.insert("__STDC_UTF_16__".to_string(), "1".to_string());
-        macros.insert("__STDC_UTF_32__".to_string(), "1".to_string());
-        macros.insert(
-            "__DATE__".to_string(),
-            format!("\"{}\"", env!("BADC_BUILD_DATE")),
-        );
-        macros.insert(
-            "__TIME__".to_string(),
-            format!("\"{}\"", env!("BADC_BUILD_TIME")),
-        );
-        match target {
-            Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
-                macros.insert("__aarch64__".to_string(), "1".to_string());
-                macros.insert("__arm64__".to_string(), "1".to_string());
-                // Little-endian AArch64; gcc/clang define this and
-                // arch-dispatch code keys its aarch64 branch on it.
-                macros.insert("__AARCH64EL__".to_string(), "1".to_string());
-            }
-            Target::LinuxX64 | Target::WindowsX64 => {}
-        }
+            // Byte order (GCC/clang form); every supported target is
+            // little-endian. gcc and clang also define
+            // `__LITTLE_ENDIAN__` there, which byte-order-detecting code
+            // commonly gates on directly rather than comparing
+            // `__BYTE_ORDER__`. `__BIG_ENDIAN__` stays undefined.
+            ("__ORDER_LITTLE_ENDIAN__", "1234"),
+            ("__ORDER_BIG_ENDIAN__", "4321"),
+            ("__ORDER_PDP_ENDIAN__", "3412"),
+            ("__BYTE_ORDER__", "__ORDER_LITTLE_ENDIAN__"),
+            ("__LITTLE_ENDIAN__", "1"),
+            // Type sizes no data model moves, so portable code can select
+            // widths without <limits.h>; the rest come from
+            // `install_data_model`. C99 5.2.4.2.1 fixes CHAR_BIT at 8 on
+            // every supported target.
+            ("__CHAR_BIT__", "8"),
+            ("__SIZEOF_SHORT__", "2"),
+            ("__SIZEOF_INT__", "4"),
+            ("__SIZEOF_LONG_LONG__", "8"),
+            ("__SIZEOF_FLOAT__", "4"),
+            ("__SIZEOF_DOUBLE__", "8"),
+            // `wint_t` is the bundled <wchar.h>'s `int` everywhere.
+            ("__WINT_TYPE__", "int"),
+            ("__SIZEOF_WINT_T__", "4"),
+            // C11 6.4.4.4p2-p4 / 7.28: `char16_t` is `uint_least16_t`
+            // and `char32_t` is `uint_least32_t`. Neither tracks
+            // `wchar_t`, so both hold on every target, and they name the
+            // types `u'c'` and `U'c'` take.
+            ("__CHAR16_TYPE__", "unsigned short"),
+            ("__CHAR32_TYPE__", "unsigned int"),
+            // The largest fundamental alignment: what a bare
+            // `__attribute__((aligned))` resolves to and where `__int128`
+            // and 16-aligned automatics are placed.
+            ("__BIGGEST_ALIGNMENT__", "16"),
+        ],
+    ),
+    (
+        PredefOn::Aarch64,
+        // `__arm64__` is the Apple/clang spelling. `__AARCH64EL__`
+        // reports the little-endian variant, which arch-dispatch code
+        // keys its aarch64 branch on.
+        &[
+            ("__aarch64__", "1"),
+            ("__arm64__", "1"),
+            ("__AARCH64EL__", "1"),
+        ],
+    ),
+    (
+        PredefOn::X86_64,
         // x86 named address spaces (`int __seg_gs *p`): gcc predefines
         // these where the qualifiers are available, and an access through
-        // one rides a segment-override prefix. x86-only, as the
-        // qualifiers themselves are.
-        if target.is_x86_64() {
-            macros.insert("__SEG_FS".to_string(), "1".to_string());
-            macros.insert("__SEG_GS".to_string(), "1".to_string());
+        // one rides a segment-override prefix.
+        &[("__SEG_FS", "1"), ("__SEG_GS", "1")],
+    ),
+    (PredefOn::UnsignedChar, &[("__CHAR_UNSIGNED__", "1")]),
+    (
+        PredefOn::MacOS,
+        &[
+            ("__APPLE__", "1"),
+            ("__MACH__", "1"),
+            // Deployment target, decimal MMmmpp. Matches the 11.0
+            // minimum OS version stamped into LC_BUILD_VERSION;
+            // <AvailabilityMacros.h> derives its version gates from it.
+            ("__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__", "110000"),
+        ],
+    ),
+    (
+        PredefOn::Linux,
+        &[
+            ("__linux__", "1"),
+            ("__unix__", "1"),
+            // badc links the GNU C library on Linux, so source gating a
+            // glibc-only feature (pthread_getattr_np, __GLIBC_PREREQ)
+            // keys on these instead of a degraded fallback, as it would
+            // for a gcc/clang build here. A 2.17 baseline.
+            ("__GLIBC__", "2"),
+            ("__GLIBC_MINOR__", "17"),
+            // The feature-test state glibc's <features.h> derives when no
+            // request macro is set. The bundled headers stand in for
+            // glibc's, so the derivation must come from here or a header
+            // keying on it (a `struct timeval` fallback guarded by
+            // `!defined(_POSIX_C_SOURCE)`) misreads the environment.
+            // Overridable like any predefine, and installed before the
+            // CLI's own lists so `-D` / `-U` win.
+            ("_DEFAULT_SOURCE", "1"),
+            ("_POSIX_SOURCE", "1"),
+            ("_POSIX_C_SOURCE", "200809L"),
+        ],
+    ),
+    (
+        PredefOn::Windows,
+        // `_WIN64` holds because both Windows targets are 64-bit.
+        // `__int8/16/32/64` are mingw-gcc builtins used by essentially
+        // all Windows API code, so they belong to the target surface;
+        // the rest of the MSVC mimicry (`_MSC_VER`, `__MINGW32__`, the
+        // `__declspec(x)` decorators, the SAL annotations) stays in the
+        // opt-in `msvc_compat.h`.
+        &[
+            ("_WIN32", "1"),
+            ("_WIN64", "1"),
+            ("__BADC_WINDOWS__", "1"),
+            ("__int8", "char"),
+            ("__int16", "short"),
+            ("__int32", "int"),
+            ("__int64", "long long"),
+        ],
+    ),
+];
+
+/// One predefine whose replacement list depends on the target or on the
+/// build driver's arguments.
+type DerivedPredef = (&'static str, fn(&PredefEnv<'_>) -> String);
+
+/// Comparing the string-literal rows below with `#if X == "..."` is a c5
+/// extension over C99 6.10.1p4, which restricts a `#if` controlling
+/// expression to an integer constant expression; see
+/// doc/std-conformance.md.
+static DERIVED_PREDEFINES: &[DerivedPredef] = &[
+    ("__BADC_VERSION__", |e| format!("\"{}\"", e.crate_version)),
+    ("__BADC_TARGET__", |e| format!("\"{}\"", e.target_spec)),
+    // `long double` takes the target ABI's storage size.
+    // `__SIZEOF_FLOAT80__` and `__SIZEOF_FLOAT128__` stay undefined with
+    // the types absent.
+    ("__SIZEOF_LONG_DOUBLE__", |e| {
+        e.target.long_double().size().to_string()
+    }),
+];
+
+/// What a [`DERIVED_PREDEFINES`] body reads.
+struct PredefEnv<'a> {
+    target: Target,
+    target_spec: &'a str,
+    crate_version: &'a str,
+}
+
+/// Function-like predefines. The `__counted_by` family annotates a
+/// flexible array member with its element-count field (a GCC 15 / Clang
+/// bounds hint badc does not implement); defining them empty is the
+/// fallback the kernel UAPI headers use when the compiler lacks the
+/// attribute, which `__has_attribute(counted_by)` also reports as 0.
+/// `__builtin_expect(exp, c)` is a GCC builtin available with no header
+/// and its value is the first operand; predefining it here lets a unit
+/// that never triggers the `<_builtins.h>` auto-include compile, and
+/// that header's identical definition harmlessly re-registers it.
+static PREDEFINED_FN_MACROS: &[(&str, &[&str], &str)] = &[
+    ("__counted_by", &["m"], ""),
+    ("__counted_by_le", &["m"], ""),
+    ("__counted_by_be", &["m"], ""),
+    ("__builtin_expect", &["exp", "c"], "(exp)"),
+];
+
+impl Preprocessor {
+    /// Build a preprocessor with the standard predefines installed:
+    /// the [`PREDEFINES`] table for this target, the derived rows, the
+    /// target's floating-point characteristics and data model, and the
+    /// function-like set.
+    pub fn new(target_spec: &str, target: Target, crate_version: &str) -> Self {
+        let env = PredefEnv {
+            target,
+            target_spec,
+            crate_version,
+        };
+        let mut macros: HashMap<String, String> = HashMap::new();
+        for (on, rows) in PREDEFINES {
+            if on.covers(target) {
+                for (name, body) in *rows {
+                    macros.insert((*name).to_string(), (*body).to_string());
+                }
+            }
         }
-        // GCC/Clang define `__CHAR_UNSIGNED__` exactly when plain
-        // `char` is unsigned (C99 6.2.5p15 leaves it
-        // implementation-defined). Headers branch on it to choose
-        // sign-extension strategy, so mirror the target's choice.
-        if !target.plain_char_signed() {
-            macros.insert("__CHAR_UNSIGNED__".to_string(), "1".to_string());
+        for (name, body) in DERIVED_PREDEFINES {
+            macros.insert((*name).to_string(), body(&env));
         }
-        // GCC/Clang predefine each type's byte size so portable code can
-        // select widths without <limits.h> (e.g. a pointer's bit width is
-        // `__SIZEOF_POINTER__ * 8`). These are the sizes no data model
-        // moves; the rest go in through `install_data_model`.
-        // C99 5.2.4.2.1: CHAR_BIT is 8 on every supported target.
-        macros.insert("__CHAR_BIT__".to_string(), "8".to_string());
-        macros.insert("__SIZEOF_SHORT__".to_string(), "2".to_string());
-        macros.insert("__SIZEOF_INT__".to_string(), "4".to_string());
-        macros.insert("__SIZEOF_LONG_LONG__".to_string(), "8".to_string());
-        macros.insert("__SIZEOF_FLOAT__".to_string(), "4".to_string());
-        macros.insert("__SIZEOF_DOUBLE__".to_string(), "8".to_string());
-        // `long double` takes the target ABI's storage size: 16 on
-        // both Linux targets, 8 elsewhere. `__SIZEOF_FLOAT80__` and
-        // `__SIZEOF_FLOAT128__` stay undefined with the types absent.
-        macros.insert(
-            "__SIZEOF_LONG_DOUBLE__".to_string(),
-            target.long_double().size().to_string(),
-        );
         install_float_characteristics(&mut macros, target);
-        // `wint_t` is the bundled <wchar.h>'s `int` on every target.
-        macros.insert("__WINT_TYPE__".to_string(), "int".to_string());
-        macros.insert("__SIZEOF_WINT_T__".to_string(), "4".to_string());
-        // C11 6.4.4.4p2-p4 / 7.28: `char16_t` is `uint_least16_t` and
-        // `char32_t` is `uint_least32_t`. Neither tracks `wchar_t`, so
-        // both hold on every target, and they name the types `u'c'` and
-        // `U'c'` take.
-        macros.insert("__CHAR16_TYPE__".to_string(), "unsigned short".to_string());
-        macros.insert("__CHAR32_TYPE__".to_string(), "unsigned int".to_string());
-        // The largest fundamental alignment: what a bare
-        // `__attribute__((aligned))` resolves to and what `__int128` /
-        // 16-aligned automatics are placed at.
-        macros.insert("__BIGGEST_ALIGNMENT__".to_string(), "16".to_string());
         install_data_model(
             &mut macros,
             target,
@@ -1023,57 +1067,23 @@ impl Preprocessor {
             CodeModel::Small,
             false,
         );
-        match target {
-            Target::MacOSAarch64 => {
-                macros.insert("__APPLE__".to_string(), "1".to_string());
-                macros.insert("__MACH__".to_string(), "1".to_string());
-                // Deployment target, decimal MMmmpp. Matches the 11.0
-                // minimum OS version stamped into LC_BUILD_VERSION;
-                // <AvailabilityMacros.h> derives its version gates from it.
-                macros.insert(
-                    "__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__".to_string(),
-                    "110000".to_string(),
-                );
-            }
-            Target::LinuxAarch64 | Target::LinuxX64 => {
-                macros.insert("__linux__".to_string(), "1".to_string());
-                macros.insert("__unix__".to_string(), "1".to_string());
-                // badc links the GNU C library on Linux targets, so source
-                // gating a glibc-only feature (pthread_getattr_np,
-                // __GLIBC_PREREQ) keys on these instead of a degraded
-                // fallback, matching a gcc/clang build here. A 2.17 baseline;
-                // installed before the CLI lists so `-D`/`-U __GLIBC__` win.
-                macros.insert("__GLIBC__".to_string(), "2".to_string());
-                macros.insert("__GLIBC_MINOR__".to_string(), "17".to_string());
-                // The feature-test state glibc's <features.h> derives when
-                // no request macro is set. The bundled headers stand in for
-                // glibc's, so the derivation must come from here or system
-                // headers keying on it (e.g. a `struct timeval` fallback
-                // guarded by `!defined(_POSIX_C_SOURCE)`) misread the
-                // environment. Overridable like any predefine.
-                macros.insert("_DEFAULT_SOURCE".to_string(), "1".to_string());
-                macros.insert("_POSIX_SOURCE".to_string(), "1".to_string());
-                macros.insert("_POSIX_C_SOURCE".to_string(), "200809L".to_string());
-            }
-            Target::WindowsX64 | Target::WindowsAarch64 => {
-                // Target-detection macros plus the `__intN` fixed-width
-                // type keywords. `__int8/16/32/64` are mingw-gcc builtins
-                // on Windows -- provided independent of MSVC, and used by
-                // essentially all Windows API code -- so they belong to the
-                // target surface. The remaining MSVC-mimicry (`_MSC_VER`,
-                // `__MINGW32__`, the `__declspec(x)` empty-decorator family,
-                // the SAL annotations) stays in the opt-in `msvc_compat.h`
-                // header, included per translation unit via
-                // `badc -include msvc_compat.h ...`.
-                macros.insert("_WIN32".to_string(), "1".to_string());
-                macros.insert("_WIN64".to_string(), "1".to_string());
-                macros.insert("__BADC_WINDOWS__".to_string(), "1".to_string());
-                macros.insert("__int8".to_string(), "char".to_string());
-                macros.insert("__int16".to_string(), "short".to_string());
-                macros.insert("__int32".to_string(), "int".to_string());
-                macros.insert("__int64".to_string(), "long long".to_string());
-            }
-        }
+        let fn_macros: HashMap<String, FnMacro> = PREDEFINED_FN_MACROS
+            .iter()
+            .map(|(name, params, body)| {
+                (
+                    (*name).to_string(),
+                    FnMacro {
+                        params: params.iter().map(|p| (*p).to_string()).collect(),
+                        body: (*body).to_string(),
+                        is_variadic: false,
+                        va_name: None,
+                    },
+                )
+            })
+            .collect();
+        let intrinsics: alloc::collections::BTreeMap<String, i64> = builtins::preseeded(target)
+            .map(|(name, id)| (name.to_string(), id))
+            .collect();
         Self {
             macros,
             target,

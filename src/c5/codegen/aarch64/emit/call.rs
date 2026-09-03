@@ -556,52 +556,23 @@ pub(super) fn emit_call(
         ret_slot_off,
     } = ops;
     let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
-    if callee_is_variadic
-        && (abi.variadic_on_stack || abi.variadic_int_only || abi.aarch64_host_variadic())
-    {
-        // A variadic callee is marshalled through `plan_call_args` like a libc
-        // variadic call: macOS puts every variadic argument on the stack at an
-        // 8-byte stride, Windows in x0..x7 then the stack (an FP variadic
-        // argument as its bit pattern, already widened to double), Linux in
-        // both banks then the stack.
-        let plan =
-            super::plan_call_args_aggs(args.len(), fixed_args, fp_arg_mask, abi, &aggs, false);
-        emit_stack_alloc(code, plan.scratch_bytes, None);
-        if !marshal_args(
-            code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs, abi,
-        ) {
+    // A variadic callee is marshalled through `plan_call_args` like a libc
+    // variadic call: macOS puts every variadic argument on the stack at an
+    // 8-byte stride, Windows in x0..x7 then the stack (an FP variadic
+    // argument as its bit pattern, already widened to double), Linux in
+    // both banks then the stack. `fp_arg_mask` comes from the argument
+    // types, since a floating-point constant rides an integer register as
+    // its bit pattern.
+    let fixed = if callee_is_variadic {
+        if !(abi.variadic_on_stack || abi.variadic_int_only || abi.aarch64_host_variadic()) {
+            bail_msg("Call: variadic callee not matched by a host-ABI branch");
             return false;
         }
-        // A variadic callee may return an aggregate by value.
-        setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, frame);
-        fixups.push(Fixup {
-            native_offset: code.len(),
-            target_ent_pc: target_pc,
-            kind: BranchKind::Bl,
-        });
-        emit(code, enc_bl(0));
-        emit_add_sp_imm(code, plan.scratch_bytes);
-        finish_call_result(
-            code,
-            ret_agg,
-            ret_slot_off,
-            agg_descs,
-            dst,
-            frame,
-            scratch,
-            fp_return,
-        );
-        return true;
-    }
-    // Every aarch64 variadic callee took the branch above; marshalling one
-    // as non-variadic would miscompile silently.
-    if callee_is_variadic {
-        bail_msg("Call: variadic callee not matched by a host-ABI branch");
-        return false;
-    }
-    // `fp_arg_mask` comes from the argument types, since a floating-point
-    // constant rides an integer register as its bit pattern.
-    let plan = super::plan_call_args_aggs(args.len(), args.len(), fp_arg_mask, abi, &aggs, false);
+        fixed_args
+    } else {
+        args.len()
+    };
+    let plan = super::plan_call_args_aggs(args.len(), fixed, fp_arg_mask, abi, &aggs, false);
     emit_stack_alloc(code, plan.scratch_bytes, None);
     if !marshal_args(
         code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs, abi,

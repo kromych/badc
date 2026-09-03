@@ -1123,21 +1123,7 @@ pub(super) fn emit_store_local(
     } else if !emit_store_local_large_disp(code, off, rv, kind, func, scratch, frame) {
         return false;
     }
-    match dst {
-        Place::IntReg(r) => {
-            let rd = Reg(r);
-            if rd.0 != rv.0 {
-                emit_mov_reg(code, rd, rv);
-            }
-        }
-        Place::Spill(slot) => {
-            let sp_off = spill_off(frame, slot);
-            emit_spill_str_x_auto(code, frame, rv, sp_off);
-        }
-        Place::None => {}
-        Place::FpReg(_) => return false,
-    }
-    true
+    propagate_int(code, frame, dst, rv)
 }
 
 /// The `float` half of `emit_store_local`. A single-precision value (C99
@@ -1212,6 +1198,18 @@ fn emit_store_local_f32(
         }
     } else {
         store_spilled_fp(code, frame, dst, dn);
+    }
+    true
+}
+
+/// Propagate a stored integer value, the c5 accumulator, to `dst` when the
+/// allocator parked it elsewhere; `false` for an FP destination.
+fn propagate_int(code: &mut Vec<u8>, frame: Frame, dst: Place, rv: Reg) -> bool {
+    match dst {
+        Place::IntReg(r) if r != rv.0 => emit_mov_reg(code, Reg(r), rv),
+        Place::IntReg(_) | Place::None => {}
+        Place::Spill(slot) => emit_spill_str_x_auto(code, frame, rv, spill_off(frame, slot)),
+        Place::FpReg(_) => return false,
     }
     true
 }
@@ -1401,22 +1399,7 @@ pub(super) fn emit_store_indexed(
         (StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128, _) => unreachable!(),
     };
     emit(code, word);
-    // c5 store-op leaves the stored value in the accumulator.
-    match dst {
-        Place::IntReg(r) => {
-            let rd = Reg(r);
-            if rd.0 != rv.0 {
-                emit_mov_reg(code, rd, rv);
-            }
-        }
-        Place::Spill(slot) => {
-            let sp_off = spill_off(frame, slot);
-            emit_spill_str_x_auto(code, frame, rv, sp_off);
-        }
-        Place::None => {}
-        Place::FpReg(_) => return false,
-    }
-    true
+    propagate_int(code, frame, dst, rv)
 }
 
 pub(super) fn emit_store(

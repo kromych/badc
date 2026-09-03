@@ -351,7 +351,18 @@ pub(super) fn emit_binop(
         store_spilled_int(code, frame, dst, rd);
         return true;
     }
-    let word = match op {
+    let Some(word) = int_binop_word(op, rd, rn, rm) else {
+        return false;
+    };
+    emit(code, word);
+    store_spilled_int(code, frame, dst, rd);
+    true
+}
+
+/// The register-form encoding of an integer binop; `None` for a
+/// comparison or a modulo.
+fn int_binop_word(op: BinOp, rd: Reg, rn: Reg, rm: Reg) -> Option<u32> {
+    Some(match op {
         BinOp::Add => enc_add_reg(rd, rn, rm),
         BinOp::Sub => enc_sub_reg(rd, rn, rm),
         BinOp::Mul => enc_mul(rd, rn, rm),
@@ -366,11 +377,8 @@ pub(super) fn emit_binop(
         BinOp::Shr => enc_asrv(rd, rn, rm),
         BinOp::Shru => enc_lsrv(rd, rn, rm),
         BinOp::Ror => super::encode::enc_rorv(rd, rn, rm),
-        _ => return false,
-    };
-    emit(code, word);
-    store_spilled_int(code, frame, dst, rd);
-    true
+        _ => return None,
+    })
 }
 
 /// The d-register encoder of an FP arithmetic op, `None` otherwise.
@@ -585,22 +593,8 @@ pub(super) fn emit_binop_imm(
         // BinopI.
         return false;
     }
-    let word = match op {
-        BinOp::Add => enc_add_reg(rd, rn, rm),
-        BinOp::Sub => enc_sub_reg(rd, rn, rm),
-        BinOp::Mul => enc_mul(rd, rn, rm),
-        BinOp::Mulh => super::encode::enc_smulh(rd, rn, rm),
-        BinOp::Mulhu => super::encode::enc_umulh(rd, rn, rm),
-        BinOp::Div => enc_sdiv(rd, rn, rm),
-        BinOp::Divu => enc_udiv(rd, rn, rm),
-        BinOp::And => enc_and_reg(rd, rn, rm),
-        BinOp::Or => enc_orr_reg(rd, rn, rm),
-        BinOp::Xor => enc_eor_reg(rd, rn, rm),
-        BinOp::Shl => enc_lslv(rd, rn, rm),
-        BinOp::Shr => enc_asrv(rd, rn, rm),
-        BinOp::Shru => enc_lsrv(rd, rn, rm),
-        BinOp::Ror => super::encode::enc_rorv(rd, rn, rm),
-        _ => return false,
+    let Some(word) = int_binop_word(op, rd, rn, rm) else {
+        return false;
     };
     emit(code, word);
     store_spilled_int(code, frame, dst, rd);

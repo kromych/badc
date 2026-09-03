@@ -620,8 +620,10 @@ impl AsmOperands<'_> {
         use super::asm::AsmOpndA64;
         use super::table::Opnd;
         use alloc::string::String;
+        if let Some(opnd) = concrete_opnd(o) {
+            return Ok(opnd);
+        }
         Ok(match *o {
-            AsmOpndA64::Imm(v) => Opnd::Imm(v),
             // `%cN` / `%PN`: the operand's compile-time constant, bare.
             AsmOpndA64::RefConst(idx) => match self.const_of(idx) {
                 Some(v) => Opnd::Imm(v),
@@ -630,41 +632,6 @@ impl AsmOperands<'_> {
                         "aarch64 inline asm: non-constant `%c` operand",
                     ));
                 }
-            },
-            AsmOpndA64::Lsl(s) => Opnd::Lsl(s),
-            AsmOpndA64::Shift { kind, amount } => Opnd::Shift { kind, amount },
-            AsmOpndA64::Extend { option, amount } => Opnd::Extend { option, amount },
-            AsmOpndA64::SysReg(f) => Opnd::SysReg(f),
-            AsmOpndA64::SysOp(b) => Opnd::SysOp(b),
-            AsmOpndA64::Reg { num, is64, sp } => Opnd::Reg { num, is64, sp },
-            AsmOpndA64::RegWb(num) => Opnd::RegWb(num),
-            AsmOpndA64::VReg { num, is_d } => Opnd::VReg { num, is_d },
-            AsmOpndA64::QReg(num) => Opnd::QReg(num),
-            AsmOpndA64::VScalar { num, size } => Opnd::VScalar { num, size },
-            AsmOpndA64::FpImm(v) => Opnd::FpImm(v),
-            AsmOpndA64::VecReg { num, size, q } => Opnd::VecReg { num, size, q },
-            AsmOpndA64::VecElem { num, size, index } => Opnd::VecElem { num, size, index },
-            AsmOpndA64::VecList {
-                first,
-                count,
-                size,
-                q,
-            } => Opnd::VecList {
-                first,
-                count,
-                size,
-                q,
-            },
-            AsmOpndA64::VecListLane {
-                first,
-                count,
-                size,
-                index,
-            } => Opnd::VecListLane {
-                first,
-                count,
-                size,
-                index,
             },
             AsmOpndA64::Ref { idx, is64 } => self.conv_ref(idx, is64)?,
             // The vector views (`%N.T`, `%qN`, `{%N.T}`) name the SIMD file,
@@ -739,7 +706,6 @@ impl AsmOperands<'_> {
                     shift,
                 }
             }
-            AsmOpndA64::Cond(c) => Opnd::Cond(c),
             AsmOpndA64::Label { .. } | AsmOpndA64::GotoLabel(_) => {
                 return Err(String::from(
                     "aarch64 inline asm: label reference outside a branch",
@@ -772,6 +738,7 @@ impl AsmOperands<'_> {
                     "aarch64 inline asm: `ldr` literal pool needs a file-scope section",
                 ));
             }
+            _ => unreachable!("concrete forms are converted above"),
         })
     }
 
@@ -2063,6 +2030,53 @@ fn lower_inline_asm(
     Ok(stream.map_state)
 }
 
+/// The table form of an operand that names no template operand, label or
+/// symbol; `None` for the forms a converter resolves itself.
+fn concrete_opnd(o: &super::asm::AsmOpndA64) -> Option<super::table::Opnd> {
+    use super::asm::AsmOpndA64;
+    use super::table::Opnd;
+    Some(match *o {
+        AsmOpndA64::Imm(v) => Opnd::Imm(v),
+        AsmOpndA64::FpImm(v) => Opnd::FpImm(v),
+        AsmOpndA64::Lsl(s) => Opnd::Lsl(s),
+        AsmOpndA64::Shift { kind, amount } => Opnd::Shift { kind, amount },
+        AsmOpndA64::Extend { option, amount } => Opnd::Extend { option, amount },
+        AsmOpndA64::SysReg(f) => Opnd::SysReg(f),
+        AsmOpndA64::SysOp(b) => Opnd::SysOp(b),
+        AsmOpndA64::Cond(c) => Opnd::Cond(c),
+        AsmOpndA64::Reg { num, is64, sp } => Opnd::Reg { num, is64, sp },
+        AsmOpndA64::RegWb(num) => Opnd::RegWb(num),
+        AsmOpndA64::VReg { num, is_d } => Opnd::VReg { num, is_d },
+        AsmOpndA64::QReg(num) => Opnd::QReg(num),
+        AsmOpndA64::VScalar { num, size } => Opnd::VScalar { num, size },
+        AsmOpndA64::VecReg { num, size, q } => Opnd::VecReg { num, size, q },
+        AsmOpndA64::VecElem { num, size, index } => Opnd::VecElem { num, size, index },
+        AsmOpndA64::VecList {
+            first,
+            count,
+            size,
+            q,
+        } => Opnd::VecList {
+            first,
+            count,
+            size,
+            q,
+        },
+        AsmOpndA64::VecListLane {
+            first,
+            count,
+            size,
+            index,
+        } => Opnd::VecListLane {
+            first,
+            count,
+            size,
+            index,
+        },
+        _ => return None,
+    })
+}
+
 /// Resolve a template vector-view reference (`%N.T`, `%qN`, `{%N.T}`) to the
 /// SIMD register assigned to operand N, requiring a `w` constraint.
 fn resolve_fp_ref(
@@ -2093,44 +2107,10 @@ pub(crate) fn encode_a64_file_asm_section_code(
     use super::asm::AsmOpndA64;
     use super::table::Opnd;
     let conv = |o: &AsmOpndA64| -> Result<Opnd, alloc::string::String> {
+        if let Some(opnd) = concrete_opnd(o) {
+            return Ok(opnd);
+        }
         Ok(match *o {
-            AsmOpndA64::Imm(v) => Opnd::Imm(v),
-            AsmOpndA64::FpImm(v) => Opnd::FpImm(v),
-            AsmOpndA64::Lsl(s) => Opnd::Lsl(s),
-            AsmOpndA64::Shift { kind, amount } => Opnd::Shift { kind, amount },
-            AsmOpndA64::Extend { option, amount } => Opnd::Extend { option, amount },
-            AsmOpndA64::SysReg(f) => Opnd::SysReg(f),
-            AsmOpndA64::SysOp(b) => Opnd::SysOp(b),
-            AsmOpndA64::Cond(c) => Opnd::Cond(c),
-            AsmOpndA64::Reg { num, is64, sp } => Opnd::Reg { num, is64, sp },
-            AsmOpndA64::RegWb(num) => Opnd::RegWb(num),
-            AsmOpndA64::VReg { num, is_d } => Opnd::VReg { num, is_d },
-            AsmOpndA64::QReg(num) => Opnd::QReg(num),
-            AsmOpndA64::VScalar { num, size } => Opnd::VScalar { num, size },
-            AsmOpndA64::VecReg { num, size, q } => Opnd::VecReg { num, size, q },
-            AsmOpndA64::VecElem { num, size, index } => Opnd::VecElem { num, size, index },
-            AsmOpndA64::VecList {
-                first,
-                count,
-                size,
-                q,
-            } => Opnd::VecList {
-                first,
-                count,
-                size,
-                q,
-            },
-            AsmOpndA64::VecListLane {
-                first,
-                count,
-                size,
-                index,
-            } => Opnd::VecListLane {
-                first,
-                count,
-                size,
-                index,
-            },
             AsmOpndA64::Mem { base, off, pre } => match base {
                 super::asm::MemBase::Reg(b) => Opnd::Mem { base: b, off, pre },
                 super::asm::MemBase::Ref(_) => {

@@ -23,6 +23,7 @@
 
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
+use super::expr::TypeName;
 use super::types::{is_struct_value_ty, struct_id_of, struct_ptr_depth};
 use super::{Compiler, StructField};
 
@@ -92,74 +93,8 @@ impl Compiler {
         // matched by the regular parser's `(` -> `)` rule.
         let mut had_paren = leading_paren;
         let total: i64 = if had_paren && self.lex_is_type_start() {
-            // sizeof(<type>): parse a type name with optional
-            // pointer decoration and return its size. C99 6.5.3.4
-            // paragraph 4: the result on an array type is the total
-            // number of bytes, so an array typedef (jmp_buf etc.)
-            // must report `dim * sizeof(element)`. The array
-            // dimension rides through on `typedef_base_array_size`
-            // (set by `parse_decl_base_type` when the typedef
-            // resolves to an array); pointer decoration collapses
-            // the type to a scalar pointer and drops the dim.
-            self.ty = self.parse_decl_base_type()?;
-            let typedef_dim = core::mem::take(&mut self.pending.typedef_base_array_size);
-            let mut decayed_to_ptr = false;
-            while self.lex.tk == Token::MulOp {
-                self.next()?;
-                self.ty += Ty::Ptr as i64;
-                decayed_to_ptr = true;
-                while self.lex.tk == Token::TypeQual {
-                    self.next()?;
-                }
-            }
-            // Abstract function-pointer / pointer-to-array declarator:
-            // `sizeof(int (*)(int))`, `sizeof(void (*)(void))`,
-            // `sizeof(int (*)[N])` (C99 6.7.6 / 6.5.3.4). c5's flat
-            // type tag records base + pointer level, so the declarator
-            // collapses to the pointer levels its inner `*`s name; the
-            // result is then the size of a pointer.
-            if self.lex.tk == '(' {
-                let nested_ptrs = self.parse_abstract_ptr_declarator_levels()?;
-                if nested_ptrs > 0 {
-                    self.ty += nested_ptrs * (Ty::Ptr as i64);
-                    decayed_to_ptr = true;
-                }
-            }
-            // Abstract array declarator: `sizeof(T [N])` /
-            // `sizeof(T [N][M])` (C99 6.7.6 / 6.5.3.4). Each
-            // dimension multiplies the element count; the result is
-            // the total byte size of the array type.
-            let mut array_count: i64 = 1;
-            while self.lex.tk == Token::Brak {
-                self.next()?;
-                // A type dimension: the const-object fold stays masked so
-                // `sizeof(int[h])` with a const local `h` stays
-                // non-constant, as in gcc.
-                let n = self.with_const_object_fold_masked(|c| c.parse_constant_int())?;
-                // n == 0 is a GCC zero-length array: `sizeof(T[0])` is 0.
-                if n < 0 {
-                    return Err(self.compile_err("array dimension in sizeof must be positive"));
-                }
-                if self.lex.tk != ']' {
-                    return Err(self.compile_err("close bracket expected in sizeof array type"));
-                }
-                self.next()?;
-                array_count *= n;
-            }
-            if !decayed_to_ptr {
-                self.require_complete_operand(self.ty, "sizeof")?;
-            }
-            let elem_size = self.size_of_type(self.ty) as i64;
-            let zero_len = core::mem::take(&mut self.pending.typedef_base_zero_len);
-            let base = if typedef_dim > 0 && !decayed_to_ptr {
-                typedef_dim * elem_size
-            } else if typedef_dim < 0 && zero_len && !decayed_to_ptr {
-                // `typedef T A[0]`: a complete type of size 0.
-                0
-            } else {
-                elem_size
-            };
-            base * array_count
+            let type_name = self.parse_type_name()?;
+            self.sizeof_type_name(&type_name)?
         } else if self.lex.tk == Token::Id
             && self.symbols[self.lex.curr_id_idx].class != 0
             && !self.lex.peek_after_whitespace(b'-')
@@ -660,53 +595,38 @@ impl Compiler {
             self.require_complete_operand(expr_ty, "_Alignof")?;
             return Ok(self.align_of_type(expr_ty) as i64);
         }
-        let saved_ty = self.ty;
-        self.ty = self.parse_decl_base_type()?;
-        // A typedef base may carry an explicit type alignment (GNU
-        // `aligned(N)`). It applies to the type and to an array of it
-        // (C11 6.2.8: an array's alignment is its element's), but a
-        // pointer to it has pointer alignment.
-        let type_align_override = core::mem::take(&mut self.pending.type_align);
-        let _ = core::mem::take(&mut self.pending.typedef_base_array_size);
-        let mut had_ptr = false;
-        while self.lex.tk == Token::MulOp {
-            self.next()?;
-            self.ty += Ty::Ptr as i64;
-            had_ptr = true;
-            while self.lex.tk == Token::TypeQual {
-                self.next()?;
-            }
-        }
-        if self.lex.tk == '(' {
-            let nested_ptrs = self.parse_abstract_ptr_declarator_levels()?;
-            if nested_ptrs > 0 {
-                self.ty += nested_ptrs * (Ty::Ptr as i64);
-                had_ptr = true;
-            }
-        }
-        while self.lex.tk == Token::Brak {
-            self.next()?;
-            // A type dimension (see above).
-            let _ = self.with_const_object_fold_masked(|c| c.parse_constant_int())?;
-            if self.lex.tk != ']' {
-                return Err(self.compile_err("close bracket expected in `_Alignof` array type"));
-            }
-            self.next()?;
-        }
+        let type_name = self.parse_type_name()?;
         if self.lex.tk != ')' {
             return Err(self.compile_err("`)` expected to close `_Alignof`"));
         }
         self.next()?;
-        if !had_ptr {
-            self.require_complete_operand(self.ty, "_Alignof")?;
+        // A typedef base may carry an explicit type alignment (GNU
+        // `aligned(N)`). It applies to the type and to an array of it
+        // (C11 6.2.8: an array's alignment is its element's), but a
+        // pointer to it has pointer alignment.
+        let is_pointer = type_name.ptr_levels > 0;
+        if !is_pointer {
+            self.require_complete_operand(type_name.ty, "_Alignof")?;
         }
-        let align = if type_align_override > 0 && !had_ptr {
-            type_align_override
+        Ok(if type_name.type_align > 0 && !is_pointer {
+            type_name.type_align
         } else {
-            self.align_of_type(self.ty) as i64
-        };
-        self.ty = saved_ty;
-        Ok(align)
+            self.align_of_type(type_name.ty) as i64
+        })
+    }
+
+    /// The byte count of a type name (C99 6.5.3.4p1, p4): the element
+    /// size times every array bound; an unspecified bound is an
+    /// incomplete type.
+    fn sizeof_type_name(&mut self, type_name: &TypeName) -> Result<i64, C5Error> {
+        if type_name.ptr_levels == 0 {
+            self.require_complete_operand(type_name.ty, "sizeof")?;
+            if type_name.dims.iter().any(|&d| d < 0) {
+                return Err(self.compile_err("`sizeof` applied to an incomplete type"));
+            }
+        }
+        let elem_size = self.size_of_type(type_name.ty) as i64;
+        Ok(type_name.dims.iter().fold(elem_size, |n, &d| n * d))
     }
 
     /// `__alignof__` on an object or a member chain (`name`, `name.f`,

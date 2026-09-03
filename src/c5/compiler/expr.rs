@@ -85,10 +85,10 @@ pub(super) fn mem_transfer_lib_name(op: super::super::ast::MemTransferOp) -> &'s
     }
 }
 use super::types::{
-    UNSIGNED_BIT, VOLATILE_BIT, apply_qual_bits, format_type, fp_result_ty, integer_promote,
-    is_bool_ty, is_float_ty, is_floating_scalar, is_long_double_ty, is_pointer_ty, is_struct_ty,
-    is_struct_value_ty, is_unsigned_ty, is_vector_ty, is_void_ptr_ty, narrow_const_int,
-    object_segment_bits, segment_of_ty, struct_id_of, struct_ptr_depth,
+    UNSIGNED_BIT, VOLATILE_BIT, add_ptr_level, apply_qual_bits, format_type, fp_result_ty,
+    integer_promote, is_bool_ty, is_float_ty, is_floating_scalar, is_long_double_ty, is_pointer_ty,
+    is_struct_ty, is_struct_value_ty, is_unsigned_ty, is_vector_ty, is_void_ptr_ty,
+    narrow_const_int, object_segment_bits, segment_of_ty, struct_id_of, struct_ptr_depth,
 };
 
 impl Compiler {
@@ -2846,267 +2846,145 @@ impl Compiler {
     }
 
     fn parse_cast_or_compound_literal(&mut self) -> Result<(), C5Error> {
-        let mut t: i64;
-        // C-style cast: `(<type>)expr`. Accepts int, char,
-        // float, double, or struct base, with any number of
-        // `*` markers and pointer-level qualifiers.
-        t = self.parse_decl_base_type()?;
-        self.note_cast_type_name(t);
-        // An array typedef (`typedef T A[N]`, e.g. `sigjmp_buf`)
-        // contributes its element count here; a single `*` below
-        // forms a pointer-to-array whose deref is the C99 6.3.2.1p3
-        // decay (no load), not a dereference. Capture the count and
-        // element type before the pointer loop rewrites `t`.
-        let cast_array_elem_ty = t;
-        let cast_typedef_array = core::mem::take(&mut self.pending.typedef_base_array_size);
-        let cast_typedef_dims = core::mem::take(&mut self.pending.typedef_base_array_dims);
-        let mut cast_ptr_levels: i64 = 0;
-        // Fn-pointer lineage: if the base type came from a
-        // typedef-of-fn-pointer, parse_decl_base_type seeded
-        // `pending_fn_ptr_indirection`; the leading `*`s
-        // below add directly to that count. The abstract
-        // fn-ptr branch further down overrides this when a
-        // `(*)(args)` shape is present in the cast.
-        let mut cast_fpi = self.pending.fn_ptr_indirection.take();
-        // The cast spells a flat type; its result carries no
-        // declarator-recorded return lineage.
-        self.pending.fn_ptr_ret_indirection = 0;
-        // A function-TYPE typedef already encodes one pointer
-        // level, so the first `*` in `(F *)x` forms the
-        // pointer-to-function rather than adding a level (matching
-        // the declarator path). Take and clear the flag so it does
-        // not leak into a later declarator.
-        let mut absorb_fn_type_ptr = core::mem::take(&mut self.pending.base_is_function_type);
-        while self.lex.tk == Token::MulOp {
-            self.next()?;
-            if absorb_fn_type_ptr {
-                absorb_fn_type_ptr = false;
-            } else {
-                t += Ty::Ptr as i64;
-                cast_ptr_levels += 1;
-                if let Some(fpi) = cast_fpi {
-                    cast_fpi = Some(fpi + 1);
-                }
-            }
-            while self.lex.tk == Token::TypeQual {
-                t = apply_qual_bits(t, self.lex_qualifier_bits());
-                self.next()?;
-            }
-        }
-        // Top-level array brackets in the abstract declarator:
-        // `(int[]){...}` / `(char[N]){...}` / `(s8[2][3]){...}`.
-        // Only a compound literal (detected after the `)`) gives
-        // these meaning; `t` stays the element type and
-        // `cast_array_dims` records the counts outermost first
-        // (`-1` when the leading bracket is empty and the
-        // initializer determines it; C99 6.7.5.2 completes only
-        // the outermost dimension that way).
-        let mut cast_array_dims: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
-        while self.lex.tk == Token::Brak {
-            self.next()?;
-            if self.lex.tk == ']' {
-                if !cast_array_dims.is_empty() {
-                    return Err(self.compile_err("array type has an incomplete inner dimension"));
-                }
-                cast_array_dims.push(-1);
-                self.next()?;
-            } else {
-                cast_array_dims.push(self.parse_constant_int()?);
-                self.accept(']')?;
-            }
-        }
-        // Function-pointer cast inside a cast expression:
-        // any abstract function-pointer declarator after
-        // the base type. Common shapes:
-        //   `(int (*)(args))expr`
-        //   `(void (*)(void))expr`
-        //   `(void(*(*)(args))(void))expr`  -- function
-        //       returning function pointer
-        // c5's type representation is base + pointer-level,
-        // so we treat the entire abstract-declarator tail
-        // as a no-op pointer level. Counted-parens scan
-        // until the cast's outer `)` so even nested fp
-        // shapes consume cleanly.
-        let mut cast_fn_proto = None;
-        if self.lex.tk == '(' {
-            let (nested_ptrs, proto, dims) = self.parse_abstract_ptr_declarator(true)?;
-            // `T (*)[N]`: fold the pointee dimensions into the
-            // aggregate-backed tag so the pointee keeps its size,
-            // matching the named declarator `T (*p)[N]`.
-            if !dims.is_empty() && nested_ptrs > 0 {
-                t = self.array_agg_type(t, &dims) + nested_ptrs * (Ty::Ptr as i64);
-            } else {
-                t += nested_ptrs * (Ty::Ptr as i64);
-            }
-            // Abstract fn-ptr declarator: the inner `*`
-            // count IS the indirection from the cast's
-            // result down to the fn-ptr rvalue, plus 1
-            // (matching `Symbol::fn_ptr_indirection`).
-            if nested_ptrs > 0 {
-                cast_fpi = Some(nested_ptrs);
-            }
-            cast_fn_proto = proto;
-        }
+        let type_name = self.parse_type_name()?;
+        self.note_cast_type_name(type_name.base);
         if self.lex.tk == ')' {
             self.next()?;
         } else {
             return Err(self.compile_err("bad cast"));
         }
         if self.lex.tk == '{' {
-            // C99 6.5.2.5 compound literal: `(type){ init }`.
-            // The `(type)` parsed above is the literal's
-            // type, not a cast operator. An array typedef's
-            // dimensions complete the type from the inside:
-            // `(row[2]){...}` with `typedef int row[3]` is
-            // `int[2][3]` (C99 6.7.7); a `*` absorbed the
-            // typedef array into the pointee instead.
-            let mut literal_dims = cast_array_dims.clone();
-            if cast_typedef_array > 0 && cast_ptr_levels == 0 && cast_fn_proto.is_none() {
-                if cast_typedef_dims.is_empty() {
-                    literal_dims.push(cast_typedef_array);
-                } else {
-                    literal_dims.extend_from_slice(&cast_typedef_dims);
+            // C99 6.5.2.5 compound literal: `(type){ init }`. An array
+            // typedef's dimensions complete the type from the inside:
+            // `(row[2]){...}` with `typedef int row[3]` is `int[2][3]`
+            // (C99 6.7.7); a `*` absorbed the typedef array into the
+            // pointee instead.
+            return self.parse_block_compound_literal(type_name.ty, &type_name.dims);
+        }
+        self.parse_cast_operand(type_name)
+    }
+
+    /// The operand of a cast and its conversion to the named type
+    /// (C99 6.5.4).
+    fn parse_cast_operand(&mut self, type_name: TypeName) -> Result<(), C5Error> {
+        let t = type_name.ty;
+
+        self.expr(Token::Inc as i64)?;
+        let cast_child_ast = self.ast_acc;
+        // FP-vs-int casts emit conversion ops so the bit
+        // pattern in r13 is consistent with the new type.
+        // Same-class casts (int<->ptr, float<->double) are
+        // bit-pattern-compatible and need no conversion.
+        let target_is_fp = is_floating_scalar(t);
+        let source_is_fp = is_floating_scalar(self.ty);
+        if target_is_fp ^ source_is_fp {
+            // Mixed FP / int cast: route through ast_fpcast
+            // regardless of direction. The shared call is
+            // the AST shape for `int -> fp` *and* `fp ->
+            // int`; the actual register conversion lives in
+            // the per-arch emit.
+            self.ast_fpcast();
+        } else if !target_is_fp && !source_is_fp && !is_pointer_ty(t) && !is_pointer_ty(self.ty) {
+            // Cast to a non-pointer integer narrower than
+            // 8 bytes: re-extend the accumulator to the
+            // target storage width. c5 keeps every value
+            // sign- or zero-extended to 64 bits in the
+            // accumulator, so a cast that narrows in C99
+            // is otherwise invisible until the value lands
+            // in a typed slot.
+            //
+            // Unsigned target -> mask the high bits.
+            // Signed target  -> shift-left then arith-shift-
+            //                   right by (64 - width*8) so
+            //                   the high bit of the target
+            //                   propagates.
+            let target_size = self.size_of_type(t);
+            let source_size = self.size_of_type(self.ty);
+            if is_unsigned_ty(t) {
+                let mask: i64 = match target_size {
+                    1 => 0xff,
+                    2 => 0xffff,
+                    4 => 0xffff_ffff,
+                    _ => -1,
+                };
+                if mask != -1 {
+                    self.emit_binop_with_imm(crate::c5::ir::BinOp::And, mask);
+                }
+            } else if target_size == 1 || target_size == 2 || target_size == 4 {
+                // Signed cast: shift-pair to mask + sign-extend
+                // to the target storage width. Fires when:
+                //  * the cast genuinely narrows (target_size <
+                //    source_size) -- e.g. `(signed char)int_val`,
+                //  * source is unsigned at the same width as the
+                //    signed target -- the accumulator is zero-
+                //    extended, but `(signed char)(unsigned char)`
+                //    has to flip values >= 0x80 to negative per
+                //    C99 6.3.1.3.
+                // Skipped for same-width signed-to-signed casts
+                // (already correctly sign-extended in the
+                //  accumulator) and widening signed casts (the
+                //  source-side load did the extension).
+                let source_is_unsigned = is_unsigned_ty(self.ty);
+                let needs_extend =
+                    target_size < source_size || (target_size == source_size && source_is_unsigned);
+                if needs_extend {
+                    let bits = 64i64 - (target_size as i64) * 8;
+                    self.emit_binop_with_imm(crate::c5::ir::BinOp::Shl, bits);
+                    self.emit_binop_with_imm(crate::c5::ir::BinOp::Shr, bits);
                 }
             }
-            self.parse_block_compound_literal(t, &literal_dims)?;
-        } else {
-            self.expr(Token::Inc as i64)?;
-            let cast_child_ast = self.ast_acc;
-            // FP-vs-int casts emit conversion ops so the bit
-            // pattern in r13 is consistent with the new type.
-            // Same-class casts (int<->ptr, float<->double) are
-            // bit-pattern-compatible and need no conversion.
-            let target_is_fp = is_floating_scalar(t);
-            let source_is_fp = is_floating_scalar(self.ty);
-            if target_is_fp ^ source_is_fp {
-                // Mixed FP / int cast: route through ast_fpcast
-                // regardless of direction. The shared call is
-                // the AST shape for `int -> fp` *and* `fp ->
-                // int`; the actual register conversion lives in
-                // the per-arch emit.
-                self.ast_fpcast();
-            } else if !target_is_fp && !source_is_fp && !is_pointer_ty(t) && !is_pointer_ty(self.ty)
-            {
-                // Cast to a non-pointer integer narrower than
-                // 8 bytes: re-extend the accumulator to the
-                // target storage width. c5 keeps every value
-                // sign- or zero-extended to 64 bits in the
-                // accumulator, so a cast that narrows in C99
-                // is otherwise invisible until the value lands
-                // in a typed slot.
-                //
-                // Unsigned target -> mask the high bits.
-                // Signed target  -> shift-left then arith-shift-
-                //                   right by (64 - width*8) so
-                //                   the high bit of the target
-                //                   propagates.
-                let target_size = self.size_of_type(t);
-                let source_size = self.size_of_type(self.ty);
-                if is_unsigned_ty(t) {
-                    let mask: i64 = match target_size {
-                        1 => 0xff,
-                        2 => 0xffff,
-                        4 => 0xffff_ffff,
-                        _ => -1,
-                    };
-                    if mask != -1 {
-                        self.emit_binop_with_imm(crate::c5::ir::BinOp::And, mask);
-                    }
-                } else if target_size == 1 || target_size == 2 || target_size == 4 {
-                    // Signed cast: shift-pair to mask + sign-extend
-                    // to the target storage width. Fires when:
-                    //  * the cast genuinely narrows (target_size <
-                    //    source_size) -- e.g. `(signed char)int_val`,
-                    //  * source is unsigned at the same width as the
-                    //    signed target -- the accumulator is zero-
-                    //    extended, but `(signed char)(unsigned char)`
-                    //    has to flip values >= 0x80 to negative per
-                    //    C99 6.3.1.3.
-                    // Skipped for same-width signed-to-signed casts
-                    // (already correctly sign-extended in the
-                    //  accumulator) and widening signed casts (the
-                    //  source-side load did the extension).
-                    let source_is_unsigned = is_unsigned_ty(self.ty);
-                    let needs_extend = target_size < source_size
-                        || (target_size == source_size && source_is_unsigned);
-                    if needs_extend {
-                        let bits = 64i64 - (target_size as i64) * 8;
-                        self.emit_binop_with_imm(crate::c5::ir::BinOp::Shl, bits);
-                        self.emit_binop_with_imm(crate::c5::ir::BinOp::Shr, bits);
-                    }
-                }
-            }
-            // `(A *)e` for an array typedef `A` names a
-            // pointer-to-array; rebuild the flat tag into the
-            // aggregate-backed form (extra `*`s add levels).
-            // Pointer casts convert no bits, so only the result
-            // type changes; a following `*` / `[i]` then takes
-            // the array-decay path off the type.
-            if cast_typedef_array > 0
-                && cast_ptr_levels >= 1
-                && cast_fn_proto.is_none()
-                && cast_array_dims.is_empty()
-            {
-                let dims: alloc::vec::Vec<i64> = if cast_typedef_dims.len() >= 2 {
-                    cast_typedef_dims.clone()
-                } else {
-                    alloc::vec![cast_typedef_array]
-                };
-                let agg = self.array_agg_type(cast_array_elem_ty, &dims);
-                t = (agg + cast_ptr_levels * (Ty::Ptr as i64)) | (t & super::types::VOLATILE_MASK);
-            }
-            self.ty = t;
-            // A cast yields a value of the cast type, not a
-            // decayed-array rvalue (C99 6.5.4): drop the operand's
-            // array-decay hint so `sizeof`/`typeof` of the cast read
-            // the cast type (`typeof((T *)arr)` is `T *`, not `T[]`).
-            self.pending.last_array_decay_size = 0;
-            self.pending.last_array_decay_bytes = 0;
-            // Overwrite the AST acc with a canonical Cast
-            // node so any intermediate Binary nodes the
-            // conversion-shaping sequence pushed don't surface
-            // as the cast's value. The dropped nodes have no
-            // consumers; the SSA walker won't visit them.
-            if let Some(child) = cast_child_ast {
-                self.ast_emit_cast(child, t);
-            }
-            // Re-seed the fn-ptr chain depth from the
-            // cast destination so a unary `*` chain that
-            // follows a `(fn_t*)expr` cast (e.g.
-            // `(**(finder_type*)pVfs->pAppData)(...)`) can
-            // recognise the decay. The cast result lives
-            // in `a`, so the depth is `cast_fpi - 1`.
-            if let Some(fpi) = cast_fpi
-                && fpi > 0
-            {
-                self.pending.fn_ptr_chain_depth = fpi - 1;
-            }
-            // C99 6.5.2.2p7: a call through the cast pointer
-            // uses the cast's prototype. Override the operand's
-            // recorded callee channel so a following call
-            // narrows each argument and splits the variadic
-            // tail per the cast, whatever the operand's own
-            // declared type said. `typeof(<cast>)` recovers the
-            // same prototype through `last_fn_ptr_cast`, keyed
-            // to the cast's flat tag.
-            if let Some(pp) = cast_fn_proto {
-                self.pending.last_fn_ptr_cast = Some((
-                    t,
-                    pp.types.clone(),
-                    pp.is_variadic,
-                    cast_fpi.unwrap_or(1).max(1),
-                ));
-                self.pending.indirect_callee_is_variadic = pp.is_variadic;
-                self.pending.indirect_callee_conv =
-                    core::mem::take(&mut self.pending.attr_call_conv);
-                self.pending.indirect_callee_fn_ptr_depth = cast_fpi.unwrap_or(1).max(1);
-                self.pending.indirect_callee_ret_fn_ptr = 0;
-                self.pending.indirect_callee_params = if pp.types.is_empty() {
-                    None
-                } else {
-                    Some(pp.types)
-                };
-            }
+        }
+        self.ty = t;
+        // A cast yields a value of the cast type, not a
+        // decayed-array rvalue (C99 6.5.4): drop the operand's
+        // array-decay hint so `sizeof`/`typeof` of the cast read
+        // the cast type (`typeof((T *)arr)` is `T *`, not `T[]`).
+        self.pending.last_array_decay_size = 0;
+        self.pending.last_array_decay_bytes = 0;
+        // Overwrite the AST acc with a canonical Cast
+        // node so any intermediate Binary nodes the
+        // conversion-shaping sequence pushed don't surface
+        // as the cast's value. The dropped nodes have no
+        // consumers; the SSA walker won't visit them.
+        if let Some(child) = cast_child_ast {
+            self.ast_emit_cast(child, t);
+        }
+        // Re-seed the fn-ptr chain depth from the
+        // cast destination so a unary `*` chain that
+        // follows a `(fn_t*)expr` cast (e.g.
+        // `(**(finder_type*)pVfs->pAppData)(...)`) can
+        // recognise the decay. The cast result lives
+        // in `a`, so the depth is `cast_fpi - 1`.
+        if let Some(fpi) = type_name.fn_ptr_indirection
+            && fpi > 0
+        {
+            self.pending.fn_ptr_chain_depth = fpi - 1;
+        }
+        // C99 6.5.2.2p7: a call through the cast pointer
+        // uses the cast's prototype. Override the operand's
+        // recorded callee channel so a following call
+        // narrows each argument and splits the variadic
+        // tail per the cast, whatever the operand's own
+        // declared type said. `typeof(<cast>)` recovers the
+        // same prototype through `last_fn_ptr_cast`, keyed
+        // to the cast's flat tag.
+        if let Some(pp) = type_name.proto {
+            self.pending.last_fn_ptr_cast = Some((
+                t,
+                pp.types.clone(),
+                pp.is_variadic,
+                type_name.fn_ptr_indirection.unwrap_or(1).max(1),
+            ));
+            self.pending.indirect_callee_is_variadic = pp.is_variadic;
+            self.pending.indirect_callee_conv = core::mem::take(&mut self.pending.attr_call_conv);
+            self.pending.indirect_callee_fn_ptr_depth =
+                type_name.fn_ptr_indirection.unwrap_or(1).max(1);
+            self.pending.indirect_callee_ret_fn_ptr = 0;
+            self.pending.indirect_callee_params = if pp.types.is_empty() {
+                None
+            } else {
+                Some(pp.types)
+            };
         }
         Ok(())
     }
@@ -5784,7 +5662,7 @@ impl Compiler {
                 }
                 self.consume(b':', "`:` expected after `default`")?;
             } else {
-                let (assoc_ty, _, _) = self.parse_generic_type_name()?;
+                let assoc_ty = self.parse_type_name()?.ty;
                 let is_match = winner.is_none() && self.tags_compatible(ctrl_ty, assoc_ty);
                 if is_match {
                     winner = Some(self.lex.snapshot());
@@ -5844,9 +5722,9 @@ impl Compiler {
     /// leading keyword has been consumed.
     pub(super) fn parse_types_compatible_p(&mut self) -> Result<i64, C5Error> {
         self.consume(b'(', "`(` expected after `__builtin_types_compatible_p`")?;
-        let (a, a_dims, a_fn) = self.parse_generic_type_name()?;
+        let a = self.parse_type_name()?;
         self.consume(b',', "`,` expected between type names")?;
-        let (b, b_dims, b_fn) = self.parse_generic_type_name()?;
+        let b = self.parse_type_name()?;
         self.consume(b')', "`)` expected after `__builtin_types_compatible_p`")?;
         // C99 6.7.6.2: an array type and a pointer type are never
         // compatible, even when the element / pointee coincide -- the flat
@@ -5854,9 +5732,9 @@ impl Compiler {
         // dimensions carry the array-vs-pointer distinction a compile-time
         // element-count macro depends on. The flat tag likewise holds only
         // a function type's return type, so the signature settles the rest.
-        Ok((self.tags_compatible(a, b)
-            && array_dims_match(&a_dims, &b_dims)
-            && fn_type_match(&a_fn, &b_fn)) as i64)
+        Ok((self.tags_compatible(a.ty, b.ty)
+            && array_dims_match(&a.dims, &b.dims)
+            && fn_type_match(&a.fn_ty, &b.fn_ty)) as i64)
     }
 
     /// Flat-tag compatibility for `_Generic` association selection and
@@ -5905,7 +5783,7 @@ impl Compiler {
     ) -> Result<Option<i64>, C5Error> {
         use super::super::ir::BinOp;
         self.consume(b'(', "`(` expected after `__builtin_offsetof`")?;
-        let (ty, _, _) = self.parse_generic_type_name()?;
+        let ty = self.parse_type_name()?.ty;
         if !is_struct_ty(ty) || struct_ptr_depth(ty) != 0 {
             return Err(self.compile_err("`__builtin_offsetof` requires a struct or union type"));
         }
@@ -6020,46 +5898,28 @@ impl Compiler {
             })
     }
 
-    /// Parse a `_Generic` association type name: a base type plus any
-    /// abstract pointer, array and function decoration, matching the
-    /// `typeof(type-name)` surface. Returns the flat type tag, the
-    /// array dimensions outermost first (`-1` for an unspecified bound,
-    /// an empty list when the type name is not an array), and the
-    /// function signature when the type name denotes a function or a
-    /// pointer to one.
-    fn parse_generic_type_name(
-        &mut self,
-    ) -> Result<(i64, alloc::vec::Vec<i64>, Option<FnTypeName>), C5Error> {
+    /// C99 6.7.6 type-name: a specifier-qualifier-list and an optional
+    /// abstract declarator, entered on the first specifier and left on the
+    /// token after the declarator. The type carriers the base parse seeds
+    /// are consumed here, so none reaches a following declarator.
+    pub(super) fn parse_type_name(&mut self) -> Result<TypeName, C5Error> {
         self.pending.typeof_operand_was_array = false;
-        // Clear the array carriers so a stale value from an earlier parse
-        // cannot read as this type name's extent; the base parse below
-        // refills them for an array typedef or `typeof` base.
         self.pending.typedef_base_array_size = 0;
         self.pending.typedef_base_array_dims.clear();
         self.pending.typedef_base_zero_len = false;
-        let mut ty = self.parse_decl_base_type()?;
-        // A function-pointer / function-type base -- a typedef, or `typeof`
-        // of a function or of a function's address -- carries the pointee
-        // prototype beside the flat tag, which holds only the return type.
-        // `base_is_function_type` separates a function type from a pointer
-        // to one; both spell the same flat tag.
-        let base_is_fn = self.pending.base_is_function_type;
+        let base = self.parse_decl_base_type()?;
+        let mut ty = base;
+        let base_is_fn = core::mem::take(&mut self.pending.base_is_function_type);
         let base_variadic = matches!(self.pending.typedef_fn_proto.take(), Some((_, true)));
         let base_params = self.pending.fn_ptr_param_types.take();
         self.pending.fn_ptr_ret_indirection = 0;
-        let mut fn_ty = self
-            .pending
-            .fn_ptr_indirection
-            .take()
-            .map(|depth| FnTypeName {
-                ptr_depth: if base_is_fn { 0 } else { depth.max(0) as usize },
-                params: Some(base_params.unwrap_or_default()),
-                variadic: base_variadic,
-            });
-        // `typeof(arr)` and an array typedef leave the operand's extent on
-        // the carrier; a multi-dimensional alias also fills the dims list.
-        // The carrier gates (not the `typeof` flag): a bare array typedef
-        // in the type-name position is that array type (C99 6.7.7p3).
+        let mut fn_ptr_indirection = self.pending.fn_ptr_indirection.take();
+        let mut fn_ty = fn_ptr_indirection.map(|depth| FnTypeName {
+            ptr_depth: if base_is_fn { 0 } else { depth.max(0) as usize },
+            params: Some(base_params.unwrap_or_default()),
+            variadic: base_variadic,
+        });
+        let type_align = core::mem::take(&mut self.pending.type_align);
         let base_extent = core::mem::take(&mut self.pending.typedef_base_array_size);
         let base_dims = core::mem::take(&mut self.pending.typedef_base_array_dims);
         let base_zero_len = core::mem::take(&mut self.pending.typedef_base_zero_len);
@@ -6072,81 +5932,87 @@ impl Compiler {
         } else {
             alloc::vec![if base_extent > 0 { base_extent } else { -1 }]
         };
+        // A function-type typedef already encodes one pointer level, so
+        // the first `*` forms the pointer to function rather than adding
+        // a level, as the declarator path reads it.
+        let mut absorb_fn_type_ptr = base_is_fn;
+        let mut ptr_levels: i64 = 0;
         while self.lex.tk == Token::MulOp {
             self.next()?;
-            if !dims.is_empty() {
+            if absorb_fn_type_ptr {
+                absorb_fn_type_ptr = false;
+            } else {
                 // `A *` over an array base names a pointer to the array
-                // (C99 6.7.7p3): fold the extent into the aggregate
-                // pointee, as the declarator path does.
-                ty = self.array_agg_type(ty, &dims);
-                dims.clear();
-            }
-            ty += Ty::Ptr as i64;
-            if let Some(f) = fn_ty.as_mut() {
-                f.ptr_depth += 1;
+                // (C99 6.7.7p3): the extent folds into the pointee.
+                if !dims.is_empty() {
+                    ty = self.array_agg_type(ty, &dims);
+                    dims.clear();
+                }
+                ty = add_ptr_level(ty);
+                ptr_levels += 1;
+                if let Some(f) = fn_ty.as_mut() {
+                    f.ptr_depth += 1;
+                }
+                if let Some(fpi) = fn_ptr_indirection.as_mut() {
+                    *fpi += 1;
+                }
             }
             while self.lex.tk == Token::TypeQual {
+                ty = apply_qual_bits(ty, self.lex_qualifier_bits());
                 self.next()?;
             }
         }
-        // Abstract function declarator (C99 6.7.6): `T (*)(params)` names a
-        // pointer to function, `T (params)` the function type itself. The
-        // base type parsed above is the return type; badc spells a function
-        // type as the return type at one pointer level, so the flat tag
-        // takes one level for the function plus one per pointer beyond the
-        // first.
-        if fn_ty.is_none() && self.lex.tk == '(' {
-            // The pointee dimensions of a `T (*)[N]` shape ride along; a
-            // function-pointer shape has none.
-            let (levels, proto, ptr_dims) = if self.lex.peek_after_whitespace(b'*') {
+        // Abstract function declarator (C99 6.7.6): `T (*)(params)` names
+        // a pointer to function, `T (params)` the function type itself,
+        // spelled as the return type at one pointer level; `T (*)[N]` a
+        // pointer to an array, whose pointee keeps its dimensions.
+        let mut proto = None;
+        if self.lex.tk == '(' {
+            let (levels, pp, ptr_dims) = if self.lex.peek_after_whitespace(b'*') {
                 self.parse_abstract_ptr_declarator(true)?
+            } else if fn_ty.is_none() {
+                self.next()?;
+                (
+                    0,
+                    Some(self.parse_type_name_params()?),
+                    alloc::vec::Vec::new(),
+                )
             } else {
-                self.next()?; // consume `(`
-                // C99 6.2.1p4: parameter names in this abstract function
-                // declarator (a cast / sizeof type name) have no scope.
-                // Record their types without binding the names, so one
-                // matching an enclosing local is not shadowed (which would
-                // corrupt the single-slot shadow the enclosing scope
-                // restores from).
-                let saved = self.pending.parsing_fn_ptr_proto;
-                self.pending.parsing_fn_ptr_proto = true;
-                let pp = self.parse_function_params()?;
-                self.pending.parsing_fn_ptr_proto = saved;
-                (0, Some(pp), alloc::vec::Vec::new())
+                (0, None, alloc::vec::Vec::new())
             };
-            if let Some(pp) = proto {
+            if let Some(pp) = pp {
                 ty += levels.max(1) * Ty::Ptr as i64;
                 dims.clear();
                 fn_ty = Some(FnTypeName {
                     ptr_depth: levels as usize,
-                    params: pp.is_prototyped.then_some(pp.types),
+                    params: pp.is_prototyped.then(|| pp.types.clone()),
                     variadic: pp.is_variadic,
                 });
+                proto = Some(pp);
             } else if !ptr_dims.is_empty() && levels > 0 {
-                // `T (*)[N]`: fold the pointee dimensions into the tag so the
-                // pointee keeps its size, as the cast path does. An array
-                // typedef base contributes the inner dimensions (C99
-                // 6.7.7p3: `A (*)[N]` is a pointer to `N` arrays of `A`).
                 let mut pointee = ptr_dims;
                 pointee.append(&mut dims);
                 ty = self.array_agg_type(ty, &pointee) + levels * Ty::Ptr as i64;
             } else {
                 ty += levels * Ty::Ptr as i64;
             }
+            if levels > 0 {
+                fn_ptr_indirection = Some(levels);
+            }
+            ptr_levels += levels;
         }
-        // Abstract array declarator `T []` / `T [N]` (C99 6.7.6). An
-        // omitted bound is an incomplete array type, which C99 6.7.5.2p6
-        // makes compatible with any bound for the same element type.
-        // These bounds are outer; an array typedef base supplies the
-        // inner ones, as the `typeof` type-name reader orders them.
+        // Abstract array declarator `T []` / `T [N]`. Only the outermost
+        // bound may be omitted (C99 6.7.5.2p1: the element type shall be
+        // complete); an array typedef base supplies the inner bounds.
         let mut outer = alloc::vec::Vec::new();
         while self.lex.tk == Token::Brak {
             self.next()?;
             let n = if self.lex.tk == ']' {
+                if !outer.is_empty() {
+                    return Err(self.compile_err("array type has an incomplete inner dimension"));
+                }
                 -1
             } else {
-                // A type dimension: masked so `sizeof(int[h])` with a
-                // const local `h` stays non-constant, as in gcc.
                 let n = self.with_const_object_fold_masked(|c| c.parse_constant_int())?;
                 if n < 0 {
                     return Err(
@@ -6165,7 +6031,27 @@ impl Compiler {
             outer.append(&mut dims);
             dims = outer;
         }
-        Ok((ty, dims, fn_ty))
+        Ok(TypeName {
+            base,
+            ty,
+            dims,
+            ptr_levels,
+            fn_ty,
+            proto,
+            fn_ptr_indirection,
+            type_align,
+        })
+    }
+
+    /// The parameter list of an abstract function declarator, entered
+    /// after its `(`. C99 6.2.1p4: parameter names in a type name have no
+    /// scope, so their types are recorded without binding the names.
+    fn parse_type_name_params(&mut self) -> Result<super::function::ParsedParams, C5Error> {
+        let saved = self.pending.parsing_fn_ptr_proto;
+        self.pending.parsing_fn_ptr_proto = true;
+        let pp = self.parse_function_params();
+        self.pending.parsing_fn_ptr_proto = saved;
+        pp
     }
 
     /// Advance the lexer past one generic association's expression to
@@ -6482,6 +6368,31 @@ struct SubscriptIndex {
     idx_ast: Option<super::super::ast::ExprId>,
     multi_dim_stride: i64,
     fn_ptr_chain_depth: i64,
+}
+
+/// A C99 6.7.6 type name as its consumers read it.
+pub(super) struct TypeName {
+    /// The specifier-qualifier-list's type, before the declarator.
+    pub base: i64,
+    /// The named type: an array type name carries its element type here
+    /// and its bounds in `dims`; a pointer to an array carries the
+    /// aggregate-backed pointee.
+    pub ty: i64,
+    /// Bounds of an array type name, outermost first, `-1` for an
+    /// unspecified bound; empty for a non-array.
+    pub dims: alloc::vec::Vec<i64>,
+    /// Pointer levels the declarator added.
+    pub ptr_levels: i64,
+    /// The function type the name denotes or points to.
+    pub fn_ty: Option<FnTypeName>,
+    /// The parameter list of a `(*)(params)` declarator, for a call
+    /// through a cast value.
+    pub proto: Option<super::function::ParsedParams>,
+    /// Function-pointer lineage of the named type, as
+    /// `Symbol::fn_ptr_indirection` counts it.
+    pub fn_ptr_indirection: Option<i64>,
+    /// Explicit alignment a typedef base carries (GNU `aligned(N)`).
+    pub type_align: i64,
 }
 
 /// A function type named by a type name. The flat type tag carries only

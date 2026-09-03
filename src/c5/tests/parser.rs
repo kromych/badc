@@ -2940,3 +2940,29 @@ fn static_initializer_diagnostic_names_what_failed() {
         "use of undeclared identifier `getchar` -- try `#include <stdio.h>`",
     );
 }
+
+#[test]
+fn sizeof_of_an_incomplete_array_type_name_is_rejected() {
+    // C99 6.5.3.4p1: `sizeof` does not apply to an incomplete type. An
+    // array type name with an unspecified bound is one, written out or
+    // through a typedef; a pointer to it is complete, and `_Alignof`
+    // reads the element's alignment.
+    expect_compile_error(
+        "int main(void) { return (int)sizeof(int[]); }",
+        "applied to an incomplete type",
+    );
+    expect_compile_error(
+        "typedef int open[];\n\
+         int main(void) { return (int)sizeof(open); }",
+        "applied to an incomplete type",
+    );
+    Compiler::new(
+        "typedef int open[];\n\
+         int main(void) {\n\
+             return (int)(sizeof(open *) + sizeof(int (*)[]) + _Alignof(open)) - 20;\n\
+         }"
+        .to_string(),
+    )
+    .compile()
+    .expect("a pointer to an incomplete array is a complete type");
+}

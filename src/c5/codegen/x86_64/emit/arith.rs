@@ -653,113 +653,18 @@ pub(super) fn emit_binop(
 ) -> bool {
     let lhs_place = place_of(alloc, lhs);
     let rhs_place = place_of(alloc, rhs);
-    // FP arithmetic: scalar f64 in xmm. `op dst, rhs` overwrites
-    // dst, so rhs must be captured into a register distinct from
-    // dst before lhs is staged into dst. The allocator can color
-    // rhs to the same xmm as dst; `materialize_fp` returns an
-    // `FpReg` source in place without copying, so staging lhs into
-    // dst would then clobber rhs. Capture rhs first, forcing a copy
-    // into the second FP scratch when it aliases dst.
     if let Some(arith) = fp_arith_enc_for(op, alloc.is_f32(v)) {
-        let Some(dd) = fp_or_spill_dst(dst, frame) else {
-            return fail("Fbinop: dst not fp reg / spill");
-        };
-        let dm = match rhs_place {
-            Place::FpReg(r) if r == dd.0 => {
-                emit_movapd_xmm_xmm(code, Reg(frame.fp_scratch[1]), dd);
-                Reg(frame.fp_scratch[1])
-            }
-            _ => match materialize_fp(code, rhs_place, Reg(frame.fp_scratch[1]), frame) {
-                Some(r) => r,
-                None => return fail("Fbinop: rhs not fp reg / spill / int reg"),
-            },
-        };
-        let Some(dn) = materialize_fp(code, lhs_place, dd, frame) else {
-            return fail("Fbinop: lhs not fp reg / spill / int reg");
-        };
-        if dn.0 != dd.0 {
-            emit_movapd_xmm_xmm(code, dd, dn);
-        }
-        arith(code, dd, dm);
-        fp_spill_dst_to_slot(code, dst, dd, frame);
-        return true;
+        return emit_fp_binop(code, arith, dst, lhs_place, rhs_place, frame);
     }
-    // FP comparison: ucomisd + setcc + (optional parity-fix
-    // setcc + AND/OR) on the result reg. `ucomisd` sets ZF / CF
-    // / PF; PF=1 signals an unordered (NaN) compare. C99 6.5.9p3
-    // / 6.5.8p6 require `==`, `<`, `<=` to yield 0 on NaN and
-    // `!=` to yield 1, so the cc-only `setb` / `sete` / `setbe`
-    // / `setne` paths get an explicit AND-with-`setnp` /
-    // OR-with-`setp` fixup.
     if let Some((cc, nan_fix)) = fp_compare_cc(op) {
-        let Some(dn) = materialize_fp(code, lhs_place, Reg(frame.fp_scratch[0]), frame) else {
-            return fail("Fcmp: lhs not fp reg / spill / int reg");
-        };
-        let Some(dm) = materialize_fp(code, rhs_place, Reg(frame.fp_scratch[1]), frame) else {
-            return fail("Fcmp: rhs not fp reg / spill / int reg");
-        };
-        // When a fused branch reads the flags, `Flt` / `Fle` compare
-        // with the operands swapped so the branch takes the
-        // parity-clean `A` / `Ae` shapes (see `fused_fp_swaps_operands`).
-        let fused = alloc.branch_fused.get(v as usize).copied().unwrap_or(false);
-        let (dn, dm) = if fused && fused_fp_swaps_operands(op) {
-            (dm, dn)
-        } else {
-            (dn, dm)
-        };
-        // The compare width follows the operands' precision (C99
-        // 6.3.1.8): two f32 operands use `ucomiss`, else `ucomisd`.
-        if alloc.is_f32(lhs) || alloc.is_f32(rhs) {
-            emit_ucomiss(code, dn, dm);
-        } else {
-            emit_ucomisd(code, dn, dm);
-        }
-        if fused {
-            return true;
-        }
-        let Some(rd) = int_or_spill_dst(dst) else {
-            return fail("Fcmp: dst not int reg / spill");
-        };
-        emit_setcc_r8(code, cc, rd);
-        emit_movzx_r_r8(code, rd, rd);
-        match nan_fix {
-            FpCmpNanFix::None => {}
-            FpCmpNanFix::AndNotP | FpCmpNanFix::OrP => {
-                // Need a 64-bit scratch distinct from `rd` for the
-                // parity-fix setcc. r10 / r11 are reserved outside both
-                // allocator banks and hold nothing live on the Fcmp
-                // path (only the two FP operands, both in xmm), so one
-                // of them is always disjoint from `rd` -- a caller-saved
-                // pick can come up empty under saturation.
-                let scratch = if rd.0 == SCRATCH_R10.0 {
-                    SCRATCH_R11
-                } else {
-                    SCRATCH_R10
-                };
-                let fix_cc = if matches!(nan_fix, FpCmpNanFix::AndNotP) {
-                    super::encode::Cc::Np
-                } else {
-                    super::encode::Cc::P
-                };
-                emit_setcc_r8(code, fix_cc, scratch);
-                emit_movzx_r_r8(code, scratch, scratch);
-                if matches!(nan_fix, FpCmpNanFix::AndNotP) {
-                    emit_rr(code, Mnem::And, 8, rd, scratch);
-                } else {
-                    emit_rr(code, Mnem::Or, 8, rd, scratch);
-                }
-            }
-        }
-        spill_dst_to_slot(code, dst, rd, frame);
-        return true;
+        return emit_fp_compare(code, op, v, dst, lhs, rhs, cc, nan_fix, alloc, frame);
     }
     let Some(rd) = int_or_spill_dst(dst) else {
         return fail("Binop: dst not int reg / spill");
     };
-    // sxtw / movsx fold for the walker-shape sign-narrow pair
-    // `Binop(Shl, X, Imm(K)); Binop(Shr, _, Imm(K))`. The
-    // allocator marked this Shr and stashed the K (32 / 48 / 56);
-    // emit one movsxd / movsx instead of two shifts.
+    // The walker's sign-narrow pair `Binop(Shl, X, Imm(K)); Binop(Shr, _,
+    // Imm(K))`: the allocator marked this Shr and stashed K (32 / 48 / 56),
+    // so one movsxd / movsx replaces the two shifts.
     let sxtw_source = alloc
         .sxtw_source
         .get(v as usize)
@@ -780,47 +685,187 @@ pub(super) fn emit_binop(
         spill_dst_to_slot(code, dst, rd, frame);
         return true;
     }
-    // A spilled second operand is read in place through the op's
-    // memory-source form, so it needs no scratch register. The prior
-    // path staged a spilled rhs into a fixed scratch (rcx when rd was
-    // r10), which clobbered a live lhs already resident in that
-    // register under high pressure. Shifts are excluded: x86 reads the
-    // shift count from cl, not from a memory operand.
-    if let Place::Spill(rhs_slot) = rhs_place {
-        let (rhs_base, rhs_off) = spill_slot_addr(frame, rhs_slot);
-        let cmp_cc = int_cmp_cc(op);
-        let arith = matches!(
-            op,
-            BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::And | BinOp::Or | BinOp::Xor
-        );
-        if arith || cmp_cc.is_some() {
-            let Some(rn) = int_operand_into_rd(code, lhs_place, rd, frame) else {
-                return fail("Binop: lhs not int reg / spill");
-            };
-            if let Some(cc) = cmp_cc {
-                emit_rm(code, Mnem::Cmp, cmp_width(alloc, v), rn, rhs_base, rhs_off);
-                if finish_int_cmp(code, v, cc, rd, alloc) {
-                    return true;
-                }
+    if let Place::Spill(rhs_slot) = rhs_place
+        && let Some(done) =
+            emit_binop_spilled_rhs(code, op, v, dst, rd, lhs_place, rhs_slot, alloc, frame)
+    {
+        return done;
+    }
+    emit_int_binop(code, op, v, dst, rd, lhs_place, rhs_place, alloc, frame)
+}
+
+/// Scalar FP arithmetic in xmm. `op dst, rhs` overwrites dst, so rhs is
+/// captured into a register distinct from dst before lhs is staged into
+/// dst: the allocator can color rhs to dst's xmm, and `materialize_fp`
+/// returns an `FpReg` source in place, so rhs is copied into the second FP
+/// scratch when it aliases dst.
+fn emit_fp_binop(
+    code: &mut Vec<u8>,
+    arith: fn(&mut Vec<u8>, Reg, Reg),
+    dst: Place,
+    lhs_place: Place,
+    rhs_place: Place,
+    frame: Frame,
+) -> bool {
+    let Some(dd) = fp_or_spill_dst(dst, frame) else {
+        return fail("Fbinop: dst not fp reg / spill");
+    };
+    let dm = match rhs_place {
+        Place::FpReg(r) if r == dd.0 => {
+            emit_movapd_xmm_xmm(code, Reg(frame.fp_scratch[1]), dd);
+            Reg(frame.fp_scratch[1])
+        }
+        _ => match materialize_fp(code, rhs_place, Reg(frame.fp_scratch[1]), frame) {
+            Some(r) => r,
+            None => return fail("Fbinop: rhs not fp reg / spill / int reg"),
+        },
+    };
+    let Some(dn) = materialize_fp(code, lhs_place, dd, frame) else {
+        return fail("Fbinop: lhs not fp reg / spill / int reg");
+    };
+    if dn.0 != dd.0 {
+        emit_movapd_xmm_xmm(code, dd, dn);
+    }
+    arith(code, dd, dm);
+    fp_spill_dst_to_slot(code, dst, dd, frame);
+    true
+}
+
+/// FP comparison: `ucomisd` / `ucomiss` sets ZF / CF / PF, PF=1 signalling
+/// an unordered (NaN) compare. C99 6.5.9p3 / 6.5.8p6 require `==`, `<`,
+/// `<=` to yield 0 on NaN and `!=` to yield 1, so the cc-only `setcc`
+/// takes an explicit AND-with-`setnp` / OR-with-`setp` fixup. A fused
+/// branch reads the flags instead.
+#[allow(clippy::too_many_arguments)]
+fn emit_fp_compare(
+    code: &mut Vec<u8>,
+    op: BinOp,
+    v: super::super::ir::ValueId,
+    dst: Place,
+    lhs: u32,
+    rhs: u32,
+    cc: Cc,
+    nan_fix: FpCmpNanFix,
+    alloc: &Allocation,
+    frame: Frame,
+) -> bool {
+    let Some(dn) = materialize_fp(code, place_of(alloc, lhs), Reg(frame.fp_scratch[0]), frame)
+    else {
+        return fail("Fcmp: lhs not fp reg / spill / int reg");
+    };
+    let Some(dm) = materialize_fp(code, place_of(alloc, rhs), Reg(frame.fp_scratch[1]), frame)
+    else {
+        return fail("Fcmp: rhs not fp reg / spill / int reg");
+    };
+    // A fused `Flt` / `Fle` compares with the operands swapped so the
+    // branch takes the parity-clean `A` / `Ae` shapes.
+    let fused = alloc.branch_fused.get(v as usize).copied().unwrap_or(false);
+    let (dn, dm) = if fused && fused_fp_swaps_operands(op) {
+        (dm, dn)
+    } else {
+        (dn, dm)
+    };
+    // The compare width follows the operands' precision (C99 6.3.1.8).
+    if alloc.is_f32(lhs) || alloc.is_f32(rhs) {
+        emit_ucomiss(code, dn, dm);
+    } else {
+        emit_ucomisd(code, dn, dm);
+    }
+    if fused {
+        return true;
+    }
+    let Some(rd) = int_or_spill_dst(dst) else {
+        return fail("Fcmp: dst not int reg / spill");
+    };
+    emit_setcc_r8(code, cc, rd);
+    emit_movzx_r_r8(code, rd, rd);
+    match nan_fix {
+        FpCmpNanFix::None => {}
+        FpCmpNanFix::AndNotP | FpCmpNanFix::OrP => {
+            // r10 / r11 hold nothing live on this path (both operands are
+            // in xmm), so one of them is disjoint from `rd`.
+            let scratch = if rd.0 == SCRATCH_R10.0 {
+                SCRATCH_R11
             } else {
-                if rd.0 != rn.0 {
-                    emit_mov_rr(code, rd, rn);
-                }
-                match op {
-                    BinOp::Add => emit_rm(code, Mnem::Add, 8, rd, rhs_base, rhs_off),
-                    BinOp::Sub => emit_rm(code, Mnem::Sub, 8, rd, rhs_base, rhs_off),
-                    BinOp::Mul => emit_imul_r_mem(code, rd, rhs_base, rhs_off),
-                    BinOp::And => emit_rm(code, Mnem::And, 8, rd, rhs_base, rhs_off),
-                    BinOp::Or => emit_rm(code, Mnem::Or, 8, rd, rhs_base, rhs_off),
-                    BinOp::Xor => emit_rm(code, Mnem::Xor, 8, rd, rhs_base, rhs_off),
-                    _ => unreachable!(),
-                }
-            }
-            spill_dst_to_slot(code, dst, rd, frame);
-            return true;
+                SCRATCH_R10
+            };
+            let and_not_p = matches!(nan_fix, FpCmpNanFix::AndNotP);
+            let fix_cc = if and_not_p { Cc::Np } else { Cc::P };
+            emit_setcc_r8(code, fix_cc, scratch);
+            emit_movzx_r_r8(code, scratch, scratch);
+            let mnem = if and_not_p { Mnem::And } else { Mnem::Or };
+            emit_rr(code, mnem, 8, rd, scratch);
         }
     }
+    spill_dst_to_slot(code, dst, rd, frame);
+    true
+}
 
+/// A spilled second operand of an arithmetic or compare op is read in
+/// place through the op's memory-source form, so it needs no scratch
+/// register (a scratch could hold a live lhs under high pressure). Shifts
+/// are excluded: x86 reads the shift count from cl. `None` when the op
+/// takes the register path.
+#[allow(clippy::too_many_arguments)]
+fn emit_binop_spilled_rhs(
+    code: &mut Vec<u8>,
+    op: BinOp,
+    v: super::super::ir::ValueId,
+    dst: Place,
+    rd: Reg,
+    lhs_place: Place,
+    rhs_slot: u32,
+    alloc: &Allocation,
+    frame: Frame,
+) -> Option<bool> {
+    let (rhs_base, rhs_off) = spill_slot_addr(frame, rhs_slot);
+    let cmp_cc = int_cmp_cc(op);
+    let arith = matches!(
+        op,
+        BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::And | BinOp::Or | BinOp::Xor
+    );
+    if !arith && cmp_cc.is_none() {
+        return None;
+    }
+    let Some(rn) = int_operand_into_rd(code, lhs_place, rd, frame) else {
+        return Some(fail("Binop: lhs not int reg / spill"));
+    };
+    if let Some(cc) = cmp_cc {
+        emit_rm(code, Mnem::Cmp, cmp_width(alloc, v), rn, rhs_base, rhs_off);
+        if finish_int_cmp(code, v, cc, rd, alloc) {
+            return Some(true);
+        }
+    } else {
+        if rd.0 != rn.0 {
+            emit_mov_rr(code, rd, rn);
+        }
+        match op {
+            BinOp::Add => emit_rm(code, Mnem::Add, 8, rd, rhs_base, rhs_off),
+            BinOp::Sub => emit_rm(code, Mnem::Sub, 8, rd, rhs_base, rhs_off),
+            BinOp::Mul => emit_imul_r_mem(code, rd, rhs_base, rhs_off),
+            BinOp::And => emit_rm(code, Mnem::And, 8, rd, rhs_base, rhs_off),
+            BinOp::Or => emit_rm(code, Mnem::Or, 8, rd, rhs_base, rhs_off),
+            BinOp::Xor => emit_rm(code, Mnem::Xor, 8, rd, rhs_base, rhs_off),
+            _ => unreachable!(),
+        }
+    }
+    spill_dst_to_slot(code, dst, rd, frame);
+    Some(true)
+}
+
+/// The two-operand integer path: stage lhs into rd, then `OP rd, rm`.
+#[allow(clippy::too_many_arguments)]
+fn emit_int_binop(
+    code: &mut Vec<u8>,
+    op: BinOp,
+    v: super::super::ir::ValueId,
+    dst: Place,
+    rd: Reg,
+    lhs_place: Place,
+    rhs_place: Place,
+    alloc: &Allocation,
+    frame: Frame,
+) -> bool {
     // Stage lhs into rd first, so the two-operand ops below can
     // `op rd, rm` and land the result in rd. A spilled rhs for an
     // arithmetic or compare op was already handled in place above; the

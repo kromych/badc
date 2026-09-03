@@ -256,8 +256,6 @@ pub(super) fn emit_inst(
         conv_targets,
         extern_tls_names,
         tls_total_size,
-        param_from_home,
-        param_plan,
         ..
     } = *fcx;
     let cx = &mut *out.cx;
@@ -278,133 +276,7 @@ pub(super) fn emit_inst(
             let _ = slot;
             true
         }
-        Inst::ParamRef { idx, kind } => {
-            // Materialise the i-th host-ABI argument into the
-            // allocator's chosen `Place`, sign-extending the low
-            // `kind` bytes per C99 6.3.1.3 so the value held in the
-            // register is canonically 64-bit-sign-extended.
-            //
-            // The incoming argument register (rdi rsi rdx rcx r8 r9
-            // on System V; rcx rdx r8 r9 on Win64) is not always
-            // pristine at this IR position: when an earlier-emitted
-            // `ParamRef` wrote to this parameter's argument register
-            // (the allocator packed sequentially-live parameters into
-            // one register), reading it would take the earlier
-            // parameter's value. `param_from_home` marks those at-risk
-            // parameters; they are non-elidable, so the prologue
-            // spilled them to their c5 cdecl home cell at
-            // `[rbp + (idx+1)*16]`, which survives the clobber. The
-            // unmarked parameters read the argument register directly.
-            // Narrow-load promotion downstream can then collapse
-            // `Inst::Extend` to a plain copy when the kinds match.
-            let i = *idx as usize;
-            // Floating-point parameter (C99 6.2.5p10): its value arrives
-            // in an FP argument register named by the plan. Read that
-            // xmm register into the allocator's FP dst (FpReg or Spill).
-            // A `float` (`LoadKind::F32`) occupies the low 32 bits of the
-            // s-register; the body re-narrows it through the f32 store
-            // the walker seeded. A scalar copy preserves the relevant
-            // bits for either width.
-            if matches!(kind, LoadKind::F32 | LoadKind::F64) {
-                // An at-risk FP parameter (its incoming xmm overwritten by
-                // an earlier FP `ParamRef`'s destination, per
-                // `param_home_clobber_set`) reads its prologue-spilled c5
-                // cdecl home cell instead of the clobbered register. The
-                // prologue stored the cell from the pristine argument
-                // register before any body instruction ran.
-                if param_from_home.get(i).copied().unwrap_or(false) {
-                    let home_off = c5_slot_to_fp_offset(
-                        *idx as i64 + 2,
-                        frame.param_cell_stride,
-                        frame.canary_bytes,
-                    ) as i32;
-                    let load = |code: &mut Vec<u8>, r: Reg| {
-                        if matches!(kind, LoadKind::F32) {
-                            emit_movss_xmm_mem(code, r, Reg::RBP, home_off);
-                        } else {
-                            emit_movsd_xmm_mem(code, r, Reg::RBP, home_off);
-                        }
-                    };
-                    match dst {
-                        Place::FpReg(r) => load(code, Reg(r)),
-                        Place::Spill(_) => {
-                            load(code, Reg(frame.fp_scratch[0]));
-                            fp_spill_dst_to_slot(code, dst, Reg(frame.fp_scratch[0]), frame);
-                        }
-                        _ => return fail("ParamRef: FP param dst not fp reg / spill"),
-                    }
-                    return true;
-                }
-                let Some(super::ArgPlacement::FpReg(x)) = param_plan.get(i).copied() else {
-                    return fail("ParamRef: FP param not in an FP argument register");
-                };
-                let xmm = Reg(x);
-                match dst {
-                    Place::FpReg(r) => {
-                        if r != x {
-                            emit_movapd_xmm_xmm(code, Reg(r), xmm);
-                        }
-                    }
-                    Place::Spill(_) => fp_spill_dst_to_slot(code, dst, xmm, frame),
-                    _ => return fail("ParamRef: FP param dst not fp reg / spill"),
-                }
-                return true;
-            }
-            let from_home = param_from_home.get(i).copied().unwrap_or(false);
-            let home_off =
-                c5_slot_to_fp_offset(*idx as i64 + 2, frame.param_cell_stride, frame.canary_bytes)
-                    as i32;
-            // The incoming integer register comes from the plan, not the
-            // absolute parameter index: a floating-point parameter
-            // earlier in the list consumes an FP register and does not
-            // shift the integer bank, so the i-th declared parameter is
-            // not the i-th integer register. A stack-passed integer
-            // parameter has no incoming register and is always read from
-            // its prologue-filled home cell.
-            let arg_reg = match param_plan.get(i).copied() {
-                Some(super::ArgPlacement::IntReg(r)) => Reg(r),
-                _ if from_home => Reg(0),
-                _ => return fail("ParamRef: int param has no incoming integer register"),
-            };
-            // The caller passes the raw 64-bit value, so an I8/I16
-            // conversion always runs; an I32 extend touches only
-            // bits 32..63 and is skipped when no consumer reads them.
-            let high_dead = !alloc.high_observed.get(v as usize).copied().unwrap_or(true);
-            let materialize = |code: &mut Vec<u8>, rd: Reg| {
-                if from_home {
-                    match kind {
-                        LoadKind::I8 => {
-                            super::encode::emit_movsx_r_mem8(code, rd, Reg::RBP, home_off)
-                        }
-                        LoadKind::I16 => {
-                            super::encode::emit_movsx_r_mem16(code, rd, Reg::RBP, home_off)
-                        }
-                        LoadKind::I32 if !high_dead => {
-                            super::encode::emit_movsxd_r_mem(code, rd, Reg::RBP, home_off)
-                        }
-                        _ => emit_mov_r_mem(code, rd, Reg::RBP, home_off),
-                    }
-                } else {
-                    match kind {
-                        LoadKind::I8 => super::encode::emit_movsx_r_r8(code, rd, arg_reg),
-                        LoadKind::I16 => super::encode::emit_movsx_r_r16(code, rd, arg_reg),
-                        LoadKind::I32 if !high_dead => {
-                            super::encode::emit_movsxd_r_r(code, rd, arg_reg)
-                        }
-                        _ => emit_mov_rr(code, rd, arg_reg),
-                    }
-                }
-            };
-            match dst {
-                Place::IntReg(r) => materialize(code, Reg(r)),
-                Place::Spill(_) => {
-                    materialize(code, SCRATCH_R10);
-                    spill_dst_to_slot(code, dst, SCRATCH_R10, frame);
-                }
-                _ => return fail("ParamRef: dst not int reg / spill"),
-            }
-            true
-        }
+        Inst::ParamRef { idx, kind } => emit_param_ref(code, *idx, *kind, dst, v, fcx),
         Inst::Imm(value) => {
             let Some(rd) = int_or_spill_dst(dst) else {
                 return fail("Imm: dst not int reg / spill");
@@ -729,4 +601,108 @@ pub(super) fn emit_inst(
             false
         }
     }
+}
+
+/// Materialise the i-th host-ABI parameter into its `Place`, converting the
+/// low `kind` bytes per C99 6.3.1.3 so the register holds the canonical
+/// 64-bit sign-extended value. The incoming argument register is not always
+/// pristine at this position: an earlier `ParamRef` may have overwritten it
+/// (the allocator packs sequentially-live parameters into one register), so
+/// `param_from_home` marks the parameters that read the c5 cdecl home cell
+/// the prologue spilled at `[rbp + (idx+1)*16]` instead. The plan names the
+/// incoming register: an earlier FP parameter does not shift the integer
+/// bank, and a stack-passed parameter always reads its home cell.
+fn emit_param_ref(
+    code: &mut Vec<u8>,
+    idx: u32,
+    kind: LoadKind,
+    dst: Place,
+    v: super::super::ir::ValueId,
+    fcx: &FnCtx,
+) -> bool {
+    let FnCtx {
+        alloc,
+        frame,
+        param_from_home,
+        param_plan,
+        ..
+    } = *fcx;
+    let i = idx as usize;
+    let from_home = param_from_home.get(i).copied().unwrap_or(false);
+    let home_off =
+        c5_slot_to_fp_offset(idx as i64 + 2, frame.param_cell_stride, frame.canary_bytes) as i32;
+    if matches!(kind, LoadKind::F32 | LoadKind::F64) {
+        // A `float` occupies the low 32 bits of the xmm; the body re-narrows
+        // it through the f32 store the walker seeded, so a scalar copy
+        // serves either width.
+        let load_home = |code: &mut Vec<u8>, r: Reg| {
+            if matches!(kind, LoadKind::F32) {
+                emit_movss_xmm_mem(code, r, Reg::RBP, home_off);
+            } else {
+                emit_movsd_xmm_mem(code, r, Reg::RBP, home_off);
+            }
+        };
+        if from_home {
+            match dst {
+                Place::FpReg(r) => load_home(code, Reg(r)),
+                Place::Spill(_) => {
+                    load_home(code, Reg(frame.fp_scratch[0]));
+                    fp_spill_dst_to_slot(code, dst, Reg(frame.fp_scratch[0]), frame);
+                }
+                _ => return fail("ParamRef: FP param dst not fp reg / spill"),
+            }
+            return true;
+        }
+        let Some(super::ArgPlacement::FpReg(x)) = param_plan.get(i).copied() else {
+            return fail("ParamRef: FP param not in an FP argument register");
+        };
+        let xmm = Reg(x);
+        match dst {
+            Place::FpReg(r) => {
+                if r != x {
+                    emit_movapd_xmm_xmm(code, Reg(r), xmm);
+                }
+            }
+            Place::Spill(_) => fp_spill_dst_to_slot(code, dst, xmm, frame),
+            _ => return fail("ParamRef: FP param dst not fp reg / spill"),
+        }
+        return true;
+    }
+    let arg_reg = match param_plan.get(i).copied() {
+        Some(super::ArgPlacement::IntReg(r)) => Reg(r),
+        _ if from_home => Reg(0),
+        _ => return fail("ParamRef: int param has no incoming integer register"),
+    };
+    // The caller passes the raw 64-bit value, so an I8/I16 conversion
+    // always runs; an I32 extend touches only bits 32..63 and is skipped
+    // when no consumer reads them.
+    let high_dead = !alloc.high_observed.get(v as usize).copied().unwrap_or(true);
+    let materialize = |code: &mut Vec<u8>, rd: Reg| {
+        if from_home {
+            match kind {
+                LoadKind::I8 => super::encode::emit_movsx_r_mem8(code, rd, Reg::RBP, home_off),
+                LoadKind::I16 => super::encode::emit_movsx_r_mem16(code, rd, Reg::RBP, home_off),
+                LoadKind::I32 if !high_dead => {
+                    super::encode::emit_movsxd_r_mem(code, rd, Reg::RBP, home_off)
+                }
+                _ => emit_mov_r_mem(code, rd, Reg::RBP, home_off),
+            }
+        } else {
+            match kind {
+                LoadKind::I8 => super::encode::emit_movsx_r_r8(code, rd, arg_reg),
+                LoadKind::I16 => super::encode::emit_movsx_r_r16(code, rd, arg_reg),
+                LoadKind::I32 if !high_dead => super::encode::emit_movsxd_r_r(code, rd, arg_reg),
+                _ => emit_mov_rr(code, rd, arg_reg),
+            }
+        }
+    };
+    match dst {
+        Place::IntReg(r) => materialize(code, Reg(r)),
+        Place::Spill(_) => {
+            materialize(code, SCRATCH_R10);
+            spill_dst_to_slot(code, dst, SCRATCH_R10, frame);
+        }
+        _ => return fail("ParamRef: dst not int reg / spill"),
+    }
+    true
 }

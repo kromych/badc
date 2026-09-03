@@ -1,35 +1,13 @@
 use super::*;
 
-/// Place every argument into its System V / Win64 target slot in
-/// an order that survives source / target overlaps. With the
-/// allocator's caller-saved bank covering the arg registers
-/// (rdi rsi rdx rcx r8 r9 / rcx rdx r8 r9), an argument's value
-/// can sit in another argument's target arg register; a naive
-/// sequential per-arg `mov target_i, src_i` would clobber a
-/// still-needed source. Resolution uses the classical
-/// parallel-copy algorithm: drain leaves (target not a source of
-/// any other pending move) first; break the residual cycles with
-/// an `xchg`. Pass ordering mirrors the AArch64 emit:
-///
-///   * Stack slots first -- their sources are read into
-///     `SCRATCH_R10` and stored to the host-stack overflow
-///     region, preserving any source register a later pass
-///     touches.
-///   * FP arg-register placements next. A value held in an
-///     integer register as a raw f64 bit pattern (the constant-
-///     folder emits `Inst::Imm` for f64 literals) is moved into
-///     the target xmm before the int marshal can overwrite the
-///     source.
-///   * Integer reg-to-reg moves, scheduled through
-///     [`schedule_int_reg_moves`], which breaks cycles with `xchg`
-///     and so needs no scratch.
-///   * Spill sources for `IntReg` placements then materialise
-///     directly into the target arg register
-///     (`materialize_int_shifted` writes its load into the dst).
-/// Resolve a call's `arg_aggs` indices into the `ArgAgg` vector the
-/// struct-aware planner consumes; empty when the call passes no
-/// aggregate by value.
-#[allow(clippy::too_many_arguments)]
+/// Place every argument into its System V / Win64 slot in an order that
+/// survives source / target overlaps: the allocator's caller-saved bank
+/// covers the argument registers, so an argument's value can sit in
+/// another argument's target register. Stack slots first (their sources
+/// are read into `SCRATCH_R10`, preserving every register a later pass
+/// touches), then the FP register placements, then the integer register
+/// placements as one parallel copy, then the spill sources materialised
+/// straight into their targets.
 fn marshal_args(
     code: &mut Vec<u8>,
     plan: &super::CallPlan,
@@ -39,43 +17,107 @@ fn marshal_args(
     abi: super::Abi,
     site: &str,
 ) -> bool {
-    let arg_place = |i: usize| -> Place { place_of(alloc, args[i]) };
-    let fail_site = |m: &str| -> bool { fail(&alloc::format!("{site}: {m}")) };
+    let m = Marshal {
+        plan,
+        args,
+        alloc,
+        frame,
+        abi,
+        site,
+    };
+    if !m.stack_args(code)
+        || !m.struct_stack_args(code)
+        || !m.fp_args(code)
+        || !m.sse_aggs(code)
+        || !m.int_args(code)
+    {
+        return false;
+    }
+    m.agg_eightbytes(code);
+    true
+}
 
-    for (i, &placement) in plan.placements.iter().enumerate() {
-        if let super::ArgPlacement::Stack(off) = placement {
-            let ap = arg_place(i);
-            let Some(src) =
-                materialize_int_shifted(code, ap, SCRATCH_R10, frame, plan.scratch_bytes)
-            else {
-                return fail_site("stack arg not in int reg / spill");
-            };
-            emit_mov_mem_r(code, Reg::RSP, off as i32, src);
-        }
+/// One call's argument marshalling: the plan and the operands it reads.
+struct Marshal<'a> {
+    plan: &'a super::CallPlan,
+    args: &'a [u32],
+    alloc: &'a Allocation,
+    frame: Frame,
+    abi: super::Abi,
+    site: &'a str,
+}
+
+/// First INTEGER eightbyte register of an aggregate, if any: the
+/// aggregate's base address is routed there by the parallel move and the
+/// eightbyte loads read from it (that register's own eightbyte last).
+fn agg_base_reg(regs: &[super::ClassReg; 4], n: u8) -> Option<u8> {
+    regs.iter()
+        .take(n as usize)
+        .find(|c| !c.is_fp)
+        .map(|c| c.reg)
+}
+
+impl Marshal<'_> {
+    fn arg_place(&self, i: usize) -> Place {
+        place_of(self.alloc, self.args[i])
     }
 
-    // Aggregate arguments passed on the outgoing stack (System V AMD64
-    // MEMORY class, > 16 bytes): copy the struct inline to [rsp + off].
-    // The destination is memory and never serves as a move source, but
-    // the struct's base address sits in an argument register that the
-    // register-move phase below overwrites, so this copy runs first
-    // while the base is still live (mirroring the scalar Stack arm).
-    // The address rides SCRATCH_R10, the per-word temp SCRATCH_R11;
-    // both lie outside the allocator pools.
-    for (i, &placement) in plan.placements.iter().enumerate() {
-        if let super::ArgPlacement::StructStack { off, size, align } = placement {
-            let Some(src) =
-                materialize_int_shifted(code, arg_place(i), SCRATCH_R10, frame, plan.scratch_bytes)
-            else {
-                return fail_site("by-stack aggregate base not in int reg / spill");
-            };
-            if src.0 != SCRATCH_R10.0 {
-                emit_mov_rr(code, SCRATCH_R10, src);
+    fn fail(&self, m: &str) -> bool {
+        fail(&alloc::format!("{}: {m}", self.site))
+    }
+
+    /// Read `args[i]` into an integer register: its own when it holds one,
+    /// else `scratch`, through the rsp shift the plan's outgoing area
+    /// produced.
+    fn arg_int(&self, code: &mut Vec<u8>, i: usize, scratch: Reg) -> Option<Reg> {
+        materialize_int_shifted(
+            code,
+            self.arg_place(i),
+            scratch,
+            self.frame,
+            self.plan.scratch_bytes,
+        )
+    }
+
+    /// Read `args[i]` into `scratch`.
+    fn arg_into(&self, code: &mut Vec<u8>, i: usize, scratch: Reg) -> bool {
+        let Some(src) = self.arg_int(code, i, scratch) else {
+            return false;
+        };
+        if src.0 != scratch.0 {
+            emit_mov_rr(code, scratch, src);
+        }
+        true
+    }
+
+    fn stack_args(&self, code: &mut Vec<u8>) -> bool {
+        for (i, &placement) in self.plan.placements.iter().enumerate() {
+            if let super::ArgPlacement::Stack(off) = placement {
+                let Some(src) = self.arg_int(code, i, SCRATCH_R10) else {
+                    return self.fail("stack arg not in int reg / spill");
+                };
+                emit_mov_mem_r(code, Reg::RSP, off as i32, src);
             }
-            // The outgoing stack slot is 8-aligned (System V AMD64
-            // 3.2.3); the source is the caller's object, so its own
-            // alignment bounds the unit.
-            let unit = super::super::access_chunk(align, abi.strict_align, 8);
+        }
+        true
+    }
+
+    /// Aggregates passed on the outgoing stack (System V AMD64 MEMORY
+    /// class): the struct is copied to [rsp + off] while its base address,
+    /// which may sit in an argument register the register moves overwrite,
+    /// is still live. The address rides SCRATCH_R10, the per-word temp
+    /// SCRATCH_R11; both lie outside the allocator pools.
+    fn struct_stack_args(&self, code: &mut Vec<u8>) -> bool {
+        for (i, &placement) in self.plan.placements.iter().enumerate() {
+            let super::ArgPlacement::StructStack { off, size, align } = placement else {
+                continue;
+            };
+            if !self.arg_into(code, i, SCRATCH_R10) {
+                return self.fail("by-stack aggregate base not in int reg / spill");
+            }
+            // The outgoing slot is 8-aligned (System V AMD64 3.2.3); the
+            // source is the caller's object, so its alignment bounds the unit.
+            let unit = super::super::access_chunk(align, self.abi.strict_align, 8);
             let words = size / unit;
             for w in 0..words {
                 let o = (w * unit) as i32;
@@ -88,184 +130,159 @@ fn marshal_args(
                 super::encode::emit_mov_mem8_r(code, Reg::RSP, off as i32 + o, SCRATCH_R11);
             }
         }
+        true
     }
 
-    // FP arguments. A value already held in an xmm register may sit
-    // in another FP argument's target xmm, so the xmm-to-xmm moves
-    // form a parallel copy that a naive sequential emit would clobber
-    // (System V passes successive FP args in xmm0, xmm1, ...).
-    // Schedule the register-to-register moves first so every xmm
-    // argument source is consumed before any Spill / IntReg source
-    // materialises into its target xmm -- otherwise a Spill load into
-    // xmmN would overwrite a value another argument still reads from
-    // xmmN. the second FP scratch breaks any cycle and lies outside the
-    // allocator's xmm pool.
-    let mut fp_moves: Vec<(u8, u8)> = Vec::new();
-    for (i, &placement) in plan.placements.iter().enumerate() {
-        if let super::ArgPlacement::FpReg(r) = placement
-            && let Place::FpReg(s) = arg_place(i)
-            && s != r
-        {
-            fp_moves.push((s, r));
+    /// FP register placements. The xmm-to-xmm moves form a parallel copy
+    /// (System V passes successive FP args in xmm0, xmm1, ...), scheduled
+    /// first so every xmm source is consumed before a spill or integer
+    /// source materialises into its target xmm. The second FP scratch
+    /// breaks a cycle and lies outside the allocator's xmm pool.
+    fn fp_args(&self, code: &mut Vec<u8>) -> bool {
+        let mut fp_moves: Vec<(u8, u8)> = Vec::new();
+        for (i, &placement) in self.plan.placements.iter().enumerate() {
+            if let super::ArgPlacement::FpReg(r) = placement
+                && let Place::FpReg(s) = self.arg_place(i)
+                && s != r
+            {
+                fp_moves.push((s, r));
+            }
         }
-    }
-    schedule_xmm_reg_moves(code, &mut fp_moves, Reg(frame.fp_scratch[1]));
-    for (i, &placement) in plan.placements.iter().enumerate() {
-        if let super::ArgPlacement::FpReg(r) = placement {
-            match arg_place(i) {
-                // Register-to-register moves were scheduled above.
-                Place::FpReg(_) => {}
-                ap @ (Place::Spill(_) | Place::IntReg(_)) => {
-                    let Some(src) =
-                        materialize_fp_shifted(code, ap, Reg(r), frame, plan.scratch_bytes)
-                    else {
-                        return fail_site("fp arg not in fp reg / spill / int reg");
-                    };
-                    if src.0 != r {
-                        emit_movapd_xmm_xmm(code, Reg(r), src);
+        schedule_xmm_reg_moves(code, &mut fp_moves, Reg(self.frame.fp_scratch[1]));
+        for (i, &placement) in self.plan.placements.iter().enumerate() {
+            if let super::ArgPlacement::FpReg(r) = placement {
+                match self.arg_place(i) {
+                    Place::FpReg(_) => {}
+                    ap @ (Place::Spill(_) | Place::IntReg(_)) => {
+                        let Some(src) = materialize_fp_shifted(
+                            code,
+                            ap,
+                            Reg(r),
+                            self.frame,
+                            self.plan.scratch_bytes,
+                        ) else {
+                            return self.fail("fp arg not in fp reg / spill / int reg");
+                        };
+                        if src.0 != r {
+                            emit_movapd_xmm_xmm(code, Reg(r), src);
+                        }
                     }
-                }
-                Place::None => return fail_site("fp arg not in fp reg / spill / int reg"),
-            }
-        }
-    }
-
-    // System V aggregates whose eightbytes are all SSE: no integer
-    // eightbyte register can hold the base, so materialize the source
-    // address into a scratch GPR and load each eightbyte's xmm. Runs
-    // after the scalar-FP moves (their xmm sources consumed); the loads
-    // touch only SCRATCH_R10 and the aggregate's own xmm targets, so
-    // they cannot disturb the integer parallel move below. Mixed
-    // SSE/INTEGER aggregates are deferred: their integer eightbyte
-    // targets are argument GPRs that may still be another argument's
-    // pending source, so their base rides the parallel move instead.
-    for (i, &placement) in plan.placements.iter().enumerate() {
-        let super::ArgPlacement::StructRegs { regs, n, align } = placement else {
-            continue;
-        };
-        if n == 0 || !regs.iter().take(n as usize).all(|c| c.is_fp) {
-            continue;
-        }
-        let Some(base) =
-            materialize_int_shifted(code, arg_place(i), SCRATCH_R10, frame, plan.scratch_bytes)
-        else {
-            return fail_site("fp aggregate base not in int reg / spill");
-        };
-        if base.0 != SCRATCH_R10.0 {
-            emit_mov_rr(code, SCRATCH_R10, base);
-        }
-        for (k, cr) in regs.iter().take(n as usize).enumerate() {
-            emit_agg_load_sse(
-                code,
-                Reg(cr.reg),
-                SCRATCH_R10,
-                (k as i32) * 8,
-                align,
-                abi.strict_align,
-                SCRATCH_R11,
-            );
-        }
-    }
-
-    // First INTEGER eightbyte register of an aggregate, if any: the
-    // aggregate's base address is routed there by the parallel move and
-    // the eightbyte loads below read from it (that register's own
-    // eightbyte loads last).
-    let agg_base_reg = |regs: &[super::ClassReg; 4], n: u8| -> Option<u8> {
-        regs.iter()
-            .take(n as usize)
-            .find(|c| !c.is_fp)
-            .map(|c| c.reg)
-    };
-
-    // Integer-register placements plus aggregate base addresses are one
-    // parallel register move (System V AMD64 3.2.3). A scalar `IntReg`
-    // arg moves src->target; a `StructRegs` arg positions its base
-    // address into its own first integer eightbyte register, from
-    // which the eightbytes load below (the base register is overwritten
-    // by its own eightbyte last). Routing the base through that per-
-    // aggregate register -- never a shared scratch -- keeps one
-    // aggregate's load from clobbering another's still-pending base.
-    let mut int_moves: Vec<(u8, u8)> = Vec::new();
-    for (i, &placement) in plan.placements.iter().enumerate() {
-        match placement {
-            super::ArgPlacement::IntReg(r) => {
-                if let Place::IntReg(s) = arg_place(i)
-                    && s != r
-                {
-                    int_moves.push((s, r));
-                }
-            }
-            // All-SSE aggregates loaded above.
-            super::ArgPlacement::StructRegs { regs, n, .. } => {
-                if let Some(dst) = agg_base_reg(&regs, n)
-                    && let Place::IntReg(s) = arg_place(i)
-                    && s != dst
-                {
-                    int_moves.push((s, dst));
-                }
-            }
-            _ => {}
-        }
-    }
-    schedule_int_reg_moves(code, &mut int_moves);
-
-    for (i, &placement) in plan.placements.iter().enumerate() {
-        if let super::ArgPlacement::IntReg(r) = placement {
-            let ap = arg_place(i);
-            match ap {
-                Place::IntReg(_) => {}
-                Place::Spill(_) | Place::None => {
-                    let Some(src) =
-                        materialize_int_shifted(code, ap, Reg(r), frame, plan.scratch_bytes)
-                    else {
-                        return fail_site("int arg not in int reg / spill");
-                    };
-                    if src.0 != r {
-                        emit_mov_rr(code, Reg(r), src);
-                    }
-                }
-                Place::FpReg(s) => {
-                    // Win64 mirrors variadic FP args into both the
-                    // matching xmm register and the integer slot
-                    // (rcx / rdx / r8 / r9), so the call-arg plan
-                    // can name the integer placement with the value
-                    // sitting in xmm.
-                    super::encode::emit_movq_r_xmm(code, Reg(r), Reg(s));
+                    Place::None => return self.fail("fp arg not in fp reg / spill / int reg"),
                 }
             }
         }
+        true
     }
 
-    // Aggregate bases not already register-resident (spill / computed)
-    // materialise into the aggregate's first integer eightbyte
-    // register, the same destination the move loop used for the
-    // register-resident case.
-    for (i, &placement) in plan.placements.iter().enumerate() {
-        if let super::ArgPlacement::StructRegs { regs, n, .. } = placement
-            && let Some(dst) = agg_base_reg(&regs, n)
-            && !matches!(arg_place(i), Place::IntReg(_))
-        {
-            let Some(src) =
-                materialize_int_shifted(code, arg_place(i), Reg(dst), frame, plan.scratch_bytes)
-            else {
-                return fail_site("aggregate base not in int reg / spill");
+    /// System V aggregates whose eightbytes are all SSE: no integer
+    /// eightbyte register can hold the base, so the source address goes
+    /// through a scratch GPR and each eightbyte's xmm loads from it. Runs
+    /// after the scalar-FP moves (their xmm sources consumed); the loads
+    /// touch only SCRATCH_R10 and the aggregate's own xmm targets, so they
+    /// cannot disturb the integer parallel move. Mixed aggregates are
+    /// deferred to it: their integer eightbyte targets may still be
+    /// another argument's pending source.
+    fn sse_aggs(&self, code: &mut Vec<u8>) -> bool {
+        for (i, &placement) in self.plan.placements.iter().enumerate() {
+            let super::ArgPlacement::StructRegs { regs, n, align } = placement else {
+                continue;
             };
-            if src.0 != dst {
-                emit_mov_rr(code, Reg(dst), src);
+            if n == 0 || !regs.iter().take(n as usize).all(|c| c.is_fp) {
+                continue;
+            }
+            if !self.arg_into(code, i, SCRATCH_R10) {
+                return self.fail("fp aggregate base not in int reg / spill");
+            }
+            for (k, cr) in regs.iter().take(n as usize).enumerate() {
+                emit_agg_load_sse(
+                    code,
+                    Reg(cr.reg),
+                    SCRATCH_R10,
+                    (k as i32) * 8,
+                    align,
+                    self.abi.strict_align,
+                    SCRATCH_R11,
+                );
             }
         }
+        true
     }
 
-    // Load each aggregate's eightbytes from the base now in its first
-    // integer eightbyte register: SSE eightbytes first (they leave the
-    // base intact), then the remaining integer eightbytes high-first,
-    // the base register's own eightbyte last since the load overwrites
-    // it. All-SSE aggregates were loaded above.
-    for &placement in plan.placements.iter() {
-        if let super::ArgPlacement::StructRegs { regs, n, align } = placement
-            && let Some(base) = agg_base_reg(&regs, n)
-        {
+    /// Integer register placements plus aggregate base addresses as one
+    /// parallel register move (System V AMD64 3.2.3): a scalar argument
+    /// moves source to target; an aggregate positions its base address
+    /// into its own first integer eightbyte register, from which the
+    /// eightbytes load (that register's own eightbyte last). Routing each
+    /// base through its own register keeps one aggregate's loads from
+    /// clobbering another's pending base. The sources not already
+    /// register-resident then materialise into their targets.
+    fn int_args(&self, code: &mut Vec<u8>) -> bool {
+        let mut int_moves: Vec<(u8, u8)> = Vec::new();
+        for (i, &placement) in self.plan.placements.iter().enumerate() {
+            match placement {
+                super::ArgPlacement::IntReg(r) => {
+                    if let Place::IntReg(s) = self.arg_place(i)
+                        && s != r
+                    {
+                        int_moves.push((s, r));
+                    }
+                }
+                // All-SSE aggregates were loaded by `sse_aggs`.
+                super::ArgPlacement::StructRegs { regs, n, .. } => {
+                    if let Some(dst) = agg_base_reg(&regs, n)
+                        && let Place::IntReg(s) = self.arg_place(i)
+                        && s != dst
+                    {
+                        int_moves.push((s, dst));
+                    }
+                }
+                _ => {}
+            }
+        }
+        schedule_int_reg_moves(code, &mut int_moves);
+        for (i, &placement) in self.plan.placements.iter().enumerate() {
+            if let super::ArgPlacement::IntReg(r) = placement {
+                match self.arg_place(i) {
+                    Place::IntReg(_) => {}
+                    Place::Spill(_) | Place::None => {
+                        if !self.arg_into(code, i, Reg(r)) {
+                            return self.fail("int arg not in int reg / spill");
+                        }
+                    }
+                    // Win64 mirrors a variadic FP argument into both the
+                    // matching xmm and the integer slot, so the plan can
+                    // name the integer placement with the value in xmm.
+                    Place::FpReg(s) => {
+                        super::encode::emit_movq_r_xmm(code, Reg(r), Reg(s));
+                    }
+                }
+            }
+        }
+        for (i, &placement) in self.plan.placements.iter().enumerate() {
+            if let super::ArgPlacement::StructRegs { regs, n, .. } = placement
+                && let Some(dst) = agg_base_reg(&regs, n)
+                && !matches!(self.arg_place(i), Place::IntReg(_))
+                && !self.arg_into(code, i, Reg(dst))
+            {
+                return self.fail("aggregate base not in int reg / spill");
+            }
+        }
+        true
+    }
+
+    /// Load each aggregate's eightbytes from the base now in its first
+    /// integer eightbyte register: SSE eightbytes first (they leave the
+    /// base intact), then the remaining integer eightbytes high-first, the
+    /// base register's own eightbyte last since the load overwrites it.
+    fn agg_eightbytes(&self, code: &mut Vec<u8>) {
+        let strict = self.abi.strict_align;
+        for &placement in self.plan.placements.iter() {
+            let super::ArgPlacement::StructRegs { regs, n, align } = placement else {
+                continue;
+            };
+            let Some(base) = agg_base_reg(&regs, n) else {
+                continue;
+            };
             for (k, cr) in regs.iter().take(n as usize).enumerate() {
                 if cr.is_fp {
                     emit_agg_load_sse(
@@ -274,7 +291,7 @@ fn marshal_args(
                         Reg(base),
                         (k as i32) * 8,
                         align,
-                        abi.strict_align,
+                        strict,
                         SCRATCH_R10,
                     );
                 }
@@ -288,7 +305,7 @@ fn marshal_args(
                         (k as i32) * 8,
                         8,
                         align,
-                        abi.strict_align,
+                        strict,
                         SCRATCH_R10,
                     );
                 }
@@ -299,9 +316,9 @@ fn marshal_args(
                 .position(|c| !c.is_fp && c.reg == base)
                 .unwrap_or(0);
             let disp = (base_off as i32) * 8;
-            // The base's own eightbyte overwrites the base, so a
-            // composed one accumulates in scratch first.
-            if super::super::access_unit(disp as u32, 8, align, abi.strict_align) == 8 {
+            // The base's own eightbyte overwrites the base, so a composed
+            // one accumulates in scratch first.
+            if super::super::access_unit(disp as u32, 8, align, strict) == 8 {
                 emit_mov_r_mem(code, Reg(base), Reg(base), disp);
             } else {
                 emit_agg_load_int(
@@ -311,15 +328,13 @@ fn marshal_args(
                     disp,
                     8,
                     align,
-                    abi.strict_align,
+                    strict,
                     SCRATCH_R11,
                 );
                 emit_mov_rr(code, Reg(base), SCRATCH_R10);
             }
         }
     }
-
-    true
 }
 
 #[allow(clippy::too_many_arguments)]

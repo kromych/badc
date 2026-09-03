@@ -259,6 +259,13 @@ pub(super) fn emit_x86_simd(
     }
 }
 
+/// Byte stride between adjacent variadic arguments in the cursor `va_list`.
+/// System V AMD64 routes its variadic intrinsics through the
+/// register-save-area forms, so the cursor forms serve Win64 only, which
+/// packs the variadic tail at 8-byte stride in the home area and the
+/// incoming stack.
+const VA_CURSOR_STRIDE: i32 = 8;
+
 pub(super) fn emit_intrinsic(
     code: &mut Vec<u8>,
     kind: i64,
@@ -271,429 +278,50 @@ pub(super) fn emit_intrinsic(
     abi: super::Abi,
 ) -> bool {
     use crate::c5::op::Intrinsic as I;
-    // Byte stride between adjacent variadic arguments in the cursor
-    // va_list. System V AMD64 routes its variadic intrinsics through the
-    // register-save-area arms below (gated on `sysv_host_variadic`), so
-    // the only x86_64 target reaching the cursor arms is Win64 (Microsoft
-    // x64 calling convention), which packs the variadic tail at 8-byte
-    // stride in the home area + incoming stack.
-    let va_stride: i32 = 8;
     let Some(intrinsic) = I::from_i64(kind) else {
         return fail("intrinsic: unknown discriminant");
     };
-    // Force args[idx]'s value into `scratch`; the register-tied arms
-    // below stage operands into fixed registers around a clobber
-    // window. `pushed` is the number of 8-byte pushes the arm has
-    // emitted so far: rsp has moved by that much since the allocator
-    // laid out its rsp-relative spill slots, so a spilled place must be
-    // read through the shifted form.
-    let materialize_at =
-        |code: &mut Vec<u8>, idx: usize, scratch: Reg, pushed: u32| -> Option<Reg> {
-            let place = alloc.places.get(args[idx] as usize).copied()?;
-            let r = materialize_int_shifted(code, place, scratch, frame, 8 * pushed)?;
-            if r.0 != scratch.0 {
-                super::encode::emit_mov_rr(code, scratch, r);
-            }
-            Some(scratch)
-        };
     match intrinsic {
         // Resolved to an `Imm` before lowering, by the SSA folds under
-        // `-O` and by the walker otherwise; reaching here is a pass-
-        // ordering bug.
+        // `-O` and by the walker otherwise.
         I::ConstantP => fail("Intrinsic::ConstantP must be resolved before lowering"),
         I::VaStart if sysv_variadic_callee(func, abi) => {
-            // System V AMD64 `va_start` (ABI 3.5.7). args[0] = the
-            // `__va_list_tag` pointer (the array-form `va_list` decayed
-            // to `&ap[0]`), args[1] = &last (unused -- the named-argument
-            // counts come from the prototype, not the last named
-            // argument's address). Initialise the struct:
-            //   gp_offset        = num_named_int * 8
-            //   fp_offset        = 48 + num_named_fp * 16
-            //   overflow_arg_area = first incoming stack argument
-            //   reg_save_area     = base of the prologue-spilled area
-            if args.len() != 2 {
-                return fail("VaStart: expected 2 args");
-            }
-            // Named integer / FP argument counts from the prototype:
-            // `param_fp_mask` bit i set means named parameter i is
-            // floating-point. The gp area skips the named integer
-            // arguments (each 8 bytes); the fp area starts at offset 48
-            // and skips the named FP arguments (each 16 bytes).
-            let n = func.n_params;
-            let mut named_int = 0u32;
-            let mut named_fp = 0u32;
-            for i in 0..n {
-                if (func.param_fp_mask & (1u32 << i)) != 0 {
-                    named_fp += 1;
-                } else {
-                    named_int += 1;
-                }
-            }
-            // gp_offset / fp_offset index the next argument register the
-            // save area holds; they saturate at the bank size (six GP, eight
-            // FP) so a callee whose named parameters fill or overflow a bank
-            // sends `va_arg` straight to the overflow area.
-            let gp_offset = named_int.min(6) * 8;
-            // With the XMM save area unpopulated (`-mno-sse`), report the
-            // FP bank exhausted so `va_arg` walks gp then overflow only.
-            let fp_offset = if abi.no_fp_varargs {
-                SYSV_REG_SAVE_BYTES
-            } else {
-                SYSV_GP_SAVE_BYTES + named_fp.min(8) * 16
-            };
-            let Some(ap_place) = alloc.places.get(args[0] as usize).copied() else {
-                return fail("VaStart: &ap value id out of range");
-            };
-            let Some(ap) = materialize_int(code, ap_place, SCRATCH_R11, frame) else {
-                return fail("VaStart: &ap not in int reg / spill");
-            };
-            // gp_offset (u32) at [ap + 0], fp_offset (u32) at [ap + 4].
-            super::encode::emit_mov_mem32_imm32(code, ap, 0, gp_offset as i32);
-            super::encode::emit_mov_mem32_imm32(code, ap, 4, fp_offset as i32);
-            // overflow_arg_area (ptr) at [ap + 8] = first variadic stack
-            // argument. Incoming stack arguments sit just above the return
-            // address at [rbp + 16]; the named parameters that overflowed
-            // the argument registers occupy the low slots there, so the
-            // variadic tail begins past them.
-            let named_stack_bytes: i32 = super::plan_param_regs(n, func.param_fp_mask, abi)
-                .placements
-                .iter()
-                .filter(|q| matches!(q, super::ArgPlacement::Stack(_)))
-                .count() as i32
-                * 8;
-            emit_lea_r_mem(code, SCRATCH_R10, Reg::RBP, 16 + named_stack_bytes);
-            emit_mov_mem_r(code, ap, 8, SCRATCH_R10);
-            // reg_save_area (ptr) at [ap + 16] = base of the spilled gp
-            // area.
-            emit_lea_r_mem(code, SCRATCH_R10, Reg::RBP, frame.va_reg_save_off);
-            emit_mov_mem_r(code, ap, 16, SCRATCH_R10);
-            true
+            emit_va_start_sysv(code, args, func, alloc, frame, abi)
         }
         // The System V `va_list` is a `__va_list_tag` struct on this
-        // target, so `va_arg` walks the gp/fp save areas regardless of
-        // whether the current function is itself variadic: a non-
-        // variadic forwarder (the `c5_v*printf` shims) receives a
-        // forwarded `va_list` and must read it the same way. Gate on the
-        // target ABI, not `func.is_variadic`.
+        // target, so `va_arg` / `va_copy` walk it whether or not the current
+        // function is itself variadic: a non-variadic forwarder receives a
+        // forwarded `va_list` and reads it the same way.
         I::VaArg if abi.sysv_host_variadic() => {
             emit_va_arg_sysv(code, args, dst, func, alloc, frame)
         }
-        I::VaCopy if abi.sysv_host_variadic() => {
-            // System V `va_copy` is a 24-byte `__va_list_tag` struct copy
-            // (ABI 3.5.7). args[0] = &dst struct, args[1] = &src struct.
-            if args.len() != 2 {
-                return fail("VaCopy: expected 2 args");
-            }
-            let Some(src_place) = alloc.places.get(args[1] as usize).copied() else {
-                return fail("VaCopy: &src value id out of range");
-            };
-            let Some(src_p) = materialize_int(code, src_place, SCRATCH_R11, frame) else {
-                return fail("VaCopy: &src not in int reg / spill");
-            };
-            let Some(dst_place) = alloc.places.get(args[0] as usize).copied() else {
-                return fail("VaCopy: &dst value id out of range");
-            };
-            // Both pointers ride the reserved r10 / r11 scratches (rcx
-            // is in the allocator's caller pool and may hold a live
-            // value across the intrinsic). The copied word borrows a
-            // pool register around a push/pop pair, mirroring
-            // emit_mcpy; the spill loads above run before the push so
-            // rsp-relative offsets stay valid.
-            let Some(dst_p) = materialize_int(code, dst_place, SCRATCH_R10, frame) else {
-                return fail("VaCopy: &dst not in int reg / spill");
-            };
-            let temp = if dst_p.0 != Reg::RAX.0 && src_p.0 != Reg::RAX.0 {
-                Reg::RAX
-            } else if dst_p.0 != Reg::RCX.0 && src_p.0 != Reg::RCX.0 {
-                Reg::RCX
-            } else {
-                Reg::RDX
-            };
-            emit_push_r(code, temp);
-            // Copy the three 8-byte `__va_list_tag` words (ABI 3.5.7):
-            // gp_offset + fp_offset packed in the first, then
-            // overflow_arg_area and reg_save_area.
-            for off in [0i32, 8, 16] {
-                emit_mov_r_mem(code, temp, src_p, off);
-                emit_mov_mem_r(code, dst_p, off, temp);
-            }
-            emit_pop_r(code, temp);
-            true
-        }
-        I::VaStart => {
-            // __builtin_va_start(&ap, &last). args[0] = &ap,
-            // args[1] = &last. *ap = &last + va_stride, the address of
-            // the first variadic slot one stride past the last named
-            // parameter. System V routes its `va_start` through the
-            // register-save-area arm above, so only the Win64 host
-            // variadic ABI reaches here: it lays named and variadic
-            // arguments at 8-byte stride (named register arguments
-            // spilled by the prologue into the home area, the variadic
-            // tail on the incoming stack). va_start runs only in the
-            // variadic function itself, whose named parameters already
-            // use `va_stride` (`Frame::param_cell_stride`), so
-            // `&last + va_stride` lands on the first variadic argument.
-            if args.len() != 2 {
-                return fail("VaStart: expected 2 args");
-            }
-            // Both pointer operands can land in spill slots under
-            // register pressure, so materialize each into a reserved
-            // scratch. r10 / r11 sit outside both allocator banks, so
-            // they never alias an allocator-chosen `ap` / `last`. The
-            // `last + va_stride` advance reuses the `last` register, so
-            // the peak register need is two.
-            let Some(ap_place) = alloc.places.get(args[0] as usize).copied() else {
-                return fail("VaStart: &ap value id out of range");
-            };
-            let Some(last_place) = alloc.places.get(args[1] as usize).copied() else {
-                return fail("VaStart: &last value id out of range");
-            };
-            let Some(ap) = materialize_int(code, ap_place, SCRATCH_R11, frame) else {
-                return fail("VaStart: &ap not in int reg / spill");
-            };
-            let Some(last) = materialize_int(code, last_place, SCRATCH_R10, frame) else {
-                return fail("VaStart: &last not in int reg / spill");
-            };
-            // advance = last + va_stride ; mov [ap], advance. When
-            // `last` is an allocator register it may still be live after
-            // VaStart, so the advance lands in r10 rather than
-            // clobbering it; when `last` was spilled it already sits in
-            // the throwaway r10 copy, which is reused. r10 is outside
-            // both pools, so it never aliases `ap` or the
-            // allocator-chosen `last`.
-            let advance = SCRATCH_R10;
-            emit_lea_r_mem(code, advance, last, va_stride);
-            emit_mov_mem_r(code, ap, 0, advance);
-            true
-        }
-        I::VaArg => {
-            // Returns *ap, advances *ap by va_stride. args[0] = &ap.
-            // args[1] (when present) is the packed type descriptor; the
-            // Win64 / cursor single-region walk ignores the kind, so only
-            // args[0] is read.
-            if args.is_empty() {
-                return fail("VaArg: expected at least the ap argument");
-            }
-            // The cursor address `ap`, the loaded result, and the
-            // advance temporary must each occupy a distinct register so
-            // the writeback stores through the cursor rather than through
-            // the just-loaded value. Both the `&ap` operand and the
-            // result can land in spill slots under register pressure, and
-            // the allocator may even pick the same physical register for
-            // the result and `&ap`. r10 / r11 sit outside both allocator
-            // banks, so they never alias an allocator-chosen place; the
-            // cursor is held in r11 (forced there whenever it would
-            // otherwise alias the work register), the value is loaded
-            // into a work register, the advance into r10, and the value
-            // is then delivered to the destination.
-            let Some(ap_place) = alloc.places.get(args[0] as usize).copied() else {
-                return fail("VaArg: &ap value id out of range");
-            };
-            // Cursor address. A spilled `&ap` loads into r11; a register
-            // operand is moved into r11 when it would alias the work
-            // register so the load can't clobber it.
-            let ap = match ap_place {
-                Place::IntReg(r) => {
-                    let work_aliases = match dst {
-                        Place::IntReg(d) => d == r,
-                        _ => false,
-                    };
-                    if work_aliases {
-                        emit_mov_rr(code, SCRATCH_R11, Reg(r));
-                        SCRATCH_R11
-                    } else {
-                        Reg(r)
-                    }
-                }
-                Place::Spill(slot) => {
-                    let (sb, sp_off) = spill_slot_addr(frame, slot);
-                    emit_mov_r_mem(code, SCRATCH_R11, sb, sp_off);
-                    SCRATCH_R11
-                }
-                _ => return fail("VaArg: &ap not in int reg / spill"),
-            };
-            // Work register holding the loaded result: the destination
-            // register when distinct from the cursor, otherwise r10. The
-            // cursor was forced to r11 above whenever the destination
-            // register aliased it, so `work` here never equals `ap`.
-            let work = match dst {
-                Place::IntReg(d) if Reg(d).0 != ap.0 => Reg(d),
-                _ => SCRATCH_R10,
-            };
-            // work = *ap (old cursor) ; r10 = work + va_stride ; *ap =
-            // r10. r10 is the advance temporary; it differs from `ap`
-            // (r11 or an allocator reg) and from `work` (only r10 when
-            // the dst is spilled, in which case `work` is dead after the
-            // store back).
-            emit_mov_r_mem(code, work, ap, 0);
-            let advance = SCRATCH_R10;
-            if advance.0 == work.0 {
-                // Destination spilled: store the result before reusing
-                // r10 for the advance.
-                spill_dst_to_slot(code, dst, work, frame);
-                emit_lea_r_mem(code, advance, work, va_stride);
-                emit_mov_mem_r(code, ap, 0, advance);
-            } else {
-                emit_lea_r_mem(code, advance, work, va_stride);
-                emit_mov_mem_r(code, ap, 0, advance);
-                spill_dst_to_slot(code, dst, work, frame);
-            }
-            true
-        }
-        I::VaEnd => {
-            // No teardown for the cursor model.
-            true
-        }
-        I::VaCopy => {
-            // __builtin_va_copy(&dst, &src). *dst = *src.
-            if args.len() != 2 {
-                return fail("VaCopy: expected 2 args");
-            }
-            // Both pointer operands can land in spill slots under
-            // register pressure. Load the source value into r10 before
-            // materializing the destination pointer, so r11 can hold the
-            // source pointer and then be reused for the destination
-            // pointer -- the peak register need is two. r10 / r11 sit
-            // outside both allocator banks, so they never alias an
-            // allocator-chosen place.
-            let Some(dst_place) = alloc.places.get(args[0] as usize).copied() else {
-                return fail("VaCopy: &dst value id out of range");
-            };
-            let Some(src_place) = alloc.places.get(args[1] as usize).copied() else {
-                return fail("VaCopy: &src value id out of range");
-            };
-            let Some(src_p) = materialize_int(code, src_place, SCRATCH_R11, frame) else {
-                return fail("VaCopy: &src not in int reg / spill");
-            };
-            let scratch = SCRATCH_R10;
-            emit_mov_r_mem(code, scratch, src_p, 0);
-            let Some(dst_p) = materialize_int(code, dst_place, SCRATCH_R11, frame) else {
-                return fail("VaCopy: &dst not in int reg / spill");
-            };
-            emit_mov_mem_r(code, dst_p, 0, scratch);
-            true
-        }
-        I::Alloca => {
-            // alloca(n): move rsp down by `n` rounded up to 16 bytes
-            // and return the new rsp. The 16-byte rounding keeps rsp
-            // aligned for the call sites that follow; the frame's
-            // spill slots and locals stay reachable through rbp
-            // (`Frame::dynamic_sp`). The storage is reclaimed by the
-            // epilogue's `lea rsp, [rbp - frame_bytes]`, or earlier by
-            // an `AllocaRestore` closing a VLA scope (C99 6.2.4p2).
-            if !frame.dynamic_sp {
-                return fail("Alloca: AllocaInit didn't run for this function");
-            }
-            if args.len() != 1 {
-                return fail("Alloca: expected 1 arg");
-            }
-            let Some(rd) = int_or_spill_dst(dst) else {
-                return fail("Alloca: dst not int reg / spill");
-            };
-            let size_place = place_of(alloc, args[0]);
-            // rd_phys receives the result (rd for a register dst, r10
-            // for a spill dst); the rounded size rides r11. Both
-            // scratches sit outside the allocator banks, and rd is
-            // never r11, so size and result stay distinct.
-            let rd_phys = if matches!(dst, Place::Spill(_)) {
-                SCRATCH_R10
-            } else {
-                rd
-            };
-            let size_reg = SCRATCH_R11;
-            let Some(n) = materialize_int(code, size_place, size_reg, frame) else {
-                return fail("Alloca: size not int reg / spill / fp");
-            };
-            if n.0 != size_reg.0 {
-                emit_mov_rr(code, size_reg, n);
-            }
-            super::encode::emit_ri(code, Mnem::Add, 8, size_reg, 15);
-            super::encode::emit_ri(code, Mnem::And, 8, size_reg, -16);
-            // rd_phys = rsp - rounded_size, the final rsp value.
-            emit_mov_rr(code, rd_phys, Reg::RSP);
-            super::encode::emit_rr(code, Mnem::Sub, 8, rd_phys, size_reg);
-            // Walk rsp down page by page, touching each, before
-            // committing the final value: the same guard-region rule the
-            // prologue's `emit_stack_alloc` follows, over a size known
-            // only at run time. The size is 16-aligned, so the amount the
-            // settling `mov` covers past the last probe is at most
-            // MAX_UNPROBED_STACK_STEP and needs no probe of its own.
-            super::encode::emit_shift_ri(code, Mnem::Shr, 8, size_reg, 12);
-            super::encode::emit_rr(code, Mnem::Test, 8, size_reg, size_reg);
-            super::encode::emit_jcc_rel32(code, Cc::E, 0);
-            let skip_at = code.len() - 4;
-            let loop_start = code.len();
-            emit_sub_rsp_imm32(code, STACK_PROBE_PAGE);
-            emit_stack_probe(code);
-            super::encode::emit_ri(code, Mnem::Sub, 8, size_reg, 1);
-            super::encode::emit_jcc_rel32(code, Cc::Ne, 0);
-            let back_at = code.len() - 4;
-            let back = (loop_start as i64 - code.len() as i64) as i32;
-            code[back_at..back_at + 4].copy_from_slice(&back.to_le_bytes());
-            let skip = (code.len() as i64 - (skip_at + 4) as i64) as i32;
-            code[skip_at..skip_at + 4].copy_from_slice(&skip.to_le_bytes());
-            emit_mov_rr(code, Reg::RSP, rd_phys);
-            spill_dst_to_slot(code, dst, rd_phys, frame);
-            true
-        }
-        I::AllocaSave => {
-            // Snapshot rsp for a VLA block (C99 6.2.4p2).
-            if !frame.dynamic_sp {
-                return fail("AllocaSave: AllocaInit didn't run for this function");
-            }
-            let Some(rd) = int_or_spill_dst(dst) else {
-                return fail("AllocaSave: dst not int reg / spill");
-            };
-            let rd_phys = if matches!(dst, Place::Spill(_)) {
-                SCRATCH_R10
-            } else {
-                rd
-            };
-            emit_mov_rr(code, rd_phys, Reg::RSP);
-            spill_dst_to_slot(code, dst, rd_phys, frame);
-            true
-        }
-        I::AllocaRestore => {
-            // Restore the saved rsp on VLA block exit, reclaiming the
-            // block's VLA storage (per iteration for a loop body).
-            if !frame.dynamic_sp {
-                return fail("AllocaRestore: AllocaInit didn't run for this function");
-            }
-            if args.len() != 1 {
-                return fail("AllocaRestore: expected 1 arg");
-            }
-            let v_place = place_of(alloc, args[0]);
-            let Some(v) = materialize_int(code, v_place, SCRATCH_R10, frame) else {
-                return fail("AllocaRestore: arg not int reg / spill / fp");
-            };
-            emit_mov_rr(code, Reg::RSP, v);
-            true
-        }
+        I::VaCopy if abi.sysv_host_variadic() => emit_va_copy_sysv(code, args, alloc, frame),
+        I::VaStart => emit_va_start_cursor(code, args, alloc, frame),
+        I::VaArg => emit_va_arg_cursor(code, args, dst, alloc, frame),
+        // No teardown for the cursor model.
+        I::VaEnd => true,
+        I::VaCopy => emit_va_copy_cursor(code, args, alloc, frame),
+        I::Alloca => emit_alloca(code, args, dst, alloc, frame),
+        I::AllocaSave => emit_alloca_save(code, dst, frame),
+        I::AllocaRestore => emit_alloca_restore(code, args, alloc, frame),
         I::SetjmpAArch64 | I::LongjmpAArch64 => {
             fail("intrinsic: AArch64 setjmp / longjmp on non-AArch64 target")
         }
-        // fma / fmaf lower to Inst::Fma at the call site, so they never
-        // reach the Inst::Intrinsic dispatch.
+        // fma / fmaf lower to Inst::Fma at the call site.
         I::Fma | I::Fmaf => fail("intrinsic: fma / fmaf lower to Inst::Fma, not Inst::Intrinsic"),
+        // `ud2`: #UD, execution does not continue past it.
         I::Trap => {
-            // `ud2` (0F 0B) raises #UD (illegal instruction). Execution
-            // does not continue past it.
-            code.push(0x0F);
-            code.push(0x0B);
+            code.extend_from_slice(&[0x0F, 0x0B]);
             true
         }
+        // `pause`, the spin-loop hint.
         I::CpuRelax => {
-            // `pause` (F3 90), the x86-64 spin-loop hint.
-            code.push(0xF3);
-            code.push(0x90);
+            code.extend_from_slice(&[0xF3, 0x90]);
             true
         }
+        // `mfence`, a full barrier (C11 7.17.4 seq_cst).
         I::AtomicThreadFence => {
-            // `mfence` (0F AE F0), a full barrier (C11 7.17.4 seq_cst).
-            // No operand, no result.
-            code.push(0x0F);
-            code.push(0xAE);
-            code.push(0xF0);
+            code.extend_from_slice(&[0x0F, 0xAE, 0xF0]);
             true
         }
         I::X87StoreControlWord
@@ -707,97 +335,8 @@ pub(super) fn emit_intrinsic(
         | I::X86Lgdt
         | I::X86Lidt
         | I::X86Lldt
-        | I::X86Clflush => {
-            // Single-memory-operand x87 / system forms. The one argument
-            // is the operand address; force it into r10 so the ModRM byte
-            // needs no SIB / displacement (r10 = rm 010 under REX.B). The
-            // opcode bytes and ModRM.reg field select the instruction:
-            //   fnstcw/fldcw = D9 /7,/5 ; fxsave/fxrstor = 0F AE /0,/1 ;
-            //   sgdt/sidt = 0F 01 /0,/1 ; lgdt/lidt = 0F 01 /2,/3 ;
-            //   sldt/str  = 0F 00 /0,/1 ; lldt = 0F 00 /2 ; clflush = 0F AE /7.
-            if args.len() != 1 {
-                return fail("single-memory-operand intrinsic expects 1 arg");
-            }
-            let Some(place) = alloc.places.get(args[0] as usize).copied() else {
-                return fail("single-memory-operand intrinsic: arg place missing");
-            };
-            let Some(addr) = materialize_int(code, place, SCRATCH_R10, frame) else {
-                return fail("single-memory-operand intrinsic: arg not an int register");
-            };
-            if addr.0 != SCRATCH_R10.0 {
-                super::encode::emit_mov_rr(code, SCRATCH_R10, addr);
-            }
-            let (opc, reg_field): (&[u8], u8) = match intrinsic {
-                I::X87StoreControlWord => (&[0xD9], 7),
-                I::X87LoadControlWord => (&[0xD9], 5),
-                I::X86FxSave => (&[0x0F, 0xAE], 0),
-                I::X86FxRestore => (&[0x0F, 0xAE], 1),
-                I::X86Sgdt => (&[0x0F, 0x01], 0),
-                I::X86Sidt => (&[0x0F, 0x01], 1),
-                I::X86Lgdt => (&[0x0F, 0x01], 2),
-                I::X86Lidt => (&[0x0F, 0x01], 3),
-                I::X86Sldt => (&[0x0F, 0x00], 0),
-                I::X86Str => (&[0x0F, 0x00], 1),
-                I::X86Lldt => (&[0x0F, 0x00], 2),
-                _ => (&[0x0F, 0xAE], 7), // clflush
-            };
-            code.push(0x41); // REX.B for r10
-            code.extend_from_slice(opc);
-            code.push((reg_field << 3) | 0x02); // mod=00, reg=field, rm=r10
-            true
-        }
-        I::Divq128 => {
-            // Unsigned 128/64 division (`udiv_qrnnd`). The dividend is
-            // rdx:rax = n1:n0, the divisor is `d`; `div` leaves the
-            // quotient in rax and the remainder in rdx. args:
-            // [q_addr, rem_addr, n0, n1, d].
-            const RAX: Reg = Reg(0);
-            const RDX: Reg = Reg(2);
-            const R10: Reg = Reg(10);
-            const R11: Reg = Reg(11);
-            if args.len() != 5 {
-                return fail("divq: wrong operand count");
-            }
-            // `div` clobbers rax and rdx.
-            super::encode::emit_push_r(code, RAX);
-            super::encode::emit_push_r(code, RDX);
-            // Push the output addresses (quotient then remainder, so the
-            // remainder address is popped first below); the shift tracks
-            // the pushes emitted so far.
-            if materialize_at(code, 0, R10, 2).is_none() {
-                return fail("divq: quotient output not an address");
-            }
-            super::encode::emit_push_r(code, R10);
-            if materialize_at(code, 1, R10, 3).is_none() {
-                return fail("divq: remainder output not an address");
-            }
-            super::encode::emit_push_r(code, R10);
-            // Divisor -> r10, dividend high -> r11, then load rax/rdx last
-            // so an input the allocator placed in rax/rdx is read first.
-            if materialize_at(code, 4, R10, 4).is_none() {
-                return fail("divq: divisor operand missing");
-            }
-            if materialize_at(code, 3, R11, 4).is_none() {
-                return fail("divq: dividend-high operand missing");
-            }
-            if materialize_at(code, 2, RAX, 4).is_none() {
-                return fail("divq: dividend-low operand missing");
-            }
-            super::encode::emit_mov_rr(code, RDX, R11); // rdx = n1
-            // div r10  (REX.W + REX.B, F7 /6 -> unsigned divide).
-            code.push(0x49);
-            code.push(0xF7);
-            code.push(0xF2);
-            // Store quotient (rax) and remainder (rdx) to the popped
-            // addresses (remainder is on top of the stack).
-            super::encode::emit_pop_r(code, R11);
-            super::encode::emit_mov_mem_r(code, R11, 0, RDX);
-            super::encode::emit_pop_r(code, R11);
-            super::encode::emit_mov_mem_r(code, R11, 0, RAX);
-            super::encode::emit_pop_r(code, RDX);
-            super::encode::emit_pop_r(code, RAX);
-            true
-        }
+        | I::X86Clflush => emit_mem_operand_insn(code, intrinsic, args, alloc, frame),
+        I::Divq128 => emit_divq128(code, args, alloc, frame),
         I::Sqrt
         | I::Sqrtf
         | I::Fabs
@@ -813,49 +352,24 @@ pub(super) fn emit_intrinsic(
             }
             emit_fp_unary(code, dst, v, args[0], intrinsic, alloc, frame)
         }
-        I::FrameAddress => {
-            // __builtin_frame_address(0): the current frame pointer (rbp).
-            // A level above 0 reaches here as this plus a load chain.
-            let Some(rd) = int_or_spill_dst(dst) else {
-                return fail("FrameAddress: dst not int reg / spill");
-            };
-            emit_mov_rr(code, rd, Reg::RBP);
-            spill_dst_to_slot(code, dst, rd, frame);
-            true
-        }
-        I::StackPointer => {
-            // A `register T v asm("rsp")` read: the current stack pointer.
-            let Some(rd) = int_or_spill_dst(dst) else {
-                bail_msg("StackPointer: dst not int reg / spill");
-                return false;
-            };
-            emit_mov_rr(code, rd, Reg::RSP);
-            spill_dst_to_slot(code, dst, rd, frame);
-            true
-        }
-        I::ReturnAddress => {
-            // __builtin_return_address: the return address a frame record
-            // holds at [fp + 8], above the saved rbp. Without an operand
-            // the record is the current frame's; with one, the frame
-            // address a level above 0 walked to.
-            let Some(rd) = int_or_spill_dst(dst) else {
-                return fail("ReturnAddress: dst not int reg / spill");
-            };
-            let fp = match args {
-                [] => Reg::RBP,
-                [walked] => {
-                    let Some(r) = int_operand_into_rd(code, place_of(alloc, *walked), rd, frame)
-                    else {
-                        return fail("ReturnAddress: frame not int reg / spill");
-                    };
-                    r
-                }
-                _ => return fail("ReturnAddress: expected at most 1 arg"),
-            };
-            emit_mov_r_mem(code, rd, fp, 8);
-            spill_dst_to_slot(code, dst, rd, frame);
-            true
-        }
+        // `__builtin_frame_address(0)`: the frame pointer. A level above 0
+        // reaches here as this plus a load chain.
+        I::FrameAddress => emit_reg_read(
+            code,
+            dst,
+            frame,
+            Reg::RBP,
+            "FrameAddress: dst not int reg / spill",
+        ),
+        // A `register T v asm("rsp")` read.
+        I::StackPointer => emit_reg_read(
+            code,
+            dst,
+            frame,
+            Reg::RSP,
+            "StackPointer: dst not int reg / spill",
+        ),
+        I::ReturnAddress => emit_return_address(code, args, dst, alloc, frame),
         I::Clz
         | I::Ctz
         | I::Popcount
@@ -871,9 +385,7 @@ pub(super) fn emit_intrinsic(
         | I::Bswap16
         | I::Bswap32
         | I::Bswap64 => {
-            // The integer bit-count and byte-swap builtins are lowered to a
-            // portable shift / mask sequence in the walker; they never reach
-            // codegen as an `Inst::Intrinsic`.
+            // Lowered to a portable shift / mask sequence in the walker.
             fail("intrinsic: bit builtin reached codegen")
         }
         I::AtomicLoad
@@ -885,20 +397,14 @@ pub(super) fn emit_intrinsic(
         | I::AtomicFetchOr
         | I::AtomicFetchXor
         | I::AtomicCompareExchangeStrong => {
-            // C11 atomic operations are lowered to load / store /
-            // read-modify-write at the call site; they never reach
-            // codegen as an `Inst::Intrinsic`.
+            // Lowered to load / store / read-modify-write at the call site.
             fail("intrinsic: atomic op reached codegen")
         }
         I::AArch64ReadCacheType
         | I::AArch64DcCvau
         | I::AArch64IcIvau
         | I::AArch64DsbIsh
-        | I::AArch64Isb => {
-            // AArch64 cache maintenance and barriers; the source gates them
-            // on `__aarch64__`, so x86-64 never reaches them.
-            fail("aarch64 cache / barrier intrinsic is aarch64-only")
-        }
+        | I::AArch64Isb => fail("aarch64 cache / barrier intrinsic is aarch64-only"),
         I::Atomic128CmpXchg
         | I::Atomic128Xchg
         | I::Atomic128FetchAnd
@@ -907,14 +413,481 @@ pub(super) fn emit_intrinsic(
         | I::Atomic128Store
         | I::Atomic128LoadEx
         | I::Atomic128StoreEx
-        | I::Atomic128StoreInsert => {
-            // The 128-bit atomic ldaxp/stlxp and ldp/stp, ldxp/stxp shapes
-            // are aarch64-only; the source selects them via the aarch64
-            // host-include path, so x86-64 (which has native `cmpxchg16b`)
-            // never reaches them.
-            fail("128-bit atomic asm shape is aarch64-only")
+        | I::Atomic128StoreInsert => fail("128-bit atomic asm shape is aarch64-only"),
+    }
+}
+
+/// The place of `args[i]`, for an intrinsic whose operands are addresses
+/// or values the allocator placed.
+fn arg_place(alloc: &Allocation, args: &[u32], i: usize, what: &str) -> Option<Place> {
+    match alloc.places.get(args[i] as usize).copied() {
+        Some(p) => Some(p),
+        None => failed(what),
+    }
+}
+
+/// System V AMD64 `va_start` (ABI 3.5.7). `args[0]` is the `__va_list_tag`
+/// pointer, `args[1]` is `&last` (unused: the named-argument counts come
+/// from the prototype). The struct is initialised with
+///   gp_offset         = num_named_int * 8
+///   fp_offset         = 48 + num_named_fp * 16
+///   overflow_arg_area = first incoming stack argument
+///   reg_save_area     = base of the prologue-spilled area
+fn emit_va_start_sysv(
+    code: &mut Vec<u8>,
+    args: &[u32],
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    frame: Frame,
+    abi: super::Abi,
+) -> bool {
+    if args.len() != 2 {
+        return fail("VaStart: expected 2 args");
+    }
+    // `param_fp_mask` bit i set means named parameter i is floating-point.
+    let n = func.n_params;
+    let mut named_int = 0u32;
+    let mut named_fp = 0u32;
+    for i in 0..n {
+        if (func.param_fp_mask & (1u32 << i)) != 0 {
+            named_fp += 1;
+        } else {
+            named_int += 1;
         }
     }
+    // gp_offset / fp_offset index the next argument register the save
+    // area holds; they saturate at the bank size (six GP, eight FP) so a
+    // callee whose named parameters fill a bank sends `va_arg` straight to
+    // the overflow area. With the XMM save area unpopulated (`-mno-sse`)
+    // the FP bank reads as exhausted.
+    let gp_offset = named_int.min(6) * 8;
+    let fp_offset = if abi.no_fp_varargs {
+        SYSV_REG_SAVE_BYTES
+    } else {
+        SYSV_GP_SAVE_BYTES + named_fp.min(8) * 16
+    };
+    let Some(ap_place) = arg_place(alloc, args, 0, "VaStart: &ap value id out of range") else {
+        return false;
+    };
+    let Some(ap) = materialize_int(code, ap_place, SCRATCH_R11, frame) else {
+        return fail("VaStart: &ap not in int reg / spill");
+    };
+    super::encode::emit_mov_mem32_imm32(code, ap, 0, gp_offset as i32);
+    super::encode::emit_mov_mem32_imm32(code, ap, 4, fp_offset as i32);
+    // overflow_arg_area: incoming stack arguments sit above the return
+    // address at [rbp + 16]; the named parameters that overflowed the
+    // argument registers occupy the low slots there.
+    let named_stack_bytes: i32 = super::plan_param_regs(n, func.param_fp_mask, abi)
+        .placements
+        .iter()
+        .filter(|q| matches!(q, super::ArgPlacement::Stack(_)))
+        .count() as i32
+        * 8;
+    emit_lea_r_mem(code, SCRATCH_R10, Reg::RBP, 16 + named_stack_bytes);
+    emit_mov_mem_r(code, ap, 8, SCRATCH_R10);
+    emit_lea_r_mem(code, SCRATCH_R10, Reg::RBP, frame.va_reg_save_off);
+    emit_mov_mem_r(code, ap, 16, SCRATCH_R10);
+    true
+}
+
+/// System V `va_copy`: a 24-byte `__va_list_tag` struct copy (ABI 3.5.7).
+/// `args[0]` = &dst struct, `args[1]` = &src struct. Both pointers ride the
+/// reserved r10 / r11 scratches (rcx is in the allocator's caller pool and
+/// may hold a live value); the copied word borrows a pool register around
+/// a push / pop pair. The spill loads run before the push so rsp-relative
+/// offsets stay valid.
+fn emit_va_copy_sysv(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, frame: Frame) -> bool {
+    if args.len() != 2 {
+        return fail("VaCopy: expected 2 args");
+    }
+    let Some(src_place) = arg_place(alloc, args, 1, "VaCopy: &src value id out of range") else {
+        return false;
+    };
+    let Some(src_p) = materialize_int(code, src_place, SCRATCH_R11, frame) else {
+        return fail("VaCopy: &src not in int reg / spill");
+    };
+    let Some(dst_place) = arg_place(alloc, args, 0, "VaCopy: &dst value id out of range") else {
+        return false;
+    };
+    let Some(dst_p) = materialize_int(code, dst_place, SCRATCH_R10, frame) else {
+        return fail("VaCopy: &dst not in int reg / spill");
+    };
+    let temp = if dst_p.0 != Reg::RAX.0 && src_p.0 != Reg::RAX.0 {
+        Reg::RAX
+    } else if dst_p.0 != Reg::RCX.0 && src_p.0 != Reg::RCX.0 {
+        Reg::RCX
+    } else {
+        Reg::RDX
+    };
+    emit_push_r(code, temp);
+    for off in [0i32, 8, 16] {
+        emit_mov_r_mem(code, temp, src_p, off);
+        emit_mov_mem_r(code, dst_p, off, temp);
+    }
+    emit_pop_r(code, temp);
+    true
+}
+
+/// Win64 `va_start(&ap, &last)`: `*ap = &last + stride`, the first variadic
+/// slot one stride past the last named parameter. Both pointer operands
+/// can land in spill slots, so each materializes into a reserved scratch;
+/// r10 / r11 sit outside both allocator banks, so they never alias an
+/// allocator-chosen `ap` / `last`, and the advance lands in r10 rather
+/// than clobbering a `last` register that may still be live.
+fn emit_va_start_cursor(
+    code: &mut Vec<u8>,
+    args: &[u32],
+    alloc: &Allocation,
+    frame: Frame,
+) -> bool {
+    if args.len() != 2 {
+        return fail("VaStart: expected 2 args");
+    }
+    let Some(ap_place) = arg_place(alloc, args, 0, "VaStart: &ap value id out of range") else {
+        return false;
+    };
+    let Some(last_place) = arg_place(alloc, args, 1, "VaStart: &last value id out of range") else {
+        return false;
+    };
+    let Some(ap) = materialize_int(code, ap_place, SCRATCH_R11, frame) else {
+        return fail("VaStart: &ap not in int reg / spill");
+    };
+    let Some(last) = materialize_int(code, last_place, SCRATCH_R10, frame) else {
+        return fail("VaStart: &last not in int reg / spill");
+    };
+    let advance = SCRATCH_R10;
+    emit_lea_r_mem(code, advance, last, VA_CURSOR_STRIDE);
+    emit_mov_mem_r(code, ap, 0, advance);
+    true
+}
+
+/// Win64 `va_arg`: returns `*ap` and advances `*ap` by the stride.
+/// `args[0]` = &ap; a type descriptor in `args[1]` is ignored by the
+/// single-region walk. The cursor address, the loaded result and the
+/// advance temporary occupy distinct registers so the writeback stores
+/// through the cursor rather than through the just-loaded value: the
+/// cursor is held in r11 whenever it would alias the work register, the
+/// value loads into the work register, the advance into r10.
+fn emit_va_arg_cursor(
+    code: &mut Vec<u8>,
+    args: &[u32],
+    dst: Place,
+    alloc: &Allocation,
+    frame: Frame,
+) -> bool {
+    if args.is_empty() {
+        return fail("VaArg: expected at least the ap argument");
+    }
+    let Some(ap_place) = arg_place(alloc, args, 0, "VaArg: &ap value id out of range") else {
+        return false;
+    };
+    let ap = match ap_place {
+        Place::IntReg(r) => {
+            let work_aliases = matches!(dst, Place::IntReg(d) if d == r);
+            if work_aliases {
+                emit_mov_rr(code, SCRATCH_R11, Reg(r));
+                SCRATCH_R11
+            } else {
+                Reg(r)
+            }
+        }
+        Place::Spill(slot) => {
+            let (sb, sp_off) = spill_slot_addr(frame, slot);
+            emit_mov_r_mem(code, SCRATCH_R11, sb, sp_off);
+            SCRATCH_R11
+        }
+        _ => return fail("VaArg: &ap not in int reg / spill"),
+    };
+    // The destination register when distinct from the cursor, else r10.
+    let work = match dst {
+        Place::IntReg(d) if Reg(d).0 != ap.0 => Reg(d),
+        _ => SCRATCH_R10,
+    };
+    emit_mov_r_mem(code, work, ap, 0);
+    let advance = SCRATCH_R10;
+    if advance.0 == work.0 {
+        // Destination spilled: store the result before reusing r10 for
+        // the advance.
+        spill_dst_to_slot(code, dst, work, frame);
+        emit_lea_r_mem(code, advance, work, VA_CURSOR_STRIDE);
+        emit_mov_mem_r(code, ap, 0, advance);
+    } else {
+        emit_lea_r_mem(code, advance, work, VA_CURSOR_STRIDE);
+        emit_mov_mem_r(code, ap, 0, advance);
+        spill_dst_to_slot(code, dst, work, frame);
+    }
+    true
+}
+
+/// Win64 `va_copy(&dst, &src)`: `*dst = *src`. The source value loads into
+/// r10 before the destination pointer materializes, so r11 serves both
+/// pointers in turn.
+fn emit_va_copy_cursor(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, frame: Frame) -> bool {
+    if args.len() != 2 {
+        return fail("VaCopy: expected 2 args");
+    }
+    let Some(dst_place) = arg_place(alloc, args, 0, "VaCopy: &dst value id out of range") else {
+        return false;
+    };
+    let Some(src_place) = arg_place(alloc, args, 1, "VaCopy: &src value id out of range") else {
+        return false;
+    };
+    let Some(src_p) = materialize_int(code, src_place, SCRATCH_R11, frame) else {
+        return fail("VaCopy: &src not in int reg / spill");
+    };
+    let scratch = SCRATCH_R10;
+    emit_mov_r_mem(code, scratch, src_p, 0);
+    let Some(dst_p) = materialize_int(code, dst_place, SCRATCH_R11, frame) else {
+        return fail("VaCopy: &dst not in int reg / spill");
+    };
+    emit_mov_mem_r(code, dst_p, 0, scratch);
+    true
+}
+
+/// `alloca(n)`: move rsp down by `n` rounded up to 16 bytes and return the
+/// new rsp. The frame's spill slots and locals stay reachable through rbp
+/// (`Frame::dynamic_sp`); the storage is reclaimed by the epilogue or by
+/// an `AllocaRestore` closing a VLA scope (C99 6.2.4p2). rsp walks down
+/// page by page, touching each, before the final value commits: the same
+/// guard-region rule as `emit_stack_alloc`, over a size known at run time.
+fn emit_alloca(
+    code: &mut Vec<u8>,
+    args: &[u32],
+    dst: Place,
+    alloc: &Allocation,
+    frame: Frame,
+) -> bool {
+    if !frame.dynamic_sp {
+        return fail("Alloca: AllocaInit didn't run for this function");
+    }
+    if args.len() != 1 {
+        return fail("Alloca: expected 1 arg");
+    }
+    let Some(rd) = int_or_spill_dst(dst) else {
+        return fail("Alloca: dst not int reg / spill");
+    };
+    let size_place = place_of(alloc, args[0]);
+    // rd_phys receives the result (r10 for a spill dst); the rounded size
+    // rides r11. Both scratches sit outside the allocator banks, and rd is
+    // never r11, so size and result stay distinct.
+    let rd_phys = if matches!(dst, Place::Spill(_)) {
+        SCRATCH_R10
+    } else {
+        rd
+    };
+    let size_reg = SCRATCH_R11;
+    let Some(n) = materialize_int(code, size_place, size_reg, frame) else {
+        return fail("Alloca: size not int reg / spill / fp");
+    };
+    if n.0 != size_reg.0 {
+        emit_mov_rr(code, size_reg, n);
+    }
+    super::encode::emit_ri(code, Mnem::Add, 8, size_reg, 15);
+    super::encode::emit_ri(code, Mnem::And, 8, size_reg, -16);
+    emit_mov_rr(code, rd_phys, Reg::RSP);
+    super::encode::emit_rr(code, Mnem::Sub, 8, rd_phys, size_reg);
+    // The size is 16-aligned, so the amount the settling `mov` covers past
+    // the last probe is at most MAX_UNPROBED_STACK_STEP.
+    super::encode::emit_shift_ri(code, Mnem::Shr, 8, size_reg, 12);
+    super::encode::emit_rr(code, Mnem::Test, 8, size_reg, size_reg);
+    super::encode::emit_jcc_rel32(code, Cc::E, 0);
+    let skip_at = code.len() - 4;
+    let loop_start = code.len();
+    emit_sub_rsp_imm32(code, STACK_PROBE_PAGE);
+    emit_stack_probe(code);
+    super::encode::emit_ri(code, Mnem::Sub, 8, size_reg, 1);
+    super::encode::emit_jcc_rel32(code, Cc::Ne, 0);
+    let back_at = code.len() - 4;
+    let back = (loop_start as i64 - code.len() as i64) as i32;
+    code[back_at..back_at + 4].copy_from_slice(&back.to_le_bytes());
+    let skip = (code.len() as i64 - (skip_at + 4) as i64) as i32;
+    code[skip_at..skip_at + 4].copy_from_slice(&skip.to_le_bytes());
+    emit_mov_rr(code, Reg::RSP, rd_phys);
+    spill_dst_to_slot(code, dst, rd_phys, frame);
+    true
+}
+
+/// Snapshot rsp for a VLA block (C99 6.2.4p2).
+fn emit_alloca_save(code: &mut Vec<u8>, dst: Place, frame: Frame) -> bool {
+    if !frame.dynamic_sp {
+        return fail("AllocaSave: AllocaInit didn't run for this function");
+    }
+    let Some(rd) = int_or_spill_dst(dst) else {
+        return fail("AllocaSave: dst not int reg / spill");
+    };
+    let rd_phys = if matches!(dst, Place::Spill(_)) {
+        SCRATCH_R10
+    } else {
+        rd
+    };
+    emit_mov_rr(code, rd_phys, Reg::RSP);
+    spill_dst_to_slot(code, dst, rd_phys, frame);
+    true
+}
+
+/// Restore the saved rsp on VLA block exit, reclaiming the block's storage
+/// (per iteration for a loop body).
+fn emit_alloca_restore(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, frame: Frame) -> bool {
+    if !frame.dynamic_sp {
+        return fail("AllocaRestore: AllocaInit didn't run for this function");
+    }
+    if args.len() != 1 {
+        return fail("AllocaRestore: expected 1 arg");
+    }
+    let v_place = place_of(alloc, args[0]);
+    let Some(v) = materialize_int(code, v_place, SCRATCH_R10, frame) else {
+        return fail("AllocaRestore: arg not int reg / spill / fp");
+    };
+    emit_mov_rr(code, Reg::RSP, v);
+    true
+}
+
+/// The single-memory-operand x87 / system forms. The one argument is the
+/// operand address, forced into r10 so the ModRM byte needs no SIB or
+/// displacement (r10 = rm 010 under REX.B). The opcode bytes and the
+/// ModRM.reg field select the instruction:
+///   fnstcw/fldcw = D9 /7,/5 ; fxsave/fxrstor = 0F AE /0,/1 ;
+///   sgdt/sidt = 0F 01 /0,/1 ; lgdt/lidt = 0F 01 /2,/3 ;
+///   sldt/str  = 0F 00 /0,/1 ; lldt = 0F 00 /2 ; clflush = 0F AE /7.
+fn emit_mem_operand_insn(
+    code: &mut Vec<u8>,
+    intrinsic: crate::c5::op::Intrinsic,
+    args: &[u32],
+    alloc: &Allocation,
+    frame: Frame,
+) -> bool {
+    use crate::c5::op::Intrinsic as I;
+    if args.len() != 1 {
+        return fail("single-memory-operand intrinsic expects 1 arg");
+    }
+    let Some(place) = arg_place(
+        alloc,
+        args,
+        0,
+        "single-memory-operand intrinsic: arg place missing",
+    ) else {
+        return false;
+    };
+    let Some(addr) = materialize_int(code, place, SCRATCH_R10, frame) else {
+        return fail("single-memory-operand intrinsic: arg not an int register");
+    };
+    if addr.0 != SCRATCH_R10.0 {
+        super::encode::emit_mov_rr(code, SCRATCH_R10, addr);
+    }
+    let (opc, reg_field): (&[u8], u8) = match intrinsic {
+        I::X87StoreControlWord => (&[0xD9], 7),
+        I::X87LoadControlWord => (&[0xD9], 5),
+        I::X86FxSave => (&[0x0F, 0xAE], 0),
+        I::X86FxRestore => (&[0x0F, 0xAE], 1),
+        I::X86Sgdt => (&[0x0F, 0x01], 0),
+        I::X86Sidt => (&[0x0F, 0x01], 1),
+        I::X86Lgdt => (&[0x0F, 0x01], 2),
+        I::X86Lidt => (&[0x0F, 0x01], 3),
+        I::X86Sldt => (&[0x0F, 0x00], 0),
+        I::X86Str => (&[0x0F, 0x00], 1),
+        I::X86Lldt => (&[0x0F, 0x00], 2),
+        _ => (&[0x0F, 0xAE], 7), // clflush
+    };
+    code.push(0x41); // REX.B for r10
+    code.extend_from_slice(opc);
+    code.push((reg_field << 3) | 0x02); // mod=00, reg=field, rm=r10
+    true
+}
+
+/// Unsigned 128/64 division (`udiv_qrnnd`): `div` takes the dividend in
+/// rdx:rax = n1:n0 and leaves the quotient in rax and the remainder in
+/// rdx. args: `[q_addr, rem_addr, n0, n1, d]`. rax and rdx are preserved
+/// around the sequence; the output addresses are pushed (quotient then
+/// remainder, so the remainder address pops first) and each operand is
+/// read through the rsp shift the pushes so far produced.
+fn emit_divq128(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, frame: Frame) -> bool {
+    const RAX: Reg = Reg(0);
+    const RDX: Reg = Reg(2);
+    const R10: Reg = Reg(10);
+    const R11: Reg = Reg(11);
+    if args.len() != 5 {
+        return fail("divq: wrong operand count");
+    }
+    // Force args[idx] into `scratch`; `pushed` counts the 8-byte pushes
+    // emitted so far.
+    let materialize_at =
+        |code: &mut Vec<u8>, idx: usize, scratch: Reg, pushed: u32| -> Option<Reg> {
+            let place = alloc.places.get(args[idx] as usize).copied()?;
+            let r = materialize_int_shifted(code, place, scratch, frame, 8 * pushed)?;
+            if r.0 != scratch.0 {
+                super::encode::emit_mov_rr(code, scratch, r);
+            }
+            Some(scratch)
+        };
+    super::encode::emit_push_r(code, RAX);
+    super::encode::emit_push_r(code, RDX);
+    if materialize_at(code, 0, R10, 2).is_none() {
+        return fail("divq: quotient output not an address");
+    }
+    super::encode::emit_push_r(code, R10);
+    if materialize_at(code, 1, R10, 3).is_none() {
+        return fail("divq: remainder output not an address");
+    }
+    super::encode::emit_push_r(code, R10);
+    // Divisor -> r10, dividend high -> r11, then rax last so an input the
+    // allocator placed in rax / rdx is read first.
+    if materialize_at(code, 4, R10, 4).is_none() {
+        return fail("divq: divisor operand missing");
+    }
+    if materialize_at(code, 3, R11, 4).is_none() {
+        return fail("divq: dividend-high operand missing");
+    }
+    if materialize_at(code, 2, RAX, 4).is_none() {
+        return fail("divq: dividend-low operand missing");
+    }
+    super::encode::emit_mov_rr(code, RDX, R11);
+    // div r10 (REX.W + REX.B, F7 /6).
+    code.extend_from_slice(&[0x49, 0xF7, 0xF2]);
+    super::encode::emit_pop_r(code, R11);
+    super::encode::emit_mov_mem_r(code, R11, 0, RDX);
+    super::encode::emit_pop_r(code, R11);
+    super::encode::emit_mov_mem_r(code, R11, 0, RAX);
+    super::encode::emit_pop_r(code, RDX);
+    super::encode::emit_pop_r(code, RAX);
+    true
+}
+
+/// The value of `src` (rbp or rsp) into the destination.
+fn emit_reg_read(code: &mut Vec<u8>, dst: Place, frame: Frame, src: Reg, no_dst: &str) -> bool {
+    let Some(rd) = int_or_spill_dst(dst) else {
+        return fail(no_dst);
+    };
+    emit_mov_rr(code, rd, src);
+    spill_dst_to_slot(code, dst, rd, frame);
+    true
+}
+
+/// `__builtin_return_address`: the return address a frame record holds at
+/// [fp + 8], above the saved rbp. Without an operand the record is the
+/// current frame's; with one, the frame address a level above 0 walked to.
+fn emit_return_address(
+    code: &mut Vec<u8>,
+    args: &[u32],
+    dst: Place,
+    alloc: &Allocation,
+    frame: Frame,
+) -> bool {
+    let Some(rd) = int_or_spill_dst(dst) else {
+        return fail("ReturnAddress: dst not int reg / spill");
+    };
+    let fp = match args {
+        [] => Reg::RBP,
+        [walked] => {
+            let Some(r) = int_operand_into_rd(code, place_of(alloc, *walked), rd, frame) else {
+                return fail("ReturnAddress: frame not int reg / spill");
+            };
+            r
+        }
+        _ => return fail("ReturnAddress: expected at most 1 arg"),
+    };
+    emit_mov_r_mem(code, rd, fp, 8);
+    spill_dst_to_slot(code, dst, rd, frame);
+    true
 }
 
 #[allow(clippy::too_many_arguments)]

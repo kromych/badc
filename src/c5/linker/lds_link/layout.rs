@@ -11,7 +11,7 @@ use alloc::vec::Vec;
 use hashbrown::HashSet;
 
 use super::{
-    Att, ChunkSrc, EM_386, EM_AARCH64, EM_X86_64, LdsEmit, LdsLinker, Piece, Placement, SHF_ALLOC,
+    Att, ChunkSrc, EM_386, EM_AARCH64, EM_X86_64, LdsLinker, Piece, Placement, SHF_ALLOC,
     SHF_EXCLUDE, SHF_EXECINSTR, SHF_GROUP, SHF_INFO_LINK, SHF_LINK_ORDER, SHF_MERGE, SHF_STRINGS,
     SHT_NOBITS, SHT_NOTE, SHT_PROGBITS, SHT_RELA, SHT_RELR, SHT_STRTAB, STT_NOTYPE, STV_PROTECTED,
     ScriptSym, Stmt, Val, align_up,
@@ -59,6 +59,73 @@ fn arch_fill(machine: u16, code: bool, len: usize) -> Vec<u8> {
             v
         }
         _ => alloc::vec![0u8; len],
+    }
+}
+
+/// Input-derived attributes of one output section, gathered over the
+/// inputs its pieces claim.
+struct InputSummary {
+    /// Union of the input flag words.
+    flags: u64,
+    /// Largest input alignment.
+    align: u64,
+    any: bool,
+    all_nobits: bool,
+    all_note: bool,
+    /// Entry size and flag word per input, in claim order.
+    entsizes: Vec<u64>,
+    flag_set: Vec<u64>,
+}
+
+impl InputSummary {
+    /// Every input carries the same flags and entry size, which is
+    /// when SHF_MERGE and the entry size survive on the output.
+    fn uniform(&self) -> bool {
+        !self.flag_set.is_empty()
+            && self.flag_set.iter().all(|&f| f == self.flag_set[0])
+            && self.entsizes.iter().all(|&e| e == self.entsizes[0])
+    }
+}
+
+/// The byte layout of one output section as its pieces are walked:
+/// the cursor, the chunks laid so far and the fill in force.
+struct ChunkLayout {
+    off: u64,
+    /// Furthest byte laid, which becomes the section size.
+    end: u64,
+    chunks: Vec<(u64, u64, ChunkSrc)>,
+    fill: Option<Vec<u8>>,
+    /// Some chunk carries file content.
+    file_bytes: bool,
+    /// Every input is NOBITS: gaps then take no pad bytes.
+    all_nobits: bool,
+    /// Pad bytes are NOPs in a code section.
+    code: bool,
+    machine: u16,
+}
+
+impl ChunkLayout {
+    /// Move the cursor to `to`; `pad` fills the gap, unless the whole
+    /// section is zero fill.
+    fn move_to(&mut self, to: u64, pad: bool) {
+        if to > self.off && pad && !self.all_nobits {
+            let len = to - self.off;
+            let pad = pad_bytes(&self.fill, self.machine, self.code, len);
+            self.chunks.push((self.off, len, ChunkSrc::Pad(pad)));
+        }
+        self.off = to;
+    }
+
+    /// Lay a chunk of `len` bytes at the cursor.
+    fn push(&mut self, len: u64, src: ChunkSrc, file_bytes: bool) {
+        self.chunks.push((self.off, len, src));
+        self.file_bytes |= file_bytes;
+        self.off += len;
+        self.note_end();
+    }
+
+    fn note_end(&mut self) {
+        self.end = self.end.max(self.off);
     }
 }
 
@@ -163,8 +230,7 @@ impl<'a> LdsLinker<'a> {
     }
 
     fn layout_out_section(&mut self, oi: usize) {
-        // Collect immutable inputs first.
-        let (address, stype, at, align_attr, fill, pieces_len) = {
+        let (address, stype, at, align_attr, fill) = {
             let o = &self.outs[oi];
             (
                 o.address.clone(),
@@ -172,52 +238,26 @@ impl<'a> LdsLinker<'a> {
                 o.at.clone(),
                 o.align_attr.clone(),
                 o.fill.clone(),
-                o.pieces.len(),
             )
         };
-        // Input-derived attributes.
-        let mut in_flags = 0u64;
-        let mut max_align = 1u64;
-        let mut any_input = false;
-        let mut all_nobits = true;
-        let mut all_note = true;
-        let mut entsizes: Vec<u64> = Vec::new();
-        let mut in_flag_set: Vec<u64> = Vec::new();
-        for pi in 0..pieces_len {
-            if let Piece::Inputs(v) = &self.outs[oi].pieces[pi] {
-                for &i in v.clone().iter() {
-                    let s = self.insec(i);
-                    any_input = true;
-                    in_flags |= s.flags;
-                    max_align = max_align.max(s.addralign);
-                    if s.shtype != SHT_NOBITS {
-                        all_nobits = false;
-                    }
-                    if s.shtype != SHT_NOTE {
-                        all_note = false;
-                    }
-                    entsizes.push(s.entsize);
-                    in_flag_set.push(s.flags);
-                }
-            }
-        }
+        let inputs = self.summarize_inputs(oi);
         let attr_align = align_attr
             .as_ref()
             .map(|e| self.eval(e).v)
             .unwrap_or(1)
             .max(1);
-        let sec_align = max_align.max(attr_align);
+        let sec_align = inputs.align.max(attr_align);
 
         // Address 0 with non-alloc inputs (the debug-section idiom)
         // keeps the section out of the allocation flow; `(INFO)`
         // likewise.
         let explicit_zero = matches!(address, Some(Expr::Number(0)));
-        let non_alloc_inputs = in_flags & SHF_ALLOC == 0;
+        let non_alloc_inputs = inputs.flags & SHF_ALLOC == 0;
         let info_type = stype == Some(OutputSectionType::Info);
         // An orphan takes its input's allocation: bfd creates the
         // output section from the input's flags, so a non-allocated
         // input never joins the load image.
-        let orphan_non_alloc = self.outs[oi].orphan && non_alloc_inputs && any_input;
+        let orphan_non_alloc = self.outs[oi].orphan && non_alloc_inputs && inputs.any;
         let alloc = !info_type && !(explicit_zero && non_alloc_inputs) && !orphan_non_alloc;
 
         let addr = if let Some(ae) = &address {
@@ -238,173 +278,25 @@ impl<'a> LdsLinker<'a> {
         self.cur_out = Some(oi);
         self.outs[oi].addr = start;
 
-        let mut off: u64 = 0;
-        let mut end: u64 = 0;
-        let mut chunks: Vec<(u64, u64, ChunkSrc)> = Vec::new();
-        let mut fill_bytes: Option<Vec<u8>> = fill.as_ref().map(|e| {
-            let v = self.eval(e).v;
-            fill_pattern(v)
-        });
-        let code = self.section_input_flags(oi) & SHF_EXECINSTR != 0;
-        let machine = self.machine;
-        let mut file_bytes = false;
-        // The veneer area sits after the section's last input piece, as
-        // ld attaches its stub section, so closing statements still
-        // bound it.
-        let veneer_len = self.veneer_reserve.get(&oi).copied().unwrap_or(0);
-        let last_inputs_pi = (0..pieces_len)
-            .rev()
-            .find(|&pi| matches!(self.outs[oi].pieces[pi], Piece::Inputs(_)));
-        for pi in 0..pieces_len {
-            match self.outs[oi].pieces[pi].clone() {
-                Piece::Inputs(v) => {
-                    for &i in &v {
-                        // A merged-away member (not its pool's
-                        // representative) contributes no bytes and no
-                        // alignment: its storage lives in the pool rep.
-                        if let Some(&pl) = self.merge_of.get(&i)
-                            && self.pools[pl].rep != i
-                        {
-                            self.placements[i] = Placement {
-                                out: oi,
-                                off,
-                                placed: true,
-                            };
-                            continue;
-                        }
-                        let (a, sz, nobits) = {
-                            let s = self.insec(i);
-                            let a = if let Some(&pl) = self.merge_of.get(&i) {
-                                self.pools[pl].align
-                            } else {
-                                s.addralign.max(1)
-                            };
-                            (a, self.insec_placed_size(i), s.shtype == SHT_NOBITS)
-                        };
-                        let aligned = align_up(off, a);
-                        if aligned > off {
-                            if !nobits && !all_nobits {
-                                let len = aligned - off;
-                                let pad = pad_bytes(&fill_bytes, machine, code, len);
-                                chunks.push((off, len, ChunkSrc::Pad(pad)));
-                            }
-                            off = aligned;
-                        }
-                        self.placements[i] = Placement {
-                            out: oi,
-                            off,
-                            placed: true,
-                        };
-                        chunks.push((off, sz, ChunkSrc::Input(i)));
-                        if !nobits && sz > 0 {
-                            file_bytes = true;
-                        }
-                        off += sz;
-                        end = end.max(off);
-                        if alloc {
-                            self.dot = start + off;
-                        }
-                    }
-                    if veneer_len > 0 && Some(pi) == last_inputs_pi {
-                        let aligned = align_up(off, 4);
-                        if aligned > off && !all_nobits {
-                            let len = aligned - off;
-                            let pad = pad_bytes(&fill_bytes, machine, code, len);
-                            chunks.push((off, len, ChunkSrc::Pad(pad)));
-                        }
-                        chunks.push((aligned, veneer_len, ChunkSrc::Veneers));
-                        file_bytes = true;
-                        off = aligned + veneer_len;
-                        end = end.max(off);
-                        if alloc {
-                            self.dot = start + off;
-                        }
-                    }
-                }
-                Piece::Assign(a) => {
-                    self.exec_assignment(&a, false);
-                    if alloc {
-                        let new_off = self.dot.wrapping_sub(start);
-                        if self.dot < start && self.final_pass {
-                            self.errors.push(format!(
-                                "cannot move location counter backwards in `{}'",
-                                self.outs[oi].name
-                            ));
-                        } else {
-                            if new_off > off && !all_nobits {
-                                let len = new_off - off;
-                                let pad = pad_bytes(&fill_bytes, machine, code, len);
-                                chunks.push((off, len, ChunkSrc::Pad(pad)));
-                            }
-                            off = new_off;
-                            end = end.max(off);
-                        }
-                    }
-                }
-                Piece::Assert(e, m) => self.exec_assert(&e, &m),
-                Piece::Data(w, e) => {
-                    let v = self.eval(&e).v;
-                    let n = w.size() as usize;
-                    let bytes = v.to_le_bytes()[..n].to_vec();
-                    chunks.push((off, n as u64, ChunkSrc::Bytes(bytes)));
-                    file_bytes = true;
-                    off += n as u64;
-                    end = end.max(off);
-                    if alloc {
-                        self.dot = start + off;
-                    }
-                }
-                Piece::Fill(e) => {
-                    let v = self.eval(&e).v;
-                    fill_bytes = Some(fill_pattern(v));
-                }
-            }
-        }
-        let size = end;
-
-        // Section classification: no file content at all makes
-        // NOBITS (`.bss`-shape sections, `. +=` reservations); a
-        // uniform SHT_NOTE membership keeps NOTE; everything else is
-        // PROGBITS.
-        let noload = stype == Some(OutputSectionType::NoLoad);
-        let shtype = if size > 0 && !file_bytes && all_nobits {
-            SHT_NOBITS
-        } else if any_input && all_note {
-            SHT_NOTE
-        } else {
-            SHT_PROGBITS
+        let mut lay = ChunkLayout {
+            off: 0,
+            end: 0,
+            chunks: Vec::new(),
+            fill: fill.as_ref().map(|e| {
+                let v = self.eval(e).v;
+                fill_pattern(v)
+            }),
+            file_bytes: false,
+            all_nobits: inputs.all_nobits,
+            code: self.section_input_flags(oi) & SHF_EXECINSTR != 0,
+            machine: self.machine,
         };
-        // A group is an input-side construct and its member index does
-        // not survive the link, so bfd clears SHF_GROUP; the retain
-        // flag describes the content and does survive. Link order is
-        // a property of the whole output section, so bfd takes it from
-        // the section opening the output and from no other.
-        let mut flags = in_flags & !(SHF_GROUP | SHF_INFO_LINK | SHF_EXCLUDE | SHF_LINK_ORDER);
-        if self
-            .first_input(oi)
-            .is_some_and(|i| self.insec(i).flags & SHF_LINK_ORDER != 0)
-        {
-            flags |= SHF_LINK_ORDER;
-        }
-        let uniform = !in_flag_set.is_empty()
-            && in_flag_set.iter().all(|&f| f == in_flag_set[0])
-            && entsizes.iter().all(|&e| e == entsizes[0]);
-        let entsize = if uniform { entsizes[0] } else { 0 };
-        if !uniform {
-            flags &= !(SHF_MERGE | SHF_STRINGS);
-        }
-        if alloc && (any_input || file_bytes || size > 0) {
-            flags |= SHF_ALLOC;
-        }
-        if !alloc {
-            flags &= !SHF_ALLOC;
-        }
-        // RELA/RELR synthesized content keeps its own type.
-        if self.outs[oi].name == self.dyn_reloc_name() && self.opts.emit == LdsEmit::Dyn && size > 0
-        {
-            // keep type from the synth input (SHT_RELA)
-        }
+        self.lay_out_pieces(oi, start, alloc, &mut lay);
+        let size = lay.end;
 
+        let noload = stype == Some(OutputSectionType::NoLoad);
+        let (shtype, flags, entsize) =
+            self.classify_output(oi, &inputs, size, lay.file_bytes, alloc);
         {
             let o = &mut self.outs[oi];
             o.size = size;
@@ -413,8 +305,8 @@ impl<'a> LdsLinker<'a> {
             o.shtype = if noload { SHT_NOBITS } else { shtype };
             o.entsize = entsize;
             o.alloc = alloc;
-            o.chunks = chunks;
-            o.file_bytes = file_bytes;
+            o.chunks = lay.chunks;
+            o.file_bytes = lay.file_bytes;
             o.removed = false;
         }
         // Synth inputs give the output their type (RELA/RELR/NOTE).
@@ -441,6 +333,186 @@ impl<'a> LdsLinker<'a> {
         }
         self.define_start_stop(oi);
         self.cur_out = None;
+    }
+
+    fn summarize_inputs(&self, oi: usize) -> InputSummary {
+        let mut s = InputSummary {
+            flags: 0,
+            align: 1,
+            any: false,
+            all_nobits: true,
+            all_note: true,
+            entsizes: Vec::new(),
+            flag_set: Vec::new(),
+        };
+        for piece in &self.outs[oi].pieces {
+            let Piece::Inputs(v) = piece else { continue };
+            for &i in v {
+                let sec = self.insec(i);
+                s.any = true;
+                s.flags |= sec.flags;
+                s.align = s.align.max(sec.addralign);
+                if sec.shtype != SHT_NOBITS {
+                    s.all_nobits = false;
+                }
+                if sec.shtype != SHT_NOTE {
+                    s.all_note = false;
+                }
+                s.entsizes.push(sec.entsize);
+                s.flag_set.push(sec.flags);
+            }
+        }
+        s
+    }
+
+    /// Walk the pieces of output section `oi` in statement order,
+    /// laying chunks and moving the location counter as they go.
+    fn lay_out_pieces(&mut self, oi: usize, start: u64, alloc: bool, lay: &mut ChunkLayout) {
+        let pieces_len = self.outs[oi].pieces.len();
+        // The veneer area sits after the section's last input piece, as
+        // ld attaches its stub section, so closing statements still
+        // bound it.
+        let veneer_len = self.veneer_reserve.get(&oi).copied().unwrap_or(0);
+        let last_inputs_pi = (0..pieces_len)
+            .rev()
+            .find(|&pi| matches!(self.outs[oi].pieces[pi], Piece::Inputs(_)));
+        for pi in 0..pieces_len {
+            match self.outs[oi].pieces[pi].clone() {
+                Piece::Inputs(v) => {
+                    self.place_inputs(oi, &v, start, alloc, lay);
+                    if veneer_len > 0 && Some(pi) == last_inputs_pi {
+                        lay.move_to(align_up(lay.off, 4), true);
+                        lay.push(veneer_len, ChunkSrc::Veneers, true);
+                        if alloc {
+                            self.dot = start + lay.off;
+                        }
+                    }
+                }
+                Piece::Assign(a) => {
+                    self.exec_assignment(&a, false);
+                    if alloc {
+                        let new_off = self.dot.wrapping_sub(start);
+                        if self.dot < start && self.final_pass {
+                            self.errors.push(format!(
+                                "cannot move location counter backwards in `{}'",
+                                self.outs[oi].name
+                            ));
+                        } else {
+                            lay.move_to(new_off, true);
+                            lay.note_end();
+                        }
+                    }
+                }
+                Piece::Assert(e, m) => self.exec_assert(&e, &m),
+                Piece::Data(w, e) => {
+                    let v = self.eval(&e).v;
+                    let n = w.size() as usize;
+                    lay.push(
+                        n as u64,
+                        ChunkSrc::Bytes(v.to_le_bytes()[..n].to_vec()),
+                        true,
+                    );
+                    if alloc {
+                        self.dot = start + lay.off;
+                    }
+                }
+                Piece::Fill(e) => {
+                    let v = self.eval(&e).v;
+                    lay.fill = Some(fill_pattern(v));
+                }
+            }
+        }
+    }
+
+    /// Place the input sections of one spec, each at its alignment.
+    fn place_inputs(
+        &mut self,
+        oi: usize,
+        inputs: &[usize],
+        start: u64,
+        alloc: bool,
+        lay: &mut ChunkLayout,
+    ) {
+        for &i in inputs {
+            // A merged-away member (not its pool's representative)
+            // contributes no bytes and no alignment: its storage lives
+            // in the pool rep.
+            if let Some(&pl) = self.merge_of.get(&i)
+                && self.pools[pl].rep != i
+            {
+                self.placements[i] = Placement {
+                    out: oi,
+                    off: lay.off,
+                    placed: true,
+                };
+                continue;
+            }
+            let (a, sz, nobits) = {
+                let s = self.insec(i);
+                let a = if let Some(&pl) = self.merge_of.get(&i) {
+                    self.pools[pl].align
+                } else {
+                    s.addralign.max(1)
+                };
+                (a, self.insec_placed_size(i), s.shtype == SHT_NOBITS)
+            };
+            lay.move_to(align_up(lay.off, a), !nobits);
+            self.placements[i] = Placement {
+                out: oi,
+                off: lay.off,
+                placed: true,
+            };
+            lay.push(sz, ChunkSrc::Input(i), !nobits && sz > 0);
+            if alloc {
+                self.dot = start + lay.off;
+            }
+        }
+    }
+
+    /// Section type, flags and entry size of an output section, from
+    /// its inputs and the bytes laid.
+    fn classify_output(
+        &self,
+        oi: usize,
+        inputs: &InputSummary,
+        size: u64,
+        file_bytes: bool,
+        alloc: bool,
+    ) -> (u32, u64, u64) {
+        // No file content at all makes NOBITS (`.bss`-shape sections,
+        // `. +=` reservations); a uniform SHT_NOTE membership keeps
+        // NOTE; everything else is PROGBITS.
+        let shtype = if size > 0 && !file_bytes && inputs.all_nobits {
+            SHT_NOBITS
+        } else if inputs.any && inputs.all_note {
+            SHT_NOTE
+        } else {
+            SHT_PROGBITS
+        };
+        // A group is an input-side construct and its member index does
+        // not survive the link, so bfd clears SHF_GROUP; the retain
+        // flag describes the content and does survive. Link order is
+        // a property of the whole output section, so bfd takes it from
+        // the section opening the output and from no other.
+        let mut flags = inputs.flags & !(SHF_GROUP | SHF_INFO_LINK | SHF_EXCLUDE | SHF_LINK_ORDER);
+        if self
+            .first_input(oi)
+            .is_some_and(|i| self.insec(i).flags & SHF_LINK_ORDER != 0)
+        {
+            flags |= SHF_LINK_ORDER;
+        }
+        let uniform = inputs.uniform();
+        let entsize = if uniform { inputs.entsizes[0] } else { 0 };
+        if !uniform {
+            flags &= !(SHF_MERGE | SHF_STRINGS);
+        }
+        if alloc && (inputs.any || file_bytes || size > 0) {
+            flags |= SHF_ALLOC;
+        }
+        if !alloc {
+            flags &= !SHF_ALLOC;
+        }
+        (shtype, flags, entsize)
     }
 
     /// Every symbol the script assigns, at file scope, in the

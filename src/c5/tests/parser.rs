@@ -3027,6 +3027,27 @@ fn type_name_array_bound_constraints() {
         "struct t;\n\
          int main(void) { return (int)_Alignof(struct t[2]); }",
         "applied to an incomplete type",
+    );
+}
+
+#[test]
+fn binary_operator_operand_constraints() {
+    // C99 6.5.5p2: `%` takes integer operands, on either side; 6.5.6p2:
+    // an aggregate is not an operand of `+`.
+    expect_compile_error(
+        "int main(void) { double d = 1; int x = 2; return (int)(d % x); }",
+        "`%` is not defined on floating-point operands",
+    );
+    expect_compile_error(
+        "int main(void) { double d = 1; int x = 2; return (int)(x % d); }",
+        "`%` is not defined on floating-point operands",
+    );
+    expect_compile_error(
+        "struct s { int a; };\n\
+         int main(void) { struct s x = {1}, y = {2}; return (x + y).a; }",
+        "invalid operands to binary operator",
+    );
+}
 
 /// Compile `src` and run it under the VM, returning `main`'s value.
 fn run_main(src: &str) -> i64 {
@@ -3201,22 +3222,6 @@ fn a_trailing_int_modifier_folds_into_the_base_type() {
 }
 
 #[test]
-fn binary_operator_operand_constraints() {
-    // C99 6.5.5p2: `%` takes integer operands, on either side; 6.5.6p2:
-    // an aggregate is not an operand of `+`.
-    expect_compile_error(
-        "int main(void) { double d = 1; int x = 2; return (int)(d % x); }",
-        "`%` is not defined on floating-point operands",
-    );
-    expect_compile_error(
-        "int main(void) { double d = 1; int x = 2; return (int)(x % d); }",
-        "`%` is not defined on floating-point operands",
-    );
-    expect_compile_error(
-        "struct s { int a; };\n\
-         int main(void) { struct s x = {1}, y = {2}; return (x + y).a; }",
-        "invalid operands to binary operator",
-
 fn the_typedef_storage_class_may_follow_the_type_specifier() {
     // C99 6.7.1p1 lists `typedef` among the storage-class specifiers, which
     // may appear anywhere in the declaration specifiers.

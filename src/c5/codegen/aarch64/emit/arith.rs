@@ -37,9 +37,8 @@ pub(super) fn emit_extend(
     true
 }
 
-/// `Inst::Copy { value, is_fp }` -- move `value` into this
-/// instruction's own place. Bit-exact in both banks, so a
-/// single-precision operand keeps its pattern.
+/// `Inst::Copy`: move `value` into this instruction's place, bit-exact
+/// in both banks.
 pub(super) fn emit_copy(
     code: &mut Vec<u8>,
     dst: Place,
@@ -50,8 +49,7 @@ pub(super) fn emit_copy(
     scratch: &ScratchPool,
 ) -> bool {
     let src_place = place_of(alloc, value);
-    // The destination doubles as the staging register, so a reload
-    // lands where the value belongs and needs no follow-up move.
+    // A reload lands in the destination itself.
     if is_fp {
         let dd = match dst {
             Place::FpReg(r) => r,
@@ -95,11 +93,9 @@ pub(super) fn emit_copy(
     true
 }
 
-/// `Inst::Bswap { value, width }` -- reverse the low `width` bytes,
-/// zero-extended. 64-bit: `rev Xd`. 32-bit: `rev Wd` (the 32-bit write
-/// zero-extends). 16-bit: `rev Wd` then `lsr Wd, #16`, which drops the
-/// reversed upper halfword so operand bits above the width cannot
-/// reach the result.
+/// `Inst::Bswap`: reverse the low `width` bytes, zero-extended: `rev Xd`,
+/// `rev Wd` (zero-extending), or `rev Wd` then `lsr Wd, #16`, which
+/// drops the reversed upper halfword.
 pub(super) fn emit_bswap(
     code: &mut Vec<u8>,
     dst: Place,
@@ -133,14 +129,10 @@ pub(super) fn emit_bswap(
     true
 }
 
-/// `Inst::MulAdd { a, b, c, neg_product }` -- one `madd` / `msub`.
-/// The instruction reads all three sources before writing the
-/// destination, so `rd` may alias any of them. A spilled operand
-/// reloads into a register of its own: the two scratch registers,
-/// plus `rd` when the allocator gave the result one -- a third
-/// landing spot the reload only reaches when all three operands
-/// spilled, which leaves `rd` holding nothing. A spilled result has
-/// no third register to offer, so that combination falls back to the
+/// `Inst::MulAdd`: one `madd` / `msub`, which reads all three sources
+/// before writing, so `rd` may alias any of them. A spilled operand
+/// reloads into the two scratches or, when all three spilled, `rd`; a
+/// spilled result has no third register, so that combination takes the
 /// `mul` / `sub` pair the contraction replaced.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_mul_add(
@@ -225,15 +217,10 @@ pub(super) fn emit_binop(
 ) -> bool {
     let lhs_place = place_of(alloc, lhs);
     let rhs_place = place_of(alloc, rhs);
-    // FP arithmetic + comparison branch. Both operands live in
-    // d-regs; arithmetic produces a d-reg; comparisons produce a
-    // GPR (cset). The scratch d-regs (d0 / d1) reload spilled
-    // operands; the matching int scratch slots aren't disturbed
-    // because no int materialisation runs in this branch.
+    // FP arithmetic and comparison: operands in d-registers, spills
+    // reloaded into the FP scratches; no integer materialisation runs here.
     if fp_arith_enc(op).is_some() {
-        // C99 6.3.1.8: pick the single- vs double-precision encoder by
-        // the result's width. A `float op float` result is f32 and the
-        // operands are themselves f32; a `double` result is f64.
+        // C99 6.3.1.8: the encoder follows the result's precision.
         let is_f32 = alloc.is_f32(v);
         let dn = match materialize_fp_for(code, lhs, lhs_place, frame.fp_scratch[0], frame, alloc) {
             Some(r) => r,
@@ -245,11 +232,8 @@ pub(super) fn emit_binop(
         };
         let dd = match dst {
             Place::FpReg(r) => r,
-            // Stage a spilled result through a reserved scratch d-reg
-            // outside the allocator's banks; d0 may hold a live
-            // value the caller still needs. `arith` reads dn / dm
-            // before writing dd, so reusing the first FP scratch (a possible
-            // operand source) is safe.
+            // The arithmetic reads dn / dm before writing dd, so a spilled result
+            // may reuse the first FP scratch.
             Place::Spill(_) => frame.fp_scratch[0],
             _ => return false,
         };
@@ -275,8 +259,7 @@ pub(super) fn emit_binop(
         return true;
     }
     if let Some(cond) = fp_compare_cond(op) {
-        // The compare width follows the operands' precision: two f32
-        // operands use `fcmp Sn, Sm`, else `fcmp Dn, Dm`.
+        // The compare width follows the operands' precision.
         let is_f32 = alloc.is_f32(lhs) || alloc.is_f32(rhs);
         let dn = match materialize_fp_for(code, lhs, lhs_place, frame.fp_scratch[0], frame, alloc) {
             Some(r) => r,
@@ -296,9 +279,7 @@ pub(super) fn emit_binop(
         } else {
             emit(code, enc_fcmp_d(dn, dm));
         }
-        // When the terminator's b.cond consumes the flags directly,
-        // drop the cset materialisation -- the comparison value is
-        // dead.
+        // A fused branch consumes the flags; the value is dead.
         if alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
             return true;
         }
@@ -306,20 +287,13 @@ pub(super) fn emit_binop(
         store_spilled_int(code, frame, dst, rd);
         return true;
     }
-    // Integer binop path. The result lands in a GPR; if the
-    // allocator picked a spill slot, route through
-    // `scratch.primary` and store afterwards. Using
-    // scratch.primary as the rd is safe even when the lhs
-    // materialise wrote it there: `add rd, rn, rm` reads rn
-    // before writing rd, so a self-aliasing destination doesn't
-    // corrupt the operand.
+    // `add rd, rn, rm` reads rn before writing rd, so a result in
+    // scratch.primary may alias the lhs reload.
     let Some(rd) = int_or_spill_scratch(dst, scratch) else {
         return false;
     };
-    // sxtw / sxth / sxtb fold for the walker-shape sign-narrow
-    // pair `Binop(Shl, X, Imm(K)); Binop(Shr, _, Imm(K))`. The
-    // allocator marked this Shr and stashed the K (32 / 48 / 56);
-    // emit one sign-extend instead of two shifts.
+    // The allocator marked this Shr as the sign-narrow pair `Shl K; Shr K`
+    // with K in 32 / 48 / 56: one sign-extend.
     let sxtw_source = alloc
         .sxtw_source
         .get(v as usize)
@@ -360,17 +334,9 @@ pub(super) fn emit_binop(
         return true;
     }
     if matches!(op, BinOp::Mod | BinOp::Modu) {
-        // rem = rn - (rn / rm) * rm. The msub reads the dividend (rn)
-        // and divisor (rm), so the quotient must occupy a register
-        // distinct from both. A spilled operand was materialised into
-        // a scratch register, so the quotient cannot blindly reuse
-        // `scratch.secondary` -- when the divisor is spilled it sits
-        // there, and the divide would overwrite it before the msub
-        // reads it. Pick a free scratch or the result register that
-        // aliases neither operand.
-        // x19 is reserved by the prologue for a spilling function that
-        // contains a modulo, so it is a safe third scratch when the
-        // dividend, divisor and result all occupy the other registers.
+        // rem = rn - (rn / rm) * rm: the quotient must alias neither operand,
+        // and a spilled divisor sits in scratch.secondary. x19 is reserved by
+        // the prologue for a spilling function with a modulo.
         let quot = [scratch.secondary, scratch.primary, rd, Reg(19)]
             .into_iter()
             .find(|r| r.0 != rn.0 && r.0 != rm.0)
@@ -407,9 +373,7 @@ pub(super) fn emit_binop(
     true
 }
 
-/// Map an FP arithmetic binop to its d-reg encoder. Returns
-/// `None` for non-arithmetic ops so the caller can try the
-/// comparison or integer paths.
+/// The d-register encoder of an FP arithmetic op, `None` otherwise.
 fn fp_arith_enc(op: BinOp) -> Option<fn(u8, u8, u8) -> u32> {
     Some(match op {
         BinOp::Fadd => enc_fadd_d,
@@ -420,9 +384,8 @@ fn fp_arith_enc(op: BinOp) -> Option<fn(u8, u8, u8) -> u32> {
     })
 }
 
-/// Map an FP comparison binop to the AArch64 condition code the
-/// matching fcmp + cset pair should use. Returns `None` for any
-/// non-FP-compare op.
+/// The condition of an FP comparison's `fcmp` + `cset`, `None`
+/// otherwise.
 pub(super) fn fp_compare_cond(op: BinOp) -> Option<Cond> {
     Some(match op {
         BinOp::Feq => Cond::Eq,
@@ -435,8 +398,7 @@ pub(super) fn fp_compare_cond(op: BinOp) -> Option<Cond> {
     })
 }
 
-/// Map a comparison binop to the matching `Cond` for the
-/// cmp / cset pair.
+/// The condition of an integer comparison's `cmp` + `cset`.
 pub(super) fn compare_cond(op: BinOp) -> Option<Cond> {
     Some(match op {
         BinOp::Eq => Cond::Eq,
@@ -458,20 +420,12 @@ fn cmp_imm12(imm: i64) -> Option<u32> {
     u32::try_from(imm).ok().filter(|v| *v < (1u32 << 12))
 }
 
-/// Single-instruction encoding of `rd = rn op imm`, when one exists.
-/// Avoids the `load_imm64 -> reg-form op` pair the caller falls back to.
-///   * Shl / Shr / Shru / Ror by 0..63 -> LSL / ASR / LSR / ROR by
-///     immediate (UBFM / SBFM aliases).
-///   * Mul by a power of two -> LSL by log2.
-///   * Add / Sub with a 12-bit magnitude -> enc_add_imm / enc_sub_imm;
-///     `x + (-k) == x - k` in two's complement, so a small negative
-///     immediate swaps to the other form instead of materializing the
-///     sign-extended constant.
-///   * `x ^ -1` -> mvn, `x & 0xffffffff` -> a 32-bit move (the mask has
-///     no logical-immediate AND short form here).
-///
-/// Whether a form exists depends on `(op, imm)` alone, so
-/// [`binop_imm_materializes`] reads the answer off this function.
+/// The single-instruction encoding of `rd = rn op imm` when one exists:
+/// shifts by 0..63, a multiply by a power of two as a shift, add / sub
+/// of a 12-bit magnitude (a small negative immediate swaps to the other
+/// form), `x ^ -1` as `mvn`, `x & 0xffffffff` as a 32-bit move. Whether
+/// a form exists depends on `(op, imm)` alone, which
+/// `binop_imm_materializes` reads off this function.
 fn binop_imm_peephole(op: BinOp, imm: i64, rd: Reg, rn: Reg) -> Option<u32> {
     let imm_u64 = imm as u64;
     let pow2_shift = if imm > 0 && imm_u64.is_power_of_two() {
@@ -515,12 +469,9 @@ fn binop_imm_peephole(op: BinOp, imm: i64, rd: Reg, rn: Reg) -> Option<u32> {
 }
 
 /// Whether lowering `Inst::BinopI { op, rhs_imm: imm }` builds the
-/// immediate into a register at the site. True means the site pays a
-/// `load_imm64` the loop-invariant hoist can lift into a preheader by
-/// rewriting the site to the register form; false means the immediate
-/// rides the instruction's own encoding and the rewrite would add work.
-/// Mod / Modu never reach the immediate path (the walker does not emit
-/// them under `BinopI`, and the lowering below declines them).
+/// immediate into a register at the site, which the loop-invariant
+/// hoist can lift into a preheader. Mod / Modu never take the immediate
+/// path.
 pub(crate) fn binop_imm_materializes(op: BinOp, imm: i64) -> bool {
     if matches!(op, BinOp::Mod | BinOp::Modu) {
         return false;
@@ -563,11 +514,9 @@ pub(super) fn emit_binop_imm(
         return false;
     };
     let lhs_place = place_of(alloc, lhs);
-    // sxtw / sxth / sxtb fold: the allocator pre-flagged this
-    // `BinopI(Shr, _, K)` as the upper half of a sign-narrow pair
-    // (`Shl K; Shr K`). The matching Shl was decremented to zero
-    // uses and DCE'd; we emit a single sign-extend whose source is
-    // the Shl's lhs (the original pre-narrow value).
+    // The allocator flagged this `BinopI(Shr, _, K)` as the upper half of
+    // a sign-narrow pair whose Shl was DCE'd: one sign-extend of the Shl's
+    // lhs.
     let sxtw_source = alloc
         .sxtw_source
         .get(v as usize)
@@ -598,10 +547,7 @@ pub(super) fn emit_binop_imm(
         store_spilled_int(code, frame, dst, rd);
         return true;
     }
-    // Compare-with-12-bit-immediate: emit `cmp Xn, #imm12`
-    // (subs xzr, Xn, #imm12) and skip the imm-into-scratch load.
-    // The 12-bit unsigned-immediate form covers 0..4095; outside
-    // that range we fall through to the load-imm64 + cmp-reg path.
+    // `cmp Xn, #imm12` covers 0..4095.
     if compare_cond(op).is_some()
         && let Some(imm) = cmp_imm12(rhs_imm)
     {
@@ -625,9 +571,7 @@ pub(super) fn emit_binop_imm(
     let rm = scratch.secondary;
     if compare_cond(op).is_some() {
         emit(code, cmp_reg_word(alloc, v, rn, rm));
-        // When the terminator's b.cond will consume the flags
-        // directly, drop the cset materialisation -- the
-        // comparison value is dead.
+        // A fused branch consumes the flags; the value is dead.
         if alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
             return true;
         }
@@ -637,9 +581,8 @@ pub(super) fn emit_binop_imm(
         return true;
     }
     if matches!(op, BinOp::Mod | BinOp::Modu) {
-        // Need a third scratch reg distinct from rn / rm; the
-        // walker doesn't emit Mod / Modu under BinopI, so falling
-        // back to the non-immediate path is safe.
+        // Mod / Modu need a third scratch; the walker does not emit them under
+        // BinopI.
         return false;
     }
     let word = match op {

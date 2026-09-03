@@ -1,8 +1,7 @@
 use super::*;
 
 /// Read-only per-function context threaded through the per-instruction
-/// lowering: the loop-invariant inputs, so `emit_inst`'s signature stays
-/// short. Copy (references and small scalars).
+/// lowering.
 #[derive(Clone, Copy)]
 pub(super) struct FnCtx<'a> {
     pub(super) func: &'a FunctionSsa,
@@ -60,10 +59,7 @@ pub(super) fn emit_inst(
     } = *fcx;
     let code = &mut *cx.code;
     match inst {
-        // Slot 0: this function doesn't use alloca. Non-zero: the function
-        // moves sp at runtime; `Frame::dynamic_sp` carries the fact to the
-        // spill addressing, the alloca intrinsics, and the epilogue. No code
-        // either way.
+        // `Frame::dynamic_sp` carries the alloca fact; no code.
         Inst::AllocaInit(_) => true,
         Inst::ParamRef { idx, kind } => {
             emit_param_ref(code, *idx, *kind, v, dst, param_plan, alloc, frame, scratch)
@@ -80,9 +76,7 @@ pub(super) fn emit_inst(
             let Some(rd) = int_or_spill_scratch(dst, scratch) else {
                 return false;
             };
-            // Encode `rd` in the adrp/add placeholder; the per-writer
-            // `patch_adrp_add` reads rd back from the placeholder, so the
-            // materialised address lands directly in the allocator's register.
+            // The writer's `patch_adrp_add` reads rd back from the placeholder.
             let instr_offset = code.len();
             emit_adrp_add(code, rd);
             cx.data_fixups.push(DataFixup {
@@ -103,9 +97,8 @@ pub(super) fn emit_inst(
             store_spilled_int(code, frame, dst, rd);
             true
         }
-        // The address of a dynamically-imported function: the pair resolves
-        // to the import's shared stub via an `is_addr` PLT-call fixup, so
-        // `&strcmp` yields the stub address.
+        // The address of an import resolves to its stub through an `is_addr`
+        // PLT-call fixup.
         Inst::ImmExtCode(binding_idx) => {
             let Some(rd) = int_or_spill_scratch(dst, scratch) else {
                 return false;
@@ -361,9 +354,8 @@ pub(super) fn emit_inst(
             cx.elf_tpoff_fixups,
             extern_tls_names.get(&v).map(|s| s.as_str()),
         ),
-        // The value is materialised by the predecessor-exit moves emitted
-        // before each branch terminator that targets this block; at the IR
-        // position the phi's allocated Place already holds the merged value.
+        // The predecessor-exit moves placed the value; nothing at the phi
+        // position.
         Inst::Phi { .. } => true,
         Inst::InlineAsm { asm, args } => emit_inline_asm_aarch64(
             code,
@@ -387,10 +379,8 @@ pub(super) fn emit_inst(
             asm_section_text_refs,
             None,
         ),
-        // `BlockAddr` is materialized in `emit_function`'s block loop and
-        // `TailExt` is a terminator, so neither reaches here; the segment
-        // accesses are x86-only. Reaching this arm means a variant has no
-        // aarch64 lowering, which is a compile failure, not silent output.
+        // `BlockAddr` is lowered in the block walk and `TailExt` is a
+        // terminator; the segment accesses are x86-only.
         other => {
             bail_msg(&alloc::format!(
                 "inst variant not yet covered: {}",
@@ -408,16 +398,12 @@ fn emit_adrp_add(code: &mut Vec<u8>, rd: Reg) {
     emit(code, enc_add_imm(rd, rd, 0));
 }
 
-/// Materialise the i-th argument register into the allocator's `Place`.
-/// The prologue does not modify x0..x7 / d0..d7, so the value is still in
-/// its incoming register at this IR position. An integer parameter is
-/// sign-extended from its `kind` width (C99 6.3.1.3) so the register holds
-/// the canonical 64-bit value; the caller passes the raw value, so an
-/// I8/I16 conversion always runs, while an I32 extend touches only bits
-/// 32..63 and is skipped when no consumer reads them. A floating-point
-/// parameter (C99 6.2.5p10) arrives in the d-register the plan names; a
-/// `float` occupies the s-register view, which the body re-narrows through
-/// the f32 store the walker seeded.
+/// Materialise the i-th argument register into the allocator's `Place`;
+/// the prologue leaves x0..x7 / d0..d7 intact. An integer parameter is
+/// sign-extended from its `kind` width (C99 6.3.1.3): an I8 / I16
+/// conversion always runs, an I32 one only when a consumer reads bits
+/// 32..63. A `float` (C99 6.2.5p10) occupies the s-view of its
+/// d-register.
 #[allow(clippy::too_many_arguments)]
 fn emit_param_ref(
     code: &mut Vec<u8>,
@@ -518,15 +504,10 @@ fn emit_fneg(
     true
 }
 
-/// `Inst::Fma`: C99 6.5p8 / FP_CONTRACT, the fused form rounds once. The
-/// result width follows the operands; the marker mirrors `a`. Each operand
-/// resolves to its own d-reg or, when spilled, a dedicated scratch outside
-/// the allocator's banks. A spilled result writes into the third FP
-/// scratch: that scratch is free unless `c` was itself spilled into it, in
-/// which case the FMADD reads Da before writing Dd. It must not reuse `dc`
-/// directly, since an allocated `c` register may hold a value a later
-/// instruction still needs (a loop-carried addend across several fused
-/// ops).
+/// `Inst::Fma`: C99 6.5p8 / FP_CONTRACT, one rounding. A spilled result
+/// writes the third FP scratch, free unless `c` was spilled into it, in
+/// which case the FMADD reads it before writing. An allocated `c`
+/// register may hold a loop-carried addend, so `dc` is never reused.
 #[allow(clippy::too_many_arguments)]
 fn emit_fma(
     code: &mut Vec<u8>,
@@ -567,11 +548,10 @@ fn emit_fma(
     true
 }
 
-/// `Inst::FpCast`. C99 6.3.1.4: an integer converts directly to the result
-/// precision (one rounding) and a `float` source truncates directly to the
-/// integer; 6.3.1.5: the single-precision view occupies the low 32 bits of
-/// the same V register, so a widening or narrowing `fcvt` reads and writes
-/// the two views with no separate move.
+/// `Inst::FpCast`. C99 6.3.1.4: an integer converts directly to the
+/// result precision and a `float` truncates directly to the integer;
+/// 6.3.1.5: the s-view is the low 32 bits of the same V register, so a
+/// widening or narrowing `fcvt` needs no separate move.
 #[allow(clippy::too_many_arguments)]
 fn emit_fp_cast(
     code: &mut Vec<u8>,
@@ -654,13 +634,9 @@ fn emit_fp_cast(
     }
 }
 
-/// Resolve a set of register-to-register copies `(src, tgt)` so
-/// that no copy writes to a register still needed as the source
-/// of another pending copy. Processed leaf-first (target not in
-/// any source) until the worklist drains; cycles are broken by
-/// routing one source through `scratch`. The caller must pass a
-/// `scratch` that lives outside the allocator's bank so it cannot
-/// collide with any pending source or target.
+/// Sequentialize register-to-register copies `(src, tgt)`: leaves first,
+/// cycles broken through `scratch`, which lies outside the allocator's
+/// bank.
 pub(super) fn schedule_int_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch: Reg) {
     super::ssa::emit_common::schedule_reg_moves_via_scratch(
         code,
@@ -670,10 +646,7 @@ pub(super) fn schedule_int_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8
     );
 }
 
-/// Sequentialize a parallel copy over d-registers. Mirrors
-/// [`schedule_int_reg_moves`] with `fmov d, d` for the register
-/// copies. `scratch_d` must lie outside the allocator's d-register
-/// pool so it collides with no pending source or target.
+/// `schedule_int_reg_moves` over d-registers with `fmov d, d`.
 pub(super) fn schedule_dreg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch_d: u8) {
     super::ssa::emit_common::schedule_reg_moves_via_scratch(
         code,
@@ -683,18 +656,13 @@ pub(super) fn schedule_dreg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>,
     );
 }
 
-/// Emit the predecessor-exit moves for each `Inst::Phi` at the head
-/// of every CFG successor of `self_block`. The phi's incoming entry
-/// for `self_block` names the reaching value at this block's exit;
-/// the move places it in the phi's allocated `Place` so the phi
-/// position itself is a no-op in the inst stream. Cycles in the
-/// IntReg -> IntReg move set are broken via the schedule helper
-/// (one scratch-mediated copy per cycle); Spill destinations route
-/// through the materialise helper.
+/// The predecessor-exit moves for each `Inst::Phi` of every CFG
+/// successor of `self_block`: the phi's incoming value for this block
+/// moves into the phi's `Place`, so the phi position itself emits
+/// nothing.
 ///
-/// TODO: extend to FpReg dst / src once a real fixture demands it;
-/// the current promotion path admits only int-store slots
-/// (`slot_stores_only_int`) so the FP case never arises today.
+/// TODO: FpReg sources and destinations; the promotion path admits only
+/// int-store slots (`slot_stores_only_int`).
 pub(super) fn emit_phi_predecessor_moves(
     code: &mut Vec<u8>,
     self_block: super::super::ir::BlockId,
@@ -703,8 +671,6 @@ pub(super) fn emit_phi_predecessor_moves(
     scratch: &ScratchPool,
     frame: Frame,
 ) -> bool {
-    // The FP scratch pair sits outside the allocator's banks;
-    // `scratch.primary` / `secondary` are the reserved integer scratch.
     super::ssa::emit_common::emit_phi_predecessor_moves(
         &super::ssa::emit_common::Aarch64Backend,
         code,
@@ -719,23 +685,11 @@ pub(super) fn emit_phi_predecessor_moves(
     )
 }
 
-/// Compare two `Place`s by physical location identity. Distinct
-/// `Place` variants never alias; same-variant places alias when their
-/// register number or spill slot matches.
-/// Emit a single resolved location-to-location move. `stage` is a
-/// scratch register used only for the spill-to-spill case (load then
-/// store); `hold` is borrowed (saved/restored on the stack) to carry
-/// the base when a spill-to-spill destination slot lies beyond the
-/// scaled-imm12 reach. Both must lie outside the allocator's bank.
-/// Sequentialize a parallel copy over physical locations (integer
-/// registers and stack spill slots). Leaves -- destinations that are
-/// not the source of any other pending move -- are emitted first;
-/// when only cycles remain, one cycle source is saved into the
-/// persistent `hold` register and every move reading that location is
-/// redirected to read `hold`, exposing a new leaf. `hold` and `stage`
-/// must both lie outside the allocator's bank so they cannot collide
-/// with any pending source or destination. Returns false if any
-/// operand is an FP or `None` location, which this path does not lower.
+/// Sequentialize a parallel copy over integer registers and spill
+/// slots: leaves first; when only cycles remain one cycle source is
+/// saved into `hold` and every move reading it redirected, exposing a
+/// new leaf. `hold` and `stage` lie outside the allocator's bank.
+/// `false` for an FP or `None` location.
 pub(super) fn schedule_place_moves(
     code: &mut Vec<u8>,
     moves: &mut Vec<(Place, Place)>,
@@ -753,19 +707,14 @@ pub(super) fn schedule_place_moves(
     )
 }
 
-/// Emit a single resolved FP location-to-location move over `FpReg`
-/// and `Spill` places. `stage_d` is the scratch d-reg for the
-/// spill-to-spill case (load then store); it must lie outside the
-/// allocator's FP pool. `IntReg` and `None` places never reach here
-/// (an FP phi's home and its operands are FP-classed).
+/// The aarch64 side of the shared phi and place-move scheduling.
 impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::Aarch64Backend {
     type Frame = Frame;
     fn fp_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
         emit(code, super::encode::enc_fmov_d_d(dst, src));
     }
     fn fp_spill_store(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8) {
-        // FP phi moves keep all values in d-regs, so the GPR scratch x16 is
-        // free to carry the base for out-of-reach slots.
+        // FP phi moves hold no integer value, so x16 is free for the base.
         emit_spill_str_d_auto(code, frame, src, spill_off(frame, slot));
     }
     fn fp_spill_load(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, dst: u8) {
@@ -790,9 +739,8 @@ impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::Aarch64Ba
         hold: u8,
     ) {
         emit_spill_ldr_x(code, frame, Reg(stage), spill_off(frame, src));
-        // The value occupies `stage` and `hold` may carry a live cycle
-        // source, so the store borrows `hold` via a stack save/restore when
-        // the destination slot is out of reach.
+        // `stage` holds the value and `hold` may carry a cycle source, so the
+        // store borrows `hold` around an out-of-reach destination.
         emit_spill_str_x_borrow(code, frame, Reg(stage), spill_off(frame, dst), Reg(hold));
     }
     fn int_spill_store_auto(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8) {

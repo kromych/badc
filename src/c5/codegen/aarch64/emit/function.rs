@@ -118,9 +118,8 @@ pub(crate) fn emit_function(
     data_sym_offsets: &alloc::collections::BTreeMap<alloc::string::String, i64>,
     asm_text_labels: &mut Vec<super::AsmTextLabel>,
     asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
-    // The text stream's mapping state spans the section, not the function: a
-    // body ending in data leaves the counter off the instruction boundary and
-    // the next function's first instruction pays the padding, as under GNU as.
+    // The mapping state spans the section: a body ending in data leaves the
+    // padding to the next function's first instruction, as under GNU as.
     text_map_state: &mut Option<super::super::map_syms::MapClass>,
     no_fp_regs: bool,
     strict_align: bool,
@@ -324,13 +323,11 @@ impl FunctionEmitter<'_, '_> {
     }
 
     /// Place the integer `Inst::ParamRef` values from their argument
-    /// registers into the allocator's homes as one parallel copy, so no
-    /// parameter's home clobbers a later parameter's incoming register
-    /// before it is read. The batch applies only when the homes are
-    /// distinct; otherwise each ParamRef is placed in program order by
-    /// `emit_inst`, which the allocator's self-home hint keeps sound
-    /// (`param-shuffle-clobber` in `verify_allocation`). Returns `false`
-    /// when the copy cannot be scheduled.
+    /// registers into the allocator's homes as one parallel copy, so no home
+    /// clobbers a later parameter's incoming register. Applies only when the
+    /// homes are distinct; otherwise `emit_inst` places each in program order,
+    /// which the allocator's self-home hint keeps sound
+    /// (`param-shuffle-clobber` in `verify_allocation`).
     fn place_int_params(&mut self, prebatched: &mut [bool]) -> bool {
         let FnCtx {
             func,
@@ -812,9 +809,8 @@ impl FunctionEmitter<'_, '_> {
             bail("JumpTable: idx Place not int", idx, iplace);
             return self.rollback();
         };
-        // rt is an allocated register or scratch.primary, never
-        // scratch.secondary, so the table base cannot alias it. The writer
-        // patches the adrp+add pair (RodataAddrFixup).
+        // rt is never scratch.secondary, so the table base cannot alias it; the
+        // writer patches the adrp+add pair (RodataAddrFixup).
         let code = &mut *self.cx.code;
         let tbl = scratch.secondary;
         let addr_site = code.len();
@@ -1026,22 +1022,19 @@ impl FunctionEmitter<'_, '_> {
     }
 }
 
-/// Store a word through sp to take the fault, if the stack ends here, on
-/// the page the allocation just entered. `xzr` is always readable and the
-/// store sets no flags, so the probe is usable at any point in the
-/// lowering without holding a register.
+/// Store through sp so the page the allocation just entered faults if
+/// the stack ends there; `xzr` is always readable and the store sets no
+/// flags.
 pub(super) fn emit_stack_probe(code: &mut Vec<u8>) {
     emit(code, super::encode::enc_str_imm(Reg(31), Reg::SP, 0));
 }
 
 /// Reserve the realigned region and align sp down to `realign_align`
-/// (C11 6.7.5). The reservation descends in probed steps; the AND then
-/// descends by up to `realign_align - 1` further bytes, which the probe
-/// schedule cannot see. When the two together can outrun the unprobed
-/// margin, a probe on each side of the AND keeps every step from a touched
-/// address within one page, so a stack overflow still faults in the guard.
-/// x16 is the emitter's reserved prologue scratch; AND-immediate cannot read
-/// sp, so the alignment stages through it.
+/// (C11 6.7.5). The AND descends by up to `realign_align - 1` bytes the
+/// probe schedule cannot see, so when the two together can outrun the
+/// unprobed margin a probe on each side of it keeps every step within a
+/// page of a touched address. x16 stages the alignment, since
+/// AND-immediate cannot read sp.
 fn emit_realign_sp(code: &mut Vec<u8>, frame: Frame) {
     let slack = frame.realign_align - 1;
     let probe = frame.realign_region_bytes.saturating_add(slack) > MAX_UNPROBED_STACK_STEP;
@@ -1059,17 +1052,11 @@ fn emit_realign_sp(code: &mut Vec<u8>, frame: Frame) {
     }
 }
 
-/// Lower `sp -= bytes`, descending in probed steps when the amount is
-/// larger than one step can safely cover.
-///
-/// A decrement of at most [`MAX_UNPROBED_STACK_STEP`] cannot place sp
-/// below the guard region, so it needs no probe. Past that the
-/// allocation walks down one page at a time and stores through sp after
-/// each step, so an overflow faults inside the guard region instead of
-/// writing into whatever mapping lies below it. `scratch` is a register
-/// the caller does not need across the allocation; given one, a step
-/// count above [`STACK_PROBE_UNROLL_MAX`] becomes a counted loop instead
-/// of straight-line steps.
+/// `sp -= bytes`. A decrement of at most `MAX_UNPROBED_STACK_STEP` cannot
+/// pass the guard region; past that the allocation descends a page at a
+/// time with a store through sp after each step, as a counted loop
+/// through `scratch` when there are more than `STACK_PROBE_UNROLL_MAX`
+/// steps and a register is available.
 pub(super) fn emit_stack_alloc(code: &mut Vec<u8>, bytes: u32, scratch: Option<Reg>) {
     if bytes <= MAX_UNPROBED_STACK_STEP {
         emit_sub_sp_imm(code, bytes);
@@ -1115,17 +1102,11 @@ fn emit_prologue(
     abi: super::Abi,
     extern_data_refs: &mut Vec<super::UserExternDataRef>,
 ) {
-    // A host-ABI variadic callee spills every argument register -- not
-    // just the named ones, since a variadic argument that landed in a
-    // register must reach the save area for `va_arg` to read it -- into a
-    // register save area directly above the saved fp/lr. Windows on ARM64
-    // (Microsoft ARM64 calling convention) passes every argument through
-    // x0..x7 as a raw 8-byte value and takes a 64-byte integer area whose
-    // top edge meets the incoming stack overflow; AAPCS64 (Appendix B)
-    // takes the general area (x0..x7) at `[fp + 16 .. fp + 80)` and the
-    // vector area (q0..q7, low eightbyte used) at `[fp + 80 .. fp + 208)`,
-    // with the incoming stack overflow at `[fp + 208 ..)`. Neither is ever
-    // a full leaf (`param_spill_bytes != 0`), so the frame record follows.
+    // A host-ABI variadic callee spills every argument register (a variadic
+    // argument that landed in one must reach the save area for `va_arg`)
+    // into the register save area above the saved fp/lr; see
+    // `emit_register_save_area`. Neither is a full leaf, so the frame record
+    // follows.
     if win_arm64_variadic_callee(func, abi) {
         debug_assert_eq!(
             frame.param_spill_bytes, WIN_ARM64_GR_SAVE_BYTES,
@@ -1142,11 +1123,9 @@ fn emit_prologue(
         emit_register_save_area(code, alloc, frame, abi, extern_data_refs, true);
         return;
     }
-    // Spill each declared parameter into a 16-byte c5 cdecl cell above fp
-    // and restripe any host-stack overflow into 16-byte cells. The total is
-    // `frame.param_spill_bytes`, which the epilogue reads back; a cell whose
-    // `Inst::ParamRef` seeded it keeps its bytes (so the `LocalAddr` offsets
-    // stay stable) but takes no store.
+    // One 16-byte c5 cdecl cell per declared parameter above fp, with the
+    // host-stack overflow restriped into cells; the epilogue drops
+    // `frame.param_spill_bytes`.
     let entry_spill = if spills_named_params_on_entry(func, abi) {
         func.n_params
     } else {
@@ -1159,9 +1138,6 @@ fn emit_prologue(
             emit_param_cells(code, func, alloc, abi);
         }
     }
-    // A full leaf makes no calls, allocates no frame, spills no params and
-    // saves no registers, so it skips the frame record and returns off the
-    // caller's lr.
     if is_full_leaf(func, frame, alloc) {
         return;
     }
@@ -1173,9 +1149,8 @@ fn emit_prologue(
         emit_local_addr_fp(code, Place::IntReg(16), func.indirect_result_slot, frame);
         emit(code, enc_str_imm(Reg(8), Reg(16), 0));
     }
-    // The canary slot is fp-relative, so it is stored before any sp
-    // realignment; the over-aligned region (C11 6.7.5) is reserved and
-    // aligned last, after every fp-relative setup.
+    // The canary slot is fp-relative, so it is stored before the sp
+    // realignment, which comes last (C11 6.7.5).
     emit_canary_store(code, frame, abi, extern_data_refs);
     if frame.realign_align > 0 {
         emit_realign_sp(code, frame);
@@ -1183,11 +1158,10 @@ fn emit_prologue(
 }
 
 /// The host-ABI variadic register save area above the saved fp/lr: the
-/// integer argument registers at 8-byte stride and, for AAPCS64, the vector
-/// registers at 16-byte stride after them. The vector half is skipped when
-/// the FP/SIMD file is off limits (`no_fp_varargs`): the store itself would
-/// fault. The area stays reserved so every offset above it is unchanged,
-/// and `va_start` marks it exhausted.
+/// integer argument registers at an 8-byte stride and, for AAPCS64,
+/// q0..q7 at a 16-byte stride after them. Under `no_fp_varargs` the
+/// vector half stays reserved but unwritten (the store would fault) and
+/// `va_start` marks it exhausted.
 fn emit_register_save_area(
     code: &mut Vec<u8>,
     alloc: &Allocation,
@@ -1202,9 +1176,7 @@ fn emit_register_save_area(
     }
     if vector && !abi.no_fp_varargs {
         for i in 0..8u32 {
-            // The d-register view stores the low eightbyte of vN into the
-            // slot start; a `va_arg(double)` reads it back from the same
-            // offset.
+            // `va_arg(double)` reads the low eightbyte of each 16-byte slot.
             emit(
                 code,
                 enc_str_d_imm(i as u8, Reg(31), AARCH64_GR_SAVE_BYTES + i * 16),
@@ -1216,19 +1188,17 @@ fn emit_register_save_area(
 }
 
 /// The contiguous-prefix cell layout: the host-stack overflow restriped
-/// into cells first, then one 16-byte pre-decrement push per
-/// register-passed parameter from the last to the first, with the stores
-/// of ParamRef-seeded, unaddressed cells elided into one coalesced
-/// `sub sp`.
+/// into cells, then one 16-byte pre-decrement push per register-passed
+/// parameter from the last to the first; the stores of ParamRef-seeded,
+/// unaddressed cells are elided into one coalesced `sub sp`.
 fn emit_param_cells(code: &mut Vec<u8>, func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) {
     let (n_reg, n_stack) = param_reg_stack_split(func, abi);
     let placements = param_placements(func, abi);
     if n_stack > 0 {
         let overflow_bytes = (n_stack as u32) * 16;
         emit_stack_alloc(code, overflow_bytes, None);
-        // Each scalar stack parameter's incoming offset is the planner's
-        // placement offset, which accounts for any by-value aggregate stack
-        // parameter (StructStack) that precedes it.
+        // The planner's offset accounts for any by-value aggregate stack
+        // parameter (StructStack) that precedes the scalar.
         let mut slot_i = 0u32;
         for p in &placements {
             if let super::ArgPlacement::Stack(off) = p {
@@ -1256,21 +1226,16 @@ fn emit_param_cells(code: &mut Vec<u8>, func: &FunctionSsa, alloc: &Allocation, 
             emit_stack_alloc(code, pending_sub, None);
             pending_sub = 0;
         }
-        // The source is the parameter's own argument register per the plan
-        // (an FP parameter earlier in the list does not shift the integer
-        // bank). A floating-point parameter arrives in a d-register; its
-        // bits move through x16 into the same cell push.
+        // An FP parameter's bits move through x16 into the same cell push.
         match placements.get(i).copied() {
             Some(super::ArgPlacement::FpReg(d)) => {
                 emit(code, enc_fmov_d_to_x(Reg(16), d));
                 emit(code, enc_str_pre(Reg(16), Reg(31), -16));
             }
             Some(super::ArgPlacement::IntReg(r)) => emit(code, enc_str_pre(Reg(r), Reg(31), -16)),
-            // An aggregate passed in registers reserves its cell and keeps
-            // its argument registers for `emit_struct_param_scatter`, which
-            // stores them into the body local the aggregate is read from. A
-            // stack-passed or out-of-range parameter's cell was filled by
-            // the overflow restripe above.
+            // An aggregate passed in registers keeps them for
+            // `emit_struct_param_scatter`; a stack-passed parameter's cell was
+            // filled by the restripe above. Either reserves its cell.
             _ => emit_sub_sp_imm(code, 16),
         }
     }
@@ -1279,25 +1244,15 @@ fn emit_param_cells(code: &mut Vec<u8>, func: &FunctionSsa, alloc: &Allocation, 
     }
 }
 
-/// Position-indexed parameter cell spill for an interleaved register /
-/// stack placement (`params_interleaved`). Allocates one 16-byte cell
-/// per declared parameter in a single block, then writes each scalar
-/// parameter into the cell for its own position: an integer register
-/// stores directly, an FP register routes its bits through x16, a
-/// stack-passed scalar copies from the incoming overflow slot just
-/// above the cell block. Aggregate parameters get a reserved cell and
-/// are filled from their argument registers / incoming stack slot by
-/// `emit_struct_param_scatter` once the frame is established; x16 is the
-/// only scratch, so no argument register that scatter still needs is
-/// disturbed. The single up-front allocation keeps every parameter's
-/// cell at `[fp + 16 + position*16]`, matching `local_slot_off`, which
-/// the two-phase contiguous-prefix layout cannot do for an interleaved
-/// order.
+/// Position-indexed cells for an interleaved register / stack placement:
+/// one block of `n_params` cells, each parameter written into its own
+/// position's cell at `[fp + 16 + position*16]` (`local_slot_off`), a
+/// stack-passed scalar copied from the overflow slot above the block.
+/// Aggregates keep their argument registers for
+/// `emit_struct_param_scatter`; x16 is the only scratch.
 fn emit_interleaved_param_cells(code: &mut Vec<u8>, func: &FunctionSsa, abi: super::Abi) {
     let placements = param_placements(func, abi);
     let cells = func.n_params as u32 * 16;
-    // The argument registers hold the incoming values, so the walk takes
-    // no scratch register.
     emit_stack_alloc(code, cells, None);
     for (i, p) in placements.iter().enumerate() {
         let c5_off = (i as u32) * 16;
@@ -1310,30 +1265,20 @@ fn emit_interleaved_param_cells(code: &mut Vec<u8>, func: &FunctionSsa, abi: sup
                 emit(code, enc_str_imm(Reg(16), Reg(31), c5_off));
             }
             super::ArgPlacement::Stack(off) => {
-                // The incoming overflow argument sits just above the
-                // freshly allocated cell block.
                 let host_off = cells + *off;
                 emit(code, enc_ldr_imm(Reg(16), Reg(31), host_off));
                 emit(code, enc_str_imm(Reg(16), Reg(31), c5_off));
             }
-            // StructRegs / StructStack reserve their cell here and are
-            // filled by `emit_struct_param_scatter`. By-reference
-            // aggregate parameters are rejected upstream on AAPCS64, so
-            // they do not reach this path.
+            // By-reference aggregates are rejected upstream on AAPCS64.
             _ => {}
         }
     }
 }
 
-/// Store each register-passed aggregate parameter's incoming argument
-/// registers into its parser-reserved body local. Runs after the
-/// frame is established (fp set, frame allocated, callee saves done)
-/// so the body local's fp-relative address is valid; the argument
-/// registers (x0..x7 / d0..d7) still hold the caller-supplied values
-/// at this point, as nothing between the entry and here clobbers
-/// them. The body reads the aggregate from this local, so the entry
-/// 16-byte argument cell stays unused (the walker emits no entry copy
-/// for a tagged aggregate parameter).
+/// Store each register-passed aggregate parameter's argument registers
+/// into its parser-reserved body local, once the frame is established
+/// and before anything clobbers x0..x7 / d0..d7. The body reads the
+/// aggregate from that local; its 16-byte argument cell stays unused.
 fn emit_struct_param_scatter(
     code: &mut Vec<u8>,
     func: &FunctionSsa,
@@ -1354,12 +1299,9 @@ fn emit_struct_param_scatter(
         }
         match placements.get(i) {
             Some(super::ArgPlacement::StructRegs { regs, n, .. }) => {
-                // Materialise the body local's address into x16, then store
-                // each unit from its argument register. An integer
-                // eightbyte stores at offset 8k; an HFA member stores at
-                // its own offset with its natural size (d-register for 8
-                // bytes, s-register for 4). x16/x17 are never argument
-                // registers, so the source `regs` are untouched.
+                // An integer eightbyte stores at offset 8k; an HFA member at its own
+                // offset and size (d for 8 bytes, s for 4). x16 is never an argument
+                // register.
                 let hfa = super::abi_classify::hfa_member_layout(
                     &func.agg_descs[*agg_idx as usize].fields,
                 );
@@ -1381,17 +1323,10 @@ fn emit_struct_param_scatter(
                 }
             }
             Some(super::ArgPlacement::StructStack { off, size, .. }) => {
-                // The aggregate spilled to the caller's stack argument
-                // area, which sits above the saved fp/lr (16 bytes) and
-                // the callee's c5 parameter cells (`param_spill_bytes`).
-                // Copy its bytes from there into the body local the
-                // parameter is read from; the cell reserved for this
-                // parameter (param_reg_stack_split counts a StructStack as
-                // a register slot, so a 16-byte cell is reserved) stays
-                // unused. AAPCS64 5.4.2 rounds the stack slot up to 8
-                // bytes; copy each whole eightbyte then a sub-eightbyte
-                // tail. x17 is the value temp, fp the source base; x16 the
-                // destination base, so no argument register is disturbed.
+                // The aggregate sits in the caller's stack argument area, above the
+                // saved fp/lr and the c5 parameter cells; its own reserved cell stays
+                // unused. AAPCS64 5.4.2 rounds the slot up to 8 bytes: whole eightbytes
+                // through x17, then the sub-eightbyte tail.
                 let src = 16 + frame.param_spill_bytes + *off;
                 let size = *size;
                 debug_assert!(
@@ -1428,22 +1363,14 @@ fn emit_struct_param_scatter(
     }
 }
 
-/// Save the allocator-reported callee-saved GPRs + FP regs at the
-/// bottom of the frame. The saved-reg region sits just above sp; its
-/// offsets are one slot per saved register, so the pair imm7 (scaled by
-/// 8, range -512..504) and the 12-bit scaled immediate always cover
-/// them. The allocator spill region, by contrast, can exceed that reach
-/// and is addressed through the range-checked SP helpers. x19 is saved
-/// just past the allocator-saved gprs, but only when the function
-/// clobbers it; the slot is reserved either way so the surrounding
-/// offsets stay fixed. Adjacent slots within each region save as
-/// stp / ldp pairs; a region's odd tail saves alone.
-///
-/// When `fold != 0` (see [`frame_fold_bytes`]) the first save carries
-/// the whole allocation -- frame plus the fp/lr slot pair -- as a
-/// pre-indexed store of `-fold` bytes, replacing the prologue's
-/// `stp x29, x30, [sp, #-16]!` / `sub sp` pair; the first save always
-/// targets offset 0, so every other offset is unchanged.
+/// Save the allocator's callee-saved GPRs and FP registers at the bottom
+/// of the frame, adjacent slots as `stp` pairs, then x19 when the
+/// function clobbers it (its slot is reserved either way). The region
+/// sits just above sp, within reach of the pair imm7 and the scaled
+/// imm12. With `fold != 0` (see `frame_fold_bytes`) the first save
+/// pre-indexes the whole allocation, frame plus the fp/lr pair, in place
+/// of the prologue's `stp x29, x30, [sp, #-16]!` / `sub sp`; every other
+/// offset is unchanged.
 fn emit_prologue_saved_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame, fold: u32) {
     let mut alloc_pending = fold != 0;
     let fp = &alloc.fp_used;
@@ -1509,18 +1436,15 @@ fn emit_prologue_saved_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame
     debug_assert!(!alloc_pending, "frame fold requested with no callee save");
 }
 
-/// Scratch pair for the stack-protector sequences. x16 / x17 are the
-/// emitter's reserved scratch, outside the allocator's pool and never an
-/// argument or result register, so they are free at the end of the
-/// prologue and on every return path.
+/// The stack-protector sequences' scratch: x16 / x17, free at the end
+/// of the prologue and on every return path.
 const CANARY_SCRATCH: Reg = Reg(16);
 
 const CANARY_SCRATCH2: Reg = Reg(17);
 
-/// Leave the guard value in `rd`. `-mstack-protector-guard=sysreg` reads
-/// it at a byte offset above a system register's value; the `global` form
-/// reads the object the target's C library exports, whose address the
-/// writer resolves directly or through the GOT.
+/// Leave the guard value in `rd`: `-mstack-protector-guard=sysreg` reads
+/// it at an offset from a system register; the `global` form reads the
+/// object the C library exports, resolved directly or through the GOT.
 fn emit_load_stack_guard(
     code: &mut Vec<u8>,
     rd: Reg,
@@ -1549,10 +1473,8 @@ fn emit_load_stack_guard(
     emit(code, enc_ldr_imm(rd, rd, 0));
 }
 
-/// `ldr rd, [rn, #off]` for a guard offset of either sign: the scaled
-/// unsigned-offset form when it fits, the unscaled signed form otherwise,
-/// and an explicit address computation past both ranges, which takes
-/// [`CANARY_SCRATCH2`].
+/// `ldr rd, [rn, #off]` for either sign: scaled unsigned, unscaled
+/// signed, or an explicit address in `CANARY_SCRATCH2` past both ranges.
 fn emit_guard_load_at_offset(code: &mut Vec<u8>, rd: Reg, rn: Reg, off: i32) {
     if (0..=32760).contains(&off) && off % 8 == 0 {
         emit(code, enc_ldr_imm(rd, rn, off as u32));
@@ -1632,11 +1554,10 @@ fn emit_canary_check(
     emit(code, enc_movz(CANARY_SCRATCH2, 0, 0));
 }
 
-/// Re-establish `sp = fp - frame_bytes` in a dynamic-sp frame before
-/// the epilogue's sp-relative restores. No-op for static frames. A
-/// split displacement is computed into x16 and committed with one
-/// write, so sp never rests above still-unrestored frame bytes (a
-/// signal delivered mid-sequence pushes its frame below sp).
+/// Re-establish `sp = fp - frame_bytes` in a dynamic-sp frame before the
+/// sp-relative restores, committed with one write so sp never rests
+/// above unrestored frame bytes (a signal delivered mid-sequence pushes
+/// its frame below sp).
 fn restore_dynamic_sp(code: &mut Vec<u8>, frame: Frame) {
     if !frame.dynamic_sp {
         return;
@@ -1650,12 +1571,9 @@ fn restore_dynamic_sp(code: &mut Vec<u8>, frame: Frame) {
     }
 }
 
-/// Restore what [`emit_prologue_saved_regs`] saved, in mirror order
-/// (x19, gprs descending, fp regs descending) so the offset-0 access
-/// comes last and, when `fold != 0`, tears the frame down as a
-/// post-indexed load of `fold` bytes, replacing the epilogue's
-/// `add sp` and the fp/lr `ldp`. `fold` is the total writeback
-/// (frame plus the fp/lr pair), or 0 for the unfolded shape.
+/// Restore what `emit_prologue_saved_regs` saved, in mirror order so the
+/// offset-0 access comes last and, with `fold != 0`, post-indexes the
+/// whole frame plus the fp/lr pair back.
 fn emit_epilogue_restore_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame, fold: u32) {
     let saved_fpr_bytes = super::ssa::emit_common::slots16(alloc.fp_used.len() as u32);
     let gpr = &alloc.gpr_used;
@@ -1716,20 +1634,16 @@ fn emit_epilogue_restore_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Fra
     }
 }
 
-/// Frame bytes the folded prologue / epilogue shape can carry, or 0
-/// when the fold does not apply. The folded shape extends the frame by
-/// the 16-byte fp/lr slot pair at its top: the first callee save
-/// pre-indexes `-(frame_bytes + 16)`, fp/lr store / load through the
-/// signed-offset pair form at `[sp, #frame_bytes]`, and the last
-/// restore post-indexes the whole amount back. All three must fit
-/// their immediates: the scaled imm7 pair forms reach +-504/512, so a
-/// pair-first frame folds up to 488 (16-aligned: 480); a single-register
-/// bottom save uses the unscaled imm9 (+-255) and folds up to 224.
-/// Both sides compute the fold from the same inputs so they agree.
+/// Frame bytes the folded prologue / epilogue shape carries, or 0. The
+/// fold extends the frame by the fp/lr pair: the first callee save
+/// pre-indexes `-(frame_bytes + 16)`, fp/lr store / load at
+/// `[sp, #frame_bytes]`, and the last restore post-indexes it all back.
+/// The scaled imm7 pair forms reach 504, so a pair-first frame folds up
+/// to 480; a single-register bottom save takes the unscaled imm9 (255)
+/// and folds up to 224.
 fn frame_fold_bytes(alloc: &Allocation, frame: Frame) -> u32 {
-    // A realigning function uses the unfolded shape so the epilogue's
-    // `restore_dynamic_sp` (sub sp, fp, #frame_bytes) cleanly returns sp to the
-    // static frame bottom before the sp-relative restores (C11 6.7.5).
+    // A realigning function keeps the unfolded shape so
+    // `restore_dynamic_sp` returns sp to the static frame bottom first.
     if frame.realign_align != 0 {
         return 0;
     }
@@ -1751,12 +1665,10 @@ fn frame_fold_bytes(alloc: &Allocation, frame: Frame) -> u32 {
     }
 }
 
-/// Establish the frame record and fp, allocate the frame, and save the
-/// callee-saved registers. The folded shape allocates everything with
-/// the first callee save's pre-index and keeps fp and every offset
-/// identical to the unfolded `stp fp/lr; mov fp, sp; sub sp` shape;
-/// fp/lr restore first in the epilogue, so the `ret`-feeding lr load
-/// issues off an address that depends on no other restore.
+/// The frame record, fp, the frame allocation and the callee saves. The
+/// folded shape allocates everything with the first save's pre-index and
+/// keeps fp and every offset identical to the unfolded
+/// `stp fp/lr; mov fp, sp; sub sp` shape.
 fn emit_frame_and_saves(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame) {
     let fold = frame_fold_bytes(alloc, frame);
     if fold != 0 {
@@ -1768,32 +1680,15 @@ fn emit_frame_and_saves(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame) {
     emit(code, enc_stp_pre(Reg(29), Reg(30), Reg(31), -16));
     emit(code, enc_add_imm(Reg(29), Reg(31), 0));
     if frame.frame_bytes > 0 {
-        // x16 is the emitter's reserved prologue scratch.
         emit_stack_alloc(code, frame.frame_bytes, Some(Reg(16)));
     }
     emit_prologue_saved_regs(code, alloc, frame, 0);
 }
 
-/// Byte offset (positive) from fp to the start of the saved-reg
-/// region. The region is the lowest portion of the frame.
-fn alloc_save_base(frame: Frame, alloc: &Allocation) -> u32 {
-    let saved_gpr_bytes = super::ssa::emit_common::slots16(alloc.gpr_used.len() as u32);
-    let saved_fpr_bytes = super::ssa::emit_common::slots16(alloc.fp_used.len() as u32);
-    // fp is at frame top; the saved-reg region sits at the
-    // bottom. Distance from fp = frame_bytes - saved-region size.
-    frame
-        .frame_bytes
-        .saturating_sub(saved_gpr_bytes + saved_fpr_bytes)
-}
-
-/// Return the aarch64 condition code to use for a `B.cond` when
-/// `cond` was flagged as branch-fused by the allocator. `negate`
-/// is true for `Bz` (branch when comparison failed); false for
-/// `Bnz`. Returns `None` when fusion doesn't apply (caller falls
-/// back to the unfused `cbz` / `cbnz` path). The FP conditions map
-/// as the `fcmp` + `cset` pair does, and `Cond::flip` is an exact
-/// NZCV complement, so an inverted FP branch is taken on the
-/// unordered (NaN) state exactly when C99 6.5.8p6 / 6.5.9p3
+/// The `B.cond` condition for a comparison the allocator flagged as
+/// branch-fused; `negate` for `Bz`. `None` when fusion does not apply.
+/// `Cond::flip` is an exact NZCV complement, so an inverted FP branch is
+/// taken on the unordered state exactly when C99 6.5.8p6 / 6.5.9p3
 /// require the negated comparison to hold.
 fn fused_branch_cond(
     func: &super::super::ir::FunctionSsa,
@@ -1835,23 +1730,15 @@ pub(super) fn emit_return(
     } else if value != super::super::ir::NO_VALUE {
         emit_scalar_return(code, value, alloc, frame, scratch, func);
     }
-    // A full leaf's prologue emitted no save, so its epilogue emits no
-    // restore: the body is bracketed only by the return-value
-    // materialization and the `ret`.
+    // A full leaf saved nothing.
     if is_full_leaf(func, frame, alloc) {
         emit(code, enc_ret(Reg(30)));
         return;
     }
     emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
-    // A dynamic-sp frame re-establishes `sp = fp - frame_bytes` first, so
-    // the sp-relative restores read the prologue-time addresses regardless
-    // of the body's alloca moves.
     restore_dynamic_sp(code, frame);
-    // The folded shape restores fp/lr first (the lr load feeds `ret`, so it
-    // issues off sp before the writeback chain), then x19 and the
-    // callee-saved registers in mirror order of the prologue's saves; the
-    // final restore's post-index tears the frame down. The unfolded shape
-    // keeps the restore / `add sp` / fp-lr `ldp` order.
+    // The folded shape restores fp/lr first (the lr load feeds `ret`) and
+    // tears the frame down with the last restore's post-index.
     let fold = frame_fold_bytes(alloc, frame);
     if fold != 0 {
         emit(code, enc_ldp_off(Reg(29), Reg(30), Reg(31), fold as i32));
@@ -1859,19 +1746,16 @@ pub(super) fn emit_return(
     } else {
         emit_epilogue_restore_regs(code, alloc, frame, 0);
         if frame.frame_bytes > 0 {
-            // x16 is call-clobbered and carries no result, so it is free to
-            // hold a frame size past the immediate reach.
+            // x16 carries no result and is free for a frame size past the
+            // immediate reach.
             super::encode::emit_add_sp_imm_scratch(code, frame.frame_bytes, Reg(16));
         }
         emit(code, enc_ldp_post(Reg(29), Reg(30), Reg(31), 16));
     }
-    // The bytes the prologue allocated above the saved fp/lr for the c5
-    // cdecl parameter cells; both sides read `frame.param_spill_bytes`.
     if frame.param_spill_bytes > 0 {
         emit_add_sp_imm(code, frame.param_spill_bytes);
     }
-    // Every teardown above has completed, so sp holds the value `paciasp`
-    // signed against.
+    // sp holds the value `paciasp` signed against.
     if signs_return_address(func, frame, alloc, abi) {
         emit(code, super::encode::AUTIASP);
     }
@@ -1945,10 +1829,8 @@ fn emit_aggregate_return(
     let dst = scratch.secondary;
     emit_local_addr_fp(code, Place::IntReg(dst.0), func.indirect_result_slot, frame);
     emit(code, enc_ldr_imm(dst, dst, 0));
-    // Both endpoints are the caller's object, so its alignment bounds the
-    // transfer unit. The byte form's scaled immediate reaches 4095, so a
-    // copy past that advances both bases; `WINDOW` is 8-aligned and below
-    // 4096, keeping every unit and tail offset in range.
+    // The caller's object bounds the transfer unit. `WINDOW` keeps every
+    // byte-form offset under 4096; a longer copy advances both bases.
     let unit = super::super::access_chunk(desc.align, abi.strict_align, 8);
     const WINDOW: u32 = 4088;
     let mut pos = 0u32;
@@ -1979,12 +1861,10 @@ fn emit_aggregate_return(
     emit_mov_reg(code, Reg(0), dst);
 }
 
-/// Move a scalar return value into its register. A floating-point scalar
-/// result is returned in d0 (C99 6.2.5p10 / AAPCS64 6.4.2); a `float`
-/// occupies s0, the low 32 bits of d0, which a d-register copy / 8-byte FP
-/// load preserves. The producing instruction determines the register file
-/// even when the allocator spilled the value or materialized it as an
-/// integer immediate. Everything else rides x0.
+/// Move a scalar return value into its register: d0 for a floating-point
+/// scalar (C99 6.2.5p10 / AAPCS64 6.4.2; a `float` is the s0 half, which
+/// the 8-byte forms preserve), decided by the producing instruction even
+/// when the value is spilled or integer-materialized; x0 otherwise.
 fn emit_scalar_return(
     code: &mut Vec<u8>,
     value: u32,

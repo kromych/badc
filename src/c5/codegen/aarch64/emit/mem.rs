@@ -1,22 +1,14 @@
 use super::*;
 
-/// SP-relative byte offset of allocator spill `slot` in the
-/// current function's frame. Thin wrapper over the cross-target
-/// math helper so the per-call sites read as `spill_off(frame,
-/// slot)` rather than the four-argument call.
+/// SP-relative byte offset of allocator spill `slot`.
 pub(super) fn spill_off(frame: Frame, slot: u32) -> u32 {
     super::ssa::emit_common::spill_slot_sp_offset(frame.frame_bytes, frame.alloc_spill_base, slot)
 }
 
-/// Largest byte displacement reachable by the scaled-imm12 unsigned-
-/// offset form of `LDR`/`STR` for a given access size, per the
-/// Arm Architecture Reference Manual C6.2 (load/store unsigned
-/// immediate): the imm12 field holds `off / size` and is 12 bits, so
-/// `off` ranges over `[0, 4095 * size]`. Beyond this the base address
-/// must be materialised into a register. The frame's allocator spill
-/// region can exceed this reach when a function spills heavily (one
-/// 8-byte slot per spilled value), so every SP-relative spill access
-/// routes through the helpers below rather than the raw encoders.
+/// Whether `off` fits the scaled unsigned-offset form of `LDR` / `STR`
+/// for `access_size` (ARM ARM C6.2: imm12 holds `off / size`). The spill
+/// region of a heavily spilling function exceeds it, so every
+/// sp-relative spill access goes through the helpers below.
 fn sp_imm12_in_range(off: u32, access_size: u32) -> bool {
     off.is_multiple_of(access_size) && (off / access_size) < 4096
 }
@@ -24,11 +16,10 @@ fn sp_imm12_in_range(off: u32, access_size: u32) -> bool {
 /// An `ADD` / `SUB` (immediate) encoder: `(rd, rn, imm)`.
 type AddSubImm = fn(Reg, Reg, u32) -> u32;
 
-/// `dst = base + off` (or `base - off` with `sub`) for any 32-bit
+/// `dst = base + off` (`base - off` with `sub`) for any 32-bit
 /// displacement: the shift-12 + remainder split of the immediate forms
-/// (24-bit reach); past that the displacement is built into `dst` and
-/// applied with the register form -- the extended-register one when the
-/// base is sp, the only register add that accepts it.
+/// (24-bit reach), past that the displacement built into `dst` and
+/// applied with the register form, the extended one when the base is sp.
 fn emit_reg_disp(code: &mut Vec<u8>, dst: Reg, base: Reg, off: u32, sub: bool) {
     if !super::encode::add_sub_imm24_in_range(off) {
         super::encode::load_imm64(code, dst, off as u64);
@@ -64,8 +55,7 @@ pub(super) fn emit_sp_plus_off(code: &mut Vec<u8>, dst: Reg, off: u32) {
     emit_reg_disp(code, dst, Reg(31), off, false);
 }
 
-/// Materialise `fp + off` into `dst`: the frame-relative address of a
-/// host-ABI variadic callee's first variadic argument.
+/// Materialise `fp + off` into `dst`.
 pub(super) fn emit_fp_plus_off(code: &mut Vec<u8>, dst: Reg, off: u32) {
     emit_reg_disp(code, dst, Reg(29), off, false);
 }
@@ -75,10 +65,8 @@ pub(super) fn emit_fp_minus_off(code: &mut Vec<u8>, dst: Reg, delta: u32) {
     emit_reg_disp(code, dst, Reg(29), delta, true);
 }
 
-/// SP-relative 8-byte load into `rt` with automatic out-of-reach
-/// handling. When `off` exceeds the scaled-imm12 reach the address is
-/// built into `rt` itself (the loaded value overwrites it), so no
-/// extra scratch is consumed.
+/// SP-relative 8-byte load; past the imm12 reach the address is built
+/// into `rt` itself.
 pub(super) fn emit_sp_ldr_x(code: &mut Vec<u8>, rt: Reg, off: u32) {
     if sp_imm12_in_range(off, 8) {
         emit(code, enc_ldr_imm(rt, Reg(31), off));
@@ -88,9 +76,8 @@ pub(super) fn emit_sp_ldr_x(code: &mut Vec<u8>, rt: Reg, off: u32) {
     }
 }
 
-/// SP-relative 8-byte store of `rt`. A store needs the data and the
-/// computed address in distinct registers, so `addr_scratch` (which
-/// must differ from `rt`) carries the base when `off` is out of reach.
+/// SP-relative 8-byte store; `addr_scratch` (distinct from `rt`) carries
+/// the base past the imm12 reach.
 fn emit_sp_str_x(code: &mut Vec<u8>, rt: Reg, off: u32, addr_scratch: Reg) {
     if sp_imm12_in_range(off, 8) {
         emit(code, enc_str_imm(rt, Reg(31), off));
@@ -101,20 +88,17 @@ fn emit_sp_str_x(code: &mut Vec<u8>, rt: Reg, off: u32, addr_scratch: Reg) {
     }
 }
 
-/// SP-relative 8-byte store of `rt`, picking an address scratch from
-/// the IP pool that differs from the data register. Use at sites where
-/// neither scratch is otherwise live across the store.
+/// `emit_sp_str_x` with the IP-pool scratch that differs from `rt`, for
+/// sites where neither scratch is live.
 pub(super) fn emit_sp_str_x_auto(code: &mut Vec<u8>, rt: Reg, off: u32) {
     let addr_scratch = if rt.0 == 16 { Reg(17) } else { Reg(16) };
     emit_sp_str_x(code, rt, off, addr_scratch);
 }
 
-/// SP-relative 8-byte store of `rt` at a site where no register other
-/// than `rt` is free to carry the base. The borrowed register is saved
-/// to the stack with a pre-index push, which shifts SP by 16; the
-/// stored displacement is compensated so it still targets the original
-/// slot. Used by the parallel-copy spill-to-spill path, where both IP
-/// scratches may hold live cycle values.
+/// SP-relative 8-byte store where only `borrow`, a live register, can
+/// carry the base: it is pushed around the store and the displacement
+/// compensates the 16-byte sp shift. The parallel-copy spill-to-spill
+/// path, where both IP scratches hold cycle values.
 fn emit_sp_str_x_borrow(code: &mut Vec<u8>, rt: Reg, off: u32, borrow: Reg) {
     if sp_imm12_in_range(off, 8) {
         emit(code, enc_str_imm(rt, Reg(31), off));
@@ -127,8 +111,8 @@ fn emit_sp_str_x_borrow(code: &mut Vec<u8>, rt: Reg, off: u32, borrow: Reg) {
     emit(code, super::encode::enc_ldr_post(borrow, Reg(31), 16));
 }
 
-/// SP-relative 8-byte FP load into d-reg `dt`. The base address is
-/// built into `addr_scratch` (a GPR) when out of reach.
+/// SP-relative 8-byte FP load; `addr_scratch` (a GPR) carries the base
+/// past the reach.
 fn emit_sp_ldr_d(code: &mut Vec<u8>, dt: u8, off: u32, addr_scratch: Reg) {
     if sp_imm12_in_range(off, 8) {
         emit(code, enc_ldr_d_imm(dt, Reg(31), off));
@@ -138,8 +122,7 @@ fn emit_sp_ldr_d(code: &mut Vec<u8>, dt: u8, off: u32, addr_scratch: Reg) {
     }
 }
 
-/// SP-relative 8-byte FP store of d-reg `dt`. `addr_scratch` carries
-/// the base when out of reach.
+/// SP-relative 8-byte FP store.
 fn emit_sp_str_d(code: &mut Vec<u8>, dt: u8, off: u32, addr_scratch: Reg) {
     if sp_imm12_in_range(off, 8) {
         emit(code, enc_str_d_imm(dt, Reg(31), off));
@@ -149,9 +132,8 @@ fn emit_sp_str_d(code: &mut Vec<u8>, dt: u8, off: u32, addr_scratch: Reg) {
     }
 }
 
-/// SP-relative 8-byte FP store using x16 as the address scratch. Use
-/// at sites lowering an FP value, where the GPR scratch holds no live
-/// int operand.
+/// `emit_sp_str_d` with x16 as the address scratch, for FP lowerings
+/// where x16 holds no operand.
 pub(super) fn emit_sp_str_d_auto(code: &mut Vec<u8>, dt: u8, off: u32) {
     emit_sp_str_d(code, dt, off, Reg(16));
 }
@@ -161,19 +143,15 @@ pub(super) fn emit_sp_ldr_d_auto(code: &mut Vec<u8>, dt: u8, off: u32) {
     emit_sp_ldr_d(code, dt, off, Reg(16));
 }
 
-/// Allocator-spill accessors. A static frame reads the slot at
-/// `[sp + sp_off]`; a dynamic-sp frame (alloca / VLA,
-/// `Frame::dynamic_sp`) reads the same byte at
-/// `[fp - (frame_bytes - sp_off)]`, since sp moves at runtime while fp
-/// stays put. The fp displacement uses the unscaled-signed `ldur` /
-/// `stur` form in reach, else builds the address with the imm12 +
-/// shift-12 split.
+/// Allocator-spill accessors: a static frame reads `[sp + sp_off]`, a
+/// dynamic-sp frame the same byte at `[fp - (frame_bytes - sp_off)]`
+/// through `ldur` / `stur` in reach, else through the split displacement.
 fn fp_spill_delta(frame: Frame, sp_off: u32) -> u32 {
     frame.frame_bytes - sp_off
 }
 
-/// Spill-slot 8-byte load into `rt`. The fp-based out-of-reach form
-/// builds the address into `rt` itself, mirroring [`emit_sp_ldr_x`].
+/// Spill-slot 8-byte load; the fp-based out-of-reach form builds the
+/// address into `rt`.
 pub(super) fn emit_spill_ldr_x(code: &mut Vec<u8>, frame: Frame, rt: Reg, sp_off: u32) {
     if !frame.dynamic_sp {
         emit_sp_ldr_x(code, rt, sp_off);
@@ -211,8 +189,7 @@ pub(super) fn emit_spill_str_x(
     }
 }
 
-/// Spill-slot 8-byte store picking an IP-pool address scratch that
-/// differs from the data register.
+/// `emit_spill_str_x` with the IP-pool scratch that differs from `rt`.
 pub(super) fn emit_spill_str_x_auto(code: &mut Vec<u8>, frame: Frame, rt: Reg, sp_off: u32) {
     let addr_scratch = if rt.0 == 16 { Reg(17) } else { Reg(16) };
     emit_spill_str_x(code, frame, rt, sp_off, addr_scratch);
@@ -292,14 +269,11 @@ fn addr_outside_borrows(code: &mut Vec<u8>, rn: Reg, scratch: &ScratchPool) -> R
     scratch.primary
 }
 
-/// `Inst::TlsAddr` lowering. Routes through the per-target TLS
-/// access shape -- Linux variant 1 (TPIDR_EL0 + tcb + offset),
-/// Windows TEB->TLS slot via `_tls_index` and the per-thread
-/// pointer table at `[x18, #0x58]`, or Apple's TLV descriptor
-/// table with the bootstrap getter. The 12-bit add immediate
-/// limit on the per-variable offset matches the pool path; any
-/// `_Thread_local` larger than 4080 bytes from `.tdata` falls
-/// back to the pool path through the false return.
+/// `Inst::TlsAddr`: the per-target TLS access -- Linux variant 1
+/// (TPIDR_EL0 + TCB + offset), Windows through the TEB's TLS array and
+/// `_tls_index`, macOS through the TLV descriptor and its getter. The
+/// 12-bit add immediate bounds the per-variable offset as on the pool
+/// path; a `_Thread_local` beyond it returns `false`.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_tls_addr(
     code: &mut Vec<u8>,
@@ -311,16 +285,14 @@ pub(super) fn emit_tls_addr(
     macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
     elf_tpoff_fixups: &mut Vec<super::ElfTpoffFixup>,
-    // Set for a cross-unit `extern _Thread_local` access: the variable's
-    // name. The descriptor is keyed by symbol (the linker resolves the
-    // offset) rather than by the placeholder `offset`.
+    // A cross-unit `extern _Thread_local` access carries the variable's
+    // name; its descriptor is keyed by symbol, not by the placeholder
+    // offset.
     tls_extern_sym: Option<&str>,
 ) -> bool {
     use super::encode::{enc_add_imm_lsl12, enc_blr, enc_ldr_reg_lsl3, enc_mrs_tpidr_el0};
-    // A spilled destination materialises in the scratch every other
-    // address-producing lowering uses, then stores to the slot; x17 stays
-    // free for the store's base, and the three sequences below only read
-    // `rd` after their last use of x16.
+    // A spilled destination materialises in x16; the sequences read `rd`
+    // only after their last use of x16, and x17 stays free for the store.
     let rd = match dst {
         Place::IntReg(r) => Reg(r),
         Place::Spill(_) => Reg(16),
@@ -331,16 +303,12 @@ pub(super) fn emit_tls_addr(
     };
     let emitted = match target {
         Target::LinuxAarch64 => {
-            // AAPCS64 variant-1: the static TLS block sits above the thread
-            // pointer after a 16-byte TCB reserve, so a variable at
-            // `offset` in its unit's block reads `tp + 16 + offset`. The
-            // local-exec form is the standard two-add sequence
-            // (`tprel_hi12` + `tprel_lo12`), which covers a 24-bit TPOFF
-            // and gives the linker two patchable immediates. A unit-local
-            // access bakes the single-unit TPOFF; a cross-unit extern
-            // bakes the 16-byte reserve as a placeholder. Both record an
-            // `elf_tpoff_fixups` entry (at the first add) so the linker
-            // rebases the pair against the merged TLS layout.
+            // Variant 1: the static TLS block sits 16 bytes (the TCB) above the
+            // thread pointer, so the local-exec form is
+            // `tp + tprel_hi12 + tprel_lo12` (24-bit TPOFF, two linker-patchable
+            // immediates). A unit-local access bakes its TPOFF, a cross-unit one
+            // the 16-byte reserve; both record an `elf_tpoff_fixups` entry at the
+            // first add for the linker to rebase against the merged TLS layout.
             let tpoff = if tls_extern_sym.is_some() {
                 16u32
             } else {
@@ -364,25 +332,13 @@ pub(super) fn emit_tls_addr(
             true
         }
         Target::WindowsAarch64 => {
-            // Windows/aarch64 TLS: x18 is the TEB pointer per the
-            // platform ABI; TEB+0x58 holds the per-thread TLS
-            // array. Index by `_tls_index` (loaded into x17) and
-            // pick the slot for this module; x16 then holds the
-            // module's TLS block base. x16 and x17 are AAPCS64
-            // scratches outside the SSA allocator pool
-            // (callee=[20..27], caller=[9..15]). A unit-local
-            // access bakes the variable's offset within its own
-            // block into the final `add`. A cross-unit `extern
-            // _Thread_local` offset is unknown until the link
-            // merges the TLS blocks, so emit a 0 placeholder and
-            // record an `elf_tpoff_fixups` entry keyed by symbol;
-            // the linker resolves it against the merged TLS layout
-            // and rewrites the `add` imm12. The TEB path indexes a
-            // module-relative block, so the offset baked in is the
-            // raw block offset with no thread-pointer bias -- the
-            // linker tells this path apart from the variant-1 ELF
-            // path by the `_tls_index` fixup the TEB sequence
-            // always records.
+            // x18 is the TEB pointer; TEB+0x58 holds the per-thread TLS array,
+            // indexed by `_tls_index` (loaded into x17) to the module's block base
+            // in x16. A unit-local access bakes the variable's offset within its
+            // own block into the final `add`, a cross-unit one a 0 placeholder; the
+            // linker resolves both against the merged layout through the
+            // `elf_tpoff_fixups` entry, telling this module-relative form from the
+            // variant-1 one by the `_tls_index` fixup.
             if tls_extern_sym.is_none() && offset >= 4096 {
                 bail_msg("TlsAddr: offset exceeds 12-bit add immediate");
                 return false;
@@ -402,11 +358,6 @@ pub(super) fn emit_tls_addr(
                 offset as u32
             };
             emit(code, enc_add_imm(rd, Reg(16), imm));
-            // Both forms record a fixup so the linker rebases the imm12 to
-            // the variable's offset in the merged TLS block: a unit-local
-            // access is correct only when its defining unit sits at block
-            // base 0, and the same variable read `extern` from another unit
-            // must resolve to the identical offset.
             elf_tpoff_fixups.push(super::ElfTpoffFixup {
                 imm_offset: add_off,
                 target: match tls_extern_sym {
@@ -417,10 +368,8 @@ pub(super) fn emit_tls_addr(
             true
         }
         Target::MacOSAarch64 => {
-            // A unit-local access dedups by offset (one descriptor per
-            // variable). A cross-unit extern access dedups by symbol --
-            // its `offset_in_block` is a placeholder the linker fills, so
-            // distinct externs must not collapse onto one offset-0 slot.
+            // One descriptor per variable: a unit-local access dedups by offset, a
+            // cross-unit one by symbol (its offset is a linker placeholder).
             let descriptor_index = match tls_extern_sym {
                 Some(name) => match macho_tlv_descriptors
                     .iter()
@@ -474,10 +423,6 @@ pub(super) fn emit_tls_addr(
     emitted
 }
 
-/// Compile-time-unrolled struct copy. `size` bytes from [src] to
-/// [dst]; emits 8-byte ldr/str pairs for whole words and a
-/// ldrb/strb tail for any sub-word remainder. The defined value
-/// is `dst` -- mirrors C's `memcpy(dst, src, size)` return.
 /// One load / store pair of `width` bytes (8, 4, 2 or 1) moving
 /// `[sbase + soff]` to `[dbase + doff]` through `temp`.
 #[allow(clippy::too_many_arguments)]
@@ -523,12 +468,11 @@ fn enc_load_unit(width: u32, rt: Reg, base: Reg, off: u32) -> u32 {
     }
 }
 
-/// Load `width` bytes at `[base + off]` into the integer register
-/// `dst`, using no access wider than `align` proves at that address
-/// (see [`super::super::access_pieces`]). `tmp` holds each narrow
-/// piece; it must differ from `base` and `dst`, and stays untouched
-/// when one access suffices -- the only case in which `dst` may alias
-/// `base`.
+/// Load `width` bytes at `[base + off]` into `dst` with no access wider
+/// than `align` proves at that address (`access_pieces`). `tmp` holds
+/// each narrow piece and must differ from `base` and `dst`; it stays
+/// untouched when one access suffices, the only case in which `dst` may
+/// alias `base`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn emit_agg_load_int(
     code: &mut Vec<u8>,
@@ -555,11 +499,10 @@ pub(crate) fn emit_agg_load_int(
     }
 }
 
-/// As [`emit_agg_load_int`] with an FP register destination (`width`
-/// 8 for a d-register, 4 for an s-register). The value composes in the
-/// vector register itself, so `tmp` is the only register needed beyond
-/// `base`: the first piece arrives through `fmov` (which clears the
-/// element bits above it), the rest through element inserts.
+/// `emit_agg_load_int` for an FP destination (`width` 8 for a
+/// d-register, 4 for an s-register): the first piece arrives through
+/// `fmov`, the rest through element inserts, so `tmp` is the only extra
+/// register.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_agg_load_fp(
     code: &mut Vec<u8>,
@@ -599,9 +542,9 @@ pub(super) fn emit_agg_load_fp(
     }
 }
 
-/// Alignment a scalar access must respect, or `None` when it may keep
-/// its natural width: an access carries a bound only where the walker
-/// proved one, and only `-mstrict-align` acts on it.
+/// The alignment a scalar access must respect, or `None` for its
+/// natural width: only a bound the walker proved, and only under
+/// `-mstrict-align`.
 pub(super) fn narrow_bound(align: u8, abi: super::Abi) -> Option<u32> {
     (abi.strict_align && align != 0).then_some(align as u32)
 }
@@ -618,14 +561,11 @@ pub(crate) fn enc_store_unit(width: u32, rt: Reg, base: Reg, off: u32) -> u32 {
 }
 
 /// Registers a narrowed scalar access borrows for its accumulator and
-/// piece temp. They sit in the allocator's pool, so each is saved and
-/// restored across the sequence; nothing between the save and the
-/// restore addresses `sp`. Mirrors the reservation `emit_mcpy` makes.
+/// piece temp, saved and restored across the sequence; nothing between
+/// the save and the restore addresses sp.
 pub(crate) const NARROW_BORROW: [u8; 7] = [9, 10, 11, 12, 13, 14, 15];
 
-/// The first `N` borrow registers distinct from every register in
-/// `avoid`. The pool is larger than any caller's avoid set, so the
-/// pick always succeeds.
+/// The first `N` borrow registers not in `avoid`.
 fn narrow_borrows<const N: usize>(avoid: &[u8]) -> [Reg; N] {
     let mut out = [Reg(0); N];
     let mut n = 0;
@@ -707,41 +647,24 @@ fn emit_narrow_store(code: &mut Vec<u8>, rs: Reg, rn: Reg, disp: u32, width: u32
     emit(code, enc_ldr_post(tmp, Reg(31), 16));
 }
 
-/// Translate a c5-stack slot index (the operand of an
-/// address-of-local emit) into a byte offset relative to fp.
-/// Mirror of the pool path's
 use super::ssa::emit_common::c5_slot_to_fp_offset;
 
-/// fp-relative byte offset of a c5 slot. Locals (`off < 0`) and the
-/// ordinary parameter cells go through `c5_slot_to_fp_offset` at the
-/// frame's cell stride. For an AAPCS64 host variadic callee (Linux
-/// aarch64) the named parameters are not pushed as cdecl cells -- they
-/// arrive in the argument registers and the prologue spills them into
-/// the register save area above the saved fp/lr. A named-parameter
-/// access (`off >= 2`, parameter index `off - 2`) is therefore
-/// redirected to that parameter's slot in the save area: an integer /
-/// pointer parameter to `[fp + 16 + int_rank*8]` within the 64-byte
-/// general area, a floating-point parameter to
-/// `[fp + 16 + 64 + fp_rank*16]` within the 128-byte vector area, where
-/// the rank is the parameter's position within its argument-register
-/// bank (the independent int / FP banks of AAPCS64 6.4.1). Locals are
-/// unaffected.
+/// fp-relative byte offset of c5 slot `off`. Locals and ordinary
+/// parameter cells go through `c5_slot_to_fp_offset` at the frame's cell
+/// stride. An AAPCS64 host variadic callee's named parameter (`off >= 2`)
+/// is redirected to its slot in the register save area:
+/// `[fp + 16 + int_rank*8]` in the general area, `[fp + 80 + fp_rank*16]`
+/// in the vector area, the rank being its position within its
+/// argument-register bank.
 fn local_slot_off(off: i64, frame: Frame) -> i64 {
     if off >= 2 && frame.va_named_redirect {
         let p = (off - 2) as usize;
-        // Named parameters arrive per AAPCS64 6.4.1: the first eight integer
-        // and eight floating-point parameters in the argument-register banks
-        // (the prologue spills them into the general / vector save area), the
-        // rest on the incoming stack. Use the shared planner so the redirect
-        // lands on the same placement the caller produced. The save area sits
-        // at `[fp + 16 .. fp + 208)`: general area (x0..x7) at
-        // `[fp + 16 .. fp + 80)`, vector area (q0..q7) at `[fp + 80 ..
-        // fp + 208)`; the incoming stack overflow begins at `[fp + 208 ..)`.
+        // The shared planner puts the redirect on the placement the caller
+        // produced; a parameter past the registers is on the incoming stack at
+        // [fp + 208 + soff].
         let plan = super::plan_param_regs(frame.va_n_params, frame.va_param_fp_mask, frame.va_abi);
         match plan.placements.get(p) {
             Some(super::ArgPlacement::Stack(soff)) => {
-                // Overflow named parameter: read from the incoming stack at
-                // [fp + 208 + soff], past the register save area.
                 16 + AARCH64_VA_SAVE_BYTES as i64 + *soff as i64
             }
             Some(super::ArgPlacement::FpReg(_)) => {
@@ -764,10 +687,10 @@ fn local_slot_off(off: i64, frame: Frame) -> i64 {
     }
 }
 
-/// Region byte offset of an over-aligned automatic object's storage in the
-/// frame's over-aligned region (C11 6.7.5), or None for an ordinary slot. The
-/// region base is sp when the prologue realigned (`realign_align` > 0) and
-/// `fp + align_region_off` for the static 16-aligned placement.
+/// Region offset of an over-aligned automatic object's storage (C11
+/// 6.7.5), or None for an ordinary slot. The region base is sp after a
+/// realignment and `fp + align_region_off` for the static 16-aligned
+/// placement.
 fn over_aligned_region_off(off: i64, func: &FunctionSsa, frame: Frame) -> Option<i64> {
     if off >= 0 || (frame.realign_align == 0 && frame.align_region_off == 0) {
         return None;
@@ -778,10 +701,9 @@ fn over_aligned_region_off(off: i64, func: &FunctionSsa, frame: Frame) -> Option
         .map(|&(_, region_off)| region_off)
 }
 
-/// Address of a local slot, redirecting an over-aligned automatic object to its
-/// storage in the over-aligned region (C11 6.7.5). Callers that only
-/// address synthetic / parameter slots (never over-aligned) use
-/// [`emit_local_addr_fp`] directly and need no `func`.
+/// The address of a local slot, an over-aligned object redirected to its
+/// region (C11 6.7.5). Callers addressing only synthetic / parameter
+/// slots use `emit_local_addr_fp`.
 pub(super) fn emit_local_addr(
     code: &mut Vec<u8>,
     dst: Place,
@@ -803,8 +725,6 @@ pub(super) fn emit_local_addr(
             return false;
         }
     };
-    // `rd = sp + region_off`, through the shared sp-relative helper so an
-    // offset past the immediate reach materialises rather than truncating.
     emit_sp_plus_off(code, rd, region_off.max(0) as u32);
     store_spilled_int(code, frame, dst, rd);
     true
@@ -816,10 +736,6 @@ pub(super) fn emit_local_addr_fp(code: &mut Vec<u8>, dst: Place, off: i64, frame
 
 /// Materialise `fp + bytes` into `dst` for any signed byte displacement.
 fn emit_fp_addr_bytes(code: &mut Vec<u8>, dst: Place, bytes: i64, frame: Frame) -> bool {
-    // Materialise the address through scratch.primary when the
-    // allocator chose a spill slot for this LocalAddr, then store
-    // the computed value into the spill slot. Register places
-    // address straight into the chosen reg.
     let rd = match dst {
         Place::IntReg(r) => Reg(r),
         Place::Spill(_) => Reg(16),
@@ -840,8 +756,7 @@ fn emit_fp_addr_bytes(code: &mut Vec<u8>, dst: Place, bytes: i64, frame: Frame) 
         store_spilled_int(code, frame, dst, rd);
         return true;
     }
-    // 24-bit reach via two add/sub-imm: shift-12 hi half + plain
-    // lo half.
+    // The shift-12 + remainder split covers 24 bits.
     if abs < (1u64 << 24) {
         let hi = abs & !0xfff;
         let lo = abs & 0xfff;
@@ -871,8 +786,6 @@ fn emit_fp_addr_bytes(code: &mut Vec<u8>, dst: Place, bytes: i64, frame: Frame) 
         store_spilled_int(code, frame, dst, rd);
         return true;
     }
-    // Past the 24-bit immediate reach: build the displacement and apply
-    // it with the register form.
     super::encode::load_imm64(code, rd, abs);
     if bytes >= 0 {
         emit(code, super::encode::enc_add_reg(rd, Reg(29), rd));
@@ -883,11 +796,9 @@ fn emit_fp_addr_bytes(code: &mut Vec<u8>, dst: Place, bytes: i64, frame: Frame) 
     true
 }
 
-/// Pick the working register for a single-result int inst:
-/// the allocator's chosen reg when it picked one, or
-/// `scratch.primary` when the result will land in a spill slot.
-/// FpReg / None destinations return `None` so the caller can
-/// bail.
+/// The working register of a single-result integer lowering: the
+/// allocator's, or `scratch.primary` for a spilled result; `None` for an
+/// FP or absent destination.
 pub(super) fn int_or_spill_scratch(dst: Place, scratch: &ScratchPool) -> Option<Reg> {
     match dst {
         Place::IntReg(r) => Some(Reg(r)),
@@ -923,28 +834,21 @@ pub(super) fn emit_load(
     scratch: &ScratchPool,
     bound: Option<u32>,
 ) -> bool {
-    // `disp` is a byte offset folded from a constant pointer addition.
-    // index_fold only emits a displacement that is a multiple of the
-    // access width and within the scaled-immediate range, so it passes
-    // straight to the immediate-offset encoders below. That multiple
-    // also lets `bound` -- recorded for the accessed address -- be read
-    // as an alignment of the base that `disp` then advances.
+    // `disp` is a width-aligned, in-range byte offset the index fold
+    // produced, so it passes to the immediate-offset encoders and `bound`
+    // reads as the base's alignment.
     let disp = disp as u32;
     let addr_place = place_of(alloc, addr);
     let rn = match materialize_int(code, addr_place, scratch.primary, frame) {
         Some(r) => r,
         None => return false,
     };
-    // F32 loads read into the s-view of a v-register. When the value is
-    // single-precision (C99 6.3.1.8), it stays f32 (no widen). The
-    // archive-reload path (lift_program) leaves the value untagged and
-    // consumes it as f64, so widen via `fcvt Dd, Sn` there.
+    // F32 loads read the s-view; a single-precision value (C99 6.3.1.8)
+    // stays f32, the untagged archive-reload value widens through
+    // `fcvt Dd, Sn`.
     if let LoadKind::F32 = kind {
         let dd = match dst {
             Place::FpReg(r) => r,
-            // A spilled f32 / f64 stages through a reserved scratch
-            // d-reg outside the allocator's banks; d0 may hold a
-            // live value the caller still needs.
             Place::Spill(_) => frame.fp_scratch[0],
             _ => {
                 bail_msg("Load F32: dst not fp reg / spill");
@@ -1012,10 +916,10 @@ pub(super) fn emit_load(
     true
 }
 
-/// The scaled unsigned displacement of local slot `off` for an
-/// fp-relative FP access of `size` bytes, when the slot is an ordinary
-/// fp-relative one and the displacement fits the immediate: non-negative,
-/// a multiple of `size` and at most `max`.
+/// The scaled unsigned displacement of an fp-relative FP access of
+/// `size` bytes to local slot `off`, when the slot is an ordinary one and
+/// the displacement is non-negative, a multiple of `size` and at most
+/// `max`.
 fn fp_scaled_disp(off: i64, frame: Frame, is_over: bool, size: u32, max: u32) -> Option<u32> {
     let disp = i32::try_from(local_slot_off(off, frame)).ok()?;
     if is_over || disp < 0 {
@@ -1025,14 +929,11 @@ fn fp_scaled_disp(off: i64, frame: Frame, is_over: bool, size: u32, max: u32) ->
     (disp.is_multiple_of(size) && disp <= max).then_some(disp)
 }
 
-/// `Inst::LoadLocal`: an fp-relative load in one instruction when the
-/// slot's displacement fits the form (the unscaled 9-bit field for an
-/// integer load, the scaled unsigned offset for an FP one); otherwise the
-/// address materialises through the `LocalAddr` lowering, which is also
-/// where an over-aligned object (C11 6.7.5, sp-relative) always goes.
-/// F32 reads into the s-view of a v-register: a single-precision value
-/// (C99 6.3.1.8) stays f32; the archive-reload path leaves it untagged and
-/// widens to f64 via `fcvt Dd, Sn`.
+/// `Inst::LoadLocal`: one fp-relative instruction when the displacement
+/// fits (the unscaled 9-bit field for an integer load, the scaled offset
+/// for an FP one); otherwise, and for an over-aligned object (C11
+/// 6.7.5), through the materialised address. A single-precision value
+/// stays f32 (C99 6.3.1.8); the untagged archive-reload value widens.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_load_local(
     code: &mut Vec<u8>,
@@ -1191,9 +1092,8 @@ pub(super) fn emit_store_local(
         propagate_fp(code, frame, dst, dn);
         return true;
     }
-    // c5 spills an FP-typed accumulator into a local temp through the
-    // store-local path (the bit pattern fits 8 bytes regardless of type),
-    // so an FpReg value bridges through `fmov d -> x` into a GPR first.
+    // An FpReg value (an FP-typed accumulator spilled to a local temp)
+    // bridges through `fmov x, d`.
     let rv = if let Place::FpReg(dr) = value_place {
         emit(code, super::encode::enc_fmov_d_to_x(scratch.primary, dr));
         scratch.primary
@@ -1208,10 +1108,8 @@ pub(super) fn emit_store_local(
         && (-256..256).contains(&disp)
         && !is_over
     {
-        // Store the low `kind`-width bytes; the accumulator keeps the full
-        // source value, matching the c5 rule that an assignment expression
-        // yields the stored value before any re-narrowing on read-back
-        // (C99 6.5.16p3).
+        // The accumulator keeps the full source value: an assignment yields
+        // the stored value before any re-narrowing on read-back (C99 6.5.16p3).
         let enc = match kind {
             StoreKind::I64 => super::encode::enc_stur(rv, Reg(29), disp),
             StoreKind::I32 => super::encode::enc_stur32(rv, Reg(29), disp),
@@ -1242,13 +1140,11 @@ pub(super) fn emit_store_local(
     true
 }
 
-/// The `float` half of [`emit_store_local`]. A single-precision value (C99
-/// 6.3.1.8) is already an f32 in the s-view (`str s`, no narrow); a wider
-/// f64 value narrows via `fcvt Sd, Dn` into the second FP scratch, outside
-/// the allocator's banks, so an allocator-held source d-reg whose f64 value
-/// is still live is not clobbered by the S-view write. Mirrors the `Store`
-/// F32 path so a mem2reg-promoted slot round-trips identically to the
-/// address-taken `LocalAddr + Store`.
+/// The `float` half of `emit_store_local`. A single-precision value (C99
+/// 6.3.1.8) stores as is; a wider value narrows through `fcvt Sd, Dn`
+/// into the second FP scratch, since the S-view write zeroes the rest of
+/// a V register the allocator may still hold live. Mirrors the `Store`
+/// F32 path so a promoted slot round-trips like the address-taken one.
 #[allow(clippy::too_many_arguments)]
 fn emit_store_local_f32(
     code: &mut Vec<u8>,
@@ -1262,8 +1158,6 @@ fn emit_store_local_f32(
     scratch: &ScratchPool,
 ) -> bool {
     let is_over = over_aligned_region_off(off, func, frame).is_some();
-    // `str s` takes the byte offset scaled by 4; a displacement past the
-    // unsigned-offset range materialises the address in a scratch register.
     let store_to_slot = |code: &mut Vec<u8>, sn: u8| -> bool {
         match fp_scaled_disp(off, frame, is_over, 4, 16376) {
             Some(disp) => emit(code, super::encode::enc_str_s_imm(sn, Reg(29), disp)),
@@ -1357,12 +1251,10 @@ fn emit_store_local_large_disp(
     true
 }
 
-/// Lower `Inst::LoadIndexed`: `dst = *(kind*)(base + index * scale)`.
-/// Emitted as one scaled-indexed load (`ldr Xt, [Xn, Xm, lsl #N]`)
-/// when `scale` matches the natural width of `kind`. F32 indexed
-/// loads aren't a shape the walker produces today (no `float arr[]`
-/// access path goes through the indexed fold yet); the FP variant
-/// would need a separate `ldr St, [Xn, Xm, lsl #2]` + `fcvt d, s`.
+/// `Inst::LoadIndexed`: one scaled-indexed load
+/// (`ldr Xt, [Xn, Xm, lsl #N]`) when `scale` is the natural width of
+/// `kind`. TODO: the FP forms; the walker's indexed fold does not
+/// produce them.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_load_indexed(
     code: &mut Vec<u8>,
@@ -1466,11 +1358,9 @@ pub(super) fn emit_store_indexed(
         bail_msg("StoreIndexed: scale doesn't match access width");
         return false;
     }
-    // The store needs three registers -- base, index, value -- but only
-    // two scratch registers exist. Pick a scratch for the value that
-    // collides with neither base nor index; when a spilled base and
-    // index occupy both, fold the index into the base so the
-    // register-offset form is no longer needed and a scratch frees up.
+    // The store needs base, index and value in three registers with two
+    // scratches: when a spilled base and index take both, the index folds
+    // into the base and the plain `[addr]` form frees a scratch.
     let vscratch;
     let addr_reg; // Some(addr) selects the plain `[addr]` store.
     if scratch.primary != rn && scratch.primary != rm {
@@ -1488,8 +1378,6 @@ pub(super) fn emit_store_indexed(
         addr_reg = Some(scratch.primary);
         vscratch = scratch.secondary;
     }
-    // Reuse the FP-bridge path from `emit_store_local` for the
-    // I64-store-of-FpReg shape.
     let rv = if let StoreKind::I64 = kind
         && let Place::FpReg(dr) = value_place
     {
@@ -1543,16 +1431,9 @@ pub(super) fn emit_store(
     scratch: &ScratchPool,
     bound: Option<u32>,
 ) -> bool {
-    // `disp` is a width-aligned, in-range byte offset folded from a
-    // constant pointer addition; it passes straight to the immediate-
-    // offset store encoders, and lets `bound` be read as an alignment
-    // of the base that `disp` then advances.
     let disp = disp as u32;
-    // The c5 store ops leave the stored value in the accumulator
-    // afterward, so `dst` may be a register or spill slot the
-    // allocator wants the value parked in. We compute the value
-    // in a register, store it through the address, then copy to
-    // dst if it isn't already there.
+    // The c5 store ops leave the stored value in the accumulator, which
+    // `dst` may want in a register or spill slot.
     let addr_place = place_of(alloc, addr);
     let value_place = place_of(alloc, value);
     let rn = match materialize_int(code, addr_place, scratch.primary, frame) {
@@ -1560,11 +1441,9 @@ pub(super) fn emit_store(
         None => return false,
     };
     if let StoreKind::F32 = kind {
-        // C99 6.3.1.8 / 6.3.1.5: a single-precision value is already an
-        // f32 in the s-view, so store it directly (`str s`, no narrow).
-        // A double value (the archive-reload boundary, or a `double`
-        // assigned to a `float` lvalue the walker didn't pre-narrow) is
-        // narrowed via `fcvt Sd, Dn` first.
+        // A single-precision value stores as is (C99 6.3.1.8); a double (the
+        // archive-reload boundary, or an un-narrowed `double` assigned to a
+        // `float` lvalue) narrows through `fcvt Sd, Dn`.
         if alloc.is_f32(value) {
             let sn = match materialize_fp_f32(code, value_place, frame.fp_scratch[0], frame) {
                 Some(r) => r,
@@ -1587,11 +1466,8 @@ pub(super) fn emit_store(
             }
             return true;
         }
-        // Stage the value as a d-reg holding the f64 pattern.
-        // For an FpReg source the materialise already gives us
-        // that; for an IntReg / Spill the source register holds
-        // the int-encoded f64 bit pattern (c5's Imm path), so
-        // an fmov x->d reinterprets the bits as f64.
+        // An IntReg / Spill source holds the f64 bit pattern (c5's `Imm`);
+        // `fmov d, x` reinterprets it.
         let dn = match value_place {
             Place::FpReg(r) => r,
             Place::IntReg(_) | Place::Spill(_) => {
@@ -1604,12 +1480,9 @@ pub(super) fn emit_store(
             }
             Place::None => return false,
         };
-        // Narrow into the second FP scratch (outside the allocator's
-        // banks) so dn -- which may be an allocator-held d-reg whose f64
-        // value is still live across this store -- is not clobbered.
-        // `fcvt Sd, Dn` writes the S view and zeroes the rest of the
-        // V register, so narrowing in place over a pooled register
-        // would destroy a value the surrounding code still reads.
+        // The narrowing writes the S view and zeroes the rest of the V
+        // register, so it targets the second FP scratch, not an allocator-held
+        // `dn`.
         emit(code, enc_fcvt_s_d(frame.fp_scratch[1], dn));
         match bound {
             Some(a) => {
@@ -1668,10 +1541,8 @@ pub(super) fn emit_store(
         }
         return true;
     }
-    // For an I64 store whose value lives in an FpReg (c5's f64
-    // store path uses StoreKind::I64 to write 8 raw bytes), bridge
-    // d-reg -> GPR via fmov. Lower-width stores from an FpReg
-    // aren't a shape c5 emits.
+    // c5's f64 store path writes 8 raw bytes as `StoreKind::I64`, so an
+    // FpReg value bridges through `fmov x, d`.
     let rs = if let StoreKind::I64 = kind
         && let Place::FpReg(dr) = value_place
     {
@@ -1705,16 +1576,9 @@ pub(super) fn emit_store(
     true
 }
 
-/// Materialise a value's `Place` into a register the lowering
-/// can name in an instruction operand. Spills get loaded into
-/// `scratch`; register places are returned as-is. Spill slots
-/// are addressed through sp with the 12-bit scaled immediate;
-/// fp-relative addressing through `ldur` would silently
-/// truncate the 9-bit immediate for frames > 256 bytes and read
-/// from the wrong slot. `sp_shift` is any amount the caller has
-/// temporarily pushed sp down by (e.g. emit_call's outgoing-arg
-/// scratch region) -- it gets added to the in-frame offset so the
-/// load still hits the correct spill slot.
+/// A value's `Place` as a register operand: a spill reloads into
+/// `scratch`. `sp_shift` is an amount the caller has temporarily moved
+/// sp down by (an outgoing-argument area), added to the slot offset.
 pub(super) fn materialize_int(
     code: &mut Vec<u8>,
     place: Place,
@@ -1745,10 +1609,9 @@ pub(super) fn materialize_int_shifted(
     }
 }
 
-/// Materialise a floating-point value's `Place` into a d-reg.
-/// Spilled FP values land in the 8-byte spill region as 64-bit
-/// patterns (the SSA model's only FP width is f64 since c5
-/// widens every load through `fcvt`).
+/// A floating-point value's `Place` as a d-register: a spill reloads
+/// the 64-bit slot, an IntReg (a folded constant's bit pattern)
+/// reinterprets through `fmov d, x`.
 pub(super) fn materialize_fp(
     code: &mut Vec<u8>,
     place: Place,
@@ -1772,16 +1635,12 @@ pub(super) fn materialize_fp_shifted(
             // dynamic-sp form is immune to it.
             let shift = if frame.dynamic_sp { 0 } else { sp_shift };
             let sp_off = spill_off(frame, slot) + shift;
-            // FP spill reloads need a GPR base when the slot is beyond
-            // the scaled-imm12 reach; x16 is the primary scratch and
-            // holds no int operand during an FP-value lowering.
+            // x16 carries the base past the imm12 reach; it holds no operand
+            // during an FP lowering.
             emit_spill_ldr_d(code, frame, scratch_d, sp_off, Reg(16));
             Some(scratch_d)
         }
-        // c5's constant-folder emits FP values as `Imm` of the
-        // int-encoded f64 bit pattern; the allocator places those
-        // in IntRegs. Reinterpret the bit pattern as an f64 via
-        // `fmov d, x` and return the scratch d-reg.
+        // A constant-folded FP value is an `Imm` bit pattern in an IntReg.
         Place::IntReg(r) => {
             emit(code, enc_fmov_x_to_d(scratch_d, Reg(r)));
             Some(scratch_d)
@@ -1790,14 +1649,9 @@ pub(super) fn materialize_fp_shifted(
     }
 }
 
-/// Materialise a single-precision (`f32`) value's `Place` into the
-/// low 32 bits of a v-register. A `Place::FpReg` already holds the
-/// f32 in its s-view; a `Place::Spill` reloads the 64-bit slot (a
-/// single-precision write zeroes the upper half, so the low 32 bits
-/// carry the f32). A `Place::IntReg` holds an f32 constant's int-
-/// encoded bit pattern in the low 32 bits; reinterpret it through
-/// `fmov s, w` (not the 64-bit `fmov d, x`, which would read garbage
-/// upper bits and misalign the single value).
+/// A single-precision value's `Place` as the s-view of a V register: an
+/// IntReg holds the f32 bit pattern in its low 32 bits and reinterprets
+/// through `fmov s, w`.
 pub(super) fn materialize_fp_f32(
     code: &mut Vec<u8>,
     place: Place,
@@ -1819,9 +1673,7 @@ pub(super) fn materialize_fp_f32(
     }
 }
 
-/// Materialise an FP operand, choosing the single- vs double-
-/// precision reinterpret of an int-register constant by the value's
-/// f32 marker.
+/// `materialize_fp_f32` or `materialize_fp` by the value's f32 marker.
 pub(super) fn materialize_fp_for(
     code: &mut Vec<u8>,
     v: super::super::ir::ValueId,
@@ -1837,16 +1689,12 @@ pub(super) fn materialize_fp_for(
     }
 }
 
-/// Extract the d-reg number from a `Place::FpReg`, or `None` for
-/// any other place. The d-reg index is the same as the s-reg
-/// index (single-precision uses the low 32 bits of the same
-/// physical register).
+/// The register of a `Place::FpReg`; the s-view shares its index.
 fn fp_reg(place: Place) -> Option<u8> {
     place.fp_reg_u8()
 }
 
-/// Extract the int reg from a `Place`, or None if it's not an
-/// int placement.
+/// The register of a `Place::IntReg`.
 pub(super) fn int_reg(p: Place) -> Option<Reg> {
     p.int_reg_u8().map(Reg)
 }

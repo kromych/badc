@@ -1,12 +1,11 @@
 use super::*;
 
-/// Block-target branch context for an `asm goto` statement: the
-/// `jump_tables` row (`[fall_through, label targets...]`) and the
-/// enclosing function's branch-fixup lists. A template `%lK` branch lands
-/// on a local restore trampoline whose final `b` is patched to the label's
-/// block like any other block-local branch; with no operand frame to
-/// release it is recorded in `direct_goto` and patched to the block
-/// itself, so it and a `.long %lK - .` section field name one address.
+/// The `asm goto` context: the `jump_tables` row
+/// `[fall_through, labels...]` and the function's branch-fixup lists. A
+/// template `%lK` branch lands on a restore trampoline patched to the
+/// label's block like any block-local branch; with no operand frame it is
+/// recorded in `direct_goto` and patched to the block itself, so it and a
+/// `.long %lK - .` section field name one address.
 pub(super) struct AsmGotoCtxA64<'a> {
     pub(super) row: &'a [super::super::ir::BlockId],
     pub(super) branch_fixups: &'a mut Vec<BranchFixup>,
@@ -22,12 +21,10 @@ pub(super) struct AsmGotoDirectBranch {
     pub(super) target: u32,
 }
 
-/// A deferred ALTERNATIVE replacement region (`.subsection 1`): the encoded
-/// replacement instructions, appended to `.text` after the function body so
-/// the main sequence does not fall through into it. `labels` records each
-/// local label's byte offset within `bytes` so the `.altinstructions`
-/// entry's `.word 663f - .` resolves to the replacement's final text
-/// offset once the region is placed.
+/// A deferred ALTERNATIVE replacement (`.subsection 1`): its encoded
+/// bytes, appended to `.text` after the function body so the main
+/// sequence does not fall into it, and each local label's offset within
+/// them for the `.altinstructions` fields (`.word 663f - .`).
 pub(super) struct DeferredAsmRegion {
     pub(super) bytes: alloc::vec::Vec<u8>,
     pub(super) labels: alloc::vec::Vec<(u32, usize)>,
@@ -38,19 +35,16 @@ pub(super) struct DeferredAsmRegion {
     pub(super) data_ranges: alloc::vec::Vec<(usize, usize)>,
 }
 
-/// A replacement `b` / `bl` to a symbol. The rel26 is a link-time or
-/// whole-text decision, so the region carries a zero placeholder word and the
-/// site is registered as a call fixup once the region's text base is known.
+/// A replacement `b` / `bl` to a symbol: a zero placeholder word,
+/// registered as a call fixup once the region's text base is known.
 pub(super) struct DeferredSymBranch {
     pub(super) region_off: usize,
     pub(super) name: alloc::string::String,
     pub(super) is_call: bool,
 }
 
-/// A replacement `%l[...]` asm-goto branch that leaves the out-of-line region
-/// for a target in the enclosing function. `region_off` is the branch's byte
-/// offset within the region; the displacement is resolved once the region base
-/// and block layout are final.
+/// A replacement `%l[...]` branch leaving the region; resolved once the
+/// region base and the block layout are final.
 pub(super) struct DeferredGotoBranch {
     pub(super) region_off: usize,
     pub(super) kind: LabelBranch,
@@ -156,11 +150,11 @@ pub(super) fn label_branch_word(
     })
 }
 
-/// Resolve a label-branch instruction -- `b` / `b.cond` / `cbz` / `cbnz` /
-/// `tbz` / `tbnz` / `adr` with a local label, `.`, or `%l[...]` target -- to
-/// its `LabelBranch` kind. Register and bit-number operands are read through
-/// `conv`, the same converter the table encoder uses, so the main stream and
-/// the out-of-line replacement region admit the same set of forms.
+/// Classify a label-branch instruction (`b` / `b.cond` / `cbz` / `cbnz`
+/// / `tbz` / `tbnz` / `adr` with a local label, `.` or `%l[...]` target).
+/// Register and bit operands go through `conv`, the table encoder's
+/// converter, so the main stream and the replacement region admit the
+/// same forms.
 fn build_label_branch(
     insn: &super::asm::AsmInsnA64,
     conv: &dyn Fn(&super::asm::AsmOpndA64) -> Result<super::table::Opnd, alloc::string::String>,
@@ -237,20 +231,13 @@ fn build_label_branch(
     })
 }
 
-/// Encode an ALTERNATIVE `.subsection` replacement into a deferred region:
-/// the machine bytes plus each local label's byte offset within them. A branch
-/// to a local label (`Nf` / `Nb`) or `.` resolves within the region (the
-/// displacement is target-minus-branch inside the region, invariant of where
-/// the region lands), matching GNU-as local-label practice. A branch to an
-/// `asm goto` label (`%l[...]`) leaves the region for the enclosing function
-/// and is returned for the caller to resolve once the block layout is final. A
-/// symbol target is rejected rather than mis-placed, since its bytes would need
-/// a relocation at the final out-of-line offset. Instructions encode through
-/// the same operand converter and table encoder as the main stream, so the
-/// region admits exactly what an inline instruction does. `main_label` resolves
-/// a main-stream label (`661b` / `662b`) for the `.org` length expression. The
-/// returned goto sites are `(byte offset in the region, branch kind, label
-/// index)`.
+/// Encode an ALTERNATIVE `.subsection` replacement into a deferred
+/// region. A branch to a local label or `.` resolves within the region
+/// (the displacement is placement-invariant); a `%l[...]` branch is
+/// returned as `(region offset, kind, label index)` for the caller to
+/// resolve after layout; a symbol target would need a relocation at the
+/// final offset and is rejected. `main_label` resolves a main-stream
+/// label (`661b`) for the `.org` length expression.
 #[allow(clippy::type_complexity)]
 fn encode_deferred_asm_region(
     text: &str,
@@ -297,11 +284,9 @@ fn encode_deferred_asm_region(
         {
             let expr = rest.trim();
             let cur = bytes.len() as i64;
-            // The location counter `.` is the current region offset; a `Nb`
-            // label resolves in the region (a `663b` / `664b` replacement
-            // label) or falls back to the main stream (`661b` / `662b`). The
-            // expression uses only label differences, so the main labels'
-            // absolute offsets cancel.
+            // `.` is the current region offset; a `Nb` label resolves in the region
+            // (`663b`) or the main stream (`661b`). The expression uses only label
+            // differences, so the main labels' absolute offsets cancel.
             let resolve = |name: &str| -> Option<i64> {
                 if name == "." {
                     return Some(cur);
@@ -419,10 +404,8 @@ fn encode_deferred_asm_region(
     // What follows the region in `.text` is instructions, so a replacement
     // ending in data realigns here.
     a64_align_asm_stream(&mut bytes, &mut data_ranges, &mut map_state);
-    // Resolve the region-local label branches: a forward reference binds the
-    // next definition after the branch, a backward one the most recent at or
-    // before it (GNU-as `Nf` / `Nb`). The displacement is region-relative and
-    // holds wherever the region is finally placed.
+    // A forward reference binds the next definition after the branch, a
+    // backward one the most recent at or before it (GNU as `Nf` / `Nb`).
     for &(site, ref kind, num, forward) in &label_fixups {
         let target = if forward {
             labels.iter().find(|&&(n, off)| n == num && off > site)
@@ -474,10 +457,9 @@ fn template_expr_value(
 }
 
 /// Bring a stream to the instruction boundary out of the data mapping
-/// state, as GNU as does in an executable section, and leave `state` on the
-/// instructions the caller is about to lay down. The gap is under one
-/// instruction, so the shared fill lays it down as zeros; the padding is
-/// part of the data run it follows.
+/// state, as GNU as does in an executable section, and leave `state` on
+/// instructions. The gap is under one instruction and is filled with
+/// zeros as part of the data run it follows.
 pub(crate) fn a64_align_asm_stream(
     code: &mut Vec<u8>,
     text_data_ranges: &mut Vec<(usize, usize)>,
@@ -564,9 +546,7 @@ impl AsmOperands<'_> {
         };
         let idx: u8 = digits.parse().ok()?;
         let r = self.resolve_ref(idx)?;
-        // A `Q` operand substitutes as the whole memory reference `[xN]`
-        // through its address register, matching the operand converter's
-        // rule for the un-expanded `%N` form.
+        // A `Q` operand substitutes as `[xN]`, as the converter does for `%N`.
         if matches!(self.constraint(idx), Some(AsmConstraint::MemBase)) {
             return Some(alloc::format!("[x{r}]"));
         }
@@ -617,8 +597,7 @@ impl AsmOperands<'_> {
                 num: r,
                 is_d: is64.unwrap_or(true),
             },
-            // A `Q` operand substitutes as the whole memory reference `[xN]`
-            // through its address register.
+            // A `Q` operand substitutes as `[xN]`.
             AsmConstraint::MemBase => Opnd::Mem {
                 base: r,
                 off: 0,
@@ -771,10 +750,8 @@ impl AsmOperands<'_> {
                     "aarch64 inline asm: `.` reference outside a branch",
                 ));
             }
-            // The main-stream encoder routes a trailing symbol operand
-            // through `encode_a64_sym_insn` before operand conversion; one
-            // reaching here sits in an unsupported position (a deferred
-            // ALTERNATIVE replacement, a non-final operand).
+            // A trailing symbol operand goes through `encode_a64_sym_insn` first;
+            // one reaching here is in an unsupported position.
             // TODO symbol relocations in deferred replacement regions.
             AsmOpndA64::Sym { .. } | AsmOpndA64::MemSymLo12 { .. } => {
                 return Err(String::from(
@@ -807,13 +784,12 @@ impl AsmOperands<'_> {
     }
 }
 
-/// The statement's scratch region: operand captures first, then the saved
-/// GP registers, then the saved FP registers, a 16-byte multiple. The region
-/// is frame storage at `[sp + region_base + off]` (`Frame::asm_scratch_off`):
-/// sp does not move, so an `asm goto` label reached by a run-time-patched
-/// branch -- a published `%l` in a jump table, which bypasses every exit path
-/// of the template -- leaves sp balanced. A naked function has no frame, so
-/// its region is carved from sp around the template.
+/// The statement's scratch region: operand captures, then the saved GP
+/// registers, then the saved FP registers, a 16-byte multiple in frame
+/// storage (`Frame::asm_scratch_off`) so sp stays balanced for an
+/// `asm goto` label reached by a run-time-patched branch, which bypasses
+/// every exit path. A naked function has no frame and carves the region
+/// from sp.
 struct AsmRegion {
     frame: Frame,
     save_list: Vec<u8>,
@@ -833,11 +809,8 @@ struct AsmRegion {
 
 impl AsmRegion {
     fn layout(ops: &AsmOperands, frame: Frame) -> Result<Self, alloc::string::String> {
-        // Registers the block overwrites: the operand registers plus the
-        // explicit clobber list. x16 / x17 are this lowering's own scratch,
-        // reloaded after the template rather than carried across it.
-        // `asm_save_masks` is shared with the frame-region sizing in
-        // `compute_frame`.
+        // The operand registers plus the clobber list; x16 / x17 are this
+        // lowering's scratch and are reloaded after the template.
         let (used_mask, fp_used_mask) = asm_save_masks(ops.asm, &ops.op_reg, frame.fixed_regs)?;
         let save_list: Vec<u8> = (0u8..31).filter(|r| used_mask & (1 << r) != 0).collect();
         let fp_save_list: Vec<u8> = (0u8..8).filter(|r| fp_used_mask & (1 << r) != 0).collect();
@@ -962,10 +935,8 @@ impl AsmRegion {
                     "aarch64 inline asm: operand place missing",
                 ));
             };
-            // A double `w` input captures its FP value; a 16-byte `w`
-            // operand's SSA value is its address, so it captures like the
-            // integer operands. Every other operand captures an integer value
-            // (input) or a destination address (output).
+            // A double `w` input captures its FP value; a 16-byte `w` operand's
+            // SSA value is its address and captures like an integer operand.
             let op = &ops.asm.operands[i];
             if matches!(op.constraint, AsmConstraint::Fp) && !op.is_output && op.width == 8 {
                 let Some(d) = materialize_fp_shifted(code, place, 16, self.frame, self.spill_shift)
@@ -1001,11 +972,9 @@ impl AsmRegion {
         for (i, op) in ops.asm.operands.iter().enumerate() {
             let Some(r) = ops.op_reg[i] else { continue };
             if matches!(op.constraint, AsmConstraint::Fp) {
-                // A double `w` input loads its captured FP value into the
-                // d-register; a 16-byte `w` operand (input or read-write
-                // output) loads the full q register through its captured
-                // address. A read-write double output loads the current value
-                // the same way.
+                // A 16-byte `w` operand (input or read-write output) loads the full q
+                // register through its captured address; a read-write double output
+                // loads its current value the same way.
                 if op.width == 16 {
                     if !op.is_output || op.is_rw {
                         self.ldr_x(code, Reg(16), self.cap_off(i)); // x16 = operand address
@@ -1135,9 +1104,7 @@ struct TemplateStream<'a> {
     label_names: Vec<&'a str>,
     /// Local label definitions and the code offset each stands at.
     label_defs: Vec<(u32, usize)>,
-    /// Branches to local labels, patched once the layout is final (`Nb`
-    /// binds the most recent definition of N at or before the branch,
-    /// `Nf` the next one after it).
+    /// Branches to local labels, patched once the layout is final.
     label_fixups: Vec<LabelFixup>,
     /// Forward-referencing data fields over template labels:
     /// `(reference_site, field, width, expression)`.
@@ -1227,9 +1194,8 @@ impl<'a> TemplateStream<'a> {
                 self.encode_layout(item, ops, out)?;
                 continue;
             }
-            // Every item but a data directive lays down instructions: a
-            // raw-byte piece the parser encoded itself (`msr`, the barriers,
-            // the system ops), `.inst`, and an assembled mnemonic.
+            // Every item but a data directive lays down instructions (raw bytes
+            // the parser encoded, `.inst`, an assembled mnemonic).
             let class =
                 crate::c5::asm::data_directive_class(&insn.mnemonic).unwrap_or(MapClass::Code);
             if class == MapClass::Code {
@@ -1279,9 +1245,8 @@ impl<'a> TemplateStream<'a> {
         Ok(())
     }
 
-    /// A layout directive moves the location counter; `code` is the unit's
-    /// whole text stream, so its length is the section offset GNU as
-    /// resolves one against.
+    /// A layout directive moves the location counter; the unit's whole text
+    /// stream is the section GNU as resolves it against.
     fn encode_layout(
         &mut self,
         item: &crate::c5::asm::AsmSectionItem,
@@ -1420,9 +1385,8 @@ impl<'a> TemplateStream<'a> {
     }
 
     /// An assembled mnemonic. An operand expression over template labels
-    /// resolves here when every leaf is placed; a forward reference encodes
-    /// zero and the word is built again once settled, the field width being
-    /// the encoding's either way.
+    /// resolves when every leaf is placed; a forward reference encodes zero
+    /// and re-encodes once settled.
     fn encode_table_insn(
         &mut self,
         insn: &super::asm::AsmInsnA64,
@@ -1481,11 +1445,10 @@ impl<'a> TemplateStream<'a> {
         Ok(())
     }
 
-    /// Patch the label branches now that every definition's offset is
-    /// known. A named label has exactly one definition, so direction does
-    /// not apply. A forward numeric reference with no in-stream definition
-    /// may bind a definition in one of the statement's pushed sections
-    /// (`jmp 6f` shape); those are returned for the section pass to bind.
+    /// Patch the label branches. A named label has one definition, so
+    /// direction does not apply. A forward numeric reference with no
+    /// in-stream definition may bind one in a pushed section (`jmp 6f`);
+    /// those are returned for the section pass.
     fn patch_label_branches(
         &self,
         out: &mut AsmSink,
@@ -1538,9 +1501,8 @@ impl<'a> TemplateStream<'a> {
     }
 
     /// A named label defined in the main stream is a definition of the
-    /// unit, as it is for GNU as: record it so the writers emit a `.text`
-    /// symbol and bind a same-name C reference to it. `.L`-prefixed names
-    /// are assembler-local, so no C reference spells one.
+    /// unit, as under GNU as: the writers emit a `.text` symbol for it. `.L`
+    /// names are assembler-local.
     fn record_named_labels(&self, out: &mut AsmSink) -> Result<(), alloc::string::String> {
         for &(num, off) in &self.label_defs {
             let Some(idx) = num.checked_sub(crate::c5::asm::NAMED_LABEL_BASE) else {
@@ -1567,11 +1529,9 @@ impl<'a> TemplateStream<'a> {
     }
 }
 
-/// A direct `bl` / `b` to a symbol: resolve the name to its entry PC and
-/// record a fixup the post-pass patches to a rel26 once every function's
-/// address is final -- the same mechanism as a compiler-emitted call. A
-/// name this unit does not define becomes a call relocation, with the rel26
-/// left zero for the linker.
+/// A direct `bl` / `b` to a symbol: a fixup the post-pass patches to a
+/// rel26 once every function's address is final, or a call relocation
+/// for a name this unit does not define.
 fn encode_sym_branch(
     insn: &super::asm::AsmInsnA64,
     name: &str,
@@ -1655,11 +1615,10 @@ fn encode_movw_abs(
     Ok(true)
 }
 
-/// A symbol operand (`adrp %x0, sym`, `add ..., :lo12:sym`, a `:lo12:`
-/// load/store, `movz`/`movk` `:abs_gN:sym`, a branch / `adr` / literal
-/// `ldr` naming a symbol) takes the section path's shape encoder; the site
-/// records a per-instruction relocation against the name, an
-/// internal-linkage data object resolved to its offset.
+/// A symbol operand (`adrp`, `add :lo12:`, a `:lo12:` load/store,
+/// `:abs_gN:`, a branch / `adr` / literal `ldr` naming a symbol) takes
+/// the section path's encoder and records a relocation against the
+/// name.
 fn encode_sym_operand(
     insn: &super::asm::AsmInsnA64,
     ops: &AsmOperands,
@@ -1697,14 +1656,12 @@ fn encode_sym_operand(
 }
 
 /// Materialize the `.pushsection` blocks now that every label's text
-/// offset is known. A reference that names a numeric template label
-/// resolves to its offset -- into the deferred region for a replacement
-/// label (`663f` / `664f`), rewritten to a text offset once it is placed;
-/// any other name is a symbol relocation. An `i`-class operand naming a
-/// link-time data address (`.quad %c0 - .` where `%c0` is `&sym`) relocates
-/// against the data image. Each deferred main-stream branch to a section
-/// definition takes an instruction-field relocation against the target
-/// section, the two landing in different object sections.
+/// offset is known: a numeric template label resolves to its offset
+/// (into the deferred region for `663f` / `664f`), any other name is a
+/// symbol relocation, and an `i`-class operand naming a link-time data
+/// address relocates against the data image. A deferred main-stream
+/// branch to a section definition takes an instruction-field relocation
+/// against the section.
 #[allow(clippy::too_many_arguments)]
 fn materialize_sections(
     section_blocks: &[crate::c5::asm::AsmSectionBlock],
@@ -1754,10 +1711,9 @@ fn materialize_sections(
         symbol_of: &operand_sym,
         form: &|idx| ops.operand_form(idx),
     };
-    // An `asm goto` label operand (`.long %l0 - .`) resolves through
-    // `goto_block` to the row's block index. Its text offset is not final
-    // here; the reloc carries the block and is rewritten after layout
-    // (see resolve_asm_goto_relocs).
+    // An `asm goto` label field resolves to its block index; the reloc is
+    // rewritten to the text offset after layout
+    // (`resolve_asm_goto_relocs`).
     let defined = crate::c5::asm::materialize_asm_sections(
         section_blocks,
         &resolver,
@@ -1787,13 +1743,12 @@ fn materialize_sections(
     Ok(())
 }
 
-/// `asm goto` exits. Each `%lK` branch leaves mid-template, before the
-/// store-backs and restore of the fall-through path, so with exit work it
-/// lands on a trampoline that repeats them and branches to the label's
-/// block through the enclosing function's branch fixups; a label whose
-/// target is the fall-through block reuses the fall-through exit. With no
-/// exit work every reference -- a template or replacement branch, or a
-/// section data field -- names its block directly.
+/// `asm goto` exits. A `%lK` branch leaves mid-template, before the
+/// store-backs and restore, so with exit work it lands on a trampoline
+/// that repeats them and branches to the label's block through the
+/// function's branch fixups (the fall-through block reuses the
+/// fall-through exit). With no exit work every reference names its
+/// block directly.
 #[allow(clippy::too_many_arguments)]
 fn emit_goto_exits(
     ctx: AsmGotoCtxA64<'_>,
@@ -1871,10 +1826,8 @@ fn emit_goto_exits(
                 });
         }
     }
-    // This statement's section `%l` fields move from the label's block to
-    // its trampoline (or the fall-through exit) while exit work is pending;
-    // frameless fields keep the block and resolve with the function's
-    // layout (`resolve_asm_goto_relocs`).
+    // Section `%l` fields move from the block to its trampoline while exit
+    // work is pending; frameless ones keep the block.
     if size > 0 && !data_goto_ks.is_empty() {
         use crate::c5::asm::AsmSectionTarget;
         let target_of = |bid: u32| -> Option<usize> {
@@ -1897,14 +1850,12 @@ fn emit_goto_exits(
     Ok(())
 }
 
-/// Lower an `Inst::InlineAsm` (GCC extended asm) on AArch64. Assigns each
-/// register operand a machine register per its constraint, saves the
-/// registers the block overwrites, captures the operand values / addresses
-/// to the scratch region, loads the inputs, encodes the register-concrete
-/// template through the table encoder, and stores the outputs back through
-/// their addresses. `x16` / `x17` are the bridge scratch, so the operand
-/// pool is `x0..x15`. `goto_ctx` is present for the `asm goto` form (the
-/// statement is the last instruction of a `Terminator::AsmGoto` block).
+/// Lower an `Inst::InlineAsm` (GCC extended asm): assign each register
+/// operand a register, save the registers the block overwrites, capture
+/// the operand values / addresses, load the inputs, encode the template
+/// through the table encoder, store the outputs back. x16 / x17 are the
+/// bridge scratch, so the operand pool is x0..x15. `goto_ctx` is present
+/// for `asm goto`.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_inline_asm_aarch64(
     code: &mut Vec<u8>,
@@ -1928,9 +1879,8 @@ pub(super) fn emit_inline_asm_aarch64(
     asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
     goto_ctx: Option<AsmGotoCtxA64<'_>>,
 ) -> bool {
-    // A statement that lowers to nothing keeps only its IR-level ordering
-    // effect; the operand staging around zero bytes of code is dead, and
-    // `asm_scratch_bytes` reserved no region for it.
+    // A statement that lowers to nothing needs no staging;
+    // `asm_scratch_bytes` reserved none.
     if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::A64) {
         return true;
     }
@@ -1989,9 +1939,7 @@ fn lower_inline_asm(
 ) -> Result<Option<super::super::map_syms::MapClass>, alloc::string::String> {
     use super::asm::{assign_operand_regs, parse_template};
     let text = template_text(asm)?;
-    // Assign operand registers before the GNU-as macro pass so it can
-    // substitute each reference to its register name -- the same register
-    // the operand capture and write-back use.
+    // The GNU-as macro pass substitutes each reference with its register.
     let ops = AsmOperands {
         asm,
         args,
@@ -2005,9 +1953,8 @@ fn lower_inline_asm(
     };
     let gas = crate::c5::asm::expand_asm_gas_macros(&text, 4, &|tok| ops.gas_subst(tok))?;
     let text = gas.as_deref().unwrap_or(&text);
-    // An ALTERNATIVE `.subsection` replacement leaves the main stream for a
-    // deferred region appended after the function body, out of the main
-    // sequence's fall-through path.
+    // An ALTERNATIVE `.subsection` replacement becomes a deferred region
+    // appended after the function body.
     let (main_text, deferred_text) = crate::c5::asm::split_asm_subsections(text);
     let extracted = crate::c5::asm::extract_asm_sections(&main_text, true)?;
     let (code_owned, mut section_blocks, sym_items) = match extracted {
@@ -2021,9 +1968,7 @@ fn lower_inline_asm(
     out.asm_sections.push_sym_decls(&sym_items)?;
     let insns = parse_template(code_text.as_bytes())?;
     let region = AsmRegion::layout(&ops, frame)?;
-    // An empty region means no entry or exit work: every capture, save and
-    // operand load addresses it, and an operand with no register takes no
-    // slot. The template's own realignment is per instruction.
+    // An empty region means no entry or exit work.
     let mut stream = TemplateStream::new(code_text, map_state);
     if region.size > 0 {
         a64_align_asm_stream(out.code, out.text_data_ranges, &mut stream.map_state);
@@ -2031,10 +1976,8 @@ fn lower_inline_asm(
     region.enter(out.code)?;
     region.emit_saves_and_captures(out.code, &ops, alloc)?;
     region.emit_input_loads(out.code, &ops)?;
-    // `%lK` label indices this statement's section items reference -- a
-    // data field (`.long %l0 - .`) or a section branch (`b %l[k]`). A
-    // statement with exit work rewrites those relocs so the published
-    // address is the trampoline a template `%lK` branch takes.
+    // `%lK` indices the section items reference; with exit work their
+    // relocs are rewritten to the trampoline a template branch takes.
     let goto_row: Option<&[super::super::ir::BlockId]> = goto_ctx.as_ref().map(|c| c.row);
     let data_goto_ks = core::cell::RefCell::new(Vec::<usize>::new());
     let goto_block = |idx: u8| -> Option<u32> {
@@ -2042,9 +1985,8 @@ fn lower_inline_asm(
         data_goto_ks.borrow_mut().push(idx as usize);
         Some(bid)
     };
-    // The instructions of a pushed section assemble to bytes before layout;
-    // the converter resolves a reference to the enclosing template's
-    // operands, which the file-scope encoder has no notion of.
+    // A pushed section's instructions assemble before layout, through the
+    // template's converter so they may reference its operands.
     if !section_blocks.is_empty() {
         encode_a64_asm_section_code(&mut section_blocks, &|o| ops.conv(o), &goto_block)?;
     }
@@ -2052,9 +1994,7 @@ fn lower_inline_asm(
     stream.settle_expr_fixups(out)?;
     let pending_xsec = stream.patch_label_branches(out, !section_blocks.is_empty())?;
     stream.record_named_labels(out)?;
-    // The ALTERNATIVE replacement's `.org` length assertion reads the main
-    // labels; the region is appended after the function body and its labels
-    // resolved to text offsets once its base is known.
+    // The replacement's `.org` length assertion reads the main labels.
     let mut deferred_goto_sites: Vec<(usize, LabelBranch, u8)> = Vec::new();
     let deferred_idx: Option<u32> = if deferred_text.is_empty() {
         None
@@ -2228,14 +2168,11 @@ pub(crate) fn encode_a64_file_asm_section_code(
     encode_a64_asm_section_code(blocks, &conv, &|_| None)
 }
 
-/// Encode instruction lines in an executable inline-asm section
-/// (`.pushsection .text,"ax"`) to machine bytes, replacing each `Code` item
-/// with `CodeBytes`. `conv` resolves an operand to its table form: a
-/// function-body block passes the enclosing template's converter, so a
-/// pushed section may reference its operands; a file-scope block has none and
-/// passes a register-concrete one. Everything else -- the literal pools, the
-/// layout the operand expressions fold against, the symbol relocations -- is
-/// the same in both positions.
+/// Encode the instruction lines of an executable inline-asm section to
+/// bytes, replacing each `Code` item with `CodeBytes`. `conv` is the
+/// enclosing template's converter for a function-body block and a
+/// register-concrete one for a file-scope block; the literal pools, the
+/// layout and the symbol relocations are the same in both.
 pub(super) fn encode_a64_asm_section_code(
     blocks: &mut [crate::c5::asm::AsmSectionBlock],
     conv: &dyn Fn(&super::asm::AsmOpndA64) -> Result<super::table::Opnd, alloc::string::String>,
@@ -2244,10 +2181,9 @@ pub(super) fn encode_a64_asm_section_code(
     use super::table::{self, Opnd};
     use crate::c5::asm::AsmSectionItem;
     assign_a64_literal_pools(blocks)?;
-    // An operand expression over labels is folded before its instruction is
-    // encoded: on A64 the value selects the form -- a scaled or unscaled
-    // offset, `movz` or `movn` -- which a relocation applied to a finished
-    // word cannot.
+    // An operand expression over labels is folded before encoding: on A64
+    // the value selects the form (scaled or unscaled offset, `movz` or
+    // `movn`), which a relocation on a finished word cannot.
     let measured = a64_section_operand_layout(blocks)?;
     a64_for_each_section_item_mut(blocks, &mut |key, site, item| {
         {
@@ -2276,10 +2212,9 @@ pub(super) fn encode_a64_asm_section_code(
                         "inline asm: `{text}` in a section needs a relocation"
                     ));
                 }
-                // A branch (or `adr`) to an `asm goto` label (`b %l[k]`)
-                // leaves the section for a block of the function. The word
-                // carries a zero displacement; the relocation names the
-                // block, rewritten to its text offset after layout.
+                // A branch or `adr` to an `asm goto` label leaves the section: a zero
+                // displacement and a relocation naming the block, rewritten after
+                // layout.
                 if let Some(&super::asm::AsmOpndA64::GotoLabel(k)) = insn.operands.last() {
                     let bid = goto_block(k).ok_or_else(|| {
                         alloc::format!(
@@ -2350,11 +2285,9 @@ type A64SectionItemFn<'a> = dyn FnMut(
     ) -> Result<(), alloc::string::String>
     + 'a;
 
-/// Apply `f` to every item of the blocks with the identity key of the section
-/// it lands in, descending into `.rept` bodies as the shared walk does. The
-/// key is the section an operand expression folds against. `site` is the
-/// item's `(block, item)` index, `None` inside a `.rept` body, whose items
-/// the measurement walk does not place individually.
+/// Apply `f` to every item with the identity key of its section,
+/// descending into `.rept` bodies; `site` is the item's `(block, item)`
+/// index, `None` inside a `.rept` body.
 fn a64_for_each_section_item_mut(
     blocks: &mut [crate::c5::asm::AsmSectionBlock],
     f: &mut A64SectionItemFn<'_>,
@@ -2382,12 +2315,10 @@ fn a64_for_each_section_item_mut(
     Ok(())
 }
 
-/// The label layout an operand expression folds against, or `None` when no
-/// operand in the blocks needs one. Each code statement measures as
-/// placeholder bytes of its assembled length, which the parse gives: an A64
-/// instruction is one word whatever its operands hold. Sections start at zero
-/// rather than at the sink's current length, which the values this serves do
-/// not depend on.
+/// The label layout an operand expression folds against, or `None` when
+/// none needs one. Each code statement measures as its assembled length
+/// (one word per A64 instruction); sections start at zero, which the
+/// values served do not depend on.
 fn a64_section_operand_layout(
     blocks: &[crate::c5::asm::AsmSectionBlock],
 ) -> Result<Option<crate::c5::asm::SectionLabelOffsets>, alloc::string::String> {
@@ -2425,10 +2356,9 @@ fn a64_section_operand_layout(
     .map(Some)
 }
 
-/// The bytes a parsed statement occupies before it is encoded: a label
-/// definition none, an assembled A64 instruction one word, and a statement
-/// the parse already resolved to bytes its own length. The operand fold
-/// advances the location counter by this, as the sizing pass measures by it.
+/// The bytes a parsed statement occupies: none for a label definition,
+/// one word for an instruction, its own length for a statement the
+/// parse resolved to bytes.
 fn a64_insn_placeholder_len(i: &super::asm::AsmInsnA64) -> usize {
     match i {
         i if i.label_def.is_some() => 0,
@@ -2437,10 +2367,9 @@ fn a64_insn_placeholder_len(i: &super::asm::AsmInsnA64) -> usize {
     }
 }
 
-/// Replace each operand the section layout values with the constant it folds
-/// to, so the encoder selects the form from the value as GNU as does. `here`
-/// is the instruction's section offset, which its expressions read as the
-/// location counter.
+/// Replace each operand the section layout values with its constant, so
+/// the encoder selects the form from the value as GNU as does; `here` is
+/// the instruction's section offset.
 fn fold_a64_layout_operands(
     insn: &mut super::asm::AsmInsnA64,
     key: &str,
@@ -2464,10 +2393,9 @@ fn fold_a64_layout_operands(
     Ok(())
 }
 
-/// The `movz` / `movk` word an `:abs_gN:` operand relocates, with a zero
-/// immediate and the group's shift. A 32-bit destination clears the operand
-/// size bit and admits only the two groups that fit its width, as GNU as
-/// does.
+/// The `movz` / `movk` word an `:abs_gN:` operand relocates: zero
+/// immediate, the group's shift. A 32-bit destination admits only the
+/// two groups that fit it, as GNU as does.
 fn a64_movw_placeholder(
     rd: u8,
     is64: bool,
@@ -2487,10 +2415,8 @@ fn a64_movw_placeholder(
     Ok(if is64 { word } else { word & !(1 << 31) })
 }
 
-/// The register shape of `o` after operand-reference resolution, for the
-/// helpers that select an encoding from the register class (`%0` resolves
-/// to the operand's assigned register in a function body; file-scope code
-/// has none and the operand is already concrete).
+/// The register shape of `o` after operand-reference resolution, for
+/// the helpers that select an encoding from the register class.
 fn concrete_reg_shape(
     o: &super::asm::AsmOpndA64,
     conv: &dyn Fn(&super::asm::AsmOpndA64) -> Result<super::table::Opnd, alloc::string::String>,
@@ -2553,9 +2479,9 @@ fn encode_a64_sym_insn(
         let word = super::table::encode(&insn.mnemonic, &ops)?;
         return Ok(Some((word, K::A64LdstLo12(size), expr.clone())));
     }
-    // A numeric-label reference (`b 1b`) resolves at materialize time, where
-    // this call's label offsets are known; carry it as a symbol reference.
-    // `.`-relative branches encode directly.
+    // A numeric-label reference (`b 1b`) is carried as a symbol reference
+    // and resolves at materialize time; `.`-relative branches encode
+    // directly.
     let named;
     let (name, spec) = match insn.operands.last() {
         Some(AsmOpndA64::Sym { expr, spec }) => (expr, *spec),
@@ -2593,9 +2519,6 @@ fn encode_a64_sym_insn(
             let word = super::encode::enc_add_imm(super::Reg(rd), super::Reg(rn), 0);
             return Ok(Some((word, K::A64AddLo12, name.clone())));
         }
-        // `movz` / `movk` with `:abs_gN:`. The placeholder carries the
-        // group's shift and a zero immediate, which is the word GNU as
-        // leaves for the relocation to fill.
         super::asm::SymSpec::MovwAbs {
             group,
             signed,
@@ -2692,12 +2615,11 @@ fn a64_label_branch_reloc(
     })
 }
 
-/// Assign the literal pools of an asm statement's sections. Each
-/// `ldr Rt, =value` takes an entry of the pending pool of its section and
-/// subsection, sharing one with an earlier request of the same width and
-/// value, and becomes a literal load of the entry's synthetic label.
-/// `.ltorg` and the end of that subsection's content deposit what has
-/// accumulated, which is where GNU as flushes.
+/// Assign the literal pools of a statement's sections: each
+/// `ldr Rt, =value` takes an entry of its section and subsection's
+/// pending pool (shared with an earlier request of the same width and
+/// value) and becomes a literal load of the entry's label; `.ltorg` and
+/// the end of the subsection's content flush, as under GNU as.
 fn assign_a64_literal_pools(
     blocks: &mut [crate::c5::asm::AsmSectionBlock],
 ) -> Result<(), alloc::string::String> {

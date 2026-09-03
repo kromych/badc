@@ -1,8 +1,6 @@
 use super::*;
 
-/// `Inst::Intrinsic` lowering. Each variant matches the pool path's shape in
-/// [`super::encode::lower_op`] but pulls its operands from the allocator's
-/// `Place`s rather than off the c5 stack / accumulator.
+/// `Inst::Intrinsic` lowering, operands from the allocator's `Place`s.
 pub(super) fn emit_intrinsic(
     code: &mut Vec<u8>,
     func: &FunctionSsa,
@@ -21,8 +19,8 @@ pub(super) fn emit_intrinsic(
         return false;
     };
     match intrinsic {
-        // Resolved to an `Imm` before lowering, by the SSA folds under `-O`
-        // and by the walker otherwise; reaching here is a pass-ordering bug.
+        // Resolved to an `Imm` before lowering; reaching here is a
+        // pass-ordering bug.
         I::ConstantP => {
             bail_msg("Intrinsic::ConstantP must be resolved before lowering");
             false
@@ -31,11 +29,9 @@ pub(super) fn emit_intrinsic(
             emit_va_start_aapcs64(code, func, abi, args, alloc, frame, scratch)
         }
         I::VaStart => emit_va_start_cursor(code, func, abi, args, alloc, frame, scratch),
-        // The AAPCS64 `va_list` is a `__va_list` struct on this target, so
-        // `va_arg` / `va_copy` walk it whether or not the current function
-        // is itself variadic: a non-variadic forwarder (the `c5_v*printf`
-        // shims) receives a forwarded `va_list` and must read it the same
-        // way. Gate on the target ABI, not `func.is_variadic`.
+        // The `__va_list` struct is the target's `va_list` whether or not the
+        // current function is variadic: a non-variadic forwarder walks it too,
+        // so the gate is the ABI, not `func.is_variadic`.
         I::VaArg if abi.aarch64_host_variadic() => {
             emit_va_arg_aapcs64(code, args, dst, func, alloc, frame, scratch)
         }
@@ -126,11 +122,9 @@ pub(super) fn emit_intrinsic(
         | I::Ceilf
         | I::Trunc
         | I::Truncf => emit_unary_fp(code, intrinsic, args, dst, v, alloc, frame),
-        // __builtin_frame_address(0): the current frame pointer (x29). A
-        // level above 0 reaches here as this plus a load chain.
+        // __builtin_frame_address(0); a level above 0 adds a load chain.
         I::FrameAddress => emit_frame_register(code, dst, frame, Reg(29), "FrameAddress"),
-        // A `register T v asm("sp")` read; ADD (immediate) reads register
-        // 31 as SP.
+        // A `register T v asm("sp")` read; `add` reads register 31 as sp.
         I::StackPointer => emit_frame_register(code, dst, frame, Reg(31), "StackPointer"),
         I::ReturnAddress => emit_return_address(code, args, dst, alloc, frame, scratch),
         // The integer bit-count and byte-swap builtins are lowered to a
@@ -206,16 +200,13 @@ fn emit_alloca(
         code,
         super::encode::enc_and_imm_neg16(scratch.secondary, scratch.secondary),
     );
-    // rd = sp - aligned_size, the final sp value. rd is an allocator
-    // register or x16; x17 holds the size, so the two never alias.
+    // rd is an allocator register or x16, never x17, which holds the size.
     emit(code, enc_add_imm(rd, Reg(31), 0));
     emit(code, enc_sub_reg(rd, rd, scratch.secondary));
-    // Walk sp down page by page, touching each, before committing the final
-    // value: the same guard-region rule the prologue's `emit_stack_alloc`
-    // follows, over a size known only at run time. x17 (the dead size)
-    // carries the page count. The size is 16-aligned, so the amount the
-    // settling `mov` covers past the last probe is at most
-    // MAX_UNPROBED_STACK_STEP and needs no probe of its own.
+    // Descend a page at a time with a probe each, as `emit_stack_alloc`,
+    // over a run-time size; x17 carries the page count. The size is
+    // 16-aligned, so the final `mov` covers at most MAX_UNPROBED_STACK_STEP
+    // past the last probe.
     emit(
         code,
         super::encode::enc_lsr_imm(scratch.secondary, scratch.secondary, 12),
@@ -299,10 +290,9 @@ fn emit_setjmp(
         emit_mov_reg(code, Reg(19), env_r);
     }
     emit_setjmp_aarch64(code);
-    // After the helper, x19 holds 0 on the initial pass and the longjmp val
-    // on a matching longjmp return. Route x19 into dst -- the helper's
-    // saved PC points past its last instruction, so the longjmp BR lands
-    // here.
+    // x19 holds 0 on the initial pass and the longjmp value on a return;
+    // the helper's saved PC points past its last instruction, so the
+    // longjmp `br` lands here.
     let Some(rd) = int_or_spill_scratch(dst, scratch) else {
         bail_msg("Setjmp: dst not int reg / spill");
         return false;
@@ -343,9 +333,8 @@ fn emit_longjmp(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, frame: Fra
         emit(code, enc_ldr_imm(Reg(19 + i as u8), Reg(16), off));
     }
     emit(code, enc_ldr_imm(Reg(29), Reg(16), JB_X29_OFF));
-    // Resume PC into x10, sp into x9. x10 is caller-saved (setjmp's caller
-    // doesn't expect it preserved); x18 is the Windows TEB pointer and
-    // stays untouched.
+    // x10 is caller-saved; x18 is the Windows TEB pointer and stays
+    // untouched.
     emit(code, enc_ldr_imm(Reg(10), Reg(16), JB_PC_OFF));
     emit(code, enc_ldr_imm(Reg(9), Reg(16), JB_SP_OFF));
     emit(code, enc_add_imm(Reg(31), Reg(9), 0));
@@ -487,15 +476,13 @@ fn emit_frame_register(
     true
 }
 
-/// __builtin_return_address: the return address a frame record holds at
-/// [fp + 8], where the AAPCS64 prologue saved x30. Without an operand the
-/// record is the current frame's; with one, the frame address a level
-/// above 0 walked to. Under pac-ret the slot holds a signed pointer;
-/// `XPACLRI` strips x30 and no other register, so the value is staged there
-/// (the epilogue reloads x30 from the frame's slot, which always exists
-/// since the intrinsic keeps the function off the full-leaf path). The hint
-/// is unconditional, as gcc and clang emit it: a NOP without FEAT_PAuth,
-/// and an unsigned pointer survives it.
+/// __builtin_return_address: the return address at [fp + 8] of the
+/// current frame record, or of the frame an operand walked to. Under
+/// pac-ret the slot holds a signed pointer; `XPACLRI` strips x30 and no
+/// other register, so the value stages there (the epilogue reloads x30,
+/// since the intrinsic keeps the function off the full-leaf path). The
+/// hint is unconditional, as gcc and clang emit it: a NOP without
+/// FEAT_PAuth.
 fn emit_return_address(
     code: &mut Vec<u8>,
     args: &[u32],
@@ -560,20 +547,9 @@ pub(super) fn emit_mcpy(
         Some(r) => r,
         None => return false,
     };
-    // Mcpy needs a third register for each ldr/str pair. The
-    // allocator pool covers x9..x15 + x20..x27 (target-dependent)
-    // and may hold a live value in any of them; the SSA emit
-    // sees only `Place`s, not liveness past this inst. Reserve
-    // x10 unconditionally and save/restore it through one 16-byte
-    // stack slot so it doesn't matter whether the allocator has
-    // x10 in active use. The slot is dropped before the next
-    // instruction sees sp.
-    //
-    // Pick a temp distinct from both bases. The save/restore
-    // protects whatever the allocator parked in the chosen reg;
-    // the aliasing check ensures we don't pick a temp that shares
-    // a number with `dst_r` or `src_r`, which would corrupt the
-    // base on the first ldr/str pair.
+    // The data temp is x10, x11 or x12, whichever aliases neither base,
+    // saved and restored around the copy since the allocator may hold a
+    // live value in it.
     let temp = if dst_r.0 != 10 && src_r.0 != 10 {
         Reg(10)
     } else if dst_r.0 != 11 && src_r.0 != 11 {
@@ -583,13 +559,9 @@ pub(super) fn emit_mcpy(
     };
     let bytes = size as u32;
     emit(code, enc_str_pre(temp, Reg(31), -16));
-    // The scaled load/store immediate reaches 32760 for 8-byte accesses
-    // but only 4095 for the byte tail, so a copy whose byte offset would
-    // exceed that must advance the base pointers. `WINDOW` is 8-aligned and
-    // below 4096, keeping every word and tail offset in range and letting a
-    // single `add` (12-bit immediate) step both bases between windows.
-    // Below 4096 the narrower units reach it too: their scaled immediates
-    // cover 8190 (halfword) and 4095 (byte).
+    // The byte tail's scaled immediate reaches only 4095; `WINDOW` is
+    // 8-aligned and below 4096, so every offset within a window is in reach
+    // and one 12-bit `add` steps both bases between windows.
     const WINDOW: u32 = 4088;
     let unit = super::super::access_chunk(align, strict_align, 8);
     let copy_run = |code: &mut Vec<u8>, sbase: Reg, dbase: Reg, run: u32| {
@@ -608,9 +580,8 @@ pub(super) fn emit_mcpy(
     if bytes <= WINDOW {
         copy_run(code, src_r, dst_r, bytes);
     } else {
-        // Advance working copies so `dst_r` (the memcpy return value) and
-        // `src_r` are left unchanged. Pick two scratch registers distinct
-        // from the bases and the data temp; save and restore them.
+        // Working copies keep `dst_r` (the memcpy return value) and `src_r`
+        // unchanged; two more registers, saved and restored.
         let mut picks = [Reg(9), Reg(9)];
         let mut n = 0;
         for cand in [9u8, 13, 14, 15, 12, 11] {
@@ -649,32 +620,22 @@ pub(super) fn emit_mcpy(
     true
 }
 
-/// Bytes the atomic lowering reserves to save the four borrowed
-/// working registers x9..x12 (two `stp` pairs). 16-byte aligned so the
-/// `stp`/`ldp` pre/post-index forms apply.
+/// The save area of the four borrowed working registers x9..x12.
 const ATOMIC_SAVE_BYTES: u32 = 32;
 
-/// Save x9..x12 (the borrowed working registers) onto the stack and
-/// return their reload site for [`atomic_restore_working`]. The SSA
-/// emit sees only `Place`s, not liveness past this instruction, so a
-/// value the allocator parked in any caller-pool register survives the
-/// save / restore. sp moves down by [`ATOMIC_SAVE_BYTES`].
+/// Save x9..x12: the allocator may hold a live value in any of them.
 fn atomic_save_working(code: &mut Vec<u8>) {
     emit(
         code,
         enc_stp_pre(Reg(9), Reg(10), Reg(31), -(ATOMIC_SAVE_BYTES as i32)),
     );
-    // Second pair at [sp+16] without a second writeback; storing at
-    // offset 0 would overwrite x9/x10's slot.
     emit(
         code,
         super::encode::enc_stp_off(Reg(11), Reg(12), Reg(31), 16),
     );
 }
 
-/// Restore x9..x12 saved by [`atomic_save_working`]. Run after the
-/// result is held in a reserved scratch (x16 / x17), since the result
-/// must outlive the reload.
+/// Restore x9..x12, after the result is in a reserved scratch.
 fn atomic_restore_working(code: &mut Vec<u8>) {
     emit(
         code,
@@ -686,9 +647,8 @@ fn atomic_restore_working(code: &mut Vec<u8>) {
     );
 }
 
-/// Materialise an operand into a designated register, copying it out
-/// of its allocator register when needed so the caller can clobber the
-/// source. `sp_shift` accounts for the working-register save area.
+/// Materialise an operand into `target`, copying it out of its
+/// allocator register; `sp_shift` accounts for the save area.
 fn atomic_operand_into(
     code: &mut Vec<u8>,
     value: super::super::ir::ValueId,
@@ -698,10 +658,8 @@ fn atomic_operand_into(
     alloc: &Allocation,
 ) -> bool {
     let place = place_of(alloc, value);
-    // An operand the allocator placed in a borrowed working register
-    // (x9..x12) may already have been overwritten by an earlier
-    // operand move; read its saved copy from the save area instead
-    // ([sp+0]=x9 .. [sp+24]=x12, laid out by `atomic_save_working`).
+    // An operand in a borrowed register may already be overwritten; read
+    // its saved copy ([sp+0]=x9 .. [sp+24]=x12).
     if let Place::IntReg(r) = place
         && (9..=12).contains(&r)
     {
@@ -719,9 +677,8 @@ fn atomic_operand_into(
     }
 }
 
-/// Write the result `src` of an atomic op into the inst's `dst`
-/// `Place`. Run after the working registers are restored so a spilled
-/// result lands at the unshifted sp offset.
+/// Write an atomic op's result to `dst`, after the working registers
+/// are restored so a spilled result lands at the unshifted sp offset.
 fn write_atomic_result(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) {
     super::ssa::emit_common::write_atomic_result(
         &super::ssa::emit_common::Aarch64Backend,
@@ -732,11 +689,9 @@ fn write_atomic_result(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) {
     );
 }
 
-/// C11 7.17.7.2-7.17.7.5 atomic read-modify-write via an LDAXR / STLXR
-/// retry loop (ARM ARM C6.2): load-acquire the prior value, compute the
-/// new value, store-release it exclusively, and retry while the monitor
-/// was lost. The acquire / release pair carries the
-/// sequentially-consistent ordering. The prior value is the result.
+/// C11 7.17.7.2-7.17.7.5 read-modify-write: an LDAXR / STLXR retry loop
+/// (ARM ARM C6.2), the acquire / release pair carrying seq_cst. The
+/// prior value is the result.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_atomic_rmw(
     code: &mut Vec<u8>,
@@ -837,9 +792,8 @@ pub(super) fn emit_atomic_cas(
         bail_msg("AtomicCas: operand not int reg / spill");
         return false;
     }
-    // Load the comparand once; `*expected_addr` is a thread-local object
-    // stable across the loop. Sub-width loads zero-extend, matching the
-    // zero-extended LDAXR result so the 64-bit compare is exact.
+    // The comparand is loaded once; sub-width loads zero-extend like the
+    // LDAXR result, so the 64-bit compare is exact.
     match width {
         1 => emit(code, enc_ldrb_imm(expected, exp_addr, 0)),
         2 => emit(code, enc_ldrh_imm(expected, exp_addr, 0)),
@@ -878,13 +832,10 @@ pub(super) fn emit_atomic_cas(
     true
 }
 
-/// x9..x15 save area for the 128-bit atomic sequence (7 borrowed working
-/// registers, padded to a 16-byte multiple).
+/// The save area of the seven borrowed working registers x9..x15.
 const ATOMIC128_SAVE_BYTES: u32 = 64;
 
-/// Save x9..x15 so any value the allocator parked there survives the
-/// sequence. Layout: `[sp+0]=x9 .. [sp+48]=x15`. sp moves down by
-/// [`ATOMIC128_SAVE_BYTES`].
+/// Save x9..x15: `[sp+0]=x9 .. [sp+48]=x15`.
 fn atomic128_save_working(code: &mut Vec<u8>) {
     use super::encode::{enc_stp_off, enc_stp_pre};
     emit(
@@ -896,8 +847,7 @@ fn atomic128_save_working(code: &mut Vec<u8>) {
     emit(code, enc_str_imm(Reg(15), Reg(31), 48));
 }
 
-/// Restore x9..x15 saved by [`atomic128_save_working`]. Run after the
-/// prior value has been written back through its output addresses.
+/// Restore x9..x15, after the prior value is written back.
 fn atomic128_restore_working(code: &mut Vec<u8>) {
     use super::encode::{enc_ldp_off, enc_ldp_post};
     emit(code, enc_ldr_imm(Reg(15), Reg(31), 48));
@@ -937,13 +887,11 @@ fn atomic128_operand_into(
     }
 }
 
-/// C11-style 128-bit atomic read-modify-write via an LDAXP / STLXP
-/// exclusive-pair retry loop (ARM ARM B2.9), recognised from the GCC
-/// inline-asm shape aarch64 code uses for `Int128` atomics. `args` is
-/// `[ptr, &oldl, &oldh, in...]`: the inputs are `(cmpl, cmph, newl, newh)`
-/// for `CmpXchg` and `(newl, newh)` otherwise. The prior 128-bit value is
-/// written back through `&oldl` / `&oldh` (the caller reads it); there is
-/// no register result.
+/// 128-bit read-modify-write: an LDAXP / STLXP retry loop (ARM ARM
+/// B2.9), the shape aarch64 code uses for `Int128` atomics. `args` is
+/// `[ptr, &oldl, &oldh, in...]` with `(cmpl, cmph, newl, newh)` for
+/// `CmpXchg` and `(newl, newh)` otherwise; the prior value is written
+/// back through `&oldl` / `&oldh` and there is no register result.
 fn emit_atomic128(
     code: &mut Vec<u8>,
     kind: super::super::op::Intrinsic,
@@ -972,9 +920,7 @@ fn emit_atomic128(
         bail_msg("atomic128: ptr operand not int reg / spill");
         return false;
     }
-    // Inputs land in x12.. in declaration order: (cmpl,cmph,newl,newh) or
-    // (newl,newh). Reads route through the save area if the allocator had
-    // parked an input in a register a prior move already overwrote.
+    // Inputs land in x12.. in declaration order.
     for (k, &a) in args[3..].iter().enumerate() {
         if !atomic128_operand_into(code, a, Reg(12 + k as u8), frame, alloc) {
             bail_msg("atomic128: input operand not int reg / spill");
@@ -1043,14 +989,11 @@ fn atomic128_writeback(
     true
 }
 
-/// AArch64 128-bit atomic load / store, recognised from the inline-asm
-/// idiom used for a 16-byte access without native LSE2. `Load`/`Store` are
-/// the plain `LDP`/`STP` forms; `LoadEx`/`StoreEx` are the pre-LSE2 forms
-/// built from an `LDXP`/`STXP` exclusive-pair retry loop (ARM ARM B2.9).
-/// `args` is `[ptr, &l, &h]` for the loads (the value read from `ptr` is
-/// written back through `&l` / `&h`) and `[ptr, l, h]` for the stores.
-/// There is no register result. Borrowed working registers x9..x15 are
-/// saved / restored so spilled operands can route through the save area.
+/// 128-bit atomic load / store without LSE2: `Load` / `Store` are plain
+/// `LDP` / `STP`, `LoadEx` / `StoreEx` an `LDXP` / `STXP` retry loop (ARM
+/// ARM B2.9). `args` is `[ptr, &l, &h]` for the loads (the value is
+/// written back through `&l` / `&h`) and `[ptr, l, h]` for the stores;
+/// no register result.
 fn emit_atomic128_ldst(
     code: &mut Vec<u8>,
     kind: super::super::op::Intrinsic,
@@ -1076,11 +1019,9 @@ fn emit_atomic128_ldst(
     }
     let is_load = matches!(kind, I::Atomic128Load | I::Atomic128LoadEx);
     match kind {
-        // Plain LDP: a single non-exclusive 128-bit load. No store, so it
-        // never faults on a read-only mapping.
+        // A plain load never faults on a read-only mapping.
         I::Atomic128Load => emit(code, enc_ldp_off(lo, hi, ptr, 0)),
-        // Pre-LSE2 load: an LDXP/STXP loop storing the value it read back
-        // unchanged, retried until the monitor holds. Leaves it in lo / hi.
+        // The loop stores the value it read back unchanged.
         I::Atomic128LoadEx => {
             let loop_start = code.len();
             emit(code, enc_ldxp(lo, hi, ptr));
@@ -1098,8 +1039,7 @@ fn emit_atomic128_ldst(
             }
             emit(code, enc_stp_off(Reg(12), Reg(13), ptr, 0));
         }
-        // Pre-LSE2 store: an LDXP (result discarded) / STXP loop. The new
-        // value sits in x12 / x13, clear of the LDXP scratch lo / hi.
+        // The new value sits in x12 / x13, clear of the LDXP scratch.
         I::Atomic128StoreEx => {
             if !atomic128_operand_into(code, args[1], Reg(12), frame, alloc)
                 || !atomic128_operand_into(code, args[2], Reg(13), frame, alloc)
@@ -1129,11 +1069,9 @@ fn emit_atomic128_ldst(
     true
 }
 
-/// AArch64 128-bit masked store-insert: `*mem = (*mem & ~msk) | val`, from an
-/// `LDXP` / `BIC` / `ORR` / `STXP` exclusive retry loop (no LSE2). `args` is
-/// `[ptr, vl, vh, ml, mh]`; there is no register result. Borrowed working
-/// registers x9..x15 are saved / restored so spilled operands can route
-/// through the save area.
+/// 128-bit masked store-insert `*mem = (*mem & ~msk) | val` as an
+/// `LDXP` / `BIC` / `ORR` / `STXP` retry loop. `args` is
+/// `[ptr, vl, vh, ml, mh]`; no register result.
 fn emit_atomic128_store_insert(
     code: &mut Vec<u8>,
     args: &[u32],
@@ -1156,8 +1094,6 @@ fn emit_atomic128_store_insert(
         bail_msg("atomic128 store-insert: ptr operand not int reg / spill");
         return false;
     }
-    // Inputs land in x12..x15 as (vl, vh, ml, mh); reads route through the
-    // save area if the allocator parked one in a working register.
     for (r, &a) in [vl, vh, ml, mh].iter().zip(&args[1..]) {
         if !atomic128_operand_into(code, a, *r, frame, alloc) {
             bail_msg("atomic128 store-insert: input operand not int reg / spill");

@@ -1,23 +1,8 @@
-//! AArch64 native emit consuming the SSA + allocator output.
-//! A per-function bail is a hard error -- the IR + emit contract
-//! has to cover every shape the walker produces.
+//! AArch64 native emit over the SSA and allocator output. The lowering
+//! returns `false` for any shape it cannot lower and the caller turns
+//! that into a compile error.
 //!
-//! ## Pass shape
-//!
-//! For each function:
-//!
-//! 1. Prologue: save fp / lr, set the frame pointer, reserve
-//!    locals + allocator-spill bytes, save the callee-saved
-//!    GPRs / FP regs the allocator reported as used, and spill
-//!    the host-ABI argument registers into the c5 cdecl slots
-//!    the body's `LocalAddr(>=2)` references.
-//! 2. Walk each block in source order. Emit per-`Inst` native
-//!    code in `inst_range`, then the terminator.
-//! 3. Epilogue lands inline at every `Terminator::Return`: load
-//!    the return value into x0, restore saved regs, drop the
-//!    frame, `ret`.
-//!
-//! ## Frame layout (top -> bottom, growing down from caller's sp)
+//! Frame layout, top to bottom, growing down from the caller's sp:
 //!
 //! ```text
 //!   c5 cdecl param slots          [fp + 16*i]
@@ -29,17 +14,8 @@
 //!   saved callee-saved FP regs    sp
 //! ```
 //!
-//! Each `Place::Spill(N)` reads / writes 8-byte slot N inside the
-//! allocator spill region; the byte address is
+//! `Place::Spill(N)` is 8-byte slot N of the allocator spill region, at
 //! `fp - frame.alloc_spill_base - (N+1)*8`.
-//!
-//! ## Coverage policy
-//!
-//! [`emit_function`] returns `true` when the SSA emit handled the
-//! function end-to-end and `false` when any encountered op is
-//! outside the implemented subset. The caller (`aarch64::lower`)
-//! turns `false` into a hard compile error -- the IR + emit
-//! contract has to cover every shape the walker produces.
 
 #![allow(dead_code, clippy::too_many_arguments)]
 

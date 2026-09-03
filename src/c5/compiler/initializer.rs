@@ -254,8 +254,11 @@ pub(crate) struct PendingLabelReloc {
 
 impl Compiler {
     /// C99 6.2.8 placement alignment of an object with static storage
-    /// duration: the declared alignment when it is stricter, and otherwise
-    /// the 8-byte boundary every object wider than a single byte takes.
+    /// duration: the alignment the declaration settled on when it is
+    /// stricter, and otherwise the 8-byte boundary every object wider than
+    /// a single byte takes. `decl_align` already carries the type's own
+    /// requirement and any lowering a variable-level `aligned(N)` applied,
+    /// so it is taken as given rather than widened again here.
     pub(super) fn data_placement_align(&self, ty: i64, decl_align: usize) -> usize {
         if decl_align > 8 {
             decl_align
@@ -302,6 +305,15 @@ impl Compiler {
     /// so the template starts on the same boundary.
     pub(super) fn stage_template_bytes(&mut self, bytes: usize) -> usize {
         self.reserve_data_bytes(DataStore::Static, 8, bytes) as usize
+    }
+
+    /// Reserve `bytes` zeroed bytes in `.data` for an unnamed object of
+    /// `ty` -- a compound literal (C99 6.5.2.5p5). It sits on the type's
+    /// boundary, and never below the 8-byte width the static-initializer
+    /// writes use.
+    pub(super) fn reserve_literal_bytes(&mut self, ty: i64, bytes: usize) -> i64 {
+        let align = self.align_of_type(ty).max(8);
+        self.reserve_data_bytes(DataStore::Static, align, bytes)
     }
 
     /// Push the relocation entry that an initializer element needs
@@ -2278,10 +2290,7 @@ impl Compiler {
         let mut full_dims = alloc::vec::Vec::with_capacity(dims.len());
         full_dims.push(rows);
         full_dims.extend_from_slice(&dims[1..]);
-        // C99 6.2.8: the literal is an unnamed object of the array type,
-        // whose alignment is its element type's.
-        let align = self.align_of_type(elem_ty).max(8);
-        let off = self.reserve_data_bytes(DataStore::Static, align, count * elem_size);
+        let off = self.reserve_literal_bytes(elem_ty, count * elem_size);
         if elem_is_struct {
             self.collect_struct_array_data(elem_ty, off, &full_dims)?;
         } else {
@@ -2382,8 +2391,7 @@ impl Compiler {
         // unnamed object (C99 6.5.2.5p3) and the data-object model
         // identifies an object by its start offset.
         let size = self.size_of_type(cl_ty).max(1);
-        let align = self.align_of_type(cl_ty).max(8);
-        let off = self.reserve_data_bytes(DataStore::Static, align, size.div_ceil(8) * 8);
+        let off = self.reserve_literal_bytes(cl_ty, size.div_ceil(8) * 8);
         let sym_idx = self.intern_compound_literal_symbol(off, cl_ty, size as i64);
         self.collect_struct_initializer(struct_id_of(cl_ty), off)?;
         Ok((off, sym_idx))
@@ -2401,9 +2409,7 @@ impl Compiler {
         cl_ty: i64,
     ) -> Result<(i64, usize), C5Error> {
         let size = self.size_of_type(cl_ty).max(1);
-        // The scalar initializer writes whole 8-byte slots.
-        let align = self.align_of_type(cl_ty).max(8);
-        let off = self.reserve_data_bytes(DataStore::Static, align, size.div_ceil(8) * 8);
+        let off = self.reserve_literal_bytes(cl_ty, size.div_ceil(8) * 8);
         let sym_idx = self.intern_compound_literal_symbol(off, cl_ty, size as i64);
         self.parse_global_initializer(cl_ty, off, false)?;
         Ok((off, sym_idx))

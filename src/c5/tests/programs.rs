@@ -4352,6 +4352,15 @@ fn thread_local_initializer() {
 }
 
 #[test]
+fn thread_local_object_alignment() {
+    // C99 6.2.8: an object with thread storage duration sits on its type's
+    // boundary. The thread-local block has no per-object placement record,
+    // so its reservation carries the alignment; the fixture keeps the
+    // running offset off every 16-byte boundary ahead of each wide object.
+    assert_eq!(run_fixture("thread_local_object_alignment.c"), 0);
+}
+
+#[test]
 fn thread_local_address_constant_initializer() {
     // C99 6.7.8p4: thread storage duration takes the same initializer
     // forms as static, address constants included. The VM keeps one

@@ -290,9 +290,16 @@ impl Compiler {
         };
         self.symbols[loc_idx].data_align = want_align.max(1) as i64;
         if want_align > 8 {
-            self.align_data_to(want_align);
             self.data_align = self.data_align.max(want_align);
         }
+    }
+
+    /// Placement alignment of a block-scope static's storage: the
+    /// requirement [`Self::apply_static_local_align`] recorded, widened by
+    /// what the type itself asks for.
+    fn static_local_placement_align(&self, loc_idx: usize, ty: i64) -> usize {
+        let decl_align = self.symbols[loc_idx].data_align.max(0) as usize;
+        self.data_placement_align(ty, decl_align)
     }
 
     /// Record an over-aligned automatic object's frame slot so it is placed
@@ -951,7 +958,7 @@ impl Compiler {
             } else {
                 DataStore::Static
             };
-            let align = self.data_placement_align(ty, 0);
+            let align = self.static_local_placement_align(loc_idx, ty);
             let off = self.reserve_data_bytes(store, align, bytes as usize);
             self.symbols[loc_idx].val = off;
             if !is_tls {
@@ -1020,7 +1027,8 @@ impl Compiler {
                     // token may append a string literal's bytes, whose
                     // parser-added NUL must land right after them.
                     let reserved = count * inner_dim * elem_size as i64;
-                    let off = self.reserve_data_bytes(DataStore::Static, 8, reserved as usize);
+                    let align = self.static_local_placement_align(loc_idx, ty);
+                    let off = self.reserve_data_bytes(DataStore::Static, align, reserved as usize);
                     self.symbols[loc_idx].val = off;
                     self.symbols[loc_idx].reserved_data_bytes = reserved;
                     self.next()?;
@@ -1094,7 +1102,7 @@ impl Compiler {
                 let final_size = elements.len() as i64;
                 let total_bytes = (self.size_of_type(ty) as i64) * final_size;
                 let aligned = ((total_bytes + 7) / 8) * 8;
-                let align = self.data_placement_align(ty, 0);
+                let align = self.static_local_placement_align(loc_idx, ty);
                 let off = self.reserve_data_bytes(DataStore::Static, align, aligned as usize);
                 self.symbols[loc_idx].val = off;
                 self.symbols[loc_idx].reserved_data_bytes = aligned;
@@ -1224,7 +1232,8 @@ impl Compiler {
         } else {
             // Deferred size: count the elements and reserve zeroed storage.
             let (c, _) = self.scan_array_init()?;
-            let off = self.reserve_data_bytes(DataStore::Static, 8, (c * elem_size) as usize);
+            let align = self.static_local_placement_align(loc_idx, ty);
+            let off = self.reserve_data_bytes(DataStore::Static, align, (c * elem_size) as usize);
             self.symbols[loc_idx].val = off;
             self.symbols[loc_idx].array_size = c;
             while !self.data.len().is_multiple_of(8) {

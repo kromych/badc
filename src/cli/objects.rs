@@ -1,12 +1,7 @@
-use std::io::IsTerminal;
-
 use super::args::Cli;
 use super::compile::{CompileCfg, compile_object_tu, compile_units, worker_count};
 use super::diag::eprint_diagnostic;
-use super::inputs::{
-    Inputs, StdinSource, native_defined_globals, native_defined_globals_logged,
-    unreadable_object_reason,
-};
+use super::inputs::{Inputs, StdinSource, native_defined_globals, unreadable_object_reason};
 use super::output::write_output;
 
 /// `-c` / `--compile-only`: compile each `.c` source to a native
@@ -32,64 +27,13 @@ pub(crate) fn compile_objects(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
     let stdin_src = stdin.for_sources(sources);
     // Relocatable `-c` builds do not require `main`; the linker
     // picks the entry once it merges every TU.
-    use badc::OutputKind;
-    let mut reloc_opts = badc::NativeOptions::new()
-        .with_debug_info(cli.codegen.emit_debug_info)
-        .with_inline_cap(cli.codegen.inline_cap);
-    reloc_opts.no_fp_regs = cli.codegen.no_fp_regs;
-    reloc_opts.strict_align = cli.codegen.strict_align;
-    reloc_opts.jump_tables = cli.codegen.jump_tables;
-    reloc_opts.min_function_alignment = cli.codegen.min_function_alignment;
-    reloc_opts.patchable_function_entry = cli.codegen.patchable_function_entry;
-    reloc_opts.profiling = cli.codegen.profiling;
-    reloc_opts.pic = cli.codegen.fpic;
-    reloc_opts.pic_link = pic_link_default(cli.codegen.fno_pic, cli.codegen.code_model);
-    reloc_opts.code_model = cli.codegen.code_model;
-    reloc_opts.hardening = cli.codegen.hardening;
-    reloc_opts.stack_protect = cli.codegen.stack_protect;
-    reloc_opts.fixed_regs = cli.codegen.fixed_regs;
-    reloc_opts.elf_class = cli.codegen.elf_class;
-    reloc_opts.keep_local_labels = cli.codegen.keep_local_labels;
-    if cli.front.optimize {
-        reloc_opts = reloc_opts.with_optimize();
-    }
-    if cli.codegen.dump_ssa {
-        reloc_opts = reloc_opts.with_dump_ssa();
-    }
-    reloc_opts.output_kind = OutputKind::Relocatable;
-    let stderr_is_tty = std::io::stderr().is_terminal();
-    let multi_tu = source_count > 1;
-    let cfg = CompileCfg {
-        target: cli.target,
-        reloc_opts,
-        gnu: cli.front.gnu,
-        gnu_dialect: cli.front.gnu_dialect,
-        gnu89_inline: cli.front.gnu89_inline,
-        strict_flex_arrays: cli.front.strict_flex_arrays,
-        short_wchar: cli.front.short_wchar,
-        char_signed: cli.front.char_signed,
-        auto_var_init: cli.front.auto_var_init,
-        nostdinc: cli.front.nostdinc,
-        no_builtin: cli.front.no_builtin,
-        no_builtin_fns: &cli.front.no_builtin_fns,
-        optimize_flag: cli.front.optimize,
-        export_all: false,
-        show_includes: cli.front.show_includes,
-        warn_dead_store: cli.front.warn_dead_store,
-        multi_tu,
-        quiet: cli.quiet,
-        stderr_is_tty,
-        defines: &cli.front.defines,
-        undefines: &cli.front.undefines,
-        include_paths: &cli.front.include_paths,
-        quote_include_paths: &cli.front.quote_include_paths,
-        system_include_paths: &cli.front.system_include_paths,
-        own_header_roots: &cli.front.own_header_roots,
-        force_includes: &cli.front.force_includes,
-        deps: cli.deps.as_ref(),
-        dep_output: cli.output_path.as_deref(),
-        stdin_src: stdin_src.as_deref(),
-    };
+    let reloc_opts = cli
+        .codegen
+        .relocatable_options(cli.front.optimize, pic_link_default(cli));
+    let mut cfg = CompileCfg::new(cli, reloc_opts, sources, stdin_src.as_deref());
+    // `--export-all` widens an image's dynamic symbol table; a
+    // relocatable object exports what its source declares.
+    cfg.export_all = false;
     if let Some(out) = cli.output_path.as_deref() {
         if source_count != 1 {
             eprintln!(
@@ -181,67 +125,18 @@ pub(crate) fn build_archive(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
         eprint_diagnostic("badc: error: --ar requires at least one input");
         std::process::exit(1);
     }
-    use badc::OutputKind;
-    let mut reloc_opts = badc::NativeOptions::new()
-        .with_debug_info(cli.codegen.emit_debug_info)
-        .with_inline_cap(cli.codegen.inline_cap);
-    reloc_opts.no_fp_regs = cli.codegen.no_fp_regs;
-    reloc_opts.strict_align = cli.codegen.strict_align;
-    reloc_opts.jump_tables = cli.codegen.jump_tables;
-    reloc_opts.min_function_alignment = cli.codegen.min_function_alignment;
-    reloc_opts.patchable_function_entry = cli.codegen.patchable_function_entry;
-    reloc_opts.profiling = cli.codegen.profiling;
-    reloc_opts.pic = cli.codegen.fpic;
-    reloc_opts.pic_link = pic_link_default(cli.codegen.fno_pic, cli.codegen.code_model);
-    reloc_opts.code_model = cli.codegen.code_model;
-    reloc_opts.hardening = cli.codegen.hardening;
-    reloc_opts.stack_protect = cli.codegen.stack_protect;
-    reloc_opts.fixed_regs = cli.codegen.fixed_regs;
-    reloc_opts.elf_class = cli.codegen.elf_class;
-    reloc_opts.keep_local_labels = cli.codegen.keep_local_labels;
-    if cli.front.optimize {
-        reloc_opts = reloc_opts.with_optimize();
-    }
-    if cli.codegen.dump_ssa {
-        reloc_opts = reloc_opts.with_dump_ssa();
-    }
-    reloc_opts.output_kind = OutputKind::Relocatable;
-    let stderr_is_tty = std::io::stderr().is_terminal();
-    let multi_tu = sources.len() > 1;
     let stdin_src = stdin.for_sources(sources);
-    let cfg = CompileCfg {
-        target: cli.target,
-        reloc_opts,
-        gnu: cli.front.gnu,
-        gnu_dialect: cli.front.gnu_dialect,
-        gnu89_inline: cli.front.gnu89_inline,
-        strict_flex_arrays: cli.front.strict_flex_arrays,
-        short_wchar: cli.front.short_wchar,
-        char_signed: cli.front.char_signed,
-        auto_var_init: cli.front.auto_var_init,
-        nostdinc: cli.front.nostdinc,
-        no_builtin: cli.front.no_builtin,
-        no_builtin_fns: &cli.front.no_builtin_fns,
-        optimize_flag: cli.front.optimize,
-        export_all: false,
-        show_includes: cli.front.show_includes,
-        warn_dead_store: cli.front.warn_dead_store,
-        multi_tu,
-        quiet: cli.quiet,
-        stderr_is_tty,
-        defines: &cli.front.defines,
-        undefines: &cli.front.undefines,
-        include_paths: &cli.front.include_paths,
-        quote_include_paths: &cli.front.quote_include_paths,
-        system_include_paths: &cli.front.system_include_paths,
-        own_header_roots: &cli.front.own_header_roots,
-        force_includes: &cli.front.force_includes,
-        // `--ar` bundles objects; gcc has no dependency-output
-        // analogue for archive assembly.
-        deps: None,
-        dep_output: None,
-        stdin_src: stdin_src.as_deref(),
-    };
+    let reloc_opts = cli
+        .codegen
+        .relocatable_options(cli.front.optimize, pic_link_default(cli));
+    let mut cfg = CompileCfg::new(cli, reloc_opts, sources, stdin_src.as_deref());
+    // `--export-all` widens an image's dynamic symbol table; a
+    // relocatable object exports what its source declares.
+    cfg.export_all = false;
+    // `--ar` bundles objects; gcc has no dependency-output analogue for
+    // archive assembly.
+    cfg.deps = None;
+    cfg.dep_output = None;
     let mut members: Vec<badc::ArchiveMember> = Vec::with_capacity(total_inputs);
     let mut sym_index: Vec<(usize, Vec<String>)> = Vec::with_capacity(total_inputs);
     // Compile every source (concurrently under `--jobs`), folding the
@@ -252,12 +147,13 @@ pub(crate) fn build_archive(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
     let compiled = compile_units(sources, workers, |_, src| {
         let (mut log, res) = compile_object_tu(src, &cfg);
         match res {
-            Ok(bytes) => {
-                match native_defined_globals_logged(&bytes, src, &mut log, cfg.stderr_is_tty) {
-                    Ok(defined) => (log, Ok((bytes, defined))),
-                    Err(()) => (log, Err(())),
+            Ok(bytes) => match native_defined_globals(&bytes, src) {
+                Ok(defined) => (log, Ok((bytes, defined))),
+                Err(e) => {
+                    log.diag(cfg.stderr_is_tty, e);
+                    (log, Err(()))
                 }
-            }
+            },
             Err(()) => (log, Err(())),
         }
     });
@@ -291,7 +187,13 @@ pub(crate) fn build_archive(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
             ));
             std::process::exit(1);
         }
-        let defined = native_defined_globals(&bytes, obj_path);
+        let defined = match native_defined_globals(&bytes, obj_path) {
+            Ok(d) => d,
+            Err(e) => {
+                eprint_diagnostic(e);
+                std::process::exit(1);
+            }
+        };
         sym_index.push((members.len(), defined));
         members.push(badc::ArchiveMember {
             name: format!("{base}.o"),
@@ -315,6 +217,6 @@ pub(crate) fn build_archive(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
 /// statically -- and keep such storage in `.rodata`: an explicit
 /// `-fno-pic` / `-fno-pie`, and the kernel code model, which by
 /// definition names a static link at fixed addresses.
-pub(crate) fn pic_link_default(fno_pic: bool, code_model: badc::CodeModel) -> bool {
-    !fno_pic && code_model != badc::CodeModel::Kernel
+fn pic_link_default(cli: &Cli) -> bool {
+    !cli.codegen.fno_pic && cli.codegen.code_model != badc::CodeModel::Kernel
 }

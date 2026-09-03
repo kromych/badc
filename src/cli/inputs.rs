@@ -6,7 +6,7 @@ use super::args::Cli;
 use super::options::Mode;
 use super::script_link::LinkInputCli;
 
-use super::diag::{TuLog, eprint_diagnostic};
+use super::diag::eprint_diagnostic;
 
 /// The relocation machine `target`'s objects use, for selecting a
 /// universal (fat) Mach-O container's slice.
@@ -307,25 +307,19 @@ pub(crate) fn ingest_linker_input(
     Ok(())
 }
 
-/// Enumerate the `STB_GLOBAL`-defined symbol names from a
-/// native ELF64 ET_REL blob. Used to populate the SysV `ar`
-/// symbol index when `--ar` bundles native objects: any name
-/// listed here resolves -- via the archive's `/` member -- to
-/// the containing member's file offset, which is how the
-/// linker's archive pull-in decides which members to load.
-pub(crate) fn native_defined_globals(bytes: &[u8], path: &str) -> Vec<String> {
-    let obj = match badc::parse_native_elf(bytes) {
-        Ok(o) => o,
-        Err(e) => {
-            eprint_diagnostic(format!("badc: {path}: {e}"));
-            std::process::exit(1);
-        }
-    };
-    obj.symbols
+/// The `STB_GLOBAL` names an ELF64 ET_REL blob defines in a section.
+/// They populate the SysV `ar` symbol index when `--ar` bundles native
+/// objects: a name listed there resolves -- via the archive's `/`
+/// member -- to the containing member's file offset, which is how the
+/// linker's archive pull-in decides which members to load. Only a
+/// section-resident definition is visible at pull-in time, so undefined
+/// and absolute symbols are dropped. `Err` is the parse diagnostic.
+pub(crate) fn native_defined_globals(bytes: &[u8], path: &str) -> Result<Vec<String>, String> {
+    let obj = badc::parse_native_elf(bytes).map_err(|e| format!("badc: {path}: {e}"))?;
+    Ok(obj
+        .symbols
         .into_iter()
         .filter(|s| {
-            // STB_GLOBAL = 1; only section-resident defs are
-            // visible at archive-pull-in time.
             s.binding == 1
                 && !matches!(
                     s.section,
@@ -333,37 +327,7 @@ pub(crate) fn native_defined_globals(bytes: &[u8], path: &str) -> Vec<String> {
                 )
         })
         .map(|s| s.name)
-        .collect()
-}
-
-/// Like [`native_defined_globals`] but records a parse error in `log`
-/// and returns `Err` instead of exiting, for the `--ar` compile
-/// workers. STB_GLOBAL section-resident names only (archive-pull-in
-/// visibility).
-pub(crate) fn native_defined_globals_logged(
-    bytes: &[u8],
-    path: &str,
-    log: &mut TuLog,
-    tty: bool,
-) -> Result<Vec<String>, ()> {
-    match badc::parse_native_elf(bytes) {
-        Ok(obj) => Ok(obj
-            .symbols
-            .into_iter()
-            .filter(|s| {
-                s.binding == 1
-                    && !matches!(
-                        s.section,
-                        badc::NativeSymSection::Undef | badc::NativeSymSection::Abs
-                    )
-            })
-            .map(|s| s.name)
-            .collect()),
-        Err(e) => {
-            log.diag(tty, format!("badc: {path}: {e}"));
-            Err(())
-        }
-    }
+        .collect())
 }
 
 #[cfg(test)]

@@ -1,4 +1,8 @@
+use std::io::IsTerminal;
+
 use badc::{NativeOptions, Target};
+
+use super::args::{Cli, FrontEnd};
 
 use super::deps::{DepOptions, emit_deps};
 use super::diag::TuLog;
@@ -46,30 +50,13 @@ pub(crate) fn worker_count(jobs: Option<usize>, count: usize) -> usize {
 pub(crate) struct CompileCfg<'a> {
     pub(crate) target: Target,
     pub(crate) reloc_opts: NativeOptions,
-    pub(crate) gnu: bool,
-    pub(crate) gnu_dialect: bool,
-    pub(crate) gnu89_inline: bool,
-    pub(crate) strict_flex_arrays: u8,
-    pub(crate) short_wchar: bool,
-    pub(crate) char_signed: Option<bool>,
-    pub(crate) auto_var_init: badc::AutoVarInit,
-    pub(crate) nostdinc: bool,
-    pub(crate) no_builtin: bool,
-    pub(crate) no_builtin_fns: &'a [String],
-    pub(crate) optimize_flag: bool,
+    pub(crate) front: &'a FrontEnd,
+    /// `--export-all` applies to an image, so a `-c` / `--ar` object
+    /// emit clears it.
     pub(crate) export_all: bool,
-    pub(crate) show_includes: bool,
-    pub(crate) warn_dead_store: bool,
     pub(crate) multi_tu: bool,
     pub(crate) quiet: bool,
     pub(crate) stderr_is_tty: bool,
-    pub(crate) defines: &'a [(String, String)],
-    pub(crate) undefines: &'a [String],
-    pub(crate) include_paths: &'a [String],
-    pub(crate) quote_include_paths: &'a [String],
-    pub(crate) system_include_paths: &'a [String],
-    pub(crate) own_header_roots: &'a [String],
-    pub(crate) force_includes: &'a [String],
     /// `-MD` / `-MMD` request, `None` when no dependency output was
     /// asked for. Each unit writes its own file.
     pub(crate) deps: Option<&'a DepOptions>,
@@ -78,6 +65,31 @@ pub(crate) struct CompileCfg<'a> {
     /// Pre-read stdin bytes for a `-` source; `None` when no input is
     /// stdin. Keeps a worker off the process stdin stream.
     pub(crate) stdin_src: Option<&'a str>,
+}
+
+impl<'a> CompileCfg<'a> {
+    /// The inputs a mode's units share. `reloc_opts` is the emitter
+    /// configuration the mode built; the object emits clear
+    /// `export_all` and `--ar` clears the dependency output.
+    pub(crate) fn new(
+        cli: &'a Cli,
+        reloc_opts: NativeOptions,
+        sources: &[String],
+        stdin_src: Option<&'a str>,
+    ) -> Self {
+        Self {
+            target: cli.target,
+            reloc_opts,
+            front: &cli.front,
+            export_all: cli.link.export_all,
+            multi_tu: sources.len() > 1,
+            quiet: cli.quiet,
+            stderr_is_tty: std::io::stderr().is_terminal(),
+            deps: cli.deps.as_ref(),
+            dep_output: cli.output_path.as_deref(),
+            stdin_src,
+        }
+    }
 }
 
 /// One compiled native-link translation unit: the parsed object plus
@@ -214,29 +226,12 @@ pub(crate) fn tu_compile_options(
     implicit_externs: &[String],
     cfg: &CompileCfg,
 ) -> badc::CompileOptions {
-    badc::CompileOptions::default()
-        .with_gnu(cfg.gnu)
-        .with_gnu89_inline(cfg.gnu89_inline)
-        .with_strict_flex_arrays(cfg.strict_flex_arrays)
-        .with_short_wchar(cfg.short_wchar)
-        .with_char_signed(cfg.char_signed)
-        .with_auto_var_init(cfg.auto_var_init)
-        .with_nostdinc(cfg.nostdinc)
-        .with_no_builtin(cfg.no_builtin)
-        .with_no_builtin_fns(cfg.no_builtin_fns.to_vec())
-        .with_gnu_dialect(cfg.gnu_dialect)
+    cfg.front
+        .compile_options(src_path)
         .with_asm_source(SourceKind::of(src_path).is_asm())
-        .with_defines(tu_defines(src_path, cfg.defines))
-        .with_undefines(cfg.undefines.to_vec())
-        .with_include_paths(cfg.include_paths.to_vec())
-        .with_quote_include_paths(cfg.quote_include_paths.to_vec())
-        .with_system_include_paths(cfg.system_include_paths.to_vec())
-        .with_own_header_roots(cfg.own_header_roots.to_vec())
-        .with_force_includes(cfg.force_includes.to_vec())
-        .with_source_label(src_path.to_string())
-        .with_track_includes(cfg.show_includes || cfg.deps.is_some())
-        .with_warn_dead_store(cfg.warn_dead_store)
-        .with_optimize(cfg.optimize_flag)
+        .with_track_includes(cfg.front.show_includes || cfg.deps.is_some())
+        .with_warn_dead_store(cfg.front.warn_dead_store)
+        .with_optimize(cfg.front.optimize)
         .with_export_all_functions(cfg.export_all)
         .with_implicit_extern_fns(implicit_externs.to_vec())
         .with_no_entry_point(true)
@@ -330,7 +325,7 @@ pub(crate) fn translate_tu(
     let src_bytes = read_tu_source(src_path, cfg, log)?;
     let copts = tu_compile_options(src_path, implicit_externs, cfg);
     let compiler = badc::Compiler::with_options(src_bytes, cfg.target, copts);
-    if cfg.show_includes {
+    if cfg.front.show_includes {
         for line in compiler.include_trace() {
             log.raw(line);
         }

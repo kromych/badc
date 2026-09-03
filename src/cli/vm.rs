@@ -38,26 +38,10 @@ pub(crate) fn run_in_process(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) ->
             }
         }
     };
-    let copts = badc::CompileOptions::default()
-        .with_gnu(cli.front.gnu)
-        .with_gnu89_inline(cli.front.gnu89_inline)
-        .with_strict_flex_arrays(cli.front.strict_flex_arrays)
-        .with_short_wchar(cli.front.short_wchar)
-        .with_char_signed(cli.front.char_signed)
-        .with_auto_var_init(cli.front.auto_var_init)
-        .with_nostdinc(cli.front.nostdinc)
-        .with_no_builtin(cli.front.no_builtin)
-        .with_no_builtin_fns(cli.front.no_builtin_fns.clone())
-        .with_gnu_dialect(cli.front.gnu_dialect)
+    let copts = cli
+        .front
+        .compile_options(&src_path)
         .with_optimize(cli.front.optimize)
-        .with_defines(cli.front.defines.clone())
-        .with_undefines(cli.front.undefines.clone())
-        .with_include_paths(cli.front.include_paths.clone())
-        .with_quote_include_paths(cli.front.quote_include_paths.clone())
-        .with_system_include_paths(cli.front.system_include_paths.clone())
-        .with_own_header_roots(cli.front.own_header_roots.clone())
-        .with_force_includes(cli.front.force_includes.clone())
-        .with_source_label(src_path.clone())
         .with_track_includes(cli.front.show_includes)
         .with_warn_dead_store(cli.front.warn_dead_store);
     let compiler = Compiler::with_options(contents, cli.target, copts);

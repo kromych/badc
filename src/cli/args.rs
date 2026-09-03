@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use badc::Target;
 
+use super::compile::tu_defines;
 use super::deps::{DepKind, DepOptions};
 use super::diag::eprint_diagnostic;
 use super::options::{AssemblerOption, Mode, accept_assembler_option, parse_c_integer};
@@ -1557,5 +1558,70 @@ fn parse_jobs(s: &str) -> Result<usize, ParseError> {
         _ => Err(ParseError::diag(format!(
             "badc: error: --jobs (-j) requires a positive integer, got `{s}`"
         ))),
+    }
+}
+
+impl FrontEnd {
+    /// The language and search-path options one unit preprocesses and
+    /// compiles under. Each phase adds what it decides on top:
+    /// optimization, include tracking, the assembler flag, and the ELF
+    /// class and code model a relocatable emit carries.
+    pub(crate) fn compile_options(&self, label: &str) -> badc::CompileOptions {
+        badc::CompileOptions::default()
+            .with_gnu(self.gnu)
+            .with_gnu89_inline(self.gnu89_inline)
+            .with_strict_flex_arrays(self.strict_flex_arrays)
+            .with_short_wchar(self.short_wchar)
+            .with_char_signed(self.char_signed)
+            .with_auto_var_init(self.auto_var_init)
+            .with_nostdinc(self.nostdinc)
+            .with_no_builtin(self.no_builtin)
+            .with_no_builtin_fns(self.no_builtin_fns.clone())
+            .with_gnu_dialect(self.gnu_dialect)
+            .with_defines(tu_defines(label, &self.defines))
+            .with_undefines(self.undefines.clone())
+            .with_include_paths(self.include_paths.clone())
+            .with_quote_include_paths(self.quote_include_paths.clone())
+            .with_system_include_paths(self.system_include_paths.clone())
+            .with_own_header_roots(self.own_header_roots.clone())
+            .with_force_includes(self.force_includes.clone())
+            .with_source_label(label.to_string())
+    }
+}
+
+impl Codegen {
+    /// The emitter options for a relocatable object. `pic_link` states
+    /// whether the consuming link applies data relocations after
+    /// mapping; see [`badc::NativeOptions::pic_link`].
+    pub(crate) fn relocatable_options(
+        &self,
+        optimize: bool,
+        pic_link: bool,
+    ) -> badc::NativeOptions {
+        let mut opts = badc::NativeOptions::new()
+            .with_debug_info(self.emit_debug_info)
+            .with_inline_cap(self.inline_cap);
+        opts.no_fp_regs = self.no_fp_regs;
+        opts.strict_align = self.strict_align;
+        opts.jump_tables = self.jump_tables;
+        opts.min_function_alignment = self.min_function_alignment;
+        opts.patchable_function_entry = self.patchable_function_entry;
+        opts.profiling = self.profiling;
+        opts.pic = self.fpic;
+        opts.pic_link = pic_link;
+        opts.code_model = self.code_model;
+        opts.hardening = self.hardening;
+        opts.stack_protect = self.stack_protect;
+        opts.fixed_regs = self.fixed_regs;
+        opts.elf_class = self.elf_class;
+        opts.keep_local_labels = self.keep_local_labels;
+        if optimize {
+            opts = opts.with_optimize();
+        }
+        if self.dump_ssa {
+            opts = opts.with_dump_ssa();
+        }
+        opts.output_kind = badc::OutputKind::Relocatable;
+        opts
     }
 }

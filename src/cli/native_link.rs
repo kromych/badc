@@ -1,5 +1,3 @@
-use std::io::IsTerminal;
-
 use badc::{Compiler, OutputKind};
 
 use super::args::Cli;
@@ -44,77 +42,22 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
     let mut native_objs: Vec<badc::NativeObject> =
         Vec::with_capacity(sources.len() + objects.len() + archives.len());
 
-    let mut reloc_opts = badc::NativeOptions::new()
-        .with_debug_info(cli.codegen.emit_debug_info)
-        .with_inline_cap(cli.codegen.inline_cap);
-    reloc_opts.no_fp_regs = cli.codegen.no_fp_regs;
-    reloc_opts.strict_align = cli.codegen.strict_align;
-    reloc_opts.jump_tables = cli.codegen.jump_tables;
-    reloc_opts.min_function_alignment = cli.codegen.min_function_alignment;
-    reloc_opts.patchable_function_entry = cli.codegen.patchable_function_entry;
-    reloc_opts.profiling = cli.codegen.profiling;
-    reloc_opts.pic = cli.codegen.fpic;
     // These objects are linked into an image below, and every image
     // this toolchain writes takes its data relocations at load time
     // (ELF ET_DYN, PE base relocations, Mach-O dyld rebases), so a
-    // relocated `const` cannot ride the read-only prefix and must
-    // not cost the unit's pure `const` objects their place in it.
-    reloc_opts.pic_link = true;
-    reloc_opts.code_model = cli.codegen.code_model;
-    reloc_opts.hardening = cli.codegen.hardening;
-    reloc_opts.stack_protect = cli.codegen.stack_protect;
-    reloc_opts.fixed_regs = cli.codegen.fixed_regs;
-    reloc_opts.elf_class = cli.codegen.elf_class;
-    reloc_opts.keep_local_labels = cli.codegen.keep_local_labels;
-    if cli.front.optimize {
-        reloc_opts = reloc_opts.with_optimize();
-    }
-    if cli.codegen.dump_ssa {
-        reloc_opts = reloc_opts.with_dump_ssa();
-    }
-    reloc_opts.output_kind = OutputKind::Relocatable;
-    // Per-source progress and diagnostics match the JIT / interp
-    // paths: a multi-source build prints `info: compiling <path>`
-    // per unit, the resolved `#include` trace under `-H`, and the
-    // compiler's warnings (parser type-mismatch, AST validator,
-    // dead-store) to stderr.
-    let stderr_is_tty = std::io::stderr().is_terminal();
-    let multi_tu = sources.len() > 1;
+    // relocated `const` cannot ride the read-only prefix and must not
+    // cost the unit's pure `const` objects their place in it.
+    let reloc_opts = cli.codegen.relocatable_options(cli.front.optimize, true);
+    // Per-source progress and diagnostics match the JIT / interp paths:
+    // a multi-source build prints `info: compiling <path>` per unit, the
+    // resolved `#include` trace under `-H`, and the compiler's warnings
+    // (parser type-mismatch, AST validator, dead-store) to stderr.
+    //
     // `.c` -> in-memory native ELF64 ET_REL: each source compiles
-    // straight to ET_REL bytes that `parse_native_elf` reads back,
-    // so no intermediate `.o` is written to disk.
+    // straight to ET_REL bytes that `parse_native_elf` reads back, so no
+    // intermediate `.o` is written to disk.
     let stdin_src = stdin.for_sources(&sources);
-    let cfg = CompileCfg {
-        target: cli.target,
-        reloc_opts,
-        gnu: cli.front.gnu,
-        gnu_dialect: cli.front.gnu_dialect,
-        gnu89_inline: cli.front.gnu89_inline,
-        strict_flex_arrays: cli.front.strict_flex_arrays,
-        short_wchar: cli.front.short_wchar,
-        char_signed: cli.front.char_signed,
-        auto_var_init: cli.front.auto_var_init,
-        nostdinc: cli.front.nostdinc,
-        no_builtin: cli.front.no_builtin,
-        no_builtin_fns: &cli.front.no_builtin_fns,
-        optimize_flag: cli.front.optimize,
-        export_all: cli.link.export_all,
-        show_includes: cli.front.show_includes,
-        warn_dead_store: cli.front.warn_dead_store,
-        multi_tu,
-        quiet: cli.quiet,
-        stderr_is_tty,
-        defines: &cli.front.defines,
-        undefines: &cli.front.undefines,
-        include_paths: &cli.front.include_paths,
-        quote_include_paths: &cli.front.quote_include_paths,
-        system_include_paths: &cli.front.system_include_paths,
-        own_header_roots: &cli.front.own_header_roots,
-        force_includes: &cli.front.force_includes,
-        deps: cli.deps.as_ref(),
-        dep_output: cli.output_path.as_deref(),
-        stdin_src: stdin_src.as_deref(),
-    };
+    let cfg = CompileCfg::new(cli, reloc_opts, &sources, stdin_src.as_deref());
     let mut embedded = EmbeddedSources {
         cli,
         reloc_opts,
@@ -274,26 +217,15 @@ impl EmbeddedSources<'_> {
         for (k, v) in extra {
             copts_defines.push((k.to_string(), v.to_string()));
         }
-        let copts = badc::CompileOptions::default()
-            .with_gnu(cli.front.gnu)
-            .with_gnu89_inline(cli.front.gnu89_inline)
-            .with_strict_flex_arrays(cli.front.strict_flex_arrays)
-            .with_short_wchar(cli.front.short_wchar)
-            .with_char_signed(cli.front.char_signed)
-            .with_auto_var_init(cli.front.auto_var_init)
-            .with_nostdinc(cli.front.nostdinc)
-            .with_no_builtin(cli.front.no_builtin)
-            .with_no_builtin_fns(cli.front.no_builtin_fns.clone())
-            .with_gnu_dialect(cli.front.gnu_dialect)
-            .with_optimize(cli.front.optimize)
+        let mut copts = cli
+            .front
+            .compile_options(label)
             .with_defines(copts_defines)
-            .with_undefines(cli.front.undefines.clone())
-            .with_include_paths(cli.front.include_paths.clone())
-            .with_system_include_paths(cli.front.system_include_paths.clone())
-            .with_own_header_roots(cli.front.own_header_roots.clone())
-            .with_force_includes(cli.front.force_includes.clone())
-            .with_source_label(label.to_string())
+            .with_optimize(cli.front.optimize)
             .with_no_entry_point(true);
+        // A bundled source resolves `#include "..."` inside the bundled
+        // set, not through the user's `-iquote` paths.
+        copts.quote_include_paths.clear();
         let program = match Compiler::with_options(src, cli.target, copts).compile() {
             Ok(p) => p,
             Err(e) => {

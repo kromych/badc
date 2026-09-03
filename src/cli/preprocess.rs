@@ -3,7 +3,6 @@ use std::io::IsTerminal;
 use badc::Compiler;
 
 use super::args::Cli;
-use super::compile::tu_defines;
 use super::deps::{DepKind, DepOptions, emit_deps};
 use super::diag::{TuLog, eprint_diagnostic};
 use super::inputs::{Inputs, StdinSource};
@@ -33,26 +32,10 @@ pub(crate) fn dump_dependencies(
                 }
             }
         };
-        let copts = badc::CompileOptions::default()
-            .with_gnu(cli.front.gnu)
-            .with_gnu89_inline(cli.front.gnu89_inline)
-            .with_strict_flex_arrays(cli.front.strict_flex_arrays)
-            .with_short_wchar(cli.front.short_wchar)
-            .with_char_signed(cli.front.char_signed)
-            .with_auto_var_init(cli.front.auto_var_init)
-            .with_nostdinc(cli.front.nostdinc)
-            .with_no_builtin(cli.front.no_builtin)
-            .with_no_builtin_fns(cli.front.no_builtin_fns.clone())
-            .with_gnu_dialect(cli.front.gnu_dialect)
+        let copts = cli
+            .front
+            .compile_options(src)
             .with_asm_source(SourceKind::of(src).is_asm())
-            .with_defines(tu_defines(src, &cli.front.defines))
-            .with_undefines(cli.front.undefines.clone())
-            .with_include_paths(cli.front.include_paths.clone())
-            .with_quote_include_paths(cli.front.quote_include_paths.clone())
-            .with_system_include_paths(cli.front.system_include_paths.clone())
-            .with_own_header_roots(cli.front.own_header_roots.clone())
-            .with_force_includes(cli.front.force_includes.clone())
-            .with_source_label(src.clone())
             .with_track_includes(true)
             .with_elf_class(cli.codegen.elf_class)
             .with_code_model(cli.codegen.code_model);
@@ -128,27 +111,11 @@ pub(crate) fn preprocess(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
                 }
             }
         };
-        let opts = badc::CompileOptions::default()
-            .with_gnu(cli.front.gnu)
-            .with_gnu89_inline(cli.front.gnu89_inline)
-            .with_strict_flex_arrays(cli.front.strict_flex_arrays)
-            .with_short_wchar(cli.front.short_wchar)
-            .with_char_signed(cli.front.char_signed)
-            .with_auto_var_init(cli.front.auto_var_init)
-            .with_nostdinc(cli.front.nostdinc)
-            .with_no_builtin(cli.front.no_builtin)
-            .with_no_builtin_fns(cli.front.no_builtin_fns.clone())
-            .with_gnu_dialect(cli.front.gnu_dialect)
+        let opts = cli
+            .front
+            .compile_options(&label)
             .with_optimize(cli.front.optimize)
             .with_asm_source(SourceKind::of(src_path).is_asm())
-            .with_defines(tu_defines(src_path, &cli.front.defines))
-            .with_undefines(cli.front.undefines.clone())
-            .with_include_paths(cli.front.include_paths.clone())
-            .with_quote_include_paths(cli.front.quote_include_paths.clone())
-            .with_system_include_paths(cli.front.system_include_paths.clone())
-            .with_own_header_roots(cli.front.own_header_roots.clone())
-            .with_force_includes(cli.front.force_includes.clone())
-            .with_source_label(label.clone())
             .with_track_includes(dump_deps.is_some())
             .with_elf_class(cli.codegen.elf_class)
             .with_code_model(cli.codegen.code_model);

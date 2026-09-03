@@ -739,24 +739,24 @@ impl Compiler {
         Ok(())
     }
 
-    /// Consume an optional `asm(...)` suffix on a block-scope declarator.
-    /// With the `register` storage class it is an explicit-register
-    /// binding, which requires automatic duration. Without it the suffix
-    /// is an asm-label rename: it applies to an object with static storage
-    /// duration (`static` or `extern`) and is ignored on an automatic one,
-    /// which has no assembler symbol to rename.
-    pub(super) fn parse_register_asm_binding(
+    /// Consume an optional `asm(...)` suffix on a declarator. With the
+    /// `register` storage class it is an explicit-register binding, which no
+    /// `static` or `extern` declaration may take. Without it the suffix is an
+    /// asm-label rename: it applies to an object with static storage duration
+    /// and is ignored on an automatic one, which has no assembler symbol to
+    /// rename.
+    pub(super) fn parse_declarator_asm_suffix(
         &mut self,
         id_idx: usize,
-        is_static: bool,
-        is_extern: bool,
+        named_static_or_extern: bool,
+        static_duration: bool,
     ) -> Result<Option<crate::c5::symbol::AsmRegister>, C5Error> {
         if self.lex.tk != Token::Asm {
             return Ok(None);
         }
         let name = self.parse_asm_register_suffix()?;
         if !self.pending.saw_register_storage {
-            if is_static || is_extern {
+            if static_duration {
                 self.set_asm_label(id_idx, name)?;
             } else {
                 let ident = self.symbols[id_idx].name.clone();
@@ -768,12 +768,25 @@ impl Compiler {
             }
             return Ok(None);
         }
-        if is_static || is_extern {
+        if named_static_or_extern {
             return Err(
                 self.compile_err("an explicit-register variable cannot be `static` or `extern`")
             );
         }
         Ok(Some(self.resolve_asm_register(&name)?))
+    }
+
+    /// The block-scope form of the suffix: C99 6.2.4 gives an object there
+    /// static storage duration only when the declaration says `static` or
+    /// `extern`.
+    pub(super) fn parse_register_asm_binding(
+        &mut self,
+        id_idx: usize,
+        is_static: bool,
+        is_extern: bool,
+    ) -> Result<Option<crate::c5::symbol::AsmRegister>, C5Error> {
+        let static_duration = is_static || is_extern;
+        self.parse_declarator_asm_suffix(id_idx, static_duration, static_duration)
     }
 
     /// A stack- or frame-pointer register variable compiles reads into
@@ -798,21 +811,13 @@ impl Compiler {
     /// across the unit (headers re-include it) as long as the register
     /// matches. TODO: general-purpose global register variables (the
     /// register must be reserved in every function's allocation).
-    pub(super) fn parse_file_scope_register_binding(
+    pub(super) fn bind_file_scope_register(
         &mut self,
         id_idx: usize,
         ty: i64,
-        is_static: bool,
-        is_extern: bool,
+        reg: crate::c5::symbol::AsmRegister,
     ) -> Result<(), C5Error> {
         use crate::c5::symbol::AsmRegister as R;
-        let name = self.parse_asm_register_suffix()?;
-        if is_static || is_extern {
-            return Err(
-                self.compile_err("an explicit-register variable cannot be `static` or `extern`")
-            );
-        }
-        let reg = self.resolve_asm_register(&name)?;
         if !matches!(reg, R::StackPointer | R::FramePointer) {
             return Err(self.compile_err(
                 "file-scope register variables are supported for the stack and frame pointer only",

@@ -403,22 +403,17 @@ impl Compiler {
                 // function body's opening brace parsed further below.
                 let signature_line = self.lex.line;
                 let (id_idx, mut ty, mut array_size) = self.parse_declarator(bt)?;
-                if self.lex.tk == Token::Asm {
-                    // `register T name asm("reg")` at file scope is a GNU
-                    // global register variable; anything else is the
-                    // assembler-name label, which continues the ordinary
-                    // object declaration (initializer, attributes, `;`/`,`).
-                    if self.pending.saw_register_storage {
-                        self.parse_file_scope_register_binding(
-                            id_idx,
-                            ty,
-                            static_seen,
-                            extern_seen,
-                        )?;
-                        self.accept_declarator_separator()?;
-                        continue;
-                    }
-                    self.parse_declarator_asm_label(id_idx)?;
+                // `register T name asm("reg")` at file scope is a GNU global
+                // register variable; any other `asm(...)` suffix is the
+                // assembler name and the object declaration continues
+                // (initializer, attributes, `;` / `,`). A file-scope object
+                // always has static storage duration (C99 6.2.4).
+                if let Some(reg) =
+                    self.parse_declarator_asm_suffix(id_idx, static_seen || extern_seen, true)?
+                {
+                    self.bind_file_scope_register(id_idx, ty, reg)?;
+                    self.accept_declarator_separator()?;
+                    continue;
                 }
                 // `__declspec(dllexport)` on the declarator exports the name,
                 // the equivalent of `#pragma export(name)`. resolve_exports

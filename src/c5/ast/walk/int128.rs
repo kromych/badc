@@ -119,13 +119,13 @@ impl<'a> Walker<'a> {
         Self::int128_sub(b, (lo, hi), (m, m))
     }
 
-    /// 128-bit shift by a runtime count. `op` is `Shl`, `Shru`, or
-    /// `Shr` (arithmetic). The count is reduced mod 128 (matching the
-    /// per-arch 64-bit shifter's mod-64 rule one level up); the two
-    /// count ranges ([0,63] and [64,127]) are computed branchlessly and
-    /// selected by mask. Sub-shifts stay in [0,63] so every 64-bit
-    /// shift below is defined on all backends: `x >> (64-t)` is written
-    /// `(x >> (63-t)) >> 1`, which is 0 at `t = 0` as required.
+    /// 128-bit shift by a runtime count, `op` being `Shl`, `Shru` or
+    /// arithmetic `Shr`. The count reduces mod 128, matching the
+    /// per-arch shifter's mod-64 rule one level up, and both count
+    /// ranges are computed branchlessly and selected by mask.
+    /// Sub-shifts stay in [0,63] so every 64-bit shift is defined on
+    /// all backends: `x >> (64-t)` is written `(x >> (63-t)) >> 1`,
+    /// which is 0 at `t = 0` as required.
     fn int128_shift(b: &mut SsaBuilder, op: BinOp, a: Halves, count: ValueId) -> Halves {
         let s = b.binop_imm(BinOp::And, count, 127);
         let t = b.binop_imm(BinOp::And, s, 63);
@@ -226,10 +226,9 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// High 64 bits of the unsigned 64x64 product, composed from the
-    /// four 32-bit partial products. Built from ops every backend
-    /// already has, so the VM, the JIT and both native targets agree by
-    /// construction.
+    /// High 64 bits of the unsigned 64x64 product, from the four
+    /// 32-bit partial products. Built from ops every backend has, so
+    /// all four agree by construction.
     // TODO: a widening-multiply opcode would fold this to one
     // instruction (x86_64 `mul`, aarch64 `umulh`).
     pub(super) fn int128_mulhi_u(b: &mut SsaBuilder, x: ValueId, y: ValueId) -> ValueId {
@@ -273,20 +272,17 @@ impl<'a> Walker<'a> {
     }
 
     /// Unsigned 128-bit divide, returning `(quotient, remainder)`.
-    ///
-    /// Operands that both fit in 64 bits take the hardware divide. The
-    /// general case is a restoring shift-subtract over the 128 bits:
-    /// the dividend shifts left out of `n` into the running remainder
-    /// while the quotient bits shift into `n` from below, so both
-    /// results share one register pair. The body is branchless (the
-    /// compare feeds a 0/-1 mask), leaving one loop-carried branch.
-    ///
-    /// This is lowered inline rather than as a call to a runtime helper
-    /// because the same lowering then serves the VM, the JIT and both
-    /// native targets, with no helper to link into freestanding images.
-    ///
-    /// A zero divisor is undefined (C99 6.5.5p5), as for the 64-bit
-    /// operators: the hardware path traps and the loop yields all-ones.
+    /// Operands that both fit in 64 bits take the hardware divide.
+    /// Otherwise a restoring shift-subtract runs over the 128 bits: the
+    /// dividend shifts left out of `n` into the running remainder while
+    /// the quotient bits shift into `n` from below, so both results
+    /// share one register pair, and the body is branchless -- the
+    /// compare feeds a 0/-1 mask -- leaving one loop-carried branch.
+    /// Lowering it inline rather than calling a runtime helper serves
+    /// the VM, the JIT and both native targets from one implementation
+    /// and leaves nothing to link into a freestanding image. A zero
+    /// divisor is undefined (C99 6.5.5p5): the hardware path traps and
+    /// the loop yields all-ones.
     fn int128_udivmod(&mut self, b: &mut SsaBuilder, a: Halves, c: Halves) -> (Halves, Halves) {
         let q_lo = b.alloc_synthetic_local();
         let q_hi = b.alloc_synthetic_local();
@@ -417,12 +413,12 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// Reinterpret a value's bits across the integer / FP register
-    /// banks through an 8-byte stack slot. The `F64` load and store
-    /// kinds are defined as single moves with no widen or narrow, so
-    /// the round trip is bit-exact on every backend. Used by the
-    /// 128-bit / floating conversions, which assemble and dissect an
-    /// IEEE-754 double with integer arithmetic.
+    /// Reinterpret a value's bits across the integer and FP register
+    /// banks through an 8-byte stack slot. The `F64` kinds are single
+    /// moves with no widen or narrow, so the round trip is bit-exact on
+    /// every backend. The 128-bit floating conversions use it to
+    /// assemble and dissect an IEEE-754 double with integer
+    /// arithmetic.
     fn fp_bitcast(
         &mut self,
         b: &mut SsaBuilder,
@@ -437,9 +433,9 @@ impl<'a> Walker<'a> {
     }
 
     /// One-based index of the most significant set bit of `x`, and 1
-    /// for `x == 0`. Branchless binary search: the IR has no
-    /// count-leading-zeros opcode, and every step shifts by a value
-    /// in [0,63] so the per-arch shifter's mod-64 rule never applies.
+    /// for `x == 0`. A branchless binary search, the IR having no
+    /// count-leading-zeros opcode; every step shifts by a value in
+    /// [0,63], so the per-arch mod-64 rule never applies.
     fn bit_length_64(b: &mut SsaBuilder, x: ValueId) -> ValueId {
         let mut len = b.imm(1);
         let mut cur = x;
@@ -454,19 +450,16 @@ impl<'a> Walker<'a> {
     }
 
     /// Convert the 128-bit integer `a` to `double`, or to `float` when
-    /// `to_float`, with the single round-to-nearest-even C99 6.3.1.4
-    /// requires (the result is the representable value nearest the
-    /// operand).
+    /// `to_float`, with the single round-to-nearest-even of C99 6.3.1.4.
     ///
     /// The magnitude is pre-reduced to its top 64 significant bits with
     /// the discarded bits collapsed into a sticky bit at position 0,
-    /// then converted once by the hardware unsigned converter and
-    /// scaled by the exact power of two that was shifted out. Position
-    /// 0 sits below the converter's own rounding position, and the
-    /// sticky bit preserves whether anything below the round bit was
-    /// set, so the pre-reduction cannot change which way the single
-    /// rounding goes. Scaling by a power of two is exact, so no second
-    /// rounding occurs.
+    /// converted once by the hardware unsigned converter, and scaled by
+    /// the exact power of two shifted out. Position 0 sits below the
+    /// converter's rounding position and the sticky bit preserves
+    /// whether anything below the round bit was set, so the
+    /// pre-reduction cannot change which way the rounding goes; scaling
+    /// by a power of two is exact, so there is no second rounding.
     pub(super) fn int128_to_fp(
         &mut self,
         b: &mut SsaBuilder,
@@ -491,10 +484,9 @@ impl<'a> Walker<'a> {
         let hnz = b.binop_imm(BinOp::Ne, mag.1, 0);
         let bl = Self::bit_length_64(b, mag.1);
         let sh = b.binop(BinOp::Mul, bl, hnz);
-        // Sticky bit over the `sh` discarded low bits. The mask is
-        // built by shifting right rather than by `(1 << sh) - 1` so the
-        // count stays in [0,63]; it is forced to zero at `sh == 0`,
-        // where nothing is discarded.
+        // Sticky bit over the `sh` discarded low bits. The mask shifts
+        // right rather than being `(1 << sh) - 1`, keeping the count in
+        // [0,63], and is forced to zero at `sh == 0`.
         let inv = {
             let k = b.imm(64);
             let d = b.binop(BinOp::Sub, k, sh);
@@ -535,19 +527,19 @@ impl<'a> Walker<'a> {
 
     /// Convert the floating value `v` to a 128-bit integer, truncating
     /// toward zero (C99 6.3.1.4). The operand is dissected into its
-    /// IEEE-754 exponent and significand and the significand is shifted
-    /// into place, which discards the fraction exactly.
+    /// IEEE-754 exponent and significand, and shifting the significand
+    /// into place discards the fraction exactly.
     ///
-    /// C99 leaves an operand whose truncated value is out of range --
-    /// including an infinity or a NaN, and any negative operand
-    /// converted to the unsigned type -- undefined, and gcc and clang
-    /// differ from each other and between targets there. This lowering
-    /// saturates instead: a negative operand converted to the unsigned
-    /// type yields 0, and anything else out of range yields the target
-    /// type's minimum or maximum by the operand's sign. That is total,
-    /// deterministic, and identical across every backend and target,
-    /// and it matches the runtime routines both compilers call when
-    /// they do not expand the conversion inline.
+    /// C99 leaves an out-of-range truncated value undefined --
+    /// infinities, NaNs and any negative operand converted to the
+    /// unsigned type included -- and gcc and clang differ there from
+    /// each other and between targets. This lowering saturates: a
+    /// negative operand converted to the unsigned type yields 0, and
+    /// anything else out of range yields the target type's minimum or
+    /// maximum by the operand's sign. That is total, deterministic and
+    /// identical on every backend, and matches the runtime routines
+    /// both compilers call when they do not expand the conversion
+    /// inline.
     pub(super) fn fp_to_int128(&mut self, b: &mut SsaBuilder, v: ValueId, signed: bool) -> Halves {
         // A `float` operand widens to double exactly, so one dissection
         // serves both source types.
@@ -593,12 +585,12 @@ impl<'a> Walker<'a> {
             b.binop(BinOp::And, mag.0, keep),
             b.binop(BinOp::And, mag.1, keep),
         );
-        // Out of range once the magnitude reaches 2^128. An infinity
-        // and a NaN both land here, their exponent field being the
-        // maximum. The signed conversion uses the same limit so a
-        // magnitude in [2^127, 2^128) wraps to a negative result rather
-        // than saturating; that keeps -2^127 exact and matches gcc and
-        // clang, which agree on this case across targets.
+        // Out of range once the magnitude reaches 2^128, where an
+        // infinity and a NaN also land, their exponent being the
+        // maximum. The signed conversion uses the same limit, so a
+        // magnitude in [2^127, 2^128) wraps negative rather than
+        // saturating: that keeps -2^127 exact and matches gcc and
+        // clang, which agree here across targets.
         let over = {
             let o = b.binop_imm(BinOp::Ge, exp, 128);
             let z = b.imm(0);
@@ -639,13 +631,12 @@ impl<'a> Walker<'a> {
         self.expr_is_int128_value(lhs) || self.expr_is_int128_value(rhs)
     }
 
-    /// Lower `Expr::Binary` with a 128-bit operand. Comparisons yield a
-    /// scalar 0/1; every other operator yields the address of a fresh
-    /// 16-byte result object, matching how a struct rvalue is produced.
-    /// The shift count stays scalar (C99 6.5.7 applies the integer
-    /// promotions to each operand separately, not the usual arithmetic
-    /// conversions across them); an int128-typed count contributes its
-    /// low half.
+    /// Lower `Expr::Binary` with a 128-bit operand. A comparison
+    /// yields a scalar 0/1 and every other operator the address of a
+    /// fresh 16-byte object, as a struct rvalue is produced. The shift
+    /// count stays scalar -- C99 6.5.7 promotes each operand separately
+    /// rather than converting across them -- and an int128-typed count
+    /// contributes its low half.
     pub(super) fn walk_int128_binary(
         &mut self,
         b: &mut SsaBuilder,
@@ -668,9 +659,8 @@ impl<'a> Walker<'a> {
     }
 
     /// Apply a value-producing 128-bit operator to an already-loaded
-    /// left operand. Shared by `Expr::Binary` and the compound
-    /// assignment, which differ only in where the left operand and the
-    /// result live. `lhs` is carried for diagnostics only.
+    /// left operand, shared by `Expr::Binary` and the compound
+    /// assignment. `lhs` is carried for diagnostics only.
     fn int128_binary_pair(
         &mut self,
         b: &mut SsaBuilder,

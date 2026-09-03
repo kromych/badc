@@ -5,14 +5,10 @@ use super::types::{expr_ty, is_floating_scalar};
 use super::*;
 
 impl<'a> Walker<'a> {
-    /// Walk a local declaration. Lowers based on the
-    /// initializer's shape:
-    /// * `LocalInit::None` -- no instruction (C99 6.7.8p10).
-    /// * `LocalInit::Scalar(expr)` -- evaluate, `store_local`.
-    /// * `LocalInit::Aggregate { src_data_off, size_bytes }` --
-    ///   emit `Inst::Mcpy { dst = local_addr, src = imm_data,
-    ///   size }` for a brace-list whose every element folded to
-    ///   a compile-time constant.
+    /// Walk a local declaration, on the initializer's shape: no
+    /// instruction without one (C99 6.7.8p10), a store for a scalar,
+    /// and an `Inst::Mcpy` from the staged template for a brace list
+    /// whose every element folded to a constant.
     pub(super) fn walk_decl(&mut self, b: &mut SsaBuilder, id: DeclId) -> Result<(), WalkError> {
         match self.ast.decl(id) {
             Decl::Local {
@@ -57,25 +53,20 @@ impl<'a> Walker<'a> {
                 Ok(())
             }
             Decl::StaticLocal { .. } => {
-                // C99 6.2.4p3 + 6.7.8p4: storage + initializer
-                // live in the data segment; nothing to emit in
-                // the function body. The matching symbol-table
-                // entry survives through `self.symbols`, so any
-                // ident reference still resolves through the Glo
-                // path in `load_ident_rvalue` /
-                // `ident_address`.
+                // C99 6.2.4p3 + 6.7.8p4: storage and initializer live in
+                // the data segment, so the body emits nothing and the
+                // references resolve through the Glo path.
                 Ok(())
             }
         }
     }
 
     /// Store a scalar `v` of type `src_ty` into the 16-byte `__int128`
-    /// object at `dst_addr`: the source, converted to 64 bits, fills the
-    /// low half and its sign fills the high half (C99 6.3.1.3/6.3.1.8
-    /// widening). Shared by the cast, initializer, and assignment paths,
-    /// which otherwise treat the scalar as a struct-rvalue address and
-    /// copy 16 bytes from it. A floating source converts through
-    /// [`Self::fp_to_int128`], which fills both halves.
+    /// object at `dst_addr`: converted to 64 bits it fills the low half
+    /// and its sign the high half (C99 6.3.1.3 / 6.3.1.8). The cast,
+    /// initializer and assignment paths share it, since each would
+    /// otherwise read the scalar as a struct-rvalue address. A floating
+    /// source converts through [`Self::fp_to_int128`].
     pub(super) fn store_scalar_as_int128(
         &mut self,
         b: &mut SsaBuilder,
@@ -137,11 +128,9 @@ impl<'a> Walker<'a> {
     }
 
     /// Store `byte` over `bytes` bytes at `dst` with a loop of 8-byte
-    /// stores. The count is rounded up to a multiple of 8: a frame slot
-    /// and an `alloca` allocation are both sized in units of at least
-    /// that and start 8-aligned, so the rounded run stays inside the
-    /// object's own storage. The cursor lives in a synthetic slot the
-    /// `-O` promotion lifts into a register.
+    /// stores. The count rounds up to a multiple of 8, which stays
+    /// inside the object: a frame slot and an `alloca` allocation are
+    /// both 8-aligned and sized in units of at least that.
     fn fill_loop(&mut self, b: &mut SsaBuilder, dst: ValueId, bytes: ValueId, byte: u8) {
         let cursor = b.alloc_synthetic_local();
         let rounded = b.binop_imm(BinOp::Add, bytes, 7);
@@ -181,12 +170,11 @@ impl<'a> Walker<'a> {
             LocalInit::None => Ok(()),
             LocalInit::Scalar(init_id) => {
                 let v = self.walk_copy_operand(b, *init_id)?;
-                // C99 6.7.8p13 struct-value initializer: copy the source's
-                // bytes into the slot via Mcpy. `v` is the source address
-                // (the walker's address-as-value routing for struct
-                // rvalues). A scalar source of a 128-bit `__int128` slot is
-                // widened into it instead -- `v` is then a value, not an
-                // address, so an Mcpy from it would fault.
+                // C99 6.7.8p13: a struct-value initializer copies the
+                // source's bytes, `v` being the source address. A scalar
+                // source of a 128-bit slot is widened into it instead --
+                // `v` is then a value, and an Mcpy from it would
+                // fault.
                 if is_struct_value_ty(ty) {
                     let dst = b.local_addr(slot);
                     let src_ty = expr_ty(self.ast.expr(*init_id)).unwrap_or(ty);
@@ -234,11 +222,11 @@ impl<'a> Walker<'a> {
                 }
                 for elem in elements {
                     let value = match elem.value {
-                        // A range-designator copy element: transfer the bytes
-                        // of the range's first, already-stored span. A bit
-                        // copy, not a value conversion, so scalar widths use
-                        // integer load/store kinds (an f32 sNaN round-trip
-                        // through a float register would quieten it).
+                        // A range designator copies the bytes of the
+                        // range's first, already-stored span. It is a bit
+                        // copy, so scalar widths use integer kinds: an
+                        // f32 sNaN through a float register would
+                        // quieten.
                         RuntimeInitValue::Copy { src_off, bytes } => {
                             debug_assert!(elem.bitfield.is_none());
                             let base = b.local_addr(slot);
@@ -310,11 +298,10 @@ impl<'a> Walker<'a> {
                         );
                         continue;
                     }
-                    // C99 6.7.8p13: a struct/union member initialized by a
-                    // single expression of compatible type copies the
-                    // source's bytes. `v` is the source address (the
-                    // walker's address-as-value routing for struct rvalues),
-                    // so this needs an Mcpy, not a scalar store.
+                    // C99 6.7.8p13: a struct or union member initialized
+                    // by one expression of compatible type copies the
+                    // source's bytes from the address `v` holds, rather
+                    // than storing it as a scalar.
                     if is_struct_value_ty(elem.ty) {
                         let size = self.struct_size(elem.ty);
                         b.mcpy(addr, v, size, self.struct_align(elem.ty));

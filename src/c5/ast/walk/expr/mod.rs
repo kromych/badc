@@ -28,13 +28,9 @@ impl<'a> Walker<'a> {
         match self.ast.expr(id) {
             Expr::IntLit { val, .. } => Ok(b.imm(*val)),
             Expr::FloatLit { bits, ty } => {
-                // C99 6.4.4.2: an `f`-suffixed constant has type `float`
-                // and is represented in single precision. The lexer
-                // records the f64 bit pattern; narrow it to the f32 bit
-                // pattern (parked in the low 32 bits of the immediate)
-                // and tag the value f32 so the codegen reinterprets it
-                // through a 32-bit move. A `double` constant keeps its
-                // f64 bits untagged.
+                // C99 6.4.4.2: an `f`-suffixed constant is single
+                // precision, so the lexer's f64 pattern narrows to the
+                // f32 one and the value is tagged f32.
                 if is_float_ty(*ty) {
                     let f32_bits = f64::from_bits(*bits) as f32;
                     return Ok(b.imm_f32(f32_bits.to_bits()));
@@ -203,30 +199,24 @@ impl<'a> Walker<'a> {
                 child,
                 ..
             } => self.walk_expr_rvalue(b, *child),
-            // Pointer-arithmetic-derived lvalues: `t->f = v` lowers
-            // to `*(t + field_off) = v`, the parser absorbs the
-            // Deref into the address expression, and the Assign's
-            // lhs reaches the walker as `Binary{Add, t, off}`.
-            // The Binary's value IS the address per C99 6.5.6
-            // pointer-plus-integer.
+            // `t->f = v` lowers to `*(t + field_off) = v` with the
+            // Deref absorbed into the address expression, so the lhs
+            // arrives as `Binary{Add, t, off}` whose value is the
+            // address (C99 6.5.6).
             Expr::Binary { .. } => self.walk_expr_rvalue(b, id),
-            // Indexed lvalue: `arr[i] = v`. Compute the address
-            // (`arr + i`) without the trailing load that
-            // `walk_expr_rvalue` would emit.
+            // `arr[i] = v`: the address, without the load the rvalue
+            // path would append.
             Expr::Index { array, idx, .. } => {
                 let (array_id, idx_id) = (*array, *idx);
                 let arr = self.walk_expr_rvalue(b, array_id)?;
                 let i = self.walk_expr_rvalue(b, idx_id)?;
-                // Same constant-index fold as the rvalue Index
-                // path above.
+                // The constant-index fold of the rvalue path.
                 match b.peek_imm(i) {
                     Some(k) => Ok(b.binop_imm(BinOp::Add, arr, k)),
                     None => Ok(b.binop(BinOp::Add, arr, i)),
                 }
             }
-            // Member lvalue: `s.f = v` / `p->f = v`. Address is
-            // the object's address-producer plus the field
-            // offset; no trailing load.
+            // `s.f = v`: the object's address plus the field offset.
             Expr::Member { obj, field_off, .. } => {
                 let obj_id = *obj;
                 let off = *field_off;
@@ -237,11 +227,9 @@ impl<'a> Walker<'a> {
                     Ok(base)
                 }
             }
-            // C99 6.5.2.5p4: a compound literal is an lvalue naming an
-            // unnamed object. In lvalue position (`&(T){...}`) emit the
-            // initializer into the reserved slot and yield the slot's
-            // address. The rvalue path handles the value-position case,
-            // where a scalar literal loads the slot instead.
+            // C99 6.5.2.5p4: a compound literal names an unnamed
+            // object, so in lvalue position the initializer runs into
+            // the reserved slot and the slot's address is the value.
             Expr::CompoundLiteral {
                 slot_off, ty, init, ..
             } => {
@@ -257,14 +245,11 @@ impl<'a> Walker<'a> {
     }
 
     /// Fold `id` to a compile-time integer constant when it is an
-    /// integer constant expression the walker can evaluate without
-    /// runtime state (C99 6.6). Returns None for any operand that
-    /// needs a load, a call, or an operator outside the handled set.
-    /// Used to select the live arm of a constant-condition `?:` /
-    /// `if` so the dead arm's side effects -- including references to
-    /// undefined symbols -- are never emitted, matching the front-end
-    /// fold gcc performs even at -O0. Identifiers are not resolved, so
-    /// only literal-rooted expressions fold.
+    /// integer constant expression evaluable without runtime state (C99
+    /// 6.6); `None` for an operand needing a load or a call, or an
+    /// operator outside the handled set. Identifiers are not resolved,
+    /// so only literal-rooted expressions fold. This selects the live
+    /// arm of a constant-condition `?:` or `if`.
     pub(super) fn const_fold_int(&self, id: ExprId) -> Option<i64> {
         match self.ast.expr(id) {
             Expr::IntLit { val, .. } => Some(*val),
@@ -283,12 +268,10 @@ impl<'a> Walker<'a> {
                 {
                     return Some(v);
                 }
-                // Integer `/` and `%` are integer constant expressions
-                // (C99 6.6) but are not immediate-foldable operators, so
-                // the imm-safe predicate (shared with the BinopI rvalue
-                // fold) excludes them; accept them here for the pure
-                // compile-time evaluation. A zero divisor is undefined
-                // and thus not a constant, so the fold declines it.
+                // Integer `/` and `%` are constant expressions (C99
+                // 6.6) that `imm_safe_binop` excludes, having no
+                // immediate form. A zero divisor is undefined, so it is
+                // not a constant.
                 let divmod = matches!(*op, BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu);
                 if !imm_safe_binop(*op) && !divmod {
                     return None;
@@ -343,9 +326,9 @@ impl<'a> Walker<'a> {
                 }
                 Some(narrow_const_to_ty(v, to, self.target))
             }
-            // Without the SSA folds the answer is 0, so the front-end
-            // dead-branch fold sees it as a constant condition. Under `-O`
-            // it is not known yet and the branch stays.
+            // Without the SSA folds the answer is 0, which the
+            // dead-branch fold reads as a constant condition; under `-O`
+            // it is not yet known and the branch stays.
             Expr::Intrinsic { kind, .. }
                 if *kind == Intrinsic::ConstantP as i64 && !self.optimize =>
             {
@@ -356,19 +339,17 @@ impl<'a> Walker<'a> {
     }
 
     /// Fold `lhs op rhs` when both are address constants over the same
-    /// object. C99 6.5.8p5 / 6.5.9p6 define the result of comparing two
-    /// pointers into one object as the comparison of their offsets, and
-    /// that answer is fixed at translation time even though the object's
-    /// own address is not. Addresses over *different* objects are left
-    /// alone: their relative order is chosen by the data layout.
+    /// object: C99 6.5.8p5 / 6.5.9p6 make that the comparison of their
+    /// offsets, which is fixed at translation time even though the
+    /// object's address is not. Addresses over different objects are
+    /// left alone, their relative order being the data layout's choice.
     ///
-    /// An address constant against a null pointer constant also folds
-    /// (equality only): C99 6.3.2.3p3 guarantees the address of an
-    /// object or function compares unequal to null, provided the named
-    /// symbol is defined in this unit and not weak -- an undefined or
-    /// weak reference may bind to address zero. The offset must be
-    /// zero: a converted address plus an arbitrary integer may wrap.
-    /// This is the front-end fold GCC performs at every level.
+    /// An address constant against a null pointer constant folds for
+    /// equality only. C99 6.3.2.3p3 guarantees an object or function
+    /// address compares unequal to null, provided the symbol is defined
+    /// in this unit and not weak -- an undefined or weak reference may
+    /// bind to address zero -- and provided the offset is zero, since a
+    /// converted address plus an integer may wrap.
     fn const_fold_addr_cmp(&self, op: BinOp, lhs: ExprId, rhs: ExprId) -> Option<i64> {
         let (l, r) = match (self.addr_const_value(lhs), self.addr_const_value(rhs)) {
             (Some(l), Some(r)) => (l, r),
@@ -383,9 +364,9 @@ impl<'a> Walker<'a> {
         if l.base != r.base {
             return None;
         }
-        // The base cancels, so the ordering of the addresses is the
-        // ordering of the offsets as integers; the pointer comparisons'
-        // unsigned forms would wrap on a negative offset.
+        // The base cancels, so the addresses order as their offsets do
+        // as integers; the unsigned pointer comparisons would wrap on a
+        // negative offset.
         let signed = match op {
             BinOp::Ult => BinOp::Lt,
             BinOp::Ugt => BinOp::Gt,
@@ -479,10 +460,9 @@ impl<'a> Walker<'a> {
                 {
                     return None;
                 }
-                // The symbol table entry is reused when a name is
-                // shadowed, so the parse-time data offset (or a
-                // function's entry PC) pins the object the identifier
-                // named here.
+                // A shadowed name reuses its symbol table entry, so the
+                // parse-time data offset (or a function's entry PC) is
+                // what pins the object this identifier named.
                 Some(AddrConst {
                     base: (*sym, *val),
                     off: 0,
@@ -544,11 +524,10 @@ impl<'a> Walker<'a> {
             return b.binop_imm(BinOp::Ne, v, 0);
         }
         if target_is_fp && !source_is_fp {
-            // Integer -> FP (C99 6.3.1.4), one rounding to the target
+            // Integer to FP (C99 6.3.1.4), one rounding to the target
             // type. An unsigned 64-bit source can exceed the signed
-            // range, where the signed convert yields a negative result,
-            // so it takes the unsigned converter. Narrower unsigned
-            // types fit the signed range zero-extended.
+            // range, which the signed convert would render negative;
+            // narrower unsigned types fit it zero-extended.
             let stripped = strip_unsigned(src_ty);
             let unsigned_64 = (src_ty & UNSIGNED_BIT) != 0
                 && (stripped == Ty::Long as i64 || stripped == Ty::LongLong as i64);
@@ -582,10 +561,10 @@ impl<'a> Walker<'a> {
             }
             return b.fp_cast(kind, v);
         } else if !target_is_fp && source_is_fp {
-            // FP -> integer (C99 6.3.1.4) truncates toward zero. An
-            // unsigned 64-bit target can hold a value in [2^63, 2^64),
-            // which the signed truncate would saturate, so it takes the
-            // unsigned converter (a `float` source widens to f64 for it).
+            // FP to integer (C99 6.3.1.4) truncates toward zero. An
+            // unsigned 64-bit target holds values in [2^63, 2^64) that
+            // the signed truncate saturates, so it takes the unsigned
+            // converter, widening a `float` source to f64 for it.
             let stripped_to = strip_unsigned(to_ty);
             let target_unsigned_64 = (to_ty & UNSIGNED_BIT) != 0
                 && (stripped_to == Ty::Long as i64 || stripped_to == Ty::LongLong as i64);

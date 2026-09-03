@@ -28,11 +28,10 @@ impl<'a> Walker<'a> {
     }
 
     /// True when the expression's type tag carries the volatile
-    /// qualifier (C99 6.7.3); `false` for node shapes without a type.
-    /// A member access inherits the qualifiers of the object it is
-    /// reached through (C99 6.5.2.3p3-4), and qualifying an array type
-    /// qualifies its elements (C99 6.7.3p8), so descend through the
-    /// member / subscript chain to the base whose tag carries the
+    /// qualifier (C99 6.7.3). A member access inherits the qualifiers
+    /// of the object reached through (C99 6.5.2.3p3-4) and qualifying
+    /// an array qualifies its elements (C99 6.7.3p8), so the member and
+    /// subscript chain is walked to the base that carries the
     /// qualifier.
     pub(super) fn expr_is_volatile(&self, id: ExprId) -> bool {
         let e = self.ast.expr(id);
@@ -75,8 +74,7 @@ impl<'a> Walker<'a> {
     /// Copy `size` bytes from `src` to `dst` in the widest chunks the
     /// endpoint alignment allows, each endpoint riding its own segment
     /// override. `Inst::Mcpy` carries no segment, so a copy with a
-    /// qualified endpoint takes this cover instead; both may be
-    /// qualified, and independently.
+    /// qualified endpoint -- either or both -- takes this cover.
     /// TODO: the cover is one chunk per unit at any size; gcc switches
     /// to an indexed loop for a large aggregate.
     #[allow(clippy::too_many_arguments)]

@@ -5,11 +5,9 @@ use super::super::plain_ty_expr;
 use super::*;
 
 impl<'a> Walker<'a> {
-    /// Byte size of the struct type encoded by `ty`. Looks up
-    /// the struct id (via the same band scheme the parser uses)
-    /// in the propagated `structs` slice. Returns 0 when the
-    /// struct id is out of range (defensive -- the parser
-    /// shouldn't emit such a type).
+    /// Byte size of the struct type encoded by `ty`, looked up by the
+    /// struct id the parser's band scheme gives it. Zero when that id
+    /// is out of range.
     pub(super) fn struct_size(&self, ty: i64) -> i64 {
         let stripped = strip_unsigned(ty);
         if stripped < STRUCT_BASE {
@@ -23,11 +21,10 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// Alignment of the struct type encoded by `ty`, for the `Inst::Mcpy`
-    /// transfer-width bound. Falls back to 1 -- the alignment every
-    /// object satisfies -- when the id is out of range or the layout has
-    /// not been finished, so a lookup miss cannot claim more than the
-    /// C99 6.2.8 minimum.
+    /// Alignment of the struct type encoded by `ty`, bounding the
+    /// `Inst::Mcpy` transfer width. A lookup miss or an unfinished
+    /// layout falls back to 1, the C99 6.2.8 minimum every object
+    /// satisfies, rather than claiming more.
     pub(super) fn struct_align(&self, ty: i64) -> u32 {
         self.struct_align_opt(ty).unwrap_or(1)
     }
@@ -47,10 +44,10 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// True when `ty` is the GCC 128-bit `__int128` as a value (not a
-    /// pointer to one). It shares the struct machinery but a cast to or
-    /// from a scalar converts the 128-bit value, unlike a plain struct
-    /// whose value in a scalar context is just its address.
+    /// True when `ty` is the GCC 128-bit `__int128` as a value, not a
+    /// pointer to one. It shares the struct machinery, but a cast to or
+    /// from a scalar converts the value rather than passing an
+    /// address.
     pub(super) fn is_int128_value_ty(&self, ty: i64) -> bool {
         let stripped = strip_unsigned(ty);
         if stripped < STRUCT_BASE || struct_ptr_depth(ty) != 0 {
@@ -120,18 +117,15 @@ pub(super) fn is_bool_scalar(ty: i64) -> bool {
     strip_unsigned(ty) == Ty::Bool as i64
 }
 
-/// Sign- or zero-extend a scalar call result to the full 64-bit
-/// accumulator per its declared return type. A c5-compiled callee
-/// already returns a 64-bit-correct value, and a direct libc call
-/// (`Inst::CallExt`) is widened in the emitter from the binding's
-/// return type. A call through a function pointer to a host library
-/// routine has neither: the routine leaves only its natural-width
-/// register set (`strcmp` returns a 32-bit result in `eax` with
-/// undefined high bits), so a call through an `int (*)()` pointer
-/// must widen the result before the caller reads it at 64 bits
-/// (C99 6.3.1.1 / 6.5.2.2). Idempotent for an already-extended
-/// value. Floating-point, pointer, `_Bool`, struct, and full-width
-/// integer results are left unchanged.
+/// Sign- or zero-extend a scalar call result to 64 bits per its
+/// declared return type. A c5-compiled callee already returns a
+/// 64-bit-correct value and the emitter widens a direct libc call from
+/// the binding's return type, but a call through a function pointer to
+/// a host routine has neither: the routine sets only its natural-width
+/// register (`strcmp` returns 32 bits in `eax` with undefined high
+/// bits), so the result widens here before the caller reads it at 64
+/// bits (C99 6.3.1.1 / 6.5.2.2). Idempotent, and inert on
+/// floating-point, pointer, `_Bool`, struct and full-width results.
 pub(super) fn extend_scalar_call_result(
     b: &mut SsaBuilder,
     v: ValueId,
@@ -143,10 +137,10 @@ pub(super) fn extend_scalar_call_result(
     if is_floating_scalar(ty) || is_pointer_ty(ty) || !(rs == 1 || rs == 2 || rs == 4) {
         return v;
     }
-    // A `_Bool` return is defined only in the low byte per the psABI
-    // (a callee compiled by another toolchain may leave garbage in the
-    // high bits, e.g. `sete %al` with no zero-extend). Zero-extend it
-    // like an unsigned char so a full-width test / `!` reads 0 or 1.
+    // The psABI defines a `_Bool` return only in the low byte, so a
+    // callee from another toolchain may leave garbage above it.
+    // Zero-extending as an unsigned char makes a full-width test read
+    // 0 or 1.
     if (ty & UNSIGNED_BIT) != 0 || stripped == Ty::Bool as i64 {
         let mask: i64 = match rs {
             1 => 0xff,
@@ -182,13 +176,12 @@ pub(crate) fn expr_ty(e: &Expr) -> Option<i64> {
     }
 }
 
-/// The type an expression contributes as a call argument (C99
-/// 6.5.2.2p6/p7: the argument's converted type). An array-typed
-/// compound literal decays to a pointer to its first element (C99
-/// 6.3.2.1p3); its element type must not classify the argument as a
-/// by-value aggregate or as a floating-point scalar. `Expr::Ident`
-/// and `Expr::Member` already carry the decayed type. Other shapes
-/// keep [`expr_ty`].
+/// The type an expression contributes as a call argument -- its
+/// converted type (C99 6.5.2.2p6/p7). An array-typed compound literal
+/// decays to a pointer to its first element (C99 6.3.2.1p3), so its
+/// element type must not classify the argument as a by-value aggregate
+/// or a floating-point scalar; `Expr::Ident` and `Expr::Member` already
+/// carry the decayed type.
 pub(crate) fn arg_value_ty(e: &Expr) -> Option<i64> {
     match e {
         Expr::CompoundLiteral { ty, array_size, .. } if *array_size != 0 => {
@@ -198,11 +191,10 @@ pub(crate) fn arg_value_ty(e: &Expr) -> Option<i64> {
     }
 }
 
-/// Byte size of a C type tag at the active target. Mirrors
-/// `compiler::types::size_of_type` for the scalar / pointer / FP
-/// cases the walker handles. Returns 0 for types whose width
-/// the walker can't compute (struct types, function types -- the
-/// walker doesn't currently consume those in cast positions).
+/// Byte size of a C type tag at the active target, mirroring
+/// `compiler::types::size_of_type` over the scalar, pointer and FP
+/// cases. Zero for a width the walker does not compute -- a struct or
+/// function type, which it does not consume in a cast position.
 pub(super) fn type_size_bytes(ty: i64, target: Target) -> usize {
     let stripped = strip_unsigned(ty);
     if is_pointer_ty(ty) {
@@ -225,11 +217,9 @@ pub(super) fn type_size_bytes(ty: i64, target: Target) -> usize {
     }
 }
 
-/// Return the AND mask needed to narrow an unsigned-typed
-/// operand of an integer divide / modulo to its declared storage
-/// width. Returns `0` (no mask) for I64-wide types and for any
-/// signed type. Takes only the common type tag and lets the
-/// walker apply the mask through `BinopI(And, _, mask)`.
+/// AND mask narrowing an unsigned operand of an integer divide or
+/// modulo to its declared storage width. Zero -- no mask -- for an
+/// I64-wide type and for any signed type.
 pub(super) fn unsigned_narrow_mask(ty: i64) -> i64 {
     let stripped = strip_unsigned(ty);
     let unsigned = (ty & UNSIGNED_BIT) != 0;

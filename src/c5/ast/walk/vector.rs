@@ -219,13 +219,12 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// Lower a bitwise operator (`^`/`&`/`|`) on two same-width GCC vector
-    /// values into a result temporary. Bitwise ops carry no value between
-    /// lanes, so the byte block is combined in the widest chunks that fit
-    /// (8/4/2/1) regardless of the element width. Both operands are aggregate
-    /// rvalues (their address lands on the accumulator); the result is a fresh
-    /// synthetic aggregate whose address is returned, matching how a struct
-    /// rvalue is produced.
+    /// Lower a bitwise operator (`^` / `&` / `|`) on two same-width GCC
+    /// vector values into a result temporary. Bitwise ops carry nothing
+    /// between lanes, so the byte block combines in the widest chunks
+    /// that fit whatever the element width. The result is a fresh
+    /// synthetic aggregate whose address is returned, as a struct rvalue
+    /// is produced.
     fn walk_vector_chunked(
         &mut self,
         b: &mut SsaBuilder,

@@ -214,10 +214,9 @@ impl<'a> Walker<'a> {
     }
 
     /// The storage-unit address and descriptor when `lvalue` names a
-    /// bitfield in a 16-byte unit, which the 128-bit read-modify-write
-    /// path is the only caller of. The object is evaluated once (C99
-    /// 6.5.16.2p3). A narrower unit stays on the scalar `RmwPlace`
-    /// path, whose accesses match its width.
+    /// bitfield in a 16-byte unit, evaluating the object once (C99
+    /// 6.5.16.2p3). Only the 128-bit read-modify-write path calls it; a
+    /// narrower unit stays on the scalar `RmwPlace` path.
     pub(super) fn wide_bitfield_place(
         &mut self,
         b: &mut SsaBuilder,
@@ -248,10 +247,9 @@ impl<'a> Walker<'a> {
 
 /// Merge `value` into the bitfield at `addr` (C99 6.7.2.1): load the
 /// storage unit, clear the field's slice, shift the value into place,
-/// OR, and store the unit back. Returns the value the width mask kept,
+/// OR, and store back. Returns the value the width mask kept,
 /// right-aligned -- the assignment expression's value per C99 6.5.16p3.
-/// Every narrow bitfield store reaches this: assignment, compound
-/// assignment, increment, and the runtime initializer.
+/// Every narrow bitfield store reaches this.
 pub(super) fn merge_into_bitfield(
     b: &mut SsaBuilder,
     addr: ValueId,

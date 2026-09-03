@@ -20,21 +20,14 @@ impl<'a> Walker<'a> {
                 Ok(true)
             }
             Stmt::Expr(e) => {
-                // C99 6.8.3: expression statement evaluates the
-                // expression for side effects and discards the
-                // value. The walker emits the side-effecting
-                // chain; the SSA DCE pass drops the dead final
-                // value if it has no other uses.
+                // C99 6.8.3: the value is discarded; DCE drops it when
+                // nothing else uses it.
                 let e = *e;
                 let _ = self.walk_expr_rvalue(b, e)?;
-                // A direct call to a `noreturn` function ends the
-                // block: the statements after it are unreachable
-                // (C11 6.7.4p8) and the unreachable-block prune
-                // drops them, so a dead tail's calls never reach
-                // the object. Seal with `Unreachable` (not a return),
-                // so the block is not counted as a return path -- a
-                // guard like `if (x) noreturn_fn(); return v;` stays a
-                // single-return, inlinable function.
+                // A direct call to a `noreturn` function ends the block
+                // (C11 6.7.4p8). The seal is `Unreachable`, not a return,
+                // so `if (x) noreturn_fn(); return v;` stays a
+                // single-return function.
                 if let Expr::Call { callee, .. } = self.ast.expr(e)
                     && let Expr::Ident { sym, .. } = self.ast.expr(*callee)
                     && self
@@ -79,11 +72,9 @@ impl<'a> Walker<'a> {
                 Ok(true)
             }
             Stmt::AsmGoto(idx) => {
-                // GCC `asm goto`: evaluate the inputs, then close the
-                // block with `Terminator::AsmGoto`. Row entry 0 is the
-                // fall-through successor; the label-block targets
-                // follow in label-list order, sharing the C-label
-                // machinery with `goto` (forward references included).
+                // GCC `asm goto`. Target 0 is the fall-through
+                // successor; the label blocks follow in label-list
+                // order, through the same machinery `goto` uses.
                 let asm = self.ast.asm_blocks[*idx as usize].clone();
                 let mut args: alloc::vec::Vec<ValueId> =
                     alloc::vec::Vec::with_capacity(asm.operand_exprs.len());
@@ -106,22 +97,16 @@ impl<'a> Walker<'a> {
                 Ok(true)
             }
             Stmt::GotoIndirect(target) => {
-                // GCC `goto *expr;`: evaluate the label-address operand
-                // and close the block with an indirect branch.
                 let v = self.walk_expr_rvalue(b, *target)?;
                 b.goto_indirect(v);
                 Ok(true)
             }
             Stmt::Labeled { label, body } => {
                 let label_blk = self.block_for_label(b, *label);
-                // C99 6.8.1: a labeled statement is reachable from
-                // both fall-through and any matching goto. When the
-                // current block is open, splice it into the label
-                // block with a jmp + switch_to. When it is closed
-                // (the immediately-preceding stmt terminated --
-                // typically a `goto label;` or a return), just
-                // switch the cursor; the label block already has
-                // its predecessors recorded by their jmps.
+                // C99 6.8.1: a labeled statement is reachable by
+                // fall-through and by any matching goto. An open block
+                // is spliced in; a closed one has already recorded its
+                // predecessors through their jumps.
                 if b.is_block_open() {
                     b.jmp(label_blk);
                 }
@@ -130,11 +115,10 @@ impl<'a> Walker<'a> {
                 self.walk_stmt(b, body_id)
             }
             Stmt::Switch { disc, body } => self.walk_switch(b, *disc, *body),
-            // A case / default marker inside the active switch jumps to
-            // the block the case-collection pass reserved for it, so the
-            // dispatcher can target it and a preceding statement falls
-            // through into it. Outside any switch (a parser bug) it is a
-            // transparent wrapper around its body.
+            // A case or default marker jumps to the block the
+            // case-collection pass reserved for it, so both the
+            // dispatcher and a fall-through reach it. Outside any switch
+            // it is a transparent wrapper around its body.
             Stmt::Case { val, body, .. } => {
                 let val = *val;
                 let body_id = *body;
@@ -150,24 +134,12 @@ impl<'a> Walker<'a> {
                                 .map(|&(_, _, b)| b)
                         })
                 });
-                if let Some(blk) = blk {
-                    if b.is_block_open() {
-                        b.jmp(blk);
-                    }
-                    b.switch_to(blk);
-                }
-                self.walk_stmt(b, body_id)
+                self.walk_case_marker(b, blk, body_id)
             }
             Stmt::Default { body } => {
                 let body_id = *body;
                 let blk = self.switch_dispatch.last().and_then(|d| d.default);
-                if let Some(blk) = blk {
-                    if b.is_block_open() {
-                        b.jmp(blk);
-                    }
-                    b.switch_to(blk);
-                }
-                self.walk_stmt(b, body_id)
+                self.walk_case_marker(b, blk, body_id)
             }
             Stmt::Asm { .. } => Err(WalkError::InvalidStmt { id, kind: "Asm" }),
             Stmt::Decl(d) => {
@@ -175,9 +147,9 @@ impl<'a> Walker<'a> {
                 self.walk_decl(b, decl_id)?;
                 Ok(false)
             }
-            // C99 6.2.4p2: snapshot the stack pointer on entry to a
-            // VLA-declaring block, restore it on exit so the storage is
-            // reclaimed (per loop iteration for a loop body).
+            // C99 6.2.4p2: the stack pointer is saved on entry to a
+            // VLA-declaring block and restored on exit, once per
+            // iteration for a loop body.
             Stmt::VlaScopeEnter { save_slot } => {
                 let slot = *save_slot;
                 let top = b.intrinsic(Intrinsic::AllocaSave as i64, alloc::vec::Vec::new());
@@ -190,6 +162,24 @@ impl<'a> Walker<'a> {
                 Ok(false)
             }
         }
+    }
+
+    /// Enter the block the case-collection pass reserved for a `case` or
+    /// `default` marker, if the marker sits inside a switch, and walk the
+    /// statement it labels.
+    fn walk_case_marker(
+        &mut self,
+        b: &mut SsaBuilder,
+        blk: Option<BlockId>,
+        body: StmtId,
+    ) -> Result<bool, WalkError> {
+        if let Some(blk) = blk {
+            if b.is_block_open() {
+                b.jmp(blk);
+            }
+            b.switch_to(blk);
+        }
+        self.walk_stmt(b, body)
     }
 
     /// Allocate or reuse the SSA block reserved for the given AST
@@ -207,11 +197,10 @@ impl<'a> Walker<'a> {
     /// Emit a jump-table dispatcher for a dense case list: a bias
     /// subtract, an unsigned bounds check branching to `deflt`, and a
     /// `Terminator::JumpTable` indexed by the biased discriminant.
-    /// Returns false (leaving the cursor untouched) when the case set
-    /// is too small or too sparse; the caller falls back to the
-    /// compare tree. `cases` is sorted with values already converted
-    /// to the promoted controlling type, so consecutive entries differ
-    /// by their true unsigned distance regardless of signedness.
+    /// False, with the cursor untouched, when the case set is too small
+    /// or too sparse for one. `cases` is sorted at the promoted
+    /// controlling type, so consecutive entries differ by their true
+    /// unsigned distance whatever the signedness.
     fn emit_switch_table(
         &mut self,
         b: &mut SsaBuilder,
@@ -261,10 +250,9 @@ impl<'a> Walker<'a> {
     }
 
     /// Emit a balanced binary search over a sorted, distinct case list
-    /// as the switch dispatcher. The cursor is at an open block on entry
-    /// and the block is closed on return. Internal nodes branch on
-    /// `lt_op` (`<`); a leaf tests equality and falls to `deflt` when the
-    /// discriminant matches no case.
+    /// as the switch dispatcher, closing the block it entered open.
+    /// Internal nodes branch on `lt_op`; a leaf tests equality and falls
+    /// to `deflt`.
     fn emit_switch_search(
         &mut self,
         b: &mut SsaBuilder,
@@ -294,11 +282,9 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// Reserve a block for every `case` value and for `default` in a
-    /// switch body, descending into nested statements but not into a
-    /// nested switch (whose labels belong to it, C99 6.8.4.2). A
-    /// duplicate case value keeps the first block; the parser already
-    /// rejects duplicates.
+    /// Reserve a block for every `case` value and for `default`,
+    /// descending into nested statements but not into a nested switch,
+    /// whose labels belong to it (C99 6.8.4.2).
     #[allow(clippy::type_complexity)]
     fn collect_switch_cases(
         &mut self,
@@ -313,12 +299,10 @@ impl<'a> Walker<'a> {
                 let val = *val;
                 let hi = *hi;
                 let body = *body;
-                // Both a single `case v` and a range `case lo ... hi` reserve
-                // one block; the body walker looks it up by `lo`. A single
-                // value joins the sorted-dispatch list; a range is dispatched
-                // by an explicit `lo <= disc <= hi` comparison so a wide range
-                // (register-decode switches span millions of values) needs no
-                // per-value expansion.
+                // A range `case lo ... hi` reserves one block, looked up
+                // by `lo`, and dispatches through an explicit `lo <=
+                // disc <= hi` test, so a range spanning millions of
+                // values needs no per-value expansion.
                 let blk = b.new_block();
                 if val == hi {
                     if !cases.iter().any(|(cv, _)| *cv == val) {
@@ -365,17 +349,13 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// Lower a GCC statement expression `({ ... })`. Walks the
-    /// block items exactly as `Stmt::Compound` does -- new-block on
-    /// a closed predecessor, decls through `walk_decl` -- but keeps
-    /// the value of the final expression-statement (GCC: the value
-    /// of the whole construct; a non-expression tail makes it void,
-    /// lowered as an immediate 0). Labels wrapping the final
-    /// statement are entered before it is evaluated, so the value
-    /// is computed in the label's join block and is defined on
-    /// every arriving path -- fall-through and any `goto` into the
-    /// label. `block` is the enclosed compound, or the bare
-    /// statement for a single-item block.
+    /// Lower a GCC statement expression `({ ... })`. The items walk as
+    /// `Stmt::Compound` does, but the value of the final
+    /// expression-statement is the construct's value; a non-expression
+    /// tail makes it void, lowered as an immediate 0. A label wrapping
+    /// the final statement is entered before the value is computed, so
+    /// the value is defined on every path into the label. `block` is the
+    /// enclosed compound, or the bare statement for a single item.
     pub(super) fn walk_stmt_expr(
         &mut self,
         b: &mut SsaBuilder,
@@ -426,12 +406,11 @@ impl<'a> Walker<'a> {
                 }
             }
         }
-        // A GNU statement expression whose final statement transfers
-        // control out of it (a `goto` or `return`, or a noreturn call)
-        // closes the block; its value is then unreachable. Open a fresh
-        // block and yield a placeholder so callers, which assume an rvalue
-        // leaves an open block, keep building well-formed SSA that the
-        // unreachable-block prune drops.
+        // A final statement that transfers control out of the
+        // expression leaves its value unreachable. A caller assumes an
+        // rvalue leaves an open block, so a fresh block and a
+        // placeholder keep the SSA well formed for the unreachable
+        // prune to drop.
         if !b.is_block_open() {
             let dead = b.new_block();
             b.switch_to(dead);
@@ -443,14 +422,12 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// Whether the statement subtree defines a label reachable from
-    /// outside it: a `goto` target (`Labeled`) anywhere within, or a
-    /// `case` / `default` belonging to a `switch` that encloses the
-    /// subtree. A constant-condition `if` may drop its dead branch
-    /// only when that branch defines none, since the branch's block
-    /// would otherwise never be emitted for the jump to reach. A
-    /// `switch` wholly inside the branch owns its case labels -- its
-    /// dispatch drops with the branch -- so those don't pin it.
+    /// Whether the subtree defines a label reachable from outside it:
+    /// a `goto` target anywhere within, or a `case` / `default`
+    /// belonging to an enclosing `switch`. A constant-condition `if`
+    /// may drop its dead branch only when the branch defines none,
+    /// since the jump would otherwise have no block to reach. A
+    /// `switch` wholly inside the branch owns its own case labels.
     fn stmt_defines_label(&self, id: StmtId) -> bool {
         self.stmt_defines_external_label(id, false)
     }
@@ -492,12 +469,10 @@ impl<'a> Walker<'a> {
                 None
             };
         if self.ret_in_regs || self.ret_indirect {
-            // C99 6.8.6.4 + AAPCS64 6.9 host-ABI struct return:
-            // yield the struct's address. The codegen scatters
-            // the eightbytes into the result registers (<= 16
-            // bytes) or copies the value through the x8 result
-            // pointer (> 16 bytes); the VM copies it into the
-            // caller's result temp.
+            // C99 6.8.6.4 with a host-ABI struct return: the value is
+            // the struct's address, which the codegen scatters into the
+            // result registers or copies through the indirect-result
+            // pointer.
             let v = match widened {
                 Some(addr) => addr,
                 None => self.walk_copy_operand(b, e)?,
@@ -506,13 +481,10 @@ impl<'a> Walker<'a> {
             return Ok(true);
         }
         if self.returns_struct {
-            // C99 6.8.6.4 + the c5 out-pointer convention: the
-            // callee receives the caller's result-temp address
-            // in `slot 2`. `return s;` copies `sizeof(struct
-            // T)` bytes from `s`'s address into that
-            // out-pointer and returns it so the call site has a
-            // stable value to chain into the surrounding
-            // assignment / Mcpy.
+            // Under the c5 out-pointer convention the callee holds the
+            // caller's result-temp address in slot 2. `return s;` copies
+            // the struct into it and returns it, so the call site has a
+            // stable value to chain from.
             let out_ptr = b.load_local(2, LoadKind::I64);
             let src = match widened {
                 Some(addr) => addr,
@@ -533,15 +505,12 @@ impl<'a> Walker<'a> {
             return Ok(true);
         }
         let mut v = self.walk_copy_operand(b, e)?;
-        // C99 6.8.6.4 / 6.3.1.1: the return value is converted to the
-        // function's return type. A body evaluated in 64-bit registers
-        // can leave bits above the type width set -- a signed constant
-        // or arithmetic sign-extends past bit 31, an unsigned source
-        // zero-extends -- so a char/short/int (and LLP64 long) return
-        // is narrowed to its declared width: zero-extend when unsigned,
-        // sign-extend when signed. Same-unit callers read the result
-        // register directly and do not re-narrow. `_Bool` is excluded:
-        // 6.3.1.2 already normalized it to 0/1.
+        // C99 6.8.6.4 / 6.3.1.1: the value is converted to the
+        // declared return type. A body evaluated in 64-bit registers can
+        // leave bits set above the type width, and a same-unit caller
+        // reads the result register without re-narrowing, so a narrow
+        // integer return is extended to its declared width here.
+        // `_Bool` is excluded, 6.3.1.2 having normalized it to 0/1.
         let stripped = strip_unsigned(self.scalar_return_ty);
         let rs = type_size_bytes(self.scalar_return_ty, self.target);
         if !is_floating_scalar(self.scalar_return_ty)
@@ -588,19 +557,11 @@ impl<'a> Walker<'a> {
         for item in items {
             match item {
                 BlockItem::Stmt(s) => {
-                    // A previous item closed the current
-                    // block (Return / Goto / Break /
-                    // Continue / If-both-arms-return). If
-                    // this item is a `Stmt::Labeled`, the
-                    // walker below resumes at its label
-                    // block so any earlier `goto label`,
-                    // `case <val>:`, or `default:` lands
-                    // somewhere walkable. Non-label dead
-                    // code per C99 6.8.6 is still walked
-                    // into a fresh synthetic block so the
-                    // SSA covers the unreachable region;
-                    // the resolver later prunes anything
-                    // the codegen can elide.
+                    // A previous item closed the block. A `Stmt::Labeled`
+                    // resumes at its own label block, so an earlier
+                    // `goto label`, `case` or `default` lands somewhere
+                    // walkable; other dead code walks into a fresh
+                    // synthetic block the prune removes later.
                     if !b.is_block_open()
                         && !matches!(
                             self.ast.stmt(*s),
@@ -615,12 +576,9 @@ impl<'a> Walker<'a> {
                     }
                 }
                 BlockItem::Decl(d) => {
-                    // Decls in dead-code regions still go
-                    // through walk_decl so the walker's
-                    // local-slot bookkeeping mirrors what
-                    // the parser stamped (per-decl
-                    // initialiser side effects land in the
-                    // same trailing dead block).
+                    // A declaration in a dead region still walks, so the
+                    // local-slot bookkeeping mirrors what the parser
+                    // stamped.
                     if !b.is_block_open() {
                         let dead = b.new_block();
                         b.switch_to(dead);
@@ -641,14 +599,11 @@ impl<'a> Walker<'a> {
         then_s: StmtId,
         else_s: Option<StmtId>,
     ) -> Result<bool, WalkError> {
-        // A constant controlling expression selects one branch
-        // at translation time (C99 6.8.4.1); emit only that
-        // branch so the dead branch's side effects and
-        // undefined-symbol references are never emitted. Skip
-        // the fold when the dead branch defines a label a goto
-        // or switch could target -- dropping its block would
-        // leave the jump unresolved. Matches gcc's front-end
-        // fold at -O0.
+        // A constant controlling expression selects one branch at
+        // translation time (C99 6.8.4.1), so the dead branch's side
+        // effects and undefined-symbol references are never emitted --
+        // unless it defines a label a goto or switch could target,
+        // whose jump would then have no block to reach.
         if let Some(c) = self.const_fold_int(cond) {
             let dead = if c != 0 { else_s } else { Some(then_s) };
             if !dead.is_some_and(|s| self.stmt_defines_label(s)) {
@@ -759,12 +714,8 @@ impl<'a> Walker<'a> {
         post: Option<ExprId>,
         body: StmtId,
     ) -> Result<bool, WalkError> {
-        // C99 6.8.5.3: for-init is either an expression
-        // (`BlockItem::Stmt`) or a declaration
-        // (`BlockItem::Decl`). The init runs once before
-        // the cond / body / post loop; without walking
-        // the declaration path the loop counter stays
-        // uninitialised on every iteration.
+        // C99 6.8.5.3: for-init is an expression or a declaration, and
+        // runs once before the cond / body / post loop.
         match init {
             Some(BlockItem::Stmt(s)) => {
                 let _ = self.walk_stmt(b, s)?;
@@ -785,13 +736,11 @@ impl<'a> Walker<'a> {
             None => b.imm(1),
         };
         b.branch_zero(cond_v, after, body_blk);
-        // C99 6.8.5.3 specifies the *evaluation* order
-        // (cond, body, post) but leaves layout open. Walk
-        // post before body so the SSA Inst ordering
-        // matches the layout the call-fixup resolver
-        // expects. Control flow is unaffected -- each
-        // block's terminator routes execution in the C99
-        // order regardless of inst-vec layout.
+        // C99 6.8.5.3 fixes the evaluation order (cond, body, post)
+        // but leaves the layout open. Post is walked before the body so
+        // the inst ordering matches what the call-fixup resolver
+        // expects; each block's terminator routes execution in the C99
+        // order either way.
         b.switch_to(post_blk);
         if let Some(p) = post {
             let _ = self.walk_expr_rvalue(b, p)?;
@@ -813,41 +762,31 @@ impl<'a> Walker<'a> {
         let body_id = body;
         let after_blk = b.new_block();
 
-        // Reserve a block for every case value and for default
-        // (C99 6.8.4.2: case labels at any depth scope to the
-        // nearest switch). The body walk below jumps to these
-        // blocks at each marker, so a marker inside a nested
-        // loop is still reachable from the dispatcher.
+        // C99 6.8.4.2: a case label at any depth scopes to the nearest
+        // switch, so a marker inside a nested loop is reachable from
+        // this dispatcher.
         let mut cases: alloc::vec::Vec<(i64, BlockId)> = alloc::vec::Vec::new();
         let mut ranges: alloc::vec::Vec<(i64, i64, BlockId)> = alloc::vec::Vec::new();
         let mut default_blk: Option<BlockId> = None;
         self.collect_switch_cases(b, body_id, &mut cases, &mut ranges, &mut default_blk);
 
-        // Dispatcher: a balanced binary search over the sorted
-        // case values. Each internal node branches on `<` (one
-        // conditional branch) and a leaf tests equality, so a
-        // dispatch is O(log n) branches where a linear compare
-        // chain is O(n). Case values are distinct (C99 6.8.4.2);
-        // the discriminant's signedness selects the ordering and
-        // the comparison so an unsigned discriminant with the
-        // high bit set still sorts correctly.
+        // The dispatcher is a balanced binary search over the sorted,
+        // distinct (C99 6.8.4.2) case values: O(log n) branches against
+        // a compare chain's O(n). The discriminant's signedness selects
+        // both the ordering and the comparison, so an unsigned value
+        // with the high bit set still sorts correctly.
         let deflt = default_blk.unwrap_or(after_blk);
         let disc_ty = expr_ty(self.ast.expr(disc)).unwrap_or(Ty::Int as i64);
         let disc_unsigned = disc_ty & UNSIGNED_BIT != 0;
         let mut sorted = cases.clone();
         if disc_unsigned {
             // C99 6.8.4.2p1 + p5: the controlling expression is
-            // integer-promoted, then each case label is converted to
-            // that promoted type. A 4-byte unsigned controlling type
-            // (`unsigned int`, and `unsigned long` on LLP64) promotes
-            // to itself, so a negative label wraps modulo 2^32 and
-            // must match the zero-extended discriminant -- mask it to
-            // 32 bits. An 8-byte unsigned type keeps the full-width
-            // value, which already matches. (Sub-`int` unsigned types
-            // promote to signed `int`, so a negative label stays
-            // negative and never matches a zero-extended value; those
-            // are reported as unsigned by `disc_ty` but take the plain
-            // path here with no masking.)
+            // integer-promoted and each label converts to that promoted
+            // type. A 4-byte unsigned type promotes to itself, so a
+            // negative label wraps modulo 2^32 and needs the mask to
+            // match the zero-extended discriminant; an 8-byte one
+            // already matches at full width. A sub-`int` unsigned type
+            // promotes to signed `int` and takes the plain path.
             if type_size_bytes(disc_ty, self.target) == 4 {
                 for c in sorted.iter_mut() {
                     c.0 = (c.0 as u32) as i64;
@@ -855,12 +794,10 @@ impl<'a> Walker<'a> {
             }
             sorted.sort_by_key(|p| p.0 as u64);
         } else {
-            // Signed controlling type: a 4-byte type promotes to
-            // itself and a sub-int type to signed `int`, so the
-            // label converts by sign-truncation to 32 bits --
-            // `case 0x80000000:` on an `int` switch must match
-            // the sign-extended INT_MIN discriminant. An 8-byte
-            // type keeps the full-width label.
+            // A signed 4-byte or sub-`int` controlling type promotes
+            // to `int`, so the label sign-truncates to 32 bits:
+            // `case 0x80000000:` must match the sign-extended INT_MIN
+            // discriminant. An 8-byte type keeps the full-width label.
             if type_size_bytes(disc_ty, self.target) <= 4 {
                 for c in sorted.iter_mut() {
                     c.0 = (c.0 as i32) as i64;
@@ -868,11 +805,9 @@ impl<'a> Walker<'a> {
             }
             sorted.sort_by_key(|p| p.0);
         }
-        // Range cases (`case lo ... hi`): each is dispatched by an
-        // explicit `lo <= disc <= hi` test before the single-value
-        // search, so a wide range needs no per-value expansion. The
-        // bounds convert to the promoted type exactly like the
-        // single-value labels above.
+        // A range case is dispatched by an explicit `lo <= disc <= hi`
+        // test ahead of the single-value search, its bounds converted to
+        // the promoted type as the labels above are.
         let (ge_op, le_op) = if disc_unsigned {
             (BinOp::Uge, BinOp::Ule)
         } else {

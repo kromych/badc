@@ -69,14 +69,12 @@ impl<'a> Walker<'a> {
         Ok(dst)
     }
 
-    /// Lower a GCC `__builtin_{add,sub,mul}_overflow(a, b, dst)`. Stores
-    /// the wrapped `a op b` through `dst` (pointee `elem_ty`) and yields
-    /// the overflow flag (0 / 1). For widths under 8 bytes the operands
-    /// are already extended in the 64-bit register, so `a op b` is exact
-    /// and overflow is exactly the case where truncation changes it; the
-    /// 64-bit case uses the carry / sign-overflow formulas, with a
-    /// guarded division for the multiply. A 128-bit operand or result
-    /// goes through [`Self::walk_checked_arith_128`].
+    /// Lower a GCC `__builtin_{add,sub,mul}_overflow(a, b, dst)`: store
+    /// the wrapped `a op b` through `dst` and yield the overflow flag.
+    /// Under 8 bytes the operands are already extended in the register,
+    /// so `a op b` is exact and overflow is exactly where truncation
+    /// changes it; at 8 bytes the carry and sign-overflow formulas
+    /// decide, with a guarded division for the multiply.
     pub(super) fn walk_checked_arith(
         &mut self,
         b: &mut SsaBuilder,
@@ -231,16 +229,15 @@ impl<'a> Walker<'a> {
         (ty & UNSIGNED_BIT) == 0 && !is_pointer_ty(ty)
     }
 
-    /// 128-bit `__builtin_{add,sub,mul}_overflow`. GCC evaluates the
-    /// operation in infinite precision and reports whether the result is
-    /// representable in the destination type. Both operands convert to
-    /// exact 128-bit halves through [`Self::int128_operand`]; the
-    /// operation runs mod 2^128 and the discarded magnitude is tracked
-    /// exactly -- as the extension word above bit 127 for add and sub,
-    /// and as the sign-and-magnitude form for multiply, whose exact
-    /// product needs 256 bits. A destination narrower than 128 bits
-    /// stores the truncation and also reports a result that does not
-    /// survive the round trip through it.
+    /// 128-bit `__builtin_{add,sub,mul}_overflow`. GCC evaluates in
+    /// infinite precision and reports whether the result is
+    /// representable in the destination type. The operation runs mod
+    /// 2^128 with the discarded magnitude tracked exactly: as the
+    /// extension word above bit 127 for add and sub, and in
+    /// sign-and-magnitude form for multiply, whose exact product needs
+    /// 256 bits. A destination narrower than 128 bits stores the
+    /// truncation and reports a result that does not survive the round
+    /// trip through it.
     fn walk_checked_arith_128(
         &mut self,
         b: &mut SsaBuilder,
@@ -361,16 +358,11 @@ impl<'a> Walker<'a> {
             let v = self.walk_expr_rvalue(b, args[0])?;
             return Ok(b.intrinsic(kind, alloc::vec![v]));
         }
-        // The va_* intrinsics receive the ADDRESS of the va_list
-        // storage. The `__va_list_self(ap)` macro spells this as
-        // `(ap)` on System V / AAPCS64 (the array decays to its
-        // address) and `&(ap)` on the cursor targets. When `ap`
-        // is `*pva` (a va_list reached through a pointer) the
-        // System V form is a bare deref whose rvalue would load
-        // the list's first eightbyte; the address wanted is the
-        // pointer itself, so take the deref's lvalue. Operand
-        // positions: arg 0 for va_start / va_arg / va_end, args 0
-        // and 1 for va_copy.
+        // The va_* intrinsics receive the address of the va_list
+        // storage. Where `ap` is a va_list reached through a pointer,
+        // the System V spelling of `__va_list_self(ap)` is a bare deref
+        // whose rvalue would load the list's first eightbyte, so the
+        // deref's lvalue -- the pointer itself -- is what is wanted.
         use crate::c5::op::Intrinsic as VaI;
         let va_addr_operand = |i: usize| match VaI::from_i64(kind) {
             Some(VaI::VaStart) | Some(VaI::VaArg) | Some(VaI::VaEnd) => i == 0,
@@ -405,11 +397,8 @@ impl<'a> Walker<'a> {
             }
             return Ok(v);
         }
-        // The integer bit-count builtins lower to a portable
-        // shift / mask sequence here rather than a dedicated
-        // instruction, so the result is identical across the
-        // interpreter and every target. clz / ctz at zero are
-        // undefined in GCC; this lowering returns the bit width.
+        // clz / ctz at zero are undefined in GCC; this lowering returns
+        // the bit width.
         if let Some(i) = Intrinsic::from_i64(kind)
             && i.is_int_bit_unary()
         {
@@ -459,10 +448,8 @@ impl<'a> Walker<'a> {
         b: &mut SsaBuilder,
         idx: u32,
     ) -> Result<ValueId, WalkError> {
-        // GCC extended asm. Each operand expression is an output
-        // destination address (the parser applied `&`) or an
-        // input value; the block descriptor carries the template
-        // and per-operand constraints for the per-arch lowering.
+        // GCC extended asm: each operand is an output destination
+        // address, the parser having applied `&`, or an input value.
         let asm = self.ast.asm_blocks[idx as usize].clone();
         let mut args: alloc::vec::Vec<ValueId> =
             alloc::vec::Vec::with_capacity(asm.operand_exprs.len());
@@ -473,13 +460,11 @@ impl<'a> Walker<'a> {
     }
 }
 
-// Portable lowering of the GCC bit-count builtins (`__builtin_clz` /
-// `ctz` / `popcount` and the 64-bit `ll` forms). Each expands to a
-// branchless shift / mask sequence over the SSA builder so the result
-// matches across the interpreter and every target without a dedicated
+// Portable lowering of the GCC bit-count builtins. Each expands to a
+// branchless shift / mask sequence over the SSA builder, so the result
+// matches across the interpreter and every target with no dedicated
 // instruction. `w64` selects the 64-bit forms; the rest operate on the
-// low 32 bits (the operand reaches here zero-extended from the parser's
-// unsigned cast).
+// low 32 bits, the operand arriving zero-extended.
 
 type Bld = SsaBuilder;
 
@@ -575,9 +560,9 @@ pub(super) fn lower_ctz(b: &mut Bld, x: Val, w64: bool) -> Val {
     lower_popcount(b, m, w64)
 }
 
-// POSIX / GCC `ffs`: one plus the index of the least-significant set bit,
-// 0 for a zero input. `lower_ctz` returns the bit width at zero, so the
-// `(x != 0)` factor forces the zero case to 0.
+/// POSIX / GCC `ffs`: one plus the index of the least-significant set
+/// bit, 0 for a zero input. `lower_ctz` returns the bit width at zero,
+/// so the `(x != 0)` factor forces that case to 0.
 pub(super) fn lower_ffs(b: &mut Bld, x: Val, w64: bool) -> Val {
     let ctz = lower_ctz(b, x, w64);
     let cp1 = b.binop_imm(BinOp::Add, ctz, 1);

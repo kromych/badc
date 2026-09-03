@@ -4,10 +4,9 @@ use super::super::access::{load_kind_for, load_place};
 use super::super::types::{is_float_ty, is_floating_scalar};
 use super::super::*;
 impl<'a> Walker<'a> {
-    /// Walk a `Expr::Unary` rvalue. AddrOf hands off to the
-    /// lvalue walk; Deref loads from the rvalue-shaped address;
-    /// Neg / BitNot / LogNot lower to a binop against an
-    /// immediate.
+    /// Walk an `Expr::Unary` rvalue. AddrOf hands off to the lvalue
+    /// walk and Deref loads through the address; Neg, BitNot and LogNot
+    /// lower to a binop against an immediate.
     pub(super) fn walk_unary(
         &mut self,
         b: &mut SsaBuilder,
@@ -23,9 +22,8 @@ impl<'a> Walker<'a> {
             UnOp::Neg => {
                 let v = self.walk_expr_rvalue(b, child)?;
                 if is_floating_scalar(ty) {
-                    // C99 6.3.1.8 / 6.5.3.3: `-x` keeps the operand's
-                    // type. A `float` negation is single precision; tag
-                    // the result so the codegen emits `fneg s`.
+                    // C99 6.5.3.3: `-x` keeps the operand's type, so a
+                    // `float` negation stays single precision.
                     let neg = b.fneg(v);
                     if is_float_ty(ty) {
                         return Ok(b.mark_f32(neg));
@@ -47,12 +45,10 @@ impl<'a> Walker<'a> {
             UnOp::AddrOf => self.walk_expr_lvalue(b, child),
             UnOp::Deref => {
                 let addr = self.walk_expr_rvalue(b, child)?;
-                // C99 6.5.3.2p4 + the c5 address-as-value rule:
-                // dereferencing a pointer to a struct value
-                // produces an rvalue whose representation is the
-                // struct's address. Skip the trailing load --
-                // the enclosing site (struct Assign / Mcpy /
-                // Member chain) consumes the address.
+                // C99 6.5.3.2p4 with the address-as-value rule for
+                // struct rvalues: the dereference yields the struct's
+                // address, which the enclosing site consumes, so there
+                // is no load.
                 if is_struct_value_ty(ty) {
                     return Ok(addr);
                 }
@@ -71,23 +67,13 @@ impl<'a> Walker<'a> {
         to_ty: i64,
     ) -> Result<ValueId, WalkError> {
         let v = self.walk_expr_rvalue(b, child)?;
-        // C99 6.5.4: a cast performs a value-changing
-        // conversion when the source/destination differ
-        // in fp-ness. Same-class casts (int<->ptr,
-        // float<->double) are bit-pattern-compatible and
-        // need no op. Width-narrowing on integers is a
-        // truncation the SSA emitter already handles
-        // through the Store / Load kinds at the
-        // surrounding sites.
-        // An asm statement yields no value, and is never a cast operand.
+        // An asm statement yields no value, and is never a cast
+        // operand.
         let src_ty = expr_ty(self.ast.expr(child)).unwrap_or(Ty::Int as i64);
-        // A 128-bit `__int128` rvalue is carried as its address
-        // (the struct-rvalue address-as-value rule). A cast to an
-        // integer or pointer loads the object's low 8 bytes (its
-        // value mod 2^64); the convert then narrows to `to_ty`.
-        // Without the load the address is used as the value. A
-        // floating target instead converts the whole 128-bit
-        // value (C99 6.3.1.4) through `int128_to_fp`.
+        // A 128-bit rvalue is carried as its address, so a cast to an
+        // integer or pointer loads the low 8 bytes -- the value mod
+        // 2^64 -- and the convert narrows that to `to_ty`. A floating
+        // target converts the whole 128-bit value (C99 6.3.1.4).
         if self.is_int128_value_ty(src_ty) && !is_struct_ty(to_ty) {
             let v = self.flatten_copy_operand(b, child, v)?;
             if is_floating_scalar(to_ty) {
@@ -99,10 +85,8 @@ impl<'a> Walker<'a> {
             let low = b.load(v, load_kind_for(low_ty, self.target));
             return Ok(self.convert_scalar_value(b, low, low_ty, to_ty));
         }
-        // The reverse: a scalar cast to a 128-bit `__int128`
-        // materialises a 16-byte object and yields its address per
-        // the same address-as-value rule. Without this the scalar
-        // value stands where an address is expected.
+        // The reverse: a scalar cast to a 128-bit type materialises a
+        // 16-byte object, whose address is the value.
         if !is_struct_ty(src_ty) && self.is_int128_value_ty(to_ty) {
             let slot = b.alloc_synthetic_struct(16);
             let addr = b.local_addr(slot);

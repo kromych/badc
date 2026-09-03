@@ -9,12 +9,10 @@ use super::*;
 impl<'a> Walker<'a> {
     /// Lower a C11 7.17 atomic operation. A naturally-aligned scalar
     /// load and store is already atomic on the supported targets, so
-    /// `atomic_load` / `atomic_store` lower to a plain load / store.
-    /// The read-modify-write and compare-exchange forms lower to the
-    /// dedicated `Inst::AtomicRmw` / `Inst::AtomicCas`, which the
-    /// per-arch emit turns into a genuine atomic sequence (C11
-    /// 7.17.7); `width` is the access size of the atomic object's
-    /// element type in bytes.
+    /// those lower to a plain load and store; the read-modify-write and
+    /// compare-exchange forms lower to `Inst::AtomicRmw` /
+    /// `Inst::AtomicCas`, which the per-arch emit turns into a genuine
+    /// atomic sequence (C11 7.17.7).
     pub(super) fn walk_atomic(
         &mut self,
         b: &mut SsaBuilder,
@@ -25,13 +23,12 @@ impl<'a> Walker<'a> {
         let load_kind = load_kind_for(elem_ty, self.target);
         let store_kind = store_kind_for(elem_ty, self.target);
         let width = type_size_bytes(elem_ty, self.target) as u8;
-        // Every atomic form here acts on a 1/2/4/8-byte scalar object,
-        // the widths `__GCC_HAVE_SYNC_COMPARE_AND_SWAP_*` and
+        // Every atomic form acts on a 1/2/4/8-byte scalar object, the
+        // widths `__GCC_HAVE_SYNC_COMPARE_AND_SWAP_*` and
         // `__atomic_is_lock_free` report. A 16-byte object needs the
-        // paired compare-exchange (x86-64 `cmpxchg16b`, aarch64
-        // `casp` / `ldxp`-`stxp`), which the emit does not have; two
-        // 8-byte accesses would tear, so this is rejected rather than
-        // lowered. A wider or aggregate object has no atomic form at all.
+        // paired compare-exchange, which the emit does not have, and
+        // two 8-byte accesses would tear, so it is rejected rather than
+        // lowered.
         // TODO: 16-byte objects via the paired compare-exchange.
         if !matches!(width, 1 | 2 | 4 | 8) {
             return Err(WalkError::UnsupportedExpr {
@@ -151,15 +148,14 @@ impl<'a> Walker<'a> {
     }
 
     /// Narrow an integer value of type `src_ty` to `to_ty`'s storage
-    /// width per C99 6.3.1.3. An unsigned target masks to width; a
+    /// width per C99 6.3.1.3: an unsigned target masks to width, and a
     /// signed narrowing (or a same-width signed view of an unsigned
-    /// source) sign-extends the truncated value via the shift pair.
-    /// A wider-or-equal signed conversion, a non-integer target, or a
-    /// target of 8 bytes or more needs no op. Shared by the cast path
-    /// and by assignment / compound-assignment / increment expressions,
-    /// whose value has the converted type of the left operand
-    /// (6.5.16p3 / 6.5.16.2 / 6.5.2.4 / 6.5.3.1) and so must carry the
-    /// narrowed value when a wider enclosing expression reads it.
+    /// source) sign-extends the truncated value through the shift pair.
+    /// A wider-or-equal signed conversion, a non-integer target and a
+    /// target of 8 bytes or more need no op. The assignment, compound
+    /// assignment and increment expressions share it with the cast
+    /// path: their value has the left operand's converted type
+    /// (6.5.16p3 / 6.5.16.2 / 6.5.2.4 / 6.5.3.1).
     pub(super) fn narrow_int_to_ty(
         &self,
         b: &mut SsaBuilder,
@@ -278,12 +274,10 @@ impl<'a> Walker<'a> {
         })
     }
 
-    /// Resolve where a read-modify-write operator targets its lvalue. A
-    /// non-thread-local `Token::Loc` Ident keeps its frame slot so
-    /// mem2reg can promote it; every non-local lvalue materializes an
-    /// address through `walk_expr_lvalue`. Mirrors the `Expr::Assign`
-    /// local-target shortcut so `i++` / `i += k` keep the counter
-    /// register-resident, not just `i = i + k`.
+    /// Resolve where a read-modify-write operator targets its lvalue.
+    /// A non-thread-local `Token::Loc` Ident keeps its frame slot so
+    /// mem2reg can promote it, as the `Expr::Assign` shortcut does, and
+    /// every other lvalue materializes an address.
     pub(super) fn rmw_place(
         &mut self,
         b: &mut SsaBuilder,
@@ -356,12 +350,9 @@ pub(super) struct RmwOpen {
 
 /// Where a read-modify-write operator (`++` / `--` / `op=`) reads and
 /// writes its lvalue. A plain non-thread-local local of integer-class
-/// storage width uses its frame slot directly (`LoadLocal` /
-/// `StoreLocal`); every other lvalue -- a dereference, an array element,
-/// a struct field, or a float-stored local -- routes through a
-/// materialized address. The slot path takes no `LocalAddr`, so the slot
-/// stays promotable; the address path pins it to memory from the point
-/// the address is taken.
+/// storage width uses its frame slot directly and takes no `LocalAddr`,
+/// so the slot stays promotable; every other lvalue routes through a
+/// materialized address, which pins the object to memory.
 pub(super) enum RmwPlace {
     Slot(i64),
     /// A materialized address, with the segment override every access

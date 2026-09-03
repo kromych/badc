@@ -6,13 +6,11 @@ use super::*;
 use crate::c5::codegen::{ArgAgg, CallConv, CallPlan, abi_classify};
 use crate::c5::compiler::{StructDef, StructReturnAbi};
 
-/// Run a per-function AST through `SsaBuilder` and return the
-/// resulting `FunctionSsa`. `n_params` and `is_variadic` come from
-/// the function's declarator; `n_locals` is the post-parse local
-/// slot count (`max_loc_offs`). `ent_pc` is the function's entry
-/// identifier -- the SSA emit threads it through so the
-/// post-link codegen can resolve call-site fixups against the
-/// same identifier the linker rebased.
+/// Run a per-function AST through `SsaBuilder`. `n_params` and
+/// `is_variadic` come from the declarator and `n_locals` is the
+/// post-parse slot count. `ent_pc` is the function's entry identifier,
+/// threaded through the SSA emit so the post-link codegen resolves
+/// call-site fixups against the identifier the linker rebased.
 pub(crate) fn walk_function(
     fun: &FinishedFunction,
     symbols: &[Symbol],
@@ -30,10 +28,9 @@ pub(crate) fn walk_function(
     // the quotient stays unshared.
     b.set_split_modulo(optimize);
     place_over_aligned_slots(&mut b, &fun.over_aligned_slots, fun.alloca_top_slot)?;
-    // C99 6.8: the frame holds the declared locals; alloca / VLA storage
-    // is carved from the stack at runtime, so no extra slots are reserved
-    // for it. With alloca the parser's Ent patch appends one reserved
-    // slot, which also covers every regular slot.
+    // C99 6.8: the frame holds the declared locals, alloca and VLA
+    // storage being carved from the stack at runtime. With alloca the
+    // parser's Ent patch appends one reserved slot.
     let effective_locals = if fun.alloca_top_slot > 0 {
         fun.alloca_top_slot
     } else {
@@ -77,9 +74,9 @@ pub(crate) fn walk_function(
         let zero = b.imm(0);
         b.return_(zero);
     }
-    // `&&label` elements of this function's static initializers: bind each
-    // staged data slot to the label's block, which also records the block
-    // as address-taken. Runs before the dead-block close so a block
+    // Bind each `&&label` element of this function's static
+    // initializers to the label's block, which records the block as
+    // address-taken. Runs before the dead-block close, so a block
     // allocated here is closed too.
     for r in &fun.label_data_slots {
         let block = ctx.block_for_label(&mut b, r.label);
@@ -89,11 +86,11 @@ pub(crate) fn walk_function(
     Ok(b.finish())
 }
 
-/// C11 6.7.5: automatic objects whose alignment exceeds the 8-byte frame
-/// slot live in a packed region (widest alignment first) that every
-/// backend addresses as `region_base + region_off`. At `frame_align` 16
-/// the region sits at a static frame offset; above 16 the prologue
-/// realigns sp, which `alloca` precludes.
+/// C11 6.7.5: an automatic object whose alignment exceeds the 8-byte
+/// frame slot lives in a packed region, widest alignment first, that
+/// every backend addresses as `region_base + region_off`. At
+/// `frame_align` 16 the region sits at a static frame offset; above 16
+/// the prologue realigns sp, which `alloca` precludes.
 fn place_over_aligned_slots(
     b: &mut SsaBuilder,
     slots: &[(i64, i64, i64)],
@@ -178,9 +175,9 @@ struct ParamEntry<'a> {
     param_tys: &'a [i64],
     param_local_slots: &'a [i64],
     /// True when the definition takes its parameters under the host ABI.
-    /// A variadic definition and an out-pointer-returning one keep the c5
-    /// cdecl shape instead: their arguments ride the c5 stack, or a hidden
-    /// out-pointer shifts every cell.
+    /// A variadic or out-pointer-returning definition keeps the c5 cdecl
+    /// shape instead, its arguments riding the c5 stack or shifted by
+    /// the hidden out-pointer.
     host_abi: bool,
     /// Argument cell of the first declared parameter: 2, or 3 when the
     /// hidden out-pointer takes cell 2. The parser assigned each
@@ -205,18 +202,16 @@ impl<'a> ParamEntry<'a> {
         ret_outptr: bool,
     ) -> Self {
         // Every ABI question about this definition is asked of the
-        // convention it declares, which is the target's own unless
-        // `__attribute__((ms_abi))` / `((sysv_abi))` says otherwise.
-        // Layout-shaped queries keep the real target, since scalar widths
-        // are the target's property and not the convention's.
+        // convention it declares. Layout queries keep the real target,
+        // scalar widths being the target's property, not the
+        // convention's.
         let abi_target = target.abi_row(fun.conv);
         let param_tys = &fun.param_tys[..];
         let host_abi = !fun.is_variadic && !ret_outptr;
-        // A small aggregate parameter arrives in argument registers rather
-        // than by the caller's address (AAPCS64 6.8.2). A tagged parameter
-        // gets no SSA entry copy: the callee prologue (native) and
-        // `run_func` (VM) write the incoming bytes straight into the
-        // parser-reserved body local.
+        // A small aggregate parameter arrives in argument registers
+        // rather than by the caller's address (AAPCS64 6.8.2), and takes
+        // no SSA entry copy: the backend writes the incoming bytes
+        // straight into the parser-reserved body local.
         let mut aggs: alloc::vec::Vec<Option<u32>> = alloc::vec::Vec::new();
         // Parallel classification for the argument-register planner, so
         // the seed loop below knows which scalar parameters an aggregate
@@ -249,21 +244,19 @@ impl<'a> ParamEntry<'a> {
             b.set_param_aggs(aggs.clone(), fun.param_local_slots.to_vec());
         }
         if host_abi {
-            // C99 6.2.5p10 + System V AMD64 3.2.3 / AAPCS64 6.4.1: a
+            // C99 6.2.5p10 with System V AMD64 3.2.3 / AAPCS64 6.4.1: a
             // floating-point scalar parameter arrives in an FP argument
-            // register. Independent int / FP banks mean an int parameter
-            // after an FP one does not lose an int argument register.
+            // register, the banks being independent.
             for (i, &pty) in param_tys.iter().enumerate() {
                 let stripped = strip_unsigned(pty);
                 if stripped == Ty::Float as i64 || stripped == Ty::Double as i64 {
                     b.mark_param_fp(i);
                 }
             }
-            // Clear the mask when the placement would interleave register
-            // and host-stack parameters: the c5 cdecl cell layout requires
-            // a contiguous register prefix, so such a function falls back
-            // to the all-integer ABI. The caller applies the same
-            // predicate to its `fp_arg_mask`.
+            // The c5 cdecl cell layout requires a contiguous register
+            // prefix, so a placement interleaving register and
+            // host-stack parameters clears the mask and falls back to
+            // the all-integer ABI, as the caller's own predicate does.
             let eff = effective_fp_arg_mask(param_tys.len(), b.param_fp_mask(), abi_target.abi());
             b.set_param_fp_mask(eff);
         }
@@ -290,15 +283,14 @@ impl<'a> ParamEntry<'a> {
         matches!(self.plan.placements.get(i), Some(ArgPlacement::FpReg(_)))
     }
 
-    /// Seed each register-passed scalar parameter's c5 argument cell with
-    /// a `ParamRef` + `StoreLocal`. The store gives mem2reg one reaching
-    /// def for the cell, so the body's per-use `LoadLocal` reads fold onto
-    /// the incoming register instead of reloading from the frame.
+    /// Seed each register-passed scalar parameter's c5 argument cell
+    /// with a `ParamRef` + `StoreLocal`, giving mem2reg one reaching def
+    /// so the body's reads fold onto the incoming register.
     ///
-    /// Runs before `emit_entry_copies` so each `ParamRef` reads its host
-    /// argument register while it still holds the caller-supplied value:
-    /// an entry mcpy emits scratch writes whose result place can land on
-    /// any caller-saved register, including a host argument register.
+    /// Runs before `emit_entry_copies`, so each `ParamRef` reads its
+    /// host argument register while it still holds the caller's value:
+    /// an entry mcpy's scratch writes can land on any caller-saved
+    /// register, an argument register included.
     fn seed_param_refs(&self, b: &mut SsaBuilder) {
         if !self.host_abi {
             return;
@@ -312,11 +304,10 @@ impl<'a> ParamEntry<'a> {
             if is_struct_value_ty(pty) {
                 continue;
             }
-            // A `double` keeps its original positive cell; seed it with an
-            // FP `ParamRef` so the body's `LoadLocal { F64 }` reads fold
-            // onto the incoming register. A `float` was repointed by the
-            // parser to a negative narrow-storage local (skipped above);
-            // its entry narrow is `emit_entry_copies`' business.
+            // A `double` keeps its positive cell and takes an FP
+            // `ParamRef`. The parser repointed a `float` to a negative
+            // narrow-storage local, skipped above, which
+            // `emit_entry_copies` narrows into.
             if stripped == Ty::Double as i64 {
                 if self.in_fp_reg(i) {
                     let arg_slot = (i as i64) + self.arg_slot_base;
@@ -328,18 +319,17 @@ impl<'a> ParamEntry<'a> {
             if stripped == Ty::Float as i64 {
                 continue;
             }
-            // Seed an integer `ParamRef` only where the planner placed an
-            // integer argument register. An aggregate earlier in the list
-            // can consume several registers, pushing a later scalar that
-            // would fit by position onto the host stack; that parameter
-            // reads its c5 cdecl cell, which the prologue restripes.
+            // Only where the planner placed an integer argument
+            // register: an earlier aggregate can consume several,
+            // pushing a later scalar that would fit by position onto the
+            // host stack, where it reads the c5 cdecl cell the prologue
+            // restripes.
             if !matches!(self.plan.placements.get(i), Some(ArgPlacement::IntReg(_))) {
                 continue;
             }
-            // An unsigned-tagged parameter keeps the full 8-byte
-            // store/load so the body's zero-extending reads see the
-            // caller's extension rather than a sign-extended narrow
-            // reload. Pointer tags land in the I64 arm by band value.
+            // An unsigned-tagged parameter keeps the full 8-byte access,
+            // so the body's zero-extending reads see the caller's
+            // extension and not a sign-extended narrow reload.
             let (store_kind, load_kind) = if pty & UNSIGNED_BIT != 0 {
                 (StoreKind::I64, LoadKind::I64)
             } else {
@@ -357,11 +347,10 @@ impl<'a> ParamEntry<'a> {
     }
 
     /// Copy each by-address aggregate parameter into the body local the
-    /// parser reserved for it (C99 6.5.2.2 + the c5 calling convention:
-    /// the caller passes the source's address in the parameter's argument
-    /// cell), and narrow each `float` parameter into its narrow-storage
-    /// local. Both kinds are marked by a negative `param_local_slots`
-    /// entry.
+    /// parser reserved for it -- the c5 convention passes the source's
+    /// address in the parameter's argument cell -- and narrow each
+    /// `float` parameter into its narrow-storage local. A negative
+    /// `param_local_slots` entry marks both kinds.
     fn emit_entry_copies(&self, b: &mut SsaBuilder) {
         for i in 0..self.param_tys.len() {
             let pty = self.param_tys[i];
@@ -373,9 +362,8 @@ impl<'a> ParamEntry<'a> {
             let arg_slot = (i as i64) + self.arg_slot_base;
             if is_struct_value_ty(pty) {
                 // A host-ABI register-passed aggregate takes no entry
-                // copy: the backend scatters the incoming registers
-                // (native) or copies the argument bytes (VM) straight into
-                // this body local.
+                // copy: the backend writes the incoming registers
+                // straight into this body local.
                 if self.aggs.get(i).copied().flatten().is_some() {
                     continue;
                 }
@@ -395,11 +383,9 @@ impl<'a> ParamEntry<'a> {
             }
             if self.host_abi && self.in_fp_reg(i) {
                 // The argument arrives at single precision in an FP
-                // argument register (C99 6.2.5p10). The value never
-                // round-trips through the positive c5 cdecl cell, so that
-                // cell stays unobserved and the prologue's spill of it is
-                // elided. A direct `StoreLocal` keeps the slot
-                // mem2reg-promotable.
+                // argument register (C99 6.2.5p10) and never
+                // round-trips through the positive c5 cdecl cell, whose
+                // spill the prologue then elides.
                 let pr = b.param_ref(i as u32, LoadKind::F32);
                 b.mark_f32(pr);
                 b.store_local(local_slot, pr, StoreKind::F32);

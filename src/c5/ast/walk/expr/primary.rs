@@ -6,12 +6,9 @@ use super::super::types::lvalue_shape_label;
 use super::super::*;
 
 impl<'a> Walker<'a> {
-    /// Address-of for an identifier. Locals lower to a
-    /// `local_addr` against the symbol's slot offset; globals to
-    /// an `imm_data` against the symbol's data offset; functions
-    /// to an `imm_code` against the function's ent_pc.
-    /// Token::Sys and TLS variants surface as unsupported until
-    /// their walker arms land.
+    /// Address-of for an identifier: a local against its slot offset,
+    /// a global against its data offset, a function against its entry
+    /// PC.
     pub(super) fn ident_address(
         &mut self,
         b: &mut SsaBuilder,
@@ -50,14 +47,10 @@ impl<'a> Walker<'a> {
                 }
             }
         } else if *class == Token::Fun as i64 {
-            // Sys-trampoline symbols are added late and have
-            // their `val` filled in by `emit_sys_trampolines`
-            // -- AFTER `ast_emit_ident` snapshotted 0. Read
-            // the live value off the symbol table; a scoped
-            // function declaration's entity also keeps its
-            // post-parse `val` there. The walker sym is the
-            // same index the parser stored, so the lookup hits
-            // the same entry the trampoline emit updated.
+            // A sys trampoline's `val` is filled in after the Ident
+            // node snapshotted 0, so the live value comes off the
+            // symbol table. A scoped function declaration's entity
+            // likewise keeps its post-parse `val` there.
             let live_val = self.live_fun_addr_val(*sym, *val);
             if live_val == 0 {
                 Ok(b.imm_code_extern(*sym))
@@ -65,11 +58,9 @@ impl<'a> Walker<'a> {
                 Ok(b.imm_code(live_val as usize))
             }
         } else if *class == Token::Sys as i64 {
-            // Address of a dynamically-imported function (`&strcmp`,
-            // `fp = strcmp`). The Ident's `val` is the binding's flat
-            // index across all `#pragma binding(...)` directives, the
-            // same value `Inst::CallExt` carries. The address resolves
-            // to the import's shared PLT stub.
+            // For a dynamically-imported function the Ident's `val` is
+            // the binding index `Inst::CallExt` carries, and the
+            // address resolves to the import's shared PLT stub.
             Ok(b.imm_ext_code(*val))
         } else {
             Err(WalkError::UnknownSymbolClass {
@@ -79,11 +70,10 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// Identifier rvalue: take the address, load through the
-    /// type-appropriate `LoadKind`. Reads `class` / `val` /
-    /// `is_thread_local` straight off the snapshotted Ident node
-    /// so a post-parse scope-exit that restored the symbol's
-    /// pre-declaration tag doesn't invalidate the walker.
+    /// Identifier rvalue: the address, loaded through the type's
+    /// `LoadKind`. The class, value and thread-local flag come off the
+    /// Ident node itself, so a post-parse scope exit that restored the
+    /// symbol's pre-declaration tag does not invalidate them.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn load_ident_rvalue(
         &mut self,
@@ -96,16 +86,10 @@ impl<'a> Walker<'a> {
         is_thread_local: bool,
         array_size: i64,
     ) -> Result<ValueId, WalkError> {
-        // The parser snapshotted `val` as the function's
-        // entry-PC at emit time; for `Token::Fun` references the
-        // live PC lives on `self.symbols[sym].val` (sys
-        // trampolines patch theirs late). Other classes
-        // (`Token::Loc` / `Token::Glo` / `Token::Num`) carry a
-        // stable per-frame slot / data offset / constant, so the
-        // snapshot stays correct. Glo non-TLS routes through
-        // `live_glo_addr` which discriminates a cross-TU extern
-        // from an
-        // intra-unit data offset without a 0 sentinel.
+        // A `Token::Fun` reference reads its entry PC off the symbol
+        // table, since a sys trampoline patches its own late. The other
+        // classes carry a stable slot, data offset or constant, so the
+        // node's snapshot holds.
         let glo_addr = if class == Token::Glo as i64 && !is_thread_local {
             Some(if self.ast.block_extern_refs.contains(&id) {
                 self.block_extern_glo_addr(_sym)
@@ -116,23 +100,15 @@ impl<'a> Walker<'a> {
             None
         };
         let val: i64 = if class == Token::Fun as i64 {
-            // The only `Token::Fun` rvalue is the function-pointer decay
-            // of C99 6.3.2.1p4, so this is an address site.
+            // The only `Token::Fun` rvalue is the function-pointer
+            // decay of C99 6.3.2.1p4.
             self.live_fun_addr_val(_sym, val)
         } else {
             val
         };
-        // C99 6.3.2.1p3 + c5's address-as-value rule: an lvalue
-        // of array type, or a struct value (non-pointer struct
-        // type), is consumed as its address rather than its
-        // contents -- no trailing load. `array_size != 0` flags
-        // arrays; the type tag indicates a struct value when
-        // `is_struct_value_ty(ty)`. Both
-        // shapes route through the lvalue helper so the walker
-        // emits just the address producer. The fields are
-        // snapshotted at parse time on `Expr::Ident` so this
-        // path keeps working after the function-end shadow
-        // restoration unbinds the symbol's outer-scope value.
+        // C99 6.3.2.1p3 with the address-as-value rule: an array
+        // lvalue or a struct value is consumed as its address, so both
+        // take the lvalue path and emit no load.
         let address_only = array_size != 0 || (is_struct_value_ty(ty));
         if address_only {
             if class == Token::Loc as i64 {
@@ -170,8 +146,8 @@ impl<'a> Walker<'a> {
             let kind = load_kind_for(ty, self.target);
             Ok(load_place(b, addr_v, kind, seg, vol, 0))
         } else if class == Token::Glo as i64 && is_thread_local {
-            // Thread-local addressing already names its own segment on
-            // x86; a further named address space cannot combine with it.
+            // Thread-local addressing names its own segment on x86, and
+            // a further named address space cannot combine with it.
             if seg != AsmSeg::None {
                 return Err(WalkError::UnsupportedExpr {
                     id,
@@ -191,14 +167,12 @@ impl<'a> Walker<'a> {
                 Ok(b.imm_code(val as usize))
             }
         } else if class == Token::Sys as i64 {
-            // Bare imported-function rvalue (`fp = strcmp`). `val` is
-            // the binding index; the address resolves to the import's
-            // shared PLT stub. See `address_of_ident`.
+            // A bare imported-function rvalue (`fp = strcmp`) resolves
+            // to the import's shared PLT stub.
             Ok(b.imm_ext_code(val))
         } else if class == Token::Num as i64 {
-            // Enum constants and `#define`-via-const-decl idioms
-            // both surface as `Token::Num`-class symbols; `val`
-            // holds the resolved integer constant.
+            // Enum constants reach the walker as `Token::Num` symbols
+            // whose `val` is the resolved integer constant.
             Ok(b.imm(val))
         } else {
             Err(WalkError::UnknownSymbolClass { sym: _sym, class })

@@ -865,6 +865,68 @@ pub(crate) enum BinOp {
     Fge,
 }
 
+/// A zero divisor reached [`eval_int_binop`]. C99 6.5.5p5 leaves integer
+/// division and modulo by zero undefined; `badc` evaluates neither -- the
+/// interpreter reports it, the constant folders decline the operands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct DivByZero;
+
+/// The C integer operators on two known operands, in one place for the AST
+/// constant folder, the SSA constant folder and the interpreter.
+/// Arithmetic wraps in 64 bits, as the SSA value model does, so signed
+/// `i64::MIN / -1` yields `i64::MIN` where the native divide traps. A
+/// shift takes its count modulo 64, which is what the emitted shift
+/// instructions do; C99 6.5.7p3 leaves a negative or too-wide count
+/// undefined, so the fold gates refuse those operands instead of
+/// committing to the mask at translation time. Mulh, Mulhu, Ror and the FP
+/// opcodes are not C operators and are not covered here.
+/// TODO: the SSA builder's immediate fold keeps its own copy of these
+/// arms.
+pub(crate) fn eval_int_binop(op: BinOp, lhs: i64, rhs: i64) -> Result<i64, DivByZero> {
+    let v = match op {
+        BinOp::Add => lhs.wrapping_add(rhs),
+        BinOp::Sub => lhs.wrapping_sub(rhs),
+        BinOp::Mul => lhs.wrapping_mul(rhs),
+        BinOp::And => lhs & rhs,
+        BinOp::Or => lhs | rhs,
+        BinOp::Xor => lhs ^ rhs,
+        BinOp::Shl => ((lhs as u64) << (rhs as u32 & 63)) as i64,
+        BinOp::Shr => lhs >> (rhs as u32 & 63),
+        BinOp::Shru => ((lhs as u64) >> (rhs as u32 & 63)) as i64,
+        BinOp::Eq => (lhs == rhs) as i64,
+        BinOp::Ne => (lhs != rhs) as i64,
+        BinOp::Lt => (lhs < rhs) as i64,
+        BinOp::Gt => (lhs > rhs) as i64,
+        BinOp::Le => (lhs <= rhs) as i64,
+        BinOp::Ge => (lhs >= rhs) as i64,
+        BinOp::Ult => ((lhs as u64) < (rhs as u64)) as i64,
+        BinOp::Ugt => ((lhs as u64) > (rhs as u64)) as i64,
+        BinOp::Ule => ((lhs as u64) <= (rhs as u64)) as i64,
+        BinOp::Uge => ((lhs as u64) >= (rhs as u64)) as i64,
+        BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu if rhs == 0 => {
+            return Err(DivByZero);
+        }
+        BinOp::Div => lhs.wrapping_div(rhs),
+        BinOp::Mod => lhs.wrapping_rem(rhs),
+        BinOp::Divu => ((lhs as u64) / (rhs as u64)) as i64,
+        BinOp::Modu => ((lhs as u64) % (rhs as u64)) as i64,
+        BinOp::Mulh
+        | BinOp::Mulhu
+        | BinOp::Ror
+        | BinOp::Fadd
+        | BinOp::Fsub
+        | BinOp::Fmul
+        | BinOp::Fdiv
+        | BinOp::Feq
+        | BinOp::Fne
+        | BinOp::Flt
+        | BinOp::Fgt
+        | BinOp::Fle
+        | BinOp::Fge => unreachable!("eval_int_binop reached on {op:?}"),
+    };
+    Ok(v)
+}
+
 /// The divide sharing a modulo's quotient, and its inverse. The two
 /// halves of `n = (n / d) * d + n % d` (C99 6.5.5p6) pair by
 /// signedness.

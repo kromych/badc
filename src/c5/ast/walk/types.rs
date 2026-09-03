@@ -294,53 +294,12 @@ pub(super) fn narrow_const_to_ty(v: i64, ty: i64, target: Target) -> i64 {
     }
 }
 
-/// Fold an integer binop on two constant operands. C99 6.6
-/// permits this at translation time. Covers arithmetic, bitwise,
-/// shift, integer comparison, and integer divide / modulo; FP
-/// and the non-integer opcodes are rejected. A zero divisor is
-/// the caller's responsibility (`const_fold_int` declines it);
-/// signed `INT_MIN / -1` wraps to `INT_MIN` rather than trapping.
-/// Shifts at out-of-range amounts produce 0 (matches what `lsl
-/// xd, xn, xm` with `xm >= 64` would land on; signed `asr` on a
-/// non-negative operand likewise saturates to 0, and on a
-/// negative operand to -1, so the model picks the closer of the
-/// two for the rhs's sign).
+/// Fold an integer binop on two constant operands, which C99 6.6 permits
+/// at translation time. The semantics are `ir::eval_int_binop`'s; a zero
+/// divisor is the caller's responsibility (`const_fold_int` declines it)
+/// and panics here.
 pub(crate) fn fold_int_binop(op: BinOp, lhs: i64, rhs: i64) -> i64 {
-    match op {
-        BinOp::Add => lhs.wrapping_add(rhs),
-        BinOp::Sub => lhs.wrapping_sub(rhs),
-        BinOp::Mul => lhs.wrapping_mul(rhs),
-        BinOp::And => lhs & rhs,
-        BinOp::Or => lhs | rhs,
-        BinOp::Xor => lhs ^ rhs,
-        BinOp::Shl => {
-            let s = rhs as u32 & 63;
-            ((lhs as u64) << s) as i64
-        }
-        BinOp::Shr => {
-            let s = rhs as u32 & 63;
-            lhs >> s
-        }
-        BinOp::Shru => {
-            let s = rhs as u32 & 63;
-            ((lhs as u64) >> s) as i64
-        }
-        BinOp::Eq => (lhs == rhs) as i64,
-        BinOp::Ne => (lhs != rhs) as i64,
-        BinOp::Lt => (lhs < rhs) as i64,
-        BinOp::Gt => (lhs > rhs) as i64,
-        BinOp::Le => (lhs <= rhs) as i64,
-        BinOp::Ge => (lhs >= rhs) as i64,
-        BinOp::Ult => ((lhs as u64) < (rhs as u64)) as i64,
-        BinOp::Ugt => ((lhs as u64) > (rhs as u64)) as i64,
-        BinOp::Ule => ((lhs as u64) <= (rhs as u64)) as i64,
-        BinOp::Uge => ((lhs as u64) >= (rhs as u64)) as i64,
-        BinOp::Div => lhs.wrapping_div(rhs),
-        BinOp::Mod => lhs.wrapping_rem(rhs),
-        BinOp::Divu => ((lhs as u64) / (rhs as u64)) as i64,
-        BinOp::Modu => ((lhs as u64) % (rhs as u64)) as i64,
-        _ => unreachable!("fold_int_binop reached on a non-integer op"),
-    }
+    crate::c5::ir::eval_int_binop(op, lhs, rhs).expect("fold_int_binop reached with a zero divisor")
 }
 
 pub(super) fn lvalue_shape_label(expr: &Expr) -> &'static str {

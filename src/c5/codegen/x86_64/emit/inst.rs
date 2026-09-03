@@ -154,12 +154,10 @@ pub(super) enum FusedBranch {
     JnpAnd(Cc),
 }
 
-/// Whether a fused `Flt` / `Fle` compare emits `ucomisd rhs, lhs`.
-/// The swap turns them into the `>` / `>=` shapes whose `A` / `Ae`
-/// (and inverted `Be` / `B`) condition codes are exact under the
-/// unordered flag state, so the branch needs no parity test. The
-/// compare emit and [`fused_branch_cc`] both derive the swap from the
-/// inst so they agree.
+/// Whether a fused `Flt` / `Fle` compare emits `ucomisd rhs, lhs`: the swap
+/// turns them into the `>` / `>=` shapes whose `A` / `Ae` (and `Be` / `B`)
+/// codes are exact under the unordered flag state, so the branch needs no
+/// parity test. The compare and [`fused_branch_cc`] derive it alike.
 pub(super) fn fused_fp_swaps_operands(op: BinOp) -> bool {
     matches!(op, BinOp::Flt | BinOp::Fle)
 }
@@ -195,11 +193,9 @@ pub(super) fn fused_branch_cc(
         };
         return Some(FusedBranch::Jcc(cc));
     }
-    // FP compares. `ucomisd` leaves ZF=PF=CF=1 on NaN: `A` / `Ae` are
-    // false there and their inversions `Be` / `B` true, matching C99
-    // 6.5.8p6 for the ordered compares (`Flt` / `Fle` were emitted
-    // operand-swapped into those shapes); `==` / `!=` carry the
-    // parity test in the branch shape.
+    // FP compares: `ucomisd` leaves ZF=PF=CF=1 on NaN, so `A` / `Ae` and
+    // their inversions match C99 6.5.8p6 for the operand-swapped `Flt` /
+    // `Fle`; `==` / `!=` carry the parity test in the branch shape.
     Some(match op {
         BinOp::Fgt | BinOp::Flt => FusedBranch::Jcc(if negate { Cc::Be } else { Cc::A }),
         BinOp::Fge | BinOp::Fle => FusedBranch::Jcc(if negate { Cc::B } else { Cc::Ae }),
@@ -285,12 +281,9 @@ pub(super) fn emit_inst(
             let Some(rd) = int_or_spill_dst(dst) else {
                 return fail("LocalAddr: dst not int reg / spill");
             };
-            // c5 cdecl: param i (i >= 2) sits at [rbp + 16*(i-1)]; locals
-            // (i < 0) sit at [rbp + 8*i]. An over-aligned automatic object is
-            // addressed sp-relative in the realigned region; a System V
-            // variadic callee redirects named-parameter slots into the
-            // register save area (see `local_slot_base_disp`). The 32-bit
-            // signed `disp` covers any frame our compiler emits; larger bail.
+            // `local_slot_base_disp` places parameter cells, locals, an over-aligned
+            // object and a System V variadic callee's named parameters; the signed
+            // disp32 covers any frame this compiler emits.
             let (base, bytes) = local_slot_base_disp(*off, func, frame, abi);
             let Ok(disp) = i32::try_from(bytes) else {
                 return fail("LocalAddr: offset doesn't fit in disp32");
@@ -408,11 +401,8 @@ pub(super) fn emit_inst(
             frame,
         ),
         Inst::Phi { .. } => {
-            // The value is materialised by the predecessor-exit
-            // moves emitted just before each branch terminator
-            // that targets this block; at the IR position the
-            // phi's allocated Place already holds the merged
-            // value.
+            // The predecessor-exit moves before each branch into this block leave
+            // the merged value in the allocated place.
             true
         }
         other => {
@@ -653,15 +643,13 @@ fn emit_call_inst(out: &mut Out, inst: &Inst, dst: Place, fcx: &FnCtx) -> bool {
     }
 }
 
-/// Materialise the i-th host-ABI parameter into its `Place`, converting the
-/// low `kind` bytes per C99 6.3.1.3 so the register holds the canonical
-/// 64-bit sign-extended value. The incoming argument register is not always
-/// pristine at this position: an earlier `ParamRef` may have overwritten it
-/// (the allocator packs sequentially-live parameters into one register), so
-/// `param_from_home` marks the parameters that read the c5 cdecl home cell
-/// the prologue spilled at `[rbp + (idx+1)*16]` instead. The plan names the
-/// incoming register: an earlier FP parameter does not shift the integer
-/// bank, and a stack-passed parameter always reads its home cell.
+/// Materialise the i-th host-ABI parameter into its `Place`, converting
+/// the low `kind` bytes per C99 6.3.1.3. An earlier `ParamRef` may have
+/// overwritten the incoming argument register (the allocator packs
+/// sequentially-live parameters into one register), so `param_from_home`
+/// marks the parameters that read the c5 cdecl home cell the prologue
+/// spilled at `[rbp + (idx+1)*16]`. The plan names the incoming register;
+/// a stack-passed parameter always reads its home cell.
 fn emit_param_ref(
     code: &mut Vec<u8>,
     idx: u32,

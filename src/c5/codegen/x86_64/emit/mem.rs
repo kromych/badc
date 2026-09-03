@@ -1,11 +1,8 @@
 use super::*;
 
-/// `Inst::TlsAddr` lowering. Routes through the per-target TLS
-/// access shape. Linux variant-2 layout: `var = fs:[0] - (tls_total
-/// - offset)`. The Windows path emits a TEB `gs:[0x58]` table
-/// lookup indexed by `_tls_index` plus a final `lea`, and pushes
-/// the writer fixup so the linker can patch the `_tls_index`
-/// slot's RVA.
+/// `Inst::TlsAddr`. Linux variant 2: `var = fs:[0] - (tls_total - offset)`.
+/// Windows: the TEB `gs:[0x58]` table indexed by `_tls_index`, plus a
+/// final `lea`; the writer fixup patches the `_tls_index` slot.
 pub(super) fn emit_tls_addr(
     code: &mut Vec<u8>,
     dst: Place,
@@ -23,20 +20,14 @@ pub(super) fn emit_tls_addr(
     };
     match target {
         Target::LinuxX64 => {
-            // A cross-unit `extern _Thread_local` carries the referenced
-            // symbol in `extern_tls_names`; its TPOFF is unknown until
-            // the link merges the TLS blocks, so emit a 0 placeholder and
-            // record an extern fixup. A same-unit access bakes the
-            // single-unit TPOFF (`tls_total_size - offset`, correct for an
-            // in-memory or single-object emit) and also records a fixup so
-            // the linker re-patches it against the merged layout when more
-            // than one unit contributes TLS storage.
+            // A cross-unit `extern _Thread_local` (`extern_tls_names`) has no TPOFF
+            // until the link merges the TLS blocks: a 0 placeholder and an extern
+            // fixup. A same-unit access bakes the single-unit TPOFF and records a
+            // fixup for the merged layout.
             let extern_sym = extern_tls_names.get(&v).cloned();
-            // Variant-2 TPOFF is negative: the block sits below the
-            // thread pointer, `var = fs:[0] + (offset - tls_total)`.
-            // Emitting an `add` with the signed immediate (rather than
-            // a `sub` of the magnitude) keeps the field patchable with
-            // the standard negative TPOFF value.
+            // Variant-2 TPOFF is negative (`var = fs:[0] + (offset - tls_total)`);
+            // an `add` with the signed immediate keeps the field patchable with the
+            // standard value.
             let tpoff = if extern_sym.is_some() {
                 0
             } else {
@@ -83,17 +74,12 @@ pub(super) fn emit_tls_addr(
             if !(i32::MIN as i64..=i32::MAX as i64).contains(&offset) {
                 return fail("TlsAddr: offset out of i32 range");
             }
-            // PE/x86_64 TLS reads gs:[0x58] (the TEB) for the TLS
-            // array, indexes it by `_tls_index`, and adds the
-            // per-variable offset. The SSA allocator covers rax /
-            // r11 / etc.; use SCRATCH_R10 (r10, outside the
-            // allocator's pool) for the TEB pointer and `rd`
-            // itself for the index load -- the index is only live
-            // across one mov so reusing the destination is safe.
+            // PE TLS: the TEB at gs:[0x58], its TLS array indexed by `_tls_index`,
+            // plus the per-variable offset. r10 holds the TEB pointer and `rd` the
+            // index, which is live across one mov only.
             //
             // mov r10, gs:[0x58]           ; TEB
-            // mov rd_w, [rip+disp32]       ; _tls_index slot
-            //                              ;   (zero-extends to rd)
+            // mov rd_w, [rip+disp32]       ; _tls_index slot (zero-extends to rd)
             // mov r10, [r10 + rd*8]        ; tls_array[idx]
             // lea rd, [r10 + offset]
             code.extend_from_slice(&[0x65, 0x4C, 0x8B, 0x14, 0x25, 0x58, 0, 0, 0]);
@@ -105,12 +91,8 @@ pub(super) fn emit_tls_addr(
             if rex_idx != 0 {
                 code.push(rex_idx);
             }
-            // The writer's TLS-index fixup patches the 4-byte
-            // displacement at `instr_offset + 2`. With a REX
-            // prefix the disp32 lives at `instr_offset + 3` if
-            // we anchor to the REX, so anchor to the opcode byte
-            // instead -- `instr_offset + 2` then lands on the
-            // disp32 regardless of whether a REX was emitted.
+            // The TLS-index fixup patches the disp32 at `instr_offset + 2`, so the
+            // anchor is the opcode byte, not a REX prefix.
             let mov_idx_offset = code.len();
             code.push(0x8B);
             code.push(0x05 | ((rd.0 & 7) << 3));
@@ -131,14 +113,11 @@ pub(super) fn emit_tls_addr(
             code.push(0x8B);
             code.push(0x14);
             code.push(0xC2 | ((rd.0 & 7) << 3));
-            // lea rd, [r10 + disp32]: r10 already holds the module's TLS
-            // block base, so disp32 is the variable's offset within the
-            // merged block with no thread-pointer bias. A cross-unit
-            // `extern _Thread_local` offset is unknown until the link merges
-            // the TLS blocks, so emit a 0 placeholder; a same-unit access
-            // bakes its raw block offset. Both record an `elf_tpoff_fixups`
-            // entry so the linker rebases the disp32 to the merged offset
-            // (Local) or resolves it by symbol (Extern).
+            // lea rd, [r10 + disp32]: r10 is the TLS block base, so disp32 is the
+            // variable's offset in the merged block. A cross-unit offset is a 0
+            // placeholder, a same-unit one the raw block offset; both record an
+            // `elf_tpoff_fixups` entry the linker rebases (Local) or resolves by
+            // symbol (Extern).
             //   REX.W=1, REX.R = (rd >= 8), REX.B=1 (r10 base);
             //   opcode 8D;
             //   ModR/M mod=10 (disp32), reg=rd.lo, rm=010 (r10).
@@ -164,38 +143,18 @@ pub(super) fn emit_tls_addr(
     }
 }
 
-/// rbp-relative byte offset of the c5 cdecl slot `off` for the
-/// current callee, accounting for the System V variadic register
-/// save area.
-///
-/// For a non-variadic callee (and every non-SysV target) this is the
-/// plain `c5_slot_to_fp_offset`: positive c5 cdecl parameter cells at
-/// `[rbp + 16 + (off-2)*stride]`, negative locals at `[rbp + off*8]`.
-///
-/// For a System V variadic callee (System V AMD64 3.5.7) the named
-/// parameters are not pushed as positive cells -- they arrive in the
-/// argument registers and the prologue spills them into the register
-/// save area at the bottom of the frame. A named-parameter access
-/// (`off >= 2`, parameter index `off - 2`) is therefore redirected to
-/// that parameter's slot in the save area: an integer / pointer
-/// parameter to `[reg_save + int_rank*8]` within the 48-byte gp area,
-/// a floating-point parameter to `[reg_save + 48 + fp_rank*16]` within
-/// the 128-byte fp area, where `reg_save = rbp - frame_bytes` and the
-/// rank is the parameter's position within its argument-register bank
-/// (the independent int / FP banks of System V AMD64 3.2.3). Locals
-/// (`off < 0`) are unaffected.
+/// rbp-relative offset of c5 cdecl slot `off`: `c5_slot_to_fp_offset`
+/// (parameter cells at `[rbp + 16 + (off-2)*stride]`, locals at
+/// `[rbp + off*8]`), except that a System V variadic callee (ABI 3.5.7)
+/// reads a named parameter (`off >= 2`) from its slot in the register save
+/// area: `[reg_save + int_rank*8]` or `[reg_save + 48 + fp_rank*16]`,
+/// the rank being the parameter's position within its argument bank.
 pub(super) fn local_slot_off(off: i64, func: &FunctionSsa, frame: Frame, abi: super::Abi) -> i64 {
     if off >= 2 && sysv_variadic_callee(func, abi) {
         let reg_save = frame.va_reg_save_off as i64;
         let p = (off - 2) as usize;
-        // Named parameters arrive per the host ABI: the first six integer
-        // and eight floating-point parameters in argument registers (the
-        // prologue spills them into the register save area), the rest on
-        // the incoming stack just above the return address. Use the shared
-        // planner so the redirect lands on the same placement the caller
-        // produced; the parameter's bank rank is the count of same-bank
-        // register placements before it (an overflow parameter consumes no
-        // register slot).
+        // The shared planner gives the placement the caller produced; the bank
+        // rank counts the same-bank register placements before the parameter.
         let plan = super::plan_param_regs(func.n_params, func.param_fp_mask, abi);
         match plan.placements.get(p) {
             Some(super::ArgPlacement::Stack(soff)) => {
@@ -357,13 +316,10 @@ fn emit_load_fp_mem(
     true
 }
 
-/// FP store `*(f32/f64*)[base + disp] = value`. A single-precision
-/// value (C99 6.3.1.8) writes directly via `movss`; a wider f64 value
-/// (a `double` assigned to a `float` the walker didn't pre-narrow)
-/// narrows via `cvtsd2ss` into the second FP scratch first so `dn` (which may
-/// be an allocator-held xmm the result Place expects) survives.
-/// `movsd` covers the 8-byte `double` store. The stored value also
-/// feeds `dst` per the c5 store-leaves-value rule (C99 6.5.16p3).
+/// FP store `*(f32/f64*)[base + disp] = value`: `movss` for a single
+/// (C99 6.3.1.8), `cvtsd2ss` into the second FP scratch first for an f64
+/// a `float` receives, so the source xmm survives; `movsd` for a double.
+/// The stored value also feeds `dst` (C99 6.5.16p3).
 #[allow(clippy::too_many_arguments)]
 fn emit_store_fp_mem(
     code: &mut Vec<u8>,
@@ -437,15 +393,10 @@ fn emit_store_fp_mem(
     true
 }
 
-/// Single-instruction rbp-relative load for `Inst::LoadLocal`.
-/// The c5 slot offset folds into the load's ModR/M disp
-/// directly, skipping the `LocalAddr` materialisation the
-/// `LocalAddr` + `Load` pair would have required.
-/// Base register and byte displacement for addressing a local slot. An
-/// over-aligned automatic object lives in the over-aligned region: at
-/// `[rsp + region_off]` when the prologue realigned rsp (alignment above 16),
-/// at `[rbp + align_region_off + region_off]` for the static 16-aligned
-/// placement; every other slot is `[rbp + local_slot_off]` (C11 6.7.5).
+/// Base register and displacement of a local slot. An over-aligned object
+/// lives at `[rsp + region_off]` when the prologue realigned rsp, at
+/// `[rbp + align_region_off + region_off]` in the static 16-aligned
+/// placement; any other slot at `[rbp + local_slot_off]` (C11 6.7.5).
 pub(super) fn local_slot_base_disp(
     off: i64,
     func: &FunctionSsa,
@@ -466,6 +417,8 @@ pub(super) fn local_slot_base_disp(
     }
 }
 
+/// `Inst::LoadLocal`: the c5 slot offset folds into the load's
+/// displacement, so no `LocalAddr` is materialised.
 pub(super) fn emit_load_local(
     code: &mut Vec<u8>,
     dst: Place,
@@ -557,17 +510,10 @@ pub(super) fn emit_store_local(
             "StoreLocal",
         );
     }
-    // c5 spills an FP-typed accumulator into a local temp through
-    // the store-local path (the bit pattern fits 8 bytes either
-    // way), so an FpReg value bridges through `movq r, xmm` into
-    // a GPR before the store; otherwise it routes through the
-    // normal int materialisation.
+    // c5 spills an FP-typed accumulator through the store-local path, so an
+    // FpReg value bridges through `movq r, xmm` into r10, which holds
+    // nothing live here.
     let rv = if let Place::FpReg(xr) = value_place {
-        // The FP value bridges through a GPR for the integer store. r10
-        // is reserved outside both allocator banks and holds nothing
-        // live on this path (the store reads only `value`), so it is
-        // always available -- a caller-saved pick can come up empty
-        // under saturation.
         let scratch = SCRATCH_R10;
         super::encode::emit_movq_r_xmm(code, scratch, Reg(xr));
         scratch
@@ -673,11 +619,8 @@ pub(super) fn emit_store_indexed(
         return fail("StoreIndexed: base / index not int reg / spill");
     };
     let (rbase, rindex) = (regs[0], regs[1]);
-    // The store also needs the value in a register distinct from the
-    // base and index. r10 / r11 are the only reserved scratch; when both
-    // already hold the spilled base and index there is none left, so the
-    // effective address is precomputed into r10 (consuming the base and
-    // index registers) and the freed r11 receives the value.
+    // When r10 and r11 both hold the spilled base and index, the effective
+    // address is precomputed into r10 and r11 receives the value.
     let fp_value = matches!(value_place, Place::FpReg(_)) && matches!(kind, StoreKind::I64);
     let free = [SCRATCH_R10, SCRATCH_R11]
         .into_iter()
@@ -787,14 +730,8 @@ pub(super) fn emit_store(
 ) -> bool {
     let addr_place = place_of(alloc, addr);
     let value_place = place_of(alloc, value);
-    // Scratch for the addr-Place spill load (the materialise helper
-    // only writes to it when addr_place is a Spill; an IntReg place
-    // returns the underlying reg directly). r10 is reserved outside
-    // both allocator banks, so it never aliases the value's
-    // allocator-chosen register and never holds a live SSA value the
-    // spill load could clobber -- a caller-saved pick can come up
-    // empty under saturation. The value-Place uses the separate
-    // reserved r11 scratch below, disjoint from r10.
+    // r10 for a spilled address, r11 for a spilled value: both are reserved
+    // outside the allocator banks and disjoint.
     let addr_scratch = SCRATCH_R10;
     let Some(base) = materialize_int(code, addr_place, addr_scratch, frame) else {
         return fail("Store: addr Place not int reg / spill");
@@ -814,21 +751,9 @@ pub(super) fn emit_store(
             "Store",
         );
     }
-    // The value scratch must be disjoint from `base` and must not be a
-    // register the allocator parked a value live across this Store in.
-    // The earlier fixed `RCX` fallback (used when `base` landed in
-    // SCRATCH_R10) clobbered a long-lived value the allocator had
-    // placed in rcx -- e.g. a base pointer read by a later indexed
-    // load -- because rcx carries SSA values once the bank flattening
-    // lets the allocator use it. A spilled value materialised into rcx
-    // then overwrote that live value before its last use. `base` is
-    // either the addr register place or the live-aware addr scratch,
-    // both inside the allocator's caller-saved bank; r11 is reserved
-    // outside both allocator banks (see the `SCRATCH_R10` note) so it
-    // can never be `base` and never holds a live allocator value, which
-    // makes it a safe value scratch under any register pressure. A
-    // value-Place already in an int register needs no scratch and
-    // `materialize_int` returns it directly.
+    // The value scratch must differ from `base` and hold no live value:
+    // r11, reserved outside both allocator banks, is never `base` (an
+    // allocated register or r10). A value already in a register needs none.
     let value_scratch = match value_place {
         Place::IntReg(r) => Reg(r),
         _ => SCRATCH_R11,
@@ -891,12 +816,10 @@ pub(super) fn emit_imm_code(
     true
 }
 
-/// `Inst::ImmExtCode` -- `lea rd, [rip+disp32]` taking the
-/// address of a dynamically-imported function. The disp32 resolves
-/// to the import's shared stub (the same `jmp [GOT]` a call to the
-/// import reaches), so `&strcmp` yields the stub address. Records an
-/// `is_addr` PLT-call fixup at the `lea`'s instruction offset; the
-/// disp32 sits three bytes in (REX + opcode + modrm).
+/// `Inst::ImmExtCode`: `lea rd, [rip+disp32]` of a dynamically imported
+/// function, resolved to the import's shared stub (the `jmp [GOT]` a call
+/// reaches) by an `is_addr` PLT-call fixup; the disp32 sits three bytes
+/// in.
 pub(super) fn emit_imm_ext_code(
     code: &mut Vec<u8>,
     dst: Place,
@@ -958,11 +881,10 @@ pub(super) fn emit_load_unit(code: &mut Vec<u8>, width: u32, dst: Reg, base: Reg
     }
 }
 
-/// Load `width` bytes at `[base + disp]` into the integer register
-/// `dst`, using no access wider than `align` proves at that address
-/// (see [`super::super::access_pieces`]). `tmp` holds each narrow
-/// piece; it must differ from `base` and `dst`, and stays untouched
-/// when one access suffices -- the only case in which `dst` may alias
+/// Load `width` bytes at `[base + disp]` into `dst` with no access wider
+/// than `align` proves at that address (`access_pieces`). `tmp` holds each
+/// narrow piece and must differ from `base` and `dst`; it stays untouched
+/// when one access suffices, the only case in which `dst` may alias
 /// `base`.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_agg_load_int(
@@ -989,12 +911,10 @@ pub(super) fn emit_agg_load_int(
     }
 }
 
-/// As [`emit_agg_load_int`] with an SSE register destination: the
-/// eightbyte composes in `tmp` and moves across with `movq`. The
-/// composition's second register is borrowed from the stack, the
-/// marshal having no third free scratch; nothing between the push and
-/// the pop addresses `rsp`. `base` and `tmp` are the marshal's
-/// reserved scratches or argument registers, never `rax`.
+/// [`emit_agg_load_int`] into an SSE register: the eightbyte composes in
+/// `tmp` and moves across with `movq`; the second composition register is
+/// borrowed from the stack, nothing between the push and the pop
+/// addressing rsp. `base` and `tmp` are never `rax`.
 pub(super) fn emit_agg_load_sse(
     code: &mut Vec<u8>,
     dst: Reg,

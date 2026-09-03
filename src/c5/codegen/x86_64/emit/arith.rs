@@ -24,11 +24,10 @@ fn fp_arith_enc_for(op: BinOp, is_f32: bool) -> Option<fn(&mut Vec<u8>, Reg, Reg
     })
 }
 
-/// How a `setcc` result needs to be combined with the parity flag
-/// for the IEEE-754 NaN semantics required by C99 6.5.9 / 6.5.8.
-/// `ucomisd` sets ZF=PF=CF=1 on an unordered (NaN) comparison;
-/// a bare `setcc` on Cc::B / Cc::E / Cc::Be / Cc::Ne would then
-/// disagree with `!(NaN < x)` / `(NaN != x)`.
+/// How a `setcc` result combines with the parity flag for the NaN
+/// semantics of C99 6.5.9 / 6.5.8: `ucomisd` sets ZF=PF=CF=1 on an
+/// unordered compare, where a bare `setb` / `sete` / `setbe` / `setne`
+/// would be wrong.
 #[derive(Clone, Copy)]
 enum FpCmpNanFix {
     /// CC already evaluates to 0 on an unordered compare (Cc::A
@@ -210,13 +209,10 @@ pub(super) fn emit_bswap(
     true
 }
 
-/// `Inst::Fma { a, b, c, neg_product, neg_addend }` -- fused multiply
-/// add `dst = (neg_product ? -(a*b) : a*b) + (neg_addend ? -c : c)`
-/// with a single rounding (C99 6.5p8 / FP_CONTRACT). FMA3 (Haswell+)
-/// is the assumed x86_64 baseline. The `231` form computes
-/// `dst = a*b OP dst`, so the addend `c` is staged into `dst` first;
-/// the two multiplicands are forced into the scratch xmms outside the
-/// allocator pool so that staging `c` cannot clobber them.
+/// `Inst::Fma`: `dst = (neg_product ? -(a*b) : a*b) + (neg_addend ? -c : c)`
+/// with one rounding (C99 6.5p8 / FP_CONTRACT), on the FMA3 baseline. The
+/// `231` form computes `dst = a*b OP dst`, so `c` is staged into `dst` and
+/// the multiplicands go to the scratch xmms first.
 pub(super) fn emit_fma(
     code: &mut Vec<u8>,
     dst: Place,
@@ -273,15 +269,11 @@ pub(super) fn emit_fma(
     true
 }
 
-/// `Inst::MulAdd { a, b, c, neg_product }` -- x86-64 has no
-/// three-operand integer multiply-accumulate, so the node lowers back
-/// to the `imul` plus `add` / `sub` pair. The two-operand `imul`
-/// overwrites its destination, which cannot be `rd` (still to receive
-/// `c`), so the product forms in a multiplicand's own register when
-/// this instruction is that value's last reader -- the register the
-/// allocator would have given the separate product -- and in
-/// `SCRATCH_R11` otherwise. Both multiplicands are consumed before `c`
-/// is staged, so `rd` may hold either of them.
+/// `Inst::MulAdd`: `imul` then `add` / `sub`, since x86-64 has no integer
+/// multiply-accumulate. The two-operand `imul` overwrites its destination,
+/// which cannot be `rd` while `c` is still to arrive, so the product forms
+/// in a multiplicand's own register when this instruction is its last
+/// reader, else in `SCRATCH_R11`.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_mul_add(
     code: &mut Vec<u8>,
@@ -299,11 +291,8 @@ pub(super) fn emit_mul_add(
     };
     let (pa, pb, pc) = (place_of(alloc, a), place_of(alloc, b), place_of(alloc, c));
     let dies_here = |val: u32| alloc.last_use.get(val as usize).copied() == Some(v);
-    // `c + a*b` with the addend elsewhere can multiply into the
-    // destination and add in place; `c - a*b` needs the destination
-    // for the addend, so its product goes to a multiplicand's own
-    // register when this instruction is that value's last reader, and
-    // to the fixed scratch otherwise.
+    // `c + a*b` with the addend elsewhere multiplies into the destination;
+    // `c - a*b` needs the destination for the addend.
     let into_dst = !neg_product && pc != Place::IntReg(rd.0);
     let (rp, other) = if into_dst && pb == Place::IntReg(rd.0) {
         (rd, pa)
@@ -365,12 +354,9 @@ pub(super) fn emit_mul_add(
     true
 }
 
-/// `Inst::Fneg(v)` -- flip the IEEE 754 sign bit. For a `double`
-/// the mask is `1 << 63`; for a single-precision value (C99 6.3.1.8)
-/// the mask is `1 << 31`, flipping the sign bit of the f32 held in
-/// the low dword. Builds the mask on the fly into the second FP scratch
-/// (movq xmm, r10 after loading the immediate into r10) and xors in
-/// place.
+/// `Inst::Fneg`: flip the IEEE 754 sign bit, `1 << 63` for a double and
+/// `1 << 31` for a single held in the low dword (C99 6.3.1.8), through a
+/// mask built in the second FP scratch.
 pub(super) fn emit_fneg(
     code: &mut Vec<u8>,
     dst: Place,
@@ -389,11 +375,7 @@ pub(super) fn emit_fneg(
     if dn.0 != dd.0 {
         emit_movapd_xmm_xmm(code, dd, dn);
     }
-    // Build the sign-bit mask in an integer scratch and transfer to
-    // the second FP scratch, then xorpd in place. r10 is reserved outside both
-    // allocator banks and holds nothing live on this path (Fneg reads
-    // only its FP `value`), so the mask load clobbers no allocator
-    // value.
+    // r10 holds nothing live here.
     let scratch_int = SCRATCH_R10;
     let mask: i64 = if alloc.is_f32(v) {
         0x8000_0000
@@ -407,11 +389,9 @@ pub(super) fn emit_fneg(
     true
 }
 
-/// `sqrt` / `fabs` intrinsic -- a unary FP operation lowering to a
-/// single hardware instruction. `sqrt` uses `SQRTSD` / `SQRTSS`; `fabs`
-/// clears the IEEE 754 sign bit by AND-ing with the inverted-sign mask
-/// (C99 7.12.7), built in an integer scratch and transferred to
-/// the second FP scratch, mirroring `emit_fneg`.
+/// A unary FP intrinsic that is one instruction: `sqrtsd` / `sqrtss`, or
+/// `fabs` as an AND with the inverted sign mask (C99 7.12.7) built as in
+/// `emit_fneg`.
 pub(super) fn emit_fp_unary(
     code: &mut Vec<u8>,
     dst: Place,
@@ -507,11 +487,9 @@ pub(super) fn emit_fp_cast(
             true
         }
         FpCastKind::UIntToFp => {
-            // Unsigned 64-bit to double. SSE2 has no unsigned convert
-            // before AVX512: when bit 63 is clear the signed convert is
-            // exact; otherwise halve the value -- OR-ing the discarded
-            // low bit back in as the sticky bit so the narrowing rounds
-            // correctly -- convert, and double.
+            // Unsigned 64-bit to double (SSE2 has no unsigned convert): a clear bit
+            // 63 makes the signed convert exact; otherwise halve with the discarded
+            // low bit as the sticky bit, convert, and double.
             let Some(src) = materialize_int(code, src_place, SCRATCH_R10, frame) else {
                 return fail("FpCast UIntToFp: value not int reg / spill");
             };
@@ -575,11 +553,8 @@ pub(super) fn emit_fp_cast(
             true
         }
         FpCastKind::UFpToInt => {
-            // Double to unsigned 64-bit. SSE2 `cvttsd2si` is signed: a
-            // value in [2^63, 2^64) saturates to the integer
-            // indefinite. Compare with 2^63: below it the signed
-            // truncate is exact; at or above, subtract 2^63, truncate
-            // the in-range remainder, and set bit 63.
+            // Double to unsigned 64-bit: `cvttsd2si` saturates at 2^63, so at or
+            // above it subtract 2^63, truncate, and set bit 63.
             let Some(src_xmm) = materialize_fp(code, src_place, Reg(frame.fp_scratch[0]), frame)
             else {
                 return fail("FpCast UFpToInt: value not fp reg / spill / int reg");
@@ -897,21 +872,11 @@ fn emit_int_binop(
     alloc: &Allocation,
     frame: Frame,
 ) -> bool {
-    // Stage lhs into rd first, so the two-operand ops below can
-    // `op rd, rm` and land the result in rd. A spilled rhs for an
-    // arithmetic or compare op was already handled in place above; the
-    // remaining spilled-rhs case is a shift, whose count this scratch
-    // carries. A register rhs needs the scratch only to preserve itself
-    // when it aliases rd.
-    //
-    // The scratch must not be rcx for a shift: the shift count is moved
-    // into rcx (cl) by the shift arm below, which preserves any live SSA
-    // value the allocator parked in rcx with a push / pop around that
-    // move. Materialising a spilled count straight into rcx here would
-    // overwrite that live value before the push could save it. r11 is
-    // reserved outside both allocator banks (see the `SCRATCH_R10`
-    // note), so it is always a safe count scratch; the non-shift path
-    // keeps the cheaper r10 / rcx choice.
+    // The rhs scratch carries a spilled shift count, or preserves a register
+    // rhs that aliases rd. It must not be rcx for a shift: the shift arm
+    // moves the count into cl while preserving a live rcx with a push / pop,
+    // which a count materialised into rcx here would defeat; r11 is always
+    // safe.
     let is_shift = matches!(op, BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror);
     let rhs_scratch = if is_shift {
         if rd.0 == SCRATCH_R10.0 {
@@ -925,12 +890,8 @@ fn emit_int_binop(
         SCRATCH_R10
     };
     let rhs_aliases_rd = matches!(rhs_place, Place::IntReg(r) if r == rd.0);
-    // When the allocator places both rhs and dst in the same register
-    // and lhs is spilled, the lhs spill-load below writes rd before
-    // any rhs-staging mov runs, destroying the rhs value. Preserve
-    // rhs into the scratch first so the downstream
-    // rhs_aliases_rd / stage_rhs_to_scratch paths read the right
-    // operand.
+    // When rhs and dst share a register and lhs is spilled, the lhs load
+    // below would overwrite rhs, so rhs moves to the scratch first.
     let rhs_preserved_in_scratch = rhs_aliases_rd && matches!(lhs_place, Place::Spill(_));
     if rhs_preserved_in_scratch {
         emit_mov_rr(code, rhs_scratch, rd);
@@ -938,20 +899,13 @@ fn emit_int_binop(
     let Some(rn) = int_operand_into_rd(code, lhs_place, rd, frame) else {
         return fail("Binop: lhs not int reg / spill");
     };
-    // Div / Mod / Mulh / Mulhu hijack rax + rdx (SDM: IDIV's implicit
-    // operand is rdx:rax and the result is rax (quot), rdx (rem);
-    // one-operand IMUL / MUL multiply rax and write rdx:rax). They
-    // need their own marshalling separate from the two-operand
-    // path below.
+    // Div / Mod / Mulh / Mulhu use the implicit rdx:rax pair and marshal
+    // separately.
     if matches!(
         op,
         BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu | BinOp::Mulh | BinOp::Mulhu
     ) {
-        // When the rhs aliased rd and was saved into the scratch
-        // above (because the spilled lhs load just overwrote rd), it
-        // now lives in that scratch register, not its original
-        // place; reading the original place would take the lhs as the
-        // second operand.
+        // A preserved rhs now lives in the scratch, not in its original place.
         let rhs_place = if rhs_preserved_in_scratch {
             Place::IntReg(rhs_scratch.0)
         } else {
@@ -959,19 +913,9 @@ fn emit_int_binop(
         };
         return emit_binop_rdx_rax(code, op, dst, rd, rn, rhs_place, frame);
     }
-    // x86_64's two-operand op `OP rd, rm` mutates rd. The standard
-    // sequence below stages LHS into rd then emits `OP rd, rm`.
-    // When rhs is an IntReg whose register is rd, materialize_int
-    // would return rd as `rm`; the subsequent `mov rd, rn` would
-    // then overwrite the rhs value, and the op would compute
-    // `lhs OP lhs` instead of `lhs OP rhs`.
-    //
-    // For commutative ops (Add, Mul, And, Or, Xor) the work to fix
-    // this is zero: rd already holds the value we want, so emit
-    // `OP rd, rn` directly -- rd <- rhs OP lhs == lhs OP rhs.
-    //
-    // For non-commutative ops (Sub, Lt, Gt, ...) we must stage
-    // rhs into the scratch before the `mov rd, rn` clobbers it.
+    // `OP rd, rm` mutates rd. When rhs already sits in rd, a commutative op
+    // takes `OP rd, rn` as it stands; a non-commutative one stages rhs into
+    // the scratch before `mov rd, rn` overwrites it.
     let commutative = matches!(
         op,
         BinOp::Add | BinOp::Mul | BinOp::And | BinOp::Or | BinOp::Xor
@@ -1001,12 +945,8 @@ fn emit_int_binop(
         emit_rr(code, alu_mnem(op).unwrap(), 8, rd, other);
         return true;
     }
-    // Comparison ops read both operands, set flags, then setcc+
-    // movzx writes the dst. The dst is not used as an input, so
-    // the staging `mov rd, rn` below is unnecessary; the rhs may
-    // even live in `rd` itself (rhs_aliases_rd), and `cmp rn, rm`
-    // still reads it before any write touches rd. Skip the stage
-    // and the scratch-mov for cmp ops.
+    // A compare reads both operands and writes dst only through setcc, so it
+    // needs neither the staging mov nor the scratch.
     let stage_rhs_to_scratch = rhs_aliases_rd && !is_cmp;
     let Some(rm) = (if rhs_preserved_in_scratch {
         Some(rhs_scratch)
@@ -1020,12 +960,9 @@ fn emit_int_binop(
     }) else {
         return fail("Binop: rhs not int reg / spill");
     };
-    // `lea rd, [rn + rm]` folds the staging mov and the add into one
-    // address-unit op when the result lands in a different register
-    // than the lhs. It reads both operands before writing rd (so it is
-    // correct even were rd to alias rm) and sets no flags, which an
-    // add-result consumer never reads. The rd == rn case is already a
-    // single `add rd, rm`, so it stays on the path below.
+    // `lea rd, [rn + rm]` folds the staging mov and the add when the result
+    // lands in another register: it reads both operands before writing rd
+    // and sets no flags, which no add consumer reads.
     if matches!(op, BinOp::Add) && rd.0 != rn.0 {
         super::encode::emit_lea_r_sib(code, rd, rn, rm, 1);
         spill_dst_to_slot(code, dst, rd, frame);
@@ -1060,21 +997,12 @@ fn emit_int_binop(
     true
 }
 
-/// Lower `BinOp::{Div,Mod,Divu,Modu,Mulh,Mulhu}` on x86_64. All six
-/// use the implicit rdx:rax pair: IDIV / DIV take the dividend there
-/// (low half in rax) and write the quotient to rax and the remainder
-/// to rdx; one-operand IMUL / MUL multiply rax by the operand and
-/// write the 128-bit product to rdx:rax. The surrounding
-/// allocator-chosen values in rax / rdx must be preserved across the
-/// sequence. The 8-byte preserve uses `push %rax` / `pop %rax`; the
-/// temporary 8-byte misalignment is fine -- none of these read or
-/// write the stack, and SysV / Win64 only require 16-byte alignment
-/// at `call` sites.
-///
-/// `rn` is the already-materialised lhs; `rhs_place` is the second
-/// operand's place so we can route it directly into r10 (which the
-/// one-operand reg/mem field can name, and which is never in any
-/// allocator pool).
+/// `BinOp::{Div,Mod,Divu,Modu,Mulh,Mulhu}`, all through the implicit
+/// rdx:rax pair: IDIV / DIV read the dividend there and leave the quotient
+/// in rax and the remainder in rdx; one-operand IMUL / MUL write the
+/// 128-bit product to rdx:rax. Allocated values in rax / rdx are preserved
+/// with push / pop; the transient misalignment is harmless since no call
+/// intervenes. `rn` is the materialised lhs; `rhs_place` routes into r10.
 fn emit_binop_rdx_rax(
     code: &mut Vec<u8>,
     op: BinOp,
@@ -1089,26 +1017,15 @@ fn emit_binop_rdx_rax(
     let want_rdx = is_mulh || matches!(op, BinOp::Mod | BinOp::Modu);
     let is_unsigned = matches!(op, BinOp::Divu | BinOp::Modu | BinOp::Mulhu);
 
-    // Preserve rax / rdx: the allocator can park a live value in
-    // either register and the sequence must not destroy it. rax
-    // receives the lhs and the quotient / low product half; rdx
-    // receives the dividend high half (cqo / xor edx,edx) and the
-    // remainder / high product half. Skip the save when rd will
-    // overwrite the register anyway, since the value living there is
-    // dead the moment rd commits its result.
+    // rax receives the lhs and the quotient / low half, rdx the high half and
+    // the remainder; a register rd overwrites anyway is not saved.
     let preserve_rax = rd.0 != Reg::RAX.0;
     let preserve_rdx = rd.0 != Reg::RDX.0;
     let pushed_bytes = (preserve_rax as i32 + preserve_rdx as i32) * 8;
 
-    // Resolve the second operand. All four one-operand forms accept
-    // r/m64, so a spilled operand is named directly through its stack
-    // slot (its rsp offset shifted by the rax/rdx preservation pushes
-    // below) and a register operand outside the implicit rdx:rax pair
-    // is used in place -- neither needs a scratch register, which the
-    // surrounding high-pressure allocation may not have free. An
-    // operand that aliases rax or rdx is copied into the dedicated
-    // scratch before the rax setup overwrites those registers; the
-    // scratch is free unless it already holds the lhs (a spilled lhs).
+    // The one-operand forms accept r/m64, so a spilled operand is named
+    // through its slot (shifted by the pushes) and a register operand
+    // outside rdx:rax stays in place; one inside is copied out first.
     enum RmOperand {
         Reg(Reg),
         Mem(Reg, i32),
@@ -1120,13 +1037,8 @@ fn emit_binop_rdx_rax(
             RmOperand::Mem(sb, off)
         }
         Place::IntReg(r) => {
-            // An operand in rax / rdx must be copied out before the
-            // rax setup overwrites those registers. The copy target
-            // must not collide with the staged lhs: a spilled lhs is
-            // materialised into rd, which for a spilled dst is
-            // SCRATCH_R10, so SCRATCH_R10 is not always free here.
-            // SCRATCH_R11 is reserved outside both allocator pools
-            // and never holds the lhs, so it is always available.
+            // r10 may hold a spilled lhs (a spilled dst is staged there); r11 never
+            // does.
             let rhs_scratch = if rn.0 == SCRATCH_R10.0 {
                 SCRATCH_R11
             } else {
@@ -1193,16 +1105,9 @@ enum ShiftCount {
     Imm(i64),
 }
 
-/// Lower `rd = rd OP count` for a variable-count shift / rotate, with
-/// the value to shift already staged in `rd`. x86 reads the count
-/// from cl, so the count is moved into rcx and the shift issued
-/// against rd. When the allocator parked a live SSA value in rcx
-/// (rcx is in the caller-saved pool), it is preserved with push /
-/// pop around the move; the body is register-to-register only, so
-/// the transient 8-byte misalignment is irrelevant (no call site
-/// intervenes). When `rd` itself is rcx the value to shift and the
-/// count would both need rcx at once, so the shift is staged in a
-/// reserved scratch and copied back.
+/// `rd = rd OP count` for a variable count, the value already in `rd`: the
+/// count moves into rcx (cl), a live rcx preserved with push / pop; when
+/// `rd` is rcx the shift is staged in a reserved scratch and copied back.
 #[allow(clippy::too_many_arguments)]
 fn emit_shift_by_count_reg(
     code: &mut Vec<u8>,
@@ -1235,12 +1140,9 @@ fn emit_shift_by_count_reg(
         spill_dst_to_slot(code, dst, rd, frame);
         return true;
     }
-    // Save rcx whenever any value is allocated there (unless the count
-    // already sits in rcx, in which case nothing below writes it). A
-    // `def < v < last_use` pc-interval test is not a liveness test: a
-    // value carried around a loop back edge is live at the shift while
-    // the shift's pc lies outside the interval.
-    // A `-ffixed-rcx` holds a value of the program's, preserved the same way.
+    // rcx is saved whenever any value is allocated there: a `def < v <
+    // last_use` interval test misses a value carried around a loop back
+    // edge. A `-ffixed-rcx` value is preserved the same way.
     let _ = v;
     let rcx_holds_live = count_reg.map(|r| r.0).unwrap_or(u8::MAX) != Reg::RCX.0
         && (frame.fixed_regs.has_gpr(Reg::RCX.0)
@@ -1264,13 +1166,10 @@ fn emit_shift_by_count_reg(
     true
 }
 
-/// Whether lowering `Inst::BinopI { op, rhs_imm: imm }` builds the
-/// immediate into a register at the site -- the `mov r, imm64` the
-/// peepholes in [`emit_binop_imm`] exist to avoid. True means the
-/// loop-invariant hoist can lift that materialization into a preheader
-/// by rewriting the site to the register form; false means the
-/// immediate rides the instruction's own imm8 / imm32 field and the
-/// rewrite would add work. Mirrors the arm order below.
+/// Whether `Inst::BinopI { op, rhs_imm: imm }` materialises the immediate
+/// into a register, so the loop-invariant hoist can lift it into a
+/// preheader; false when it rides the instruction's own field. Mirrors
+/// the arm order in `emit_binop_imm`.
 pub(crate) fn binop_imm_materializes(op: BinOp, imm: i64) -> bool {
     let fits_i32 = i32::try_from(imm).is_ok();
     match op {

@@ -1,11 +1,8 @@
 use super::*;
 
-/// Per-function frame layout. Bytes are 16-aligned at every
-/// region boundary so SysV / Win64's sp-at-call invariant holds.
-/// Compute the x86_64 stack-frame layout for `func`. Fills the shared
-/// [`Frame`]'s x86_64 fields; the aarch64-only fields stay at their defaults.
-/// Per-function stack-frame layout for x86_64. Every region is an explicit
-/// byte count so the prologue and epilogue read the same values.
+/// Per-function stack-frame layout. Every region is an explicit byte
+/// count, 16-aligned at each boundary, so the prologue and the epilogue
+/// read the same values.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Frame {
     /// Total frame the prologue allocates: locals + allocator spills + saved
@@ -67,46 +64,33 @@ pub(crate) fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::
     let canary_bytes =
         super::ssa::emit_common::canary_bytes(func, declared_locals_bytes, abi.stack_protect);
     let locals_bytes = declared_locals_bytes + canary_bytes;
-    // System V variadic callees reserve the 176-byte register save
-    // area (System V AMD64 3.5.7) at the bottom of the frame. It is
-    // added to `frame_bytes` only; `alloc_spill_base` (and thus the
-    // spill / locals offsets, which are measured from rbp down by
-    // `alloc_spill_base`) is unchanged, so the existing regions keep
-    // their rbp-relative positions and the save area takes the lowest
-    // bytes.
+    // A System V variadic callee's register save area (ABI 3.5.7) takes the
+    // lowest bytes of the frame; the rbp-relative regions above it keep
+    // their offsets.
     let va_save_bytes = if sysv_variadic_callee(func, abi) {
         SYSV_REG_SAVE_BYTES
     } else {
         0
     };
-    // The save area sits above the saved-callee-GPR region
-    // (addressed bottom-up from rsp) and below the locals / spill
-    // region (addressed top-down from rbp), so neither region's
-    // offset formula changes. Its base is the gp area start.
     let va_reg_save_off = if va_save_bytes > 0 {
         -((locals_bytes + alloc_spill_bytes + va_save_bytes) as i32)
     } else {
         0
     };
-    // Saved non-volatile xmm scratch (Win64): 16 bytes per register,
-    // placed at the bottom of the frame below the saved-GPR region.
+    // Win64: the saved non-volatile xmm scratch, 16 bytes each, below the
+    // saved GPRs.
     let saved_fpr_bytes = alloc.fp_used.len() as u32 * 16;
-    // Inline-asm scratch, directly below the va save area (or the spill
-    // region when there is none) and above the rsp-addressed saved
-    // registers. Sized for the largest block in the function.
+    // The inline-asm scratch region, sized for the largest statement.
     let asm_bytes = asm_scratch_bytes(func, abi.fixed_regs);
     let asm_scratch_off = if asm_bytes > 0 {
         -((locals_bytes + alloc_spill_bytes + va_save_bytes + asm_bytes) as i32)
     } else {
         0
     };
-    // An over-aligned region whose alignment is exactly 16 joins the static
-    // frame between the rbp-addressed regions and the rsp-addressed saved-
-    // register block: every region above it is a 16-byte multiple, so its
-    // base is 16-aligned with no rsp move. Above 16 the prologue realigns
-    // rsp instead. A region whose members have no emitted access needs no
-    // bytes, the same decision `compute_frame_base` makes for the locals
-    // region (`locals_bytes` is 0 exactly when no local access survives).
+    // A region aligned to exactly 16 joins the static frame, whose regions
+    // above it are all 16-byte multiples; above 16 the prologue realigns rsp
+    // instead. A region with no emitted access needs no bytes, as
+    // `compute_frame_base` decides for the locals.
     let region_bytes = func.realign_region_bytes.max(0) as u32;
     let static_region_bytes = if func.frame_align == 16 && declared_locals_bytes > 0 {
         region_bytes
@@ -121,25 +105,17 @@ pub(crate) fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::
         + asm_bytes
         + static_region_bytes;
     let param_spill_bytes = prologue_param_spill_bytes(func, alloc, abi);
-    // A Win64 variadic callee receives every argument (named and
-    // variadic) in a contiguous 8-byte-per-argument region: the
-    // first four in rcx/rdx/r8/r9 (spilled by the prologue into
-    // the caller-reserved home area at `[rbp + 16 + i*8]`), the
-    // rest on the incoming stack just above it. The body reads its
-    // named parameters and `va_arg` walks the variadic tail with a
-    // single 8-byte stride across that region, so the cell stride
-    // is 8 rather than the 16-byte c5 cdecl cell width. Every other
-    // callee keeps the 16-byte stride.
+    // A Win64 variadic callee reads its named parameters and walks the
+    // variadic tail across one contiguous 8-byte-per-argument region (the
+    // home area, then the incoming stack), so its cell stride is 8.
     let param_cell_stride = if win64_variadic_callee(func, abi) {
         8
     } else {
         16
     };
-    // An automatic object aligned above 16 realigns rsp in the prologue and
-    // lives in a region below the static frame, addressed sp-relative; the
-    // frame is dynamic-sp so spills go through rbp and the epilogue restores
-    // rsp from rbp (C11 6.7.5). An alignment of exactly 16 keeps the static
-    // frame and addresses the region rbp-relative.
+    // An automatic object aligned above 16 lives in a realigned region below
+    // the static frame, addressed through rsp; the frame is then dynamic-sp
+    // (C11 6.7.5).
     let realign_align = if func.frame_align > 16 {
         func.frame_align as u32
     } else {
@@ -177,8 +153,7 @@ pub(super) fn asm_scratch_bytes(func: &FunctionSsa, fixed: super::FixedRegs) -> 
         let Inst::InlineAsm { asm, args } = inst else {
             continue;
         };
-        // A no-op statement emits no staging (`emit_inline_asm`), so it
-        // needs no scratch.
+        // A no-op statement stages nothing.
         if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::X86) {
             continue;
         }
@@ -203,17 +178,12 @@ pub(super) fn asm_scratch_bytes(func: &FunctionSsa, fixed: super::FixedRegs) -> 
 }
 
 /// The GP / FP register masks an inline-asm statement saves around its
-/// body, and the staging register its capture / load / store-back
-/// sequences run through. The stage must not alias any GP operand
-/// register (a `register T v asm("reg")` binding can pin an operand to
-/// any GPR, including r10 / r11), so it is chosen per statement: r10 /
-/// r11 first (outside the allocator banks, nothing to save), then any
-/// clobbered non-operand register (already saved), then a free
-/// allocator-visible register, added to the save mask. Sizing
-/// (`asm_scratch_bytes`) and emission (`emit_inline_asm`) share this so
-/// the frame region always covers the emitted save list. A `-ffixed-`
-/// register holds nothing of the compiler's, so it is neither the stage
-/// nor saved: a write the template makes to it stays, as under gcc.
+/// body, and the register its captures, loads and store-backs stage
+/// through. The stage may not alias an operand register (a
+/// `register T v asm("reg")` binding can pin one to any GPR), so it is
+/// picked per statement: r10 / r11, else a clobbered non-operand register,
+/// else a free allocator-visible register added to the save mask. A
+/// `-ffixed-` register is neither staged through nor saved.
 pub(super) fn asm_save_masks_and_stage(
     asm: &super::super::ir::AsmBlock,
     op_reg: &[Option<u8>],
@@ -237,11 +207,6 @@ pub(super) fn asm_save_masks_and_stage(
         }
     }
     const STAGE_CANDIDATES: [u8; 14] = [10, 11, 0, 3, 1, 2, 6, 7, 8, 9, 12, 13, 14, 15];
-    // The stage carries no value across the template, so a clobbered
-    // register serves at no cost (it is saved regardless); r10 / r11
-    // are free even unclobbered. A free allocator-visible register may
-    // hold a live value, so it is the last resort and joins the save
-    // list.
     let free = |r: u8| operand_gp & (1 << r) == 0 && !fixed.has_gpr(r);
     let stage = [10u8, 11]
         .into_iter()
@@ -262,17 +227,9 @@ pub(super) fn asm_save_masks_and_stage(
     Ok((used & !fixed.gpr, fp_used & !fixed.fpr, Reg(stage)))
 }
 
-/// True when the function is a variadic c5 callee compiled for the
-/// Win64 host variadic ABI (Microsoft x64 calling convention). Win64
-/// is the only x86_64 target whose `Abi` sets `position_indexed_args`
-/// (the by-position rcx/rdx/r8/r9 placement); SysV x86_64 leaves it
-/// clear, so this gate selects Win64 alone and leaves the SysV
-/// variadic c5 path on its 16-byte cdecl stack-push shape byte for
-/// byte. Under this ABI named arguments arrive in argument registers
-/// and the variadic tail rides the incoming stack at 8-byte stride;
-/// the prologue spills the named register arguments into the caller's
-/// home area, `va_start` points at the first variadic 8-byte slot, and
-/// `va_arg` advances 8.
+/// A variadic callee under the Win64 host variadic ABI, the only x86_64
+/// `Abi` with `position_indexed_args`: the named arguments arrive in
+/// registers and the variadic tail on the incoming stack at 8-byte stride.
 pub(super) fn win64_variadic_callee(func: &FunctionSsa, abi: super::Abi) -> bool {
     debug_assert!(
         !abi.position_indexed_args || matches!(abi.arch, super::Arch::X86_64),
@@ -281,32 +238,16 @@ pub(super) fn win64_variadic_callee(func: &FunctionSsa, abi: super::Abi) -> bool
     func.is_variadic && abi.position_indexed_args
 }
 
-/// Bytes the System V AMD64 register save area occupies (ABI 3.5.7):
-/// the six integer argument registers (rdi rsi rdx rcx r8 r9) at
-/// `[base + 0 .. 48]` followed by the eight XMM argument registers
-/// (xmm0..xmm7) at `[base + 48 .. 176]`. `va_start`'s gp_offset /
-/// fp_offset and `va_arg`'s 48 / 176 bounds all derive from this
-/// single layout.
+/// The System V AMD64 register save area (ABI 3.5.7): rdi rsi rdx rcx r8 r9
+/// at `[base .. 48]`, then xmm0..xmm7 at `[base + 48 .. 176]`.
 pub(super) const SYSV_GP_SAVE_BYTES: u32 = 6 * 8;
 const SYSV_FP_SAVE_BYTES: u32 = 8 * 16;
 pub(super) const SYSV_REG_SAVE_BYTES: u32 = SYSV_GP_SAVE_BYTES + SYSV_FP_SAVE_BYTES;
 
-/// True when the function is a variadic c5 callee compiled for the
-/// System V AMD64 host variadic ABI (Linux x86_64). System V is the
-/// x86_64 target with `shadow_space == 0`, no `position_indexed_args`
-/// (the standard rdi/rsi/.../xmm bank placement), and
-/// `variadic_zero_xmm_count` set (the caller passes the XMM-argument
-/// count in `al`). Win64 (shadow_space 32, position_indexed_args,
-/// no al) and every aarch64 target are excluded, so this gate selects
-/// Linux x86_64 alone.
-///
-/// Under this ABI the named arguments arrive in the standard argument
-/// registers (integer bank rdi.. + FP bank xmm0..), the variadic tail
-/// rides the same banks then the incoming stack, the callee prologue
-/// spills rdi..r9 + xmm0..xmm7 into a register save area (System V
-/// AMD64 3.5.7), `va_start` initialises the `__va_list_tag` offsets and
-/// pointers, and `va_arg` walks the gp area, fp area, then the overflow
-/// area per `kind`.
+/// A variadic callee under the System V AMD64 host variadic ABI (Linux
+/// x86_64): the standard register banks then the stack, the register save
+/// area (ABI 3.5.7) spilled by the prologue, and `al` carrying the XMM
+/// argument count.
 pub(super) fn sysv_variadic_callee(func: &FunctionSsa, abi: super::Abi) -> bool {
     func.is_variadic
         && matches!(abi.arch, super::Arch::X86_64)
@@ -315,27 +256,14 @@ pub(super) fn sysv_variadic_callee(func: &FunctionSsa, abi: super::Abi) -> bool 
         && abi.variadic_zero_xmm_count
 }
 
-/// Registers that are caller-saved on both SysV AMD64 and Win64.
-/// Candidate pool for `pick_caller_saved_scratch`, used to find an
-/// *additional* scratch beyond the dedicated fixed scratch r10 / r11.
-/// The intersection of the two ABIs' caller-saved sets is rax, rcx,
-/// rdx, r8, r9, r10, r11; rsi and rdi are caller-saved on SysV but
-/// callee-saved on Win64, so they are excluded. r10 / r11 are the
-/// reserved fixed scratch (`SCRATCH_R10` / `SCRATCH_R11`) and are
-/// excluded so a pick never aliases a register the caller already
-/// committed as scratch. Order favours rax (rarely a call argument)
-/// then the argument registers rcx / rdx / r8 / r9.
+/// Registers caller-saved on both System V AMD64 and Win64 (rsi and rdi
+/// are callee-saved on Win64), less the reserved r10 / r11: the pool for an
+/// additional scratch, rax first as it is rarely an argument.
 const CALLER_SAVED_INT_SCRATCHES: &[u8] = &[0, 1, 2, 8, 9];
 
-/// Pick a caller-saved x86_64 GPR that is neither `rd` nor any
-/// register in `operand_regs`. Returns `None` when every
-/// candidate in `CALLER_SAVED_INT_SCRATCHES` is excluded -- callers
-/// then bail the emit rather than silently fall through to a
-/// callee-saved register (which would violate the System V /
-/// Win64 callee-save contract and corrupt the caller's state on
-/// return). Used by emit handlers that need an intra-instruction
-/// scratch (BinopI immediate-materialise, VaArg staging, alloca
-/// bookkeeping, ...).
+/// A caller-saved GPR that is neither `rd` nor in `operand_regs`; `None`
+/// when the pool is exhausted, so the caller bails rather than take a
+/// callee-saved register.
 pub(super) fn pick_caller_saved_scratch(
     rd: Reg,
     operand_regs: &[Reg],
@@ -353,12 +281,8 @@ pub(super) fn pick_caller_saved_scratch(
     None
 }
 
-/// Same as `pick_caller_saved_scratch`, but additionally avoids
-/// any register that carries an SSA value live across the current
-/// instruction. `pc` is the current instruction's index; a value
-/// `x` is live across `pc` when `x < pc < alloc.last_use[x]`. The
-/// chosen scratch is then disjoint from `rd`, the operand list,
-/// and every register the next instructions need to read.
+/// `pick_caller_saved_scratch` avoiding also every register holding an SSA
+/// value live across instruction `pc` (`x < pc < last_use[x]`).
 fn pick_caller_saved_scratch_live_aware(
     rd: Reg,
     operand_regs: &[Reg],
@@ -381,29 +305,9 @@ fn pick_caller_saved_scratch_live_aware(
     pick_caller_saved_scratch(rd, &live, fixed)
 }
 
-/// Total bytes the prologue allocates between the return
-/// address and the saved rbp for c5 cdecl parameter slots plus
-/// host-stack overflow. Mirrors the prologue's branch structure
-/// exactly so prologue and epilogue agree on one value:
-///
-/// * Variadic callees: the caller pushes 16-byte cells onto the
-///   bytecode stack; the callee allocates nothing.
-/// * Non-variadic, n_params within `int_arg_regs.len()`:
-///   `n_reg * 16`, or 0 when every register-passed parameter is
-///   `ParamRef`-seeded with no address taken and no surviving
-///   `Load/StoreLocal` -- in which case the entire register
-///   stripe drops out and no `pop r10` / `push r10` sequence is
-///   needed to preserve the return address.
-/// * Non-variadic, host-stack overflow: full `n_params * 16`.
-/// * Struct-returning callees: the walker excludes them from
-///   `ParamRef` synthesis, so `seeded` is empty, the elision
-///   check fails, and `n_params * 16` is returned.
-/// A function that meets every condition to skip the standard
-/// push rbp / mov rbp,rsp / pop rbp prologue triple: no callee
-/// it must reserve frame for, no param spill, no callee-saved
-/// GPR to spill. The caller-pushed return address sits at top of
-/// stack untouched, so the function can ret directly with no
-/// stack adjustment.
+/// A function that needs no frame at all: nothing to reserve, no parameter
+/// spill, no callee-saved register, no call; the return address stays at
+/// the top of the stack and `ret` returns directly.
 pub(super) fn is_full_leaf(
     func: &FunctionSsa,
     frame: Frame,
@@ -413,53 +317,29 @@ pub(super) fn is_full_leaf(
     if frame.frame_bytes != 0 || frame.param_spill_bytes != 0 || abi.mcount_frame {
         return false;
     }
-    // A function that realigns rsp for an over-aligned automatic object needs
-    // the frame pointer to restore rsp on exit; it is never leaf-elided.
+    // Realigning rsp needs the frame pointer to restore it.
     if frame.realign_align != 0 {
         return false;
     }
-    // A Win64 variadic callee must establish rbp so the prologue can
-    // spill its named register arguments into the caller's home area
-    // and the body / `va_arg` can address that area through rbp; it is
-    // never leaf-elided.
+    // A host variadic callee needs rbp and a frame for the home area or the
+    // register save area.
     if win64_variadic_callee(func, abi) {
         return false;
     }
-    // A System V variadic callee must establish rbp and a frame for its
-    // register save area (System V AMD64 3.5.7) and named-parameter
-    // cells; it is never leaf-elided.
     if sysv_variadic_callee(func, abi) {
         return false;
     }
     if !alloc.gpr_used.is_empty() {
         return false;
     }
-    // A saved non-volatile xmm scratch (Win64) needs a frame to hold it
-    // and an epilogue to restore it.
     if !alloc.fp_used.is_empty() {
         return false;
     }
     super::ssa::emit_common::function_makes_no_calls(func)
 }
 
-/// Per-parameter elidability scan. Returns the `(elidable, n_reg,
-/// n_stack)` triple `emit_prologue` and `prologue_param_spill_bytes`
-/// both consume. `elidable[i]` is true when parameter `i` has a
-/// surviving `Inst::ParamRef`, no `LocalAddr`, and no live
-/// `Load/StoreLocal` against its c5-cdecl arg slot -- i.e. the body
-/// reads the value through the host arg register the SysV / Win64
-/// ABI placed it in, and the cell that the cdecl prologue would
-/// otherwise allocate at `[rbp + 16*(i+1)]` is unobserved.
-///
-/// Variadic and zero-parameter callees return an empty mask;
-/// host-stack overflow parameters (idx >= int_arg_regs.len()) are
-/// never elidable because the c5 emit always reads the cell.
-/// Per-parameter incoming-register placement from `plan_call_args`.
-/// Indexed by declared parameter position. Variadic and zero-param
-/// callees yield an empty plan. Consumed by the prologue spill and
-/// the `Inst::ParamRef` lowering to resolve each parameter's incoming
-/// integer / FP register through the independent argument-register
-/// banks.
+/// Each declared parameter's incoming placement from `plan_call_args`;
+/// empty for a variadic or zero-parameter callee.
 pub(super) fn param_placements(
     func: &FunctionSsa,
     abi: super::Abi,
@@ -470,23 +350,11 @@ pub(super) fn param_placements(
     super::ssa::emit_common::param_placements_common(func, abi)
 }
 
-/// `(n_reg, n_stack)` split of the declared parameters: how many land
-/// in argument registers (integer or FP) and how many overflow to the
-/// host stack. The entry-spill prologue fills each c5 cdecl cell from
-/// its own placement, so the register-passed and stack-passed
-/// parameters need not form a contiguous prefix and suffix: a by-value
-/// aggregate consuming no argument register (System V AMD64 MEMORY
-/// class) or a Win64 aggregate overflowing past the positional
-/// registers interleaves the two, and the per-placement fill handles
-/// it directly.
+/// How many declared parameters land in registers and how many overflow to
+/// the host stack. The prologue fills each cell from its own placement, so
+/// the two need not form a contiguous prefix and suffix.
 fn param_reg_stack_split(func: &FunctionSsa, abi: super::Abi) -> (usize, usize) {
     let placements = param_placements(func, abi);
-    // The count of register-passed (non-stack) placements and the count
-    // of stack-passed ones. The entry-spill prologue fills each c5 cdecl
-    // cell by its own placement, so the two need not form a contiguous
-    // register prefix and stack suffix; a by-value aggregate consuming no
-    // argument register (System V MEMORY class) or a Win64 aggregate
-    // overflowing past the positional registers may interleave them.
     let n_reg = placements
         .iter()
         .filter(|p| !matches!(p, super::ArgPlacement::Stack(_)))
@@ -494,6 +362,11 @@ fn param_reg_stack_split(func: &FunctionSsa, abi: super::Abi) -> (usize, usize) 
     (n_reg, placements.len() - n_reg)
 }
 
+/// `(elidable, n_reg, n_stack)`: `elidable[i]` holds when parameter `i` is
+/// read only through a surviving `Inst::ParamRef`, so the c5 cdecl cell the
+/// prologue would fill at `[rbp + 16*(i+1)]` is unobserved. Empty for a
+/// variadic or zero-parameter callee; a stack-passed parameter is never
+/// elidable.
 pub(super) fn param_elidable_mask(
     func: &FunctionSsa,
     alloc: &Allocation,
@@ -502,22 +375,13 @@ pub(super) fn param_elidable_mask(
     if func.is_variadic || func.n_params == 0 {
         return (alloc::vec::Vec::new(), 0, 0);
     }
-    // Register-passed vs host-stack-overflow split comes from the
-    // same `plan_call_args` the caller runs. Independent int / FP
-    // argument-register banks (System V AMD64 3.2.3) mean the count
-    // of register-passed parameters can exceed `int_arg_regs.len()`
-    // (e.g. eight floating-point parameters in xmm0..xmm7 alongside
-    // integer parameters), so the count is derived from the plan
-    // rather than `n_params.min(int_arg_regs.len())`.
+    // Independent int / FP banks (System V AMD64 3.2.3): the register count
+    // comes from the plan, not from `int_arg_regs.len()`.
     let (n_reg, n_stack) = param_reg_stack_split(func, abi);
     let (seeded, addr_taken, needed) = super::ssa::emit_common::scan_param_slot_usage(func, alloc);
-    // A parameter whose incoming argument register the per-inst
-    // `ParamRef` path clobbers before it is read must keep its c5 cdecl
-    // home cell so it can read the value back from that cell rather than
-    // from the clobbered register (see `compute_param_from_home`).
-    // mem2reg may otherwise have promoted the parameter into a register
-    // and left its slot unobserved, which would mark it elidable and
-    // drop the home spill the per-inst read depends on.
+    // A parameter whose argument register a per-inst `ParamRef` clobbers
+    // keeps its home cell, mem2reg promotion notwithstanding; see
+    // `compute_param_from_home`.
     let clobbered = param_home_clobber_set(func, alloc, abi);
     let mut elidable = alloc::vec::Vec::with_capacity(n_reg);
     for i in 0..n_reg {
@@ -531,24 +395,14 @@ pub(super) fn param_elidable_mask(
     (elidable, n_reg, n_stack)
 }
 
-/// A register parameter that the entry parallel copy
-/// ([`emit_function`]'s prebatch) cannot place atomically and that the
-/// per-inst `Inst::ParamRef` path therefore lowers with a register read
-/// whose incoming argument register an earlier-emitted `ParamRef`'s
-/// home write already clobbered.
-///
-/// The entry parallel copy avoids the hazard by placing every register
-/// parameter from its (distinct) argument register at once. It runs only
-/// when the parameter homes are pairwise distinct, the parallel-copy
-/// precondition. When two homes coincide the batch is skipped and the
-/// per-inst path runs; a parameter whose argument register is then
-/// clobbered must read its prologue-spilled c5 cdecl home cell instead.
-/// This returns the per-parameter mask of exactly those at-risk
-/// parameters; it is empty whenever the batch runs (every parameter is
-/// placed atomically, so none is at risk). The mask depends only on
-/// `alloc.places` and `Inst::ParamRef` order, neither of which the
-/// resulting home-cell spill changes, so the elidability scan and the
-/// prologue both consult it without a fixpoint.
+/// The register parameters the per-inst `Inst::ParamRef` path lowers
+/// after an earlier `ParamRef`'s write clobbered their incoming argument
+/// register. The entry parallel copy places every register parameter at
+/// once when their homes are pairwise distinct, so the mask is empty then;
+/// otherwise the marked parameters read their prologue-spilled c5 cdecl
+/// home cell. The mask depends only on `alloc.places` and the `ParamRef`
+/// order, so the elidability scan and the prologue consult it without a
+/// fixpoint.
 fn param_home_clobber_set(
     func: &FunctionSsa,
     alloc: &Allocation,
@@ -557,11 +411,8 @@ fn param_home_clobber_set(
     if func.is_variadic || func.n_params == 0 {
         return alloc::vec::Vec::new();
     }
-    // The clobber set tracks the integer argument-register bank only.
-    // Floating-point parameters arrive in the separate FP bank, so an
-    // FP `ParamRef`'s write can never clobber an integer parameter's
-    // incoming register (and vice versa). The mask spans the
-    // register-passed parameters; FP entries stay `false`.
+    // Integer and FP parameters arrive in separate banks; each bank is
+    // tracked on its own.
     let param_plan = param_placements(func, abi);
     let n_reg = param_plan
         .iter()
@@ -571,12 +422,8 @@ fn param_home_clobber_set(
     if n_reg == 0 {
         return mask;
     }
-    // Floating-point parameters are never placed by the integer entry
-    // batch, so the per-inst `ParamRef` path always lowers them and the
-    // same clobber hazard applies within the FP bank: an FP parameter
-    // whose incoming xmm an earlier-emitted FP `ParamRef`'s destination
-    // overwrites must read its prologue-spilled home cell. This pass is
-    // independent of the integer `homes_distinct` gate below.
+    // FP parameters always take the per-inst path, so the same hazard applies
+    // within the FP bank.
     {
         let mut written_fp: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
         for (vid, inst) in func.insts.iter().enumerate() {
@@ -605,11 +452,8 @@ fn param_home_clobber_set(
             }
         }
     }
-    // Mirror the prebatch eligibility and the `homes_distinct` gate in
-    // `emit_function`: the entry parallel copy batches every register
-    // parameter whose home is an integer register or a spill slot, and
-    // runs only when those homes are pairwise distinct. When it runs no
-    // parameter is at risk.
+    // The entry parallel copy's eligibility and `homes_distinct` gate,
+    // mirrored.
     let mut batch_homes: alloc::vec::Vec<Place> = alloc::vec::Vec::new();
     for (vid, inst) in func.insts.iter().enumerate() {
         let Inst::ParamRef { idx, .. } = inst else {
@@ -660,14 +504,15 @@ fn param_home_clobber_set(
     mask
 }
 
+/// Bytes the prologue reserves for c5 cdecl parameter cells and host-stack
+/// overflow, from the branch structure the prologue uses: nothing for a
+/// variadic callee (the caller pushes the cells), `n_reg * 16` or 0 when
+/// every register parameter's cell is elidable, else `n_params * 16`.
 fn prologue_param_spill_bytes(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> u32 {
     let (elidable, n_reg, n_stack) = param_elidable_mask(func, alloc, abi);
-    // The reg-stripe stays allocated when any single parameter
-    // needs its cell (address-taken or LoadLocal-surviving), so the
-    // c5 cdecl offsets `[rbp + 16*(i+1)]` remain stable for the
-    // body. The mov store for each individually elidable parameter
-    // is skipped at emit time. Stack-overflow parameters always
-    // need their cell.
+    // The register stripe stays allocated while any parameter needs its cell,
+    // so the cdecl offsets stay stable; each elidable store is skipped at
+    // emit time.
     let any_reg_needed = elidable.iter().any(|e| !e);
     let reg_bytes = if any_reg_needed || n_stack > 0 {
         (n_reg as u32) * 16
@@ -678,23 +523,11 @@ fn prologue_param_spill_bytes(func: &FunctionSsa, alloc: &Allocation, abi: super
     reg_bytes + overflow_bytes
 }
 
-/// Per-parameter mask: `mask[idx]` is true when the per-inst
-/// `Inst::ParamRef` for register parameter `idx` must read its value
-/// from the prologue-spilled c5 cdecl home cell rather than from the
-/// incoming host argument register.
-///
-/// The hazard: the allocator can color several `ParamRef` values into
-/// one register (sequentially-live parameters consumed by intervening
-/// stores). When the destination register an earlier-emitted
-/// `ParamRef` writes is a later parameter's incoming argument register,
-/// the write clobbers that argument value before the later `ParamRef`
-/// reads it. The home cell is immune because the prologue stored it
-/// before any body instruction ran. The set is exactly the clobber set
-/// from [`param_home_clobber_set`]: each at-risk parameter is forced
-/// non-elidable by [`param_elidable_mask`], so its home cell exists. A
-/// mem2reg-promoted parameter is at risk too -- the earlier
-/// non-elidable-only gate left such a promoted parameter reading a
-/// clobbered argument register.
+/// `mask[idx]`: the per-inst `Inst::ParamRef` of register parameter `idx`
+/// reads its prologue-spilled home cell instead of the incoming argument
+/// register, because an earlier `ParamRef`'s destination overwrote it. The
+/// set is `param_home_clobber_set`; each member is forced non-elidable, so
+/// its home cell exists.
 pub(super) fn compute_param_from_home(
     func: &FunctionSsa,
     alloc: &Allocation,

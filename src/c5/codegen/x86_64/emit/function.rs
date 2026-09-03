@@ -1,22 +1,11 @@
 use super::*;
 
-/// Resolve a set of register-to-register copies `(src, tgt)` so
-/// no copy writes to a register still needed as the source of
-/// another pending copy. Mirrors the AArch64 emit's scheduler:
-/// drain leaves (target not a source of any other pending move)
-/// first, then break cycles by routing one source through
-/// `scratch`. The caller must pass a `scratch` whose register
-/// lives outside the allocator's bank.
-/// Emit the predecessor-exit moves for each `Inst::Phi` at the head
-/// of every CFG successor of `self_block`. Mirrors the aarch64
-/// helper: IntReg -> IntReg pairs schedule through the parallel-copy
-/// helper, which breaks register cycles with `xchg` (no scratch) and
-/// routes a spill-touching cycle through `hold`; Spill destinations
-/// route through the materialise helper and a store against rsp.
+/// The predecessor-exit moves for the `Inst::Phi`s at the head of every
+/// CFG successor of `self_block`: register pairs through the parallel-copy
+/// scheduler, spill destinations through the materialise helper.
 ///
-/// TODO: extend to FpReg dst / src once a real fixture demands it;
-/// the current promotion path admits only int-store slots
-/// (`slot_stores_only_int`) so the FP case never arises today.
+/// TODO: FpReg sources and destinations, once the promotion path admits
+/// them (`slot_stores_only_int` keeps them out today).
 fn emit_phi_predecessor_moves(
     code: &mut Vec<u8>,
     self_block: super::super::ir::BlockId,
@@ -40,21 +29,11 @@ fn emit_phi_predecessor_moves(
     )
 }
 
-/// Compare two `Place`s by physical location identity. Distinct
-/// `Place` variants never alias; same-variant places alias when their
-/// register number or spill slot matches.
-/// Emit a single resolved location-to-location move. `stage` is a
-/// scratch register used only for the spill-to-spill case (load then
-/// store); it must lie outside the allocator's bank.
-/// Sequentialize a parallel copy over physical locations (integer
-/// registers and stack spill slots). Leaves -- destinations that are
-/// not the source of any other pending move -- are emitted first;
-/// when only cycles remain, one cycle source is saved into the
-/// persistent `hold` register and every move reading that location is
-/// redirected to read `hold`, exposing a new leaf. `hold` and `stage`
-/// must lie outside the allocator's bank so they cannot collide with
-/// any pending source or destination. Returns false if any operand is
-/// an FP or `None` location, which this path does not lower.
+/// Sequentialize a parallel copy over integer registers and spill slots:
+/// leaves (destinations no pending move reads) first; when only cycles
+/// remain, one cycle source is saved in `hold` and every move reading it
+/// redirected there, exposing a new leaf. `hold` and `stage` lie outside
+/// the allocator's bank. Returns false for an FP or `None` operand.
 fn schedule_place_moves(
     code: &mut Vec<u8>,
     moves: &mut Vec<(Place, Place)>,
@@ -72,13 +51,9 @@ fn schedule_place_moves(
     )
 }
 
-/// Sequentialize a parallel copy over xmm registers. Mirrors
-/// [`schedule_int_reg_moves`] with `movapd` for the register copies:
-/// drain leaves (a target that is not the source of any other
-/// pending move) first; break a residual cycle by routing one cycle
-/// source through `scratch`. `scratch` must lie outside the
-/// allocator's xmm pool so it collides with no pending source or
-/// target.
+/// Sequentialize a parallel copy over xmm registers: leaves first, then a
+/// residual cycle through `scratch`, which lies outside the allocator's
+/// xmm pool.
 pub(super) fn schedule_xmm_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch: Reg) {
     super::ssa::emit_common::schedule_reg_moves_via_scratch(
         code,
@@ -88,11 +63,7 @@ pub(super) fn schedule_xmm_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8
     );
 }
 
-/// Emit a single resolved FP location-to-location move over `FpReg`
-/// and `Spill` places. `stage` is the scratch xmm for the
-/// spill-to-spill case (load then store); it must lie outside the
-/// allocator's xmm pool. `IntReg` and `None` places never reach here
-/// (an FP phi's home and its operands are FP-classed).
+/// The x86_64 moves the shared parallel-copy scheduler emits.
 impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::X64Backend {
     type Frame = Frame;
     fn fp_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
@@ -143,11 +114,9 @@ impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::X64Backen
         hold: u8,
         stage: u8,
     ) {
-        // Break a register-register edge with `xchg` (no scratch, not locked
-        // for register operands): the exchange satisfies that move and leaves
-        // the displaced value in the source for the move that reads it. An edge
-        // touching a spill slot has no register swap, so route one such source
-        // through `hold`. A single cycle drains before the next break.
+        // A register-register edge breaks with `xchg`, which satisfies one move
+        // and leaves the displaced value in the source; an edge touching a spill
+        // slot routes one source through `hold`.
         if let Some(i) = moves
             .iter()
             .position(|(s, t)| matches!(s, Place::IntReg(_)) && matches!(t, Place::IntReg(_)))
@@ -197,12 +166,8 @@ impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::X64Backen
     }
 }
 
-/// Sequentialize a parallel copy over FP locations (xmm registers and
-/// stack spill slots) for FP-classed phi predecessor moves. Mirrors
-/// [`schedule_place_moves`] with `movsd` / `movapd`: leaves first,
-/// then break a residual cycle by holding one cycle source in `hold`.
-/// `hold` and `stage` must lie outside the allocator's xmm pool so
-/// they collide with no pending source or destination.
+/// Sequentialize register-to-register copies `(src, tgt)`: leaves first,
+/// then a residual cycle broken with `xchg`, so no scratch is needed.
 pub(super) fn schedule_int_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>) {
     moves.retain(|(s, t)| s != t);
     while !moves.is_empty() {
@@ -220,11 +185,8 @@ pub(super) fn schedule_int_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8
             }
         }
         if !progress {
-            // Only cycle members remain, all register to register, so
-            // break a cycle with `xchg` (no scratch): the exchange
-            // satisfies one move -- the target receives the source's
-            // value -- and leaves the displaced value in the source for
-            // the move that reads it.
+            // Only cycle members remain: `xchg` satisfies one move and leaves the
+            // displaced value in the source for the move that reads it.
             let (s, t) = moves[0];
             emit_xchg_rr(code, Reg(s), Reg(t));
             moves.swap_remove(0);
@@ -482,13 +444,10 @@ impl FnEmit<'_, '_> {
     }
 
     /// Place the entry `Inst::ParamRef` values from their argument registers
-    /// as one parallel copy, when the integer / spill homes are distinct:
-    /// emitting each `ParamRef` in instruction order would let an earlier
-    /// parameter's destination overwrite a later parameter's incoming
-    /// register. When two parameters share a home the set is not a
-    /// permutation, so each `ParamRef` is placed in program order instead;
-    /// the allocator's self-home hint keeps that path sound
-    /// (`verify_allocation` checks it under `codegen_test`).
+    /// as one parallel copy when their integer / spill homes are distinct;
+    /// otherwise each `ParamRef` is placed in program order, which the
+    /// allocator's self-home hint keeps sound (`verify_allocation` checks it
+    /// under `codegen_test`).
     fn place_entry_params(&mut self) -> bool {
         let FnCtx {
             func,
@@ -986,11 +945,9 @@ impl FnEmit<'_, '_> {
         true
     }
 
-    /// Materialize each jump table into the read-only blob: an address
-    /// fixup for the lea site, then one slot per entry (a 4-byte
-    /// `target - table_base` difference, or the relocatable form's 8-byte
-    /// absolute address left to the object's relocations). Runs past the
-    /// last bail site so a bailed function leaves the blob untouched.
+    /// Materialize each jump table into the read-only blob: an address fixup
+    /// for the lea site, then one slot per entry (a 4-byte table-relative
+    /// difference, or the relocatable form's 8-byte absolute address).
     fn materialize_jump_tables(&mut self, rodata: &mut super::RodataBuild) {
         let width: usize = if self.abs_jump_tables { 8 } else { 4 };
         for &(lea_start, table) in &self.jump_table_fixups {
@@ -1023,25 +980,14 @@ impl FnEmit<'_, '_> {
     }
 }
 
-/// Decide, per local branch, whether its target is close enough to use
-/// the 2-byte rel8 encoding (`EB`/`7x`) instead of the 5/6-byte rel32
-/// form (`E9`/`0F 8x`).
-///
-/// Each entry of `branches` is `(opcode_start, long_size, target_block,
-/// pinned_long)` in emission order, where `opcode_start` is the all-long
-/// byte offset of the instruction's first byte, `long_size` is 5 (jmp) or
-/// 6 (jcc), and `block_offsets` holds each block's all-long byte offset.
-/// Both short forms are 2 bytes, so a shortened branch removes
-/// `long_size - 2` bytes at its `opcode_start`. A pinned branch keeps the
-/// long form whatever its displacement.
-///
-/// Shortening one branch only reduces the magnitude of every other
-/// branch's displacement, so the shortenable set is a monotone fixpoint:
-/// start all-long and repeatedly mark a branch short once its
-/// displacement -- recomputed against the bytes already removed by the
-/// branches marked short so far -- fits a signed 8-bit field. The check
-/// excludes a forward branch's own saving, so the estimate is never
-/// optimistic: a branch marked short fits in the final layout.
+/// Which local branches take the 2-byte rel8 form instead of the 5 / 6-byte
+/// rel32 form. `branches` holds `(opcode_start, long_size, target_block,
+/// pinned_long)` per branch in emission order against the all-long layout
+/// in `block_offsets`; a pinned branch stays long. Shortening one branch
+/// only reduces the other displacements, so the set is a monotone
+/// fixpoint: a branch is marked short once its displacement, less the
+/// bytes the branches marked so far remove and excluding its own saving,
+/// fits a signed byte, so a short branch fits in the final layout.
 pub(super) fn relax_branches(
     branches: &[(usize, usize, usize, bool)],
     block_offsets: &[usize],
@@ -1087,12 +1033,10 @@ pub(super) fn emit_stack_probe(code: &mut Vec<u8>) {
     super::encode::emit_mi(code, Mnem::Mov, 8, Reg::RSP, 0, 0);
 }
 
-/// Reserve the realigned region and align rsp down to `realign_align`
-/// (C11 6.7.5). The reservation descends in probed steps; the AND then
-/// descends by up to `realign_align - 1` further bytes, which the probe
-/// schedule cannot see. When the two together can outrun the unprobed
-/// margin, a probe on each side of the AND keeps every step from a touched
-/// address within one page, so a stack overflow still faults in the guard.
+/// Reserve the realigned region and align rsp down to `realign_align` (C11
+/// 6.7.5). The AND descends up to `realign_align - 1` bytes the probe
+/// schedule cannot see; when that can outrun the unprobed margin, a probe
+/// on each side keeps every step within a page of a touched address.
 fn emit_realign_rsp(code: &mut Vec<u8>, frame: Frame) {
     let slack = frame.realign_align - 1;
     let probe = frame.realign_region_bytes.saturating_add(slack) > MAX_UNPROBED_STACK_STEP;
@@ -1106,17 +1050,11 @@ fn emit_realign_rsp(code: &mut Vec<u8>, frame: Frame) {
     }
 }
 
-/// Lower `rsp -= bytes`, descending in probed steps when the amount is
-/// larger than one step can safely cover.
-///
-/// A decrement of at most [`MAX_UNPROBED_STACK_STEP`] cannot place rsp
-/// below the guard region, so it needs no probe. Past that the
-/// allocation walks down one page at a time and stores through rsp after
-/// each step, so an overflow faults inside the guard region instead of
-/// writing into whatever mapping lies below it. `scratch` is a register
-/// the caller does not need across the allocation; given one, a step
-/// count above [`STACK_PROBE_UNROLL_MAX`] becomes a counted loop instead
-/// of straight-line steps.
+/// `rsp -= bytes`. A decrement of at most [`MAX_UNPROBED_STACK_STEP`]
+/// cannot pass the guard region; past that rsp walks down a page at a time
+/// with a store after each step, so an overflow faults in the guard. Given
+/// `scratch`, more than [`STACK_PROBE_UNROLL_MAX`] steps become a counted
+/// loop.
 pub(super) fn emit_stack_alloc(code: &mut Vec<u8>, bytes: u32, scratch: Option<Reg>) {
     if bytes <= MAX_UNPROBED_STACK_STEP {
         emit_sub_rsp_imm32(code, bytes);
@@ -1151,17 +1089,10 @@ pub(super) fn emit_stack_alloc(code: &mut Vec<u8>, bytes: u32, scratch: Option<R
     }
 }
 
-/// then save rbp and proceed.
-///
-/// `func_start` is `code.len()` at function entry; the returned
-/// [`super::FnUnwind`] records every prologue instruction boundary
-/// relative to it so the PE writer can build a Win64 `UNWIND_INFO`
-/// for the frame. `begin` / `end` are filled by the caller.
 /// Save the callee-saved registers the allocator reported: the non-volatile
-/// xmm scratch at the frame bottom (full 128-bit movups, the caller's value
-/// may occupy the upper lanes) and the callee-saved GPRs directly above at
-/// sp + saved_fpr_bytes. SysV leaves fp_used empty. One source for the
-/// offsets so the prologue and every return path agree.
+/// xmm scratch at the frame bottom (full 128-bit `movups`, the caller may
+/// use the upper lanes) and the callee-saved GPRs above it. The offsets
+/// have one source, so the prologue and every return path agree.
 fn save_callee_saved(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame) {
     for (i, &r) in alloc.fp_used.iter().enumerate() {
         emit_movups_mem_xmm(code, Reg::RSP, (i as i32) * 16, Reg(r));
@@ -1193,15 +1124,13 @@ pub(super) fn restore_callee_saved(code: &mut Vec<u8>, alloc: &Allocation, frame
     }
 }
 
-/// Emit the function prologue: spill the host-ABI argument registers
-/// into the c5 cdecl parameter cells the body references via
-/// address-of-local with slot index `N >= 2` (the first declared
-/// parameter at `[rbp + 16]`, the second at `[rbp + 32]`, ...), then
-/// establish the frame and save the callee-saved registers. SysV /
-/// Win64 push the return address before `call`, so the cell block is
-/// interleaved with the saved rbp: pop the return address into r10,
-/// reserve the cells, fill each from its placement, push the return
-/// address back.
+/// The prologue: the argument registers spilled into the c5 cdecl cells the
+/// body addresses as locals with slot `N >= 2` (`[rbp + 16*(N-1)]`), then
+/// the frame and the callee-saved registers. The return address sits above
+/// the cells, so it is popped into r10 and pushed back after the cells are
+/// filled. `func_start` is `code.len()` at entry; the returned
+/// [`super::FnUnwind`] records each prologue instruction boundary relative
+/// to it for the PE unwind table (`begin` / `end` are the caller's).
 fn emit_prologue(
     code: &mut Vec<u8>,
     func: &FunctionSsa,
@@ -1217,32 +1146,20 @@ fn emit_prologue(
         ..super::FnUnwind::default()
     };
     let rel = |code: &Vec<u8>| (code.len() - func_start) as u32;
-    // Host-arg-reg spill. `frame.param_spill_bytes` is the
-    // single source of truth for how many bytes get allocated
-    // here; the epilogue reads the same value to undo the same
-    // bytes. Variadic callees, fully-Native callees with every
-    // parameter `ParamRef`-seeded, and 0-param callees all
-    // produce 0 and skip the entire `pop r10` / `push r10`
-    // sequence (the return address stays at the top of the stack
-    // where the caller pushed it).
+    // `frame.param_spill_bytes` is read by the epilogue too; it is 0, and the
+    // return address stays where the caller pushed it, for a variadic callee,
+    // a fully elided one and a zero-parameter one.
     let entry_spill = if func.is_variadic { 0 } else { func.n_params };
     if entry_spill > 0 && frame.param_spill_bytes > 0 {
         emit_pop_r(code, Reg::R10);
         let (elidable, _n_reg, _n_stack) = param_elidable_mask(func, alloc, abi);
         let placements = param_placements(func, abi);
-        // One contiguous c5 cdecl cell block, `n_params` 16-byte cells.
-        // Parameter `i` reads its value through `LoadLocal { off: i+2 }`
-        // from cell `[rsp + 16*i]` here (equivalently `[rbp + 16*(i+1)]`
-        // after the frame is established). The incoming argument area --
-        // the caller's outgoing stack, including any shadow space --
-        // begins at `[rsp + cells]`; a stack-passed parameter sits at the
-        // planner's byte offset within it. Filling each cell by its own
-        // placement (rather than as a contiguous register prefix plus a
-        // contiguous stack suffix) lets a register-passed parameter and a
-        // stack-passed one interleave, which happens when a by-value
-        // aggregate that consumes no argument register sits between
-        // register parameters (System V MEMORY class), or when a Win64
-        // aggregate overflows past the four positional registers.
+        // `n_params` 16-byte cells; parameter `i` reads cell `[rsp + 16*i]`
+        // (`[rbp + 16*(i+1)]` once the frame stands). The incoming argument area
+        // begins at `[rsp + cells]`. Each cell fills from its own placement, so
+        // register-passed and stack-passed parameters may interleave (a System V
+        // MEMORY-class aggregate between register parameters, or a Win64
+        // aggregate past the positional registers).
         let cells = frame.param_spill_bytes;
         debug_assert_eq!(cells, (func.n_params as u32) * 16);
         // The argument registers hold the incoming values and r10 the
@@ -1285,12 +1202,8 @@ fn emit_prologue(
         uw.arg_spill_end = rel(code);
     }
 
-    // Leaf-function elision: a function that makes no calls
-    // (the caller's return address stays at top of stack), has no
-    // frame to allocate, spills no params, and saves no callee
-    // regs has no work in the standard prologue. SysV / Win64 let
-    // it ret directly off the caller-pushed return address with
-    // rsp unchanged.
+    // A full leaf has no prologue work: it returns off the caller-pushed
+    // return address with rsp unchanged.
     if is_full_leaf(func, frame, alloc, abi) {
         uw.leaf = true;
         return uw;
@@ -1300,29 +1213,11 @@ fn emit_prologue(
     uw.push_rbp_end = rel(code);
     emit_mov_rr(code, Reg::RBP, Reg::RSP);
     uw.set_fpreg_end = rel(code);
-    // Win64 variadic callee home-area spill (Microsoft x64 calling
-    // convention). The caller passes the first four arguments in
-    // rcx/rdx/r8/r9 by position and reserves 32 bytes of home area
-    // above the return address; the callee spills those registers into
-    // the home slots at `[rbp + 16 + i*8]` so the named parameters are
-    // readable through the body's c5 cdecl cell path (cell stride 8,
-    // set on `Frame`) and the home area joins the incoming stack
-    // overflow into one contiguous 8-byte-stride region the variadic
-    // tail occupies. Arguments past the fourth already sit on the
-    // incoming stack at `[rbp + 16 + i*8]`, so they need no spill. The
-    // Win64 host variadic ABI (Microsoft x64 calling convention) routes
-    // every argument (named and variadic) through the integer registers
-    // as a raw 8-byte value (the caller widens floating-point arguments
-    // to double and passes `fp_arg_mask = 0`), so the spill is uniformly
-    // integer.
-    //
-    // Spill ALL four argument registers, not just the named ones: a
-    // variadic argument that landed in a register (rdx/r8/r9 for the
-    // second through fourth argument position) must reach the home area
-    // for `va_arg` to read it, and the caller reserves the full 32-byte
-    // home regardless of the argument count, so the stores never fall
-    // outside it. The body reads only the named slots; the surplus
-    // stores feed `va_arg`.
+    // Win64 variadic callee: rcx/rdx/r8/r9 spill into the 32-byte home area at
+    // `[rbp + 16 + i*8]`, which joins the incoming stack into one 8-byte-stride
+    // region the body reads through its cells (stride 8) and `va_arg` walks.
+    // All four spill, named or not, since a variadic argument in a register
+    // must reach the home area and the caller reserves the full area.
     if win64_variadic_callee(func, abi) {
         for (i, &reg) in abi.int_arg_regs.iter().enumerate() {
             let home_off = (16 + i * 8) as i32;
@@ -1330,13 +1225,9 @@ fn emit_prologue(
         }
     }
     if frame.frame_bytes > 0 {
-        // A single `sub rsp,N` lowers to one instruction the unwinder
-        // can describe with `UWOP_ALLOC`; a probed frame lowers to a
-        // multi-step walk with no single `sub` and is left undescribed
-        // (SizeOfProlog still covers it, and the frame-pointer rule
-        // recovers RSP exactly at any body fault, which is where the
-        // unwinder samples). `frame_alloc_end == 0` is the "no single
-        // sub" sentinel `build_unwind_codes` reads.
+        // A single `sub rsp, N` is describable with `UWOP_ALLOC`; a probed frame
+        // stays undescribed (`frame_alloc_end == 0`), the frame-pointer rule
+        // recovering rsp at any body fault.
         let single_sub = frame.frame_bytes <= MAX_UNPROBED_STACK_STEP;
         // r11 is caller-saved, is no target's argument register, and
         // carries no live value in the prologue.
@@ -1345,23 +1236,12 @@ fn emit_prologue(
             uw.frame_alloc_end = rel(code);
         }
     }
-    // System V variadic callee register save area (System V AMD64
-    // 3.5.7). Spill the six integer argument registers rdi rsi rdx rcx
-    // r8 r9 into the gp area at `[reg_save + 0 .. 48]` and the eight XMM
-    // argument registers xmm0..xmm7 into the fp area at
-    // `[reg_save + 48 .. 176]`. The named parameters read their values
-    // from this area too (`local_slot_off` redirects positive c5 cdecl
-    // slots here), and `va_start` / `va_arg` walk it for the variadic
-    // tail. `reg_save` is `[rbp + va_reg_save_off]`; the spill writes
-    // address it through rbp so it is independent of the rsp moves the
-    // body makes for outgoing-call scratch.
-    //
-    // The XMM spill is guarded by the caller-passed XMM-register count
-    // in `al` (System V AMD64 3.2.3): when the caller passed no
-    // floating-point arguments (`al == 0`) the XMM save area is unused,
-    // and skipping the eight `movsd` stores avoids touching xmm regs the
-    // caller never set. The integer spill is unconditional -- the gp
-    // area always holds the (named + variadic) integer arguments.
+    // System V variadic callee: rdi rsi rdx rcx r8 r9 spill into the gp area
+    // at `[reg_save .. 48]` and xmm0..xmm7 into the fp area at
+    // `[reg_save + 48 .. 176]` (ABI 3.5.7), through rbp so the body's rsp
+    // moves do not matter. The named parameters read from there too
+    // (`local_slot_off`). The XMM spill is guarded by `al`, the caller's XMM
+    // count (ABI 3.2.3); the integer spill is unconditional.
     if sysv_variadic_callee(func, abi) {
         let reg_save = frame.va_reg_save_off;
         for (i, &reg) in abi.int_arg_regs.iter().enumerate() {
@@ -1387,14 +1267,9 @@ fn emit_prologue(
             code[rel32_at..rel32_at + 4].copy_from_slice(&rel.to_le_bytes());
         }
     }
-    // The allocator's FP register pool (`callee_fprs`) is empty for both
-    // SysV and Win64, so it never assigns an SSA value to a non-volatile
-    // xmm. The only non-volatile xmm exposure is the emit pass's fixed
-    // FP scratch, which the allocator lists in `fp_used`
-    // for Win64 functions that perform FP work. Save those at the bottom
-    // of the frame (lowest addresses) with the full 128-bit `movups`,
-    // since the caller's value may occupy the upper lanes. SysV leaves
-    // `fp_used` empty.
+    // The allocator never assigns a non-volatile xmm (`callee_fprs` is empty);
+    // `fp_used` lists the fixed FP scratch of a Win64 function doing FP work,
+    // saved at the frame bottom with the full 128-bit `movups`.
     save_callee_saved(code, alloc, frame);
     emit_struct_param_scatter(code, func, frame, abi);
     emit_struct_stack_param_copy(code, func, frame, abi);
@@ -1402,30 +1277,21 @@ fn emit_prologue(
     // before the realign: the slot is rbp-relative, so the rsp move that
     // follows does not reach it.
     emit_canary_store(code, frame, abi, extern_data_refs);
-    // C11 6.7.5: reserve the over-aligned objects' region below the static
-    // frame and align rsp down into it. Done last, after the callee-saved
-    // stores (which stay at rbp-frame_bytes, where the epilogue's
-    // restore_dynamic_sp puts rsp back); the objects live at [rsp + region_off].
-    // Reserving before aligning keeps the AND's descent inside bytes the
-    // reservation already claimed, so the region cannot overlap the frame.
+    // C11 6.7.5: the over-aligned region below the static frame, after the
+    // callee-saved stores (which stay at rbp - frame_bytes, where
+    // `restore_dynamic_sp` puts rsp back); reserving before aligning keeps
+    // the AND inside the reserved bytes.
     if frame.realign_align > 0 {
         emit_realign_rsp(code, frame);
     }
     uw
 }
 
-/// Copy each aggregate parameter the host ABI passes inline on the
-/// stack (System V AMD64 MEMORY class with size > 16, or a Win64
-/// aggregate that overflows past the four positional registers) into its
-/// parser-reserved body local. The caller placed the struct in its
-/// outgoing argument area, which sits above the return address at callee
-/// entry; after the c5 cdecl entry spill (`n_params` 16-byte cells) it is
-/// reachable at `[rbp + 16 + n_params*16 + off]`, where `off` is the
-/// planner's byte offset of the parameter in the outgoing area. The dead
-/// cell the entry spill reserves for the aggregate keeps the slot->cell
-/// map positional; the body reads the struct from the synthetic body
-/// local this copy fills. Runs after the frame is set up, so the
-/// addresses are rbp-relative and SCRATCH_R10 is free.
+/// Copy each aggregate parameter passed inline on the stack (System V
+/// AMD64 MEMORY class over 16 bytes, or a Win64 aggregate past the four
+/// positional registers) from the caller's outgoing area at
+/// `[rbp + 16 + n_params*16 + off]` into its parser-reserved body local;
+/// the entry cell reserved for it keeps the slot-to-cell map positional.
 fn emit_struct_stack_param_copy(
     code: &mut Vec<u8>,
     func: &FunctionSsa,
@@ -1466,12 +1332,9 @@ fn emit_struct_stack_param_copy(
     }
 }
 
-/// Store each register-passed aggregate parameter's incoming argument
-/// registers into its parser-reserved body local (System V AMD64
-/// 3.2.3). Runs after the frame is established; the argument registers
-/// still hold the caller-supplied values, since nothing between entry
-/// and here clobbers them. The body reads the aggregate from this
-/// local, so the entry argument cell stays unused.
+/// Store each register-passed aggregate parameter's argument registers
+/// (System V AMD64 3.2.3), still intact at this point, into its
+/// parser-reserved body local.
 fn emit_struct_param_scatter(
     code: &mut Vec<u8>,
     func: &FunctionSsa,
@@ -1515,31 +1378,18 @@ fn emit_return(
     extern_sites: &mut Vec<super::UserExternCallSite>,
     extern_data_refs: &mut Vec<super::UserExternDataRef>,
 ) {
-    // Staging through rcx is needed only when the return value
-    // itself lives in a callee-saved register the epilogue is about
-    // to restore (e.g. rbx, r12): the restore would overwrite the
-    // source before it reaches rax. rcx is caller-saved and never in
-    // `gpr_used`, so it survives the restore. In every other case --
-    // the value already in rax, in a caller-saved register, or in a
-    // spill slot the restore does not touch -- the epilogue restores
-    // first, then places the value into rax directly (`mov rax, src`,
-    // or nothing when src already lives in rax). FP returns ride xmm0
-    // directly;
-    // xmm0 is outside the GPR restore loop, but the integer
-    // mirror into rax happens after the restore so the bit
-    // pattern is available to int-shaped callers.
+    // A return value in a callee-saved register stages through rcx
+    // (caller-saved, never in `gpr_used`) across the restore; any other
+    // source moves into rax after it. The integer mirror of an FP return
+    // into rax follows the restore too.
     let return_place = if value != super::super::ir::NO_VALUE {
         place_of(alloc, value)
     } else {
         Place::None
     };
-    // Host-ABI aggregate return (System V AMD64 3.2.3): `value` is the
-    // struct's address. A <= 16-byte integer aggregate returns its
-    // eightbytes in rax:rdx (x86_64 has no x8 indirect-result path --
-    // the > 16-byte case keeps the out-pointer convention, so `ret_agg`
-    // is only ever set here for the register case). Stage the address
-    // through rcx (caller-saved, untouched by the callee-saved restore)
-    // before the restore, then load the eightbytes after it.
+    // A register-returned aggregate (System V AMD64 3.2.3): `value` is its
+    // address, staged through rcx across the restore; the eightbytes load
+    // into rax:rdx / xmm0:xmm1 after it.
     if let Some(ai) = func.ret_agg {
         let desc = &func.agg_descs[ai as usize];
         let eb_classes = match super::abi_classify::classify_aggregate(
@@ -1565,11 +1415,6 @@ fn emit_return(
             _ => {}
         }
         restore_dynamic_sp(code, frame);
-        // Restore callee-saved GPRs and saved non-volatile xmm scratch
-        // (the prologue places xmm at the bottom, GPRs above by
-        // saved_fpr_bytes). rcx already holds the struct address and is
-        // caller-saved, so the restore does not disturb it; the return
-        // eightbytes load into the volatile rax/rdx/xmm0/xmm1 below.
         restore_callee_saved(code, alloc, frame);
         // Place each eightbyte in its bank: System V returns SSE eightbytes
         // in xmm0/xmm1 and INTEGER eightbytes in rax/rdx, each in order.
@@ -1614,24 +1459,17 @@ fn emit_return(
         );
         return;
     }
-    // A floating-point scalar return rides xmm0 (C99 6.2.5p10). The
-    // declared return type is authoritative: a bare FP constant
-    // materializes as an integer immediate in a GPR, and any value whose
-    // producing instruction is integer-classed lands in a GPR, yet an
-    // `fp_return` caller reads xmm0. `materialize_fp` reinterprets the
-    // GPR / spill bit pattern into an xmm via `movq` / `movsd`.
+    // An FP return rides xmm0 (C99 6.2.5p10); the declared type decides, since
+    // an FP constant or an integer-classed producer leaves the bits in a GPR,
+    // which `materialize_fp` reinterprets.
     let return_is_fp = func.ret_is_fp
         || matches!(return_place, Place::FpReg(_))
         || (value != super::super::ir::NO_VALUE
             && (value as usize) < func.insts.len()
             && super::ssa::reg_alloc::produces_fp_result(&func.insts[value as usize]));
     let needs_staging = matches!(return_place, Place::IntReg(r) if alloc.gpr_used.contains(&r));
-    // An integer return value sitting in a callee-saved register goes
-    // straight to rax BEFORE the restore loop: rax is caller-saved (never
-    // in gpr_used), so the restore cannot clobber it and no post-restore
-    // move is needed -- one `mov` instead of staging through rcx and
-    // copying back. FP returns keep the rcx staging below so the xmm0 path
-    // and the int-shaped-caller mirror are undisturbed.
+    // An integer return in a callee-saved register moves to rax before the
+    // restore: rax is caller-saved, so one `mov` replaces the rcx staging.
     let staged_rax = needs_staging && !return_is_fp;
     if staged_rax
         && let Place::IntReg(r) = return_place
@@ -1702,14 +1540,10 @@ fn emit_return(
     );
 }
 
-/// Frame teardown + `ret` (callee-saved restores already ran): drop
-/// the frame, pop rbp, and drop the prologue's c5 cdecl parameter
-/// cells, parking the return address in r11 across the drop.
-/// `frame.param_spill_bytes` is the single source of truth both the
-/// prologue and this epilogue read, so the two sides agree across
-/// every prologue branch (variadic, host-stack overflow,
-/// ParamRef-elided, n_params == 0). A full leaf emitted no save and
-/// no frame, so only the `ret` is needed.
+/// Frame teardown and `ret` after the callee-saved restores: drop the frame,
+/// pop rbp, drop the c5 cdecl cells with the return address parked in r11.
+/// `frame.param_spill_bytes` is the value the prologue used. A full leaf
+/// needs only the `ret`.
 fn emit_epilogue_ret(
     code: &mut Vec<u8>,
     func: &FunctionSsa,
@@ -1734,12 +1568,8 @@ fn emit_epilogue_ret(
     emit_hardened_ret(code, abi, extern_sites);
 }
 
-/// Branch to a symbol this unit does not define: `E8`/`E9 rel32` with a
-/// zero displacement plus the by-name call site the writer turns into a
-/// relocation against an undefined symbol.
-/// Scratch for the stack-protector sequences. r11 is caller-saved, is
-/// neither ABI's argument or return register, and carries no live value at
-/// the end of the prologue or at any point a return path is taken.
+/// Scratch for the stack-protector sequences: caller-saved, no ABI argument
+/// or return register, and holding nothing live where the sequences run.
 const CANARY_SCRATCH: Reg = Reg::R11;
 
 /// Leave the guard value in `rd`. `-mstack-protector-guard=tls` reads
@@ -1851,6 +1681,9 @@ pub(super) fn emit_canary_check(
     emit_rr(code, Mnem::Xor, 8, CANARY_SCRATCH, CANARY_SCRATCH);
 }
 
+/// A branch to a symbol this unit does not define: `E8` / `E9 rel32` with
+/// a zero displacement and a by-name call site for the writer's
+/// relocation.
 fn emit_extern_branch(
     code: &mut Vec<u8>,
     extern_sites: &mut Vec<super::UserExternCallSite>,
@@ -1931,11 +1764,9 @@ fn emit_retpoline_capture(code: &mut Vec<u8>, target: Reg) {
     code.push(0xC3); // ret
 }
 
-/// Indirect call through `target`. `-mindirect-branch=thunk-extern`
-/// replaces `call *%reg` with a direct call to the register's thunk;
-/// `thunk-inline` embeds the retpoline (gcc's shape: hop over the
-/// 17-byte thunk body, then call into it, so the continuation follows
-/// the site). A call has an architectural successor either way, so
+/// Indirect call through `target`: a direct call to the register's thunk
+/// under `-mindirect-branch=thunk-extern`, the embedded retpoline (gcc's
+/// shape) under `thunk-inline`. A call has an architectural successor, so
 /// `-mharden-sls=` places no trap here.
 pub(super) fn emit_hardened_call_r(
     code: &mut Vec<u8>,
@@ -1961,11 +1792,9 @@ pub(super) fn emit_hardened_call_r(
     }
 }
 
-/// Indirect jump through `target` (computed goto, switch-table
-/// dispatch), routed through the register's thunk under
-/// `-mindirect-branch=thunk-extern` and embedded as the retpoline
-/// sequence under `thunk-inline`; `-mharden-sls=indirect-jmp` traps
-/// after the transfer in every form.
+/// Indirect jump through `target`, through the register's thunk or the
+/// embedded retpoline under `-mindirect-branch=`;
+/// `-mharden-sls=indirect-jmp` traps after the transfer in every form.
 fn emit_hardened_jmp_r(
     code: &mut Vec<u8>,
     target: Reg,

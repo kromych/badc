@@ -1,13 +1,10 @@
 use super::*;
 
 /// Place every argument into its System V / Win64 slot in an order that
-/// survives source / target overlaps: the allocator's caller-saved bank
-/// covers the argument registers, so an argument's value can sit in
-/// another argument's target register. Stack slots first (their sources
-/// are read into `SCRATCH_R10`, preserving every register a later pass
-/// touches), then the FP register placements, then the integer register
-/// placements as one parallel copy, then the spill sources materialised
-/// straight into their targets.
+/// survives overlaps: the allocator's caller-saved bank covers the
+/// argument registers, so one argument's value can sit in another's
+/// target. Stack slots first, then the FP registers, then the integer
+/// registers as one parallel copy, then the spilled sources.
 fn marshal_args(
     code: &mut Vec<u8>,
     plan: &super::CallPlan,
@@ -102,11 +99,9 @@ impl Marshal<'_> {
         true
     }
 
-    /// Aggregates passed on the outgoing stack (System V AMD64 MEMORY
-    /// class): the struct is copied to [rsp + off] while its base address,
-    /// which may sit in an argument register the register moves overwrite,
-    /// is still live. The address rides SCRATCH_R10, the per-word temp
-    /// SCRATCH_R11; both lie outside the allocator pools.
+    /// Aggregates passed on the outgoing stack (System V AMD64 MEMORY class),
+    /// copied while their base address, possibly in an argument register the
+    /// register moves overwrite, is still live.
     fn struct_stack_args(&self, code: &mut Vec<u8>) -> bool {
         for (i, &placement) in self.plan.placements.iter().enumerate() {
             let super::ArgPlacement::StructStack { off, size, align } = placement else {
@@ -133,11 +128,9 @@ impl Marshal<'_> {
         true
     }
 
-    /// FP register placements. The xmm-to-xmm moves form a parallel copy
-    /// (System V passes successive FP args in xmm0, xmm1, ...), scheduled
-    /// first so every xmm source is consumed before a spill or integer
-    /// source materialises into its target xmm. The second FP scratch
-    /// breaks a cycle and lies outside the allocator's xmm pool.
+    /// FP register placements: the xmm-to-xmm moves as a parallel copy first,
+    /// so every xmm source is consumed before a spilled or integer source
+    /// lands in its target xmm; the second FP scratch breaks a cycle.
     fn fp_args(&self, code: &mut Vec<u8>) -> bool {
         let mut fp_moves: Vec<(u8, u8)> = Vec::new();
         for (i, &placement) in self.plan.placements.iter().enumerate() {
@@ -174,14 +167,10 @@ impl Marshal<'_> {
         true
     }
 
-    /// System V aggregates whose eightbytes are all SSE: no integer
-    /// eightbyte register can hold the base, so the source address goes
-    /// through a scratch GPR and each eightbyte's xmm loads from it. Runs
-    /// after the scalar-FP moves (their xmm sources consumed); the loads
-    /// touch only SCRATCH_R10 and the aggregate's own xmm targets, so they
-    /// cannot disturb the integer parallel move. Mixed aggregates are
-    /// deferred to it: their integer eightbyte targets may still be
-    /// another argument's pending source.
+    /// System V aggregates whose eightbytes are all SSE: no integer eightbyte
+    /// register can hold the base, so it goes through a scratch GPR. A mixed
+    /// aggregate waits for the integer parallel move, since its integer
+    /// eightbyte targets may still be another argument's pending source.
     fn sse_aggs(&self, code: &mut Vec<u8>) -> bool {
         for (i, &placement) in self.plan.placements.iter().enumerate() {
             let super::ArgPlacement::StructRegs { regs, n, align } = placement else {
@@ -208,13 +197,10 @@ impl Marshal<'_> {
         true
     }
 
-    /// Integer register placements plus aggregate base addresses as one
-    /// parallel register move (System V AMD64 3.2.3): a scalar argument
-    /// moves source to target; an aggregate positions its base address
-    /// into its own first integer eightbyte register, from which the
-    /// eightbytes load (that register's own eightbyte last). Routing each
-    /// base through its own register keeps one aggregate's loads from
-    /// clobbering another's pending base. The sources not already
+    /// Integer register placements and aggregate base addresses as one
+    /// parallel register move (System V AMD64 3.2.3): an aggregate routes its
+    /// base through its own first integer eightbyte register, so no
+    /// aggregate's loads clobber another's pending base. The sources not
     /// register-resident then materialise into their targets.
     fn int_args(&self, code: &mut Vec<u8>) -> bool {
         let mut int_moves: Vec<(u8, u8)> = Vec::new();
@@ -270,10 +256,9 @@ impl Marshal<'_> {
         true
     }
 
-    /// Load each aggregate's eightbytes from the base now in its first
-    /// integer eightbyte register: SSE eightbytes first (they leave the
-    /// base intact), then the remaining integer eightbytes high-first, the
-    /// base register's own eightbyte last since the load overwrites it.
+    /// Load each aggregate's eightbytes from its base register: SSE eightbytes
+    /// first, then the integer eightbytes high-first, the base register's own
+    /// eightbyte last since the load overwrites it.
     fn agg_eightbytes(&self, code: &mut Vec<u8>) {
         let strict = self.abi.strict_align;
         for &placement in self.plan.placements.iter() {
@@ -338,12 +323,9 @@ impl Marshal<'_> {
 }
 
 #[allow(clippy::too_many_arguments)]
-/// Store a register-classed <= 16-byte aggregate return into the
-/// caller's result temp at `[rbp + base]`. Eightbytes are classified
-/// (System V AMD64 3.2.3): INTEGER arrive in rax:rdx, SSE in
-/// xmm0:xmm1; Win64 register returns classify as one INTEGER
-/// eightbyte in rax. Variadic and non-variadic callees return
-/// identically, so every call shape shares this store.
+/// Store a register-classed <= 16-byte aggregate return into the caller's
+/// result temp at `[rbp + base]`: INTEGER eightbytes from rax:rdx, SSE from
+/// xmm0:xmm1 (System V AMD64 3.2.3); Win64 returns one INTEGER eightbyte.
 fn store_agg_return(
     code: &mut Vec<u8>,
     desc: &super::super::ir::AggDesc,
@@ -481,19 +463,12 @@ pub(super) fn emit_call(
     // reduces to the scalar placement, so every branch runs the aggregate
     // planner.
     let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
-    // A variadic callee follows the host ABI. Win64 (`position_indexed_args`)
-    // passes the first four arguments by position in rcx/rdx/r8/r9 and the
-    // rest on the stack at 8-byte stride above the home area; the walker
-    // widened the variadic FP arguments to double with `fp_arg_mask` 0, so
-    // every argument rides the integer side. System V AMD64 places the
-    // arguments in the standard register banks (3.2.3) and reports the
-    // number of XMM argument registers in `al`, so the callee prologue's
-    // guarded XMM save runs only when needed. The c5-internal convention
-    // passes integer / pointer arguments in the integer bank and FP scalars
-    // in the FP bank; the callee prologue spills each incoming register into
-    // its c5 cdecl cell using the same placement. `fp_arg_mask` comes from
-    // the argument types, since an FP constant rides an integer register as
-    // its `Imm` bit pattern.
+    // A variadic callee follows the host ABI: Win64 passes every argument on
+    // the integer side, by position then on the stack at 8-byte stride (the
+    // walker widened the FP arguments to double with `fp_arg_mask` 0); System
+    // V AMD64 uses the standard banks and reports the XMM count in `al`. The
+    // internal convention uses both banks; `fp_arg_mask` comes from the
+    // argument types, since an FP constant rides an integer register.
     let (plan, site, xmm_count) = if callee_is_variadic && abi.position_indexed_args {
         let plan =
             super::plan_call_args_aggs(args.len(), fixed_args, fp_arg_mask, abi, &aggs, false);
@@ -525,17 +500,12 @@ pub(super) fn emit_call(
     if plan.scratch_bytes > 0 {
         emit_add_rsp_imm32(code, plan.scratch_bytes);
     }
-    // A <= 16-byte aggregate return arrives classified (System V AMD64
-    // 3.2.3: INTEGER eightbytes in rax:rdx, SSE in xmm0:xmm1), for a
-    // variadic callee as for any other; larger returns keep the out-pointer
-    // convention and never set `ret_agg`.
+    // A <= 16-byte aggregate return arrives classified; larger ones keep the
+    // out-pointer convention and never set `ret_agg`.
     if store_ret_agg(code, ret_agg, agg_descs, ret_slot_local, func, frame, abi) {
         return true;
     }
-    // An integer / pointer result lives in rax, an FP result in xmm0 (C99
-    // 6.2.5p10). The host variadic branches mirror the integer result
-    // through the working-register pick; the internal convention routes it
-    // into any destination kind.
+    // An integer result lives in rax, an FP result in xmm0 (C99 6.2.5p10).
     if fp_return {
         xmm0_result_to_dst(code, dst, frame);
     } else if callee_is_variadic {
@@ -585,13 +555,9 @@ pub(super) fn emit_call_ext(
     if !marshal_args(code, &plan, args, alloc, frame, abi, "CallExt") {
         return false;
     }
-    // System V AMD64 ABI 3.2.3: when the callee is variadic, `al`
-    // must hold the number of XMM argument registers used (printf
-    // and friends consult `al` in their prologue to decide whether
-    // to spill xmm0..xmm7 into the va-save area). Non-variadic
-    // SysV callees treat `al` as don't-care; zero it for
-    // determinism. Win64 has no such requirement and clears
-    // `variadic_zero_xmm_count` in its `Abi`.
+    // System V AMD64 3.2.3: a variadic callee reads the XMM argument count
+    // from `al`; a non-variadic one ignores it, zeroed for determinism.
+    // Win64 clears `variadic_zero_xmm_count`.
     if abi.variadic_zero_xmm_count {
         if imp.is_variadic {
             super::encode::emit_mov_al_imm8(code, xmm_used);
@@ -610,26 +576,15 @@ pub(super) fn emit_call_ext(
     if plan.scratch_bytes > 0 {
         emit_add_rsp_imm32(code, plan.scratch_bytes);
     }
-    // Host-ABI aggregate return (System V AMD64 3.2.3): a <= 16-byte
-    // aggregate arrives in rax:rdx (INTEGER) / xmm0:xmm1 (SSE); store each
-    // eightbyte into the caller's result temp. The walker tags `ret_agg`
-    // for the register-returned class; > 16-byte returns use the OutPtr
-    // hidden-argument path and do not reach here.
+    // A register-returned aggregate (System V AMD64 3.2.3) stores into the
+    // caller's result temp; > 16-byte returns take the out-pointer path.
     if store_ret_agg(code, ret_agg, agg_descs, ret_slot_local, func, frame, abi) {
         return true;
     }
-    // Sub-word integer returns get the standard sign / zero
-    // extension into rax. FP returns arrive in xmm0 (SysV 3.2.3,
-    // Win64 returns scalars/SSE in xmm0); route into the
-    // allocator's chosen Place, which may be an FpReg, an IntReg
-    // (holding the f64 bit pattern -- c5's accumulator is one big
-    // 8-byte slot), or a spill slot.
-    //
-    // SysV long-double sits in x87 st0 (binary128 mantissa
-    // truncated to the x87 80-bit format). c5 stores long double
-    // in an 8-byte slot, so emit `fstp QWORD PTR [rsp]` to round
-    // st0 to f64 and route the f64 bit pattern through the same
-    // dst dispatch.
+    // A sub-word integer return is extended into rax; an FP return arrives
+    // in xmm0 and routes to the allocated place. A System V long double
+    // arrives in st0: `fstp QWORD PTR [rsp]` rounds it to the f64 c5 stores
+    // in its 8-byte slot.
     use crate::c5::compiler::types as ty_helpers;
     let return_type_tag = imp.return_type_tag;
     let bare = ty_helpers::strip_unsigned(return_type_tag);
@@ -649,12 +604,8 @@ pub(super) fn emit_call_ext(
         return true;
     }
     if ty_helpers::is_float_ty(bare) || ty_helpers::is_double_ty(bare) {
-        // A float / double result is FP-classed (`Inst::CallExt::fp_return`).
-        // An f32 result is the single in the low 32 bits of xmm0 -- the same
-        // form `FpCast(F64ToF32)` produces and `StoreLocal F32` /
-        // `FpCast(F32ToF64)` consume -- so route it without widening. (The
-        // prior GPR-bridged path widened via cvtss2sd because the
-        // integer-class convention carried the f64-widened bits.)
+        // An f32 result is the single in the low 32 bits of xmm0, the form the
+        // FP casts and `StoreLocal F32` consume, so it routes without widening.
         xmm0_result_to_dst(code, dst, frame);
         return true;
     }
@@ -664,12 +615,9 @@ pub(super) fn emit_call_ext(
     true
 }
 
-/// The ABI a call site marshals to: the callee's own convention, which
-/// is the target's unless the callee declares `ms_abi` / `sysv_abi`.
-/// It is never the caller's -- a `ms_abi` function calling an ordinary
-/// one has to marshal into the ordinary one's argument window. The rest
-/// of `Abi` describes this compilation rather than any convention, so
-/// it carries over from the caller unchanged.
+/// The ABI a call site marshals to: the callee's own convention, the
+/// target's unless it declares `ms_abi` / `sysv_abi`; never the caller's.
+/// The rest of `Abi` describes this compilation and carries over.
 pub(super) fn callee_abi(abi: super::Abi, target: Target, conv: super::CallConv) -> super::Abi {
     let row = target.abi_for(conv);
     super::Abi {
@@ -704,50 +652,21 @@ pub(super) fn emit_call_indirect(
     extern_sites: &mut Vec<super::UserExternCallSite>,
 ) -> bool {
     let target_place = place_of(alloc, target);
-    // Collect every register `marshal_args` reads or writes for
-    // this call; the staged target must avoid all of them.
-    //
-    //   * Arg SOURCES: the marshal reads each argument from its
-    //     allocator placement. Staging the target over an arg
-    //     source corrupts that arg before the marshal copies it.
-    //   * Arg DESTINATIONS (`abi.int_arg_regs[0..n]`, e.g.
-    //     rcx/rdx/r8/r9 on Win64, rdi/rsi/rdx/rcx/r8/r9 on SysV):
-    //     the marshal writes each argument into its target arg
-    //     register. Staging the target into an arg-destination
-    //     register lets the marshal overwrite it before the
-    //     `call`, sending control to the first argument's value.
-    //   * SCRATCH_R10: the marshal's parallel-register-move scratch
-    //     (`schedule_int_reg_moves`) and spill/stack staging
-    //     register; it is clobbered mid-marshal.
-    // A Win64 variadic indirect call (the pointed-to prototype is
-    // variadic and the target is Win64) splits the arguments into the
-    // named prefix and the variadic tail: the planner places the named
-    // prefix per Win64 position-indexing and the variadic tail at
-    // 8-byte stride past the home area (Microsoft x64 calling
-    // convention). The walker widened the variadic floating-point
-    // arguments to double and passed `fp_arg_mask` 0, so every argument
-    // rides the integer side. Every other dialect (SysV, or a
-    // non-variadic Win64 callee) treats all arguments as fixed, which
-    // leaves `fixed = args.len()` and the placement unchanged.
+    // A Win64 variadic indirect call splits the arguments into the named
+    // prefix, placed by position, and the variadic tail at 8-byte stride past
+    // the home area; every other dialect treats all arguments as fixed.
     let fixed = if callee_variadic && abi.position_indexed_args {
         fixed_args.min(args.len())
     } else {
         args.len()
     };
-    // A by-value aggregate argument the classifier tagged rides through
-    // `plan_call_args_aggs`, which lays its eightbytes into the argument
-    // registers / stack (System V AMD64 3.2.3); with no tagged aggregate
-    // this reduces to the scalar placement.
+    // A tagged by-value aggregate rides `plan_call_args_aggs`; with none the
+    // plan is the scalar placement.
     let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
     let plan = super::plan_call_args_aggs(args.len(), fixed, fp_arg_mask, abi, &aggs, false);
-    // Collect every register `marshal_args` reads or writes for this
-    // call; the staged target pointer must avoid all of them.
-    //   * Arg SOURCES: each argument is read from its allocator
-    //     placement; staging the target over a source corrupts it.
-    //   * Arg DESTINATIONS: every integer register the plan writes -- a
-    //     scalar `IntReg`, a by-reference base, or an aggregate's
-    //     integer eightbytes -- is overwritten before the `call`.
-    //   * SCRATCH_R10: the marshal's parallel-move / staging scratch.
+    // The staged target must avoid every register the marshal reads (the
+    // argument sources) or writes (every integer register the plan fills,
+    // and the r10 staging scratch).
     let mut blocked: alloc::vec::Vec<Reg> =
         alloc::vec::Vec::with_capacity(args.len() + abi.int_arg_regs.len() + 2);
     for &a in args {
@@ -771,21 +690,14 @@ pub(super) fn emit_call_indirect(
         }
     }
     blocked.push(SCRATCH_R10);
-    // A System V variadic indirect call sets `al` to the XMM-argument
-    // count just before the `call` (System V AMD64 3.2.3). The target
-    // pointer must not be staged in rax, or the `mov al, imm8` would
-    // corrupt its low byte; block rax for the target scratch.
+    // A System V variadic call sets `al` just before the `call`, so the
+    // target must not sit in rax.
     let sysv_variadic_call = callee_variadic && abi.sysv_host_variadic();
     if sysv_variadic_call {
         blocked.push(Reg::RAX);
     }
-    // Capture the target pointer into a caller-saved scratch before arg
-    // marshalling can clobber it. rax is the usual pick: no ABI assigns
-    // it to an argument slot, so it is blocked only on a System V
-    // variadic call (where it carries the XMM count). The pool excludes
-    // the marshal's reserved scratch r10 / r11, so a pick never aliases
-    // it. When everything is blocked the `else` branch below spills the
-    // target to the stack.
+    // The target pointer moves to a caller-saved scratch before the marshal
+    // clobbers it; when every candidate is blocked it spills to the stack.
     let target_scratch = pick_caller_saved_scratch(Reg(0xff), &blocked, abi.fixed_regs);
     // System V AMD64 3.2.3: a variadic call passes the XMM-argument
     // count in `al`. Computed from the plan and emitted after the
@@ -815,13 +727,9 @@ pub(super) fn emit_call_indirect(
             emit_add_rsp_imm32(code, plan.scratch_bytes);
         }
     } else {
-        // Every caller-saved register is an arg source (and r10 is
-        // reserved for the marshal). No register survives the
-        // marshal, so spill the target to a fresh 16-byte stack
-        // slot above the marshal's scratch window, marshal, then
-        // reload into SCRATCH_R10 for the `call`. The 16-byte slot
-        // keeps the call-site sp 16-aligned (SysV / Win64 require
-        // 16-byte alignment at `call`).
+        // No register survives the marshal: the target spills to a 16-byte slot
+        // above the scratch window (the call site keeps rsp 16-aligned) and
+        // reloads into r10 for the `call`.
         let Some(target_r) = materialize_int(code, target_place, SCRATCH_R10, frame) else {
             return fail("CallIndirect: target not int reg / spill");
         };
@@ -831,12 +739,8 @@ pub(super) fn emit_call_indirect(
         if plan.scratch_bytes > 0 {
             emit_stack_alloc(code, plan.scratch_bytes, None);
         }
-        // rsp is now slot_bytes + scratch_bytes below the frame baseline.
-        // marshal_args reloads spilled argument sources at
-        // `spill_offset + plan.scratch_bytes`; the target slot must be
-        // folded into that shift, or every spilled-source reload reads
-        // slot_bytes too low (a spilled arg loads garbage and the call
-        // jumps through a corrupt register).
+        // The slot joins the rsp shift the marshal applies to its spilled-source
+        // reloads.
         let mut shifted = plan.clone();
         shifted.scratch_bytes = plan.scratch_bytes + slot_bytes;
         if !marshal_args(code, &shifted, args, alloc, frame, abi, "CallIndirect") {
@@ -854,11 +758,8 @@ pub(super) fn emit_call_indirect(
         }
         emit_add_rsp_imm32(code, slot_bytes);
     }
-    // Host-ABI aggregate return through a function pointer (System V
-    // AMD64 3.2.3): a <= 16-byte aggregate arrives in rax:rdx; store it
-    // into the caller's result temp. The walker tags `ret_agg` only for
-    // the register-returned class, so > 16-byte (out-pointer) returns do
-    // not reach here.
+    // A register-returned aggregate (System V AMD64 3.2.3) stores into the
+    // caller's result temp.
     if store_ret_agg(code, ret_agg, agg_descs, ret_slot_local, func, frame, abi) {
         return true;
     }
@@ -873,25 +774,13 @@ pub(super) fn emit_call_indirect(
     true
 }
 
-/// System V AMD64 `va_arg` (ABI 3.5.7). `args[0]` is the
-/// `__va_list_tag` pointer; `args[1]` is the packed
-/// `(kind << 16) | size` descriptor the parser folded as an
-/// `Inst::Imm`. The intrinsic returns the address of the slot holding
-/// the next argument (the `<stdarg.h>` macro dereferences it as the
-/// requested type) and advances the matching offset / pointer in the
-/// struct.
-///
-/// Integer / pointer (kind 0): if `gp_offset < 48` the value sits in
-/// the register save area at `reg_save_area + gp_offset` and
-/// `gp_offset` advances by 8; otherwise it sits in the overflow area
-/// at `overflow_arg_area`, which advances by 8.
-///
-/// Floating-point (kind 1): if `fp_offset < 176` the value sits at
-/// `reg_save_area + fp_offset` and `fp_offset` advances by 16;
-/// otherwise it sits at `overflow_arg_area`, which advances by 8.
-///
-/// Struct layout (matching `<stdarg.h>` / libc): gp_offset at +0,
-/// fp_offset at +4, overflow_arg_area at +8, reg_save_area at +16.
+/// System V AMD64 `va_arg` (ABI 3.5.7). `args[0]` is the `__va_list_tag`
+/// pointer, `args[1]` the packed `(kind << 16) | size` descriptor. Returns
+/// the address of the slot holding the next argument and advances the
+/// matching field: an integer class comes from the register save area at
+/// `gp_offset` (< 48, step 8), a floating-point one at `fp_offset` (< 176,
+/// step 16), else from `overflow_arg_area` (step 8). Layout: gp_offset at
+/// +0, fp_offset at +4, overflow_arg_area at +8, reg_save_area at +16.
 pub(super) fn emit_va_arg_sysv(
     code: &mut Vec<u8>,
     args: &[u32],
@@ -929,26 +818,17 @@ pub(super) fn emit_va_arg_sysv(
     } else {
         ap
     };
-    // A by-value integer-class aggregate spans `ceil(size/8)` eightbytes
-    // in consecutive gp save-area slots (System V AMD64 3.5.7); it rides
-    // the register save area only if all its eightbytes fit
-    // (`gp_offset + aligned <= 48`), else the whole aggregate sits in the
-    // overflow area. A scalar's aligned size is 8, leaving the bound and
-    // step at their single-eightbyte values. Floating-point arguments are
-    // single doubles (the classifier declines HFAs), so they keep the
-    // 16-byte fp-slot step and 176-byte bound.
+    // A by-value integer-class aggregate spans `ceil(size/8)` consecutive gp
+    // slots and rides the save area only when all of them fit; FP arguments
+    // are single doubles (the classifier declines HFAs).
     let aligned = (((descriptor & 0xffff) as i32 + 7) & !7).max(8);
     let (off_disp, bound, step): (i32, i32, i32) = if is_fp {
         (4, 176, 16)
     } else {
         (0, 48 - (aligned - 8), aligned)
     };
-    // r10 = current offset (gp_offset or fp_offset, a u32 field; the
-    // 32-bit load zero-extends into r10). The whole sequence touches
-    // only r10 and r11 -- both reserved outside the allocator's banks --
-    // plus the in-memory va_list fields, so it never clobbers a live
-    // allocator value (the consuming `t += va_arg(...)` keeps `t` in an
-    // allocator register that an earlier draft overwrote via rcx).
+    // The sequence touches only r10 / r11 and the in-memory fields, so no
+    // allocated value is clobbered.
     super::encode::emit_mov_r32_mem(code, SCRATCH_R10, ap, off_disp);
     // cmp r10d, bound ; jae use_overflow
     super::encode::emit_ri(code, Mnem::Cmp, 8, SCRATCH_R10, bound);
@@ -966,10 +846,8 @@ pub(super) fn emit_va_arg_sysv(
     let overflow_start = code.len();
     let rel_to_overflow = (overflow_start - (jae_rel32_at + 4)) as i32;
     code[jae_rel32_at..jae_rel32_at + 4].copy_from_slice(&rel_to_overflow.to_le_bytes());
-    // r10 = overflow_arg_area (at [ap + 8]) = the argument slot, then
-    // bump it in memory by the argument's eightbyte span. System V AMD64
-    // 3.5.7 rounds each overflow argument to an eightbyte; a scalar or a
-    // `double` occupies one, a by-value aggregate `ceil(size/8)`.
+    // The overflow slot, advanced by the argument's eightbyte span (System V
+    // AMD64 3.5.7 rounds each overflow argument to an eightbyte).
     let ov_step = if is_fp { 8 } else { aligned };
     emit_mov_r_mem(code, SCRATCH_R10, ap, 8);
     super::encode::emit_mi(code, Mnem::Add, 8, ap, 8, ov_step);
@@ -981,37 +859,14 @@ pub(super) fn emit_va_arg_sysv(
     true
 }
 
-/// Decide whether `block` ends in a tail-call shape: the block's
-/// `Terminator::Return` value is the same block's last instruction,
-/// and that instruction is a direct `Inst::Call` whose arguments
-/// fit in the host integer-arg-register window. Returns
-/// `Some((call_pc, target_pc, args))` when the shape matches and
-/// every safety precondition holds.
-///
-/// Preconditions (in order):
-///   * The terminator is `Return(v)` and `v` is the PC of the last
-///     instruction in the block.
-///   * That instruction is `Inst::Call { target_pc, args }`. Indirect
-///     and external calls are out of scope for this pass.
-///   * `args.len() <= abi.int_arg_regs.len()` -- no host-stack-overflow
-///     argument; the epilogue would otherwise have to negotiate the
-///     overflow stripe and the caller's stack at the same time.
-///   * The callee isn't this function's variadic-marker call: c5's
-///     internal cdecl-vs-variadic split is encoded by the callee's
-///     own prologue, but the tail call site can't tell from here, so
-///     keep the tail conversion off when *this* function is variadic
-///     (its arg slots stay on the c5 stack rather than reg cells).
-///   * The function takes no `LocalAddr`, whether to a user local
-///     (negative `off`) or a c5 cdecl param cell (`off >= 2`): such an
-///     address could have been passed to an earlier callee, and the
-///     param cells are overwritten by the tail-callee's own prologue,
-///     so tearing down the frame before the jmp would make it dangle.
-///
-/// Callee-saved register use is allowed: the marshalled arguments ride
-/// the caller-saved arg-register window, which is disjoint from
-/// `alloc.gpr_used` (only callee-saved regs land there), so the
-/// epilogue's per-reg restores cannot clobber them (see
-/// `emit_tail_call`).
+/// `Some((call_pc, target_pc, args))` when `block` returns the value of
+/// its last instruction, a direct `Inst::Call` the epilogue can replace by
+/// a jump: the arguments fit the host argument-register window, this
+/// function is not variadic, the callee is on the same convention with a
+/// known return extension, no aggregate rides the call, and no
+/// `LocalAddr` (user local or c5 cdecl cell) exists that could dangle once
+/// the frame is gone. The marshalled arguments ride caller-saved
+/// registers, disjoint from the callee-saved ones the epilogue restores.
 pub(super) fn detect_tail_call<'a>(
     func: &'a FunctionSsa,
     block: &super::super::ir::Block,
@@ -1027,12 +882,8 @@ pub(super) fn detect_tail_call<'a>(
     if v == super::super::ir::NO_VALUE {
         return None;
     }
-    // The returned value must be this block's last instruction. `v + 1 ==
-    // end` alone also holds for an empty block whose range starts right
-    // after another block's trailing call: that call is emitted with its own
-    // block, so converting here would call the callee and then jump into it
-    // again with whatever the intervening code left in the argument
-    // registers.
+    // An empty block whose range starts after another block's trailing call
+    // also satisfies `v + 1 == end`; that call belongs to its own block.
     if v < block.inst_range.start || v + 1 != block.inst_range.end {
         return None;
     }
@@ -1048,52 +899,33 @@ pub(super) fn detect_tail_call<'a>(
     if args.len() > abi.int_arg_regs.len() {
         return None;
     }
-    // A by-value aggregate argument is marshalled into one or two
-    // argument registers loaded from its source address (System V AMD64
-    // 3.2.3); the tail-call path plans with the scalar `plan_call_args`,
-    // which would instead pass the address as a single pointer. Fall
-    // back to the regular call-and-return path, which honours the
-    // aggregate placement.
+    // The tail-call plan is the scalar one, which would pass an aggregate by
+    // address rather than in its eightbytes.
     if arg_aggs.iter().any(Option::is_some) {
         return None;
     }
     if func.is_variadic {
         return None;
     }
-    // Variadic callees use a different call ABI (c5-stack 16-byte
-    // pushes rather than the host int-arg-register window), so the
-    // tail conversion's `marshal_args` would deliver garbage. The
-    // regular `emit_call` path branches on this same flag.
+    // A variadic callee takes the c5-stack argument convention.
     if variadic_targets.contains(&target_pc) {
         return None;
     }
-    // The tail conversion reuses this frame and this function's entry
-    // contract; a callee on another calling convention wants a different
-    // argument window, a different shadow-space reservation and a
-    // different set of preserved registers. Keep the regular
-    // call-then-return path.
+    // A callee on another convention wants a different argument window,
+    // shadow space and preserved-register set.
     if conv_targets.get(&target_pc).copied().unwrap_or_default() != func.conv {
         return None;
     }
-    // The callee's epilogue extends a sub-word integer return per its
-    // own declared type, and the jmp skips this function's return
-    // staging, so the two extension recipes must agree (an `int`
-    // callee leaves a sign-extended accumulator that an `unsigned`
-    // caller's contract does not allow). An unknown callee -- a
-    // cross-unit placeholder pc -- has no recorded contract; keep the
-    // regular call-then-return path.
+    // The callee's return extension replaces this function's, so the two
+    // contracts must agree; an unknown callee has no recorded contract.
     let &callee_tag = ret_tags.get(&target_pc)?;
     if super::return_extension(callee_tag, target)
         != super::return_extension(func.ret_type_tag, target)
     {
         return None;
     }
-    // Any `LocalAddr` -- whether to a user-local (negative `off`) or
-    // a c5 cdecl param cell (positive `off >= 2`) -- could have been
-    // passed as an argument to an earlier call or stored where the
-    // callee will read it. Tearing down our frame before the `jmp`
-    // would make that address dangle; the param cells in particular
-    // get overwritten by the tail-callee's own prologue.
+    // A taken local or parameter-cell address may be held by an earlier
+    // callee; the frame teardown would leave it dangling.
     if func.insts.iter().any(|i| matches!(i, Inst::LocalAddr(_))) {
         return None;
     }
@@ -1106,13 +938,9 @@ pub(super) fn detect_tail_call<'a>(
     Some((v as usize, target_pc, args))
 }
 
-/// Emit a tail call as `marshal_args; epilogue; jmp target`.
-/// `args` are placed into the host integer arg-register window using
-/// the same planner the regular `Inst::Call` path uses; the epilogue
-/// mirrors `emit_return`'s frame teardown (callee-saved restores +
-/// `add rsp` + `pop rbp` + cdecl-cell drop) but skips the return
-/// value staging and ends in `jmp rel32` instead of `ret`. The
-/// callee's own `ret` instruction returns control to *our* caller.
+/// A tail call: `marshal_args; epilogue; jmp target`. The epilogue is
+/// `emit_return`'s teardown without the return-value staging; the callee's
+/// own `ret` returns to this function's caller.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_tail_call(
     code: &mut Vec<u8>,
@@ -1131,9 +959,7 @@ pub(super) fn emit_tail_call(
         !frame.dynamic_sp,
         "detect_tail_call rejects dynamic-sp frames"
     );
-    // Marshal arguments into their ABI-prescribed registers. The
-    // caller-saved arg-reg window is disjoint from `alloc.gpr_used`
-    // (only callee-saved regs land there), so the epilogue's
+    // The argument-register window is disjoint from `alloc.gpr_used`, so the
     // restores below cannot clobber the marshalled values.
     let mut plan = super::plan_call_args(args.len(), args.len(), fp_arg_mask, abi);
     // `detect_tail_call` rejects arg counts above `int_arg_regs.len()`,
@@ -1149,21 +975,14 @@ pub(super) fn emit_tail_call(
              detect_tail_call should have rejected arg_count > int_arg_regs"
         );
     }
-    // marshal_args adds plan.scratch_bytes to every spill-slot rsp
-    // offset because regular call sites do `sub rsp, scratch_bytes`
-    // ahead of the marshal to set up the Win64 shadow-space window.
-    // The tail-call path doesn't allocate that window (the callee
-    // inherits the slot from our caller's frame), so rsp has not
-    // moved -- any spill load must use the natural slot offset.
-    // Clear scratch_bytes to suppress the marshal's sp_shift add.
+    // No scratch window is allocated here (the callee inherits the slot from
+    // this function's caller), so rsp has not moved and the marshal's
+    // sp shift must be zero.
     plan.scratch_bytes = 0;
     if !marshal_args(code, &plan, args, alloc, frame, abi, "TailCall") {
         return false;
     }
-    // Mirror emit_return's epilogue, omitting the return-value
-    // staging (the callee's own `ret` carries the value back). The
-    // marshalled args ride caller-saved arg registers, disjoint from the
-    // callee-saved GPRs and the non-volatile xmm scratch restored here.
+    // `emit_return`'s epilogue without the return-value staging.
     emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
     restore_callee_saved(code, alloc, frame);
     if !is_full_leaf(func, frame, alloc, abi) {
@@ -1175,11 +994,8 @@ pub(super) fn emit_tail_call(
             emit_add_rsp_imm32(code, frame.param_spill_bytes);
         }
     }
-    // Record a Call-kind fixup at the rel32 byte; the post-link pass
-    // resolves `target_ent_pc` to its native byte offset like a
-    // regular intra-unit call. The opcode emitted here is `jmp`
-    // (E9 rel32), not `call`, so the callee's own `ret` returns to
-    // our caller rather than to this instruction.
+    // A Call-kind fixup resolves the rel32 like an intra-unit call; the
+    // opcode is `jmp`.
     let jmp_site = code.len();
     fixups.push(Fixup {
         native_offset: jmp_site,

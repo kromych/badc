@@ -259,11 +259,9 @@ pub(super) fn emit_x86_simd(
     }
 }
 
-/// Byte stride between adjacent variadic arguments in the cursor `va_list`.
-/// System V AMD64 routes its variadic intrinsics through the
-/// register-save-area forms, so the cursor forms serve Win64 only, which
-/// packs the variadic tail at 8-byte stride in the home area and the
-/// incoming stack.
+/// Byte stride between adjacent variadic arguments in the cursor `va_list`
+/// of Win64, the only x86_64 target on the cursor forms (System V uses the
+/// register save area).
 const VA_CURSOR_STRIDE: i32 = 8;
 
 pub(super) fn emit_intrinsic(
@@ -426,13 +424,11 @@ fn arg_place(alloc: &Allocation, args: &[u32], i: usize, what: &str) -> Option<P
     }
 }
 
-/// System V AMD64 `va_start` (ABI 3.5.7). `args[0]` is the `__va_list_tag`
-/// pointer, `args[1]` is `&last` (unused: the named-argument counts come
-/// from the prototype). The struct is initialised with
-///   gp_offset         = num_named_int * 8
-///   fp_offset         = 48 + num_named_fp * 16
-///   overflow_arg_area = first incoming stack argument
-///   reg_save_area     = base of the prologue-spilled area
+/// System V AMD64 `va_start` (ABI 3.5.7): `args[0]` is the `__va_list_tag`
+/// pointer (`args[1]`, `&last`, is unused; the named counts come from the
+/// prototype). gp_offset = named_int * 8, fp_offset = 48 + named_fp * 16,
+/// overflow_arg_area = the first incoming stack argument, reg_save_area =
+/// the prologue-spilled area.
 fn emit_va_start_sysv(
     code: &mut Vec<u8>,
     args: &[u32],
@@ -455,11 +451,9 @@ fn emit_va_start_sysv(
             named_int += 1;
         }
     }
-    // gp_offset / fp_offset index the next argument register the save
-    // area holds; they saturate at the bank size (six GP, eight FP) so a
-    // callee whose named parameters fill a bank sends `va_arg` straight to
-    // the overflow area. With the XMM save area unpopulated (`-mno-sse`)
-    // the FP bank reads as exhausted.
+    // The offsets saturate at the bank size, so a full bank sends `va_arg`
+    // straight to the overflow area; with the XMM area unpopulated
+    // (`-mno-sse`) the FP bank reads as exhausted.
     let gp_offset = named_int.min(6) * 8;
     let fp_offset = if abi.no_fp_varargs {
         SYSV_REG_SAVE_BYTES
@@ -490,12 +484,10 @@ fn emit_va_start_sysv(
     true
 }
 
-/// System V `va_copy`: a 24-byte `__va_list_tag` struct copy (ABI 3.5.7).
-/// `args[0]` = &dst struct, `args[1]` = &src struct. Both pointers ride the
-/// reserved r10 / r11 scratches (rcx is in the allocator's caller pool and
-/// may hold a live value); the copied word borrows a pool register around
-/// a push / pop pair. The spill loads run before the push so rsp-relative
-/// offsets stay valid.
+/// System V `va_copy`: the 24-byte `__va_list_tag` copy (ABI 3.5.7),
+/// `args[0]` = &dst, `args[1]` = &src. The pointers ride r10 / r11; the
+/// copied word borrows a pool register around a push / pop pair, the spill
+/// loads running before the push.
 fn emit_va_copy_sysv(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, frame: Frame) -> bool {
     if args.len() != 2 {
         return fail("VaCopy: expected 2 args");
@@ -528,12 +520,9 @@ fn emit_va_copy_sysv(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, frame
     true
 }
 
-/// Win64 `va_start(&ap, &last)`: `*ap = &last + stride`, the first variadic
-/// slot one stride past the last named parameter. Both pointer operands
-/// can land in spill slots, so each materializes into a reserved scratch;
-/// r10 / r11 sit outside both allocator banks, so they never alias an
-/// allocator-chosen `ap` / `last`, and the advance lands in r10 rather
-/// than clobbering a `last` register that may still be live.
+/// Win64 `va_start(&ap, &last)`: `*ap = &last + stride`. Each pointer
+/// materialises into a reserved scratch, and the advance lands in r10
+/// rather than in a `last` register that may still be live.
 fn emit_va_start_cursor(
     code: &mut Vec<u8>,
     args: &[u32],
@@ -561,13 +550,11 @@ fn emit_va_start_cursor(
     true
 }
 
-/// Win64 `va_arg`: returns `*ap` and advances `*ap` by the stride.
-/// `args[0]` = &ap; a type descriptor in `args[1]` is ignored by the
-/// single-region walk. The cursor address, the loaded result and the
-/// advance temporary occupy distinct registers so the writeback stores
-/// through the cursor rather than through the just-loaded value: the
-/// cursor is held in r11 whenever it would alias the work register, the
-/// value loads into the work register, the advance into r10.
+/// Win64 `va_arg`: returns `*ap` and advances it by the stride (`args[1]`,
+/// the type descriptor, is ignored by the single-region walk). The cursor,
+/// the loaded value and the advance occupy distinct registers so the
+/// writeback goes through the cursor: the cursor moves to r11 when it
+/// would alias the work register, the advance takes r10.
 fn emit_va_arg_cursor(
     code: &mut Vec<u8>,
     args: &[u32],
@@ -644,12 +631,11 @@ fn emit_va_copy_cursor(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, fra
     true
 }
 
-/// `alloca(n)`: move rsp down by `n` rounded up to 16 bytes and return the
-/// new rsp. The frame's spill slots and locals stay reachable through rbp
-/// (`Frame::dynamic_sp`); the storage is reclaimed by the epilogue or by
-/// an `AllocaRestore` closing a VLA scope (C99 6.2.4p2). rsp walks down
-/// page by page, touching each, before the final value commits: the same
-/// guard-region rule as `emit_stack_alloc`, over a size known at run time.
+/// `alloca(n)`: rsp moves down by `n` rounded up to 16 and is returned; the
+/// frame stays reachable through rbp (`Frame::dynamic_sp`) and the storage
+/// is reclaimed by the epilogue or an `AllocaRestore` (C99 6.2.4p2). rsp
+/// walks down page by page as in `emit_stack_alloc`, the size being a
+/// run-time value.
 fn emit_alloca(
     code: &mut Vec<u8>,
     args: &[u32],
@@ -742,10 +728,9 @@ fn emit_alloca_restore(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, fra
     true
 }
 
-/// The single-memory-operand x87 / system forms. The one argument is the
-/// operand address, forced into r10 so the ModRM byte needs no SIB or
-/// displacement (r10 = rm 010 under REX.B). The opcode bytes and the
-/// ModRM.reg field select the instruction:
+/// The single-memory-operand x87 / system forms: the operand address is
+/// forced into r10 so the ModRM byte needs no SIB or displacement (rm 010
+/// under REX.B). Opcode and ModRM.reg per form:
 ///   fnstcw/fldcw = D9 /7,/5 ; fxsave/fxrstor = 0F AE /0,/1 ;
 ///   sgdt/sidt = 0F 01 /0,/1 ; lgdt/lidt = 0F 01 /2,/3 ;
 ///   sldt/str  = 0F 00 /0,/1 ; lldt = 0F 00 /2 ; clflush = 0F AE /7.
@@ -794,12 +779,11 @@ fn emit_mem_operand_insn(
     true
 }
 
-/// Unsigned 128/64 division (`udiv_qrnnd`): `div` takes the dividend in
-/// rdx:rax = n1:n0 and leaves the quotient in rax and the remainder in
-/// rdx. args: `[q_addr, rem_addr, n0, n1, d]`. rax and rdx are preserved
-/// around the sequence; the output addresses are pushed (quotient then
-/// remainder, so the remainder address pops first) and each operand is
-/// read through the rsp shift the pushes so far produced.
+/// Unsigned 128/64 division (`udiv_qrnnd`): `div` reads rdx:rax = n1:n0
+/// and leaves the quotient in rax and the remainder in rdx. args:
+/// `[q_addr, rem_addr, n0, n1, d]`. rax / rdx are preserved and the output
+/// addresses pushed (remainder popped first); each operand is read through
+/// the rsp shift the pushes produced.
 fn emit_divq128(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, frame: Frame) -> bool {
     const RAX: Reg = Reg(0);
     const RDX: Reg = Reg(2);
@@ -907,13 +891,8 @@ pub(super) fn emit_mcpy(
     }
     let dst_in = place_of(alloc, dst_val);
     let src_in = place_of(alloc, src_val);
-    // Materialise both bases into reserved scratches. SCRATCH_R10 and
-    // SCRATCH_R11 sit outside both allocator pools, so loading a base
-    // into either cannot clobber a live SSA value. rcx must not be used
-    // here: it is in the LinuxX64 `caller_gprs` pool, so under raised
-    // register pressure the allocator parks SSA values there (e.g. a
-    // `context` pointer threaded into a later call argument), and a
-    // materialise into rcx would overwrite that value.
+    // Both bases go to r10 / r11; rcx is in the caller pool and may hold a
+    // live value.
     let Some(dst_r) = materialize_int(code, dst_in, SCRATCH_R10, frame) else {
         return fail("Mcpy: dst base not int reg / spill");
     };
@@ -925,12 +904,8 @@ pub(super) fn emit_mcpy(
     let Some(src_r) = materialize_int(code, src_in, src_scratch, frame) else {
         return fail("Mcpy: src base not int reg / spill");
     };
-    // Pick a per-iteration temp distinct from both bases, then save /
-    // restore it across the copy. rax, rcx and rdx are in the
-    // allocator's caller_gprs pool, so the prologue may have parked a
-    // live value in the chosen one; a push/pop pair around the loop
-    // preserves it. (r10 / r11 are the bases' reserved scratch and are
-    // not candidates here.)
+    // The per-iteration temp is a pool register distinct from both bases,
+    // preserved with a push / pop pair around the loop.
     let temp = if dst_r.0 != Reg::RAX.0 && src_r.0 != Reg::RAX.0 {
         Reg::RAX
     } else if dst_r.0 != Reg::RCX.0 && src_r.0 != Reg::RCX.0 {
@@ -1003,11 +978,9 @@ fn emit_atomic_store(code: &mut Vec<u8>, base: Reg, src: Reg, width: u8) {
     }
 }
 
-/// Force an operand's value into a designated scratch register. The
-/// operand may already sit in its allocator register; `materialize`
-/// returns that register, and we copy it into `scratch` so the
-/// caller can clobber the source register afterwards. `sp_shift`
-/// accounts for the borrowed registers already pushed.
+/// An operand's value in `scratch`, copied from its own register when it
+/// has one so the caller may clobber that register; `sp_shift` counts the
+/// borrowed registers already pushed.
 fn operand_into(
     code: &mut Vec<u8>,
     value: super::super::ir::ValueId,
@@ -1024,15 +997,12 @@ fn operand_into(
     Some(scratch)
 }
 
-/// C11 7.17.7.2-7.17.7.5 atomic read-modify-write. Lowers to a genuine
-/// atomic instruction (Intel SDM Vol.2): `XCHG` for exchange, `LOCK
-/// XADD` for add / sub (negating the operand for sub), and a `LOCK
-/// CMPXCHG` retry loop for the bitwise operators (x86 has no
-/// fetch-and-return-old form for AND / OR / XOR). The defined value is
-/// the object's prior contents. The address rides SCRATCH_R11 and the
-/// operand SCRATCH_R10, both outside the allocator's register banks;
-/// RAX and a loop temp are borrowed via push / pop so a value the
-/// allocator parked there survives.
+/// C11 7.17.7.2-7.17.7.5 atomic read-modify-write: `XCHG` for exchange,
+/// `LOCK XADD` for add / sub (the operand negated for sub), and a `LOCK
+/// CMPXCHG` retry loop for the bitwise operators, which have no
+/// fetch-and-return-old form. The result is the prior contents. The
+/// address rides r11 and the operand r10; rax and a loop temp are
+/// borrowed with push / pop.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_atomic_rmw(
     code: &mut Vec<u8>,
@@ -1113,12 +1083,10 @@ pub(super) fn emit_atomic_rmw(
     }
 }
 
-/// C11 7.17.7.4 atomic compare-and-exchange. Lowers to `LOCK CMPXCHG`
-/// (Intel SDM Vol.2): RAX is loaded with `*expected`; on a match the
-/// store publishes `desired` and the result is 1, otherwise the
-/// current contents are written back into `*expected` and the result
-/// is 0. The success flag is read from the CMPXCHG ZF (a `mov` does
-/// not disturb the flags, so the post-branch SETcc is correct).
+/// C11 7.17.7.4 compare-and-exchange as `LOCK CMPXCHG`: rax holds
+/// `*expected`; on a match `desired` is stored and the result is 1, else
+/// the current contents go back into `*expected` and the result is 0. The
+/// flag comes from the CMPXCHG ZF, which the intervening `mov` keeps.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_atomic_cas(
     code: &mut Vec<u8>,

@@ -1,41 +1,24 @@
-//! x86_64 native emit consuming the SSA + allocator output.
-//! Mirrors the aarch64 counterpart's structure; the difference
-//! is the per-target instruction encodings and the SysV / Win64
-//! ABI shape applied to argument and return placement.
-//!
-//! ## Pass shape
-//!
-//! For each function:
-//!
-//! 1. Prologue: push rbp, set rbp = rsp, reserve locals +
-//!    allocator-spill bytes, save the callee-saved GPRs the
-//!    allocator reported as used, and spill the host-ABI arg
-//!    registers into the c5 cdecl slots the body's
-//!    `LocalAddr(>=2)` references.
-//! 2. Walk each block in source order. Emit per-`Inst` native
-//!    code in `inst_range`, then the terminator.
-//! 3. Epilogue lands inline at every `Terminator::Return`: move
-//!    the return value into rax, restore saved regs, drop the
-//!    frame, pop rbp, ret.
-//!
-//! ## Frame layout (top -> bottom, growing down from caller's rsp)
-//!
-//! ```text
-//!   c5 cdecl param slots          [rbp + 16*i + 16]
-//!   saved rbp, ret address        [rbp]
-//!   locals area                   [rbp - locals_bytes .. rbp]
-//!   allocator spill slots         ...
-//!   over-aligned region           [rbp + align_region_off ..]  (16-mode only)
-//!   saved callee-saved GPRs       rsp
-//! ```
-//!
-//! ## Coverage policy
-//!
-//! [`emit_function`] returns `true` when the SSA emit handled the
-//! function end-to-end and `false` when any encountered op is
-//! outside the implemented subset. The caller (`x86_64::lower`)
-//! turns `false` into a hard compile error -- the IR + emit
-//! contract has to cover every shape the walker produces.
+// x86_64 native emit over the SSA and the allocator output; the aarch64
+// backend has the same shape with its own encodings and ABI rules.
+//
+// Per function: the prologue (frame, callee-saved registers, the argument
+// registers spilled into the c5 cdecl cells the body addresses), each
+// block in source order with its instructions and terminator, and the
+// epilogue inline at every `Terminator::Return`.
+//
+// Frame layout, top to bottom:
+//
+// ```text
+//   c5 cdecl param slots          [rbp + 16*i + 16]
+//   saved rbp, ret address        [rbp]
+//   locals area                   [rbp - locals_bytes .. rbp]
+//   allocator spill slots         ...
+//   over-aligned region           [rbp + align_region_off ..]  (16-mode only)
+//   saved callee-saved GPRs       rsp
+// ```
+//
+// [`emit_function`] returns `false` when it meets a shape outside the
+// implemented subset; `x86_64::lower` turns that into a compile error.
 
 #![allow(dead_code, clippy::too_many_arguments)]
 
@@ -121,32 +104,16 @@ fn int_reg(place: Place) -> Option<Reg> {
     place.int_reg_u8().map(Reg)
 }
 
-/// Scratch register for handlers whose dst is a spill: r10 is
-/// r10 is in the SSA allocator's `caller_gprs` pool (see
-/// `RegBanks::for_target` for `LinuxX64` / `WindowsX64`), so any
-/// emit handler that reuses it as a scratch must first check
-/// whether the current instruction's `rd` / operand places alias
-/// r10 -- otherwise the scratch write clobbers a live value.
-/// Emit handlers that need a register guaranteed free of
-/// allocator interference use r10 (reserved by the codegen and
-/// outside both pools). Caller-saved, so reserving it forces no
-/// prologue save.
+/// Scratch outside both allocator banks (`RegBanks::for_target`), so it
+/// never aliases an allocated value; caller-saved, so reserving it costs
+/// no prologue save.
 const SCRATCH_R10: Reg = Reg(10);
-/// Secondary / tertiary int scratches for emit handlers that
-/// need more than one register beyond `rd`. rcx and rdx are also
-/// in the allocator's `caller_gprs` pool, so callers must check
-/// for aliasing with `rd` / operand places exactly as with
-/// `SCRATCH_R10`. Used by emit handlers that work over a base,
-/// an index, and a value (indexed stores) where one register
-/// isn't enough.
+/// Further scratches inside the allocator's `caller_gprs` pool: a handler
+/// that uses one must check that no `rd` or operand place aliases it.
 const SCRATCH_RCX: Reg = Reg(1);
 const SCRATCH_RDX: Reg = Reg(2);
-/// Reserved secondary scratch outside both allocator pools (see the
-/// note on `SCRATCH_R10`). Handlers that already commit `SCRATCH_R10`
-/// to one operand and need a second guaranteed-free register use this;
-/// it never aliases an allocator-chosen `rd`, a staged dividend in
-/// `SCRATCH_R10`, or any argument register. r11 is caller-saved, so
-/// reserving it forces no prologue save.
+/// The second reserved scratch, outside both allocator banks like
+/// `SCRATCH_R10`.
 const SCRATCH_R11: Reg = Reg(11);
 
 /// Extract the FP reg from a `Place`, or `None` if it's not an
@@ -155,10 +122,8 @@ fn fp_reg(place: Place) -> Option<Reg> {
     place.fp_reg_u8().map(Reg)
 }
 
-/// Pick the working xmm a single-result FP-producing handler writes
-/// into: the allocator's chosen reg for `FpReg`, or the first FP scratch
-/// for `Spill`. Other place kinds (`IntReg`, `None`) are not legal
-/// for the FP handlers.
+/// The working xmm of an FP-producing handler: the allocated register for
+/// `FpReg`, the first FP scratch for `Spill`.
 fn fp_or_spill_dst(dst: Place, frame: Frame) -> Option<Reg> {
     match dst {
         Place::FpReg(r) => Some(Reg(r)),
@@ -167,12 +132,9 @@ fn fp_or_spill_dst(dst: Place, frame: Frame) -> Option<Reg> {
     }
 }
 
-/// Read an FP value's `Place` into a usable xmm register. `FpReg`
-/// returns the allocator's chosen reg directly; `Spill` loads the
-/// spilled bit pattern into `scratch`; `IntReg` reinterprets the
-/// register's bit pattern as an f64 via `movq xmm, gpr` (c5's
-/// constant-folder represents f64 constants as `Imm` of the f64 bit
-/// pattern, which the allocator places in an IntReg).
+/// An FP value's `Place` in an xmm register: `FpReg` in place, `Spill`
+/// loaded into `scratch`, `IntReg` reinterpreted through `movq xmm, gpr`
+/// (the constant folder places f64 constants as `Imm` bit patterns).
 fn materialize_fp(code: &mut Vec<u8>, place: Place, scratch: Reg, frame: Frame) -> Option<Reg> {
     materialize_fp_shifted(code, place, scratch, frame, 0)
 }
@@ -223,10 +185,8 @@ fn int_operand_into_rd(code: &mut Vec<u8>, place: Place, rd: Reg, frame: Frame) 
     }
 }
 
-/// Pick the working register a single-result int-producing handler
-/// writes into: the allocator's chosen reg for `IntReg`, or
-/// `SCRATCH_R10` for `Spill`. Other place kinds (FpReg, None) are
-/// not legal for the handlers that call this helper.
+/// The working register of an int-producing handler: the allocated
+/// register for `IntReg`, `SCRATCH_R10` for `Spill`.
 fn int_or_spill_dst(dst: Place) -> Option<Reg> {
     match dst {
         Place::IntReg(r) => Some(Reg(r)),
@@ -235,25 +195,16 @@ fn int_or_spill_dst(dst: Place) -> Option<Reg> {
     }
 }
 
-/// `(base, disp)` pair addressing allocator spill slot `slot`. Every
-/// spill access routes through here so the dynamic-sp choice cannot be
-/// bypassed. A static frame uses `[rsp + off]`; a dynamic-sp frame
-/// (alloca / VLA) uses `[rbp + off - frame_bytes]`, the same byte,
-/// since rsp no longer has a fixed relation to the slot once the body
-/// moves it.
+/// `(base, disp)` of allocator spill slot `slot`. Every spill access goes
+/// through here: a static frame addresses `[rsp + off]`, a dynamic-sp
+/// frame the same byte as `[rbp + off - frame_bytes]`.
 fn spill_slot_addr(frame: Frame, slot: u32) -> (Reg, i32) {
     spill_slot_addr_shifted(frame, slot, 0)
 }
 
-/// Like [`spill_slot_addr`], but for callers that temporarily pushed
-/// rsp down by `sp_shift` bytes. The shift applies only to the
-/// rsp-based form; the rbp-based form is immune to rsp moves.
-///
-/// The base offset: spill slot 0 sits at the top of the allocator-spill
-/// region, slot N+1 eight bytes below slot N. The region lives at
-/// `[rbp - alloc_spill_base .. - alloc_spill_bytes]` and rsp =
-/// rbp - frame_bytes, so the slot is `frame_bytes - alloc_spill_base
-/// - (N+1)*8` from rsp. Mirror of the aarch64 module's formula.
+/// [`spill_slot_addr`] for a caller that pushed rsp down by `sp_shift`
+/// bytes; only the rsp-based form shifts. Slot 0 is the top of the spill
+/// region, slot N+1 eight bytes below slot N, and rsp = rbp - frame_bytes.
 fn spill_slot_addr_shifted(frame: Frame, slot: u32, sp_shift: u32) -> (Reg, i32) {
     let off = super::ssa::emit_common::spill_slot_sp_offset(
         frame.frame_bytes,
@@ -277,21 +228,15 @@ fn spill_dst_to_slot(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) {
     }
 }
 
-/// Read a value's `Place` into a usable register: returns the
-/// allocator's chosen reg directly for `IntReg`, or loads the
-/// spilled value into `scratch` and returns `scratch` for `Spill`.
-/// Returns `None` for `FpReg` / `None` so the caller can bail.
+/// A value's `Place` in a register: `IntReg` in place, `Spill` loaded into
+/// `scratch`; `None` for the other kinds.
 fn materialize_int(code: &mut Vec<u8>, place: Place, scratch: Reg, frame: Frame) -> Option<Reg> {
     materialize_int_shifted(code, place, scratch, frame, 0)
 }
 
-/// Materialize up to two integer operands into distinct registers. A
-/// register-resident operand keeps its register; a spilled operand is
-/// loaded into one of the reserved scratch registers (`r10` / `r11`)
-/// that holds no other operand. Both scratch registers sit outside the
-/// allocator's pool, so loading a spilled operand cannot clobber an
-/// allocated value. Returns `None` if an operand is neither a register
-/// nor a spill slot.
+/// Up to two integer operands in distinct registers: a register-resident
+/// operand stays, a spilled one loads into whichever of r10 / r11 holds no
+/// other operand. `None` when an operand is neither.
 fn materialize_int_operands_distinct(
     code: &mut Vec<u8>,
     places: &[Place],
@@ -326,12 +271,8 @@ fn materialize_int_operands_distinct(
     )
 }
 
-/// Like [`materialize_int`] but accounts for a temporary `rsp`
-/// adjustment that hasn't been undone yet (e.g. the call-args
-/// scratch frame). Spill offsets are computed from the
-/// post-prologue rsp, so callers that pushed extra bytes on top
-/// must pass that delta as `sp_shift` so the load reaches the
-/// correct slot.
+/// [`materialize_int`] for a caller that pushed rsp down by `sp_shift`
+/// bytes since the prologue.
 fn materialize_int_shifted(
     code: &mut Vec<u8>,
     place: Place,

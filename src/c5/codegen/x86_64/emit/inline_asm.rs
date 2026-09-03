@@ -139,16 +139,12 @@ fn riprel_field(
     (width == 4).then(|| (field, body.len() - field - 4))
 }
 
-/// Encode replacement instructions in an executable inline-asm section
+/// Encode the replacement instructions of an executable inline-asm section
 /// (`.pushsection .altinstr_replacement,"ax"`) to bytes and relocations,
-/// replacing each `Code` item with `CodeBytes`. The x86 ALTERNATIVE puts
-/// its replacement in a separate section, so there is no fall-through from
-/// the main sequence; the bytes and their relocations lay out like any
-/// other section data. Only a direct `call` / `jmp` to a symbol (a bare
-/// name or a `%c` function operand), a `jmp` / `jcc` to an `asm goto` label
-/// (`%lK`, via `goto_block`), and self-contained instructions are assembled;
-/// a replacement referencing a register operand or a memory location is
-/// rejected rather than mis-encoded.
+/// each `Code` item becoming `CodeBytes`. Only a direct `call` / `jmp` to a
+/// symbol, a `jmp` / `jcc` to an `asm goto` label (via `goto_block`) and
+/// self-contained instructions assemble; a replacement referencing a
+/// register operand or a memory location is rejected.
 fn encode_x86_asm_section_code(
     blocks: &mut [crate::c5::asm::AsmSectionBlock],
     func: &FunctionSsa,
@@ -231,15 +227,11 @@ fn encode_x86_asm_section_code(
     Ok(())
 }
 
-/// Encode a file-scope inline-asm named section's instructions to bytes,
-/// reusing the function-body per-instruction encoder with an empty operand
-/// context: file-scope asm has no numbered operands, `asm goto` labels, or
-/// register assignments, so only self-contained instructions and a direct
-/// `call` / `jmp` to a bare symbol assemble.
-///
-/// The `.code16` / `.code32` / `.code64` state is a property of the assembler's
-/// input stream, so it carries across the walk in section order rather than
-/// resetting per section.
+/// Encode a file-scope inline-asm section's instructions with an empty
+/// operand context: no numbered operands, `asm goto` labels or register
+/// assignments. The `.code16` / `.code32` / `.code64` state is a property
+/// of the assembler's input stream, so it carries across sections in walk
+/// order.
 pub(crate) fn encode_x86_file_asm_section_code(
     blocks: &mut [crate::c5::asm::AsmSectionBlock],
     class: crate::c5::ElfClass,
@@ -468,17 +460,12 @@ struct SectionOperandRefs<'a> {
     file_scope: bool,
 }
 
-/// Encode one replacement instruction to a `CodeBytes` item. A direct
-/// `call` / `jmp` to a symbol emits `E8`/`E9` with a zero rel32 and a
-/// `PLT32` branch relocation (addend -4), matching a compiler-emitted
-/// call; a `jmp` / `jcc` to an `asm goto` label (`%lK`) emits the same
-/// `E9` / `0F 8x` rel32 with a `PC32` relocation (addend -4) to the label's
-/// caller block. Otherwise the operands resolve to registers, immediates,
-/// and memory references: a template operand (`%N`) takes its register or
-/// `i`-class constant, a register-indirect / displacement memory operand
-/// encodes with no relocation, and a `%a[N]` operand naming a link-time
-/// address lowers to a RIP-relative reference with a `PC32` relocation
-/// against the symbol. A form that resolves to none of these is rejected.
+/// Encode one replacement instruction to a `CodeBytes` item: a direct
+/// `call` / `jmp` to a symbol as `E8` / `E9` with a `PLT32` relocation
+/// (addend -4), a `jmp` / `jcc` to an `asm goto` label with a `PC32`
+/// relocation to the label's block, otherwise the operands resolved to
+/// registers, immediates and memory references, a `%a[N]` link-time
+/// address becoming a RIP-relative reference with a `PC32` relocation.
 fn encode_one_x86_section_insn(
     text: &str,
     mode: &mut super::table::Mode,
@@ -604,12 +591,10 @@ impl SectionInsn<'_> {
         alloc::format!("inline asm: replacement `{}` {what}", self.text)
     }
 
-    /// A jmp / jcc to an `asm goto` label (`%lK`): the replacement leaves
-    /// the alternative for a caller block (`jmp %l[t_no]` in
-    /// `_static_cpu_has`). The rel32 form with a zero displacement and a
-    /// `PC32` relocation to the label's block, deferred as `TextBlock` and
-    /// rewritten to the block's text offset after layout -- the GNU as
-    /// cross-section branch (addend -4).
+    /// A jmp / jcc to an `asm goto` label (`%lK`), as `jmp %l[t_no]` in
+    /// `_static_cpu_has`: the rel32 form with a `PC32` relocation deferred as
+    /// `TextBlock` and rewritten to the block's text offset after layout, the
+    /// GNU as cross-section branch (addend -4).
     fn goto_branch(
         &self,
         goto_block: &dyn Fn(u8) -> Option<u32>,
@@ -708,12 +693,10 @@ impl SectionInsn<'_> {
         Ok(None)
     }
 
-    /// A `call` / `jmp` / `jcc` to a symbol or a numeric label -- a
-    /// section-local label (this or another statement of the section) or an
-    /// external name: the mode-width rel form with a branch relocation the
-    /// writer resolves against the label's symbol (a same-section target
-    /// patches at materialize time). An indirect target (`call *%rdi`)
-    /// encodes on the general operand path.
+    /// A `call` / `jmp` / `jcc` to a symbol or a numeric label: the mode-width
+    /// rel form with a branch relocation the writer resolves against the
+    /// label's symbol (a same-section target patches at materialize time). An
+    /// indirect target encodes on the operand path.
     fn direct_branch(
         &self,
         operand_target: &dyn Fn(u8) -> Option<crate::c5::asm::AsmSectionTarget>,
@@ -885,12 +868,10 @@ impl SectionInsn<'_> {
             .and_then(|e| (self.refs.fold)(e))
     }
 
-    /// Resolve each operand to a concrete register, immediate, or memory
-    /// reference. A template operand assigned a register uses it; an
-    /// `i`-class operand uses its constant. A base register is a `%%reg` or
-    /// an operand's register; a `%a[N]` operand naming an `i`-class link-time
-    /// address resolves to no register and lowers to a RIP-relative
-    /// reference.
+    /// Resolve each operand to a concrete register, immediate or memory
+    /// reference: a template operand takes its register or its `i`-class
+    /// constant; a `%a[N]` operand naming a link-time address resolves to no
+    /// register and becomes a RIP-relative reference.
     fn resolve_operands(&self) -> Result<SectionOperands, alloc::string::String> {
         use super::asm::AsmOpnd;
         let mut ops = SectionOperands {
@@ -1228,13 +1209,11 @@ impl SectionInsn<'_> {
         })
     }
 
-    /// Encode the instruction body behind its prefixes and locate the
-    /// symbolic fields: a `$symbol` immediate settles its width and
-    /// signedness before the body encodes, since both follow from the form
-    /// the probe value selects (the widest probe that encodes wins, as GNU
-    /// as relocates a symbol immediate in the operand size's own field); a
-    /// symbolic displacement is located by re-encoding with a distinct
-    /// displacement, exactly those field bytes differing.
+    /// Encode the body behind its prefixes and locate the symbolic fields: a
+    /// `$symbol` immediate settles its width and signedness first, the widest
+    /// probe that encodes winning as under GNU as; a symbolic displacement is
+    /// found by re-encoding with a distinct displacement, exactly those bytes
+    /// differing.
     fn encode(
         &self,
         mut ops: SectionOperands,
@@ -1408,12 +1387,10 @@ struct SymImmField {
     signed: bool,
 }
 
-/// Probe pairs for locating a symbol immediate's field, widest first. Both
-/// members of a pair differ in every byte of the field and stay inside the
-/// signed range of their width, so a form that accepts one accepts the other.
-/// The 8-byte pair comes last: an instruction that also has a 4-byte form
-/// (`movq $sym, %rax`) takes it, as GNU as does, and only an imm64-only form
-/// (`movabsq`) falls through.
+/// Probe pairs for locating a symbol immediate's field, widest first; the
+/// members of a pair differ in every byte and stay inside the signed range
+/// of their width. The 8-byte pair comes last, so a form with a 4-byte
+/// variant takes it, as under GNU as, and only `movabsq` falls through.
 const IMM_PROBE: [(u8, i64, i64); 4] = [
     (4, 0x5B3D_71A7, 0x24C2_8E58),
     (2, 0x5B3D, 0x24C2),
@@ -1544,23 +1521,16 @@ fn differing_run(a: &[u8], b: &[u8]) -> Option<(usize, usize)> {
         .then_some((first, end - first))
 }
 
-/// Lower an `Inst::InlineAsm` (GCC extended asm with operands). Assigns
-/// each register operand a machine register per its constraint, saves
-/// the registers it and the clobber list overwrite, loads the inputs,
-/// encodes the register-concrete template, and stores the outputs back
-/// through their addresses. Operand values / addresses are captured to
-/// the stack first (via r10) so an operand living in a register the asm
-/// then overwrites is read before it is clobbered -- the shape the
-/// register-tied intrinsics above use, generalised over the constraints.
-/// `goto_ctx` is present for the `asm goto` form (the statement is the
-/// last instruction of a `Terminator::AsmGoto` block).
+/// Lower an `Inst::InlineAsm`: assign each register operand a register per
+/// its constraint, save the registers the statement overwrites, capture the
+/// operand values and addresses to the frame (so an operand in a register
+/// the asm overwrites is read first), load the inputs, encode the
+/// template, store the outputs back. `goto_ctx` is present for `asm goto`.
 ///
-/// A template branch to a label of its own stream starts on the rel8 form
-/// and is lengthened, permanently, when the settled layout leaves its
-/// displacement outside the byte's reach: the attempt grows the set and
-/// this driver rolls the outputs back and lays the template out again.
-/// Each round either grows the set or is final, the rule
-/// `measure_asm_section_offsets` applies to a pushed section's branches.
+/// A branch to a label of the template's own stream starts on the rel8
+/// form; when the settled layout leaves it out of reach the attempt grows
+/// `long_sites` and this driver rolls the outputs back and lays the
+/// template out again. Each round either grows the set or is final.
 pub(super) fn emit_inline_asm(
     out: &mut Out,
     asm: &super::super::ir::AsmBlock,
@@ -1835,13 +1805,12 @@ impl AsmScratch {
         self.base + self.fp_area + 8 * (self.save_list.len() + i) as i32
     }
 
-    /// With nothing to run on the way out -- no register outputs to store
-    /// back, no saved registers to restore -- a `%lK` branch goes straight
-    /// to the label's block, so the template branch and a `.long %lK - .`
-    /// section field name one address, as runtime patchers require. TODO
-    /// with exit work pending, a section field still names the block, so a
-    /// patched-in branch skips the store-backs and restores; the aarch64
-    /// lowering rewrites such fields to the restore trampoline.
+    /// With no store-back and no restore on the way out, a `%lK` branch goes
+    /// straight to the label's block, so the template branch and a
+    /// `.long %lK - .` section field name one address, as runtime patchers
+    /// require. TODO with exit work pending, a section field still names the
+    /// block, so a patched-in branch skips the store-backs and restores; the
+    /// aarch64 lowering rewrites such fields to the restore trampoline.
     fn goto_direct(&self, asm: &super::super::ir::AsmBlock) -> bool {
         use super::super::ir::AsmConstraint;
         self.save_list.is_empty()
@@ -2113,12 +2082,11 @@ impl AsmPass<'_> {
             layout.label_defs.push((num, code.len()));
             return Some(true);
         }
-        // `.align` / `.p2align` / `.balign`: pad `code` (the unit's whole
-        // text stream, so its length is a section offset) to the boundary,
-        // as GNU as does section-relative. A boundary above the section
-        // default raises the section alignment. The default fill is the GNU
-        // as multi-byte NOP sequence. An operand over template labels
-        // resolves against the definitions already emitted.
+        // `.align` / `.p2align` / `.balign` pad the unit's text stream to the
+        // boundary as GNU as does section-relative, raising the section
+        // alignment above the default when needed; the default fill is the GNU
+        // as multi-byte NOP sequence. A label operand resolves against the
+        // definitions already emitted.
         if let Some(crate::c5::asm::AsmSectionItem::Align {
             spec,
             fill,
@@ -3096,12 +3064,11 @@ impl AsmPass<'_> {
         long_sites.len() != known
     }
 
-    /// Patch each label reference against the definition it binds to; the
-    /// displacement is measured from the end of its field. A reference with
-    /// no main-stream definition may name a label in one of the template's
-    /// pushed sections; it is returned for the section pass, as is a
-    /// `$LABEL` immediate, whose field carries an absolute `.text`
-    /// relocation instead of an in-stream displacement.
+    /// Patch each label reference against the definition it binds to, the
+    /// displacement measured from the end of its field. A reference with no
+    /// main-stream definition may name a label in a pushed section; it is
+    /// returned for the section pass, as is a `$LABEL` immediate, whose field
+    /// carries an absolute `.text` relocation.
     fn patch_label_refs(
         &self,
         code: &mut [u8],
@@ -3172,12 +3139,11 @@ impl AsmPass<'_> {
         true
     }
 
-    /// Materialize the `.pushsection` blocks now that every label's text
-    /// offset is known, then bind each deferred main-stream reference to its
-    /// section definition. The pushed sections follow the main stream
-    /// textually, so only a forward reference reaches one; the two land in
-    /// different object sections, so the reference becomes a relocation
-    /// against the target section's symbol.
+    /// Materialize the `.pushsection` blocks, every label offset now known,
+    /// then bind each deferred main-stream reference to its section
+    /// definition. The sections follow the main stream textually, so only a
+    /// forward reference reaches one, and it becomes a relocation against the
+    /// target section's symbol.
     fn materialize_sections(
         &self,
         out: &mut Out,
@@ -3311,13 +3277,13 @@ impl AsmPass<'_> {
         true
     }
 
-    /// The store-backs and register restores on the fall-through path, then
-    /// the `asm goto` exits. A `%lK` branch leaves mid-template, so it lands
-    /// on a trampoline repeating the exit sequence and jumping to the
-    /// label's block through the enclosing function's branch fixups; a
-    /// label targeting the fall-through block reuses the fall-through exit.
-    /// With an empty exit sequence the template branch itself rides the
-    /// function's branch fixups, pinned to its emitted long form.
+    /// The store-backs and restores of the fall-through path, then the
+    /// `asm goto` exits: a `%lK` branch leaves mid-template, so it lands on a
+    /// trampoline repeating the exit sequence and jumping to the label's
+    /// block through the enclosing function's branch fixups (a label
+    /// targeting the fall-through block reuses the fall-through exit). With
+    /// an empty exit sequence the template branch itself rides the function's
+    /// branch fixups, pinned to its long form.
     fn emit_exits(
         &self,
         code: &mut Vec<u8>,

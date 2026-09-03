@@ -1849,17 +1849,9 @@ impl Compiler {
         // decoration (C99 6.7.6 abstract declarator), the
         // same machinery `sizeof(<type>)` uses. A pointer
         // type collapses to an 8-byte integer-class slot.
-        let mut arg_ty = self.parse_decl_base_type()?;
-        let _ = core::mem::take(&mut self.pending.typedef_base_array_size);
-        let mut is_pointer = false;
-        while self.lex.tk == Token::MulOp {
-            self.next()?;
-            arg_ty += Ty::Ptr as i64;
-            is_pointer = true;
-            while self.lex.tk == Token::TypeQual {
-                self.next()?;
-            }
-        }
+        let type_name = self.parse_type_name()?;
+        let arg_ty = type_name.ty;
+        let is_pointer = type_name.ptr_levels > 0;
         let size = self.size_of_type(arg_ty) as i64;
         // C99 6.5.2.2p6: a floating-point argument that
         // survives default argument promotions is `double`

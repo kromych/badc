@@ -2275,6 +2275,13 @@ fn sizeof_array_type_and_binding() {
 }
 
 #[test]
+fn type_name_forms() {
+    // C99 6.7.6 type names with abstract declarators in a cast, `sizeof`,
+    // `_Alignof`, a `_Generic` association and `va_arg`.
+    assert_eq!(run_fixture("type_name_forms.c"), 0);
+}
+
+#[test]
 fn sizeof_abstract_fn_ptr() {
     // `sizeof` of an abstract function-pointer type-name `int (*)(int)`
     // is the pointer width, in both the runtime and constant-expression

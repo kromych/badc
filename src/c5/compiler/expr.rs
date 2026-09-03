@@ -3400,88 +3400,86 @@ impl Compiler {
         Ok(())
     }
 
+    /// C99 6.5.3.1: prefix `++` / `--`. The operand is parsed by a nested
+    /// `expr`, so a pointer-to-array operand's stride sits in the
+    /// end-of-expression snapshot.
     fn parse_prefix_inc_dec(&mut self) -> Result<(), C5Error> {
-        let tok = self.lex.tk.raw();
+        let is_inc = self.lex.tk == Token::Inc;
         self.next()?;
         self.expr(Token::Inc as i64)?;
-        // Snapshot the lvalue's AST node before the emit
-        // sequence below: rewrite + reload + Psh + Imm +
-        // Add/Sub + store_op all run through `ast_apply_*`
-        // helpers that pop the vstack regardless of whether the
-        // build succeeded, so by the time `ast_emit_pre_inc`
-        // fires the lvalue would otherwise be gone.
-        let bf_pre = self.direct_inc_lvalue();
-        if let Some((lv, ety)) = bf_pre {
-            let by = if tok == Token::Inc as i64 { 1 } else { -1 };
-            let src = self.ast_src_pos();
-            let id = self.ast.push_expr(
-                super::super::ast::Expr::PreInc {
-                    lvalue: lv,
-                    by,
-                    ty: ety,
-                },
-                src,
-            );
-            self.ast_acc = Some(id);
-            self.ty = ety;
-        } else {
-            let pre_inc_lvalue = self.ast_acc;
-            let fn_ptr_step = self.value_is_function_pointer();
-            self.rewrite_trailing_load_as_psh()
-                .ok_or_else(|| self.compile_err("bad lvalue in pre-increment"))?;
-            // ++/-- reads the prior value and stores a new one.
-            // `take_last_loaded_local` restored was_read to its
-            // pre-load state; force it true because the reload
-            // below re-emits the load. The read clears any
-            // pending dead-store entries; the subsequent store
-            // pushes a fresh one.
-            let line = self.lex.line;
-            if let Some(idx) = self.take_last_loaded_local() {
-                self.symbols[idx].was_read = true;
-                self.symbols[idx].was_written = true;
-                self.record_local_read(idx);
-                self.record_local_store(idx, line);
-            }
-            self.mark_emit_other();
-            self.ast_psh();
-            // A pointer-to-array (`T (*p)[N]`) looks like a plain
-            // `T*` in the flat type, so `pointee_step` would scale by
-            // `sizeof(T)`. The correct step is the array's size,
-            // seeded into the stride snapshot when the operand was
-            // loaded (the operand was parsed via a nested `expr()`,
-            // so it sits in `end_of_expr_stride`).
-            let step = if fn_ptr_step {
-                1
-            } else {
-                self.pointer_to_array_arith_stride(
-                    self.pending.end_of_expr_stride,
-                    self.ty,
-                    self.pointee_step(self.ty),
-                )
-            };
-            self.emit_imm(step);
-            self.ast_binop(if tok == Token::Inc as i64 {
-                super::super::ir::BinOp::Add
-            } else {
-                super::super::ir::BinOp::Sub
-            });
-            self.ast_assign();
-            // Build the AST `Expr::PreInc` whose `by` is signed
-            // by the op direction so the walker routes to a
-            // single `binop_imm(Add, lvalue, by)` rather than
-            // matching the sign separately. The lvalue producer
-            // is already on the parser-side vstack from the
-            // trailing-load rewrite.
-            let pre_inc_step = if tok == Token::Inc as i64 {
-                step
-            } else {
-                -step
-            };
-            let pre_inc_ty = self.ty;
-            if let Some(lvalue) = pre_inc_lvalue {
-                self.ast_emit_pre_inc(lvalue, pre_inc_step, pre_inc_ty);
-            }
+        if let Some((lvalue, ty)) = self.direct_inc_lvalue() {
+            return self.emit_direct_inc_dec(lvalue, ty, is_inc, false);
         }
+        let (lvalue, fn_ptr_step) = self.inc_dec_lvalue("pre-increment")?;
+        let step = if fn_ptr_step {
+            1
+        } else {
+            self.pointer_to_array_arith_stride(
+                self.pending.end_of_expr_stride,
+                self.ty,
+                self.pointee_step(self.ty),
+            )
+        };
+        self.emit_imm(step);
+        self.ast_binop(if is_inc {
+            super::super::ir::BinOp::Add
+        } else {
+            super::super::ir::BinOp::Sub
+        });
+        self.ast_assign();
+        let ty = self.ty;
+        if let Some(lvalue) = lvalue {
+            self.ast_emit_pre_inc(lvalue, if is_inc { step } else { -step }, ty);
+        }
+        Ok(())
+    }
+
+    /// The lvalue of a `++` / `--` that reads and stores through the
+    /// trailing load: the load becomes a push of the address, and the
+    /// local it read is recorded as read and written. Returns the lvalue
+    /// node and whether the value is a function pointer, which steps by
+    /// one byte.
+    fn inc_dec_lvalue(
+        &mut self,
+        what: &str,
+    ) -> Result<(Option<super::super::ast::ExprId>, bool), C5Error> {
+        let lvalue = self.ast_acc;
+        let fn_ptr_step = self.value_is_function_pointer();
+        self.rewrite_trailing_load_as_psh()
+            .ok_or_else(|| self.compile_err(format!("bad lvalue in {what}")))?;
+        let line = self.lex.line;
+        if let Some(idx) = self.take_last_loaded_local() {
+            self.symbols[idx].was_read = true;
+            self.symbols[idx].was_written = true;
+            self.record_local_read(idx);
+            self.record_local_store(idx, line);
+        }
+        self.mark_emit_other();
+        self.ast_psh();
+        Ok((lvalue, fn_ptr_step))
+    }
+
+    /// A `++` / `--` on a bitfield member or a 128-bit integer, whose
+    /// read is not one scalar load: the node is built over the lvalue and
+    /// the walker performs the read-modify-write.
+    fn emit_direct_inc_dec(
+        &mut self,
+        lvalue: super::super::ast::ExprId,
+        ty: i64,
+        is_inc: bool,
+        postfix: bool,
+    ) -> Result<(), C5Error> {
+        let by = if is_inc { 1 } else { -1 };
+        let src = self.ast_src_pos();
+        let expr = if postfix {
+            self.next()?;
+            super::super::ast::Expr::PostInc { lvalue, by, ty }
+        } else {
+            super::super::ast::Expr::PreInc { lvalue, by, ty }
+        };
+        let id = self.ast.push_expr(expr, src);
+        self.ast_acc = Some(id);
+        self.ty = ty;
         Ok(())
     }
 
@@ -4879,65 +4877,29 @@ impl Compiler {
         }
     }
 
+    /// C99 6.5.2.4: postfix `++` / `--`. The value is the operand before
+    /// the update: the updated value is stored, then stepped back on the
+    /// accumulator. The operand was parsed in this scope, so a
+    /// pointer-to-array stride sits in the current stride slot.
     fn parse_postfix_inc_dec(&mut self) -> Result<(), C5Error> {
-        // A bitfield member or 128-bit lvalue cannot use the trailing-
-        // load rewrite (its read is a shift-and-mask / address-valued
-        // load); build `Expr::PostInc` directly, as the pre-increment
-        // path above does. A parenthesized bitfield (`(s.f)++`) reaches
-        // here as the read node the member parser committed to.
-        if let Some((lv, ety)) = self.direct_inc_lvalue() {
-            let by = if self.lex.tk == Token::Inc { 1 } else { -1 };
-            let src = self.ast_src_pos();
-            self.next()?;
-            let id = self.ast.push_expr(
-                super::super::ast::Expr::PostInc {
-                    lvalue: lv,
-                    by,
-                    ty: ety,
-                },
-                src,
-            );
-            self.ast_acc = Some(id);
-            self.ty = ety;
-            return Ok(());
+        let is_inc = self.lex.tk == Token::Inc;
+        if let Some((lvalue, ty)) = self.direct_inc_lvalue() {
+            return self.emit_direct_inc_dec(lvalue, ty, is_inc, true);
         }
-        let post_inc_lvalue = self.ast_acc;
-        let fn_ptr_step = self.value_is_function_pointer();
-        self.rewrite_trailing_load_as_psh()
-            .ok_or_else(|| self.compile_err("bad lvalue in post-increment"))?;
-        // Post ++/-- reads the prior value and stores a
-        // new one. Same shape as the compound-assign
-        // path: revert via `take_last_loaded_local`,
-        // then force was_read true (reload re-emits the
-        // load), was_written true, and refresh the
-        // dead-store tracker.
-        let line = self.lex.line;
-        if let Some(idx) = self.take_last_loaded_local() {
-            self.symbols[idx].was_read = true;
-            self.symbols[idx].was_written = true;
-            self.record_local_read(idx);
-            self.record_local_store(idx, line);
-        }
-        self.mark_emit_other();
-        self.ast_psh();
+        let (lvalue, fn_ptr_step) = self.inc_dec_lvalue("post-increment")?;
         self.emit_imm(if fn_ptr_step {
             1
         } else {
             self.pointee_step(self.ty)
         });
-        self.ast_binop(if self.lex.tk == Token::Inc {
+        self.ast_binop(if is_inc {
             super::super::ir::BinOp::Add
         } else {
             super::super::ir::BinOp::Sub
         });
         self.ast_assign();
         self.ast_psh();
-        // Pointer-to-array (`T (*p)[N]`) carries a `T*` flat
-        // type; the correct step is the array's size, seeded
-        // into the stride snapshot at the operand load (which
-        // sits in the current scope's `index_stride` for a
-        // postfix operand).
-        let post_step = if fn_ptr_step {
+        let step = if fn_ptr_step {
             1
         } else {
             self.pointer_to_array_arith_stride(
@@ -4946,27 +4908,17 @@ impl Compiler {
                 self.pointee_step(self.ty),
             )
         };
-        self.emit_imm(post_step);
-        self.ast_binop(if self.lex.tk == Token::Inc {
+        self.emit_imm(step);
+        self.ast_binop(if is_inc {
             super::super::ir::BinOp::Sub
         } else {
             super::super::ir::BinOp::Add
         });
-        // Build `Expr::PostInc { lvalue, by, ty }` so
-        // the walker emits load -> binop_imm(Add, by) ->
-        // store -> return the pre-update value per C99
-        // 6.5.2.4p3.
-        let post_signed = if self.lex.tk == Token::Inc {
-            post_step
-        } else {
-            -post_step
-        };
-        let post_ty = self.ty;
-        if let Some(lvalue) = post_inc_lvalue {
-            self.ast_emit_post_inc(lvalue, post_signed, post_ty);
+        let ty = self.ty;
+        if let Some(lvalue) = lvalue {
+            self.ast_emit_post_inc(lvalue, if is_inc { step } else { -step }, ty);
         }
-        self.next()?;
-        Ok(())
+        self.next()
     }
 
     fn parse_subscript(

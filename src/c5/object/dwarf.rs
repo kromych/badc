@@ -303,6 +303,7 @@ impl DebugLineProgramHeader {
 /// The byte vectors the emitter produces. Per-target writers
 /// (Mach-O / ELF / PE) wrap these into their format-specific
 /// debug-section containers.
+#[derive(Default)]
 pub(crate) struct DwarfSections {
     pub debug_info: Vec<u8>,
     pub debug_abbrev: Vec<u8>,

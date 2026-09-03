@@ -544,20 +544,8 @@ fn link_err(msg: &str) -> C5Error {
 /// only the interp string, the JUMP_SLOT reloc kind, and the
 /// PLT-trampoline patch shape differ.
 fn write_dynamic_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8>, C5Error> {
-    let entry_sym = merged.defined.get(entry_name).ok_or_else(|| {
-        link_err(&format!(
-            "entry symbol `{entry_name}` not defined in any input object"
-        ))
-    })?;
-    if !matches!(entry_sym.section, NativeSymSection::Text) {
-        return Err(link_err(&format!(
-            "entry symbol `{entry_name}` is not in .text (found {:?})",
-            entry_sym.section
-        )));
-    }
-    let entry_text_offset = entry_sym.value as usize;
+    let entry_text_offset = dynamic_entry_offset(merged, entry_name)?;
     let n_imports = merged.imports.len();
-
     let (machine_em, interp_path, jump_slot_rtype) = match merged.machine {
         NativeMachine::X86_64 => (EM_X86_64, "/lib64/ld-linux-x86-64.so.2", R_X86_64_JUMP_SLOT),
         NativeMachine::Aarch64 => (
@@ -572,11 +560,10 @@ fn write_dynamic_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8
         v
     };
 
-    // Append the entry-call stub to the merged text. The
-    // trampolines already produced by `emit_*_plt` are part of
-    // `merged.text`; the stub lands past them. Pad to 4 bytes
-    // first so the entry point is instruction-aligned on
-    // aarch64 (matching the static path).
+    // The entry-call stub lands past the trampolines `emit_*_plt`
+    // already put in `merged.text`, padded to 4 bytes first so the
+    // entry point is instruction-aligned on aarch64 (matching the
+    // static path).
     let exit_text_offset = merged.defined.get("__c5_exit").and_then(|sym| {
         matches!(sym.section, NativeSymSection::Text).then_some(sym.value as usize)
     });
@@ -593,14 +580,104 @@ fn write_dynamic_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8
     );
     text.extend_from_slice(&stub_bytes);
 
-    // .dynstr layout: a leading "\0", then one NUL-terminated
-    // entry per DT_NEEDED dylib path collected from each unit's
-    // `#pragma dylib` declarations, then every import name
-    // NUL-terminated. A merge with no recorded dylibs falls back
-    // to "libc.so.6" -- that matches the historical single-libc
-    // ELF write path and keeps cross-TU smokes runnable when an
-    // upstream .o was produced before the `.badc.dylibs` section
-    // landed.
+    let tables = dynamic_tables(merged);
+    let lay = DynamicLayout::compute(
+        merged,
+        interp_bytes.len() as u64,
+        tables.dynstr.len() as u64,
+        tables.dynsym.len() as u64,
+        text.len() as u64,
+        tables.dylib_name_off.len() as u64,
+    );
+    let entry_vaddr = lay.text_vaddr + stub_text_offset as u64;
+
+    // Patch the PLT trampolines to dereference their .got.plt slot. The
+    // codegen left `0` placeholders; each trampoline's text offset is
+    // known because `emit_*_plt` placed them contiguously past the user
+    // .text.
+    let user_text_end = merged.text.len() - n_imports * plt_trampoline_size(merged.machine);
+    for i in 0..n_imports {
+        let tramp_offset = user_text_end + i * plt_trampoline_size(merged.machine);
+        let slot_vaddr = lay.got_plt_vaddr + (i as u64) * 8;
+        patch_plt_trampoline(
+            &mut text,
+            tramp_offset,
+            lay.text_vaddr + tramp_offset as u64,
+            slot_vaddr,
+            merged.machine,
+        )?;
+    }
+    // Resolve every parked data-ref reloc against the now-known runtime
+    // `.data` vmaddr; the addend on each parked reloc is the byte
+    // offset within `merged.data`.
+    patch_data_refs(
+        &mut text,
+        lay.text_vaddr,
+        lay.data_vaddr,
+        &merged.pending_imports,
+        merged.machine,
+        &merged.section_map,
+    )?;
+    let mut data = merged.data.clone();
+    patch_data_abs_relocs(
+        &mut data,
+        lay.text_vaddr,
+        lay.data_vaddr,
+        &merged.data_abs_relocs,
+    )?;
+    patch_data_pcrel_relocs(
+        &mut data,
+        lay.text_vaddr,
+        lay.data_vaddr,
+        &merged.data_pcrel_relocs,
+    )?;
+
+    let mut out: Vec<u8> = Vec::with_capacity(
+        (lay.dynamic_off + lay.dynamic_size + PAGE_SIZE) as usize + merged.data.len(),
+    );
+    write_dynamic_headers(&mut out, merged, &lay, machine_em, entry_vaddr);
+    write_dynamic_bodies(
+        &mut out,
+        &lay,
+        &tables,
+        &interp_bytes,
+        &text,
+        &data,
+        jump_slot_rtype,
+    );
+    Ok(out)
+}
+
+/// The entry symbol's `.text` offset.
+fn dynamic_entry_offset(merged: &MergedNative, entry_name: &str) -> Result<usize, C5Error> {
+    let entry_sym = merged.defined.get(entry_name).ok_or_else(|| {
+        link_err(&format!(
+            "entry symbol `{entry_name}` not defined in any input object"
+        ))
+    })?;
+    if !matches!(entry_sym.section, NativeSymSection::Text) {
+        return Err(link_err(&format!(
+            "entry symbol `{entry_name}` is not in .text (found {:?})",
+            entry_sym.section
+        )));
+    }
+    Ok(entry_sym.value as usize)
+}
+
+/// `.dynstr` and `.dynsym`. The string table holds a leading NUL, one
+/// entry per DT_NEEDED dylib path collected from each unit's `#pragma
+/// dylib` declarations, then every import name. A merge with no
+/// recorded dylibs falls back to "libc.so.6", the historical
+/// single-libc ELF write path. The symbol table is the null symbol
+/// plus one STT_FUNC per import.
+struct DynamicTables {
+    dynstr: Vec<u8>,
+    dylib_name_off: Vec<u32>,
+    dynsym: Vec<u8>,
+}
+
+fn dynamic_tables(merged: &MergedNative) -> DynamicTables {
+    let n_imports = merged.imports.len();
     let mut dynstr: Vec<u8> = Vec::new();
     dynstr.push(0);
     let dylib_paths: alloc::vec::Vec<&str> = if merged.dylibs.is_empty() {
@@ -621,107 +698,123 @@ fn write_dynamic_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8
         dynstr.extend_from_slice(name.as_bytes());
         dynstr.push(0);
     }
-
-    // .dynsym layout: null symbol + one STT_FUNC per import.
     let mut dynsym: Vec<u8> = Vec::with_capacity((n_imports + 1) * ELF64_SYM_SIZE as usize);
     write_elf64_sym(&mut dynsym, 0, 0, 0, SHN_UNDEF, 0, 0);
     for off in &import_name_off {
         let st_info = (STB_GLOBAL << 4) | STT_FUNC;
         write_elf64_sym(&mut dynsym, *off, st_info, 0, SHN_UNDEF, 0, 0);
     }
-
-    // Lay out the file. The header offsets need the final
-    // addresses to compute reloc offsets, so first walk
-    // forward picking offsets, then write the bytes.
-    let phnum: u16 = 5;
-    let phoff: u64 = ELF_HEADER_SIZE as u64;
-    let headers_size: u64 = phoff + (PROGRAM_HEADER_SIZE as u64) * (phnum as u64);
-
-    let interp_off = headers_size;
-    let interp_size = interp_bytes.len() as u64;
-    let dynstr_off = interp_off + interp_size;
-    let dynstr_size = dynstr.len() as u64;
-    let dynsym_off = dynstr_off + dynstr_size;
-    let dynsym_size = dynsym.len() as u64;
-    let rela_plt_off = dynsym_off + dynsym_size;
-    let rela_plt_size = (n_imports as u64) * ELF64_RELA_SIZE;
-    // The merged text starts at the alignment its input sections
-    // claim, never below the instruction alignment aarch64 needs.
-    let text_off =
-        (rela_plt_off + rela_plt_size).next_multiple_of(merged.text_align.max(16) as u64);
-    let text_size = text.len() as u64;
-
-    // Second PT_LOAD starts on the next page after the text
-    // segment. Page-align both the file offset and the load
-    // vaddr; the kernel's mmap requires
-    // `vaddr % PAGE_SIZE == offset % PAGE_SIZE`.
-    let data_seg_file_off = round_up_page(text_off + text_size);
-    let data_seg_vaddr = round_up_page(BASE_ADDR + text_off + text_size) + PAGE_SIZE;
-    let got_plt_off = data_seg_file_off;
-    let got_plt_size: u64 = (n_imports as u64) * 8;
-    let data_off = got_plt_off + got_plt_size;
-    let data_size = merged.data.len() as u64;
-    let dynamic_off = data_off + data_size;
-    let dynamic_size: u64 = {
-        // Tag list: one NEEDED per merged dylib, then STRTAB,
-        // SYMTAB, STRSZ, SYMENT, PLTGOT, PLTREL, JMPREL,
-        // PLTRELSZ, FLAGS, BIND_NOW, NULL.
-        let n_tags: u64 = dylib_name_off.len() as u64 + 11;
-        n_tags * ELF64_DYN_SIZE
-    };
-
-    // Compute VA addresses now that file offsets are fixed.
-    let interp_vaddr = BASE_ADDR + interp_off;
-    let dynstr_vaddr = BASE_ADDR + dynstr_off;
-    let dynsym_vaddr = BASE_ADDR + dynsym_off;
-    let rela_plt_vaddr = BASE_ADDR + rela_plt_off;
-    let text_vaddr = BASE_ADDR + text_off;
-    let got_plt_vaddr = data_seg_vaddr;
-    let dynamic_vaddr = data_seg_vaddr + (dynamic_off - data_seg_file_off);
-    let entry_vaddr = text_vaddr + stub_text_offset as u64;
-
-    // Patch the PLT trampolines to dereference their .got.plt
-    // slot. The codegen left `0` placeholders; we know each
-    // trampoline's text offset because `emit_*_plt` placed them
-    // contiguously past the user .text.
-    let user_text_end = merged.text.len() - n_imports * plt_trampoline_size(merged.machine);
-    for (i, _name) in merged.imports.iter().enumerate() {
-        let tramp_offset = user_text_end + i * plt_trampoline_size(merged.machine);
-        let slot_vaddr = got_plt_vaddr + (i as u64) * 8;
-        patch_plt_trampoline(
-            &mut text,
-            tramp_offset,
-            text_vaddr + tramp_offset as u64,
-            slot_vaddr,
-            merged.machine,
-        )?;
+    DynamicTables {
+        dynstr,
+        dylib_name_off,
+        dynsym,
     }
+}
 
-    // Resolve every parked data-ref reloc against the now-
-    // known runtime `.data` vmaddr. The dynamic-section layout
-    // puts `.data` after the `.got.plt` slots; the addend on
-    // each parked reloc is the byte offset within `merged.data`
-    // (set by `link_native_objects`).
-    let data_vaddr = got_plt_vaddr + got_plt_size;
-    patch_data_refs(
-        &mut text,
-        text_vaddr,
-        data_vaddr,
-        &merged.pending_imports,
-        merged.machine,
-        &merged.section_map,
-    )?;
+/// File offsets and runtime addresses of the dynamic image's pieces.
+/// The second PT_LOAD starts on the next page after the text segment,
+/// page-aligning both the file offset and the load vaddr, since the
+/// kernel's mmap requires `vaddr % PAGE_SIZE == offset % PAGE_SIZE`.
+struct DynamicLayout {
+    phnum: u16,
+    phoff: u64,
+    interp_off: u64,
+    interp_size: u64,
+    dynstr_off: u64,
+    dynstr_size: u64,
+    dynsym_off: u64,
+    rela_plt_off: u64,
+    rela_plt_size: u64,
+    text_off: u64,
+    text_size: u64,
+    data_seg_file_off: u64,
+    data_seg_vaddr: u64,
+    got_plt_off: u64,
+    got_plt_size: u64,
+    data_off: u64,
+    dynamic_off: u64,
+    dynamic_size: u64,
+    interp_vaddr: u64,
+    dynstr_vaddr: u64,
+    dynsym_vaddr: u64,
+    rela_plt_vaddr: u64,
+    text_vaddr: u64,
+    got_plt_vaddr: u64,
+    data_vaddr: u64,
+    dynamic_vaddr: u64,
+}
 
-    // Apply absolute data-segment relocations the same way as
-    // in the static path.
-    let mut data = merged.data.clone();
-    patch_data_abs_relocs(&mut data, text_vaddr, data_vaddr, &merged.data_abs_relocs)?;
-    patch_data_pcrel_relocs(&mut data, text_vaddr, data_vaddr, &merged.data_pcrel_relocs)?;
+impl DynamicLayout {
+    fn compute(
+        merged: &MergedNative,
+        interp_size: u64,
+        dynstr_size: u64,
+        dynsym_size: u64,
+        text_size: u64,
+        n_dylibs: u64,
+    ) -> DynamicLayout {
+        let n_imports = merged.imports.len() as u64;
+        let phnum: u16 = 5;
+        let phoff: u64 = ELF_HEADER_SIZE as u64;
+        let headers_size: u64 = phoff + (PROGRAM_HEADER_SIZE as u64) * (phnum as u64);
+        let interp_off = headers_size;
+        let dynstr_off = interp_off + interp_size;
+        let dynsym_off = dynstr_off + dynstr_size;
+        let rela_plt_off = dynsym_off + dynsym_size;
+        let rela_plt_size = n_imports * ELF64_RELA_SIZE;
+        // The merged text starts at the alignment its input sections
+        // claim, never below the instruction alignment aarch64 needs.
+        let text_off =
+            (rela_plt_off + rela_plt_size).next_multiple_of(merged.text_align.max(16) as u64);
+        let data_seg_file_off = round_up_page(text_off + text_size);
+        let data_seg_vaddr = round_up_page(BASE_ADDR + text_off + text_size) + PAGE_SIZE;
+        let got_plt_off = data_seg_file_off;
+        let got_plt_size: u64 = n_imports * 8;
+        let data_off = got_plt_off + got_plt_size;
+        let dynamic_off = data_off + merged.data.len() as u64;
+        // Tag list: one NEEDED per merged dylib, then STRTAB, SYMTAB,
+        // STRSZ, SYMENT, PLTGOT, PLTREL, JMPREL, PLTRELSZ, FLAGS,
+        // BIND_NOW, NULL.
+        let dynamic_size = (n_dylibs + 11) * ELF64_DYN_SIZE;
+        DynamicLayout {
+            phnum,
+            phoff,
+            interp_off,
+            interp_size,
+            dynstr_off,
+            dynstr_size,
+            dynsym_off,
+            rela_plt_off,
+            rela_plt_size,
+            text_off,
+            text_size,
+            data_seg_file_off,
+            data_seg_vaddr,
+            got_plt_off,
+            got_plt_size,
+            data_off,
+            dynamic_off,
+            dynamic_size,
+            interp_vaddr: BASE_ADDR + interp_off,
+            dynstr_vaddr: BASE_ADDR + dynstr_off,
+            dynsym_vaddr: BASE_ADDR + dynsym_off,
+            rela_plt_vaddr: BASE_ADDR + rela_plt_off,
+            text_vaddr: BASE_ADDR + text_off,
+            got_plt_vaddr: data_seg_vaddr,
+            data_vaddr: data_seg_vaddr + got_plt_size,
+            dynamic_vaddr: data_seg_vaddr + (dynamic_off - data_seg_file_off),
+        }
+    }
+}
 
-    let mut out: Vec<u8> =
-        Vec::with_capacity((dynamic_off + dynamic_size + PAGE_SIZE) as usize + merged.data.len());
-
-    // ELF identification.
+/// The ELF header and the five program headers.
+fn write_dynamic_headers(
+    out: &mut Vec<u8>,
+    merged: &MergedNative,
+    lay: &DynamicLayout,
+    machine_em: u16,
+    entry_vaddr: u64,
+) {
     out.extend_from_slice(&ELF_MAGIC);
     out.push(EI_CLASS_64);
     out.push(EI_DATA_LSB);
@@ -729,49 +822,47 @@ fn write_dynamic_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8
     out.push(EI_OSABI_SYSV);
     out.push(0);
     out.extend_from_slice(&[0u8; 7]);
+    write_u16(out, ET_EXEC);
+    write_u16(out, machine_em);
+    write_u32(out, EV_CURRENT);
+    write_u64(out, entry_vaddr);
+    write_u64(out, lay.phoff);
+    write_u64(out, 0);
+    write_u32(out, 0);
+    write_u16(out, ELF_HEADER_SIZE);
+    write_u16(out, PROGRAM_HEADER_SIZE);
+    write_u16(out, lay.phnum);
+    write_u16(out, 0);
+    write_u16(out, 0);
+    write_u16(out, 0);
+    debug_assert_eq!(out.len() as u64, lay.phoff);
 
-    // ELF header (e_type onwards).
-    write_u16(&mut out, ET_EXEC);
-    write_u16(&mut out, machine_em);
-    write_u32(&mut out, EV_CURRENT);
-    write_u64(&mut out, entry_vaddr);
-    write_u64(&mut out, phoff);
-    write_u64(&mut out, 0);
-    write_u32(&mut out, 0);
-    write_u16(&mut out, ELF_HEADER_SIZE);
-    write_u16(&mut out, PROGRAM_HEADER_SIZE);
-    write_u16(&mut out, phnum);
-    write_u16(&mut out, 0);
-    write_u16(&mut out, 0);
-    write_u16(&mut out, 0);
-    debug_assert_eq!(out.len() as u64, phoff);
-
-    // Program headers.
+    let phdrs_size = (PROGRAM_HEADER_SIZE as u64) * (lay.phnum as u64);
     write_phdr(
-        &mut out,
+        out,
         PT_PHDR,
         PF_R,
-        phoff,
-        BASE_ADDR + phoff,
-        BASE_ADDR + phoff,
-        (PROGRAM_HEADER_SIZE as u64) * (phnum as u64),
-        (PROGRAM_HEADER_SIZE as u64) * (phnum as u64),
+        lay.phoff,
+        BASE_ADDR + lay.phoff,
+        BASE_ADDR + lay.phoff,
+        phdrs_size,
+        phdrs_size,
         8,
     );
     write_phdr(
-        &mut out,
+        out,
         PT_INTERP,
         PF_R,
-        interp_off,
-        interp_vaddr,
-        interp_vaddr,
-        interp_size,
-        interp_size,
+        lay.interp_off,
+        lay.interp_vaddr,
+        lay.interp_vaddr,
+        lay.interp_size,
+        lay.interp_size,
         1,
     );
-    let text_seg_file_size = text_off + text_size;
+    let text_seg_file_size = lay.text_off + lay.text_size;
     write_phdr(
-        &mut out,
+        out,
         PT_LOAD,
         PF_R | PF_X,
         0,
@@ -781,95 +872,100 @@ fn write_dynamic_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8
         text_seg_file_size,
         PAGE_SIZE,
     );
-    let data_seg_file_size = (dynamic_off + dynamic_size) - data_seg_file_off;
+    let data_seg_file_size = (lay.dynamic_off + lay.dynamic_size) - lay.data_seg_file_off;
     let data_seg_mem_size = data_seg_file_size + merged.bss_size as u64;
     write_phdr(
-        &mut out,
+        out,
         PT_LOAD,
         PF_R | PF_W,
-        data_seg_file_off,
-        data_seg_vaddr,
-        data_seg_vaddr,
+        lay.data_seg_file_off,
+        lay.data_seg_vaddr,
+        lay.data_seg_vaddr,
         data_seg_file_size,
         data_seg_mem_size,
         PAGE_SIZE,
     );
     write_phdr(
-        &mut out,
+        out,
         PT_DYNAMIC,
         PF_R | PF_W,
-        dynamic_off,
-        dynamic_vaddr,
-        dynamic_vaddr,
-        dynamic_size,
-        dynamic_size,
+        lay.dynamic_off,
+        lay.dynamic_vaddr,
+        lay.dynamic_vaddr,
+        lay.dynamic_size,
+        lay.dynamic_size,
         8,
     );
+}
 
-    // .interp / .dynstr / .dynsym
-    debug_assert_eq!(out.len() as u64, interp_off);
-    out.extend_from_slice(&interp_bytes);
-    debug_assert_eq!(out.len() as u64, dynstr_off);
-    out.extend_from_slice(&dynstr);
-    debug_assert_eq!(out.len() as u64, dynsym_off);
-    out.extend_from_slice(&dynsym);
+/// Everything after the headers: the tables, `.rela.plt`, the text
+/// with its stubs, the page-aligned data segment with `.got.plt`,
+/// `.data` and `.dynamic`.
+fn write_dynamic_bodies(
+    out: &mut Vec<u8>,
+    lay: &DynamicLayout,
+    tables: &DynamicTables,
+    interp_bytes: &[u8],
+    text: &[u8],
+    data: &[u8],
+    jump_slot_rtype: u32,
+) {
+    let n_imports = (lay.got_plt_size / 8) as usize;
+    debug_assert_eq!(out.len() as u64, lay.interp_off);
+    out.extend_from_slice(interp_bytes);
+    debug_assert_eq!(out.len() as u64, lay.dynstr_off);
+    out.extend_from_slice(&tables.dynstr);
+    debug_assert_eq!(out.len() as u64, lay.dynsym_off);
+    out.extend_from_slice(&tables.dynsym);
 
-    // .rela.plt -- one Elf64_Rela per import. r_offset points
-    // at the import's .got.plt slot; r_info encodes the dynsym
-    // index (1-based; the null entry sits at 0) and the
-    // JUMP_SLOT reloc type. r_addend stays 0.
-    debug_assert_eq!(out.len() as u64, rela_plt_off);
-    for (i, _name) in merged.imports.iter().enumerate() {
-        let slot_vaddr = got_plt_vaddr + (i as u64) * 8;
+    // `.rela.plt`: one Elf64_Rela per import. r_offset points at the
+    // import's .got.plt slot; r_info encodes the dynsym index (1-based;
+    // the null entry sits at 0) and the JUMP_SLOT reloc type. r_addend
+    // stays 0.
+    debug_assert_eq!(out.len() as u64, lay.rela_plt_off);
+    for i in 0..n_imports {
+        let slot_vaddr = lay.got_plt_vaddr + (i as u64) * 8;
         let sym_idx = (i + 1) as u64;
         let r_info = (sym_idx << 32) | jump_slot_rtype as u64;
-        write_u64(&mut out, slot_vaddr);
-        write_u64(&mut out, r_info);
-        write_u64(&mut out, 0);
+        write_u64(out, slot_vaddr);
+        write_u64(out, r_info);
+        write_u64(out, 0);
     }
 
-    // .text (with PLT trampolines patched + start stub).
-    // Pad any gap left by 4-aligning `text_off`.
-    while (out.len() as u64) < text_off {
+    // Pad any gap left by aligning `text_off`.
+    while (out.len() as u64) < lay.text_off {
         out.push(0);
     }
-    debug_assert_eq!(out.len() as u64, text_off);
-    out.extend_from_slice(&text);
+    debug_assert_eq!(out.len() as u64, lay.text_off);
+    out.extend_from_slice(text);
 
-    // Pad to next page for the data segment.
-    while (out.len() as u64) < data_seg_file_off {
+    while (out.len() as u64) < lay.data_seg_file_off {
         out.push(0);
     }
-
-    // .got.plt -- one i64 zero per import (dynamic linker will
-    // overwrite at startup).
-    debug_assert_eq!(out.len() as u64, got_plt_off);
+    // `.got.plt`: one zero slot per import, filled by the dynamic
+    // linker at startup.
+    debug_assert_eq!(out.len() as u64, lay.got_plt_off);
     for _ in 0..n_imports {
-        write_u64(&mut out, 0);
+        write_u64(out, 0);
     }
+    debug_assert_eq!(out.len() as u64, lay.data_off);
+    out.extend_from_slice(data);
 
-    // .data
-    debug_assert_eq!(out.len() as u64, data_off);
-    out.extend_from_slice(&data);
-
-    // .dynamic
-    debug_assert_eq!(out.len() as u64, dynamic_off);
-    for off in &dylib_name_off {
-        write_dyn(&mut out, DT_NEEDED, *off as u64);
+    debug_assert_eq!(out.len() as u64, lay.dynamic_off);
+    for off in &tables.dylib_name_off {
+        write_dyn(out, DT_NEEDED, *off as u64);
     }
-    write_dyn(&mut out, DT_STRTAB, dynstr_vaddr);
-    write_dyn(&mut out, DT_SYMTAB, dynsym_vaddr);
-    write_dyn(&mut out, DT_STRSZ, dynstr_size);
-    write_dyn(&mut out, DT_SYMENT, ELF64_SYM_SIZE);
-    write_dyn(&mut out, DT_PLTGOT, got_plt_vaddr);
-    write_dyn(&mut out, DT_PLTREL, 7); // 7 = DT_RELA
-    write_dyn(&mut out, DT_JMPREL, rela_plt_vaddr);
-    write_dyn(&mut out, DT_PLTRELSZ, rela_plt_size);
-    write_dyn(&mut out, DT_FLAGS, DF_BIND_NOW);
-    write_dyn(&mut out, DT_BIND_NOW, 0);
-    write_dyn(&mut out, DT_NULL, 0);
-
-    Ok(out)
+    write_dyn(out, DT_STRTAB, lay.dynstr_vaddr);
+    write_dyn(out, DT_SYMTAB, lay.dynsym_vaddr);
+    write_dyn(out, DT_STRSZ, lay.dynstr_size);
+    write_dyn(out, DT_SYMENT, ELF64_SYM_SIZE);
+    write_dyn(out, DT_PLTGOT, lay.got_plt_vaddr);
+    write_dyn(out, DT_PLTREL, 7); // 7 = DT_RELA
+    write_dyn(out, DT_JMPREL, lay.rela_plt_vaddr);
+    write_dyn(out, DT_PLTRELSZ, lay.rela_plt_size);
+    write_dyn(out, DT_FLAGS, DF_BIND_NOW);
+    write_dyn(out, DT_BIND_NOW, 0);
+    write_dyn(out, DT_NULL, 0);
 }
 
 /// Walk `pending` for parked data / bss references

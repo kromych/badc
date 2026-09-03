@@ -82,7 +82,7 @@ use alloc::vec::Vec;
 use super::super::error::C5Error;
 use super::super::program::Program;
 use super::dwarf;
-use super::{AddrPart, Build};
+use super::{AddrPart, Build, DataRegion, data_region_addr};
 use crate::c5::layout::{pad_to_align as pad_to, round_up, write_struct};
 
 // ------------------------------------------------------------------
@@ -2124,21 +2124,29 @@ impl Layout {
         self.data_fileoff + self.thread_storage_offset_in_segment
     }
 
-    /// Runtime address of a data-stream offset. Only the read-only
-    /// family's named run moves; the others keep the placement their
-    /// region already gives.
+    /// The data stream's regions at their runtime addresses: the
+    /// read-only head, the read-only named run past the tables, the
+    /// relro region, `__data`, `__bss`.
+    fn data_regions(&self) -> [DataRegion; 5] {
+        let open = |start, base| DataRegion {
+            start,
+            base,
+            len: u64::MAX,
+        };
+        [
+            open(0, self.const_vmaddr()),
+            open(
+                self.ro_head,
+                self.const_vmaddr() + self.ro_head + self.named_ro_shift,
+            ),
+            open(self.ro_len, self.data_const_vmaddr()),
+            open(self.relro_total, self.data_section_vmaddr()),
+            open(self.program_data_size, self.bss_base_vmaddr),
+        ]
+    }
+
     fn data_off_to_vaddr(&self, off: u64) -> u64 {
-        if off < self.ro_head {
-            self.const_vmaddr() + off
-        } else if off < self.ro_len {
-            self.const_vmaddr() + off + self.named_ro_shift
-        } else if off < self.relro_total {
-            self.data_const_vmaddr() + (off - self.ro_len)
-        } else if off < self.program_data_size {
-            self.data_section_vmaddr() + (off - self.relro_total)
-        } else {
-            self.bss_base_vmaddr + (off - self.program_data_size)
-        }
+        data_region_addr(&self.data_regions(), off)
     }
 }
 

@@ -74,7 +74,7 @@ use super::aarch64;
 use super::dwarf;
 use super::elf_reloc_types::AbsCheck;
 use super::x86_64;
-use super::{AddrPart, Build, Machine};
+use super::{AddrPart, Build, DataRegion, Machine, data_region_addr};
 use crate::c5::layout::{round_up, write_struct};
 use crate::c5::program::Program;
 
@@ -786,14 +786,8 @@ impl<'a> PeWriter<'a> {
         Ok(())
     }
 
-    /// A data offset inside a named section resolves against it; the
-    /// rest name a byte of `.rdata` (the read-only prefix, then the
-    /// relro region) or of `.data` (the writable head, then the TLS
-    /// blob, then the zero-fill `.bss` tail). A group's extent is
-    /// closed at both ends: the merge leaves slack behind each, so an
-    /// offset at one group's end names that group rather than the next
-    /// one's first byte. Padding a moved run left behind is addressed
-    /// by nothing; it resolves to the family's end.
+    /// RVA of a data-stream offset: the named section covering it,
+    /// else its family's region.
     fn data_off_to_rva(&self, off: u32) -> u32 {
         let l = &self.layout;
         let named_base = |n: &NamedOut| -> u32 {
@@ -811,23 +805,26 @@ impl<'a> PeWriter<'a> {
         {
             return n.rva + (off - named_base(n));
         }
-        if off < l.ro_head {
-            l.rdata_rva + off
-        } else if off < l.ro_len {
-            l.rdata_rva + l.ro_head
-        } else if off < l.ro_len + l.relro_head_len {
-            l.rdata_rva + l.ro_head + (off - l.ro_len)
-        } else if off < l.relro_total {
-            l.rdata_rva + l.rdata_prefix_len
-        } else if off < l.relro_total + l.data_head_len {
-            l.data_rva + (off - l.relro_total)
-        } else if off < l.file_data_len {
-            l.data_rva + l.data_head_len
-        } else if off < l.file_data_len + l.bss_head {
-            l.data_rva + l.data_size + (off - l.file_data_len)
-        } else {
-            l.data_rva + l.data_size + l.bss_head
-        }
+        data_region_addr(&self.data_regions(), off as u64) as u32
+    }
+
+    /// The data stream's family regions at their RVAs, each closed at
+    /// its family's head: a group's extent is closed at both ends, so
+    /// an offset at one group's end names that group, and the padding
+    /// a moved run left behind resolves to the family's end.
+    fn data_regions(&self) -> [DataRegion; 4] {
+        let l = &self.layout;
+        let region = |start: u32, base: u32, len: u32| DataRegion {
+            start: start as u64,
+            base: base as u64,
+            len: len as u64,
+        };
+        [
+            region(0, l.rdata_rva, l.ro_head),
+            region(l.ro_len, l.rdata_rva + l.ro_head, l.relro_head_len),
+            region(l.relro_total, l.data_rva, l.data_head_len),
+            region(l.file_data_len, l.data_rva + l.data_size, l.bss_head),
+        ]
     }
 
     /// `.reloc` (one `IMAGE_BASE_RELOCATION` block per page holding an

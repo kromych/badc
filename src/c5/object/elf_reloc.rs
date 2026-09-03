@@ -4324,7 +4324,8 @@ impl<'a> RelocWriter<'a> {
                 got_sites.push(s.instr_offset);
             }
         }
-        let mut text_body = rewrite_extern_addr_loads_to_got(self.machine, &build.text, &got_sites);
+        let mut text_body =
+            rewrite_extern_addr_loads_to_got(self.machine, &build.text, &got_sites)?;
         rewrite_extern_addr_loads_to_abs32(&mut text_body, &abs_sites);
         let carve = &mut self.layout.carve;
         if !carve.text_ranges.is_empty() {
@@ -5452,7 +5453,7 @@ fn rewrite_extern_addr_loads_to_got(
     machine: Machine,
     text: &[u8],
     instr_offsets: &[usize],
-) -> alloc::vec::Vec<u8> {
+) -> Result<alloc::vec::Vec<u8>, C5Error> {
     let mut body = text.to_vec();
     match machine {
         Machine::Aarch64 => {
@@ -5463,13 +5464,17 @@ fn rewrite_extern_addr_loads_to_got(
                 if off + 4 > body.len() {
                     continue;
                 }
-                let add =
+                let word =
                     u32::from_le_bytes([body[off], body[off + 1], body[off + 2], body[off + 3]]);
-                let rd = add & 0x1f;
-                let rn = (add >> 5) & 0x1f;
-                // `ldr Xrd, [Xrn, #0]` (0xF9400000 | Rn<<5 | Rt); the
-                // :got_lo12: reloc fills the scaled imm12.
-                let ldr = 0xF940_0000u32 | (rn << 5) | rd;
+                let ldr = super::aarch64::patch::slot_load_form(
+                    word,
+                    super::aarch64::patch::SlotWidth::W64,
+                )
+                .map_err(|e| {
+                    C5Error::Compile(crate::c5::error::fmt_internal_err(
+                        &e.describe("ELF: GOT reference"),
+                    ))
+                })?;
                 body[off..off + 4].copy_from_slice(&ldr.to_le_bytes());
             }
         }
@@ -5482,7 +5487,7 @@ fn rewrite_extern_addr_loads_to_got(
             }
         }
     }
-    body
+    Ok(body)
 }
 
 /// Rewrite each x86-64 external-address `lea reg, [rip+disp32]`

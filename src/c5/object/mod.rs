@@ -901,6 +901,33 @@ pub fn emit_native_with_options_named(
     write_for(program, &build, target)
 }
 
+/// One region of the data stream at its runtime placement. The
+/// compaction leaves the stream as a read-only prefix, a relro region,
+/// the writable data and the zero-fill tail, in that order; a writer
+/// gives each region (and the runs it moves out of them) one base
+/// address, and an offset resolves to `base + (off - start)`, clamped
+/// to `base + len` past the region's own bytes.
+#[cfg(feature = "native-emit")]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct DataRegion {
+    /// First stream offset of the region.
+    pub(crate) start: u64,
+    /// Runtime address (or RVA) of `start`.
+    pub(crate) base: u64,
+    /// Bytes mapped one to one from `start`; `u64::MAX` leaves the
+    /// region open.
+    pub(crate) len: u64,
+}
+
+/// Runtime address of a data-stream offset. `regions` are sorted by
+/// `start`, the first starts at 0, and of two regions sharing a start
+/// the later one wins.
+#[cfg(feature = "native-emit")]
+pub(crate) fn data_region_addr(regions: &[DataRegion], off: u64) -> u64 {
+    let r = &regions[regions.partition_point(|r| r.start <= off) - 1];
+    r.base + (off - r.start).min(r.len)
+}
+
 /// C99 6.2.2 / 6.7.8: drop static data no surviving function or
 /// relocation references, repacking `.data` and rewriting every offset
 /// surface (symbol values, AST data offsets, relocation slots), then

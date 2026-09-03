@@ -57,7 +57,7 @@ use super::elf_reloc_types::{
     R_AARCH64_COPY, R_AARCH64_GLOB_DAT, R_AARCH64_RELATIVE, R_X86_64_COPY, R_X86_64_GLOB_DAT,
     R_X86_64_RELATIVE,
 };
-use super::{Abi, AddrPart, Build, Machine};
+use super::{Abi, AddrPart, Build, DataRegion, Machine, data_region_addr};
 use super::{aarch64, dwarf, x86_64};
 use crate::c5::layout::{round_up, write_struct};
 
@@ -2224,20 +2224,25 @@ impl<'a> ElfImageWriter<'a> {
         seg.segment2_end = round_up(seg.segment2_off + seg.segment2_filesize, FILE_TAIL_ALIGN);
     }
 
-    /// Runtime address of a data-segment byte: the read-only prefix,
-    /// the relro region, `.data`, or the zero-fill `.bss` tail past
-    /// the file image.
-    fn data_off_to_vaddr(&self, off: u64) -> u64 {
+    /// The data stream's regions at their runtime addresses: the
+    /// read-only prefix, the relro region, `.data`, `.bss`.
+    fn data_regions(&self) -> [DataRegion; 4] {
         let seg = &self.seg;
-        if off < seg.ro_len {
-            self.va(seg.rodata_off) + off
-        } else if off < seg.relro_total {
-            self.va(seg.relro_off) + (off - seg.ro_len)
-        } else if off < seg.file_data_len {
-            self.va(seg.data_off) + (off - seg.relro_total)
-        } else {
-            seg.bss_vmaddr + (off - seg.file_data_len)
-        }
+        let open = |start, base| DataRegion {
+            start,
+            base,
+            len: u64::MAX,
+        };
+        [
+            open(0, self.va(seg.rodata_off)),
+            open(seg.ro_len, self.va(seg.relro_off)),
+            open(seg.relro_total, self.va(seg.data_off)),
+            open(seg.file_data_len, seg.bss_vmaddr),
+        ]
+    }
+
+    fn data_off_to_vaddr(&self, off: u64) -> u64 {
+        data_region_addr(&self.data_regions(), off)
     }
 
     /// The section a data-stream byte falls in.

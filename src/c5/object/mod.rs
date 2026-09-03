@@ -1,7 +1,5 @@
-//! Object-file serialization: ELF, Mach-O, and PE containers plus DWARF debug
-//! information. Consumes the codegen `Build` (machine code, relocations, and
-//! debug/unwind metadata) and writes the target's container bytes. This module
-//! depends on `c5::codegen`; codegen does not depend on it.
+//! Object-file serialization: ELF, Mach-O, and PE containers plus DWARF
+//! debug information.
 
 #[cfg(feature = "native-emit")]
 pub(crate) mod dwarf;
@@ -33,7 +31,8 @@ use crate::c5::error::C5Error;
 use crate::c5::program::Program;
 
 // Codegen output-contract types the writers and the emit driver consume,
-// re-exported at object level so the moved files' `super::<item>` paths resolve.
+// re-exported at object level so the moved files' `super::<item>` paths
+// resolve.
 #[cfg(all(test, feature = "native-emit"))]
 pub(crate) use crate::c5::codegen::lower_for;
 #[cfg(feature = "native-emit")]
@@ -44,11 +43,8 @@ pub(crate) use crate::c5::codegen::{
     TlsIndexFixup, aarch64, x86_64,
 };
 
-/// Write the runtime address of a text-targeting DWARF
-/// placeholder over its preserved location in a merged DWARF
-/// section. The linker leaves `r.byte_offset` cleared; the
-/// writer adds `text_vmaddr` to `r.merged_text_offset` and writes
-/// the matching `r.width` bytes (4 or 8) little-endian.
+/// Write the runtime address of a text-targeting DWARF placeholder over its
+/// preserved location in a merged DWARF section.
 #[cfg(feature = "native-emit")]
 pub(crate) fn apply_merged_dwarf_text_reloc(
     section_bytes: &mut [u8],
@@ -107,12 +103,10 @@ pub(crate) fn apply_merged_dwarf_data_reloc(
     Ok(())
 }
 
-/// The producer fingerprint every final image carries: the
-/// NUL-terminated release version line, `strings(1)`-visible and
-/// placed outside the instruction stream (ELF `.comment`, the Mach-O
-/// `__TEXT,__const` tail, the PE `.rdata` tail) so decoders never
-/// walk into it. Release version only -- no git state -- so identical
-/// source/flags/target produce identical bytes.
+/// The producer fingerprint every final image carries: the NUL-terminated
+/// release version line, `strings(1)`-visible and placed outside the
+/// instruction stream (ELF `.comment`, the Mach-O `__TEXT,__const` tail,
+/// the PE `.rdata` tail) so decoders never walk into it.
 #[cfg(feature = "native-emit")]
 fn provenance_comment() -> Vec<u8> {
     let mut v = crate::OUTPUT_MARKER.as_bytes().to_vec();
@@ -121,10 +115,7 @@ fn provenance_comment() -> Vec<u8> {
 }
 
 /// Index of a relocated 8-byte slot within the writable data payload
-/// (`data[data_ro_len..]`). A slot below the read-only prefix would
-/// need a load-time write to a page the loader maps without write
-/// permission, so the producer's segregation is checked rather than
-/// assumed. Shared by every final-image writer.
+/// (`data[data_ro_len..]`).
 #[cfg(feature = "native-emit")]
 fn reloc_slot_in_data(
     format: &str,
@@ -149,8 +140,7 @@ pub fn emit_native(program: &Program, target: Target) -> Result<Vec<u8>, C5Error
 }
 
 /// Variant of [`emit_native`] that accepts user-controllable
-/// [`NativeOptions`]. `options.optimize` gates the SSA optimization
-/// passes (see [`NativeOptions::optimize`]).
+/// [`NativeOptions`].
 #[cfg(feature = "native-emit")]
 pub fn emit_native_with_options(
     program: &Program,
@@ -160,11 +150,7 @@ pub fn emit_native_with_options(
     emit_native_with_options_owned(program.clone(), target, options)
 }
 
-/// [`emit_native_with_options`] taking the program by value. The emit
-/// path rewrites the program -- the data compaction packs `.data` and
-/// maps every offset surface onto the new layout -- so a caller with
-/// nothing left to do with it skips a whole-program copy. The borrowing
-/// forms clone into this one.
+/// [`emit_native_with_options`] taking the program by value.
 #[cfg(feature = "native-emit")]
 pub fn emit_native_with_options_owned(
     program: Program,
@@ -174,22 +160,8 @@ pub fn emit_native_with_options_owned(
     emit_native_with_options_named(program, target, options, None)
 }
 
-/// Route a single-TU final image's `#pragma binding(data ...)`
-/// references through the GOT, the same way the multi-TU linker does.
-///
-/// The walker lowers a data-binding reference to an `Inst::ImmData` that
-/// the emitter records as a [`UserExternDataRef`] -- a named undefined
-/// data reference. The relocatable (`.o`) writer turns that into an
-/// undefined symbol the linker later binds through the GOT; a single-TU
-/// final image has no link step, so resolve it here instead: register
-/// the host data symbol as a flat-namespace import and load its address
-/// from the dyld-filled GOT slot, leaving an `adrp + ldr` pair for
-/// [`mach_o`] to patch. Without this the reference stays an unresolved
-/// `.data`-relative address and faults at runtime.
-///
-/// Mach-O only: ELF binds the local copy through an `R_*_COPY`
-/// relocation; PE routes the reference through a loader-filled IAT
-/// slot on the regular import path (`is_data_load` GOT fixups).
+/// Route a single-TU final image's `#pragma binding(data ...)` references
+/// through the GOT, the same way the multi-TU linker does.
 #[cfg(feature = "native-emit")]
 fn route_single_tu_data_imports(build: &mut Build, target: Target) {
     if target != Target::MacOSAarch64 || build.output_kind == OutputKind::Relocatable {
@@ -198,7 +170,6 @@ fn route_single_tu_data_imports(build: &mut Build, target: Target) {
     if build.imports.data_bindings.is_empty() || build.user_extern_data_refs.is_empty() {
         return;
     }
-    // (local name -> host symbol) for every data binding in scope.
     let hosts: alloc::collections::BTreeMap<String, String> = build
         .imports
         .data_bindings
@@ -241,8 +212,8 @@ fn route_single_tu_data_imports(build: &mut Build, target: Target) {
 }
 
 /// Where a label an inline-asm template defines ended up in a single-TU
-/// final image: a byte offset within `Build::text` or within the data
-/// image (`Build::data` plus its zero-fill tail).
+/// final image: a byte offset within `Build::text` or within the data image
+/// (`Build::data` plus its zero-fill tail).
 #[cfg(feature = "native-emit")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AsmLabelPlacement {
@@ -262,19 +233,11 @@ impl AsmLabelPlacement {
 
 /// Place the inline-asm sections a single-TU final image references into
 /// its text stream, and bind the image's references to every label the
-/// templates define. The relocatable path emits each section for a real
-/// link to place; a final image has no link step, so a referenced
-/// section is appended to the text, its relocations resolved, and its
-/// labels returned so the referring sites bind to them -- what the
-/// linker does for the object path's undefined symbols.
-///
-/// Placement is by section flags, matching the ELF rule that maps a
-/// section into a segment by its access rights. `SHF_WRITE` selects the
-/// data image; every other section goes to the text stream, whose region
-/// is readable as well as executable, so a code section's instructions
-/// and a read-only section's payload are both valid at their label
-/// addresses. Unreferenced sections keep the established final-image
-/// behavior (assembled and dropped).
+/// templates define. A final image has no link step, so a referenced
+/// section is appended, resolved and its labels returned. Placement
+/// follows the section flags: `SHF_WRITE` selects the data image, every
+/// other section the text stream, whose region is readable as well as
+/// executable. An unreferenced section is assembled and dropped.
 ///
 /// TODO: give the final-image writers real named-section placement, so
 /// the payload lands under its own access rights instead of the
@@ -290,9 +253,6 @@ fn fold_asm_sections(
     if build.output_kind == OutputKind::Relocatable {
         return Ok(alloc::collections::BTreeMap::new());
     }
-    // A named label the template defined in the main stream is already
-    // placed; it binds a same-name C reference exactly as the object
-    // path's local `.text` symbol does.
     let mut label_at: alloc::collections::BTreeMap<String, AsmLabelPlacement> = build
         .asm_text_labels
         .iter()
@@ -312,9 +272,6 @@ fn fold_asm_sections(
     if build.asm_sections.is_empty() {
         return Ok(label_at);
     }
-    // Names the image needs: the C code's extern call sites and address-of
-    // / data references. Folding a section can add needs of its own (its
-    // relocations), so iterate to a fixpoint.
     let mut needed: alloc::collections::BTreeSet<String> = build
         .user_extern_call_sites
         .iter()
@@ -326,8 +283,6 @@ fn fold_asm_sections(
                 .map(|r| r.symbol_name.clone()),
         )
         .collect();
-    // A main-stream branch into a pushed section names it by index, not by
-    // symbol, so seed the fold set with those sections directly.
     let mut wanted: alloc::collections::BTreeSet<usize> = build
         .asm_section_text_refs
         .iter()
@@ -401,15 +356,12 @@ fn fold_asm_sections(
             break;
         }
     }
-    // A defined function's text offset, for a section's call into the C code.
     let func_off = |name: &str| -> Option<usize> {
         let i = build.func_names.iter().position(|n| n == name)?;
         build.pc_to_native.get(*build.func_ent_pcs.get(i)?).copied()
     };
     for &i in &folded {
         let s = &build.asm_sections[i];
-        // Only a text placement reaches here: a writable section carrying
-        // relocations was refused above.
         let AsmLabelPlacement::Text(base) = bases[i].expect("folded section has a base") else {
             continue;
         };
@@ -443,11 +395,7 @@ fn fold_asm_sections(
                 }
             };
             // The folded code and its targets share the text stream, so a
-            // PC-relative field folds to a constant: S + A - P. The shared
-            // patcher covers the rel32 data field and the AArch64
-            // PC-relative instruction kinds; a kind it declines (an
-            // absolute field, a page / lo12 form) needs a load-time
-            // relocation this image cannot carry.
+            // PC-relative field folds to a constant: S + A - P.
             let disp = target_off as i64 + r.addend - at as i64;
             let patched = crate::c5::asm::patch_asm_insn_field(
                 &mut build.text,
@@ -467,9 +415,6 @@ fn fold_asm_sections(
             }
         }
     }
-    // Main-stream references to a label placed in one of those sections.
-    // A PC-relative field whose target also landed in the text stream
-    // folds to a constant; anything else needs a load-time relocation.
     for r in core::mem::take(&mut build.asm_section_text_refs) {
         let s = &build.asm_sections[r.section_index];
         let text_base = match (r.absolute, bases[r.section_index]) {
@@ -499,22 +444,15 @@ fn fold_asm_sections(
             )));
         }
     }
-    // The folded sections are placed; remove them so no writer emits a copy.
+    // The folded sections are placed; remove them so no writer emits a
+    // copy.
     let mut keep = bases.iter().map(|b| b.is_none());
     build.asm_sections.retain(|_| keep.next().unwrap());
     Ok(label_at)
 }
 
 /// Resolve function-body inline-asm symbol-operand sites (aarch64) on a
-/// single-TU final image. A page / low-12 field against a resolved target
-/// becomes the writers' per-site address fixup; a PC-relative field whose
-/// target landed in the text stream is patched in place. The GOT base
-/// parks as a [`GotBaseFixup`], the same record the link path hands the
-/// writer. A `movw` group needs the image base, and a PC-relative field
-/// cannot reach the data segment before layout; both are refused toward
-/// the `-c` + link path, as is a name the image does not define.
-///
-/// [`GotBaseFixup`]: crate::c5::codegen::GotBaseFixup
+/// single-TU final image.
 #[cfg(feature = "native-emit")]
 fn resolve_single_image_asm_sym_fixups(
     program: &Program,
@@ -550,7 +488,6 @@ fn resolve_single_image_asm_sym_fixups(
             .collect()
     };
     let err = |m: alloc::string::String| C5Error::Compile(crate::c5::error::fmt_link_err(&m));
-    // Where a record's target landed; the addend is already applied.
     enum Loc {
         Text(usize),
         Data(u64),
@@ -678,16 +615,7 @@ fn resolve_single_image_asm_sym_fixups(
 }
 
 /// Resolve or diagnose the external references still recorded on a
-/// single-TU final image. Such an image has no link step to bind them,
-/// so leaving them as the codegen's zero-displacement placeholders
-/// yields a rip-relative `lea` that materializes the address of the
-/// next instruction -- a non-null pointer that faults when called.
-///
-/// An undefined weak reference resolves to address 0, matching the
-/// linker's ELF behavior, so the `if (fn) fn();` guard idiom reads a
-/// null pointer. Everything else is an undefined-reference diagnostic.
-/// `#pragma binding(data ...)` locals are excluded: the per-format
-/// writer binds those through the GOT / a copy relocation.
+/// single-TU final image.
 #[cfg(feature = "native-emit")]
 fn resolve_single_tu_extern_refs(
     program: &Program,
@@ -754,11 +682,6 @@ fn resolve_single_tu_extern_refs(
             kept_data.push(r);
             continue;
         }
-        // A label an inline-asm template defines: the reference takes the
-        // address-load patch of the region the label landed in, as the
-        // linker binds the object path's reference against the label. The
-        // `direct_pcrel` addend folded the 4-byte end skew; a fixup targets
-        // the effective byte, so restore it.
         if let Some(&placement) = asm_labels.get(r.symbol_name.as_str()) {
             let delta = r.direct_pcrel.map_or(0, |a| a + 4);
             match placement {
@@ -779,10 +702,6 @@ fn resolve_single_tu_extern_refs(
             }
             continue;
         }
-        // A data object this unit defines (weak included): the reference
-        // binds to the definition, as the linker binds the object path's
-        // named relocation. The PC-relative addend folded the -4 end skew;
-        // the data fixup targets the effective byte, so restore it.
         if let (Some(&off), Some(addend)) = (
             defined_data_by_name.get(r.symbol_name.as_str()),
             r.direct_pcrel,
@@ -796,9 +715,7 @@ fn resolve_single_tu_extern_refs(
         }
         // The GOT base is linker-defined: looked up after the unit's own
         // definitions and ahead of the weak rule, since the usual C idiom
-        // for reaching it declares the name weak-undefined. The writer
-        // holds the table's address, so the site parks as the same record
-        // the link path hands it.
+        // for reaching it declares the name weak-undefined.
         if r.symbol_name == crate::c5::object::elf_reloc_types::GOT_BASE_SYMBOL
             && let Some(addend) = r.direct_pcrel
         {
@@ -828,20 +745,15 @@ fn resolve_single_tu_extern_refs(
     build.user_extern_data_refs = kept_data;
 
     for site in core::mem::take(&mut build.user_extern_call_sites) {
-        // A callee defined as a label in the text stream (the main stream
-        // or a folded asm section): bind the call directly, as the linker
-        // binds the object path's undefined symbol against the label.
         if let Some(&AsmLabelPlacement::Text(target_off)) =
             asm_labels.get(site.symbol_name.as_str())
         {
             let at = site.instr_offset;
             match machine {
-                // `call`/`jmp` rel32: the displacement field is at +1.
                 Machine::X86_64 => {
                     let rel = target_off as i64 - (at as i64 + 5);
                     build.text[at + 1..at + 5].copy_from_slice(&(rel as i32).to_le_bytes());
                 }
-                // `bl`/`b` imm26, word-aligned.
                 Machine::Aarch64 => {
                     let word = u32::from_le_bytes(build.text[at..at + 4].try_into().unwrap());
                     let imm = (((target_off as i64 - at as i64) >> 2) as u32) & 0x03FF_FFFF;
@@ -868,9 +780,7 @@ fn resolve_single_tu_extern_refs(
 }
 
 /// Whether `BADC_NO_BSS_SEGREGATE` opts a build out of segregating
-/// wholly-zero data objects into a no-file-backing `.bss` region. The
-/// opt-out exists for debugging and for diffing against the pre-`.bss`
-/// file image; segregation is otherwise on by default.
+/// wholly-zero data objects into a no-file-backing `.bss` region.
 #[cfg(feature = "native-emit")]
 fn bss_segregation_disabled() -> bool {
     std::env::var("BADC_NO_BSS_SEGREGATE").is_ok()
@@ -879,10 +789,7 @@ fn bss_segregation_disabled() -> bool {
 /// Variant of [`emit_native_with_options`] that records the shared
 /// library's own name in the image (PE export-directory Name, Mach-O
 /// `LC_ID_DYLIB` install name) so a consumer linking against it by name
-/// references the file it loads at runtime. `shared_lib_name` is the
-/// `-o` basename for `--shared`; `None` falls back to the per-format
-/// default and is ignored for non-shared output. Takes the program by
-/// value, as [`emit_native_with_options_owned`] does.
+/// references the file it loads at runtime.
 #[cfg(feature = "native-emit")]
 pub fn emit_native_with_options_named(
     program: Program,
@@ -903,59 +810,27 @@ pub fn emit_native_with_options_named(
     write_for(program, &build, target)
 }
 
-/// One region of the data stream at its runtime placement. The
-/// compaction leaves the stream as a read-only prefix, a relro region,
-/// the writable data and the zero-fill tail, in that order; a writer
-/// gives each region (and the runs it moves out of them) one base
-/// address, and an offset resolves to `base + (off - start)`, clamped
-/// to `base + len` past the region's own bytes.
+/// One region of the data stream at its runtime placement.
 #[cfg(feature = "native-emit")]
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct DataRegion {
-    /// First stream offset of the region.
     pub(crate) start: u64,
-    /// Runtime address (or RVA) of `start`.
     pub(crate) base: u64,
-    /// Bytes mapped one to one from `start`; `u64::MAX` leaves the
-    /// region open.
+    /// Bytes mapped one to one from `start`; `u64::MAX` leaves the region
+    /// open.
     pub(crate) len: u64,
 }
 
-/// Runtime address of a data-stream offset. `regions` are sorted by
-/// `start`, the first starts at 0, and of two regions sharing a start
-/// the later one wins.
+/// Runtime address of a data-stream offset.
 #[cfg(feature = "native-emit")]
 pub(crate) fn data_region_addr(regions: &[DataRegion], off: u64) -> u64 {
     let r = &regions[regions.partition_point(|r| r.start <= off) - 1];
     r.base + (off - r.start).min(r.len)
 }
 
-/// C99 6.2.2 / 6.7.8: drop static data no surviving function or
-/// relocation references, repacking `.data` and rewriting every offset
-/// surface (symbol values, AST data offsets, relocation slots), then
-/// lower the result. The one compaction feeds both the backend lowering
-/// (which bakes data-relative fixups) and the container writer (which
-/// emits the symbol table), so the emitted `.data` and its symbols stay
-/// consistent.
-///
-/// The compaction runs before lowering, so its call graph is the
-/// pre-inline one. At -O the pipeline can orphan an object -- an address
-/// materialised only to pass to a callee that ignores the parameter dies
-/// with the call the inliner removed -- and the lowering reports it. The
-/// program is then compacted once more, from the original, with the
-/// sharper set, and the reported post-inline bodies lower against it, so
-/// the object, its relocations, and any symbol only they referenced stay
-/// out of the image. The second pass is the fixed point: the report is a
-/// joint function + data reachability result and the repack maps every
-/// reference one-to-one. The assertion below checks that.
-///
-/// Only the report survives that first lowering -- the code it emits is
-/// against the `.data` the recompaction replaces -- so the first pass
-/// runs as a probe and stops there, leaving one backend run either way.
-/// It probes only when the compaction produced a plan to replay the
-/// report against. A compaction that declined (a unit with no function
-/// to walk, an empty `.data`) has nothing to narrow, and a probe that
-/// stopped anyway would leave the writer a `Build` with no image.
+/// C99 6.2.2 / 6.7.8: drop static data no surviving function or relocation
+/// references, repacking `.data` and rewriting every offset surface (symbol
+/// values, AST data offsets, relocation slots), then lower the result.
 #[cfg(feature = "native-emit")]
 fn compact_and_lower(
     program: Program,
@@ -1000,12 +875,10 @@ fn compact_and_lower(
     Ok((recompacted, bss_size, build))
 }
 
-/// Test-only: emit a complete native image for a single program,
-/// satisfying the PE entry stub's `__c5_*` runtime-helper references
-/// that the bare single-TU path cannot link (production links them
-/// from the embedded startup runtime). The injected symbols point at
-/// the program entry; the image is inspected for structure, not run.
-/// ELF / Mach-O ignore the extra names.
+/// Test-only: emit a complete native image for a single program, satisfying
+/// the PE entry stub's `__c5_*` runtime-helper references that the bare
+/// single-TU path cannot link (production links them from the embedded
+/// startup runtime).
 #[cfg(all(test, feature = "native-emit"))]
 pub(crate) fn emit_native_single_tu_for_test(
     program: &Program,
@@ -1015,10 +888,10 @@ pub(crate) fn emit_native_single_tu_for_test(
     Ok(single_tu_image_for_test(program, target, options)?.0)
 }
 
-/// The single-TU image plus the data-region boundaries it was written
-/// from and the compacted `.data` offset of every named global:
-/// `data[..ro_len]` is the pure read-only prefix, `data[ro_len..
-/// relro_len]` the relro region, the rest writable.
+/// The single-TU image plus the data-region boundaries it was written from
+/// and the compacted `.data` offset of every named global: `data[..ro_len]`
+/// is the pure read-only prefix, `data[ro_len.. relro_len]` the relro
+/// region, the rest writable.
 #[cfg(all(test, feature = "native-emit"))]
 pub(crate) struct SingleTuRegions {
     pub ro_len: usize,
@@ -1038,8 +911,6 @@ pub(crate) fn single_tu_image_for_test(
     build.bss_size = bss_size;
     let pc = build.pc_to_native.len();
     build.pc_to_native.push(build.entry_offset);
-    // The entry adapter targets `__c5_entry`; the real link path
-    // supplies it from the startup runtime.
     build
         .func_names
         .push(alloc::string::String::from("__c5_entry"));
@@ -1070,10 +941,6 @@ pub(crate) fn write_native_image(
 fn write_for(program: &Program, build: &Build, target: Target) -> Result<Vec<u8>, C5Error> {
     #[cfg(feature = "std")]
     if build.output_kind == OutputKind::Relocatable {
-        // ELF64 ET_REL is the badc-internal relocatable format on
-        // every target -- single writer, single reloc table. The
-        // final executable still comes out in the target's native
-        // container (Mach-O / ELF / PE) at link time.
         let machine = match target {
             Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
                 Machine::Aarch64
@@ -1085,11 +952,10 @@ fn write_for(program: &Program, build: &Build, target: Target) -> Result<Vec<u8>
             || elf_reloc::write_relocatable(program, build, machine, target),
         );
     }
-    // The no-std build can't reach the relocatable writer; the
-    // `-c` path lives in the CLI, which itself is std-only. If
-    // a no-std caller ever surfaces `Relocatable` it would
-    // fall through to the final-image writers below; the
-    // unreachable branch keeps the match arms exhaustive
+    // The no-std build can't reach the relocatable writer; the `-c` path
+    // lives in the CLI, which itself is std-only. If a no-std caller ever
+    // surfaces `Relocatable` it would fall through to the final-image
+    // writers below; the unreachable branch keeps the match arms exhaustive
     // without pulling `elf_reloc` into the no-std build.
     #[cfg(not(feature = "std"))]
     if build.output_kind == OutputKind::Relocatable {
@@ -1106,8 +972,8 @@ fn write_for(program: &Program, build: &Build, target: Target) -> Result<Vec<u8>
     }
 }
 
-/// Empty `Program` and `Build` values for the writers' unit tests;
-/// a test sets the fields it exercises.
+/// Empty `Program` and `Build` values for the writers' unit tests; a test
+/// sets the fields it exercises.
 #[cfg(all(test, feature = "native-emit"))]
 pub(crate) mod test_support {
     use alloc::collections::BTreeMap;

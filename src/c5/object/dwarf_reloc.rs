@@ -1,48 +1,4 @@
 //! Relocatable DWARF emitter for `OutputKind::Relocatable` output.
-//!
-//! Produces the DWARF 4 sections suitable for placement in an ELF
-//! ET_REL object:
-//!
-//!   * `.debug_info`   -- one compilation-unit DIE per `.o` with
-//!                        type catalog + subprogram DIEs + their
-//!                        formal_parameter / variable children.
-//!   * `.debug_abbrev` -- the matching abbreviation table.
-//!   * `.debug_line`   -- one line-number program covering the unit's
-//!                        `.text`.
-//!   * `.debug_str`    -- the unit's names, each stored once and
-//!                        named by a relocated `DW_FORM_strp` slot.
-//!                        The DWARF 4 line-program header has no such
-//!                        indirection and keeps its names inline.
-//!
-//! Every address slot is emitted as a placeholder paired with an
-//! [`DwarfReloc`] record so the linker can rebase the section once
-//! the per-unit `.text` / `.debug_line` / `.debug_abbrev` bases are
-//! known. This matches gcc / clang `-c -g` output for c5's subset.
-//!
-//! Each CU lays out its children in this order: type DIEs, enum
-//! DIEs, objects with static storage duration, then subprograms.
-//!
-//! Type emission runs in two passes. [`TypeCatalog`] interns every
-//! type the unit's locals, file-scope objects and aggregate members
-//! reach, keyed structurally so `int *` shares one DIE across the
-//! unit. Each interned node is then written into its own buffer with
-//! its `DW_FORM_ref4` slots recorded, and the slots are patched once
-//! the concatenated layout gives every DIE its CU-relative offset.
-//! Because a reference is resolved after layout rather than at write
-//! time, a member can name a type whose DIE lands later in the unit,
-//! and no emission order can drop one.
-//!
-//! A type the catalog cannot describe becomes
-//! `DW_TAG_unspecified_type` rather than the nearest type that can be
-//! spelled: a member keeps its name and offset, and the description
-//! reports the type as unknown instead of naming a different one.
-//!
-//! Pointer DIEs take their `DW_AT_byte_size` from the object's ELF
-//! class, and so does the `long` base type except on Windows, whose
-//! LLP64 model fixes it at 4 bytes.
-//! Bitfield members carry `DW_AT_data_bit_offset` + `DW_AT_bit_size`.
-//! `.debug_frame` regenerates from `synth_build`'s symbol set on the
-//! merged image rather than being carried per-`.o`.
 
 #![allow(dead_code)]
 
@@ -63,38 +19,29 @@ use crate::c5::compiler::{StructDef, StructField};
 use crate::c5::layout::write_struct;
 use crate::c5::symbol::DeclSpelling;
 
-/// Section that an emitted reloc lives in. Used to route the
-/// reloc into the matching `.rela.<section>` table in the ELF
-/// writer.
+/// Section that an emitted reloc lives in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DwarfSectionKind {
     Info,
     Line,
 }
 
-/// Section symbol the reloc resolves against. The linker
-/// translates this into the section's runtime base; the addend
-/// the reloc carries is added on top.
+/// Section symbol the reloc resolves against.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DwarfRelocTarget {
     Text,
     DebugLine,
     DebugAbbrev,
-    /// The unit's `.debug_str`. The addend is the string's offset in
-    /// it, which a `DW_FORM_strp` slot names.
+    /// The unit's `.debug_str`.
     DebugStr,
     /// A defined object with static storage duration, by its index in
-    /// [`DwarfRelocatable::reloc_symbols`]. The object writer resolves
-    /// the name to its own symbol-table entry.
+    /// [`DwarfRelocatable::reloc_symbols`].
     Symbol(u32),
-    /// A defined `_Thread_local` object, named the same way. The slot
-    /// takes the object's offset within the module's thread block, not
-    /// an address.
+    /// A defined `_Thread_local` object, named the same way.
     ThreadLocalSymbol(u32),
 }
 
-/// Width of the reloc's value field. Maps to R_*_64 / R_*_32 in
-/// the ELF reloc table.
+/// Width of the reloc's value field.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DwarfRelocWidth {
     W4,
@@ -102,8 +49,8 @@ pub(crate) enum DwarfRelocWidth {
 }
 
 impl DwarfRelocWidth {
-    /// Width of a `DW_FORM_addr` slot, which the CU header's
-    /// `address_size` states and every address slot follows.
+    /// Width of a `DW_FORM_addr` slot, which the CU header's `address_size`
+    /// states and every address slot follows.
     fn addr(class: ElfClass) -> DwarfRelocWidth {
         if class.is32() {
             DwarfRelocWidth::W4
@@ -119,42 +66,32 @@ impl DwarfRelocWidth {
     }
 }
 
-/// Append a zeroed `DW_FORM_addr` slot of `width` bytes. The value is
-/// the relocation's to supply.
+/// Append a zeroed `DW_FORM_addr` slot of `width` bytes.
 fn push_addr_slot(out: &mut Vec<u8>, width: DwarfRelocWidth) {
     out.extend_from_slice(&[0u8; 8][..width.bytes()]);
 }
 
-/// One placeholder slot the linker has to patch once the merged
-/// section bases are known.
+/// One placeholder slot the linker has to patch once the merged section
+/// bases are known.
 #[derive(Debug, Clone)]
 pub(crate) struct DwarfReloc {
     pub section: DwarfSectionKind,
-    /// Byte offset of the slot within its section.
     pub offset: u64,
     pub width: DwarfRelocWidth,
     pub target: DwarfRelocTarget,
-    /// Pre-relocation value of the slot. The linker computes the
-    /// final value as `section_base(target) + addend`.
     pub addend: i64,
 }
 
-/// Output of [`emit`]: the DWARF byte streams plus the relocs
-/// that describe every placeholder address slot inside them.
-/// The `Default` (all-empty) value is what a build without `-g`
-/// produces, so the relocatable object carries no debug info.
+/// Output of [`emit`]: the DWARF byte streams plus the relocs that describe
+/// every placeholder address slot inside them.
 #[derive(Default)]
 pub(crate) struct DwarfRelocatable {
     pub debug_info: Vec<u8>,
     pub debug_abbrev: Vec<u8>,
     pub debug_line: Vec<u8>,
-    /// The unit's name pool, one copy of each distinct string. The
-    /// writer marks it mergeable so the link folds across units.
     pub debug_str: Vec<u8>,
     pub info_relocs: Vec<DwarfReloc>,
     pub line_relocs: Vec<DwarfReloc>,
-    /// Link names named by [`DwarfRelocTarget::Symbol`] relocs, in the
-    /// order the emitter first referenced them.
     pub reloc_symbols: Vec<String>,
 }
 
@@ -215,7 +152,6 @@ const DW_FORM_UDATA: u8 = 0x0f;
 const DW_FORM_FLAG_PRESENT: u8 = 0x19;
 const DW_FORM_SDATA: u8 = 0x0d;
 
-// DW_ATE_* encoding values for DW_TAG_base_type.
 const DW_ATE_SIGNED: u8 = 0x05;
 const DW_ATE_UNSIGNED: u8 = 0x07;
 const DW_ATE_SIGNED_CHAR: u8 = 0x06;
@@ -278,8 +214,6 @@ const ABBREV_SUBPROGRAM_LEAF_VOID: u64 = 34;
 const ABBREV_SUBPROGRAM_WITH_CHILDREN_VOID: u64 = 35;
 const ABBREV_SUBPROGRAM_LEAF_INTERNAL_VOID: u64 = 36;
 const ABBREV_SUBPROGRAM_WITH_CHILDREN_INTERNAL_VOID: u64 = 37;
-// Typedef and qualifier DIEs. The `_VOID` form of each is the shape
-// DWARF 4 5.2 gives one applied to `void`, which has no DIE to name.
 const ABBREV_TYPEDEF: u64 = 38;
 const ABBREV_TYPEDEF_VOID: u64 = 39;
 const ABBREV_CONST_TYPE: u64 = 40;
@@ -289,8 +223,7 @@ const ABBREV_VOLATILE_TYPE_VOID: u64 = 43;
 const ABBREV_RESTRICT_TYPE: u64 = 44;
 const ABBREV_RESTRICT_TYPE_VOID: u64 = 45;
 
-/// Compilation-unit header for `.debug_info` (DWARF 4, 32-bit
-/// form). Follows the spec table exactly.
+/// Compilation-unit header for `.debug_info` (DWARF 4, 32-bit form).
 #[repr(C, packed)]
 #[derive(Clone, Copy)]
 struct DebugInfoUnitHeader {
@@ -317,10 +250,9 @@ const DEBUG_LINE_UNIT_HEADER_SIZE: u64 = 10;
 const _: () =
     assert!(core::mem::size_of::<DebugLineUnitHeader>() == DEBUG_LINE_UNIT_HEADER_SIZE as usize);
 
-/// Fixed-shape prefix of the `.debug_line` program (the bytes
-/// between the unit header's `header_length` field and the
-/// variable include_directories / file_names lists). DWARF 4
-/// section 6.2.4.
+/// Fixed-shape prefix of the `.debug_line` program (the bytes between the
+/// unit header's `header_length` field and the variable include_directories
+/// / file_names lists).
 #[repr(C, packed)]
 #[derive(Clone, Copy)]
 struct DebugLineProgramHeader {
@@ -330,9 +262,6 @@ struct DebugLineProgramHeader {
     line_base: i8,
     line_range: u8,
     opcode_base: u8,
-    /// `standard_opcode_lengths[i]` is the operand count for
-    /// standard opcode `i+1`. Sized for the twelve DWARF 4
-    /// standard opcodes (`DW_LNS_copy` through `DW_LNS_set_isa`).
     standard_opcode_lengths: [u8; 12],
 }
 
@@ -342,8 +271,6 @@ const _: () = assert!(
 );
 
 /// Emit the relocatable DWARF triple plus the address-reloc list.
-/// `source_path` becomes the CU's `DW_AT_name`; the line table's
-/// file numbering reuses [`Program::source_files`].
 pub(crate) fn emit(
     program: &Program,
     build: &Build,
@@ -366,14 +293,8 @@ pub(crate) fn emit(
     }
 }
 
-// ---- .debug_abbrev ----
-
-/// One `.debug_abbrev` declaration: the abbreviation code, its DWARF
-/// tag, whether the DIE has children, and the ordered (attribute,
-/// form) pairs. `build_debug_abbrev` emits the table from this list
-/// and `build_debug_info` writes each DIE's attribute values in the
-/// same order under the same code, so the abbrev and the values
-/// cannot drift.
+/// One `.debug_abbrev` declaration: the abbreviation code, its DWARF tag,
+/// whether the DIE has children, and the ordered (attribute, form) pairs.
 struct AbbrevDecl {
     code: u64,
     tag: u8,
@@ -382,7 +303,6 @@ struct AbbrevDecl {
 }
 
 const ABBREV_DECLS: &[AbbrevDecl] = &[
-    // compile_unit with subprogram children.
     AbbrevDecl {
         code: ABBREV_CU,
         tag: DW_TAG_COMPILE_UNIT,
@@ -399,15 +319,9 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
     },
     // subprogram leaf -- name + extent only, for a function with no
     // variables. DW_AT_external (DW_FORM_flag_present) marks the name
-    // visible outside the compilation unit (DWARF 4 3.3.1), which
-    // C99 6.2.2p3 denies a `static` definition; the internal-linkage
-    // form drops it. DW_AT_prototyped is always set: c5 rejects
-    // K&R identifier-list declarators per C99 6.7.6.3p14.
-    // DW_AT_calling_convention pins DW_CC_normal -- SysV / Win64 /
-    // AAPCS64 are the C standard convention per DWARF 4 3.3.1.1.
-    // DW_AT_type is the return type; DWARF 4 3.3.2 gives a
-    // void-returning function no such attribute, which is the
-    // `_VOID` form below.
+    // visible outside the compilation unit (DWARF 4 3.3.1), which C99
+    // 6.2.2p3 denies a `static` definition; the internal-linkage form drops
+    // it.
     AbbrevDecl {
         code: ABBREV_SUBPROGRAM_LEAF,
         tag: DW_TAG_SUBPROGRAM,
@@ -422,8 +336,6 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_TYPE, DW_FORM_REF4),
         ],
     },
-    // subprogram with variable / parameter children. DW_AT_frame_base
-    // resolves the fbreg offsets in the children's DW_AT_location.
     AbbrevDecl {
         code: ABBREV_SUBPROGRAM_WITH_CHILDREN,
         tag: DW_TAG_SUBPROGRAM,
@@ -466,9 +378,6 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_FRAME_BASE, DW_FORM_EXPRLOC),
         ],
     },
-    // formal_parameter -- name + fbreg location + DW_AT_type ref4 to
-    // a type DIE earlier in the CU. DW_AT_decl_line gives the source
-    // line of the declaration.
     AbbrevDecl {
         code: ABBREV_FORMAL_PARAMETER,
         tag: DW_TAG_FORMAL_PARAMETER,
@@ -481,8 +390,6 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_DECL_LINE, DW_FORM_UDATA),
         ],
     },
-    // variable -- formal_parameter's shape under DW_TAG_variable so
-    // debuggers distinguish locals from arguments.
     AbbrevDecl {
         code: ABBREV_VARIABLE,
         tag: DW_TAG_VARIABLE,
@@ -495,8 +402,6 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_DECL_LINE, DW_FORM_UDATA),
         ],
     },
-    // base_type -- name + byte_size + DWARF encoding (DW_ATE_*) for
-    // every C99 scalar.
     AbbrevDecl {
         code: ABBREV_BASE_TYPE,
         tag: DW_TAG_BASE_TYPE,
@@ -508,31 +413,26 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         ],
     },
     // pointer_type -- a pointer wrapping a referenced type DIE. C99
-    // 6.2.5p20 leaves the size implementation-defined; the value is
-    // the object's address width.
+    // 6.2.5p20 leaves the size implementation-defined; the value is the
+    // object's address width.
     AbbrevDecl {
         code: ABBREV_POINTER_TYPE,
         tag: DW_TAG_POINTER_TYPE,
         has_children: false,
         attrs: &[(DW_AT_BYTE_SIZE, DW_FORM_DATA1), (DW_AT_TYPE, DW_FORM_REF4)],
     },
-    // structure_type -- name + byte_size; carries DW_TAG_member
-    // children terminated by a null DIE.
     AbbrevDecl {
         code: ABBREV_STRUCTURE_TYPE,
         tag: DW_TAG_STRUCTURE_TYPE,
         has_children: true,
         attrs: &[(DW_AT_NAME, DW_FORM_STRP), (DW_AT_BYTE_SIZE, DW_FORM_UDATA)],
     },
-    // union_type -- structure_type's payload with members at offset 0.
     AbbrevDecl {
         code: ABBREV_UNION_TYPE,
         tag: DW_TAG_UNION_TYPE,
         has_children: true,
         attrs: &[(DW_AT_NAME, DW_FORM_STRP), (DW_AT_BYTE_SIZE, DW_FORM_UDATA)],
     },
-    // structure / union member -- name + type ref4 + byte offset from
-    // the start of the aggregate.
     AbbrevDecl {
         code: ABBREV_MEMBER,
         tag: DW_TAG_MEMBER,
@@ -543,9 +443,6 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_DATA_MEMBER_LOCATION, DW_FORM_UDATA),
         ],
     },
-    // The unnamed member C11 6.7.2.1p13 gives an anonymous struct or
-    // union. DWARF 4 5.5.3: no DW_AT_name, and the type names the
-    // anonymous aggregate whose members the enclosing scope sees.
     AbbrevDecl {
         code: ABBREV_MEMBER_ANON,
         tag: DW_TAG_MEMBER,
@@ -555,9 +452,6 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_DATA_MEMBER_LOCATION, DW_FORM_UDATA),
         ],
     },
-    // bitfield member -- name + type ref4 + DWARF 4
-    // DW_AT_data_bit_offset (absolute bit offset from the aggregate
-    // start) + DW_AT_bit_size (bit width).
     AbbrevDecl {
         code: ABBREV_BITFIELD_MEMBER,
         tag: DW_TAG_MEMBER,
@@ -569,40 +463,32 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_BIT_SIZE, DW_FORM_UDATA),
         ],
     },
-    // unspecified_parameters -- the `...` of a variadic prototype
-    // (DWARF 4 3.4.2). The tag alone signals trailing varargs.
     AbbrevDecl {
         code: ABBREV_UNSPECIFIED_PARAMETERS,
         tag: DW_TAG_UNSPECIFIED_PARAMETERS,
         has_children: false,
         attrs: &[],
     },
-    // array_type -- DW_AT_type refs the element type DIE; the
-    // DW_TAG_subrange_type child carries the bound.
     AbbrevDecl {
         code: ABBREV_ARRAY_TYPE,
         tag: DW_TAG_ARRAY_TYPE,
         has_children: true,
         attrs: &[(DW_AT_TYPE, DW_FORM_REF4)],
     },
-    // subrange_type -- DWARF 4 5.13: one array dimension.
-    // DW_AT_upper_bound is the last in-bounds index (count - 1).
     AbbrevDecl {
         code: ABBREV_SUBRANGE_TYPE,
         tag: DW_TAG_SUBRANGE_TYPE,
         has_children: false,
         attrs: &[(DW_AT_UPPER_BOUND, DW_FORM_UDATA)],
     },
-    // enumeration_type -- a tagged enum (C99 6.7.2.2). Children are
-    // DW_TAG_enumerator DIEs; the enum is `int` in c5 so byte_size 4.
     AbbrevDecl {
         code: ABBREV_ENUMERATION_TYPE,
         tag: DW_TAG_ENUMERATION_TYPE,
         has_children: true,
         attrs: &[(DW_AT_NAME, DW_FORM_STRP), (DW_AT_BYTE_SIZE, DW_FORM_DATA1)],
     },
-    // enumerator -- one (name, value) pair. DW_AT_const_value is
-    // signed since C99 enum constants can be negative.
+    // enumerator -- one (name, value) pair. DW_AT_const_value is signed
+    // since C99 enum constants can be negative.
     AbbrevDecl {
         code: ABBREV_ENUMERATOR,
         tag: DW_TAG_ENUMERATOR,
@@ -612,10 +498,6 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_CONST_VALUE, DW_FORM_SDATA),
         ],
     },
-    // structure / union with no source tag (C99 6.7.2.3). DWARF 4
-    // 5.5.1 gives such a type no DW_AT_name; c5's registry key is a
-    // synthesized spelling that carries a parse-order serial and so
-    // names the same type differently in two units.
     AbbrevDecl {
         code: ABBREV_STRUCTURE_TYPE_ANON,
         tag: DW_TAG_STRUCTURE_TYPE,
@@ -630,8 +512,8 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
     },
     // structure / union the unit only forward-declares (C99 6.7.2.3
     // incomplete type). DWARF 4 5.5.1: DW_AT_declaration and no
-    // DW_AT_byte_size, so a consumer reads the size as unknown rather
-    // than as zero.
+    // DW_AT_byte_size, so a consumer reads the size as unknown rather than
+    // as zero.
     AbbrevDecl {
         code: ABBREV_STRUCTURE_TYPE_DECL,
         tag: DW_TAG_STRUCTURE_TYPE,
@@ -650,10 +532,8 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_DECLARATION, DW_FORM_FLAG_PRESENT),
         ],
     },
-    // subroutine_type -- the pointee of a function pointer (DWARF 4
-    // 5.7). DW_AT_type is the return type; the void-returning form
-    // omits it. DW_AT_prototyped is always set (c5 rejects K&R
-    // identifier lists). Children are the parameter types.
+    // subroutine_type -- the pointee of a function pointer (DWARF 4 5.7).
+    // DW_AT_prototyped is always set (c5 rejects K&R identifier lists).
     AbbrevDecl {
         code: ABBREV_SUBROUTINE_TYPE,
         tag: DW_TAG_SUBROUTINE_TYPE,
@@ -669,34 +549,28 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         has_children: true,
         attrs: &[(DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT)],
     },
-    // formal_parameter of a subroutine_type: a type with no name and
-    // no location, since a function type has no storage.
+    // formal_parameter of a subroutine_type: a type with no name and no
+    // location, since a function type has no storage.
     AbbrevDecl {
         code: ABBREV_FORMAL_PARAMETER_TYPE,
         tag: DW_TAG_FORMAL_PARAMETER,
         has_children: false,
         attrs: &[(DW_AT_TYPE, DW_FORM_REF4)],
     },
-    // subrange with no bound -- the unspecified extent of a flexible
-    // array member (C99 6.7.2.1p16) and of the GNU zero-length form.
     AbbrevDecl {
         code: ABBREV_SUBRANGE_TYPE_OPEN,
         tag: DW_TAG_SUBRANGE_TYPE,
         has_children: false,
         attrs: &[],
     },
-    // `void *` -- DWARF 4 5.2 spells an untyped pointer as a
-    // pointer_type with no DW_AT_type.
     AbbrevDecl {
         code: ABBREV_POINTER_TYPE_VOID,
         tag: DW_TAG_POINTER_TYPE,
         has_children: false,
         attrs: &[(DW_AT_BYTE_SIZE, DW_FORM_DATA1)],
     },
-    // unspecified_type (DWARF 4 5.2) -- the target of a member whose
-    // type this emitter cannot describe. The member keeps its name and
-    // offset and the description says the type is unknown instead of
-    // naming a different one.
+    // unspecified_type (DWARF 4 5.2) -- the target of a member whose type
+    // this emitter cannot describe.
     AbbrevDecl {
         code: ABBREV_UNSPECIFIED_TYPE,
         tag: DW_TAG_UNSPECIFIED_TYPE,
@@ -704,9 +578,8 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         attrs: &[],
     },
     // Object with static storage duration (C99 6.2.4p3), at compile-unit
-    // scope. DW_AT_location is an exprloc holding DW_OP_addr over the
-    // object's link-time address. DW_AT_external marks external linkage;
-    // the internal-linkage form drops it.
+    // scope. DW_AT_external marks external linkage; the internal-linkage
+    // form drops it.
     AbbrevDecl {
         code: ABBREV_STATIC_VARIABLE,
         tag: DW_TAG_VARIABLE,
@@ -732,10 +605,9 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_DECL_LINE, DW_FORM_UDATA),
         ],
     },
-    // `_Thread_local` object whose address the unit cannot spell: the
-    // name and type resolve, and the location is left out rather than
-    // given an expression that names the wrong storage. Same shape
-    // gcc and clang emit for a thread-local on aarch64.
+    // `_Thread_local` object whose address the unit cannot spell: the name
+    // and type resolve, and the location is left out rather than given an
+    // expression that names the wrong storage.
     AbbrevDecl {
         code: ABBREV_TLS_VARIABLE,
         tag: DW_TAG_VARIABLE,
@@ -759,8 +631,6 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_DECL_LINE, DW_FORM_UDATA),
         ],
     },
-    // The four subprogram shapes above for a function returning void,
-    // which DWARF 4 3.3.2 describes by the absence of DW_AT_type.
     AbbrevDecl {
         code: ABBREV_SUBPROGRAM_LEAF_VOID,
         tag: DW_TAG_SUBPROGRAM,
@@ -813,8 +683,6 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_FRAME_BASE, DW_FORM_EXPRLOC),
         ],
     },
-    // typedef (DWARF 4 5.3) -- the name a declaration spelled the
-    // type with, over the type it resolves to.
     AbbrevDecl {
         code: ABBREV_TYPEDEF,
         tag: DW_TAG_TYPEDEF,
@@ -827,8 +695,6 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         has_children: false,
         attrs: &[(DW_AT_NAME, DW_FORM_STRP)],
     },
-    // Qualified types (DWARF 4 5.2). Each wraps the type it
-    // qualifies and carries no size of its own.
     AbbrevDecl {
         code: ABBREV_CONST_TYPE,
         tag: DW_TAG_CONST_TYPE,
@@ -867,8 +733,8 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
     },
 ];
 
-/// Every declaration's `(attribute, form)` pairs, for the
-/// cross-producer form check in `dwarf`.
+/// Every declaration's `(attribute, form)` pairs, for the cross-producer
+/// form check in `dwarf`.
 #[cfg(test)]
 pub(super) fn abbrev_attr_forms() -> Vec<(u8, u8)> {
     ABBREV_DECLS
@@ -890,11 +756,9 @@ fn build_debug_abbrev() -> Vec<u8> {
         for (name, form) in d.attrs {
             push_attr(&mut out, *name, *form);
         }
-        // End of this declaration's attribute list.
         out.push(0);
         out.push(0);
     }
-    // End of the abbrev table.
     out.push(0);
     out
 }
@@ -904,15 +768,12 @@ fn push_attr(out: &mut Vec<u8>, name: u8, form: u8) {
     write_uleb128(out, form as u64);
 }
 
-// ---- .debug_info ----
-
-/// What a subprogram DIE needs from the function's `Token::Fun`
-/// symbol, resolved before the type catalog is laid out.
+/// What a subprogram DIE needs from the function's `Token::Fun` symbol,
+/// resolved before the type catalog is laid out.
 #[derive(Clone, Copy)]
 struct FnFacts {
     is_variadic: bool,
     external: bool,
-    /// `None` for a void-returning function (DWARF 4 3.3.2).
     ret: Option<TypeId>,
 }
 
@@ -926,27 +787,21 @@ fn subprogram_name(build: &Build, i: usize) -> &str {
         .unwrap_or("<unknown>")
 }
 
-/// The compilation unit of one object under construction: the DIE
-/// bytes past the unit header, the relocations over their placeholder
-/// slots, the string pool, and the per-unit type facts every DIE
-/// resolves against.
+/// The compilation unit of one object under construction: the DIE bytes
+/// past the unit header, the relocations over their placeholder slots, the
+/// string pool, and the per-unit type facts every DIE resolves against.
 struct RelocInfoUnit<'a> {
     program: &'a Program,
     build: &'a Build,
     target: super::Target,
     addr_width: DwarfRelocWidth,
-    /// `DW_AT_frame_base`: x29 on aarch64, rbp on x86_64.
     frame_base_op: u8,
     body: Vec<u8>,
     relocs: Vec<DwarfReloc>,
     strs: StrPool,
     reloc_symbols: Vec<String>,
-    /// CU-relative offset of each catalog type DIE.
     type_offsets: Vec<u32>,
-    /// Type of each `program.variables` entry.
     var_types: Vec<TypeId>,
-    /// Indices in `program.symbols` of the static-storage objects,
-    /// and their types.
     statics: Vec<usize>,
     static_types: Vec<TypeId>,
     fn_facts: Vec<FnFacts>,
@@ -1003,11 +858,7 @@ impl RelocInfoUnit<'_> {
         });
     }
 
-    /// The CU DIE. `DW_AT_low_pc` relocates against `.text`;
-    /// `DW_AT_high_pc` is the size, which needs no relocation since the
-    /// unit's `.text` slice stays contiguous; `DW_AT_stmt_list` is the
-    /// unit's line program at offset 0 of its own `.debug_line`, which
-    /// the linker rebases.
+    /// The CU DIE.
     fn emit_cu_die(&mut self, source_path: &str) {
         write_uleb128(&mut self.body, ABBREV_CU);
         self.strp(&format!("badc {}", env!("CARGO_PKG_VERSION")));
@@ -1023,12 +874,9 @@ impl RelocInfoUnit<'_> {
         self.body.extend_from_slice(&[0u8; 4]);
     }
 
-    /// Every type this unit references is interned into a catalog, the
-    /// DIEs are written into per-DIE buffers, laid out, and their
-    /// `DW_AT_type` slots patched with the resulting CU-relative
-    /// offsets. The return types are resolved here so they reach the
-    /// catalog before the layout fixes every offset; so are the
-    /// aggregates a cast type-name reached, which no object declares.
+    /// Every type this unit references is interned into a catalog, the DIEs
+    /// are written into per-DIE buffers, laid out, and their `DW_AT_type`
+    /// slots patched with the resulting CU-relative offsets.
     fn emit_type_dies(&mut self) {
         let (program, build) = (self.program, self.build);
         let mut catalog = TypeCatalog::new(
@@ -1054,9 +902,6 @@ impl RelocInfoUnit<'_> {
                     s.class == super::super::token::Token::Fun as i64
                         && s.link_name() == subprogram_name(build, i)
                 });
-                // A missing entry means non-variadic and external: a
-                // function this unit defines always has one, and only a
-                // `static` definition denies the name to other units.
                 FnFacts {
                     is_variadic: sym.is_some_and(|s| s.is_variadic),
                     external: sym.is_none_or(|s| s.linkage != crate::c5::symbol::Linkage::Internal),
@@ -1105,9 +950,8 @@ impl RelocInfoUnit<'_> {
         }
     }
 
-    /// One `DW_TAG_enumeration_type` per tagged enum, so `ptype enum
-    /// Tag` resolves the named constants although c5 collapses enums
-    /// to `int`.
+    /// One `DW_TAG_enumeration_type` per tagged enum, so `ptype enum Tag`
+    /// resolves the named constants although c5 collapses enums to `int`.
     fn emit_enum_dies(&mut self) {
         let program = self.program;
         for ed in &program.enums {
@@ -1127,13 +971,8 @@ impl RelocInfoUnit<'_> {
     }
 
     /// `DW_TAG_variable` per object with static storage duration (C99
-    /// 6.2.4p3), at compile-unit scope; `DW_OP_addr` takes the
-    /// link-time address from the relocation. A thread-local's
-    /// location is its offset in the thread block under
-    /// `DW_OP_GNU_push_tls_address`, which needs a module-relative TLS
-    /// relocation; only the ELFCLASS64 Linux/x86_64 surface has one both
-    /// linkers resolve, and elsewhere the object gets no location
-    /// rather than an expression naming the wrong storage.
+    /// 6.2.4p3), at compile-unit scope; `DW_OP_addr` takes the link-time
+    /// address from the relocation.
     fn emit_static_variables(&mut self) {
         let program = self.program;
         let addr_width = self.addr_width;
@@ -1191,12 +1030,7 @@ impl RelocInfoUnit<'_> {
         }
     }
 
-    /// One subprogram per defined function. With parameters, locals or
-    /// a variadic ellipsis to carry, the with-children shape (which
-    /// adds `DW_AT_frame_base`) ends in a null DIE; the leaf shape
-    /// otherwise. A void-returning function has no `DW_AT_type` (DWARF
-    /// 4 3.3.2). A local mem2reg promoted to a register gets an empty
-    /// location.
+    /// One subprogram per defined function.
     fn emit_subprograms(&mut self) {
         let (program, build) = (self.program, self.build);
         let addr_width = self.addr_width;
@@ -1253,9 +1087,6 @@ impl RelocInfoUnit<'_> {
             let canary_shift = build.canary_frame_bytes.get(&ent_pc).copied().unwrap_or(0) as i64;
             for &(v, type_id) in &vars {
                 let type_off = self.type_offsets[type_id];
-                // Slot coalescing may have moved this local onto a new
-                // exclusive frame offset; one moved onto shared storage
-                // is in `promoted_local_slots` and gets an empty location.
                 let eff = build
                     .coalesced_slot_remap
                     .get(&ent_pc)
@@ -1294,10 +1125,10 @@ impl RelocInfoUnit<'_> {
         }
     }
 
-    /// The CU's children terminator, the unit header (`unit_length`
-    /// covers everything after itself) and the relocation of its
-    /// `debug_abbrev_offset` against `.debug_abbrev`, which each
-    /// object's own table starts at offset 0 of.
+    /// The CU's children terminator, the unit header (`unit_length` covers
+    /// everything after itself) and the relocation of its
+    /// `debug_abbrev_offset` against `.debug_abbrev`, which each object's
+    /// own table starts at offset 0 of.
     fn finish(mut self) -> (Vec<u8>, Vec<u8>, Vec<DwarfReloc>, Vec<String>) {
         self.body.push(0);
         let unit_length: u32 = (DEBUG_INFO_UNIT_HEADER_SIZE as u32 - 4) + self.body.len() as u32;
@@ -1322,13 +1153,8 @@ impl RelocInfoUnit<'_> {
     }
 }
 
-/// Indices in `program.symbols` of the objects with static storage
-/// duration this unit defines, in declaration order. Mirrors the
-/// relocatable writer's own selection so every DIE emitted here has a
-/// symbol-table entry to relocate against: an alias names another
-/// object's storage, and one link name reaches the writer only once.
-/// A `_Thread_local` object (C11 6.2.4p4) is included; its location is
-/// a thread-block offset rather than a `DW_OP_addr` address.
+/// Indices in `program.symbols` of the objects with static storage duration
+/// this unit defines, in declaration order.
 fn static_storage_objects(program: &Program) -> Vec<usize> {
     use crate::c5::symbol::Linkage;
     use crate::c5::token::Token;
@@ -1350,18 +1176,11 @@ fn static_storage_objects(program: &Program) -> Vec<usize> {
     out
 }
 
-// ---- .debug_line ----
-
 fn build_debug_line(program: &Program, build: &Build) -> (Vec<u8>, Vec<DwarfReloc>) {
-    // File table: DWARF 4 uses 1-based file indices. The CU's
-    // primary file is index 1; every other entry the lexer
-    // recorded follows. The `<source>` placeholder is the lexer's
-    // pre-marker default and gets folded into entry 1.
-    // Fixed-shape header prefix per DWARF 4 section 6.2.4.
-    // `standard_opcode_lengths` carries the operand count for
-    // each of the 12 DWARF 4 standard opcodes (DW_LNS_copy
-    // through DW_LNS_set_isa); the table value matches
-    // DWARF 4 Figure 38.
+    // File table: DWARF 4 uses 1-based file indices.
+    // `standard_opcode_lengths` carries the operand count for each of the
+    // 12 DWARF 4 standard opcodes (DW_LNS_copy through DW_LNS_set_isa); the
+    // table value matches DWARF 4 Figure 38.
     let prog_header = DebugLineProgramHeader {
         minimum_instruction_length: 1,
         maximum_operations_per_instruction: 1,
@@ -1381,20 +1200,16 @@ fn build_debug_line(program: &Program, build: &Build) -> (Vec<u8>, Vec<DwarfRelo
     }
     hdr.push(0); // file_names terminator
 
-    // Program body. Reloc offsets are recorded against the byte
-    // position within the final output (`prefix + body`), so the
-    // header-prefix length has to be known to convert body-local
-    // offsets to section-local ones.
+    // Program body. Reloc offsets are recorded against the byte position
+    // within the final output (`prefix + body`), so the header-prefix
+    // length has to be known to convert body-local offsets to section-local
+    // ones.
     let header_length: u32 = hdr.len() as u32;
-    // unit_length covers everything after itself:
-    // version(2) + header_length(4) + header_length bytes + prog.
     let prefix_size: u64 = 4 + 2 + 4 + header_length as u64;
 
     let mut prog: Vec<u8> = Vec::new();
     let mut relocs: Vec<DwarfReloc> = Vec::new();
 
-    // Anchor address at 0 (codegen-relative); the linker rebases
-    // through the recorded reloc.
     write_set_address_reloc(
         &mut prog,
         &mut relocs,
@@ -1438,8 +1253,6 @@ fn write_set_address_reloc(
     addend: i64,
     addr_width: DwarfRelocWidth,
 ) {
-    // Extended opcode: 0x00, ULEB128 length (opcode + addr_size),
-    // opcode (DW_LNE_SET_ADDRESS), addr.
     prog.push(0);
     write_uleb128(prog, 1 + addr_width.bytes() as u64);
     prog.push(DW_LNE_SET_ADDRESS);
@@ -1447,9 +1260,6 @@ fn write_set_address_reloc(
     push_addr_slot(prog, addr_width);
     relocs.push(DwarfReloc {
         section: DwarfSectionKind::Line,
-        // The body starts at `prefix_size` bytes from the section
-        // start; the addr field sits at `addr_pos_in_prog` within
-        // the body.
         offset: prefix_size + addr_pos_in_prog,
         width: addr_width,
         target: DwarfRelocTarget::Text,
@@ -1457,9 +1267,7 @@ fn write_set_address_reloc(
     });
 }
 
-/// The unit's `.debug_str`: each distinct string stored once. Offset 0
-/// is the empty string, so a zero slot reads as a name rather than as
-/// another string's bytes.
+/// The unit's `.debug_str`: each distinct string stored once.
 pub(crate) struct StrPool {
     bytes: Vec<u8>,
     offsets: BTreeMap<String, u32>,
@@ -1492,8 +1300,7 @@ impl StrPool {
     }
 }
 
-/// Append a `DW_FORM_strp` slot naming `s`. The slot stays zero; the
-/// string's pool offset rides in the reloc's addend.
+/// Append a `DW_FORM_strp` slot naming `s`.
 fn push_strp(out: &mut Vec<u8>, relocs: &mut Vec<DwarfReloc>, strs: &mut StrPool, s: &str) {
     relocs.push(DwarfReloc {
         section: DwarfSectionKind::Info,
@@ -1508,46 +1315,42 @@ fn push_strp(out: &mut Vec<u8>, relocs: &mut Vec<DwarfReloc>, strs: &mut StrPool
 /// Index of a type DIE within the per-unit catalog.
 type TypeId = usize;
 
-/// One type DIE in a form independent of emission order: every
-/// `DW_AT_type` reference is a [`TypeId`] the layout pass turns into a
-/// CU-relative offset, so a member can name a type whose DIE is
-/// written later in the unit.
+/// One type DIE in a form independent of emission order: every `DW_AT_type`
+/// reference is a [`TypeId`] the layout pass turns into a CU-relative
+/// offset, so a member can name a type whose DIE is written later in the
+/// unit.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum TypeNode {
     /// C99 scalar, keyed by the leaf tag with its unsigned marker.
     Base(i64),
-    /// `DW_TAG_pointer_type`. `None` is `void *`, which DWARF 4 5.2
-    /// spells as a pointer with no `DW_AT_type`.
+    /// `DW_TAG_pointer_type`.
     Pointer(Option<TypeId>),
     /// Struct / union whose definition this unit has.
     Aggregate(usize),
     /// Struct / union the unit only forward-declares (C99 6.7.2.3).
     Declaration(usize),
-    /// `DW_TAG_array_type`, one `DW_TAG_subrange_type` child per
-    /// dimension, outermost first. A negative bound is unspecified.
+    /// `DW_TAG_array_type`, one `DW_TAG_subrange_type` child per dimension,
+    /// outermost first.
     Array { elem: TypeId, dims: Vec<i64> },
     /// `DW_TAG_subroutine_type` -- the pointee of a function pointer.
-    /// `ret` is `None` for a void-returning function.
     Subroutine {
         ret: Option<TypeId>,
         params: Vec<TypeId>,
         variadic: bool,
     },
-    /// `DW_TAG_typedef` (DWARF 4 5.3): the name a declaration spelled
-    /// the type with. `None` is a typedef of `void`, which has no DIE.
+    /// `DW_TAG_typedef` (DWARF 4 5.3): the name a declaration spelled the
+    /// type with.
     Typedef { name: String, inner: Option<TypeId> },
-    /// `DW_TAG_const_type` / `_volatile_type` / `_restrict_type`
-    /// (DWARF 4 5.2). `None` qualifies `void`.
+    /// `DW_TAG_const_type` / `_volatile_type` / `_restrict_type` (DWARF 4
+    /// 5.2).
     Qualified { qual: Qual, inner: Option<TypeId> },
-    /// `DW_TAG_unspecified_type` (DWARF 4 5.2): a type this emitter
-    /// cannot describe. A member keeps its name and offset and the
-    /// description reports the type as unknown rather than naming a
-    /// different one.
+    /// `DW_TAG_unspecified_type` (DWARF 4 5.2): a type this emitter cannot
+    /// describe.
     Unspecified,
 }
 
-/// A C99 6.7.3 type qualifier, which DWARF describes with a wrapper
-/// DIE rather than an attribute.
+/// A C99 6.7.3 type qualifier, which DWARF describes with a wrapper DIE
+/// rather than an attribute.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Qual {
     Const,
@@ -1563,23 +1366,20 @@ struct Quals {
     restrict: bool,
 }
 
-/// A declaration's spelling resolved for the type catalog: the alias
-/// name to emit and the qualifiers at each of the two levels the
-/// declaration distinguishes.
+/// A declaration's spelling resolved for the type catalog: the alias name
+/// to emit and the qualifiers at each of the two levels the declaration
+/// distinguishes.
 #[derive(Clone, Copy, Default)]
 struct Spelled<'a> {
     typedef: Option<&'a str>,
-    /// Qualifiers on the base type -- the pointee's, under a pointer
-    /// declarator.
     base: Quals,
-    /// Qualifiers on the declared object itself.
     outer: Quals,
 }
 
 impl<'a> Spelled<'a> {
-    /// `volatile` rides the type tag rather than [`DeclSpelling`], and
-    /// its inner marker answers the same base-vs-object question the
-    /// two `const` carriers do (C99 6.7.5.1p1).
+    /// `volatile` rides the type tag rather than [`DeclSpelling`], and its
+    /// inner marker answers the same base-vs-object question the two
+    /// `const` carriers do (C99 6.7.5.1p1).
     fn of(tag: i64, spelling: DeclSpelling, typedef: Option<&'a str>) -> Self {
         use crate::c5::compiler::types::{is_volatile_object_ty, is_volatile_ty};
         let volatile_object = is_volatile_object_ty(tag);
@@ -1601,13 +1401,10 @@ impl<'a> Spelled<'a> {
 }
 
 /// One DIE (with its children) as bytes, plus the byte offsets of its
-/// `DW_FORM_ref4` slots and the type each names. The layout pass
-/// resolves the slots once every DIE's size is known.
+/// `DW_FORM_ref4` slots and the type each names.
 struct DieBuf {
     bytes: Vec<u8>,
     refs: Vec<(usize, TypeId)>,
-    /// `DW_FORM_strp` slots: DIE-relative offset paired with the pool
-    /// offset. Held until the layout pass fixes the DIE's position.
     strs: Vec<(usize, u32)>,
 }
 
@@ -1633,20 +1430,14 @@ impl DieBuf {
     }
 }
 
-/// Interned type DIEs for one compilation unit. Interning is
-/// structural, so `int *` on ten members shares one DIE.
+/// Interned type DIEs for one compilation unit.
 struct TypeCatalog<'a> {
     structs: &'a [StructDef],
-    /// The unit's symbol table, which `DeclSpelling::typedef` indexes
-    /// for the alias name.
     symbols: &'a [crate::c5::symbol::Symbol],
     target: super::Target,
-    /// The object's address width, from its ELF class. Sizes every
-    /// pointer DIE and, off Windows, the `long` base type.
     addr_bytes: u8,
     nodes: Vec<TypeNode>,
     index: BTreeMap<TypeNode, TypeId>,
-    /// Aggregates interned but whose members have not been walked.
     pending: Vec<usize>,
 }
 
@@ -1698,10 +1489,8 @@ impl<'a> TypeCatalog<'a> {
         cur
     }
 
-    /// Walk the members of every aggregate interned so far, which
-    /// interns the types they reach. Runs to fixpoint; a cycle
-    /// terminates because an aggregate is queued only when its DIE is
-    /// first interned.
+    /// Walk the members of every aggregate interned so far, which interns
+    /// the types they reach.
     fn drain(&mut self) {
         while let Some(id) = self.pending.pop() {
             let structs = self.structs;
@@ -1719,8 +1508,8 @@ impl<'a> TypeCatalog<'a> {
         }
     }
 
-    /// The DIE for the key's base type, before the declarator's
-    /// pointer levels. `None` is `void`, which has no DIE.
+    /// The DIE for the key's base type, before the declarator's pointer
+    /// levels.
     fn of_key_base(&mut self, key: TypeKey) -> Option<TypeId> {
         match key {
             TypeKey::Scalar { leaf, .. } => {
@@ -1738,9 +1527,8 @@ impl<'a> TypeCatalog<'a> {
         }
     }
 
-    /// Wrap `inner` in one `DW_TAG_*_type` DIE per qualifier present,
-    /// in the order C99 6.7.3 gives them no significance and gcc
-    /// emits them.
+    /// Wrap `inner` in one `DW_TAG_*_type` DIE per qualifier present, in
+    /// the order C99 6.7.3 gives them no significance and gcc emits them.
     fn qualify(&mut self, inner: Option<TypeId>, q: Quals) -> Option<TypeId> {
         let mut cur = inner;
         for (present, qual) in [
@@ -1757,8 +1545,7 @@ impl<'a> TypeCatalog<'a> {
 
     /// The DIE for a declared type: the base as spelled, then the
     /// declarator's pointer levels, then the qualifiers on the object
-    /// itself. A `void` base with no qualifier and no typedef has no
-    /// DIE, so the shallowest pointer over it is the untyped `void *`.
+    /// itself.
     fn of_key_spelled(&mut self, key: TypeKey, sp: Spelled) -> TypeId {
         let depth = key.depth();
         let mut cur = self.of_key_base(key);
@@ -1773,7 +1560,6 @@ impl<'a> TypeCatalog<'a> {
             cur = Some(self.intern(TypeNode::Pointer(cur)));
         }
         cur = self.qualify(cur, sp.outer);
-        // Only a bare `void` value type reaches here as `None`.
         cur.unwrap_or_else(|| self.unspecified())
     }
 
@@ -1789,9 +1575,9 @@ impl<'a> TypeCatalog<'a> {
     }
 
     /// The alias name `spelling` names, unless the typedef is an array
-    /// type: an array typedef names the array rather than its element,
-    /// and the declaration cannot say which of the two the dimensions
-    /// on it came from. Naming nothing is the honest answer there.
+    /// type: an array typedef names the array rather than its element, and
+    /// the declaration cannot say which of the two the dimensions on it
+    /// came from.
     fn typedef_name(&self, spelling: DeclSpelling) -> Option<&'a str> {
         let sym = self.symbols.get(spelling.typedef? as usize)?;
         if sym.array_size != 0 || sym.name.is_empty() {
@@ -1800,8 +1586,8 @@ impl<'a> TypeCatalog<'a> {
         Some(&sym.name)
     }
 
-    /// The declared type of an object or member: its tag decomposed,
-    /// then `spelling` and the tag's own volatile markers applied.
+    /// The declared type of an object or member: its tag decomposed, then
+    /// `spelling` and the tag's own volatile markers applied.
     fn of_declared(&mut self, tag: i64, spelling: DeclSpelling) -> TypeId {
         let Some(key) = decompose_pointer_chain(tag) else {
             return self.unspecified();
@@ -1815,9 +1601,6 @@ impl<'a> TypeCatalog<'a> {
         let Some(sd) = structs.get(id) else {
             return self.unspecified();
         };
-        // The pointer-to-array carrier is an array type, not an
-        // aggregate: it exists only to give `T (*)[N]` a type id and
-        // holds one array field of the element type.
         if sd.is_array && sd.fields.len() == 1 {
             let f = &sd.fields[0];
             let elem = self.of_tag(f.ty);
@@ -1836,9 +1619,9 @@ impl<'a> TypeCatalog<'a> {
         tid
     }
 
-    /// The type of an aggregate member: a function pointer resolves
-    /// through its own `DW_TAG_subroutine_type`, an array member
-    /// through a `DW_TAG_array_type` over the element type.
+    /// The type of an aggregate member: a function pointer resolves through
+    /// its own `DW_TAG_subroutine_type`, an array member through a
+    /// `DW_TAG_array_type` over the element type.
     fn of_field(&mut self, f: &StructField) -> TypeId {
         let base = if f.fn_ptr_indirection >= 1 {
             self.of_function_pointer(
@@ -1881,8 +1664,7 @@ impl<'a> TypeCatalog<'a> {
     }
 
     /// The return type of a function definition, from the `Token::Fun`
-    /// symbol's `type_`. `None` is a void-returning function, which
-    /// DWARF 4 3.3.2 describes by the absence of `DW_AT_type`.
+    /// symbol's `type_`.
     fn of_return(&mut self, tag: i64, spelling: DeclSpelling) -> Option<TypeId> {
         match decompose_pointer_chain(tag) {
             Some(k) if k.is_void_value() => None,
@@ -1891,9 +1673,7 @@ impl<'a> TypeCatalog<'a> {
         }
     }
 
-    /// The type of a local or parameter. C99 6.7.5.3p7 decays a
-    /// parameter array to a pointer, so only a true local contributes
-    /// an array type.
+    /// The type of a local or parameter.
     fn of_variable(&mut self, v: &super::super::program::VariableInfo) -> TypeId {
         let base = if v.fn_ptr_indirection >= 1 {
             self.of_function_pointer(
@@ -1917,10 +1697,7 @@ impl<'a> TypeCatalog<'a> {
         }
     }
 
-    /// A function pointer. `indirection` counts the `*` levels the
-    /// declarator put over the function type, and `tag` carries the
-    /// return type under exactly that many pointer levels, so peeling
-    /// them names the return type.
+    /// A function pointer.
     fn of_function_pointer(
         &mut self,
         tag: i64,
@@ -1935,13 +1712,9 @@ impl<'a> TypeCatalog<'a> {
         };
         let ret = match key.peel(depth) {
             None => Some(self.unspecified()),
-            // DWARF 4 5.7: a void-returning subroutine type has no
-            // DW_AT_type.
             Some(k) if k.is_void_value() => None,
             Some(k) => Some(self.of_key(k)),
         };
-        // A `(void)` prototype is an empty parameter list, not one
-        // parameter of type void (C99 6.7.5.3p10).
         let params: Vec<TypeId> = param_tags
             .iter()
             .copied()
@@ -1954,8 +1727,8 @@ impl<'a> TypeCatalog<'a> {
             variadic,
         });
         // A function-pointer typedef names the pointer type as a whole
-        // (`typedef int (*fn_t)(int)`), so the alias sits over the
-        // finished chain rather than over the return type.
+        // (`typedef int (*fn_t)(int)`), so the alias sits over the finished
+        // chain rather than over the return type.
         let mut cur = Some(self.pointer_chain(fn_ty, depth));
         if let Some(name) = self.typedef_name(spelling) {
             cur = Some(self.intern(TypeNode::Typedef {
@@ -1973,24 +1746,17 @@ impl<'a> TypeCatalog<'a> {
     }
 }
 
-/// One child of an aggregate's DIE. C11 6.7.2.1p13 promotes an
-/// anonymous struct's or union's members into the enclosing
-/// aggregate's namespace; the registry keeps them flattened, and the
-/// description restores the unnamed member whose type is the
-/// anonymous aggregate.
+/// One child of an aggregate's DIE.
 enum MemberPlan {
     /// Index into `StructDef::fields`.
     Field(usize),
-    /// Registry id of the anonymous aggregate and its byte offset in
-    /// the enclosing one.
+    /// Registry id of the anonymous aggregate and its byte offset in the
+    /// enclosing one.
     Anonymous { id: usize, offset: usize },
 }
 
-/// The anonymous aggregate whose promotion produced `f`, or `None` for
-/// a field the source declared directly. A field promoted through
-/// nested anonymous aggregates carries one group id per tag kind; the
-/// enclosing one is then the aggregate whose own field list carries
-/// the other, since the inner one cannot contain its own ancestor.
+/// The anonymous aggregate whose promotion produced `f`, or `None` for a
+/// field the source declared directly.
 fn anon_group_of(structs: &[StructDef], f: &StructField) -> Option<usize> {
     match (f.anon_union_group as usize, f.anon_struct_group as usize) {
         (0, 0) => None,
@@ -2005,13 +1771,7 @@ fn anon_group_of(structs: &[StructDef], f: &StructField) -> Option<usize> {
     }
 }
 
-/// The children of `sd`'s DIE in declaration order. A run of fields
-/// promoted from one anonymous aggregate collapses into a single
-/// unnamed member when the run reproduces that aggregate's own field
-/// list at a constant displacement. It does not when the enclosing
-/// aggregate re-laid the promoted members (`packed` over an anonymous
-/// struct); the fields stay flat there, because nesting them would
-/// describe offsets the layout does not have.
+/// The children of `sd`'s DIE in declaration order.
 fn member_plan(structs: &[StructDef], sd: &StructDef) -> Vec<MemberPlan> {
     let mut out = Vec::new();
     let mut i = 0;
@@ -2051,11 +1811,8 @@ fn anon_run_offset(sd: &StructDef, at: usize, inner: &StructDef) -> Option<usize
     placed.then_some(base)
 }
 
-/// The dimension list of an array declarator, outermost first, empty
-/// when the declarator is not an array. A negative entry is an
-/// unspecified bound: c5 records the C99 6.7.2.1p16 flexible array
-/// member, the GNU zero-length form and a variable-length array all as
-/// a negative count.
+/// The dimension list of an array declarator, outermost first, empty when
+/// the declarator is not an array.
 fn array_dims(count: i64, dims: &[i64]) -> Vec<i64> {
     if count == 0 {
         return Vec::new();
@@ -2063,9 +1820,9 @@ fn array_dims(count: i64, dims: &[i64]) -> Vec<i64> {
     if count < 0 {
         return alloc::vec![-1];
     }
-    // `dims` also carries shapes whose entries are not a plain
-    // dimension list (the redundant-paren form prepends a sentinel), so
-    // it is used only when it accounts for the recorded element count.
+    // `dims` also carries shapes whose entries are not a plain dimension
+    // list (the redundant-paren form prepends a sentinel), so it is used
+    // only when it accounts for the recorded element count.
     if !dims.is_empty() && dims.iter().all(|&d| d > 0) && dims.iter().product::<i64>() == count {
         return dims.to_vec();
     }
@@ -2077,7 +1834,6 @@ fn build_type_die(catalog: &mut TypeCatalog, node: &TypeNode, strs: &mut StrPool
     let mut die = DieBuf::new();
     match node {
         TypeNode::Base(leaf) => {
-            // Every interned Base was checked to have a description.
             let Some(base) = base_key_for_leaf(*leaf, catalog.target, catalog.addr_bytes) else {
                 write_uleb128(&mut die.bytes, ABBREV_UNSPECIFIED_TYPE);
                 return die;
@@ -2138,11 +1894,6 @@ fn build_type_die(catalog: &mut TypeCatalog, node: &TypeNode, strs: &mut StrPool
                 let f = &sd.fields[i];
                 let field_type = catalog.of_field(f);
                 if f.bit_width > 0 {
-                    // DWARF 4 5.6.6: DW_AT_data_bit_offset is the
-                    // absolute bit offset from the start of the
-                    // aggregate. c5 stores `offset` as the byte offset
-                    // of the storage unit and `bit_offset` as the bit
-                    // offset within it.
                     let data_bit_offset = (f.offset as u64) * 8 + f.bit_offset as u64;
                     write_uleb128(&mut die.bytes, ABBREV_BITFIELD_MEMBER);
                     die.push_str(strs, &f.name);
@@ -2222,14 +1973,7 @@ fn build_type_die(catalog: &mut TypeCatalog, node: &TypeNode, strs: &mut StrPool
     die
 }
 
-/// c5's frame-slot index to native byte offset from the frame
-/// pointer. Mirror of the amalg-path DWARF emitter: locals
-/// (slot < 0) stride by 8 bytes; parameters (slot >= 2) stride
-/// by 16 bytes starting at `(slot - 1) * 16` so slot 2 lands at
-/// +16. Slots 0..2 are the saved-fp / saved-ret area and don't
-/// carry user-visible values. `canary_shift` is the stack-protector
-/// region a protected frame reserves below the frame base; every local
-/// slot sits that much lower, and the parameter cells above it do not.
+/// c5's frame-slot index to native byte offset from the frame pointer.
 fn fp_byte_offset_for_slot(slot: i64, canary_shift: i64) -> i64 {
     if slot >= 2 {
         (slot - 1) * 16
@@ -2238,10 +1982,8 @@ fn fp_byte_offset_for_slot(slot: i64, canary_shift: i64) -> i64 {
     }
 }
 
-/// A type-catalog key: either a scalar leaf with pointer depth,
-/// or a struct/union with id + pointer depth. The unsigned bit
-/// stays bundled into the scalar leaf so signed / unsigned
-/// variants get distinct entries.
+/// A type-catalog key: either a scalar leaf with pointer depth, or a
+/// struct/union with id + pointer depth.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum TypeKey {
     Scalar { leaf: i64, depth: u8 },
@@ -2256,8 +1998,8 @@ impl TypeKey {
         }
     }
 
-    /// The same type with `n` pointer levels removed, or `None` when
-    /// it does not have that many.
+    /// The same type with `n` pointer levels removed, or `None` when it
+    /// does not have that many.
     fn peel(self, n: u8) -> Option<TypeKey> {
         match self {
             TypeKey::Scalar { leaf, depth } => depth
@@ -2269,22 +2011,15 @@ impl TypeKey {
         }
     }
 
-    /// True for the scalar `void` value type, which DWARF describes by
-    /// the absence of a `DW_AT_type` rather than by a DIE.
+    /// True for the scalar `void` value type, which DWARF describes by the
+    /// absence of a `DW_AT_type` rather than by a DIE.
     fn is_void_value(self) -> bool {
         matches!(self, TypeKey::Scalar { leaf, depth: 0 }
             if crate::c5::compiler::types::is_void_ty(leaf))
     }
 }
 
-/// Split a c5 type tag into its catalog key. Mirror of the
-/// amalg-path `classify` band layout: each non-integer scalar
-/// type occupies a 100-wide band; pointer depth is encoded as
-/// `bare_band_offset / Ty::Ptr`. The integer family shares the
-/// `[0, 100)` band with even values for char and odd values for
-/// int. Struct / union types live in the `[STRUCT_BASE,
-/// STRUCT_BASE + N*STRUCT_STRIDE)` range with one band per
-/// struct id.
+/// Split a c5 type tag into its catalog key.
 fn decompose_pointer_chain(type_tag: i64) -> Option<TypeKey> {
     use crate::c5::compiler::types::{UNSIGNED_BIT, VOID_BIT};
     const TY_PTR: i64 = Ty::Ptr as i64;
@@ -2296,9 +2031,6 @@ fn decompose_pointer_chain(type_tag: i64) -> Option<TypeKey> {
     if bare < 0 {
         return None;
     }
-    // Struct / union band: identify the struct id by dividing
-    // the band offset by the stride. Pointer depth is the
-    // intra-band remainder over Ty::Ptr.
     if bare >= STRUCT_BASE {
         let band_off = bare - STRUCT_BASE;
         let id = (band_off / STRUCT_STRIDE) as usize;
@@ -2337,16 +2069,14 @@ fn decompose_pointer_chain(type_tag: i64) -> Option<TypeKey> {
     } else {
         return None;
     };
-    // The unsigned and void markers ride the leaf so `unsigned char`
-    // and `char` get distinct DIEs and `void *` stays distinguishable
-    // from `unsigned char *`.
+    // The unsigned and void markers ride the leaf so `unsigned char` and
+    // `char` get distinct DIEs and `void *` stays distinguishable from
+    // `unsigned char *`.
     let leaf = if unsigned { leaf | UNSIGNED_BIT } else { leaf } | (type_tag & VOID_BIT);
     Some(TypeKey::Scalar { leaf, depth })
 }
 
-/// Wide-format string for callers needing a writable view of
-/// `source_path`. Keeps the lifetime away from the call sites
-/// that mutate `program`.
+/// Wide-format string for callers needing a writable view of `source_path`.
 #[allow(dead_code)]
 pub(crate) fn source_path_or_default(p: &Program) -> String {
     if p.source_path.is_empty() {
@@ -2359,11 +2089,6 @@ pub(crate) fn source_path_or_default(p: &Program) -> String {
 #[cfg(test)]
 mod abbrev_golden {
     /// Byte-stability lock for the ET_REL `.debug_abbrev` table.
-    /// `build_debug_info` references each abbreviation by code and
-    /// supplies its attribute values in the order declared here, so
-    /// an accidental edit to a code, tag, or attribute silently
-    /// desyncs the two emitters. Any intentional change must update
-    /// this golden after re-checking the info emitter.
     #[test]
     fn build_debug_abbrev_is_byte_stable() {
         let hex: alloc::string::String = super::build_debug_abbrev()
@@ -2404,8 +2129,8 @@ mod str_pool {
         assert_eq!(pool.into_bytes(), alloc::vec![0u8]);
     }
 
-    /// Offsets run past each string's terminator, and a repeat of a
-    /// string already in the pool returns the first copy's offset.
+    /// Offsets run past each string's terminator, and a repeat of a string
+    /// already in the pool returns the first copy's offset.
     #[test]
     fn offsets_advance_and_repeats_share_one_copy() {
         let mut pool = StrPool::new();
@@ -2431,8 +2156,8 @@ mod str_pool {
         assert_eq!(pool.into_bytes(), b"\0counter\0nter\0");
     }
 
-    /// Every name in a unit's `.debug_info` is a 4-byte slot bound to
-    /// the pool by a reloc whose addend is the string's offset.
+    /// Every name in a unit's `.debug_info` is a 4-byte slot bound to the
+    /// pool by a reloc whose addend is the string's offset.
     #[test]
     fn strp_slot_is_four_zero_bytes_plus_a_reloc() {
         let mut out: Vec<u8> = alloc::vec![0xaa];
@@ -2454,8 +2179,8 @@ mod str_pool {
 mod address_width {
     use super::*;
 
-    /// The `DW_AT_byte_size` a pointer DIE for `int *` carries, and the
-    /// one the `long` base type carries, for an object of `class`.
+    /// The `DW_AT_byte_size` a pointer DIE for `int *` carries, and the one
+    /// the `long` base type carries, for an object of `class`.
     fn widths(target: super::super::Target, class: ElfClass) -> (u8, u8) {
         let structs: [StructDef; 0] = [];
         let symbols: [crate::c5::symbol::Symbol; 0] = [];
@@ -2468,14 +2193,12 @@ mod address_width {
         let node = catalog.node(int_ptr).clone();
         assert!(matches!(node, TypeNode::Pointer(Some(_))));
         let die = build_type_die(&mut catalog, &node, &mut StrPool::new());
-        // ABBREV_POINTER_TYPE is a one-byte code, then DW_AT_byte_size.
         let long = base_key_for_leaf(Ty::Long as i64, target, addr_bytes).expect("long base type");
         (die.bytes[1], long.byte_size)
     }
 
     /// A pointer DIE is as wide as the object's addresses, not
-    /// unconditionally 8. `long` follows the same width except under
-    /// LLP64, which fixes it at 4.
+    /// unconditionally 8.
     #[test]
     fn pointer_and_long_follow_the_objects_elf_class() {
         use super::super::Target;

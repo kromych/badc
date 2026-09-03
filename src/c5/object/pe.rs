@@ -1,68 +1,6 @@
-//! Windows PE32+ writer for x86_64 executables.
-//!
-//! Takes a [`Build`] from the x86_64 lowering and packages it as a
-//! console-subsystem PE binary that runs on Windows (and under WINE
-//! on macOS / Linux). Sibling of `elf.rs` (Linux) and `mach_o.rs`
-//! (macOS): the lowering is platform-agnostic, only the writer
-//! differs.
-//!
-//! ## Layout
-//!
-//! ```text
-//!   file                                                   memory (RVA from ImageBase)
-//!   ----------------------------------------------------------------------------------
-//!   0x000   DOS header (64 bytes)                          0x000   (headers)
-//!           DOS stub (zero-padded, 64 bytes)
-//!   0x080   PE signature "PE\0\0" (4 bytes)
-//!   0x084   COFF header (20 bytes)
-//!   0x098   Optional64 header + 16 data directories (240)
-//!   0x188   Section table: 3 * 40 bytes
-//!   0x200   .text: entry stub + build.text                 0x1000  (R-X)
-//!           .idata: import descriptors + IAT + names       0x?000  (RW-)
-//!           .data: build.data                              0x?000  (RW-)
-//! ```
-//!
-//! ## Imports
-//!
-//! Two DLLs: `msvcrt.dll` (libc shapes) and `kernel32.dll`
-//! (`VirtualProtect` for `mprotect`, `LoadLibraryA` / `GetProcAddress`
-//! / `FreeLibrary` for `dlopen` / `dlsym` / `dlclose`, plus the
-//! entry stub's `ExitProcess`). The codegen's `call qword
-//! ptr [rip+disp32]` shape is unchanged from the Linux backend --
-//! the writer just patches `disp32` to point at an IAT slot rather
-//! than a `.got` slot.
-//!
-//! ## Entry stub
-//!
-//! Windows hands control to the entry point with `rsp` 16-aligned
-//! and the OS-pushed return address on top, so the stub looks like
-//! a normal function prologue. We fetch argc / argv via msvcrt's
-//! `__p___argc` / `__p___argv` (each returns a pointer to its
-//! respective global), call the program's `main` with those values
-//! in `rcx` / `rdx`, then route the result through `ExitProcess`
-//! so the CRT atexit chain runs (without it printf to a pipe loses
-//! its tail line because msvcrt block-buffers non-tty stdout).
-//!
-//! ## POSIX-to-DLL binding
-//!
-//! Most c5 intrinsic ops map straight onto a msvcrt or kernel32
-//! export. Two corners worth flagging:
-//!
-//! * `setenv(name, value, overwrite)` binds to msvcrt's
-//!   `_putenv_s(name, value)`. The 3rd arg lands in `r8` per
-//!   Win64 calling convention; `_putenv_s` ignores it. The
-//!   semantics differ when `overwrite == 0`, but most c5 callers
-//!   pass `overwrite = 1` and don't notice.
-//! * `dlerror()` binds to kernel32's `GetLastError`. Both return
-//!   zero when there's no pending error; a c5 program that
-//!   *prints* `dlerror()` would see garbage on Windows, but the
-//!   common `if (dlerror()) { ... }` shape works.
-//! * `mprotect(addr, len, prot)` is not currently supported on
-//!   Windows; the binding goes to `VirtualProtect`, but the
-//!   calling convention mismatch (Windows takes a 4th `OldProt`
-//!   out-pointer the c5 program doesn't provide) makes it unsafe
-//!   to invoke. Programs that don't call `mprotect` are
-//!   unaffected.
+//! PE32+ image writer for Windows x86_64 and aarch64: the headers, the
+//! section table and the directories the loader reads -- imports,
+//! exports, base relocations, exception data and the TLS directory.
 
 use alloc::format;
 use alloc::string::String;
@@ -77,10 +15,6 @@ use super::{AddrPart, Build, DataRegion, Machine, data_region_addr, image};
 use crate::c5::layout::{round_up, write_struct};
 use crate::c5::program::Program;
 
-// ----------------------------------------------------------------
-// PE constants. Names mirror `winnt.h` so cross-checking is easy.
-// ----------------------------------------------------------------
-
 const IMAGE_BASE: u64 = 0x1_4000_0000;
 const SECTION_ALIGNMENT: u32 = 0x1000;
 const FILE_ALIGNMENT: u32 = 0x200;
@@ -88,13 +22,6 @@ const FILE_ALIGNMENT: u32 = 0x200;
 const IMAGE_FILE_MACHINE_AMD64: u16 = 0x8664;
 const IMAGE_FILE_MACHINE_ARM64: u16 = 0xAA64;
 const IMAGE_FILE_EXECUTABLE_IMAGE: u16 = 0x0002;
-/// `IMAGE_FILE_DLL` -- the COFF characteristic that tells
-/// Windows the image is a dynamic-link library, not an
-/// executable. Set when `OutputKind::SharedLibrary` is in
-/// effect; combined with the `Export Directory` data
-/// directory entry, this is enough for `LoadLibraryA` /
-/// `GetProcAddress` to resolve `#pragma export(<name>)`
-/// symbols.
 const IMAGE_FILE_DLL: u16 = 0x2000;
 const IMAGE_FILE_LARGE_ADDRESS_AWARE: u16 = 0x0020;
 
@@ -107,12 +34,9 @@ const IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER: u16 = 11;
 const IMAGE_SUBSYSTEM_EFI_RUNTIME_DRIVER: u16 = 12;
 const IMAGE_SUBSYSTEM_EFI_ROM: u16 = 13;
 
-/// Subsystems whose loader invokes the entry point directly:
-/// NT hands `NtProcessStartup` a PEB pointer; UEFI hands the entry
-/// `(EFI_HANDLE, EFI_SYSTEM_TABLE *)`. For these the writer
-/// suppresses the CRT-flavoured stub; `AddressOfEntryPoint` points
-/// at the user's entry function inside `build.text` and no
-/// `msvcrt!__getmainargs` / `msvcrt!exit` imports are added.
+/// Subsystems whose loader invokes the entry point directly: NT hands
+/// `NtProcessStartup` a PEB pointer; UEFI hands the entry `(EFI_HANDLE,
+/// EFI_SYSTEM_TABLE *)`.
 fn subsystem_uses_passthrough_entry(subsystem: u16) -> bool {
     matches!(
         subsystem,
@@ -128,86 +52,27 @@ const IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE: u16 = 0x0040;
 const IMAGE_DLLCHARACTERISTICS_NX_COMPAT: u16 = 0x0100;
 const IMAGE_DLLCHARACTERISTICS_NO_SEH: u16 = 0x0400;
 
-/// COFF storage classes (`IMAGE_SYMBOL.StorageClass`).
-/// uses `IMAGE_SYM_CLASS_EXTERNAL` for the per-trampoline names
-/// so debuggers (`gdb`, `lldb`, `windbg`) resolve `b malloc`
-/// against the local trampoline rather than chasing it through
-/// msvcrt's dispatcher tables. `IMAGE_SYM_CLASS_STATIC` would
-/// be the file-local equivalent but tools tend to filter it out
-/// of name lookups.
 const IMAGE_SYM_CLASS_EXTERNAL: u8 = 2;
-/// Function-typed symbol -- `IMAGE_SYMBOL.Type` high byte set to
-/// `DT_FUNCTION` (0x20). Tells consumers the value is a code
-/// address.
 const IMAGE_SYM_TYPE_FUNCTION: u16 = 0x20;
-/// Each `IMAGE_SYMBOL` is exactly 18 bytes (8-byte name + 4-byte
-/// value + 2-byte section number + 2-byte type + 1-byte storage
-/// class + 1-byte aux count). Hard-coded as a const so callers
-/// can pre-size the symbol-table buffer.
 const IMAGE_SYMBOL_SIZE: u32 = 18;
 
 const IMAGE_SCN_CNT_CODE: u32 = 0x0000_0020;
 const IMAGE_SCN_CNT_INITIALIZED_DATA: u32 = 0x0000_0040;
 const IMAGE_SCN_CNT_UNINITIALIZED_DATA: u32 = 0x0000_0080;
-/// `IMAGE_SCN_MEM_DISCARDABLE` -- the loader may unmap the
-/// section after consuming its contents. Used for `.reloc`,
-/// which the loader walks once at load time and never reads
-/// again.
 const IMAGE_SCN_MEM_DISCARDABLE: u32 = 0x0200_0000;
 const IMAGE_SCN_MEM_EXECUTE: u32 = 0x2000_0000;
 const IMAGE_SCN_MEM_READ: u32 = 0x4000_0000;
 const IMAGE_SCN_MEM_WRITE: u32 = 0x8000_0000;
 
-/// `IMAGE_REL_BASED_DIR64` -- 64-bit absolute address relocation
-/// type, encoded in the high 4 bits of each `.reloc` u16 entry.
-/// The loader subtracts `ImageBase`, adds the actual load
-/// address, and writes the result back. Used for the three
-/// absolute VAs in `IMAGE_TLS_DIRECTORY64`
-/// (`StartAddressOfRawData`, `EndAddressOfRawData`,
-/// `AddressOfIndex`) so DYNAMIC_BASE / HIGH_ENTROPY_VA can stay
-/// on for TLS-using images.
 const IMAGE_REL_BASED_DIR64: u16 = 10 << 12;
-/// `IMAGE_REL_BASED_HIGHLOW` (type = 3). The 32-bit counterpart of
-/// `IMAGE_REL_BASED_DIR64`: the loader applies the whole delta to a
-/// 32-bit field, which holds only while the image's addresses fit 32
-/// bits. A field the value overflows is reported instead.
 const IMAGE_REL_BASED_HIGHLOW: u16 = 3 << 12;
-/// `IMAGE_REL_BASED_ABSOLUTE` (type = 0). A no-op entry whose
-/// only purpose is to pad each `.reloc` block to a 4-byte
-/// boundary, since `SizeOfBlock` must be a multiple of 4.
 const IMAGE_REL_BASED_ABSOLUTE: u16 = 0;
 
 const NUM_DATA_DIRS: u32 = 16;
 
-/// Section layout: every emitted PE carries `.text`, `.pdata`,
-/// `.idata`, and `.rdata` (read-only data prefix + switch tables +
-/// producer fingerprint; the fingerprint keeps it non-empty). The
-/// optional `.data` only appears when the c5 program has writable
-/// initialized, zero-fill, or `_Thread_local` storage -- real
-/// Windows kernels reject images that list a zero-sized
-/// section. The optional `.reloc` appears when the image holds
-/// any absolute VA the ASLR-aware loader must fix up after
-/// sliding: the three `IMAGE_TLS_DIRECTORY64` pointer fields
-/// (when the program declares a `_Thread_local` global) and any
-/// absolute pointer baked by an address-of-static data or code
-/// relocation. Each merged C-identifier-named section adds one more,
-/// between `.data` and `.reloc`.
-///
-/// `.pdata` is the Exception Directory, mandatory under the
-/// 64-bit Windows ABI: the loader looks up `RUNTIME_FUNCTION`
-/// entries there to handle stack unwinding, and wine refuses
-/// to load AArch64 PEs that omit it. x86_64 doesn't fail to
-/// load without one, but the spec requires it and stricter
-/// hosts can reject a missing entry, so we emit it on both
-/// arches.
-///
-/// `.reloc` is omitted only when the image holds no absolute
-/// pointer: most cross-section references are RIP-relative
-/// (x86_64) or PC-relative (aarch64 ADRP+ADD), and a
-/// DYNAMIC_BASE-flagged image slides freely without touching
-/// them. Absolute VAs live in the TLS directory and in
-/// address-of-static initializers, so `.reloc` follows their
-/// presence.
+/// Section layout: every emitted PE carries `.text`, `.pdata`, `.idata`,
+/// and `.rdata` (read-only data prefix + switch tables + producer
+/// fingerprint; the fingerprint keeps it non-empty).
 #[derive(Default)]
 struct SectionPlan {
     rdata: bool,
@@ -215,7 +80,6 @@ struct SectionPlan {
     reloc: bool,
     edata: bool,
     dwarf: usize,
-    /// Named sections carrying their own header.
     named: usize,
 }
 
@@ -242,17 +106,14 @@ enum NamedFamily {
     Bss,
 }
 
-/// A named section given a header of its own: it leaves its family's
-/// region and takes a SectionAlignment-aligned slot past `.data`.
+/// A named section given a header of its own: it leaves its family's region
+/// and takes a SectionAlignment-aligned slot past `.data`.
 struct NamedOut<'a> {
     name: &'a str,
     family: NamedFamily,
-    /// First byte's offset in the merged data stream, or in the
-    /// zero-fill region when the family is `Bss`.
     start: u32,
     size: u32,
     rva: u32,
-    /// Zero for a zero-fill section, which has no file bytes.
     file_off: u32,
     raw_size: u32,
 }
@@ -263,9 +124,8 @@ const COFF_HEADER_SIZE: usize = 20;
 const OPTIONAL64_HEADER_SIZE: usize = 240;
 const SECTION_HEADER_SIZE: usize = 40;
 
-/// Raw on-disk size of the PE headers (DOS + PE sig + COFF +
-/// Optional + section table), rounded up to FILE_ALIGNMENT.
-/// 3 sections fit in 0x200; 4 sections need 0x400.
+/// Raw on-disk size of the PE headers (DOS + PE sig + COFF + Optional +
+/// section table), rounded up to FILE_ALIGNMENT.
 fn headers_raw_size(plan: &SectionPlan) -> usize {
     let unaligned = DOS_HEADER_AND_STUB
         + PE_SIG_SIZE
@@ -278,54 +138,27 @@ fn headers_raw_size(plan: &SectionPlan) -> usize {
 const IMAGE_IMPORT_DESCRIPTOR_SIZE: usize = 20;
 const IAT_ENTRY_SIZE: usize = 8;
 
-/// Export Directory (data directory entry 0) -- the
-/// `IMAGE_EXPORT_DIRECTORY` describing each `#pragma export`
-/// function. `LoadLibraryA` / `GetProcAddress` walks this to
-/// resolve external names.
 const DATA_DIRECTORY_EXPORT: usize = 0;
 const DATA_DIRECTORY_IMPORT: usize = 1;
 const DATA_DIRECTORY_EXCEPTION: usize = 3;
 const DATA_DIRECTORY_BASERELOC: usize = 5;
-/// TLS Directory (entry 9) -- the loader walks this to allocate
-/// per-thread TLS at thread creation, copy `.tdata`, zero-fill
-/// `.tbss`, and write the chosen index back into the
-/// `_tls_index` slot. The directory itself is a 40-byte
-/// `IMAGE_TLS_DIRECTORY64` we put inside `.data`.
 const DATA_DIRECTORY_TLS: usize = 9;
 const DATA_DIRECTORY_IAT: usize = 12;
 
-/// Size of `IMAGE_TLS_DIRECTORY64` in bytes (PE32+ form).
-/// Layout: 4 u64 VAs + 2 u32 fields = 32 + 8 = 40 bytes.
 const IMAGE_TLS_DIRECTORY64_SIZE: u32 = 40;
 
-/// AArch64 RUNTIME_FUNCTION packed-unwind format limit: the
-/// FunctionLength field is 11 bits (units = 4-byte instructions),
-/// so a single packed entry covers at most 2047 instructions
-/// = 8188 bytes. The maximum representable field value is `0x7FF`
-/// (2047), not 2048 -- a 2048-instruction chunk encodes as
-/// `2048 & 0x7FF == 0`, which the OS loader reads as a zero-length
-/// function. Larger `.text` sections need multiple entries.
 const ARM64_PACKED_FUNCTION_MAX_BYTES: u32 = 2047 * 4;
 
-// ----------------------------------------------------------------
-// Entry adapter. The executable entry is a minimal per-arch shim that
-// loads the initial stack pointer + the image-base offset into the
-// first two argument registers and calls `__c5_entry`, defined in the
-// embedded startup runtime. `__c5_entry` runs process startup
-// (argc/argv via the CRT, then the entry, then `exit`), so the writer
-// references only this one name; the CRT / kernel32 imports ride the
-// runtime TU's `#pragma binding`.
-// ----------------------------------------------------------------
+// Entry
+// adapter. `__c5_entry` runs process startup (argc/argv via the CRT, then
+// the entry, then `exit`), so the writer references only this one name; the
+// CRT / kernel32 imports ride the runtime TU's `#pragma binding`.
 
 const RT_ENTRY: &str = "__c5_entry";
 
-// ----------------------------------------------------------------
-// Top-level writer.
-// ----------------------------------------------------------------
-
-/// One entry of the PE DWARF layout: the section name (`/<offset>`
-/// into the COFF string table for the full `.debug_*` name), the
-/// section's RVA and file offset, and the payload.
+/// One entry of the PE DWARF layout: the section name (`/<offset>` into the
+/// COFF string table for the full `.debug_*` name), the section's RVA and
+/// file offset, and the payload.
 struct DwarfPeSlot {
     name: [u8; 8],
     rva: u32,
@@ -333,8 +166,8 @@ struct DwarfPeSlot {
     bytes: Vec<u8>,
 }
 
-/// RVAs, file offsets and payloads of every section, settled before
-/// any byte is written.
+/// RVAs, file offsets and payloads of every section, settled before any
+/// byte is written.
 #[derive(Default)]
 struct PeLayout<'a> {
     ro_len: u32,
@@ -345,8 +178,8 @@ struct PeLayout<'a> {
     relro_head_len: u32,
     data_head_len: u32,
     bss_head: u32,
-    /// What `.rdata` keeps of the two read-only families once their
-    /// named runs move out.
+    /// What `.rdata` keeps of the two read-only families once their named
+    /// runs move out.
     rdata_prefix_len: u32,
     jt_base_in_rdata: u32,
     provenance: Vec<u8>,
@@ -377,8 +210,6 @@ struct PeLayout<'a> {
     rdata_file_off: u32,
     rdata_raw_size: u32,
     tls: TlsLayout,
-    /// File-backed content of `.data`; `data_vsize` adds the zero-init
-    /// `.bss` tail past it.
     data_size: u32,
     data_vsize: u32,
     data_rva: u32,
@@ -410,10 +241,9 @@ struct PeLayout<'a> {
     image_size: u32,
 }
 
-/// One PE image's writer. [`write`] runs the phases in order: the
-/// entry stub and the import list, the section layout, the `.text`
-/// bytes with every fixup applied, then the headers and each section
-/// body.
+/// One PE image's writer. [`write`] runs the phases in order: the entry
+/// stub and the import list, the section layout, the `.text` bytes with
+/// every fixup applied, then the headers and each section body.
 struct PeWriter<'a> {
     program: &'a Program,
     build: &'a Build,
@@ -425,10 +255,9 @@ struct PeWriter<'a> {
     stub: EntryStub,
     imports: Vec<(String, String)>,
     dlls: Vec<DllGroup>,
-    /// The stub occupies a span rounded up to the alignment
-    /// `build.text`'s own input sections claim; the section starts at
-    /// SECTION_ALIGNMENT, so the span places `build.text[0]` on that
-    /// alignment absolutely.
+    /// The stub occupies a span rounded up to the alignment `build.text`'s
+    /// own input sections claim; the section starts at SECTION_ALIGNMENT,
+    /// so the span places `build.text[0]` on that alignment absolutely.
     text_prologue_len: u32,
     layout: PeLayout<'a>,
     text_bytes: Vec<u8>,
@@ -461,8 +290,6 @@ impl<'a> PeWriter<'a> {
     ) -> Self {
         use crate::c5::preprocessor::Subsystem;
         let is_dll = build.output_kind == super::OutputKind::SharedLibrary;
-        // `Console` is the default for a program without
-        // `#pragma subsystem(...)`.
         let subsystem = match program.subsystem {
             Some(Subsystem::Windows) => IMAGE_SUBSYSTEM_WINDOWS_GUI,
             Some(Subsystem::Native) => IMAGE_SUBSYSTEM_NATIVE,
@@ -472,10 +299,6 @@ impl<'a> PeWriter<'a> {
             Some(Subsystem::EfiRom) => IMAGE_SUBSYSTEM_EFI_ROM,
             Some(Subsystem::Console) | None => IMAGE_SUBSYSTEM_WINDOWS_CUI,
         };
-        // The stub is suppressed for `--shared` output declaring its own
-        // `DllMain` (the loader calls the user's body directly) and for
-        // the NT-native and UEFI subsystems, whose loaders invoke the
-        // entry with a platform-native argument shape.
         let user_dllmain = is_dll && build.dllmain_pc.is_some();
         let passthrough_entry = subsystem_uses_passthrough_entry(subsystem) && !is_dll;
         let stub = if user_dllmain || passthrough_entry {
@@ -483,9 +306,9 @@ impl<'a> PeWriter<'a> {
         } else {
             build_entry_stub(machine, is_dll)
         };
-        // Index N becomes IAT slot N. The CRT / kernel32 entries the
-        // stub relies on ride the embedded runtime TU's `#pragma
-        // binding`, so they already sit in `build.imports`.
+        // Index N becomes IAT slot N. The CRT / kernel32 entries the stub
+        // relies on ride the embedded runtime TU's `#pragma binding`, so
+        // they already sit in `build.imports`.
         let imports: Vec<(String, String)> = build
             .imports
             .imports
@@ -551,30 +374,11 @@ impl<'a> PeWriter<'a> {
         self.layout.text_rva + self.text_prologue_len
     }
 
-    /// The data families and which sections the image carries, the
-    /// DWARF payloads (built first so the section-header count is known
-    /// before the layout; empty blobs are dropped, since the loader
-    /// rejects two `SizeOfRawData == 0` sections sharing an RVA), then
-    /// `.text`, `.pdata` and `.idata`.
-    ///
-    /// `.rdata` carries `build.data[..data_relro_len]`: the read-only
-    /// prefix followed by the relro region, whose slots the loader
-    /// writes via `.reloc` before the entry point runs (a base
-    /// relocation into a `MEM_READ` section is what link.exe emits for
-    /// the same content), the switch-table blob at an 8-aligned tail
-    /// and the producer fingerprint last, as mingw's `.rdata$zzz`. The
-    /// fingerprint keeps the section non-empty. `.data` is present when
-    /// the program has writable initialized, zero-fill or
-    /// `_Thread_local` storage: a real Windows kernel rejects an image
-    /// listing a zero-sized section. `.reloc` is present when the image
-    /// holds any absolute pointer the loader fixes up after the slide.
-    /// `.edata` is present whenever the image exports anything; a PE
-    /// executable may carry an export directory.
-    ///
-    /// `.pdata` is the Exception Directory, mandatory under the 64-bit
-    /// ABI; the directory entry spans exactly the `RUNTIME_FUNCTION`
-    /// array, an x86_64 `UNWIND_INFO` blob following it inside the
-    /// section but outside the directory range.
+    /// The data families and which sections the image carries, the DWARF
+    /// payloads (built first so the section-header count is known before
+    /// the layout; empty blobs are dropped, since the loader rejects two
+    /// `SizeOfRawData == 0` sections sharing an RVA), then `.text`,
+    /// `.pdata` and `.idata`.
     fn layout_code_sections(&mut self) -> Result<(), C5Error> {
         let (program, build) = (self.program, self.build);
         let l = &mut self.layout;
@@ -613,10 +417,6 @@ impl<'a> PeWriter<'a> {
         l.edata_present = !build.exports.is_empty() || !build.dynamic_exports.is_empty();
         l.dwarf_present = build.debug_info;
         l.text_rva = SECTION_ALIGNMENT;
-        // A multi-TU link hands over the linker-merged streams with the
-        // text-targeting placeholders unresolved, applied here against
-        // the committed text address; `.debug_frame` regenerates from
-        // the synth-Build.
         let text_vmaddr = IMAGE_BASE + (l.text_rva + self.text_prologue_len) as u64;
         let raw = image::image_dwarf(program, build, self.target, text_vmaddr, None, None)?;
         l.dwarf_blobs = alloc::vec![
@@ -631,8 +431,6 @@ impl<'a> PeWriter<'a> {
         } else {
             0
         };
-        // The header size, the COFF header's count and the emitted
-        // table all read the plan.
         l.plan = SectionPlan {
             rdata: l.rdata_present,
             data: l.data_present,
@@ -666,12 +464,10 @@ impl<'a> PeWriter<'a> {
     }
 
     /// `.rdata`, `.data` (the writable head, then under TLS the 4-byte
-    /// `_tls_index` slot, the 40-byte `IMAGE_TLS_DIRECTORY64` and the
-    /// TLS template) and the named sections, each on its own RVA page
-    /// past `.data` since a PE section RVA is SectionAlignment-aligned
-    /// and cannot sit inside its family's range. The data-targeting
-    /// DWARF placeholders of a merged link resolve once `.data`'s RVA
-    /// is settled.
+    /// `_tls_index` slot, the 40-byte `IMAGE_TLS_DIRECTORY64` and the TLS
+    /// template) and the named sections, each on its own RVA page past
+    /// `.data` since a PE section RVA is SectionAlignment-aligned and
+    /// cannot sit inside its family's range.
     fn layout_data_sections(&mut self) -> Result<(), C5Error> {
         let build = self.build;
         let l = &mut self.layout;
@@ -755,8 +551,8 @@ impl<'a> PeWriter<'a> {
         Ok(())
     }
 
-    /// RVA of a data-stream offset: the named section covering it,
-    /// else its family's region.
+    /// RVA of a data-stream offset: the named section covering it, else its
+    /// family's region.
     fn data_off_to_rva(&self, off: u32) -> u32 {
         let l = &self.layout;
         let named_base = |n: &NamedOut| -> u32 {
@@ -777,10 +573,10 @@ impl<'a> PeWriter<'a> {
         data_region_addr(&self.data_regions(), off as u64) as u32
     }
 
-    /// The data stream's family regions at their RVAs, each closed at
-    /// its family's head: a group's extent is closed at both ends, so
-    /// an offset at one group's end names that group, and the padding
-    /// a moved run left behind resolves to the family's end.
+    /// The data stream's family regions at their RVAs, each closed at its
+    /// family's head: a group's extent is closed at both ends, so an offset
+    /// at one group's end names that group, and the padding a moved run
+    /// left behind resolves to the family's end.
     fn data_regions(&self) -> [DataRegion; 4] {
         let l = &self.layout;
         let region = |start: u32, base: u32, len: u32| DataRegion {
@@ -800,8 +596,7 @@ impl<'a> PeWriter<'a> {
     /// absolute pointer: the TLS directory's three VAs, the template's
     /// address constants, every pointer initializer, and the absolute
     /// fields in `.text`) and `.edata`, the export directory with every
-    /// export resolved to its RVA. A `#pragma export` entry wins over a
-    /// dynamic export of the same name.
+    /// export resolved to its RVA.
     fn layout_reloc_and_export_sections(&mut self) -> Result<(), C5Error> {
         let build = self.build;
         let machine = self.machine;
@@ -955,13 +750,13 @@ impl<'a> PeWriter<'a> {
         Ok(())
     }
 
-    /// The DWARF sections past the last loaded one, each named through
-    /// the COFF string table (`/<offset>`, the mingw-w64 convention for
-    /// names over 8 bytes, with `number_of_symbols = 0` unless the
-    /// trampoline symbols below are present) and `MEM_DISCARDABLE`;
-    /// then the COFF symbol table naming each PLT trampoline, which a
-    /// debugger's `b malloc` resolves to, and its string table at the
-    /// file tail, each with the sizes the headers read.
+    /// The DWARF sections past the last loaded one, each named through the
+    /// COFF string table (`/<offset>`, the mingw-w64 convention for names
+    /// over 8 bytes, with `number_of_symbols = 0` unless the trampoline
+    /// symbols below are present) and `MEM_DISCARDABLE`; then the COFF
+    /// symbol table naming each PLT trampoline, which a debugger's `b
+    /// malloc` resolves to, and its string table at the file tail, each
+    /// with the sizes the headers read.
     fn layout_dwarf_and_coff(&mut self) {
         let build = self.build;
         let text_body_rva = self.text_body_rva();
@@ -990,7 +785,6 @@ impl<'a> PeWriter<'a> {
         let need_coff_strtab = l.dwarf_present || emit_plt_coff_symbols;
         let mut coff_strtab: Vec<u8> = Vec::new();
         if need_coff_strtab {
-            // The 4-byte size header covers the whole table.
             coff_strtab.extend_from_slice(&0u32.to_le_bytes());
         }
         let mut dwarf_sections: Vec<DwarfPeSlot> = Vec::new();
@@ -1028,9 +822,9 @@ impl<'a> PeWriter<'a> {
             .map(|s| round_up(s.rva + s.bytes.len() as u32, SECTION_ALIGNMENT))
             .unwrap_or(l.pre_dwarf_end_rva);
         l.dwarf_sections = dwarf_sections;
-        // One `IMAGE_SYMBOL` per trampoline, `IMAGE_SYM_CLASS_EXTERNAL`
-        // so name lookups keep it (some tool versions filter STATIC out
-        // of `b malloc`). A name over 8 bytes lands in the string table.
+        // One `IMAGE_SYMBOL` per trampoline, `IMAGE_SYM_CLASS_EXTERNAL` so
+        // name lookups keep it (some tool versions filter STATIC out of `b
+        // malloc`).
         let mut coff_symbols: Vec<u8> = Vec::new();
         if emit_plt_coff_symbols {
             for (imp, off) in build
@@ -1039,7 +833,6 @@ impl<'a> PeWriter<'a> {
                 .iter()
                 .zip(build.plt_trampoline_offsets.iter())
             {
-                // A data import has no trampoline.
                 let Some(tramp_offset) = *off else {
                     continue;
                 };
@@ -1097,16 +890,7 @@ impl<'a> PeWriter<'a> {
     }
 
     /// `.text`: the entry stub, an `int3` pad, `build.text`, with every
-    /// fixup applied. The stub's direct calls reach `main` and the
-    /// `__c5_*` runtime helpers; program-side sites are offset by the
-    /// stub prologue. A GOT fixup lands on the IAT slot (a data import
-    /// reads the slot's value, a distinct x86_64 instruction form);
-    /// data and function-pointer references are address loads;
-    /// assembler pc-relative words receive `S + A - P` as RVAs, absolute
-    /// fields `S + A` as a preferred VA checked against the field width;
-    /// switch-table bases reach the blob in `.rdata`, whose entries are
-    /// patched as `target - table_base`; each `_tls_index` lookup
-    /// reaches the slot at the tail of `.data`.
+    /// fixup applied.
     fn build_text(&mut self) -> Result<(), C5Error> {
         let build = self.build;
         let machine = self.machine;
@@ -1117,7 +901,6 @@ impl<'a> PeWriter<'a> {
         text.extend_from_slice(&self.stub.bytes);
         text.resize(prologue as usize, 0xCC);
         text.extend_from_slice(&build.text);
-        // The absolute-slot form is relocatable-only.
         if !build.rodata.abs64.is_empty() {
             return Err(Self::internal(String::from(
                 "PE: absolute table slots reached a final-image build",
@@ -1257,10 +1040,9 @@ impl<'a> PeWriter<'a> {
         }
     }
 
-    /// The DOS header and stub, the PE signature, the COFF and
-    /// optional headers, and the section table, whose length is checked
-    /// against the plan the header size and the COFF count were
-    /// computed from.
+    /// The DOS header and stub, the PE signature, the COFF and optional
+    /// headers, and the section table, whose length is checked against the
+    /// plan the header size and the COFF count were computed from.
     fn emit_headers(&mut self) -> Result<(), C5Error> {
         let build = self.build;
         let l = &self.layout;
@@ -1372,8 +1154,8 @@ impl<'a> PeWriter<'a> {
                     | IMAGE_SCN_MEM_WRITE,
             });
         }
-        // Read-only families keep `.rdata`'s protection, the writable
-        // ones `.data`'s.
+        // Read-only families keep `.rdata`'s protection, the writable ones
+        // `.data`'s.
         for n in &l.named_out {
             let mut name = [0u8; 8];
             let bytes = n.name.as_bytes();
@@ -1438,16 +1220,7 @@ impl<'a> PeWriter<'a> {
         Ok(sections)
     }
 
-    /// Every section body at its file offset. One buffer covers every
-    /// relocated data slot (all lie at or past `ro_len`), split at the
-    /// relro boundary between `.rdata` and `.data`; each slot holds the
-    /// preferred VA the `.reloc` block lists. The TLS directory's
-    /// template covers the whole `tls_data` rather than an init prefix
-    /// plus `SizeOfZeroFill`: a Windows ARM64 loader path skips a
-    /// directory whose template is empty, leaving `_tls_index` zero.
-    /// The data image past the read-only prefix with every pointer
-    /// initializer at its link-time address and every pc-relative slot
-    /// holding its displacement.
+    /// Every section body at its file offset.
     fn bake_data_image(&self) -> Result<Vec<u8>, C5Error> {
         image::bake_data_relocs(
             "PE",
@@ -1492,7 +1265,6 @@ impl<'a> PeWriter<'a> {
                     &mut out,
                     (l.data_file_off + l.tls.tls_index_offset_in_data) as usize,
                 )?;
-                // `_tls_index`: the loader writes the chosen slot here.
                 out.extend_from_slice(&[0u8; 4]);
                 pad_to(
                     &mut out,
@@ -1518,8 +1290,6 @@ impl<'a> PeWriter<'a> {
                 out.extend_from_slice(&tls);
             }
         }
-        // A read-only family's bytes come straight from `build.data`;
-        // the relro and writable ones from the relocated span.
         for n in &l.named_out {
             if n.raw_size == 0 {
                 continue;
@@ -1566,38 +1336,7 @@ impl<'a> PeWriter<'a> {
     }
 }
 
-/// Build the `.reloc` section bytes. Emits one
-/// `IMAGE_BASE_RELOCATION` block per 4 KiB page that contains
-/// any absolute pointer the loader needs to fix up after a
-/// slide. Sources of absolute pointers we care about today:
-///
-/// * The three VAs in `IMAGE_TLS_DIRECTORY64`
-///   (`StartAddressOfRawData`, `EndAddressOfRawData`,
-///   `AddressOfIndex`) -- emitted only when TLS is present.
-/// * Each `int *p = &x;`-style entry in `Build::data_relocs`
-///   -- the data slot's bytes hold the preferred VA of the
-///   target global, and the loader patches in the slide.
-///
-/// Block layout:
-///
-/// ```text
-///   u32 VirtualAddress  -- page RVA (the 4 KiB-aligned RVA covering the entries)
-///   u32 SizeOfBlock     -- total block bytes (header + entries), multiple of 4
-///   u16 entry[N]        -- high 4 bits: type, low 12 bits: offset within page
-/// ```
-///
-/// `SizeOfBlock` must be 4-byte aligned, so blocks with an
-/// odd entry count get one trailing `IMAGE_REL_BASED_ABSOLUTE`
-/// pad entry.
-///
-/// (`build_reloc_section` follows.)
-///
-/// On-disk shape of `IMAGE_EXPORT_DIRECTORY`. Same field
-/// order, sizes, and meaning as `winnt.h`'s definition --
-/// the writer fills one of these in and `write_struct`s it
-/// to the section's head, then appends the
-/// AddressOfFunctions / AddressOfNames / AddressOfNameOrdinals
-/// arrays plus the trailing string blob.
+/// Build the `.reloc` section bytes.
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct ImageExportDirectory {
@@ -1605,20 +1344,12 @@ struct ImageExportDirectory {
     time_date_stamp: u32,
     major_version: u16,
     minor_version: u16,
-    /// RVA of a NUL-terminated DLL name.
     name_rva: u32,
-    /// Lowest valid ordinal. Conventionally 1; `dlsym`-style
-    /// lookups never reach for ordinals so the value matters
-    /// little, but tooling cross-checks it.
     ordinal_base: u32,
     number_of_functions: u32,
     number_of_names: u32,
-    /// RVA of an array of `u32` function RVAs.
     address_of_functions: u32,
-    /// RVA of an array of `u32` name-string RVAs.
     address_of_names: u32,
-    /// RVA of an array of `u16` ordinals (zero-based indices
-    /// into the function table).
     address_of_name_ordinals: u32,
 }
 
@@ -1626,39 +1357,27 @@ const IMAGE_EXPORT_DIRECTORY_SIZE: usize = 40;
 const _: () = assert!(core::mem::size_of::<ImageExportDirectory>() == IMAGE_EXPORT_DIRECTORY_SIZE);
 
 /// Build the `.edata` section bytes for an image with exports.
-/// Layout: `IMAGE_EXPORT_DIRECTORY` followed by
-/// AddressOfFunctions / AddressOfNames /
-/// AddressOfNameOrdinals arrays, then the image-name and
-/// per-export-name strings (NUL-terminated).
-///
-/// `exports` pairs each export name with its resolved image-relative
-/// RVA (functions and data alike). The name pointer table is lexically
-/// ordered, as the loader and GetProcAddress binary-search it; the
-/// parallel ordinal table maps each name back to its
-/// AddressOfFunctions slot.
 fn build_export_directory(
     edata_rva: u32,
     exports: Vec<(String, u32)>,
     image_name: Option<&str>,
 ) -> Result<Vec<u8>, C5Error> {
     let n = exports.len() as u32;
-    // Layout offsets within the section.
     let header_size = IMAGE_EXPORT_DIRECTORY_SIZE as u32;
     let funcs_off = header_size;
     let names_off = funcs_off + 4 * n;
     let ordinals_off = names_off + 4 * n;
     let strings_off = ordinals_off + 2 * n;
 
-    // The image-name string heads the string blob; per-export
-    // names follow, each NUL-terminated. We compute their
-    // RVAs as we go so the AddressOfNames entries match.
+    // The image-name string heads the string blob; per-export names follow,
+    // each NUL-terminated. We compute their RVAs as we go so the
+    // AddressOfNames entries match.
     let dll_name = image_name.unwrap_or("c5-output.dll");
     let strings_rva = edata_rva + strings_off;
     let dll_name_rva = strings_rva;
 
     let mut out = Vec::with_capacity(strings_off as usize + dll_name.len() + 1);
 
-    // Header (filled out, not patched after).
     write_struct(
         &mut out,
         &ImageExportDirectory {
@@ -1676,7 +1395,6 @@ fn build_export_directory(
         },
     );
 
-    // AddressOfFunctions -- resolved RVA of each export.
     for (_, rva) in &exports {
         out.extend_from_slice(&rva.to_le_bytes());
     }
@@ -1686,20 +1404,16 @@ fn build_export_directory(
     let mut by_name: Vec<usize> = (0..exports.len()).collect();
     by_name.sort_by(|&a, &b| exports[a].0.as_bytes().cmp(exports[b].0.as_bytes()));
 
-    // AddressOfNames -- RVA of each export's name string.
     let mut cur = strings_rva + dll_name.len() as u32 + 1;
     for &i in &by_name {
         out.extend_from_slice(&cur.to_le_bytes());
         cur += exports[i].0.len() as u32 + 1;
     }
 
-    // AddressOfNameOrdinals -- u16 unbiased ordinal per name.
     for &i in &by_name {
         out.extend_from_slice(&(i as u16).to_le_bytes());
     }
 
-    // String blob: image name first, then each export name in
-    // name-pointer-table order.
     out.extend_from_slice(dll_name.as_bytes());
     out.push(0);
     for &i in &by_name {
@@ -1710,14 +1424,9 @@ fn build_export_directory(
     Ok(out)
 }
 
-/// `ro_len` is the `.rdata`-resident prefix of the data-byte space;
-/// slot offsets are `.data`-relative past it. A slot below `ro_len`
-/// is rejected by the writer's data patch pass before this stream is
-/// consumed.
-/// One [`crate::c5::codegen::TextAbsReloc`] with its width, overflow
-/// rule and target resolved against this image's layout.
+/// `ro_len` is the `.rdata`-resident prefix of the data-byte space; slot
+/// offsets are `.data`-relative past it.
 struct AbsTextField {
-    /// Byte offset of the field within the emitted `.text` bytes.
     site_off: usize,
     site_rva: u32,
     width: u32,
@@ -1725,9 +1434,9 @@ struct AbsTextField {
     target_rva: u32,
 }
 
-/// Width and overflow rule of the field a relocation type writes
-/// `S + A` into. badc's relocatable format is ELF ET_REL on every
-/// target, so a PE image's inputs carry ELF relocation numbers.
+/// Width and overflow rule of the field a relocation type writes `S + A`
+/// into. badc's relocatable format is ELF ET_REL on every target, so a PE
+/// image's inputs carry ELF relocation numbers.
 fn abs_field(machine: Machine, rtype: u32) -> Option<(u32, AbsCheck)> {
     use super::elf_reloc_types::{aarch64_abs_field, x86_64_abs_field};
     match machine {
@@ -1748,10 +1457,6 @@ fn build_reloc_section(
     text_abs_fields: &[AbsTextField],
     tls_sites: &[(usize, u64)],
 ) -> Vec<u8> {
-    // Bucket every relocation target by the 4 KiB page it
-    // lives in. Per-page entries within a bucket get one
-    // shared `IMAGE_BASE_RELOCATION` header. Each entry pairs the
-    // in-page offset with the type the field's width takes.
     use alloc::collections::BTreeMap;
     let mut by_page: BTreeMap<u32, Vec<(u32, u16)>> = BTreeMap::new();
     let mut add = |rva: u32, kind: u16| {
@@ -1762,38 +1467,30 @@ fn build_reloc_section(
     };
     if tls_present {
         let dir_rva = data_rva + tls_layout.directory_offset_in_data;
-        // Sanity: the directory's three pointer fields must
-        // share a page. The directory is 40 bytes, far smaller
-        // than 4 KiB, so this holds on any reasonable layout.
+        // Sanity: the directory's three pointer fields must share a page.
         debug_assert_eq!(dir_rva & !0xFFF, (dir_rva + 16) & !0xFFF);
         add(dir_rva, IMAGE_REL_BASED_DIR64); // StartAddressOfRawData
         add(dir_rva + 8, IMAGE_REL_BASED_DIR64); // EndAddressOfRawData
         add(dir_rva + 16, IMAGE_REL_BASED_DIR64); // AddressOfIndex
-        // Address-constant initializers inside the template itself.
         let template_rva = data_rva + tls_layout.tls_init_offset_in_data;
         for &(off, _) in tls_sites {
             add(template_rva + off as u32, IMAGE_REL_BASED_DIR64);
         }
     }
-    // A slot's section follows from its data offset: the relro region
-    // resolves into `.rdata`, everything past it into `.data`.
     for r in data_relocs {
         add(data_off_to_rva(r.data_offset as u32), IMAGE_REL_BASED_DIR64);
     }
-    // Code relocations live in the data stream too; the loader just
-    // adds the slide. The kind of pointer (data vs code) doesn't
-    // matter to PE's `.reloc`, so we use the same DIR64 entry.
     for r in code_relocs {
         add(data_off_to_rva(r.data_offset as u32), IMAGE_REL_BASED_DIR64);
     }
-    // `&&label` initializers hold a code pointer in the data stream,
-    // so they take the same DIR64 entry.
+    // `&&label` initializers hold a code pointer in the data stream, so
+    // they take the same DIR64 entry.
     for r in label_relocs {
         add(data_off_to_rva(r.data_offset as u32), IMAGE_REL_BASED_DIR64);
     }
-    // Absolute fields in the code section. `.reloc` covers every
-    // section, so the loader rebases these like a data pointer; the
-    // entry type follows the field's width.
+    // Absolute fields in the code section. `.reloc` covers every section,
+    // so the loader rebases these like a data pointer; the entry type
+    // follows the field's width.
     for f in text_abs_fields {
         let kind = if f.width == 8 {
             IMAGE_REL_BASED_DIR64
@@ -1806,9 +1503,7 @@ fn build_reloc_section(
     let mut out = Vec::new();
     for (page_rva, mut entries) in by_page {
         entries.sort_unstable();
-        // Each entry is u16; SizeOfBlock must be 4-byte
-        // aligned. Pad with a no-op ABSOLUTE entry when the
-        // entry count is odd.
+        // Each entry is u16; SizeOfBlock must be 4-byte aligned.
         let needs_pad = !entries.len().is_multiple_of(2);
         let total_entries = entries.len() + if needs_pad { 1 } else { 0 };
         let size_of_block = 8 + total_entries as u32 * 2;
@@ -1825,33 +1520,14 @@ fn build_reloc_section(
     out
 }
 
-/// Per-`.data` offsets for the trio of TLS support structures
-/// (the `_tls_index` slot, the `IMAGE_TLS_DIRECTORY64`, and the
-/// initialised TLS image). Computed once up-front so the layout
-/// pass and the writer agree on byte offsets without
-/// recomputing.
-///
-/// All offsets are *within* the `.data` section, after
-/// `build.data` (the user-side initialised data). When
-/// `build.tls_data` is empty, every field is zero and
-/// `tls_blob_size` is zero.
+/// Per-`.data` offsets for the trio of TLS support structures (the
+/// `_tls_index` slot, the `IMAGE_TLS_DIRECTORY64`, and the initialised TLS
+/// image).
 #[derive(Default)]
 struct TlsLayout {
-    /// Total bytes appended to `.data` for TLS support
-    /// (excluding the zero-fill, which the loader handles).
-    /// Adds to `data_size` to size the `.data` section.
     tls_blob_size: u32,
-    /// Byte offset within `.data` of the 4-byte `_tls_index`
-    /// slot. The loader writes the chosen slot index here at
-    /// module-init time.
     tls_index_offset_in_data: u32,
-    /// Byte offset within `.data` of the 40-byte
-    /// `IMAGE_TLS_DIRECTORY64`. The Optional Header's
-    /// DataDirectory[9] (TLS) points at it.
     directory_offset_in_data: u32,
-    /// Byte offset within `.data` of the initialised TLS image
-    /// (`.tdata`). `IMAGE_TLS_DIRECTORY64.StartAddressOfRawData`
-    /// points at it.
     tls_init_offset_in_data: u32,
 }
 
@@ -1865,16 +1541,13 @@ fn compute_tls_layout(build: &Build, writable_data_size: u32) -> TlsLayout {
         };
     }
     let user_data_end = writable_data_size;
-    // 4-byte align the _tls_index slot (DWORD).
     let tls_index_offset = round_up(user_data_end, 4);
-    // 8-byte align IMAGE_TLS_DIRECTORY64 (it carries u64s).
     let directory_offset = round_up(tls_index_offset + 4, 8);
     let tls_init_offset = directory_offset + IMAGE_TLS_DIRECTORY64_SIZE;
-    // We emit the entire `tls_data` as the template (see the
-    // long comment in `write` next to the
-    // IMAGE_TLS_DIRECTORY64 emission), so the .data tail
-    // contributed by TLS is `tls_data.len()` bytes regardless
-    // of `tls_init_size`.
+    // We emit the entire `tls_data` as the template (see the long comment
+    // in `write` next to the IMAGE_TLS_DIRECTORY64 emission), so the .data
+    // tail contributed by TLS is `tls_data.len()` bytes regardless of
+    // `tls_init_size`.
     let total = tls_init_offset + build.tls_data.len() as u32;
     TlsLayout {
         tls_blob_size: total - user_data_end,
@@ -1884,15 +1557,7 @@ fn compute_tls_layout(build: &Build, writable_data_size: u32) -> TlsLayout {
     }
 }
 
-/// Patch the TLS-index lookup at `instr_offset`. The encoding
-/// shape varies by architecture:
-///
-/// * x86_64: a 6-byte `mov ecx, [rip+disp32]`. The disp32 sits
-///   at +2 within the instruction; RIP is at +6.
-/// * aarch64: an `adrp x17, _; ldr w17, [x17, #_]` pair (the
-///   same encoding `patch_aarch64_adrp_ldr` understands, with a
-///   `ldr w` instead of `ldr x` -- the in-page byte offset must
-///   be 4-aligned for the 32-bit form).
+/// Patch the TLS-index lookup at `instr_offset`.
 fn patch_tls_index_lookup(
     machine: Machine,
     text: &mut [u8],
@@ -1903,8 +1568,6 @@ fn patch_tls_index_lookup(
     let instr_rva = text_section_rva + instr_offset_in_text;
     match machine {
         Machine::X86_64 => {
-            // `mov ecx, [rip+disp32]` is 6 bytes; disp32 at +2,
-            // RIP at +6.
             let after_rva = instr_rva + 6;
             patch_x86_64_disp32(
                 text,
@@ -1920,9 +1583,8 @@ fn patch_tls_index_lookup(
 }
 
 /// AArch64 `adrp xd, _; ldr wd, [xd, #_]` patcher -- mirrors
-/// [`patch_aarch64_adrp_ldr`] but for the 32-bit (`ldr w`) load
-/// form used by the TLS-index lookup. The in-page offset must be
-/// 4-aligned (the 32-bit form's imm12 is scaled by 4).
+/// [`patch_aarch64_adrp_ldr`] but for the 32-bit (`ldr w`) load form used
+/// by the TLS-index lookup.
 fn patch_aarch64_adrp_ldr32(
     text: &mut [u8],
     adrp_offset_in_text: u32,
@@ -1943,16 +1605,7 @@ fn patch_aarch64_adrp_ldr32(
     })
 }
 
-// ----------------------------------------------------------------
-// Header writers.
-// ----------------------------------------------------------------
-
-/// On-disk shape of the DOS header + 64-byte stub. The modern PE
-/// loader only reads `e_magic` (`"MZ"`) and `e_lfanew` (the file
-/// offset of the PE signature); everything else can stay zero.
-/// The struct fields document the standard layout so a
-/// refactor that grew a real DOS stub doesn't have to rederive the
-/// offsets.
+/// On-disk shape of the DOS header + 64-byte stub.
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct DosHeader {
@@ -1964,8 +1617,7 @@ struct DosHeader {
 
 const _: () = assert!(core::mem::size_of::<DosHeader>() == DOS_HEADER_AND_STUB);
 
-/// COFF File Header (NT-style). Sits right after the 4-byte
-/// `"PE\0\0"` signature.
+/// COFF File Header (NT-style).
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct CoffHeader {
@@ -1980,9 +1632,8 @@ struct CoffHeader {
 
 const _: () = assert!(core::mem::size_of::<CoffHeader>() == COFF_HEADER_SIZE);
 
-/// One slot of the Optional Header's Data Directories array (16
-/// fixed slots: Export, Import, Resource, Exception, ..., IAT,
-/// ...). Both fields are RVAs / sizes.
+/// One slot of the Optional Header's Data Directories array (16 fixed
+/// slots: Export, Import, Resource, Exception, ..., IAT, ...).
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct DataDirectoryEntry {
@@ -1990,9 +1641,7 @@ struct DataDirectoryEntry {
     size: u32,
 }
 
-/// PE32+ Optional Header (240 bytes). All fields are explicit so
-/// the reader can map field name to offset without consulting the
-/// PE/COFF spec.
+/// PE32+ Optional Header (240 bytes).
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct OptionalHeader64 {
@@ -2030,9 +1679,7 @@ struct OptionalHeader64 {
 
 const _: () = assert!(core::mem::size_of::<OptionalHeader64>() == OPTIONAL64_HEADER_SIZE);
 
-/// One section table entry (40 bytes). Repeated
-/// [`CoffHeader::number_of_sections`] times immediately after the
-/// Optional Header.
+/// One section table entry (40 bytes).
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct SectionHeaderRaw {
@@ -2092,17 +1739,8 @@ fn write_coff_header(
             machine: machine_id,
             number_of_sections: n_sections as u16,
             time_date_stamp: 0,
-            // PE images carry a COFF strtab at the file
-            // tail so the long DWARF section names ("/<offset>")
-            // resolve. With PLT trampolines we now also
-            // emit a real COFF symbol table -- one local-name
-            // entry per import -- right before the strtab.
-            //
-            // Layout: `pointer_to_symbol_table` -> symbols, then
-            // strtab at `pointer_to_symbol_table + n_symbols * 18`.
-            // Pre-#61 default with no trampolines: the symbol
-            // count is 0 and the pointer lands directly on the
-            // strtab.
+            // PE images carry a COFF strtab at the file tail so the long
+            // DWARF section names ("/<offset>") resolve.
             pointer_to_symbol_table: coff_symtab_file_off,
             number_of_symbols: n_coff_symbols,
             size_of_optional_header: optional_header_size as u16,
@@ -2120,59 +1758,24 @@ struct OptionalHeaderInputs {
     size_of_headers: u32,
     import_table_rva: u32,
     import_table_size: u32,
-    /// Exception Directory (data directory entry 3) -- the
-    /// `.pdata` section's RUNTIME_FUNCTION array (the array only,
-    /// excluding any trailing UNWIND_INFO blob in the same section).
     exception_table_rva: u32,
     exception_table_size: u32,
-    /// Base Relocation Directory (data directory entry 5) -- the
-    /// `.reloc` section's RVA / size.
     base_reloc_rva: u32,
     base_reloc_size: u32,
     iat_rva: u32,
     iat_size: u32,
-    /// TLS Directory (data directory entry 9). RVA and size of
-    /// `IMAGE_TLS_DIRECTORY64` (which lives inside `.data`).
-    /// Both zero when the program has no `_Thread_local`
-    /// globals.
     tls_table_rva: u32,
     tls_table_size: u32,
-    /// Export Directory (data directory entry 0). RVA / size
-    /// of `.edata` -- the `IMAGE_EXPORT_DIRECTORY` plus its
-    /// trailing function-RVA / name-RVA / ordinal arrays
-    /// and string blob. Both zero for executables and for
-    /// DLLs that don't declare any `#pragma export`.
     export_table_rva: u32,
     export_table_size: u32,
-    /// PE optional-header `Subsystem` field. Driven by
-    /// `#pragma subsystem(<kind>)` -- `console` ->
-    /// `IMAGE_SUBSYSTEM_WINDOWS_CUI` (3, default), `windows`
-    /// -> `IMAGE_SUBSYSTEM_WINDOWS_GUI` (2). The console
-    /// shape is what every existing demo / fixture builds
-    /// against; the GUI shape skips the loader's auto-attach
-    /// to a console window so a `WinMain`-shaped program
-    /// doesn't show a console.
     subsystem: u16,
 }
 
 fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
-    // OS version 4.0, Subsystem 5.2: copied from mingw's minimal
-    // exe. These are the most permissive values that still mark the
-    // image as a 64-bit console app the modern Windows loader
-    // accepts. Bumping to 10.0 (which we tried first) caused
-    // CreateProcess to reject our images with ERROR_BAD_EXE_FORMAT
-    // on real Windows, even though wine on Linux tolerated it.
-    //
-    // DllCharacteristics: copy what mingw's minimal exe ships
-    // with -- DYNAMIC_BASE | HIGH_ENTROPY_VA | NX_COMPAT |
-    // NO_SEH. ASLR stays on for every image we emit:
-    // TLS-free images have no absolute pointers to fix up, so
-    // the loader can slide them freely without consulting a
-    // `.reloc` section; TLS-using images carry an actual
-    // `.reloc` block targeting the three absolute VAs in
-    // `IMAGE_TLS_DIRECTORY64` (StartAddressOfRawData,
-    // EndAddressOfRawData, AddressOfIndex) so the slide-aware
-    // loader fixes them up before walking the directory.
+    // OS version 4.0, Subsystem 5.2: copied from mingw's minimal exe.
+    // Bumping to 10.0 (which we tried first) caused CreateProcess to reject
+    // our images with ERROR_BAD_EXE_FORMAT on real Windows, even though
+    // wine on Linux tolerated it.
     let dll_chars = IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE
         | IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA
         | IMAGE_DLLCHARACTERISTICS_NX_COMPAT
@@ -2218,14 +1821,13 @@ fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
             image_base: IMAGE_BASE,
             section_alignment: SECTION_ALIGNMENT,
             file_alignment: FILE_ALIGNMENT,
-            // Windows 6.0 (Vista) is the earliest version that
-            // supports the modern PE security characteristics this
-            // image opts into (DYNAMIC_BASE + NX_COMPAT +
-            // HIGH_ENTROPY_VA). The previous 4.0 / 5.2 values
-            // (NT 4.0 + Windows Server 2003) leave the loader in a
-            // legacy code path that refuses to dispatch
-            // HIGH_ENTROPY_VA images on real Windows 10+; wine
-            // ignored the field and ran the binary anyway.
+            // Windows 6.0 (Vista) is the earliest version that supports the
+            // modern PE security characteristics this image opts into
+            // (DYNAMIC_BASE + NX_COMPAT + HIGH_ENTROPY_VA). The previous
+            // 4.0 / 5.2 values (NT 4.0 + Windows Server 2003) leave the
+            // loader in a legacy code path that refuses to dispatch
+            // HIGH_ENTROPY_VA images on real Windows 10+; wine ignored the
+            // field and ran the binary anyway.
             major_operating_system_version: 6,
             minor_operating_system_version: 0,
             major_image_version: 0,
@@ -2239,16 +1841,15 @@ fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
             subsystem: inp.subsystem,
             dll_characteristics: dll_chars,
             // PE/COFF specifies `SizeOfStackReserve` as the
-            // committed-on-demand virtual range reserved for the
-            // initial thread's stack (cleared by the loader; no
-            // physical backing until each page faults in). MSVC's
-            // link.exe defaults to 1 MiB; mingw's ld defaults to
-            // 8 MiB, matching glibc / Apple libc thread defaults.
-            // c5 uses the mingw default so portable programs that
-            // exercise recursion to a depth tuned for the Linux /
-            // macOS C stack budget don't fault the guard page on
-            // Windows before whatever in-program counter would
-            // otherwise enforce the recursion limit.
+            // committed-on-demand virtual range reserved for the initial
+            // thread's stack (cleared by the loader; no physical backing
+            // until each page faults in). MSVC's link.exe defaults to 1
+            // MiB; mingw's ld defaults to 8 MiB, matching glibc / Apple
+            // libc thread defaults. c5 uses the mingw default so portable
+            // programs that exercise recursion to a depth tuned for the
+            // Linux / macOS C stack budget don't fault the guard page on
+            // Windows before whatever in-program counter would otherwise
+            // enforce the recursion limit.
             size_of_stack_reserve: 0x80_0000, // 8 MiB
             size_of_stack_commit: 0x1000,
             size_of_heap_reserve: 0x10_0000,
@@ -2261,10 +1862,6 @@ fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
 }
 
 /// Caller-side view of a section the writer is about to emit.
-/// Only the fields that vary between sections live here -- the
-/// per-section relocation / line-number counters are zero for
-/// every section we produce, so the on-disk
-/// [`SectionHeaderRaw`] fills them in unconditionally.
 struct SectionHeader {
     name: [u8; 8],
     virtual_size: u32,
@@ -2294,20 +1891,12 @@ fn write_section_headers(out: &mut Vec<u8>, sections: &[SectionHeader]) {
     }
 }
 
-// ----------------------------------------------------------------
-// Imports + IAT layout.
-// ----------------------------------------------------------------
-
 struct DllGroup {
     dll_name: String,
-    /// Indices into the global imports list (== IAT slot indices).
     members: Vec<usize>,
 }
 
 fn group_imports_by_dll(imports: &[(String, String)]) -> Vec<DllGroup> {
-    // Preserve the order DLLs first appear in. Most programs hit
-    // two DLLs (msvcrt + kernel32) but the structure scales --
-    // anything declared via `#pragma dylib` shows up here.
     let mut groups: Vec<DllGroup> = Vec::new();
     for (idx, (_, dll)) in imports.iter().enumerate() {
         if let Some(g) = groups.iter_mut().find(|g| g.dll_name == *dll) {
@@ -2327,40 +1916,21 @@ struct IDataLayout {
     bytes: Vec<u8>,
     import_directory_rva: u32,
     import_directory_size: u32,
-    /// RVA of the start of the unified IAT region. The contents are
-    /// laid out DLL-by-DLL (each DLL's run terminated by a zero
-    /// entry), so the position of import N in the IAT does *not*
-    /// match its position in the global imports list -- look up
-    /// [`Self::iat_rva_for_import`] instead.
     iat_rva_base: u32,
-    /// Total IAT size, including the per-DLL terminator entries.
     iat_size: u32,
-    /// `iat_rva_for_import[N]` is the RVA of the IAT slot for
-    /// import index N in the global list. Indexed straight by
-    /// `GotFixup::import_index` and by the entry stub's stub-only
-    /// indices.
     iat_rva_for_import: Vec<u32>,
 }
 
 fn plan_idata(dlls: &[DllGroup], imports: &[(String, String)], base_rva: u32) -> IDataLayout {
-    // Fixed-size pieces: import descriptors (one per DLL plus a
-    // zero-terminator) and the IATs / ILTs (each per-DLL section
-    // plus a zero terminator).
     let n_dlls = dlls.len();
     let n_imports = imports.len();
 
     let import_dir_off: usize = 0;
     let import_dir_size = (n_dlls + 1) * IMAGE_IMPORT_DESCRIPTOR_SIZE;
 
-    // The IAT entries are 8-byte u64s, and the aarch64 LDR
-    // immediate is scaled by 8 (so the in-page byte offset must be
-    // 8-aligned). The import-descriptor block is 4-aligned by its
-    // shape (each descriptor is 20 bytes), so a 2-DLL setup ends
-    // at offset 60 -- not 8-aligned. Pad here so the IAT starts at
-    // an 8-byte boundary regardless of how many DLLs we have.
+    // The IAT entries are 8-byte u64s, and the aarch64 LDR immediate is
+    // scaled by 8 (so the in-page byte offset must be 8-aligned).
     let iat_off = round_up(import_dir_off + import_dir_size, 8);
-    // IAT layout: per-DLL block of (n_members + 1) u64 entries (the
-    // final entry per DLL is a NULL terminator).
     let iat_size = dlls
         .iter()
         .map(|g| (g.members.len() + 1) * IAT_ENTRY_SIZE)
@@ -2369,11 +1939,6 @@ fn plan_idata(dlls: &[DllGroup], imports: &[(String, String)], base_rva: u32) ->
     let ilt_off = iat_off + iat_size;
     let ilt_size = iat_size; // mirror of IAT
 
-    // Hint/Name table starts after the ILT. Each import gets:
-    //   IMAGE_IMPORT_BY_NAME { Hint: u16, Name: NUL-terminated bytes }
-    // We round each entry up to 2 bytes to keep the next entry's
-    // u16 hint aligned (the spec is lenient, but the typical
-    // toolchain output rounds).
     let hint_table_off = ilt_off + ilt_size;
     let mut hint_table_size = 0usize;
     let mut hint_offsets: Vec<usize> = Vec::with_capacity(n_imports);
@@ -2385,7 +1950,6 @@ fn plan_idata(dlls: &[DllGroup], imports: &[(String, String)], base_rva: u32) ->
         }
     }
 
-    // DLL name strings come after the hint table.
     let dll_strings_off = hint_table_off + hint_table_size;
     let mut dll_strings_size = 0usize;
     let mut dll_name_offsets: Vec<usize> = Vec::with_capacity(n_dlls);
@@ -2397,9 +1961,6 @@ fn plan_idata(dlls: &[DllGroup], imports: &[(String, String)], base_rva: u32) ->
     let total = dll_strings_off + dll_strings_size;
     let mut bytes = vec![0u8; total];
 
-    // Per-DLL IAT base offsets within the IAT region (each member
-    // of group g sits at iat_off + group_iat_offsets[g_idx] +
-    // member_pos * 8).
     let mut group_iat_offsets: Vec<usize> = Vec::with_capacity(n_dlls);
     let mut group_ilt_offsets: Vec<usize> = Vec::with_capacity(n_dlls);
     {
@@ -2413,7 +1974,6 @@ fn plan_idata(dlls: &[DllGroup], imports: &[(String, String)], base_rva: u32) ->
         }
     }
 
-    // ---- Write import descriptors (one per DLL + zero terminator).
     for (g_idx, group) in dlls.iter().enumerate() {
         let _ = group; // descriptor just needs the indexed offsets below
         let off = import_dir_off + g_idx * IMAGE_IMPORT_DESCRIPTOR_SIZE;
@@ -2426,14 +1986,12 @@ fn plan_idata(dlls: &[DllGroup], imports: &[(String, String)], base_rva: u32) ->
         bytes[off + 12..off + 16].copy_from_slice(&name_rva.to_le_bytes()); // Name
         bytes[off + 16..off + 20].copy_from_slice(&iat_rva.to_le_bytes()); // FirstThunk
     }
-    // The terminating descriptor is already zeroed.
 
-    // ---- Write IAT and ILT entries. We layout the IAT so that
-    // import_index N (in the global list) lives in slot
-    // [iat_off + offset_to_global_index(N)], where the offset is
-    // chosen so the global ordering is preserved (program imports
-    // first, then stub-only imports). To make that work we compute
-    // each global index's IAT offset directly.
+    // Write IAT and ILT entries. We layout the IAT so that
+    // import_index N (in the global list) lives in slot [iat_off +
+    // offset_to_global_index(N)], where the offset is chosen so the global
+    // ordering is preserved (program imports first, then stub-only
+    // imports).
     let mut iat_slot_for_global_index: Vec<usize> = vec![0; n_imports];
     for (g_idx, g) in dlls.iter().enumerate() {
         for (member_pos, &global_idx) in g.members.iter().enumerate() {
@@ -2450,19 +2008,14 @@ fn plan_idata(dlls: &[DllGroup], imports: &[(String, String)], base_rva: u32) ->
             bytes[iat_slot..iat_slot + IAT_ENTRY_SIZE].copy_from_slice(&entry.to_le_bytes());
             bytes[ilt_slot..ilt_slot + IAT_ENTRY_SIZE].copy_from_slice(&entry.to_le_bytes());
         }
-        // Terminator zero entry per DLL: already zeroed.
     }
 
-    // ---- Write hint/name table.
     for (i, (sym, _)) in imports.iter().enumerate() {
         let off = hint_offsets[i];
-        // Hint = 0 (we don't pre-resolve ordinals).
         bytes[off..off + 2].copy_from_slice(&0u16.to_le_bytes());
         bytes[off + 2..off + 2 + sym.len()].copy_from_slice(sym.as_bytes());
-        // The trailing NUL is already in place from vec![0; total].
     }
 
-    // ---- Write DLL name strings.
     for (g_idx, g) in dlls.iter().enumerate() {
         let off = dll_name_offsets[g_idx];
         bytes[off..off + g.dll_name.len()].copy_from_slice(g.dll_name.as_bytes());
@@ -2473,12 +2026,11 @@ fn plan_idata(dlls: &[DllGroup], imports: &[(String, String)], base_rva: u32) ->
         .map(|off| base_rva + *off as u32)
         .collect();
 
-    // With no imported DLLs the descriptor block is a lone zero
-    // terminator and the IAT is empty. Pointing the Import data
-    // directory at that descriptor with a zero-size IAT directory is
-    // rejected by the Windows loader (ERROR_INVALID_PARAMETER) even
-    // though wine accepts it, so leave both directories empty
-    // (RVA = 0, size = 0) in that case.
+    // With no imported DLLs the descriptor block is a lone zero terminator
+    // and the IAT is empty. Pointing the Import data directory at that
+    // descriptor with a zero-size IAT directory is rejected by the Windows
+    // loader (ERROR_INVALID_PARAMETER) even though wine accepts it, so
+    // leave both directories empty (RVA = 0, size = 0) in that case.
     let (import_directory_rva, import_directory_size, iat_rva_base, iat_size) = if n_dlls == 0 {
         (0, 0, 0, 0)
     } else {
@@ -2500,39 +2052,9 @@ fn plan_idata(dlls: &[DllGroup], imports: &[(String, String)], base_rva: u32) ->
     }
 }
 
-// ----------------------------------------------------------------
-// Entry stub.
-//
-// `AddressOfEntryPoint` is the no-argument entry the loader calls;
-// the uniform stub bridges it to `__c5_entry`, which calls the user's
-// entry with the shape its symbol dictates (not the PE subsystem):
-// `main` / `wmain` take `(argc, argv)` via `__getmainargs` /
-// `__wgetmainargs`; `WinMain` / `wWinMain` take `(hInstance, NULL,
-// lpCmdLine, SW_SHOWNORMAL)` via `GetModuleHandleA` + `GetCommandLineA`
-// / `GetCommandLineW`. A GUI-subsystem image can therefore enter at a
-// plain `main` and still receive argc/argv.
-//
-// Instruction selection differs per architecture; the call shape is
-// uniform. Every CRT / kernel32 entry the stub needs is reached
-// through a `__c5_*` runtime helper called directly, so `EntryStub`
-// carries only an architecture-neutral list of
-// `(byte-offset, runtime-symbol-name)` direct-call patches plus the
-// direct-call-main offset. The writer resolves each name to its
-// native offset in `build.text` and patches the displacement.
-// ----------------------------------------------------------------
-
 struct EntryStub {
     bytes: Vec<u8>,
-    /// Direct-call patch sites targeting embedded-runtime helpers:
-    /// `(byte_offset, symbol_name)`. `byte_offset` points at the
-    /// first byte of the `call rel32` (x86_64) or the `bl` word
-    /// (aarch64). The writer resolves each name to its native
-    /// offset in `build.text` and patches the relative displacement,
-    /// the same path as the direct call to `main`.
     direct_call_runtime: Vec<(u32, &'static str)>,
-    /// Offset of the direct `call main` / `bl main`. `None` for
-    /// DLL output: `DllMain` is invoked by the loader, not from
-    /// the stub.
     direct_call_main_offset: Option<u32>,
 }
 
@@ -2546,10 +2068,8 @@ impl EntryStub {
     }
 }
 
-/// Native offset within `build.text` of a runtime helper the entry
-/// stub direct-calls. Resolves the function name through the merged
-/// symbol tables (`func_names` -> `func_ent_pcs` -> `pc_to_native`),
-/// the same lineage the DWARF / CFI pass uses.
+/// Native offset within `build.text` of a runtime helper the entry stub
+/// direct-calls.
 fn runtime_symbol_offset(build: &Build, name: &str) -> Result<u32, C5Error> {
     let idx = build
         .func_names
@@ -2575,23 +2095,10 @@ fn build_entry_stub(machine: Machine, is_dll: bool) -> EntryStub {
     build_entry_adapter(machine)
 }
 
-/// Minimal `DllMain` for shared-library output. The Windows
-/// loader calls this on `DLL_PROCESS_ATTACH`,
-/// `DLL_THREAD_ATTACH`, etc. with the standard
-/// `(HINSTANCE, DWORD reason, LPVOID reserved)` signature
-/// and expects a `BOOL` return; we return `TRUE` (1) to
-/// signal "module is happy to load", which is all the
-/// runtime semantics c5 has to offer today (no global
-/// constructors, no thread-attach hooks).
-///
-/// * x86_64 (Win64 ABI): `mov eax, 1; ret` -- 6 bytes.
-/// * aarch64 (Windows AAPCS64): `mov w0, #1; ret` -- 8 bytes.
+/// Minimal `DllMain` for shared-library output.
 fn build_dllmain_stub(machine: Machine) -> EntryStub {
     let bytes = match machine {
-        // mov eax, 1 (B8 01 00 00 00); ret (C3).
         Machine::X86_64 => vec![0xB8, 0x01, 0x00, 0x00, 0x00, 0xC3],
-        // mov w0, #1 (52800020) ; ret (D65F03C0). Both are
-        // 4-byte little-endian instruction words.
         Machine::Aarch64 => {
             let mov = aarch64::enc_movz(aarch64::Reg::X0, 1, 0);
             let ret_word = aarch64::enc_ret(aarch64::Reg::X30);
@@ -2608,25 +2115,12 @@ fn build_dllmain_stub(machine: Machine) -> EntryStub {
     }
 }
 
-/// The executable entry adapter -- a minimal per-arch shim that loads
-/// the initial stack pointer and the image-base offset into the first
-/// two argument registers and calls `__c5_entry`. The Windows entry
-/// ABI is not the SysV stack layout, so the Windows `__c5_entry`
-/// ignores `sp`; the arguments are passed uniformly with the other
-/// targets. `__c5_entry` runs the process startup and does not return.
+/// The executable entry adapter -- a minimal per-arch shim that loads the
+/// initial stack pointer and the image-base offset into the first two
+/// argument registers and calls `__c5_entry`.
 fn build_entry_adapter(machine: Machine) -> EntryStub {
     match machine {
         Machine::X86_64 => {
-            // mov rcx, rsp        -- arg0 = stack pointer
-            // sub rsp, 0x28       -- 32-byte shadow space + 16-align
-            // xor edx, edx        -- arg1 = image offset (0)
-            // call __c5_entry
-            // ud2                 -- unreachable
-            //
-            // The loader calls the entry, so rsp is `8 mod 16` here;
-            // `sub 0x28` brings it to `0 mod 16` and `call` pushes 8,
-            // giving `__c5_entry` the Win64-required alignment at its
-            // own call sites.
             let mut bytes: Vec<u8> = Vec::with_capacity(16);
             bytes.extend_from_slice(&[0x48, 0x89, 0xE1]); // mov rcx, rsp
             bytes.extend_from_slice(&[0x48, 0x83, 0xEC, 0x28]); // sub rsp, 0x28
@@ -2642,10 +2136,6 @@ fn build_entry_adapter(machine: Machine) -> EntryStub {
         }
         Machine::Aarch64 => {
             use super::aarch64 as a;
-            // mov x0, sp          -- arg0 = stack pointer
-            // mov x1, #0          -- arg1 = image offset
-            // bl  __c5_entry
-            // brk #1              -- unreachable
             let mut bytes: Vec<u8> = Vec::with_capacity(16);
             a::emit(&mut bytes, a::enc_add_imm(a::Reg::X0, a::Reg::SP, 0));
             a::emit(&mut bytes, a::enc_movz(a::Reg::X1, 0, 0));
@@ -2661,24 +2151,13 @@ fn build_entry_adapter(machine: Machine) -> EntryStub {
     }
 }
 
-/// `.pdata` builder result. `bytes` is the full section payload
-/// (RUNTIME_FUNCTIONs + any trailing UNWIND_INFO blobs). `directory_size`
-/// is just the RUNTIME_FUNCTION array size and is what gets wired into
-/// the Optional Header's Exception Directory entry. The two are equal
-/// for AArch64 (no trailing data) and differ for x86_64.
+/// `.pdata` builder result.
 struct Pdata {
     bytes: Vec<u8>,
     directory_size: u32,
 }
 
 /// `.pdata` Exception Directory dispatcher.
-///
-/// Both x86_64 and aarch64 are covered. The two formats are
-/// different on the wire -- x86_64 uses 12-byte
-/// (begin/end/UnwindInfoAddress) entries plus a co-located
-/// `UNWIND_INFO` blob; aarch64 uses 8-byte entries with packed
-/// unwind info inline -- so we dispatch and let each builder lay
-/// out its own bytes.
 fn build_pdata(
     machine: Machine,
     text_rva: u32,
@@ -2695,39 +2174,28 @@ fn build_pdata(
     }
 }
 
-/// x86_64 `UNWIND_CODE` operation codes (Win64 ABI, x64 exception
-/// handling). Each code is two bytes: `{ CodeOffset:u8, UnwindOp:4
-/// | OpInfo:4 }`. `UWOP_ALLOC_*` and `UWOP_SAVE_NONVOL` consume one
-/// or two extra `u16` slots.
 const UWOP_PUSH_NONVOL: u8 = 0;
 const UWOP_ALLOC_LARGE: u8 = 1;
 const UWOP_ALLOC_SMALL: u8 = 2;
 const UWOP_SET_FPREG: u8 = 3;
-/// Non-volatile GPR save at a scaled RSP offset. Not emitted today (see
-/// `build_unwind_codes`); referenced by the regression test that locks
-/// the current no-SAVE_NONVOL shape until the prologue restructure.
+/// Non-volatile GPR save at a scaled RSP offset.
 #[cfg(test)]
 const UWOP_SAVE_NONVOL: u8 = 4;
-/// Register encoding for rbp in `OpInfo` / `FrameRegister`.
 const UNWIND_REG_RBP: u8 = 5;
 
 /// Append one `UWOP_ALLOC_SMALL` / `UWOP_ALLOC_LARGE` to a reversed
-/// (descending-`CodeOffset`) `UNWIND_CODE` list for a `sub rsp,size`
-/// at prolog offset `code_offset`. Picks the shortest encoding the
-/// ABI allows: small (8..128), large form 0 (136..512K-8), large
-/// form 1 (>=512K).
+/// (descending-`CodeOffset`) `UNWIND_CODE` list for a `sub rsp,size` at
+/// prolog offset `code_offset`.
 fn push_alloc_code(codes: &mut Vec<u8>, code_offset: u8, size: u32) {
     debug_assert!(size != 0 && size.is_multiple_of(8));
     if (8..=128).contains(&size) {
         codes.push(code_offset);
         codes.push((UWOP_ALLOC_SMALL & 0x0F) | (((size / 8 - 1) as u8) << 4));
     } else if size < 512 * 1024 {
-        // OpInfo 0: next slot holds size/8.
         codes.push(code_offset);
         codes.push(UWOP_ALLOC_LARGE & 0x0F);
         codes.extend_from_slice(&((size / 8) as u16).to_le_bytes());
     } else {
-        // OpInfo 1: next two slots hold the unscaled size.
         codes.push(code_offset);
         codes.push((UWOP_ALLOC_LARGE & 0x0F) | (1 << 4));
         codes.extend_from_slice(&size.to_le_bytes());
@@ -2775,22 +2243,15 @@ fn build_unwind_codes(uw: &super::FnUnwind) -> (Vec<u8>, u8, u8) {
         return (Vec::new(), 0, 0);
     }
     let mut codes = Vec::new();
-    // The `*_end` offsets are already relative to the function's first
-    // byte (the CodeOffset domain). Descending CodeOffset order: frame
-    // alloc, set-fpreg, push rbp, arg-spill.
-    //
-    // The frame allocation is described only when it lowered to a
-    // single `sub rsp,N` (`frame_alloc_end != 0`). A Win64 frame of a
-    // page or more lowers to a stack-probe loop with no single `sub`;
-    // it is left undescribed because the probe runs after the frame
-    // pointer is established, so `UWOP_SET_FPREG` recovers RSP exactly
-    // at any fault past it.
+    // The `*_end` offsets are already relative to the function's first byte
+    // (the CodeOffset domain). A Win64 frame of a page or more lowers to a
+    // stack-probe loop with no single `sub`; it is left undescribed because
+    // the probe runs after the frame pointer is established, so
+    // `UWOP_SET_FPREG` recovers RSP exactly at any fault past it.
     if uw.frame_alloc_end != 0 {
         push_alloc_code(&mut codes, uw.frame_alloc_end as u8, uw.frame_bytes);
     }
     codes.push(uw.set_fpreg_end as u8);
-    // SET_FPREG's OpInfo is reserved (0); the frame register and its
-    // scaled offset live in the UNWIND_INFO header, not the code slot.
     codes.push(UWOP_SET_FPREG & 0x0F);
     codes.push(uw.push_rbp_end as u8);
     codes.push((UWOP_PUSH_NONVOL & 0x0F) | (UNWIND_REG_RBP << 4));
@@ -2799,9 +2260,8 @@ fn build_unwind_codes(uw: &super::FnUnwind) -> (Vec<u8>, u8, u8) {
     }
     // SizeOfProlog need only reach past `mov rbp,rsp` so the unwinder
     // classifies the pre-frame-pointer region (arg-spill, push rbp) as
-    // prolog and the rest as body; PCs past `mov rbp,rsp` unwind
-    // correctly through the frame pointer whether labelled prolog or
-    // body. Use the described frame-alloc end when present.
+    // prolog and the rest as body; PCs past `mov rbp,rsp` unwind correctly
+    // through the frame pointer whether labelled prolog or body.
     let size_of_prolog = if uw.frame_alloc_end != 0 {
         uw.frame_alloc_end
     } else {
@@ -2811,26 +2271,6 @@ fn build_unwind_codes(uw: &super::FnUnwind) -> (Vec<u8>, u8, u8) {
 }
 
 /// x86_64 `.pdata` builder.
-///
-/// The x86_64 Windows ABI requires every non-leaf function to have
-/// a `RUNTIME_FUNCTION` entry pointing at an `UNWIND_INFO` struct;
-/// `RtlLookupFunctionEntry` / `RtlVirtualUnwind` consult these to
-/// recover the caller's RIP, RSP, and saved registers at any
-/// instruction. The Exception Directory entry spans only the
-/// `RUNTIME_FUNCTION` array (the loader counts entries as `Size /
-/// 12`); the `UNWIND_INFO` blobs sit in the same section after the
-/// array, outside the directory range.
-///
-/// `fn_unwind` carries one descriptor per emitted function with
-/// the prologue instruction boundaries; each becomes a sorted,
-/// non-overlapping `RUNTIME_FUNCTION` plus an `UNWIND_INFO`
-/// describing the `push rbp` / `mov rbp,rsp` / `sub rsp,N` (and
-/// the optional arg-spill) prologue. Function ranges are byte
-/// offsets in `build.text`; the prepended entry stub shifts them
-/// by `text_prologue_len`. When `fn_unwind` is empty (a hand-built
-/// `Build`, or a path that records no descriptors), fall back to a
-/// single coarse frameless entry over the whole `.text` so the
-/// image still carries a structurally valid Exception Directory.
 fn build_x86_64_pdata(
     text_rva: u32,
     text_size: u32,
@@ -2845,7 +2285,6 @@ fn build_x86_64_pdata(
         bytes.extend_from_slice(&text_rva.to_le_bytes());
         bytes.extend_from_slice(&(text_rva + text_size).to_le_bytes());
         bytes.extend_from_slice(&unwind_info_rva.to_le_bytes());
-        // Frameless UNWIND_INFO: v1, no flags, no prolog, no codes.
         bytes.extend_from_slice(&[0x01, 0x00, 0x00, 0x00]);
         return Pdata {
             bytes,
@@ -2853,16 +2292,12 @@ fn build_x86_64_pdata(
         };
     }
 
-    // Sort by begin so the RUNTIME_FUNCTION array is ascending (the
-    // loader binary-searches it); the emitter already produces them
-    // in order, but the link path collects from a name-keyed map.
+    // Sort by begin so the RUNTIME_FUNCTION array is ascending (the loader
+    // binary-searches it); the emitter already produces them in order, but
+    // the link path collects from a name-keyed map.
     let mut entries: Vec<&super::FnUnwind> = fn_unwind.iter().collect();
     entries.sort_by_key(|u| u.begin);
 
-    // Two-pass layout: the array fixes each UNWIND_INFO's position,
-    // so build the blobs first, record each one's RVA, then emit the
-    // array. The blob region starts right after the array, 4-byte
-    // aligned (UNWIND_INFO requires DWORD alignment).
     let array_size = entries.len() as u32 * RUNTIME_FUNCTION_SIZE;
     let blobs_rva = round_up(pdata_rva + array_size, 4);
     let mut blobs: Vec<u8> = Vec::new();
@@ -2874,12 +2309,10 @@ fn build_x86_64_pdata(
         blobs.push(0x01); // Version 1, Flags 0.
         blobs.push(size_of_prolog);
         blobs.push(count_of_codes);
-        // FrameRegister (low nibble) | FrameOffset (high nibble, 0).
         blobs.push(frame_reg & 0x0F);
         blobs.extend_from_slice(&codes);
-        // The codes array holds an even number of slots; each slot is
-        // 2 bytes, so the blob is already u16-aligned. Pad to 4 bytes
-        // so the next UNWIND_INFO stays DWORD-aligned.
+        // The codes array holds an even number of slots; each slot is 2
+        // bytes, so the blob is already u16-aligned.
         while !blobs.len().is_multiple_of(4) {
             blobs.push(0);
         }
@@ -2893,7 +2326,6 @@ fn build_x86_64_pdata(
         bytes.extend_from_slice(&end.to_le_bytes());
         bytes.extend_from_slice(&info_rvas[i].to_le_bytes());
     }
-    // Pad the array out to the blob region's start, then append blobs.
     while pdata_rva + bytes.len() as u32 != blobs_rva {
         bytes.push(0);
     }
@@ -2905,44 +2337,12 @@ fn build_x86_64_pdata(
 }
 
 /// AArch64 `.pdata` builder.
-///
-/// The AArch64 Windows ABI requires every executable code region
-/// to be covered by a `RUNTIME_FUNCTION` entry in the Exception
-/// Directory; the OS loader looks these up to handle stack
-/// unwinding for SEH-style exceptions. wine on Linux/arm64 follows
-/// the same rule and refuses to load PEs that omit `.pdata`.
-///
-/// Each `RUNTIME_FUNCTION` is two `u32`s: `BeginAddress` (RVA of
-/// the first instruction) and `UnwindData`. The `UnwindData` can
-/// either point to an `.xdata` blob or carry packed unwind info
-/// inline -- packed format has `Flag != 0` in its low two bits and
-/// is sufficient for our purposes since the c5 program never
-/// raises a Windows-style exception. We use `Flag = 1` ("packed
-/// unwind, canonical -- complete function") with all other fields
-/// zero, which claims "no saves, no frame, no chained context, no
-/// LR home". The Microsoft compiler emits this exact pattern for
-/// frameless leaf functions. The unwinder would interpret every
-/// address as a frameless leaf, which is a lie, but the loader
-/// only validates structural properties (begin within image, no
-/// overlap, ranges sorted) and never runs the unwinder against
-/// our binary. We previously used `Flag = 2` (fragment) here;
-/// real Windows ARM rejected those binaries with
-/// `STATUS_INVALID_IMAGE_FORMAT` even though wine on Linux/arm64
-/// accepted them, so we picked the canonical encoding.
-///
-/// One catch: the `FunctionLength` field is 11 bits (instruction
-/// count), so a single packed entry covers at most 8192 bytes of
-/// code. We split larger `.text` into 8 KiB chunks, one packed
-/// entry per chunk.
 fn build_aarch64_pdata(text_rva: u32, text_size: u32) -> Pdata {
     let mut bytes = Vec::new();
     let mut covered = 0u32;
     while covered < text_size {
         let remaining = text_size - covered;
         let chunk = remaining.min(ARM64_PACKED_FUNCTION_MAX_BYTES);
-        // Round chunk down to a multiple of 4 (instruction size).
-        // Any tail (non-multiple-of-4) shouldn't appear in our
-        // codegen, but guard against it just in case.
         let chunk_words = chunk / 4;
         let function_length = chunk_words & 0x7FF; // 11 bits
         let unwind_data: u32 = (function_length << 2) | 0b01; // Flag=1
@@ -2958,19 +2358,8 @@ fn build_aarch64_pdata(text_rva: u32, text_size: u32) -> Pdata {
     }
 }
 
-// ----------------------------------------------------------------
-// Fixup helpers.
-//
-// Three patch shapes per arch (six total). The writer threads RVAs
-// (relative to ImageBase) and offsets within the combined `.text`,
-// and these helpers do the per-arch arithmetic to land the right
-// bits in the right slots.
-// ----------------------------------------------------------------
-
-/// Patch an IAT-lookup sequence: `call qword [rip+disp32]` on
-/// x86_64, or `adrp x16, _; ldr x16, [x16, #_]` on aarch64. The
-/// caller passes the offset of the first instruction within the
-/// combined `.text`, the section's RVA, and the IAT slot's RVA.
+/// Patch an IAT-lookup sequence: `call qword [rip+disp32]` on x86_64, or
+/// `adrp x16, _; ldr x16, [x16, #_]` on aarch64.
 fn patch_iat_lookup(
     machine: Machine,
     text: &mut [u8],
@@ -2982,8 +2371,6 @@ fn patch_iat_lookup(
     let instr_rva = text_section_rva + instr_offset_in_text;
     match machine {
         Machine::X86_64 => {
-            // `call qword [rip+disp32]`: 6 bytes. disp32 at +2;
-            // RIP at the after-byte (+6).
             crate::c5::codegen::require_whole_addr(part, "PE: IAT lookup")?;
             let after_rva = instr_rva + 6;
             patch_x86_64_disp32(
@@ -2999,15 +2386,8 @@ fn patch_iat_lookup(
     }
 }
 
-/// Patch a data-import reference so it loads the value of the IAT
-/// slot rather than taking the address of a call thunk. On x86_64
-/// the codegen emitted `lea reg, [rip+disp32]` (REX.W 0x48, opcode
-/// 0x8D, modrm 0x05, disp32 at +3, 7-byte instruction). `lea` and
-/// the RIP-relative `mov reg, [rip+disp32]` share the same REX /
-/// modrm / disp layout and differ only in the opcode byte, so the
-/// flip from 0x8D to 0x8B (load) is length-preserving. The disp32
-/// is then patched to reach the IAT slot, whose loader-written
-/// contents are the imported data's runtime address.
+/// Patch a data-import reference so it loads the value of the IAT slot
+/// rather than taking the address of a call thunk.
 fn patch_iat_data_load(
     machine: Machine,
     text: &mut [u8],
@@ -3027,10 +2407,6 @@ fn patch_iat_data_load(
                     ),
                 )));
             }
-            // The site is either the `lea` a relaxed GOT reference left
-            // behind or the unrelaxed `mov` itself; both end as a load of
-            // the slot. The disp32 follows at +3 in a 7-byte instruction
-            // either way.
             text[opcode_off] = 0x8B;
             let instr_rva = text_section_rva + instr_offset_in_text;
             let after_rva = instr_rva + (x86_64::LEA_RIP32_LEN as u32);
@@ -3041,19 +2417,14 @@ fn patch_iat_data_load(
                 target_rva,
             )
         }
-        // aarch64 routes data-import references through
-        // `patch_iat_lookup`'s adrp + ldr, which already loads the
-        // slot; this helper is x86_64-only.
         Machine::Aarch64 => Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
             "PE: patch_iat_data_load is x86_64-only; aarch64 uses patch_iat_lookup",
         ))),
     }
 }
 
-/// Patch an absolute-address materialization: `lea rd, [rip+disp32]`
-/// on x86_64 or `adrp xd, _; add xd, xd, #_` on aarch64. The
-/// codegen records these for data-segment references and
-/// function-pointer literals.
+/// Patch an absolute-address materialization: `lea rd, [rip+disp32]` on
+/// x86_64 or `adrp xd, _; add xd, xd, #_` on aarch64.
 fn patch_addr_load(
     machine: Machine,
     text: &mut [u8],
@@ -3065,8 +2436,6 @@ fn patch_addr_load(
     let instr_rva = text_section_rva + instr_offset_in_text;
     match machine {
         Machine::X86_64 => {
-            // `lea r13, [rip+disp32]`: 7 bytes. disp32 at +3, RIP
-            // at +7 (LEA_RIP32_LEN).
             crate::c5::codegen::require_whole_addr(part, "PE: address load")?;
             let after_rva = instr_rva + (x86_64::LEA_RIP32_LEN as u32);
             patch_x86_64_disp32(
@@ -3082,10 +2451,8 @@ fn patch_addr_load(
     }
 }
 
-/// Patch a direct call to a target within the same `.text`:
-/// `call rel32` on x86_64 (5 bytes) or `bl rel26` on aarch64
-/// (4 bytes). Both offsets are in the combined `.text`, so the
-/// helper doesn't need section RVAs.
+/// Patch a direct call to a target within the same `.text`: `call rel32` on
+/// x86_64 (5 bytes) or `bl rel26` on aarch64 (4 bytes).
 fn patch_direct_call(
     machine: Machine,
     text: &mut [u8],
@@ -3094,8 +2461,6 @@ fn patch_direct_call(
 ) -> Result<(), C5Error> {
     match machine {
         Machine::X86_64 => {
-            // rel32 = target - (call+5). The 5-byte call form ends
-            // at `call_offset + 5`; rel32 fills bytes [+1..+5].
             let after = call_offset_in_text + 5;
             let delta = target_offset_in_text as i64 - after as i64;
             if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
@@ -3109,8 +2474,6 @@ fn patch_direct_call(
             Ok(())
         }
         Machine::Aarch64 => {
-            // bl rel26: signed 26-bit offset measured in
-            // instructions, relative to the bl instruction itself.
             let delta_bytes = target_offset_in_text as i64 - call_offset_in_text as i64;
             if delta_bytes & 3 != 0 {
                 return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
@@ -3131,8 +2494,8 @@ fn patch_direct_call(
     }
 }
 
-/// Write a 32-bit signed displacement at `disp32_off` so that
-/// `target_rva = after_rva + disp32`. Used by the x86_64 patches.
+/// Write a 32-bit signed displacement at `disp32_off` so that `target_rva =
+/// after_rva + disp32`.
 fn patch_x86_64_disp32(
     text: &mut [u8],
     disp32_off: usize,
@@ -3150,11 +2513,8 @@ fn patch_x86_64_disp32(
     Ok(())
 }
 
-/// Patch an aarch64 reference to load the 64-bit value at `target_rva`
-/// into `xd`. `target_rva` names an IAT slot, so the in-page
-/// instruction ends up `ldr xd, [xd, #_]` whether the input carried
-/// a load (a call thunk) or the `add` an object spells for the
-/// address of an extern data symbol.
+/// Patch an aarch64 reference to load the 64-bit value at `target_rva` into
+/// `xd`.
 fn patch_aarch64_adrp_ldr(
     text: &mut [u8],
     instr_offset_in_text: u32,
@@ -3177,11 +2537,8 @@ fn patch_aarch64_adrp_ldr(
     })
 }
 
-/// Patch an aarch64 `adrp xd, _` / `add xd, xd, #_` reference to point
-/// at `target_rva`. The encoding is PC-relative: `adrp` takes the
-/// signed 4 KiB page delta from its own page and `add` the 12-bit
-/// in-page offset, so an ASLR slide moves the instruction and its
-/// target by the same delta and neither needs a base relocation.
+/// Patch an aarch64 `adrp xd, _` / `add xd, xd, #_` reference to point at
+/// `target_rva`.
 fn patch_aarch64_adrp_add(
     text: &mut [u8],
     instr_offset_in_text: u32,
@@ -3203,14 +2560,7 @@ fn patch_aarch64_adrp_add(
     })
 }
 
-// ----------------------------------------------------------------
-// Misc.
-// ----------------------------------------------------------------
-
 /// Zero-pad `out` to the precomputed file offset of the next section.
-/// A write cursor already past the target means the layout pass and
-/// the emission pass disagree; every later `pointer_to_raw_data` would
-/// then be wrong, so that is a hard error rather than a silent overlap.
 fn pad_to(out: &mut Vec<u8>, target_len: usize) -> Result<(), C5Error> {
     if out.len() > target_len {
         return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
@@ -3229,12 +2579,8 @@ mod tests {
     use super::*;
     use alloc::string::ToString;
 
-    /// Append the entry-stub runtime helpers to `build` so the
-    /// writer's executable stub direct-call patches resolve. The real
-    /// link path supplies these from the embedded startup runtime;
-    /// writer-level tests bypass the linker, so point each at the
-    /// program entry. These tests inspect PE structure, not the stub
-    /// call targets, and never execute the image.
+    /// Append the entry-stub runtime helpers to `build` so the writer's
+    /// executable stub direct-call patches resolve.
     fn inject_runtime_stub_symbols(build: &mut Build) {
         let pc = build.pc_to_native.len();
         build.pc_to_native.push(build.entry_offset);
@@ -3254,8 +2600,8 @@ mod tests {
         Ok(build)
     }
 
-    /// `pad_to` rejects a write cursor already past the layout's
-    /// computed file offset instead of silently overlapping sections.
+    /// `pad_to` rejects a write cursor already past the layout's computed
+    /// file offset instead of silently overlapping sections.
     #[test]
     fn pad_to_rejects_cursor_past_target() {
         let mut out = alloc::vec![0u8; 16];
@@ -3265,10 +2611,9 @@ mod tests {
         assert_eq!(out.len(), 32);
     }
 
-    /// The export name pointer table is binary-searched by
-    /// GetProcAddress, so `build_export_directory` orders the entries
-    /// lexically with the ordinal table pointing back at each name's
-    /// AddressOfFunctions slot.
+    /// The export name pointer table is binary-searched by GetProcAddress,
+    /// so `build_export_directory` orders the entries lexically with the
+    /// ordinal table pointing back at each name's AddressOfFunctions slot.
     #[test]
     fn export_directory_sorts_names_lexically() {
         let bytes = build_export_directory(
@@ -3292,8 +2637,6 @@ mod tests {
         let rva0 = u32::from_le_bytes(bytes[funcs_off..funcs_off + 4].try_into().unwrap());
         let rva1 = u32::from_le_bytes(bytes[funcs_off + 4..funcs_off + 8].try_into().unwrap());
         assert_eq!((rva0, rva1), (0x1000, 0x2000));
-        // Ordinal table (after funcs + names arrays) maps sorted names
-        // back to their slots: alpha -> slot 1, zeta -> slot 0.
         let ordinals_off = funcs_off + 4 * 2 + 4 * 2;
         let ord0 = u16::from_le_bytes(bytes[ordinals_off..ordinals_off + 2].try_into().unwrap());
         let ord1 = u16::from_le_bytes(
@@ -3304,24 +2647,12 @@ mod tests {
         assert_eq!((ord0, ord1), (1, 0));
     }
 
-    /// The packed AArch64 RUNTIME_FUNCTION encodes `FunctionLength`
-    /// in 11 bits (units = 4-byte instructions). The maximum
-    /// representable value is `0x7FF == 2047` instructions; a
-    /// chunk of exactly 2048 instructions cannot be encoded and
-    /// must be split. Without the cap, `chunk_words & 0x7FF` for
-    /// a 2048-instruction chunk overflows to `0`, which the OS
-    /// loader reads as a zero-length function and refuses to
-    /// dispatch the binary's CRT init on real Windows ARM64.
-    /// Verifies that the cap is honoured and each emitted entry
-    /// declares a non-zero `FunctionLength`.
+    /// The packed AArch64 RUNTIME_FUNCTION encodes `FunctionLength` in 11
+    /// bits (units = 4-byte instructions).
     #[test]
     fn aarch64_pdata_packs_chunks_under_function_length_limit() {
-        // 8 KiB + 1 instruction text exercises the multi-entry
-        // split: first entry should carry the cap, second the
-        // remainder.
         let text_size = 2047 * 4 + 4 + 4;
         let p = build_aarch64_pdata(0x1000, text_size);
-        // Each entry is 8 bytes (BeginAddress + UnwindData).
         assert_eq!(p.bytes.len() % 8, 0);
         for entry in p.bytes.as_chunks::<8>().0.iter() {
             let unwind_data = u32::from_le_bytes([entry[4], entry[5], entry[6], entry[7]]);
@@ -3332,14 +2663,12 @@ mod tests {
         }
     }
 
-    /// The executable entry is the uniform adapter that calls
-    /// `__c5_entry`; the console / GUI / wide distinction lives in the
-    /// runtime, so the adapter is identical regardless of subsystem.
+    /// The executable entry is the uniform adapter that calls `__c5_entry`;
+    /// the console / GUI / wide distinction lives in the runtime, so the
+    /// adapter is identical regardless of subsystem.
     #[test]
     fn entry_adapter_calls_c5_entry_x86_64() {
         let s = build_entry_stub(Machine::X86_64, false);
-        // mov rcx,rsp(3) + sub rsp,0x28(4) + xor edx,edx(2)
-        //   + call __c5_entry(5) + ud2(2) = 16 bytes.
         assert_eq!(s.bytes.len(), 16);
         assert_eq!(s.direct_call_runtime, vec![(9, RT_ENTRY)]);
         assert_eq!(s.direct_call_main_offset, None);
@@ -3349,25 +2678,18 @@ mod tests {
     #[test]
     fn entry_adapter_calls_c5_entry_aarch64() {
         let s = build_entry_stub(Machine::Aarch64, false);
-        // mov x0,sp + mov x1,#0 + bl __c5_entry + brk #1 = 16 bytes.
         assert_eq!(s.bytes.len(), 16);
         assert_eq!(s.direct_call_runtime, vec![(8, RT_ENTRY)]);
         assert_eq!(s.direct_call_main_offset, None);
     }
 
-    /// Offset within the Optional Header at which DataDirectory[i]
-    /// begins. The fixed-size prefix of OptionalHeader64 ends with
-    /// `number_of_rva_and_sizes` (4 bytes); the array starts
-    /// immediately after.
+    /// Offset within the Optional Header at which DataDirectory[i] begins.
     fn data_directory_offset(optional_off: usize, idx: usize) -> usize {
-        // NumberOfRvaAndSizes is at offset 108 from the start of
-        // OptionalHeader64 in PE32+ (see <winnt.h>); the
-        // DataDirectory array starts at offset 112.
         optional_off + 112 + idx * core::mem::size_of::<DataDirectoryEntry>()
     }
 
-    /// Walk the Optional Header and read DataDirectory[idx]'s
-    /// (rva, size) tuple.
+    /// Walk the Optional Header and read DataDirectory[idx]'s (rva, size)
+    /// tuple.
     fn read_data_directory(bytes: &[u8], idx: usize) -> (u32, u32) {
         let pe_off = u32::from_le_bytes(bytes[60..64].try_into().unwrap()) as usize;
         let optional_off = pe_off + 4 + COFF_HEADER_SIZE;
@@ -3377,9 +2699,8 @@ mod tests {
         (rva, size)
     }
 
-    /// PE without `_Thread_local`: TLS directory entry must be
-    /// zero so the loader knows there's nothing to allocate
-    /// per-thread.
+    /// PE without `_Thread_local`: TLS directory entry must be zero so the
+    /// loader knows there's nothing to allocate per-thread.
     #[test]
     fn no_tls_means_zero_tls_data_directory() {
         use crate::Compiler;
@@ -3404,10 +2725,8 @@ mod tests {
         assert_eq!(size, 0, "TLS size must be 0 when no TLS present");
     }
 
-    /// A PE executable may legally carry an export directory (a plugin
-    /// host publishing its API for GetProcAddress). `--export-all` /
-    /// `--export-data` reach PE executables through `dynamic_exports`;
-    /// the flags previously no-op'd for PE, leaving the directory empty.
+    /// A PE executable may legally carry an export directory (a plugin host
+    /// publishing its API for GetProcAddress).
     #[test]
     fn executable_dynamic_exports_emit_export_directory() {
         use crate::Compiler;
@@ -3420,9 +2739,6 @@ mod tests {
             super::super::NativeOptions::default(),
         )
         .expect("lower");
-        // A zero-init global is addressed by a data-byte offset past
-        // `build.data`, which names a byte in the `.data` section's
-        // zero-fill tail rather than in the file-backed prefix.
         build.data = alloc::vec![0u8; 16];
         build.bss_size = 8;
         build.dynamic_exports = alloc::vec![
@@ -3462,7 +2778,6 @@ mod tests {
             "a zero-init global must reach the export directory"
         );
 
-        // Without dynamic exports the executable carries no directory.
         let plain = write(
             &program,
             &lower_for(
@@ -3482,10 +2797,10 @@ mod tests {
         );
     }
 
-    /// PE with `_Thread_local`: TLS directory entry must point
-    /// at a non-empty IMAGE_TLS_DIRECTORY64 of size 40, and the
-    /// directory's contents must reference plausible RVAs (well
-    /// past the header, inside the .data section).
+    /// PE with `_Thread_local`: TLS directory entry must point at a
+    /// non-empty IMAGE_TLS_DIRECTORY64 of size 40, and the directory's
+    /// contents must reference plausible RVAs (well past the header, inside
+    /// the .data section).
     #[test]
     fn thread_local_emits_well_formed_tls_directory_x64() {
         use crate::Compiler;
@@ -3513,9 +2828,6 @@ mod tests {
             "TLS directory size must equal IMAGE_TLS_DIRECTORY64 size"
         );
 
-        // Find the section that contains the TLS directory and
-        // resolve `tls_rva` to a file offset to inspect the
-        // bytes.
         let pe_off = u32::from_le_bytes(bytes[60..64].try_into().unwrap()) as usize;
         let coff_off = pe_off + 4;
         let n_sections = u16::from_le_bytes([bytes[coff_off + 2], bytes[coff_off + 3]]) as usize;
@@ -3536,9 +2848,9 @@ mod tests {
         }
         let tls_file_off = tls_file_off.expect("TLS directory must lie inside a section");
 
-        // Read the four VAs + two u32s. They must be monotonic
-        // (Start <= End), Start/End within the image's address
-        // range (>= ImageBase), and SizeOfZeroFill non-negative.
+        // Read the four VAs + two u32s. They must be monotonic (Start <=
+        // End), Start/End within the image's address range (>= ImageBase),
+        // and SizeOfZeroFill non-negative.
         let start_va =
             u64::from_le_bytes(bytes[tls_file_off..tls_file_off + 8].try_into().unwrap());
         let end_va = u64::from_le_bytes(
@@ -3571,13 +2883,10 @@ mod tests {
         assert!(index_va >= IMAGE_BASE, "AddressOfIndex below ImageBase");
         assert_eq!(cb_va, 0, "AddressOfCallBacks should be NULL");
         assert_eq!(characteristics, 0, "Characteristics must be 0");
-        // The single `_Thread_local int counter` is 8 bytes
-        // (c5 globals are word-sized). We emit the whole TLS
-        // block as init template (zeros) rather than as
-        // SizeOfZeroFill, so a Windows ARM64 loader path that
-        // skips empty-template directories still processes us.
-        // See the long comment next to the
-        // IMAGE_TLS_DIRECTORY64 emission in `write`.
+        // The single `_Thread_local int counter` is 8 bytes (c5 globals are
+        // word-sized). We emit the whole TLS block as init template (zeros)
+        // rather than as SizeOfZeroFill, so a Windows ARM64 loader path
+        // that skips empty-template directories still processes us.
         assert_eq!(
             end_va - start_va,
             8,
@@ -3589,11 +2898,7 @@ mod tests {
         );
     }
 
-    /// AArch64 mirror of the x64 TLS-directory check. The
-    /// per-arch lowering and the writer share the same TLS
-    /// scaffolding, but the patcher walks an `adrp + ldr` pair
-    /// instead of a `mov ecx, [rip+disp32]`, so it's worth
-    /// confirming the directory is built the same way.
+    /// AArch64 mirror of the x64 TLS-directory check.
     #[test]
     fn thread_local_emits_well_formed_tls_directory_arm64() {
         use crate::Compiler;
@@ -3619,8 +2924,7 @@ mod tests {
         assert_eq!(tls_size, IMAGE_TLS_DIRECTORY64_SIZE);
     }
 
-    /// Read OptionalHeader.DllCharacteristics. Sits at fixed
-    /// offset 70 within the PE32+ Optional Header.
+    /// Read OptionalHeader.DllCharacteristics.
     fn read_dll_characteristics(bytes: &[u8]) -> u16 {
         let pe_off = u32::from_le_bytes(bytes[60..64].try_into().unwrap()) as usize;
         let optional_off = pe_off + 4 + COFF_HEADER_SIZE;
@@ -3654,22 +2958,13 @@ mod tests {
         None
     }
 
-    /// A multi-function Windows-x64 PE must carry one
-    /// `RUNTIME_FUNCTION` per emitted function -- sorted by
-    /// `BeginAddress`, non-overlapping, each pointing at a
-    /// well-formed `UNWIND_INFO` (version 1) inside the `.pdata`
-    /// section. The Exception data directory spans only the
-    /// `RUNTIME_FUNCTION` array (`Size / 12` == function count);
-    /// the `UNWIND_INFO` blobs follow in the same section. This
-    /// guards against the previous single coarse whole-`.text`
-    /// entry that left `RtlVirtualUnwind` unable to unwind any
-    /// frame.
+    /// A multi-function Windows-x64 PE must carry one `RUNTIME_FUNCTION`
+    /// per emitted function -- sorted by `BeginAddress`, non-overlapping,
+    /// each pointing at a well-formed `UNWIND_INFO` (version 1) inside the
+    /// `.pdata` section.
     #[test]
     fn pdata_has_one_runtime_function_per_function_x64() {
         use crate::Compiler;
-        // Four user functions with distinct frame shapes (params,
-        // a loop body with locals, a leaf). The lowering records a
-        // per-function unwind descriptor for each.
         let src = "
             int add(int a, int b) { return a + b; }
             int mul3(int a, int b, int c) { return a * b * c; }
@@ -3688,8 +2983,6 @@ mod tests {
             super::super::NativeOptions::default(),
         )
         .expect("lower");
-        // One descriptor per emitted function (the single-TU path
-        // records every function the lowering walked).
         let n_funcs = build.fn_unwind.len();
         assert!(
             n_funcs >= 4,
@@ -3716,12 +3009,11 @@ mod tests {
             "one RUNTIME_FUNCTION per emitted function (not a single coarse entry)"
         );
 
-        // The `.pdata` section must hold both the array and the
-        // trailing UNWIND_INFO blobs, so its virtual size exceeds
-        // the directory (array-only) size.
+        // The `.pdata` section must hold both the array and the trailing
+        // UNWIND_INFO blobs, so its virtual size exceeds the directory
+        // (array-only) size.
         let pdata_off = rva_to_file_off(&bytes, exc_rva).expect("Exception dir inside a section");
 
-        // Find the `.text` extent so each BeginAddress lands in it.
         let (text_lo, text_hi) = {
             let pe_off = u32::from_le_bytes(bytes[60..64].try_into().unwrap()) as usize;
             let coff_off = pe_off + 4;
@@ -3774,12 +3066,11 @@ mod tests {
         }
     }
 
-    /// The two `FnUnwind` producers -- the structured single-TU
-    /// path (`emit_prologue`) and the link path's prologue-grammar
-    /// decoder (`decode_x86_64_prologue_unwind`) -- must agree, so
-    /// a function unwinds identically whether it is compiled in one
-    /// unit or linked from objects. Drive both from the same lowered
-    /// `.text` and assert the resulting unwind codes match.
+    /// The two `FnUnwind` producers -- the structured single-TU path
+    /// (`emit_prologue`) and the link path's prologue-grammar decoder
+    /// (`decode_x86_64_prologue_unwind`) -- must agree, so a function
+    /// unwinds identically whether it is compiled in one unit or linked
+    /// from objects.
     #[test]
     fn structured_and_decoded_unwind_agree_x64() {
         use crate::Compiler;
@@ -3827,14 +3118,10 @@ mod tests {
     /// Locks the documented unwind-metadata limitation: a non-leaf x64
     /// Windows function that spills callee-saved GPRs describes only the
     /// frame-pointer prologue (SET_FPREG + PUSH_NONVOL rbp), never a
-    /// `UWOP_SAVE_NONVOL` for the GPR spills. When the push-before-setframe
-    /// prologue restructure lands, this assertion must flip to REQUIRE a
-    /// PUSH_NONVOL per spilled GPR.
+    /// `UWOP_SAVE_NONVOL` for the GPR spills.
     #[test]
     fn win64_gpr_spill_unwind_omits_save_nonvol() {
         use crate::Compiler;
-        // Many simultaneously-live longs across a call force the allocator
-        // to spill callee-saved GPRs in a non-leaf frame.
         let src = "
             long g(long);
             long f(long a, long b, long c, long d, long e, long h, long i) {
@@ -3852,8 +3139,6 @@ mod tests {
             super::super::NativeOptions::default(),
         )
         .expect("lower");
-        // Walk an UNWIND_CODE byte stream node-by-node, returning the op
-        // nibble of each node (ALLOC_LARGE carries extra size slots).
         fn ops_of(codes: &[u8]) -> Vec<u8> {
             let mut ops = Vec::new();
             let mut i = 0;
@@ -3897,17 +3182,8 @@ mod tests {
         assert!(saw_non_leaf, "expected at least one non-leaf frame");
     }
 
-    /// `DYNAMIC_BASE` / `HIGH_ENTROPY_VA` stay on for every
-    /// image we emit, including TLS-using ones. TLS-free
-    /// images have no absolute pointers in the file (every
-    /// cross-section reference is RIP-relative or PC-relative)
-    /// so the loader can slide them freely without consulting
-    /// any relocation table. TLS-using images carry a real
-    /// `.reloc` section listing the three absolute VAs in
-    /// `IMAGE_TLS_DIRECTORY64`, so the loader fixes those up
-    /// after the slide too. The previous "drop DYNAMIC_BASE
-    /// for TLS images" workaround is gone -- this regression
-    /// test guards against re-introducing it.
+    /// `DYNAMIC_BASE` / `HIGH_ENTROPY_VA` stay on for every image we emit,
+    /// including TLS-using ones.
     #[test]
     fn dll_characteristics_keep_aslr_flags_with_and_without_tls() {
         use crate::Compiler;
@@ -3950,14 +3226,11 @@ mod tests {
         }
     }
 
-    /// TLS-using images must carry a `.reloc` section
-    /// covering the three absolute VAs inside the TLS
-    /// directory; otherwise the ASLR-aware loader would write
-    /// the chosen `_tls_index` to a stale address and the
-    /// process would crash with STATUS_ACCESS_VIOLATION on
-    /// real Windows. Confirms `DataDirectory[5]` (Base
-    /// Relocation) is non-empty and the `.reloc` block has
-    /// the expected three `IMAGE_REL_BASED_DIR64` entries.
+    /// TLS-using images must carry a `.reloc` section covering the three
+    /// absolute VAs inside the TLS directory; otherwise the ASLR-aware
+    /// loader would write the chosen `_tls_index` to a stale address and
+    /// the process would crash with STATUS_ACCESS_VIOLATION on real
+    /// Windows.
     #[test]
     fn thread_local_emits_reloc_section() {
         use crate::Compiler;
@@ -3978,8 +3251,8 @@ mod tests {
             };
             let bytes = write(&program, &build, machine, target).expect("write PE");
 
-            // DataDirectory[5] (BaseRelocation) must point at a
-            // non-empty block.
+            // DataDirectory[5] (BaseRelocation) must point at a non-empty
+            // block.
             let (reloc_rva, reloc_dir_size) = read_data_directory(&bytes, DATA_DIRECTORY_BASERELOC);
             assert_ne!(reloc_rva, 0, "{target:?}: missing .reloc directory");
             assert_eq!(
@@ -3987,7 +3260,6 @@ mod tests {
                 "{target:?}: expected 16-byte .reloc block"
             );
 
-            // Resolve the .reloc bytes inside the file image.
             let pe_off = u32::from_le_bytes(bytes[60..64].try_into().unwrap()) as usize;
             let coff_off = pe_off + 4;
             let n_sections =
@@ -4009,16 +3281,12 @@ mod tests {
             }
             let reloc_file_off = reloc_file_off.expect(".reloc must lie inside a section");
 
-            // Header: VirtualAddress (page RVA), SizeOfBlock = 16.
             let size_of_block = u32::from_le_bytes(
                 bytes[reloc_file_off + 4..reloc_file_off + 8]
                     .try_into()
                     .unwrap(),
             );
             assert_eq!(size_of_block, 16, "{target:?}: SizeOfBlock should be 16");
-            // Three IMAGE_REL_BASED_DIR64 entries (type=10) at
-            // u16 positions 4..16. The fourth slot is a no-op
-            // ABSOLUTE pad.
             for slot in 0..3 {
                 let off = reloc_file_off + 8 + slot * 2;
                 let entry = u16::from_le_bytes([bytes[off], bytes[off + 1]]);
@@ -4034,9 +3302,8 @@ mod tests {
         }
     }
 
-    /// TLS-free images must NOT carry a `.reloc` section --
-    /// they have no absolute pointers, so a `.reloc` would be
-    /// dead weight.
+    /// TLS-free images must NOT carry a `.reloc` section -- they have no
+    /// absolute pointers, so a `.reloc` would be dead weight.
     #[test]
     fn no_tls_means_no_reloc_section() {
         use crate::Compiler;
@@ -4067,13 +3334,9 @@ mod tests {
         u16::from_le_bytes(bytes[pe_off + 22..pe_off + 24].try_into().unwrap())
     }
 
-    /// Shared-library output (`OutputKind::SharedLibrary`)
-    /// flips the `IMAGE_FILE_DLL` characteristic and adds an
-    /// `IMAGE_EXPORT_DIRECTORY` for each `#pragma export`
-    /// symbol. Verify both: the characteristic bit, the
-    /// non-empty data-directory entry, and a well-formed
-    /// directory header (NumberOfFunctions / NumberOfNames
-    /// match the source's export count).
+    /// Shared-library output (`OutputKind::SharedLibrary`) flips the
+    /// `IMAGE_FILE_DLL` characteristic and adds an `IMAGE_EXPORT_DIRECTORY`
+    /// for each `#pragma export` symbol.
     #[test]
     fn dll_output_emits_export_directory_and_dll_flag() {
         use crate::Compiler;
@@ -4112,8 +3375,6 @@ mod tests {
                 "{machine:?}: Export Directory must be at least 40 bytes (the IMAGE_EXPORT_DIRECTORY header)"
             );
 
-            // Resolve `.edata` to a file offset and read the
-            // header's NumberOfFunctions / NumberOfNames.
             let pe_off = u32::from_le_bytes(bytes[60..64].try_into().unwrap()) as usize;
             let coff_off = pe_off + 4;
             let n_sections =
@@ -4155,16 +3416,11 @@ mod tests {
         }
     }
 
-    /// DllMain stubs returning TRUE: x86_64 is
-    /// `mov eax, 1; ret` (`B8 01 00 00 00 C3`); aarch64 is
-    /// `mov w0, #1; ret` (4-byte `enc_movz` + 4-byte
-    /// `enc_ret(x30)`). Without this stub the loader's
-    /// `DLL_PROCESS_ATTACH` callback would jump into
-    /// arbitrary `build.text` bytes; verify each architecture
-    /// produces the right shape.
+    /// DllMain stubs returning TRUE: x86_64 is `mov eax, 1; ret` (`B8 01 00
+    /// 00 00 C3`); aarch64 is `mov w0, #1; ret` (4-byte `enc_movz` + 4-byte
+    /// `enc_ret(x30)`).
     #[test]
     fn dllmain_stub_returns_true() {
-        // DLL stubs don't depend on subsystem; pass console.
         let s_x64 = build_entry_stub(Machine::X86_64, true);
         assert_eq!(
             s_x64.bytes,
@@ -4175,13 +3431,11 @@ mod tests {
         assert!(s_x64.direct_call_main_offset.is_none());
 
         let s_arm = build_entry_stub(Machine::Aarch64, true);
-        // 2 instructions x 4 bytes.
         assert_eq!(s_arm.bytes.len(), 8);
-        // First word: movz w0, #1 => 0x52800020 (movz is the
-        // 32-bit form because Rd is x0 / w0 with sf=0; we
-        // emit the 64-bit movz with imm=1, low lane, which
-        // also clears the upper lanes -- semantically the
-        // same single bit).
+        // First word: movz w0, #1 => 0x52800020 (movz is the 32-bit form
+        // because Rd is x0 / w0 with sf=0; we emit the 64-bit movz with
+        // imm=1, low lane, which also clears the upper lanes --
+        // semantically the same single bit).
         let first = u32::from_le_bytes([
             s_arm.bytes[0],
             s_arm.bytes[1],
@@ -4194,16 +3448,12 @@ mod tests {
             s_arm.bytes[6],
             s_arm.bytes[7],
         ]);
-        // `enc_movz(x0, 1, 0)` lower bits: rd=0, imm16=1,
-        // hw=0 => 0xD2800020.
         assert_eq!(first, 0xD280_0020, "expected `movz x0, #1`");
-        // `enc_ret(x30)` => 0xD65F03C0.
         assert_eq!(second, 0xD65F_03C0, "expected `ret` against x30");
     }
 
-    /// `AddressOfEntryPoint` lives at Optional Header offset
-    /// 16; `BaseOfCode` at offset 20. PE32+ keeps both as
-    /// 4-byte unsigned RVAs.
+    /// `AddressOfEntryPoint` lives at Optional Header offset 16;
+    /// `BaseOfCode` at offset 20.
     fn read_entry_point_and_base_of_code(bytes: &[u8]) -> (u32, u32) {
         let pe_off = u32::from_le_bytes(bytes[60..64].try_into().unwrap()) as usize;
         let optional_off = pe_off + 4 + COFF_HEADER_SIZE;
@@ -4220,10 +3470,9 @@ mod tests {
         (entry, base)
     }
 
-    /// Default `--shared` build (no user `DllMain`):
-    /// `AddressOfEntryPoint` must equal `BaseOfCode` because
-    /// the boilerplate `mov eax, 1; ret` stub sits at the
-    /// start of `.text` and is what the loader calls on
+    /// Default `--shared` build (no user `DllMain`): `AddressOfEntryPoint`
+    /// must equal `BaseOfCode` because the boilerplate `mov eax, 1; ret`
+    /// stub sits at the start of `.text` and is what the loader calls on
     /// `DLL_PROCESS_ATTACH`.
     #[test]
     fn dll_without_user_dllmain_uses_stub_at_base_of_code() {
@@ -4254,16 +3503,9 @@ mod tests {
         );
     }
 
-    /// User-defined `DllMain` overrides the stub: the writer
-    /// must point `AddressOfEntryPoint` at the user's body
-    /// inside `build.text` rather than at the start of
-    /// `.text`. With the stub suppressed, `build.text` lands
-    /// at offset 0 of `.text`, so the expected entry is
-    /// `BaseOfCode + pc_to_native[dllmain_pc]`. A
-    /// secondary `dummy` function before `DllMain` guarantees
-    /// `pc_to_native[dllmain_pc] > 0` so the assertion
-    /// is genuinely distinguishing the user-DllMain branch
-    /// from the no-user-DllMain branch.
+    /// User-defined `DllMain` overrides the stub: the writer must point
+    /// `AddressOfEntryPoint` at the user's body inside `build.text` rather
+    /// than at the start of `.text`.
     #[test]
     fn dll_with_user_dllmain_skips_stub() {
         use crate::Compiler;
@@ -4307,9 +3549,7 @@ mod tests {
     }
 
     /// `#pragma subsystem(windows)` sets Subsystem to
-    /// `IMAGE_SUBSYSTEM_WINDOWS_GUI` and selects the WinMain-shaped
-    /// stub. The stub direct-calls the `__c5_*` runtime helpers, so
-    /// the writer itself hardcodes no kernel32 / msvcrt import names.
+    /// `IMAGE_SUBSYSTEM_WINDOWS_GUI` and selects the WinMain-shaped stub.
     #[test]
     fn gui_subsystem_sets_gui_and_hardcodes_no_imports() {
         use crate::Compiler;
@@ -4336,8 +3576,6 @@ mod tests {
         )
         .expect("write PE");
 
-        // 1) Subsystem field. OptionalHeader64.Subsystem lives at
-        //    offset 68 within the optional header.
         let pe_off = u32::from_le_bytes(bytes[60..64].try_into().unwrap()) as usize;
         let optional_off = pe_off + 4 + COFF_HEADER_SIZE;
         let subsystem = u16::from_le_bytes([bytes[optional_off + 68], bytes[optional_off + 69]]);
@@ -4346,11 +3584,6 @@ mod tests {
             "`#pragma subsystem(windows)` must set Subsystem to WINDOWS_GUI"
         );
 
-        // 2) The writer hardcodes no CRT / kernel32 import names for
-        //    the GUI stub -- it direct-calls the `__c5_*` runtime
-        //    helpers, which carry the kernel32 / msvcrt bindings on
-        //    the real link path. A single-program image (no runtime
-        //    linked) therefore contains none of those import strings.
         let contains =
             |needle: &str| -> bool { bytes.windows(needle.len()).any(|w| w == needle.as_bytes()) };
         assert!(
@@ -4367,12 +3600,7 @@ mod tests {
         );
     }
 
-    /// Passthrough subsystems (NT-native, UEFI) skip the entry
-    /// stub. The optional-header Subsystem field reflects the
-    /// source pragma, `AddressOfEntryPoint` targets the user's
-    /// entry inside `build.text`, and no CRT shim imports
-    /// (`__getmainargs`, `exit`, `GetModuleHandleA`,
-    /// `GetCommandLineA`) appear in the import table.
+    /// Passthrough subsystems (NT-native, UEFI) skip the entry stub.
     fn passthrough_subsystem_skips_stub(pragma: &str, expected_subsystem: u16) {
         use crate::Compiler;
         let src = format!(
@@ -4398,7 +3626,6 @@ mod tests {
         )
         .expect("write PE");
 
-        // 1) Subsystem byte in the optional header.
         let pe_off = u32::from_le_bytes(bytes[60..64].try_into().unwrap()) as usize;
         let optional_off = pe_off + 4 + COFF_HEADER_SIZE;
         let subsystem = u16::from_le_bytes([bytes[optional_off + 68], bytes[optional_off + 69]]);
@@ -4408,8 +3635,6 @@ mod tests {
         );
 
         // 2) AddressOfEntryPoint must target the user's `Entry`
-        //    directly -- BaseOfCode + the lowering's native
-        //    offset, with no stub prologue in between.
         let (entry_rva, base) = read_entry_point_and_base_of_code(&bytes);
         assert_eq!(
             entry_rva,
@@ -4418,8 +3643,6 @@ mod tests {
              (BaseOfCode {base:#x} + entry_offset {entry_native_off:#x}) -- got {entry_rva:#x}"
         );
 
-        // 3) No CRT shim imports. Each name appears as an ASCII
-        //    string in the import-name table when present.
         for needle in &[
             "__getmainargs",
             "exit",
@@ -4440,9 +3663,6 @@ mod tests {
 
     #[test]
     fn driver_pragma_aliases_native_subsystem() {
-        // `driver` and `native` both map to IMAGE_SUBSYSTEM_NATIVE;
-        // kernel-mode drivers and NT-native usermode programs
-        // share the Subsystem byte.
         passthrough_subsystem_skips_stub("driver", IMAGE_SUBSYSTEM_NATIVE);
     }
 
@@ -4501,9 +3721,8 @@ mod tests {
         );
     }
 
-    /// Executables keep `IMAGE_FILE_DLL` cleared and have no
-    /// Export Directory. Mirrors the TLS / DYNAMIC_BASE
-    /// guards.
+    /// Executables keep `IMAGE_FILE_DLL` cleared and have no Export
+    /// Directory.
     #[test]
     fn executable_output_keeps_dll_flag_clear() {
         use crate::Compiler;
@@ -4534,11 +3753,9 @@ mod tests {
         assert_eq!(size, 0);
     }
 
-    /// End-to-end format check: build an aarch64 Windows PE for a
-    /// trivial program and verify the on-disk byte layout claims
-    /// the right architecture. Doesn't execute the binary; the
-    /// runtime tests that need an aarch64 Windows host live in
-    /// `c5::tests::native_pe_arm64`.
+    /// End-to-end format check: build an aarch64 Windows PE for a trivial
+    /// program and verify the on-disk byte layout claims the right
+    /// architecture.
     #[test]
     fn aarch64_pe_format_is_well_formed() {
         use crate::Compiler;
@@ -4559,15 +3776,11 @@ mod tests {
         )
         .expect("write PE");
 
-        // DOS magic.
         assert_eq!(&bytes[0..2], b"MZ");
-        // PE offset stored at byte 60.
         let pe_off = u32::from_le_bytes([bytes[60], bytes[61], bytes[62], bytes[63]]) as usize;
         assert_eq!(&bytes[pe_off..pe_off + 4], b"PE\0\0");
-        // COFF Machine field is right after the PE signature.
         let machine_field = u16::from_le_bytes([bytes[pe_off + 4], bytes[pe_off + 5]]);
         assert_eq!(machine_field, IMAGE_FILE_MACHINE_ARM64);
-        // Optional header magic confirms PE32+.
         let optional_off = pe_off + 4 + COFF_HEADER_SIZE;
         let optional_magic = u16::from_le_bytes([bytes[optional_off], bytes[optional_off + 1]]);
         assert_eq!(optional_magic, PE32_PLUS_MAGIC);

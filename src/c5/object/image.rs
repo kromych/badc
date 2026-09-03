@@ -1,7 +1,6 @@
-//! What the three final-image writers share: the pointer initializers
-//! baked into the data image, the TLS template's address constants,
-//! the switch-table entries, and the DWARF sections of an image.
-//! `format` names the writer in diagnostics.
+//! What the three final-image writers share: the pointer initializers baked
+//! into the data image, the TLS template's address constants, the
+//! switch-table entries, and the DWARF sections of an image.
 
 use alloc::format;
 use alloc::vec::Vec;
@@ -14,13 +13,10 @@ fn internal(msg: alloc::string::String) -> C5Error {
     C5Error::Compile(crate::c5::error::fmt_internal_err(&msg))
 }
 
-/// The data image past the read-only prefix with every pointer
-/// initializer resolved to its link-time address (the writer's
-/// load-time relocation slides it) and every object-linked pc-relative
-/// slot holding `target - slot` at its width, which slides on its own.
-/// `.rodata`, `.data` and `.bss` occupy separate runtime regions, so a
-/// target maps through its object anchor and the signed displacement
-/// rides on the address. `span` names the buffer in diagnostics.
+/// The data image past the read-only prefix with every pointer initializer
+/// resolved to its link-time address (the writer's load-time relocation
+/// slides it) and every object-linked pc-relative slot holding `target -
+/// slot` at its width, which slides on its own.
 pub(crate) fn bake_data_relocs(
     format: &str,
     span: &str,
@@ -109,10 +105,8 @@ pub(crate) fn bake_data_relocs(
     Ok(data)
 }
 
-/// Address-constant initializers of `_Thread_local` objects, as
-/// `(offset within the TLS template, link-time absolute target)`. Both
-/// the baked template bytes and the load-time relocations read this,
-/// so the two cannot disagree.
+/// Address-constant initializers of `_Thread_local` objects, as `(offset
+/// within the TLS template, link-time absolute target)`.
 pub(crate) fn tls_reloc_sites(
     format: &str,
     build: &Build,
@@ -166,8 +160,7 @@ pub(crate) fn bake_tls_template(
 }
 
 /// Each switch-table entry as `target - table_base`, a difference that
-/// slides with the image. `table` starts at the blob's first byte;
-/// `slot` names the entry in a diagnostic.
+/// slides with the image.
 pub(crate) fn patch_jump_table(
     format: &str,
     slot: &str,
@@ -190,14 +183,7 @@ pub(crate) fn patch_jump_table(
     Ok(())
 }
 
-/// The DWARF sections of an image. A multi-TU link hands over the
-/// linker-merged `.debug_info` / `.debug_abbrev` / `.debug_line` /
-/// `.debug_str` with the text-targeting placeholders it could not
-/// apply, resolved here against the committed text address and, when
-/// `data` is given, the data addresses (a writer whose data placement
-/// settles later resolves those itself); `.debug_frame` regenerates
-/// from the build's per-function metadata. Without merged sections the
-/// build is emitted fresh under `-g` and empty otherwise.
+/// The DWARF sections of an image.
 pub(crate) fn image_dwarf(
     program: &Program,
     build: &Build,

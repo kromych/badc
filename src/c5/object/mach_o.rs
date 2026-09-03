@@ -1,79 +1,7 @@
-//! Mach-O (64-bit) writer for arm64 executables.
-//!
-//! Mach-O is a fixed `mach_header_64` followed by a sequence of "load
-//! commands". Each load command tells dyld to do something on launch:
-//! map a segment, load a shared library, set the entry point, fill in
-//! the GOT, and so on. The header carries the total size of the command
-//! stream so dyld knows where the segment data starts.
-//!
-//! We hand-roll all of it. The format is well-documented in
-//! `<mach-o/loader.h>` and Apple's open-source `dyld`, and a hand-rolled
-//! writer keeps us free of any binary-writer dependency.
-//!
-//! ## Layout we emit
-//!
-//! ```text
-//!   file                                                  segment / contents
-//!   ------------------------------------------------------------------------
-//!   0x0000   mach_header_64                                \
-//!            LC_SEGMENT_64 __PAGEZERO                      |
-//!            LC_SEGMENT_64 __TEXT (__text, __const, [..]) |
-//!            [LC_SEGMENT_64 __DATA_CONST (__const, [..])]  |
-//!            LC_SEGMENT_64 __DATA (__got, __data, [__bss]) | __TEXT
-//!            LC_SEGMENT_64 __LINKEDIT                      |
-//!            LC_DYLD_INFO_ONLY                             |
-//!            LC_SYMTAB                                     |
-//!            LC_DYSYMTAB                                   |
-//!            LC_LOAD_DYLINKER /usr/lib/dyld                |
-//!            LC_LOAD_DYLIB   /usr/lib/libSystem...         |
-//!            LC_BUILD_VERSION                              |
-//!            LC_UUID                                       |
-//!            LC_MAIN entry_off=...                         |
-//!            <padding>                                     |
-//!            <machine code from build.text>                |
-//!            __const: data[..data_ro_len] + version line   |
-//!            <pad to 16 KiB>                               /
-//!   0x4000   [__DATA_CONST: data[data_ro_len..relro_len]]  - __DATA_CONST
-//!   0x4000+  __DATA: __got at section start, __data after  - __DATA
-//!            (page-aligned, may span more than one page if
-//!             build.data is large)
-//!   0x8000+  __LINKEDIT contents:                          bind opcodes,
-//!                                                          symbol table,
-//!                                                          string table.
-//! ```
-//!
-//! __PAGEZERO is an unmapped 4 GiB segment at vmaddr 0 -- the standard
-//! null-pointer-deref catcher. __TEXT carries the header, the code, and
-//! `__const`: the read-only data prefix (`Build::data[..data_ro_len]`,
-//! no relocated slot in it) plus the producer fingerprint -- mapped
-//! non-writable by the segment itself. __DATA_CONST, emitted only when
-//! the relro region is non-empty, carries `data[data_ro_len..
-//! data_relro_len]`: read-only content holding slots dyld rebases, so
-//! the segment maps writable and carries `SG_READ_ONLY` for dyld to
-//! drop write permission once the fixups land. __DATA holds __got (one
-//! pointer-sized slot per imported symbol; dyld fills the slots in at
-//! launch via the bind opcode stream in __LINKEDIT) and __data (the
-//! writable remainder `data[data_relro_len..]`, copied into the file by
-//! the writer and patched into the code via the `DataFixup` adrp+add
-//! pairs). __LINKEDIT also holds the symbol + string tables so tools
-//! like `otool -bind` can name what's being bound. A merged
-//! C-identifier-named section takes a section of its own past the
-//! family it was grouped into, inside the same segment.
-//!
-//! Apple Silicon mandates 16 KiB pages for arm64 (`vm_page_size`).
-//!
-//! ## What dyld checks at load time
-//!
-//! Plenty -- but only some of it bites here:
-//! * Magic / cpu type / file type must match.
-//! * `MH_PIE` must be set (modern macOS rejects non-PIE executables).
-//! * Segment file ranges must fit inside the file.
-//! * `LC_MAIN` entry must land inside an executable segment.
-//! * Every undefined symbol in `LC_DYLD_INFO_ONLY` must resolve in
-//!   one of the loaded dylibs.
-//! * The binary must be code-signed -- shelled out to `codesign --sign -`
-//!   from the CLI shim. Without it, `exec()` fails with `killed: 9`
-//!   even on an otherwise valid Mach-O.
+//! Mach-O 64-bit image writer for arm64: the header, the load-command
+//! stream, the `__TEXT` / `__DATA_CONST` / `__DATA` / `__DWARF`
+//! segments and the `__LINKEDIT` tables dyld binds from. The CLI shim
+//! signs the result; macOS refuses to exec an unsigned image.
 
 use alloc::format;
 use alloc::string::String;
@@ -85,34 +13,17 @@ use super::dwarf;
 use super::{AddrPart, Build, DataRegion, data_region_addr, image};
 use crate::c5::layout::{pad_to_align as pad_to, round_up, write_struct};
 
-// ------------------------------------------------------------------
-// Mach-O constants. Names mirror `<mach-o/loader.h>` and `<mach-o/nlist.h>`
-// so cross-checking against system headers is mechanical.
-// ------------------------------------------------------------------
-
 const MH_MAGIC_64: u32 = 0xFEED_FACF;
 
 const CPU_TYPE_ARM64: u32 = 0x0100_000C; // CPU_ARCH_ABI64 | CPU_TYPE_ARM
 const CPU_SUBTYPE_ARM64_ALL: u32 = 0;
 
 const MH_EXECUTE: u32 = 0x2;
-/// `MH_DYLIB` filetype -- shared library (`.dylib`). Picked
-/// when `OutputKind::SharedLibrary` is in effect; the writer
-/// drops `LC_MAIN`, emits an `LC_ID_DYLIB` describing this
-/// image's install name, and promotes each
-/// `Program::exports` entry to an externally visible symbol.
 const MH_DYLIB: u32 = 0x6;
 
 const MH_DYLDLINK: u32 = 0x4;
 const MH_TWOLEVEL: u32 = 0x80;
 const MH_PIE: u32 = 0x0020_0000;
-/// `MH_HAS_TLV_DESCRIPTORS` -- tells dyld the image carries
-/// `__DATA,__thread_vars` descriptors that need their slot-0
-/// thunk getters replaced with the real `tlv_get_addr`. Without
-/// this flag dyld skips that pass and the descriptors stay
-/// pointing at `_tlv_bootstrap_error`, which aborts on first
-/// call. Set only when the program declares any
-/// `_Thread_local` global.
 const MH_HAS_TLV_DESCRIPTORS: u32 = 0x0080_0000;
 
 const LC_REQ_DYLD: u32 = 0x8000_0000;
@@ -121,23 +32,11 @@ const LC_SYMTAB: u32 = 0x2;
 const LC_DYSYMTAB: u32 = 0xB;
 const LC_LOAD_DYLINKER: u32 = 0xE;
 const LC_LOAD_DYLIB: u32 = 0xC;
-/// `LC_ID_DYLIB` -- this image's own install name. Same wire
-/// shape as `LC_LOAD_DYLIB` (a `dylib_command` header
-/// followed by the path bytes); dyld reads this to resolve
-/// the dylib's filename when another image references it via
-/// `LC_LOAD_DYLIB`. Required for `MH_DYLIB`.
 const LC_ID_DYLIB: u32 = 0xD;
 const LC_DYLD_INFO_ONLY: u32 = 0x22 | LC_REQ_DYLD;
 const LC_MAIN: u32 = 0x28 | LC_REQ_DYLD;
 const LC_BUILD_VERSION: u32 = 0x32;
-/// `LC_UUID` -- 16-byte image identity. dyld uses it to dedup
-/// modules in process-image lists; without it lldb's
-/// `DynamicLoaderDarwin` re-registers our image after launch
-/// against the static target image, triggering "address ...
-/// maps to more than one section" warnings on every launch.
 const LC_UUID: u32 = 0x1b;
-/// Total bytes of `LC_UUID` on disk: 4 (cmd) + 4 (cmdsize) +
-/// 16 (uuid) = 24.
 const UUID_COMMAND_SIZE: usize = 24;
 
 const VM_PROT_READ: u32 = 1;
@@ -146,98 +45,45 @@ const VM_PROT_EXECUTE: u32 = 4;
 
 const PLATFORM_MACOS: u32 = 1;
 
-// 16 KiB pages on Apple Silicon arm64.
 const PAGE_SIZE: u64 = 0x4000;
 
-/// Standard 4 GiB __PAGEZERO -- catches null-pointer derefs cheaply
-/// because the segment has no readable, writable, or executable
-/// permission bits set.
 const PAGEZERO_VMSIZE: u64 = 0x1_0000_0000;
 
-/// Default __TEXT base. Sits right above __PAGEZERO. dyld slides this
-/// to a random offset on launch (PIE), so the value is mostly cosmetic.
 const TEXT_VMADDR_BASE: u64 = PAGEZERO_VMSIZE;
 
-/// macOS 11.0.0 -- the floor for the Apple Silicon era. Apple docs
-/// suggest setting this to the lowest version you actually test on.
-/// Encoded as `(major << 16) | (minor << 8) | patch`, all bytes packed.
 const MIN_MACOS: u32 = 11 << 16;
 const SDK_MACOS: u32 = 11 << 16;
 
-// ---- Bind opcode stream constants (low nibble carries an immediate
-//      operand; high nibble selects the opcode). Mirror of
-//      `<mach-o/loader.h>` `BIND_OPCODE_*`. ----
-
 const BIND_OPCODE_DONE: u8 = 0x00;
 const BIND_OPCODE_SET_DYLIB_ORDINAL_IMM: u8 = 0x10;
-/// ULEB128 dylib ordinal, for 1-based ordinals past 15 that do not fit
-/// the IMM opcode's 4-bit operand (<mach-o/loader.h>).
 const BIND_OPCODE_SET_DYLIB_ORDINAL_ULEB: u8 = 0x20;
-/// Select a special pseudo-dylib by signed immediate. Used for the
-/// flat-namespace lookup ordinal (`BIND_SPECIAL_DYLIB_FLAT_LOOKUP`,
-/// -2), which dyld resolves by searching every loaded image -- the
-/// path a shared library's host-supplied imports take at `dlopen`.
 const BIND_OPCODE_SET_DYLIB_SPECIAL_IMM: u8 = 0x30;
-/// `BIND_SPECIAL_DYLIB_FLAT_LOOKUP` (-2) in the opcode's signed 4-bit
-/// immediate field.
 const BIND_SPECIAL_DYLIB_FLAT_LOOKUP_IMM: u8 = 0x0E;
 const BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM: u8 = 0x40;
 const BIND_OPCODE_SET_TYPE_IMM: u8 = 0x50;
 const BIND_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB: u8 = 0x70;
 const BIND_OPCODE_DO_BIND: u8 = 0x90;
 
-// ---- Rebase opcode stream. Used for in-image absolute
-//      pointers (e.g., `int *p = &x;` initializers): the
-//      file holds the preferred VA, dyld walks the rebase
-//      stream and adds the slide delta to each named slot
-//      after mapping the image. Same shape as the bind
-//      stream -- top nibble = opcode, bottom nibble = imm. ----
-
 const REBASE_OPCODE_DONE: u8 = 0x00;
 const REBASE_OPCODE_SET_TYPE_IMM: u8 = 0x10;
 const REBASE_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB: u8 = 0x20;
-/// `REBASE_OPCODE_DO_REBASE_IMM_TIMES` -- rebase N entries
-/// where N is encoded in the low 4 bits of the opcode byte.
-/// We use this for the per-DataReloc emission (one entry at
-/// a time -- imm=1) rather than the ULEB form, since a
-/// 4-bit count is always enough for a single bump and the
-/// shorter encoding shaves a byte per reloc.
 const REBASE_OPCODE_DO_REBASE_IMM_TIMES: u8 = 0x50;
 
 const REBASE_TYPE_POINTER: u8 = 1;
 
 const BIND_TYPE_POINTER: u8 = 1;
 
-/// nlist_64 type bits.
 const N_UNDF: u8 = 0x0;
-/// `N_SECT` (in `n_type` field): symbol is defined in
-/// section number `n_sect` of this image. Used for the
-/// shared-library export entries -- each `#pragma export`
-/// function shows up in the symbol table as
-/// `N_EXT | N_SECT` with `n_sect` pointing at `__text`.
 const N_SECT: u8 = 0xE;
 const N_EXT: u8 = 0x01;
 const NO_SECT: u8 = 0;
-/// `N_WEAK_DEF` (`n_desc` bit) and its export-trie counterpart: a
-/// definition dyld may coalesce with a strong one from another image.
 const N_WEAK_DEF: u16 = 0x0080;
 const EXPORT_SYMBOL_FLAGS_WEAK_DEFINITION: u64 = 0x04;
-/// `DYNAMIC_LOOKUP_ORDINAL` (<mach-o/nlist.h>): the n_desc library
-/// ordinal for a symbol resolved through the flat namespace rather than
-/// a specific LC_LOAD_DYLIB.
 const DYNAMIC_LOOKUP_ORDINAL: u8 = 0xFE;
-/// 1-based index of `__TEXT,__text` within the per-image
-/// section table. Mach-O numbers sections globally across
-/// all segments in declaration order; `__text` is the first
-/// section we emit, hence index 1.
 const SECT_INDEX_TEXT: u8 = 1;
-/// 1-based index of `__TEXT,__const`: the read-only data prefix
-/// (`Build::data[..data_ro_len]`, less any named run at its end) with
-/// the producer fingerprint and the switch tables past it. Always
-/// emitted.
 const SECT_INDEX_CONST: u8 = 2;
-/// Family whose region held a named section's bytes, hence the segment
-/// it is declared in: `__TEXT` past `__const`, `__DATA_CONST` past its
+/// Family whose region held a named section's bytes, hence the segment it
+/// is declared in: `__TEXT` past `__const`, `__DATA_CONST` past its
 /// `__const`, `__DATA` past `__data` or past `__bss`.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum NamedFamily {
@@ -247,9 +93,7 @@ enum NamedFamily {
     Bss,
 }
 
-/// A named section given a section of its own inside its family's
-/// segment. `start` is the merged data-stream offset of its first
-/// byte, or the zero-fill region offset when the family is `Bss`.
+/// A named section given a section of its own inside its family's segment.
 struct NamedOut<'a> {
     name: &'a str,
     family: NamedFamily,
@@ -260,8 +104,8 @@ struct NamedOut<'a> {
     align_log2: u32,
 }
 
-/// Named-section counts per family, which shift every global section
-/// index past the family they ride in.
+/// Named-section counts per family, which shift every global section index
+/// past the family they ride in.
 #[derive(Clone, Copy, Default)]
 struct NamedCounts {
     konst: u8,
@@ -269,62 +113,28 @@ struct NamedCounts {
     data: u8,
 }
 
-/// Segment indices, in the order they appear as `LC_SEGMENT_64` load
-/// commands. Bind and rebase opcodes refer to segments by this index.
 const SEG_INDEX_DATA_CONST: u8 = 2;
 fn seg_index_data(data_const: bool) -> u8 {
     if data_const { 3 } else { 2 }
 }
 
-/// `SG_READ_ONLY` -- the segment is mapped `VM_PROT_READ|VM_PROT_WRITE`
-/// so dyld can apply its fixups, then mprotected read-only before the
-/// image gets control. Carries `__DATA_CONST`, as ld64 emits it.
 const SG_READ_ONLY: u32 = 0x10;
 
-/// `S_ATTR_DEBUG` -- set on every section inside `__DWARF`.
-/// Tells `nm`, `lldb`, `dyld_info`, and the Apple symbolicator
-/// that this section is debug-only metadata: no code, no data,
-/// don't try to install breakpoints into its vmaddr range, and
-/// don't fold its symbols into the executable's lookup table.
-/// Without this flag, lldb sees the section's `addr+size` as a
-/// loaded range that overlaps `__TEXT` / `__DATA`, prints
-/// "address ... maps to more than one section" warnings, and
-/// refuses to resolve breakpoints set inside what it (wrongly)
-/// thinks is a debug-overlapping region.
 const S_ATTR_DEBUG: u32 = 0x0200_0000;
 
-/// Mach-O section type bits used by the TLV layout. See
-/// `<mach-o/loader.h>` for the full set. `__thread_vars` holds the
-/// descriptors; the per-thread storage is `__thread_bss` (zero-fill)
-/// when every `_Thread_local` starts zero, or `__thread_data`
-/// (S_THREAD_LOCAL_REGULAR = 0x11, file-backed init template) once any
-/// initialiser makes `build.tls_init_size` non-zero.
+/// Mach-O section type bits used by the TLV layout.
 #[allow(dead_code)]
 const S_ZEROFILL: u32 = 0x1; // __bss (zero-fill, no file backing)
 const S_THREAD_LOCAL_REGULAR: u32 = 0x11; // __thread_data (init data)
 const S_THREAD_LOCAL_ZEROFILL: u32 = 0x12; // __thread_bss (zero-fill)
 const S_THREAD_LOCAL_VARIABLES: u32 = 0x13; // __thread_vars (descriptors)
 
-/// Each TLV descriptor in `__thread_vars` is three pointer-sized
-/// words: thunk getter (bound to `__tlv_bootstrap`), key (set by
-/// dyld), and per-thread offset.
 const TLV_DESCRIPTOR_SIZE: u64 = 24;
 
-/// Symbol name dyld looks up to bootstrap each Thread-Local
-/// Variable on first access. Lives in `libSystem.B.dylib`
-/// (re-exported from `libdyld.dylib`); we bind it via the
-/// regular bind-opcode stream just like any other libc import.
 const TLV_BOOTSTRAP_SYMBOL: &str = "__tlv_bootstrap";
 
-// ------------------------------------------------------------------
-// On-disk shapes. `#[repr(C)]` with explicit fields, const-asserted
-// sizes against `<mach-o/loader.h>` / `<mach-o/nlist.h>`, written via
-// the same memcpy helper the PE writer uses. Mach-O is little-endian
-// on every CPU we target, so the in-memory layout *is* the wire
-// format. The variable-length load commands (`LC_LOAD_DYLINKER`,
-// `LC_LOAD_DYLIB`) carry a fixed-size header followed by a NUL-
-// terminated, 8-byte-padded path -- only the header is a struct.
-// ------------------------------------------------------------------
+// On-disk shapes. Mach-O is little-endian on every CPU we target, so the
+// in-memory layout *is* the wire format.
 
 /// `mach_header_64` -- the file header at offset 0.
 #[repr(C)]
@@ -343,8 +153,7 @@ struct MachHeader64 {
 const MACH_HEADER_64_SIZE: usize = 32;
 const _: () = assert!(core::mem::size_of::<MachHeader64>() == MACH_HEADER_64_SIZE);
 
-/// `segment_command_64` -- one `LC_SEGMENT_64` load command. Followed
-/// by `nsects` `Section64` entries, all counted in `cmdsize`.
+/// `segment_command_64` -- one `LC_SEGMENT_64` load command.
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct SegmentCommand64 {
@@ -385,8 +194,8 @@ struct Section64 {
 const SECTION_64_SIZE: usize = 80;
 const _: () = assert!(core::mem::size_of::<Section64>() == SECTION_64_SIZE);
 
-/// `dyld_info_command` -- pointers into __LINKEDIT for dyld's
-/// rebase / bind / weak-bind / lazy-bind / export streams.
+/// `dyld_info_command` -- pointers into __LINKEDIT for dyld's rebase / bind
+/// / weak-bind / lazy-bind / export streams.
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct DyldInfoCommand {
@@ -423,8 +232,8 @@ const SYMTAB_COMMAND_SIZE: usize = 24;
 const _: () = assert!(core::mem::size_of::<SymtabCommand>() == SYMTAB_COMMAND_SIZE);
 
 /// `dysymtab_command` -- partitions the symbol table into local /
-/// external-defined / undefined ranges and points at the indirect
-/// symbol table. We currently only fill in the undefined-range count.
+/// external-defined / undefined ranges and points at the indirect symbol
+/// table.
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct DysymtabCommand {
@@ -453,8 +262,8 @@ struct DysymtabCommand {
 const DYSYMTAB_COMMAND_SIZE: usize = 80;
 const _: () = assert!(core::mem::size_of::<DysymtabCommand>() == DYSYMTAB_COMMAND_SIZE);
 
-/// `entry_point_command` (`LC_MAIN`) -- file offset of the entry
-/// point plus a stack-size hint.
+/// `entry_point_command` (`LC_MAIN`) -- file offset of the entry point plus
+/// a stack-size hint.
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct EntryPointCommand {
@@ -483,7 +292,6 @@ const BUILD_VERSION_COMMAND_SIZE: usize = 24;
 const _: () = assert!(core::mem::size_of::<BuildVersionCommand>() == BUILD_VERSION_COMMAND_SIZE);
 
 /// `dylinker_command` header (without the trailing NUL-padded path).
-/// `cmdsize` is the total command size including the path bytes.
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct DylinkerCommandHead {
@@ -524,10 +332,7 @@ struct Nlist64 {
 const NLIST_64_SIZE: usize = 16;
 const _: () = assert!(core::mem::size_of::<Nlist64>() == NLIST_64_SIZE);
 
-/// Pack a name into the 16-byte `segname` / `sectname` field, NUL-
-/// padded. `<mach-o/loader.h>` only requires NUL-termination when the
-/// name is shorter than 16 bytes, so a name that exactly fills the
-/// buffer is legal but we don't emit any.
+/// Pack a name into the 16-byte `segname` / `sectname` field, NUL- padded.
 fn pack_name16(name: &str) -> [u8; 16] {
     debug_assert!(name.len() <= 16, "segment/section name too long: {name:?}");
     let mut buf = [0u8; 16];
@@ -537,8 +342,8 @@ fn pack_name16(name: &str) -> [u8; 16] {
     buf
 }
 
-/// LEB128 unsigned encoding -- 7-bit groups, low to high, MSB set on
-/// every byte except the last. Used inside bind opcode streams.
+/// LEB128 unsigned encoding -- 7-bit groups, low to high, MSB set on every
+/// byte except the last.
 fn put_uleb128(out: &mut Vec<u8>, mut v: u64) {
     loop {
         let byte = (v & 0x7F) as u8;
@@ -551,15 +356,11 @@ fn put_uleb128(out: &mut Vec<u8>, mut v: u64) {
     }
 }
 
-/// Build the `LC_DYLD_INFO` export trie from `(disk name, address,
-/// flags)` triples where `address` is the symbol's offset from the
-/// image base. dyld resolves two-level-namespace imports and `dlsym`
-/// through this trie, not the classic symbol table, so a shared library
-/// without it exports nothing dyld can bind against. The trie is a
-/// radix tree over the names; a terminal node carries the export flags
-/// and the address. Child-edge offsets are ULEB128, so node sizes
-/// depend on each other; the layout iterates to a fixed point before
-/// emitting.
+/// Build the `LC_DYLD_INFO` export trie from `(disk name, address, flags)`
+/// triples where `address` is the symbol's offset from the image base. dyld
+/// resolves two-level-namespace imports and `dlsym` through this trie, not
+/// the classic symbol table, so a shared library without it exports nothing
+/// dyld can bind against.
 pub(crate) fn build_export_trie(entries: &[(String, u64, u64)]) -> Vec<u8> {
     if entries.is_empty() {
         return Vec::new();
@@ -595,7 +396,6 @@ pub(crate) fn build_export_trie(entries: &[(String, u64, u64)]) -> Vec<u8> {
                     pos += k;
                     continue 'walk;
                 }
-                // Partial match: split the edge at the common prefix.
                 let split = nodes.len();
                 nodes.push(Node {
                     term: None,
@@ -663,11 +463,6 @@ pub(crate) fn build_export_trie(entries: &[(String, u64, u64)]) -> Vec<u8> {
     out
 }
 
-// ------------------------------------------------------------------
-// Load-command writers. Each returns the bytes for one LC; the caller
-// concatenates them in the order it wants dyld to see them.
-// ------------------------------------------------------------------
-
 /// A `section_64` header with no relocations.
 fn section64(
     sectname: &str,
@@ -694,8 +489,7 @@ fn section64(
     }
 }
 
-/// `Section64` for one named section, declared inside `segname`. A
-/// zero-fill section has no file bytes.
+/// `Section64` for one named section, declared inside `segname`.
 fn named_section64(n: &NamedOut<'_>, segname: &str, zerofill: bool) -> Section64 {
     section64(
         &n.name[..n.name.len().min(16)],
@@ -727,8 +521,8 @@ struct SectionPlacement {
 
 /// The thread-local sections of `__DATA`: `__thread_vars` (a 24-byte
 /// descriptor per variable) and the per-thread storage, file-backed as
-/// `__thread_data` once any variable has an initializer, else the
-/// zero-fill `__thread_bss`.
+/// `__thread_data` once any variable has an initializer, else the zero-fill
+/// `__thread_bss`.
 #[derive(Clone, Copy)]
 struct TlvSections {
     vars: SectionPlacement,
@@ -795,9 +589,9 @@ fn segment(
 }
 
 /// `__TEXT`: `__text`, then `__const` (the read-only data prefix, the
-/// producer fingerprint and the switch tables; no relocated slot, so
-/// the segment's R+X mapping serves it, and no instruction attribute
-/// so tools do not decode it), then the read-only named sections.
+/// producer fingerprint and the switch tables; no relocated slot, so the
+/// segment's R+X mapping serves it, and no instruction attribute so tools
+/// do not decode it), then the read-only named sections.
 fn segment_text(
     place: SegmentPlacement,
     text: SectionPlacement,
@@ -806,7 +600,6 @@ fn segment_text(
     named: &[&NamedOut<'_>],
 ) -> Vec<u8> {
     let mut sections = alloc::vec![
-        // S_REGULAR | S_ATTR_PURE_INSTRUCTIONS | S_ATTR_SOME_INSTRUCTIONS
         section64(
             "__text",
             "__TEXT",
@@ -837,8 +630,8 @@ fn segment_text(
 }
 
 /// `__DATA_CONST`: the relro region, read-only content whose slots dyld
-/// writes through the rebase stream; `SG_READ_ONLY` makes dyld drop
-/// write permission once the fixups are applied.
+/// writes through the rebase stream; `SG_READ_ONLY` makes dyld drop write
+/// permission once the fixups are applied.
 fn segment_data_const(
     place: SegmentPlacement,
     const_size: u64,
@@ -870,8 +663,8 @@ fn segment_data_const(
 
 /// `__DATA`: `__got` (filled by dyld via the bind opcodes, so its type
 /// stays `S_REGULAR`), `__data`, the writable named sections, the
-/// thread-local sections when present, `__bss` when segregation
-/// produced zero-init storage, and the zero-fill named sections.
+/// thread-local sections when present, `__bss` when segregation produced
+/// zero-init storage, and the zero-fill named sections.
 #[allow(clippy::too_many_arguments)]
 fn segment_data(
     place: SegmentPlacement,
@@ -932,11 +725,7 @@ fn segment_data(
     segment("__DATA", place, VM_PROT_READ | VM_PROT_WRITE, 0, &sections)
 }
 
-/// `__DWARF`: the five debug sections back to back. `vmsize` rounds
-/// the file size up to a page (`dyld_info` rejects `vmsize <
-/// filesize`), the segment maps with no permissions and is never
-/// accessed at runtime, and each section takes a distinct address so
-/// lldb's section resolution sees no overlap.
+/// `__DWARF`: the five debug sections back to back.
 fn segment_dwarf(place: SegmentPlacement, sections: [(u32, u64); 5]) -> Vec<u8> {
     const NAMES: [&str; 5] = [
         "__debug_info",
@@ -962,9 +751,8 @@ fn segment_dwarf(place: SegmentPlacement, sections: [(u32, u64); 5]) -> Vec<u8> 
     segment("__DWARF", place, 0, 0, &headers)
 }
 
-/// Compute the cmdsize for a variable-length load command whose body
-/// is a fixed `head_size` followed by a NUL-terminated path padded to
-/// 8 bytes.
+/// Compute the cmdsize for a variable-length load command whose body is a
+/// fixed `head_size` followed by a NUL-terminated path padded to 8 bytes.
 fn variable_lc_cmdsize(head_size: usize, path: &str) -> u32 {
     let unpadded = head_size + path.len() + 1;
     let padded = unpadded.next_multiple_of(8);
@@ -990,15 +778,13 @@ fn load_dylinker(path: &str) -> Vec<u8> {
     out
 }
 
-/// `LC_LOAD_DYLIB` -- declare a dependency on a shared library that
-/// dyld must load before our entry point runs.
+/// `LC_LOAD_DYLIB` -- declare a dependency on a shared library that dyld
+/// must load before our entry point runs.
 fn load_dylib(path: &str) -> Vec<u8> {
     dylib_command(LC_LOAD_DYLIB, path)
 }
 
-/// `LC_ID_DYLIB` -- this image's install name. Same wire
-/// shape as `LC_LOAD_DYLIB`; differs only in the `cmd`
-/// field. Used in shared-library output (MH_DYLIB).
+/// `LC_ID_DYLIB` -- this image's install name.
 fn id_dylib(path: &str) -> Vec<u8> {
     dylib_command(LC_ID_DYLIB, path)
 }
@@ -1024,16 +810,9 @@ fn dylib_command(cmd: u32, path: &str) -> Vec<u8> {
     out
 }
 
-/// `LC_UUID` -- 16-byte module-identity blob. Computed as a
-/// FNV-1a hash of the build's text + data so that two
-/// byte-identical compilations share a UUID (useful for cache
-/// keying, dSYM matching). Doesn't have to be cryptographic;
-/// lldb only uses it to deduplicate modules.
+/// `LC_UUID` -- 16-byte module-identity blob.
 fn uuid_command(text: &[u8], data: &[u8], rodata: &crate::c5::codegen::RodataBuild) -> Vec<u8> {
     fn fnv1a128(bytes: &[u8]) -> [u8; 16] {
-        // Two interleaved 64-bit FNV-1a hashes give a 128-bit
-        // result without needing a real cryptographic primitive.
-        // Sufficient identity for lldb's dedup keying.
         let mut h0: u64 = 0xcbf2_9ce4_8422_2325;
         let mut h1: u64 = 0xa5e8_a87b_7de0_b591;
         for (i, &b) in bytes.iter().enumerate() {
@@ -1048,9 +827,6 @@ fn uuid_command(text: &[u8], data: &[u8], rodata: &crate::c5::codegen::RodataBui
         let mut out = [0u8; 16];
         out[0..8].copy_from_slice(&h0.to_le_bytes());
         out[8..16].copy_from_slice(&h1.to_le_bytes());
-        // Mark as "version 4 / variant DCE" so consumers that
-        // care about the RFC 4122 type bits (rarely; most just
-        // treat it as opaque bytes) see something sensible.
         out[6] = (out[6] & 0x0f) | 0x40;
         out[8] = (out[8] & 0x3f) | 0x80;
         out
@@ -1058,10 +834,8 @@ fn uuid_command(text: &[u8], data: &[u8], rodata: &crate::c5::codegen::RodataBui
     let mut hash_input: Vec<u8> = Vec::with_capacity(text.len() + data.len());
     hash_input.extend_from_slice(text);
     hash_input.extend_from_slice(data);
-    // Switch-table entries are patched after this runs, so the blob's
-    // bytes are still zero; the routing they will carry lives in the
-    // entry list. Two images whose code is byte-identical can still
-    // route their cases differently.
+    // Switch-table entries are patched after this runs, so the blob's bytes
+    // are still zero; the routing they will carry lives in the entry list.
     for r in &rodata.rel32 {
         hash_input.extend_from_slice(&r.slot_offset.to_le_bytes());
         hash_input.extend_from_slice(&r.text_offset.to_le_bytes());
@@ -1075,8 +849,7 @@ fn uuid_command(text: &[u8], data: &[u8], rodata: &crate::c5::codegen::RodataBui
     out
 }
 
-/// `LC_BUILD_VERSION` -- platform + min OS + SDK. Modern dyld grumbles
-/// without it.
+/// `LC_BUILD_VERSION` -- platform + min OS + SDK.
 fn build_version() -> Vec<u8> {
     let mut out = Vec::with_capacity(BUILD_VERSION_COMMAND_SIZE);
     write_struct(
@@ -1094,8 +867,8 @@ fn build_version() -> Vec<u8> {
     out
 }
 
-/// `LC_MAIN` -- file offset of the entry point, plus a stack-size
-/// hint (zero = use the kernel default).
+/// `LC_MAIN` -- file offset of the entry point, plus a stack-size hint
+/// (zero = use the kernel default).
 fn main_command(entry_file_offset: u64) -> Vec<u8> {
     let mut out = Vec::with_capacity(ENTRY_POINT_COMMAND_SIZE);
     write_struct(
@@ -1113,10 +886,7 @@ fn main_command(entry_file_offset: u64) -> Vec<u8> {
 
 /// Native `.text` offset of `__c5_entry`, the startup-runtime entry that
 /// runs `__attribute__((constructor))` functions (via the linker's
-/// `.init_array`) before the program entry, when the runtime is linked
-/// in. `None` for a bare single-TU image with no runtime, where `LC_MAIN`
-/// stays on the program's own entry. Mirrors the ELF writer's entry
-/// adapter, which likewise routes through `__c5_entry` when present.
+/// `.init_array`) before the program entry, when the runtime is linked in.
 fn c5_entry_native_offset(build: &Build) -> Option<u64> {
     let idx = build.func_names.iter().position(|n| n == "__c5_entry")?;
     let ent_pc = *build.func_ent_pcs.get(idx)?;
@@ -1128,9 +898,8 @@ fn c5_entry_native_offset(build: &Build) -> Option<u64> {
         .map(|o| o as u64)
 }
 
-/// `LC_DYLD_INFO_ONLY` -- pointers into __LINKEDIT for dyld's
-/// rebase / bind / weak-bind / lazy-bind / export streams. Only
-/// eager bind is used; the rest are zero.
+/// `LC_DYLD_INFO_ONLY` -- pointers into __LINKEDIT for dyld's rebase / bind
+/// / weak-bind / lazy-bind / export streams.
 #[allow(clippy::too_many_arguments)]
 fn dyld_info_only(
     rebase_off: u32,
@@ -1166,10 +935,7 @@ fn dyld_info_only(
     out
 }
 
-/// `LC_SYMTAB` -- classic symbol table (nlist entries) + string
-/// table. Strictly speaking `LC_DYLD_INFO_ONLY` carries enough info
-/// for dyld to bind without this, but `otool`, `nm`, debuggers, and
-/// `codesign` all expect it.
+/// `LC_SYMTAB` -- classic symbol table (nlist entries) + string table.
 fn symtab_command(symoff: u32, nsyms: u32, stroff: u32, strsize: u32) -> Vec<u8> {
     let mut out = Vec::with_capacity(SYMTAB_COMMAND_SIZE);
     write_struct(
@@ -1188,13 +954,8 @@ fn symtab_command(symoff: u32, nsyms: u32, stroff: u32, strsize: u32) -> Vec<u8>
 }
 
 /// `LC_DYSYMTAB` -- partition the symbol table into local /
-/// external-defined / undefined ranges and point at the
-/// indirect symbol table. We split the table as
-/// `[exports..imports]`: the first `nextdefsym` entries are
-/// `N_EXT | N_SECT` exports (one per `Program::exports`
-/// entry, only present in shared-library output); the
-/// remaining `nundefsym` are `N_EXT | N_UNDF` imports (one
-/// per resolved libc binding).
+/// external-defined / undefined ranges and point at the indirect symbol
+/// table.
 fn dysymtab_command(nlocalsym: u32, nextdefsym: u32, nundefsym: u32) -> Vec<u8> {
     let mut out = Vec::with_capacity(DYSYMTAB_COMMAND_SIZE);
     write_struct(
@@ -1226,16 +987,7 @@ fn dysymtab_command(nlocalsym: u32, nextdefsym: u32, nundefsym: u32) -> Vec<u8> 
     out
 }
 
-// ------------------------------------------------------------------
-// GOT fixup patching. Each codegen-emitted `adrp + ldr` pair points
-// at a __got slot; we now know the data vmaddr so we can fill in
-// the page-relative offset and the in-page byte offset.
-// ------------------------------------------------------------------
-
-/// Patch each adrp/ldr pair the codegen left behind. `code_base_in_file`
-/// is the file offset where the code blob starts; `code_vmaddr_base`
-/// is the matching vmaddr; `got_base_vmaddr` is the vmaddr of GOT
-/// slot 0 in __DATA.
+/// Patch each adrp/ldr pair the codegen left behind.
 fn apply_got_fixups(
     out: &mut [u8],
     code_base_in_file: usize,
@@ -1262,10 +1014,7 @@ fn apply_got_fixups(
     Ok(())
 }
 
-/// Patch the fields `part` names so the reference computes
-/// `target_vmaddr`. The codegen uses the same shape for both
-/// data-segment references and function-pointer literals; the only
-/// difference between callers is how they compute the target.
+/// Patch the fields `part` names so the reference computes `target_vmaddr`.
 fn patch_adrp_add(
     out: &mut [u8],
     code_base_in_file: usize,
@@ -1289,8 +1038,7 @@ fn patch_adrp_add(
     })
 }
 
-/// Patch each `Inst::ImmData` lowering site. `data_off_to_vaddr` maps
-/// the data byte offset to its runtime VA (`.data` or the `.bss` tail).
+/// Patch each `Inst::ImmData` lowering site.
 fn apply_data_fixups(
     out: &mut [u8],
     code_base_in_file: usize,
@@ -1313,11 +1061,7 @@ fn apply_data_fixups(
     Ok(())
 }
 
-/// Patch each macOS arm64 TLV access site. Each fixup's
-/// `descriptor_index` selects a descriptor inside `__thread_vars`
-/// (24 bytes per entry); the codegen left an `adrp + add x0, x0,
-/// #_` pair to materialize the descriptor's vmaddr into x0
-/// before the indirect call to slot 0.
+/// Patch each macOS arm64 TLV access site.
 fn apply_macho_tlv_fixups(
     out: &mut [u8],
     code_base_in_file: usize,
@@ -1341,8 +1085,7 @@ fn apply_macho_tlv_fixups(
     Ok(())
 }
 
-/// Patch each function-pointer literal site. The target is the
-/// vmaddr of the called function's first instruction.
+/// Patch each function-pointer literal site.
 fn apply_func_fixups(
     out: &mut [u8],
     code_base_in_file: usize,
@@ -1364,17 +1107,10 @@ fn apply_func_fixups(
     Ok(())
 }
 
-// ------------------------------------------------------------------
-// __LINKEDIT contents: bind opcodes, nlist entries, string table.
-// ------------------------------------------------------------------
-
-/// Layout context for the TLV bind ops. The thread_vars
-/// descriptors live at `(__DATA, segment_offset + 24*i)`; their
-/// slot 0 (the thunk getter pointer) is what dyld binds to
-/// `__tlv_bootstrap`.
+/// Layout context for the TLV bind ops.
 struct TlvBindContext {
-    /// Byte offset of the start of `__thread_vars` within the
-    /// `__DATA` segment.
+    /// Byte offset of the start of `__thread_vars` within the `__DATA`
+    /// segment.
     segment_offset: u64,
     /// Number of TLV descriptors that need binding.
     tlv_count: usize,
@@ -1384,10 +1120,7 @@ struct TlvBindContext {
 }
 
 /// 1-based LC_LOAD_DYLIB ordinal of libSystem, the dylib that defines
-/// `__tlv_bootstrap`. The bind stream and the matching nlist entry both
-/// resolve the ordinal through here so they cannot diverge. An image
-/// using TLV without linking libSystem cannot bind the descriptors, so
-/// that is an error rather than a guessed ordinal.
+/// `__tlv_bootstrap`.
 fn tlv_bootstrap_ordinal(dylibs: &[crate::c5::codegen::ResolvedDylib]) -> Result<u64, C5Error> {
     dylibs
         .iter()
@@ -1401,27 +1134,9 @@ fn tlv_bootstrap_ordinal(dylibs: &[crate::c5::codegen::ResolvedDylib]) -> Result
         })
 }
 
-/// Bind opcode stream that resolves the program's imports plus,
-/// when TLV is in use, every TLV descriptor's slot 0 (the thunk
-/// getter pointer, bound to `__tlv_bootstrap`).
-///
-/// Each regular import lands at GOT slot `i` (offset `i*8` into
-/// __DATA). Each TLV descriptor's slot 0 lands at offset
-/// `tlv_ctx.segment_offset + i*24` into __DATA (slots 1 and 2
-/// of each descriptor are not bound; dyld fills slot 1 and we
-/// fill slot 2 statically).
-/// Build the rebase opcode stream for in-image absolute
-/// pointers. Each `data_relocs` entry corresponds to one
-/// 8-byte slot inside `__DATA,__data` whose initial bytes
-/// hold a preferred-load-address VA; dyld walks this stream
-/// after mapping the image and adds the slide delta to each
-/// listed slot.
-///
-/// `data_slot` maps a `build.data` byte offset to the `(segment index,
-/// offset within that segment)` pair dyld needs: the relro region
-/// resolves into `__DATA_CONST`, everything past it into `__DATA`. A
-/// slot below `ro_len` is rejected by the writer's data patch pass
-/// before the stream is consumed.
+/// Bind opcode stream that resolves the program's imports plus, when TLV is
+/// in use, every TLV descriptor's slot 0 (the thunk getter pointer, bound
+/// to `__tlv_bootstrap`).
 #[allow(clippy::too_many_arguments)]
 fn build_rebase_opcodes(
     data_relocs: &[crate::c5::program::DataReloc],
@@ -1460,8 +1175,6 @@ fn build_rebase_opcodes(
     for &(segment, seg_off) in &all {
         out.push(REBASE_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB | (segment & 0x0F));
         put_uleb128(&mut out, seg_off);
-        // `REBASE_OPCODE_DO_REBASE_IMM_TIMES | 1` -- one entry,
-        // count packed into the low 4 bits of the opcode byte.
         out.push(REBASE_OPCODE_DO_REBASE_IMM_TIMES | 1);
     }
     out.push(REBASE_OPCODE_DONE);
@@ -1469,18 +1182,15 @@ fn build_rebase_opcodes(
     out
 }
 
-/// Source library a bind opcode selects: the flat-lookup pseudo-dylib or
-/// a 1-based LC_LOAD_DYLIB ordinal.
+/// Source library a bind opcode selects: the flat-lookup pseudo-dylib or a
+/// 1-based LC_LOAD_DYLIB ordinal.
 #[derive(PartialEq, Clone, Copy)]
 enum BindSource {
     Flat,
     Dylib(u64),
 }
 
-/// Emit the dylib-selection opcode for `source`. Uses the compact IMM
-/// form for ordinals <= 15 (its operand is 4 bits) and the ULEB form
-/// otherwise, so an ordinal past 15 binds against the right library
-/// instead of wrapping.
+/// Emit the dylib-selection opcode for `source`.
 fn push_bind_source(out: &mut Vec<u8>, source: BindSource) {
     match source {
         BindSource::Flat => {
@@ -1503,10 +1213,6 @@ fn build_bind_opcodes(
 ) -> Vec<u8> {
     let mut out = Vec::new();
     out.push(BIND_OPCODE_SET_TYPE_IMM | BIND_TYPE_POINTER);
-    // Track the last dylib-selection opcode byte emitted so consecutive
-    // imports from the same source don't repeat it. A flat-lookup import
-    // selects the special pseudo-dylib instead of an LC_LOAD_DYLIB
-    // ordinal.
     let mut current_source: Option<BindSource> = None;
     for (i, imp) in imports.imports.iter().enumerate() {
         let source = if imp.flat_lookup {
@@ -1548,8 +1254,8 @@ fn build_bind_opcodes(
 }
 
 /// The nlist library ordinal for an import, mirroring the bind stream's
-/// flat-lookup branch so the symbol table and the bind opcodes agree on
-/// the symbol's provenance: a flat-lookup import carries
+/// flat-lookup branch so the symbol table and the bind opcodes agree on the
+/// symbol's provenance: a flat-lookup import carries
 /// `DYNAMIC_LOOKUP_ORDINAL`, a two-level import its 1-based dylib ordinal.
 fn import_library_ordinal(imp: &super::ResolvedImport) -> u8 {
     if imp.flat_lookup {
@@ -1559,9 +1265,7 @@ fn import_library_ordinal(imp: &super::ResolvedImport) -> u8 {
     }
 }
 
-/// One `nlist_64` for an undefined external symbol. `n_strx` is the
-/// byte offset of the symbol's name in the string table; `ordinal`
-/// is the 1-based dylib ordinal (which library exports the symbol).
+/// One `nlist_64` for an undefined external symbol.
 fn nlist_undef(n_strx: u32, ordinal: u8) -> Vec<u8> {
     let mut out = Vec::with_capacity(NLIST_64_SIZE);
     write_struct(
@@ -1578,16 +1282,8 @@ fn nlist_undef(n_strx: u32, ordinal: u8) -> Vec<u8> {
     out
 }
 
-/// One `nlist_64` for a symbol defined in this image (an
-/// exported function). `n_value` is the runtime VA of the
-/// symbol; `n_sect` is the 1-based section index it lives
-/// in. The shared-library writer emits one of these per
-/// `Program::exports` entry, with `N_EXT | N_SECT` so dyld /
-/// `dlsym` will surface the symbol to other images.
-/// One `nlist_64` for a file-local symbol -- `N_SECT` *without*
-/// `N_EXT`, so dyld leaves it out of dlsym lookups but the host's
-/// debugger and `nm` still see the name. Used to label
-/// each PLT trampoline with its libc import name.
+/// One `nlist_64` for a symbol defined in this image (an exported
+/// function).
 fn nlist_local(n_strx: u32, n_value: u64, n_sect: u8) -> Vec<u8> {
     let mut out = Vec::with_capacity(NLIST_64_SIZE);
     write_struct(
@@ -1620,9 +1316,9 @@ fn nlist_defined(n_strx: u32, n_value: u64, n_sect: u8, weak: bool) -> Vec<u8> {
     out
 }
 
-/// Build the Mach-O string table (Mach-O strings are NUL-separated
-/// and start with a single leading NUL so that `n_strx == 0` can mean
-/// "no name"). Returns `(strtab_bytes, [n_strx_for_each_input])`.
+/// Build the Mach-O string table (Mach-O strings are NUL-separated and
+/// start with a single leading NUL so that `n_strx == 0` can mean "no
+/// name").
 fn build_strtab(symbols: &[&str]) -> (Vec<u8>, Vec<u32>) {
     let mut strtab = Vec::new();
     strtab.push(0); // leading NUL
@@ -1636,27 +1332,18 @@ fn build_strtab(symbols: &[&str]) -> (Vec<u8>, Vec<u32>) {
     (strtab, indices)
 }
 
-// ------------------------------------------------------------------
-// Top-level writer. Three-stage: build the parts (so we know their
-// sizes), build the LC stream (which depends on those sizes), then
-// emit the whole image.
-// ------------------------------------------------------------------
-
-/// Gap between the load-command stream and the code: `codesign` adds
-/// `LC_CODE_SIGNATURE` in place, and the entry must not move. ld64
-/// leaves the same room.
 const CODESIGN_LC_PAD: u64 = 64;
 
-/// Byte sizes of the load-command stream and the variable-length
-/// commands that are built to be measured.
+/// Byte sizes of the load-command stream and the variable-length commands
+/// that are built to be measured.
 #[derive(Default)]
 struct Commands {
     dylinker: Vec<u8>,
     dylib_lcs: Vec<Vec<u8>>,
     build_version: Vec<u8>,
     uuid: Vec<u8>,
-    /// `LC_ID_DYLIB` for a shared library; an executable takes
-    /// `LC_MAIN` instead.
+    /// `LC_ID_DYLIB` for a shared library; an executable takes `LC_MAIN`
+    /// instead.
     id_dylib: Option<Vec<u8>>,
     text_seg_size: u64,
     data_const_seg_size: u64,
@@ -1715,8 +1402,8 @@ struct Layout {
     data_vmsize: u64,
     bss_base_vmaddr: u64,
     /// Section indices: the read-only named run follows `__const`, the
-    /// relro one `__DATA_CONST,__const`, the data one `__data`, the
-    /// bss one `__bss`.
+    /// relro one `__DATA_CONST,__const`, the data one `__data`, the bss one
+    /// `__bss`.
     idx_named_const: u8,
     idx_data_const: u8,
     idx_named_data_const: u8,
@@ -1768,9 +1455,9 @@ impl Layout {
         self.data_fileoff + self.thread_storage_offset_in_segment
     }
 
-    /// The data stream's regions at their runtime addresses: the
-    /// read-only head, the read-only named run past the tables, the
-    /// relro region, `__data`, `__bss`.
+    /// The data stream's regions at their runtime addresses: the read-only
+    /// head, the read-only named run past the tables, the relro region,
+    /// `__data`, `__bss`.
     fn data_regions(&self) -> [DataRegion; 5] {
         let open = |start, base| DataRegion {
             start,
@@ -1829,9 +1516,9 @@ struct LinkEdit {
 }
 
 /// One Mach-O image's writer. [`write`] runs the phases in order: the
-/// load-command sizes, the segment layout, the `__LINKEDIT` tables,
-/// the `__DWARF` and `__LINKEDIT` placement, the load commands, then
-/// the emission of each segment.
+/// load-command sizes, the segment layout, the `__LINKEDIT` tables, the
+/// `__DWARF` and `__LINKEDIT` placement, the load commands, then the
+/// emission of each segment.
 struct MachOWriter<'a> {
     program: &'a Program,
     build: &'a Build,
@@ -1875,7 +1562,6 @@ impl<'a> MachOWriter<'a> {
                 "Mach-O writer: pc-relative data-word slots not implemented",
             )));
         }
-        // The absolute-slot table form is relocatable-output only.
         if !build.rodata.abs64.is_empty() {
             return Err(Self::internal(String::from(
                 "Mach-O writer: absolute table slots reached an image build",
@@ -1915,8 +1601,8 @@ impl<'a> MachOWriter<'a> {
         }
     }
 
-    /// The region a family's own section covers, stopping where its
-    /// first named section begins.
+    /// The region a family's own section covers, stopping where its first
+    /// named section begins.
     fn head_of(&self, f: NamedFamily, full: u64) -> u64 {
         self.named
             .iter()
@@ -1933,15 +1619,8 @@ impl<'a> MachOWriter<'a> {
             .count()
     }
 
-    /// Every load command's size, so the header and the code placement
-    /// past the stream are known. `__TEXT,__const` carries the
-    /// read-only data prefix, the producer fingerprint at its 8-aligned
-    /// tail and the switch-table blob past that, so no table byte lands
-    /// in `__text`. A section name is a 16-byte field, so a longer one
-    /// is truncated the way ld64 truncates its own. One `LC_LOAD_DYLIB`
-    /// per resolved dylib, in declaration order; dyld assigns ordinal
-    /// `i+1` to the i-th one, which the bind opcodes and the nlist
-    /// `n_desc` fields both use.
+    /// Every load command's size, so the header and the code placement past
+    /// the stream are known.
     fn size_load_commands(&mut self) {
         let build = self.build;
         let ro_len = build.data_ro_len.min(build.data.len()) as u64;
@@ -2001,9 +1680,6 @@ impl<'a> MachOWriter<'a> {
         } else {
             0
         };
-        // `__DATA` carries `__got` and `__data`, `__thread_vars` and the
-        // thread storage under TLS, `__bss` when segregation produced
-        // zero-init storage, and the named runs.
         l.has_bss_section = build.bss_size > 0;
         let data_seg_section_count: u64 = (if self.tls_present { 4 } else { 2 })
             + if l.has_bss_section { 1 } else { 0 }
@@ -2055,19 +1731,7 @@ impl<'a> MachOWriter<'a> {
             + entry_lc_size;
     }
 
-    /// The file and vmaddr layout. `codesign --sign -` appends an
-    /// `LC_CODE_SIGNATURE` to the load-command stream in place, so the
-    /// code starts past a pad the signature can grow into, at the
-    /// alignment the text's input sections claim. `__TEXT,__const`
-    /// sits past the code at the data image's base alignment so the
-    /// prefix's packed residues hold absolutely. `__DATA_CONST` sits
-    /// between `__TEXT` and `__DATA`, page-aligned like every segment so
-    /// dyld can drop write permission on it alone. `__DATA` holds
-    /// `__got`, `__data`, the TLV descriptors, the per-thread storage
-    /// (file-backed as `__thread_data` once any initializer makes
-    /// `tls_init_size` non-zero, else the zero-fill `__thread_bss`) and
-    /// the zero-fill `.bss` tail the loader provides past the file
-    /// image.
+    /// The file and vmaddr layout.
     fn layout_segments(&mut self) {
         let build = self.build;
         let l = &mut self.layout;
@@ -2088,8 +1752,6 @@ impl<'a> MachOWriter<'a> {
         };
         l.data_fileoff = l.data_const_fileoff + l.data_const_size;
         l.got_size = (build.imports.imports.len() * 8) as u64;
-        // The segment base is page-aligned, so aligning the in-segment
-        // offset aligns both fileoff and vmaddr.
         l.data_align = crate::c5::layout::data_image_align(build.data_align) as u64;
         l.data_section_offset_in_segment = round_up(l.got_size, l.data_align);
         l.program_data_size = build.data.len() as u64;
@@ -2162,9 +1824,6 @@ impl<'a> MachOWriter<'a> {
             })
             .collect();
         self.named_out = named_out;
-        // 1-based section indices run globally across segments in
-        // declaration order, so each family's named run shifts every
-        // index past it.
         let l = &mut self.layout;
         l.idx_named_const = SECT_INDEX_CONST + 1;
         l.idx_data_const = l.idx_named_const + l.counts.konst;
@@ -2191,8 +1850,8 @@ impl<'a> MachOWriter<'a> {
         v
     }
 
-    /// Section holding a data-stream offset: the named section covering
-    /// it, else its family's own.
+    /// Section holding a data-stream offset: the named section covering it,
+    /// else its family's own.
     fn data_off_sect_index(&self, off: u64) -> u8 {
         let l = &self.layout;
         let runs: [(NamedFamily, u8, u64); 4] = [
@@ -2223,13 +1882,10 @@ impl<'a> MachOWriter<'a> {
         }
     }
 
-    /// The bind stream (every imported symbol, plus each TLV
-    /// descriptor's slot 0 bound to `__tlv_bootstrap`) and the rebase
-    /// stream (every absolute pointer in static data and in the TLS
-    /// template; the file holds the preferred address and dyld adds
-    /// the slide). A slot in the relro region is addressed against
-    /// `__DATA_CONST`, one past it against `__data` inside `__DATA`;
-    /// the TLS-template slots carry their own section base.
+    /// The bind stream (every imported symbol, plus each TLV descriptor's
+    /// slot 0 bound to `__tlv_bootstrap`) and the rebase stream (every
+    /// absolute pointer in static data and in the TLS template; the file
+    /// holds the preferred address and dyld adds the slide).
     fn build_linkedit_streams(&mut self) -> Result<(), C5Error> {
         let build = self.build;
         let l = &self.layout;
@@ -2280,12 +1936,7 @@ impl<'a> MachOWriter<'a> {
 
     /// The symbol and string tables, laid out `[locals][exports]
     /// [imports][tlv-bootstrap?]` so the `LC_DYSYMTAB` ranges are
-    /// contiguous. One local per PLT trampoline under its c5-side name
-    /// (a data import has no trampoline and gets only the undefined
-    /// entry). Mach-O prefixes C exports with an underscore; the
-    /// export trie carries the same defined externals, addressed
-    /// relative to the image base, since dyld resolves an image
-    /// carrying `LC_DYLD_INFO` through the trie alone.
+    /// contiguous.
     fn build_symbol_tables(&mut self) -> Result<(), C5Error> {
         let build = self.build;
         let code_vmaddr_base = self.layout.code_vmaddr_base();
@@ -2302,9 +1953,6 @@ impl<'a> MachOWriter<'a> {
             .filter_map(|(imp, off)| off.map(|o| (imp.local_name.as_str(), o)))
             .collect();
         let mut symbol_names: Vec<&str> = plt_locals.iter().map(|&(name, _)| name).collect();
-        // `#pragma export` populates `build.exports` for shared
-        // libraries and `--export-all` / `--export-data` the dynamic
-        // exports of an executable; a name in both is exported once.
         let pragma_export_names: alloc::collections::BTreeSet<&str> =
             build.exports.iter().map(|e| e.name.as_str()).collect();
         let dyn_exports_emit: Vec<&crate::c5::codegen::DynamicExport> = build
@@ -2392,17 +2040,9 @@ impl<'a> MachOWriter<'a> {
         Ok(())
     }
 
-    /// `__DWARF` sits between `__DATA` and `__LINKEDIT` in both LC
-    /// order and file order: `__LINKEDIT` has to remain the last
-    /// file-resident segment because `codesign` grows it over the
-    /// signature blob. The segment declares a page-sized `vmsize`
-    /// (`dyld_info` rejects `vmsize < filesize`), maps with `prot = 0`
-    /// and is never accessed at runtime. A multi-TU link hands over
-    /// the linker-merged sections with their text-targeting
-    /// placeholders unresolved; `.debug_frame` regenerates from the
-    /// synth-Build. `__LINKEDIT` holds the rebase stream, the bind
-    /// stream, the export trie, the symbol table and the string table,
-    /// in the order `LC_DYLD_INFO_ONLY` names them.
+    /// `__DWARF` sits between `__DATA` and `__LINKEDIT` in both LC order
+    /// and file order: `__LINKEDIT` has to remain the last file-resident
+    /// segment because `codesign` grows it over the signature blob.
     fn layout_dwarf_and_linkedit(&mut self) -> Result<(), C5Error> {
         let (program, build) = (self.program, self.build);
         let l = &self.layout;
@@ -2425,8 +2065,6 @@ impl<'a> MachOWriter<'a> {
             le.dwarf_frame_offset = le.dwarf_str_offset + s.debug_str.len() as u64;
             let sections_size =
                 le.dwarf_frame_offset + s.debug_frame.len() as u64 - le.dwarf_fileoff;
-            // Padded to a page so `__LINKEDIT`'s fileoff lands on a page
-            // boundary, which dyld checks against its vmaddr.
             le.dwarf_filesize = round_up(sections_size, PAGE_SIZE);
             le.dwarf_tail_pad = (le.dwarf_filesize - sections_size) as usize;
             le.dwarf = s;
@@ -2577,11 +2215,9 @@ impl<'a> MachOWriter<'a> {
     }
 
     /// The load commands, in Apple's order: segments first, then the
-    /// dyld_info family, the symbol tables, the dylinker, the dylibs,
-    /// the build version, the UUID, and `LC_MAIN` (or `LC_ID_DYLIB` for
-    /// a shared library). `LC_MAIN` routes through `__c5_entry` when
-    /// the startup runtime is linked, so constructors run before the
-    /// program entry.
+    /// dyld_info family, the symbol tables, the dylinker, the dylibs, the
+    /// build version, the UUID, and `LC_MAIN` (or `LC_ID_DYLIB` for a
+    /// shared library).
     fn build_load_commands(&mut self) -> Result<(), C5Error> {
         let build = self.build;
         let l = &self.layout;
@@ -2627,10 +2263,8 @@ impl<'a> MachOWriter<'a> {
         Ok(())
     }
 
-    // ---- Emission ----
-
-    /// `mach_header_64` and the load-command stream, padded out to the
-    /// code so `codesign` can insert `LC_CODE_SIGNATURE` in place.
+    /// `mach_header_64` and the load-command stream, padded out to the code
+    /// so `codesign` can insert `LC_CODE_SIGNATURE` in place.
     fn emit_header_and_commands(&mut self) {
         let build = self.build;
         let l = &self.layout;
@@ -2669,12 +2303,11 @@ impl<'a> MachOWriter<'a> {
         self.out = out;
     }
 
-    /// `__TEXT`: the code with its GOT, data, function-pointer, table
-    /// and TLV descriptor references patched against the settled
-    /// addresses, then `__const` (the read-only prefix verbatim, the
-    /// fingerprint, the switch-table blob with each entry as the
-    /// `target - table_base` difference) and the read-only named run,
-    /// page-padded.
+    /// `__TEXT`: the code with its GOT, data, function-pointer, table and
+    /// TLV descriptor references patched against the settled addresses,
+    /// then `__const` (the read-only prefix verbatim, the fingerprint, the
+    /// switch-table blob with each entry as the `target - table_base`
+    /// difference) and the read-only named run, page-padded.
     fn emit_text_segment(&mut self) -> Result<(), C5Error> {
         let build = self.build;
         let l = &self.layout;
@@ -2746,15 +2379,11 @@ impl<'a> MachOWriter<'a> {
         Ok(())
     }
 
-    /// The data image with every pointer initializer materialized as
-    /// its preferred address (dyld adds the slide through the rebase
-    /// stream), split at the relro boundary into `__DATA_CONST,__const`
-    /// and `__DATA,__data`; the `__got` slots ahead of it stay zero for
-    /// the bind stream. Under TLS, one 24-byte descriptor per variable
-    /// (slot 0 bound to `__tlv_bootstrap` by dyld, slot 1 the key dyld
-    /// assigns, slot 2 the offset in the per-thread block) and, when any
-    /// variable has an initializer, the template as `__thread_data`
-    /// with its address constants resolved.
+    /// The data image with every pointer initializer materialized as its
+    /// preferred address (dyld adds the slide through the rebase stream),
+    /// split at the relro boundary into `__DATA_CONST,__const` and
+    /// `__DATA,__data`; the `__got` slots ahead of it stay zero for the
+    /// bind stream.
     fn emit_data_segments(&mut self) -> Result<(), C5Error> {
         let build = self.build;
         let l = &self.layout;
@@ -2798,8 +2427,8 @@ impl<'a> MachOWriter<'a> {
         Ok(())
     }
 
-    /// The `__DWARF` contents in the order `segment_dwarf` pointed at,
-    /// then `__LINKEDIT` in the order `LC_DYLD_INFO_ONLY` names.
+    /// The `__DWARF` contents in the order `segment_dwarf` pointed at, then
+    /// `__LINKEDIT` in the order `LC_DYLD_INFO_ONLY` names.
     fn emit_dwarf_and_linkedit(&mut self) {
         let le = &self.linkedit;
         let out = &mut self.out;
@@ -2834,9 +2463,7 @@ impl<'a> MachOWriter<'a> {
 
 #[cfg(test)]
 mod tests {
-    //! Verify the structural invariants of the emitted Mach-O. The
-    //! end-to-end "does it run" check lives in `tests/native.rs`,
-    //! which builds the binary and execs it.
+    //! Verify the structural invariants of the emitted Mach-O.
 
     use super::*;
 
@@ -2908,23 +2535,19 @@ mod tests {
 
     #[test]
     fn ncmds_baseline_is_twelve_plus_dylibs() {
-        // tiny_build has 1 dylib (libSystem) -> baseline 12 LCs
-        // (5 segments incl. __DWARF + dyld_info + symtab +
-        // dysymtab + dylinker + build_version + uuid + main)
-        // plus 1 LC_LOAD_DYLIB.
         let bytes = write(&tiny_program(), &tiny_build()).unwrap();
         assert_eq!(read_u32(&bytes, 16), 13);
     }
 
     #[test]
     fn lc_main_entry_lands_on_first_instruction_byte() {
-        // Find LC_MAIN, read entryoff, check the byte at that offset
-        // is the first instruction byte we passed in (the `movz x0,
-        // #42` from tiny_build() starts with 0x40 in little-endian).
-        // We have to look up entryoff rather than computing it as
-        // (32 + sizeofcmds), because we leave padding between the LC
-        // stream and the code so codesign can grow the LCs in place
-        // without overwriting the entry point.
+        // Find LC_MAIN, read entryoff, check the byte at that offset is the
+        // first instruction byte we passed in (the `movz x0, #42` from
+        // tiny_build() starts with 0x40 in little-endian). We have to look
+        // up entryoff rather than computing it as (32 + sizeofcmds),
+        // because we leave padding between the LC stream and the code so
+        // codesign can grow the LCs in place without overwriting the entry
+        // point.
         let bytes = write(&tiny_program(), &tiny_build()).unwrap();
         let sizeofcmds = read_u32(&bytes, 20) as usize;
         let mut p = 32usize;
@@ -2955,8 +2578,6 @@ mod tests {
         let bytes = write(&tiny_program(), &tiny_build()).unwrap();
         // strtab is padded to 8 bytes, so the whole image is too.
         assert_eq!(bytes.len() % 8, 0);
-        // Two full segments worth of file-resident data (__TEXT, __DATA)
-        // plus some __LINKEDIT trailer.
         assert!(
             bytes.len() as u64 > 2 * PAGE_SIZE,
             "image too small: {} bytes",
@@ -2964,9 +2585,9 @@ mod tests {
         );
     }
 
-    /// `__tlv_bootstrap` binds against libSystem's real ordinal; an
-    /// image whose dylib list lacks libSystem cannot bind the TLV
-    /// descriptors and must fail rather than guess ordinal 1.
+    /// `__tlv_bootstrap` binds against libSystem's real ordinal; an image
+    /// whose dylib list lacks libSystem cannot bind the TLV descriptors and
+    /// must fail rather than guess ordinal 1.
     #[test]
     fn tlv_bootstrap_ordinal_requires_libsystem() {
         use crate::c5::codegen::ResolvedDylib;
@@ -2986,8 +2607,6 @@ mod tests {
 
     #[test]
     fn uleb128_round_trips() {
-        // Spot-check the encoder against a few known values from
-        // <mach-o/loader.h>'s ULEB references.
         let cases: &[(u64, &[u8])] = &[
             (0, &[0x00]),
             (1, &[0x01]),
@@ -3024,8 +2643,8 @@ mod tests {
         use super::super::ResolvedImports;
         use crate::c5::codegen::ResolvedDylib;
         // 20 distinct dylibs: ordinals 16 and 17 (dylib_index 15 / 16)
-        // exceed the IMM opcode's 4-bit operand and must switch to the
-        // ULEB form instead of wrapping to a wrong library.
+        // exceed the IMM opcode's 4-bit operand and must switch to the ULEB
+        // form instead of wrapping to a wrong library.
         let dylibs: Vec<ResolvedDylib> = (0..20)
             .map(|i| ResolvedDylib {
                 name: format!("lib{i}"),
@@ -3052,23 +2671,20 @@ mod tests {
 
     #[test]
     fn flat_lookup_nlist_carries_dynamic_lookup_ordinal() {
-        // A flat-lookup import's nlist library ordinal must match the
-        // bind stream's flat-lookup provenance (DYNAMIC_LOOKUP_ORDINAL),
-        // not a two-level ordinal pointing at the first dylib.
+        // A flat-lookup import's nlist library ordinal must match the bind
+        // stream's flat-lookup provenance (DYNAMIC_LOOKUP_ORDINAL), not a
+        // two-level ordinal pointing at the first dylib.
         let flat = sample_import(0, true);
         assert_eq!(import_library_ordinal(&flat), DYNAMIC_LOOKUP_ORDINAL);
         let bytes = nlist_undef(0, import_library_ordinal(&flat));
         let n_desc = u16::from_le_bytes([bytes[6], bytes[7]]);
         assert_eq!((n_desc >> 8) as u8, DYNAMIC_LOOKUP_ORDINAL);
-        // A two-level import still reports its 1-based dylib ordinal.
         let two_level = sample_import(0, false);
         assert_eq!(import_library_ordinal(&two_level), 1);
     }
 
     #[test]
     fn export_trie_round_trips() {
-        // Shared prefixes ("_Init...") exercise the radix edge splitting.
-        // A minimal walker decodes each name back to its address.
         let entries = [
             ("_InitWindow".to_string(), 0x1234u64, 0u64),
             ("_InitAudioDevice".to_string(), 0x5678u64, 0u64),
@@ -3141,9 +2757,6 @@ mod tests {
     #[test]
     fn bind_stream_contains_symbol_name() {
         let bytes = write(&tiny_program(), &tiny_build()).unwrap();
-        // Walk the LCs to find LC_DYLD_INFO_ONLY, read bind_off+size,
-        // confirm the symbol "_write" appears in there as a NUL-
-        // terminated string.
         let sizeofcmds = read_u32(&bytes, 20) as usize;
         let mut p = 32usize;
         let lc_end = 32 + sizeofcmds;
@@ -3167,11 +2780,9 @@ mod tests {
 
     #[test]
     fn dynamic_exports_emitted_as_external_defined() {
-        // A text, a data and a zero-init global carried as dynamic
-        // exports must appear in the symbol table as N_EXT | N_SECT
-        // entries with the right section index, so a dlopen'd module
-        // can bind them. The zero-init one is addressed by a data-byte
-        // offset past `build.data`, which resolves into `__DATA,__bss`.
+        // A text, a data and a zero-init global carried as dynamic exports
+        // must appear in the symbol table as N_EXT | N_SECT entries with
+        // the right section index, so a dlopen'd module can bind them.
         let mut build = tiny_build();
         build.data = alloc::vec![0u8; 16];
         build.bss_size = 8;
@@ -3245,9 +2856,6 @@ mod tests {
             .expect("_myglobal export");
         assert_eq!(data.1 & N_EXT, N_EXT, "data export must be external");
         assert_eq!(data.1 & N_SECT, N_SECT, "data export must be N_SECT");
-        // Independent restatement of the numbering for an image with
-        // no relro region, no TLS and no named section: 1 __text,
-        // 2 __TEXT,__const, 3 __got, 4 __data, 5 __bss.
         assert_eq!(data.2, 4, "data export n_sect");
 
         let zero = found
@@ -3273,8 +2881,6 @@ mod tests {
             if cmd == LC_SYMTAB {
                 let stroff = read_u32(&bytes, p + 16) as usize;
                 assert_eq!(bytes[stroff], 0, "string table must start with NUL");
-                // tiny_build's only import is `_write`; it lands
-                // immediately after the leading NUL.
                 assert_eq!(
                     &bytes[stroff + 1..stroff + 7],
                     b"_write",
@@ -3287,9 +2893,8 @@ mod tests {
         panic!("LC_SYMTAB not found");
     }
 
-    /// Round-trip through `otool -h` on the host to confirm Apple's
-    /// own parser is happy with the header. A separate test below
-    /// (`otool_l_lists_dyld_info`) checks the dyld_info LC.
+    /// Round-trip through `otool -h` on the host to confirm Apple's own
+    /// parser is happy with the header.
     #[cfg(target_os = "macos")]
     #[test]
     fn otool_h_parses_the_image() {
@@ -3316,10 +2921,9 @@ mod tests {
         }
     }
 
-    /// Confirm `dyld_info -imports` sees `_write` bound against
-    /// libSystem. dyld_info is Apple's modern Mach-O introspection tool
-    /// and the closest analogue to "what dyld would see at load time".
-    /// If the bind stream is malformed, dyld_info says so.
+    /// Confirm `dyld_info -imports` sees `_write` bound against libSystem.
+    /// dyld_info is Apple's modern Mach-O introspection tool and the
+    /// closest analogue to "what dyld would see at load time".
     #[cfg(target_os = "macos")]
     #[test]
     fn dyld_info_imports_lists_write() {
@@ -3353,24 +2957,7 @@ mod tests {
         );
     }
 
-    /// Structural check for the TLV path. Compiles a program
-    /// declaring a single `_Thread_local` global, writes the
-    /// Mach-O, and verifies:
-    ///   * `MH_HAS_TLV_DESCRIPTORS` is set in the mach header
-    ///     flags (otherwise dyld doesn't replace descriptor
-    ///     slot 0 with the real getter, and `__tlv_bootstrap`
-    ///     resolves to the abort-on-call error stub),
-    ///   * `__DATA` carries 4 sections including
-    ///     `__thread_vars` (S_THREAD_LOCAL_VARIABLES = 0x13)
-    ///     and `__thread_bss` (S_THREAD_LOCAL_ZEROFILL = 0x12),
-    ///   * the bind opcode stream contains the
-    ///     `__tlv_bootstrap` symbol name.
-    ///
-    /// End-to-end execution is covered by
-    /// `c5::tests::native::fixture_parity`'s
-    /// `thread_local_basic.c` entry; this test runs even on
-    /// machines that can't `codesign` (e.g., a CI runner with
-    /// macOS but a stripped-down keychain).
+    /// Structural check for the TLV path.
     #[test]
     fn thread_local_marks_tlv_header_and_sections() {
         use crate::Compiler;
@@ -3389,7 +2976,6 @@ mod tests {
         .expect("lower");
         let bytes = write(&tiny_program(), &build).expect("write Mach-O");
 
-        // mach_header_64.flags carries MH_HAS_TLV_DESCRIPTORS.
         let flags = read_u32(&bytes, 24);
         assert_ne!(
             flags & MH_HAS_TLV_DESCRIPTORS,
@@ -3397,9 +2983,6 @@ mod tests {
             "expected MH_HAS_TLV_DESCRIPTORS in mach header flags, got {flags:#x}"
         );
 
-        // Walk the LCs and find __DATA segment; confirm it has
-        // 4 sections including __thread_vars and __thread_bss
-        // with the right type bits.
         let sizeofcmds = read_u32(&bytes, 20) as usize;
         let mut p = 32usize;
         let lc_end = 32 + sizeofcmds;
@@ -3409,7 +2992,6 @@ mod tests {
             let cmd = read_u32(&bytes, p);
             let cmdsize = read_u32(&bytes, p + 4) as usize;
             if cmd == LC_SEGMENT_64 {
-                // segname at p + 8 (16 bytes).
                 let segname = &bytes[p + 8..p + 24];
                 if segname.starts_with(b"__DATA\0") {
                     let nsects = read_u32(&bytes, p + 64) as usize;
@@ -3417,7 +2999,6 @@ mod tests {
                     let mut sect_p = p + 72;
                     for _ in 0..nsects {
                         let sect_name = &bytes[sect_p..sect_p + 16];
-                        // section flags at offset 64 within Section64.
                         let sect_flags = read_u32(&bytes, sect_p + 64);
                         let sect_type = sect_flags & 0xFF;
                         if sect_name.starts_with(b"__thread_vars\0") {
@@ -3436,9 +3017,6 @@ mod tests {
         assert!(saw_thread_vars, "missing __DATA,__thread_vars");
         assert!(saw_thread_bss, "missing __DATA,__thread_bss");
 
-        // Bind stream names `__tlv_bootstrap` so dyld knows
-        // which TLV initialiser to replace each descriptor's
-        // slot 0 with.
         let mut p = 32usize;
         while p < lc_end {
             let cmd = read_u32(&bytes, p);
@@ -3457,11 +3035,8 @@ mod tests {
         }
     }
 
-    /// Same `_Thread_local` source compiles cleanly *without*
-    /// the TLV mach-header flag when there's no TLS. Sanity
-    /// check that we don't accidentally set the flag for
-    /// non-TLS programs (which would mislead dyld into
-    /// scanning a non-existent `__thread_vars`).
+    /// Same `_Thread_local` source compiles cleanly *without* the TLV
+    /// mach-header flag when there's no TLS.
     #[test]
     fn no_tls_means_no_tlv_header_flag() {
         use crate::Compiler;
@@ -3488,8 +3063,8 @@ mod tests {
     }
 
     /// `nm` should report `_write` as a U (undefined external) entry,
-    /// confirming `LC_SYMTAB` and the string table are readable by
-    /// classic Unix tooling.
+    /// confirming `LC_SYMTAB` and the string table are readable by classic
+    /// Unix tooling.
     #[cfg(target_os = "macos")]
     #[test]
     fn nm_reports_write_undefined() {

@@ -36,12 +36,11 @@
 #![allow(dead_code)]
 
 use alloc::format;
-use alloc::vec;
 use alloc::vec::Vec;
 
 use super::super::error::C5Error;
 use super::super::program::Program;
-use super::{AddrPart, Build, DataFixup, FuncFixup, GotFixup, NativeOptions, Target};
+use super::{AddrPart, Build, GotFixup, NativeOptions, Target};
 
 /// AArch64 register name. Wraps the 5-bit register field that nearly
 /// every instruction needs in some position; using a newtype prevents
@@ -1720,6 +1719,227 @@ pub(crate) struct Fixup {
     pub(crate) kind: BranchKind,
 }
 
+/// The AArch64 half of the lowering shell: the tables this target derives
+/// from the unit, the output only it produces, and the encodings behind
+/// [`super::ssa::emit_common::LowerTarget`].
+struct Aarch64Lower {
+    fixups: Vec<Fixup>,
+    macho_tlv_fixups: Vec<super::MachoTlvFixup>,
+    macho_tlv_descriptors: Vec<super::MachoTlvDescriptor>,
+    /// Internal-linkage data object name -> unified data offset, so a
+    /// function-body inline-asm symbol operand naming a static resolves to
+    /// its storage; an external-linkage name stays symbolic and keeps its
+    /// own symbol's binding. First record wins, matching the writer's
+    /// local-symbol dedup for a block-scope static sharing a file-scope
+    /// name.
+    data_sym_offsets: alloc::collections::BTreeMap<alloc::string::String, i64>,
+    /// The mapping state spans the section: a body ending in data leaves the
+    /// padding to the next function's first instruction, as under GNU as.
+    text_map_state: Option<super::map_syms::MapClass>,
+}
+
+impl Aarch64Lower {
+    fn new(program: &Program) -> Self {
+        use crate::c5::symbol::Linkage;
+        use crate::c5::token::Token;
+        let mut data_sym_offsets = alloc::collections::BTreeMap::new();
+        for s in program.symbols.iter().filter(|s| {
+            s.class == Token::Glo as i64
+                && s.defined_here
+                && !s.is_thread_local
+                && !s.is_alias
+                && !s.name.is_empty()
+                && s.linkage == Linkage::Internal
+        }) {
+            data_sym_offsets
+                .entry(alloc::string::String::from(s.link_name()))
+                .or_insert(s.val);
+        }
+        Self {
+            fixups: Vec::new(),
+            macho_tlv_fixups: Vec::new(),
+            macho_tlv_descriptors: Vec::new(),
+            data_sym_offsets,
+            text_map_state: None,
+        }
+    }
+}
+
+impl super::ssa::emit_common::LowerTarget for Aarch64Lower {
+    type Fixup = Fixup;
+
+    const ARCH: &'static str = "aarch64";
+    const ERR_TAG: &'static str = "";
+    const WALK_PASS: &'static str = "ssa_emit_aarch64 (block walk)";
+    // `.align` takes a power-of-two exponent on aarch64.
+    const FILE_ASM_ALIGN_POW2: bool = true;
+    const FILE_ASM_COMMENTS: crate::c5::asm::AsmComments = crate::c5::asm::AsmComments::A64;
+
+    /// Contract an integer multiply into the add / sub that reads it (madd /
+    /// msub). After the index fold and the store forwarding, whose address
+    /// matching reads the `base + index * scale` shape a fused node would
+    /// hide, and after the divide pairing, which is what leaves `n - q*d`
+    /// behind.
+    fn late_opt_passes(&mut self, funcs: &mut Vec<crate::c5::ir::FunctionSsa>) {
+        super::ssa::emit_common::time_pass_arch("passes::mul_add::run", Self::ARCH, || {
+            crate::c5::codegen::passes::mul_add::run(funcs);
+        });
+    }
+
+    fn note_callees(&mut self, _funcs: &[crate::c5::ir::FunctionSsa]) {}
+
+    fn note_extern_callee(&mut self, _sym: &crate::c5::symbol::Symbol) {}
+
+    #[cfg(feature = "std")]
+    fn dump_unit(
+        &self,
+        program: &Program,
+        funcs: &[crate::c5::ir::FunctionSsa],
+        allocs: &[super::ssa::reg_alloc::Allocation],
+        out: &mut alloc::string::String,
+    ) {
+        use core::fmt::Write;
+        let name_by_ent: alloc::collections::BTreeMap<usize, &str> = program
+            .finished_functions
+            .iter()
+            .map(|ff| (ff.ent_pc, ff.name.as_str()))
+            .collect();
+        for (f, a) in funcs.iter().zip(allocs.iter()) {
+            if let Some(name) = name_by_ent.get(&f.ent_pc) {
+                let _ = writeln!(out, "; name={name}");
+            }
+            let _ = write!(out, "{}", super::ssa::dump::dump_function(f, a));
+        }
+    }
+
+    fn align_entry(&mut self, st: &mut super::ssa::emit_common::LowerState, fn_align: usize) {
+        // A preceding body's inline-asm data may leave the stream off
+        // instruction alignment; the function's first byte pays it.
+        super::emit::a64_align_asm_stream(
+            &mut st.code,
+            &mut st.text_data_ranges,
+            &mut self.text_map_state,
+        );
+        super::pad_to_alignment(&mut st.code, fn_align, &NOP.to_le_bytes());
+    }
+
+    fn entry_nops(&mut self, code: &mut Vec<u8>, n: u32) {
+        for _ in 0..n {
+            code.extend_from_slice(&NOP.to_le_bytes());
+        }
+    }
+
+    fn emit_function(
+        &mut self,
+        fe: super::ssa::emit_common::FunctionEmit<'_>,
+        inputs: &super::ssa::emit_common::FunctionInputs<'_>,
+        func: &crate::c5::ir::FunctionSsa,
+        alloc_for: &super::ssa::reg_alloc::Allocation,
+        target: Target,
+        native: &NativeOptions,
+        imports: &super::ResolvedImports,
+        entry: super::FunctionEntry,
+    ) -> bool {
+        let mut cx = fe.cx;
+        #[cfg(feature = "std")]
+        let _ = super::ssa::emit_common::take_bail();
+        super::emit::emit_function(
+            func,
+            alloc_for,
+            target,
+            &mut cx,
+            &mut self.fixups,
+            inputs.extern_data_names,
+            inputs.extern_tls_names,
+            imports,
+            inputs.variadic_targets,
+            &mut self.macho_tlv_fixups,
+            &mut self.macho_tlv_descriptors,
+            inputs.name2entpc,
+            &self.data_sym_offsets,
+            fe.asm_text_labels,
+            fe.asm_section_text_refs,
+            &mut self.text_map_state,
+            native.no_fp_regs,
+            native.strict_align,
+            fe.rodata,
+            native.output_kind == super::OutputKind::Relocatable && !native.pic,
+            native.hardening,
+            native.stack_protect.resolved_for(target),
+            entry,
+            native.fixed_regs,
+        )
+    }
+
+    fn after_functions(
+        &mut self,
+        _st: &mut super::ssa::emit_common::LowerState,
+        _native: &NativeOptions,
+    ) {
+    }
+
+    fn take_fixups(&mut self) -> Vec<Fixup> {
+        core::mem::take(&mut self.fixups)
+    }
+
+    fn fixup_native_offset(f: &Fixup) -> usize {
+        f.native_offset
+    }
+
+    fn fixup_target_ent_pc(f: &Fixup) -> usize {
+        f.target_ent_pc
+    }
+
+    fn fixup_is_tail(f: &Fixup) -> bool {
+        matches!(f.kind, BranchKind::B)
+    }
+
+    fn apply_fixups(
+        code: &mut [u8],
+        fixups: &[Fixup],
+        pc_to_native: &[usize],
+        pc_extent: usize,
+    ) -> Result<(), C5Error> {
+        apply_fixups(code, fixups, pc_to_native, pc_extent)
+    }
+
+    fn emit_plt_trampolines(
+        code: &mut Vec<u8>,
+        got_fixups: &mut Vec<GotFixup>,
+        n_imports: usize,
+    ) -> Vec<usize> {
+        emit_plt_trampolines(code, got_fixups, n_imports)
+    }
+
+    fn apply_plt_call_fixups(
+        code: &mut [u8],
+        fixups: &[PltCallFixup],
+        trampoline_offsets: &[usize],
+    ) -> Result<(), C5Error> {
+        apply_plt_call_fixups(code, fixups, trampoline_offsets)
+    }
+
+    fn entry_native_offset(pc_to_native: &[usize], entry_pc: usize) -> Result<usize, C5Error> {
+        pc_to_native.get(entry_pc).copied().ok_or_else(|| {
+            C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
+                "native codegen: entry_pc {entry_pc} is out of PC range"
+            )))
+        })
+    }
+
+    fn cfi_target(_native: &NativeOptions) -> super::ssa::cfi::CfiTarget {
+        super::ssa::cfi::CfiTarget {
+            arch: super::ssa::cfi::CfiArch::Aarch64,
+            addr_bytes: 8,
+        }
+    }
+
+    fn install(&mut self, build: &mut Build) {
+        build.macho_tlv_fixups = core::mem::take(&mut self.macho_tlv_fixups);
+        build.macho_tlv_descriptors = core::mem::take(&mut self.macho_tlv_descriptors);
+    }
+}
+
 /// Lower a [`Program`]'s SSA functions to AArch64 machine code.
 /// Walks every Inst once, emitting native code; control-flow
 /// terminators emit a placeholder branch and record a fixup to be
@@ -1741,902 +1961,21 @@ pub(crate) struct Fixup {
 pub(crate) fn lower(
     program: &Program,
     target: Target,
-    #[cfg_attr(not(feature = "std"), allow(unused_variables))] native: NativeOptions,
+    native: NativeOptions,
     imports: &super::ResolvedImports,
     prebuilt: Option<super::ssa::shadow::PrebuiltSsa>,
     mode: super::LowerMode,
 ) -> Result<Build, C5Error> {
-    // Asm label numbering restarts per lowering; see
-    // `crate::c5::asm::reset_asm_instance`.
-    crate::c5::asm::reset_asm_instance();
-    let mut code = Vec::new();
-    let mut func_ent_pcs: Vec<usize> = Vec::new();
-    let mut func_ends: Vec<usize> = Vec::new();
-    let mut patchable_entries: Vec<super::EntryArea> = Vec::new();
-    let mut mcount_sites: Vec<usize> = Vec::new();
-    let mut func_names: Vec<alloc::string::String> = Vec::new();
-    let mut func_prologue_native: alloc::collections::BTreeMap<usize, usize> =
-        alloc::collections::BTreeMap::new();
-    let mut ssa_line_rows: Vec<(usize, u32, u32)> = Vec::new();
-    let mut asm_sections = crate::c5::asm::AsmSectionSink::default();
-    // File-scope asm section blocks precede the per-function ones
-    // (`.align` takes a power-of-two exponent on aarch64).
-    crate::c5::asm::materialize_file_asm(
-        &program.file_asm,
-        true,
-        crate::c5::asm::AsmComments::A64,
-        &|blocks| {
-            crate::c5::codegen::encode_file_asm_section_code(blocks, target, native.elf_class)
-        },
-        &mut asm_sections,
+    let mut backend = Aarch64Lower::new(program);
+    super::ssa::emit_common::lower_unit(
+        &mut backend,
+        program,
+        target,
+        native,
+        imports,
+        prebuilt,
+        mode,
     )
-    .map_err(|m| C5Error::Compile(alloc::format!("<file-scope asm>: {m}")))?;
-    let mut fixups: Vec<Fixup> = Vec::new();
-    let mut got_fixups: Vec<GotFixup> = Vec::new();
-    // Each `JsrExt` / `TailExt` site emits a placeholder
-    // BL/B; the displacement gets backfilled once trampolines are
-    // laid out at the tail of `code`.
-    let mut plt_call_fixups: Vec<PltCallFixup> = Vec::new();
-    let mut data_fixups: Vec<DataFixup> = Vec::new();
-    let mut user_extern_data_refs: Vec<super::UserExternDataRef> = Vec::new();
-    // Function-pointer Imms get their target resolved post-walk against
-    // `pc_to_native`, so we record (adrp_offset, target_ent_pc)
-    // here and rewrite into `Build::func_fixups` once the map is final.
-    let mut pending_func_fixups: Vec<(usize, usize)> = Vec::new();
-    // Win64 TLS-index fixups -- one entry per `Inst::TlsAddr`
-    // lowering site when targeting Windows. The PE writer reserves
-    // the `_tls_index` DWORD slot and patches each fixup with the
-    // displacement to it.
-    let mut tls_index_fixups: Vec<super::TlsIndexFixup> = Vec::new();
-    // Linux/aarch64 TLS access fixups: each `Inst::TlsAddr` records its
-    // add-immediate site so the linker resolves the variant-1 TPOFF
-    // against the merged TLS layout (extern symbols and multi-unit
-    // local accesses).
-    let mut elf_tpoff_fixups: Vec<super::ElfTpoffFixup> = Vec::new();
-    // macOS arm64 TLV: each unique TLS variable's offset gets a
-    // descriptor index; the writer emits a 24-byte
-    // `__thread_vars` descriptor per index. Each `Inst::TlsAddr`
-    // site records an `adrp + add` pair via `macho_tlv_fixups`.
-    let mut macho_tlv_fixups: Vec<super::MachoTlvFixup> = Vec::new();
-    let mut macho_tlv_descriptors: Vec<super::MachoTlvDescriptor> = Vec::new();
-
-    // Lift the program into SSA once and run the linear-scan
-    // allocator per function. Each function lowers through
-    // `ssa_emit_aarch64::emit_function`; a per-function emit bail
-    // is a hard error so any IR + emit coverage gap surfaces
-    // immediately. `--dump-ssa` prints the IR + allocation for
-    // each function.
-    // A recompaction retry supplies the post-inline bodies directly; the
-    // walk and the -O passes that produced them are skipped, the rest of
-    // the pipeline runs unchanged.
-    let walked = prebuilt.is_none();
-    let mut rodata = super::RodataBuild::default();
-    let (mut ssa_funcs, prebuilt_promoted) = match prebuilt {
-        Some(p) => (p.funcs, p.promoted_local_slots),
-        None => (
-            super::ssa::emit_common::time_pass("ssa::produce_ssa_funcs (aarch64)", || {
-                super::ssa::shadow::produce_ssa_funcs(
-                    program,
-                    target,
-                    native.optimize,
-                    native.jump_tables,
-                )
-            })?,
-            alloc::collections::BTreeMap::new(),
-        ),
-    };
-    // A final image is its own link step: bind import placeholders a
-    // function alias of this unit resolves. A relocatable object keeps
-    // them symbolic for the linker.
-    if native.output_kind != super::OutputKind::Relocatable {
-        super::ssa::shadow::bind_alias_imports(program, &mut ssa_funcs);
-    }
-    super::ssa::emit_common::check_frame_limits(&ssa_funcs)?;
-    // Frame slots mem2reg promoted to registers (-O) or that slot
-    // coalescing moved onto shared storage: the debug-info emitter drops
-    // their stale frame location. Slots coalescing moved to a new exclusive
-    // offset are recorded separately so the emitter rewrites the location.
-    let mut promoted_local_slots: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>> =
-        prebuilt_promoted;
-    let mut canary_frame_bytes: alloc::collections::BTreeMap<usize, u32> =
-        alloc::collections::BTreeMap::new();
-    let mut coalesced_slot_remap: alloc::collections::BTreeMap<
-        usize,
-        alloc::collections::BTreeMap<i64, i64>,
-    > = alloc::collections::BTreeMap::new();
-    // Reuse non-overlapping synthetic stack slots. At -O, mem2reg promotes
-    // these address-free slots to SSA values; this is the default-level
-    // analog, shrinking frames built from many control-flow merges whose
-    // phi-substitute slots never overlap. The pass runs regardless of debug
-    // info so the emitted code is identical with and without -g.
-    if !native.optimize && walked {
-        let coalesce_dwarf =
-            super::ssa::emit_common::time_pass("ssa::slot_coalesce::run (aarch64)", || {
-                super::ssa::slot_coalesce::run(&mut ssa_funcs, false)
-            });
-        for (ent_pc, map) in coalesce_dwarf {
-            for (orig, new) in map {
-                match new {
-                    Some(new) => {
-                        coalesced_slot_remap
-                            .entry(ent_pc)
-                            .or_default()
-                            .insert(orig, new);
-                    }
-                    None => promoted_local_slots.entry(ent_pc).or_default().push(orig),
-                }
-            }
-        }
-    }
-    // Data the -O pipeline orphans after the pre-inline compaction
-    // packed `.data`; the caller recompacts and lowers again.
-    let mut orphaned_data: Option<crate::c5::codegen::ssa::shadow::OrphanedData> = None;
-    // Written only under the `std` dump path; the Build field is
-    // unconditional.
-    #[cfg_attr(not(feature = "std"), allow(unused_mut))]
-    let mut ssa_dump = alloc::string::String::new();
-    // -O: promote address-free local slots to SSA values before
-    // register allocation, dropping their frame load / store traffic.
-    // Record the promoted slots per function so the debug-info emitter
-    // can drop their now-stale frame location.
-    if native.optimize && walked {
-        super::ssa::emit_common::time_pass("ssa::mem2reg::run (aarch64)", || {
-            for f in &mut ssa_funcs {
-                let promoted = super::ssa::mem2reg::run(f);
-                if !promoted.is_empty() {
-                    promoted_local_slots.insert(f.ent_pc, promoted);
-                }
-            }
-        });
-        // Simplify each body before the inliner reads it; see x86_64.rs's
-        // matching block for the rationale.
-        super::ssa::emit_common::time_pass(
-            "passes::simplify_branches::pre_inline (aarch64)",
-            || {
-                crate::c5::codegen::passes::simplify_branches::run(&mut ssa_funcs);
-            },
-        );
-        // Unroll constant-trip loops before the inliner so a helper
-        // whose body was a short loop becomes a single-block inline
-        // candidate; see x86_64.rs's matching block for the rationale.
-        super::ssa::emit_common::time_pass("passes::unroll::run (aarch64)", || {
-            crate::c5::codegen::passes::unroll::run(&mut ssa_funcs);
-        });
-        // Merge byte-at-a-time accesses; see x86_64.rs's matching block
-        // for the ordering rationale.
-        super::ssa::emit_common::time_pass("passes::byteload::run (aarch64)", || {
-            crate::c5::codegen::passes::byteload::run(
-                &mut ssa_funcs,
-                target.is_little_endian(),
-                native.strict_align,
-            );
-        });
-        // Seed a parameter every call site of an internal function
-        // agrees a constant for, and record the range each parameter's
-        // argument stays inside for the range analysis below. After
-        // unrolling and before inlining: a callee the inliner absorbs
-        // gets the same constant by argument substitution, so this is
-        // what reaches the bodies that stay out of line.
-        // Interprocedural parameter ranges, by entry PC; read by the
-        // range analysis inside the branch-fold fixed point below.
-        let param_ranges =
-            super::ssa::emit_common::time_pass("passes::ipa_const_param::run (aarch64)", || {
-                let escaping = crate::c5::codegen::passes::ipa_const_param::escaping_functions(
-                    &ssa_funcs, program,
-                );
-                crate::c5::codegen::passes::ipa_const_param::run(&mut ssa_funcs, &escaping)
-            });
-        // Inline after mem2reg; see x86_64.rs's matching block for
-        // the ordering rationale.
-        let code_syms = super::ssa::emit_common::defined_fn_syms(program);
-        super::ssa::emit_common::time_pass("passes::inline::run (aarch64)", || {
-            crate::c5::codegen::passes::inline::run(
-                &mut ssa_funcs,
-                native.inline_cap,
-                target.abi(),
-                &code_syms,
-            );
-        });
-        // Turn self-tail-recursion into a loop back edge; see x86_64.rs's
-        // matching block for the rationale.
-        super::ssa::emit_common::time_pass("passes::tailrec::run (aarch64)", || {
-            crate::c5::codegen::passes::tailrec::run(&mut ssa_funcs);
-        });
-        // Forward an inlined one-word struct return out of its frame slot;
-        // see x86_64.rs's matching block for the rationale.
-        super::ssa::emit_common::time_pass("passes::struct_return_reg::run (aarch64)", || {
-            crate::c5::codegen::passes::struct_return_reg::run(&mut ssa_funcs, native.strict_align);
-        });
-        // Constant folding over the post-inline tape; see x86_64.rs's
-        // matching block for the rationale.
-        super::ssa::emit_common::time_pass("passes::constfold::run (aarch64)", || {
-            crate::c5::codegen::passes::constfold::run(&mut ssa_funcs);
-        });
-        // Re-run mem2reg on callers the inliner spliced into; see x86_64.rs's
-        // matching block for the rationale (relocated callee locals expose
-        // address-free slots pre-inline mem2reg never saw).
-        super::ssa::emit_common::time_pass("ssa::mem2reg::run post-inline (aarch64)", || {
-            for f in &mut ssa_funcs {
-                if f.did_inline {
-                    let promoted = super::ssa::mem2reg::run(f);
-                    if !promoted.is_empty() {
-                        promoted_local_slots
-                            .entry(f.ent_pc)
-                            .or_default()
-                            .extend(promoted);
-                    }
-                }
-            }
-        });
-        // Split address-taken local aggregates into per-field slots and
-        // re-run mem2reg to promote them to SSA values; see encode.rs's
-        // matching block on x86_64.
-        super::ssa::emit_common::time_pass("passes::sroa::run (aarch64)", || {
-            let usable_gpr = super::ssa::reg_alloc::usable_gpr_count(target, native.fixed_regs);
-            // What each function does with its pointer parameters, so a
-            // call taking an object's address gives up only the fields
-            // it can reach. Derived once over the whole unit, and only
-            // where the gate below admits some function.
-            let footprints = if ssa_funcs.iter().any(|f| f.did_unroll || f.did_inline) {
-                crate::c5::codegen::passes::sroa::param_footprints(&ssa_funcs)
-            } else {
-                Default::default()
-            };
-            for f in &mut ssa_funcs {
-                if f.did_unroll || f.did_inline {
-                    let promoted =
-                        crate::c5::codegen::passes::sroa::run(f, usable_gpr, &footprints);
-                    if !promoted.is_empty() {
-                        promoted_local_slots
-                            .entry(f.ent_pc)
-                            .or_default()
-                            .extend(promoted);
-                    }
-                }
-            }
-        });
-        super::ssa::emit_common::time_pass("passes::rotate::run (aarch64)", || {
-            crate::c5::codegen::passes::rotate::run(&mut ssa_funcs);
-        });
-        // Fused multiply-add contraction (C99 6.5p8 / FP_CONTRACT ON at
-        // -O). Runs after the inliner so products exposed by parameter
-        // substitution into an add/sub become contractible.
-        super::ssa::emit_common::time_pass("passes::fma::run (aarch64)", || {
-            crate::c5::codegen::passes::fma::run(&mut ssa_funcs);
-        });
-        // Prove a null comparison of a const array's relocated pointer
-        // member false. Runs after constfold has folded the constant
-        // member offset (`ARRAY_SIZE(a) - 1` -> a fixed index), so the
-        // branch fold below deletes the unreachable arm (e.g. an inlined
-        // build-time-unreachable guard).
-        super::ssa::emit_common::time_pass("passes::const_global_fold::run (aarch64)", || {
-            crate::c5::codegen::passes::const_global_fold::run(&mut ssa_funcs, program);
-        });
-        // Fold constant-condition branches and delete the blocks that
-        // leaves unreachable (so their calls and extern references are
-        // neither lowered nor relocated), to a fixed point: pruning a
-        // folded branch's dead predecessor can collapse a merge phi and
-        // expose a fresh constant condition one level down. The
-        // const-data-aware form also folds loads from const initialized
-        // data inside the same fixed point, so an inlined table lookup
-        // whose index just became constant decides the next branch (a
-        // build-time-assert guard reading a const table).
-        super::ssa::emit_common::time_pass("passes::simplify_branches::run (aarch64)", || {
-            crate::c5::codegen::passes::simplify_branches::run_with_const_data(
-                &mut ssa_funcs,
-                program,
-                &param_ranges,
-            );
-        });
-    }
-    // Re-run static DCE: inlining a static callee into its last caller,
-    // and the branch fold dropping calls in unreachable arms, can leave
-    // a static function with no remaining references. Dropping it now
-    // keeps its body -- and any undefined symbol it alone referenced
-    // (e.g. an unreachable build-time-assert canary the fold removed
-    // from the caller) -- out of the object. It also reports the data the
-    // pipeline orphaned; the passes below run on prebuilt bodies too, so a
-    // recompaction retry re-runs them and re-checks the report is empty.
-    if native.optimize {
-        orphaned_data = super::ssa::emit_common::time_pass(
-            "ssa::shadow::drop_unreachable_statics (aarch64)",
-            || crate::c5::codegen::ssa::shadow::drop_unreachable_statics(&mut ssa_funcs, program),
-        );
-        if let Some(o) = &mut orphaned_data {
-            o.ssa.promoted_local_slots = promoted_local_slots.clone();
-        }
-        // A probe caller relowers the reported bodies against a `.data`
-        // this run cannot know, so everything below would be discarded.
-        if orphaned_data.is_some() && mode == super::LowerMode::DataLivenessProbe {
-            return Ok(Build {
-                orphaned_data,
-                stopped_at_data_liveness: true,
-                ..Default::default()
-            });
-        }
-        // Frame compaction after inlining, promotion, and the branch
-        // folds; see x86_64.rs's matching block for the rationale and
-        // the `index_fold` ordering constraint.
-        let coalesce_dwarf =
-            super::ssa::emit_common::time_pass("ssa::slot_coalesce::run -O (aarch64)", || {
-                super::ssa::slot_coalesce::run(&mut ssa_funcs, true)
-            });
-        for (ent_pc, map) in coalesce_dwarf {
-            for (orig, new) in map {
-                match new {
-                    Some(new) => {
-                        coalesced_slot_remap
-                            .entry(ent_pc)
-                            .or_default()
-                            .insert(orig, new);
-                    }
-                    None => promoted_local_slots.entry(ent_pc).or_default().push(orig),
-                }
-            }
-        }
-        super::ssa::emit_common::time_pass("passes::split_crit_edges::run (aarch64)", || {
-            crate::c5::codegen::passes::split_crit_edges::run(&mut ssa_funcs);
-        });
-        super::ssa::emit_common::time_pass("passes::dedup_imm::run (aarch64)", || {
-            crate::c5::codegen::passes::dedup_imm::run(&mut ssa_funcs);
-        });
-        super::ssa::emit_common::time_pass("passes::drop_redundant_extend::run (aarch64)", || {
-            crate::c5::codegen::passes::drop_redundant_extend::run(&mut ssa_funcs);
-        });
-        // Scaled-index addressing: fold `base + index*scale` into the
-        // load / store. Runs last so it sees the final address shape;
-        // the optimizer passes never traverse `LoadIndexed` /
-        // `StoreIndexed`, so the per-arch emit is the only later consumer.
-        super::ssa::emit_common::time_pass("passes::index_fold::run (aarch64)", || {
-            crate::c5::codegen::passes::index_fold::run(&mut ssa_funcs);
-        });
-        // Dominator-scoped CSE of pure arithmetic and address values.
-        // After the index fold, so merging cannot weld two `base + K`
-        // addresses the fold would have turned into displacements; the
-        // canonical bases then feed store forwarding.
-        super::ssa::emit_common::time_pass("passes::cse::run (aarch64)", || {
-            let caps = super::ssa::reg_alloc::bank_capacity(target, native.fixed_regs);
-            crate::c5::codegen::passes::cse::run(&mut ssa_funcs, caps);
-        });
-        // Rebuild the single modulo where the builder's split quotient
-        // found no division to share with. After the value numbering,
-        // which is what can still supply that second consumer.
-        super::ssa::emit_common::time_pass("passes::divmod_pair::run (aarch64)", || {
-            crate::c5::codegen::passes::divmod_pair::run(&mut ssa_funcs);
-        });
-        // Store-to-load and load-to-load forwarding within a block. Runs
-        // after the index fold so a struct field's store and load address
-        // are both normalised to the same `(base, disp)`. Bounded by
-        // live-range extension so it does not pin scattered re-reads in a
-        // register-starved unrolled loop.
-        super::ssa::emit_common::time_pass("passes::store_forward::run (aarch64)", || {
-            crate::c5::codegen::passes::store_forward::run(&mut ssa_funcs);
-        });
-        // Contract an integer multiply into the add / sub that reads it
-        // (aarch64 madd / msub). After the index fold and the store
-        // forwarding, whose address matching reads the `base + index *
-        // scale` shape a fused node would hide, and after the divide
-        // pairing, which is what leaves `n - q*d` behind.
-        super::ssa::emit_common::time_pass("passes::mul_add::run (aarch64)", || {
-            crate::c5::codegen::passes::mul_add::run(&mut ssa_funcs);
-        });
-        // Rewrite `CallIndirect`-of-`ImmCode` pairs the passes since the
-        // inline run exposed -- the post-inline promotions and the
-        // forwarding above turn function-pointer cell reads into
-        // `ImmCode` values -- so the emit issues direct calls. Last of
-        // the passes that change call targets.
-        super::ssa::emit_common::time_pass("passes::inline::devirtualize (aarch64)", || {
-            let code_syms = super::ssa::emit_common::defined_fn_syms(program);
-            crate::c5::codegen::passes::inline::devirtualize(&mut ssa_funcs, &code_syms);
-        });
-        // Block layout: fallthrough chains, loop rotation to
-        // bottom-test, branch inversion. Reorders blocks and remaps
-        // block ids only, so it runs last; the emit elides jumps to
-        // the next block in the new order.
-        super::ssa::emit_common::time_pass("passes::layout::run (aarch64)", || {
-            crate::c5::codegen::passes::layout::run(&mut ssa_funcs);
-        });
-    }
-    // Upper bound on ent_pcs the lowering will reference. The
-    // walker stamps `ent_pc` / `end_pc` against the ent_pc
-    // space, and the dense `pc_to_native` table holds
-    // every reachable PC.
-    let pc_extent = super::pc_extent_for_lowering(program, &ssa_funcs);
-    let mut pc_to_native: Vec<usize> = vec![usize::MAX; pc_extent + 1];
-    // Per-callee variadic flag, derived from FunctionSsa::is_variadic
-    // for locally-defined callees and from `Symbol::is_variadic`
-    // for cross-TU extern-declared callees. Each call site reads
-    // it to pick the host-ABI vs c5-stack arg passing shape for
-    // the callee. Without the extern entries here, a cross-TU
-    // call to a variadic function emits a non-variadic register
-    // sequence and the callee reads junk from the c5 stack.
-    let mut variadic_targets: alloc::collections::BTreeSet<usize> = ssa_funcs
-        .iter()
-        .filter(|f| f.is_variadic)
-        .map(|f| f.ent_pc)
-        .collect();
-    {
-        use crate::c5::symbol::Linkage;
-        let extern_pcs: alloc::collections::BTreeSet<usize> = program
-            .extern_function_imports
-            .iter()
-            .map(|(pc, _)| *pc)
-            .collect();
-        for sym in &program.symbols {
-            if sym.is_fun_entity()
-                && !sym.defined_here
-                && sym.linkage == Linkage::External
-                && sym.is_variadic
-                && extern_pcs.contains(&(sym.val as usize))
-            {
-                variadic_targets.insert(sym.val as usize);
-            }
-        }
-    }
-    // Branch on a zero test's operand directly. Immediately before
-    // allocation so every mid-end fold keyed on the compare shape has
-    // run.
-    for f in ssa_funcs.iter_mut() {
-        crate::c5::codegen::passes::constfold_branch::strip_zero_test_conds(f);
-    }
-    // At -O each function is allocated, then reallocated with the
-    // spilled values' call-free reuse runs split out; the split is kept
-    // only when it lowers the function's loop-weighted spill traffic.
-    let ssa_allocs: alloc::vec::Vec<super::ssa::reg_alloc::Allocation> =
-        super::ssa::emit_common::time_pass("ssa::reg_alloc::allocate (aarch64)", || {
-            ssa_funcs
-                .iter_mut()
-                .map(|f| {
-                    if native.optimize {
-                        super::ssa::licm::allocate_hoisted(f, target, native.fixed_regs)
-                    } else {
-                        super::ssa::reg_alloc::allocate(f, target, native.fixed_regs)
-                    }
-                })
-                .collect()
-        });
-    #[cfg(feature = "std")]
-    if super::ssa::dump::enabled(native) {
-        use core::fmt::Write;
-        let name_by_ent: alloc::collections::BTreeMap<usize, &str> = program
-            .finished_functions
-            .iter()
-            .map(|ff| (ff.ent_pc, ff.name.as_str()))
-            .collect();
-        for (f, a) in ssa_funcs.iter().zip(ssa_allocs.iter()) {
-            if let Some(name) = name_by_ent.get(&f.ent_pc) {
-                let _ = writeln!(ssa_dump, "; name={name}");
-            }
-            let _ = write!(ssa_dump, "{}", super::ssa::dump::dump_function(f, a));
-        }
-    }
-    #[cfg(feature = "std")]
-    let _ssa_emit_pass_start = std::time::Instant::now();
-    // Function name -> entry PC, so an inline-asm `bl` / `b` to a bare
-    // identifier resolves to the target's fixup like a compiler-emitted call.
-    let mut asm_extern_call_sites: Vec<super::UserExternCallSite> = Vec::new();
-    let mut asm_sym_fixups: Vec<super::AsmSymFixup> = Vec::new();
-    let mut text_align: usize = 16;
-    let mut label_relocs: Vec<super::LabelReloc> = Vec::new();
-    let mut text_data_ranges: Vec<(usize, usize)> = Vec::new();
-    let mut text_map_state: Option<super::map_syms::MapClass> = None;
-    let mut asm_text_labels: Vec<super::AsmTextLabel> = Vec::new();
-    let mut asm_section_text_refs: Vec<super::AsmSectionTextRef> = Vec::new();
-    let name2entpc: alloc::collections::BTreeMap<alloc::string::String, usize> = ssa_funcs
-        .iter()
-        .map(|f| (f.name.clone(), f.ent_pc))
-        .collect();
-    // Internal-linkage data object name -> unified data offset, so a
-    // function-body inline-asm symbol operand naming a static resolves to
-    // its storage; an external-linkage name stays symbolic and keeps its
-    // own symbol's binding. First record wins, matching the writer's
-    // local-symbol dedup for a block-scope static sharing a file-scope name.
-    let data_sym_offsets: alloc::collections::BTreeMap<alloc::string::String, i64> = {
-        use crate::c5::symbol::Linkage;
-        use crate::c5::token::Token;
-        let mut m = alloc::collections::BTreeMap::new();
-        for s in program.symbols.iter().filter(|s| {
-            s.class == Token::Glo as i64
-                && s.defined_here
-                && !s.is_thread_local
-                && !s.is_alias
-                && !s.name.is_empty()
-                && s.linkage == Linkage::Internal
-        }) {
-            m.entry(alloc::string::String::from(s.link_name()))
-                .or_insert(s.val);
-        }
-        m
-    };
-    let fn_align = native.min_function_alignment.max(1) as usize;
-    text_align = text_align.max(fn_align);
-    for (func_ssa, alloc_for) in ssa_funcs.iter().zip(ssa_allocs.iter()) {
-        let ent_pc = func_ssa.ent_pc;
-        let entry = super::FunctionEntry::of(func_ssa, &native);
-        // A preceding body's inline-asm data may leave the stream off
-        // instruction alignment; the function's first byte pays it.
-        super::emit::a64_align_asm_stream(&mut code, &mut text_data_ranges, &mut text_map_state);
-        // `-fmin-function-alignment=N`: the function's first byte starts
-        // at a multiple of N, the gap filled with NOPs (A64 `HINT #0`).
-        // Under `-fpatchable-function-entry` that byte opens the NOP
-        // area, of which `nops_before` precede the symbol.
-        super::pad_to_alignment(&mut code, fn_align, &super::encode::NOP.to_le_bytes());
-        if entry.nops_before + entry.nops_after > 0 {
-            patchable_entries.push(super::EntryArea {
-                func: func_ent_pcs.len(),
-                start: code.len(),
-            });
-        }
-        for _ in 0..entry.nops_before {
-            code.extend_from_slice(&super::encode::NOP.to_le_bytes());
-        }
-        pc_to_native[ent_pc] = code.len();
-        func_ent_pcs.push(ent_pc);
-        func_names.push(func_ssa.name.clone());
-        // Pre-resolve every `imm_data_extern` value-id to the
-        // symbol name once per function so `emit_function` can
-        // tag the matching `DataFixup` with the cross-TU name.
-        let extern_data_names: alloc::collections::BTreeMap<u32, alloc::string::String> = func_ssa
-            .extern_imm_data_refs
-            .iter()
-            .map(|(v, sym_idx)| (*v, program.symbols[*sym_idx as usize].link_name().into()))
-            .collect();
-        // Same pre-resolution for `tls_addr_extern` value-ids so the
-        // Mach-O TLV descriptor is keyed by the cross-unit symbol name.
-        let extern_tls_names: alloc::collections::BTreeMap<u32, alloc::string::String> = func_ssa
-            .extern_tls_refs
-            .iter()
-            .map(|(v, sym_idx)| (*v, program.symbols[*sym_idx as usize].link_name().into()))
-            .collect();
-        let ok = {
-            let mut cx = super::ssa::emit_common::EmitCtx {
-                code: &mut code,
-                plt_call_fixups: &mut plt_call_fixups,
-                data_fixups: &mut data_fixups,
-                user_extern_data_refs: &mut user_extern_data_refs,
-                pending_func_fixups: &mut pending_func_fixups,
-                tls_index_fixups: &mut tls_index_fixups,
-                elf_tpoff_fixups: &mut elf_tpoff_fixups,
-                ssa_line_rows: &mut ssa_line_rows,
-                pc_to_native: &mut pc_to_native,
-                prologue_native: &mut func_prologue_native,
-                asm_sections: &mut asm_sections,
-                asm_extern_call_sites: &mut asm_extern_call_sites,
-                asm_sym_fixups: &mut asm_sym_fixups,
-                text_align: &mut text_align,
-                label_relocs: &mut label_relocs,
-                text_data_ranges: &mut text_data_ranges,
-                canary_frame_bytes: &mut canary_frame_bytes,
-                mcount_sites: &mut mcount_sites,
-            };
-            #[cfg(feature = "std")]
-            let _ = super::ssa::emit_common::take_bail();
-            super::emit::emit_function(
-                func_ssa,
-                alloc_for,
-                target,
-                &mut cx,
-                &mut fixups,
-                &extern_data_names,
-                &extern_tls_names,
-                imports,
-                &variadic_targets,
-                &mut macho_tlv_fixups,
-                &mut macho_tlv_descriptors,
-                &name2entpc,
-                &data_sym_offsets,
-                &mut asm_text_labels,
-                &mut asm_section_text_refs,
-                &mut text_map_state,
-                native.no_fp_regs,
-                native.strict_align,
-                &mut rodata,
-                native.output_kind == super::OutputKind::Relocatable && !native.pic,
-                native.hardening,
-                native.stack_protect.resolved_for(target),
-                entry,
-                native.fixed_regs,
-            )
-        };
-        if !ok {
-            // A specific bail reason (an unencodable inline-asm form, a
-            // fixup out of range) is surfaced verbatim; the generic message
-            // stands only for a shape that failed without recording one.
-            #[cfg(feature = "std")]
-            if let Some(reason) = super::ssa::emit_common::take_bail() {
-                return Err(C5Error::Compile(crate::c5::error::fmt_codegen_err(
-                    &alloc::format!("{reason} (aarch64, function `{}`)", func_ssa.name),
-                )));
-            }
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &alloc::format!(
-                    "ssa emit (aarch64): function `{}` (ent_pc {ent_pc}) contains an op outside the implemented subset",
-                    func_ssa.name,
-                ),
-            )));
-        }
-        func_ends.push(code.len());
-    }
-    #[cfg(feature = "std")]
-    if super::ssa::emit_common::time_passes_enabled() {
-        let us = _ssa_emit_pass_start.elapsed().as_micros();
-        eprintln!("pass: ssa_emit_aarch64 (block walk) -- {us}us");
-    }
-    pc_to_native[pc_extent] = code.len();
-
-    // Cross-TU user-function imports surfaced by the parser as
-    // placeholder ent_pcs past `text.len()`. Each `Inst::Call`
-    // emits a `Fixup::Bl` with `target_ent_pc` equal to the
-    // placeholder; we partition those out before
-    // `apply_fixups` and re-emit them as
-    // `Build::user_extern_call_sites` entries that the writer
-    // surfaces as `R_AARCH64_CALL26` relocs against the
-    // callee's symbol.
-    let extern_pc_lookup: alloc::collections::BTreeMap<usize, &str> = program
-        .extern_function_imports
-        .iter()
-        .map(|(pc, name)| (*pc, name.as_str()))
-        .collect();
-    // Seeded with the inline-asm branch sites whose target this unit does
-    // not define; they take the same by-name relocation.
-    let mut user_extern_call_sites: Vec<super::UserExternCallSite> = asm_extern_call_sites;
-    // A direct branch whose callee the linker resolves -- across a
-    // named-section boundary, or to a weak definition a sibling unit
-    // may override -- likewise becomes a by-name call relocation.
-    let reloc_ctx = super::reloc_callee_ctx(program, &ssa_funcs, &pc_to_native, native.output_kind);
-    let resolved_fixups: Vec<Fixup> = {
-        let mut out = Vec::with_capacity(fixups.len());
-        for f in fixups {
-            let is_tail = matches!(f.kind, BranchKind::B);
-            if let Some(name) = extern_pc_lookup.get(&f.target_ent_pc) {
-                user_extern_call_sites.push(super::UserExternCallSite {
-                    instr_offset: f.native_offset,
-                    symbol_name: (*name).into(),
-                    is_tail,
-                });
-            } else if let Some(name) = reloc_ctx.reloc_callee(f.native_offset, f.target_ent_pc) {
-                user_extern_call_sites.push(super::UserExternCallSite {
-                    instr_offset: f.native_offset,
-                    symbol_name: name.into(),
-                    is_tail,
-                });
-            } else {
-                out.push(f);
-            }
-        }
-        out
-    };
-    apply_fixups(&mut code, &resolved_fixups, &pc_to_native, pc_extent)?;
-
-    // Append one PLT trampoline per import. Every BL/B
-    // placeholder recorded in `plt_call_fixups` now gets its imm26
-    // backfilled to the matching trampoline's byte offset. The
-    // trampoline body's adrp+ldr pair is patched by the per-format
-    // writer through the same `GotFixup` shape the inline call
-    // sequence used before PLT trampolines existed.
-    // Capture call sites before the PLT-fixup pass rewrites the
-    // BL imm26 fields. The `OutputKind::Relocatable` writer reads
-    // these to emit `R_AARCH64_CALL26` relocations against each
-    // import's external symbol; final-image writers ignore the
-    // list and rely on the PLT trampolines below.
-    let reloc_call_sites: Vec<super::RelocCallSite> = plt_call_fixups
-        .iter()
-        .map(|f| super::RelocCallSite {
-            instr_offset: f.instr_offset,
-            import_index: f.import_index,
-            is_tail: f.is_tail,
-            is_addr: f.is_addr,
-        })
-        .collect();
-    // Final-image output emits one PLT trampoline per import at
-    // the tail of `.text` and rewrites every BL/B placeholder to
-    // reach the matching trampoline. Relocatable output leaves
-    // the placeholders raw (imm26 = 0) so the linker materialises
-    // the PLT pool when it produces the final image -- the
-    // matching `R_AARCH64_CALL26` reloc in `.rela.text` carries
-    // the call site's import symbol.
-    let plt_trampoline_offsets: Vec<usize> = if native.output_kind != super::OutputKind::Relocatable
-    {
-        let offsets = emit_plt_trampolines(&mut code, &mut got_fixups, imports.imports.len());
-        apply_plt_call_fixups(&mut code, &plt_call_fixups, &offsets)?;
-        offsets
-    } else {
-        Vec::new()
-    };
-
-    // Function-pointer fixups resolve to each callee's body offset
-    // directly: every function's prologue already spills the host
-    // arg registers into the c5 cdecl slots that the body reads
-    // through the address-of-local path, so a host caller
-    // (`pthread_create`, `qsort`, a static dispatch table, ...)
-    // can land on the body itself. Variadic c5 functions keep the
-    // c5-stack-based ABI and reach only via indirect c5 callers
-    // that lay args onto the c5 stack first; their fn-pointer
-    // fixups also land on the body, which keeps that contract
-    // intact.
-    let mut func_fixups: Vec<FuncFixup> = Vec::with_capacity(pending_func_fixups.len());
-    for (instr_offset, target_ent_pc) in pending_func_fixups {
-        // Cross-TU target: the placeholder ent_pc has no entry
-        // in `pc_to_native`. Route to the same named-
-        // symbol channel that data extern refs use; the linker
-        // resolves the ADRP+ADD pair to `text_vaddr + target`
-        // via the data_abs_relocs Text-section path.
-        if let Some(&name) = extern_pc_lookup.get(&target_ent_pc) {
-            user_extern_data_refs.push(super::UserExternDataRef {
-                instr_offset,
-                symbol_name: (*name).into(),
-                direct_pcrel: None,
-            });
-            continue;
-        }
-        if target_ent_pc > pc_extent {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!(
-                    "native codegen: function pointer target {target_ent_pc} past end of PC space"
-                ),
-            )));
-        }
-        let target = pc_to_native[target_ent_pc];
-        if target == usize::MAX {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!(
-                    "native codegen: function pointer target {target_ent_pc} did not land on an instruction"
-                ),
-            )));
-        }
-        func_fixups.push(FuncFixup {
-            instr_offset,
-            target_native_offset: target,
-            part: AddrPart::Whole,
-        });
-    }
-
-    // Address-of-import sites (`&strcmp`, `Inst::ImmExtCode`) in the
-    // local-image path resolve to the import's PLT trampoline, the
-    // same stub a call to the import reaches. A `FuncFixup` routes
-    // the `adrp + add` pair through the writer's func-fixup pass
-    // exactly like a function-pointer literal. Relocatable output
-    // (empty `plt_trampoline_offsets`) emits the reloc via
-    // `reloc_call_sites` instead.
-    if native.output_kind != super::OutputKind::Relocatable {
-        for fx in &plt_call_fixups {
-            if fx.is_addr {
-                func_fixups.push(FuncFixup {
-                    instr_offset: fx.instr_offset,
-                    target_native_offset: plt_trampoline_offsets[fx.import_index],
-                    part: AddrPart::Whole,
-                });
-            }
-        }
-    }
-
-    let entry_offset = if native.output_kind == super::OutputKind::Relocatable {
-        // Relocatable objects carry no entry point; the linker picks
-        // it once every TU is merged. `entry_pc` may legitimately be
-        // 0 here (`--no-entry-point` / `-c` on a TU without `main`)
-        // and need not land on a real instruction.
-        pc_to_native
-            .get(program.entry_pc)
-            .copied()
-            .filter(|&n| n != usize::MAX)
-            .unwrap_or(0)
-    } else {
-        let off = pc_to_native.get(program.entry_pc).copied().ok_or_else(|| {
-            C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
-                "native codegen: entry_pc {} is out of PC range",
-                program.entry_pc
-            )))
-        })?;
-        if off == usize::MAX {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!(
-                    "native codegen: entry_pc {} did not align with any instruction start",
-                    program.entry_pc
-                ),
-            )));
-        }
-        off
-    };
-
-    asm_sections
-        .emit_cfi_sections(super::ssa::cfi::CfiTarget {
-            arch: super::ssa::cfi::CfiArch::Aarch64,
-            addr_bytes: 8,
-        })
-        .map_err(|m| C5Error::Compile(alloc::format!("<file-scope asm>: {m}")))?;
-    let (asm_section_list, asm_sym_decls) = asm_sections.into_parts();
-    Ok(Build {
-        emitted_relocs: Vec::new(),
-        named_sections: Vec::new(),
-        // The GOT base is a cross-unit link fact; the single-TU emit
-        // has no table to name.
-        got_base_fixups: Vec::new(),
-        asm_sections: asm_section_list,
-        asm_sym_decls,
-        text_data_ranges,
-        asm_section_text_refs,
-        // No aarch64 form takes a label address as an absolute immediate.
-        asm_text_abs_refs: Vec::new(),
-        asm_sym_fixups,
-        asm_text_labels,
-        copy_relocs: Vec::new(),
-        text: code,
-        text_align,
-        data: program.data.clone(),
-        // Region boundaries the data compaction produced; zero when
-        // the pass did not run (JIT, empty data).
-        data_ro_len: program.data_ro_len.min(program.data.len()),
-        data_relro_len: program
-            .data_relro_len
-            .clamp(program.data_ro_len, program.data.len()),
-        data_align: program.data_align,
-        bss_size: 0,
-        init_fini_arrays: Default::default(),
-        entry_offset,
-        got_fixups,
-        data_fixups,
-        rodata,
-        data_pcrel_relocs: Vec::new(),
-        text_pcrel_relocs: Vec::new(),
-        text_abs_relocs: Vec::new(),
-        func_fixups,
-        pc_to_native,
-        func_ent_pcs,
-        func_ends,
-        patchable_entries,
-        mcount_sites,
-        func_names,
-        func_prologue_native,
-        promoted_local_slots,
-        coalesced_slot_remap,
-        canary_frame_bytes,
-        // x86_64-only Win64 unwind; the aarch64 PE writer uses packed
-        // RUNTIME_FUNCTIONs and consults no per-function descriptor.
-        fn_unwind: Vec::new(),
-        reloc_call_sites,
-        user_extern_call_sites,
-        user_extern_data_refs,
-        ssa_line_rows,
-        // `imports` is set by `lower_for` after this returns; the
-        // resolver runs once up there and the value is shared with
-        // both the lowering and the writer. Default-empty here keeps
-        // the per-arch lowering oblivious to the resolver.
-        imports: super::ResolvedImports::default(),
-        abi: super::Abi::default(),
-        tls_data: program.tls_data.clone(),
-        tls_init_size: program.tls_init_size,
-        tls_index_fixups,
-        data_relocs: Vec::new(),
-        extern_data_relocs: Vec::new(),
-        code_relocs: Vec::new(),
-        tls_data_relocs: Vec::new(),
-        tls_extern_data_relocs: Vec::new(),
-        tls_code_relocs: Vec::new(),
-        label_relocs,
-        exports: Vec::new(),
-        dynamic_exports: Vec::new(),
-        output_kind: super::OutputKind::Executable,
-        pic_link: native.pic || native.pic_link,
-        code_model: native.code_model,
-        elf_class: native.elf_class,
-        keep_local_labels: native.keep_local_labels,
-        shared_lib_name: None,
-        dllmain_pc: None,
-        macho_tlv_fixups,
-        macho_tlv_descriptors,
-        // macOS resolves TLS through Mach-O TLV descriptors; Linux/aarch64
-        // records add-immediate sites here for the linker to resolve.
-        elf_tpoff_fixups,
-        // Overwritten by `lower_for` from `NativeOptions::debug_info`.
-        debug_info: true,
-        merged_dwarf: None,
-        // Every import on this single-TU path gets a trampoline (data
-        // imports ride `ResolvedImports::data_bindings`, not `imports`).
-        plt_trampoline_offsets: plt_trampoline_offsets.into_iter().map(Some).collect(),
-        orphaned_data,
-        stopped_at_data_liveness: false,
-        ssa_dump,
-    })
 }
 
 /// Walk through the patch list, computing the actual native offset

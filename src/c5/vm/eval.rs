@@ -235,6 +235,7 @@ pub(crate) fn eval_fma(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::c5::ast::walk::fold_int_binop;
 
     #[test]
     fn fold_refuses_div_mod_by_zero() {
@@ -300,5 +301,79 @@ mod tests {
         assert_eq!(eval_extend(0xffff_ffff, LoadKind::I32), -1);
         assert_eq!(eval_extend(0x7f, LoadKind::I8), 0x7f);
         assert_eq!(eval_extend(-1, LoadKind::I64), -1);
+    }
+
+    /// The AST constant folder and the interpreter answer for the same C
+    /// operators; a divergence would give a folded expression a different
+    /// value than the interpreter computes for it. Operands cover zero,
+    /// one, minus one, both signs, the signed extremes, and shift counts
+    /// 0, 1, 63, 64, 65 and negative. A new opcode is not reached here,
+    /// but the exhaustive matches in `eval_int_binop` and `apply_binop`
+    /// force a decision for it.
+    #[test]
+    fn fold_int_binop_matches_apply_binop() {
+        const OPS: [BinOp; 23] = [
+            BinOp::Add,
+            BinOp::Sub,
+            BinOp::Mul,
+            BinOp::And,
+            BinOp::Or,
+            BinOp::Xor,
+            BinOp::Shl,
+            BinOp::Shr,
+            BinOp::Shru,
+            BinOp::Eq,
+            BinOp::Ne,
+            BinOp::Lt,
+            BinOp::Gt,
+            BinOp::Le,
+            BinOp::Ge,
+            BinOp::Ult,
+            BinOp::Ugt,
+            BinOp::Ule,
+            BinOp::Uge,
+            BinOp::Div,
+            BinOp::Mod,
+            BinOp::Divu,
+            BinOp::Modu,
+        ];
+        const VALS: [i64; 18] = [
+            0,
+            1,
+            -1,
+            2,
+            -2,
+            3,
+            -3,
+            7,
+            -7,
+            63,
+            64,
+            65,
+            -64,
+            -65,
+            i64::MIN,
+            i64::MIN + 1,
+            i64::MAX - 1,
+            i64::MAX,
+        ];
+        for op in OPS {
+            let divmod = matches!(op, BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu);
+            for lhs in VALS {
+                for rhs in VALS {
+                    if divmod && rhs == 0 {
+                        // A zero divisor is the folder's caller's
+                        // responsibility, so only the interpreter answers.
+                        assert!(apply_binop(op, lhs, rhs).is_err(), "{op:?} {lhs} 0");
+                        continue;
+                    }
+                    assert_eq!(
+                        apply_binop(op, lhs, rhs),
+                        Ok(fold_int_binop(op, lhs, rhs)),
+                        "{op:?} {lhs} {rhs}"
+                    );
+                }
+            }
+        }
     }
 }

@@ -1605,7 +1605,7 @@ fn sign_narrow_kind(k: i64) -> Option<LoadKind> {
 /// undefined / floating-point cases the caller must keep as a
 /// runtime instruction. Integer arithmetic wraps in 64 bits to
 /// mirror the SSA value model.
-fn fold_int_binop_imm(op: BinOp, k1: i64, k2: i64) -> Option<i64> {
+pub(crate) fn fold_int_binop_imm(op: BinOp, k1: i64, k2: i64) -> Option<i64> {
     use BinOp::*;
     match op {
         Add => Some(k1.wrapping_add(k2)),

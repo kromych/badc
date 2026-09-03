@@ -202,6 +202,7 @@ pub(crate) fn eval_fma(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::c5::codegen::ssa::build::fold_int_binop_imm;
     use crate::c5::irgen::fold_int_binop;
 
     #[test]
@@ -270,7 +271,7 @@ mod tests {
         assert_eq!(eval_extend(-1, LoadKind::I64), -1);
     }
 
-    /// The AST constant folder and the interpreter answer for the same C
+    /// The two constant folders and the interpreter answer for the same C
     /// operators; a divergence would give a folded expression a different
     /// value than the interpreter computes for it. Operands cover zero,
     /// one, minus one, both signs, the signed extremes, and shift counts
@@ -278,7 +279,7 @@ mod tests {
     /// but the exhaustive matches in `eval_int_binop` and `apply_binop`
     /// force a decision for it.
     #[test]
-    fn fold_int_binop_matches_apply_binop() {
+    fn the_constant_folders_match_apply_binop() {
         const OPS: [BinOp; 23] = [
             BinOp::Add,
             BinOp::Sub,
@@ -328,6 +329,14 @@ mod tests {
             let divmod = matches!(op, BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu);
             for lhs in VALS {
                 for rhs in VALS {
+                    // Over the C operators the SSA builder's gate refuses
+                    // exactly what `fold_binop` refuses, and folds to the
+                    // same value.
+                    assert_eq!(
+                        fold_int_binop_imm(op, lhs, rhs),
+                        fold_binop(op, lhs, rhs),
+                        "{op:?} {lhs} {rhs}"
+                    );
                     if divmod && rhs == 0 {
                         // A zero divisor is the folder's caller's
                         // responsibility, so only the interpreter answers.
@@ -339,8 +348,27 @@ mod tests {
                         Ok(fold_int_binop(op, lhs, rhs)),
                         "{op:?} {lhs} {rhs}"
                     );
+                    if let Some(folded) = fold_int_binop_imm(op, lhs, rhs) {
+                        assert_eq!(Ok(folded), apply_binop(op, lhs, rhs), "{op:?} {lhs} {rhs}");
+                    }
                 }
             }
+        }
+    }
+
+    /// The two gates part company on the opcodes no C operator produces:
+    /// the SSA builder folds a rotate only for counts its own guard
+    /// admits and leaves the wide multiplies to run time, while
+    /// `fold_binop` answers for all of them.
+    #[test]
+    fn the_gates_differ_on_the_non_c_opcodes() {
+        assert_eq!(fold_int_binop_imm(BinOp::Ror, 1, 1), Some(i64::MIN));
+        assert_eq!(fold_binop(BinOp::Ror, 1, 1), Some(i64::MIN));
+        assert_eq!(fold_int_binop_imm(BinOp::Ror, 1, 65), None);
+        assert_eq!(fold_binop(BinOp::Ror, 1, 65), Some(i64::MIN));
+        for op in [BinOp::Mulh, BinOp::Mulhu] {
+            assert_eq!(fold_int_binop_imm(op, i64::MAX, 4), None);
+            assert!(fold_binop(op, i64::MAX, 4).is_some());
         }
     }
 }

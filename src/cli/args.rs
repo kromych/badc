@@ -287,9 +287,9 @@ fn operand(iter: &mut Args, missing: &str) -> Result<String, ParseError> {
     iter.next().ok_or_else(|| ParseError::diag(missing))
 }
 
-/// Read the argument vector. Reads the environment and nothing else:
-/// every diagnostic is returned rather than printed, so the caller
-/// decides what to write and what to exit with.
+/// Read the argument vector, which is the whole input. Every
+/// diagnostic is returned rather than printed, so the caller decides
+/// what to write and what to exit with.
 pub(crate) fn parse_args(argv: Vec<String>) -> Result<Parsed, ParseError> {
     let mut p = Parser::default();
     let mut iter = argv.into_iter();

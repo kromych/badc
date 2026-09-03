@@ -44,9 +44,9 @@ pub(crate) fn worker_count(jobs: Option<usize>, count: usize) -> usize {
     n.saturating_mul(2).min(count).max(1)
 }
 
-/// Read-only per-invocation compile inputs shared across `--jobs`
-/// workers by reference. Every field is fixed during argument parsing
-/// and never mutated during compilation.
+/// Per-invocation compile inputs shared across `--jobs` workers by
+/// reference. Fixed before the first unit compiles and never mutated
+/// while one is in flight.
 pub(crate) struct CompileCfg<'a> {
     pub(crate) target: Target,
     pub(crate) reloc_opts: NativeOptions,
@@ -68,9 +68,8 @@ pub(crate) struct CompileCfg<'a> {
 }
 
 impl<'a> CompileCfg<'a> {
-    /// The inputs a mode's units share. `reloc_opts` is the emitter
-    /// configuration the mode built; the object emits clear
-    /// `export_all` and `--ar` clears the dependency output.
+    /// The inputs a mode's units share, under the emitter
+    /// configuration the mode built.
     pub(crate) fn new(
         cli: &'a Cli,
         reloc_opts: NativeOptions,

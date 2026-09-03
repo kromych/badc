@@ -17,7 +17,6 @@ pub(crate) fn dump_dependencies(
     deps: &DepOptions,
 ) {
     let sources = &inputs.sources;
-    let d = deps;
     let stderr_is_tty = std::io::stderr().is_terminal();
     let mut failed = false;
     for src in sources {
@@ -59,7 +58,7 @@ pub(crate) fn dump_dependencies(
             None => emit_deps(
                 src,
                 compiler.include_records(),
-                d,
+                deps,
                 cli.output_path.as_deref(),
                 &mut log,
                 stderr_is_tty,

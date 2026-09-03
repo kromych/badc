@@ -424,8 +424,8 @@ impl Inputs {
                     }
                     eprint_diagnostic(format!(
                         "badc: error: unrecognized input file extension: `{a}` \
-                     (expected a `.c` / `.s` / `.S` source, `.o` object, or \
-                     `.a` archive)"
+                         (expected a `.c` / `.s` / `.S` source, `.o` object, or \
+                         `.a` archive)"
                     ));
                     std::process::exit(1);
                 }
@@ -499,7 +499,7 @@ impl Inputs {
                     let [shared, archive] = library_spellings(name, cli.target);
                     eprintln!(
                         "badc: cannot find `{shared}` or `{archive}` on any search path \
-                     ({} probed)",
+                         ({} probed)",
                         search_paths.len()
                     );
                     std::process::exit(1);

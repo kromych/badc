@@ -688,10 +688,6 @@ struct ImageInputs<'a> {
 
 /// Merge the selected objects, lower the PLT, and write the image.
 fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
-    // Every supported target lays out `_Thread_local` storage
-    // through the native path: ELF PT_TLS, the PE TLS directory +
-    // `_tls_index` note, and the Mach-O TLV descriptors + fixups
-    // note.
     // A shared library may reference symbols the host executable
     // supplies at `dlopen` time; let an unresolved global become a
     // load-time import instead of a link error.

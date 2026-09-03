@@ -3,6 +3,7 @@ mod ast;
 mod codegen;
 mod compiler;
 mod depfile;
+pub mod diag;
 mod error;
 mod headers;
 mod host;

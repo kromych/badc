@@ -1,0 +1,10 @@
+code   name                           default  class         groups             status   description
+B7001  unknown-argument               error    hard          -                  live     command-line option or operand the driver does not implement
+B7002  unknown-warning-option         warning  controllable  default            live     a diagnostic pragma names a selector that is not in the catalogue
+B7003  unused-command-line-argument   ignore   controllable  all,extra          live     an accepted option that selects nothing in the mode the command line picked
+B7004  no-input-files                 error    hard          -                  live     the command line names nothing to compile, assemble or link
+B7005  input-unreadable               error    hard          -                  live     an input file the driver cannot read
+B7006  output-unwritable              error    hard          -                  live     the driver cannot write the file it was asked to produce
+B7007  unsupported-option             error    controllable  default            live     an option badc parses but declines in the mode the command line picked
+B7008  link-pragma-ignored            warning  controllable  default            live     a link request from a source pragma that an object file does not carry
+B7009  cross-target-output            warning  note          -                  live     the image is for another host and will not run where it was built

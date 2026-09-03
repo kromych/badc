@@ -1,0 +1,119 @@
+//! Where a site reports a diagnostic, and where the resolved level is
+//! decided.
+
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+
+use super::code::{Code, Level};
+use super::control::{Config, Control};
+use super::message::{Diagnostic, Loc};
+use crate::c5::error::C5Error;
+
+/// Resolves each reported diagnostic against the command line and the
+/// pragmas, keeps the ones that survive, and counts the errors.
+///
+/// A raised warning does not unwind: the sink counts it and the caller
+/// asks at a phase boundary, which is what `-Werror` does in gcc.
+#[derive(Clone, Default, Debug)]
+pub struct Sink {
+    config: Config,
+    control: Control,
+    emitted: Vec<Diagnostic>,
+    errors: usize,
+    /// Codes a `once` pragma has already spent.
+    spent: Vec<u16>,
+}
+
+impl Sink {
+    pub fn new(config: Config, control: Control) -> Self {
+        Self {
+            config,
+            control,
+            emitted: Vec::new(),
+            errors: 0,
+            spent: Vec::new(),
+        }
+    }
+
+    pub fn config(&self) -> &Config {
+        &self.config
+    }
+
+    pub fn control(&self) -> &Control {
+        &self.control
+    }
+
+    /// The level `code` resolves to at `loc`: the command line, then
+    /// the pragmas in effect at the position, if the location carries
+    /// one.
+    pub fn level(&self, code: Code, loc: Option<&Loc>) -> Level {
+        let base = self.config.level(code);
+        match loc.and_then(|l| l.offset) {
+            Some(offset) => self.control.level_at(code, offset, base),
+            None => base,
+        }
+    }
+
+    /// Report a diagnostic. An ignored one is dropped; the rest are
+    /// recorded with the level they resolved to.
+    pub fn emit(&mut self, code: Code, loc: Option<Loc>, text: impl Into<String>) -> Level {
+        let level = self.level(code, loc.as_ref());
+        if level == Level::Ignore || !self.spend_once(code, loc.as_ref()) {
+            return Level::Ignore;
+        }
+        if level == Level::Error {
+            self.errors += 1;
+        }
+        self.emitted
+            .push(Diagnostic::new(code, level, loc, text.into()));
+        level
+    }
+
+    /// Report a diagnostic whose site can continue when the user lowers
+    /// it. `Err` comes back only when the effective level is `Error`.
+    pub fn report(
+        &mut self,
+        code: Code,
+        loc: Option<Loc>,
+        text: impl Into<String>,
+    ) -> Result<(), C5Error> {
+        if self.emit(code, loc, text) != Level::Error {
+            return Ok(());
+        }
+        match self.emitted.last() {
+            Some(diagnostic) => Err(C5Error::Compile(diagnostic.to_string())),
+            None => Ok(()),
+        }
+    }
+
+    pub fn has_errors(&self) -> bool {
+        self.errors > 0
+    }
+
+    pub fn errors(&self) -> usize {
+        self.errors
+    }
+
+    pub fn diagnostics(&self) -> &[Diagnostic] {
+        &self.emitted
+    }
+
+    pub fn take(&mut self) -> Vec<Diagnostic> {
+        core::mem::take(&mut self.emitted)
+    }
+
+    /// Whether a `once` pragma still allows this diagnostic through.
+    fn spend_once(&mut self, code: Code, loc: Option<&Loc>) -> bool {
+        let Some(offset) = loc.and_then(|l| l.offset) else {
+            return true;
+        };
+        if !self.control.is_once(code, offset) {
+            return true;
+        }
+        if self.spent.contains(&code.value()) {
+            return false;
+        }
+        self.spent.push(code.value());
+        true
+    }
+}

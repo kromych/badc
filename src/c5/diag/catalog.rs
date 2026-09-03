@@ -1,0 +1,145 @@
+//! The catalogue: one row per diagnostic, and the accessors generated
+//! from it.
+//!
+//! Canonical names reuse gcc's and clang's spellings wherever the
+//! diagnostic corresponds, so an existing `#pragma GCC diagnostic
+//! ignored "-W..."` in real source applies. Aliases accept the other
+//! compilers' identifiers as selectors: gcc and clang names where they
+//! differ, and MSVC numbers spelled with their letter prefix (`C4101`,
+//! `D9002`), which `#pragma warning(...)` spells bare. Only the
+//! canonical name and the `B` code are ever printed.
+
+use alloc::format;
+
+use super::code::{Class, Code, Groups, Level, Status};
+
+/// One catalogue entry. The code and the name are the published
+/// contract and never change; the default level and the groups may.
+#[derive(Clone, Copy, Debug)]
+pub struct Row {
+    pub code: Code,
+    pub name: &'static str,
+    pub aliases: &'static [&'static str],
+    pub default_level: Level,
+    pub class: Class,
+    pub groups: Groups,
+    pub status: Status,
+    pub description: &'static str,
+}
+
+macro_rules! catalog {
+    ($(
+        $code:literal, $name:literal, [$($alias:literal),*], $level:ident, $class:ident,
+        [$($group:ident),*], $status:ident, $desc:literal;
+    )*) => {
+        static ROWS: &[Row] = &[$(Row {
+            code: Code::new($code),
+            name: $name,
+            aliases: &[$($alias),*],
+            default_level: Level::$level,
+            class: Class::$class,
+            groups: Groups::union_all(&[$(Groups::$group),*]),
+            status: Status::$status,
+            description: $desc,
+        }),*];
+    };
+}
+
+// A row is: code, canonical name, aliases, default level, class,
+// groups, status, description. Groups say what a `-W` selector turns
+// on, so only a controllable row carries them: a row that only a group
+// turns on defaults to `Ignore`, which is what enabling the group
+// raises.
+catalog! {
+    7001, "unknown-argument", ["D9002"], Error, Hard,
+        [], Live,
+        "command-line option or operand the driver does not implement";
+    7002, "unknown-warning-option", ["pragmas"], Warning, Controllable,
+        [DEFAULT], Live,
+        "a diagnostic pragma names a selector that is not in the catalogue";
+    7003, "unused-command-line-argument", [], Ignore, Controllable,
+        [ALL, EXTRA], Live,
+        "an accepted option that selects nothing in the mode the command line picked";
+    7004, "no-input-files", [], Error, Hard,
+        [], Live,
+        "the command line names nothing to compile, assemble or link";
+    7005, "input-unreadable", [], Error, Hard,
+        [], Live,
+        "an input file the driver cannot read";
+    7006, "output-unwritable", [], Error, Hard,
+        [], Live,
+        "the driver cannot write the file it was asked to produce";
+    7007, "unsupported-option", [], Error, Controllable,
+        [DEFAULT], Live,
+        "an option badc parses but declines in the mode the command line picked";
+    7008, "link-pragma-ignored", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a link request from a source pragma that an object file does not carry";
+    7009, "cross-target-output", [], Warning, Note,
+        [], Live,
+        "the image is for another host and will not run where it was built";
+}
+
+/// Every row, in catalogue order.
+pub fn rows() -> impl Iterator<Item = &'static Row> {
+    ROWS.iter()
+}
+
+/// The accessors the catalogue generates. `Code` is constructible only
+/// from a row, so every lookup here resolves; the fallbacks keep the
+/// accessors total without a panic path.
+impl Code {
+    pub fn row(self) -> Option<&'static Row> {
+        ROWS.iter().find(|r| r.code == self)
+    }
+
+    pub fn name(self) -> &'static str {
+        self.row().map_or("", |r| r.name)
+    }
+
+    pub fn default_level(self) -> Level {
+        self.row().map_or(Level::Error, |r| r.default_level)
+    }
+
+    pub fn class(self) -> Class {
+        self.row().map_or(Class::Hard, |r| r.class)
+    }
+
+    pub fn groups(self) -> Groups {
+        self.row().map_or(Groups::NONE, |r| r.groups)
+    }
+
+    pub fn status(self) -> Status {
+        self.row().map_or(Status::Live, |r| r.status)
+    }
+
+    pub fn description(self) -> &'static str {
+        self.row().map_or("", |r| r.description)
+    }
+
+    pub fn is_retired(self) -> bool {
+        self.status() == Status::Retired
+    }
+
+    /// Resolve a selector: the canonical name, an alias, or the `B`
+    /// code as printed. The `-W` / `-Wno-` prefix and the `error=`
+    /// head belong to the option grammar and the caller strips them.
+    pub fn from_selector(sel: &str) -> Option<Code> {
+        if let Some(digits) = sel.strip_prefix('B')
+            && digits.len() == 4
+            && let Ok(value) = digits.parse::<u16>()
+        {
+            return Code::new(value).row().map(|r| r.code);
+        }
+        ROWS.iter()
+            .find(|r| r.name == sel || r.aliases.contains(&sel))
+            .map(|r| r.code)
+    }
+
+    /// Resolve a bare MSVC warning number, which is how
+    /// `#pragma warning(...)` spells one. The row lists it with the
+    /// `C` prefix badc's own selector grammar takes.
+    pub fn from_msvc_number(number: u32) -> Option<Code> {
+        Code::from_selector(&format!("C{number}"))
+    }
+}

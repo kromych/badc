@@ -5,20 +5,6 @@ use super::super::access::{load_kind_for, store_kind_for};
 use super::super::types::{expr_ty, is_comparison_op, is_floating_scalar};
 use super::super::*;
 impl<'a> Walker<'a> {
-    /// Walk a `Expr::Unary` rvalue. AddrOf hands off to the
-    /// lvalue walk; Deref loads from the rvalue-shaped address;
-    /// Lower a `&&` / `||` expression (C99 6.5.13 / 6.5.14). Evaluate
-    /// lhs; if it decides the result, skip rhs and jump to the merge
-    /// block, otherwise evaluate rhs. A synthetic local slot stands in
-    /// for the phi -- both arms store into it and the merge block loads
-    /// it.
-    ///
-    /// `normalize` controls whether the stored value is reduced to 0/1.
-    /// In value position the result is observed as an integer, so it
-    /// must be `int` 0 or 1: store the constant the deciding lhs yields
-    /// (`||` -> 1, `&&` -> 0) and `rhs != 0` on the evaluated path. In a
-    /// branch condition only the truthiness is observed, so the raw
-    /// operands are stored and the `!= 0` and the constant are skipped.
     /// True when `cond` is observed for truthiness as a floating value,
     /// i.e. the C99 controlling-expression comparison is `!= 0.0`. A
     /// comparison's result is `int`, so it is excluded even though its

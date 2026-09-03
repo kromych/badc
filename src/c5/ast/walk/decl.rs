@@ -69,11 +69,6 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// Emit the initialization of a frame slot from a [`LocalInit`].
-    /// Shared by local-variable declarations (`Decl::Local`) and
-    /// block-scope compound literals (`Expr::CompoundLiteral`), both
-    /// of which lower the same C99 6.7.8 / 6.5.2.5 initializer
-    /// shapes into the same slot.
     /// Store a scalar `v` of type `src_ty` into the 16-byte `__int128`
     /// object at `dst_addr`: the source, converted to 64 bits, fills the
     /// low half and its sign fills the high half (C99 6.3.1.3/6.3.1.8
@@ -170,6 +165,11 @@ impl<'a> Walker<'a> {
         b.switch_to(after);
     }
 
+    /// Emit the initialization of a frame slot from a [`LocalInit`].
+    /// Shared by local-variable declarations (`Decl::Local`) and
+    /// block-scope compound literals (`Expr::CompoundLiteral`), both
+    /// of which lower the same C99 6.7.8 / 6.5.2.5 initializer
+    /// shapes into the same slot.
     pub(super) fn emit_local_init(
         &mut self,
         b: &mut SsaBuilder,

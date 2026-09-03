@@ -530,9 +530,6 @@ pub(super) fn lower_popcount(b: &mut Bld, x: Val, w64: bool) -> Val {
     }
 }
 
-/// Count leading zeros: smear the highest set bit down to fill the low
-/// bits, then `width - popcount`. At zero the smear stays zero and the
-/// result is the bit width.
 /// Count leading redundant sign bits: `clz(x ^ (x >> (w-1))) - 1`, with
 /// an arithmetic shift forming the all-sign mask. XORing it clears the
 /// leading run of sign bits to zeros (and always the sign bit itself),
@@ -546,6 +543,9 @@ pub(super) fn lower_clrsb(b: &mut Bld, x: Val, w64: bool) -> Val {
     b.binop_imm(BinOp::Sub, clz, 1)
 }
 
+/// Count leading zeros: smear the highest set bit down to fill the low
+/// bits, then `width - popcount`. At zero the smear stays zero and the
+/// result is the bit width.
 pub(super) fn lower_clz(b: &mut Bld, x: Val, w64: bool) -> Val {
     let su = BinOp::Shru;
     let or = BinOp::Or;

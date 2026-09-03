@@ -187,6 +187,10 @@ impl<'a> Walker<'a> {
         }
     }
 
+    /// Walk an expression in lvalue position -- the result is the
+    /// `ValueId` of the lvalue's *address*. The `Assign` rhs and
+    /// `Unary{AddrOf}` cases drive into this path; the rvalue
+    /// walker re-enters from this address with a matching load.
     pub(super) fn walk_expr_lvalue(
         &mut self,
         b: &mut SsaBuilder,

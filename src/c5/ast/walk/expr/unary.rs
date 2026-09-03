@@ -4,6 +4,8 @@ use super::super::access::{load_kind_for, load_place};
 use super::super::types::{is_float_ty, is_floating_scalar};
 use super::super::*;
 impl<'a> Walker<'a> {
+    /// Walk a `Expr::Unary` rvalue. AddrOf hands off to the
+    /// lvalue walk; Deref loads from the rvalue-shaped address;
     /// Neg / BitNot / LogNot lower to a binop against an
     /// immediate.
     pub(super) fn walk_unary(

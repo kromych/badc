@@ -150,10 +150,6 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// Normalize a sub-`int` atomic read-modify-write result to its
-    /// element type's representation (C99 6.3.1.3): zero-extend an
-    /// unsigned narrow type, sign-extend a signed one. A 4- or 8-byte
-    /// type and a pointer ride the register at full width unchanged.
     /// Narrow an integer value of type `src_ty` to `to_ty`'s storage
     /// width per C99 6.3.1.3. An unsigned target masks to width; a
     /// signed narrowing (or a same-width signed view of an unsigned
@@ -202,6 +198,10 @@ impl<'a> Walker<'a> {
         }
     }
 
+    /// Normalize a sub-`int` atomic read-modify-write result to its
+    /// element type's representation (C99 6.3.1.3): zero-extend an
+    /// unsigned narrow type, sign-extend a signed one. A 4- or 8-byte
+    /// type and a pointer ride the register at full width unchanged.
     pub(super) fn extend_atomic_result(
         &self,
         b: &mut SsaBuilder,
@@ -228,10 +228,6 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// Walk an expression in lvalue position -- the result is the
-    /// `ValueId` of the lvalue's *address*. The `Assign` rhs and
-    /// `Unary{AddrOf}` cases drive into this path; the rvalue
-    /// walker re-enters from this address with a matching load.
     /// Add `by` (+1 / -1) to a loaded scalar for `++` / `--`. Integer
     /// lvalues take the immediate-form add; a real floating lvalue (C99
     /// 6.5.3.1 / 6.5.2.4) adds `1.0` of its own precision through the FP

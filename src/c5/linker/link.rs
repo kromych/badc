@@ -274,7 +274,7 @@ pub struct MergedNative {
     /// resolution as [`Self::data_abs_relocs`], with `slot_offset`
     /// indexing the TLS template instead of `data`.
     pub tls_abs_relocs: Vec<DataAbsReloc>,
-    /// `.init_array` / `.fini_array` placement in [`Self::data`] (Pass 1.5),
+    /// `.init_array` / `.fini_array` placement in [`Self::data`],
     /// forwarded to the dynamic-ELF writer so it emits DT_INIT_ARRAY /
     /// DT_FINI_ARRAY. The pointer slots already carry R_*_RELATIVE via
     /// [`Self::data_abs_relocs`].
@@ -392,8 +392,8 @@ pub enum MergedTarget {
 /// rebased by its unit's base -- into the merged image, applying the
 /// `data.len()` bias that puts a `.bss` offset past the writable data.
 ///
-/// `RoData` and `Data` share the data-byte space by construction (Pass
-/// 1 lays the read-only payload down first), so a caller never has to
+/// `RoData` and `Data` share the data-byte space by construction (the
+/// layout lays the read-only payload down first), so a caller never has to
 /// know which side of the boundary a reference fell on.
 fn merged_target(
     section: NativeSymSection,
@@ -1732,7 +1732,7 @@ impl<'a> Link<'a> {
                 // already answers where it lands.
                 let def = *self.defined.get(sym.name.as_str()).ok_or_else(|| {
                     internal_err(MODULE, &format!(
-                        "link_native_objects: SHN_COMMON `{}` not coalesced (internal: Pass 2.5 missed it)",
+                        "link_native_objects: SHN_COMMON `{}` not coalesced (internal: coalesce_commons missed it)",
                         sym.name,
                     ))
                 })?;
@@ -3179,7 +3179,7 @@ fn emit_plt(
         let tramp = tramp_for_import
             .get(&reloc.import_index)
             .copied()
-            .expect("every reloc has a tramp entry from pass 1");
+            .expect("every reloc has a stub from the first loop");
         patch_site(merged, reloc, tramp, &mut parked_back)?;
     }
     let data_import_refs = merged.data_import_refs.clone();
@@ -3286,12 +3286,10 @@ pub fn emit_aarch64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>,
                 });
                 Ok(())
             }
-            _ => unreachable!("pass 1 rejected every other rtype"),
+            _ => unreachable!("the stub loop rejected every other rtype"),
         }
     })
 }
-
-// ---- Reloc application ----
 
 /// Import name behind a [`PendingImportReloc::import_index`], for
 /// diagnostics. Parked section references carry no import.
@@ -3714,8 +3712,6 @@ fn resolve_merged_target(
     }
     Ok(())
 }
-
-// ---- helpers ----
 
 #[cfg(test)]
 mod tests {

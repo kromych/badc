@@ -27,8 +27,6 @@ use crate::c5::error::C5Error;
 /// The tag this module's diagnostics carry.
 const MODULE: &str = "linker script";
 
-// ---------------------------------------------------------------- AST
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Number(u64),
@@ -278,8 +276,6 @@ impl LinkerScript {
     }
 }
 
-// -------------------------------------------------------------- lexer
-
 /// Lexing state. Pattern state treats glob punctuation as name
 /// constituents; expression state treats it as operators.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -498,8 +494,6 @@ fn parse_number(w: &str) -> Option<u64> {
     };
     value.checked_mul(scale)
 }
-
-// ------------------------------------------------------------- parser
 
 pub struct Parser<'a> {
     lex: Lexer<'a>,
@@ -1335,8 +1329,6 @@ impl<'a> Parser<'a> {
         Ok(spec)
     }
 
-    // ------------------------------------------------------ expressions
-
     pub fn parse_expr(&mut self) -> Result<Expr, C5Error> {
         self.parse_ternary()
     }
@@ -1539,8 +1531,6 @@ fn sort_kw(w: &str) -> Option<SortKind> {
         _ => None,
     }
 }
-
-// ------------------------------------------------------------ matching
 
 /// Glob match with `*`, `?`, and `[...]` classes (ranges, leading `!`
 /// negation), the pattern language ld's input-section specs use.

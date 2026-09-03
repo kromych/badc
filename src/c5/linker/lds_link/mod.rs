@@ -16,6 +16,15 @@
 //! relaxation passes serve the same purpose. Diagnostics (ASSERT,
 //! undefined symbols, backwards dot moves) fire only on the final
 //! pass, when values are settled.
+//!
+//! The phases, one submodule each: `inputs` reads an ET_REL,
+//! `sections` flattens and claims them, `pools` merges SHF_MERGE and
+//! `.eh_frame`, `layout` walks the statements, `eval` evaluates script
+//! expressions, `veneers` reserves erratum stubs, `dynamic_sections`
+//! and `got` size the dynamic tables and slots, `reloc` /
+//! `reloc_aarch64` apply relocations, `synth` fills synthetic content,
+//! `phdrs` and `symtab` build the program headers and the symbol
+//! table, and `write` assembles the image.
 
 #![cfg(feature = "std")]
 #![allow(dead_code)]

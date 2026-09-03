@@ -588,8 +588,6 @@ fn read_carried(bytes: &[u8], sh: &Elf64Shdr, shstr: &[u8]) -> Result<EtSection,
     })
 }
 
-// ---- Linker-script subset -------------------------------------------
-
 /// One `*(pattern)` input spec inside an output section statement.
 #[derive(Debug, Clone)]
 pub struct GatherSpec {
@@ -777,8 +775,6 @@ fn const_expr(e: &Expr) -> Option<u64> {
 pub fn parse_module_script(text: &str) -> Result<LdScript, C5Error> {
     Ok(lower_script(&super::lds::parse_linker_script(text)?))
 }
-
-// ---- Merge ----------------------------------------------------------
 
 /// Which local symbols survive the merge. A relocation against a
 /// discarded local retargets the containing section's symbol with the

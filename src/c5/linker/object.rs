@@ -1948,8 +1948,6 @@ fn parse_rela(bytes: &[u8], sh: &Elf64Shdr) -> Result<Vec<NativeReloc>, C5Error>
     Ok(out)
 }
 
-// ---- Internal helpers ----
-
 pub(crate) fn section_slice<'a>(bytes: &'a [u8], sh: &Elf64Shdr) -> Result<&'a [u8], C5Error> {
     if sh.sh_type == SHT_NOBITS {
         return Ok(&[]);

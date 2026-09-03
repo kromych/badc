@@ -6455,3 +6455,37 @@ mod comdat {
         );
     }
 }
+
+/// Every option value the ld driver refuses, named in the message it
+/// prints. `LdArgs::parse` rejects the first four while reading the
+/// command line; the emulation is resolved once parsing is done.
+#[test]
+fn ld_driver_names_the_option_value_it_refuses() {
+    let cases: [(&[&str], &str); 6] = [
+        (&["--hash-style=bogus"], "unknown hash style `bogus`"),
+        (
+            &["-z", "max-page-size=3"],
+            "-z max-page-size requires a power of two",
+        ),
+        (
+            &["--build-id=bogus"],
+            "unsupported --build-id style `bogus`",
+        ),
+        (
+            &["--orphan-handling=bogus"],
+            "unknown --orphan-handling kind `bogus`",
+        ),
+        (&["--frobnicate"], "unrecognized option `--frobnicate`"),
+        (&["-m", "bogus"], "unsupported emulation `bogus`"),
+    ];
+    for (args, want) in cases {
+        let out = Command::new(badc())
+            .arg("--ld")
+            .args(args)
+            .output()
+            .expect("run the ld driver");
+        assert!(!out.status.success(), "{args:?} should have been refused");
+        let err = String::from_utf8_lossy(&out.stderr).into_owned();
+        assert!(err.contains(want), "{args:?}: stderr {err}");
+    }
+}

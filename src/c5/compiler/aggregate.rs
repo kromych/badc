@@ -838,41 +838,9 @@ impl Compiler {
                 Ty::Double as i64
             }
         } else if self.lex.tk == Token::Struct || self.lex.tk == Token::Union {
-            let nested_is_union = self.lex.tk == Token::Union;
-            self.next()?;
-            let nested_packed = self.skip_attribute_specifiers()?;
-            // Three shapes: `struct Foo { ... }` (named definition),
-            // `struct Foo` (type use), and `struct { ... }` (no tag,
-            // registered under a synthesised unique tag). Any of them
-            // with no declarator -- next token `;` -- is an unnamed
-            // member whose fields promote into the enclosing
-            // aggregate.
-            let mut inner_anonymous = false;
-            let inner_name = if self.lex.tk == Token::Id {
-                let name = self.symbols[self.lex.curr_id_idx].name.clone();
-                self.next()?;
-                name
-            } else if self.lex.tk == '{' {
-                let kind = if nested_is_union {
-                    "anon_union"
-                } else {
-                    "anon_struct"
-                };
-                inner_anonymous = true;
-                format!("__{kind}_{}_in_{}", self.structs.len(), name)
-            } else {
-                return Err(self.compile_err("aggregate name or `{{` expected in field type"));
-            };
-            let inner_id = if self.lex.tk == '{' {
-                let id = self.parse_aggregate_body(&inner_name, nested_is_union, nested_packed)?;
-                self.structs[id].is_anonymous = inner_anonymous;
-                self.apply_post_body_attributes(id)?;
-                id
-            } else {
-                self.find_or_forward_declare_struct(&inner_name, nested_is_union)
-            };
+            let (ty, inner_id) = self.parse_nested_aggregate_member(name)?;
             anon_aggregate_inner_id = Some(inner_id);
-            struct_ty_for(inner_id)
+            ty
         } else if self.lex.tk == Token::Enum {
             // C99 6.7.2.2: an `enum X` field is `int`, or the packed
             // underlying type for `enum __attribute__((packed))`; the
@@ -894,72 +862,11 @@ impl Compiler {
             self.next()?;
             self.builtin_va_list_tag()
         } else if !mods.saw_int_mod && self.is_lex_typedef_name() {
-            // Guarded by `!saw_int_mod`: C99 6.7.2p2 forbids
-            // combining a typedef-name with `unsigned`/`short`/
-            // `long`/`signed`, so after an int-modifier the
-            // following typedef-name is the field's declarator
-            // identifier (a redeclared name), not a type-specifier.
-            if self.symbols[self.lex.curr_id_idx].is_enum_typedef {
-                field_base_is_enum = true;
-            }
-            let aliased = self.symbols[self.lex.curr_id_idx].type_;
-            self.pending.spell_base_typedef = Some(self.lex.curr_id_idx as u32);
-            // C99 6.7.7 paragraph 3: a typedef name carries
-            // through any array dimension on its alias. Stash
-            // the count so the field-binding code below can
-            // make `jmp_buf b;` lay out `long b[64];`.
-            let typedef_array = self.symbols[self.lex.curr_id_idx].array_size;
-            if typedef_array != 0 {
-                self.pending.typedef_base_array_size = typedef_array;
-                self.pending.typedef_base_array_dims =
-                    self.symbols[self.lex.curr_id_idx].array_dims.clone();
-                self.pending.typedef_base_zero_len =
-                    self.symbols[self.lex.curr_id_idx].is_zero_len_array;
-            }
-            // Carry the typedef's explicit type alignment so a field
-            // declared with it lays out on the requested boundary
-            // (below its natural value for a reducing `aligned(N)`).
-            let typedef_align = self.symbols[self.lex.curr_id_idx].type_align;
-            if typedef_align > 0 {
-                self.pending.type_align = typedef_align;
-            }
-            // A function / function-pointer typedef carries the
-            // pointed-to function's calling convention; a declarator
-            // through the alias inherits it unless the declaration names
-            // one of its own.
-            if self.symbols[self.lex.curr_id_idx].conv != crate::c5::codegen::CallConv::Target
-                && self.pending.attr_call_conv == crate::c5::codegen::CallConv::Target
-            {
-                self.pending.attr_call_conv = self.symbols[self.lex.curr_id_idx].conv;
-            }
-            // Carry the typedef's fn-pointer lineage forward
-            // (mirrors `decl_base.rs` for the non-aggregate
-            // path) so a `typedef RET (*fn_t)(args); struct {
-            // fn_t cb; }` field records `fn_ptr_indirection =
-            // 1`. Without it the StructField loses the tag and
-            // `(*s.cb)(...)` looks like a regular pointer
-            // deref rather than the C99 6.3.2.1p4 fn-pointer
-            // decay no-op, so the call jumps to garbage.
-            let typedef_fpi = self.symbols[self.lex.curr_id_idx].fn_ptr_indirection;
-            if typedef_fpi > 0 {
-                self.pending.fn_ptr_indirection = Some(typedef_fpi);
-                self.pending.fn_ptr_ret_indirection =
-                    self.symbols[self.lex.curr_id_idx].fn_ptr_ret_indirection;
-                self.pending.base_is_function_type =
-                    self.symbols[self.lex.curr_id_idx].is_function_type;
-                // Carry the typedef's pointed-to prototype (parameter
-                // types + variadic flag) so `s.cb(args)` narrows each
-                // argument to its declared type and splits fixed vs
-                // variadic arguments per the host variadic ABI. Mirrors
-                // the non-aggregate path in `decl_base.rs`.
-                self.pending.typedef_fn_proto = Some((
-                    self.symbols[self.lex.curr_id_idx].params.len(),
-                    self.symbols[self.lex.curr_id_idx].is_variadic,
-                ));
-                self.pending.fn_ptr_param_types =
-                    Some(self.symbols[self.lex.curr_id_idx].params.clone());
-            }
-            self.next()?;
+            // C99 6.7.2p2 forbids combining a typedef-name with `unsigned` /
+            // `short` / `long` / `signed`, so after an int modifier the
+            // identifier is the member's declarator name, not a type specifier.
+            let (aliased, is_enum) = self.typedef_name_member_type()?;
+            field_base_is_enum = is_enum;
             aliased
         } else if mods.saw_int_mod {
             mods.int_base()
@@ -1000,6 +907,115 @@ impl Compiler {
             base_spelling,
             type_align_override,
         })
+    }
+
+    /// A nested `struct` / `union` member type. Three shapes reach here:
+    /// a definition, a tag use, and an untagged body, which registers under
+    /// a synthetic tag naming the outer aggregate. Returns the type and the
+    /// registered id, which the caller keeps as the promotion candidate a
+    /// declarator-less member becomes (C11 6.7.2.1p13).
+    fn parse_nested_aggregate_member(&mut self, name: &str) -> Result<(i64, usize), C5Error> {
+        let nested_is_union = self.lex.tk == Token::Union;
+        self.next()?;
+        let nested_packed = self.skip_attribute_specifiers()?;
+        // Three shapes: `struct Foo { ... }` (named definition),
+        // `struct Foo` (type use), and `struct { ... }` (no tag,
+        // registered under a synthesised unique tag). Any of them
+        // with no declarator -- next token `;` -- is an unnamed
+        // member whose fields promote into the enclosing
+        // aggregate.
+        let mut inner_anonymous = false;
+        let inner_name = if self.lex.tk == Token::Id {
+            let name = self.symbols[self.lex.curr_id_idx].name.clone();
+            self.next()?;
+            name
+        } else if self.lex.tk == '{' {
+            let kind = if nested_is_union {
+                "anon_union"
+            } else {
+                "anon_struct"
+            };
+            inner_anonymous = true;
+            format!("__{kind}_{}_in_{}", self.structs.len(), name)
+        } else {
+            return Err(self.compile_err("aggregate name or `{{` expected in field type"));
+        };
+        let inner_id = if self.lex.tk == '{' {
+            let id = self.parse_aggregate_body(&inner_name, nested_is_union, nested_packed)?;
+            self.structs[id].is_anonymous = inner_anonymous;
+            self.apply_post_body_attributes(id)?;
+            id
+        } else {
+            self.find_or_forward_declare_struct(&inner_name, nested_is_union)
+        };
+        Ok((struct_ty_for(inner_id), inner_id))
+    }
+
+    /// A typedef-name member type: the aliased type, plus the carriers a
+    /// member declared through the alias reads -- its array dimension (C99
+    /// 6.7.7p3), its type alignment, and a function-pointer alias's calling
+    /// convention and prototype.
+    fn typedef_name_member_type(&mut self) -> Result<(i64, bool), C5Error> {
+        let is_enum = self.symbols[self.lex.curr_id_idx].is_enum_typedef;
+        let aliased = self.symbols[self.lex.curr_id_idx].type_;
+        self.pending.spell_base_typedef = Some(self.lex.curr_id_idx as u32);
+        // C99 6.7.7 paragraph 3: a typedef name carries
+        // through any array dimension on its alias. Stash
+        // the count so the field-binding code below can
+        // make `jmp_buf b;` lay out `long b[64];`.
+        let typedef_array = self.symbols[self.lex.curr_id_idx].array_size;
+        if typedef_array != 0 {
+            self.pending.typedef_base_array_size = typedef_array;
+            self.pending.typedef_base_array_dims =
+                self.symbols[self.lex.curr_id_idx].array_dims.clone();
+            self.pending.typedef_base_zero_len =
+                self.symbols[self.lex.curr_id_idx].is_zero_len_array;
+        }
+        // Carry the typedef's explicit type alignment so a field
+        // declared with it lays out on the requested boundary
+        // (below its natural value for a reducing `aligned(N)`).
+        let typedef_align = self.symbols[self.lex.curr_id_idx].type_align;
+        if typedef_align > 0 {
+            self.pending.type_align = typedef_align;
+        }
+        // A function / function-pointer typedef carries the
+        // pointed-to function's calling convention; a declarator
+        // through the alias inherits it unless the declaration names
+        // one of its own.
+        if self.symbols[self.lex.curr_id_idx].conv != crate::c5::codegen::CallConv::Target
+            && self.pending.attr_call_conv == crate::c5::codegen::CallConv::Target
+        {
+            self.pending.attr_call_conv = self.symbols[self.lex.curr_id_idx].conv;
+        }
+        // Carry the typedef's fn-pointer lineage forward
+        // (mirrors `decl_base.rs` for the non-aggregate
+        // path) so a `typedef RET (*fn_t)(args); struct {
+        // fn_t cb; }` field records `fn_ptr_indirection =
+        // 1`. Without it the StructField loses the tag and
+        // `(*s.cb)(...)` looks like a regular pointer
+        // deref rather than the C99 6.3.2.1p4 fn-pointer
+        // decay no-op, so the call jumps to garbage.
+        let typedef_fpi = self.symbols[self.lex.curr_id_idx].fn_ptr_indirection;
+        if typedef_fpi > 0 {
+            self.pending.fn_ptr_indirection = Some(typedef_fpi);
+            self.pending.fn_ptr_ret_indirection =
+                self.symbols[self.lex.curr_id_idx].fn_ptr_ret_indirection;
+            self.pending.base_is_function_type =
+                self.symbols[self.lex.curr_id_idx].is_function_type;
+            // Carry the typedef's pointed-to prototype (parameter
+            // types + variadic flag) so `s.cb(args)` narrows each
+            // argument to its declared type and splits fixed vs
+            // variadic arguments per the host variadic ABI. Mirrors
+            // the non-aggregate path in `decl_base.rs`.
+            self.pending.typedef_fn_proto = Some((
+                self.symbols[self.lex.curr_id_idx].params.len(),
+                self.symbols[self.lex.curr_id_idx].is_variadic,
+            ));
+            self.pending.fn_ptr_param_types =
+                Some(self.symbols[self.lex.curr_id_idx].params.clone());
+        }
+        self.next()?;
+        Ok((aliased, is_enum))
     }
 
     /// An unnamed member (a struct / union type prefix with no declarator):

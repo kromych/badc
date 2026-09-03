@@ -1,7 +1,7 @@
 //! Per-function AST.
 //!
 //! Built by the parser (`c5::compiler`) one function at a time and
-//! consumed by `c5::ast::walk` to drive
+//! consumed by `c5::irgen` to drive
 //! `c5::codegen::ssa::build::SsaBuilder`. The canonical
 //! function-shaped IR the walker descends to produce
 //! `FunctionSsa`.
@@ -23,8 +23,6 @@
 // reachability that depends on parser sites we haven't wired
 // yet; allow it module-wide rather than per-variant.
 #![allow(dead_code)]
-
-pub(crate) mod walk;
 
 use alloc::vec::Vec;
 

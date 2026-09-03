@@ -1,6 +1,6 @@
 //! Direct construction of [`FunctionSsa`] from a syntactic walk.
 //!
-//! The builder feeds the AST walker (`ast::walk::walk_function`) and
+//! The builder feeds the AST walker (`irgen::walk_function`) and
 //! parser-side synthesis (`emit_sys_trampolines`, the synthetic CRT
 //! entry); anything constructed here is consumed by the allocator
 //! and per-arch emit unchanged.

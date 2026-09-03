@@ -97,7 +97,7 @@ fn internal_function_names(program: &Program) -> alloc::collections::BTreeSet<&s
 }
 
 /// Walks every entry in `program.finished_functions` through
-/// [`crate::c5::ast::walk::walk_function`] and returns one
+/// [`crate::c5::irgen::walk_function`] and returns one
 /// `FunctionSsa` per source function in `ent_pc` order. Sys
 /// trampolines and the synthetic CRT entry don't go through
 /// the AST walker; the caller layers them on from
@@ -122,7 +122,7 @@ pub(crate) fn walk_program(
     for i in ordered {
         let f = &program.finished_functions[i];
         walker_pcs.insert(f.ent_pc);
-        let mut func = crate::c5::ast::walk::walk_function(
+        let mut func = crate::c5::irgen::walk_function(
             f,
             &program.symbols,
             &program.structs,
@@ -136,7 +136,7 @@ pub(crate) fn walk_program(
             // invariant, which also reports the offending node.
             C5Error::Compile(if e.is_internal() {
                 crate::c5::error::fmt_internal_err(&alloc::format!(
-                    "ast::walk: function `{}` (ent_pc={}): {}",
+                    "irgen: function `{}` (ent_pc={}): {}",
                     f.name,
                     f.ent_pc,
                     e,

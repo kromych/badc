@@ -202,7 +202,7 @@ pub(crate) fn eval_fma(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::c5::ast::walk::fold_int_binop;
+    use crate::c5::irgen::fold_int_binop;
 
     #[test]
     fn fold_refuses_div_mod_by_zero() {

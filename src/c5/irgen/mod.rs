@@ -8,28 +8,28 @@
 
 use alloc::string::String;
 
-use super::super::codegen::ssa::build::SsaBuilder;
-use super::super::codegen::{
-    ArgPlacement, LongDoubleKind, Target, effective_fp_arg_mask, offset_align, plan_param_regs_aggs,
-};
-use super::super::compiler::types::{
-    STRUCT_BASE, STRUCT_STRIDE, Segment, UNSIGNED_BIT, is_long_double_scalar, is_pointer_ty,
-    is_struct_ty, is_struct_value_ty, is_unsigned_ty, is_vector_ty, is_volatile_object_ty,
-    is_volatile_ty, load_kind, segment_of_object_ty, strip_unsigned, struct_id_of,
-    struct_ptr_depth,
-};
-use super::super::ir::{
-    AsmSeg, AtomicRmwOp, BinOp, BlockId, FpCastKind, FunctionSsa, LoadKind, StoreKind, ValueId,
-};
-use super::super::op::Intrinsic;
-use super::super::symbol::Symbol;
-use super::super::token::{Token, Ty};
-use super::{
+use super::ast::{
     Ast, AtomicKind, BitfieldDesc, BlockItem, Decl, DeclId, Expr, ExprId, FinishedFunction,
     LabelId, LocalInit, LocalInitPrelude, MAX_MEM_FILL_ACCESSES, MemTransferOp, RuntimeInitValue,
     SLOT_ALIGN, ShortCircuitOp, Stmt, StmtId, UnOp, bitfield_slice_mask, mem_transfer_accesses,
     mem_transfer_chunks,
 };
+use super::codegen::ssa::build::SsaBuilder;
+use super::codegen::{
+    ArgPlacement, LongDoubleKind, Target, effective_fp_arg_mask, offset_align, plan_param_regs_aggs,
+};
+use super::compiler::types::{
+    STRUCT_BASE, STRUCT_STRIDE, Segment, UNSIGNED_BIT, is_long_double_scalar, is_pointer_ty,
+    is_struct_ty, is_struct_value_ty, is_unsigned_ty, is_vector_ty, is_volatile_object_ty,
+    is_volatile_ty, load_kind, segment_of_object_ty, strip_unsigned, struct_id_of,
+    struct_ptr_depth,
+};
+use super::ir::{
+    AsmSeg, AtomicRmwOp, BinOp, BlockId, FpCastKind, FunctionSsa, LoadKind, StoreKind, ValueId,
+};
+use super::op::Intrinsic;
+use super::symbol::Symbol;
+use super::token::{Token, Ty};
 
 mod access;
 mod atomic;

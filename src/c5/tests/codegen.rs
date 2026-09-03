@@ -81,7 +81,7 @@ fn deliberate_walker_rejection_is_not_an_internal_error() {
         "names the missing lowering: {msg}"
     );
     assert!(
-        !msg.contains("ast::walk"),
+        !msg.contains("irgen"),
         "no internal locator in a user-facing diagnostic: {msg}"
     );
 }

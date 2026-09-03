@@ -1,8 +1,7 @@
-use super::super::super::ir::{BinOp, Inst};
-use super::super::super::symbol::Symbol;
-use super::super::super::token::Token;
-use super::super::Ast;
-use super::super::*;
+use super::super::ast::{Ast, SrcPos};
+use super::super::ir::{BinOp, Inst};
+use super::super::symbol::Symbol;
+use super::super::token::Token;
 use super::*;
 
 fn empty_symbols() -> alloc::vec::Vec<Symbol> {

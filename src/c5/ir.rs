@@ -4,7 +4,7 @@
 //! ([`super::codegen::ssa::reg_alloc::allocate`]) and the per-arch SSA
 //! emitters. Two producers:
 //!
-//!   * The AST walker ([`super::ast::walk::walk_function`]) -- the
+//!   * The AST walker ([`super::irgen::walk_function`]) -- the
 //!     canonical source for every parser-produced function.
 //!   * The direct construction API
 //!     ([`super::ssa_build::SsaBuilder`]) -- used by

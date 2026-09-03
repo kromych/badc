@@ -7,6 +7,7 @@ mod error;
 mod headers;
 mod host;
 mod ir;
+mod irgen;
 mod layout;
 mod lexer;
 #[cfg(feature = "full")]

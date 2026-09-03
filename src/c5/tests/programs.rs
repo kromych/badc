@@ -4370,6 +4370,17 @@ fn overaligned_vector_object() {
 }
 
 #[test]
+fn block_scope_object_alignment() {
+    // C11 6.7.5: `_Alignas` on a block-scope declarator places the object on
+    // the requested boundary -- a static local in the data image, an automatic
+    // one in the over-aligned frame region -- while a thread-local keeps the
+    // boundary its block is placed on. One function holds all three kinds with
+    // odd-sized neighbours between them, so a dropped request shows up in the
+    // address rather than being masked by a lucky offset.
+    assert_eq!(run_fixture("block_scope_object_alignment.c"), 0);
+}
+
+#[test]
 fn thread_local_object_alignment() {
     // C99 6.2.8: an object with thread storage duration sits on its type's
     // boundary. The thread-local block has no per-object placement record,

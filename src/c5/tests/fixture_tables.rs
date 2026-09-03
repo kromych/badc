@@ -4548,6 +4548,7 @@ pub(super) const JIT_UNSUPPORTED_FIXTURES: &[(&str, &str)] = &[
     ("thread_local_gnu.c", "thread-local storage"),
     ("thread_local_initializer.c", "thread-local storage"),
     ("thread_local_object_alignment.c", "thread-local storage"),
+    ("block_scope_object_alignment.c", "thread-local storage"),
     ("thread_local_per_thread.c", "thread-local storage"),
 ];
 

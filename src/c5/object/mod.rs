@@ -15,6 +15,8 @@ pub(crate) mod elf_reloc;
 #[cfg(feature = "native-emit")]
 pub(crate) mod elf_reloc_types;
 #[cfg(feature = "native-emit")]
+pub(crate) mod image;
+#[cfg(feature = "native-emit")]
 pub(crate) mod mach_o;
 #[cfg(feature = "native-emit")]
 pub(crate) mod pe;
@@ -1101,5 +1103,143 @@ fn write_for(program: &Program, build: &Build, target: Target) -> Result<Vec<u8>
         Target::LinuxX64 => elf::write(program, build, Machine::X86_64),
         Target::WindowsX64 => pe::write(program, build, Machine::X86_64, target),
         Target::WindowsAarch64 => pe::write(program, build, Machine::Aarch64, target),
+    }
+}
+
+/// Empty `Program` and `Build` values for the writers' unit tests;
+/// a test sets the fields it exercises.
+#[cfg(all(test, feature = "native-emit"))]
+pub(crate) mod test_support {
+    use alloc::collections::BTreeMap;
+    use alloc::string::String;
+    use alloc::vec::Vec;
+
+    use super::{Abi, Build, OutputKind, Program, ResolvedImports, Target};
+
+    pub(crate) fn empty_program() -> Program {
+        Program {
+            target: Target::host(),
+            data: Vec::new(),
+            file_asm: Vec::new(),
+            asm_weak_names: Vec::new(),
+            asm_global_names: Vec::new(),
+            asm_visibility: Vec::new(),
+            asm_unit: false,
+            asm_file_names: Vec::new(),
+            asm_idents: Vec::new(),
+            data_ro_len: 0,
+            data_relro_len: 0,
+            data_object_starts: Vec::new(),
+            const_data_ranges: Vec::new(),
+            data_pad_ranges: Vec::new(),
+            data_align_marks: Vec::new(),
+            entry_pc: 0,
+            warnings: Vec::new(),
+            tls_data: Vec::new(),
+            tls_init_size: 0,
+            data_relocs: Vec::new(),
+            extern_data_relocs: Vec::new(),
+            code_relocs: Vec::new(),
+            tls_data_relocs: Vec::new(),
+            tls_extern_data_relocs: Vec::new(),
+            tls_code_relocs: Vec::new(),
+            exports: Vec::new(),
+            dylibs: Vec::new(),
+            dllmain_pc: None,
+            source_files: Vec::new(),
+            source_path: String::new(),
+            variables: Vec::new(),
+            structs: Vec::new(),
+            enums: Vec::new(),
+            entry_name: None,
+            entry_pragma: None,
+            auto_includes: Vec::new(),
+            data_align: 8,
+            subsystem: None,
+            finished_functions: Vec::new(),
+            symbols: Vec::new(),
+            synthetic_ssa_funcs: Vec::new(),
+            user_ssa_funcs: Vec::new(),
+            extern_function_imports: Vec::new(),
+            init_funcs: Vec::new(),
+            function_aliases: Vec::new(),
+        }
+    }
+
+    pub(crate) fn empty_build() -> Build {
+        Build {
+            text_data_ranges: Vec::new(),
+            emitted_relocs: Vec::new(),
+            named_sections: Vec::new(),
+            got_base_fixups: Vec::new(),
+            text_align: 16,
+            orphaned_data: None,
+            stopped_at_data_liveness: false,
+            ssa_dump: String::new(),
+            asm_sections: Vec::new(),
+            asm_section_text_refs: Vec::new(),
+            asm_text_abs_refs: Vec::new(),
+            asm_sym_fixups: Vec::new(),
+            asm_text_labels: Vec::new(),
+            asm_sym_decls: Vec::new(),
+            copy_relocs: Default::default(),
+            text: Vec::new(),
+            data: Vec::new(),
+            data_ro_len: 0,
+            data_relro_len: 0,
+            pic_link: false,
+            code_model: Default::default(),
+            elf_class: Default::default(),
+            keep_local_labels: false,
+            rodata: Default::default(),
+            data_pcrel_relocs: Vec::new(),
+            text_pcrel_relocs: Vec::new(),
+            text_abs_relocs: Vec::new(),
+            data_align: 8,
+            bss_size: 0,
+            init_fini_arrays: Default::default(),
+            entry_offset: 0,
+            got_fixups: Vec::new(),
+            data_fixups: Vec::new(),
+            func_fixups: Vec::new(),
+            pc_to_native: Vec::new(),
+            func_ent_pcs: Vec::new(),
+            func_ends: Vec::new(),
+            patchable_entries: Vec::new(),
+            mcount_sites: Vec::new(),
+            func_names: Vec::new(),
+            func_prologue_native: BTreeMap::new(),
+            promoted_local_slots: BTreeMap::new(),
+            coalesced_slot_remap: BTreeMap::new(),
+            canary_frame_bytes: BTreeMap::new(),
+            fn_unwind: Vec::new(),
+            reloc_call_sites: Vec::new(),
+            user_extern_call_sites: Vec::new(),
+            user_extern_data_refs: Vec::new(),
+            ssa_line_rows: Vec::new(),
+            imports: ResolvedImports::default(),
+            abi: Abi::default(),
+            tls_data: Vec::new(),
+            tls_init_size: 0,
+            tls_index_fixups: Vec::new(),
+            elf_tpoff_fixups: Vec::new(),
+            data_relocs: Vec::new(),
+            extern_data_relocs: Vec::new(),
+            code_relocs: Vec::new(),
+            tls_data_relocs: Vec::new(),
+            tls_extern_data_relocs: Vec::new(),
+            tls_code_relocs: Vec::new(),
+            label_relocs: Vec::new(),
+            exports: Vec::new(),
+            dynamic_exports: Vec::new(),
+            output_kind: OutputKind::Relocatable,
+            shared_lib_name: None,
+            dllmain_pc: None,
+            macho_tlv_fixups: Vec::new(),
+            macho_tlv_descriptors: Vec::new(),
+            debug_info: false,
+            merged_dwarf: None,
+            plt_trampoline_offsets: Vec::new(),
+        }
     }
 }

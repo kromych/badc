@@ -82,7 +82,7 @@ use alloc::vec::Vec;
 use super::super::error::C5Error;
 use super::super::program::Program;
 use super::dwarf;
-use super::{AddrPart, Build, DataRegion, data_region_addr};
+use super::{AddrPart, Build, DataRegion, data_region_addr, image};
 use crate::c5::layout::{pad_to_align as pad_to, round_up, write_struct};
 
 // ------------------------------------------------------------------
@@ -267,24 +267,6 @@ struct NamedCounts {
     konst: u8,
     data_const: u8,
     data: u8,
-}
-
-/// `Section64` for one named section, declared inside `segname`.
-fn named_section64(n: &NamedOut<'_>, segname: &str, zerofill: bool) -> Section64 {
-    Section64 {
-        sectname: pack_name16(&n.name[..n.name.len().min(16)]),
-        segname: pack_name16(segname),
-        addr: n.addr,
-        size: n.size,
-        offset: if zerofill { 0 } else { n.fileoff },
-        align: n.align_log2,
-        reloff: 0,
-        nreloc: 0,
-        flags: if zerofill { S_ZEROFILL } else { 0 },
-        reserved1: 0,
-        reserved2: 0,
-        reserved3: 0,
-    }
 }
 
 /// Segment indices, in the order they appear as `LC_SEGMENT_64` load
@@ -686,17 +668,77 @@ pub(crate) fn build_export_trie(entries: &[(String, u64, u64)]) -> Vec<u8> {
 // concatenates them in the order it wants dyld to see them.
 // ------------------------------------------------------------------
 
-/// `LC_SEGMENT_64` for a segment with no sections (used for
-/// __PAGEZERO and __LINKEDIT). The on-disk struct is 72 bytes.
-fn segment_no_sections(
-    name: &str,
+/// A `section_64` header with no relocations.
+fn section64(
+    sectname: &str,
+    segname: &str,
+    addr: u64,
+    size: u64,
+    offset: u32,
+    align: u32,
+    flags: u32,
+) -> Section64 {
+    Section64 {
+        sectname: pack_name16(sectname),
+        segname: pack_name16(segname),
+        addr,
+        size,
+        offset,
+        align,
+        reloff: 0,
+        nreloc: 0,
+        flags,
+        reserved1: 0,
+        reserved2: 0,
+        reserved3: 0,
+    }
+}
+
+/// `Section64` for one named section, declared inside `segname`. A
+/// zero-fill section has no file bytes.
+fn named_section64(n: &NamedOut<'_>, segname: &str, zerofill: bool) -> Section64 {
+    section64(
+        &n.name[..n.name.len().min(16)],
+        segname,
+        n.addr,
+        n.size,
+        if zerofill { 0 } else { n.fileoff },
+        n.align_log2,
+        if zerofill { S_ZEROFILL } else { 0 },
+    )
+}
+
+/// Where a segment sits in memory and in the file.
+#[derive(Clone, Copy)]
+struct SegmentPlacement {
     vmaddr: u64,
     vmsize: u64,
     fileoff: u64,
     filesize: u64,
-    maxprot: u32,
-    initprot: u32,
-) -> Vec<u8> {
+}
+
+/// One section's placement inside its segment.
+#[derive(Clone, Copy)]
+struct SectionPlacement {
+    addr: u64,
+    size: u64,
+    offset: u32,
+}
+
+/// The thread-local sections of `__DATA`: `__thread_vars` (a 24-byte
+/// descriptor per variable) and the per-thread storage, file-backed as
+/// `__thread_data` once any variable has an initializer, else the
+/// zero-fill `__thread_bss`.
+#[derive(Clone, Copy)]
+struct TlvSections {
+    vars: SectionPlacement,
+    storage: SectionPlacement,
+    initialised: bool,
+}
+
+/// `LC_SEGMENT_64` for a segment with no sections (`__PAGEZERO`,
+/// `__LINKEDIT`).
+fn segment_no_sections(name: &str, place: SegmentPlacement, prot: u32) -> Vec<u8> {
     let mut out = Vec::with_capacity(SEGMENT_COMMAND_64_SIZE);
     write_struct(
         &mut out,
@@ -704,12 +746,12 @@ fn segment_no_sections(
             cmd: LC_SEGMENT_64,
             cmdsize: SEGMENT_COMMAND_64_SIZE as u32,
             segname: pack_name16(name),
-            vmaddr,
-            vmsize,
-            fileoff,
-            filesize,
-            maxprot,
-            initprot,
+            vmaddr: place.vmaddr,
+            vmsize: place.vmsize,
+            fileoff: place.fileoff,
+            filesize: place.filesize,
+            maxprot: prot,
+            initprot: prot,
             nsects: 0,
             flags: 0,
         },
@@ -718,570 +760,206 @@ fn segment_no_sections(
     out
 }
 
-/// `LC_SEGMENT_64` for `__TEXT`: the `__text` section plus the
-/// `__const` section (read-only data prefix + producer fingerprint).
-/// `__const` rides the segment's existing R+X mapping -- the prefix
-/// holds no relocated slot, so nothing writes it after emission, and
-/// the section carries no instruction attribute so tools do not
-/// decode it.
-#[allow(clippy::too_many_arguments)]
-fn segment_text(
-    vmaddr: u64,
-    vmsize: u64,
-    fileoff: u64,
-    filesize: u64,
-    text_addr: u64,
-    text_size: u64,
-    text_offset: u32,
-    const_section: (u64, u64, u32, u32),
-    named: &[&NamedOut<'_>],
+/// `LC_SEGMENT_64` header for `name` over `sections`, followed by the
+/// section headers.
+fn segment(
+    name: &str,
+    place: SegmentPlacement,
+    prot: u32,
+    flags: u32,
+    sections: &[Section64],
 ) -> Vec<u8> {
-    let total = SEGMENT_COMMAND_64_SIZE + (2 + named.len()) * SECTION_64_SIZE;
+    let total = SEGMENT_COMMAND_64_SIZE + sections.len() * SECTION_64_SIZE;
     let mut out = Vec::with_capacity(total);
     write_struct(
         &mut out,
         &SegmentCommand64 {
             cmd: LC_SEGMENT_64,
             cmdsize: total as u32,
-            segname: pack_name16("__TEXT"),
-            vmaddr,
-            vmsize,
-            fileoff,
-            filesize,
-            maxprot: VM_PROT_READ | VM_PROT_EXECUTE,
-            initprot: VM_PROT_READ | VM_PROT_EXECUTE,
-            nsects: 2 + named.len() as u32,
-            flags: 0,
+            segname: pack_name16(name),
+            vmaddr: place.vmaddr,
+            vmsize: place.vmsize,
+            fileoff: place.fileoff,
+            filesize: place.filesize,
+            maxprot: prot,
+            initprot: prot,
+            nsects: sections.len() as u32,
+            flags,
         },
     );
-    write_struct(
-        &mut out,
-        &Section64 {
-            sectname: pack_name16("__text"),
-            segname: pack_name16("__TEXT"),
-            addr: text_addr,
-            size: text_size,
-            offset: text_offset,
-            align: 2, // log2 -- 4-byte arm64 instruction alignment
-            reloff: 0,
-            nreloc: 0,
-            // S_REGULAR (0) | S_ATTR_PURE_INSTRUCTIONS | S_ATTR_SOME_INSTRUCTIONS
-            flags: 0x8000_0400,
-            reserved1: 0,
-            reserved2: 0,
-            reserved3: 0,
-        },
-    );
-    let (addr, size, offset, align) = const_section;
-    write_struct(
-        &mut out,
-        &Section64 {
-            sectname: pack_name16("__const"),
-            segname: pack_name16("__TEXT"),
-            addr,
-            size,
-            offset,
-            align,
-            reloff: 0,
-            nreloc: 0,
-            flags: 0, // S_REGULAR
-            reserved1: 0,
-            reserved2: 0,
-            reserved3: 0,
-        },
-    );
-    for n in named {
-        write_struct(&mut out, &named_section64(n, "__TEXT", false));
+    for s in sections {
+        write_struct(&mut out, s);
     }
     debug_assert_eq!(out.len(), total);
     out
 }
 
-/// `LC_SEGMENT_64` for `__DATA_CONST`: one `__const` section holding
-/// the relro region (`Build::data[data_ro_len..data_relro_len]`) --
-/// read-only content whose slots dyld writes through the rebase
-/// stream. `SG_READ_ONLY` makes dyld drop write permission once the
-/// fixups are applied.
+/// `__TEXT`: `__text`, then `__const` (the read-only data prefix, the
+/// producer fingerprint and the switch tables; no relocated slot, so
+/// the segment's R+X mapping serves it, and no instruction attribute
+/// so tools do not decode it), then the read-only named sections.
+fn segment_text(
+    place: SegmentPlacement,
+    text: SectionPlacement,
+    konst: SectionPlacement,
+    const_align: u32,
+    named: &[&NamedOut<'_>],
+) -> Vec<u8> {
+    let mut sections = alloc::vec![
+        // S_REGULAR | S_ATTR_PURE_INSTRUCTIONS | S_ATTR_SOME_INSTRUCTIONS
+        section64(
+            "__text",
+            "__TEXT",
+            text.addr,
+            text.size,
+            text.offset,
+            2,
+            0x8000_0400
+        ),
+        section64(
+            "__const",
+            "__TEXT",
+            konst.addr,
+            konst.size,
+            konst.offset,
+            const_align,
+            0
+        ),
+    ];
+    sections.extend(named.iter().map(|n| named_section64(n, "__TEXT", false)));
+    segment(
+        "__TEXT",
+        place,
+        VM_PROT_READ | VM_PROT_EXECUTE,
+        0,
+        &sections,
+    )
+}
+
+/// `__DATA_CONST`: the relro region, read-only content whose slots dyld
+/// writes through the rebase stream; `SG_READ_ONLY` makes dyld drop
+/// write permission once the fixups are applied.
 fn segment_data_const(
-    vmaddr: u64,
-    vmsize: u64,
-    fileoff: u64,
-    filesize: u64,
+    place: SegmentPlacement,
     const_size: u64,
     align: u32,
     named: &[&NamedOut<'_>],
 ) -> Vec<u8> {
-    let total = SEGMENT_COMMAND_64_SIZE + (1 + named.len()) * SECTION_64_SIZE;
-    let mut out = Vec::with_capacity(total);
-    write_struct(
-        &mut out,
-        &SegmentCommand64 {
-            cmd: LC_SEGMENT_64,
-            cmdsize: total as u32,
-            segname: pack_name16("__DATA_CONST"),
-            vmaddr,
-            vmsize,
-            fileoff,
-            filesize,
-            maxprot: VM_PROT_READ | VM_PROT_WRITE,
-            initprot: VM_PROT_READ | VM_PROT_WRITE,
-            nsects: 1 + named.len() as u32,
-            flags: SG_READ_ONLY,
-        },
+    let mut sections = alloc::vec![section64(
+        "__const",
+        "__DATA_CONST",
+        place.vmaddr,
+        const_size,
+        place.fileoff as u32,
+        align,
+        0
+    )];
+    sections.extend(
+        named
+            .iter()
+            .map(|n| named_section64(n, "__DATA_CONST", false)),
     );
-    write_struct(
-        &mut out,
-        &Section64 {
-            sectname: pack_name16("__const"),
-            segname: pack_name16("__DATA_CONST"),
-            addr: vmaddr,
-            size: const_size,
-            offset: fileoff as u32,
-            align,
-            reloff: 0,
-            nreloc: 0,
-            flags: 0, // S_REGULAR
-            reserved1: 0,
-            reserved2: 0,
-            reserved3: 0,
-        },
-    );
-    for n in named {
-        write_struct(&mut out, &named_section64(n, "__DATA_CONST", false));
-    }
-    debug_assert_eq!(out.len(), total);
-    out
+    segment(
+        "__DATA_CONST",
+        place,
+        VM_PROT_READ | VM_PROT_WRITE,
+        SG_READ_ONLY,
+        &sections,
+    )
 }
 
-/// `LC_SEGMENT_64` for `__DATA` containing the
-/// thread-local-variable scaffolding (`__thread_vars` +
-/// `__thread_bss`) on top of the existing `__got` and `__data`.
-/// Used when the program declares `_Thread_local` globals on a
-/// macOS arm64 target. Layout (4 sections):
-///
-/// ```text
-///   __DATA,__got           filled by dyld via bind opcodes
-///   __DATA,__data          program's static data segment
-///   __DATA,__thread_vars   24-byte descriptor per TLS variable
-///   __DATA,__thread_bss    zero-fill TLS image (per-thread)
-/// ```
-///
-/// 72 + 4 * 80 = 392 bytes total.
-#[allow(clippy::too_many_arguments)]
-fn segment_data_with_tlv(
-    vmaddr: u64,
-    vmsize: u64,
-    fileoff: u64,
-    filesize: u64,
-    got_addr: u64,
-    got_size: u64,
-    got_offset: u32,
-    data_addr: u64,
-    data_size: u64,
-    data_offset: u32,
-    data_align_log2: u32,
-    thread_vars_addr: u64,
-    thread_vars_size: u64,
-    thread_vars_offset: u32,
-    thread_storage_addr: u64,
-    thread_storage_size: u64,
-    thread_storage_offset: u32,
-    thread_storage_initialised: bool,
-    bss_addr: u64,
-    bss_size: u64,
-    bss_present: bool,
-    named_data: &[&NamedOut<'_>],
-    named_bss: &[&NamedOut<'_>],
-) -> Vec<u8> {
-    let nsects: u32 =
-        if bss_present { 5 } else { 4 } + named_data.len() as u32 + named_bss.len() as u32;
-    let total = SEGMENT_COMMAND_64_SIZE + nsects as usize * SECTION_64_SIZE;
-    let mut out = Vec::with_capacity(total);
-    write_struct(
-        &mut out,
-        &SegmentCommand64 {
-            cmd: LC_SEGMENT_64,
-            cmdsize: total as u32,
-            segname: pack_name16("__DATA"),
-            vmaddr,
-            vmsize,
-            fileoff,
-            filesize,
-            maxprot: VM_PROT_READ | VM_PROT_WRITE,
-            initprot: VM_PROT_READ | VM_PROT_WRITE,
-            nsects,
-            flags: 0,
-        },
-    );
-    // __got
-    write_struct(
-        &mut out,
-        &Section64 {
-            sectname: pack_name16("__got"),
-            segname: pack_name16("__DATA"),
-            addr: got_addr,
-            size: got_size,
-            offset: got_offset,
-            align: 3,
-            reloff: 0,
-            nreloc: 0,
-            flags: 0,
-            reserved1: 0,
-            reserved2: 0,
-            reserved3: 0,
-        },
-    );
-    // __data
-    write_struct(
-        &mut out,
-        &Section64 {
-            sectname: pack_name16("__data"),
-            segname: pack_name16("__DATA"),
-            addr: data_addr,
-            size: data_size,
-            offset: data_offset,
-            align: data_align_log2,
-            reloff: 0,
-            nreloc: 0,
-            flags: 0,
-            reserved1: 0,
-            reserved2: 0,
-            reserved3: 0,
-        },
-    );
-    for n in named_data {
-        write_struct(&mut out, &named_section64(n, "__DATA", false));
-    }
-    // __thread_vars -- 24-byte descriptor per TLS variable.
-    // Section type S_THREAD_LOCAL_VARIABLES (0x13) tells dyld
-    // these are descriptor records.
-    write_struct(
-        &mut out,
-        &Section64 {
-            sectname: pack_name16("__thread_vars"),
-            segname: pack_name16("__DATA"),
-            addr: thread_vars_addr,
-            size: thread_vars_size,
-            offset: thread_vars_offset,
-            align: 3,
-            reloff: 0,
-            nreloc: 0,
-            flags: S_THREAD_LOCAL_VARIABLES,
-            reserved1: 0,
-            reserved2: 0,
-            reserved3: 0,
-        },
-    );
-    // Per-thread storage area. Two flavours: when *any* TLS
-    // variable has a static initializer, we emit
-    // `__thread_data` (S_THREAD_LOCAL_REGULAR = 0x11) -- a
-    // file-backed init template the loader copies into each
-    // thread's per-thread block. Otherwise we emit
-    // `__thread_bss` (S_THREAD_LOCAL_ZEROFILL = 0x12) -- no
-    // file backing, the loader just zero-fills the per-thread
-    // bytes.
-    //
-    // We don't try to split the byte range into "init prefix"
-    // and "zero-fill suffix" sections; the c5 frontend lays
-    // out TLS vars in declaration order and any uninit byte
-    // inside the init prefix is already zero (the parser
-    // pushes zero bytes per slot before optionally
-    // overwriting), so emitting the full block as
-    // `__thread_data` produces byte-for-byte the same
-    // per-thread result as the split layout.
-    let (storage_name, storage_flags, storage_file_offset) = if thread_storage_initialised {
-        (
-            *b"__thread_data\0\0\0",
-            S_THREAD_LOCAL_REGULAR,
-            thread_storage_offset,
-        )
-    } else {
-        (*b"__thread_bss\0\0\0\0", S_THREAD_LOCAL_ZEROFILL, 0)
-    };
-    write_struct(
-        &mut out,
-        &Section64 {
-            sectname: storage_name,
-            segname: pack_name16("__DATA"),
-            addr: thread_storage_addr,
-            size: thread_storage_size,
-            offset: storage_file_offset,
-            align: 3,
-            reloff: 0,
-            nreloc: 0,
-            flags: storage_flags,
-            reserved1: 0,
-            reserved2: 0,
-            reserved3: 0,
-        },
-    );
-    // __bss -- regular zero-init storage at the segment tail, past the
-    // thread storage. Present only when segregation produced it.
-    if bss_present {
-        write_struct(
-            &mut out,
-            &Section64 {
-                sectname: pack_name16("__bss"),
-                segname: pack_name16("__DATA"),
-                addr: bss_addr,
-                size: bss_size,
-                offset: 0, // S_ZEROFILL: zero-filled by the loader
-                align: 3,
-                reloff: 0,
-                nreloc: 0,
-                flags: S_ZEROFILL,
-                reserved1: 0,
-                reserved2: 0,
-                reserved3: 0,
-            },
-        );
-    }
-    for n in named_bss {
-        write_struct(&mut out, &named_section64(n, "__DATA", true));
-    }
-    debug_assert_eq!(out.len(), total);
-    out
-}
-
-/// `LC_SEGMENT_64` for `__DATA` containing two sections: `__got`
-/// (filled by dyld via bind opcodes) and `__data` (the program's
-/// initialised data segment, copied into the image at write time).
-/// Both sections live within a single page; the writer guarantees
-/// that __data ends before the page boundary by sizing __DATA up.
-/// 72 + 80 + 80 bytes total.
+/// `__DATA`: `__got` (filled by dyld via the bind opcodes, so its type
+/// stays `S_REGULAR`), `__data`, the writable named sections, the
+/// thread-local sections when present, `__bss` when segregation
+/// produced zero-init storage, and the zero-fill named sections.
 #[allow(clippy::too_many_arguments)]
 fn segment_data(
-    vmaddr: u64,
-    vmsize: u64,
-    fileoff: u64,
-    filesize: u64,
-    got_addr: u64,
-    got_size: u64,
-    got_offset: u32,
-    data_addr: u64,
-    data_size: u64,
-    data_offset: u32,
+    place: SegmentPlacement,
+    got: SectionPlacement,
+    data: SectionPlacement,
     data_align_log2: u32,
-    bss_addr: u64,
-    bss_size: u64,
-    bss_present: bool,
+    tlv: Option<TlvSections>,
+    bss: Option<(u64, u64)>,
     named_data: &[&NamedOut<'_>],
     named_bss: &[&NamedOut<'_>],
 ) -> Vec<u8> {
-    let nsects: u32 =
-        if bss_present { 3 } else { 2 } + named_data.len() as u32 + named_bss.len() as u32;
-    let total = SEGMENT_COMMAND_64_SIZE + nsects as usize * SECTION_64_SIZE;
-    let mut out = Vec::with_capacity(total);
-    write_struct(
-        &mut out,
-        &SegmentCommand64 {
-            cmd: LC_SEGMENT_64,
-            cmdsize: total as u32,
-            segname: pack_name16("__DATA"),
-            vmaddr,
-            vmsize,
-            fileoff,
-            filesize,
-            maxprot: VM_PROT_READ | VM_PROT_WRITE,
-            initprot: VM_PROT_READ | VM_PROT_WRITE,
-            nsects,
-            flags: 0,
-        },
+    let mut sections = alloc::vec![
+        section64("__got", "__DATA", got.addr, got.size, got.offset, 3, 0),
+        section64(
+            "__data",
+            "__DATA",
+            data.addr,
+            data.size,
+            data.offset,
+            data_align_log2,
+            0
+        ),
+    ];
+    sections.extend(
+        named_data
+            .iter()
+            .map(|n| named_section64(n, "__DATA", false)),
     );
-    // __got section. We fill it via bind opcodes, not the indirect
-    // symbol table, so the section type stays S_REGULAR (0).
-    // Conventionally __got is named that way and otool treats it
-    // specially even without any flag bits.
-    write_struct(
-        &mut out,
-        &Section64 {
-            sectname: pack_name16("__got"),
-            segname: pack_name16("__DATA"),
-            addr: got_addr,
-            size: got_size,
-            offset: got_offset,
-            align: 3, // log2 -- 8 bytes for u64 pointers
-            reloff: 0,
-            nreloc: 0,
-            flags: 0, // S_REGULAR
-            reserved1: 0,
-            reserved2: 0,
-            reserved3: 0,
-        },
-    );
-    // __data section. Holds the program's static data segment --
-    // string literals + initialised globals. Copied into the file at
-    // write time; dyld maps it RW alongside __got. Wholly-zero globals
-    // move to __bss below.
-    write_struct(
-        &mut out,
-        &Section64 {
-            sectname: pack_name16("__data"),
-            segname: pack_name16("__DATA"),
-            addr: data_addr,
-            size: data_size,
-            offset: data_offset,
-            align: data_align_log2,
-            reloff: 0,
-            nreloc: 0,
-            flags: 0, // S_REGULAR
-            reserved1: 0,
-            reserved2: 0,
-            reserved3: 0,
-        },
-    );
-    for n in named_data {
-        write_struct(&mut out, &named_section64(n, "__DATA", false));
+    if let Some(t) = tlv {
+        sections.push(section64(
+            "__thread_vars",
+            "__DATA",
+            t.vars.addr,
+            t.vars.size,
+            t.vars.offset,
+            3,
+            S_THREAD_LOCAL_VARIABLES,
+        ));
+        let (name, flags, offset) = if t.initialised {
+            ("__thread_data", S_THREAD_LOCAL_REGULAR, t.storage.offset)
+        } else {
+            ("__thread_bss", S_THREAD_LOCAL_ZEROFILL, 0)
+        };
+        sections.push(section64(
+            name,
+            "__DATA",
+            t.storage.addr,
+            t.storage.size,
+            offset,
+            3,
+            flags,
+        ));
     }
-    // __bss section (zero-fill, no file backing). Present only when
-    // segregation produced zero-init storage; sizers read its size.
-    if bss_present {
-        write_struct(
-            &mut out,
-            &Section64 {
-                sectname: pack_name16("__bss"),
-                segname: pack_name16("__DATA"),
-                addr: bss_addr,
-                size: bss_size,
-                offset: 0, // S_ZEROFILL: zero-filled by the loader
-                align: 3,
-                reloff: 0,
-                nreloc: 0,
-                flags: S_ZEROFILL,
-                reserved1: 0,
-                reserved2: 0,
-                reserved3: 0,
-            },
-        );
+    if let Some((addr, size)) = bss {
+        sections.push(section64("__bss", "__DATA", addr, size, 0, 3, S_ZEROFILL));
     }
-    for n in named_bss {
-        write_struct(&mut out, &named_section64(n, "__DATA", true));
-    }
-    debug_assert_eq!(out.len(), total);
-    out
+    sections.extend(named_bss.iter().map(|n| named_section64(n, "__DATA", true)));
+    segment("__DATA", place, VM_PROT_READ | VM_PROT_WRITE, 0, &sections)
 }
 
-/// `LC_SEGMENT_64` for `__DWARF` containing the five debug
-/// sections we emit (`__debug_info`, `__debug_abbrev`,
-/// `__debug_line`, `__debug_str`, `__debug_frame`).
-///
-/// Mach-O conventions for "DWARF embedded in a final-linked
-/// executable" -- the form lldb expects when it cracks the
-/// image directly rather than via a `.dSYM` bundle:
-///
-/// * `vmsize` rounds the debug filesize up to a page. Newer
-///   `dyld_info` (Xcode 15+) rejects any `vmsize < filesize`
-///   with "segment '...' filesize exceeds vmsize" -- which
-///   then aborts `dyld_info -imports` before it prints any
-///   bindings, breaking the structural Mach-O tests that pipe
-///   through it. Older Apple tools tolerated `vmsize = 0`,
-///   but we now mirror what ld64 emits when it keeps
-///   `__DWARF` in-binary: a real, page-sized vmsize.
-/// * `vmaddr` sits in its own page-aligned slot between
-///   `__DATA.vmaddr + __DATA.vmsize` and `__LINKEDIT.vmaddr`
-///   so the kernel's segment-overlap check stays clean.
-/// * `initprot = maxprot = 0`. The bytes get mapped (because
-///   vmsize > 0) but never accessed at runtime -- code only
-///   reads __TEXT and writes __DATA, lldb / dsymutil read the
-///   debug sections via the file image, and the kernel
-///   accepts `prot = 0` as "reserved address space, no
-///   permissions".
-/// * Each section's `addr` mirrors `vmaddr` so `nm`'s
-///   `addr >= segment.vmaddr` invariant holds; the
-///   `S_ATTR_DEBUG` flag tells lldb / dyld_info / the Apple
-///   symbolicator that the section is debug-only metadata so
-///   address-based breakpoints aren't shadowed by it.
-///
-/// The four section file offsets and sizes are passed in by
-/// the caller, which has just laid out the slot for `__DWARF`
-/// between `__DATA` and `__LINKEDIT` in the order the sections
-/// appear here.
-#[allow(clippy::too_many_arguments)]
-fn segment_dwarf(
-    vmaddr: u64,
-    vmsize: u64,
-    fileoff: u64,
-    filesize: u64,
-    info_offset: u32,
-    info_size: u64,
-    abbrev_offset: u32,
-    abbrev_size: u64,
-    line_offset: u32,
-    line_size: u64,
-    str_offset: u32,
-    str_size: u64,
-    frame_offset: u32,
-    frame_size: u64,
-) -> Vec<u8> {
-    const TOTAL: usize = SEGMENT_COMMAND_64_SIZE + 5 * SECTION_64_SIZE;
-    let mut out = Vec::with_capacity(TOTAL);
-    write_struct(
-        &mut out,
-        &SegmentCommand64 {
-            cmd: LC_SEGMENT_64,
-            cmdsize: TOTAL as u32,
-            segname: pack_name16("__DWARF"),
-            vmaddr,
-            vmsize,
-            fileoff,
-            filesize,
-            maxprot: 0,
-            initprot: 0,
-            nsects: 5,
-            flags: 0,
-        },
-    );
-    let dwarf_section = |sectname: &str, addr: u64, offset: u32, size: u64| Section64 {
-        sectname: pack_name16(sectname),
-        segname: pack_name16("__DWARF"),
-        // Section addresses go ascending across the segment so
-        // each `__debug_*` claims a distinct vmaddr range. With
-        // every section's addr pinned at `segment.vmaddr` lldb
-        // emits "address ... maps to more than one section"
-        // warnings on every launch (it sees N sections starting
-        // at the same vmaddr). The `S_ATTR_DEBUG` flag still
-        // marks the section as debug-only so dyld doesn't try
-        // to load these bytes; the unique addrs are purely for
-        // lldb's section-resolution disambiguator.
-        addr,
-        size,
-        offset,
-        align: 0,
-        reloff: 0,
-        nreloc: 0,
-        flags: S_ATTR_DEBUG,
-        reserved1: 0,
-        reserved2: 0,
-        reserved3: 0,
-    };
-    let info_addr = vmaddr;
-    let abbrev_addr = info_addr + info_size;
-    let line_addr = abbrev_addr + abbrev_size;
-    let str_addr = line_addr + line_size;
-    let frame_addr = str_addr + str_size;
-    let _ = vmaddr;
-    write_struct(
-        &mut out,
-        &dwarf_section("__debug_info", info_addr, info_offset, info_size),
-    );
-    write_struct(
-        &mut out,
-        &dwarf_section("__debug_abbrev", abbrev_addr, abbrev_offset, abbrev_size),
-    );
-    write_struct(
-        &mut out,
-        &dwarf_section("__debug_line", line_addr, line_offset, line_size),
-    );
-    write_struct(
-        &mut out,
-        &dwarf_section("__debug_str", str_addr, str_offset, str_size),
-    );
-    write_struct(
-        &mut out,
-        &dwarf_section("__debug_frame", frame_addr, frame_offset, frame_size),
-    );
-    debug_assert_eq!(out.len(), TOTAL);
-    out
+/// `__DWARF`: the five debug sections back to back. `vmsize` rounds
+/// the file size up to a page (`dyld_info` rejects `vmsize <
+/// filesize`), the segment maps with no permissions and is never
+/// accessed at runtime, and each section takes a distinct address so
+/// lldb's section resolution sees no overlap.
+fn segment_dwarf(place: SegmentPlacement, sections: [(u32, u64); 5]) -> Vec<u8> {
+    const NAMES: [&str; 5] = [
+        "__debug_info",
+        "__debug_abbrev",
+        "__debug_line",
+        "__debug_str",
+        "__debug_frame",
+    ];
+    let mut addr = place.vmaddr;
+    let mut headers = Vec::with_capacity(5);
+    for (name, (offset, size)) in NAMES.iter().zip(sections) {
+        headers.push(section64(
+            name,
+            "__DWARF",
+            addr,
+            size,
+            offset,
+            0,
+            S_ATTR_DEBUG,
+        ));
+        addr += size;
+    }
+    segment("__DWARF", place, 0, 0, &headers)
 }
 
 /// Compute the cmdsize for a variable-length load command whose body
@@ -1789,40 +1467,6 @@ fn build_rebase_opcodes(
     out.push(REBASE_OPCODE_DONE);
     pad_to(&mut out, 8);
     out
-}
-
-/// Address-constant initializers of `_Thread_local` objects, as
-/// `(offset within the TLS template, preferred-load-address VA)`. Both
-/// the baked template bytes and the rebase stream read this.
-fn tls_reloc_sites(
-    build: &Build,
-    data_off_to_vaddr: &dyn Fn(u64) -> u64,
-    code_vmaddr_base: u64,
-) -> Result<Vec<(usize, u64)>, C5Error> {
-    if let Some(r) = build.tls_extern_data_relocs.first() {
-        return Err(C5Error::Compile(crate::c5::error::fmt_link_err(&format!(
-            "undefined reference to `{}` in a `_Thread_local` initializer: \
-             the template's address constant must resolve within the image",
-            r.symbol_name,
-        ))));
-    }
-    let mut sites = Vec::with_capacity(build.tls_data_relocs.len() + build.tls_code_relocs.len());
-    for r in &build.tls_data_relocs {
-        let va = data_off_to_vaddr(r.target_anchor)
-            .wrapping_add(r.target_offset.wrapping_sub(r.target_anchor));
-        sites.push((r.data_offset as usize, va));
-    }
-    for r in &build.tls_code_relocs {
-        let ent_pc = r.target_ent_pc as usize;
-        let Some(&native_off) = build.pc_to_native.get(ent_pc) else {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!("Mach-O: TLS code reloc references missing ent_pc {ent_pc}"),
-            )));
-        };
-        sites.push((r.data_offset as usize, code_vmaddr_base + native_off as u64));
-    }
-    sites.sort_unstable();
-    Ok(sites)
 }
 
 /// Source library a bind opcode selects: the flat-lookup pseudo-dylib or
@@ -2626,7 +2270,8 @@ impl<'a> MachOWriter<'a> {
     }
 
     fn tls_reloc_sites(&self) -> Result<Vec<(usize, u64)>, C5Error> {
-        tls_reloc_sites(
+        image::tls_reloc_sites(
+            "Mach-O",
             self.build,
             &|off| self.data_off_to_vaddr(off),
             self.layout.code_vmaddr_base(),
@@ -2762,43 +2407,17 @@ impl<'a> MachOWriter<'a> {
         let (program, build) = (self.program, self.build);
         let l = &self.layout;
         let code_vmaddr_base = l.code_vmaddr_base();
-        let fresh = || {
-            dwarf::emit(
+        let le = &mut self.linkedit;
+        le.dwarf_fileoff = l.data_fileoff + l.data_filesize;
+        if self.emit_dwarf {
+            let s = image::image_dwarf(
                 program,
                 build,
                 super::Target::MacOSAarch64,
                 code_vmaddr_base,
-                &program.source_path,
                 None,
-            )
-        };
-        let le = &mut self.linkedit;
-        le.dwarf_fileoff = l.data_fileoff + l.data_filesize;
-        if self.emit_dwarf {
-            let s = if let Some(md) = &build.merged_dwarf {
-                let mut debug_info = md.debug_info.clone();
-                let mut debug_line = md.debug_line.clone();
-                for r in &md.debug_info_text_relocs {
-                    super::apply_merged_dwarf_text_reloc(&mut debug_info, r, code_vmaddr_base)?;
-                }
-                for r in &md.debug_line_text_relocs {
-                    super::apply_merged_dwarf_text_reloc(&mut debug_line, r, code_vmaddr_base)?;
-                }
-                for r in &md.debug_info_data_relocs {
-                    super::apply_merged_dwarf_data_reloc(&mut debug_info, r, &|off| {
-                        l.data_off_to_vaddr(off)
-                    })?;
-                }
-                dwarf::DwarfSections {
-                    debug_info,
-                    debug_abbrev: md.debug_abbrev.clone(),
-                    debug_line,
-                    debug_str: md.debug_str.clone(),
-                    debug_frame: fresh().debug_frame,
-                }
-            } else {
-                fresh()
-            };
+                Some(&|off| l.data_off_to_vaddr(off)),
+            )?;
             le.dwarf_info_offset = le.dwarf_fileoff;
             le.dwarf_abbrev_offset = le.dwarf_info_offset + s.debug_info.len() as u64;
             le.dwarf_line_offset = le.dwarf_abbrev_offset + s.debug_abbrev.len() as u64;
@@ -2844,40 +2463,44 @@ impl<'a> MachOWriter<'a> {
         let named_data_const_out = self.named_in(NamedFamily::DataConst);
         let named_data_out = self.named_in(NamedFamily::Data);
         let named_bss_out = self.named_in(NamedFamily::Bss);
+        let place = |vmaddr, vmsize, fileoff, filesize| SegmentPlacement {
+            vmaddr,
+            vmsize,
+            fileoff,
+            filesize,
+        };
+        let section = |addr, size, offset: u64| SectionPlacement {
+            addr,
+            size,
+            offset: offset as u32,
+        };
         let mut lcs: Vec<Vec<u8>> = Vec::new();
         lcs.push(segment_no_sections(
             "__PAGEZERO",
-            0,
-            PAGEZERO_VMSIZE,
-            0,
-            0,
-            0,
+            place(0, PAGEZERO_VMSIZE, 0, 0),
             0,
         ));
         let text_segment = segment_text(
-            TEXT_VMADDR_BASE,
-            l.text_filesize,
-            0,
-            l.text_filesize,
-            l.code_vmaddr_base(),
-            build.text.len() as u64,
-            l.entry_file_offset as u32,
-            (
-                l.const_vmaddr(),
-                l.const_size,
-                l.const_fileoff as u32,
-                l.ro_align.trailing_zeros(),
+            place(TEXT_VMADDR_BASE, l.text_filesize, 0, l.text_filesize),
+            section(
+                l.code_vmaddr_base(),
+                build.text.len() as u64,
+                l.entry_file_offset,
             ),
+            section(l.const_vmaddr(), l.const_size, l.const_fileoff),
+            l.ro_align.trailing_zeros(),
             &named_const_out,
         );
         debug_assert_eq!(text_segment.len() as u64, c.text_seg_size);
         lcs.push(text_segment);
         if l.data_const_present {
             let s = segment_data_const(
-                l.data_const_vmaddr(),
-                l.data_const_size,
-                l.data_const_fileoff,
-                l.data_const_size,
+                place(
+                    l.data_const_vmaddr(),
+                    l.data_const_size,
+                    l.data_const_fileoff,
+                    l.data_const_size,
+                ),
                 l.relro_head_len,
                 l.data_align.trailing_zeros(),
                 &named_data_const_out,
@@ -2885,81 +2508,69 @@ impl<'a> MachOWriter<'a> {
             debug_assert_eq!(s.len() as u64, c.data_const_seg_size);
             lcs.push(s);
         }
-        let data_segment = if self.tls_present {
-            segment_data_with_tlv(
-                l.data_vmaddr(),
-                l.data_vmsize,
-                l.data_fileoff,
-                l.data_filesize,
-                l.data_vmaddr(),
-                l.got_size,
-                l.data_fileoff as u32,
-                l.data_section_vmaddr(),
-                l.data_head_len,
-                l.data_section_fileoff() as u32,
-                l.data_align.trailing_zeros(),
+        let tlv = self.tls_present.then(|| TlvSections {
+            vars: section(
                 l.thread_vars_vmaddr(),
                 l.thread_vars_size,
-                l.thread_vars_fileoff() as u32,
+                l.thread_vars_fileoff(),
+            ),
+            storage: section(
                 l.thread_storage_vmaddr(),
                 l.thread_storage_size,
-                l.thread_storage_fileoff() as u32,
-                l.thread_storage_initialised,
-                l.bss_base_vmaddr,
-                l.bss_head_len,
-                l.has_bss_section,
-                &named_data_out,
-                &named_bss_out,
-            )
-        } else {
-            segment_data(
+                l.thread_storage_fileoff(),
+            ),
+            initialised: l.thread_storage_initialised,
+        });
+        let data_segment = segment_data(
+            place(
                 l.data_vmaddr(),
                 l.data_vmsize,
                 l.data_fileoff,
                 l.data_filesize,
-                l.data_vmaddr(),
-                l.got_size,
-                l.data_fileoff as u32,
+            ),
+            section(l.data_vmaddr(), l.got_size, l.data_fileoff),
+            section(
                 l.data_section_vmaddr(),
                 l.data_head_len,
-                l.data_section_fileoff() as u32,
-                l.data_align.trailing_zeros(),
-                l.bss_base_vmaddr,
-                l.bss_head_len,
-                l.has_bss_section,
-                &named_data_out,
-                &named_bss_out,
-            )
-        };
+                l.data_section_fileoff(),
+            ),
+            l.data_align.trailing_zeros(),
+            tlv,
+            l.has_bss_section
+                .then_some((l.bss_base_vmaddr, l.bss_head_len)),
+            &named_data_out,
+            &named_bss_out,
+        );
         debug_assert_eq!(data_segment.len() as u64, c.data_seg_size);
         lcs.push(data_segment);
         if self.emit_dwarf {
+            let d = &le.dwarf;
             let s = segment_dwarf(
-                le.dwarf_vmaddr,
-                le.dwarf_vmsize,
-                le.dwarf_fileoff,
-                le.dwarf_filesize,
-                le.dwarf_info_offset as u32,
-                le.dwarf.debug_info.len() as u64,
-                le.dwarf_abbrev_offset as u32,
-                le.dwarf.debug_abbrev.len() as u64,
-                le.dwarf_line_offset as u32,
-                le.dwarf.debug_line.len() as u64,
-                le.dwarf_str_offset as u32,
-                le.dwarf.debug_str.len() as u64,
-                le.dwarf_frame_offset as u32,
-                le.dwarf.debug_frame.len() as u64,
+                place(
+                    le.dwarf_vmaddr,
+                    le.dwarf_vmsize,
+                    le.dwarf_fileoff,
+                    le.dwarf_filesize,
+                ),
+                [
+                    (le.dwarf_info_offset as u32, d.debug_info.len() as u64),
+                    (le.dwarf_abbrev_offset as u32, d.debug_abbrev.len() as u64),
+                    (le.dwarf_line_offset as u32, d.debug_line.len() as u64),
+                    (le.dwarf_str_offset as u32, d.debug_str.len() as u64),
+                    (le.dwarf_frame_offset as u32, d.debug_frame.len() as u64),
+                ],
             );
             debug_assert_eq!(s.len() as u64, c.dwarf_seg_size);
             lcs.push(s);
         }
         lcs.push(segment_no_sections(
             "__LINKEDIT",
-            le.linkedit_vmaddr,
-            le.linkedit_vmsize,
-            le.linkedit_fileoff,
-            le.linkedit_filesize,
-            VM_PROT_READ,
+            place(
+                le.linkedit_vmaddr,
+                le.linkedit_vmsize,
+                le.linkedit_fileoff,
+                le.linkedit_filesize,
+            ),
             VM_PROT_READ,
         ));
         lcs
@@ -3117,19 +2728,15 @@ impl<'a> MachOWriter<'a> {
         if l.jt_len > 0 {
             out.resize((l.const_fileoff + l.jt_off) as usize, 0);
             out.extend_from_slice(&build.rodata.bytes);
-            let jt_vmaddr = const_vmaddr + l.jt_off;
-            for r in &build.rodata.rel32 {
-                let value =
-                    (code_vmaddr_base + r.text_offset) as i64 - (jt_vmaddr + r.base_offset) as i64;
-                let Ok(v) = i32::try_from(value) else {
-                    return Err(Self::internal(alloc::format!(
-                        "Mach-O: table slot {:#x}: displacement {value:#x} exceeds 32 bits",
-                        r.slot_offset,
-                    )));
-                };
-                let at = (l.const_fileoff + l.jt_off + r.slot_offset) as usize;
-                out[at..at + 4].copy_from_slice(&v.to_le_bytes());
-            }
+            let jt_start = (l.const_fileoff + l.jt_off) as usize;
+            image::patch_jump_table(
+                "Mach-O",
+                "table",
+                &mut out[jt_start..],
+                code_vmaddr_base,
+                const_vmaddr + l.jt_off,
+                &build.rodata.rel32,
+            )?;
         }
         if l.named_ro_size > 0 {
             out.resize((l.const_fileoff + l.ro_head + l.named_ro_shift) as usize, 0);
@@ -3153,63 +2760,14 @@ impl<'a> MachOWriter<'a> {
         let l = &self.layout;
         let code_vmaddr_base = l.code_vmaddr_base();
         let ro_len = l.ro_len;
-        let mut data = build.data[ro_len as usize..].to_vec();
-        for r in &build.data_relocs {
-            let preferred_va = self
-                .data_off_to_vaddr(r.target_anchor)
-                .wrapping_add(r.target_offset.wrapping_sub(r.target_anchor));
-            let off = super::reloc_slot_in_data("Mach-O", r.data_offset, ro_len, "data")?;
-            if off + 8 > data.len() {
-                return Err(Self::internal(format!(
-                    "Mach-O: data reloc offset {off:#x} past end of __data ({})",
-                    data.len()
-                )));
-            }
-            data[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
-        }
-        for r in &build.code_relocs {
-            let ent_pc = r.target_ent_pc as usize;
-            let native_off = build
-                .pc_to_native
-                .get(ent_pc)
-                .copied()
-                .unwrap_or(usize::MAX);
-            if native_off == usize::MAX {
-                return Err(Self::internal(format!(
-                    "Mach-O: code reloc references missing ent_pc {ent_pc}"
-                )));
-            }
-            let preferred_va = code_vmaddr_base + native_off as u64;
-            let off = super::reloc_slot_in_data("Mach-O", r.data_offset, ro_len, "code")?;
-            #[cfg(feature = "codegen_test")]
-            if std::env::var("BADC_DEBUG_CODE_RELOCS").is_ok() {
-                std::eprintln!(
-                    "[code_reloc] data_off={:#x} target_ent_pc={} native_off={:#x} preferred_va={:#x}",
-                    r.data_offset,
-                    ent_pc,
-                    native_off,
-                    preferred_va,
-                );
-            }
-            if off + 8 > data.len() {
-                return Err(Self::internal(format!(
-                    "Mach-O: code reloc offset {off:#x} past end of __data ({})",
-                    data.len()
-                )));
-            }
-            data[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
-        }
-        for r in &build.label_relocs {
-            let preferred_va = code_vmaddr_base + r.text_offset;
-            let off = super::reloc_slot_in_data("Mach-O", r.data_offset, ro_len, "label")?;
-            if off + 8 > data.len() {
-                return Err(Self::internal(format!(
-                    "Mach-O: label reloc offset {off:#x} past end of __data ({})",
-                    data.len()
-                )));
-            }
-            data[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
-        }
+        let data = image::bake_data_relocs(
+            "Mach-O",
+            "__data",
+            build,
+            ro_len,
+            code_vmaddr_base,
+            &|off| self.data_off_to_vaddr(off),
+        )?;
         let tls_sites = if self.tls_present && l.thread_storage_initialised {
             Some(self.tls_reloc_sites()?)
         } else {
@@ -3231,16 +2789,8 @@ impl<'a> MachOWriter<'a> {
             }
             if let Some(sites) = tls_sites {
                 out.resize(l.thread_storage_fileoff() as usize, 0);
-                let mut tls = build.tls_data.clone();
-                for (off, va) in sites {
-                    if off + 8 > tls.len() {
-                        return Err(Self::internal(format!(
-                            "Mach-O: TLS reloc offset {off:#x} past end of __thread_data ({})",
-                            tls.len()
-                        )));
-                    }
-                    tls[off..off + 8].copy_from_slice(&va.to_le_bytes());
-                }
+                let tls =
+                    image::bake_tls_template("Mach-O", "__thread_data", &build.tls_data, &sites)?;
                 out.extend_from_slice(&tls);
             }
         }
@@ -3290,164 +2840,40 @@ mod tests {
 
     use super::*;
 
-    /// Smallest Build that exercises the layout end to end.
-    ///
-    /// Carries a single fake import (`_write` from libSystem) so
-    /// the bind-opcode / symtab / dylib paths produce non-empty
-    /// output worth asserting on. Real lowering populates this
-    /// from the program's `#pragma binding`s.
-    /// Empty `Program` paired with `tiny_build`. The DWARF
-    /// emitter needs *a* program to walk for function entries
-    /// -- passing the matching empty `text` + `source_*` keeps
-    /// the debug-segment payload trivial without changing
-    /// the structural invariants the tests check.
     fn tiny_program() -> Program {
-        Program {
-            target: crate::c5::codegen::Target::host(),
-            data: Vec::new(),
-            file_asm: Vec::new(),
-            asm_weak_names: Vec::new(),
-            asm_global_names: Vec::new(),
-            asm_visibility: Vec::new(),
-            asm_unit: false,
-            asm_file_names: Vec::new(),
-            asm_idents: Vec::new(),
-            data_ro_len: 0,
-            data_relro_len: 0,
-            data_object_starts: Vec::new(),
-            const_data_ranges: Vec::new(),
-            data_pad_ranges: Vec::new(),
-            data_align_marks: Vec::new(),
-            entry_pc: 0,
-            warnings: Vec::new(),
-            tls_data: Vec::new(),
-            tls_init_size: 0,
-            data_relocs: Vec::new(),
-            extern_data_relocs: Vec::new(),
-            code_relocs: Vec::new(),
-            tls_data_relocs: Vec::new(),
-            tls_extern_data_relocs: Vec::new(),
-            tls_code_relocs: Vec::new(),
-            exports: Vec::new(),
-            dylibs: Vec::new(),
-            dllmain_pc: None,
-            source_files: Vec::new(),
-            source_path: String::new(),
-            variables: Vec::new(),
-            structs: Vec::new(),
-            enums: Vec::new(),
-            entry_name: None,
-            entry_pragma: None,
-            auto_includes: Vec::new(),
-            data_align: 8,
-            subsystem: None,
-            finished_functions: alloc::vec::Vec::new(),
-            symbols: alloc::vec::Vec::new(),
-            synthetic_ssa_funcs: alloc::vec::Vec::new(),
-            user_ssa_funcs: alloc::vec::Vec::new(),
-            extern_function_imports: alloc::vec::Vec::new(),
-            init_funcs: alloc::vec::Vec::new(),
-            function_aliases: alloc::vec::Vec::new(),
-        }
+        super::super::test_support::empty_program()
     }
 
+    /// One imported function and one dylib, over a `movz x0, #42; ret`.
     fn tiny_build() -> Build {
         use super::super::{ResolvedImport, ResolvedImports};
         use crate::c5::codegen::ResolvedDylib;
-        Build {
-            text_data_ranges: alloc::vec::Vec::new(),
-            emitted_relocs: Vec::new(),
-            named_sections: Vec::new(),
-            got_base_fixups: Vec::new(),
-            text_align: 16,
-            orphaned_data: None,
-            stopped_at_data_liveness: false,
-            ssa_dump: alloc::string::String::new(),
-            asm_sections: Vec::new(),
-            asm_section_text_refs: Vec::new(),
-            asm_text_abs_refs: Vec::new(),
-            asm_sym_fixups: Vec::new(),
-            asm_text_labels: Vec::new(),
-            asm_sym_decls: Vec::new(),
-            copy_relocs: Default::default(),
-            // movz x0, #42 ; ret
-            text: vec![0x40, 0x05, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6],
-            data: Vec::new(),
-            data_ro_len: 0,
-            data_relro_len: 0,
-            pic_link: false,
-            code_model: Default::default(),
-            elf_class: Default::default(),
-            keep_local_labels: false,
-            data_align: 8,
-            bss_size: 0,
-            init_fini_arrays: Default::default(),
-            entry_offset: 0,
-            got_fixups: Vec::new(),
-            data_fixups: Vec::new(),
-            rodata: Default::default(),
-            data_pcrel_relocs: Vec::new(),
-            text_pcrel_relocs: Vec::new(),
-            text_abs_relocs: Vec::new(),
-            func_fixups: Vec::new(),
-            pc_to_native: Vec::new(),
-            func_ent_pcs: Vec::new(),
-            func_ends: Vec::new(),
-            patchable_entries: Vec::new(),
-            mcount_sites: Vec::new(),
-            func_names: Vec::new(),
-            func_prologue_native: alloc::collections::BTreeMap::new(),
-            promoted_local_slots: alloc::collections::BTreeMap::new(),
-            coalesced_slot_remap: alloc::collections::BTreeMap::new(),
-            canary_frame_bytes: alloc::collections::BTreeMap::new(),
-            fn_unwind: Vec::new(),
-            reloc_call_sites: Vec::new(),
-            user_extern_call_sites: Vec::new(),
-            user_extern_data_refs: Vec::new(),
-            ssa_line_rows: Vec::new(),
-            imports: ResolvedImports {
-                data_bindings: Default::default(),
-                imports: vec![ResolvedImport {
-                    binding_idx: 0,
-                    local_name: "write".into(),
-                    real_symbol: "_write".into(),
-                    dylib_index: 0,
-                    flat_lookup: false,
-                    is_object: false,
-                    is_variadic: false,
-                    fixed_args: 3,
-                    return_type_tag: 0,
-                    returns_long_double: false,
-                    param_types: Vec::new(),
-                }],
-                dylibs: vec![ResolvedDylib {
-                    name: "libc".into(),
-                    path: "/usr/lib/libSystem.B.dylib".into(),
-                }],
-            },
-            abi: super::super::Target::MacOSAarch64.abi(),
-            tls_data: Vec::new(),
-            tls_init_size: 0,
-            tls_index_fixups: Vec::new(),
-            elf_tpoff_fixups: Vec::new(),
-            data_relocs: Vec::new(),
-            extern_data_relocs: Vec::new(),
-            code_relocs: Vec::new(),
-            tls_data_relocs: Vec::new(),
-            tls_extern_data_relocs: Vec::new(),
-            tls_code_relocs: Vec::new(),
-            label_relocs: Vec::new(),
-            exports: Vec::new(),
-            dynamic_exports: Vec::new(),
-            output_kind: super::super::OutputKind::Executable,
-            shared_lib_name: None,
-            dllmain_pc: None,
-            macho_tlv_fixups: Vec::new(),
-            macho_tlv_descriptors: Vec::new(),
-            debug_info: true,
-            merged_dwarf: None,
-            plt_trampoline_offsets: Vec::new(),
-        }
+        let mut build = super::super::test_support::empty_build();
+        build.text = vec![0x40, 0x05, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6];
+        build.imports = ResolvedImports {
+            data_bindings: Default::default(),
+            imports: vec![ResolvedImport {
+                binding_idx: 0,
+                local_name: "write".into(),
+                real_symbol: "_write".into(),
+                dylib_index: 0,
+                flat_lookup: false,
+                is_object: false,
+                is_variadic: false,
+                fixed_args: 3,
+                return_type_tag: 0,
+                returns_long_double: false,
+                param_types: Vec::new(),
+            }],
+            dylibs: vec![ResolvedDylib {
+                name: "libc".into(),
+                path: "/usr/lib/libSystem.B.dylib".into(),
+            }],
+        };
+        build.abi = super::super::Target::MacOSAarch64.abi();
+        build.output_kind = super::super::OutputKind::Executable;
+        build.debug_info = true;
+        build
     }
 
     fn read_u32(buf: &[u8], off: usize) -> u32 {

@@ -58,7 +58,7 @@ use super::elf_reloc_types::{
     R_X86_64_RELATIVE,
 };
 use super::{Abi, AddrPart, Build, DataRegion, Machine, data_region_addr};
-use super::{aarch64, dwarf, x86_64};
+use super::{aarch64, dwarf, image, x86_64};
 use crate::c5::layout::{round_up, write_struct};
 
 // ------------------------------------------------------------------
@@ -530,47 +530,6 @@ fn r_relative(machine: Machine) -> u64 {
         Machine::Aarch64 => R_AARCH64_RELATIVE.into(),
         Machine::X86_64 => R_X86_64_RELATIVE.into(),
     }
-}
-
-/// Address-constant initializers of `_Thread_local` objects, as
-/// `(offset within the TLS template, link-time absolute target VA)`.
-/// Both the baked template bytes and the `.rela.dyn` addends read this,
-/// so the two cannot disagree.
-fn tls_reloc_sites(
-    build: &Build,
-    data_off_to_vaddr: &dyn Fn(u64) -> u64,
-    code_vmaddr: u64,
-    stub_len: u64,
-) -> Result<Vec<(usize, u64)>, C5Error> {
-    if let Some(r) = build.tls_extern_data_relocs.first() {
-        return Err(C5Error::Compile(crate::c5::error::fmt_link_err(&format!(
-            "undefined reference to `{}` in a `_Thread_local` initializer: \
-             the template's address constant must resolve within the image",
-            r.symbol_name,
-        ))));
-    }
-    let mut sites = Vec::with_capacity(build.tls_data_relocs.len() + build.tls_code_relocs.len());
-    for r in &build.tls_data_relocs {
-        // Same anchored mapping the `.data` slots take: the anchor picks
-        // the runtime region, the signed displacement rides on the address.
-        let absolute = data_off_to_vaddr(r.target_anchor)
-            .wrapping_add(r.target_offset.wrapping_sub(r.target_anchor));
-        sites.push((r.data_offset as usize, absolute));
-    }
-    for r in &build.tls_code_relocs {
-        let ent_pc = r.target_ent_pc as usize;
-        let Some(&native_off) = build.pc_to_native.get(ent_pc) else {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!("ELF: TLS code reloc references missing ent_pc {ent_pc}"),
-            )));
-        };
-        sites.push((
-            r.data_offset as usize,
-            code_vmaddr + stub_len + native_off as u64,
-        ));
-    }
-    sites.sort_unstable();
-    Ok(sites)
 }
 
 // `DT_NEEDED` entries come from `build.imports.dylibs` -- whatever
@@ -1571,10 +1530,6 @@ fn resolve_import_version_reqs(
     alloc::vec![None; imports.imports.len()]
 }
 
-/// [`super::reloc_slot_in_data`] with this writer's format tag.
-fn reloc_slot_in_data(data_offset: u64, ro_len: u64, kind: &str) -> Result<usize, C5Error> {
-    super::reloc_slot_in_data("ELF", data_offset, ro_len, kind)
-}
 /// The dynamic-linking tables, built up front so the layout knows
 /// their sizes. `dynsym` is the placeholder table (addresses and
 /// section indices zero); the final one is rebuilt at emission.
@@ -2282,42 +2237,14 @@ impl<'a> ElfImageWriter<'a> {
         } else {
             None
         };
-        let fresh = || {
-            dwarf::emit(
-                program,
-                build,
-                elf_target,
-                text_vmaddr,
-                &program.source_path,
-                start_stub_range,
-            )
-        };
-        let dwarf = if let Some(md) = &build.merged_dwarf {
-            let mut debug_info = md.debug_info.clone();
-            let mut debug_line = md.debug_line.clone();
-            for r in &md.debug_info_text_relocs {
-                super::apply_merged_dwarf_text_reloc(&mut debug_info, r, text_vmaddr)?;
-            }
-            for r in &md.debug_line_text_relocs {
-                super::apply_merged_dwarf_text_reloc(&mut debug_line, r, text_vmaddr)?;
-            }
-            for r in &md.debug_info_data_relocs {
-                super::apply_merged_dwarf_data_reloc(&mut debug_info, r, &|off| {
-                    self.data_off_to_vaddr(off)
-                })?;
-            }
-            dwarf::DwarfSections {
-                debug_info,
-                debug_abbrev: md.debug_abbrev.clone(),
-                debug_line,
-                debug_str: md.debug_str.clone(),
-                debug_frame: fresh().debug_frame,
-            }
-        } else if emit_dwarf {
-            fresh()
-        } else {
-            dwarf::DwarfSections::default()
-        };
+        let dwarf = image::image_dwarf(
+            program,
+            build,
+            elf_target,
+            text_vmaddr,
+            start_stub_range,
+            Some(&|off| self.data_off_to_vaddr(off)),
+        )?;
         let tail = &mut self.tail;
         tail.emit_dwarf = emit_dwarf;
         tail.start_stub_range = start_stub_range;
@@ -3004,11 +2931,11 @@ impl<'a> ElfImageWriter<'a> {
     /// Address-constant initializers of `_Thread_local` objects, as
     /// `(offset within the TLS template, link-time absolute target)`.
     fn tls_reloc_sites(&self) -> Result<Vec<(usize, u64)>, C5Error> {
-        tls_reloc_sites(
+        image::tls_reloc_sites(
+            "ELF",
             self.build,
             &|off| self.data_off_to_vaddr(off),
-            self.va(self.seg.code_off),
-            self.stub_len,
+            self.text_vmaddr(),
         )
     }
 
@@ -3037,41 +2964,18 @@ impl<'a> ElfImageWriter<'a> {
             }
             out.resize((seg.rodata_off + seg.jt_off) as usize, 0);
             out.extend_from_slice(&build.rodata.bytes);
-            for r in &build.rodata.rel32 {
-                let target = text_vmaddr + r.text_offset;
-                let base = jt_vmaddr + r.base_offset;
-                let value = target as i64 - base as i64;
-                let Ok(v) = i32::try_from(value) else {
-                    return Err(Self::internal(format!(
-                        "ELF: table slot {:#x}: displacement {value:#x} exceeds 32 bits",
-                        r.slot_offset,
-                    )));
-                };
-                let file_off = (seg.rodata_off + seg.jt_off + r.slot_offset) as usize;
-                out[file_off..file_off + 4].copy_from_slice(&v.to_le_bytes());
-            }
+            let jt_start = (seg.rodata_off + seg.jt_off) as usize;
+            image::patch_jump_table(
+                "ELF",
+                "table",
+                &mut out[jt_start..],
+                text_vmaddr,
+                jt_vmaddr,
+                &build.rodata.rel32,
+            )?;
         }
         out.resize(seg.rodata_end as usize, 0);
         Ok(())
-    }
-
-    /// An 8-byte slot of the relocated data span, checked against the
-    /// span's end.
-    fn data_slot_at(
-        data: &[u8],
-        ro_len: u64,
-        data_offset: u64,
-        kind: &str,
-        width: usize,
-    ) -> Result<usize, C5Error> {
-        let off = reloc_slot_in_data(data_offset, ro_len, kind)?;
-        if off + width > data.len() {
-            return Err(Self::internal(format!(
-                "ELF: {kind} reloc offset {off:#x} past end of .data ({})",
-                data.len()
-            )));
-        }
-        Ok(off)
     }
 
     /// The rw segment: `.dynamic`, the zero-filled `.got` the loader
@@ -3114,74 +3018,16 @@ impl<'a> ElfImageWriter<'a> {
         );
         debug_assert_eq!(dynamic.len() as u64, seg.dynamic_size);
         let ro_len = seg.ro_len;
-        let text_vmaddr = self.text_vmaddr();
-        let mut data = build.data[ro_len as usize..].to_vec();
-        for r in &build.data_relocs {
-            let absolute = self
-                .data_off_to_vaddr(r.target_anchor)
-                .wrapping_add(r.target_offset.wrapping_sub(r.target_anchor));
-            let off = Self::data_slot_at(&data, ro_len, r.data_offset, "data", 8)?;
-            data[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
-        }
-        for r in &build.code_relocs {
-            let ent_pc = r.target_ent_pc as usize;
-            let native_off = build
-                .pc_to_native
-                .get(ent_pc)
-                .copied()
-                .unwrap_or(usize::MAX);
-            if native_off == usize::MAX {
-                return Err(Self::internal(format!(
-                    "ELF: code reloc references missing ent_pc {ent_pc}"
-                )));
-            }
-            let absolute = text_vmaddr + native_off as u64;
-            let off = Self::data_slot_at(&data, ro_len, r.data_offset, "code", 8)?;
-            data[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
-        }
-        for r in &build.label_relocs {
-            let absolute = text_vmaddr + r.text_offset;
-            let off = Self::data_slot_at(&data, ro_len, r.data_offset, "label", 8)?;
-            data[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
-        }
-        for r in &build.data_pcrel_relocs {
-            let target = if r.target_in_data {
-                self.data_off_to_vaddr(r.target_anchor)
-                    .wrapping_add(r.target_offset.wrapping_sub(r.target_anchor))
-            } else {
-                text_vmaddr + r.target_offset
-            };
-            let slot_vaddr = self.data_off_to_vaddr(r.slot_data_offset);
-            let width = r.width as usize;
-            let off = reloc_slot_in_data(r.slot_data_offset, ro_len, "pcrel")?;
-            if off + width > data.len() {
-                return Err(Self::internal(format!(
-                    "ELF: data pcrel slot {off:#x} past end of .data ({})",
-                    data.len()
-                )));
-            }
-            let value = target as i64 - slot_vaddr as i64;
-            if width == 8 {
-                data[off..off + 8].copy_from_slice(&value.to_le_bytes());
-                continue;
-            }
-            let Ok(v) = i32::try_from(value) else {
-                return Err(Self::internal(format!(
-                    "ELF: data pcrel slot {off:#x}: displacement {value:#x} exceeds 32 bits"
-                )));
-            };
-            data[off..off + 4].copy_from_slice(&v.to_le_bytes());
-        }
-        let mut tdata = build.tls_data[..build.tls_init_size].to_vec();
-        for (off, absolute) in self.tls_reloc_sites()? {
-            if off + 8 > tdata.len() {
-                return Err(Self::internal(format!(
-                    "ELF: TLS reloc offset {off:#x} past end of .tdata ({})",
-                    tdata.len()
-                )));
-            }
-            tdata[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
-        }
+        let data =
+            image::bake_data_relocs("ELF", ".data", build, ro_len, self.text_vmaddr(), &|off| {
+                self.data_off_to_vaddr(off)
+            })?;
+        let tdata = image::bake_tls_template(
+            "ELF",
+            ".tdata",
+            &build.tls_data[..build.tls_init_size],
+            &self.tls_reloc_sites()?,
+        )?;
         let out = &mut self.out;
         out.extend_from_slice(&dynamic);
         out.extend(vec![0u8; seg.got_size as usize]);
@@ -3880,6 +3726,42 @@ fn write_phdr(
 mod tests {
     use super::*;
 
+    fn tiny_program() -> Program {
+        super::super::test_support::empty_program()
+    }
+
+    /// One imported function and one dylib, over a `movz x0, #42; ret`.
+    fn tiny_build() -> Build {
+        use super::super::{ResolvedImport, ResolvedImports};
+        use crate::c5::codegen::ResolvedDylib;
+        let mut build = super::super::test_support::empty_build();
+        build.text = vec![0x40, 0x05, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6];
+        build.imports = ResolvedImports {
+            data_bindings: Default::default(),
+            imports: vec![ResolvedImport {
+                binding_idx: 0,
+                local_name: "exit".into(),
+                real_symbol: "exit".into(),
+                dylib_index: 0,
+                flat_lookup: false,
+                is_object: false,
+                is_variadic: false,
+                fixed_args: 1,
+                return_type_tag: 0,
+                returns_long_double: false,
+                param_types: Vec::new(),
+            }],
+            dylibs: vec![ResolvedDylib {
+                name: "libc".into(),
+                path: "libc.so.6".into(),
+            }],
+        };
+        build.abi = super::super::Target::LinuxAarch64.abi();
+        build.output_kind = super::super::OutputKind::Executable;
+        build.debug_info = true;
+        build
+    }
+
     /// Code blob at file offset 0, loaded at 0x1000.
     const PLACE_1000: CodePlacement = CodePlacement {
         file_off: 0,
@@ -3972,154 +3854,6 @@ mod tests {
             }
             // `.shstrtab` is always last.
             assert_eq!(plan.index_of(Sec::Shstrtab) as usize, plan.len() - 1);
-        }
-    }
-
-    fn tiny_program() -> Program {
-        Program {
-            target: crate::c5::codegen::Target::host(),
-            data: Vec::new(),
-            file_asm: Vec::new(),
-            asm_weak_names: Vec::new(),
-            asm_global_names: Vec::new(),
-            asm_visibility: Vec::new(),
-            asm_unit: false,
-            asm_file_names: Vec::new(),
-            asm_idents: Vec::new(),
-            data_ro_len: 0,
-            data_relro_len: 0,
-            data_object_starts: Vec::new(),
-            const_data_ranges: Vec::new(),
-            data_pad_ranges: Vec::new(),
-            data_align_marks: Vec::new(),
-            entry_pc: 0,
-            warnings: Vec::new(),
-            tls_data: Vec::new(),
-            tls_init_size: 0,
-            data_relocs: Vec::new(),
-            extern_data_relocs: Vec::new(),
-            code_relocs: Vec::new(),
-            tls_data_relocs: Vec::new(),
-            tls_extern_data_relocs: Vec::new(),
-            tls_code_relocs: Vec::new(),
-            exports: Vec::new(),
-            dylibs: Vec::new(),
-            dllmain_pc: None,
-            source_files: Vec::new(),
-            source_path: String::new(),
-            variables: Vec::new(),
-            structs: Vec::new(),
-            enums: Vec::new(),
-            entry_name: None,
-            entry_pragma: None,
-            auto_includes: Vec::new(),
-            data_align: 8,
-            subsystem: None,
-            finished_functions: alloc::vec::Vec::new(),
-            symbols: alloc::vec::Vec::new(),
-            synthetic_ssa_funcs: alloc::vec::Vec::new(),
-            user_ssa_funcs: alloc::vec::Vec::new(),
-            extern_function_imports: alloc::vec::Vec::new(),
-            init_funcs: alloc::vec::Vec::new(),
-            function_aliases: alloc::vec::Vec::new(),
-        }
-    }
-
-    fn tiny_build() -> Build {
-        use super::super::{ResolvedImport, ResolvedImports};
-        use crate::c5::codegen::ResolvedDylib;
-        Build {
-            text_data_ranges: alloc::vec::Vec::new(),
-            emitted_relocs: Vec::new(),
-            named_sections: Vec::new(),
-            got_base_fixups: Vec::new(),
-            text_align: 16,
-            orphaned_data: None,
-            stopped_at_data_liveness: false,
-            ssa_dump: alloc::string::String::new(),
-            asm_sections: Vec::new(),
-            asm_section_text_refs: Vec::new(),
-            asm_text_abs_refs: Vec::new(),
-            asm_sym_fixups: Vec::new(),
-            asm_text_labels: Vec::new(),
-            asm_sym_decls: Vec::new(),
-            copy_relocs: Default::default(),
-            text: vec![0x40, 0x05, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6],
-            data: Vec::new(),
-            data_ro_len: 0,
-            data_relro_len: 0,
-            pic_link: false,
-            code_model: Default::default(),
-            elf_class: Default::default(),
-            keep_local_labels: false,
-            rodata: Default::default(),
-            data_pcrel_relocs: Vec::new(),
-            text_pcrel_relocs: Vec::new(),
-            text_abs_relocs: Vec::new(),
-            data_align: 8,
-            bss_size: 0,
-            init_fini_arrays: Default::default(),
-            entry_offset: 0,
-            got_fixups: Vec::new(),
-            data_fixups: Vec::new(),
-            func_fixups: Vec::new(),
-            pc_to_native: Vec::new(),
-            func_ent_pcs: Vec::new(),
-            func_ends: Vec::new(),
-            patchable_entries: Vec::new(),
-            mcount_sites: Vec::new(),
-            func_names: Vec::new(),
-            func_prologue_native: alloc::collections::BTreeMap::new(),
-            promoted_local_slots: alloc::collections::BTreeMap::new(),
-            coalesced_slot_remap: alloc::collections::BTreeMap::new(),
-            canary_frame_bytes: alloc::collections::BTreeMap::new(),
-            fn_unwind: Vec::new(),
-            reloc_call_sites: Vec::new(),
-            user_extern_call_sites: Vec::new(),
-            user_extern_data_refs: Vec::new(),
-            ssa_line_rows: Vec::new(),
-            imports: ResolvedImports {
-                data_bindings: Default::default(),
-                imports: vec![ResolvedImport {
-                    binding_idx: 0,
-                    local_name: "exit".into(),
-                    real_symbol: "exit".into(),
-                    dylib_index: 0,
-                    flat_lookup: false,
-                    is_object: false,
-                    is_variadic: false,
-                    fixed_args: 1,
-                    return_type_tag: 0,
-                    returns_long_double: false,
-                    param_types: Vec::new(),
-                }],
-                dylibs: vec![ResolvedDylib {
-                    name: "libc".into(),
-                    path: "libc.so.6".into(),
-                }],
-            },
-            abi: super::super::Target::LinuxAarch64.abi(),
-            tls_data: Vec::new(),
-            tls_init_size: 0,
-            tls_index_fixups: Vec::new(),
-            elf_tpoff_fixups: Vec::new(),
-            data_relocs: Vec::new(),
-            extern_data_relocs: Vec::new(),
-            code_relocs: Vec::new(),
-            tls_data_relocs: Vec::new(),
-            tls_extern_data_relocs: Vec::new(),
-            tls_code_relocs: Vec::new(),
-            label_relocs: Vec::new(),
-            exports: Vec::new(),
-            dynamic_exports: Vec::new(),
-            output_kind: super::super::OutputKind::Executable,
-            shared_lib_name: None,
-            dllmain_pc: None,
-            macho_tlv_fixups: Vec::new(),
-            macho_tlv_descriptors: Vec::new(),
-            debug_info: true,
-            merged_dwarf: None,
-            plt_trampoline_offsets: Vec::new(),
         }
     }
 

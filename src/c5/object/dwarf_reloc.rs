@@ -54,6 +54,9 @@ use alloc::vec::Vec;
 use super::super::program::Program;
 use super::super::token::Ty;
 use super::Build;
+use super::dwarf::{
+    LineState, base_key_for_leaf, dwarf_file_numbers, push_file_entry, write_line_rows,
+};
 use super::elf_class::ElfClass;
 use crate::c5::codegen::ssa::cfi::{write_sleb128, write_uleb128};
 use crate::c5::compiler::{StructDef, StructField};
@@ -232,12 +235,6 @@ const DW_CHILDREN_YES: u8 = 0x01;
 
 const DW_LANG_C99: u8 = 0x0c;
 
-const DW_LNS_COPY: u8 = 0x01;
-const DW_LNS_ADVANCE_PC: u8 = 0x02;
-const DW_LNS_ADVANCE_LINE: u8 = 0x03;
-const DW_LNS_SET_FILE: u8 = 0x04;
-const DW_LNS_SET_PROLOGUE_END: u8 = 0x0a;
-const DW_LNE_END_SEQUENCE: u8 = 0x01;
 const DW_LNE_SET_ADDRESS: u8 = 0x02;
 
 const LINE_BASE: i8 = -1;
@@ -1378,16 +1375,9 @@ fn build_debug_line(program: &Program, build: &Build) -> (Vec<u8>, Vec<DwarfRelo
     write_struct(&mut hdr, &prog_header);
     hdr.push(0); // include_directories terminator
     push_file_entry(&mut hdr, default_file_name(program));
-    let mut next_dwarf_idx: u64 = 2;
-    let mut dwarf_file_for_lex_idx: Vec<u64> = Vec::with_capacity(program.source_files.len());
-    for src in &program.source_files {
-        if src == "<source>" {
-            dwarf_file_for_lex_idx.push(1);
-            continue;
-        }
+    let files = dwarf_file_numbers(program);
+    for src in program.source_files.iter().filter(|s| *s != "<source>") {
         push_file_entry(&mut hdr, src);
-        dwarf_file_for_lex_idx.push(next_dwarf_idx);
-        next_dwarf_idx += 1;
     }
     hdr.push(0); // file_names terminator
 
@@ -1413,75 +1403,9 @@ fn build_debug_line(program: &Program, build: &Build) -> (Vec<u8>, Vec<DwarfRelo
         DwarfRelocWidth::addr(build.elf_class),
     );
 
-    let mut state_addr: u64 = 0;
-    let mut state_line: i64 = 1;
-    let mut state_file: u64 = 1;
-
-    let mut func_starts: Vec<usize> = build
-        .func_ent_pcs
-        .iter()
-        .filter_map(|&pc| build.pc_to_native.get(pc).copied())
-        .filter(|&n| n != usize::MAX)
-        .collect();
-    func_starts.sort_unstable();
-    func_starts.dedup();
-    let mut func_start_iter = func_starts.iter().copied().peekable();
-    let mut row_emitted_at_state = false;
-    // True once a function-entry synthetic row has fired but the
-    // matching post-prologue source row hasn't landed yet. The next
-    // emit_row that materialises a COPY stamps DW_LNS_set_prologue_end
-    // first so debuggers land "break main" past the prologue per
-    // DWARF 4 section 6.2.5.3.
-    let mut prologue_end_pending = false;
-
-    for &(native, line, file_idx) in &build.ssa_line_rows {
-        if line == 0 {
-            continue;
-        }
-        let file = dwarf_file_for_lex_idx
-            .get(file_idx as usize)
-            .copied()
-            .unwrap_or(1);
-        let target_addr = native as u64;
-        while let Some(&fn_start) = func_start_iter.peek() {
-            let entry_addr = fn_start as u64;
-            if entry_addr > target_addr {
-                break;
-            }
-            emit_row(
-                &mut prog,
-                &mut state_addr,
-                &mut state_line,
-                &mut state_file,
-                &mut row_emitted_at_state,
-                entry_addr,
-                line as i64,
-                file,
-                false,
-            );
-            func_start_iter.next();
-            prologue_end_pending = true;
-        }
-        emit_row(
-            &mut prog,
-            &mut state_addr,
-            &mut state_line,
-            &mut state_file,
-            &mut row_emitted_at_state,
-            target_addr,
-            line as i64,
-            file,
-            prologue_end_pending,
-        );
-        prologue_end_pending = false;
-    }
-
-    // Close the sequence at one past the last byte of `.text`.
-    let end_addr = build.text.len() as u64;
-    if end_addr > state_addr {
-        advance_pc(&mut prog, end_addr - state_addr);
-    }
-    write_extended(&mut prog, DW_LNE_END_SEQUENCE, &[]);
+    let mut state = LineState::new(0);
+    write_line_rows(&mut prog, build, &files, 0, &mut state);
+    state.end_sequence(&mut prog, build.text.len() as u64);
 
     let unit_length: u32 =
         (DEBUG_LINE_UNIT_HEADER_SIZE as u32 - 4) + hdr.len() as u32 + prog.len() as u32;
@@ -1505,14 +1429,6 @@ fn default_file_name(program: &Program) -> &str {
     } else {
         program.source_path.as_str()
     }
-}
-
-fn push_file_entry(out: &mut Vec<u8>, name: &str) {
-    out.extend_from_slice(name.as_bytes());
-    out.push(0);
-    write_uleb128(out, 0); // dir_idx
-    write_uleb128(out, 0); // mtime
-    write_uleb128(out, 0); // file size
 }
 
 fn write_set_address_reloc(
@@ -1539,60 +1455,6 @@ fn write_set_address_reloc(
         target: DwarfRelocTarget::Text,
         addend,
     });
-}
-
-#[allow(clippy::too_many_arguments)]
-fn emit_row(
-    buf: &mut Vec<u8>,
-    state_addr: &mut u64,
-    state_line: &mut i64,
-    state_file: &mut u64,
-    row_emitted: &mut bool,
-    target_addr: u64,
-    line: i64,
-    file: u64,
-    mark_prologue_end: bool,
-) {
-    if target_addr > *state_addr {
-        advance_pc(buf, target_addr - *state_addr);
-        *state_addr = target_addr;
-        *row_emitted = false;
-    }
-    if file != *state_file {
-        buf.push(DW_LNS_SET_FILE);
-        write_uleb128(buf, file);
-        *state_file = file;
-        *row_emitted = false;
-    }
-    if line != *state_line {
-        advance_line(buf, line - *state_line);
-        *state_line = line;
-        *row_emitted = false;
-    }
-    if !*row_emitted {
-        if mark_prologue_end {
-            buf.push(DW_LNS_SET_PROLOGUE_END);
-        }
-        buf.push(DW_LNS_COPY);
-        *row_emitted = true;
-    }
-}
-
-fn advance_pc(buf: &mut Vec<u8>, delta: u64) {
-    buf.push(DW_LNS_ADVANCE_PC);
-    write_uleb128(buf, delta);
-}
-
-fn advance_line(buf: &mut Vec<u8>, delta: i64) {
-    buf.push(DW_LNS_ADVANCE_LINE);
-    write_sleb128(buf, delta);
-}
-
-fn write_extended(buf: &mut Vec<u8>, opcode: u8, operand: &[u8]) {
-    buf.push(0);
-    write_uleb128(buf, (operand.len() + 1) as u64);
-    buf.push(opcode);
-    buf.extend_from_slice(operand);
 }
 
 /// The unit's `.debug_str`: each distinct string stored once. Offset 0
@@ -1866,7 +1728,7 @@ impl<'a> TypeCatalog<'a> {
                     return None;
                 }
                 Some(
-                    match base_type_for_leaf(leaf, self.target, self.addr_bytes) {
+                    match base_key_for_leaf(leaf, self.target, self.addr_bytes) {
                         Some(_) => self.intern(TypeNode::Base(leaf)),
                         None => self.unspecified(),
                     },
@@ -2216,7 +2078,7 @@ fn build_type_die(catalog: &mut TypeCatalog, node: &TypeNode, strs: &mut StrPool
     match node {
         TypeNode::Base(leaf) => {
             // Every interned Base was checked to have a description.
-            let Some(base) = base_type_for_leaf(*leaf, catalog.target, catalog.addr_bytes) else {
+            let Some(base) = base_key_for_leaf(*leaf, catalog.target, catalog.addr_bytes) else {
                 write_uleb128(&mut die.bytes, ABBREV_UNSPECIFIED_TYPE);
                 return die;
             };
@@ -2376,13 +2238,6 @@ fn fp_byte_offset_for_slot(slot: i64, canary_shift: i64) -> i64 {
     }
 }
 
-/// Wire-form attributes for a DWARF base_type DIE.
-struct BaseTypeDesc {
-    name: &'static str,
-    byte_size: u8,
-    encoding: u8,
-}
-
 /// A type-catalog key: either a scalar leaf with pointer depth,
 /// or a struct/union with id + pointer depth. The unsigned bit
 /// stays bundled into the scalar leaf so signed / unsigned
@@ -2487,101 +2342,6 @@ fn decompose_pointer_chain(type_tag: i64) -> Option<TypeKey> {
     // from `unsigned char *`.
     let leaf = if unsigned { leaf | UNSIGNED_BIT } else { leaf } | (type_tag & VOID_BIT);
     Some(TypeKey::Scalar { leaf, depth })
-}
-
-/// Map a c5 leaf scalar type tag to its DWARF base_type
-/// attributes. Returns `None` for struct types and any tag
-/// outside the C99 scalar grid; the caller skips emitting a
-/// type DIE for those (debugger falls back to raw bytes).
-fn base_type_for_leaf(leaf: i64, target: super::Target, addr_bytes: u8) -> Option<BaseTypeDesc> {
-    use crate::c5::compiler::types::{UNSIGNED_BIT, is_void_ty};
-    if is_void_ty(leaf) {
-        return None;
-    }
-    let unsigned = (leaf & UNSIGNED_BIT) != 0;
-    let bare = crate::c5::compiler::types::strip_unsigned(leaf);
-    let desc = if bare == Ty::Bool as i64 {
-        BaseTypeDesc {
-            name: "_Bool",
-            byte_size: 1,
-            encoding: DW_ATE_BOOLEAN,
-        }
-    } else if bare == Ty::Char as i64 {
-        BaseTypeDesc {
-            name: if unsigned { "unsigned char" } else { "char" },
-            byte_size: 1,
-            encoding: if unsigned {
-                DW_ATE_UNSIGNED_CHAR
-            } else {
-                DW_ATE_SIGNED_CHAR
-            },
-        }
-    } else if bare == Ty::Short as i64 {
-        BaseTypeDesc {
-            name: if unsigned { "unsigned short" } else { "short" },
-            byte_size: 2,
-            encoding: if unsigned {
-                DW_ATE_UNSIGNED
-            } else {
-                DW_ATE_SIGNED
-            },
-        }
-    } else if bare == Ty::Int as i64 {
-        BaseTypeDesc {
-            name: if unsigned { "unsigned int" } else { "int" },
-            byte_size: 4,
-            encoding: if unsigned {
-                DW_ATE_UNSIGNED
-            } else {
-                DW_ATE_SIGNED
-            },
-        }
-    } else if bare == Ty::Long as i64 {
-        // LLP64 (Windows) fixes `long` at 4 bytes; every other data
-        // model badc emits gives it the address width -- 8 under LP64,
-        // 4 under ILP32. Matches the c5 codegen's load/store width
-        // pick in `load_op_for` and the amalg path's DWARF base_type
-        // emission.
-        let byte_size = if target.is_windows() { 4 } else { addr_bytes };
-        BaseTypeDesc {
-            name: if unsigned { "unsigned long" } else { "long" },
-            byte_size,
-            encoding: if unsigned {
-                DW_ATE_UNSIGNED
-            } else {
-                DW_ATE_SIGNED
-            },
-        }
-    } else if bare == Ty::LongLong as i64 {
-        BaseTypeDesc {
-            name: if unsigned {
-                "unsigned long long"
-            } else {
-                "long long"
-            },
-            byte_size: 8,
-            encoding: if unsigned {
-                DW_ATE_UNSIGNED
-            } else {
-                DW_ATE_SIGNED
-            },
-        }
-    } else if bare == Ty::Float as i64 {
-        BaseTypeDesc {
-            name: "float",
-            byte_size: 4,
-            encoding: DW_ATE_FLOAT,
-        }
-    } else if bare == Ty::Double as i64 {
-        BaseTypeDesc {
-            name: "double",
-            byte_size: 8,
-            encoding: DW_ATE_FLOAT,
-        }
-    } else {
-        return None;
-    };
-    Some(desc)
 }
 
 /// Wide-format string for callers needing a writable view of
@@ -2709,7 +2469,7 @@ mod address_width {
         assert!(matches!(node, TypeNode::Pointer(Some(_))));
         let die = build_type_die(&mut catalog, &node, &mut StrPool::new());
         // ABBREV_POINTER_TYPE is a one-byte code, then DW_AT_byte_size.
-        let long = base_type_for_leaf(Ty::Long as i64, target, addr_bytes).expect("long base type");
+        let long = base_key_for_leaf(Ty::Long as i64, target, addr_bytes).expect("long base type");
         (die.bytes[1], long.byte_size)
     }
 

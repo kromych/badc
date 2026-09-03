@@ -71,10 +71,9 @@ use alloc::vec::Vec;
 
 use super::super::error::C5Error;
 use super::aarch64;
-use super::dwarf;
 use super::elf_reloc_types::AbsCheck;
 use super::x86_64;
-use super::{AddrPart, Build, DataRegion, Machine, data_region_addr};
+use super::{AddrPart, Build, DataRegion, Machine, data_region_addr, image};
 use crate::c5::layout::{round_up, write_struct};
 use crate::c5::program::Program;
 
@@ -619,37 +618,7 @@ impl<'a> PeWriter<'a> {
         // the committed text address; `.debug_frame` regenerates from
         // the synth-Build.
         let text_vmaddr = IMAGE_BASE + (l.text_rva + self.text_prologue_len) as u64;
-        let fresh = || {
-            dwarf::emit(
-                program,
-                build,
-                self.target,
-                text_vmaddr,
-                &program.source_path,
-                None,
-            )
-        };
-        let raw = if let Some(md) = &build.merged_dwarf {
-            let mut debug_info = md.debug_info.clone();
-            let mut debug_line = md.debug_line.clone();
-            for r in &md.debug_info_text_relocs {
-                super::apply_merged_dwarf_text_reloc(&mut debug_info, r, text_vmaddr)?;
-            }
-            for r in &md.debug_line_text_relocs {
-                super::apply_merged_dwarf_text_reloc(&mut debug_line, r, text_vmaddr)?;
-            }
-            dwarf::DwarfSections {
-                debug_info,
-                debug_abbrev: md.debug_abbrev.clone(),
-                debug_line,
-                debug_str: md.debug_str.clone(),
-                debug_frame: fresh().debug_frame,
-            }
-        } else if l.dwarf_present {
-            fresh()
-        } else {
-            dwarf::DwarfSections::default()
-        };
+        let raw = image::image_dwarf(program, build, self.target, text_vmaddr, None, None)?;
         l.dwarf_blobs = alloc::vec![
             (".debug_info", raw.debug_info),
             (".debug_abbrev", raw.debug_abbrev),
@@ -863,7 +832,12 @@ impl<'a> PeWriter<'a> {
                 })
             })
             .collect::<Result<_, C5Error>>()?;
-        let tls_sites = tls_reloc_sites(build, &|off| self.data_off_to_rva(off), text_body_rva)?;
+        let tls_sites = image::tls_reloc_sites(
+            "PE",
+            build,
+            &|off| IMAGE_BASE + self.data_off_to_rva(off as u32) as u64,
+            IMAGE_BASE + text_body_rva as u64,
+        )?;
         let l = &self.layout;
         let reloc_present = l.reloc_present;
         let (reloc_rva, reloc_file_off) = if reloc_present {
@@ -1241,18 +1215,14 @@ impl<'a> PeWriter<'a> {
             )?;
         }
         let mut jt_bytes = build.rodata.bytes.clone();
-        for r in &build.rodata.rel32 {
-            let value = (text_rva as i64 + prologue as i64 + r.text_offset as i64)
-                - (jt_rva as i64 + r.base_offset as i64);
-            let Ok(v) = i32::try_from(value) else {
-                return Err(Self::internal(format!(
-                    "PE: rodata rel32 slot {:#x}: displacement {value:#x} exceeds 32 bits",
-                    r.slot_offset,
-                )));
-            };
-            let off = r.slot_offset as usize;
-            jt_bytes[off..off + 4].copy_from_slice(&v.to_le_bytes());
-        }
+        image::patch_jump_table(
+            "PE",
+            "rodata rel32",
+            &mut jt_bytes,
+            IMAGE_BASE + (text_rva + prologue) as u64,
+            IMAGE_BASE + jt_rva as u64,
+            &build.rodata.rel32,
+        )?;
         if !build.tls_index_fixups.is_empty() {
             let tls_index_rva = l.data_rva + l.tls.tls_index_offset_in_data;
             for f in &build.tls_index_fixups {
@@ -1479,86 +1449,14 @@ impl<'a> PeWriter<'a> {
     /// initializer at its link-time address and every pc-relative slot
     /// holding its displacement.
     fn bake_data_image(&self) -> Result<Vec<u8>, C5Error> {
-        let build = self.build;
-        let text_body_rva = self.text_body_rva();
-        let ro_len = self.layout.ro_len;
-        let mut data = build.data[ro_len as usize..].to_vec();
-        for r in &build.data_relocs {
-            let preferred_va = (IMAGE_BASE + self.data_off_to_rva(r.target_anchor as u32) as u64)
-                .wrapping_add(r.target_offset.wrapping_sub(r.target_anchor));
-            let off = super::reloc_slot_in_data("PE", r.data_offset, ro_len as u64, "data")?;
-            if off + 8 > data.len() {
-                return Err(Self::internal(format!(
-                    "PE: data reloc offset {off:#x} past end of the relocated data span ({})",
-                    data.len()
-                )));
-            }
-            data[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
-        }
-        for r in &build.code_relocs {
-            let ent_pc = r.target_ent_pc as usize;
-            let native_off = build
-                .pc_to_native
-                .get(ent_pc)
-                .copied()
-                .unwrap_or(usize::MAX);
-            if native_off == usize::MAX {
-                return Err(Self::internal(format!(
-                    "PE: code reloc references missing ent_pc {ent_pc}"
-                )));
-            }
-            let preferred_va = IMAGE_BASE + (text_body_rva + native_off as u32) as u64;
-            let off = super::reloc_slot_in_data("PE", r.data_offset, ro_len as u64, "code")?;
-            if off + 8 > data.len() {
-                return Err(Self::internal(format!(
-                    "PE: code reloc offset {off:#x} past end of the relocated data span ({})",
-                    data.len()
-                )));
-            }
-            data[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
-        }
-        for r in &build.label_relocs {
-            let preferred_va = IMAGE_BASE + (text_body_rva + r.text_offset as u32) as u64;
-            let off = super::reloc_slot_in_data("PE", r.data_offset, ro_len as u64, "label")?;
-            if off + 8 > data.len() {
-                return Err(Self::internal(format!(
-                    "PE: label reloc offset {off:#x} past end of the relocated data span ({})",
-                    data.len()
-                )));
-            }
-            data[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
-        }
-        // Object-linked pc-relative slots hold `target - slot` as RVAs
-        // (the image base cancels) at the recorded width.
-        for r in &build.data_pcrel_relocs {
-            let target = if r.target_in_data {
-                self.data_off_to_rva(r.target_anchor as u32) as i64
-                    + (r.target_offset as i64 - r.target_anchor as i64)
-            } else {
-                text_body_rva as i64 + r.target_offset as i64
-            };
-            let slot_rva = self.data_off_to_rva(r.slot_data_offset as u32) as i64;
-            let off = super::reloc_slot_in_data("PE", r.slot_data_offset, ro_len as u64, "pcrel")?;
-            let width = r.width as usize;
-            if off + width > data.len() {
-                return Err(Self::internal(format!(
-                    "PE: data pcrel slot {off:#x} past end of the relocated data span ({})",
-                    data.len()
-                )));
-            }
-            let value = target - slot_rva;
-            if width == 8 {
-                data[off..off + 8].copy_from_slice(&value.to_le_bytes());
-                continue;
-            }
-            let Ok(v) = i32::try_from(value) else {
-                return Err(Self::internal(format!(
-                    "PE: data pcrel slot {off:#x}: displacement {value:#x} exceeds 32 bits"
-                )));
-            };
-            data[off..off + 4].copy_from_slice(&v.to_le_bytes());
-        }
-        Ok(data)
+        image::bake_data_relocs(
+            "PE",
+            "the relocated data span",
+            self.build,
+            self.layout.ro_len as u64,
+            IMAGE_BASE + self.text_body_rva() as u64,
+            &|off| IMAGE_BASE + self.data_off_to_rva(off as u32) as u64,
+        )
     }
 
     fn emit_sections(mut self) -> Result<Vec<u8>, C5Error> {
@@ -1611,16 +1509,12 @@ impl<'a> PeWriter<'a> {
                 out.extend_from_slice(&0u64.to_le_bytes()); // AddressOfCallBacks
                 out.extend_from_slice(&0u32.to_le_bytes()); // SizeOfZeroFill
                 out.extend_from_slice(&0u32.to_le_bytes()); // Characteristics
-                let mut tls = build.tls_data.clone();
-                for &(off, va) in &l.tls_sites {
-                    if off + 8 > tls.len() {
-                        return Err(Self::internal(format!(
-                            "PE: TLS reloc offset {off:#x} past end of the TLS template ({})",
-                            tls.len()
-                        )));
-                    }
-                    tls[off..off + 8].copy_from_slice(&va.to_le_bytes());
-                }
+                let tls = image::bake_tls_template(
+                    "PE",
+                    "the TLS template",
+                    &build.tls_data,
+                    &l.tls_sites,
+                )?;
                 out.extend_from_slice(&tls);
             }
         }
@@ -1959,43 +1853,6 @@ struct TlsLayout {
     /// (`.tdata`). `IMAGE_TLS_DIRECTORY64.StartAddressOfRawData`
     /// points at it.
     tls_init_offset_in_data: u32,
-}
-
-/// Address-constant initializers of `_Thread_local` objects, as
-/// `(offset within the TLS template, preferred VA)`. Both the baked
-/// template bytes and the `.reloc` entries read this.
-fn tls_reloc_sites(
-    build: &Build,
-    data_off_to_rva: &dyn Fn(u32) -> u32,
-    text_body_rva: u32,
-) -> Result<Vec<(usize, u64)>, C5Error> {
-    if let Some(r) = build.tls_extern_data_relocs.first() {
-        return Err(C5Error::Compile(crate::c5::error::fmt_link_err(&format!(
-            "undefined reference to `{}` in a `_Thread_local` initializer: \
-             the template's address constant must resolve within the image",
-            r.symbol_name,
-        ))));
-    }
-    let mut sites = Vec::with_capacity(build.tls_data_relocs.len() + build.tls_code_relocs.len());
-    for r in &build.tls_data_relocs {
-        let va = (IMAGE_BASE + data_off_to_rva(r.target_anchor as u32) as u64)
-            .wrapping_add(r.target_offset.wrapping_sub(r.target_anchor));
-        sites.push((r.data_offset as usize, va));
-    }
-    for r in &build.tls_code_relocs {
-        let ent_pc = r.target_ent_pc as usize;
-        let Some(&native_off) = build.pc_to_native.get(ent_pc) else {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!("PE: TLS code reloc references missing ent_pc {ent_pc}"),
-            )));
-        };
-        sites.push((
-            r.data_offset as usize,
-            IMAGE_BASE + (text_body_rva + native_off as u32) as u64,
-        ));
-    }
-    sites.sort_unstable();
-    Ok(sites)
 }
 
 fn compute_tls_layout(build: &Build, writable_data_size: u32) -> TlsLayout {

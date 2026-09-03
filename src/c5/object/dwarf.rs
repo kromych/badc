@@ -855,13 +855,13 @@ fn collect_subprograms(
 /// catalog dedupes by this key so two `int` locals share a single
 /// DIE.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-struct BaseTypeKey {
+pub(super) struct BaseTypeKey {
     /// C source spelling -- "int", "unsigned long", "double", etc.
     /// Becomes the DIE's `DW_AT_name`.
-    name: &'static str,
-    byte_size: u8,
+    pub(super) name: &'static str,
+    pub(super) byte_size: u8,
     /// `DW_ATE_*` encoding, drives the DIE's `DW_AT_encoding`.
-    encoding: u8,
+    pub(super) encoding: u8,
 }
 
 /// One entry in the type catalog. Sort order (derived from the
@@ -1187,7 +1187,7 @@ fn classify(ty: i64, target: Target) -> CatalogEntry {
     } else {
         leaf_tag
     };
-    let leaf_key = match base_key_for_leaf(leaf_signed, target) {
+    let leaf_key = match base_key_for_leaf(leaf_signed, target, 8) {
         Some(k) => k,
         None => return CatalogEntry::VoidStar,
     };
@@ -1204,7 +1204,14 @@ fn classify(ty: i64, target: Target) -> CatalogEntry {
 /// Build a `BaseTypeKey` for a *bare* leaf scalar tag (no pointer
 /// depth). Caller handles the pointer extraction; this just maps
 /// the leaf-band tag to its DWARF wire-form attributes.
-fn base_key_for_leaf(leaf_tag: i64, target: Target) -> Option<BaseTypeKey> {
+pub(super) fn base_key_for_leaf(
+    leaf_tag: i64,
+    target: Target,
+    addr_bytes: u8,
+) -> Option<BaseTypeKey> {
+    if types::is_void_ty(leaf_tag) {
+        return None;
+    }
     let unsigned = types::is_unsigned_ty(leaf_tag);
     let bare = types::strip_unsigned(leaf_tag);
 
@@ -1245,9 +1252,9 @@ fn base_key_for_leaf(leaf_tag: i64, target: Target) -> Option<BaseTypeKey> {
             },
         }
     } else if bare == Ty::Long as i64 {
-        // LP64: 8 bytes; LLP64 (Windows): 4 bytes. Matches the
-        // c5 codegen's load/store width pick (`load_op_for`).
-        let byte_size = if target.is_windows() { 4 } else { 8 };
+        // LLP64 keeps `long` at 4 bytes; the other data models give
+        // it the address width, as the codegen's load width does.
+        let byte_size = if target.is_windows() { 4 } else { addr_bytes };
         BaseTypeKey {
             name: if unsigned { "unsigned long" } else { "long" },
             byte_size,
@@ -2572,21 +2579,9 @@ fn build_debug_line(
     } else {
         source_path
     };
-    let emit_file_entry = |hdr: &mut Vec<u8>, name: &str| {
-        hdr.extend_from_slice(name.as_bytes());
-        hdr.push(0);
-        write_uleb128(hdr, 0); // dir_idx (0 = comp_dir)
-        write_uleb128(hdr, 0); // mtime
-        write_uleb128(hdr, 0); // file size
-    };
-    emit_file_entry(&mut hdr_after_len_field, tu_name);
-    for src in &program.source_files {
-        // Skip the lexer's placeholder; the TU is already
-        // entry 1 under its real path.
-        if src == "<source>" {
-            continue;
-        }
-        emit_file_entry(&mut hdr_after_len_field, src);
+    push_file_entry(&mut hdr_after_len_field, tu_name);
+    for src in program.source_files.iter().filter(|s| *s != "<source>") {
+        push_file_entry(&mut hdr_after_len_field, src);
     }
     hdr_after_len_field.push(0); // file_names terminator
 
@@ -2608,53 +2603,126 @@ fn build_debug_line(
     (out, 0)
 }
 
-/// Walk the SSA-tier line table, emit one row per (live) PC whose
-/// source line is known. The DWARF state machine starts at
-/// `(address=0, line=1, file=1, is_stmt=true)`; the emit opens with
-/// a `DW_LNE_set_address` to anchor at `code_vmaddr` and ends with
-/// `DW_LNE_end_sequence` row past the last byte.
+/// The statement program: `DW_LNE_set_address` at `code_vmaddr`, the
+/// rows, and `DW_LNE_end_sequence` one past the user code, so the last
+/// row does not cover the PLT trampolines past it.
 fn write_line_program(buf: &mut Vec<u8>, program: &Program, build: &Build, code_vmaddr: u64) {
-    // Anchor address at the start of code.
-    write_set_address(buf, code_vmaddr);
+    write_extended(buf, DW_LNE_SET_ADDRESS, &code_vmaddr.to_le_bytes());
+    let files = dwarf_file_numbers(program);
+    let mut state = LineState::new(code_vmaddr);
+    write_line_rows(buf, build, &files, code_vmaddr, &mut state);
+    state.end_sequence(buf, code_vmaddr + end_of_user_text(build) as u64);
+}
 
-    // Pre-compute the lexer-index -> DWARF-file-number remap. The
-    // `program.source_files` table starts at index 0 (the lexer
-    // interns the TU's lexer-side label `"<source>"` first, then
-    // each `#include`d header). DWARF file numbers start at 1 (0
-    // is reserved for "no file"). We elide the `"<source>"`
-    // placeholder from the file table and reserve DWARF index 1
-    // for the TU's real path; every other lexer-source entry
-    // gets a fresh DWARF index in declaration order.
-    let mut next_dwarf_idx: u64 = 2;
-    let dwarf_file_for_lex_idx: Vec<u64> = program
+// ---- Line-number program, shared with the ET_REL emitter ----
+
+/// DWARF file number of each `program.source_files` entry. The lexer's
+/// `"<source>"` placeholder is the unit itself, file 1; every other
+/// entry takes the next number in declaration order.
+pub(super) fn dwarf_file_numbers(program: &Program) -> Vec<u64> {
+    let mut next: u64 = 2;
+    program
         .source_files
         .iter()
         .map(|name| {
             if name == "<source>" {
                 1
             } else {
-                let idx = next_dwarf_idx;
-                next_dwarf_idx += 1;
-                idx
+                let n = next;
+                next += 1;
+                n
             }
         })
-        .collect();
+        .collect()
+}
 
-    let mut state_addr: u64 = code_vmaddr;
-    let mut state_line: i64 = 1;
-    let mut state_file: u64 = 1;
+/// One `file_names` entry: the name, directory 0, no mtime, no size.
+pub(super) fn push_file_entry(out: &mut Vec<u8>, name: &str) {
+    out.extend_from_slice(name.as_bytes());
+    out.push(0);
+    write_uleb128(out, 0);
+    write_uleb128(out, 0);
+    write_uleb128(out, 0);
+}
 
-    // Each function's native start PC. The SSA emit's
-    // `record_inst_src` only records a row when an instruction
-    // carries a non-zero `inst_src`, so the prologue (which the
-    // walker doesn't stamp) emits no row -- the first row in a
-    // function lands at the first body instruction, not the
-    // function entry. lldb / gdb need a row at the entry PC to
-    // attribute a function-name breakpoint to source; without
-    // it, a breakpoint at low_pc has no covering line entry and
-    // no source is shown. Seed an extra row at each function's
-    // entry PC, reusing the line and file from the body's first
-    // recorded row.
+/// The line-number state machine's registers the program advances.
+/// After `DW_LNE_set_address` the machine sits at `(addr, line 1,
+/// file 1)` with no row yet; a `DW_LNS_copy` materialises one.
+pub(super) struct LineState {
+    addr: u64,
+    line: i64,
+    file: u64,
+    row_emitted: bool,
+}
+
+impl LineState {
+    pub(super) fn new(addr: u64) -> Self {
+        LineState {
+            addr,
+            line: 1,
+            file: 1,
+            row_emitted: false,
+        }
+    }
+
+    /// Advance to `(addr, line, file)`, emitting a row when anything
+    /// changed; `prologue_end` stamps `DW_LNS_set_prologue_end` on it.
+    pub(super) fn emit_row(
+        &mut self,
+        buf: &mut Vec<u8>,
+        addr: u64,
+        line: i64,
+        file: u64,
+        prologue_end: bool,
+    ) {
+        if addr > self.addr {
+            advance_pc(buf, addr - self.addr);
+            self.addr = addr;
+            self.row_emitted = false;
+        }
+        if file != self.file {
+            buf.push(DW_LNS_SET_FILE);
+            write_uleb128(buf, file);
+            self.file = file;
+            self.row_emitted = false;
+        }
+        if line != self.line {
+            advance_line(buf, line - self.line);
+            self.line = line;
+            self.row_emitted = false;
+        }
+        if !self.row_emitted {
+            if prologue_end {
+                buf.push(DW_LNS_SET_PROLOGUE_END);
+            }
+            buf.push(DW_LNS_COPY);
+            self.row_emitted = true;
+        }
+    }
+
+    /// `DW_LNE_end_sequence` one past `end`.
+    pub(super) fn end_sequence(&mut self, buf: &mut Vec<u8>, end: u64) {
+        if end > self.addr {
+            advance_pc(buf, end - self.addr);
+            self.addr = end;
+        }
+        write_extended(buf, DW_LNE_END_SEQUENCE, &[]);
+    }
+}
+
+/// One row per source-position change the SSA emit recorded, at
+/// `base` plus the native offset. The prologue carries no row of its
+/// own, so each function entry gets a synthetic row with the body's
+/// first position, and that body row is stamped as the prologue end
+/// (DWARF 4 6.2.5.3) so a breakpoint on the function lands past the
+/// prologue.
+pub(super) fn write_line_rows(
+    buf: &mut Vec<u8>,
+    build: &Build,
+    files: &[u64],
+    base: u64,
+    state: &mut LineState,
+) {
     let mut func_starts: Vec<usize> = build
         .func_ent_pcs
         .iter()
@@ -2664,131 +2732,29 @@ fn write_line_program(buf: &mut Vec<u8>, program: &Program, build: &Build, code_
     func_starts.sort_unstable();
     func_starts.dedup();
     let mut func_start_iter = func_starts.iter().copied().peekable();
-
-    // Track whether the most recent state (addr, line, file)
-    // has already been emitted as a row. After
-    // `DW_LNE_set_address`, the state machine sits at
-    // (code_vmaddr, line=1, file=1, ...) but no row exists yet;
-    // a `DW_LNS_COPY` is what materialises the row.
-    let mut row_emitted_at_state: bool = false;
-
-    let emit_row = |buf: &mut Vec<u8>,
-                    state_addr: &mut u64,
-                    state_line: &mut i64,
-                    state_file: &mut u64,
-                    row_emitted: &mut bool,
-                    target_addr: u64,
-                    line: i64,
-                    file: u64,
-                    mark_prologue_end: bool| {
-        if target_addr > *state_addr {
-            advance_pc(buf, target_addr - *state_addr);
-            *state_addr = target_addr;
-            *row_emitted = false;
-        }
-        if file != *state_file {
-            buf.push(DW_LNS_SET_FILE);
-            write_uleb128(buf, file);
-            *state_file = file;
-            *row_emitted = false;
-        }
-        if line != *state_line {
-            advance_line(buf, line - *state_line);
-            *state_line = line;
-            *row_emitted = false;
-        }
-        if !*row_emitted {
-            if mark_prologue_end {
-                buf.push(DW_LNS_SET_PROLOGUE_END);
-            }
-            buf.push(DW_LNS_COPY);
-            *row_emitted = true;
-        }
-    };
-
-    // One row per source-position change the SSA emit recorded
-    // against the emitted native byte offset. Provides per-
-    // statement granularity inside each function. Native code
-    // emission flows through the SSA pipeline exclusively, so
-    // every program with executable bytes populates
-    // `ssa_line_rows`; an empty vector means no code was emitted
-    // and the closing `DW_LNE_end_sequence` below caps a zero-
-    // length sequence.
-    // True once a function-entry synthetic row has fired but the
-    // matching post-prologue source row hasn't landed yet. The next
-    // emit_row that materialises a COPY stamps DW_LNS_set_prologue_end
-    // first so debuggers land "break main" past the prologue per
-    // DWARF 4 section 6.2.5.3.
     let mut prologue_end_pending = false;
-
     for &(native, line, file_idx) in &build.ssa_line_rows {
         if line == 0 {
             continue;
         }
-        let file = dwarf_file_for_lex_idx
-            .get(file_idx as usize)
-            .copied()
-            .unwrap_or(1);
-        let target_addr = code_vmaddr + native as u64;
-        // Drain every function start at-or-before this row.
-        // The drained start gets a synthetic row whose (line,
-        // file) match this row's, so the function-entry PC
-        // through the body's first statement reports the same
-        // source position.
+        let file = files.get(file_idx as usize).copied().unwrap_or(1);
+        let target_addr = base + native as u64;
         while let Some(&fn_start) = func_start_iter.peek() {
-            let entry_addr = code_vmaddr + fn_start as u64;
+            let entry_addr = base + fn_start as u64;
             if entry_addr > target_addr {
                 break;
             }
-            emit_row(
-                buf,
-                &mut state_addr,
-                &mut state_line,
-                &mut state_file,
-                &mut row_emitted_at_state,
-                entry_addr,
-                line as i64,
-                file,
-                false,
-            );
+            state.emit_row(buf, entry_addr, line as i64, file, false);
             func_start_iter.next();
             prologue_end_pending = true;
         }
-        emit_row(
-            buf,
-            &mut state_addr,
-            &mut state_line,
-            &mut state_file,
-            &mut row_emitted_at_state,
-            target_addr,
-            line as i64,
-            file,
-            prologue_end_pending,
-        );
+        state.emit_row(buf, target_addr, line as i64, file, prologue_end_pending);
         prologue_end_pending = false;
     }
-
-    // Close the sequence with end_sequence at one past the last
-    // byte of *user* code. The PLT trampoline pool lives
-    // past that point; including it would extend the previous row's
-    // `[addr_N, addr_{N+1})` coverage over every stub and gdb would
-    // mis-attribute PLT-stub hits to the closing brace of the last
-    // function.
-    let end_addr = code_vmaddr + end_of_user_text(build) as u64;
-    if end_addr > state_addr {
-        advance_pc(buf, end_addr - state_addr);
-    }
-    write_extended(buf, DW_LNE_END_SEQUENCE, &[]);
 }
 
-fn write_set_address(buf: &mut Vec<u8>, addr: u64) {
-    // Extended opcode: 0, len(ULEB), DW_LNE_set_address, addr (8 bytes).
-    write_extended(buf, DW_LNE_SET_ADDRESS, &addr.to_le_bytes());
-}
-
-fn write_extended(buf: &mut Vec<u8>, op: u8, data: &[u8]) {
+pub(super) fn write_extended(buf: &mut Vec<u8>, op: u8, data: &[u8]) {
     buf.push(0);
-    // length covers op + data
     write_uleb128(buf, (1 + data.len()) as u64);
     buf.push(op);
     buf.extend_from_slice(data);

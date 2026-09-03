@@ -4930,6 +4930,19 @@ fn build_gnu_property_note(machine: Machine, build: &Build, align: usize) -> Opt
     Some(body)
 }
 
+/// One `.note.badc` record: the header naming `badc`, then `desc`,
+/// each padded to 4 bytes.
+fn push_note_record(out: &mut Vec<u8>, ntype: u32, desc: &[u8]) {
+    let name = b"badc\0";
+    out.extend_from_slice(&(name.len() as u32).to_le_bytes());
+    out.extend_from_slice(&(desc.len() as u32).to_le_bytes());
+    out.extend_from_slice(&ntype.to_le_bytes());
+    out.extend_from_slice(name);
+    crate::c5::layout::pad_to_align(out, 4);
+    out.extend_from_slice(desc);
+    crate::c5::layout::pad_to_align(out, 4);
+}
+
 #[allow(clippy::too_many_arguments)]
 fn build_badc_note(
     imports: &super::ResolvedImports,
@@ -4943,7 +4956,6 @@ fn build_badc_note(
     extern_data_names: &[&str],
 ) -> Vec<u8> {
     let mut out: Vec<u8> = Vec::new();
-    let name = b"badc\0";
 
     // Record 1: dylib paths. Skipped when there are none, like every
     // other record, so a unit using no note channel builds an empty
@@ -4954,13 +4966,7 @@ fn build_badc_note(
             dylibs_desc.extend_from_slice(d.path.as_bytes());
             dylibs_desc.push(0);
         }
-        out.extend_from_slice(&(name.len() as u32).to_le_bytes());
-        out.extend_from_slice(&(dylibs_desc.len() as u32).to_le_bytes());
-        out.extend_from_slice(&NT_BADC_DYLIBS.to_le_bytes());
-        out.extend_from_slice(name);
-        crate::c5::layout::pad_to_align(&mut out, 4);
-        out.extend_from_slice(&dylibs_desc);
-        crate::c5::layout::pad_to_align(&mut out, 4);
+        push_note_record(&mut out, NT_BADC_DYLIBS, &dylibs_desc);
     }
 
     // Record 2: per-import dylib map. Skip when there are no
@@ -4984,13 +4990,7 @@ fn build_badc_note(
             bm_desc.extend_from_slice(local.as_bytes());
             bm_desc.push(0);
         }
-        out.extend_from_slice(&(name.len() as u32).to_le_bytes());
-        out.extend_from_slice(&(bm_desc.len() as u32).to_le_bytes());
-        out.extend_from_slice(&NT_BADC_BINDING_MAP.to_le_bytes());
-        out.extend_from_slice(name);
-        crate::c5::layout::pad_to_align(&mut out, 4);
-        out.extend_from_slice(&bm_desc);
-        crate::c5::layout::pad_to_align(&mut out, 4);
+        push_note_record(&mut out, NT_BADC_BINDING_MAP, &bm_desc);
     }
 
     // Record 3: source-declared export names. Omitted when the TU
@@ -5002,13 +5002,7 @@ fn build_badc_note(
             ex_desc.extend_from_slice(e.name.as_bytes());
             ex_desc.push(0);
         }
-        out.extend_from_slice(&(name.len() as u32).to_le_bytes());
-        out.extend_from_slice(&(ex_desc.len() as u32).to_le_bytes());
-        out.extend_from_slice(&NT_BADC_EXPORTS.to_le_bytes());
-        out.extend_from_slice(name);
-        crate::c5::layout::pad_to_align(&mut out, 4);
-        out.extend_from_slice(&ex_desc);
-        crate::c5::layout::pad_to_align(&mut out, 4);
+        push_note_record(&mut out, NT_BADC_EXPORTS, &ex_desc);
     }
 
     // Record 4: Win64 `_tls_index` fixup offsets. Omitted when the
@@ -5019,13 +5013,7 @@ fn build_badc_note(
         for f in tls_index_fixups {
             tls_desc.extend_from_slice(&(f.instr_offset as u64).to_le_bytes());
         }
-        out.extend_from_slice(&(name.len() as u32).to_le_bytes());
-        out.extend_from_slice(&(tls_desc.len() as u32).to_le_bytes());
-        out.extend_from_slice(&NT_BADC_TLS_INDEX.to_le_bytes());
-        out.extend_from_slice(name);
-        crate::c5::layout::pad_to_align(&mut out, 4);
-        out.extend_from_slice(&tls_desc);
-        crate::c5::layout::pad_to_align(&mut out, 4);
+        push_note_record(&mut out, NT_BADC_TLS_INDEX, &tls_desc);
     }
 
     // Record 5: Mach-O TLV descriptor offsets.
@@ -5034,13 +5022,7 @@ fn build_badc_note(
         for d in macho_tlv_descriptors {
             desc.extend_from_slice(&d.offset_in_block.to_le_bytes());
         }
-        out.extend_from_slice(&(name.len() as u32).to_le_bytes());
-        out.extend_from_slice(&(desc.len() as u32).to_le_bytes());
-        out.extend_from_slice(&NT_BADC_MACHO_TLV_DESC.to_le_bytes());
-        out.extend_from_slice(name);
-        crate::c5::layout::pad_to_align(&mut out, 4);
-        out.extend_from_slice(&desc);
-        crate::c5::layout::pad_to_align(&mut out, 4);
+        push_note_record(&mut out, NT_BADC_MACHO_TLV_DESC, &desc);
     }
 
     // Record 6: Mach-O TLV fixups -- (adrp_offset, descriptor_index)
@@ -5051,13 +5033,7 @@ fn build_badc_note(
             desc.extend_from_slice(&(f.adrp_offset as u64).to_le_bytes());
             desc.extend_from_slice(&(f.descriptor_index as u64).to_le_bytes());
         }
-        out.extend_from_slice(&(name.len() as u32).to_le_bytes());
-        out.extend_from_slice(&(desc.len() as u32).to_le_bytes());
-        out.extend_from_slice(&NT_BADC_MACHO_TLV_FIXUP.to_le_bytes());
-        out.extend_from_slice(name);
-        crate::c5::layout::pad_to_align(&mut out, 4);
-        out.extend_from_slice(&desc);
-        crate::c5::layout::pad_to_align(&mut out, 4);
+        push_note_record(&mut out, NT_BADC_MACHO_TLV_FIXUP, &desc);
     }
 
     // Record 8: defined `_Thread_local` symbols -- (tls_offset, size,
@@ -5070,13 +5046,7 @@ fn build_badc_note(
             desc.extend_from_slice(sym_name.as_bytes());
             desc.push(0);
         }
-        out.extend_from_slice(&(name.len() as u32).to_le_bytes());
-        out.extend_from_slice(&(desc.len() as u32).to_le_bytes());
-        out.extend_from_slice(&NT_BADC_TLS_SYM.to_le_bytes());
-        out.extend_from_slice(name);
-        crate::c5::layout::pad_to_align(&mut out, 4);
-        out.extend_from_slice(&desc);
-        crate::c5::layout::pad_to_align(&mut out, 4);
+        push_note_record(&mut out, NT_BADC_TLS_SYM, &desc);
     }
 
     // Record 9: Mach-O TLV descriptors keyed by a cross-unit symbol --
@@ -5093,13 +5063,7 @@ fn build_badc_note(
             desc.extend_from_slice(sym_name.as_bytes());
             desc.push(0);
         }
-        out.extend_from_slice(&(name.len() as u32).to_le_bytes());
-        out.extend_from_slice(&(desc.len() as u32).to_le_bytes());
-        out.extend_from_slice(&NT_BADC_MACHO_TLV_DESC_SYM.to_le_bytes());
-        out.extend_from_slice(name);
-        crate::c5::layout::pad_to_align(&mut out, 4);
-        out.extend_from_slice(&desc);
-        crate::c5::layout::pad_to_align(&mut out, 4);
+        push_note_record(&mut out, NT_BADC_MACHO_TLV_DESC_SYM, &desc);
     }
 
     // Record 10: Linux/x86_64 TLS access fixups -- (imm_offset, kind,
@@ -5120,13 +5084,7 @@ fn build_badc_note(
                 }
             }
         }
-        out.extend_from_slice(&(name.len() as u32).to_le_bytes());
-        out.extend_from_slice(&(desc.len() as u32).to_le_bytes());
-        out.extend_from_slice(&NT_BADC_ELF_TPOFF.to_le_bytes());
-        out.extend_from_slice(name);
-        crate::c5::layout::pad_to_align(&mut out, 4);
-        out.extend_from_slice(&desc);
-        crate::c5::layout::pad_to_align(&mut out, 4);
+        push_note_record(&mut out, NT_BADC_ELF_TPOFF, &desc);
     }
 
     // Record 11: post-prologue anchors -- (entry_offset,
@@ -5137,13 +5095,7 @@ fn build_badc_note(
             desc.extend_from_slice(&entry.to_le_bytes());
             desc.extend_from_slice(&post.to_le_bytes());
         }
-        out.extend_from_slice(&(name.len() as u32).to_le_bytes());
-        out.extend_from_slice(&(desc.len() as u32).to_le_bytes());
-        out.extend_from_slice(&NT_BADC_PROLOGUE_END.to_le_bytes());
-        out.extend_from_slice(name);
-        crate::c5::layout::pad_to_align(&mut out, 4);
-        out.extend_from_slice(&desc);
-        crate::c5::layout::pad_to_align(&mut out, 4);
+        push_note_record(&mut out, NT_BADC_PROLOGUE_END, &desc);
     }
 
     // Record 7: data-import copy relocations -- (local_name, host_symbol)
@@ -5156,13 +5108,7 @@ fn build_badc_note(
             desc.extend_from_slice(host.as_bytes());
             desc.push(0);
         }
-        out.extend_from_slice(&(name.len() as u32).to_le_bytes());
-        out.extend_from_slice(&(desc.len() as u32).to_le_bytes());
-        out.extend_from_slice(&NT_BADC_COPY_RELOC.to_le_bytes());
-        out.extend_from_slice(name);
-        crate::c5::layout::pad_to_align(&mut out, 4);
-        out.extend_from_slice(&desc);
-        crate::c5::layout::pad_to_align(&mut out, 4);
+        push_note_record(&mut out, NT_BADC_COPY_RELOC, &desc);
     }
 
     // Record 12: names whose address this unit materialises through an
@@ -5175,13 +5121,7 @@ fn build_badc_note(
             desc.extend_from_slice(n.as_bytes());
             desc.push(0);
         }
-        out.extend_from_slice(&(name.len() as u32).to_le_bytes());
-        out.extend_from_slice(&(desc.len() as u32).to_le_bytes());
-        out.extend_from_slice(&NT_BADC_EXTERN_DATA.to_le_bytes());
-        out.extend_from_slice(name);
-        crate::c5::layout::pad_to_align(&mut out, 4);
-        out.extend_from_slice(&desc);
-        crate::c5::layout::pad_to_align(&mut out, 4);
+        push_note_record(&mut out, NT_BADC_EXTERN_DATA, &desc);
     }
     out
 }
@@ -5513,6 +5453,16 @@ fn rewrite_extern_addr_loads_to_abs32(body: &mut [u8], instr_offsets: &[usize]) 
 mod tests {
     use super::*;
 
+    fn empty_program(path: &str) -> Program {
+        let mut program = super::super::test_support::empty_program();
+        program.source_path = path.into();
+        program
+    }
+
+    fn empty_build_for(_machine: Machine) -> Build {
+        super::super::test_support::empty_build()
+    }
+
     /// Sanity: an empty Build produces a valid ELF header that
     /// `readelf -h` would accept.
     #[test]
@@ -5801,134 +5751,6 @@ mod tests {
             rewrite_extern_addr_loads_to_abs32(&mut body, &[0]);
             assert_eq!(&body[..3], &mov, "lea {lea:02x?}");
             assert_eq!(&body[3..], &[0, 0, 0, 0], "imm32 slot untouched");
-        }
-    }
-
-    fn empty_program(path: &str) -> Program {
-        Program {
-            target: crate::c5::codegen::Target::host(),
-            data: Vec::new(),
-            file_asm: Vec::new(),
-            asm_weak_names: Vec::new(),
-            asm_global_names: Vec::new(),
-            asm_visibility: Vec::new(),
-            asm_unit: false,
-            asm_file_names: Vec::new(),
-            asm_idents: Vec::new(),
-            data_ro_len: 0,
-            data_relro_len: 0,
-            data_object_starts: Vec::new(),
-            const_data_ranges: Vec::new(),
-            data_pad_ranges: Vec::new(),
-            data_align_marks: Vec::new(),
-            entry_pc: 0,
-            warnings: Vec::new(),
-            tls_data: Vec::new(),
-            tls_init_size: 0,
-            data_relocs: Vec::new(),
-            extern_data_relocs: Vec::new(),
-            code_relocs: Vec::new(),
-            tls_data_relocs: Vec::new(),
-            tls_extern_data_relocs: Vec::new(),
-            tls_code_relocs: Vec::new(),
-            exports: Vec::new(),
-            dylibs: Vec::new(),
-            dllmain_pc: None,
-            source_files: Vec::new(),
-            source_path: path.into(),
-            variables: Vec::new(),
-            structs: Vec::new(),
-            enums: Vec::new(),
-            entry_name: None,
-            entry_pragma: None,
-            auto_includes: Vec::new(),
-            data_align: 8,
-            subsystem: None,
-            finished_functions: Vec::new(),
-            symbols: Vec::new(),
-            synthetic_ssa_funcs: Vec::new(),
-            user_ssa_funcs: Vec::new(),
-            extern_function_imports: Vec::new(),
-            init_funcs: Vec::new(),
-            function_aliases: Vec::new(),
-        }
-    }
-
-    fn empty_build_for(_machine: Machine) -> Build {
-        use super::super::{Abi, OutputKind, ResolvedImports};
-        Build {
-            text_data_ranges: alloc::vec::Vec::new(),
-            emitted_relocs: Vec::new(),
-            named_sections: Vec::new(),
-            got_base_fixups: Vec::new(),
-            text_align: 16,
-            orphaned_data: None,
-            stopped_at_data_liveness: false,
-            ssa_dump: alloc::string::String::new(),
-            asm_sections: Vec::new(),
-            asm_section_text_refs: Vec::new(),
-            asm_text_abs_refs: Vec::new(),
-            asm_sym_fixups: Vec::new(),
-            asm_text_labels: Vec::new(),
-            asm_sym_decls: Vec::new(),
-            copy_relocs: Default::default(),
-            text: Vec::new(),
-            data: Vec::new(),
-            data_ro_len: 0,
-            data_relro_len: 0,
-            pic_link: false,
-            code_model: Default::default(),
-            elf_class: Default::default(),
-            keep_local_labels: false,
-            rodata: Default::default(),
-            data_pcrel_relocs: Vec::new(),
-            text_pcrel_relocs: Vec::new(),
-            text_abs_relocs: Vec::new(),
-            data_align: 8,
-            bss_size: 0,
-            init_fini_arrays: Default::default(),
-            entry_offset: 0,
-            got_fixups: Vec::new(),
-            data_fixups: Vec::new(),
-            func_fixups: Vec::new(),
-            pc_to_native: Vec::new(),
-            func_ent_pcs: Vec::new(),
-            func_ends: Vec::new(),
-            patchable_entries: Vec::new(),
-            mcount_sites: Vec::new(),
-            func_names: Vec::new(),
-            func_prologue_native: alloc::collections::BTreeMap::new(),
-            promoted_local_slots: alloc::collections::BTreeMap::new(),
-            coalesced_slot_remap: alloc::collections::BTreeMap::new(),
-            canary_frame_bytes: alloc::collections::BTreeMap::new(),
-            fn_unwind: Vec::new(),
-            reloc_call_sites: Vec::new(),
-            user_extern_call_sites: Vec::new(),
-            user_extern_data_refs: Vec::new(),
-            ssa_line_rows: Vec::new(),
-            imports: ResolvedImports::default(),
-            abi: Abi::default(),
-            tls_data: Vec::new(),
-            tls_init_size: 0,
-            tls_index_fixups: Vec::new(),
-            elf_tpoff_fixups: Vec::new(),
-            data_relocs: Vec::new(),
-            extern_data_relocs: Vec::new(),
-            code_relocs: Vec::new(),
-            tls_data_relocs: Vec::new(),
-            tls_extern_data_relocs: Vec::new(),
-            tls_code_relocs: Vec::new(),
-            label_relocs: Vec::new(),
-            exports: Vec::new(),
-            dynamic_exports: Vec::new(),
-            output_kind: OutputKind::Relocatable,
-            shared_lib_name: None,
-            dllmain_pc: None,
-            macho_tlv_fixups: Vec::new(),
-            macho_tlv_descriptors: Vec::new(),
-            debug_info: false,
-            merged_dwarf: None,
-            plt_trampoline_offsets: Vec::new(),
         }
     }
 }

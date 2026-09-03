@@ -1631,6 +1631,19 @@ fn uleb128_byte_len(mut v: u64) -> u32 {
 
 // ---- .debug_info ----
 
+/// The compilation unit under construction: the DIE bytes past the
+/// unit header and the CU-relative offset of every type DIE, laid out
+/// before any DIE is written so a member can reach a type that lands
+/// later in the unit.
+struct InfoUnit<'a> {
+    target: Target,
+    catalog: &'a TypeCatalog,
+    structs: &'a [StructDef],
+    entry_offsets: BTreeMap<CatalogEntry, u32>,
+    array_offsets: BTreeMap<(CatalogEntry, u32), u32>,
+    body: Vec<u8>,
+}
+
 #[allow(clippy::too_many_arguments)]
 fn build_debug_info(
     cu_name_off: u32,
@@ -1646,336 +1659,330 @@ fn build_debug_info(
     structs: &[StructDef],
     enums: &[super::super::compiler::EnumDef],
 ) -> Vec<u8> {
-    // Build the body first so we know its size before prepending
-    // the unit header. CU-relative `DW_FORM_ref4` offsets are
-    // body-position + `DebugInfoUnitHeader::SIZE`.
-    let mut body: Vec<u8> = Vec::with_capacity(64 + subs.len() * 48);
+    let mut unit = InfoUnit {
+        target,
+        catalog,
+        structs,
+        entry_offsets: BTreeMap::new(),
+        array_offsets: BTreeMap::new(),
+        body: Vec::with_capacity(64 + subs.len() * 48),
+    };
+    unit.emit_cu_die(
+        cu_name_off,
+        comp_dir_off,
+        producer_off,
+        line_unit_off,
+        cu_low_pc,
+        cu_size,
+    );
+    let array_pairs = unit.array_pairs(subs);
+    unit.layout_types(&array_pairs);
+    unit.emit_type_dies();
+    unit.emit_array_dies();
+    unit.emit_enum_dies(enums);
+    unit.emit_subprograms(subs);
+    unit.emit_plt_subprograms(plt_subs);
+    unit.finish()
+}
 
-    // CU DIE: abbrev 1.
-    write_uleb128(&mut body, ABBREV_COMPILE_UNIT);
-    body.extend_from_slice(&producer_off.to_le_bytes());
-    body.push(DW_LANG_C99);
-    body.extend_from_slice(&cu_name_off.to_le_bytes());
-    body.extend_from_slice(&comp_dir_off.to_le_bytes());
-    body.extend_from_slice(&cu_low_pc.to_le_bytes());
-    body.extend_from_slice(&cu_size.to_le_bytes());
-    body.extend_from_slice(&line_unit_off.to_le_bytes());
-
-    // Collect every (element_type, count) pair the unit's arrays
-    // need a DIE for. Sources: non-parameter variables with
-    // `array_size > 0` (C99 6.7.5.3p7 decays parameter arrays to
-    // pointers) and struct fields with `array_size > 0`. Element
-    // must be scalar / pointer-to-scalar -- aggregate elements
-    // would need an aggregate DIE that doesn't exist yet at the
-    // array DIE's reserved position.
-    let mut array_pairs: BTreeSet<(CatalogEntry, u32)> = BTreeSet::new();
-    for s in subs {
-        for v in &s.variables {
-            if v.array_size == 0 || v.is_parameter {
-                continue;
-            }
-            let entry = classify(v.type_tag, target);
-            if matches!(entry, CatalogEntry::Base(_) | CatalogEntry::Pointer { .. }) {
-                array_pairs.insert((entry, v.array_size));
-            }
-        }
-    }
-    // Restrict the struct walk to aggregates the catalog actually
-    // emits a DIE for. The TypeCatalog only pulls in structs that
-    // are transitively reachable from variables / PLT signatures;
-    // collecting array pairs from unreferenced structs would name
-    // element-type DIEs the layout pass never reserved space for.
-    let referenced_struct_ids: BTreeSet<u32> = catalog
-        .entries
-        .iter()
-        .filter_map(|e| match e {
-            CatalogEntry::Struct { id } | CatalogEntry::StructPointer { id, .. } => Some(*id),
-            _ => None,
-        })
-        .collect();
-    for id in &referenced_struct_ids {
-        let Some(s) = structs.get(*id as usize) else {
-            continue;
-        };
-        for f in &s.fields {
-            if f.array_size <= 0 || f.bit_width > 0 {
-                continue;
-            }
-            let entry = classify(f.ty, target);
-            if matches!(entry, CatalogEntry::Base(_) | CatalogEntry::Pointer { .. }) {
-                array_pairs.insert((entry, f.array_size as u32));
-            }
-        }
+impl InfoUnit<'_> {
+    /// CU-relative offset of the next DIE.
+    fn cursor(&self) -> u32 {
+        (self.body.len() as u32) + DebugInfoUnitHeader::SIZE
     }
 
-    // Layout pass: precompute the CU-relative offset every
-    // catalog entry and every array DIE will land at, before
-    // writing any of them. Struct fields with array_size > 0
-    // reach forward via DW_FORM_ref4 to array DIEs that come
-    // after the catalog, so write-time positions aren't enough.
-    // `die_size` is deterministic, so the pass is exact.
-    let mut entry_offsets: BTreeMap<CatalogEntry, u32> = BTreeMap::new();
-    let mut array_offsets: BTreeMap<(CatalogEntry, u32), u32> = BTreeMap::new();
-    {
-        let mut cursor = (body.len() as u32) + DebugInfoUnitHeader::SIZE;
-        for entry in &catalog.entries {
-            entry_offsets.insert(*entry, cursor);
-            cursor += entry.die_size(structs);
+    fn emit_cu_die(
+        &mut self,
+        cu_name_off: u32,
+        comp_dir_off: u32,
+        producer_off: u32,
+        line_unit_off: u32,
+        cu_low_pc: u64,
+        cu_size: u64,
+    ) {
+        let body = &mut self.body;
+        write_uleb128(body, ABBREV_COMPILE_UNIT);
+        body.extend_from_slice(&producer_off.to_le_bytes());
+        body.push(DW_LANG_C99);
+        body.extend_from_slice(&cu_name_off.to_le_bytes());
+        body.extend_from_slice(&comp_dir_off.to_le_bytes());
+        body.extend_from_slice(&cu_low_pc.to_le_bytes());
+        body.extend_from_slice(&cu_size.to_le_bytes());
+        body.extend_from_slice(&line_unit_off.to_le_bytes());
+    }
+
+    /// Every (element type, count) pair the unit's arrays need a DIE
+    /// for: non-parameter variables (C99 6.7.5.3p7 decays parameter
+    /// arrays to pointers) and fields of the aggregates the catalog
+    /// emits. The element must be a scalar or a pointer to one, since
+    /// an aggregate element would need a DIE that does not exist at
+    /// the array DIE's reserved position.
+    fn array_pairs(&self, subs: &[Subprog]) -> BTreeSet<(CatalogEntry, u32)> {
+        let mut pairs: BTreeSet<(CatalogEntry, u32)> = BTreeSet::new();
+        for s in subs {
+            for v in &s.variables {
+                if v.array_size == 0 || v.is_parameter {
+                    continue;
+                }
+                let entry = classify(v.type_tag, self.target);
+                if matches!(entry, CatalogEntry::Base(_) | CatalogEntry::Pointer { .. }) {
+                    pairs.insert((entry, v.array_size));
+                }
+            }
         }
-        for &(entry, count) in &array_pairs {
-            array_offsets.insert((entry, count), cursor);
+        let referenced_struct_ids: BTreeSet<u32> = self
+            .catalog
+            .entries
+            .iter()
+            .filter_map(|e| match e {
+                CatalogEntry::Struct { id } | CatalogEntry::StructPointer { id, .. } => Some(*id),
+                _ => None,
+            })
+            .collect();
+        for id in &referenced_struct_ids {
+            let Some(s) = self.structs.get(*id as usize) else {
+                continue;
+            };
+            for f in &s.fields {
+                if f.array_size <= 0 || f.bit_width > 0 {
+                    continue;
+                }
+                let entry = classify(f.ty, self.target);
+                if matches!(entry, CatalogEntry::Base(_) | CatalogEntry::Pointer { .. }) {
+                    pairs.insert((entry, f.array_size as u32));
+                }
+            }
+        }
+        pairs
+    }
+
+    /// The CU-relative offset of every catalog entry and every array
+    /// DIE, from the deterministic `die_size` of each.
+    fn layout_types(&mut self, array_pairs: &BTreeSet<(CatalogEntry, u32)>) {
+        let mut cursor = self.cursor();
+        for entry in &self.catalog.entries {
+            self.entry_offsets.insert(*entry, cursor);
+            cursor += entry.die_size(self.structs);
+        }
+        for &(entry, count) in array_pairs {
+            self.array_offsets.insert((entry, count), cursor);
             cursor += array_die_size(count);
         }
     }
 
-    // Emit pass: walk entries in catalog order. Each write
-    // advances `body` by exactly `die_size` bytes; we sanity-check
-    // that against the precomputed offset to catch encoding
-    // drift (an attribute width that doesn't match the abbrev
-    // declaration would be silent corruption otherwise).
-    for entry in &catalog.entries {
-        let pre_pos = (body.len() as u32) + DebugInfoUnitHeader::SIZE;
-        debug_assert_eq!(
-            pre_pos, entry_offsets[entry],
-            "die_size disagreed with the emitter for {entry:?}",
-        );
-        emit_type_die(
-            entry,
-            &mut body,
-            catalog,
-            structs,
-            &entry_offsets,
-            &array_offsets,
-            target,
-        );
-    }
-
-    // Array DIEs at their precomputed offsets. BTreeMap iteration
-    // is ordered by key, matching the layout pass.
-    for (&(entry, count), &arr_off) in &array_offsets {
-        debug_assert_eq!(
-            arr_off,
-            (body.len() as u32) + DebugInfoUnitHeader::SIZE,
-            "array layout disagreed with the emitter for ({entry:?}, {count})",
-        );
-        let elem_off = entry_offsets[&entry];
-        write_uleb128(&mut body, ABBREV_ARRAY_TYPE);
-        body.extend_from_slice(&elem_off.to_le_bytes());
-        // Subrange child: upper_bound = count - 1.
-        write_uleb128(&mut body, ABBREV_SUBRANGE_TYPE);
-        write_uleb128(&mut body, (count as u64).saturating_sub(1));
-        // Children-list terminator for the array_type DIE.
-        body.push(0);
-    }
-
-    // DW_TAG_enumeration_type DIEs for every tagged enum the
-    // parser captured. Standalone -- no variable references them
-    // because c5 collapses enums to `int`. Strings ride inline
-    // via DW_FORM_string so the emitter doesn't have to extend
-    // the sealed catalog string table at this point.
-    for ed in enums {
-        if ed.name.is_empty() || ed.constants.is_empty() {
-            continue;
+    /// The type DIEs in catalog order. Each write advances the body
+    /// by exactly `die_size` bytes, checked against the layout so an
+    /// attribute width that disagrees with the abbrev table is caught.
+    fn emit_type_dies(&mut self) {
+        for entry in &self.catalog.entries {
+            debug_assert_eq!(
+                self.cursor(),
+                self.entry_offsets[entry],
+                "die_size disagreed with the emitter for {entry:?}",
+            );
+            emit_type_die(
+                entry,
+                &mut self.body,
+                self.catalog,
+                self.structs,
+                &self.entry_offsets,
+                &self.array_offsets,
+                self.target,
+            );
         }
-        write_uleb128(&mut body, ABBREV_ENUMERATION_TYPE);
-        body.extend_from_slice(ed.name.as_bytes());
-        body.push(0);
-        body.push(ed.byte_size());
-        for (cname, cval) in &ed.constants {
-            write_uleb128(&mut body, ABBREV_ENUMERATOR);
-            body.extend_from_slice(cname.as_bytes());
+    }
+
+    /// The array DIEs at their laid-out offsets: `DW_TAG_array_type`
+    /// over the element with one `DW_TAG_subrange_type` child.
+    fn emit_array_dies(&mut self) {
+        for (&(entry, count), &arr_off) in &self.array_offsets {
+            debug_assert_eq!(
+                arr_off,
+                self.cursor(),
+                "array layout disagreed with the emitter for ({entry:?}, {count})",
+            );
+            let elem_off = self.entry_offsets[&entry];
+            let body = &mut self.body;
+            write_uleb128(body, ABBREV_ARRAY_TYPE);
+            body.extend_from_slice(&elem_off.to_le_bytes());
+            write_uleb128(body, ABBREV_SUBRANGE_TYPE);
+            write_uleb128(body, (count as u64).saturating_sub(1));
             body.push(0);
-            write_sleb128(&mut body, *cval);
         }
-        body.push(0);
     }
 
-    // Subprogram children, each with its own variable /
-    // formal_parameter children.
-    for s in subs {
-        write_uleb128(
-            &mut body,
-            if s.external {
-                ABBREV_SUBPROGRAM
-            } else {
-                ABBREV_SUBPROGRAM_INTERNAL
-            },
-        );
-        body.extend_from_slice(&s.name_off.to_le_bytes());
-        body.extend_from_slice(&s.low_pc.to_le_bytes());
-        body.extend_from_slice(&(s.high_pc - s.low_pc).to_le_bytes());
-        // DW_AT_external is DW_FORM_flag_present -- no bytes.
-        // DW_AT_prototyped is DW_FORM_flag_present -- no bytes.
-        // DW_AT_calling_convention: DW_CC_normal pins user-defined
-        // functions to the host C ABI (SysV / Win64 / AAPCS64).
-        body.push(DW_CC_NORMAL);
-        // DW_AT_frame_base (DW_FORM_exprloc): "frame base is the
-        // frame pointer + 0" -- DW_OP_breg29 (x29) on aarch64,
-        // DW_OP_breg6 (rbp) on x86_64. exprloc length is 2 (opcode +
-        // sleb128(0)).
-        let frame_base_breg = match target {
+    /// One `DW_TAG_enumeration_type` per tagged enum. No variable
+    /// references them, since c5 collapses enums to `int`; the names
+    /// ride inline (`DW_FORM_string`) because the string table is
+    /// sealed by now.
+    fn emit_enum_dies(&mut self, enums: &[super::super::compiler::EnumDef]) {
+        let body = &mut self.body;
+        for ed in enums {
+            if ed.name.is_empty() || ed.constants.is_empty() {
+                continue;
+            }
+            write_uleb128(body, ABBREV_ENUMERATION_TYPE);
+            body.extend_from_slice(ed.name.as_bytes());
+            body.push(0);
+            body.push(ed.byte_size());
+            for (cname, cval) in &ed.constants {
+                write_uleb128(body, ABBREV_ENUMERATOR);
+                body.extend_from_slice(cname.as_bytes());
+                body.push(0);
+                write_sleb128(body, *cval);
+            }
+            body.push(0);
+        }
+    }
+
+    /// A subprogram per function with its variable and parameter
+    /// children in capture order (parameters first, in declaration
+    /// order, then the locals). `DW_AT_frame_base` is the frame
+    /// pointer plus 0; a local mem2reg promoted to a register gets an
+    /// empty location rather than a stale `DW_OP_fbreg`. `decl_file`
+    /// is 0-indexed with the primary unit at 0, the DWARF file table
+    /// 1-indexed with it at 1.
+    fn emit_subprograms(&mut self, subs: &[Subprog]) {
+        let frame_base_breg = match self.target {
             Target::LinuxX64 | Target::WindowsX64 => DW_OP_BREG6,
             Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => DW_OP_BREG29,
         };
-        write_uleb128(&mut body, 2);
-        body.push(frame_base_breg);
-        body.push(0);
-
-        // Variable / formal_parameter children, in capture order: the
-        // frontend records parameters first, in declaration order
-        // (DWARF 5 3.3.4), then the locals.
-        for v in &s.variables {
-            let abbrev = if v.is_parameter {
-                ABBREV_FORMAL_PARAMETER
-            } else {
-                ABBREV_VARIABLE
-            };
-            write_uleb128(&mut body, abbrev);
-            body.extend_from_slice(&v.name_off.to_le_bytes());
-            // Resolve this variable's c5 type tag through the
-            // catalog: scalar -> Base DIE, pointer-chain ->
-            // Pointer DIE at the right depth, struct / unknown ->
-            // VoidStar placeholder. The catalog's collect() walks
-            // every captured variable, so a lookup miss is
-            // impossible.
-            let entry = classify(v.type_tag, target);
-            let elem_off = *entry_offsets
-                .get(&entry)
-                .expect("catalog includes every entry produced by classify()");
-            // True local arrays reference the array_type DIE if one
-            // was reserved for this (element, count) pair above;
-            // every other variable references the element / scalar
-            // / pointer DIE directly.
-            let type_off = if v.array_size > 0 && !v.is_parameter {
-                array_offsets
-                    .get(&(entry, v.array_size))
-                    .copied()
-                    .unwrap_or(elem_off)
-            } else {
-                elem_off
-            };
-            body.extend_from_slice(&type_off.to_le_bytes());
-            // Location: DW_OP_fbreg <sleb128 offset-from-frame-base>.
-            // A slot mem2reg promoted to a register no longer holds
-            // the value; emit an empty location so the debugger reports
-            // it optimized out rather than reading stale frame memory.
-            if v.promoted {
-                write_uleb128(&mut body, 0);
-            } else {
-                let mut loc: Vec<u8> = Vec::with_capacity(8);
-                loc.push(DW_OP_FBREG);
-                write_sleb128(&mut loc, v.fp_byte_offset);
-                write_uleb128(&mut body, loc.len() as u64);
-                body.extend_from_slice(&loc);
+        for s in subs {
+            let body = &mut self.body;
+            write_uleb128(
+                body,
+                if s.external {
+                    ABBREV_SUBPROGRAM
+                } else {
+                    ABBREV_SUBPROGRAM_INTERNAL
+                },
+            );
+            body.extend_from_slice(&s.name_off.to_le_bytes());
+            body.extend_from_slice(&s.low_pc.to_le_bytes());
+            body.extend_from_slice(&(s.high_pc - s.low_pc).to_le_bytes());
+            body.push(DW_CC_NORMAL);
+            write_uleb128(body, 2);
+            body.push(frame_base_breg);
+            body.push(0);
+            for v in &s.variables {
+                let abbrev = if v.is_parameter {
+                    ABBREV_FORMAL_PARAMETER
+                } else {
+                    ABBREV_VARIABLE
+                };
+                write_uleb128(body, abbrev);
+                body.extend_from_slice(&v.name_off.to_le_bytes());
+                let entry = classify(v.type_tag, self.target);
+                let elem_off = *self
+                    .entry_offsets
+                    .get(&entry)
+                    .expect("catalog includes every entry produced by classify()");
+                let type_off = if v.array_size > 0 && !v.is_parameter {
+                    self.array_offsets
+                        .get(&(entry, v.array_size))
+                        .copied()
+                        .unwrap_or(elem_off)
+                } else {
+                    elem_off
+                };
+                body.extend_from_slice(&type_off.to_le_bytes());
+                if v.promoted {
+                    write_uleb128(body, 0);
+                } else {
+                    let mut loc: Vec<u8> = Vec::with_capacity(8);
+                    loc.push(DW_OP_FBREG);
+                    write_sleb128(&mut loc, v.fp_byte_offset);
+                    write_uleb128(body, loc.len() as u64);
+                    body.extend_from_slice(&loc);
+                }
+                write_uleb128(body, v.decl_file as u64 + 1);
+                write_uleb128(body, v.decl_line as u64);
             }
-            // DW_AT_decl_file (ULEB128) -- c5's `source_files` is
-            // 0-indexed with the primary TU at 0; the DWARF
-            // file_names table is 1-indexed with the primary file
-            // at slot 1, so emit `decl_file + 1`.
-            write_uleb128(&mut body, v.decl_file as u64 + 1);
-            // DW_AT_decl_line (ULEB128).
-            write_uleb128(&mut body, v.decl_line as u64);
+            body.push(0);
         }
-        // Children-list terminator for this subprogram.
-        body.push(0);
     }
 
-    // Emit one DW_TAG_subprogram per PLT trampoline. Lets
-    // gdb / lldb show typed signatures (`malloc (size, ...)`)
-    // when a `bt` frame points into the stub.
-    //
-    // Bindings can name opaque forward-declared aggregates
-    // (`FILE *`, `DIR *`) the compiler never assigned a real
-    // struct id to. Coerce those to `VoidStar` so the lookup
-    // hits an entry the catalog actually placed -- mirrors the
-    // seeding rule in `TypeCatalog::collect`.
-    let plt_classify = |ty: i64| -> CatalogEntry {
-        let raw = classify(ty, target);
-        match raw {
-            CatalogEntry::Struct { id } if (id as usize) >= structs.len() => CatalogEntry::VoidStar,
-            CatalogEntry::StructPointer { id, .. } if (id as usize) >= structs.len() => {
+    /// A binding can name an opaque forward-declared aggregate
+    /// (`FILE *`) the compiler never assigned a struct id to; the
+    /// catalog seeded such a type as `VoidStar`.
+    fn plt_classify(&self, ty: i64) -> CatalogEntry {
+        match classify(ty, self.target) {
+            CatalogEntry::Struct { id } if (id as usize) >= self.structs.len() => {
+                CatalogEntry::VoidStar
+            }
+            CatalogEntry::StructPointer { id, .. } if (id as usize) >= self.structs.len() => {
                 CatalogEntry::VoidStar
             }
             other => other,
         }
-    };
-    for plt in plt_subs {
-        // Abbrev 11: name, low_pc, high_pc, external, type.
-        write_uleb128(&mut body, ABBREV_PLT_SUBPROGRAM);
-        body.extend_from_slice(&plt.name_off.to_le_bytes());
-        body.extend_from_slice(&plt.low_pc.to_le_bytes());
-        body.extend_from_slice(&(plt.high_pc - plt.low_pc).to_le_bytes());
-        // DW_AT_external = flag_present, no bytes.
-        // DW_AT_type -> CU-relative ref4. classify(0) returns
-        // `Base(char)` -- a usable fallback when the parser hasn't
-        // seen the prototype (return_type_tag stays 0). Imperfect
-        // for `void` returns (we'd render them as `char`), but no
-        // worse than the pre-#67 "in malloc ()" with no signature.
-        let ret_entry = plt_classify(plt.return_type_tag);
-        let ret_off = *entry_offsets
-            .get(&ret_entry)
-            .expect("catalog includes every entry produced by plt_classify()");
-        body.extend_from_slice(&ret_off.to_le_bytes());
-
-        // One DW_TAG_formal_parameter per fixed param. Args that
-        // fit in the ABI's int_arg_reg window get abbrev 14 with
-        // a `DW_OP_regN` location so gdb's `bt` reads the value
-        // out of the right calling-convention register at the
-        // moment of the call. Args beyond the window spill to
-        // stack at libc-side offsets we can't describe -- they
-        // fall back to abbrev 12 (type-only). A binding with no
-        // prototype seen has `param_types` empty; the subprogram
-        // still gets the name + return type, just no parameters.
-        for (slot, &ty) in plt.param_types.iter().enumerate() {
-            let entry = plt_classify(ty);
-            let type_off = *entry_offsets
-                .get(&entry)
-                .expect("catalog includes every entry produced by plt_classify()");
-            let name_off = plt.param_name_offs[slot];
-            match dwarf_arg_reg(target, slot) {
-                Some(reg) => {
-                    write_uleb128(&mut body, ABBREV_PLT_FORMAL_PARAMETER_LOC);
-                    body.extend_from_slice(&name_off.to_le_bytes());
-                    body.extend_from_slice(&type_off.to_le_bytes());
-                    // DW_OP_reg<N> is one byte for N <= 31; every
-                    // calling convention we support fits in that
-                    // range (max is x86_64's R9 = DWARF 9).
-                    body.push(1);
-                    body.push(DW_OP_REG_BASE + reg);
-                }
-                None => {
-                    write_uleb128(&mut body, ABBREV_PLT_FORMAL_PARAMETER);
-                    body.extend_from_slice(&name_off.to_le_bytes());
-                    body.extend_from_slice(&type_off.to_le_bytes());
-                }
-            }
-        }
-        // Abbrev 13: variadic ellipsis. `printf` and friends
-        // surface as `printf(char *, ...)` rather than just
-        // `printf(char *)`.
-        if plt.is_variadic {
-            write_uleb128(&mut body, ABBREV_UNSPECIFIED_PARAMETERS);
-        }
-        // Children-list terminator for this PLT subprogram.
-        body.push(0);
     }
 
-    // CU children list terminator.
-    body.push(0);
+    /// One subprogram per PLT trampoline so a `bt` frame in the stub
+    /// shows a typed signature. A parameter within the ABI register
+    /// window carries a `DW_OP_regN` location; one past it spills to
+    /// stack at offsets the stub cannot describe. `classify(0)` is
+    /// `Base(char)`, the fallback for a binding with no prototype
+    /// seen. A variadic prototype ends in
+    /// `DW_TAG_unspecified_parameters`.
+    fn emit_plt_subprograms(&mut self, plt_subs: &[PltSub]) {
+        for plt in plt_subs {
+            let ret_entry = self.plt_classify(plt.return_type_tag);
+            let ret_off = *self
+                .entry_offsets
+                .get(&ret_entry)
+                .expect("catalog includes every entry produced by plt_classify()");
+            let body = &mut self.body;
+            write_uleb128(body, ABBREV_PLT_SUBPROGRAM);
+            body.extend_from_slice(&plt.name_off.to_le_bytes());
+            body.extend_from_slice(&plt.low_pc.to_le_bytes());
+            body.extend_from_slice(&(plt.high_pc - plt.low_pc).to_le_bytes());
+            body.extend_from_slice(&ret_off.to_le_bytes());
+            for (slot, &ty) in plt.param_types.iter().enumerate() {
+                let entry = self.plt_classify(ty);
+                let type_off = *self
+                    .entry_offsets
+                    .get(&entry)
+                    .expect("catalog includes every entry produced by plt_classify()");
+                let name_off = plt.param_name_offs[slot];
+                let body = &mut self.body;
+                match dwarf_arg_reg(self.target, slot) {
+                    Some(reg) => {
+                        write_uleb128(body, ABBREV_PLT_FORMAL_PARAMETER_LOC);
+                        body.extend_from_slice(&name_off.to_le_bytes());
+                        body.extend_from_slice(&type_off.to_le_bytes());
+                        body.push(1);
+                        body.push(DW_OP_REG_BASE + reg);
+                    }
+                    None => {
+                        write_uleb128(body, ABBREV_PLT_FORMAL_PARAMETER);
+                        body.extend_from_slice(&name_off.to_le_bytes());
+                        body.extend_from_slice(&type_off.to_le_bytes());
+                    }
+                }
+            }
+            let body = &mut self.body;
+            if plt.is_variadic {
+                write_uleb128(body, ABBREV_UNSPECIFIED_PARAMETERS);
+            }
+            body.push(0);
+        }
+    }
 
-    // Prepend the unit header. `unit_length` covers everything
-    // after itself: version(2) + abbrev_off(4) + addr_size(1) +
-    // body.
-    let mut out = Vec::with_capacity(DebugInfoUnitHeader::SIZE as usize + body.len());
-    let header = DebugInfoUnitHeader {
-        unit_length: (body.len() + 7) as u32,
-        version: 4,
-        debug_abbrev_offset: 0,
-        address_size: 8,
-    };
-    header.write_le(&mut out);
-    out.extend_from_slice(&body);
-    out
+    /// The CU's children terminator and the unit header, whose
+    /// `unit_length` covers everything after itself.
+    fn finish(mut self) -> Vec<u8> {
+        self.body.push(0);
+        let mut out = Vec::with_capacity(DebugInfoUnitHeader::SIZE as usize + self.body.len());
+        let header = DebugInfoUnitHeader {
+            unit_length: (self.body.len() + 7) as u32,
+            version: 4,
+            debug_abbrev_offset: 0,
+            address_size: 8,
+        };
+        header.write_le(&mut out);
+        out.extend_from_slice(&self.body);
+        out
+    }
 }
 
 /// Emit one type DIE into `body`. Walks the entry's variant,

@@ -929,6 +929,32 @@ fn subprogram_name(build: &Build, i: usize) -> &str {
         .unwrap_or("<unknown>")
 }
 
+/// The compilation unit of one object under construction: the DIE
+/// bytes past the unit header, the relocations over their placeholder
+/// slots, the string pool, and the per-unit type facts every DIE
+/// resolves against.
+struct RelocInfoUnit<'a> {
+    program: &'a Program,
+    build: &'a Build,
+    target: super::Target,
+    addr_width: DwarfRelocWidth,
+    /// `DW_AT_frame_base`: x29 on aarch64, rbp on x86_64.
+    frame_base_op: u8,
+    body: Vec<u8>,
+    relocs: Vec<DwarfReloc>,
+    strs: StrPool,
+    reloc_symbols: Vec<String>,
+    /// CU-relative offset of each catalog type DIE.
+    type_offsets: Vec<u32>,
+    /// Type of each `program.variables` entry.
+    var_types: Vec<TypeId>,
+    /// Indices in `program.symbols` of the static-storage objects,
+    /// and their types.
+    statics: Vec<usize>,
+    static_types: Vec<TypeId>,
+    fn_facts: Vec<FnFacts>,
+}
+
 fn build_debug_info(
     source_path: &str,
     program: &Program,
@@ -936,319 +962,303 @@ fn build_debug_info(
     machine: super::Machine,
     target: super::Target,
 ) -> (Vec<u8>, Vec<u8>, Vec<DwarfReloc>, Vec<String>) {
-    let mut body: Vec<u8> = Vec::new();
-    let mut relocs: Vec<DwarfReloc> = Vec::new();
-    let mut strs = StrPool::new();
-    let addr_width = DwarfRelocWidth::addr(build.elf_class);
-
-    // Body content first; the unit header's `unit_length` field
-    // covers everything after itself, which the prefix below
-    // backfills once the body is sized.
-    write_uleb128(&mut body, ABBREV_CU);
-    push_strp(
-        &mut body,
-        &mut relocs,
-        &mut strs,
-        &format!("badc {}", env!("CARGO_PKG_VERSION")),
-    );
-    body.push(DW_LANG_C99);
-    push_strp(&mut body, &mut relocs, &mut strs, source_path);
-    push_strp(&mut body, &mut relocs, &mut strs, ""); // DW_AT_comp_dir
-    let low_pc_off_in_body = body.len() as u64;
-    push_addr_slot(&mut body, addr_width);
-    relocs.push(DwarfReloc {
-        section: DwarfSectionKind::Info,
-        offset: DEBUG_INFO_UNIT_HEADER_SIZE + low_pc_off_in_body,
-        width: addr_width,
-        target: DwarfRelocTarget::Text,
-        addend: 0,
-    });
-    // DW_AT_high_pc as DATA8 (size in bytes from low_pc). No reloc
-    // needed; the linker keeps low_pc + size pointing at the same
-    // span because the per-unit `.text` slice is contiguous.
-    let text_size = build.text.len() as u64;
-    body.extend_from_slice(&text_size.to_le_bytes());
-    // DW_AT_stmt_list -- 4-byte section offset into .debug_line.
-    // Each `.o` has exactly one CU and its line program lands at
-    // offset 0 inside `.debug_line`; the linker rebases the slot
-    // when concatenating per-unit `.debug_line` blobs.
-    let stmt_list_off_in_body = body.len() as u64;
-    body.extend_from_slice(&[0u8; 4]);
-    relocs.push(DwarfReloc {
-        section: DwarfSectionKind::Info,
-        offset: DEBUG_INFO_UNIT_HEADER_SIZE + stmt_list_off_in_body,
-        width: DwarfRelocWidth::W4,
-        target: DwarfRelocTarget::DebugLine,
-        addend: 0,
-    });
-
-    // Per-target frame-pointer DWARF register encoding for
-    // DW_AT_frame_base. aarch64 uses x29 (DW_OP_reg29); x86_64
-    // uses rbp (DW_OP_reg6). The frame-base expr is a single
-    // opcode byte, so DW_FORM_exprloc length = 1.
-    let frame_base_op: u8 = match machine {
-        super::Machine::Aarch64 => DW_OP_REG29,
-        super::Machine::X86_64 => DW_OP_REG6,
-    };
-
-    // Type DIEs. Every type this unit references is interned into a
-    // catalog first; the DIEs are then written into per-DIE buffers,
-    // laid out, and their `DW_AT_type` slots patched with the
-    // resulting CU-relative offsets. Separating layout from writing
-    // is what lets a member name a type whose DIE lands later in the
-    // unit, so no member is dropped for want of an emission order.
-    let mut catalog = TypeCatalog::new(
-        &program.structs,
-        &program.symbols,
+    let mut unit = RelocInfoUnit {
+        program,
+        build,
         target,
-        addr_width.bytes() as u8,
-    );
-    let var_types: Vec<TypeId> = program
-        .variables
-        .iter()
-        .map(|v| catalog.of_variable(v))
-        .collect();
-    let statics = static_storage_objects(program);
-    let static_types: Vec<TypeId> = statics
-        .iter()
-        .map(|&i| catalog.of_symbol(&program.symbols[i]))
-        .collect();
-    // Prototype facts per defined function, resolved here so a return
-    // type reaches the catalog before the layout pass fixes every
-    // DIE's offset.
-    let fn_facts: Vec<FnFacts> = (0..build.func_ent_pcs.len())
-        .map(|i| {
-            let sym = program.symbols.iter().find(|s| {
-                s.class == super::super::token::Token::Fun as i64
-                    && s.link_name() == subprogram_name(build, i)
-            });
-            FnFacts {
+        addr_width: DwarfRelocWidth::addr(build.elf_class),
+        frame_base_op: match machine {
+            super::Machine::Aarch64 => DW_OP_REG29,
+            super::Machine::X86_64 => DW_OP_REG6,
+        },
+        body: Vec::new(),
+        relocs: Vec::new(),
+        strs: StrPool::new(),
+        reloc_symbols: Vec::new(),
+        type_offsets: Vec::new(),
+        var_types: Vec::new(),
+        statics: Vec::new(),
+        static_types: Vec::new(),
+        fn_facts: Vec::new(),
+    };
+    unit.emit_cu_die(source_path);
+    unit.emit_type_dies();
+    unit.emit_enum_dies();
+    unit.emit_static_variables();
+    unit.emit_subprograms();
+    unit.finish()
+}
+
+impl RelocInfoUnit<'_> {
+    /// A `DW_FORM_strp` slot naming `s`.
+    fn strp(&mut self, s: &str) {
+        push_strp(&mut self.body, &mut self.relocs, &mut self.strs, s);
+    }
+
+    /// A relocated slot at the current position of `self.body`.
+    fn reloc(&mut self, width: DwarfRelocWidth, target: DwarfRelocTarget, addend: i64) {
+        self.relocs.push(DwarfReloc {
+            section: DwarfSectionKind::Info,
+            offset: DEBUG_INFO_UNIT_HEADER_SIZE + self.body.len() as u64,
+            width,
+            target,
+            addend,
+        });
+    }
+
+    /// The CU DIE. `DW_AT_low_pc` relocates against `.text`;
+    /// `DW_AT_high_pc` is the size, which needs no relocation since the
+    /// unit's `.text` slice stays contiguous; `DW_AT_stmt_list` is the
+    /// unit's line program at offset 0 of its own `.debug_line`, which
+    /// the linker rebases.
+    fn emit_cu_die(&mut self, source_path: &str) {
+        write_uleb128(&mut self.body, ABBREV_CU);
+        self.strp(&format!("badc {}", env!("CARGO_PKG_VERSION")));
+        self.body.push(DW_LANG_C99);
+        self.strp(source_path);
+        self.strp("");
+        let addr_width = self.addr_width;
+        self.reloc(addr_width, DwarfRelocTarget::Text, 0);
+        push_addr_slot(&mut self.body, addr_width);
+        let text_size = self.build.text.len() as u64;
+        self.body.extend_from_slice(&text_size.to_le_bytes());
+        self.reloc(DwarfRelocWidth::W4, DwarfRelocTarget::DebugLine, 0);
+        self.body.extend_from_slice(&[0u8; 4]);
+    }
+
+    /// Every type this unit references is interned into a catalog, the
+    /// DIEs are written into per-DIE buffers, laid out, and their
+    /// `DW_AT_type` slots patched with the resulting CU-relative
+    /// offsets. The return types are resolved here so they reach the
+    /// catalog before the layout fixes every offset; so are the
+    /// aggregates a cast type-name reached, which no object declares.
+    fn emit_type_dies(&mut self) {
+        let (program, build) = (self.program, self.build);
+        let mut catalog = TypeCatalog::new(
+            &program.structs,
+            &program.symbols,
+            self.target,
+            self.addr_width.bytes() as u8,
+        );
+        self.var_types = program
+            .variables
+            .iter()
+            .map(|v| catalog.of_variable(v))
+            .collect();
+        self.statics = static_storage_objects(program);
+        self.static_types = self
+            .statics
+            .iter()
+            .map(|&i| catalog.of_symbol(&program.symbols[i]))
+            .collect();
+        self.fn_facts = (0..build.func_ent_pcs.len())
+            .map(|i| {
+                let sym = program.symbols.iter().find(|s| {
+                    s.class == super::super::token::Token::Fun as i64
+                        && s.link_name() == subprogram_name(build, i)
+                });
                 // A missing entry means non-variadic and external: a
                 // function this unit defines always has one, and only a
-                // `static` definition denies the name to other units
-                // (C99 6.2.2p3).
-                is_variadic: sym.is_some_and(|s| s.is_variadic),
-                external: sym.is_none_or(|s| s.linkage != crate::c5::symbol::Linkage::Internal),
-                ret: match sym {
-                    Some(s) => catalog.of_return(s.type_, s.decl_spelling),
-                    None => Some(catalog.unspecified()),
-                },
+                // `static` definition denies the name to other units.
+                FnFacts {
+                    is_variadic: sym.is_some_and(|s| s.is_variadic),
+                    external: sym.is_none_or(|s| s.linkage != crate::c5::symbol::Linkage::Internal),
+                    ret: match sym {
+                        Some(s) => catalog.of_return(s.type_, s.decl_spelling),
+                        None => Some(catalog.unspecified()),
+                    },
+                }
+            })
+            .collect();
+        for (id, sd) in program.structs.iter().enumerate() {
+            if sd.cast_named {
+                catalog.of_aggregate(id);
             }
-        })
-        .collect();
-    // Aggregates a cast type-name reached; nothing has to declare an
-    // object of the type.
-    for (id, sd) in program.structs.iter().enumerate() {
-        if sd.cast_named {
-            catalog.of_aggregate(id);
         }
-    }
-    catalog.drain();
-    let mut dies: Vec<DieBuf> = Vec::new();
-    let mut next = 0usize;
-    while next < catalog.len() {
-        let node = catalog.node(next).clone();
-        dies.push(build_type_die(&mut catalog, &node, &mut strs));
-        next += 1;
-    }
-    let type_offsets: Vec<u32> = {
+        catalog.drain();
+        let mut dies: Vec<DieBuf> = Vec::new();
+        let mut next = 0usize;
+        while next < catalog.len() {
+            let node = catalog.node(next).clone();
+            dies.push(build_type_die(&mut catalog, &node, &mut self.strs));
+            next += 1;
+        }
+        let mut cur = self.body.len() as u32 + DEBUG_INFO_UNIT_HEADER_SIZE as u32;
         let mut offs = Vec::with_capacity(dies.len());
-        let mut cur = body.len() as u32 + DEBUG_INFO_UNIT_HEADER_SIZE as u32;
         for d in &dies {
             offs.push(cur);
             cur += d.bytes.len() as u32;
         }
-        offs
-    };
-    for (i, die) in dies.iter_mut().enumerate() {
-        let DieBuf { bytes, refs, strs } = die;
-        for &(at, id) in refs.iter() {
-            bytes[at..at + 4].copy_from_slice(&type_offsets[id].to_le_bytes());
-        }
-        for &(at, str_off) in strs.iter() {
-            relocs.push(DwarfReloc {
-                section: DwarfSectionKind::Info,
-                offset: type_offsets[i] as u64 + at as u64,
-                width: DwarfRelocWidth::W4,
-                target: DwarfRelocTarget::DebugStr,
-                addend: str_off as i64,
-            });
-        }
-        body.extend_from_slice(bytes);
-    }
-
-    // DW_TAG_enumeration_type DIEs for every tagged enum the
-    // parser captured. Standalone definitions -- no variable
-    // references them at the type level because c5 collapses
-    // enums to `int`, but the DIE still lets `(gdb) ptype enum
-    // Tag` resolve the named constants.
-    for ed in &program.enums {
-        if ed.name.is_empty() || ed.constants.is_empty() {
-            continue;
-        }
-        write_uleb128(&mut body, ABBREV_ENUMERATION_TYPE);
-        push_strp(&mut body, &mut relocs, &mut strs, &ed.name);
-        body.push(ed.byte_size());
-        for (cname, cval) in &ed.constants {
-            write_uleb128(&mut body, ABBREV_ENUMERATOR);
-            push_strp(&mut body, &mut relocs, &mut strs, cname);
-            write_sleb128(&mut body, *cval);
-        }
-        // End-of-children marker for the enumeration_type DIE.
-        body.push(0);
-    }
-
-    // DW_TAG_variable DIEs for objects with static storage duration
-    // (C99 6.2.4p3), at compile-unit scope. `DW_OP_addr` needs the
-    // object's link-time address, which the relocation supplies.
-    let mut reloc_symbols: Vec<String> = Vec::new();
-    for (&idx, &type_id) in statics.iter().zip(static_types.iter()) {
-        let sym = &program.symbols[idx];
-        let external = sym.linkage == crate::c5::symbol::Linkage::External;
-        // A thread-local's location is its offset in the thread block,
-        // which needs a module-relative TLS relocation. Only the ELF
-        // x86_64 surface has one both linkers resolve, matching what
-        // gcc and clang describe per target; elsewhere the object gets
-        // its name and type and no location. The 8-byte offset slot is
-        // ELFCLASS64's; i386 spells the relocation 4 bytes wide.
-        let tls_location =
-            sym.is_thread_local && target == super::Target::LinuxX64 && !build.elf_class.is32();
-        let located = !sym.is_thread_local || tls_location;
-        write_uleb128(
-            &mut body,
-            match (located, external) {
-                (true, true) => ABBREV_STATIC_VARIABLE,
-                (true, false) => ABBREV_STATIC_VARIABLE_INTERNAL,
-                (false, true) => ABBREV_TLS_VARIABLE,
-                (false, false) => ABBREV_TLS_VARIABLE_INTERNAL,
-            },
-        );
-        push_strp(&mut body, &mut relocs, &mut strs, &sym.name);
-        body.extend_from_slice(&type_offsets[type_id].to_le_bytes());
-        if located {
-            // DW_AT_location: exprloc holding the address form plus the
-            // slot the reloc below fills in. A thread-local pushes its
-            // thread-block offset and lets the consumer add the thread
-            // pointer (DWARF 4 2.5.1 vendor extension
-            // DW_OP_GNU_push_tls_address); its slot is ELFCLASS64's,
-            // which is the only class `tls_location` admits.
-            let slot = if tls_location {
-                DwarfRelocWidth::W8
-            } else {
-                addr_width
-            };
-            let push_tls = u64::from(tls_location);
-            write_uleb128(&mut body, 1 + slot.bytes() as u64 + push_tls);
-            body.push(if tls_location {
-                DW_OP_CONST8U
-            } else {
-                DW_OP_ADDR
-            });
-            let addr_off = body.len() as u64;
-            push_addr_slot(&mut body, slot);
-            if tls_location {
-                body.push(DW_OP_GNU_PUSH_TLS_ADDRESS);
+        self.type_offsets = offs;
+        for (i, die) in dies.iter_mut().enumerate() {
+            let DieBuf { bytes, refs, strs } = die;
+            for &(at, id) in refs.iter() {
+                bytes[at..at + 4].copy_from_slice(&self.type_offsets[id].to_le_bytes());
             }
-            let sym_idx = reloc_symbols.len() as u32;
-            reloc_symbols.push(sym.link_name().to_string());
-            relocs.push(DwarfReloc {
-                section: DwarfSectionKind::Info,
-                offset: DEBUG_INFO_UNIT_HEADER_SIZE + addr_off,
-                width: slot,
-                target: if tls_location {
-                    DwarfRelocTarget::ThreadLocalSymbol(sym_idx)
-                } else {
-                    DwarfRelocTarget::Symbol(sym_idx)
-                },
-                addend: 0,
-            });
+            for &(at, str_off) in strs.iter() {
+                self.relocs.push(DwarfReloc {
+                    section: DwarfSectionKind::Info,
+                    offset: self.type_offsets[i] as u64 + at as u64,
+                    width: DwarfRelocWidth::W4,
+                    target: DwarfRelocTarget::DebugStr,
+                    addend: str_off as i64,
+                });
+            }
+            self.body.extend_from_slice(bytes);
         }
-        // `source_files` is 0-indexed with the primary unit at 0; the
-        // DWARF file table is 1-indexed with it at slot 1.
-        write_uleb128(&mut body, sym.decl_file as u64 + 1);
-        write_uleb128(&mut body, sym.decl_line as u64);
     }
 
-    // Subprogram child DIEs. One per defined function in the
-    // unit. With parameters / variables present, the subprogram
-    // takes the with-children abbrev (carries DW_AT_frame_base)
-    // and ends in a null DIE terminator; otherwise the leaf
-    // abbrev runs.
-    for (i, &ent_pc) in build.func_ent_pcs.iter().enumerate() {
-        let lo = match build.pc_to_native.get(ent_pc).copied() {
-            Some(off) if off != usize::MAX => off as u64,
-            _ => continue,
-        };
-        let hi = build.func_code_end(i) as u64;
-        let size = hi.saturating_sub(lo);
-        if size == 0 {
-            continue;
+    /// One `DW_TAG_enumeration_type` per tagged enum, so `ptype enum
+    /// Tag` resolves the named constants although c5 collapses enums
+    /// to `int`.
+    fn emit_enum_dies(&mut self) {
+        let program = self.program;
+        for ed in &program.enums {
+            if ed.name.is_empty() || ed.constants.is_empty() {
+                continue;
+            }
+            write_uleb128(&mut self.body, ABBREV_ENUMERATION_TYPE);
+            self.strp(&ed.name);
+            self.body.push(ed.byte_size());
+            for (cname, cval) in &ed.constants {
+                write_uleb128(&mut self.body, ABBREV_ENUMERATOR);
+                self.strp(cname);
+                write_sleb128(&mut self.body, *cval);
+            }
+            self.body.push(0);
         }
-        let name = subprogram_name(build, i);
-        let FnFacts {
-            is_variadic,
-            external,
-            ret,
-        } = fn_facts[i];
-        // Group this function's parameters and locals out of the
-        // flat program.variables list. `function_bc_pc` keys by
-        // the function's ent_pc, matching what the amalg path's
-        // DWARF emitter uses.
-        let vars: Vec<(&super::super::program::VariableInfo, TypeId)> = program
-            .variables
-            .iter()
-            .zip(var_types.iter().copied())
-            .filter(|(v, _)| v.function_bc_pc == ent_pc as u64)
-            .collect();
-        // A variadic function always needs the WITH_CHILDREN
-        // abbrev so the trailing DW_TAG_unspecified_parameters DIE
-        // has somewhere to live.
-        let has_children = !vars.is_empty() || is_variadic;
-        write_uleb128(
-            &mut body,
-            match (has_children, external, ret.is_some()) {
-                (true, true, true) => ABBREV_SUBPROGRAM_WITH_CHILDREN,
-                (true, false, true) => ABBREV_SUBPROGRAM_WITH_CHILDREN_INTERNAL,
-                (false, true, true) => ABBREV_SUBPROGRAM_LEAF,
-                (false, false, true) => ABBREV_SUBPROGRAM_LEAF_INTERNAL,
-                (true, true, false) => ABBREV_SUBPROGRAM_WITH_CHILDREN_VOID,
-                (true, false, false) => ABBREV_SUBPROGRAM_WITH_CHILDREN_INTERNAL_VOID,
-                (false, true, false) => ABBREV_SUBPROGRAM_LEAF_VOID,
-                (false, false, false) => ABBREV_SUBPROGRAM_LEAF_INTERNAL_VOID,
-            },
-        );
-        push_strp(&mut body, &mut relocs, &mut strs, name);
-        let low_pc_off = body.len() as u64;
-        push_addr_slot(&mut body, addr_width);
-        relocs.push(DwarfReloc {
-            section: DwarfSectionKind::Info,
-            offset: DEBUG_INFO_UNIT_HEADER_SIZE + low_pc_off,
-            width: addr_width,
-            target: DwarfRelocTarget::Text,
-            addend: lo as i64,
-        });
-        body.extend_from_slice(&size.to_le_bytes());
-        // DW_AT_calling_convention -- c5's user-defined functions
-        // all use the host C ABI; debuggers treat that as
-        // DW_CC_normal.
-        body.push(DW_CC_NORMAL);
-        // DW_AT_type -- the return type (DWARF 4 3.3.2), left out
-        // entirely by the abbrev when the function returns void.
-        if let Some(r) = ret {
-            body.extend_from_slice(&type_offsets[r].to_le_bytes());
+    }
+
+    /// `DW_TAG_variable` per object with static storage duration (C99
+    /// 6.2.4p3), at compile-unit scope; `DW_OP_addr` takes the
+    /// link-time address from the relocation. A thread-local's
+    /// location is its offset in the thread block under
+    /// `DW_OP_GNU_push_tls_address`, which needs a module-relative TLS
+    /// relocation; only the ELFCLASS64 Linux/x86_64 surface has one both
+    /// linkers resolve, and elsewhere the object gets no location
+    /// rather than an expression naming the wrong storage.
+    fn emit_static_variables(&mut self) {
+        let program = self.program;
+        let addr_width = self.addr_width;
+        let tls_relocatable =
+            self.target == super::Target::LinuxX64 && !self.build.elf_class.is32();
+        for k in 0..self.statics.len() {
+            let sym = &program.symbols[self.statics[k]];
+            let type_id = self.static_types[k];
+            let external = sym.linkage == crate::c5::symbol::Linkage::External;
+            let tls_location = sym.is_thread_local && tls_relocatable;
+            let located = !sym.is_thread_local || tls_location;
+            write_uleb128(
+                &mut self.body,
+                match (located, external) {
+                    (true, true) => ABBREV_STATIC_VARIABLE,
+                    (true, false) => ABBREV_STATIC_VARIABLE_INTERNAL,
+                    (false, true) => ABBREV_TLS_VARIABLE,
+                    (false, false) => ABBREV_TLS_VARIABLE_INTERNAL,
+                },
+            );
+            self.strp(&sym.name);
+            let type_off = self.type_offsets[type_id];
+            self.body.extend_from_slice(&type_off.to_le_bytes());
+            if located {
+                let slot = if tls_location {
+                    DwarfRelocWidth::W8
+                } else {
+                    addr_width
+                };
+                let push_tls = u64::from(tls_location);
+                write_uleb128(&mut self.body, 1 + slot.bytes() as u64 + push_tls);
+                self.body.push(if tls_location {
+                    DW_OP_CONST8U
+                } else {
+                    DW_OP_ADDR
+                });
+                let sym_idx = self.reloc_symbols.len() as u32;
+                self.reloc_symbols.push(sym.link_name().to_string());
+                self.reloc(
+                    slot,
+                    if tls_location {
+                        DwarfRelocTarget::ThreadLocalSymbol(sym_idx)
+                    } else {
+                        DwarfRelocTarget::Symbol(sym_idx)
+                    },
+                    0,
+                );
+                push_addr_slot(&mut self.body, slot);
+                if tls_location {
+                    self.body.push(DW_OP_GNU_PUSH_TLS_ADDRESS);
+                }
+            }
+            write_uleb128(&mut self.body, sym.decl_file as u64 + 1);
+            write_uleb128(&mut self.body, sym.decl_line as u64);
         }
-        if has_children {
-            // DW_AT_frame_base: exprloc with a single
-            // DW_OP_reg<fp> byte. ULEB128 length(1) + opcode.
-            write_uleb128(&mut body, 1);
-            body.push(frame_base_op);
+    }
+
+    /// One subprogram per defined function. With parameters, locals or
+    /// a variadic ellipsis to carry, the with-children shape (which
+    /// adds `DW_AT_frame_base`) ends in a null DIE; the leaf shape
+    /// otherwise. A void-returning function has no `DW_AT_type` (DWARF
+    /// 4 3.3.2). A local mem2reg promoted to a register gets an empty
+    /// location.
+    fn emit_subprograms(&mut self) {
+        let (program, build) = (self.program, self.build);
+        let addr_width = self.addr_width;
+        for (i, &ent_pc) in build.func_ent_pcs.iter().enumerate() {
+            let lo = match build.pc_to_native.get(ent_pc).copied() {
+                Some(off) if off != usize::MAX => off as u64,
+                _ => continue,
+            };
+            let hi = build.func_code_end(i) as u64;
+            let size = hi.saturating_sub(lo);
+            if size == 0 {
+                continue;
+            }
+            let name = subprogram_name(build, i);
+            let FnFacts {
+                is_variadic,
+                external,
+                ret,
+            } = self.fn_facts[i];
+            let vars: Vec<(&super::super::program::VariableInfo, TypeId)> = program
+                .variables
+                .iter()
+                .zip(self.var_types.iter().copied())
+                .filter(|(v, _)| v.function_bc_pc == ent_pc as u64)
+                .collect();
+            let has_children = !vars.is_empty() || is_variadic;
+            write_uleb128(
+                &mut self.body,
+                match (has_children, external, ret.is_some()) {
+                    (true, true, true) => ABBREV_SUBPROGRAM_WITH_CHILDREN,
+                    (true, false, true) => ABBREV_SUBPROGRAM_WITH_CHILDREN_INTERNAL,
+                    (false, true, true) => ABBREV_SUBPROGRAM_LEAF,
+                    (false, false, true) => ABBREV_SUBPROGRAM_LEAF_INTERNAL,
+                    (true, true, false) => ABBREV_SUBPROGRAM_WITH_CHILDREN_VOID,
+                    (true, false, false) => ABBREV_SUBPROGRAM_WITH_CHILDREN_INTERNAL_VOID,
+                    (false, true, false) => ABBREV_SUBPROGRAM_LEAF_VOID,
+                    (false, false, false) => ABBREV_SUBPROGRAM_LEAF_INTERNAL_VOID,
+                },
+            );
+            self.strp(name);
+            self.reloc(addr_width, DwarfRelocTarget::Text, lo as i64);
+            push_addr_slot(&mut self.body, addr_width);
+            self.body.extend_from_slice(&size.to_le_bytes());
+            self.body.push(DW_CC_NORMAL);
+            if let Some(r) = ret {
+                let off = self.type_offsets[r];
+                self.body.extend_from_slice(&off.to_le_bytes());
+            }
+            if !has_children {
+                continue;
+            }
+            write_uleb128(&mut self.body, 1);
+            self.body.push(self.frame_base_op);
             let canary_shift = build.canary_frame_bytes.get(&ent_pc).copied().unwrap_or(0) as i64;
             for &(v, type_id) in &vars {
-                let type_off = type_offsets[type_id];
+                let type_off = self.type_offsets[type_id];
                 // Slot coalescing may have moved this local onto a new
-                // exclusive frame offset; use it so the location is not
-                // stale. A local moved onto shared storage is in
-                // `promoted_local_slots` and gets an empty location below.
+                // exclusive frame offset; one moved onto shared storage
+                // is in `promoted_local_slots` and gets an empty location.
                 let eff = build
                     .coalesced_slot_remap
                     .get(&ent_pc)
@@ -1261,81 +1271,58 @@ fn build_debug_info(
                 } else {
                     ABBREV_VARIABLE
                 };
-                write_uleb128(&mut body, abbrev);
-                push_strp(&mut body, &mut relocs, &mut strs, &v.name);
-                // DW_AT_location: exprloc carrying DW_OP_fbreg
-                // <SLEB128 offset>. Length prefix is the byte
-                // count of the expression. A slot mem2reg promoted to
-                // a register no longer holds the value, so emit an
-                // empty location (zero-length exprloc) -- the debugger
-                // reports the variable optimized out instead of
-                // reading stale frame memory.
+                write_uleb128(&mut self.body, abbrev);
+                self.strp(&v.name);
                 let promoted = build
                     .promoted_local_slots
                     .get(&ent_pc)
                     .is_some_and(|slots| slots.contains(&v.fp_slot));
                 if promoted {
-                    write_uleb128(&mut body, 0);
+                    write_uleb128(&mut self.body, 0);
                 } else {
                     let mut expr: Vec<u8> = Vec::with_capacity(8);
                     expr.push(DW_OP_FBREG);
                     write_sleb128(&mut expr, fp_byte_offset);
-                    write_uleb128(&mut body, expr.len() as u64);
-                    body.extend_from_slice(&expr);
+                    write_uleb128(&mut self.body, expr.len() as u64);
+                    self.body.extend_from_slice(&expr);
                 }
-                // DW_AT_type: DW_FORM_ref4 -- CU-relative byte
-                // offset of the matching type DIE emitted above.
-                body.extend_from_slice(&type_off.to_le_bytes());
-                // DW_AT_decl_file (ULEB128) -- c5's `source_files`
-                // is 0-indexed (0 = primary TU, headers at 1+);
-                // DWARF file_names is 1-indexed with the primary
-                // file at slot 1, so emit `decl_file + 1`.
-                write_uleb128(&mut body, v.decl_file as u64 + 1);
-                // DW_AT_decl_line (ULEB128).
-                write_uleb128(&mut body, v.decl_line as u64);
+                self.body.extend_from_slice(&type_off.to_le_bytes());
+                write_uleb128(&mut self.body, v.decl_file as u64 + 1);
+                write_uleb128(&mut self.body, v.decl_line as u64);
             }
-            // DWARF 4 section 3.4.2: trailing `...` of a variadic
-            // prototype becomes a DW_TAG_unspecified_parameters
-            // child after the formal-parameter siblings.
             if is_variadic {
-                write_uleb128(&mut body, ABBREV_UNSPECIFIED_PARAMETERS);
+                write_uleb128(&mut self.body, ABBREV_UNSPECIFIED_PARAMETERS);
             }
-            // End-of-children marker for this subprogram.
-            body.push(0);
+            self.body.push(0);
         }
     }
 
-    // DWARF 4 5.7.2: end-of-children marker for the CU's
-    // DW_CHILDREN_yes DIE. Single null entry closes the sibling
-    // list.
-    body.push(0);
-
-    // Unit header. `unit_length` covers everything after itself
-    // (version + debug_abbrev_offset + address_size + body).
-    let unit_length: u32 = (DEBUG_INFO_UNIT_HEADER_SIZE as u32 - 4) + body.len() as u32;
-    let header = DebugInfoUnitHeader {
-        unit_length,
-        version: 4,
-        debug_abbrev_offset: 0,
-        address_size: addr_width.bytes() as u8,
-    };
-    let mut out: Vec<u8> = Vec::with_capacity(DEBUG_INFO_UNIT_HEADER_SIZE as usize + body.len());
-    write_struct(&mut out, &header);
-    // debug_abbrev_offset slot inside the header gets a reloc
-    // against the `.debug_abbrev` section symbol; each `.o`'s
-    // abbrev table starts at offset 0 inside its own
-    // `.debug_abbrev`, so addend stays zero and the linker
-    // rebases to the merged offset.
-    relocs.push(DwarfReloc {
-        section: DwarfSectionKind::Info,
-        offset: 6, // unit_length(4) + version(2)
-        width: DwarfRelocWidth::W4,
-        target: DwarfRelocTarget::DebugAbbrev,
-        addend: 0,
-    });
-    out.extend_from_slice(&body);
-
-    (out, strs.into_bytes(), relocs, reloc_symbols)
+    /// The CU's children terminator, the unit header (`unit_length`
+    /// covers everything after itself) and the relocation of its
+    /// `debug_abbrev_offset` against `.debug_abbrev`, which each
+    /// object's own table starts at offset 0 of.
+    fn finish(mut self) -> (Vec<u8>, Vec<u8>, Vec<DwarfReloc>, Vec<String>) {
+        self.body.push(0);
+        let unit_length: u32 = (DEBUG_INFO_UNIT_HEADER_SIZE as u32 - 4) + self.body.len() as u32;
+        let header = DebugInfoUnitHeader {
+            unit_length,
+            version: 4,
+            debug_abbrev_offset: 0,
+            address_size: self.addr_width.bytes() as u8,
+        };
+        let mut out: Vec<u8> =
+            Vec::with_capacity(DEBUG_INFO_UNIT_HEADER_SIZE as usize + self.body.len());
+        write_struct(&mut out, &header);
+        self.relocs.push(DwarfReloc {
+            section: DwarfSectionKind::Info,
+            offset: 6, // unit_length(4) + version(2)
+            width: DwarfRelocWidth::W4,
+            target: DwarfRelocTarget::DebugAbbrev,
+            addend: 0,
+        });
+        out.extend_from_slice(&self.body);
+        (out, self.strs.into_bytes(), self.relocs, self.reloc_symbols)
+    }
 }
 
 /// Indices in `program.symbols` of the objects with static storage

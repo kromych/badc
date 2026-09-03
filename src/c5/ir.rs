@@ -871,17 +871,6 @@ pub(crate) enum BinOp {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct DivByZero;
 
-/// The C integer operators on two known operands, in one place for the AST
-/// constant folder, the SSA constant folder and the interpreter.
-/// Arithmetic wraps in 64 bits, as the SSA value model does, so signed
-/// `i64::MIN / -1` yields `i64::MIN` where the native divide traps. A
-/// shift takes its count modulo 64, which is what the emitted shift
-/// instructions do; C99 6.5.7p3 leaves a negative or too-wide count
-/// undefined, so the fold gates refuse those operands instead of
-/// committing to the mask at translation time. Mulh, Mulhu, Ror and the FP
-/// opcodes are not C operators and are not covered here.
-/// TODO: the SSA builder's immediate fold keeps its own copy of these
-/// arms.
 /// Integer relational and equality operators (C99 6.5.8 / 6.5.9),
 /// signed and unsigned.
 pub(crate) fn is_int_comparison_op(op: BinOp) -> bool {
@@ -940,6 +929,15 @@ pub(crate) fn imm_safe_binop(op: BinOp) -> bool {
     is_imm_arith_op(op) || is_int_comparison_op(op)
 }
 
+/// The C integer operators on two known operands, in one place for the AST
+/// constant folder, the SSA constant folder and the interpreter.
+/// Arithmetic wraps in 64 bits, as the SSA value model does, so signed
+/// `i64::MIN / -1` yields `i64::MIN` where the native divide traps. A
+/// shift takes its count modulo 64, which is what the emitted shift
+/// instructions do; C99 6.5.7p3 leaves a negative or too-wide count
+/// undefined, so the fold gates refuse those operands instead of
+/// committing to the mask at translation time. Mulh, Mulhu, Ror and the FP
+/// opcodes are not C operators and are not covered here.
 pub(crate) fn eval_int_binop(op: BinOp, lhs: i64, rhs: i64) -> Result<i64, DivByZero> {
     let v = match op {
         BinOp::Add => lhs.wrapping_add(rhs),

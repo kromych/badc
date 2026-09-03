@@ -508,11 +508,8 @@ impl Compiler {
             ty = self.apply_mode_to_type(ty, m)?;
         }
         let declarator_transparent = core::mem::take(&mut self.pending.attr_transparent_union);
-        // Capture per this declarator before any nested parse can
-        // overwrite it (a later parameter of function type would
-        // re-set it). A bare function-type declarator is a function
-        // declaration; the routing below runs after the typedef
-        // branch so only an object/function declaration is affected.
+        // Captured per declarator, before a nested parse (a later parameter
+        // of function type) can overwrite it.
         let bare_function_type = self.pending.bare_function_type_declarator;
         self.pending.bare_function_type_declarator = false;
         // Pick up the fn-pointer indirection count
@@ -770,9 +767,9 @@ impl Compiler {
             self.symbols[id_idx].fn_ptr_indirection = typedef_fpi;
             self.symbols[id_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
         }
-        // The `typedef RET NAME(args)` / `typedef RET (*NAME)(args)`
-        // spellings parse their own list; an alias of an existing
-        // function type took the carrier install above.
+        // The `typedef RET NAME(args)` / `typedef RET (*NAME)(args)` spellings
+        // parse a list of their own; an alias of an existing function type
+        // took the one its carrier held.
         if let Some(pp) = typedef_params {
             self.symbols[id_idx].params = pp.types;
             self.symbols[id_idx].is_variadic = pp.is_variadic;
@@ -838,16 +835,14 @@ impl Compiler {
         {
             return Err(self.compile_err("duplicate global definition"));
         }
-        // Snapshot the prior signature before overwriting
-        // `type_` so the redeclaration-mismatch warnings
-        // below have something to compare against.
+        // Snapshot the prior signature before overwriting `type_`, so the
+        // signature check has something to compare against.
         let prior_return_ty = self.symbols[id_idx].type_;
         let prior_params = self.symbols[id_idx].params.clone();
         let prior_is_variadic = self.symbols[id_idx].is_variadic;
         self.symbols[id_idx].type_ = ty;
-        // Covers both branches below: for an object the spelling
-        // is the object's, for a function it is the return
-        // type's.
+        // For an object the spelling is the object's; for a function it is
+        // the return type's.
         self.symbols[id_idx].decl_spelling = self.decl_spelling(base_spelling);
         // An explicit return type replaces the implicit-`int`
         // default (Sys binding without a prior prototype).
@@ -1000,9 +995,8 @@ impl Compiler {
         // the inline linkage models (C99 6.7.4p6-p7 and
         // GNU89); `resolve_inline_linkage` reads the totals
         // once the unit's last declaration is in. The
-        // provisional linkage below keeps mid-parse state
-        // consistent for a `static`-vs-external decision that
-        // does not depend on the inline model.
+        // provisional linkage keeps mid-parse state consistent for a
+        // `static`-vs-external decision the inline model does not affect.
         let sym = &mut self.symbols[id_idx];
         sym.saw_static_decl |= static_seen;
         match (self.pending_saw_inline_specifier, extern_seen) {
@@ -1081,12 +1075,10 @@ impl Compiler {
         let name = self.symbols[id_idx].name.clone();
         let fixed = params.types.len();
         let variadic = params.is_variadic;
-        // `ty` is the return type the parser extracted just
-        // above. Stash it so the codegen knows whether the
-        // libc call leaves a 32-bit value with junk in the
-        // upper half of the host return register (msvcrt
-        // `int` returns) and needs sign / zero extension
-        // before the result becomes the c5 accumulator.
+        // The return type tells the codegen whether the call leaves a 32-bit
+        // value with junk in the upper half of the host return register
+        // (msvcrt `int` returns) and needs extending before it becomes the
+        // accumulator.
         for spec in self.dylibs.iter_mut() {
             for binding in spec.bindings.iter_mut() {
                 if binding.local_name == name {
@@ -1371,9 +1363,7 @@ impl Compiler {
             // dst = &local
             self.emit_lea(local_val);
             self.ast_psh();
-            // src = *param_slot (the passed address;
-            // val from the param-base-aware
-            // numbering above)
+            // src = *param_slot -- the address the caller pushed
             self.emit_lea(param_val);
             self.mark_emit_other();
             self.mark_emit_other();
@@ -1692,11 +1682,9 @@ impl Compiler {
                 });
             }
         }
-        // Merge block-scoped locals captured during body
-        // parsing. The symbol walk above misses them: their
-        // bindings were restored at block exit. Every
-        // pending entry belongs to this function, since C
-        // has no nested function definitions.
+        // Block-scoped locals unbound at their block's exit, which the walk
+        // over the function's own bindings does not see. Every pending entry
+        // belongs to this function: C has no nested function definitions.
         for mut bl in core::mem::take(&mut self.pending_block_locals) {
             bl.function_bc_pc = ent_pc as u64;
             self.variables.push(bl);
@@ -1902,14 +1890,6 @@ impl Compiler {
             }
         } else {
             self.symbols[id_idx].is_extern_decl = false;
-            // Default: a file-scope global declaration
-            // that reaches this branch will allocate
-            // storage (or merge with prior tentative
-            // storage) below; the matching
-            // `defined_here = true` is set at each
-            // alloc site so the field tracks every
-            // path that produces real bytes.
-
             // C99 6.9.2p3: the type of a definition must not be
             // incomplete. A tentative definition's tag may be
             // completed further on in the unit, so the check runs
@@ -2019,10 +1999,9 @@ impl Compiler {
             self.symbols[id_idx].has_initializer = true;
             return Ok(true);
         }
-        // A later no-initializer declaration of an alias-defined
-        // object redeclares it (C99 6.9.2p2). The alias owns no
-        // storage, so the merge-or-allocate paths below would
-        // give it fresh zero bytes and break the binding.
+        // C99 6.9.2p2: a later no-initializer declaration redeclares the
+        // alias-defined object. The alias owns no storage, so reserving any
+        // for it would break the binding.
         if self.symbols[id_idx].is_alias && self.lex.tk != Token::Assign {
             return Ok(true);
         }

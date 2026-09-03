@@ -520,10 +520,8 @@ impl Compiler {
         let mut bit_unit: usize = 0;
         let mut placed_align: usize = 0;
         let field_offset: usize;
-        // Bitfield? `int x:N` shapes the field as N bits
-        // packed into a shared 8-byte storage unit. The
-        // bit-packing state above tracks whether we're
-        // inside an active run.
+        // `int x:N` packs N bits into a shared storage unit; the layout's bit
+        // cursor says whether a run of them is already open.
         // Storage-unit width (bytes) the extraction reads for a
         // bitfield; the declared type's size. Zero for a
         // non-bitfield field.
@@ -741,42 +739,28 @@ impl Compiler {
     /// The type prefix of one member group: the specifiers, the type they
     /// name, and the carriers a declarator through it reads (C99 6.7.2.1).
     fn parse_member_base_type(&mut self, name: &str) -> Result<MemberBase, C5Error> {
-        // Reset the typedef-array carrier between field groups
-        // (`jmp_buf env;` then `int code;`). The aggregate
-        // parser has its own inline base-type reader and does
-        // not call `parse_decl_base_type`, so the carrier
-        // would otherwise leak its prior value into the next
-        // group and turn an unrelated scalar field into a
-        // bogus array.
+        // This reader seeds the carriers itself; clear what the previous
+        // member group left, or `jmp_buf env;` before `int code;` would make
+        // the scalar an array. TODO: route the specifiers through
+        // `parse_decl_specifiers`, which resets them on entry.
         self.pending.typedef_base_array_size = 0;
         self.pending.typedef_base_zero_len = false;
         self.pending.type_align = 0;
-        // Same for the debug-info spelling carriers, which the
-        // inline reader below seeds itself.
         let _ = self.take_base_spelling();
-        // Field type prefix: int, char, float, double, or struct Name.
-        // Leading qualifiers / int modifiers / function specifiers
-        // (`const`, `unsigned`, ...) are no-ops; track if any int
-        // modifier appeared so a bare `unsigned x;` field still
-        // produces an `int` field.
         let mut mods = decl_base::IntModifiers::default();
-        // Set when the field-type prefix is a `struct` / `union`
-        // whose members should promote into the enclosing struct
-        // when no declarator follows: C11 6.7.2.1p13 for a no-tag
-        // `struct { ... }`, and the unnamed-field extension gcc
-        // spells `-fms-extensions` for a tagged one. Checked AFTER
-        // the type-prefix parse: if there's no declarator (`;`
-        // next), the promotion path runs; otherwise the tag stays a
-        // regular nested-aggregate field type.
+        // A `struct` / `union` prefix whose members promote into the
+        // enclosing aggregate when no declarator follows: C11 6.7.2.1p13 for
+        // the untagged form, the unnamed-field extension gcc spells
+        // `-fms-extensions` for a tagged one. The promotion is decided after
+        // the prefix parse, on whether a `;` follows.
         let mut anon_aggregate_inner_id: Option<usize> = None;
         let mut atomic_field_base: Option<i64> = None;
         // `__attribute__((aligned(N)))` before the declarator raises the
-        // alignment of every field in the group; a per-declarator one
-        // (below) adds to it. Applied at field placement, not dropped.
+        // alignment of every member of the group; a per-declarator one adds
+        // to it at placement.
         let mut group_align: usize = 0;
-        // Qualifiers ahead of the type (`volatile int x;`). C99
-        // 6.7.2p2 admits them in any order, and the trailing form
-        // already folds in below, so collect the leading one too.
+        // C99 6.7.2p2 admits the qualifiers in any order, so a leading
+        // `volatile int x;` folds like the trailing spelling.
         let mut leading_quals: i64 = 0;
         while is_decl_modifier(self.lex.tk) {
             if self.lex.tk == Token::Attribute {
@@ -892,11 +876,9 @@ impl Compiler {
         field_base = super::types::apply_qual_bits(field_base, leading_quals | trailing_quals);
         let base_spelling = self.take_base_spelling();
 
-        // Explicit type alignment carried by a typedef base (GNU
-        // `aligned(N)`), consumed once for every declarator sharing
-        // this base. Replaces the field's natural alignment below,
-        // so a reducing attribute lowers it; a pointer declarator
-        // through the typedef keeps pointer alignment instead.
+        // A GNU `aligned(N)` carried by a typedef base replaces the member's
+        // natural alignment, so a reducing attribute lowers it; a pointer
+        // declarator through the alias keeps pointer alignment.
         let type_align_override = core::mem::take(&mut self.pending.type_align) as usize;
 
         Ok(MemberBase {
@@ -959,10 +941,8 @@ impl Compiler {
         let is_enum = self.symbols[self.lex.curr_id_idx].is_enum_typedef;
         let aliased = self.symbols[self.lex.curr_id_idx].type_;
         self.pending.spell_base_typedef = Some(self.lex.curr_id_idx as u32);
-        // C99 6.7.7 paragraph 3: a typedef name carries
-        // through any array dimension on its alias. Stash
-        // the count so the field-binding code below can
-        // make `jmp_buf b;` lay out `long b[64];`.
+        // C99 6.7.7p3: the alias carries its array dimension through, so
+        // `jmp_buf b;` lays out as `long b[64];`.
         let typedef_array = self.symbols[self.lex.curr_id_idx].array_size;
         if typedef_array != 0 {
             self.pending.typedef_base_array_size = typedef_array;

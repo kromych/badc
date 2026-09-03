@@ -1,5 +1,282 @@
 use super::*;
 
+/// AAPCS64 `va_start` (Appendix B). args[0] = the `__va_list` pointer (the
+/// array-form `va_list` decayed to `&ap[0]`); args[1] = &last (unused --
+/// the named-argument counts come from the prototype). Initialise the
+/// 32-byte struct:
+///   __stack  (+0)  = first incoming stack argument
+///   __gr_top (+8)  = high edge of the general save area
+///   __vr_top (+16) = high edge of the vector save area
+///   __gr_offs (+24) = -(8 - named_int) * 8   (counts up to 0)
+///   __vr_offs (+28) = -(8 - named_fp) * 16
+pub(super) fn emit_va_start_aapcs64(
+    code: &mut Vec<u8>,
+    func: &FunctionSsa,
+    abi: super::Abi,
+    args: &[u32],
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    if args.len() != 2 {
+        bail_msg("VaStart: expected 2 args");
+        return false;
+    }
+    let n = func.n_params;
+    let mut named_int = 0u32;
+    let mut named_fp = 0u32;
+    for i in 0..n {
+        if (func.param_fp_mask & (1u32 << i)) != 0 {
+            named_fp += 1;
+        } else {
+            named_int += 1;
+        }
+    }
+    let Some(ap_r) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame) else {
+        return false;
+    };
+    // The struct pointer must survive the field writes; keep it in
+    // scratch.primary so the secondary is free to stage each value.
+    let ap = if ap_r.0 != scratch.primary.0 {
+        emit_mov_reg(code, scratch.primary, ap_r);
+        scratch.primary
+    } else {
+        ap_r
+    };
+    // __stack (+0) = fp + 16 + 192 + named-stack-overflow: incoming stack
+    // arguments begin just above the register save area at [fp + 208], and
+    // the named parameters that overflowed the argument registers occupy
+    // the low slots there.
+    let named_stack_bytes: u32 = super::plan_param_regs(n, func.param_fp_mask, abi)
+        .placements
+        .iter()
+        .filter(|q| matches!(q, super::ArgPlacement::Stack(_)))
+        .count() as u32
+        * 8;
+    emit_fp_plus_off(
+        code,
+        scratch.secondary,
+        16 + AARCH64_VA_SAVE_BYTES + named_stack_bytes,
+    );
+    emit(code, enc_str_imm(scratch.secondary, ap, 0));
+    // __gr_top (+8) = fp + 16 + 64 (high edge of the general area).
+    emit_fp_plus_off(code, scratch.secondary, 16 + AARCH64_GR_SAVE_BYTES);
+    emit(code, enc_str_imm(scratch.secondary, ap, 8));
+    // __vr_top (+16) = fp + 16 + 192 (high edge of the vector area).
+    emit_fp_plus_off(code, scratch.secondary, 16 + AARCH64_VA_SAVE_BYTES);
+    emit(code, enc_str_imm(scratch.secondary, ap, 16));
+    // __gr_offs (+24) = -(8 - named_int) * 8. A named integer parameter
+    // past the eight argument registers overflows to the stack, which this
+    // offset does not cover (the same assumption `local_slot_off` makes).
+    let gr_offs = -((8u32.saturating_sub(named_int) * 8) as i64);
+    load_imm64(code, scratch.secondary, gr_offs as u64);
+    emit(code, enc_str32_imm(scratch.secondary, ap, 24));
+    // __vr_offs (+28) = -(8 - named_fp) * 16, or 0 when the prologue skipped
+    // the vector save area: zero reads as exhausted, so `va_arg` walks the
+    // general area then the overflow stack.
+    let vr_offs = if abi.no_fp_varargs {
+        0
+    } else {
+        -((8u32.saturating_sub(named_fp) * 16) as i64)
+    };
+    load_imm64(code, scratch.secondary, vr_offs as u64);
+    emit(code, enc_str32_imm(scratch.secondary, ap, 28));
+    true
+}
+
+/// `__builtin_va_start(&ap, &last)` for the cursor `va_list` models: set
+/// `*ap` to the address of the first variadic argument, computed from the
+/// frame since `&last` cannot locate a tail that is not adjacent to the
+/// named arguments.
+///
+/// * Windows on ARM64 (Microsoft ARM64 calling convention): the prologue
+///   spilled x0..x7 into the 64-byte gr-save area at `[fp + 16 .. fp + 80)`,
+///   one 8-byte slot per argument position; the first variadic argument is
+///   slot `n_params`. The area's top edge meets the incoming stack overflow,
+///   so the single cursor `va_arg` advances by 8 walks the register-saved
+///   variadic arguments then the stack arguments with no gap.
+/// * macOS arm64: the named arguments arrive in argument registers (spilled
+///   to c5 cdecl cells by the prologue) and the variadic arguments sit on
+///   the incoming stack above the named arguments' stack overflow. The
+///   incoming-stack region begins at `fp + param_spill_bytes + 16`; the
+///   named arguments that overflowed the registers occupy its low
+///   `n_stack * 8` bytes (AAPCS64 8-byte stack stride).
+pub(super) fn emit_va_start_cursor(
+    code: &mut Vec<u8>,
+    func: &FunctionSsa,
+    abi: super::Abi,
+    args: &[u32],
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    if args.len() != 2 {
+        bail_msg("VaStart: expected 2 args");
+        return false;
+    }
+    let Some(ap_r) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame) else {
+        return false;
+    };
+    if win_arm64_variadic_callee(func, abi) {
+        debug_assert!(
+            func.n_params <= abi.int_arg_regs.len(),
+            "win-arm64 variadic callee assumes named params fit the int arg bank"
+        );
+        let off = 16 + (func.n_params as u32) * 8;
+        emit_fp_plus_off(code, scratch.secondary, off);
+        emit(code, enc_str_imm(scratch.secondary, ap_r, 0));
+        return true;
+    }
+    if func.is_variadic && abi.variadic_on_stack {
+        let (_, n_stack) = param_reg_stack_split(func, abi);
+        let named_overflow_bytes = (n_stack as u32) * 8;
+        let off = frame.param_spill_bytes + 16 + named_overflow_bytes;
+        // The c5 cdecl cell region keeps fp 16-aligned (each cell is 16
+        // bytes, the fp/lr save is 16 bytes); a non-16-aligned `off` would
+        // mean the frame accounting and the incoming-stack region disagree.
+        debug_assert_eq!(
+            (frame.param_spill_bytes + 16) % 16,
+            0,
+            "va_start: c5 cdecl cell region must keep fp 16-aligned"
+        );
+        emit_fp_plus_off(code, scratch.secondary, off);
+        emit(code, enc_str_imm(scratch.secondary, ap_r, 0));
+        return true;
+    }
+    // Linux aarch64 takes the `aarch64_host_variadic_callee` arm; no other
+    // aarch64 variadic callee shape reaches here.
+    bail_msg("VaStart: variadic callee not matched by a host-ABI branch");
+    false
+}
+
+/// `__builtin_va_arg(&ap)` for the cursor `va_list` models (macOS arm64
+/// and Windows arm64, which both lay variadic arguments at 8-byte stride):
+/// returns `*ap` (the address of the current slot) and advances `*ap` by
+/// the argument's eightbyte span. The stride is a property of the
+/// `va_list` layout the target builds, not of the current function, so a
+/// non-variadic forwarder (libc's `vsnprintf` taking a `va_list`) walks the
+/// same stride the variadic caller produced. args[0] = &ap, args[1] = the
+/// packed `(kind << 16) | size` descriptor; a scalar occupies one
+/// eightbyte, a by-value aggregate `ceil(size/8)` consecutive ones.
+pub(super) fn emit_va_arg_cursor(
+    code: &mut Vec<u8>,
+    func: &FunctionSsa,
+    args: &[u32],
+    dst: Place,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    if args.is_empty() {
+        bail_msg("VaArg: expected at least the ap argument");
+        return false;
+    }
+    let va_stride: u32 = match args.get(1).and_then(|a| func.insts.get(*a as usize)) {
+        Some(super::super::ir::Inst::Imm(d)) => (((*d & 0xffff) as u32 + 7) & !7).max(8),
+        _ => 8,
+    };
+    let Some(ap_r) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame) else {
+        return false;
+    };
+    // The result is loaded into a work register, the cursor is advanced,
+    // then the result is delivered to the destination. The work register
+    // and the advance temporary must each differ from the cursor address
+    // `ap_r` so the writeback stores to the right slot.
+    let rd = match dst {
+        Place::IntReg(r) if r != ap_r.0 => Reg(r),
+        _ if scratch.secondary.0 != ap_r.0 => scratch.secondary,
+        _ => scratch.primary,
+    };
+    let adv = if scratch.primary.0 != ap_r.0 && scratch.primary.0 != rd.0 {
+        scratch.primary
+    } else if scratch.secondary.0 != ap_r.0 && scratch.secondary.0 != rd.0 {
+        scratch.secondary
+    } else {
+        // Both scratch registers hold the cursor and the staged result
+        // (cursor and destination both spilled). x19 is reserved by the
+        // prologue for any function with an intrinsic, so it serves as a
+        // third scratch here.
+        Reg(19)
+    };
+    emit(code, enc_ldr_imm(rd, ap_r, 0));
+    emit(code, enc_add_imm(adv, rd, va_stride));
+    emit(code, enc_str_imm(adv, ap_r, 0));
+    match dst {
+        Place::IntReg(r) if rd.0 != r => emit_mov_reg(code, Reg(r), rd),
+        Place::Spill(slot) => {
+            let sp_off = spill_off(frame, slot);
+            emit_spill_str_x_auto(code, frame, rd, sp_off);
+        }
+        _ => {}
+    }
+    true
+}
+
+/// AAPCS64 `va_copy`: a 32-byte `__va_list` struct copy (Appendix B),
+/// three pointers plus two offsets. args[0] = &dst struct, args[1] = &src
+/// struct.
+pub(super) fn emit_va_copy_aapcs64(
+    code: &mut Vec<u8>,
+    args: &[u32],
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    if args.len() != 2 {
+        bail_msg("VaCopy: expected 2 args");
+        return false;
+    }
+    let Some(dst_r) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame)
+    else {
+        return false;
+    };
+    let Some(src_r) = materialize_int(code, place_of(alloc, args[1]), scratch.secondary, frame)
+    else {
+        return false;
+    };
+    // Transfer register distinct from both pointer registers. x9 / x10 /
+    // x11 are AAPCS64 caller-saved temporaries outside the allocator's
+    // reach here; save and restore the chosen one so a live value it may
+    // hold is preserved across the copy.
+    let borrow = [9u8, 10, 11]
+        .into_iter()
+        .map(Reg)
+        .find(|r| r.0 != dst_r.0 && r.0 != src_r.0)
+        .expect("a caller-saved transfer register is always free");
+    emit(code, enc_str_pre(borrow, Reg(31), -16));
+    for off in [0u32, 8, 16, 24] {
+        emit(code, enc_ldr_imm(borrow, src_r, off));
+        emit(code, enc_str_imm(borrow, dst_r, off));
+    }
+    emit(code, enc_ldr_post(borrow, Reg(31), 16));
+    true
+}
+
+/// `__builtin_va_copy(&dst, &src)` for the cursor models: `*dst = *src`.
+pub(super) fn emit_va_copy_cursor(
+    code: &mut Vec<u8>,
+    args: &[u32],
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    if args.len() != 2 {
+        bail_msg("VaCopy: expected 2 args");
+        return false;
+    }
+    let Some(dst_r) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame)
+    else {
+        return false;
+    };
+    let Some(src_r) = materialize_int(code, place_of(alloc, args[1]), scratch.secondary, frame)
+    else {
+        return false;
+    };
+    emit(code, enc_ldr_imm(scratch.secondary, src_r, 0));
+    emit(code, enc_str_imm(scratch.secondary, dst_r, 0));
+    true
+}
+
 /// AAPCS64 `va_arg` (Appendix B). Reads the packed `(kind << 16) | size`
 /// descriptor the parser folded for the type operand and walks the
 /// `__va_list` struct: a general (integer / pointer) argument from the

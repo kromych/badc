@@ -1,11 +1,8 @@
 use super::*;
 
-/// Emit one SSA instruction. Returns `false` for any op the thin
-/// slice doesn't handle yet so the caller can fall back.
-#[allow(clippy::too_many_arguments)]
 /// Read-only per-function context threaded through the per-instruction
-/// lowering. Bundles the loop-invariant inputs so emit_inst's signature stays
-/// short; Copy (references and small scalars).
+/// lowering: the loop-invariant inputs, so `emit_inst`'s signature stays
+/// short. Copy (references and small scalars).
 #[derive(Clone, Copy)]
 pub(super) struct FnCtx<'a> {
     pub(super) func: &'a FunctionSsa,
@@ -29,6 +26,9 @@ pub(super) struct FnCtx<'a> {
     pub(super) data_sym_offsets: &'a alloc::collections::BTreeMap<alloc::string::String, i64>,
 }
 
+/// Emit one SSA instruction. Returns `false` for an op with no lowering, so
+/// the caller can roll the function back.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn emit_inst(
     cx: &mut super::ssa::emit_common::EmitCtx,
     inst: &Inst,
@@ -43,8 +43,6 @@ pub(super) fn emit_inst(
     asm_text_labels: &mut Vec<super::AsmTextLabel>,
     asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
 ) -> bool {
-    // Unpack the read-only per-function context into the per-field names the
-    // lowering below uses, so the body is unchanged.
     let FnCtx {
         func,
         alloc,
@@ -60,121 +58,34 @@ pub(super) fn emit_inst(
         name2entpc,
         data_sym_offsets,
     } = *fcx;
-    // The bundled emit output now arrives in `cx`; recreate the per-field
-    // names as disjoint reborrows so the per-`Inst` lowering below is unchanged.
     let code = &mut *cx.code;
-    let plt_call_fixups = &mut *cx.plt_call_fixups;
-    let data_fixups = &mut *cx.data_fixups;
-    let pending_func_fixups = &mut *cx.pending_func_fixups;
-    let tls_index_fixups = &mut *cx.tls_index_fixups;
-    let elf_tpoff_fixups = &mut *cx.elf_tpoff_fixups;
-    let asm_sections = &mut *cx.asm_sections;
-    let asm_extern_call_sites = &mut *cx.asm_extern_call_sites;
-    let asm_sym_fixups = &mut *cx.asm_sym_fixups;
-    let text_data_ranges = &mut *cx.text_data_ranges;
-    let text_align = &mut *cx.text_align;
     match inst {
-        Inst::AllocaInit(slot) => {
-            // Slot 0: this function doesn't use alloca. Non-zero:
-            // the function moves sp at runtime; `Frame::dynamic_sp`
-            // carries the fact to the spill addressing, the alloca
-            // intrinsics, and the epilogue. No code either way.
-            let _ = slot;
-            true
-        }
+        // Slot 0: this function doesn't use alloca. Non-zero: the function
+        // moves sp at runtime; `Frame::dynamic_sp` carries the fact to the
+        // spill addressing, the alloca intrinsics, and the epilogue. No code
+        // either way.
+        Inst::AllocaInit(_) => true,
         Inst::ParamRef { idx, kind } => {
-            // Materialise the i-th AAPCS64 argument register into
-            // the allocator's chosen `Place`, sign-extending the
-            // low `kind` bytes per C99 6.3.1.3 so the value held
-            // in the register is canonically 64-bit-sign-extended.
-            // The prologue does not modify x0..x7 / d0..d7, so the
-            // argument value is still in its incoming register at this
-            // IR position. Narrow-load promotion downstream can then
-            // collapse `Inst::Extend(ParamRef, kind)` to a plain copy
-            // when the kinds match.
-            let i = *idx as usize;
-            // Floating-point parameter (C99 6.2.5p10): its value arrives
-            // in a d-register named by the plan. Read that register into
-            // the allocator's FP dst. A `float` (`LoadKind::F32`)
-            // occupies the s-register view; the body re-narrows it
-            // through the f32 store the walker seeded.
-            if matches!(kind, LoadKind::F32 | LoadKind::F64) {
-                let Some(super::ArgPlacement::FpReg(d)) = param_plan.get(i).copied() else {
-                    bail_msg("ParamRef: FP param not in an FP argument register");
-                    return false;
-                };
-                match dst {
-                    Place::FpReg(r) => {
-                        if r != d {
-                            emit(code, super::encode::enc_fmov_d_d(r, d));
-                        }
-                    }
-                    Place::Spill(slot) => {
-                        let sp_off = spill_off(frame, slot);
-                        emit_spill_str_d_auto(code, frame, d, sp_off);
-                    }
-                    _ => {
-                        bail_msg("ParamRef: FP param dst not fp reg / spill");
-                        return false;
-                    }
-                }
-                return true;
-            }
-            let Some(super::ArgPlacement::IntReg(arg_reg)) = param_plan.get(i).copied() else {
-                bail_msg("ParamRef: int param not in an integer argument register");
-                return false;
-            };
-            // The encoding to write `dst <- sign-extend(arg_reg)`.
-            // For full-width kinds (I64), it is a plain mov. The
-            // caller passes the raw 64-bit value, so an I8/I16
-            // conversion always runs; an I32 extend touches only
-            // bits 32..63 and is skipped when no consumer reads them.
-            let high_dead = !alloc.high_observed.get(v as usize).copied().unwrap_or(true);
-            let sign_extend = |code: &mut Vec<u8>, rd: Reg| {
-                let rn = Reg(arg_reg);
-                match kind {
-                    LoadKind::I8 => emit(code, super::encode::enc_sxtb(rd, rn)),
-                    LoadKind::I16 => emit(code, super::encode::enc_sxth(rd, rn)),
-                    LoadKind::I32 if !high_dead => emit(code, super::encode::enc_sxtw(rd, rn)),
-                    _ => emit_mov_reg(code, rd, rn),
-                }
-            };
-            match dst {
-                Place::IntReg(r) => sign_extend(code, Reg(r)),
-                Place::Spill(slot) => {
-                    sign_extend(code, scratch.primary);
-                    let sp_off = spill_off(frame, slot);
-                    emit_spill_str_x(code, frame, scratch.primary, sp_off, scratch.secondary);
-                }
-                _ => {
-                    bail_msg("ParamRef: dst not int reg / spill");
-                    return false;
-                }
-            }
-            true
+            emit_param_ref(code, *idx, *kind, v, dst, param_plan, alloc, frame, scratch)
         }
         Inst::Imm(value) => {
-            let rd = match int_or_spill_scratch(dst, scratch) {
-                Some(r) => r,
-                None => return false,
+            let Some(rd) = int_or_spill_scratch(dst, scratch) else {
+                return false;
             };
             load_imm64(code, rd, *value as u64);
             store_spilled_int(code, frame, dst, rd);
             true
         }
         Inst::ImmData(offset) => {
-            let rd = match int_or_spill_scratch(dst, scratch) {
-                Some(r) => r,
-                None => return false,
+            let Some(rd) = int_or_spill_scratch(dst, scratch) else {
+                return false;
             };
             // Encode `rd` in the adrp/add placeholder; the per-writer
-            // `patch_adrp_add` reads rd back from the placeholder, so
-            // the materialised address lands directly in the
-            // allocator's chosen register.
+            // `patch_adrp_add` reads rd back from the placeholder, so the
+            // materialised address lands directly in the allocator's register.
             let instr_offset = code.len();
-            emit(code, enc_adrp(rd, 0));
-            emit(code, enc_add_imm(rd, rd, 0));
-            data_fixups.push(DataFixup {
+            emit_adrp_add(code, rd);
+            cx.data_fixups.push(DataFixup {
                 instr_offset,
                 data_offset: *offset as u64,
                 part: AddrPart::Whole,
@@ -183,47 +94,36 @@ pub(super) fn emit_inst(
             true
         }
         Inst::ImmCode(target_ent_pc) => {
-            let rd = match int_or_spill_scratch(dst, scratch) {
-                Some(r) => r,
-                None => return false,
+            let Some(rd) = int_or_spill_scratch(dst, scratch) else {
+                return false;
             };
             let instr_offset = code.len();
-            emit(code, enc_adrp(rd, 0));
-            emit(code, enc_add_imm(rd, rd, 0));
-            pending_func_fixups.push((instr_offset, *target_ent_pc));
+            emit_adrp_add(code, rd);
+            cx.pending_func_fixups.push((instr_offset, *target_ent_pc));
             store_spilled_int(code, frame, dst, rd);
             true
         }
+        // The address of a dynamically-imported function: the pair resolves
+        // to the import's shared stub via an `is_addr` PLT-call fixup, so
+        // `&strcmp` yields the stub address.
         Inst::ImmExtCode(binding_idx) => {
-            // `adrp rd, page; add rd, rd, lo12` taking the address
-            // of a dynamically-imported function. The pair resolves
-            // to the import's shared stub via an `is_addr` PLT-call
-            // fixup, so `&strcmp` yields the stub address.
-            let rd = match int_or_spill_scratch(dst, scratch) {
-                Some(r) => r,
-                None => return false,
+            let Some(rd) = int_or_spill_scratch(dst, scratch) else {
+                return false;
             };
-            let import_index = match imports.index_of_binding(*binding_idx) {
-                Some(i) => i,
-                None => {
-                    bail_msg("ImmExtCode: binding index has no resolved import");
-                    return false;
-                }
+            let Some(import_index) = imports.index_of_binding(*binding_idx) else {
+                bail_msg("ImmExtCode: binding index has no resolved import");
+                return false;
             };
-            plt_call_fixups.push(super::encode::PltCallFixup {
+            cx.plt_call_fixups.push(super::encode::PltCallFixup {
                 instr_offset: code.len(),
                 import_index,
                 is_tail: false,
                 is_addr: true,
             });
-            emit(code, enc_adrp(rd, 0));
-            emit(code, enc_add_imm(rd, rd, 0));
+            emit_adrp_add(code, rd);
             store_spilled_int(code, frame, dst, rd);
             true
         }
-        // Inst::BlockAddr is handled in emit_function's block loop
-        // (it needs the local block_offsets table for its PC-relative
-        // fixup), so it never reaches emit_inst.
         Inst::LocalAddr(off) => emit_local_addr(code, dst, *off, func, frame),
         Inst::Load {
             addr,
@@ -352,7 +252,7 @@ pub(super) fn emit_inst(
             scratch,
             abi,
             target,
-            plt_call_fixups,
+            cx.plt_call_fixups,
             imports,
             arg_aggs,
             &func.agg_descs,
@@ -430,88 +330,23 @@ pub(super) fn emit_inst(
         Inst::Intrinsic { kind, args } => {
             emit_intrinsic(code, func, abi, *kind, args, dst, v, alloc, frame, scratch)
         }
-        Inst::Fneg(src) => {
-            let src_place = place_of(alloc, *src);
-            // C99 6.3.1.8: negation of a `float` is single-precision;
-            // the result's f32 marker mirrors the operand's.
-            let is_f32 = alloc.is_f32(v);
-            let dn = match materialize_fp_for(
-                code,
-                *src,
-                src_place,
-                frame.fp_scratch[0],
-                frame,
-                alloc,
-            ) {
-                Some(r) => r,
-                None => return false,
-            };
-            let dd = match dst {
-                Place::FpReg(r) => r,
-                // Stage a spilled result through a reserved scratch
-                // d-reg outside the allocator's banks; d0 may
-                // hold a live value the caller still needs. The source
-                // may already occupy the first FP scratch, so use the second FP scratch.
-                Place::Spill(_) => frame.fp_scratch[1],
-                _ => return false,
-            };
-            if is_f32 {
-                emit(code, super::encode::enc_fneg_s(dd, dn));
-            } else {
-                emit(code, enc_fneg_d(dd, dn));
-            }
-            store_spilled_fp(code, frame, dst, dd);
-            true
-        }
+        Inst::Fneg(src) => emit_fneg(code, *src, v, dst, alloc, frame),
         Inst::Fma {
             a,
             b,
             c,
             neg_product,
             neg_addend,
-        } => {
-            // C99 6.5p8 / FP_CONTRACT: the fused form rounds once. The
-            // result width follows the operands; the marker mirrors `a`.
-            let is_f32 = alloc.is_f32(v);
-            let a_place = place_of(alloc, *a);
-            let b_place = place_of(alloc, *b);
-            let c_place = place_of(alloc, *c);
-            // Each operand resolves to its own d-reg or, when spilled, a
-            // dedicated scratch outside the allocator's banks.
-            let da = match materialize_fp_for(code, *a, a_place, frame.fp_scratch[0], frame, alloc)
-            {
-                Some(r) => r,
-                None => return false,
-            };
-            let dm = match materialize_fp_for(code, *b, b_place, frame.fp_scratch[1], frame, alloc)
-            {
-                Some(r) => r,
-                None => return false,
-            };
-            let dc = match materialize_fp_for(code, *c, c_place, frame.fp_scratch[2], frame, alloc)
-            {
-                Some(r) => r,
-                None => return false,
-            };
-            // A spilled result writes into the third FP scratch and stores after.
-            // The third scratch is free unless `c` was itself spilled into it, in which
-            // case the FMADD reads Da before writing Dd so the alias is
-            // harmless. It must NOT reuse `dc` directly: when `c` lives
-            // in an allocated register that register may hold a value
-            // still needed by a later instruction (e.g. a loop-carried
-            // operand reused as the addend across several fused ops).
-            let dd = match dst {
-                Place::FpReg(r) => r,
-                Place::Spill(_) => frame.fp_scratch[2],
-                _ => return false,
-            };
-            emit(
-                code,
-                super::encode::enc_fma(dd, da, dm, dc, is_f32, *neg_product, *neg_addend),
-            );
-            store_spilled_fp(code, frame, dst, dd);
-            true
-        }
+        } => emit_fma(
+            code,
+            [*a, *b, *c],
+            *neg_product,
+            *neg_addend,
+            v,
+            dst,
+            alloc,
+            frame,
+        ),
         Inst::Extend { value, kind } => {
             emit_extend(code, dst, *value, *kind, alloc, frame, scratch)
         }
@@ -520,103 +355,7 @@ pub(super) fn emit_inst(
         }
         Inst::Copy { value, is_fp } => emit_copy(code, dst, *value, *is_fp, alloc, frame, scratch),
         Inst::FpCast { kind, value } => {
-            use super::super::ir::FpCastKind;
-            let src_place = place_of(alloc, *value);
-            match kind {
-                FpCastKind::IntToFp | FpCastKind::UIntToFp => {
-                    let rn = match materialize_int(code, src_place, scratch.primary, frame) {
-                        Some(r) => r,
-                        None => return false,
-                    };
-                    let dd = match dst {
-                        Place::FpReg(r) => r,
-                        // Stage a spilled result through a reserved scratch
-                        // d-reg outside the allocator's banks; d0
-                        // may hold a live value the caller still needs.
-                        Place::Spill(_) => frame.fp_scratch[0],
-                        _ => return false,
-                    };
-                    // C99 6.3.1.4: when the result is `float`, convert the
-                    // integer directly to single precision (one rounding)
-                    // rather than to double followed by a narrowing `fcvt`.
-                    let res_f32 = alloc.is_f32(v);
-                    let enc = match (matches!(kind, FpCastKind::UIntToFp), res_f32) {
-                        (true, true) => enc_ucvtf_s_x(dd, rn),
-                        (true, false) => enc_ucvtf_d_x(dd, rn),
-                        (false, true) => enc_scvtf_s_x(dd, rn),
-                        (false, false) => enc_scvtf_d_x(dd, rn),
-                    };
-                    emit(code, enc);
-                    store_spilled_fp(code, frame, dst, dd);
-                    true
-                }
-                FpCastKind::FpToInt | FpCastKind::UFpToInt => {
-                    // C99 6.3.1.4: a `float` source truncates directly to
-                    // the integer (one conversion) rather than widening to
-                    // double first. Read the source in its single-precision
-                    // view when it is f32-marked.
-                    let src_f32 = alloc.is_f32(*value);
-                    let dn = if src_f32 {
-                        match materialize_fp_f32(code, src_place, frame.fp_scratch[0], frame) {
-                            Some(r) => r,
-                            None => return false,
-                        }
-                    } else {
-                        match materialize_fp(code, src_place, frame.fp_scratch[0], frame) {
-                            Some(r) => r,
-                            None => return false,
-                        }
-                    };
-                    let rd = match dst {
-                        Place::IntReg(r) => Reg(r),
-                        Place::Spill(_) => scratch.primary,
-                        _ => return false,
-                    };
-                    let enc = match (matches!(kind, FpCastKind::UFpToInt), src_f32) {
-                        (true, true) => enc_fcvtzu_x_s(rd, dn),
-                        (true, false) => enc_fcvtzu_x_d(rd, dn),
-                        (false, true) => enc_fcvtzs_x_s(rd, dn),
-                        (false, false) => enc_fcvtzs_x_d(rd, dn),
-                    };
-                    emit(code, enc);
-                    store_spilled_int(code, frame, dst, rd);
-                    true
-                }
-                // C99 6.3.1.5: widen single to double (`fcvt Dd, Sn`)
-                // or narrow double to single (`fcvt Sd, Dn`). The
-                // single-precision view occupies the low 32 bits of the
-                // same physical V register, so the source f32 is read as
-                // an s-reg and the f64 result written as a d-reg (and
-                // vice versa) with no separate move.
-                FpCastKind::F32ToF64 => {
-                    let dn = match materialize_fp_f32(code, src_place, frame.fp_scratch[0], frame) {
-                        Some(r) => r,
-                        None => return false,
-                    };
-                    let dd = match dst {
-                        Place::FpReg(r) => r,
-                        Place::Spill(_) => frame.fp_scratch[0],
-                        _ => return false,
-                    };
-                    emit(code, enc_fcvt_d_s(dd, dn));
-                    store_spilled_fp(code, frame, dst, dd);
-                    true
-                }
-                FpCastKind::F64ToF32 => {
-                    let dn = match materialize_fp(code, src_place, frame.fp_scratch[0], frame) {
-                        Some(r) => r,
-                        None => return false,
-                    };
-                    let dd = match dst {
-                        Place::FpReg(r) => r,
-                        Place::Spill(_) => frame.fp_scratch[0],
-                        _ => return false,
-                    };
-                    emit(code, enc_fcvt_s_d(dd, dn));
-                    store_spilled_fp(code, frame, dst, dd);
-                    true
-                }
-            }
+            emit_fp_cast(code, *kind, *value, v, dst, alloc, frame, scratch)
         }
         Inst::TlsAddr(offset) => emit_tls_addr(
             code,
@@ -624,20 +363,16 @@ pub(super) fn emit_inst(
             frame,
             *offset,
             target,
-            tls_index_fixups,
+            cx.tls_index_fixups,
             macho_tlv_fixups,
             macho_tlv_descriptors,
-            elf_tpoff_fixups,
+            cx.elf_tpoff_fixups,
             extern_tls_names.get(&v).map(|s| s.as_str()),
         ),
-        Inst::Phi { .. } => {
-            // The value is materialised by the predecessor-exit
-            // moves emitted just before each branch terminator
-            // that targets this block; at the IR position the
-            // phi's allocated Place already holds the merged
-            // value.
-            true
-        }
+        // The value is materialised by the predecessor-exit moves emitted
+        // before each branch terminator that targets this block; at the IR
+        // position the phi's allocated Place already holds the merged value.
+        Inst::Phi { .. } => true,
         Inst::InlineAsm { asm, args } => emit_inline_asm_aarch64(
             code,
             asm,
@@ -649,12 +384,12 @@ pub(super) fn emit_inst(
             name2entpc,
             extern_data_names,
             data_sym_offsets,
-            asm_sections,
-            asm_extern_call_sites,
-            asm_sym_fixups,
+            cx.asm_sections,
+            cx.asm_extern_call_sites,
+            cx.asm_sym_fixups,
             deferred_regions,
-            text_data_ranges,
-            text_align,
+            cx.text_data_ranges,
+            cx.text_align,
             text_map_state,
             asm_text_labels,
             asm_section_text_refs,
@@ -670,6 +405,259 @@ pub(super) fn emit_inst(
                 other.variant_name()
             ));
             false
+        }
+    }
+}
+
+/// The `adrp rd, page; add rd, rd, lo12` placeholder pair an address fixup
+/// patches.
+fn emit_adrp_add(code: &mut Vec<u8>, rd: Reg) {
+    emit(code, enc_adrp(rd, 0));
+    emit(code, enc_add_imm(rd, rd, 0));
+}
+
+/// Materialise the i-th argument register into the allocator's `Place`.
+/// The prologue does not modify x0..x7 / d0..d7, so the value is still in
+/// its incoming register at this IR position. An integer parameter is
+/// sign-extended from its `kind` width (C99 6.3.1.3) so the register holds
+/// the canonical 64-bit value; the caller passes the raw value, so an
+/// I8/I16 conversion always runs, while an I32 extend touches only bits
+/// 32..63 and is skipped when no consumer reads them. A floating-point
+/// parameter (C99 6.2.5p10) arrives in the d-register the plan names; a
+/// `float` occupies the s-register view, which the body re-narrows through
+/// the f32 store the walker seeded.
+#[allow(clippy::too_many_arguments)]
+fn emit_param_ref(
+    code: &mut Vec<u8>,
+    idx: u32,
+    kind: LoadKind,
+    v: super::super::ir::ValueId,
+    dst: Place,
+    param_plan: &[super::ArgPlacement],
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    let i = idx as usize;
+    if matches!(kind, LoadKind::F32 | LoadKind::F64) {
+        let Some(super::ArgPlacement::FpReg(d)) = param_plan.get(i).copied() else {
+            bail_msg("ParamRef: FP param not in an FP argument register");
+            return false;
+        };
+        match dst {
+            Place::FpReg(r) => {
+                if r != d {
+                    emit(code, super::encode::enc_fmov_d_d(r, d));
+                }
+            }
+            Place::Spill(slot) => {
+                let sp_off = spill_off(frame, slot);
+                emit_spill_str_d_auto(code, frame, d, sp_off);
+            }
+            _ => {
+                bail_msg("ParamRef: FP param dst not fp reg / spill");
+                return false;
+            }
+        }
+        return true;
+    }
+    let Some(super::ArgPlacement::IntReg(arg_reg)) = param_plan.get(i).copied() else {
+        bail_msg("ParamRef: int param not in an integer argument register");
+        return false;
+    };
+    let high_dead = !alloc.high_observed.get(v as usize).copied().unwrap_or(true);
+    let sign_extend = |code: &mut Vec<u8>, rd: Reg| {
+        let rn = Reg(arg_reg);
+        match kind {
+            LoadKind::I8 => emit(code, super::encode::enc_sxtb(rd, rn)),
+            LoadKind::I16 => emit(code, super::encode::enc_sxth(rd, rn)),
+            LoadKind::I32 if !high_dead => emit(code, super::encode::enc_sxtw(rd, rn)),
+            _ => emit_mov_reg(code, rd, rn),
+        }
+    };
+    match dst {
+        Place::IntReg(r) => sign_extend(code, Reg(r)),
+        Place::Spill(slot) => {
+            sign_extend(code, scratch.primary);
+            let sp_off = spill_off(frame, slot);
+            emit_spill_str_x(code, frame, scratch.primary, sp_off, scratch.secondary);
+        }
+        _ => {
+            bail_msg("ParamRef: dst not int reg / spill");
+            return false;
+        }
+    }
+    true
+}
+
+/// `Inst::Fneg`. C99 6.3.1.8: negation of a `float` is single-precision;
+/// the result's f32 marker mirrors the operand's. A spilled result stages
+/// through the second FP scratch, since the source may occupy the first.
+fn emit_fneg(
+    code: &mut Vec<u8>,
+    src: u32,
+    v: super::super::ir::ValueId,
+    dst: Place,
+    alloc: &Allocation,
+    frame: Frame,
+) -> bool {
+    let is_f32 = alloc.is_f32(v);
+    let Some(dn) = materialize_fp_for(
+        code,
+        src,
+        place_of(alloc, src),
+        frame.fp_scratch[0],
+        frame,
+        alloc,
+    ) else {
+        return false;
+    };
+    let dd = match dst {
+        Place::FpReg(r) => r,
+        Place::Spill(_) => frame.fp_scratch[1],
+        _ => return false,
+    };
+    if is_f32 {
+        emit(code, super::encode::enc_fneg_s(dd, dn));
+    } else {
+        emit(code, enc_fneg_d(dd, dn));
+    }
+    store_spilled_fp(code, frame, dst, dd);
+    true
+}
+
+/// `Inst::Fma`: C99 6.5p8 / FP_CONTRACT, the fused form rounds once. The
+/// result width follows the operands; the marker mirrors `a`. Each operand
+/// resolves to its own d-reg or, when spilled, a dedicated scratch outside
+/// the allocator's banks. A spilled result writes into the third FP
+/// scratch: that scratch is free unless `c` was itself spilled into it, in
+/// which case the FMADD reads Da before writing Dd. It must not reuse `dc`
+/// directly, since an allocated `c` register may hold a value a later
+/// instruction still needs (a loop-carried addend across several fused
+/// ops).
+#[allow(clippy::too_many_arguments)]
+fn emit_fma(
+    code: &mut Vec<u8>,
+    [a, b, c]: [u32; 3],
+    neg_product: bool,
+    neg_addend: bool,
+    v: super::super::ir::ValueId,
+    dst: Place,
+    alloc: &Allocation,
+    frame: Frame,
+) -> bool {
+    let is_f32 = alloc.is_f32(v);
+    let mut regs = [0u8; 3];
+    for (k, &src) in [a, b, c].iter().enumerate() {
+        let Some(d) = materialize_fp_for(
+            code,
+            src,
+            place_of(alloc, src),
+            frame.fp_scratch[k],
+            frame,
+            alloc,
+        ) else {
+            return false;
+        };
+        regs[k] = d;
+    }
+    let [da, dm, dc] = regs;
+    let dd = match dst {
+        Place::FpReg(r) => r,
+        Place::Spill(_) => frame.fp_scratch[2],
+        _ => return false,
+    };
+    emit(
+        code,
+        super::encode::enc_fma(dd, da, dm, dc, is_f32, neg_product, neg_addend),
+    );
+    store_spilled_fp(code, frame, dst, dd);
+    true
+}
+
+/// `Inst::FpCast`. C99 6.3.1.4: an integer converts directly to the result
+/// precision (one rounding) and a `float` source truncates directly to the
+/// integer; 6.3.1.5: the single-precision view occupies the low 32 bits of
+/// the same V register, so a widening or narrowing `fcvt` reads and writes
+/// the two views with no separate move.
+#[allow(clippy::too_many_arguments)]
+fn emit_fp_cast(
+    code: &mut Vec<u8>,
+    kind: super::super::ir::FpCastKind,
+    value: u32,
+    v: super::super::ir::ValueId,
+    dst: Place,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    use super::super::ir::FpCastKind;
+    let src_place = place_of(alloc, value);
+    match kind {
+        FpCastKind::IntToFp | FpCastKind::UIntToFp => {
+            let Some(rn) = materialize_int(code, src_place, scratch.primary, frame) else {
+                return false;
+            };
+            let Some(dd) = fp_or_spill_dst(dst, frame) else {
+                return false;
+            };
+            let res_f32 = alloc.is_f32(v);
+            let enc = match (matches!(kind, FpCastKind::UIntToFp), res_f32) {
+                (true, true) => enc_ucvtf_s_x(dd, rn),
+                (true, false) => enc_ucvtf_d_x(dd, rn),
+                (false, true) => enc_scvtf_s_x(dd, rn),
+                (false, false) => enc_scvtf_d_x(dd, rn),
+            };
+            emit(code, enc);
+            store_spilled_fp(code, frame, dst, dd);
+            true
+        }
+        FpCastKind::FpToInt | FpCastKind::UFpToInt => {
+            let src_f32 = alloc.is_f32(value);
+            let dn = if src_f32 {
+                materialize_fp_f32(code, src_place, frame.fp_scratch[0], frame)
+            } else {
+                materialize_fp(code, src_place, frame.fp_scratch[0], frame)
+            };
+            let Some(dn) = dn else {
+                return false;
+            };
+            let Some(rd) = int_or_spill_scratch(dst, scratch) else {
+                return false;
+            };
+            let enc = match (matches!(kind, FpCastKind::UFpToInt), src_f32) {
+                (true, true) => enc_fcvtzu_x_s(rd, dn),
+                (true, false) => enc_fcvtzu_x_d(rd, dn),
+                (false, true) => enc_fcvtzs_x_s(rd, dn),
+                (false, false) => enc_fcvtzs_x_d(rd, dn),
+            };
+            emit(code, enc);
+            store_spilled_int(code, frame, dst, rd);
+            true
+        }
+        FpCastKind::F32ToF64 | FpCastKind::F64ToF32 => {
+            let widen = matches!(kind, FpCastKind::F32ToF64);
+            let dn = if widen {
+                materialize_fp_f32(code, src_place, frame.fp_scratch[0], frame)
+            } else {
+                materialize_fp(code, src_place, frame.fp_scratch[0], frame)
+            };
+            let Some(dn) = dn else {
+                return false;
+            };
+            let Some(dd) = fp_or_spill_dst(dst, frame) else {
+                return false;
+            };
+            emit(
+                code,
+                if widen {
+                    enc_fcvt_d_s(dd, dn)
+                } else {
+                    enc_fcvt_s_d(dd, dn)
+                },
+            );
+            store_spilled_fp(code, frame, dst, dd);
+            true
         }
     }
 }

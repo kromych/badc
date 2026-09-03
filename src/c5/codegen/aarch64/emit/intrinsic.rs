@@ -1,9 +1,8 @@
 use super::*;
 
-/// `Inst::Intrinsic` lowering. Each variant matches the pool
-/// path's shape in [`super::encode::lower_op`] but pulls its
-/// operands from the allocator's `Place`s rather than off the c5
-/// stack / accumulator.
+/// `Inst::Intrinsic` lowering. Each variant matches the pool path's shape in
+/// [`super::encode::lower_op`] but pulls its operands from the allocator's
+/// `Place`s rather than off the c5 stack / accumulator.
 pub(super) fn emit_intrinsic(
     code: &mut Vec<u8>,
     func: &FunctionSsa,
@@ -17,583 +16,66 @@ pub(super) fn emit_intrinsic(
     scratch: &ScratchPool,
 ) -> bool {
     use crate::c5::op::Intrinsic as I;
-    let intrinsic = match I::from_i64(kind) {
-        Some(i) => i,
-        None => {
-            bail_msg("intrinsic: unknown discriminant");
-            return false;
-        }
+    let Some(intrinsic) = I::from_i64(kind) else {
+        bail_msg("intrinsic: unknown discriminant");
+        return false;
     };
     match intrinsic {
-        // Resolved to an `Imm` before lowering, by the SSA folds under
-        // `-O` and by the walker otherwise; reaching here is a pass-
-        // ordering bug.
+        // Resolved to an `Imm` before lowering, by the SSA folds under `-O`
+        // and by the walker otherwise; reaching here is a pass-ordering bug.
         I::ConstantP => {
             bail_msg("Intrinsic::ConstantP must be resolved before lowering");
             false
         }
         I::VaStart if aarch64_host_variadic_callee(func, abi) => {
-            // AAPCS64 `va_start` (Appendix B). args[0] = the `__va_list`
-            // pointer (the array-form `va_list` decayed to `&ap[0]`);
-            // args[1] = &last (unused -- the named-argument counts come
-            // from the prototype, not the last named argument's address).
-            // Initialise the 32-byte struct:
-            //   __stack  (+0)  = first incoming stack argument
-            //   __gr_top (+8)  = high edge of the general save area
-            //   __vr_top (+16) = high edge of the vector save area
-            //   __gr_offs (+24) = -(8 - named_int) * 8   (counts up to 0)
-            //   __vr_offs (+28) = -(8 - named_fp) * 16
-            if args.len() != 2 {
-                bail_msg("VaStart: expected 2 args");
-                return false;
-            }
-            let n = func.n_params;
-            let mut named_int = 0u32;
-            let mut named_fp = 0u32;
-            for i in 0..n {
-                if (func.param_fp_mask & (1u32 << i)) != 0 {
-                    named_fp += 1;
-                } else {
-                    named_int += 1;
-                }
-            }
-            let ap_place = alloc
-                .places
-                .get(args[0] as usize)
-                .copied()
-                .unwrap_or(Place::None);
-            let ap_r = match materialize_int(code, ap_place, scratch.primary, frame) {
-                Some(r) => r,
-                None => return false,
-            };
-            // The struct pointer must survive the field writes; keep it in
-            // scratch.primary so the secondary is free to stage each value.
-            let ap = if ap_r.0 != scratch.primary.0 {
-                emit_mov_reg(code, scratch.primary, ap_r);
-                scratch.primary
-            } else {
-                ap_r
-            };
-            // __stack (+0) = fp + 16 + 192 + named-stack-overflow. Incoming
-            // stack arguments begin just above the register save area at
-            // [fp + 208]; the named parameters that overflowed the argument
-            // registers occupy the low slots there, so the variadic tail
-            // begins past them.
-            let named_stack_bytes: u32 = super::plan_param_regs(n, func.param_fp_mask, abi)
-                .placements
-                .iter()
-                .filter(|q| matches!(q, super::ArgPlacement::Stack(_)))
-                .count() as u32
-                * 8;
-            emit_fp_plus_off(
-                code,
-                scratch.secondary,
-                16 + AARCH64_VA_SAVE_BYTES + named_stack_bytes,
-            );
-            emit(code, enc_str_imm(scratch.secondary, ap, 0));
-            // __gr_top (+8) = fp + 16 + 64 (high edge of the general area).
-            emit_fp_plus_off(code, scratch.secondary, 16 + AARCH64_GR_SAVE_BYTES);
-            emit(code, enc_str_imm(scratch.secondary, ap, 8));
-            // __vr_top (+16) = fp + 16 + 192 (high edge of the vector area).
-            emit_fp_plus_off(code, scratch.secondary, 16 + AARCH64_VA_SAVE_BYTES);
-            emit(code, enc_str_imm(scratch.secondary, ap, 16));
-            // __gr_offs (+24) = -(8 - named_int) * 8. A named integer
-            // parameter past the eight argument registers overflows to the
-            // stack, which this offset does not cover (the same assumption
-            // `local_slot_off` makes for the named-parameter redirect).
-            let gr_offs = -((8u32.saturating_sub(named_int) * 8) as i64);
-            load_imm64(code, scratch.secondary, gr_offs as u64);
-            emit(code, enc_str32_imm(scratch.secondary, ap, 24));
-            // __vr_offs (+28) = -(8 - named_fp) * 16, or 0 when the
-            // prologue skipped the vector save area: zero reads as
-            // exhausted, so `va_arg` walks the general area then the
-            // overflow stack.
-            let vr_offs = if abi.no_fp_varargs {
-                0
-            } else {
-                -((8u32.saturating_sub(named_fp) * 16) as i64)
-            };
-            load_imm64(code, scratch.secondary, vr_offs as u64);
-            emit(code, enc_str32_imm(scratch.secondary, ap, 28));
-            true
+            emit_va_start_aapcs64(code, func, abi, args, alloc, frame, scratch)
         }
-        I::VaStart => {
-            // __builtin_va_start(&ap, &last). args[0] = &ap,
-            // args[1] = &last. Set *ap = address of the first
-            // variadic argument.
-            if args.len() != 2 {
-                bail_msg("VaStart: expected 2 args");
-                return false;
-            }
-            let ap_place = alloc
-                .places
-                .get(args[0] as usize)
-                .copied()
-                .unwrap_or(Place::None);
-            let ap_r = match materialize_int(code, ap_place, scratch.primary, frame) {
-                Some(r) => r,
-                None => return false,
-            };
-            if win_arm64_variadic_callee(func, abi) {
-                // Windows-on-ARM64 variadic ABI (Microsoft ARM64 calling
-                // convention): the prologue spilled x0..x7 into the
-                // 64-byte gr-save area at `[fp + 16 .. fp + 80)`, one
-                // 8-byte slot per argument position. The named arguments
-                // occupy the first `n_params` slots; the first variadic
-                // argument is slot `n_params` at `fp + 16 + n_params*8`.
-                // The gr-save area's top edge (`fp + 80`) meets the
-                // incoming stack overflow, so the single cursor `va_arg`
-                // advances by 8 walks the register-saved variadic
-                // arguments then crosses into the stack arguments with no
-                // gap (the same fixed-count / base / stride the prologue
-                // and `c5_slot_to_fp_offset` use).
-                debug_assert!(
-                    func.n_params <= abi.int_arg_regs.len(),
-                    "win-arm64 variadic callee assumes named params fit the int arg bank"
-                );
-                let off = 16 + (func.n_params as u32) * 8;
-                emit_fp_plus_off(code, scratch.secondary, off);
-                emit(code, enc_str_imm(scratch.secondary, ap_r, 0));
-                return true;
-            }
-            if func.is_variadic && abi.variadic_on_stack {
-                // macOS arm64 variadic ABI: the named arguments arrive
-                // in argument registers (spilled to c5 cdecl cells by
-                // the prologue) and the variadic arguments sit on the
-                // incoming stack above the named arguments' stack
-                // overflow. The named arguments are no longer adjacent
-                // to the variadic tail, so `&last` cannot locate it;
-                // compute the address from the frame.
-                //
-                // The prologue allocates `frame.param_spill_bytes` of
-                // c5 cdecl cells plus the standard 16-byte fp/lr save
-                // below fp, so the incoming-stack region begins at
-                // `fp + param_spill_bytes + 16`. The named arguments
-                // that overflowed the registers occupy the low
-                // `n_stack * 8` bytes of that region (AAPCS64 8-byte
-                // stack stride); the variadic tail follows.
-                let (_, n_stack) = param_reg_stack_split(func, abi);
-                let named_overflow_bytes = (n_stack as u32) * 8;
-                let off = frame.param_spill_bytes + 16 + named_overflow_bytes;
-                // The c5 cdecl cell region the prologue allocates keeps
-                // fp 16-aligned (each cell is 16 bytes, the fp/lr save
-                // is 16 bytes); a non-16-aligned `off` would mean the
-                // frame accounting and the incoming-stack region
-                // disagree.
-                debug_assert_eq!(
-                    (frame.param_spill_bytes + 16) % 16,
-                    0,
-                    "va_start: c5 cdecl cell region must keep fp 16-aligned"
-                );
-                emit_fp_plus_off(code, scratch.secondary, off);
-                emit(code, enc_str_imm(scratch.secondary, ap_r, 0));
-                return true;
-            }
-            // macOS arm64 (`variadic_on_stack`) and Windows arm64
-            // (`win_arm64_variadic_callee`) return above; Linux aarch64
-            // takes the `aarch64_host_variadic_callee` arm. No other
-            // aarch64 variadic callee shape reaches here.
-            bail_msg("VaStart: variadic callee not matched by a host-ABI branch");
-            false
-        }
+        I::VaStart => emit_va_start_cursor(code, func, abi, args, alloc, frame, scratch),
+        // The AAPCS64 `va_list` is a `__va_list` struct on this target, so
+        // `va_arg` / `va_copy` walk it whether or not the current function
+        // is itself variadic: a non-variadic forwarder (the `c5_v*printf`
+        // shims) receives a forwarded `va_list` and must read it the same
+        // way. Gate on the target ABI, not `func.is_variadic`.
         I::VaArg if abi.aarch64_host_variadic() => {
-            // The AAPCS64 `va_list` is a `__va_list` struct on this
-            // target, so `va_arg` walks the general / vector save areas
-            // regardless of whether the current function is itself
-            // variadic: a non-variadic forwarder (the `c5_v*printf`
-            // shims) receives a forwarded `va_list` and must read it the
-            // same way. Gate on the target ABI, not `func.is_variadic`.
             emit_va_arg_aapcs64(code, args, dst, func, alloc, frame, scratch)
         }
-        I::VaArg => {
-            // __builtin_va_arg(&ap) returns *ap (the address of the
-            // current variadic slot) and advances *ap to the next. The
-            // stride is a property of the va_list layout the target
-            // builds, not of the current function, so a non-variadic
-            // forwarder (e.g. libc's `vsnprintf` taking a `va_list`) walks
-            // the same stride the variadic caller produced; this does not
-            // depend on `func.is_variadic`. Linux aarch64 routes its
-            // variadic intrinsics through the register-save-area arm above
-            // (gated on `aarch64_host_variadic`), so the cursor arm is
-            // reached only by macOS arm64 (`variadic_on_stack`) and
-            // Windows arm64 (`variadic_int_only`), both of which lay
-            // variadic arguments at 8-byte stride (the incoming stack,
-            // respectively the gr-save area + stack overflow). args[0] =
-            // &ap, args[1] = the packed `(kind << 16) | size` descriptor.
-            // A scalar occupies one eightbyte; a by-value aggregate spans
-            // `ceil(size/8)` consecutive eightbytes, so the cursor
-            // advances by the aggregate's eightbyte span. va_arg returns
-            // the slot address; the caller's load / Mcpy reads `size`
-            // bytes from it.
-            if args.is_empty() {
-                bail_msg("VaArg: expected at least the ap argument");
-                return false;
-            }
-            let va_stride: u32 = match args.get(1).and_then(|a| func.insts.get(*a as usize)) {
-                Some(super::super::ir::Inst::Imm(d)) => (((*d & 0xffff) as u32 + 7) & !7).max(8),
-                _ => 8,
-            };
-            let ap_place = alloc
-                .places
-                .get(args[0] as usize)
-                .copied()
-                .unwrap_or(Place::None);
-            let ap_r = match materialize_int(code, ap_place, scratch.primary, frame) {
-                Some(r) => r,
-                None => return false,
-            };
-            // The result is loaded into a work register, the cursor is
-            // advanced by 16, then the result is delivered to the
-            // destination. The work register and the advance temporary
-            // must each differ from the cursor address `ap_r` so the
-            // writeback stores to the right slot. A spilled destination
-            // stages in a scratch register and stores afterward.
-            let rd = match dst {
-                Place::IntReg(r) if r != ap_r.0 => Reg(r),
-                _ if scratch.secondary.0 != ap_r.0 => scratch.secondary,
-                _ => scratch.primary,
-            };
-            let adv = if scratch.primary.0 != ap_r.0 && scratch.primary.0 != rd.0 {
-                scratch.primary
-            } else if scratch.secondary.0 != ap_r.0 && scratch.secondary.0 != rd.0 {
-                scratch.secondary
-            } else {
-                // Both scratch registers hold the cursor and the staged
-                // result (cursor and destination both spilled). x19 is
-                // a callee-saved register reserved by the prologue for
-                // any function with an intrinsic -- which a VaArg is --
-                // so it serves as a third scratch here.
-                Reg(19)
-            };
-            emit(code, enc_ldr_imm(rd, ap_r, 0));
-            emit(code, enc_add_imm(adv, rd, va_stride));
-            emit(code, enc_str_imm(adv, ap_r, 0));
-            match dst {
-                Place::IntReg(r) if rd.0 != r => emit_mov_reg(code, Reg(r), rd),
-                Place::Spill(slot) => {
-                    let sp_off = spill_off(frame, slot);
-                    emit_spill_str_x_auto(code, frame, rd, sp_off);
-                }
-                _ => {}
-            }
-            true
-        }
-        I::VaEnd => {
-            // No teardown for the cursor model. args[0] is unused.
-            true
-        }
+        I::VaArg => emit_va_arg_cursor(code, func, args, dst, alloc, frame, scratch),
+        // No teardown for the cursor model. args[0] is unused.
+        I::VaEnd => true,
         I::VaCopy if abi.aarch64_host_variadic() => {
-            // AAPCS64 `va_copy` is a 32-byte `__va_list` struct copy
-            // (Appendix B): three pointers plus two offsets. args[0] =
-            // &dst struct, args[1] = &src struct. Like `va_arg`, gate on
-            // the target ABI so a non-variadic forwarder copies the
-            // struct it received rather than a single cursor word.
-            if args.len() != 2 {
-                bail_msg("VaCopy: expected 2 args");
-                return false;
-            }
-            let dst_place = alloc
-                .places
-                .get(args[0] as usize)
-                .copied()
-                .unwrap_or(Place::None);
-            let src_place = alloc
-                .places
-                .get(args[1] as usize)
-                .copied()
-                .unwrap_or(Place::None);
-            let dst_r = match materialize_int(code, dst_place, scratch.primary, frame) {
-                Some(r) => r,
-                None => return false,
-            };
-            let src_r = match materialize_int(code, src_place, scratch.secondary, frame) {
-                Some(r) => r,
-                None => return false,
-            };
-            // Transfer register distinct from both pointer registers. x9
-            // / x10 / x11 are AAPCS64 caller-saved temporaries outside the
-            // allocator's reach here; save and restore the chosen one so a
-            // live value it may hold is preserved across the copy.
-            let borrow = [9u8, 10, 11]
-                .into_iter()
-                .map(Reg)
-                .find(|r| r.0 != dst_r.0 && r.0 != src_r.0)
-                .expect("a caller-saved transfer register is always free");
-            emit(code, enc_str_pre(borrow, Reg(31), -16));
-            for off in [0u32, 8, 16, 24] {
-                emit(code, enc_ldr_imm(borrow, src_r, off));
-                emit(code, enc_str_imm(borrow, dst_r, off));
-            }
-            emit(code, enc_ldr_post(borrow, Reg(31), 16));
-            true
+            emit_va_copy_aapcs64(code, args, alloc, frame, scratch)
         }
-        I::VaCopy => {
-            // __builtin_va_copy(&dst, &src). args[0] = &dst,
-            // args[1] = &src. *dst = *src.
-            if args.len() != 2 {
-                bail_msg("VaCopy: expected 2 args");
-                return false;
-            }
-            let dst_place = alloc
-                .places
-                .get(args[0] as usize)
-                .copied()
-                .unwrap_or(Place::None);
-            let src_place = alloc
-                .places
-                .get(args[1] as usize)
-                .copied()
-                .unwrap_or(Place::None);
-            let dst_r = match materialize_int(code, dst_place, scratch.primary, frame) {
-                Some(r) => r,
-                None => return false,
-            };
-            let src_r = match materialize_int(code, src_place, scratch.secondary, frame) {
-                Some(r) => r,
-                None => return false,
-            };
-            emit(code, enc_ldr_imm(scratch.secondary, src_r, 0));
-            emit(code, enc_str_imm(scratch.secondary, dst_r, 0));
-            true
-        }
-        I::Alloca => {
-            // alloca(n): move sp down by `n` rounded up to 16 bytes
-            // and return the new sp. The 16-byte rounding keeps sp
-            // aligned (AAPCS64 5.2.2.1); the frame's spill slots and
-            // locals stay reachable through fp (`Frame::dynamic_sp`).
-            // The storage is reclaimed by the epilogue's
-            // `sub sp, fp, #frame_bytes`, or earlier by an
-            // `AllocaRestore` closing a VLA scope (C99 6.2.4p2).
-            if !frame.dynamic_sp {
-                bail_msg("Alloca: AllocaInit didn't run for this function");
-                return false;
-            }
-            if args.len() != 1 {
-                bail_msg("Alloca: expected 1 arg");
-                return false;
-            }
-            let Some(rd) = int_or_spill_scratch(dst, scratch) else {
-                bail_msg("Alloca: dst not int reg / spill");
-                return false;
-            };
-            let size_place = alloc
-                .places
-                .get(args[0] as usize)
-                .copied()
-                .unwrap_or(Place::None);
-            let n = match materialize_int(code, size_place, scratch.primary, frame) {
-                Some(r) => r,
-                None => return false,
-            };
-            // x17 = (n + 15) & ~15 -- the 16-byte-aligned size.
-            emit(code, enc_add_imm(scratch.secondary, n, 15));
-            emit(
-                code,
-                super::encode::enc_and_imm_neg16(scratch.secondary, scratch.secondary),
-            );
-            // rd = sp - aligned_size, the final sp value. rd is an
-            // allocator register or x16; x17 holds the size, so the
-            // two never alias.
-            emit(code, enc_add_imm(rd, Reg(31), 0));
-            emit(code, enc_sub_reg(rd, rd, scratch.secondary));
-            // Walk sp down page by page, touching each, before committing
-            // the final value: the same guard-region rule the prologue's
-            // `emit_stack_alloc` follows, over a size known only at run
-            // time. x17 (the dead size) carries the page count. The size
-            // is 16-aligned, so the amount the settling `mov` covers past
-            // the last probe is at most MAX_UNPROBED_STACK_STEP and needs
-            // no probe of its own.
-            emit(
-                code,
-                super::encode::enc_lsr_imm(scratch.secondary, scratch.secondary, 12),
-            );
-            emit(code, enc_cbz(scratch.secondary, 5));
-            emit(code, super::encode::enc_sub_imm_lsl12(Reg(31), Reg(31), 1));
-            emit_stack_probe(code);
-            emit(
-                code,
-                super::encode::enc_subs_imm(scratch.secondary, scratch.secondary, 1),
-            );
-            emit(code, super::encode::enc_b_cond(super::encode::Cond::Ne, -3));
-            emit(code, enc_add_imm(Reg(31), rd, 0));
-            store_spilled_int(code, frame, dst, rd);
-            true
-        }
-        I::AllocaSave => {
-            // Snapshot sp for a VLA block (C99 6.2.4p2).
-            if !frame.dynamic_sp {
-                bail_msg("AllocaSave: AllocaInit didn't run for this function");
-                return false;
-            }
-            let Some(rd) = int_or_spill_scratch(dst, scratch) else {
-                bail_msg("AllocaSave: dst not int reg / spill");
-                return false;
-            };
-            emit(code, enc_add_imm(rd, Reg(31), 0));
-            store_spilled_int(code, frame, dst, rd);
-            true
-        }
-        I::AllocaRestore => {
-            // Restore the saved sp on VLA block exit, reclaiming the
-            // block's VLA storage (per iteration for a loop body).
-            if !frame.dynamic_sp {
-                bail_msg("AllocaRestore: AllocaInit didn't run for this function");
-                return false;
-            }
-            if args.len() != 1 {
-                bail_msg("AllocaRestore: expected 1 arg");
-                return false;
-            }
-            let v_place = alloc
-                .places
-                .get(args[0] as usize)
-                .copied()
-                .unwrap_or(Place::None);
-            let v = match materialize_int(code, v_place, scratch.primary, frame) {
-                Some(r) => r,
-                None => {
-                    bail_msg("AllocaRestore: arg not int reg / spill / fp");
-                    return false;
-                }
-            };
-            emit(code, enc_add_imm(Reg(31), v, 0));
-            true
-        }
-        I::SetjmpAArch64 => {
-            // c5 binds <setjmp.h>'s setjmp() to this intrinsic on
-            // Windows aarch64 because msvcrt's longjmp routes
-            // through SEH and refuses a CRT-free `jmp_buf`. The
-            // inline expansion mirrors the pool path: 25 AArch64
-            // words that save x19-x28, x29, the resume PC, sp,
-            // and d8-d15 into [env].
-            if args.len() != 1 {
-                bail_msg("Setjmp: expected 1 arg");
-                return false;
-            }
-            let env_place = alloc
-                .places
-                .get(args[0] as usize)
-                .copied()
-                .unwrap_or(Place::None);
-            let env_r = match materialize_int(code, env_place, scratch.primary, frame) {
-                Some(r) => r,
-                None => {
-                    bail_msg("Setjmp: env not int reg / spill / fp");
-                    return false;
-                }
-            };
-            // The helper reads env from x19; route it there.
-            if env_r.0 != 19 {
-                emit_mov_reg(code, Reg(19), env_r);
-            }
-            emit_setjmp_aarch64(code);
-            // After the helper, x19 holds 0 on the initial pass and
-            // the longjmp val on a matching longjmp return. Route
-            // x19 into dst (or spill to the dst slot) -- the
-            // helper's saved-PC points past the helper's last
-            // instruction, so the longjmp BR lands here.
-            let Some(rd) = int_or_spill_scratch(dst, scratch) else {
-                bail_msg("Setjmp: dst not int reg / spill");
-                return false;
-            };
-            if rd.0 != 19 {
-                emit_mov_reg(code, rd, Reg(19));
-            }
-            store_spilled_int(code, frame, dst, rd);
-            true
-        }
-        I::LongjmpAArch64 => {
-            // c5 binds <setjmp.h>'s longjmp() to this intrinsic on
-            // Windows aarch64. args[0] = env, args[1] = val. The
-            // helper restores the saved register set, materializes
-            // x19 = (val != 0) ? val : 1 per C99 7.13.2.1p2, and
-            // branches to the saved PC.
-            if args.len() != 2 {
-                bail_msg("Longjmp: expected 2 args");
-                return false;
-            }
-            let env_place = alloc
-                .places
-                .get(args[0] as usize)
-                .copied()
-                .unwrap_or(Place::None);
-            let val_place = alloc
-                .places
-                .get(args[1] as usize)
-                .copied()
-                .unwrap_or(Place::None);
-            let env_r = match materialize_int(code, env_place, Reg(16), frame) {
-                Some(r) => r,
-                None => {
-                    bail_msg("Longjmp: env not int reg / spill / fp");
-                    return false;
-                }
-            };
-            if env_r.0 != 16 {
-                emit_mov_reg(code, Reg(16), env_r);
-            }
-            // Stash val in x17 (the secondary scratch in this
-            // module) before the upcoming restores clobber x19.
-            let val_r = match materialize_int(code, val_place, Reg(17), frame) {
-                Some(r) => r,
-                None => {
-                    bail_msg("Longjmp: val not int reg / spill / fp");
-                    return false;
-                }
-            };
-            if val_r.0 != 17 {
-                emit_mov_reg(code, Reg(17), val_r);
-            }
-            // Restore x19-x28 + x29 from [x16 + offset].
-            for (i, off) in (JB_X19_OFF..JB_X29_OFF).step_by(8).enumerate() {
-                emit(code, enc_ldr_imm(Reg(19 + i as u8), Reg(16), off));
-            }
-            emit(code, enc_ldr_imm(Reg(29), Reg(16), JB_X29_OFF));
-            // Resume PC into x10, sp into x9. x10 is caller-saved
-            // (setjmp's caller doesn't expect it preserved); x18
-            // is the Windows TEB pointer and stays untouched.
-            emit(code, enc_ldr_imm(Reg(10), Reg(16), JB_PC_OFF));
-            emit(code, enc_ldr_imm(Reg(9), Reg(16), JB_SP_OFF));
-            emit(code, enc_add_imm(Reg(31), Reg(9), 0));
-            for (i, off) in (JB_D8_OFF..JB_D8_OFF + 64).step_by(8).enumerate() {
-                emit(code, enc_ldr_d_imm(8 + i as u8, Reg(16), off));
-            }
-            // cmp val, #0 ; cinc x19, val, eq -- 0 becomes 1,
-            // anything else passes through unchanged.
-            emit(code, enc_subs_imm(Reg(31), Reg(17), 0));
-            emit(code, enc_cinc(Reg(19), Reg(17), Cond::Eq));
-            emit(code, enc_br(Reg(10)));
-            true
-        }
+        I::VaCopy => emit_va_copy_cursor(code, args, alloc, frame, scratch),
+        I::Alloca => emit_alloca(code, args, dst, alloc, frame, scratch),
+        I::AllocaSave => emit_alloca_save(code, dst, frame, scratch),
+        I::AllocaRestore => emit_alloca_restore(code, args, alloc, frame, scratch),
+        I::SetjmpAArch64 => emit_setjmp(code, args, dst, alloc, frame, scratch),
+        I::LongjmpAArch64 => emit_longjmp(code, args, alloc, frame),
         // fma / fmaf lower to Inst::Fma at the call site, so they never
         // reach the Inst::Intrinsic dispatch.
         I::Fma | I::Fmaf => false,
+        // `brk #0` raises a breakpoint / illegal-state exception.
         I::Trap => {
-            // `brk #0` (0xD4200000) raises a breakpoint / illegal-state
-            // exception. Execution does not continue past it.
             emit(code, 0xD420_0000u32);
             true
         }
+        // `yield`, the AArch64 spin-loop hint.
         I::CpuRelax => {
-            // `yield` (0xD503203F), the AArch64 spin-loop hint.
             emit(code, 0xD503_203Fu32);
             true
         }
+        // `dmb ish`, a full barrier across the inner shareable domain (C11
+        // 7.17.4 seq_cst).
         I::AtomicThreadFence => {
-            // `dmb ish` (0xD5033BBF), a full barrier across the inner
-            // shareable domain (C11 7.17.4 seq_cst). No operand, no result.
             emit(code, 0xD503_3BBFu32);
             true
         }
+        // The x86-only forms; the source gates each on the target.
         I::X87StoreControlWord | I::X87LoadControlWord => {
-            // The x87 FPU control word is x86-only; AArch64 source never
-            // reaches for it (the guarding HAVE_GCC_ASM_FOR_X87 is unset).
             bail_msg("x87 control word intrinsic is x86-only");
             false
         }
         I::X86FxSave | I::X86FxRestore => {
-            // fxsave / fxrstor are x86-only; the AArch64 firmware path uses
-            // its own FP state save and never reaches these.
             bail_msg("fxsave / fxrstor intrinsic is x86-only");
             false
         }
@@ -605,79 +87,28 @@ pub(super) fn emit_intrinsic(
         | I::X86Lidt
         | I::X86Lldt
         | I::X86Clflush => {
-            // x86 descriptor-table / clflush forms; AArch64 has no equivalent
-            // and the source gates them on the target.
             bail_msg("descriptor-table intrinsic is x86-only");
             false
         }
         I::Divq128 => {
-            // The `divq` 128/64 divide is x86-only; the source gates it on
-            // `__x86_64__`, so AArch64 never reaches it.
             bail_msg("divq intrinsic is x86-64 only");
             false
         }
+        // `dsb ish`: data synchronisation barrier over the inner shareable
+        // domain.
         I::AArch64DsbIsh => {
-            // `dsb ish` (0xD5033B9F): data synchronisation barrier over the
-            // inner shareable domain. No operand, no result.
             emit(code, 0xD503_3B9Fu32);
             true
         }
+        // `isb`: instruction synchronisation barrier.
         I::AArch64Isb => {
-            // `isb` (0xD5033FDF): instruction synchronisation barrier. No
-            // operand, no result.
             emit(code, 0xD503_3FDFu32);
             true
         }
         I::AArch64DcCvau | I::AArch64IcIvau => {
-            // `dc cvau, Xt` (0xD50B7B20|Rt) / `ic ivau, Xt` (0xD50B7520|Rt):
-            // clean the data cache / invalidate the instruction cache to the
-            // point of unification for the address in Xt. One pointer input.
-            if args.len() != 1 {
-                bail_msg("dc/ic cache op: expected 1 arg");
-                return false;
-            }
-            let place = alloc
-                .places
-                .get(args[0] as usize)
-                .copied()
-                .unwrap_or(Place::None);
-            let rt = match materialize_int(code, place, scratch.primary, frame) {
-                Some(r) => r,
-                None => return false,
-            };
-            let base = if matches!(intrinsic, I::AArch64DcCvau) {
-                0xD50B_7B20u32
-            } else {
-                0xD50B_7520u32
-            };
-            emit(code, base | (rt.0 as u32));
-            true
+            emit_cache_op(code, intrinsic, args, alloc, frame, scratch)
         }
-        I::AArch64ReadCacheType => {
-            // `mrs Xt, ctr_el0` (0xD53B0020|Rt) reads the cache type
-            // register; store it to the output operand's address (arg 0).
-            if args.len() != 1 {
-                bail_msg("mrs ctr_el0: expected 1 arg");
-                return false;
-            }
-            let place = alloc
-                .places
-                .get(args[0] as usize)
-                .copied()
-                .unwrap_or(Place::None);
-            let addr = match materialize_int(code, place, scratch.primary, frame) {
-                Some(r) => r,
-                None => return false,
-            };
-            let tmp = if addr.0 == scratch.secondary.0 {
-                scratch.primary
-            } else {
-                scratch.secondary
-            };
-            emit(code, 0xD53B_0020u32 | (tmp.0 as u32));
-            emit(code, enc_str_imm(tmp, addr, 0));
-            true
-        }
+        I::AArch64ReadCacheType => emit_read_cache_type(code, args, alloc, frame, scratch),
         I::Atomic128CmpXchg | I::Atomic128Xchg | I::Atomic128FetchAnd | I::Atomic128FetchOr => {
             emit_atomic128(code, intrinsic, args, alloc, frame, scratch)
         }
@@ -694,127 +125,17 @@ pub(super) fn emit_intrinsic(
         | I::Ceil
         | I::Ceilf
         | I::Trunc
-        | I::Truncf => {
-            if args.len() != 1 {
-                bail_msg("unary FP intrinsic: expected 1 arg");
-                return false;
-            }
-            let src_place = alloc
-                .places
-                .get(args[0] as usize)
-                .copied()
-                .unwrap_or(Place::None);
-            let is_f32 = alloc.is_f32(v);
-            let dn = match materialize_fp_for(
-                code,
-                args[0],
-                src_place,
-                frame.fp_scratch[0],
-                frame,
-                alloc,
-            ) {
-                Some(r) => r,
-                None => return false,
-            };
-            let dd = match dst {
-                Place::FpReg(r) => r,
-                Place::Spill(_) => frame.fp_scratch[1],
-                _ => return false,
-            };
-            use super::encode::{
-                enc_fabs_d, enc_fabs_s, enc_frintm_d, enc_frintm_s, enc_frintp_d, enc_frintp_s,
-                enc_frintz_d, enc_frintz_s, enc_fsqrt_d, enc_fsqrt_s,
-            };
-            let inst = match intrinsic {
-                I::Sqrt | I::Sqrtf if is_f32 => enc_fsqrt_s(dd, dn),
-                I::Sqrt | I::Sqrtf => enc_fsqrt_d(dd, dn),
-                I::Fabs | I::Fabsf if is_f32 => enc_fabs_s(dd, dn),
-                I::Fabs | I::Fabsf => enc_fabs_d(dd, dn),
-                I::Floor | I::Floorf if is_f32 => enc_frintm_s(dd, dn),
-                I::Floor | I::Floorf => enc_frintm_d(dd, dn),
-                I::Ceil | I::Ceilf if is_f32 => enc_frintp_s(dd, dn),
-                I::Ceil | I::Ceilf => enc_frintp_d(dd, dn),
-                _ if is_f32 => enc_frintz_s(dd, dn),
-                _ => enc_frintz_d(dd, dn),
-            };
-            emit(code, inst);
-            store_spilled_fp(code, frame, dst, dd);
-            true
-        }
-        I::FrameAddress => {
-            // __builtin_frame_address(0): the current frame pointer (x29).
-            // A level above 0 reaches here as this plus a load chain.
-            // Materialise through scratch when the dst spilled.
-            let rd = match dst {
-                Place::IntReg(r) => Reg(r),
-                Place::Spill(_) => Reg(16),
-                _ => {
-                    bail_msg("FrameAddress: dst not int reg / spill");
-                    return false;
-                }
-            };
-            emit(code, enc_add_imm(rd, Reg(29), 0));
-            store_spilled_int(code, frame, dst, rd);
-            true
-        }
-        I::StackPointer => {
-            // A `register T v asm("sp")` read: the current stack pointer.
-            // ADD (immediate) reads register 31 as SP.
-            let rd = match dst {
-                Place::IntReg(r) => Reg(r),
-                Place::Spill(_) => Reg(16),
-                _ => {
-                    bail_msg("StackPointer: dst not int reg / spill");
-                    return false;
-                }
-            };
-            emit(code, enc_add_imm(rd, Reg(31), 0));
-            store_spilled_int(code, frame, dst, rd);
-            true
-        }
-        I::ReturnAddress => {
-            // __builtin_return_address: the return address a frame record
-            // holds at [fp + 8], where the AAPCS64 prologue saved x30.
-            // Without an operand the record is the current frame's; with
-            // one, the frame address a level above 0 walked to.
-            let rd = match dst {
-                Place::IntReg(r) => Reg(r),
-                Place::Spill(_) => Reg(16),
-                _ => {
-                    bail_msg("ReturnAddress: dst not int reg / spill");
-                    return false;
-                }
-            };
-            let fp = match args {
-                [] => Reg(29),
-                [walked] => {
-                    let place = place_of(alloc, *walked);
-                    match materialize_int(code, place, scratch.primary, frame) {
-                        Some(r) => r,
-                        None => {
-                            bail_msg("ReturnAddress: frame not int reg / spill");
-                            return false;
-                        }
-                    }
-                }
-                _ => {
-                    bail_msg("ReturnAddress: expected at most 1 arg");
-                    return false;
-                }
-            };
-            // Under pac-ret the slot holds a signed pointer, which matches
-            // no symbol range. `XPACLRI` strips x30 and no other register,
-            // so the value is staged there; the epilogue reloads x30 from
-            // the current frame's slot. Holding the intrinsic keeps the
-            // function off the full-leaf path, so that record always
-            // exists. Unconditional, as gcc and clang emit it: the hint is
-            // a NOP without FEAT_PAuth and an unsigned pointer survives it.
-            emit(code, enc_ldr_imm(Reg(30), fp, 8));
-            emit(code, super::encode::XPACLRI);
-            emit_mov_reg(code, rd, Reg(30));
-            store_spilled_int(code, frame, dst, rd);
-            true
-        }
+        | I::Truncf => emit_unary_fp(code, intrinsic, args, dst, v, alloc, frame),
+        // __builtin_frame_address(0): the current frame pointer (x29). A
+        // level above 0 reaches here as this plus a load chain.
+        I::FrameAddress => emit_frame_register(code, dst, frame, Reg(29), "FrameAddress"),
+        // A `register T v asm("sp")` read; ADD (immediate) reads register
+        // 31 as SP.
+        I::StackPointer => emit_frame_register(code, dst, frame, Reg(31), "StackPointer"),
+        I::ReturnAddress => emit_return_address(code, args, dst, alloc, frame, scratch),
+        // The integer bit-count and byte-swap builtins are lowered to a
+        // portable shift / mask sequence in the walker; they never reach
+        // codegen as an `Inst::Intrinsic`.
         I::Clz
         | I::Ctz
         | I::Popcount
@@ -830,12 +151,12 @@ pub(super) fn emit_intrinsic(
         | I::Bswap16
         | I::Bswap32
         | I::Bswap64 => {
-            // The integer bit-count and byte-swap builtins are lowered to a
-            // portable shift / mask sequence in the walker; they never reach
-            // codegen as an `Inst::Intrinsic`.
             bail_msg("intrinsic: bit builtin reached codegen");
             false
         }
+        // C11 atomic operations are lowered to load / store /
+        // read-modify-write at the call site; they never reach codegen as
+        // an `Inst::Intrinsic`.
         I::AtomicLoad
         | I::AtomicStore
         | I::AtomicExchange
@@ -845,13 +166,371 @@ pub(super) fn emit_intrinsic(
         | I::AtomicFetchOr
         | I::AtomicFetchXor
         | I::AtomicCompareExchangeStrong => {
-            // C11 atomic operations are lowered to load / store /
-            // read-modify-write at the call site; they never reach
-            // codegen as an `Inst::Intrinsic`.
             bail_msg("intrinsic: atomic op reached codegen");
             false
         }
     }
+}
+
+/// `alloca(n)`: move sp down by `n` rounded up to 16 bytes (AAPCS64
+/// 5.2.2.1) and return the new sp. The frame's spill slots and locals stay
+/// reachable through fp (`Frame::dynamic_sp`); the storage is reclaimed by
+/// the epilogue's `sub sp, fp, #frame_bytes`, or earlier by an
+/// `AllocaRestore` closing a VLA scope (C99 6.2.4p2).
+fn emit_alloca(
+    code: &mut Vec<u8>,
+    args: &[u32],
+    dst: Place,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    if !frame.dynamic_sp {
+        bail_msg("Alloca: AllocaInit didn't run for this function");
+        return false;
+    }
+    if args.len() != 1 {
+        bail_msg("Alloca: expected 1 arg");
+        return false;
+    }
+    let Some(rd) = int_or_spill_scratch(dst, scratch) else {
+        bail_msg("Alloca: dst not int reg / spill");
+        return false;
+    };
+    let Some(n) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame) else {
+        return false;
+    };
+    // x17 = (n + 15) & ~15 -- the 16-byte-aligned size.
+    emit(code, enc_add_imm(scratch.secondary, n, 15));
+    emit(
+        code,
+        super::encode::enc_and_imm_neg16(scratch.secondary, scratch.secondary),
+    );
+    // rd = sp - aligned_size, the final sp value. rd is an allocator
+    // register or x16; x17 holds the size, so the two never alias.
+    emit(code, enc_add_imm(rd, Reg(31), 0));
+    emit(code, enc_sub_reg(rd, rd, scratch.secondary));
+    // Walk sp down page by page, touching each, before committing the final
+    // value: the same guard-region rule the prologue's `emit_stack_alloc`
+    // follows, over a size known only at run time. x17 (the dead size)
+    // carries the page count. The size is 16-aligned, so the amount the
+    // settling `mov` covers past the last probe is at most
+    // MAX_UNPROBED_STACK_STEP and needs no probe of its own.
+    emit(
+        code,
+        super::encode::enc_lsr_imm(scratch.secondary, scratch.secondary, 12),
+    );
+    emit(code, enc_cbz(scratch.secondary, 5));
+    emit(code, super::encode::enc_sub_imm_lsl12(Reg(31), Reg(31), 1));
+    emit_stack_probe(code);
+    emit(
+        code,
+        super::encode::enc_subs_imm(scratch.secondary, scratch.secondary, 1),
+    );
+    emit(code, super::encode::enc_b_cond(super::encode::Cond::Ne, -3));
+    emit(code, enc_add_imm(Reg(31), rd, 0));
+    store_spilled_int(code, frame, dst, rd);
+    true
+}
+
+/// Snapshot sp for a VLA block (C99 6.2.4p2).
+fn emit_alloca_save(code: &mut Vec<u8>, dst: Place, frame: Frame, scratch: &ScratchPool) -> bool {
+    if !frame.dynamic_sp {
+        bail_msg("AllocaSave: AllocaInit didn't run for this function");
+        return false;
+    }
+    let Some(rd) = int_or_spill_scratch(dst, scratch) else {
+        bail_msg("AllocaSave: dst not int reg / spill");
+        return false;
+    };
+    emit(code, enc_add_imm(rd, Reg(31), 0));
+    store_spilled_int(code, frame, dst, rd);
+    true
+}
+
+/// Restore the saved sp on VLA block exit, reclaiming the block's VLA
+/// storage (per iteration for a loop body).
+fn emit_alloca_restore(
+    code: &mut Vec<u8>,
+    args: &[u32],
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    if !frame.dynamic_sp {
+        bail_msg("AllocaRestore: AllocaInit didn't run for this function");
+        return false;
+    }
+    if args.len() != 1 {
+        bail_msg("AllocaRestore: expected 1 arg");
+        return false;
+    }
+    let Some(v) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame) else {
+        bail_msg("AllocaRestore: arg not int reg / spill / fp");
+        return false;
+    };
+    emit(code, enc_add_imm(Reg(31), v, 0));
+    true
+}
+
+/// c5 binds <setjmp.h>'s setjmp() to this intrinsic on Windows aarch64,
+/// where msvcrt's longjmp routes through SEH and refuses a CRT-free
+/// `jmp_buf`. The inline expansion mirrors the pool path: 25 AArch64 words
+/// that save x19-x28, x29, the resume PC, sp, and d8-d15 into [env].
+fn emit_setjmp(
+    code: &mut Vec<u8>,
+    args: &[u32],
+    dst: Place,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    if args.len() != 1 {
+        bail_msg("Setjmp: expected 1 arg");
+        return false;
+    }
+    let Some(env_r) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame)
+    else {
+        bail_msg("Setjmp: env not int reg / spill / fp");
+        return false;
+    };
+    // The helper reads env from x19; route it there.
+    if env_r.0 != 19 {
+        emit_mov_reg(code, Reg(19), env_r);
+    }
+    emit_setjmp_aarch64(code);
+    // After the helper, x19 holds 0 on the initial pass and the longjmp val
+    // on a matching longjmp return. Route x19 into dst -- the helper's
+    // saved PC points past its last instruction, so the longjmp BR lands
+    // here.
+    let Some(rd) = int_or_spill_scratch(dst, scratch) else {
+        bail_msg("Setjmp: dst not int reg / spill");
+        return false;
+    };
+    if rd.0 != 19 {
+        emit_mov_reg(code, rd, Reg(19));
+    }
+    store_spilled_int(code, frame, dst, rd);
+    true
+}
+
+/// c5 binds <setjmp.h>'s longjmp() to this intrinsic on Windows aarch64.
+/// args[0] = env, args[1] = val. The helper restores the saved register
+/// set, materializes x19 = (val != 0) ? val : 1 per C99 7.13.2.1p2, and
+/// branches to the saved PC.
+fn emit_longjmp(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, frame: Frame) -> bool {
+    if args.len() != 2 {
+        bail_msg("Longjmp: expected 2 args");
+        return false;
+    }
+    let Some(env_r) = materialize_int(code, place_of(alloc, args[0]), Reg(16), frame) else {
+        bail_msg("Longjmp: env not int reg / spill / fp");
+        return false;
+    };
+    if env_r.0 != 16 {
+        emit_mov_reg(code, Reg(16), env_r);
+    }
+    // Stash val in x17 before the upcoming restores clobber x19.
+    let Some(val_r) = materialize_int(code, place_of(alloc, args[1]), Reg(17), frame) else {
+        bail_msg("Longjmp: val not int reg / spill / fp");
+        return false;
+    };
+    if val_r.0 != 17 {
+        emit_mov_reg(code, Reg(17), val_r);
+    }
+    // Restore x19-x28 + x29 from [x16 + offset].
+    for (i, off) in (JB_X19_OFF..JB_X29_OFF).step_by(8).enumerate() {
+        emit(code, enc_ldr_imm(Reg(19 + i as u8), Reg(16), off));
+    }
+    emit(code, enc_ldr_imm(Reg(29), Reg(16), JB_X29_OFF));
+    // Resume PC into x10, sp into x9. x10 is caller-saved (setjmp's caller
+    // doesn't expect it preserved); x18 is the Windows TEB pointer and
+    // stays untouched.
+    emit(code, enc_ldr_imm(Reg(10), Reg(16), JB_PC_OFF));
+    emit(code, enc_ldr_imm(Reg(9), Reg(16), JB_SP_OFF));
+    emit(code, enc_add_imm(Reg(31), Reg(9), 0));
+    for (i, off) in (JB_D8_OFF..JB_D8_OFF + 64).step_by(8).enumerate() {
+        emit(code, enc_ldr_d_imm(8 + i as u8, Reg(16), off));
+    }
+    // cmp val, #0 ; cinc x19, val, eq -- 0 becomes 1, anything else passes
+    // through unchanged.
+    emit(code, enc_subs_imm(Reg(31), Reg(17), 0));
+    emit(code, enc_cinc(Reg(19), Reg(17), Cond::Eq));
+    emit(code, enc_br(Reg(10)));
+    true
+}
+
+/// `dc cvau, Xt` / `ic ivau, Xt`: clean the data cache / invalidate the
+/// instruction cache to the point of unification for the address in Xt.
+fn emit_cache_op(
+    code: &mut Vec<u8>,
+    intrinsic: crate::c5::op::Intrinsic,
+    args: &[u32],
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    if args.len() != 1 {
+        bail_msg("dc/ic cache op: expected 1 arg");
+        return false;
+    }
+    let Some(rt) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame) else {
+        return false;
+    };
+    let base = if matches!(intrinsic, crate::c5::op::Intrinsic::AArch64DcCvau) {
+        0xD50B_7B20u32
+    } else {
+        0xD50B_7520u32
+    };
+    emit(code, base | (rt.0 as u32));
+    true
+}
+
+/// `mrs Xt, ctr_el0` reads the cache type register; store it to the output
+/// operand's address (arg 0).
+fn emit_read_cache_type(
+    code: &mut Vec<u8>,
+    args: &[u32],
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    if args.len() != 1 {
+        bail_msg("mrs ctr_el0: expected 1 arg");
+        return false;
+    }
+    let Some(addr) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame) else {
+        return false;
+    };
+    let tmp = if addr.0 == scratch.secondary.0 {
+        scratch.primary
+    } else {
+        scratch.secondary
+    };
+    emit(code, 0xD53B_0020u32 | (tmp.0 as u32));
+    emit(code, enc_str_imm(tmp, addr, 0));
+    true
+}
+
+/// The unary floating-point builtins: one instruction in the result's
+/// precision, a spilled result staged through the second FP scratch.
+fn emit_unary_fp(
+    code: &mut Vec<u8>,
+    intrinsic: crate::c5::op::Intrinsic,
+    args: &[u32],
+    dst: Place,
+    v: super::super::ir::ValueId,
+    alloc: &Allocation,
+    frame: Frame,
+) -> bool {
+    use super::encode::{
+        enc_fabs_d, enc_fabs_s, enc_frintm_d, enc_frintm_s, enc_frintp_d, enc_frintp_s,
+        enc_frintz_d, enc_frintz_s, enc_fsqrt_d, enc_fsqrt_s,
+    };
+    use crate::c5::op::Intrinsic as I;
+    if args.len() != 1 {
+        bail_msg("unary FP intrinsic: expected 1 arg");
+        return false;
+    }
+    let is_f32 = alloc.is_f32(v);
+    let Some(dn) = materialize_fp_for(
+        code,
+        args[0],
+        place_of(alloc, args[0]),
+        frame.fp_scratch[0],
+        frame,
+        alloc,
+    ) else {
+        return false;
+    };
+    let dd = match dst {
+        Place::FpReg(r) => r,
+        Place::Spill(_) => frame.fp_scratch[1],
+        _ => return false,
+    };
+    let inst = match intrinsic {
+        I::Sqrt | I::Sqrtf if is_f32 => enc_fsqrt_s(dd, dn),
+        I::Sqrt | I::Sqrtf => enc_fsqrt_d(dd, dn),
+        I::Fabs | I::Fabsf if is_f32 => enc_fabs_s(dd, dn),
+        I::Fabs | I::Fabsf => enc_fabs_d(dd, dn),
+        I::Floor | I::Floorf if is_f32 => enc_frintm_s(dd, dn),
+        I::Floor | I::Floorf => enc_frintm_d(dd, dn),
+        I::Ceil | I::Ceilf if is_f32 => enc_frintp_s(dd, dn),
+        I::Ceil | I::Ceilf => enc_frintp_d(dd, dn),
+        _ if is_f32 => enc_frintz_s(dd, dn),
+        _ => enc_frintz_d(dd, dn),
+    };
+    emit(code, inst);
+    store_spilled_fp(code, frame, dst, dd);
+    true
+}
+
+/// `rd = base` for the frame pointer or the stack pointer, through the
+/// scratch when the destination spilled.
+fn emit_frame_register(
+    code: &mut Vec<u8>,
+    dst: Place,
+    frame: Frame,
+    base: Reg,
+    what: &str,
+) -> bool {
+    let rd = match dst {
+        Place::IntReg(r) => Reg(r),
+        Place::Spill(_) => Reg(16),
+        _ => {
+            bail_msg(&alloc::format!("{what}: dst not int reg / spill"));
+            return false;
+        }
+    };
+    emit(code, enc_add_imm(rd, base, 0));
+    store_spilled_int(code, frame, dst, rd);
+    true
+}
+
+/// __builtin_return_address: the return address a frame record holds at
+/// [fp + 8], where the AAPCS64 prologue saved x30. Without an operand the
+/// record is the current frame's; with one, the frame address a level
+/// above 0 walked to. Under pac-ret the slot holds a signed pointer;
+/// `XPACLRI` strips x30 and no other register, so the value is staged there
+/// (the epilogue reloads x30 from the frame's slot, which always exists
+/// since the intrinsic keeps the function off the full-leaf path). The hint
+/// is unconditional, as gcc and clang emit it: a NOP without FEAT_PAuth,
+/// and an unsigned pointer survives it.
+fn emit_return_address(
+    code: &mut Vec<u8>,
+    args: &[u32],
+    dst: Place,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    let rd = match dst {
+        Place::IntReg(r) => Reg(r),
+        Place::Spill(_) => Reg(16),
+        _ => {
+            bail_msg("ReturnAddress: dst not int reg / spill");
+            return false;
+        }
+    };
+    let fp = match args {
+        [] => Reg(29),
+        [walked] => match materialize_int(code, place_of(alloc, *walked), scratch.primary, frame) {
+            Some(r) => r,
+            None => {
+                bail_msg("ReturnAddress: frame not int reg / spill");
+                return false;
+            }
+        },
+        _ => {
+            bail_msg("ReturnAddress: expected at most 1 arg");
+            return false;
+        }
+    };
+    emit(code, enc_ldr_imm(Reg(30), fp, 8));
+    emit(code, super::encode::XPACLRI);
+    emit_mov_reg(code, rd, Reg(30));
+    store_spilled_int(code, frame, dst, rd);
+    true
 }
 
 #[allow(clippy::too_many_arguments)]

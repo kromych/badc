@@ -274,7 +274,7 @@ pub(super) fn emit_spill_ldr_d_auto(code: &mut Vec<u8>, frame: Frame, dt: u8, sp
 
 /// The d-register an FP result lands in: the allocator's, or a scratch
 /// outside its pool when the value spills.
-fn fp_or_spill_dst(dst: Place, frame: Frame) -> Option<u8> {
+pub(super) fn fp_or_spill_dst(dst: Place, frame: Frame) -> Option<u8> {
     match dst {
         Place::FpReg(r) => Some(r),
         Place::Spill(_) => Some(frame.fp_scratch[0]),

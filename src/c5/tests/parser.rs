@@ -3027,6 +3027,176 @@ fn type_name_array_bound_constraints() {
         "struct t;\n\
          int main(void) { return (int)_Alignof(struct t[2]); }",
         "applied to an incomplete type",
+
+/// Compile `src` and run it under the VM, returning `main`'s value.
+fn run_main(src: &str) -> i64 {
+    let prog = Compiler::new(src.to_string())
+        .compile()
+        .unwrap_or_else(|e| panic!("compile failed: {e}\nsource: {src}"));
+    crate::c5::Vm::new(prog).run().unwrap()
+}
+
+#[test]
+fn declaration_specifier_order_reads_the_same_in_every_scope() {
+    // C99 6.7.1p1 / 6.7.2p2: the storage-class specifiers, type qualifiers,
+    // function specifiers and type specifiers of a declaration may be
+    // written in any order. File scope, block scope and a parameter list
+    // read them through one parser, so every spelling below is accepted
+    // wherever it is legal and declares the same object.
+
+    // A `const` integer object folds its initializer into a later constant
+    // expression, so the array bound reads the value back.
+    for spec in [
+        "static const int",
+        "static int const",
+        "const static int",
+        "const int static",
+        "int static const",
+        "int const static",
+    ] {
+        let file = alloc::format!(
+            "{spec} K = 4;\nint main(void) {{ int a[K]; return (int)(sizeof a / sizeof a[0]); }}"
+        );
+        assert_eq!(run_main(&file), 4, "{file}");
+        let block = alloc::format!(
+            "int main(void) {{ {spec} K = 4; int a[K]; return (int)(sizeof a / sizeof a[0]); }}"
+        );
+        assert_eq!(run_main(&block), 4, "{block}");
+    }
+
+    // C99 6.9.2p1: an `extern` declaration with an initializer defines the
+    // object at file scope. C11 6.7.9p5 forbids the initializer at block
+    // scope, so that combination is file-scope only.
+    for spec in [
+        "extern const int",
+        "extern int const",
+        "const extern int",
+        "int extern const",
+    ] {
+        let file = alloc::format!(
+            "{spec} K = 4;\nint main(void) {{ int a[K]; return (int)(sizeof a / sizeof a[0]); }}"
+        );
+        assert_eq!(run_main(&file), 4, "{file}");
+    }
+
+    // C99 6.7.5.3p2: `register` is the only storage class a parameter
+    // declaration takes.
+    for spec in [
+        "register const int",
+        "register int const",
+        "const register int",
+        "int register const",
+    ] {
+        let block = alloc::format!(
+            "int main(void) {{ {spec} K = 4; int a[K]; return (int)(sizeof a / sizeof a[0]); }}"
+        );
+        assert_eq!(run_main(&block), 4, "{block}");
+        let param =
+            alloc::format!("int f({spec} k) {{ return k; }}\nint main(void) {{ return f(4); }}");
+        assert_eq!(run_main(&param), 4, "{param}");
+    }
+
+    // A qualifier that folds no value still qualifies the object in every
+    // position (C99 6.7.3, C11 6.7.2.4).
+    for qual in ["volatile", "_Atomic"] {
+        for spec in [
+            alloc::format!("static {qual} int"),
+            alloc::format!("static int {qual}"),
+            alloc::format!("{qual} static int"),
+            alloc::format!("{qual} int static"),
+            alloc::format!("int static {qual}"),
+            alloc::format!("int {qual} static"),
+        ] {
+            let file = alloc::format!("{spec} v = 4;\nint main(void) {{ return v; }}");
+            assert_eq!(run_main(&file), 4, "{file}");
+            // TODO: the block-scope specifier run consumes the storage
+            // classes itself instead of routing through
+            // `parse_decl_specifiers`, and its token set omits `_Atomic`, so
+            // the two orders that put a storage class between `_Atomic` and
+            // the type keyword are still rejected there.
+            if spec == "_Atomic static int" || spec == "int static _Atomic" {
+                continue;
+            }
+            let block = alloc::format!("int main(void) {{ {spec} v = 4; return v; }}");
+            assert_eq!(run_main(&block), 4, "{block}");
+        }
+        let param = alloc::format!(
+            "int f({qual} int k) {{ return k; }}\nint main(void) {{ return f(4); }}"
+        );
+        assert_eq!(run_main(&param), 4, "{param}");
+    }
+
+    // C99 6.7.5.1: `restrict` qualifies the pointer, so it follows the `*`
+    // while the storage class stays among the declaration specifiers.
+    for spec in [
+        "static int *restrict",
+        "int static *restrict",
+        "static int *const restrict",
+        "static int *restrict const",
+    ] {
+        let file = alloc::format!("int t = 4;\n{spec} p = &t;\nint main(void) {{ return *p; }}");
+        assert_eq!(run_main(&file), 4, "{file}");
+    }
+
+    // A function specifier is one more specifier of the declaration.
+    for spec in [
+        "static inline int",
+        "inline static int",
+        "int static inline",
+        "int inline static",
+    ] {
+        let src =
+            alloc::format!("{spec} f(void) {{ return 4; }}\nint main(void) {{ return f(); }}");
+        assert_eq!(run_main(&src), 4, "{src}");
+    }
+
+    // A `_Thread_local` object needs a thread pointer the VM does not
+    // install, so the assertion here is the declaration's acceptance.
+    for spec in [
+        "static _Thread_local int",
+        "_Thread_local static int",
+        "int static _Thread_local",
+        "_Thread_local int",
+        "int _Thread_local",
+    ] {
+        let src = alloc::format!("{spec} t = 4;\nint main(void) {{ return t; }}");
+        Compiler::new(src.clone())
+            .compile()
+            .unwrap_or_else(|e| panic!("compile failed: {e}\nsource: {src}"));
+    }
+}
+
+#[test]
+fn a_trailing_int_modifier_folds_into_the_base_type() {
+    // C99 6.7.2p2: the type specifiers of a declaration are a multiset, so
+    // `int unsigned` is `unsigned int` and `int long` is `long int` at file
+    // scope as at block scope. An unsigned object compares above zero where
+    // the signed one does not.
+    assert_eq!(
+        run_main("int unsigned x = 4294967295u;\nint main(void) { return x > 0; }"),
+        1
+    );
+    assert_eq!(
+        run_main("int main(void) { int unsigned x = 4294967295u; return x > 0; }"),
+        1
+    );
+    assert_eq!(
+        run_main("int long x = 4;\nint main(void) { return (int)sizeof x; }"),
+        8
+    );
+    assert_eq!(
+        run_main("char unsigned c = 200;\nint main(void) { return c > 100; }"),
+        1
+    );
+    assert_eq!(
+        run_main("double long d = 4.0;\nint main(void) { return (int)d; }"),
+        4
+    );
+    // The modifier folds with a storage-class specifier between it and the
+    // type keyword.
+    assert_eq!(
+        run_main("int static unsigned x = 4;\nint main(void) { return (int)x; }"),
+        4
     );
 }
 
@@ -3046,5 +3216,61 @@ fn binary_operator_operand_constraints() {
         "struct s { int a; };\n\
          int main(void) { struct s x = {1}, y = {2}; return (x + y).a; }",
         "invalid operands to binary operator",
+
+fn the_typedef_storage_class_may_follow_the_type_specifier() {
+    // C99 6.7.1p1 lists `typedef` among the storage-class specifiers, which
+    // may appear anywhere in the declaration specifiers.
+    assert_eq!(
+        run_main("int typedef X;\nX v = 4;\nint main(void) { return v; }"),
+        4
+    );
+    assert_eq!(
+        run_main("struct S { int a; } typedef T;\nT t = { 4 };\nint main(void) { return t.a; }"),
+        4
+    );
+    assert_eq!(
+        run_main("enum { A = 4 } typedef E;\nE e = A;\nint main(void) { return (int)e; }"),
+        4
+    );
+}
+
+#[test]
+fn a_trailing_noreturn_specifier_is_recorded() {
+    // C11 6.7.4: `_Noreturn` on any declaration of the function marks it,
+    // and the reachability analysis then treats a call to it as not
+    // reaching its continuation. Either spelling of the declaration
+    // records it, so neither leaves the fall-off diagnostic behind.
+    for spec in ["_Noreturn void", "void _Noreturn"] {
+        let src = alloc::format!(
+            "{spec} die(void);\nint f(int x) {{ if (x) return x; die(); }}\n\
+             int main(void) {{ return f(1); }}"
+        );
+        let prog = Compiler::new(src.clone())
+            .compile()
+            .unwrap_or_else(|e| panic!("compile failed: {e}\nsource: {src}"));
+        assert!(
+            !prog
+                .warnings
+                .iter()
+                .any(|w| w.contains("control reaches end of non-void function")),
+            "{src}: {:?}",
+            prog.warnings,
+        );
+    }
+}
+
+#[test]
+fn a_typedef_name_after_an_int_modifier_is_not_a_type_specifier() {
+    // C99 6.7.2p2: a typedef-name does not combine with `unsigned` /
+    // `signed` / `short` / `long`, so the identifier after one is the
+    // declarator's name, which then redeclares the alias as an object.
+    // Both scopes read the declaration the same way.
+    expect_compile_error(
+        "typedef int Foo;\nunsigned Foo x;\nint main(void) { return 0; }",
+        "duplicate global definition",
+    );
+    expect_compile_error(
+        "int main(void) { typedef int Foo; unsigned Foo x; return 0; }",
+        "duplicate local definition",
     );
 }

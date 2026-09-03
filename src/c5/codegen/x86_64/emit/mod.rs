@@ -104,6 +104,12 @@ fn fail(reason: &str) -> bool {
     false
 }
 
+/// `fail` for a helper that returns its result as an `Option`.
+fn failed<T>(reason: &str) -> Option<T> {
+    bail_msg(reason);
+    None
+}
+
 /// A value's allocated `Place`, `Place::None` when out of range.
 fn place_of(alloc: &Allocation, v: u32) -> Place {
     alloc.places.get(v as usize).copied().unwrap_or(Place::None)

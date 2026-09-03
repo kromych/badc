@@ -17,61 +17,26 @@ impl Preprocessor {
     /// macro-substituted string suitable for the `#if` expression
     /// parser.
     pub(super) fn expand_for_if(&self, expr: &str, line_no: usize, filename: &str) -> String {
-        let mut out = String::with_capacity(expr.len());
-        let bytes = expr.as_bytes();
-        let mut i = 0;
-        while i < bytes.len() {
-            if (bytes[i] as char).is_ascii_whitespace() {
-                out.push(bytes[i] as char);
-                i += 1;
-                continue;
-            }
-            // Comments were removed in phase 3; the literal-aware strip
-            // after substitution covers macro-introduced ones.
-            //
-            // `defined(NAME)` / `defined NAME` (C99 6.10.1p1) resolves to
-            // 1 or 0 here, before substitution, because `substitute`
-            // would otherwise expand NAME away.
-            if let Some((name, next)) = operator_operand(expr, i, "defined", Parens::Optional) {
+        let out = scan_operators(expr, |s, i, out| {
+            // `defined(NAME)` / `defined NAME` (C99 6.10.1p1) and the
+            // `__has_*` operators take an unexpanded operand, so they
+            // resolve before substitution: `substitute` would expand a
+            // name away, and for `__has_include` (C23 6.10.1) it would
+            // insert re-lex separators into the header name.
+            if let Some((name, next)) = operator_operand(s, i, "defined", Parens::Optional) {
                 out.push_str(if self.is_defined_name(name) { "1" } else { "0" });
-                i = next;
-                continue;
+                return Some(next);
             }
-            // `__has_builtin` / `__has_attribute` likewise take an
-            // unexpanded identifier operand.
-            if let Some(next) = resolve_has_operator(expr, i, &mut out) {
-                i = next;
-                continue;
-            }
-            // `__has_include` / `__has_include_next` (C23 6.10.1) also
-            // resolve before substitution: a literal `<...>` / `"..."`
-            // operand is a header name as written, and a pp-token
-            // operand expands spelling-faithfully. Substituting the
-            // whole expression instead would insert re-lex separators
-            // into the header name.
-            if let Some(next) = self.resolve_has_include(expr, i, filename, line_no, &mut out) {
-                i = next;
-                continue;
-            }
-            // Bytes with no operator meaning pass through as a UTF-8
-            // slice; a per-byte `as char` would widen non-ASCII.
-            let start = i;
-            i += 1;
-            while i < bytes.len() && !bytes[i].is_ascii() {
-                i += 1;
-            }
-            out.push_str(&expr[start..i]);
-        }
-        // Now expand all remaining identifiers (object + function-
-        // like) via the standard substitute pass. Then strip block
-        // and line comments from the result -- driver-predefined
-        // macro bodies never went through phase 3 and can carry
-        // comments that would confuse the expression tokenizer.
+            resolve_has_operator(s, i, out)
+                .or_else(|| self.resolve_has_include(s, i, filename, line_no, out))
+        });
+        // Expand the remaining identifiers, then strip comments from the
+        // result: driver-predefined bodies never went through phase 3
+        // and can carry comments the expression tokenizer would trip on.
         // `strip_c_comments` keeps string and char literals intact.
         let substituted = self.substitute(&out, "<#if>", line_no);
         // Resolve any `__has_builtin` / `__has_attribute` that a macro
-        // alias expanded into; the pre-pass above already handled the
-        // ones written literally.
+        // alias expanded into; the pre-pass above handled the literal ones.
         replace_has_operators(&strip_c_comments(&substituted))
     }
 
@@ -1049,11 +1014,22 @@ pub(super) fn if_value_lt(a: &IfValue, b: &IfValue) -> bool {
 /// header that reaches the operator through a macro alias
 /// (`#define ALIAS __has_attribute`) still resolves.
 pub(super) fn replace_has_operators(s: &str) -> String {
+    scan_operators(s, resolve_has_operator)
+}
+
+/// Walk `s`, offering each byte position to `resolve`, which appends its
+/// replacement and reports where the scan resumes. Positions it declines
+/// pass through; a non-ASCII run copies as one slice, so no code point is
+/// split and no operator can start inside one.
+fn scan_operators(
+    s: &str,
+    mut resolve: impl FnMut(&str, usize, &mut String) -> Option<usize>,
+) -> String {
     let bytes = s.as_bytes();
     let mut out = String::with_capacity(s.len());
     let mut i = 0;
     while i < bytes.len() {
-        if let Some(next) = resolve_has_operator(s, i, &mut out) {
+        if let Some(next) = resolve(s, i, &mut out) {
             i = next;
             continue;
         }
@@ -1076,11 +1052,30 @@ enum Parens {
     Optional,
 }
 
-/// Parse `kw ( NAME )` at `at`: `kw` must sit at a word boundary (C99
-/// 6.10: a directive operand is one preprocessing token), then optional
-/// white space, the operand, and the closing `)`. Returns the operand
-/// and the index just past the call. `Parens::Optional` also accepts the
-/// bare `kw NAME` form and tolerates a missing `)`.
+/// Index just past `kw` when it sits at `at` as a whole preprocessing
+/// token (C99 6.10), else `None`.
+fn keyword_end(bytes: &[u8], at: usize, kw: &str) -> Option<usize> {
+    if !bytes[at..].starts_with(kw.as_bytes()) {
+        return None;
+    }
+    let after = at + kw.len();
+    let bounded = !(at > 0 && is_ident_byte(bytes[at - 1]))
+        && !bytes.get(after).copied().is_some_and(is_ident_byte);
+    bounded.then_some(after)
+}
+
+/// Index of the first byte at or after `from` that is not white space.
+fn skip_ws(bytes: &[u8], mut from: usize) -> usize {
+    while from < bytes.len() && bytes[from].is_ascii_whitespace() {
+        from += 1;
+    }
+    from
+}
+
+/// Parse `kw ( NAME )` at `at`: the keyword, optional white space, the
+/// operand, and the closing `)`. Returns the operand and the index just
+/// past the call. `Parens::Optional` also accepts the bare `kw NAME`
+/// form and tolerates a missing `)`.
 fn operator_operand<'a>(
     s: &'a str,
     at: usize,
@@ -1088,21 +1083,8 @@ fn operator_operand<'a>(
     parens: Parens,
 ) -> Option<(&'a str, usize)> {
     let bytes = s.as_bytes();
-    if !bytes[at..].starts_with(kw.as_bytes()) {
-        return None;
-    }
-    let after = at + kw.len();
-    let prev_word = at > 0 && is_ident_byte(bytes[at - 1]);
-    let next_word = bytes.get(after).copied().is_some_and(is_ident_byte);
-    if prev_word || next_word {
-        return None;
-    }
-    let skip_ws = |mut j: usize| {
-        while j < bytes.len() && bytes[j].is_ascii_whitespace() {
-            j += 1;
-        }
-        j
-    };
+    let after = keyword_end(bytes, at, kw)?;
+    let skip_ws = |j: usize| skip_ws(bytes, j);
     let mut j = skip_ws(after);
     let open = bytes.get(j) == Some(&b'(');
     if open {
@@ -1123,7 +1105,7 @@ fn operator_operand<'a>(
         match bytes.get(j) {
             Some(&b')') => j += 1,
             // A required-paren operator with no `)` is not a call; the
-            // optional-paren form tolerates it, as it did before.
+            // optional-paren form tolerates the omission.
             _ if parens == Parens::Required => return None,
             _ => {}
         }
@@ -1131,25 +1113,12 @@ fn operator_operand<'a>(
     Some((name, j))
 }
 
-/// Match `kw ( operand )` at `at` with a word boundary around `kw`,
-/// the operand running to the balancing `)`. Returns the operand text
-/// and the index just past the call. String and char literals inside
-/// the operand are skipped opaquely.
+/// Match `kw ( operand )` at `at`, the operand running to the balancing
+/// `)`. Returns the operand text and the index just past the call.
+/// String and char literals inside the operand are skipped opaquely.
 fn balanced_operand<'a>(s: &'a str, at: usize, kw: &str) -> Option<(&'a str, usize)> {
     let bytes = s.as_bytes();
-    if !bytes[at..].starts_with(kw.as_bytes()) {
-        return None;
-    }
-    let after = at + kw.len();
-    let prev_word = at > 0 && is_ident_byte(bytes[at - 1]);
-    let next_word = bytes.get(after).copied().is_some_and(is_ident_byte);
-    if prev_word || next_word {
-        return None;
-    }
-    let mut j = after;
-    while j < bytes.len() && bytes[j].is_ascii_whitespace() {
-        j += 1;
-    }
+    let mut j = skip_ws(bytes, keyword_end(bytes, at, kw)?);
     if bytes.get(j) != Some(&b'(') {
         return None;
     }

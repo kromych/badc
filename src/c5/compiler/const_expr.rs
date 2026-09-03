@@ -1814,24 +1814,16 @@ impl Compiler {
     }
 
     fn parse_const_type_name_inner(&mut self) -> Result<ConstTypeName, C5Error> {
-        let mut ty = self.parse_decl_base_type()?;
+        let ty = self.parse_decl_base_type()?;
         self.note_cast_type_name(ty);
         // Consumed as a type name, not bound through a declarator.
         self.pending.bare_function_type_declarator = false;
         let base_is_const = self.pending.base_is_const;
-        let mut ptr_levels: i64 = 0;
+        let ptr = self.consume_abstract_pointer(ty)?;
+        let ty = ptr.ty;
+        let ptr_levels = ptr.levels;
         // A `const` after the outermost `*` qualifies the object itself.
-        let mut outer_const = false;
-        while self.lex.tk == Token::MulOp {
-            self.next()?;
-            ty += Ty::Ptr as i64;
-            ptr_levels += 1;
-            outer_const = false;
-            while self.lex.tk == Token::TypeQual {
-                outer_const |= self.lex_is_const_qual();
-                self.next()?;
-            }
-        }
+        let outer_const = ptr.outer_const;
         while self.lex.tk == Token::TypeQual {
             self.next()?;
         }

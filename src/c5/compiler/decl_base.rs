@@ -169,6 +169,15 @@ pub(super) struct DeclStorage {
     pub base_is_enum: bool,
 }
 
+/// The pointer part of an abstract declarator (C99 6.7.6): the type it
+/// decorates, how many levels it added, and whether the outermost one is
+/// `const`-qualified.
+pub(super) struct AbstractPointer {
+    pub ty: i64,
+    pub levels: i64,
+    pub outer_const: bool,
+}
+
 impl Compiler {
     /// Consume the current token if it's one of the int modifiers
     /// (`signed`, `unsigned`, `short`, `long`, `_Bool`),
@@ -263,6 +272,30 @@ impl Compiler {
         Ok(struct_ty_for(id))
     }
 
+    /// Consume the pointer part of an abstract declarator: the `*` run and
+    /// the qualifiers that follow each one (C99 6.7.6). Returns the decorated
+    /// type, the number of pointer levels added, and whether a `const`
+    /// qualified the outermost of them (`T *const`), which qualifies the
+    /// object rather than the pointee.
+    pub(super) fn consume_abstract_pointer(&mut self, ty: i64) -> Result<AbstractPointer, C5Error> {
+        let mut p = AbstractPointer {
+            ty,
+            levels: 0,
+            outer_const: false,
+        };
+        while self.lex.tk == Token::MulOp {
+            self.next()?;
+            p.ty += Ty::Ptr as i64;
+            p.levels += 1;
+            p.outer_const = false;
+            while self.lex.tk == Token::TypeQual {
+                p.outer_const |= self.lex_is_const_qual();
+                self.next()?;
+            }
+        }
+        Ok(p)
+    }
+
     /// C11 6.7.2.4 atomic type specifier `_Atomic ( type-name )`. When the
     /// current token is `_Atomic` immediately followed by `(`, consume the
     /// whole specifier and return the inner type-name's type. c5 does not
@@ -277,11 +310,8 @@ impl Compiler {
         }
         self.next()?; // _Atomic
         self.next()?; // (
-        let mut inner = self.parse_decl_base_type()?;
-        while self.lex.tk == Token::MulOp {
-            self.next()?;
-            inner += Ty::Ptr as i64;
-        }
+        let inner = self.parse_decl_base_type()?;
+        let inner = self.consume_abstract_pointer(inner)?.ty;
         if self.lex.tk != ')' {
             return Err(self.compile_err("`)` expected after `_Atomic(type-name)`"));
         }
@@ -346,16 +376,10 @@ impl Compiler {
             }
         }
         let ty = if self.lex_is_type_start() {
-            let mut inner = self.parse_decl_base_type()?;
-            let mut had_ptr = false;
-            while self.lex.tk == Token::MulOp {
-                self.next()?;
-                inner += Ty::Ptr as i64;
-                had_ptr = true;
-                while self.lex.tk == Token::TypeQual {
-                    self.next()?;
-                }
-            }
+            let inner = self.parse_decl_base_type()?;
+            let ptr = self.consume_abstract_pointer(inner)?;
+            let inner = ptr.ty;
+            let had_ptr = ptr.levels > 0;
             // An array typedef operand keeps its dimension on the carrier
             // so a declarator through the specifier is an array, exactly
             // as if the typedef itself were the base type. `typeof(T *)`
@@ -1126,14 +1150,8 @@ impl Compiler {
                 if is_alignas {
                     self.next()?; // (
                     if self.lex_is_type_start() {
-                        let mut ty = self.parse_decl_base_type()?;
-                        while self.lex.tk == Token::MulOp {
-                            self.next()?;
-                            ty += Ty::Ptr as i64;
-                            while self.lex.tk == Token::TypeQual {
-                                self.next()?;
-                            }
-                        }
+                        let ty = self.parse_decl_base_type()?;
+                        let ty = self.consume_abstract_pointer(ty)?.ty;
                         alignas_align = alignas_align.max(self.align_of_type(ty) as i64);
                         align = align.max(alignas_align);
                         if self.lex.tk != ')' {

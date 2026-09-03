@@ -3274,3 +3274,33 @@ fn a_typedef_name_after_an_int_modifier_is_not_a_type_specifier() {
         "duplicate local definition",
     );
 }
+
+#[test]
+fn a_qualifier_may_follow_the_pointer_in_a_type_name() {
+    // C99 6.7.6: the pointer part of an abstract declarator takes the same
+    // qualifiers as a named declarator's, in every context that reads a type
+    // name. One parser consumes that pointer run for all of them.
+    assert_eq!(
+        run_main("int g = 4;\nint main(void) { _Atomic(int *const) p = &g; return *p; }"),
+        4
+    );
+    assert_eq!(
+        run_main("int g = 4;\nint main(void) { typeof(int *const) p = &g; return *p; }"),
+        4
+    );
+    assert_eq!(
+        run_main("int g = 4;\nint main(void) { int *p = (int *const)&g; return *p; }"),
+        4
+    );
+    assert_eq!(
+        run_main(
+            "struct s { _Alignas(int *const) char c; int n; };\n\
+             int main(void) { return (int)sizeof(struct s); }"
+        ),
+        8
+    );
+    assert_eq!(
+        run_main("int main(void) { return (int)sizeof(int *const); }"),
+        8
+    );
+}

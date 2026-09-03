@@ -1839,11 +1839,11 @@ impl super::ssa::emit_common::LowerTarget for Aarch64Lower {
         native: &NativeOptions,
         imports: &super::ResolvedImports,
         entry: super::FunctionEntry,
-    ) -> bool {
+    ) -> super::ssa::emit_common::Emit {
         let mut cx = fe.cx;
         #[cfg(feature = "std")]
         let _ = super::ssa::emit_common::take_bail();
-        super::emit::emit_function(
+        let ok = super::emit::emit_function(
             func,
             alloc_for,
             target,
@@ -1868,7 +1868,8 @@ impl super::ssa::emit_common::LowerTarget for Aarch64Lower {
             native.stack_protect.resolved_for(target),
             entry,
             native.fixed_regs,
-        )
+        );
+        super::ssa::emit_common::emit_result(ok)
     }
 
     fn after_functions(

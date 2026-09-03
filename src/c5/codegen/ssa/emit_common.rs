@@ -844,6 +844,66 @@ pub(crate) fn time_pass_arch<R>(_label: &str, _arch: &str, f: impl FnOnce() -> R
     f()
 }
 
+/// A form outside the implemented subset, carrying the reason the emit
+/// named for it. A failure that named none reports the generic message.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Unsupported(Option<alloc::borrow::Cow<'static, str>>);
+
+impl Unsupported {
+    /// A named form; `reason` reaches the diagnostic verbatim.
+    pub(crate) fn new(reason: impl Into<alloc::borrow::Cow<'static, str>>) -> Self {
+        Self(Some(reason.into()))
+    }
+
+    /// A failure the emit did not name.
+    pub(crate) fn unspecified() -> Self {
+        Self(None)
+    }
+
+    pub(crate) fn reason(&self) -> Option<&str> {
+        self.0.as_deref()
+    }
+}
+
+/// Result of an emit step: `Err` names a form outside the implemented subset.
+pub(crate) type Emit<T = ()> = Result<T, Unsupported>;
+
+/// Diagnostic for a function the emit could not lower. The recorded reason
+/// is surfaced verbatim; the generic message stands only for a shape that
+/// failed without naming one. No `std` gate: a `no_std` build reports the
+/// same text.
+pub(crate) fn unsupported_error(
+    e: &Unsupported,
+    arch: &str,
+    name: &str,
+    ent_pc: usize,
+) -> crate::c5::error::C5Error {
+    match e.reason() {
+        Some(reason) => crate::c5::error::C5Error::Compile(crate::c5::error::fmt_codegen_err(
+            &alloc::format!("{reason} ({arch}, function `{name}`)"),
+        )),
+        None => {
+            crate::c5::error::C5Error::Compile(crate::c5::error::fmt_internal_err(&alloc::format!(
+                "ssa emit ({arch}): function `{name}` (ent_pc {ent_pc}) contains an op outside the implemented subset"
+            )))
+        }
+    }
+}
+
+/// [`Emit`] for a per-function emit that still signals failure with a
+/// `bool` and records its reason in [`take_bail`]. Goes away with the last
+/// of those emit paths.
+pub(crate) fn emit_result(ok: bool) -> Emit {
+    if ok {
+        return Ok(());
+    }
+    #[cfg(feature = "std")]
+    if let Some(reason) = take_bail() {
+        return Err(Unsupported::new(reason));
+    }
+    Err(Unsupported::unspecified())
+}
+
 /// Diagnostic surface for a per-function SSA-emit fallback. The
 /// per-arch emit paths call this when they hit a shape they
 /// don't cover; the message lands on stderr only under the
@@ -1252,8 +1312,7 @@ pub(crate) trait LowerTarget {
     /// Emit `n` no-ops ahead of the function symbol.
     fn entry_nops(&mut self, code: &mut alloc::vec::Vec<u8>, n: u32);
 
-    /// Lower one function's body; `false` for a shape outside the
-    /// implemented subset.
+    /// Lower one function's body.
     #[allow(clippy::too_many_arguments)]
     fn emit_function(
         &mut self,
@@ -1265,7 +1324,7 @@ pub(crate) trait LowerTarget {
         native: &super::NativeOptions,
         imports: &super::ResolvedImports,
         entry: super::FunctionEntry,
-    ) -> bool;
+    ) -> Emit;
 
     /// Settle target-specific per-function output once the walk is done.
     fn after_functions(&mut self, st: &mut LowerState, native: &super::NativeOptions);
@@ -1782,7 +1841,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             variadic_targets: &variadic_targets,
             name2entpc: &name2entpc,
         };
-        let ok = b.emit_function(
+        let lowered = b.emit_function(
             st.function_emit(),
             &inputs,
             func_ssa,
@@ -1794,29 +1853,10 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         );
         #[cfg(feature = "std")]
         if super::dump::enabled(native) {
-            b.dump_function(func_ssa, alloc_for, ok, &mut ssa_dump);
+            b.dump_function(func_ssa, alloc_for, lowered.is_ok(), &mut ssa_dump);
         }
-        if !ok {
-            // A specific bail reason (an unencodable inline-asm form, a
-            // fixup out of range) is surfaced verbatim; the generic message
-            // stands only for a shape that failed without recording one.
-            #[cfg(feature = "std")]
-            if let Some(reason) = take_bail() {
-                return Err(C5Error::Compile(crate::c5::error::fmt_codegen_err(
-                    &alloc::format!(
-                        "{reason} ({arch}, function `{name}`)",
-                        arch = B::ARCH,
-                        name = func_ssa.name,
-                    ),
-                )));
-            }
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &alloc::format!(
-                    "ssa emit ({arch}): function `{name}` (ent_pc {ent_pc}) contains an op outside the implemented subset",
-                    arch = B::ARCH,
-                    name = func_ssa.name,
-                ),
-            )));
+        if let Err(e) = lowered {
+            return Err(unsupported_error(&e, B::ARCH, &func_ssa.name, ent_pc));
         }
         st.func_ends.push(st.code.len());
     }

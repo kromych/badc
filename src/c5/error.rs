@@ -93,7 +93,6 @@ pub(crate) fn fmt_link_err(message: &str) -> String {
 /// carry no `<file>:<line>`. They describe a problem with the user's
 /// source, so they MUST NOT carry the `internal compiler error:`
 /// marker.
-#[cfg(feature = "std")]
 pub(crate) fn fmt_codegen_err(message: &str) -> String {
     use alloc::format;
     format!("error: {message}")

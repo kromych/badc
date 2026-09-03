@@ -492,117 +492,86 @@ pub(crate) fn a64_align_asm_stream(
     crate::c5::asm::push_a64_exec_align_fill(code, gap);
 }
 
-/// Lower an `Inst::InlineAsm` (GCC extended asm) on AArch64. Assigns each
-/// register operand a machine register per its constraint, saves the registers
-/// the block overwrites, captures the operand values / addresses to a stack
-/// region, loads the inputs, encodes the register-concrete template through the
-/// table encoder, and stores the outputs back through their addresses. Raw-byte
-/// pieces emit their literal bytes verbatim. `x16` / `x17` are the bridge
-/// scratch, so the operand pool is `x0..x15`. `goto_ctx` is present for
-/// the `asm goto` form (the statement is the last instruction of a
-/// `Terminator::AsmGoto` block).
-pub(super) fn emit_inline_asm_aarch64(
-    code: &mut Vec<u8>,
-    asm: &super::super::ir::AsmBlock,
-    args: &[u32],
-    func: &FunctionSsa,
-    alloc: &Allocation,
-    frame: Frame,
-    fixups: &mut Vec<super::encode::Fixup>,
-    name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
-    extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
-    data_sym_offsets: &alloc::collections::BTreeMap<alloc::string::String, i64>,
-    asm_sections: &mut crate::c5::asm::AsmSectionSink,
-    asm_extern_call_sites: &mut Vec<super::UserExternCallSite>,
-    asm_sym_fixups: &mut Vec<super::AsmSymFixup>,
-    deferred_regions: &mut Vec<DeferredAsmRegion>,
-    text_data_ranges: &mut Vec<(usize, usize)>,
-    text_align: &mut usize,
-    text_map_state: &mut Option<super::super::map_syms::MapClass>,
-    asm_text_labels: &mut Vec<super::AsmTextLabel>,
-    asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
-    goto_ctx: Option<AsmGotoCtxA64<'_>>,
-) -> bool {
-    use super::super::ir::AsmConstraint;
-    use super::super::map_syms::MapClass;
-    use super::asm::{AsmOpndA64, assign_operand_regs, parse_template};
-    use super::encode::{enc_add_imm, enc_str_imm, enc_str32_imm, enc_strh_imm, enc_sub_imm};
-    use super::table::{self, Opnd};
-    use alloc::string::String;
+/// The output tables an inline-asm statement writes.
+struct AsmSink<'a> {
+    code: &'a mut Vec<u8>,
+    fixups: &'a mut Vec<super::encode::Fixup>,
+    asm_sections: &'a mut crate::c5::asm::AsmSectionSink,
+    asm_extern_call_sites: &'a mut Vec<super::UserExternCallSite>,
+    asm_sym_fixups: &'a mut Vec<super::AsmSymFixup>,
+    deferred_regions: &'a mut Vec<DeferredAsmRegion>,
+    text_data_ranges: &'a mut Vec<(usize, usize)>,
+    text_align: &'a mut usize,
+    asm_text_labels: &'a mut Vec<super::AsmTextLabel>,
+    asm_section_text_refs: &'a mut Vec<super::AsmSectionTextRef>,
+}
 
-    // A statement that lowers to nothing keeps only its IR-level ordering
-    // effect; the operand staging around zero bytes of code is dead, and
-    // `asm_scratch_bytes` reserved no region for it.
-    if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::A64) {
-        return true;
+/// The unit's symbol tables a statement resolves names against.
+#[derive(Clone, Copy)]
+struct AsmSymbols<'a> {
+    /// Function name -> entry PC, for a `bl` / `b` to a named symbol.
+    name2entpc: &'a alloc::collections::BTreeMap<alloc::string::String, usize>,
+    /// `Inst::ImmData` value-id -> cross-TU data symbol name.
+    extern_data_names: &'a alloc::collections::BTreeMap<u32, alloc::string::String>,
+    /// Internal-linkage data object name -> unified data offset.
+    data_sym_offsets: &'a alloc::collections::BTreeMap<alloc::string::String, i64>,
+}
+
+/// A statement's operands with their assigned registers: what the
+/// template substitution, the operand converter and the capture / load /
+/// store-back sequences read.
+struct AsmOperands<'a> {
+    asm: &'a super::super::ir::AsmBlock,
+    args: &'a [u32],
+    func: &'a FunctionSsa,
+    op_reg: Vec<Option<u8>>,
+}
+
+impl AsmOperands<'_> {
+    /// The constant value of an `i`-class operand reference, if any.
+    fn const_of(&self, idx: u8) -> Option<i64> {
+        crate::c5::asm::asm_operand_const(self.func, *self.args.get(idx as usize)?)
     }
-    // Expand `%=` once so the code text and any `.pushsection` content
-    // share one instance number, then split off the section blocks; the
-    // arch parser sees only the code text.
-    let Ok(raw_text) = core::str::from_utf8(&asm.template) else {
-        bail_msg("aarch64 inline asm: non-UTF8 template");
-        return false;
-    };
-    let stripped = crate::c5::asm::strip_asm_comments(raw_text, crate::c5::asm::AsmComments::A64);
-    let raw_text = stripped.as_deref().unwrap_or(raw_text);
-    let expanded = crate::c5::asm::expand_template_uniq(raw_text);
-    let text = expanded.as_deref().unwrap_or(raw_text);
-    let reduced = match crate::c5::asm::strip_asm_conditionals(text) {
-        Ok(r) => r,
-        Err(m) => {
-            bail_msg(&m);
-            return false;
-        }
-    };
-    let text = reduced.as_deref().unwrap_or(text);
-    // Assign operand registers before the GNU-as macro pass so it can
-    // substitute each reference to its register name -- the same register the
-    // operand capture and write-back below use.
-    // The constant value of an `i`-class operand reference, if any.
-    let const_of = |idx: u8| -> Option<i64> {
-        crate::c5::asm::asm_operand_const(func, *args.get(idx as usize)?)
-    };
-    let operand_form = |idx: u8| -> String {
-        args.get(idx as usize).map_or_else(
-            || String::from("past the operand list"),
-            |&a| crate::c5::asm::asm_operand_form(func, a),
+
+    fn operand_form(&self, idx: u8) -> alloc::string::String {
+        self.args.get(idx as usize).map_or_else(
+            || alloc::string::String::from("past the operand list"),
+            |&a| crate::c5::asm::asm_operand_form(self.func, a),
         )
-    };
-    let op_reg = match assign_operand_regs(
-        &asm.operands,
-        asm.clobber_regs | frame.fixed_regs.gpr,
-        asm.clobber_fp_regs | frame.fixed_regs.fpr,
-        &|i| const_of(i as u8),
-    ) {
-        Ok(r) => r,
-        Err(m) => {
-            bail_msg(&m);
-            return false;
-        }
-    };
-    let gas_subst = |tok: &str| -> Option<String> {
+    }
+
+    fn resolve_ref(&self, idx: u8) -> Option<u8> {
+        self.op_reg.get(idx as usize).copied().flatten()
+    }
+
+    fn constraint(&self, idx: u8) -> Option<super::super::ir::AsmConstraint> {
+        self.asm.operands.get(idx as usize).map(|o| o.constraint)
+    }
+
+    /// The GNU-as macro pass substitutes each operand reference with its
+    /// register name -- the register the capture and write-back use.
+    fn gas_subst(&self, tok: &str) -> Option<alloc::string::String> {
+        use super::super::ir::AsmConstraint;
         let body = tok.strip_prefix('%')?;
         let (force, digits) = match body.as_bytes().first()? {
             b'w' => (Some(false), &body[1..]),
             b'x' => (Some(true), &body[1..]),
             b'c' | b'P' => {
                 let idx: u8 = body[1..].parse().ok()?;
-                return const_of(idx).map(|v| alloc::format!("{v}"));
+                return self.const_of(idx).map(|v| alloc::format!("{v}"));
             }
             _ => (None, body),
         };
         let idx: u8 = digits.parse().ok()?;
-        let r = op_reg.get(idx as usize).copied().flatten()?;
+        let r = self.resolve_ref(idx)?;
         // A `Q` operand substitutes as the whole memory reference `[xN]`
         // through its address register, matching the operand converter's
         // rule for the un-expanded `%N` form.
-        if matches!(
-            asm.operands.get(idx as usize).map(|o| o.constraint),
-            Some(AsmConstraint::MemBase)
-        ) {
+        if matches!(self.constraint(idx), Some(AsmConstraint::MemBase)) {
             return Some(alloc::format!("[x{r}]"));
         }
-        let wide = asm
+        let wide = self
+            .asm
             .operands
             .get(idx as usize)
             .map(|o| o.width >= 8)
@@ -612,251 +581,70 @@ pub(super) fn emit_inline_asm_aarch64(
             if force.unwrap_or(wide) { 'x' } else { 'w' },
             r
         ))
-    };
-    let gas = match crate::c5::asm::expand_asm_gas_macros(text, 4, &gas_subst) {
-        Ok(e) => e,
-        Err(m) => {
-            bail_msg(&m);
-            return false;
-        }
-    };
-    let text = gas.as_deref().unwrap_or(text);
-    // Lift any ALTERNATIVE `.subsection` replacement out of the main stream;
-    // it is encoded into a deferred region appended after the function body
-    // (below), out of the main sequence's fall-through path.
-    let (main_text, deferred_text) = crate::c5::asm::split_asm_subsections(text);
-    let text = main_text.as_str();
-    let extracted = match crate::c5::asm::extract_asm_sections(text, true) {
-        Ok(e) => e,
-        Err(m) => {
-            bail_msg(&m);
-            return false;
-        }
-    };
-    // Owned parts: the blocks are encoded in place below, once the operand
-    // converter exists, while the code text stays borrowable.
-    let (code_owned, mut section_blocks, sym_items) = match extracted {
-        Some(ex) => (Some(ex.code), ex.blocks, ex.sym_items),
-        None => (None, Vec::new(), Vec::new()),
-    };
-    let code_text: &str = code_owned.as_deref().unwrap_or(text);
-    if let Err(m) = crate::c5::asm::reject_unit_symbol_items(&section_blocks) {
-        bail_msg(&m);
-        return false;
     }
-    // The template's symbol directives declare names of the unit; the object
-    // writer applies them, where every definition is known.
-    if let Err(m) = asm_sections.push_sym_decls(&sym_items) {
-        bail_msg(&m);
-        return false;
-    }
-    let insns = match parse_template(code_text.as_bytes()) {
-        Ok(i) => i,
-        Err(m) => {
-            bail_msg(&m);
-            return false;
-        }
-    };
-    // Registers the block overwrites: the operand registers plus the explicit
-    // clobber list. Every general register is saved around the block, since the
-    // allocator may hold a live value in any of them; x16 / x17 are this
-    // lowering's own scratch, reloaded after the template rather than carried
-    // across it. `w` operands and FP clobbers are in the independent d0..d7
-    // file and are saved separately. `asm_save_masks` is shared with the
-    // frame-region sizing in `compute_frame`.
-    let (used_mask, fp_used_mask) = match asm_save_masks(asm, &op_reg, frame.fixed_regs) {
-        Ok(m) => m,
-        Err(m) => {
-            bail_msg(&m);
-            return false;
-        }
-    };
-    let save_list: Vec<u8> = (0u8..31).filter(|r| used_mask & (1 << r) != 0).collect();
-    let fp_save_list: Vec<u8> = (0u8..8).filter(|r| fp_used_mask & (1 << r) != 0).collect();
 
-    let n = asm.operands.len();
-    let n_saved = save_list.len();
-    let n_fp_saved = fp_save_list.len();
-    // An immediate operand is substituted into the template text and has
-    // no runtime storage, so it takes no capture slot. Keeping the
-    // region empty for a template whose only operands are immediates
-    // matters beyond the saved bytes: the region is released on the paths
-    // out of the template, and an `asm goto` label reached by a branch
-    // planted at run time -- a jump-label or alternative patch site, whose
-    // `%l` is a data reference rather than a branch in the template --
-    // bypasses every one of them.
-    let needs_cap: Vec<bool> = op_reg.iter().map(Option::is_some).collect();
-    let mut cap_slot: Vec<usize> = alloc::vec![0; n];
-    let mut n_cap = 0usize;
-    for (i, &c) in needs_cap.iter().enumerate() {
-        if c {
-            cap_slot[i] = n_cap;
-            n_cap += 1;
-        }
-    }
-    // Region layout: captures first, then the saved GP registers, then the
-    // saved FP registers, a 16-byte multiple. The region is frame storage at
-    // `[sp + region_base + off]` (`Frame::asm_scratch_off`): sp does not move,
-    // so an `asm goto` label reached by a run-time-patched branch -- a
-    // published `%l` in a jump table, which bypasses every exit path of the
-    // template -- leaves sp balanced. A naked function has no frame, so its
-    // region is carved from sp around the template as a self-contained pair.
-    let size = (((n_cap + n_saved + n_fp_saved) * 8) as u32 + 15) & !15;
-    let carve = func.is_naked && size > 0;
-    // An empty region means no entry or exit work: every capture, save and
-    // operand load addresses it, and an operand with no register takes no
-    // slot. The template's own realignment is per instruction below.
-    let mut map_state = *text_map_state;
-    if size > 0 {
-        a64_align_asm_stream(code, text_data_ranges, &mut map_state);
-    }
-    let region_base: u32 = if carve {
-        if size > MAX_UNPROBED_STACK_STEP {
-            bail_msg("aarch64 inline asm: operand frame too large");
-            return false;
-        }
-        emit(code, enc_sub_imm(Reg(31), Reg(31), size));
-        0
-    } else {
-        debug_assert!(
-            size == 0 || (frame.asm_scratch_off + size as i64) <= 0,
-            "inline asm without a frame scratch region"
-        );
-        (frame.frame_bytes as i64 + frame.asm_scratch_off) as u32
-    };
-    // The carve moved sp under the allocator's sp-relative spill slots; frame
-    // storage leaves sp alone.
-    let spill_shift = if carve { size } else { 0 };
-    let cap_off = |i: usize| region_base + (cap_slot[i] * 8) as u32;
-    let save_off = |j: usize| region_base + ((n_cap + j) * 8) as u32;
-    let fp_save_off = |k: usize| region_base + ((n_cap + n_saved + k) * 8) as u32;
-    // Region slot accessors: the carve is always sp-based; frame storage
-    // follows the spill addressing (sp-based, fp-based when `dynamic_sp`).
-    let reg_ldr_x = |code: &mut Vec<u8>, rt: Reg, off: u32| {
-        if carve {
-            emit_sp_ldr_x(code, rt, off);
-        } else {
-            emit_spill_ldr_x(code, frame, rt, off);
-        }
-    };
-    let reg_str_x = |code: &mut Vec<u8>, rt: Reg, off: u32| {
-        if carve {
-            emit_sp_str_x_auto(code, rt, off);
-        } else {
-            emit_spill_str_x_auto(code, frame, rt, off);
-        }
-    };
-    let reg_ldr_d = |code: &mut Vec<u8>, dt: u8, off: u32| {
-        if carve {
-            emit_sp_ldr_d_auto(code, dt, off);
-        } else {
-            emit_spill_ldr_d_auto(code, frame, dt, off);
-        }
-    };
-    let reg_str_d = |code: &mut Vec<u8>, dt: u8, off: u32| {
-        if carve {
-            emit_sp_str_d_auto(code, dt, off);
-        } else {
-            emit_spill_str_d_auto(code, frame, dt, off);
-        }
-    };
-
-    // Save the clobbered registers, then capture each operand's value (input) /
-    // address (output) -- both before any operand register is overwritten.
-    for (j, &r) in save_list.iter().enumerate() {
-        reg_str_x(code, Reg(r), save_off(j));
-    }
-    for (k, &r) in fp_save_list.iter().enumerate() {
-        reg_str_d(code, r, fp_save_off(k));
-    }
-    for (i, &a) in args.iter().enumerate() {
-        if !needs_cap.get(i).copied().unwrap_or(true) {
-            continue;
-        }
-        let Some(place) = alloc.places.get(a as usize).copied() else {
-            bail_msg("aarch64 inline asm: operand place missing");
-            return false;
+    /// A bare `%N` reference as a table operand: the assigned register in
+    /// the view the constraint gives it, or an immediate operand's constant.
+    fn conv_ref(
+        &self,
+        idx: u8,
+        is64: Option<bool>,
+    ) -> Result<super::table::Opnd, alloc::string::String> {
+        use super::super::ir::AsmConstraint;
+        use super::table::Opnd;
+        use alloc::string::String;
+        let Some(r) = self.resolve_ref(idx) else {
+            if matches!(
+                self.asm.operands[idx as usize].constraint,
+                AsmConstraint::Imm | AsmConstraint::RegOrImm { .. }
+            ) {
+                return match self.const_of(idx) {
+                    Some(v) => Ok(Opnd::Imm(v)),
+                    None => Err(alloc::format!(
+                        "aarch64 inline asm: non-constant immediate operand `%{idx}`: \
+                         the operand is {}",
+                        self.operand_form(idx)
+                    )),
+                };
+            }
+            return Err(String::from(
+                "aarch64 inline asm: operand reference is not a register",
+            ));
         };
-        // A double `w` input captures its FP value; a 16-byte `w` operand's
-        // SSA value is its address, so it captures like the integer operands.
-        // Every other operand captures an integer value (input) or a
-        // destination address (output).
-        if matches!(asm.operands[i].constraint, AsmConstraint::Fp)
-            && !asm.operands[i].is_output
-            && asm.operands[i].width == 8
-        {
-            let Some(d) = materialize_fp_shifted(code, place, 16, frame, spill_shift) else {
-                bail_msg("aarch64 inline asm: `w` operand not a floating-point place");
-                return false;
-            };
-            reg_str_d(code, d, cap_off(i));
-        } else {
-            let Some(r) = materialize_int_shifted(code, place, Reg(16), frame, spill_shift) else {
-                bail_msg("aarch64 inline asm: operand not an integer place");
-                return false;
-            };
-            reg_str_x(code, r, cap_off(i));
-        }
+        Ok(match self.asm.operands[idx as usize].constraint {
+            // `%sN` selects the single view, `%dN` / bare the double.
+            AsmConstraint::Fp => Opnd::VReg {
+                num: r,
+                is_d: is64.unwrap_or(true),
+            },
+            // A `Q` operand substitutes as the whole memory reference `[xN]`
+            // through its address register.
+            AsmConstraint::MemBase => Opnd::Mem {
+                base: r,
+                off: 0,
+                pre: false,
+            },
+            _ => Opnd::Reg {
+                num: r,
+                is64: is64.unwrap_or(self.asm.operands[idx as usize].width >= 8),
+                sp: false,
+            },
+        })
     }
-    // Load inputs and memory addresses into their assigned registers; a `+`
-    // read-write output loads its current value from the destination address.
-    for (i, op) in asm.operands.iter().enumerate() {
-        let Some(r) = op_reg[i] else { continue };
-        if matches!(op.constraint, AsmConstraint::Fp) {
-            // A double `w` input loads its captured FP value into the
-            // d-register; a 16-byte `w` operand (input or read-write output)
-            // loads the full q register through its captured address. A
-            // read-write double output loads the current value the same way.
-            if op.width == 16 {
-                if !op.is_output || op.is_rw {
-                    reg_ldr_x(code, Reg(16), cap_off(i)); // x16 = operand address
-                    emit(code, super::encode::enc_ldr_q_imm(r, Reg(16), 0));
-                }
-            } else if !op.is_output {
-                reg_ldr_d(code, r, cap_off(i));
-            } else if op.is_rw {
-                reg_ldr_x(code, Reg(16), cap_off(i)); // x16 = destination address
-                emit(code, super::encode::enc_ldr_d_imm(r, Reg(16), 0));
-            }
-            continue;
-        }
-        if matches!(op.constraint, AsmConstraint::Mem | AsmConstraint::MemBase) || !op.is_output {
-            reg_ldr_x(code, Reg(r), cap_off(i));
-        } else if op.is_rw {
-            reg_ldr_x(code, Reg(16), cap_off(i)); // x16 = destination address
-            let ok = match op.width {
-                8 => {
-                    emit(code, super::encode::enc_ldr_imm(Reg(r), Reg(16), 0));
-                    true
-                }
-                4 => {
-                    emit(code, super::encode::enc_ldr32_imm(Reg(r), Reg(16), 0));
-                    true
-                }
-                2 => {
-                    emit(code, super::encode::enc_ldrh_imm(Reg(r), Reg(16), 0));
-                    true
-                }
-                1 => {
-                    emit(code, super::encode::enc_ldrb_imm(Reg(r), Reg(16), 0));
-                    true
-                }
-                _ => false,
-            };
-            if !ok {
-                bail_msg("aarch64 inline asm: unsupported read-write operand width");
-                return false;
-            }
-        }
-    }
-    // Resolve one symbolic operand to a table operand; label references have
-    // no table form and are handled by the branch path below.
-    let conv = |o: &AsmOpndA64| -> Result<Opnd, String> {
-        let resolve_ref = |idx: u8| -> Option<u8> { op_reg.get(idx as usize).copied().flatten() };
+
+    /// Resolve one symbolic operand to a table operand; label references
+    /// have no table form and are handled by the branch path.
+    fn conv(
+        &self,
+        o: &super::asm::AsmOpndA64,
+    ) -> Result<super::table::Opnd, alloc::string::String> {
+        use super::asm::AsmOpndA64;
+        use super::table::Opnd;
+        use alloc::string::String;
         Ok(match *o {
             AsmOpndA64::Imm(v) => Opnd::Imm(v),
             // `%cN` / `%PN`: the operand's compile-time constant, bare.
-            AsmOpndA64::RefConst(idx) => match const_of(idx) {
+            AsmOpndA64::RefConst(idx) => match self.const_of(idx) {
                 Some(v) => Opnd::Imm(v),
                 None => {
                     return Err(String::from(
@@ -899,61 +687,15 @@ pub(super) fn emit_inline_asm_aarch64(
                 size,
                 index,
             },
-            AsmOpndA64::Ref { idx, is64 } => {
-                let Some(r) = resolve_ref(idx) else {
-                    // An immediate operand has no register; a bare `%N` uses
-                    // its compile-time constant value.
-                    if matches!(
-                        asm.operands[idx as usize].constraint,
-                        AsmConstraint::Imm | AsmConstraint::RegOrImm { .. }
-                    ) {
-                        return match const_of(idx) {
-                            Some(v) => Ok(Opnd::Imm(v)),
-                            None => Err(alloc::format!(
-                                "aarch64 inline asm: non-constant immediate operand `%{idx}`: \
-                                 the operand is {}",
-                                operand_form(idx)
-                            )),
-                        };
-                    }
-                    return Err(String::from(
-                        "aarch64 inline asm: operand reference is not a register",
-                    ));
-                };
-                if matches!(asm.operands[idx as usize].constraint, AsmConstraint::Fp) {
-                    // `%sN` selects the single view, `%dN` / bare the double.
-                    Opnd::VReg {
-                        num: r,
-                        is_d: is64.unwrap_or(true),
-                    }
-                } else if matches!(
-                    asm.operands[idx as usize].constraint,
-                    AsmConstraint::MemBase
-                ) {
-                    // A `Q` operand substitutes as the whole memory
-                    // reference `[xN]` through its address register.
-                    Opnd::Mem {
-                        base: r,
-                        off: 0,
-                        pre: false,
-                    }
-                } else {
-                    let is64 = is64.unwrap_or(asm.operands[idx as usize].width >= 8);
-                    Opnd::Reg {
-                        num: r,
-                        is64,
-                        sp: false,
-                    }
-                }
-            }
-            // The vector views (`%N.T`, `%qN`, `{%N.T}`) name the SIMD file, so
-            // they require a `w` operand.
+            AsmOpndA64::Ref { idx, is64 } => self.conv_ref(idx, is64)?,
+            // The vector views (`%N.T`, `%qN`, `{%N.T}`) name the SIMD file,
+            // so they require a `w` operand.
             AsmOpndA64::RefVec { idx, size, q } => {
-                let r = resolve_fp_ref(&op_reg, asm, idx)?;
+                let r = resolve_fp_ref(&self.op_reg, self.asm, idx)?;
                 Opnd::VecReg { num: r, size, q }
             }
             AsmOpndA64::RefVecElem { idx, size, index } => {
-                let r = resolve_fp_ref(&op_reg, asm, idx)?;
+                let r = resolve_fp_ref(&self.op_reg, self.asm, idx)?;
                 Opnd::VecElem {
                     num: r,
                     size,
@@ -961,7 +703,7 @@ pub(super) fn emit_inline_asm_aarch64(
                 }
             }
             AsmOpndA64::RefVecList { idx, size, q } => {
-                let r = resolve_fp_ref(&op_reg, asm, idx)?;
+                let r = resolve_fp_ref(&self.op_reg, self.asm, idx)?;
                 Opnd::VecList {
                     first: r,
                     count: 1,
@@ -970,7 +712,7 @@ pub(super) fn emit_inline_asm_aarch64(
                 }
             }
             AsmOpndA64::RefVecListLane { idx, size, index } => {
-                let r = resolve_fp_ref(&op_reg, asm, idx)?;
+                let r = resolve_fp_ref(&self.op_reg, self.asm, idx)?;
                 Opnd::VecListLane {
                     first: r,
                     count: 1,
@@ -979,14 +721,14 @@ pub(super) fn emit_inline_asm_aarch64(
                 }
             }
             AsmOpndA64::RefQ(idx) => {
-                let r = resolve_fp_ref(&op_reg, asm, idx)?;
+                let r = resolve_fp_ref(&self.op_reg, self.asm, idx)?;
                 Opnd::QReg(r)
             }
             AsmOpndA64::Mem { base, off, pre } => {
                 let base = match base {
                     super::asm::MemBase::Reg(n) => n,
                     super::asm::MemBase::Ref(idx) => {
-                        let Some(r) = resolve_ref(idx) else {
+                        let Some(r) = self.resolve_ref(idx) else {
                             return Err(String::from(
                                 "aarch64 inline asm: memory base is not a register",
                             ));
@@ -1004,7 +746,7 @@ pub(super) fn emit_inline_asm_aarch64(
             } => {
                 let reg_of = |b: super::asm::MemBase| match b {
                     super::asm::MemBase::Reg(n) => Some(n),
-                    super::asm::MemBase::Ref(idx) => resolve_ref(idx),
+                    super::asm::MemBase::Ref(idx) => self.resolve_ref(idx),
                 };
                 let (Some(base), Some(index)) = (reg_of(base), reg_of(index)) else {
                     return Err(String::from(
@@ -1054,649 +796,263 @@ pub(super) fn emit_inline_asm_aarch64(
                 ));
             }
         })
-    };
-    // `%lK` label indices this statement's section items reference -- a data
-    // field (`.long %l0 - .`) or a section branch (`b %l[k]`). A statement
-    // with exit work rewrites those relocs below, so the published address is
-    // the same trampoline a template `%lK` branch takes.
-    let data_goto_ks = core::cell::RefCell::new(Vec::<usize>::new());
-    let goto_block = |idx: u8| -> Option<u32> {
-        let ctx = goto_ctx.as_ref()?;
-        let bid = ctx.row.get(1 + idx as usize).copied()?;
-        data_goto_ks.borrow_mut().push(idx as usize);
-        Some(bid)
-    };
-    // Assemble the instructions of a pushed section to bytes before layout.
-    // The converter above resolves a reference to the enclosing template's
-    // operands, which the file-scope encoder has no notion of.
-    if !section_blocks.is_empty()
-        && let Err(m) = encode_a64_asm_section_code(&mut section_blocks, &conv, &goto_block)
-    {
-        bail_msg(&m);
-        return false;
     }
-    // Local labels: definitions record the code offset they stand at; branches
-    // to them emit a placeholder word and are patched once the block's layout
-    // is final (a `Nb` reference binds to the most recent definition of N at
-    // or before the branch, `Nf` to the next one after it).
-    let mut label_defs: Vec<(u32, usize)> = Vec::new();
-    let mut label_fixups: Vec<(usize, LabelBranch, u32, bool)> = Vec::new();
-    // The template's intern table, telling an expression leaf apart from a
-    // symbol the stream cannot relocate.
-    let label_names = crate::c5::asm::scan_label_names(code_text);
-    // Forward-referencing fields over template labels, settled below: a data
-    // field as `(reference_site, field, width, expression)`, an instruction
-    // operand by re-encoding its word.
-    let mut expr_fixups: Vec<(usize, usize, usize, String)> = Vec::new();
-    let mut insn_expr_fixups: Vec<(usize, String, Vec<Opnd>, usize, String)> = Vec::new();
-    // `asm goto` label branches: `(site, kind, label_index)` per `%lK`
-    // reference, patched to the label's restore trampoline (or to the
-    // shared fall-through restore when the target is the fall-through
-    // block).
-    let mut goto_sites: Vec<(usize, LabelBranch, usize)> = Vec::new();
 
-    // The mapping state the stream is in on entry; it spans the section, so
-    // a template ending in data pads only where an instruction follows.
-    let mut map_state = *text_map_state;
+    /// A symbol name with its operand references substituted, which is what
+    /// makes `__get_user_%c0` name `__get_user_4`.
+    fn symbol_name(&self, name: &str) -> Result<alloc::string::String, alloc::string::String> {
+        crate::c5::asm::resolve_asm_symbol_target(name, &crate::c5::asm::A64_SYMBOL_SUBST, &|i| {
+            self.const_of(i)
+        })
+    }
+}
 
-    // Code-stream label names, so a layout directive's expression can read a
-    // named label's offset as it reads a numeric one.
-    let stream_label_names = crate::c5::asm::scan_label_names(code_text);
-    // Encode each template instruction; raw-byte pieces emit verbatim.
-    for insn in &insns {
-        if let Some(num) = insn.label_def {
-            label_defs.push((num, code.len()));
-            continue;
-        }
-        // A layout directive moves the location counter; `code` is the unit's
-        // whole text stream, so its length is the section offset GNU as
-        // resolves one against. Only a definition already emitted resolves.
-        if let Some(item) = &insn.layout {
-            let resolve = |name: &str| -> Option<i64> {
-                let num = match stream_label_names.iter().position(|&n| n == name) {
-                    Some(i) => crate::c5::asm::NAMED_LABEL_BASE + i as u32,
-                    None => name.strip_suffix(['b', 'f'])?.parse().ok()?,
-                };
-                label_defs
-                    .iter()
-                    .rfind(|&&(n, _)| n == num)
-                    .map(|&(_, off)| off as i64)
-            };
-            let resolved = match crate::c5::asm::resolve_align_item(item, &resolve) {
-                Ok(r) => r,
-                Err(m) => {
-                    bail_msg(&m);
-                    return false;
-                }
-            };
-            let item = resolved.as_ref().unwrap_or(item);
-            match crate::c5::asm::push_a64_stream_layout(
-                item,
-                code,
-                text_data_ranges,
-                &resolve,
-                &const_of,
-            ) {
-                Ok(n) => *text_align = (*text_align).max(n as usize),
-                Err(m) => {
-                    bail_msg(&m);
-                    return false;
-                }
+/// The statement's scratch region: operand captures first, then the saved
+/// GP registers, then the saved FP registers, a 16-byte multiple. The region
+/// is frame storage at `[sp + region_base + off]` (`Frame::asm_scratch_off`):
+/// sp does not move, so an `asm goto` label reached by a run-time-patched
+/// branch -- a published `%l` in a jump table, which bypasses every exit path
+/// of the template -- leaves sp balanced. A naked function has no frame, so
+/// its region is carved from sp around the template.
+struct AsmRegion {
+    frame: Frame,
+    save_list: Vec<u8>,
+    fp_save_list: Vec<u8>,
+    /// Whether operand `i` has a capture slot: an immediate operand is
+    /// substituted into the text and has no runtime storage.
+    needs_cap: Vec<bool>,
+    cap_slot: Vec<usize>,
+    n_cap: usize,
+    size: u32,
+    carve: bool,
+    region_base: u32,
+    /// The carve moves sp under the allocator's sp-relative spill slots;
+    /// frame storage leaves sp alone.
+    spill_shift: u32,
+}
+
+impl AsmRegion {
+    fn layout(ops: &AsmOperands, frame: Frame) -> Result<Self, alloc::string::String> {
+        // Registers the block overwrites: the operand registers plus the
+        // explicit clobber list. x16 / x17 are this lowering's own scratch,
+        // reloaded after the template rather than carried across it.
+        // `asm_save_masks` is shared with the frame-region sizing in
+        // `compute_frame`.
+        let (used_mask, fp_used_mask) = asm_save_masks(ops.asm, &ops.op_reg, frame.fixed_regs)?;
+        let save_list: Vec<u8> = (0u8..31).filter(|r| used_mask & (1 << r) != 0).collect();
+        let fp_save_list: Vec<u8> = (0u8..8).filter(|r| fp_used_mask & (1 << r) != 0).collect();
+        let n = ops.asm.operands.len();
+        let needs_cap: Vec<bool> = ops.op_reg.iter().map(Option::is_some).collect();
+        let mut cap_slot: Vec<usize> = alloc::vec![0; n];
+        let mut n_cap = 0usize;
+        for (i, &c) in needs_cap.iter().enumerate() {
+            if c {
+                cap_slot[i] = n_cap;
+                n_cap += 1;
             }
-            map_state = crate::c5::asm::step_map_state(item, map_state, true);
-            continue;
         }
-        // Every item but a data directive lays down instructions: a raw-byte
-        // piece the parser encoded itself (`msr`, the barriers, the system
-        // ops), `.inst`, and an assembled mnemonic.
-        let class = crate::c5::asm::data_directive_class(&insn.mnemonic).unwrap_or(MapClass::Code);
-        if class == MapClass::Code {
-            a64_align_asm_stream(code, text_data_ranges, &mut map_state);
-        }
-        map_state = Some(class);
-        if !insn.bytes.is_empty() {
-            if class == MapClass::Data {
-                text_data_ranges.push((code.len(), insn.bytes.len()));
-            }
-            code.extend_from_slice(&insn.bytes);
-            continue;
-        }
-        // A data directive with operand references (`.long %c0`): each
-        // argument must resolve to a compile-time constant, emitted
-        // little-endian at the directive width.
-        if let Some(w) = crate::c5::asm::data_directive_width(&insn.mnemonic) {
-            // `.word` is target-dependent: 4 bytes on AArch64.
-            let w = if insn.mnemonic == ".word" { 4 } else { w };
-            if class == MapClass::Data {
-                text_data_ranges.push((code.len(), w * insn.operands.len()));
-            }
-            for o in &insn.operands {
-                let v = match *o {
-                    AsmOpndA64::Imm(v) => v,
-                    AsmOpndA64::RefConst(idx) | AsmOpndA64::Ref { idx, .. } => {
-                        match const_of(idx) {
-                            Some(v) => v,
-                            None => {
-                                bail_msg("aarch64 inline asm: non-constant data-directive value");
-                                return false;
-                            }
-                        }
-                    }
-                    // A value over template labels: the field width is the
-                    // directive's, so only the value waits on the layout.
-                    AsmOpndA64::ImmExpr(ref e) => {
-                        match template_expr_value(e, code.len(), &label_defs, &label_names) {
-                            Some(v) => v,
-                            None if crate::c5::asm::is_template_label_expr(e, &label_names) => {
-                                expr_fixups.push((code.len(), code.len(), w, e.clone()));
-                                0
-                            }
-                            None => {
-                                bail_msg("aarch64 inline asm: unsupported data-directive value");
-                                return false;
-                            }
-                        }
-                    }
-                    _ => {
-                        bail_msg("aarch64 inline asm: unsupported data-directive value");
-                        return false;
-                    }
-                };
-                code.extend_from_slice(&(v as u64).to_le_bytes()[..w]);
-            }
-            continue;
-        }
-        // A direct `bl` / `b` to a symbol: resolve the name to its entry PC and
-        // record a fixup the post-pass patches to a rel26 once every function's
-        // address is final -- the same mechanism as a compiler-emitted call.
-        if let Some(name) = &insn.sym_target {
-            let is_call = insn.mnemonic == "bl";
-            let (kind, word) = if is_call {
-                (BranchKind::Bl, super::encode::enc_bl(0))
-            } else {
-                (BranchKind::B, super::encode::enc_b(0))
-            };
-            // The name may embed operand references; substituting them first
-            // is what makes `__get_user_%c0` name `__get_user_4`.
-            let name = match crate::c5::asm::resolve_asm_symbol_target(
-                name,
-                &crate::c5::asm::A64_SYMBOL_SUBST,
-                &const_of,
-            ) {
-                Ok(n) => n,
-                Err(e) => {
-                    bail_msg(&e);
-                    return false;
-                }
-            };
-            let native_offset = code.len();
-            match name2entpc.get(name.as_str()) {
-                Some(&ent_pc) => fixups.push(Fixup {
-                    native_offset,
-                    target_ent_pc: ent_pc,
-                    kind,
-                }),
-                // Not defined here: the callee's address is a link-time
-                // decision, so the site becomes a call relocation against the
-                // name, exactly as a compiler-emitted call to an extern
-                // function does. The rel26 stays zero for the linker to patch.
-                None => asm_extern_call_sites.push(super::UserExternCallSite {
-                    instr_offset: native_offset,
-                    symbol_name: name.clone(),
-                    is_tail: !is_call,
-                }),
-            }
-            emit(code, word);
-            continue;
-        }
-        let goto_label = match insn.operands.last() {
-            Some(&AsmOpndA64::GotoLabel(k)) => Some(k),
-            _ => None,
+        let size = (((n_cap + save_list.len() + fp_save_list.len()) * 8) as u32 + 15) & !15;
+        let carve = ops.func.is_naked && size > 0;
+        let region_base = if carve {
+            0
+        } else {
+            debug_assert!(
+                size == 0 || (frame.asm_scratch_off + size as i64) <= 0,
+                "inline asm without a frame scratch region"
+            );
+            (frame.frame_bytes as i64 + frame.asm_scratch_off) as u32
         };
-        if matches!(
-            insn.operands.last(),
-            Some(AsmOpndA64::Label { .. } | AsmOpndA64::Here(_))
-        ) || goto_label.is_some()
-        {
-            let kind = match build_label_branch(insn, &conv) {
-                Ok(k) => k,
-                Err(m) => {
-                    bail_msg(&m);
-                    return false;
-                }
-            };
-            if let Some(k) = goto_label {
-                let Some(ctx) = goto_ctx.as_ref() else {
-                    bail_msg("aarch64 inline asm: `%l` label reference outside `asm goto`");
-                    return false;
-                };
-                if 1 + k as usize >= ctx.row.len() {
-                    bail_msg("aarch64 inline asm: `%l` label index out of range");
-                    return false;
-                }
-                if matches!(kind, LabelBranch::Adr { .. }) {
-                    bail_msg("aarch64 inline asm: adr cannot take an `asm goto` label");
-                    return false;
-                }
-                goto_sites.push((code.len(), kind, k as usize));
-                emit(code, 0);
+        Ok(AsmRegion {
+            frame,
+            save_list,
+            fp_save_list,
+            needs_cap,
+            cap_slot,
+            n_cap,
+            size,
+            carve,
+            region_base,
+            spill_shift: if carve { size } else { 0 },
+        })
+    }
+
+    /// The naked function's sp carve. An empty region means no entry or
+    /// exit work at all.
+    fn enter(&self, code: &mut Vec<u8>) -> Result<(), alloc::string::String> {
+        if !self.carve {
+            return Ok(());
+        }
+        if self.size > MAX_UNPROBED_STACK_STEP {
+            return Err(alloc::string::String::from(
+                "aarch64 inline asm: operand frame too large",
+            ));
+        }
+        emit(code, enc_sub_imm(Reg(31), Reg(31), self.size));
+        Ok(())
+    }
+
+    fn cap_off(&self, i: usize) -> u32 {
+        self.region_base + (self.cap_slot[i] * 8) as u32
+    }
+
+    fn save_off(&self, j: usize) -> u32 {
+        self.region_base + ((self.n_cap + j) * 8) as u32
+    }
+
+    fn fp_save_off(&self, k: usize) -> u32 {
+        self.region_base + ((self.n_cap + self.save_list.len() + k) * 8) as u32
+    }
+
+    // Region slot accessors: the carve is always sp-based; frame storage
+    // follows the spill addressing (sp-based, fp-based when `dynamic_sp`).
+    fn ldr_x(&self, code: &mut Vec<u8>, rt: Reg, off: u32) {
+        if self.carve {
+            emit_sp_ldr_x(code, rt, off);
+        } else {
+            emit_spill_ldr_x(code, self.frame, rt, off);
+        }
+    }
+
+    fn str_x(&self, code: &mut Vec<u8>, rt: Reg, off: u32) {
+        if self.carve {
+            emit_sp_str_x_auto(code, rt, off);
+        } else {
+            emit_spill_str_x_auto(code, self.frame, rt, off);
+        }
+    }
+
+    fn ldr_d(&self, code: &mut Vec<u8>, dt: u8, off: u32) {
+        if self.carve {
+            emit_sp_ldr_d_auto(code, dt, off);
+        } else {
+            emit_spill_ldr_d_auto(code, self.frame, dt, off);
+        }
+    }
+
+    fn str_d(&self, code: &mut Vec<u8>, dt: u8, off: u32) {
+        if self.carve {
+            emit_sp_str_d_auto(code, dt, off);
+        } else {
+            emit_spill_str_d_auto(code, self.frame, dt, off);
+        }
+    }
+
+    /// Save the clobbered registers, then capture each operand's value
+    /// (input) / address (output) -- both before any operand register is
+    /// overwritten.
+    fn emit_saves_and_captures(
+        &self,
+        code: &mut Vec<u8>,
+        ops: &AsmOperands,
+        alloc: &Allocation,
+    ) -> Result<(), alloc::string::String> {
+        use super::super::ir::AsmConstraint;
+        for (j, &r) in self.save_list.iter().enumerate() {
+            self.str_x(code, Reg(r), self.save_off(j));
+        }
+        for (k, &r) in self.fp_save_list.iter().enumerate() {
+            self.str_d(code, r, self.fp_save_off(k));
+        }
+        for (i, &a) in ops.args.iter().enumerate() {
+            if !self.needs_cap.get(i).copied().unwrap_or(true) {
                 continue;
             }
-            if let Some(&AsmOpndA64::Here(off)) = insn.operands.last() {
-                // `.` names the branch's own address, plus any offset.
-                let word = match kind {
-                    LabelBranch::Adr { rd } => {
-                        if !(-(1i32 << 20)..(1i32 << 20)).contains(&off) {
-                            bail_msg("aarch64 inline asm: adr target out of +/-1MiB range");
-                            return false;
-                        }
-                        super::encode::enc_adr(Reg(rd), off)
+            let Some(place) = alloc.places.get(a as usize).copied() else {
+                return Err(alloc::string::String::from(
+                    "aarch64 inline asm: operand place missing",
+                ));
+            };
+            // A double `w` input captures its FP value; a 16-byte `w`
+            // operand's SSA value is its address, so it captures like the
+            // integer operands. Every other operand captures an integer value
+            // (input) or a destination address (output).
+            let op = &ops.asm.operands[i];
+            if matches!(op.constraint, AsmConstraint::Fp) && !op.is_output && op.width == 8 {
+                let Some(d) = materialize_fp_shifted(code, place, 16, self.frame, self.spill_shift)
+                else {
+                    return Err(alloc::string::String::from(
+                        "aarch64 inline asm: `w` operand not a floating-point place",
+                    ));
+                };
+                self.str_d(code, d, self.cap_off(i));
+            } else {
+                let Some(r) =
+                    materialize_int_shifted(code, place, Reg(16), self.frame, self.spill_shift)
+                else {
+                    return Err(alloc::string::String::from(
+                        "aarch64 inline asm: operand not an integer place",
+                    ));
+                };
+                self.str_x(code, r, self.cap_off(i));
+            }
+        }
+        Ok(())
+    }
+
+    /// Load inputs and memory addresses into their assigned registers; a
+    /// `+` read-write output loads its current value from the destination
+    /// address.
+    fn emit_input_loads(
+        &self,
+        code: &mut Vec<u8>,
+        ops: &AsmOperands,
+    ) -> Result<(), alloc::string::String> {
+        use super::super::ir::AsmConstraint;
+        for (i, op) in ops.asm.operands.iter().enumerate() {
+            let Some(r) = ops.op_reg[i] else { continue };
+            if matches!(op.constraint, AsmConstraint::Fp) {
+                // A double `w` input loads its captured FP value into the
+                // d-register; a 16-byte `w` operand (input or read-write
+                // output) loads the full q register through its captured
+                // address. A read-write double output loads the current value
+                // the same way.
+                if op.width == 16 {
+                    if !op.is_output || op.is_rw {
+                        self.ldr_x(code, Reg(16), self.cap_off(i)); // x16 = operand address
+                        emit(code, super::encode::enc_ldr_q_imm(r, Reg(16), 0));
                     }
-                    _ => match label_branch_word(&kind, off as i64) {
-                        Ok(w) => w,
-                        Err(m) => {
-                            bail_msg(&m);
-                            return false;
-                        }
-                    },
+                } else if !op.is_output {
+                    self.ldr_d(code, r, self.cap_off(i));
+                } else if op.is_rw {
+                    self.ldr_x(code, Reg(16), self.cap_off(i)); // x16 = destination address
+                    emit(code, super::encode::enc_ldr_d_imm(r, Reg(16), 0));
+                }
+                continue;
+            }
+            if matches!(op.constraint, AsmConstraint::Mem | AsmConstraint::MemBase) || !op.is_output
+            {
+                self.ldr_x(code, Reg(r), self.cap_off(i));
+            } else if op.is_rw {
+                self.ldr_x(code, Reg(16), self.cap_off(i)); // x16 = destination address
+                let word = match op.width {
+                    8 => super::encode::enc_ldr_imm(Reg(r), Reg(16), 0),
+                    4 => super::encode::enc_ldr32_imm(Reg(r), Reg(16), 0),
+                    2 => super::encode::enc_ldrh_imm(Reg(r), Reg(16), 0),
+                    1 => super::encode::enc_ldrb_imm(Reg(r), Reg(16), 0),
+                    _ => {
+                        return Err(alloc::string::String::from(
+                            "aarch64 inline asm: unsupported read-write operand width",
+                        ));
+                    }
                 };
                 emit(code, word);
-                continue;
-            }
-            let Some(&AsmOpndA64::Label { num, forward }) = insn.operands.last() else {
-                unreachable!("guard admits Label, Here or GotoLabel; the first two handled above");
-            };
-            label_fixups.push((code.len(), kind, num, forward));
-            emit(code, 0);
-            continue;
-        }
-        // `movz` / `movk` with `:abs_gN:` over an expression that folds:
-        // a function body has no layout pass, so only a constant resolves,
-        // and it takes the same field encoding the section path applies.
-        if let Some(AsmOpndA64::Sym {
-            expr,
-            spec:
-                super::asm::SymSpec::MovwAbs {
-                    group,
-                    signed,
-                    check,
-                },
-        }) = insn.operands.last()
-            && matches!(insn.mnemonic.as_str(), "movz" | "movk")
-            && let Some(v) = crate::c5::asm::eval_const_expr_ops(expr, &|_| None)
-        {
-            let (rd, is64) = match conv(&insn.operands[0]) {
-                Ok(Opnd::Reg { num, is64, .. }) => (num, is64),
-                _ => {
-                    bail_msg("aarch64 inline asm: `:abs_g` destination must be a register");
-                    return false;
-                }
-            };
-            let movk = insn.mnemonic == "movk";
-            if movk && *signed {
-                bail_msg("aarch64 inline asm: `:abs_g<n>_s:` is not allowed on `movk`");
-                return false;
-            }
-            let word = match a64_movw_placeholder(rd, is64, movk, *group) {
-                Ok(w) => w,
-                Err(m) => {
-                    bail_msg(&alloc::format!("aarch64 {m}"));
-                    return false;
-                }
-            };
-            match super::patch::movw_const_word(word, *group, *signed, *check, v) {
-                Ok(w) => emit(code, w),
-                Err(m) => {
-                    bail_msg(&alloc::format!("aarch64 inline asm: {m}"));
-                    return false;
-                }
-            }
-            continue;
-        }
-        // A symbol operand (`adrp %x0, sym`, `add ..., :lo12:sym`, a `:lo12:`
-        // load/store, `movz`/`movk` `:abs_gN:sym`, a branch / `adr` / literal
-        // `ldr` naming a symbol) takes the section path's shape encoder; the
-        // site records a per-instruction relocation against the name, an
-        // internal-linkage data object resolved to its offset.
-        if matches!(
-            insn.operands.last(),
-            Some(AsmOpndA64::Sym { .. } | AsmOpndA64::MemSymLo12 { .. })
-        ) {
-            let (word, kind, expr) = match encode_a64_sym_insn(insn, &conv) {
-                Ok(Some(t)) => t,
-                Ok(None) => {
-                    bail_msg("aarch64 inline asm: unsupported symbol operand");
-                    return false;
-                }
-                Err(m) => {
-                    bail_msg(&alloc::format!("aarch64 {m}"));
-                    return false;
-                }
-            };
-            // A function body has no section layout, so only `sym + constant`
-            // resolves here; a label-difference expression does not.
-            let Some((name, addend)) = crate::c5::asm::asm_expr_sym_addend(&expr) else {
-                bail_msg(&alloc::format!(
-                    "aarch64 inline asm: operand expression `{expr}` needs a section layout"
-                ));
-                return false;
-            };
-            let target = match data_sym_offsets.get(name.as_str()) {
-                Some(&off) => crate::c5::asm::AsmSectionTarget::Data(off as u64),
-                None => crate::c5::asm::AsmSectionTarget::Symbol(name),
-            };
-            asm_sym_fixups.push(super::AsmSymFixup {
-                instr_offset: code.len(),
-                kind,
-                target,
-                addend,
-            });
-            emit(code, word);
-            continue;
-        }
-        let mut ops: Vec<Opnd> = Vec::new();
-        // An operand expression over template labels resolves here when every
-        // leaf is placed; a forward reference encodes zero and the word is
-        // built again below, the field width being the encoding's either way.
-        let mut pending: Option<(usize, String)> = None;
-        for o in &insn.operands {
-            if let AsmOpndA64::ImmExpr(e) = o
-                && crate::c5::asm::is_template_label_expr(e, &label_names)
-            {
-                let v = template_expr_value(e, code.len(), &label_defs, &label_names);
-                if v.is_none() {
-                    pending = Some((ops.len(), e.clone()));
-                }
-                ops.push(Opnd::Imm(v.unwrap_or(0)));
-                continue;
-            }
-            match conv(o) {
-                Ok(opnd) => ops.push(opnd),
-                Err(m) => {
-                    bail_msg(&m);
-                    return false;
-                }
             }
         }
-        let site = code.len();
-        match table::encode(&insn.mnemonic, &ops) {
-            Ok(word) => emit(code, word),
-            Err(m) => {
-                bail_msg(&m);
-                return false;
-            }
-        }
-        if let Some((idx, expr)) = pending {
-            insn_expr_fixups.push((site, insn.mnemonic.clone(), ops, idx, expr));
-        }
+        Ok(())
     }
-    // Settle the deferred expression fields and words: the layout is final,
-    // so a forward reference now has its definition.
-    for (site, at, width, expr) in &expr_fixups {
-        let Some(v) = template_expr_value(expr, *site, &label_defs, &label_names) else {
-            bail_msg(&alloc::format!(
-                "aarch64 inline asm: expression `{expr}` is not a constant"
-            ));
-            return false;
-        };
-        code[*at..*at + *width].copy_from_slice(&(v as u64).to_le_bytes()[..*width]);
-    }
-    for (site, mnemonic, ops, idx, expr) in &insn_expr_fixups {
-        let Some(v) = template_expr_value(expr, *site, &label_defs, &label_names) else {
-            bail_msg(&alloc::format!(
-                "aarch64 inline asm: expression `{expr}` is not a constant"
-            ));
-            return false;
-        };
-        let mut ops = ops.clone();
-        ops[*idx] = Opnd::Imm(v);
-        match table::encode(mnemonic, &ops) {
-            Ok(word) => code[*site..*site + 4].copy_from_slice(&word.to_le_bytes()),
-            Err(m) => {
-                bail_msg(&m);
-                return false;
-            }
-        }
-    }
-    // Patch the label branches now that every definition's offset is known.
-    // A named label has exactly one definition, so direction does not apply.
-    // Numeric references without an in-stream definition: the definition may
-    // sit in one of the statement's pushed sections, resolved once those are
-    // materialized below (`jmp 6f` shape). Only a forward reference reaches
-    // one, as the sections follow the code textually.
-    let mut pending_xsec: Vec<(usize, LabelBranch, u32)> = Vec::new();
-    for &(site, ref kind, num, forward) in &label_fixups {
-        let target = if num >= crate::c5::asm::NAMED_LABEL_BASE {
-            label_defs.iter().find(|&&(n, _)| n == num).map(|&(_, o)| o)
-        } else if forward {
-            label_defs
-                .iter()
-                .find(|&&(n, off)| n == num && off > site)
-                .map(|&(_, off)| off)
-        } else {
-            label_defs
-                .iter()
-                .rev()
-                .find(|&&(n, off)| n == num && off <= site)
-                .map(|&(_, off)| off)
-        };
-        let Some(target) = target else {
-            if num < crate::c5::asm::NAMED_LABEL_BASE && forward && !section_blocks.is_empty() {
-                pending_xsec.push((site, *kind, num));
-                continue;
-            }
-            bail_msg("aarch64 inline asm: undefined local label");
-            return false;
-        };
-        let delta = target as i64 - site as i64;
-        // `adr` materializes a byte-granular PC-relative address (rel21,
-        // unscaled), unlike the word-aligned, word-scaled branch offsets.
-        if let LabelBranch::Adr { rd } = *kind {
-            if !(-(1i64 << 20)..(1i64 << 20)).contains(&delta) {
-                bail_msg("aarch64 inline asm: adr target out of +/-1MiB range");
-                return false;
-            }
-            let word = super::encode::enc_adr(Reg(rd), delta as i32);
-            code[site..site + 4].copy_from_slice(&word.to_le_bytes());
-            continue;
-        }
-        match label_branch_word(kind, delta) {
-            Ok(word) => code[site..site + 4].copy_from_slice(&word.to_le_bytes()),
-            Err(m) => {
-                bail_msg(&m);
-                return false;
-            }
-        }
-    }
-    // A named label defined in the main stream is a definition of the unit,
-    // as it is for GNU as: record it so the writers emit a `.text` symbol and
-    // bind a same-name C reference to it. `.L`-prefixed names are
-    // assembler-local, so no C reference spells one.
-    {
-        let names = crate::c5::asm::scan_label_names(code_text);
-        for &(num, off) in &label_defs {
-            let Some(idx) = num.checked_sub(crate::c5::asm::NAMED_LABEL_BASE) else {
-                continue;
-            };
-            let Some(&name) = names.get(idx as usize) else {
-                continue;
-            };
-            if crate::c5::asm::is_local_label(name) {
-                continue;
-            }
-            // One definition per name across the unit, as in GNU as.
-            if asm_text_labels.iter().any(|l| l.name == name) {
-                bail_msg(&alloc::format!(
-                    "inline asm: symbol `{name}` is already defined"
-                ));
-                return false;
-            }
-            asm_text_labels.push(super::AsmTextLabel {
-                name: alloc::string::String::from(name),
-                text_offset: off,
-            });
-        }
-    }
-    // Resolve a numeric main-stream template label (`661b` / `662b`) to its
-    // emitted text offset; `Nb` (or bare `N`) binds the last definition, `Nf`
-    // the first.
-    let main_label_off = |name: &str| -> Option<usize> {
-        let digits = name.strip_suffix(['b', 'f']).unwrap_or(name);
-        if digits.is_empty() || !digits.bytes().all(|c| c.is_ascii_digit()) {
-            return None;
-        }
-        let num: u32 = digits.parse().ok()?;
-        let mut defs = label_defs.iter().filter(|&&(n, _)| n == num);
-        if name.ends_with('f') {
-            defs.map(|&(_, off)| off).min()
-        } else {
-            defs.next_back().map(|&(_, off)| off)
-        }
-    };
-    // Encode the ALTERNATIVE replacement (if any) into a deferred region;
-    // its `.org` length assertion reads the main labels above. The region is
-    // appended after the function body and its labels resolved to text
-    // offsets once its base is known (see the caller's placement pass).
-    let mut deferred_goto_sites: Vec<(usize, LabelBranch, u8)> = Vec::new();
-    let deferred_idx: Option<u32> = if deferred_text.is_empty() {
-        None
-    } else {
-        // A replacement branch names its target the same way a main-stream one
-        // does, operand references included (`bl __get_user_%c0`).
-        let sym_name = |name: &str| -> Result<String, String> {
-            crate::c5::asm::resolve_asm_symbol_target(
-                name,
-                &crate::c5::asm::A64_SYMBOL_SUBST,
-                &const_of,
-            )
-        };
-        match encode_deferred_asm_region(&deferred_text, &conv, &main_label_off, &sym_name) {
-            Ok((region, gotos)) => {
-                let idx = deferred_regions.len() as u32;
-                deferred_regions.push(region);
-                deferred_goto_sites = gotos;
-                Some(idx)
-            }
-            Err(m) => {
-                bail_msg(&m);
-                return false;
-            }
-        }
-    };
-    // The per-section reloc counts before this statement's contribution,
-    // bounding the trampoline rewrite below to this statement's relocs.
-    let sect_reloc_marks: Vec<usize> = if goto_ctx.is_some() && size > 0 {
-        asm_sections
-            .relocs_mut()
-            .iter()
-            .map(|s| s.relocs.len())
-            .collect()
-    } else {
-        Vec::new()
-    };
-    // Materialize the `.pushsection` blocks now that every label's text
-    // offset is known. A reference that names a numeric template label
-    // resolves to its offset; any other name is a symbol relocation.
-    if !section_blocks.is_empty() {
-        let label_off = |name: &str| -> Option<crate::c5::asm::LabelLoc> {
-            use crate::c5::asm::LabelLoc;
-            // A replacement-region label (`663f` / `664f`) resolves into the
-            // deferred region, rewritten to a text offset once it is placed.
-            if let Some(region) = deferred_idx {
-                let digits = name.strip_suffix(['b', 'f']).unwrap_or(name);
-                if let Ok(num) = digits.parse::<u32>() {
-                    let labels = &deferred_regions[region as usize].labels;
-                    let hit = if name.ends_with('f') {
-                        labels
-                            .iter()
-                            .filter(|&&(n, _)| n == num)
-                            .map(|&(_, o)| o)
-                            .min()
-                    } else {
-                        labels
-                            .iter()
-                            .rev()
-                            .find(|&&(n, _)| n == num)
-                            .map(|&(_, o)| o)
-                    };
-                    if let Some(off) = hit {
-                        return Some(LabelLoc::Deferred { region, off });
-                    }
-                }
-            }
-            main_label_off(name).map(LabelLoc::Text)
-        };
-        // An `i`-class operand naming a link-time data address (`.quad %c0 - .`
-        // where `%c0` is `&sym`) relocates against the data image, resolved
-        // like the operand's own `ImmData` lowering.
-        let operand_sym = |idx: u8| -> Option<(crate::c5::asm::AsmSectionTarget, i64)> {
-            crate::c5::asm::asm_operand_data_target(func, *args.get(idx as usize)?, &|vid| {
-                extern_data_names.get(&vid).cloned()
-            })
-        };
-        let resolver = crate::c5::asm::AsmOperandResolver {
-            const_of: &|idx| const_of(idx),
-            symbol_of: &operand_sym,
-            form: &operand_form,
-        };
-        // An `asm goto` label operand (`.long %l0 - .`) resolves through
-        // `goto_block` to the row's block index. Its text offset is not final
-        // here; the reloc carries the block and is rewritten after layout
-        // (see resolve_asm_goto_relocs).
-        let defined = match crate::c5::asm::materialize_asm_sections(
-            &section_blocks,
-            &resolver,
-            &label_off,
-            &goto_block,
-            true,
-            asm_sections,
-        ) {
-            Ok(d) => d,
-            Err(m) => {
-                bail_msg(&m);
-                return false;
-            }
-        };
-        // Bind each deferred main-stream branch to its section definition.
-        // The two land in different object sections, so the site takes an
-        // instruction-field relocation against the target section rather
-        // than an in-stream displacement.
-        for (site, kind, num) in pending_xsec.drain(..) {
-            let name = alloc::format!("{num}");
-            let Some(d) = defined.iter().find(|d| d.name == name) else {
-                bail_msg("aarch64 inline asm: undefined local label");
-                return false;
-            };
-            let (word, rkind) = match a64_label_branch_reloc(&kind) {
-                Ok(t) => t,
-                Err(m) => {
-                    bail_msg(&m);
-                    return false;
-                }
-            };
-            code[site..site + 4].copy_from_slice(&word.to_le_bytes());
-            asm_section_text_refs.push(super::AsmSectionTextRef {
-                instr_offset: site,
-                section_index: d.section_index,
-                section_offset: d.offset,
-                addend: 0,
-                absolute: false,
-                kind: rkind,
-            });
-        }
-    }
-    // Store the register outputs back through their captured addresses (x16
-    // holds the address; the operand pool is untouched). For `asm goto`
-    // the outputs are stored on every exit path (GCC 11 output
-    // semantics), so the sequence repeats on each trampoline.
-    let emit_outputs = |code: &mut Vec<u8>| -> bool {
-        for (i, op) in asm.operands.iter().enumerate() {
+
+    /// Store the register outputs back through their captured addresses
+    /// (x16 holds the address; the operand pool is untouched). `false` for
+    /// an output width with no store form.
+    fn emit_outputs(&self, code: &mut Vec<u8>, ops: &AsmOperands) -> bool {
+        use super::super::ir::AsmConstraint;
+        for (i, op) in ops.asm.operands.iter().enumerate() {
             if !op.is_output || matches!(op.constraint, AsmConstraint::Mem | AsmConstraint::MemBase)
             {
                 continue;
             }
-            let Some(r) = op_reg[i] else { continue };
-            reg_ldr_x(code, Reg(16), cap_off(i));
+            let Some(r) = ops.op_reg[i] else { continue };
+            self.ldr_x(code, Reg(16), self.cap_off(i));
             if matches!(op.constraint, AsmConstraint::Fp) {
                 if op.width == 16 {
                     emit(code, super::encode::enc_str_q_imm(r, Reg(16), 0));
@@ -1709,150 +1065,1062 @@ pub(super) fn emit_inline_asm_aarch64(
                 8 => emit(code, enc_str_imm(Reg(r), Reg(16), 0)),
                 4 => emit(code, enc_str32_imm(Reg(r), Reg(16), 0)),
                 2 => emit(code, enc_strh_imm(Reg(r), Reg(16), 0)),
-                1 => emit(code, super::encode::enc_strb_imm(Reg(r), Reg(16), 0)),
+                1 => emit(code, enc_strb_imm(Reg(r), Reg(16), 0)),
                 _ => return false,
             }
         }
         true
-    };
-    // Restore the saved registers; only the naked carve moves sp back.
-    let emit_restore = |code: &mut Vec<u8>| {
-        for (j, &r) in save_list.iter().enumerate() {
-            reg_ldr_x(code, Reg(r), save_off(j));
-        }
-        for (k, &r) in fp_save_list.iter().enumerate() {
-            reg_ldr_d(code, r, fp_save_off(k));
-        }
-        if carve {
-            emit(code, enc_add_imm(Reg(31), Reg(31), size));
-        }
-    };
-    if size > 0 {
-        a64_align_asm_stream(code, text_data_ranges, &mut map_state);
     }
-    let exit_start = code.len();
-    if !emit_outputs(code) {
-        bail_msg("aarch64 inline asm: unsupported output width");
-        return false;
+
+    /// Restore the saved registers; only the naked carve moves sp back.
+    fn emit_restore(&self, code: &mut Vec<u8>) {
+        for (j, &r) in self.save_list.iter().enumerate() {
+            self.ldr_x(code, Reg(r), self.save_off(j));
+        }
+        for (k, &r) in self.fp_save_list.iter().enumerate() {
+            self.ldr_d(code, r, self.fp_save_off(k));
+        }
+        if self.carve {
+            emit(code, enc_add_imm(Reg(31), Reg(31), self.size));
+        }
     }
-    emit_restore(code);
-    // `asm goto`: each `%lK` branch leaves mid-template, before the
-    // store-backs and restore just emitted on the fall-through path, so
-    // it lands on a trampoline that repeats them and branches to the
-    // label's block through the enclosing function's branch fixups. A
-    // label whose target is the fall-through block reuses the
-    // fall-through exit sequence instead.
-    if let Some(ctx) = goto_ctx {
-        let mut tramp_at: Vec<Option<usize>> = alloc::vec![None; ctx.row.len() - 1];
-        // Label indices needing a restore trampoline. With no exit work, a
-        // `%lK` reference -- a template or replacement (`.subsection`) branch,
-        // or a section data field -- names its block directly; with captures
-        // or saves, every one routes through the trampolines built here, so a
-        // branch a run-time patcher plants from a section field runs the same
-        // store-backs and restores a template branch does.
-        let mut tramp_ks: Vec<usize> = Vec::new();
-        if size > 0 {
-            tramp_ks.extend(goto_sites.iter().map(|&(_, _, k)| k));
-            tramp_ks.extend(deferred_goto_sites.iter().map(|&(_, _, k)| k as usize));
-            tramp_ks.extend(data_goto_ks.borrow().iter().copied());
+
+    /// The store-backs and the restore: the exit sequence every path out
+    /// of the template runs.
+    fn emit_exit(
+        &self,
+        code: &mut Vec<u8>,
+        ops: &AsmOperands,
+    ) -> Result<(), alloc::string::String> {
+        if !self.emit_outputs(code, ops) {
+            return Err(alloc::string::String::from(
+                "aarch64 inline asm: unsupported output width",
+            ));
         }
-        if tramp_ks.iter().any(|&k| ctx.row[1 + k] != ctx.row[0]) {
-            let skip_site = code.len();
-            emit(code, 0); // b over the trampolines, patched below
-            for &k in &tramp_ks {
-                if ctx.row[1 + k] == ctx.row[0] || tramp_at[k].is_some() {
-                    continue;
-                }
-                tramp_at[k] = Some(code.len());
-                if !emit_outputs(code) {
-                    bail_msg("aarch64 inline asm: unsupported output width");
-                    return false;
-                }
-                emit_restore(code);
-                ctx.branch_fixups.push(BranchFixup {
-                    site: code.len(),
-                    target: ctx.row[1 + k],
-                    kind: LocalBranchKind::B,
-                });
-                emit(code, super::encode::enc_b(0));
-            }
-            let words = ((code.len() - skip_site) / 4) as i32;
-            let word = super::encode::enc_b(words);
-            code[skip_site..skip_site + 4].copy_from_slice(&word.to_le_bytes());
+        self.emit_restore(code);
+        Ok(())
+    }
+}
+
+/// The template text after the passes that run before the arch parser
+/// sees it: comments stripped, `%=` expanded once so the code text and any
+/// `.pushsection` content share one instance number, `.if` conditionals
+/// reduced.
+fn template_text(
+    asm: &super::super::ir::AsmBlock,
+) -> Result<alloc::string::String, alloc::string::String> {
+    let Ok(raw_text) = core::str::from_utf8(&asm.template) else {
+        return Err(alloc::string::String::from(
+            "aarch64 inline asm: non-UTF8 template",
+        ));
+    };
+    let stripped = crate::c5::asm::strip_asm_comments(raw_text, crate::c5::asm::AsmComments::A64);
+    let raw_text = stripped.as_deref().unwrap_or(raw_text);
+    let expanded = crate::c5::asm::expand_template_uniq(raw_text);
+    let text = expanded.as_deref().unwrap_or(raw_text);
+    let reduced = crate::c5::asm::strip_asm_conditionals(text)?;
+    Ok(alloc::string::String::from(
+        reduced.as_deref().unwrap_or(text),
+    ))
+}
+
+/// A branch site awaiting its label: `(site, kind, label, forward)`.
+type LabelFixup = (usize, LabelBranch, u32, bool);
+
+/// The main-stream template encoding: label definitions and every site
+/// patched once the statement's layout is final.
+struct TemplateStream<'a> {
+    /// The template's intern table, telling an expression leaf apart from
+    /// a symbol the stream cannot relocate.
+    label_names: Vec<&'a str>,
+    /// Local label definitions and the code offset each stands at.
+    label_defs: Vec<(u32, usize)>,
+    /// Branches to local labels, patched once the layout is final (`Nb`
+    /// binds the most recent definition of N at or before the branch,
+    /// `Nf` the next one after it).
+    label_fixups: Vec<LabelFixup>,
+    /// Forward-referencing data fields over template labels:
+    /// `(reference_site, field, width, expression)`.
+    expr_fixups: Vec<(usize, usize, usize, alloc::string::String)>,
+    /// Instruction operands over template labels, re-encoded once settled:
+    /// `(site, mnemonic, operands, operand index, expression)`.
+    insn_expr_fixups: Vec<(
+        usize,
+        alloc::string::String,
+        Vec<super::table::Opnd>,
+        usize,
+        alloc::string::String,
+    )>,
+    /// `asm goto` label branches: `(site, kind, label_index)` per `%lK`
+    /// reference.
+    goto_sites: Vec<(usize, LabelBranch, usize)>,
+    /// The mapping state; it spans the section, so a template ending in
+    /// data pads only where an instruction follows.
+    map_state: Option<super::super::map_syms::MapClass>,
+}
+
+impl<'a> TemplateStream<'a> {
+    fn new(code_text: &'a str, map_state: Option<super::super::map_syms::MapClass>) -> Self {
+        TemplateStream {
+            label_names: crate::c5::asm::scan_label_names(code_text),
+            label_defs: Vec::new(),
+            label_fixups: Vec::new(),
+            expr_fixups: Vec::new(),
+            insn_expr_fixups: Vec::new(),
+            goto_sites: Vec::new(),
+            map_state,
         }
-        for &(site, ref kind, k) in &goto_sites {
-            if size == 0 {
-                ctx.direct_goto.push(AsmGotoDirectBranch {
-                    site,
-                    kind: *kind,
-                    target: ctx.row[1 + k],
-                });
+    }
+
+    /// The offset a layout directive's expression reads for a label: a
+    /// named label's index, a numeric one's number; only a definition
+    /// already emitted resolves.
+    fn label_offset(&self, name: &str) -> Option<i64> {
+        let num = match self.label_names.iter().position(|&n| n == name) {
+            Some(i) => crate::c5::asm::NAMED_LABEL_BASE + i as u32,
+            None => name.strip_suffix(['b', 'f'])?.parse().ok()?,
+        };
+        self.label_defs
+            .iter()
+            .rfind(|&&(n, _)| n == num)
+            .map(|&(_, off)| off as i64)
+    }
+
+    fn expr_value(&self, expr: &str, at: usize) -> Option<i64> {
+        template_expr_value(expr, at, &self.label_defs, &self.label_names)
+    }
+
+    /// Resolve a numeric main-stream template label (`661b` / `662b`) to
+    /// its emitted text offset; `Nb` (or bare `N`) binds the last
+    /// definition, `Nf` the first.
+    fn main_label_off(&self, name: &str) -> Option<usize> {
+        let digits = name.strip_suffix(['b', 'f']).unwrap_or(name);
+        if digits.is_empty() || !digits.bytes().all(|c| c.is_ascii_digit()) {
+            return None;
+        }
+        let num: u32 = digits.parse().ok()?;
+        let mut defs = self.label_defs.iter().filter(|&&(n, _)| n == num);
+        if name.ends_with('f') {
+            defs.map(|&(_, off)| off).min()
+        } else {
+            defs.next_back().map(|&(_, off)| off)
+        }
+    }
+
+    /// Encode each template instruction; raw-byte pieces emit verbatim.
+    fn encode(
+        &mut self,
+        insns: &[super::asm::AsmInsnA64],
+        ops: &AsmOperands,
+        out: &mut AsmSink,
+        syms: AsmSymbols,
+        goto_row: Option<&[super::super::ir::BlockId]>,
+    ) -> Result<(), alloc::string::String> {
+        use super::super::map_syms::MapClass;
+        use super::asm::AsmOpndA64;
+        for insn in insns {
+            if let Some(num) = insn.label_def {
+                self.label_defs.push((num, out.code.len()));
                 continue;
             }
-            let target = tramp_at[k].unwrap_or(exit_start);
-            match label_branch_word(kind, target as i64 - site as i64) {
-                Ok(word) => code[site..site + 4].copy_from_slice(&word.to_le_bytes()),
-                Err(m) => {
-                    bail_msg(&m);
-                    return false;
+            if let Some(item) = &insn.layout {
+                self.encode_layout(item, ops, out)?;
+                continue;
+            }
+            // Every item but a data directive lays down instructions: a
+            // raw-byte piece the parser encoded itself (`msr`, the barriers,
+            // the system ops), `.inst`, and an assembled mnemonic.
+            let class =
+                crate::c5::asm::data_directive_class(&insn.mnemonic).unwrap_or(MapClass::Code);
+            if class == MapClass::Code {
+                a64_align_asm_stream(out.code, out.text_data_ranges, &mut self.map_state);
+            }
+            self.map_state = Some(class);
+            if !insn.bytes.is_empty() {
+                if class == MapClass::Data {
+                    out.text_data_ranges
+                        .push((out.code.len(), insn.bytes.len()));
                 }
+                out.code.extend_from_slice(&insn.bytes);
+                continue;
             }
-        }
-        // Record each out-of-line replacement `%lK` branch for the placement
-        // pass, where the region base is known. With an operand frame it routes
-        // through the teardown trampoline (or the fall-through exit when the
-        // label is the fall-through block); frameless, it targets the block
-        // directly, matching a plain out-of-line branch.
-        if let Some(idx) = deferred_idx {
-            for &(region_off, kind, k) in &deferred_goto_sites {
-                let k = k as usize;
-                let target = if size == 0 {
-                    DeferredGotoTarget::Block(ctx.row[1 + k])
-                } else if ctx.row[1 + k] == ctx.row[0] {
-                    DeferredGotoTarget::Code(exit_start)
-                } else {
-                    DeferredGotoTarget::Code(
-                        tramp_at[k].expect("trampoline built for framed deferred goto"),
-                    )
-                };
-                deferred_regions[idx as usize]
-                    .goto_branches
-                    .push(DeferredGotoBranch {
-                        region_off,
-                        kind,
-                        target,
-                    });
+            if let Some(w) = crate::c5::asm::data_directive_width(&insn.mnemonic) {
+                self.encode_data_directive(insn, w, class, ops, out)?;
+                continue;
             }
-        }
-        // Rewrite this statement's section `%l` fields from the label's block
-        // to its trampoline (or the fall-through exit) while exit work is
-        // pending; frameless fields keep the block and resolve with the
-        // function's layout (`resolve_asm_goto_relocs`).
-        if size > 0 && !data_goto_ks.borrow().is_empty() {
-            use crate::c5::asm::AsmSectionTarget;
-            let ks = data_goto_ks.borrow();
-            let target_of = |bid: u32| -> Option<usize> {
-                ks.iter()
-                    .find(|&&k| ctx.row.get(1 + k).copied() == Some(bid))
-                    .map(|&k| tramp_at[k].unwrap_or(exit_start))
+            if let Some(name) = &insn.sym_target {
+                encode_sym_branch(insn, name, ops, out, syms)?;
+                continue;
+            }
+            let goto_label = match insn.operands.last() {
+                Some(&AsmOpndA64::GotoLabel(k)) => Some(k),
+                _ => None,
             };
-            for (i, s) in asm_sections.relocs_mut().iter_mut().enumerate() {
-                let start = sect_reloc_marks.get(i).copied().unwrap_or(0);
-                for r in s.relocs.iter_mut().skip(start) {
-                    if let AsmSectionTarget::TextBlock(bid) = r.target
-                        && let Some(off) = target_of(bid)
-                    {
-                        r.target = AsmSectionTarget::Text(off);
+            if matches!(
+                insn.operands.last(),
+                Some(AsmOpndA64::Label { .. } | AsmOpndA64::Here(_))
+            ) || goto_label.is_some()
+            {
+                self.encode_label_branch(insn, goto_label, ops, out, goto_row)?;
+                continue;
+            }
+            if encode_movw_abs(insn, ops, out)? {
+                continue;
+            }
+            if matches!(
+                insn.operands.last(),
+                Some(AsmOpndA64::Sym { .. } | AsmOpndA64::MemSymLo12 { .. })
+            ) {
+                encode_sym_operand(insn, ops, out, syms)?;
+                continue;
+            }
+            self.encode_table_insn(insn, ops, out)?;
+        }
+        Ok(())
+    }
+
+    /// A layout directive moves the location counter; `code` is the unit's
+    /// whole text stream, so its length is the section offset GNU as
+    /// resolves one against.
+    fn encode_layout(
+        &mut self,
+        item: &crate::c5::asm::AsmSectionItem,
+        ops: &AsmOperands,
+        out: &mut AsmSink,
+    ) -> Result<(), alloc::string::String> {
+        let resolve = |name: &str| -> Option<i64> { self.label_offset(name) };
+        let resolved = crate::c5::asm::resolve_align_item(item, &resolve)?;
+        let item = resolved.as_ref().unwrap_or(item);
+        let n = crate::c5::asm::push_a64_stream_layout(
+            item,
+            out.code,
+            out.text_data_ranges,
+            &resolve,
+            &|i| ops.const_of(i),
+        )?;
+        *out.text_align = (*out.text_align).max(n as usize);
+        self.map_state = crate::c5::asm::step_map_state(item, self.map_state, true);
+        Ok(())
+    }
+
+    /// A data directive with operand references (`.long %c0`): each
+    /// argument must resolve to a compile-time constant, emitted
+    /// little-endian at the directive width.
+    fn encode_data_directive(
+        &mut self,
+        insn: &super::asm::AsmInsnA64,
+        w: usize,
+        class: super::super::map_syms::MapClass,
+        ops: &AsmOperands,
+        out: &mut AsmSink,
+    ) -> Result<(), alloc::string::String> {
+        use super::super::map_syms::MapClass;
+        use super::asm::AsmOpndA64;
+        // `.word` is target-dependent: 4 bytes on AArch64.
+        let w = if insn.mnemonic == ".word" { 4 } else { w };
+        if class == MapClass::Data {
+            out.text_data_ranges
+                .push((out.code.len(), w * insn.operands.len()));
+        }
+        for o in &insn.operands {
+            let v = match *o {
+                AsmOpndA64::Imm(v) => v,
+                AsmOpndA64::RefConst(idx) | AsmOpndA64::Ref { idx, .. } => {
+                    match ops.const_of(idx) {
+                        Some(v) => v,
+                        None => {
+                            return Err(alloc::string::String::from(
+                                "aarch64 inline asm: non-constant data-directive value",
+                            ));
+                        }
                     }
                 }
+                // A value over template labels: the field width is the
+                // directive's, so only the value waits on the layout.
+                AsmOpndA64::ImmExpr(ref e) => match self.expr_value(e, out.code.len()) {
+                    Some(v) => v,
+                    None if crate::c5::asm::is_template_label_expr(e, &self.label_names) => {
+                        self.expr_fixups
+                            .push((out.code.len(), out.code.len(), w, e.clone()));
+                        0
+                    }
+                    None => {
+                        return Err(alloc::string::String::from(
+                            "aarch64 inline asm: unsupported data-directive value",
+                        ));
+                    }
+                },
+                _ => {
+                    return Err(alloc::string::String::from(
+                        "aarch64 inline asm: unsupported data-directive value",
+                    ));
+                }
+            };
+            out.code.extend_from_slice(&(v as u64).to_le_bytes()[..w]);
+        }
+        Ok(())
+    }
+
+    /// A branch to a local label, `.`, or an `asm goto` label: a `.` target
+    /// encodes at once; the other two take a placeholder word patched once
+    /// the target offset is known.
+    fn encode_label_branch(
+        &mut self,
+        insn: &super::asm::AsmInsnA64,
+        goto_label: Option<u8>,
+        ops: &AsmOperands,
+        out: &mut AsmSink,
+        goto_row: Option<&[super::super::ir::BlockId]>,
+    ) -> Result<(), alloc::string::String> {
+        use super::asm::AsmOpndA64;
+        use alloc::string::String;
+        let kind = build_label_branch(insn, &|o| ops.conv(o))?;
+        if let Some(k) = goto_label {
+            let Some(row) = goto_row else {
+                return Err(String::from(
+                    "aarch64 inline asm: `%l` label reference outside `asm goto`",
+                ));
+            };
+            if 1 + k as usize >= row.len() {
+                return Err(String::from(
+                    "aarch64 inline asm: `%l` label index out of range",
+                ));
+            }
+            if matches!(kind, LabelBranch::Adr { .. }) {
+                return Err(String::from(
+                    "aarch64 inline asm: adr cannot take an `asm goto` label",
+                ));
+            }
+            self.goto_sites.push((out.code.len(), kind, k as usize));
+            emit(out.code, 0);
+            return Ok(());
+        }
+        if let Some(&AsmOpndA64::Here(off)) = insn.operands.last() {
+            // `.` names the branch's own address, plus any offset.
+            let word = match kind {
+                LabelBranch::Adr { rd } => {
+                    if !(-(1i32 << 20)..(1i32 << 20)).contains(&off) {
+                        return Err(String::from(
+                            "aarch64 inline asm: adr target out of +/-1MiB range",
+                        ));
+                    }
+                    super::encode::enc_adr(Reg(rd), off)
+                }
+                _ => label_branch_word(&kind, off as i64)?,
+            };
+            emit(out.code, word);
+            return Ok(());
+        }
+        let Some(&AsmOpndA64::Label { num, forward }) = insn.operands.last() else {
+            unreachable!("guard admits Label, Here or GotoLabel; the first two handled above");
+        };
+        self.label_fixups.push((out.code.len(), kind, num, forward));
+        emit(out.code, 0);
+        Ok(())
+    }
+
+    /// An assembled mnemonic. An operand expression over template labels
+    /// resolves here when every leaf is placed; a forward reference encodes
+    /// zero and the word is built again once settled, the field width being
+    /// the encoding's either way.
+    fn encode_table_insn(
+        &mut self,
+        insn: &super::asm::AsmInsnA64,
+        ops: &AsmOperands,
+        out: &mut AsmSink,
+    ) -> Result<(), alloc::string::String> {
+        use super::asm::AsmOpndA64;
+        use super::table::{self, Opnd};
+        let mut table_ops: Vec<Opnd> = Vec::new();
+        let mut pending: Option<(usize, alloc::string::String)> = None;
+        for o in &insn.operands {
+            if let AsmOpndA64::ImmExpr(e) = o
+                && crate::c5::asm::is_template_label_expr(e, &self.label_names)
+            {
+                let v = self.expr_value(e, out.code.len());
+                if v.is_none() {
+                    pending = Some((table_ops.len(), e.clone()));
+                }
+                table_ops.push(Opnd::Imm(v.unwrap_or(0)));
+                continue;
+            }
+            table_ops.push(ops.conv(o)?);
+        }
+        let site = out.code.len();
+        emit(out.code, table::encode(&insn.mnemonic, &table_ops)?);
+        if let Some((idx, expr)) = pending {
+            self.insn_expr_fixups
+                .push((site, insn.mnemonic.clone(), table_ops, idx, expr));
+        }
+        Ok(())
+    }
+
+    /// Settle the deferred expression fields and words: the layout is
+    /// final, so a forward reference now has its definition.
+    fn settle_expr_fixups(&self, out: &mut AsmSink) -> Result<(), alloc::string::String> {
+        use super::table::{self, Opnd};
+        for (site, at, width, expr) in &self.expr_fixups {
+            let Some(v) = self.expr_value(expr, *site) else {
+                return Err(alloc::format!(
+                    "aarch64 inline asm: expression `{expr}` is not a constant"
+                ));
+            };
+            out.code[*at..*at + *width].copy_from_slice(&(v as u64).to_le_bytes()[..*width]);
+        }
+        for (site, mnemonic, ops, idx, expr) in &self.insn_expr_fixups {
+            let Some(v) = self.expr_value(expr, *site) else {
+                return Err(alloc::format!(
+                    "aarch64 inline asm: expression `{expr}` is not a constant"
+                ));
+            };
+            let mut ops = ops.clone();
+            ops[*idx] = Opnd::Imm(v);
+            let word = table::encode(mnemonic, &ops)?;
+            out.code[*site..*site + 4].copy_from_slice(&word.to_le_bytes());
+        }
+        Ok(())
+    }
+
+    /// Patch the label branches now that every definition's offset is
+    /// known. A named label has exactly one definition, so direction does
+    /// not apply. A forward numeric reference with no in-stream definition
+    /// may bind a definition in one of the statement's pushed sections
+    /// (`jmp 6f` shape); those are returned for the section pass to bind.
+    fn patch_label_branches(
+        &self,
+        out: &mut AsmSink,
+        has_sections: bool,
+    ) -> Result<Vec<(usize, LabelBranch, u32)>, alloc::string::String> {
+        let mut pending_xsec: Vec<(usize, LabelBranch, u32)> = Vec::new();
+        for &(site, ref kind, num, forward) in &self.label_fixups {
+            let target = if num >= crate::c5::asm::NAMED_LABEL_BASE {
+                self.label_defs
+                    .iter()
+                    .find(|&&(n, _)| n == num)
+                    .map(|&(_, o)| o)
+            } else if forward {
+                self.label_defs
+                    .iter()
+                    .find(|&&(n, off)| n == num && off > site)
+                    .map(|&(_, off)| off)
+            } else {
+                self.label_defs
+                    .iter()
+                    .rev()
+                    .find(|&&(n, off)| n == num && off <= site)
+                    .map(|&(_, off)| off)
+            };
+            let Some(target) = target else {
+                if num < crate::c5::asm::NAMED_LABEL_BASE && forward && has_sections {
+                    pending_xsec.push((site, *kind, num));
+                    continue;
+                }
+                return Err(alloc::string::String::from(
+                    "aarch64 inline asm: undefined local label",
+                ));
+            };
+            let delta = target as i64 - site as i64;
+            // `adr` materializes a byte-granular PC-relative address
+            // (rel21, unscaled), unlike the word-scaled branch offsets.
+            let word = if let LabelBranch::Adr { rd } = *kind {
+                if !(-(1i64 << 20)..(1i64 << 20)).contains(&delta) {
+                    return Err(alloc::string::String::from(
+                        "aarch64 inline asm: adr target out of +/-1MiB range",
+                    ));
+                }
+                super::encode::enc_adr(Reg(rd), delta as i32)
+            } else {
+                label_branch_word(kind, delta)?
+            };
+            out.code[site..site + 4].copy_from_slice(&word.to_le_bytes());
+        }
+        Ok(pending_xsec)
+    }
+
+    /// A named label defined in the main stream is a definition of the
+    /// unit, as it is for GNU as: record it so the writers emit a `.text`
+    /// symbol and bind a same-name C reference to it. `.L`-prefixed names
+    /// are assembler-local, so no C reference spells one.
+    fn record_named_labels(&self, out: &mut AsmSink) -> Result<(), alloc::string::String> {
+        for &(num, off) in &self.label_defs {
+            let Some(idx) = num.checked_sub(crate::c5::asm::NAMED_LABEL_BASE) else {
+                continue;
+            };
+            let Some(&name) = self.label_names.get(idx as usize) else {
+                continue;
+            };
+            if crate::c5::asm::is_local_label(name) {
+                continue;
+            }
+            // One definition per name across the unit, as in GNU as.
+            if out.asm_text_labels.iter().any(|l| l.name == name) {
+                return Err(alloc::format!(
+                    "inline asm: symbol `{name}` is already defined"
+                ));
+            }
+            out.asm_text_labels.push(super::AsmTextLabel {
+                name: alloc::string::String::from(name),
+                text_offset: off,
+            });
+        }
+        Ok(())
+    }
+}
+
+/// A direct `bl` / `b` to a symbol: resolve the name to its entry PC and
+/// record a fixup the post-pass patches to a rel26 once every function's
+/// address is final -- the same mechanism as a compiler-emitted call. A
+/// name this unit does not define becomes a call relocation, with the rel26
+/// left zero for the linker.
+fn encode_sym_branch(
+    insn: &super::asm::AsmInsnA64,
+    name: &str,
+    ops: &AsmOperands,
+    out: &mut AsmSink,
+    syms: AsmSymbols,
+) -> Result<(), alloc::string::String> {
+    let is_call = insn.mnemonic == "bl";
+    let (kind, word) = if is_call {
+        (BranchKind::Bl, super::encode::enc_bl(0))
+    } else {
+        (BranchKind::B, super::encode::enc_b(0))
+    };
+    let name = ops.symbol_name(name)?;
+    let native_offset = out.code.len();
+    match syms.name2entpc.get(name.as_str()) {
+        Some(&ent_pc) => out.fixups.push(Fixup {
+            native_offset,
+            target_ent_pc: ent_pc,
+            kind,
+        }),
+        None => out.asm_extern_call_sites.push(super::UserExternCallSite {
+            instr_offset: native_offset,
+            symbol_name: name.clone(),
+            is_tail: !is_call,
+        }),
+    }
+    emit(out.code, word);
+    Ok(())
+}
+
+/// `movz` / `movk` with `:abs_gN:` over an expression that folds: a
+/// function body has no layout pass, so only a constant resolves, and it
+/// takes the same field encoding the section path applies. `Ok(false)`
+/// when the instruction is not of that shape.
+fn encode_movw_abs(
+    insn: &super::asm::AsmInsnA64,
+    ops: &AsmOperands,
+    out: &mut AsmSink,
+) -> Result<bool, alloc::string::String> {
+    use super::asm::AsmOpndA64;
+    use super::table::Opnd;
+    use alloc::string::String;
+    let Some(AsmOpndA64::Sym {
+        expr,
+        spec:
+            super::asm::SymSpec::MovwAbs {
+                group,
+                signed,
+                check,
+            },
+    }) = insn.operands.last()
+    else {
+        return Ok(false);
+    };
+    if !matches!(insn.mnemonic.as_str(), "movz" | "movk") {
+        return Ok(false);
+    }
+    let Some(v) = crate::c5::asm::eval_const_expr_ops(expr, &|_| None) else {
+        return Ok(false);
+    };
+    let (rd, is64) = match ops.conv(&insn.operands[0]) {
+        Ok(Opnd::Reg { num, is64, .. }) => (num, is64),
+        _ => {
+            return Err(String::from(
+                "aarch64 inline asm: `:abs_g` destination must be a register",
+            ));
+        }
+    };
+    let movk = insn.mnemonic == "movk";
+    if movk && *signed {
+        return Err(String::from(
+            "aarch64 inline asm: `:abs_g<n>_s:` is not allowed on `movk`",
+        ));
+    }
+    let word =
+        a64_movw_placeholder(rd, is64, movk, *group).map_err(|m| alloc::format!("aarch64 {m}"))?;
+    let word = super::patch::movw_const_word(word, *group, *signed, *check, v)
+        .map_err(|m| alloc::format!("aarch64 inline asm: {m}"))?;
+    emit(out.code, word);
+    Ok(true)
+}
+
+/// A symbol operand (`adrp %x0, sym`, `add ..., :lo12:sym`, a `:lo12:`
+/// load/store, `movz`/`movk` `:abs_gN:sym`, a branch / `adr` / literal
+/// `ldr` naming a symbol) takes the section path's shape encoder; the site
+/// records a per-instruction relocation against the name, an
+/// internal-linkage data object resolved to its offset.
+fn encode_sym_operand(
+    insn: &super::asm::AsmInsnA64,
+    ops: &AsmOperands,
+    out: &mut AsmSink,
+    syms: AsmSymbols,
+) -> Result<(), alloc::string::String> {
+    let (word, kind, expr) = match encode_a64_sym_insn(insn, &|o| ops.conv(o)) {
+        Ok(Some(t)) => t,
+        Ok(None) => {
+            return Err(alloc::string::String::from(
+                "aarch64 inline asm: unsupported symbol operand",
+            ));
+        }
+        Err(m) => return Err(alloc::format!("aarch64 {m}")),
+    };
+    // A function body has no section layout, so only `sym + constant`
+    // resolves here; a label-difference expression does not.
+    let Some((name, addend)) = crate::c5::asm::asm_expr_sym_addend(&expr) else {
+        return Err(alloc::format!(
+            "aarch64 inline asm: operand expression `{expr}` needs a section layout"
+        ));
+    };
+    let target = match syms.data_sym_offsets.get(name.as_str()) {
+        Some(&off) => crate::c5::asm::AsmSectionTarget::Data(off as u64),
+        None => crate::c5::asm::AsmSectionTarget::Symbol(name),
+    };
+    out.asm_sym_fixups.push(super::AsmSymFixup {
+        instr_offset: out.code.len(),
+        kind,
+        target,
+        addend,
+    });
+    emit(out.code, word);
+    Ok(())
+}
+
+/// Materialize the `.pushsection` blocks now that every label's text
+/// offset is known. A reference that names a numeric template label
+/// resolves to its offset -- into the deferred region for a replacement
+/// label (`663f` / `664f`), rewritten to a text offset once it is placed;
+/// any other name is a symbol relocation. An `i`-class operand naming a
+/// link-time data address (`.quad %c0 - .` where `%c0` is `&sym`) relocates
+/// against the data image. Each deferred main-stream branch to a section
+/// definition takes an instruction-field relocation against the target
+/// section, the two landing in different object sections.
+#[allow(clippy::too_many_arguments)]
+fn materialize_sections(
+    section_blocks: &[crate::c5::asm::AsmSectionBlock],
+    stream: &TemplateStream,
+    deferred_idx: Option<u32>,
+    pending_xsec: Vec<(usize, LabelBranch, u32)>,
+    ops: &AsmOperands,
+    out: &mut AsmSink,
+    syms: AsmSymbols,
+    goto_block: &dyn Fn(u8) -> Option<u32>,
+) -> Result<(), alloc::string::String> {
+    use crate::c5::asm::LabelLoc;
+    let deferred_labels = deferred_idx.map(|r| &out.deferred_regions[r as usize].labels);
+    let label_off = |name: &str| -> Option<LabelLoc> {
+        if let Some(region) = deferred_idx
+            && let Some(labels) = deferred_labels
+        {
+            let digits = name.strip_suffix(['b', 'f']).unwrap_or(name);
+            if let Ok(num) = digits.parse::<u32>() {
+                let hit = if name.ends_with('f') {
+                    labels
+                        .iter()
+                        .filter(|&&(n, _)| n == num)
+                        .map(|&(_, o)| o)
+                        .min()
+                } else {
+                    labels
+                        .iter()
+                        .rev()
+                        .find(|&&(n, _)| n == num)
+                        .map(|&(_, o)| o)
+                };
+                if let Some(off) = hit {
+                    return Some(LabelLoc::Deferred { region, off });
+                }
             }
         }
-    } else if !deferred_goto_sites.is_empty() {
-        bail_msg("aarch64 inline asm: `%l` label reference outside `asm goto`");
-        return false;
+        stream.main_label_off(name).map(LabelLoc::Text)
+    };
+    let operand_sym = |idx: u8| -> Option<(crate::c5::asm::AsmSectionTarget, i64)> {
+        crate::c5::asm::asm_operand_data_target(ops.func, *ops.args.get(idx as usize)?, &|vid| {
+            syms.extern_data_names.get(&vid).cloned()
+        })
+    };
+    let resolver = crate::c5::asm::AsmOperandResolver {
+        const_of: &|idx| ops.const_of(idx),
+        symbol_of: &operand_sym,
+        form: &|idx| ops.operand_form(idx),
+    };
+    // An `asm goto` label operand (`.long %l0 - .`) resolves through
+    // `goto_block` to the row's block index. Its text offset is not final
+    // here; the reloc carries the block and is rewritten after layout
+    // (see resolve_asm_goto_relocs).
+    let defined = crate::c5::asm::materialize_asm_sections(
+        section_blocks,
+        &resolver,
+        &label_off,
+        goto_block,
+        true,
+        out.asm_sections,
+    )?;
+    for (site, kind, num) in pending_xsec {
+        let name = alloc::format!("{num}");
+        let Some(d) = defined.iter().find(|d| d.name == name) else {
+            return Err(alloc::string::String::from(
+                "aarch64 inline asm: undefined local label",
+            ));
+        };
+        let (word, rkind) = a64_label_branch_reloc(&kind)?;
+        out.code[site..site + 4].copy_from_slice(&word.to_le_bytes());
+        out.asm_section_text_refs.push(super::AsmSectionTextRef {
+            instr_offset: site,
+            section_index: d.section_index,
+            section_offset: d.offset,
+            addend: 0,
+            absolute: false,
+            kind: rkind,
+        });
     }
-    *text_map_state = map_state;
-    true
+    Ok(())
+}
+
+/// `asm goto` exits. Each `%lK` branch leaves mid-template, before the
+/// store-backs and restore of the fall-through path, so with exit work it
+/// lands on a trampoline that repeats them and branches to the label's
+/// block through the enclosing function's branch fixups; a label whose
+/// target is the fall-through block reuses the fall-through exit. With no
+/// exit work every reference -- a template or replacement branch, or a
+/// section data field -- names its block directly.
+#[allow(clippy::too_many_arguments)]
+fn emit_goto_exits(
+    ctx: AsmGotoCtxA64<'_>,
+    region: &AsmRegion,
+    ops: &AsmOperands,
+    stream: &TemplateStream,
+    deferred_idx: Option<u32>,
+    deferred_goto_sites: &[(usize, LabelBranch, u8)],
+    data_goto_ks: &[usize],
+    sect_reloc_marks: &[usize],
+    exit_start: usize,
+    out: &mut AsmSink,
+) -> Result<(), alloc::string::String> {
+    let size = region.size;
+    let mut tramp_at: Vec<Option<usize>> = alloc::vec![None; ctx.row.len() - 1];
+    let mut tramp_ks: Vec<usize> = Vec::new();
+    if size > 0 {
+        tramp_ks.extend(stream.goto_sites.iter().map(|&(_, _, k)| k));
+        tramp_ks.extend(deferred_goto_sites.iter().map(|&(_, _, k)| k as usize));
+        tramp_ks.extend(data_goto_ks.iter().copied());
+    }
+    if tramp_ks.iter().any(|&k| ctx.row[1 + k] != ctx.row[0]) {
+        let skip_site = out.code.len();
+        emit(out.code, 0); // b over the trampolines, patched below
+        for &k in &tramp_ks {
+            if ctx.row[1 + k] == ctx.row[0] || tramp_at[k].is_some() {
+                continue;
+            }
+            tramp_at[k] = Some(out.code.len());
+            region.emit_exit(out.code, ops)?;
+            ctx.branch_fixups.push(BranchFixup {
+                site: out.code.len(),
+                target: ctx.row[1 + k],
+                kind: LocalBranchKind::B,
+            });
+            emit(out.code, super::encode::enc_b(0));
+        }
+        let words = ((out.code.len() - skip_site) / 4) as i32;
+        let word = super::encode::enc_b(words);
+        out.code[skip_site..skip_site + 4].copy_from_slice(&word.to_le_bytes());
+    }
+    for &(site, ref kind, k) in &stream.goto_sites {
+        if size == 0 {
+            ctx.direct_goto.push(AsmGotoDirectBranch {
+                site,
+                kind: *kind,
+                target: ctx.row[1 + k],
+            });
+            continue;
+        }
+        let target = tramp_at[k].unwrap_or(exit_start);
+        let word = label_branch_word(kind, target as i64 - site as i64)?;
+        out.code[site..site + 4].copy_from_slice(&word.to_le_bytes());
+    }
+    // Each out-of-line replacement `%lK` branch is recorded for the
+    // placement pass, where the region base is known.
+    if let Some(idx) = deferred_idx {
+        for &(region_off, kind, k) in deferred_goto_sites {
+            let k = k as usize;
+            let target = if size == 0 {
+                DeferredGotoTarget::Block(ctx.row[1 + k])
+            } else if ctx.row[1 + k] == ctx.row[0] {
+                DeferredGotoTarget::Code(exit_start)
+            } else {
+                DeferredGotoTarget::Code(
+                    tramp_at[k].expect("trampoline built for framed deferred goto"),
+                )
+            };
+            out.deferred_regions[idx as usize]
+                .goto_branches
+                .push(DeferredGotoBranch {
+                    region_off,
+                    kind,
+                    target,
+                });
+        }
+    }
+    // This statement's section `%l` fields move from the label's block to
+    // its trampoline (or the fall-through exit) while exit work is pending;
+    // frameless fields keep the block and resolve with the function's
+    // layout (`resolve_asm_goto_relocs`).
+    if size > 0 && !data_goto_ks.is_empty() {
+        use crate::c5::asm::AsmSectionTarget;
+        let target_of = |bid: u32| -> Option<usize> {
+            data_goto_ks
+                .iter()
+                .find(|&&k| ctx.row.get(1 + k).copied() == Some(bid))
+                .map(|&k| tramp_at[k].unwrap_or(exit_start))
+        };
+        for (i, s) in out.asm_sections.relocs_mut().iter_mut().enumerate() {
+            let start = sect_reloc_marks.get(i).copied().unwrap_or(0);
+            for r in s.relocs.iter_mut().skip(start) {
+                if let AsmSectionTarget::TextBlock(bid) = r.target
+                    && let Some(off) = target_of(bid)
+                {
+                    r.target = AsmSectionTarget::Text(off);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Lower an `Inst::InlineAsm` (GCC extended asm) on AArch64. Assigns each
+/// register operand a machine register per its constraint, saves the
+/// registers the block overwrites, captures the operand values / addresses
+/// to the scratch region, loads the inputs, encodes the register-concrete
+/// template through the table encoder, and stores the outputs back through
+/// their addresses. `x16` / `x17` are the bridge scratch, so the operand
+/// pool is `x0..x15`. `goto_ctx` is present for the `asm goto` form (the
+/// statement is the last instruction of a `Terminator::AsmGoto` block).
+#[allow(clippy::too_many_arguments)]
+pub(super) fn emit_inline_asm_aarch64(
+    code: &mut Vec<u8>,
+    asm: &super::super::ir::AsmBlock,
+    args: &[u32],
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    frame: Frame,
+    fixups: &mut Vec<super::encode::Fixup>,
+    name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
+    extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
+    data_sym_offsets: &alloc::collections::BTreeMap<alloc::string::String, i64>,
+    asm_sections: &mut crate::c5::asm::AsmSectionSink,
+    asm_extern_call_sites: &mut Vec<super::UserExternCallSite>,
+    asm_sym_fixups: &mut Vec<super::AsmSymFixup>,
+    deferred_regions: &mut Vec<DeferredAsmRegion>,
+    text_data_ranges: &mut Vec<(usize, usize)>,
+    text_align: &mut usize,
+    text_map_state: &mut Option<super::super::map_syms::MapClass>,
+    asm_text_labels: &mut Vec<super::AsmTextLabel>,
+    asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
+    goto_ctx: Option<AsmGotoCtxA64<'_>>,
+) -> bool {
+    // A statement that lowers to nothing keeps only its IR-level ordering
+    // effect; the operand staging around zero bytes of code is dead, and
+    // `asm_scratch_bytes` reserved no region for it.
+    if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::A64) {
+        return true;
+    }
+    let mut out = AsmSink {
+        code,
+        fixups,
+        asm_sections,
+        asm_extern_call_sites,
+        asm_sym_fixups,
+        deferred_regions,
+        text_data_ranges,
+        text_align,
+        asm_text_labels,
+        asm_section_text_refs,
+    };
+    let syms = AsmSymbols {
+        name2entpc,
+        extern_data_names,
+        data_sym_offsets,
+    };
+    match lower_inline_asm(
+        &mut out,
+        asm,
+        args,
+        func,
+        alloc,
+        frame,
+        syms,
+        *text_map_state,
+        goto_ctx,
+    ) {
+        Ok(map_state) => {
+            *text_map_state = map_state;
+            true
+        }
+        Err(m) => {
+            bail_msg(&m);
+            false
+        }
+    }
+}
+
+/// The body of [`emit_inline_asm_aarch64`]; the mapping state it returns
+/// is the stream's after the statement.
+#[allow(clippy::too_many_arguments)]
+fn lower_inline_asm(
+    out: &mut AsmSink,
+    asm: &super::super::ir::AsmBlock,
+    args: &[u32],
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    frame: Frame,
+    syms: AsmSymbols,
+    map_state: Option<super::super::map_syms::MapClass>,
+    goto_ctx: Option<AsmGotoCtxA64<'_>>,
+) -> Result<Option<super::super::map_syms::MapClass>, alloc::string::String> {
+    use super::asm::{assign_operand_regs, parse_template};
+    let text = template_text(asm)?;
+    // Assign operand registers before the GNU-as macro pass so it can
+    // substitute each reference to its register name -- the same register
+    // the operand capture and write-back use.
+    let ops = AsmOperands {
+        asm,
+        args,
+        func,
+        op_reg: assign_operand_regs(
+            &asm.operands,
+            asm.clobber_regs | frame.fixed_regs.gpr,
+            asm.clobber_fp_regs | frame.fixed_regs.fpr,
+            &|i| crate::c5::asm::asm_operand_const(func, *args.get(i)?),
+        )?,
+    };
+    let gas = crate::c5::asm::expand_asm_gas_macros(&text, 4, &|tok| ops.gas_subst(tok))?;
+    let text = gas.as_deref().unwrap_or(&text);
+    // An ALTERNATIVE `.subsection` replacement leaves the main stream for a
+    // deferred region appended after the function body, out of the main
+    // sequence's fall-through path.
+    let (main_text, deferred_text) = crate::c5::asm::split_asm_subsections(text);
+    let extracted = crate::c5::asm::extract_asm_sections(&main_text, true)?;
+    let (code_owned, mut section_blocks, sym_items) = match extracted {
+        Some(ex) => (Some(ex.code), ex.blocks, ex.sym_items),
+        None => (None, Vec::new(), Vec::new()),
+    };
+    let code_text: &str = code_owned.as_deref().unwrap_or(&main_text);
+    crate::c5::asm::reject_unit_symbol_items(&section_blocks)?;
+    // The template's symbol directives declare names of the unit; the
+    // object writer applies them, where every definition is known.
+    out.asm_sections.push_sym_decls(&sym_items)?;
+    let insns = parse_template(code_text.as_bytes())?;
+    let region = AsmRegion::layout(&ops, frame)?;
+    // An empty region means no entry or exit work: every capture, save and
+    // operand load addresses it, and an operand with no register takes no
+    // slot. The template's own realignment is per instruction.
+    let mut stream = TemplateStream::new(code_text, map_state);
+    if region.size > 0 {
+        a64_align_asm_stream(out.code, out.text_data_ranges, &mut stream.map_state);
+    }
+    region.enter(out.code)?;
+    region.emit_saves_and_captures(out.code, &ops, alloc)?;
+    region.emit_input_loads(out.code, &ops)?;
+    // `%lK` label indices this statement's section items reference -- a
+    // data field (`.long %l0 - .`) or a section branch (`b %l[k]`). A
+    // statement with exit work rewrites those relocs so the published
+    // address is the trampoline a template `%lK` branch takes.
+    let goto_row: Option<&[super::super::ir::BlockId]> = goto_ctx.as_ref().map(|c| c.row);
+    let data_goto_ks = core::cell::RefCell::new(Vec::<usize>::new());
+    let goto_block = |idx: u8| -> Option<u32> {
+        let bid = goto_row?.get(1 + idx as usize).copied()?;
+        data_goto_ks.borrow_mut().push(idx as usize);
+        Some(bid)
+    };
+    // The instructions of a pushed section assemble to bytes before layout;
+    // the converter resolves a reference to the enclosing template's
+    // operands, which the file-scope encoder has no notion of.
+    if !section_blocks.is_empty() {
+        encode_a64_asm_section_code(&mut section_blocks, &|o| ops.conv(o), &goto_block)?;
+    }
+    stream.encode(&insns, &ops, out, syms, goto_row)?;
+    stream.settle_expr_fixups(out)?;
+    let pending_xsec = stream.patch_label_branches(out, !section_blocks.is_empty())?;
+    stream.record_named_labels(out)?;
+    // The ALTERNATIVE replacement's `.org` length assertion reads the main
+    // labels; the region is appended after the function body and its labels
+    // resolved to text offsets once its base is known.
+    let mut deferred_goto_sites: Vec<(usize, LabelBranch, u8)> = Vec::new();
+    let deferred_idx: Option<u32> = if deferred_text.is_empty() {
+        None
+    } else {
+        let (region, gotos) = encode_deferred_asm_region(
+            &deferred_text,
+            &|o| ops.conv(o),
+            &|name| stream.main_label_off(name),
+            &|name| ops.symbol_name(name),
+        )?;
+        let idx = out.deferred_regions.len() as u32;
+        out.deferred_regions.push(region);
+        deferred_goto_sites = gotos;
+        Some(idx)
+    };
+    // The per-section reloc counts before this statement's contribution
+    // bound the trampoline rewrite to this statement's relocs.
+    let sect_reloc_marks: Vec<usize> = if goto_ctx.is_some() && region.size > 0 {
+        out.asm_sections
+            .relocs_mut()
+            .iter()
+            .map(|s| s.relocs.len())
+            .collect()
+    } else {
+        Vec::new()
+    };
+    if !section_blocks.is_empty() {
+        materialize_sections(
+            &section_blocks,
+            &stream,
+            deferred_idx,
+            pending_xsec,
+            &ops,
+            out,
+            syms,
+            &goto_block,
+        )?;
+    }
+    // The fall-through exit: outputs are stored on every exit path (GCC 11
+    // output semantics), so the sequence repeats on each goto trampoline.
+    if region.size > 0 {
+        a64_align_asm_stream(out.code, out.text_data_ranges, &mut stream.map_state);
+    }
+    let exit_start = out.code.len();
+    region.emit_exit(out.code, &ops)?;
+    match goto_ctx {
+        Some(ctx) => emit_goto_exits(
+            ctx,
+            &region,
+            &ops,
+            &stream,
+            deferred_idx,
+            &deferred_goto_sites,
+            &data_goto_ks.borrow(),
+            &sect_reloc_marks,
+            exit_start,
+            out,
+        )?,
+        None if !deferred_goto_sites.is_empty() => {
+            return Err(alloc::string::String::from(
+                "aarch64 inline asm: `%l` label reference outside `asm goto`",
+            ));
+        }
+        None => {}
+    }
+    Ok(stream.map_state)
 }
 
 /// Resolve a template vector-view reference (`%N.T`, `%qN`, `{%N.T}`) to the

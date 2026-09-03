@@ -965,51 +965,7 @@ impl Compiler {
         } = prior;
 
         if !was_sys {
-            self.symbols[id_idx].class = Token::Fun as i64;
-            if self.symbols[id_idx].decl_line == 0 {
-                self.symbols[id_idx].decl_line = self.lex.line;
-                self.symbols[id_idx].decl_in_main_source = self.in_main_source();
-            }
-            // Census one file-scope declaration of this name for
-            // the inline linkage models (C99 6.7.4p6-p7 and
-            // GNU89); `resolve_inline_linkage` reads the totals
-            // once the unit's last declaration is in. The
-            // provisional linkage below keeps mid-parse state
-            // consistent for a `static`-vs-external decision that
-            // does not depend on the inline model.
-            let sym = &mut self.symbols[id_idx];
-            sym.saw_static_decl |= static_seen;
-            match (self.pending_saw_inline_specifier, extern_seen) {
-                (false, _) => sym.saw_noninline_decl = true,
-                (true, false) => sym.saw_plain_inline_decl = true,
-                (true, true) => sym.saw_extern_inline_decl = true,
-            }
-            let internal = sym.saw_static_decl
-                || (!sym.saw_noninline_decl && !extern_seen && !sym.is_extern_decl);
-            sym.linkage = if internal {
-                crate::c5::symbol::Linkage::Internal
-            } else {
-                crate::c5::symbol::Linkage::External
-            };
-            if extern_seen {
-                self.symbols[id_idx].is_extern_decl = true;
-            }
-            // Leave `val` untouched. For a first-time
-            // prototype it stays at the Symbol default
-            // (0); the walker reads the live
-            // `Symbol::val` through `live_fun_val`
-            // when it lowers a call to this name, so
-            // a call placed before the body sees the
-            // post-body `ent_pc` once the body has
-            // been parsed. For a
-            // redeclaration after the body has been
-            // emitted, `val` already points at the
-            // real `ent_pc` and must not be
-            // clobbered -- a previous version of this
-            // code wrote `val = self.next_ent_pc`
-            // whenever val was 0, which silently
-            // broke any function whose body
-            // legitimately started at PC 0.
+            self.record_function_declaration(id_idx, static_seen, extern_seen);
         }
         // Only warn on user-vs-user redeclarations.
         // Sys symbols (the per-target header's libc
@@ -1018,7 +974,6 @@ impl Compiler {
         // to refine -- complaining about every printf
         // / memcpy / fcntl in the standard library
         // would drown real bugs.
-        let prior_was_known = was_fwd_fun;
         // Capture the long-double return-type marker
         // before parameter parsing, which calls
         // `parse_decl_base_type` per param and clears
@@ -1088,6 +1043,108 @@ impl Compiler {
             self.symbols[id_idx].returns_void = true;
         }
 
+        self.warn_on_signature_mismatch(
+            id_idx,
+            ty,
+            prior_return_ty,
+            &prior_params,
+            prior_is_variadic,
+            &params,
+            was_fwd_fun,
+        );
+        // For Sys symbols (header-bound libc functions),
+        // also fold the variadic flag onto the matching
+        // `#pragma binding`. The native lowering reads
+        // it when it picks the variadic ABI path (macOS
+        // arm64 stack-packing, SysV `xor eax, eax`)
+        // instead of consulting the symbol table at
+        // codegen time -- it is out of scope by then.
+        if was_sys {
+            self.update_libc_binding(id_idx, &params, ty, ret_was_long_double);
+        }
+
+        if self.lex.tk == ';' || self.lex.tk == ',' {
+            return self.finish_function_prototype(id_idx);
+        }
+        if was_sys {
+            return Err(self.compile_err_at(
+                signature_line,
+                format!(
+                    "cannot give a body to predefined library function `{}` \
+                     (the per-target header's `#pragma binding` provides the \
+                     implementation -- use a prototype only)",
+                    self.symbols[id_idx].name
+                ),
+            ));
+        }
+        self.parse_function_definition(id_idx, params)
+    }
+
+    /// Record one file-scope declaration of a function name: its class and
+    /// source position, the census the inline linkage models read (C99
+    /// 6.7.4p6-p7 and GNU89), and the linkage that census implies so far.
+    fn record_function_declaration(&mut self, id_idx: usize, static_seen: bool, extern_seen: bool) {
+        self.symbols[id_idx].class = Token::Fun as i64;
+        if self.symbols[id_idx].decl_line == 0 {
+            self.symbols[id_idx].decl_line = self.lex.line;
+            self.symbols[id_idx].decl_in_main_source = self.in_main_source();
+        }
+        // Census one file-scope declaration of this name for
+        // the inline linkage models (C99 6.7.4p6-p7 and
+        // GNU89); `resolve_inline_linkage` reads the totals
+        // once the unit's last declaration is in. The
+        // provisional linkage below keeps mid-parse state
+        // consistent for a `static`-vs-external decision that
+        // does not depend on the inline model.
+        let sym = &mut self.symbols[id_idx];
+        sym.saw_static_decl |= static_seen;
+        match (self.pending_saw_inline_specifier, extern_seen) {
+            (false, _) => sym.saw_noninline_decl = true,
+            (true, false) => sym.saw_plain_inline_decl = true,
+            (true, true) => sym.saw_extern_inline_decl = true,
+        }
+        let internal =
+            sym.saw_static_decl || (!sym.saw_noninline_decl && !extern_seen && !sym.is_extern_decl);
+        sym.linkage = if internal {
+            crate::c5::symbol::Linkage::Internal
+        } else {
+            crate::c5::symbol::Linkage::External
+        };
+        if extern_seen {
+            self.symbols[id_idx].is_extern_decl = true;
+        }
+        // Leave `val` untouched. For a first-time
+        // prototype it stays at the Symbol default
+        // (0); the walker reads the live
+        // `Symbol::val` through `live_fun_val`
+        // when it lowers a call to this name, so
+        // a call placed before the body sees the
+        // post-body `ent_pc` once the body has
+        // been parsed. For a
+        // redeclaration after the body has been
+        // emitted, `val` already points at the
+        // real `ent_pc` and must not be
+        // clobbered -- a previous version of this
+        // code wrote `val = self.next_ent_pc`
+        // whenever val was 0, which silently
+        // broke any function whose body
+        // legitimately started at PC 0.
+    }
+
+    /// C99 6.7p4 requires the declarations of one function to be
+    /// compatible. An amalgamated unit can disagree by accident, which is
+    /// worth surfacing but not refusing: only this declaration is in scope.
+    #[allow(clippy::too_many_arguments)]
+    fn warn_on_signature_mismatch(
+        &mut self,
+        id_idx: usize,
+        ty: i64,
+        prior_return_ty: i64,
+        prior_params: &[i64],
+        prior_is_variadic: bool,
+        params: &super::function::ParsedParams,
+        prior_was_known: bool,
+    ) {
         // Warn if a redeclaration disagrees with the
         // prior signature. C99 6.7p4 requires
         // compatibility (same return type + same
@@ -1112,13 +1169,13 @@ impl Compiler {
         let either_unspecified = prior_params.is_empty() || params.types.is_empty();
         let return_differs = prior_return_ty != ty;
         let variadic_differs = prior_is_variadic != params.is_variadic;
-        let params_differ = !either_unspecified && prior_params != params.types;
+        let params_differ = !either_unspecified && prior_params != params.types.as_slice();
         if prior_was_known && (return_differs || variadic_differs || params_differ) {
             let name = self.symbols[id_idx].name.clone();
             let line = self.lex.line;
             let prior_sig = format_signature(
                 prior_return_ty,
-                &prior_params,
+                prior_params,
                 prior_is_variadic,
                 &self.structs,
             );
@@ -1127,122 +1184,160 @@ impl Compiler {
                 line,
                 format!(
                     "redeclaration of `{name}` differs from the previous \
-                     declaration\n  previous: {prior_sig}\n  now:      {new_sig}",
+                 declaration\n  previous: {prior_sig}\n  now:      {new_sig}",
                 ),
             );
         }
+    }
 
-        // For Sys symbols (header-bound libc functions),
-        // also fold the variadic flag onto the matching
-        // `#pragma binding`. The native lowering reads
-        // it when it picks the variadic ABI path (macOS
-        // arm64 stack-packing, SysV `xor eax, eax`)
-        // instead of consulting the symbol table at
-        // codegen time -- it is out of scope by then.
-        if was_sys {
-            let name = self.symbols[id_idx].name.clone();
-            let fixed = params.types.len();
-            let variadic = params.is_variadic;
-            // `ty` is the return type the parser extracted just
-            // above. Stash it so the codegen knows whether the
-            // libc call leaves a 32-bit value with junk in the
-            // upper half of the host return register (msvcrt
-            // `int` returns) and needs sign / zero extension
-            // before the result becomes the c5 accumulator.
-            let ret_ty = ty;
-            let ret_is_long_double = ret_was_long_double;
-            for spec in self.dylibs.iter_mut() {
-                for binding in spec.bindings.iter_mut() {
-                    if binding.local_name == name {
-                        binding.is_variadic = variadic;
-                        binding.fixed_args = fixed;
-                        binding.return_type_tag = ret_ty;
-                        binding.returns_long_double = ret_is_long_double;
-                        // Per-param types for the
-                        // DWARF subprogram DIE the codegen
-                        // emits over each PLT trampoline.
-                        // Without these, gdb shows
-                        // `in malloc ()` instead of
-                        // `in malloc (size=...)`.
-                        binding.param_types = params.types.clone();
-                    }
+    /// Fold a libc binding's signature onto the matching `#pragma binding`:
+    /// the native lowering reads the variadic ABI choice and the return
+    /// convention off it, and the DWARF subprogram DIE over each PLT
+    /// trampoline reads the parameter types.
+    fn update_libc_binding(
+        &mut self,
+        id_idx: usize,
+        params: &super::function::ParsedParams,
+        ret_ty: i64,
+        ret_is_long_double: bool,
+    ) {
+        let name = self.symbols[id_idx].name.clone();
+        let fixed = params.types.len();
+        let variadic = params.is_variadic;
+        // `ty` is the return type the parser extracted just
+        // above. Stash it so the codegen knows whether the
+        // libc call leaves a 32-bit value with junk in the
+        // upper half of the host return register (msvcrt
+        // `int` returns) and needs sign / zero extension
+        // before the result becomes the c5 accumulator.
+        for spec in self.dylibs.iter_mut() {
+            for binding in spec.bindings.iter_mut() {
+                if binding.local_name == name {
+                    binding.is_variadic = variadic;
+                    binding.fixed_args = fixed;
+                    binding.return_type_tag = ret_ty;
+                    binding.returns_long_double = ret_is_long_double;
+                    // Per-param types for the
+                    // DWARF subprogram DIE the codegen
+                    // emits over each PLT trampoline.
+                    // Without these, gdb shows
+                    // `in malloc ()` instead of
+                    // `in malloc (size=...)`.
+                    binding.param_types = params.types.clone();
                 }
             }
         }
+    }
 
-        if self.lex.tk == ';' || self.lex.tk == ',' {
-            // `alias("target")` on a bodyless declarator: the
-            // declared name becomes an additional symbol for a
-            // function already defined in this unit, and calls
-            // through it resolve to the target's entry. A weak
-            // alias is interposable -- a strong definition in
-            // another object replaces it at link time -- so it
-            // never binds here; the unit-end resolver keeps its
-            // references symbolic.
-            if let Some(target) = self.pending.attr_alias.take() {
-                let tgt = (!self.symbols[id_idx].is_weak)
-                    .then(|| {
-                        self.symbols.iter().position(|s| {
-                            s.link_name() == target
-                                && s.class == Token::Fun as i64
-                                && s.defined_here
-                        })
+    /// A bodyless declarator ends the declaration: bind an `alias("target")`
+    /// to the target it names, then unbind the parameter symbols
+    /// `parse_function_params` bound so a later declaration of the same
+    /// names is not a duplicate.
+    fn finish_function_prototype(&mut self, id_idx: usize) -> Result<(), C5Error> {
+        // `alias("target")` on a bodyless declarator: the
+        // declared name becomes an additional symbol for a
+        // function already defined in this unit, and calls
+        // through it resolve to the target's entry. A weak
+        // alias is interposable -- a strong definition in
+        // another object replaces it at link time -- so it
+        // never binds here; the unit-end resolver keeps its
+        // references symbolic.
+        if let Some(target) = self.pending.attr_alias.take() {
+            let tgt = (!self.symbols[id_idx].is_weak)
+                .then(|| {
+                    self.symbols.iter().position(|s| {
+                        s.link_name() == target && s.class == Token::Fun as i64 && s.defined_here
                     })
-                    .flatten();
-                let Some(tgt) = tgt else {
-                    // The target may be defined later in the unit;
-                    // retry once the unit is complete.
-                    self.pending_aliases.push((id_idx, target, false));
-                    self.symbols[id_idx].is_alias = true;
-                    let bound = self.take_scope_bound();
-                    self.unwind_scope_bound(bound);
-                    return Ok(());
-                };
-                self.symbols[tgt].was_referenced = true;
-                self.symbols[id_idx].val = self.symbols[tgt].val;
-                // Defined-through-the-target: keeps the TU-end
-                // extern-import pass from re-assigning a
-                // placeholder pc over the resolved entry.
-                self.symbols[id_idx].defined_here = true;
+                })
+                .flatten();
+            let Some(tgt) = tgt else {
+                // The target may be defined later in the unit;
+                // retry once the unit is complete.
+                self.pending_aliases.push((id_idx, target, false));
                 self.symbols[id_idx].is_alias = true;
-                let name = self.symbols[id_idx].link_name().into();
-                let bind = alias_bind(&self.symbols[id_idx]);
-                self.function_aliases
-                    .push(crate::c5::program::FunctionAlias {
-                        name,
-                        target,
-                        bind,
-                        addend: 0,
-                    });
-            }
-            // Function prototype, not a definition. C99 6.7
-            // permits several declarators in one declaration,
-            // so a prototype can be followed by `,` and more
-            // declarators (further prototypes or objects),
-            // e.g. `int f(int a), g(int a), a;`. Restore the
-            // param symbols' outer class (parse_function_params
-            // marked them as `Loc`) so subsequent declarations
-            // of the same names don't trip the
-            // duplicate-global check.
-            let bound = self.take_scope_bound();
-            self.unwind_scope_bound(bound);
-            // On `,` consume it and let the outer loop parse
-            // the next declarator; on `;` the outer loop exits
-            // and `self.next()` after it consumes the `;`.
-            return Ok(());
+                let bound = self.take_scope_bound();
+                self.unwind_scope_bound(bound);
+                return Ok(());
+            };
+            self.symbols[tgt].was_referenced = true;
+            self.symbols[id_idx].val = self.symbols[tgt].val;
+            // Defined-through-the-target: keeps the TU-end
+            // extern-import pass from re-assigning a
+            // placeholder pc over the resolved entry.
+            self.symbols[id_idx].defined_here = true;
+            self.symbols[id_idx].is_alias = true;
+            let name = self.symbols[id_idx].link_name().into();
+            let bind = alias_bind(&self.symbols[id_idx]);
+            self.function_aliases
+                .push(crate::c5::program::FunctionAlias {
+                    name,
+                    target,
+                    bind,
+                    addend: 0,
+                });
         }
+        // Function prototype, not a definition. C99 6.7
+        // permits several declarators in one declaration,
+        // so a prototype can be followed by `,` and more
+        // declarators (further prototypes or objects),
+        // e.g. `int f(int a), g(int a), a;`. Restore the
+        // param symbols' outer class (parse_function_params
+        // marked them as `Loc`) so subsequent declarations
+        // of the same names don't trip the
+        // duplicate-global check.
+        let bound = self.take_scope_bound();
+        self.unwind_scope_bound(bound);
+        // On `,` consume it and let the outer loop parse
+        // the next declarator; on `;` the outer loop exits
+        // and `self.next()` after it consumes the `;`.
+        Ok(())
+    }
 
-        if was_sys {
-            return Err(self.compile_err_at(
-                signature_line,
-                format!(
-                    "cannot give a body to predefined library function `{}` \
-                     (the per-target header's `#pragma binding` provides the \
-                     implementation -- use a prototype only)",
-                    self.symbols[id_idx].name
-                ),
-            ));
+    /// The definition: the K&R parameter declarations, the body, and the
+    /// records the walker and the debug info read off the finished frame.
+    fn parse_function_definition(
+        &mut self,
+        id_idx: usize,
+        mut params: super::function::ParsedParams,
+    ) -> Result<(), C5Error> {
+        self.parse_kr_parameter_declarations(&mut params)?;
+        self.symbols[id_idx].params = params.types.clone();
+
+        if self.lex.tk != '{' {
+            return Err(self.compile_err("bad function definition"));
         }
+        self.next()?;
+
+        let ent_pc = self.open_function_body(id_idx, &params);
+        self.copy_by_value_parameters(&params);
+        self.parse_function_body_items()?;
+        self.finish_function_body(ent_pc, &params)?;
+        // Snapshot the function's locals +
+        // formal parameters before `restore_shadowed_symbol`
+        // unwinds the bindings. The DWARF emitter groups
+        // these by `function_bc_pc` (the Ent's PC) and
+        // emits `DW_TAG_formal_parameter` /
+        // `DW_TAG_variable` DIEs as children of the
+        // matching subprogram, with `DW_OP_fbreg` locations
+        // derived from `fp_slot * 8`. Slots `0..2` cover
+        // the saved-x29 / saved-x30 area and don't
+        // correspond to a user-visible name; everything
+        // else is either a parameter (val >= 2) or a
+        // local (val < 0).
+        let param_set: alloc::collections::BTreeSet<usize> =
+            params.indices.iter().copied().collect();
+        let bound = self.take_scope_bound();
+        let vars_start = self.record_function_variables(ent_pc, &params, &bound, &param_set);
+        self.classify_function_frame(vars_start)?;
+        self.warn_unused_function_bindings(&bound, &param_set);
+        self.unwind_scope_bound(bound);
+        Ok(())
+    }
+
+    fn parse_kr_parameter_declarations(
+        &mut self,
+        params: &mut super::function::ParsedParams,
+    ) -> Result<(), C5Error> {
         // C99 6.9.1: an old-style (K&R) definition lists the
         // parameter names in the declarator and gives their
         // types in declarations between the `)` and the
@@ -1295,15 +1390,18 @@ impl Compiler {
             }
             self.accept(';')?;
         }
-        // Re-record the signature now that old-style
-        // declarations may have refined the parameter types.
-        self.symbols[id_idx].params = params.types.clone();
+        Ok(())
+    }
 
-        if self.lex.tk != '{' {
-            return Err(self.compile_err("bad function definition"));
-        }
-        self.next()?;
-
+    /// Open the frame the body emits into: the return-type state the
+    /// `return` lowering reads, the parameter slot numbering the call ABI
+    /// places, the per-function counters, and the entry pc. Returns the
+    /// entry pc the finished function is recorded under.
+    fn open_function_body(
+        &mut self,
+        id_idx: usize,
+        params: &super::function::ParsedParams,
+    ) -> usize {
         // Track this function's declared return type
         // so the `return s` lowering knows whether to
         // emit a struct-copy through the hidden
@@ -1407,6 +1505,10 @@ impl Compiler {
             });
         }
 
+        ent_pc
+    }
+
+    fn copy_by_value_parameters(&mut self, params: &super::function::ParsedParams) {
         // Struct-value parameters: the caller pushed
         // the struct's *address* into the param slot
         // (matching the "address is the value" rule
@@ -1492,7 +1594,9 @@ impl Compiler {
             // Symbol now points at the f32-storage local.
             self.symbols[idx].val = local_val;
         }
+    }
 
+    fn parse_function_body_items(&mut self) -> Result<(), C5Error> {
         // C99 block-scope: declarations may appear
         // anywhere a statement may. Each iteration
         // either parses a local decl (with optional
@@ -1618,6 +1722,16 @@ impl Compiler {
         // without double-walking inner-wrapped stmts.
         let body_root = self.ast_wrap_block_items(&top_level_ids);
         self.ast.body = Some(body_root);
+        Ok(())
+    }
+
+    /// Close the body: the synthetic return, the dead-store flush, and the
+    /// `FinishedFunction` record the walker lowers.
+    fn finish_function_body(
+        &mut self,
+        ent_pc: usize,
+        params: &super::function::ParsedParams,
+    ) -> Result<(), C5Error> {
         // C99 6.8.6.4p3: a `void`-returning function
         // doesn't produce a value. Zero the accumulator
         // before the trailing synthetic return so a
@@ -1708,21 +1822,19 @@ impl Compiler {
             }
         }
 
-        // Snapshot the function's locals +
-        // formal parameters before `restore_shadowed_symbol`
-        // unwinds the bindings. The DWARF emitter groups
-        // these by `function_bc_pc` (the Ent's PC) and
-        // emits `DW_TAG_formal_parameter` /
-        // `DW_TAG_variable` DIEs as children of the
-        // matching subprogram, with `DW_OP_fbreg` locations
-        // derived from `fp_slot * 8`. Slots `0..2` cover
-        // the saved-x29 / saved-x30 area and don't
-        // correspond to a user-visible name; everything
-        // else is either a parameter (val >= 2) or a
-        // local (val < 0).
-        let param_set: alloc::collections::BTreeSet<usize> =
-            params.indices.iter().copied().collect();
-        let bound = self.take_scope_bound();
+        Ok(())
+    }
+
+    /// Capture the function's parameters and locals for the debug info
+    /// before the scope unwind restores their outer bindings. Returns the
+    /// index the unit-wide variable list grew from.
+    fn record_function_variables(
+        &mut self,
+        ent_pc: usize,
+        params: &super::function::ParsedParams,
+        bound: &[u32],
+        param_set: &alloc::collections::BTreeSet<usize>,
+    ) -> usize {
         // `variables` accumulates over the whole unit; this
         // function owns exactly the entries appended from here on.
         // Parameters go first, in declaration order (DWARF 5
@@ -1792,6 +1904,10 @@ impl Compiler {
         for i in core::mem::take(&mut self.pending_block_static_syms) {
             self.symbols[i].owner_ent_pc = Some(ent_pc as u64);
         }
+        vars_start
+    }
+
+    fn classify_function_frame(&mut self, vars_start: usize) -> Result<(), C5Error> {
         // Record declared aggregate locals (any cell count) and
         // multi-cell scalars. A declared local at frame slot
         // `fp_slot` (most-negative cell) occupying `cells` 8-byte
@@ -1846,7 +1962,7 @@ impl Compiler {
         if over_aligned.iter().any(|&(_, align, _)| align > 16) && self.uses_alloca_in_current_fn {
             return Err(self.compile_err(
                 "an automatic object aligned above 16 cannot share a function \
-                 with `alloca` or a variable-length array; use static storage",
+             with `alloca` or a variable-length array; use static storage",
             ));
         }
         if let Some(ff) = self.finished_functions.last_mut() {
@@ -1854,6 +1970,14 @@ impl Compiler {
             ff.over_aligned_slots = over_aligned;
             ff.ssp = ssp;
         }
+        Ok(())
+    }
+
+    fn warn_unused_function_bindings(
+        &mut self,
+        bound: &[u32],
+        param_set: &alloc::collections::BTreeSet<usize>,
+    ) {
         // Collect unused-parameter and unused-local
         // diagnostics for the function's top-level
         // bindings. Inner-block locals were already
@@ -1870,7 +1994,7 @@ impl Compiler {
             ValueSet,
         }
         let mut unused: Vec<(usize, String, UnusedKind)> = Vec::new();
-        for &bi in &bound {
+        for &bi in bound {
             let i = bi as usize;
             let sym = &self.symbols[i];
             if sym.class != Token::Loc as i64
@@ -1932,10 +2056,11 @@ impl Compiler {
         // `extern` that converted a bound file-scope name
         // all unbind at function exit so the outer binding
         // of the same name reappears.
-        self.unwind_scope_bound(bound);
-        Ok(())
     }
 
+    /// Bind the declarator as an object: linkage and attributes, then the
+    /// storage its definition reserves and the initializer that fills it
+    /// (C99 6.9.2).
     /// Bind the declarator as an object: linkage and attributes, then the
     /// storage its definition reserves and the initializer that fills it
     /// (C99 6.9.2).
@@ -1961,6 +2086,106 @@ impl Compiler {
             ..
         } = b;
 
+        self.record_object_declaration(id_idx, static_seen, thread_local, was_tentative_glo);
+        if self.bind_object_alias(id_idx, ty)? {
+            return Ok(());
+        }
+        let decl_align = self.object_alignment(id_idx, ty, base_type_align, thread_local)?;
+        let was_extern_only_decl = extern_seen && self.lex.tk != Token::Assign && array_size != -1;
+        // `extern struct S s;` whose `struct S` has no fixed
+        // size at the declaration cannot reserve storage: an
+        // incomplete struct (size unknown), or one with a
+        // flexible array member (C99 6.7.2.1 -- the element
+        // count comes from the defining initializer). C99 6.9.2
+        // makes it a pure declaration anyway. Record an
+        // undefined external reference; the defining
+        // declaration allocates the bytes. Without this the
+        // permissive single-TU fallback below reserves a
+        // wrong-sized slot, and either the next global overlaps
+        // it (fixed part too small) or the definition allocating
+        // fresh strands references emitted against the slot.
+        // C99 6.2.2p4: after a prior definition (tentative or
+        // initialized) the extern redeclares the same object;
+        // flipping it undefined here would drop the symbol.
+        if was_extern_only_decl
+            && !self.symbols[id_idx].defined_here
+            && is_struct_value_ty(ty)
+            && (self.structs[struct_id_of(ty)].fields.is_empty()
+                || self.flexible_array_member(struct_id_of(ty)).is_some())
+        {
+            // C99 6.2.2p4 + 6.9.2p2: after a prior definition in
+            // this unit the extern redeclaration is a pure
+            // redeclaration; the definition and its storage stand.
+            if !self.symbols[id_idx].defined_here {
+                self.symbols[id_idx].is_extern_decl = true;
+                self.symbols[id_idx].type_ = ty;
+            }
+            return Ok(());
+        }
+        if was_extern_only_decl {
+            // C99 6.2.2p4 + 6.9.2p2: `extern T x;` after a
+            // prior file-scope definition (tentative or
+            // initialized) redeclares the same object; the
+            // definition stands.
+            if !self.symbols[id_idx].defined_here {
+                self.symbols[id_idx].is_extern_decl = true;
+            }
+        } else {
+            self.symbols[id_idx].is_extern_decl = false;
+            // Default: a file-scope global declaration
+            // that reaches this branch will allocate
+            // storage (or merge with prior tentative
+            // storage) below; the matching
+            // `defined_here = true` is set at each
+            // alloc site so the field tracks every
+            // path that produces real bytes.
+
+            // C99 6.9.2p3: the type of a definition must not be
+            // incomplete. A tentative definition's tag may be
+            // completed further on in the unit, so the check runs
+            // once the unit is parsed.
+            if let Some(sid) = self.incomplete_aggregate_tag(ty) {
+                self.pending_incomplete_objects
+                    .push((id_idx, sid, signature_line));
+            }
+        }
+        // Deferred-size array global: the dimension
+        // comes from the initializer and storage is
+        // reserved after parsing it. Disallow on TLS
+        // globals -- the per-target rebase ordering
+        // needs design work.
+        if array_size == -1 {
+            self.define_deferred_size_array(
+                id_idx,
+                ty,
+                decl_align,
+                thread_local,
+                extern_seen,
+                was_tentative_glo,
+                prior_array_size,
+            )
+        } else {
+            self.define_sized_object(
+                id_idx,
+                ty,
+                array_size,
+                decl_align,
+                thread_local,
+                was_tentative_glo,
+                was_extern_only_decl,
+            )
+        }
+    }
+
+    /// C99 6.2.2: record the object, its source position and its linkage.
+    /// `static` is sticky once any declaration of the name carries it.
+    fn record_object_declaration(
+        &mut self,
+        id_idx: usize,
+        static_seen: bool,
+        thread_local: bool,
+        was_tentative_glo: bool,
+    ) {
         self.symbols[id_idx].class = Token::Glo as i64;
         // First declaration wins the source position, as it does
         // for functions; it feeds DW_AT_decl_file / decl_line.
@@ -1985,6 +2210,13 @@ impl Compiler {
             self.symbols[id_idx].linkage = crate::c5::symbol::Linkage::External;
         }
         self.apply_symbol_attributes(id_idx);
+    }
+
+    /// `alias("target")` on an object declarator: the name is a second
+    /// symbol at the target object's offset and reserves no storage of its
+    /// own. Returns true when the declarator is fully bound here -- as an
+    /// alias, or as a redeclaration of one (C99 6.9.2p2).
+    fn bind_object_alias(&mut self, id_idx: usize, ty: i64) -> Result<bool, C5Error> {
         // `alias("target")` on an object declarator: the name
         // is an additional symbol at the target object's
         // offset. It reserves no storage of its own; the
@@ -2005,7 +2237,7 @@ impl Compiler {
                 self.symbols[id_idx].type_ = ty;
                 self.symbols[id_idx].is_alias = true;
                 self.symbols[id_idx].has_initializer = true;
-                return Ok(());
+                return Ok(true);
             };
             self.symbols[id_idx].class = Token::Glo as i64;
             self.symbols[id_idx].type_ = ty;
@@ -2015,15 +2247,28 @@ impl Compiler {
             self.symbols[id_idx].is_extern_decl = false;
             self.symbols[id_idx].is_alias = true;
             self.symbols[id_idx].has_initializer = true;
-            return Ok(());
+            return Ok(true);
         }
         // A later no-initializer declaration of an alias-defined
         // object redeclares it (C99 6.9.2p2). The alias owns no
         // storage, so the merge-or-allocate paths below would
         // give it fresh zero bytes and break the binding.
         if self.symbols[id_idx].is_alias && self.lex.tk != Token::Assign {
-            return Ok(());
+            return Ok(true);
         }
+        Ok(false)
+    }
+
+    /// C11 6.7.5: the object is placed at the strictest alignment its
+    /// declarations request and its type requires. Returns the alignment
+    /// the data cursor is now at.
+    fn object_alignment(
+        &mut self,
+        id_idx: usize,
+        ty: i64,
+        base_type_align: i64,
+        thread_local: bool,
+    ) -> Result<usize, C5Error> {
         // C11 6.7.5: a requested alignment is honored on
         // file-scope objects -- the object writer aligns the
         // section to `Program::data_align` and the object's
@@ -2110,542 +2355,555 @@ impl Compiler {
         if decl_align > 8 {
             self.align_data_to(decl_align);
         }
-        let was_extern_only_decl = extern_seen && self.lex.tk != Token::Assign && array_size != -1;
-        // `extern struct S s;` whose `struct S` has no fixed
-        // size at the declaration cannot reserve storage: an
-        // incomplete struct (size unknown), or one with a
-        // flexible array member (C99 6.7.2.1 -- the element
-        // count comes from the defining initializer). C99 6.9.2
-        // makes it a pure declaration anyway. Record an
-        // undefined external reference; the defining
-        // declaration allocates the bytes. Without this the
-        // permissive single-TU fallback below reserves a
-        // wrong-sized slot, and either the next global overlaps
-        // it (fixed part too small) or the definition allocating
-        // fresh strands references emitted against the slot.
-        // C99 6.2.2p4: after a prior definition (tentative or
-        // initialized) the extern redeclares the same object;
-        // flipping it undefined here would drop the symbol.
-        if was_extern_only_decl
-            && !self.symbols[id_idx].defined_here
-            && is_struct_value_ty(ty)
-            && (self.structs[struct_id_of(ty)].fields.is_empty()
-                || self.flexible_array_member(struct_id_of(ty)).is_some())
+        Ok(decl_align)
+    }
+
+    /// A deferred-size array (`T xs[]`): the initializer supplies the
+    /// element count, so the storage is reserved once it is parsed.
+    #[allow(clippy::too_many_arguments)]
+    fn define_deferred_size_array(
+        &mut self,
+        id_idx: usize,
+        ty: i64,
+        decl_align: usize,
+        thread_local: bool,
+        extern_seen: bool,
+        was_tentative_glo: bool,
+        prior_array_size: i64,
+    ) -> Result<(), C5Error> {
+        if self.lex.tk != Token::Assign {
+            return self.declare_deferred_size_array(
+                id_idx,
+                ty,
+                decl_align,
+                extern_seen,
+                prior_array_size,
+            );
+        }
+        if thread_local {
+            return Err(self.compile_err("deferred-size `_Thread_local` arrays are not supported"));
+        }
+        self.next()?;
+        if self.is_traversable_aggregate_ty(ty) {
+            return self.define_deferred_struct_array(id_idx, ty, decl_align, was_tentative_glo);
+        }
+        self.pending.init_inner_dims = self.inner_dims_of(id_idx);
+        let elements = self.collect_array_initializer(ty)?;
+        let final_size = elements.len() as i64;
+        self.symbols[id_idx].array_size = final_size;
+        // `T xs[] = {}` resolves to zero elements; keep the
+        // array-ness that the scalar `array_size == 0`
+        // encoding would otherwise drop.
+        self.symbols[id_idx].is_zero_len_array = final_size == 0;
+        self.reserve_zero_length_array_slot(id_idx);
+        // Patch the deferred-outer placeholder in
+        // `array_dims[0]` to the resolved row count.
+        // Layout: total elements = outer * inner-dims-product,
+        // so the outermost count is final_size /
+        // product(dims[1..]).
+        if let Some(first) = self.symbols[id_idx].array_dims.first().copied()
+            && first == 0
         {
-            // C99 6.2.2p4 + 6.9.2p2: after a prior definition in
-            // this unit the extern redeclaration is a pure
-            // redeclaration; the definition and its storage stand.
-            if !self.symbols[id_idx].defined_here {
+            let inner_product: i64 = self.symbols[id_idx].array_dims.iter().skip(1).product();
+            if inner_product > 0 {
+                self.symbols[id_idx].array_dims[0] = final_size / inner_product;
+            }
+        }
+        let total_bytes = (self.size_of_type(ty) as i64) * final_size;
+        let aligned = ((total_bytes + 7) / 8) * 8;
+        // C99 6.9.2: a prior tentative definition already
+        // reserved storage; reuse it so references emitted
+        // before this definition observe the initialized object,
+        // not the tentative's separate zero copy. A
+        // deferred-size tentative (`T x[];`) reserves one
+        // element, so a larger initializer takes fresh storage
+        // and records the move for rebasing.
+        let obj_align = self.symbols[id_idx].data_align.max(1);
+        let off = if was_tentative_glo
+            && aligned <= self.symbols[id_idx].reserved_data_bytes
+            && self.symbols[id_idx].val % obj_align == 0
+        {
+            self.symbols[id_idx].val
+        } else {
+            let eff = decl_align.max(obj_align as usize);
+            if eff > 8 {
+                self.align_data_to(eff);
+            } else if self.size_of_type(ty) > 1 {
+                self.align_data_to_8();
+            }
+            let fresh = self.data.len() as i64;
+            self.note_global_relocated(id_idx, was_tentative_glo, fresh);
+            self.symbols[id_idx].reserved_data_bytes = aligned;
+            for _ in 0..aligned {
+                self.data.push(0);
+            }
+            fresh
+        };
+        self.symbols[id_idx].val = off;
+        self.write_array_init_into_data(off, ty, &elements)?;
+        self.symbols[id_idx].has_initializer = true;
+        self.symbols[id_idx].defined_here = true;
+        Ok(())
+    }
+
+    /// The same array without an initializer: `extern T x[];` declares it
+    /// elsewhere, and a bare `T x[];` is a tentative definition an
+    /// end-of-unit completion sizes at one element (C99 6.9.2p2).
+    fn declare_deferred_size_array(
+        &mut self,
+        id_idx: usize,
+        ty: i64,
+        decl_align: usize,
+        extern_seen: bool,
+        prior_array_size: i64,
+    ) -> Result<(), C5Error> {
+        // `extern T x[];` declares an array
+        // whose definition (with its actual
+        // size) lives in another TU. Mark
+        // the symbol as undefined-here and
+        // let the link step resolve the
+        // address against the defining TU's
+        // storage.
+        if extern_seen {
+            // C99 6.2.2p4: after a prior definition,
+            // `extern T x[];` is a redeclaration of
+            // the same object -- the definition and
+            // its dimension stand.
+            if self.symbols[id_idx].defined_here {
+                self.symbols[id_idx].array_size = prior_array_size;
+            } else {
                 self.symbols[id_idx].is_extern_decl = true;
-                self.symbols[id_idx].type_ = ty;
+                self.symbols[id_idx].defined_here = false;
             }
             return Ok(());
         }
-        if was_extern_only_decl {
-            // C99 6.2.2p4 + 6.9.2p2: `extern T x;` after a
-            // prior file-scope definition (tentative or
-            // initialized) redeclares the same object; the
-            // definition stands.
-            if !self.symbols[id_idx].defined_here {
-                self.symbols[id_idx].is_extern_decl = true;
-            }
-        } else {
-            self.symbols[id_idx].is_extern_decl = false;
-            // Default: a file-scope global declaration
-            // that reaches this branch will allocate
-            // storage (or merge with prior tentative
-            // storage) below; the matching
-            // `defined_here = true` is set at each
-            // alloc site so the field tracks every
-            // path that produces real bytes.
-
-            // C99 6.9.2p3: the type of a definition must not be
-            // incomplete. A tentative definition's tag may be
-            // completed further on in the unit, so the check runs
-            // once the unit is parsed.
-            if let Some(sid) = self.incomplete_aggregate_tag(ty) {
-                self.pending_incomplete_objects
-                    .push((id_idx, sid, signature_line));
-            }
+        // C99 6.9.2p2: a file-scope `T x[];` with no
+        // `extern` and no initializer is a tentative
+        // definition, and an array type left incomplete
+        // at the end of the unit is completed to one
+        // element. A GNU `T x[0]` is complete already and
+        // holds no elements, so it keeps the zero count.
+        let zero_len = self.pending.declarator_zero_len_array;
+        let count = if zero_len { 0 } else { 1 };
+        self.symbols[id_idx].array_size = count;
+        self.symbols[id_idx].is_zero_len_array = zero_len;
+        if let Some(first) = self.symbols[id_idx].array_dims.first_mut() {
+            *first = count;
         }
-        // Deferred-size array global: the dimension
-        // comes from the initializer and storage is
-        // reserved after parsing it. Disallow on TLS
-        // globals -- the per-target rebase ordering
-        // needs design work.
-        if array_size == -1 {
-            if self.lex.tk != Token::Assign {
-                // `extern T x[];` declares an array
-                // whose definition (with its actual
-                // size) lives in another TU. Mark
-                // the symbol as undefined-here and
-                // let the link step resolve the
-                // address against the defining TU's
-                // storage.
-                if extern_seen {
-                    // C99 6.2.2p4: after a prior definition,
-                    // `extern T x[];` is a redeclaration of
-                    // the same object -- the definition and
-                    // its dimension stand.
-                    if self.symbols[id_idx].defined_here {
-                        self.symbols[id_idx].array_size = prior_array_size;
-                    } else {
-                        self.symbols[id_idx].is_extern_decl = true;
-                        self.symbols[id_idx].defined_here = false;
-                    }
-                    return Ok(());
-                }
-                // C99 6.9.2p2: a file-scope `T x[];` with no
-                // `extern` and no initializer is a tentative
-                // definition, and an array type left incomplete
-                // at the end of the unit is completed to one
-                // element. A GNU `T x[0]` is complete already and
-                // holds no elements, so it keeps the zero count.
-                let zero_len = self.pending.declarator_zero_len_array;
-                let count = if zero_len { 0 } else { 1 };
-                self.symbols[id_idx].array_size = count;
-                self.symbols[id_idx].is_zero_len_array = zero_len;
-                if let Some(first) = self.symbols[id_idx].array_dims.first_mut() {
-                    *first = count;
-                }
-                let elem = self.size_of_type(ty) as i64;
-                let aligned = (((elem + 7) / 8) * 8).max(8);
-                if decl_align > 8 {
-                    self.align_data_to(decl_align);
-                } else if self.size_of_type(ty) > 1 {
-                    self.align_data_to_8();
-                }
-                let off = self.data.len() as i64;
-                self.symbols[id_idx].val = off;
-                self.symbols[id_idx].reserved_data_bytes = aligned;
-                for _ in 0..aligned {
-                    self.data.push(0);
-                }
-                self.symbols[id_idx].defined_here = true;
-                return Ok(());
-            }
-            if thread_local {
-                return Err(
-                    self.compile_err("deferred-size `_Thread_local` arrays are not supported")
-                );
-            }
-            self.next()?;
-            if self.is_traversable_aggregate_ty(ty) {
-                // `struct T xs[] = { {...}, {...}, ... };`
-                // Pre-scan the source to count elements so
-                // every element's storage is pre-reserved
-                // contiguously *before* any string literal
-                // inside an element gets appended to
-                // `self.data` and pushes subsequent
-                // elements to a non-contiguous offset.
-                let elem_size = self.size_of_type(ty);
-                if self.lex.tk != '{' {
-                    return Err(self.compile_err("array initializer must start with `{{`"));
-                }
-                let sid = struct_id_of(ty);
-                // Elements below the outer (deferred) dimension:
-                // for a 2D struct array `T xs[][M]` each top-level
-                // brace is a row of `inner_dim` structs. 1 for a
-                // plain `T xs[]`.
-                let inner_dim: i64 = self.symbols[id_idx]
-                    .array_dims
-                    .get(1..)
-                    .map(|s| s.iter().product::<i64>())
-                    .unwrap_or(1)
-                    .max(1);
-                // C99 6.7.8p20 brace elision: when no element
-                // carries its own braces, the flat value list
-                // fills consecutive struct elements, each
-                // consuming the struct's scalar slot count.
-                let groups = self.lex.count_top_level_groups_in_array();
-                let count = if groups > 0 {
-                    // Braced elements: one `{ ... }` (or `[N] = {
-                    // ... }`) per element. A `[N]` designator may
-                    // raise the size past the positional count
-                    // (C99 6.7.8p22), so peek the designators.
-                    self.designated_array_count(groups as i64, 1)?
-                } else {
-                    // Brace-elided: the flat value list fills
-                    // consecutive elements, each consuming the
-                    // struct's scalar slot count.
-                    let items = self.lex.count_top_level_items_in_array();
-                    let slots = self.struct_flat_init_slots(sid).max(1);
-                    let positional = items.div_ceil(slots) as i64;
-                    // A `[N].field = v` designated element list (no
-                    // braces, one element per item) raises the size
-                    // to the highest designated index + 1 (C99
-                    // 6.7.8p22), which the positional count misses.
-                    if self.array_first_element_is_designator() {
-                        self.designated_array_count(positional, 1)?
-                    } else {
-                        positional
-                    }
-                };
-                // C99 6.9.2: a prior tentative definition already
-                // reserved storage; reuse it so references emitted
-                // before this definition -- which baked in the
-                // tentative's offset -- observe the initialized
-                // object, not the tentative's separate zero copy.
-                // A deferred-size tentative (`T x[];`) reserves one
-                // element, so a larger initializer takes fresh
-                // storage and records the move for rebasing.
-                let needed = count * inner_dim * elem_size as i64;
-                let obj_align = self.symbols[id_idx].data_align.max(1);
-                let off = if was_tentative_glo
-                    && needed <= self.symbols[id_idx].reserved_data_bytes
-                    && self.symbols[id_idx].val % obj_align == 0
-                {
-                    self.symbols[id_idx].val
-                } else {
-                    self.align_data_to(decl_align.max(obj_align as usize));
-                    let fresh = self.data.len() as i64;
-                    self.note_global_relocated(id_idx, was_tentative_glo, fresh);
-                    self.symbols[id_idx].reserved_data_bytes = needed;
-                    for _ in 0..needed {
-                        self.data.push(0);
-                    }
-                    fresh
-                };
-                self.symbols[id_idx].val = off;
-                // Reserve before consuming `{`: lexing the first
-                // element token may append a string literal's
-                // bytes, whose parser-added NUL must land right
-                // after them.
-                self.next()?;
-                // Multi-dimensional struct array `T xs[][M]... = {
-                // ... }`: fill the rows below the deferred outer
-                // dimension through the shared struct-array walker
-                // (designators at every level). The pre-scan counts
-                // each top-level entry as a row, but an entry after
-                // a chained designator resumes mid-row (C99
-                // 6.7.8p17), so the walker's extent is the real
-                // outer count (p22).
-                if inner_dim > 1 {
-                    let mut dims = alloc::vec::Vec::new();
-                    dims.push(count);
-                    dims.extend_from_slice(&self.symbols[id_idx].array_dims[1..]);
-                    let high = self.collect_struct_array_entries(ty, off, &dims)?;
-                    let rows = (high + inner_dim - 1) / inner_dim;
-                    if rows < count
-                        && self.data.len() as i64 == off + count * inner_dim * elem_size as i64
-                    {
-                        self.truncate_data((off + rows * inner_dim * elem_size as i64) as usize);
-                        self.symbols[id_idx].reserved_data_bytes =
-                            rows * inner_dim * elem_size as i64;
-                    }
-                    let total = rows * inner_dim;
-                    self.symbols[id_idx].array_size = total;
-                    self.symbols[id_idx].is_zero_len_array = total == 0;
-                    self.reserve_zero_length_array_slot(id_idx);
-                    if let Some(first) = self.symbols[id_idx].array_dims.first_mut()
-                        && *first == 0
-                    {
-                        *first = rows;
-                    }
-                    while !self.data.len().is_multiple_of(8) {
-                        self.data.push(0);
-                    }
-                    self.symbols[id_idx].has_initializer = true;
-                    self.symbols[id_idx].defined_here = true;
-                    return Ok(());
-                }
-                // Same walker the multi-dimensional case above
-                // uses, so designators read identically at either
-                // rank: `[N]`, the GCC range `[lo ... hi]`, and a
-                // `.field` continuation.
-                self.collect_struct_array_entries(ty, off, &[count])?;
-                self.symbols[id_idx].array_size = count;
-                // `struct T xs[] = {}` resolves to zero elements.
-                // Keep the array-ness (the `array_size == 0`
-                // scalar encoding would otherwise lose it).
-                self.symbols[id_idx].is_zero_len_array = count == 0;
-                self.reserve_zero_length_array_slot(id_idx);
-                // Pad data to 8-byte alignment so the next
-                // global doesn't land on an odd offset.
-                while !self.data.len().is_multiple_of(8) {
-                    self.data.push(0);
-                }
-                self.symbols[id_idx].has_initializer = true;
-                self.symbols[id_idx].defined_here = true;
-                return Ok(());
-            }
-            self.pending.init_inner_dims = self.inner_dims_of(id_idx);
-            let elements = self.collect_array_initializer(ty)?;
-            let final_size = elements.len() as i64;
-            self.symbols[id_idx].array_size = final_size;
-            // `T xs[] = {}` resolves to zero elements; keep the
-            // array-ness that the scalar `array_size == 0`
-            // encoding would otherwise drop.
-            self.symbols[id_idx].is_zero_len_array = final_size == 0;
-            self.reserve_zero_length_array_slot(id_idx);
-            // Patch the deferred-outer placeholder in
-            // `array_dims[0]` to the resolved row count.
-            // Layout: total elements = outer * inner-dims-product,
-            // so the outermost count is final_size /
-            // product(dims[1..]).
-            if let Some(first) = self.symbols[id_idx].array_dims.first().copied()
-                && first == 0
-            {
-                let inner_product: i64 = self.symbols[id_idx].array_dims.iter().skip(1).product();
-                if inner_product > 0 {
-                    self.symbols[id_idx].array_dims[0] = final_size / inner_product;
-                }
-            }
-            let total_bytes = (self.size_of_type(ty) as i64) * final_size;
-            let aligned = ((total_bytes + 7) / 8) * 8;
-            // C99 6.9.2: a prior tentative definition already
-            // reserved storage; reuse it so references emitted
-            // before this definition observe the initialized object,
-            // not the tentative's separate zero copy. A
-            // deferred-size tentative (`T x[];`) reserves one
-            // element, so a larger initializer takes fresh storage
-            // and records the move for rebasing.
-            let obj_align = self.symbols[id_idx].data_align.max(1);
-            let off = if was_tentative_glo
-                && aligned <= self.symbols[id_idx].reserved_data_bytes
-                && self.symbols[id_idx].val % obj_align == 0
-            {
-                self.symbols[id_idx].val
+        let elem = self.size_of_type(ty) as i64;
+        let aligned = (((elem + 7) / 8) * 8).max(8);
+        if decl_align > 8 {
+            self.align_data_to(decl_align);
+        } else if self.size_of_type(ty) > 1 {
+            self.align_data_to_8();
+        }
+        let off = self.data.len() as i64;
+        self.symbols[id_idx].val = off;
+        self.symbols[id_idx].reserved_data_bytes = aligned;
+        for _ in 0..aligned {
+            self.data.push(0);
+        }
+        self.symbols[id_idx].defined_here = true;
+        Ok(())
+    }
+
+    /// `struct T xs[] = { ... }`: pre-scan the brace list for the element
+    /// count so every element is reserved contiguously before a string
+    /// literal inside one appends to the data segment.
+    fn define_deferred_struct_array(
+        &mut self,
+        id_idx: usize,
+        ty: i64,
+        decl_align: usize,
+        was_tentative_glo: bool,
+    ) -> Result<(), C5Error> {
+        // `struct T xs[] = { {...}, {...}, ... };`
+        // Pre-scan the source to count elements so
+        // every element's storage is pre-reserved
+        // contiguously *before* any string literal
+        // inside an element gets appended to
+        // `self.data` and pushes subsequent
+        // elements to a non-contiguous offset.
+        let elem_size = self.size_of_type(ty);
+        if self.lex.tk != '{' {
+            return Err(self.compile_err("array initializer must start with `{{`"));
+        }
+        let sid = struct_id_of(ty);
+        // Elements below the outer (deferred) dimension:
+        // for a 2D struct array `T xs[][M]` each top-level
+        // brace is a row of `inner_dim` structs. 1 for a
+        // plain `T xs[]`.
+        let inner_dim: i64 = self.symbols[id_idx]
+            .array_dims
+            .get(1..)
+            .map(|s| s.iter().product::<i64>())
+            .unwrap_or(1)
+            .max(1);
+        // C99 6.7.8p20 brace elision: when no element
+        // carries its own braces, the flat value list
+        // fills consecutive struct elements, each
+        // consuming the struct's scalar slot count.
+        let groups = self.lex.count_top_level_groups_in_array();
+        let count = if groups > 0 {
+            // Braced elements: one `{ ... }` (or `[N] = {
+            // ... }`) per element. A `[N]` designator may
+            // raise the size past the positional count
+            // (C99 6.7.8p22), so peek the designators.
+            self.designated_array_count(groups as i64, 1)?
+        } else {
+            // Brace-elided: the flat value list fills
+            // consecutive elements, each consuming the
+            // struct's scalar slot count.
+            let items = self.lex.count_top_level_items_in_array();
+            let slots = self.struct_flat_init_slots(sid).max(1);
+            let positional = items.div_ceil(slots) as i64;
+            // A `[N].field = v` designated element list (no
+            // braces, one element per item) raises the size
+            // to the highest designated index + 1 (C99
+            // 6.7.8p22), which the positional count misses.
+            if self.array_first_element_is_designator() {
+                self.designated_array_count(positional, 1)?
             } else {
-                let eff = decl_align.max(obj_align as usize);
-                if eff > 8 {
-                    self.align_data_to(eff);
-                } else if self.size_of_type(ty) > 1 {
-                    self.align_data_to_8();
-                }
-                let fresh = self.data.len() as i64;
-                self.note_global_relocated(id_idx, was_tentative_glo, fresh);
-                self.symbols[id_idx].reserved_data_bytes = aligned;
-                for _ in 0..aligned {
-                    self.data.push(0);
-                }
-                fresh
-            };
-            self.symbols[id_idx].val = off;
-            self.write_array_init_into_data(off, ty, &elements)?;
+                positional
+            }
+        };
+        // C99 6.9.2: a prior tentative definition already
+        // reserved storage; reuse it so references emitted
+        // before this definition -- which baked in the
+        // tentative's offset -- observe the initialized
+        // object, not the tentative's separate zero copy.
+        // A deferred-size tentative (`T x[];`) reserves one
+        // element, so a larger initializer takes fresh
+        // storage and records the move for rebasing.
+        let needed = count * inner_dim * elem_size as i64;
+        let obj_align = self.symbols[id_idx].data_align.max(1);
+        let off = if was_tentative_glo
+            && needed <= self.symbols[id_idx].reserved_data_bytes
+            && self.symbols[id_idx].val % obj_align == 0
+        {
+            self.symbols[id_idx].val
+        } else {
+            self.align_data_to(decl_align.max(obj_align as usize));
+            let fresh = self.data.len() as i64;
+            self.note_global_relocated(id_idx, was_tentative_glo, fresh);
+            self.symbols[id_idx].reserved_data_bytes = needed;
+            for _ in 0..needed {
+                self.data.push(0);
+            }
+            fresh
+        };
+        self.symbols[id_idx].val = off;
+        // Reserve before consuming `{`: lexing the first
+        // element token may append a string literal's
+        // bytes, whose parser-added NUL must land right
+        // after them.
+        self.next()?;
+        // Multi-dimensional struct array `T xs[][M]... = {
+        // ... }`: fill the rows below the deferred outer
+        // dimension through the shared struct-array walker
+        // (designators at every level). The pre-scan counts
+        // each top-level entry as a row, but an entry after
+        // a chained designator resumes mid-row (C99
+        // 6.7.8p17), so the walker's extent is the real
+        // outer count (p22).
+        if inner_dim > 1 {
+            let mut dims = alloc::vec::Vec::new();
+            dims.push(count);
+            dims.extend_from_slice(&self.symbols[id_idx].array_dims[1..]);
+            let high = self.collect_struct_array_entries(ty, off, &dims)?;
+            let rows = (high + inner_dim - 1) / inner_dim;
+            if rows < count && self.data.len() as i64 == off + count * inner_dim * elem_size as i64
+            {
+                self.truncate_data((off + rows * inner_dim * elem_size as i64) as usize);
+                self.symbols[id_idx].reserved_data_bytes = rows * inner_dim * elem_size as i64;
+            }
+            let total = rows * inner_dim;
+            self.symbols[id_idx].array_size = total;
+            self.symbols[id_idx].is_zero_len_array = total == 0;
+            self.reserve_zero_length_array_slot(id_idx);
+            if let Some(first) = self.symbols[id_idx].array_dims.first_mut()
+                && *first == 0
+            {
+                *first = rows;
+            }
+            while !self.data.len().is_multiple_of(8) {
+                self.data.push(0);
+            }
             self.symbols[id_idx].has_initializer = true;
             self.symbols[id_idx].defined_here = true;
-        } else {
-            // A zero-sized object (empty struct, GNU) still
-            // reserves one slot so no two objects share a
-            // start offset (mirrors the block-scope allocator).
-            let mut bytes = if array_size > 0 {
-                let total = (self.size_of_type(ty) as i64) * array_size;
-                (((total + 7) / 8) * 8).max(8)
-            } else {
-                (self.slots_of_type(ty) * 8).max(8)
-            };
-            // A flexible array member initialized via `.<fam> =
-            // {...}` needs its element bytes reserved now, before
-            // the field fill appends string literals into that
-            // trailing region (they would collide with the
-            // member's data). Only the defining `= {` form
-            // reserves extra; a bare / tentative declaration keeps
-            // the fixed size.
-            let fam_tail = self.flexible_array_init_tail_bytes(ty)?;
-            if fam_tail > 0 {
-                self.symbols[id_idx].fam_init_bytes = fam_tail;
-                bytes = ((bytes + fam_tail + 7) / 8) * 8;
-            }
-            // `extern T x;` -- C99 6.9.2 says no
-            // tentative definition. We still
-            // allocate storage here so the single-TU
-            // `Compiler::compile()` path stays
-            // permissive (writing through `a` in
-            // `extern int a; a = 1;` works without a
-            // link partner). In a multi-TU build the
-            // walker emits a `GloAddr::Extern` reference
-            // for an `extern`-marked Glo with no
-            // initializer, so the defining TU's bytes
-            // are the ones in play and this local
-            // storage is only the single-TU fallback.
-            let _ = was_extern_only_decl;
-            // Tentative-merge: reuse the storage that was
-            // already allocated for the prior declaration.
-            // The initializer (if any) writes into the
-            // existing slot. Mismatched array sizes between
-            // the prior tentative and the new defining
-            // declaration aren't merged here -- the prior
-            // allocation would be too small or too large.
-            // Reuse the prior storage on a tentative merge,
-            // and also when a redundant tentative declaration
-            // (no initializer) follows an already-defined
-            // global -- C99 6.9.2 makes the later `T x;` a
-            // redeclaration of the same object, so allocating
-            // fresh zeroed storage would discard its value.
-            // The two-initializer case already errored at the
-            // duplicate-definition check above.
-            let obj_align = self.symbols[id_idx].data_align.max(1);
-            let reuse_eligible = was_tentative_glo
-                || (self.symbols[id_idx].defined_here && self.lex.tk != Token::Assign);
-            // Prior storage is reusable only when it sits on the
-            // object's (merged) alignment and spans every byte the
-            // object now needs -- a tentative definition reserves
-            // `sizeof`, which a flexible array member's initializer
-            // outgrows. Otherwise the object moves to a fresh slot
-            // below, as the deferred-size array paths do, and the
-            // references already emitted are rebased onto it.
-            let reuse_prior_storage = reuse_eligible
-                && self.symbols[id_idx].val % obj_align == 0
-                && bytes <= self.symbols[id_idx].reserved_data_bytes;
-            // `extern _Thread_local T x;` (no initializer) is a
-            // pure reference, not a definition: it must not
-            // reserve TLS storage. The defining unit owns the
-            // slot; the access resolves by symbol against the
-            // merged TLS block at link time. A local slot here
-            // would add a phantom per-unit copy (one TLS block
-            // per object), breaking the shared-state semantics
-            // and the multi-object link.
-            let extern_tls_ref = thread_local && was_extern_only_decl;
-            let var_offset = if extern_tls_ref {
-                self.symbols[id_idx].is_extern_decl = true;
-                self.symbols[id_idx].defined_here = false;
-                0
-            } else if reuse_prior_storage {
-                self.symbols[id_idx].val
-            } else if thread_local {
-                let off = self.tls_data.len() as i64;
-                self.symbols[id_idx].val = off;
-                for _ in 0..bytes {
-                    self.tls_data.push(0);
-                }
-                off
-            } else {
-                let eff = decl_align.max(obj_align as usize);
-                if eff > 8 {
-                    self.align_data_to(eff);
-                } else if self.size_of_type(ty) > 1 {
-                    self.align_data_to_8();
-                }
-                let off = self.data.len() as i64;
-                self.note_global_relocated(id_idx, reuse_eligible, off);
-                let prior = (
-                    self.symbols[id_idx].val,
-                    self.symbols[id_idx].reserved_data_bytes,
-                );
-                self.symbols[id_idx].val = off;
-                self.symbols[id_idx].reserved_data_bytes = bytes;
-                for _ in 0..bytes {
-                    self.data.push(0);
-                }
-                // A move off a misaligned slot keeps the bytes a
-                // prior defining declaration wrote there.
-                if reuse_eligible && prior.1 > 0 {
-                    let n = prior.1.min(bytes) as usize;
-                    for k in 0..n {
-                        self.data[off as usize + k] = self.data[prior.0 as usize + k];
-                    }
-                }
-                off
-            };
-            if !extern_tls_ref {
-                self.symbols[id_idx].defined_here = true;
-            }
+            return Ok(());
+        }
+        // Same walker the multi-dimensional case above
+        // uses, so designators read identically at either
+        // rank: `[N]`, the GCC range `[lo ... hi]`, and a
+        // `.field` continuation.
+        self.collect_struct_array_entries(ty, off, &[count])?;
+        self.symbols[id_idx].array_size = count;
+        // `struct T xs[] = {}` resolves to zero elements.
+        // Keep the array-ness (the `array_size == 0`
+        // scalar encoding would otherwise lose it).
+        self.symbols[id_idx].is_zero_len_array = count == 0;
+        self.reserve_zero_length_array_slot(id_idx);
+        // Pad data to 8-byte alignment so the next
+        // global doesn't land on an odd offset.
+        while !self.data.len().is_multiple_of(8) {
+            self.data.push(0);
+        }
+        self.symbols[id_idx].has_initializer = true;
+        self.symbols[id_idx].defined_here = true;
+        Ok(())
+    }
 
-            // Optional initializer. For non-arrays, the
-            // restricted constant-expression path
-            // (parse_global_initializer) handles
-            // integer / NULL / address-of-global. For
-            // known-size arrays, a string literal or a
-            // brace list populates the leading bytes;
-            // the rest stays zero (the allocation
-            // pre-zeroed self.data). For struct-value
-            // globals, a `{ ... }` brace list with
-            // designators or positional entries
-            // populates per-field; unspecified fields
-            // stay zero.
-            if self.lex.tk == Token::Assign {
-                self.next()?;
-                // A file-scope aggregate may be initialised by a
-                // compound literal naming its own type (C99
-                // 6.5.2.5): `static T g = (T){ ... };`. Drop the
-                // redundant `(T)` so the brace dispatch below sees
-                // `{ ... }`. Only for an aggregate object: the
-                // cast is not redundant when the object is a
-                // scalar, where `T *p = (T[]){ ... }` decays to
-                // the address of an anonymous array and
-                // `int x = (int){ v }` converts a value. Both are
-                // the constant evaluator's, which needs the type.
-                if array_size > 0 || self.is_traversable_aggregate_ty(ty) {
-                    self.skip_opt_compound_literal_cast()?;
+    /// An object of known size: reserve or reuse its storage, then take the
+    /// initializer that fills it.
+    #[allow(clippy::too_many_arguments)]
+    fn define_sized_object(
+        &mut self,
+        id_idx: usize,
+        ty: i64,
+        array_size: i64,
+        decl_align: usize,
+        thread_local: bool,
+        was_tentative_glo: bool,
+        was_extern_only_decl: bool,
+    ) -> Result<(), C5Error> {
+        // A zero-sized object (empty struct, GNU) still
+        // reserves one slot so no two objects share a
+        // start offset (mirrors the block-scope allocator).
+        let mut bytes = if array_size > 0 {
+            let total = (self.size_of_type(ty) as i64) * array_size;
+            (((total + 7) / 8) * 8).max(8)
+        } else {
+            (self.slots_of_type(ty) * 8).max(8)
+        };
+        // A flexible array member initialized via `.<fam> =
+        // {...}` needs its element bytes reserved now, before
+        // the field fill appends string literals into that
+        // trailing region (they would collide with the
+        // member's data). Only the defining `= {` form
+        // reserves extra; a bare / tentative declaration keeps
+        // the fixed size.
+        let fam_tail = self.flexible_array_init_tail_bytes(ty)?;
+        if fam_tail > 0 {
+            self.symbols[id_idx].fam_init_bytes = fam_tail;
+            bytes = ((bytes + fam_tail + 7) / 8) * 8;
+        }
+        // `extern T x;` -- C99 6.9.2 says no
+        // tentative definition. We still
+        // allocate storage here so the single-TU
+        // `Compiler::compile()` path stays
+        // permissive (writing through `a` in
+        // `extern int a; a = 1;` works without a
+        // link partner). In a multi-TU build the
+        // walker emits a `GloAddr::Extern` reference
+        // for an `extern`-marked Glo with no
+        // initializer, so the defining TU's bytes
+        // are the ones in play and this local
+        // storage is only the single-TU fallback.
+        let _ = was_extern_only_decl;
+        // Tentative-merge: reuse the storage that was
+        // already allocated for the prior declaration.
+        // The initializer (if any) writes into the
+        // existing slot. Mismatched array sizes between
+        // the prior tentative and the new defining
+        // declaration aren't merged here -- the prior
+        // allocation would be too small or too large.
+        // Reuse the prior storage on a tentative merge,
+        // and also when a redundant tentative declaration
+        // (no initializer) follows an already-defined
+        // global -- C99 6.9.2 makes the later `T x;` a
+        // redeclaration of the same object, so allocating
+        // fresh zeroed storage would discard its value.
+        // The two-initializer case already errored at the
+        // duplicate-definition check above.
+        let obj_align = self.symbols[id_idx].data_align.max(1);
+        let reuse_eligible = was_tentative_glo
+            || (self.symbols[id_idx].defined_here && self.lex.tk != Token::Assign);
+        // Prior storage is reusable only when it sits on the
+        // object's (merged) alignment and spans every byte the
+        // object now needs -- a tentative definition reserves
+        // `sizeof`, which a flexible array member's initializer
+        // outgrows. Otherwise the object moves to a fresh slot
+        // below, as the deferred-size array paths do, and the
+        // references already emitted are rebased onto it.
+        let reuse_prior_storage = reuse_eligible
+            && self.symbols[id_idx].val % obj_align == 0
+            && bytes <= self.symbols[id_idx].reserved_data_bytes;
+        // `extern _Thread_local T x;` (no initializer) is a
+        // pure reference, not a definition: it must not
+        // reserve TLS storage. The defining unit owns the
+        // slot; the access resolves by symbol against the
+        // merged TLS block at link time. A local slot here
+        // would add a phantom per-unit copy (one TLS block
+        // per object), breaking the shared-state semantics
+        // and the multi-object link.
+        let extern_tls_ref = thread_local && was_extern_only_decl;
+        let var_offset = if extern_tls_ref {
+            self.symbols[id_idx].is_extern_decl = true;
+            self.symbols[id_idx].defined_here = false;
+            0
+        } else if reuse_prior_storage {
+            self.symbols[id_idx].val
+        } else if thread_local {
+            let off = self.tls_data.len() as i64;
+            self.symbols[id_idx].val = off;
+            for _ in 0..bytes {
+                self.tls_data.push(0);
+            }
+            off
+        } else {
+            let eff = decl_align.max(obj_align as usize);
+            if eff > 8 {
+                self.align_data_to(eff);
+            } else if self.size_of_type(ty) > 1 {
+                self.align_data_to_8();
+            }
+            let off = self.data.len() as i64;
+            self.note_global_relocated(id_idx, reuse_eligible, off);
+            let prior = (
+                self.symbols[id_idx].val,
+                self.symbols[id_idx].reserved_data_bytes,
+            );
+            self.symbols[id_idx].val = off;
+            self.symbols[id_idx].reserved_data_bytes = bytes;
+            for _ in 0..bytes {
+                self.data.push(0);
+            }
+            // A move off a misaligned slot keeps the bytes a
+            // prior defining declaration wrote there.
+            if reuse_eligible && prior.1 > 0 {
+                let n = prior.1.min(bytes) as usize;
+                for k in 0..n {
+                    self.data[off as usize + k] = self.data[prior.0 as usize + k];
                 }
-                // The two array branches below finish at the
-                // literal's `}`; the grouping parens the strip
-                // left behind close after it.
-                let array_cl_parens = if array_size > 0 {
-                    core::mem::take(&mut self.pending.compound_lit_close_parens)
-                } else {
-                    0
-                };
-                if array_size > 0 && self.is_traversable_aggregate_ty(ty) {
-                    if thread_local {
-                        return Err(self
-                            .compile_err("array `_Thread_local` initialisers are not supported"));
-                    }
-                    // Known-size struct array: the shared
-                    // struct-array walker fills the brace list
-                    // into the pre-allocated slot (designators
-                    // at every level, positional resume at the
-                    // designated rank, C99 6.7.8p17); missing
-                    // trailing entries stay zero-init.
-                    let inner_dims = self.inner_dims_of(id_idx);
-                    let inner_product: i64 = inner_dims.iter().product::<i64>().max(1);
-                    let group_count = array_size / inner_product;
-                    if self.lex.tk != '{' {
-                        return Err(self.compile_err("array initializer must start with `{{`"));
-                    }
-                    self.next()?;
-                    let mut full_dims = alloc::vec::Vec::with_capacity(inner_dims.len() + 1);
-                    full_dims.push(group_count);
-                    full_dims.extend_from_slice(&inner_dims);
-                    self.collect_struct_array_entries(ty, var_offset, &full_dims)?;
-                    for _ in 0..array_cl_parens {
-                        self.accept(')')?;
-                    }
-                } else if array_size > 0 {
-                    if thread_local {
-                        return Err(self
-                            .compile_err("array `_Thread_local` initialisers are not supported"));
-                    }
-                    self.pending.init_inner_dims = self.inner_dims_of(id_idx);
-                    self.pending.init_target_array_size = array_size;
-                    let elements = self.collect_array_initializer(ty)?;
-                    if elements.len() > array_size as usize {
-                        return Err(self.compile_err(format!(
-                            "too many initializers for array `{}` ({} > {})",
-                            self.symbols[id_idx].name,
-                            elements.len(),
-                            array_size
-                        )));
-                    }
-                    self.write_array_init_into_data(var_offset, ty, &elements)?;
-                    for _ in 0..array_cl_parens {
-                        self.accept(')')?;
-                    }
-                } else if self.is_traversable_aggregate_ty(ty) {
-                    if thread_local {
-                        return Err(self
-                            .compile_err("struct `_Thread_local` initialisers are not supported"));
-                    }
-                    let sid = struct_id_of(ty);
-                    // A parenthesized compound literal `((T){...})`
-                    // left grouping parens for the brace list to
-                    // close (C99 6.5.2.5).
-                    let cl_parens = core::mem::take(&mut self.pending.compound_lit_close_parens);
-                    self.collect_struct_initializer(sid, var_offset)?;
-                    for _ in 0..cl_parens {
-                        self.accept(')')?;
-                    }
-                } else {
-                    let cl_parens = core::mem::take(&mut self.pending.compound_lit_close_parens);
-                    self.parse_global_initializer(ty, var_offset, thread_local)?;
-                    for _ in 0..cl_parens {
-                        self.accept(')')?;
-                    }
-                }
-                self.symbols[id_idx].has_initializer = true;
+            }
+            off
+        };
+        if !extern_tls_ref {
+            self.symbols[id_idx].defined_here = true;
+        }
+
+        // Optional initializer. For non-arrays, the
+        // restricted constant-expression path
+        // (parse_global_initializer) handles
+        // integer / NULL / address-of-global. For
+        // known-size arrays, a string literal or a
+        // brace list populates the leading bytes;
+        // the rest stays zero (the allocation
+        // pre-zeroed self.data). For struct-value
+        // globals, a `{ ... }` brace list with
+        // designators or positional entries
+        // populates per-field; unspecified fields
+        // stay zero.
+        if self.lex.tk == Token::Assign {
+            self.parse_object_initializer(id_idx, ty, array_size, var_offset, thread_local)?;
+        }
+        Ok(())
+    }
+
+    /// The initializer of a file-scope object: a brace list for an array or
+    /// an aggregate, else the restricted constant-expression form (C99
+    /// 6.7.8p4). The storage is already reserved and zeroed.
+    fn parse_object_initializer(
+        &mut self,
+        id_idx: usize,
+        ty: i64,
+        array_size: i64,
+        var_offset: i64,
+        thread_local: bool,
+    ) -> Result<(), C5Error> {
+        self.next()?;
+        // A file-scope aggregate may be initialised by a
+        // compound literal naming its own type (C99
+        // 6.5.2.5): `static T g = (T){ ... };`. Drop the
+        // redundant `(T)` so the brace dispatch below sees
+        // `{ ... }`. Only for an aggregate object: the
+        // cast is not redundant when the object is a
+        // scalar, where `T *p = (T[]){ ... }` decays to
+        // the address of an anonymous array and
+        // `int x = (int){ v }` converts a value. Both are
+        // the constant evaluator's, which needs the type.
+        if array_size > 0 || self.is_traversable_aggregate_ty(ty) {
+            self.skip_opt_compound_literal_cast()?;
+        }
+        // The two array branches below finish at the
+        // literal's `}`; the grouping parens the strip
+        // left behind close after it.
+        let array_cl_parens = if array_size > 0 {
+            core::mem::take(&mut self.pending.compound_lit_close_parens)
+        } else {
+            0
+        };
+        if array_size > 0 && self.is_traversable_aggregate_ty(ty) {
+            if thread_local {
+                return Err(
+                    self.compile_err("array `_Thread_local` initialisers are not supported")
+                );
+            }
+            // Known-size struct array: the shared
+            // struct-array walker fills the brace list
+            // into the pre-allocated slot (designators
+            // at every level, positional resume at the
+            // designated rank, C99 6.7.8p17); missing
+            // trailing entries stay zero-init.
+            let inner_dims = self.inner_dims_of(id_idx);
+            let inner_product: i64 = inner_dims.iter().product::<i64>().max(1);
+            let group_count = array_size / inner_product;
+            if self.lex.tk != '{' {
+                return Err(self.compile_err("array initializer must start with `{{`"));
+            }
+            self.next()?;
+            let mut full_dims = alloc::vec::Vec::with_capacity(inner_dims.len() + 1);
+            full_dims.push(group_count);
+            full_dims.extend_from_slice(&inner_dims);
+            self.collect_struct_array_entries(ty, var_offset, &full_dims)?;
+            for _ in 0..array_cl_parens {
+                self.accept(')')?;
+            }
+        } else if array_size > 0 {
+            if thread_local {
+                return Err(
+                    self.compile_err("array `_Thread_local` initialisers are not supported")
+                );
+            }
+            self.pending.init_inner_dims = self.inner_dims_of(id_idx);
+            self.pending.init_target_array_size = array_size;
+            let elements = self.collect_array_initializer(ty)?;
+            if elements.len() > array_size as usize {
+                return Err(self.compile_err(format!(
+                    "too many initializers for array `{}` ({} > {})",
+                    self.symbols[id_idx].name,
+                    elements.len(),
+                    array_size
+                )));
+            }
+            self.write_array_init_into_data(var_offset, ty, &elements)?;
+            for _ in 0..array_cl_parens {
+                self.accept(')')?;
+            }
+        } else if self.is_traversable_aggregate_ty(ty) {
+            if thread_local {
+                return Err(
+                    self.compile_err("struct `_Thread_local` initialisers are not supported")
+                );
+            }
+            let sid = struct_id_of(ty);
+            // A parenthesized compound literal `((T){...})`
+            // left grouping parens for the brace list to
+            // close (C99 6.5.2.5).
+            let cl_parens = core::mem::take(&mut self.pending.compound_lit_close_parens);
+            self.collect_struct_initializer(sid, var_offset)?;
+            for _ in 0..cl_parens {
+                self.accept(')')?;
+            }
+        } else {
+            let cl_parens = core::mem::take(&mut self.pending.compound_lit_close_parens);
+            self.parse_global_initializer(ty, var_offset, thread_local)?;
+            for _ in 0..cl_parens {
+                self.accept(')')?;
             }
         }
+        self.symbols[id_idx].has_initializer = true;
         Ok(())
     }
 

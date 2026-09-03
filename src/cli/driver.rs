@@ -40,6 +40,10 @@ pub(crate) fn run() {
             println!("{text}");
             return;
         }
+        Ok(Parsed::Diagnostics(text)) => {
+            print!("{text}");
+            return;
+        }
         Ok(Parsed::Install { dir, quiet }) => return install(dir, quiet),
         Err(e) => e.report(),
     };

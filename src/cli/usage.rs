@@ -20,6 +20,12 @@ Output mode -- pick at most one (defaults to a native binary):
                            function.
   --list-symbols           Print built-in keywords / library calls /
                            constants and exit.
+  --list-diagnostics       Print the diagnostic catalogue -- code,
+                           name, default level, class, groups -- and
+                           exit.
+  --explain <selector>     Print one catalogue row and exit. The
+                           selector is a diagnostic name, an alias, or
+                           a `B` code.
   --dump-headers           Print every bundled header to stdout and
                            exit. Useful for extracting a header into
                            `./include` to override it locally.

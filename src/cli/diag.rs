@@ -12,44 +12,36 @@ pub(crate) fn eprint_diagnostic(msg: impl core::fmt::Display) {
 }
 
 /// Add ANSI color around the severity word (`warning:`, `error:`,
-/// `info:` / `note:`) inside a diagnostic line. We accept either
-/// the gcc shape `<file>:<line>: warning: <msg>` or any line
-/// whose severity word is followed by a colon and a space; the
-/// rest of the message stays untouched. Falls through unchanged
-/// when stderr isn't a TTY so build logs stay greppable.
+/// `info:` / `note:`) inside a diagnostic line. Accepts either the gcc
+/// shape `<file>:<line>: warning: <msg>` or any line whose severity
+/// word is followed by a colon and a space; the rest stays untouched.
+/// Falls through unchanged when stderr isn't a TTY so build logs stay
+/// greppable.
+///
+/// This scans text because most sites still build their message as a
+/// string. A [`badc::diag::Diagnostic`] carries its level and renders
+/// its own color, so a migrated site does not pass through here.
 pub(crate) fn colorize_diagnostic(line: &str, is_tty: bool) -> std::borrow::Cow<'_, str> {
     if !is_tty {
         return std::borrow::Cow::Borrowed(line);
     }
-    // Find the first ` <severity>: ` -- after the `<file>:<line>: `
-    // anchor in gcc-shape lines, or at the front for severity-first
-    // lines (legacy / future-style). Severity words are matched
-    // case-insensitively against a small allow-list so a
-    // user-supplied identifier accidentally containing `:` doesn't
-    // get re-colored.
-    const SEVERITIES: &[(&str, &str)] = &[
-        ("error", "\x1b[1;31m"), // bold red
-        ("Error", "\x1b[1;31m"),
-        ("warning", "\x1b[1;33m"), // bold yellow
-        ("Warning", "\x1b[1;33m"),
-        ("info", "\x1b[1;32m"), // bold green
-        ("Info", "\x1b[1;32m"),
-        ("note", "\x1b[1;36m"), // bold cyan
-        ("Note", "\x1b[1;36m"),
-    ];
-    const RESET: &str = "\x1b[0m";
-    for (word, color) in SEVERITIES {
-        let needle = format!(" {word}: ");
-        if let Some(pos) = line.find(&needle) {
-            let prefix = &line[..pos + 1];
-            let rest = &line[pos + needle.len()..];
-            return std::borrow::Cow::Owned(format!("{prefix}{color}{word}:{RESET} {rest}"));
-        }
-        // Severity at the very start of the line.
-        let head = format!("{word}: ");
-        if line.starts_with(&head) {
-            let rest = &line[head.len()..];
-            return std::borrow::Cow::Owned(format!("{color}{word}:{RESET} {rest}"));
+    // After the `<file>:<line>: ` anchor, or at the front for a
+    // severity-first line. The severity words are an allow-list so a
+    // user-supplied identifier containing `:` is not re-colored.
+    for severity in badc::diag::Severity::SCAN_ORDER {
+        for word in [severity.word(), severity.capitalized()] {
+            let color = severity.color();
+            let reset = badc::diag::RESET;
+            let needle = format!(" {word}: ");
+            if let Some(pos) = line.find(&needle) {
+                let prefix = &line[..pos + 1];
+                let rest = &line[pos + needle.len()..];
+                return std::borrow::Cow::Owned(format!("{prefix}{color}{word}:{reset} {rest}"));
+            }
+            let head = format!("{word}: ");
+            if let Some(rest) = line.strip_prefix(&head) {
+                return std::borrow::Cow::Owned(format!("{color}{word}:{reset} {rest}"));
+            }
         }
     }
     std::borrow::Cow::Borrowed(line)

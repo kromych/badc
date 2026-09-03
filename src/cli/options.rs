@@ -35,6 +35,12 @@ pub(crate) enum Mode {
     /// linking; the archive is meant to be passed back as
     /// input to a future link.
     BuildArchive,
+    /// `--list-diagnostics` -- print the diagnostic catalogue and
+    /// exit. Takes no source file.
+    ListDiagnostics,
+    /// `--explain <selector>` -- print one catalogue row and exit.
+    /// The selector is a name, an alias, or a `B` code.
+    Explain,
     /// `--dump-native-link` -- parse a list of native ELF
     /// `.o` files (produced by `-c`), merge them via
     /// `link_native_objects`, and print a summary of the
@@ -56,6 +62,8 @@ impl Mode {
             Mode::Install => "--install",
             Mode::DumpPp => "--dump-pp",
             Mode::BuildArchive => "--ar",
+            Mode::ListDiagnostics => "--list-diagnostics",
+            Mode::Explain => "--explain",
             Mode::DumpNativeLink => "--dump-native-link",
         }
     }

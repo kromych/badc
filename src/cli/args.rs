@@ -54,6 +54,9 @@ pub(crate) enum Parsed {
     /// `--install [<dir>]` writes the embedded header and runtime tree
     /// and reads no target, so it is decided before target resolution.
     Install { dir: Option<PathBuf>, quiet: bool },
+    /// `--list-diagnostics` / `--explain <sel>`: rendered catalogue text
+    /// for stdout, then exit 0. Neither reads a target or an input.
+    Diagnostics(String),
 }
 
 /// Front-end options every translation unit preprocesses and compiles
@@ -263,6 +266,8 @@ struct Parser {
     mode: Option<(Mode, &'static str)>,
     /// `-h` / `-v` stop the loop with text for stdout.
     print: Option<&'static str>,
+    /// The `--explain` selector, resolved once the whole line is read.
+    explain: Option<String>,
     target_spec: Option<String>,
     mcpu: Option<String>,
     dep: DepFlags,
@@ -360,6 +365,18 @@ impl Parser {
             "--shared" | "-shared" => self.claim(Mode::SharedLibrary)?,
             "--ar" | "--archive" => self.claim(Mode::BuildArchive)?,
             "--dump-native-link" => self.claim(Mode::DumpNativeLink)?,
+            "--list-diagnostics" => self.claim(Mode::ListDiagnostics)?,
+            "--explain" => {
+                self.claim(Mode::Explain)?;
+                self.explain = Some(operand(
+                    iter,
+                    "badc: error: --explain requires a diagnostic name, alias or `B` code",
+                )?);
+            }
+            s if s.starts_with("--explain=") => {
+                self.claim(Mode::Explain)?;
+                self.explain = Some(s["--explain=".len()..].to_string());
+            }
             // `-c` emits one relocatable object per source instead of
             // linking through to a native binary.
             "-c" | "--compile-only" => self.compile_only = true,
@@ -1212,6 +1229,29 @@ impl Parser {
         Ok(true)
     }
 
+    /// Render the catalogue text `--list-diagnostics` / `--explain`
+    /// asked for. An unknown selector is refused, matching the
+    /// driver's policy of rejecting what it does not implement.
+    fn catalog_query(&self, mode: Mode) -> Result<Option<String>, ParseError> {
+        let mut out = String::new();
+        match mode {
+            Mode::ListDiagnostics => {
+                let _ = badc::diag::list_catalog(&mut out);
+            }
+            Mode::Explain => {
+                let selector = self.explain.as_deref().unwrap_or_default();
+                let Some(code) = badc::diag::Code::from_selector(selector) else {
+                    return Err(ParseError::diag(format!(
+                        "badc: error: unknown diagnostic `{selector}`"
+                    )));
+                };
+                let _ = badc::diag::explain(&mut out, code);
+            }
+            _ => return Ok(None),
+        }
+        Ok(Some(out))
+    }
+
     /// Resolve the target, check every flag combination the argument
     /// vector alone decides, and hand back the parsed command line.
     fn finish(mut self) -> Result<Parsed, ParseError> {
@@ -1221,6 +1261,9 @@ impl Parser {
                 dir: self.positional.get(1).map(PathBuf::from),
                 quiet: self.quiet,
             });
+        }
+        if let Some(text) = self.catalog_query(mode)? {
+            return Ok(Parsed::Diagnostics(text));
         }
         let target = Target::parse(self.target_spec.as_deref()).map_err(ParseError::diag)?;
         for name in &self.fixed_reg_names {
@@ -1672,6 +1715,7 @@ mod tests {
             Ok(Parsed::Run(_)) => "a run".to_string(),
             Ok(Parsed::Print(_)) => "printed text".to_string(),
             Ok(Parsed::Install { .. }) => "an install".to_string(),
+            Ok(Parsed::Diagnostics(_)) => "catalogue text".to_string(),
             Err(e) => format!("a rejection: {}", e.message),
         }
     }
@@ -1807,6 +1851,48 @@ mod tests {
             Target::WindowsX64
         );
         assert!(reject(&["--target=nope", "a.c"]).0.contains("nope"));
+    }
+
+    /// The catalogue text `args` prints. Panics on any other outcome.
+    fn catalog(args: &[&str]) -> String {
+        match parse_args(argv(args)) {
+            Ok(Parsed::Diagnostics(text)) => text,
+            other => panic!("{args:?}: expected catalogue text, got {}", outcome(&other)),
+        }
+    }
+
+    #[test]
+    fn list_diagnostics_prints_every_row() {
+        let text = catalog(&["--list-diagnostics"]);
+        assert_eq!(text.lines().count(), badc::diag::rows().count() + 1);
+        assert!(text.contains("B7001  unknown-argument"));
+    }
+
+    #[test]
+    fn explain_takes_a_name_an_alias_or_a_code() {
+        for selector in ["unknown-argument", "D9002", "B7001"] {
+            let text = catalog(&["--explain", selector]);
+            assert!(text.starts_with("B7001 unknown-argument\n"), "{selector}");
+        }
+        assert!(catalog(&["--explain=B7001"]).starts_with("B7001 unknown-argument\n"));
+    }
+
+    #[test]
+    fn an_unknown_diagnostic_selector_is_refused() {
+        assert_eq!(
+            reject(&["--explain", "no-such-thing"]),
+            (
+                "badc: error: unknown diagnostic `no-such-thing`".to_string(),
+                1
+            )
+        );
+        assert_eq!(
+            reject(&["--explain"]),
+            (
+                "badc: error: --explain requires a diagnostic name, alias or `B` code".to_string(),
+                1
+            )
+        );
     }
 
     #[test]

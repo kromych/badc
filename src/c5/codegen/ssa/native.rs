@@ -133,7 +133,7 @@ pub(crate) fn compile_function_to_bytes(
                     super::super::FixedRegs::NONE,
                 )
             };
-            if !ok {
+            if ok.is_err() {
                 return Err("ssa_native: emit_function bailed".to_string());
             }
             let outer = fixups.len()

@@ -16,10 +16,9 @@ pub(super) fn emit_va_start_aapcs64(
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
-) -> bool {
+) -> Emit {
     if args.len() != 2 {
-        bail_msg("VaStart: expected 2 args");
-        return false;
+        return fail("VaStart: expected 2 args");
     }
     let n = func.n_params;
     let mut named_int = 0u32;
@@ -32,7 +31,7 @@ pub(super) fn emit_va_start_aapcs64(
         }
     }
     let Some(ap_r) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame) else {
-        return false;
+        return Err(Unsupported::unspecified());
     };
     // The struct pointer stays in scratch.primary across the field writes.
     let ap = if ap_r.0 != scratch.primary.0 {
@@ -74,7 +73,7 @@ pub(super) fn emit_va_start_aapcs64(
     };
     load_imm64(code, scratch.secondary, vr_offs as u64);
     emit(code, enc_str32_imm(scratch.secondary, ap, 28));
-    true
+    Ok(())
 }
 
 /// `__builtin_va_start(&ap, &last)` for the cursor models: `*ap` = the
@@ -91,13 +90,12 @@ pub(super) fn emit_va_start_cursor(
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
-) -> bool {
+) -> Emit {
     if args.len() != 2 {
-        bail_msg("VaStart: expected 2 args");
-        return false;
+        return fail("VaStart: expected 2 args");
     }
     let Some(ap_r) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame) else {
-        return false;
+        return Err(Unsupported::unspecified());
     };
     if win_arm64_variadic_callee(func, abi) {
         debug_assert!(
@@ -107,7 +105,7 @@ pub(super) fn emit_va_start_cursor(
         let off = 16 + (func.n_params as u32) * 8;
         emit_fp_plus_off(code, scratch.secondary, off);
         emit(code, enc_str_imm(scratch.secondary, ap_r, 0));
-        return true;
+        return Ok(());
     }
     if func.is_variadic && abi.variadic_on_stack {
         let (_, n_stack) = param_reg_stack_split(func, abi);
@@ -120,10 +118,9 @@ pub(super) fn emit_va_start_cursor(
         );
         emit_fp_plus_off(code, scratch.secondary, off);
         emit(code, enc_str_imm(scratch.secondary, ap_r, 0));
-        return true;
+        return Ok(());
     }
-    bail_msg("VaStart: variadic callee not matched by a host-ABI branch");
-    false
+    fail("VaStart: variadic callee not matched by a host-ABI branch")
 }
 
 /// `__builtin_va_arg(&ap)` for the cursor models (macOS and Windows
@@ -139,17 +136,16 @@ pub(super) fn emit_va_arg_cursor(
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
-) -> bool {
+) -> Emit {
     if args.is_empty() {
-        bail_msg("VaArg: expected at least the ap argument");
-        return false;
+        return fail("VaArg: expected at least the ap argument");
     }
     let va_stride: u32 = match args.get(1).and_then(|a| func.insts.get(*a as usize)) {
         Some(super::super::ir::Inst::Imm(d)) => (((*d & 0xffff) as u32 + 7) & !7).max(8),
         _ => 8,
     };
     let Some(ap_r) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame) else {
-        return false;
+        return Err(Unsupported::unspecified());
     };
     // The work register and the advance temporary must both differ from
     // the cursor address `ap_r`.
@@ -177,7 +173,7 @@ pub(super) fn emit_va_arg_cursor(
         }
         _ => {}
     }
-    true
+    Ok(())
 }
 
 /// AAPCS64 `va_copy`: a 32-byte `__va_list` struct copy (Appendix B),
@@ -189,18 +185,17 @@ pub(super) fn emit_va_copy_aapcs64(
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
-) -> bool {
+) -> Emit {
     if args.len() != 2 {
-        bail_msg("VaCopy: expected 2 args");
-        return false;
+        return fail("VaCopy: expected 2 args");
     }
     let Some(dst_r) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame)
     else {
-        return false;
+        return Err(Unsupported::unspecified());
     };
     let Some(src_r) = materialize_int(code, place_of(alloc, args[1]), scratch.secondary, frame)
     else {
-        return false;
+        return Err(Unsupported::unspecified());
     };
     // A caller-saved transfer register distinct from both pointers, saved
     // and restored around the copy.
@@ -215,7 +210,7 @@ pub(super) fn emit_va_copy_aapcs64(
         emit(code, enc_str_imm(borrow, dst_r, off));
     }
     emit(code, enc_ldr_post(borrow, Reg(31), 16));
-    true
+    Ok(())
 }
 
 /// `__builtin_va_copy(&dst, &src)` for the cursor models: `*dst = *src`.
@@ -225,22 +220,21 @@ pub(super) fn emit_va_copy_cursor(
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
-) -> bool {
+) -> Emit {
     if args.len() != 2 {
-        bail_msg("VaCopy: expected 2 args");
-        return false;
+        return fail("VaCopy: expected 2 args");
     }
     let Some(dst_r) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame)
     else {
-        return false;
+        return Err(Unsupported::unspecified());
     };
     let Some(src_r) = materialize_int(code, place_of(alloc, args[1]), scratch.secondary, frame)
     else {
-        return false;
+        return Err(Unsupported::unspecified());
     };
     emit(code, enc_ldr_imm(scratch.secondary, src_r, 0));
     emit(code, enc_str_imm(scratch.secondary, dst_r, 0));
-    true
+    Ok(())
 }
 
 /// AAPCS64 `va_arg` (Appendix B) over the `__va_list` struct: a general
@@ -258,16 +252,14 @@ pub(super) fn emit_va_arg_aapcs64(
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
-) -> bool {
+) -> Emit {
     if args.len() != 2 {
-        bail_msg("VaArg: expected 2 args (ap, descriptor)");
-        return false;
+        return fail("VaArg: expected 2 args (ap, descriptor)");
     }
     let descriptor = match func.insts.get(args[1] as usize) {
         Some(Inst::Imm(d)) => *d,
         _ => {
-            bail_msg("VaArg: descriptor operand is not a constant");
-            return false;
+            return fail("VaArg: descriptor operand is not a constant");
         }
     };
     let kind = (descriptor >> 16) & 0xffff;
@@ -280,8 +272,7 @@ pub(super) fn emit_va_arg_aapcs64(
     let ap_r = match materialize_int(code, ap_place, scratch.secondary, frame) {
         Some(r) => r,
         None => {
-            bail_msg("VaArg: &ap not in int reg / spill");
-            return false;
+            return fail("VaArg: &ap not in int reg / spill");
         }
     };
     let ap = if ap_r.0 != scratch.secondary.0 {
@@ -363,11 +354,10 @@ pub(super) fn emit_va_arg_aapcs64(
         }
         Place::None => {}
         Place::FpReg(_) => {
-            bail_msg("VaArg: dst is an FP register (the result is a pointer)");
-            return false;
+            return fail("VaArg: dst is an FP register (the result is a pointer)");
         }
     }
-    true
+    Ok(())
 }
 
 /// The operands every call form carries: the argument values, which of
@@ -392,7 +382,7 @@ pub(super) fn emit_call_ext(
     ops: CallOperands,
     binding_idx: i64,
     plt_call_fixups: &mut Vec<PltCallFixup>,
-) -> bool {
+) -> Emit {
     let FnCtx {
         func,
         alloc,
@@ -413,7 +403,7 @@ pub(super) fn emit_call_ext(
     } = ops;
     let import_index = match imports.index_of_binding(binding_idx) {
         Some(i) => i,
-        None => return false,
+        None => return Err(Unsupported::unspecified()),
     };
     let imp = &imports.imports[import_index];
     // A variadic import gives the planner its fixed count so the tail
@@ -427,11 +417,9 @@ pub(super) fn emit_call_ext(
     let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
     let plan = super::plan_call_args_aggs(args.len(), fixed, fp_arg_mask, abi, &aggs, false);
     emit_stack_alloc(code, plan.scratch_bytes, None);
-    if !marshal_args(
+    marshal_args(
         code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs, abi,
-    ) {
-        return false;
-    }
+    )?;
     setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, frame);
     plt_call_fixups.push(PltCallFixup {
         instr_offset: code.len(),
@@ -453,8 +441,7 @@ pub(super) fn emit_call_ext(
             .position(|i| i.local_name == "__trunctfdf2")
             .unwrap_or(usize::MAX);
         if trunc_idx == usize::MAX {
-            bail_msg("CallExt: returns_long_double but __trunctfdf2 not in imports");
-            return false;
+            return fail("CallExt: returns_long_double but __trunctfdf2 not in imports");
         }
         plt_call_fixups.push(PltCallFixup {
             instr_offset: code.len(),
@@ -476,7 +463,7 @@ pub(super) fn emit_call_ext(
             scratch,
             false,
         );
-        return true;
+        return Ok(());
     }
     use crate::c5::compiler::types as ty_helpers;
     let return_type_tag = imp.return_type_tag;
@@ -486,7 +473,7 @@ pub(super) fn emit_call_ext(
         // A float / double result is FP-classed and already in d0 / s0; an f32
         // stays the single in s0, the form the F32 stores and casts consume.
         move_call_result(code, dst, frame, true);
-        return true;
+        return Ok(());
     }
     // `long double` is not FP-classed and bridges through x0 like an
     // integer; sub-word integer returns take the pool path's extension.
@@ -504,7 +491,7 @@ pub(super) fn emit_call_ext(
         let sp_off = spill_off(frame, slot);
         emit_spill_str_x_auto(code, frame, Reg(0), sp_off);
     }
-    true
+    Ok(())
 }
 
 /// The sub-word sign / zero extension of a call result in x0;
@@ -538,7 +525,7 @@ pub(super) fn emit_call(
     fixups: &mut Vec<Fixup>,
     callee_is_variadic: bool,
     fp_return: bool,
-) -> bool {
+) -> Emit {
     let FnCtx {
         func,
         alloc,
@@ -565,8 +552,7 @@ pub(super) fn emit_call(
     // its bit pattern.
     let fixed = if callee_is_variadic {
         if !(abi.variadic_on_stack || abi.variadic_int_only || abi.aarch64_host_variadic()) {
-            bail_msg("Call: variadic callee not matched by a host-ABI branch");
-            return false;
+            return fail("Call: variadic callee not matched by a host-ABI branch");
         }
         fixed_args
     } else {
@@ -574,11 +560,9 @@ pub(super) fn emit_call(
     };
     let plan = super::plan_call_args_aggs(args.len(), fixed, fp_arg_mask, abi, &aggs, false);
     emit_stack_alloc(code, plan.scratch_bytes, None);
-    if !marshal_args(
+    marshal_args(
         code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs, abi,
-    ) {
-        return false;
-    }
+    )?;
     setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, frame);
     fixups.push(Fixup {
         native_offset: code.len(),
@@ -597,7 +581,7 @@ pub(super) fn emit_call(
         scratch,
         fp_return,
     );
-    true
+    Ok(())
 }
 
 /// Point x8 at the caller's result temp before a call returning an
@@ -616,7 +600,7 @@ fn setup_indirect_result(
     {
         // An HFA larger than 16 bytes (three or four members) still returns
         // in v-registers, not through x8.
-        emit_local_addr_fp(code, Place::IntReg(8), ret_slot_off, frame);
+        let _ = emit_local_addr_fp(code, Place::IntReg(8), ret_slot_off, frame);
     }
 }
 
@@ -640,7 +624,7 @@ fn finish_call_result(
         let size = desc.size;
         if let Some(members) = super::abi_classify::hfa_member_layout(&desc.fields) {
             // AAPCS64 6.9: an HFA result arrives with member k in v[k].
-            emit_local_addr_fp(code, Place::IntReg(scratch.primary.0), ret_slot_off, frame);
+            let _ = emit_local_addr_fp(code, Place::IntReg(scratch.primary.0), ret_slot_off, frame);
             for (k, (off, msize)) in members.iter().enumerate() {
                 if *msize == 8 {
                     emit(
@@ -655,7 +639,7 @@ fn finish_call_result(
                 }
             }
         } else if size <= 16 {
-            emit_local_addr_fp(code, Place::IntReg(scratch.primary.0), ret_slot_off, frame);
+            let _ = emit_local_addr_fp(code, Place::IntReg(scratch.primary.0), ret_slot_off, frame);
             emit(code, enc_str_imm(Reg(0), scratch.primary, 0));
             if size > 8 {
                 emit(code, enc_str_imm(Reg(1), scratch.primary, 8));
@@ -718,7 +702,7 @@ pub(super) fn emit_call_indirect(
     callee_variadic: bool,
     fixed_args: usize,
     fp_return: bool,
-) -> bool {
+) -> Emit {
     let FnCtx {
         func,
         alloc,
@@ -773,7 +757,7 @@ pub(super) fn emit_call_indirect(
     };
     let target_r = match materialize_int(code, target_place, scratch.primary, frame) {
         Some(r) => r,
-        None => return false,
+        None => return Err(Unsupported::unspecified()),
     };
     let target_reg = match free_target_reg {
         Some(r) => {
@@ -793,11 +777,9 @@ pub(super) fn emit_call_indirect(
     if let Some(off) = staged_off {
         emit_sp_str_x_auto(code, target_reg, off);
     }
-    if !marshal_args(
+    marshal_args(
         code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs, abi,
-    ) {
-        return false;
-    }
+    )?;
     setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, frame);
     // The marshal consumed every argument source, so x9 is free
     // to carry the staged pointer to the blr.
@@ -820,7 +802,7 @@ pub(super) fn emit_call_indirect(
         scratch,
         fp_return,
     );
-    true
+    Ok(())
 }
 
 /// The argument values of one call, for the marshalling passes.
@@ -855,7 +837,7 @@ impl CallArgs<'_> {
     /// Stack slots first: each source is read into a scratch and stored to
     /// the host-stack overflow region, preserving any source register that
     /// a later pass touches.
-    fn marshal_stack_args(&self, code: &mut Vec<u8>) -> bool {
+    fn marshal_stack_args(&self, code: &mut Vec<u8>) -> Emit {
         for (i, &placement) in self.plan.placements.iter().enumerate() {
             let super::ArgPlacement::Stack(off) = placement else {
                 continue;
@@ -865,29 +847,29 @@ impl CallArgs<'_> {
                 let Some(dn) =
                     materialize_fp_shifted(code, ap, 0u8, self.frame, self.plan.scratch_bytes)
                 else {
-                    return false;
+                    return Err(Unsupported::unspecified());
                 };
                 emit(code, enc_str_d_imm(dn, Reg(31), off));
             } else {
                 let Some(src) = self.arg_int(code, i, self.scratch.primary) else {
-                    return false;
+                    return Err(Unsupported::unspecified());
                 };
                 emit(code, enc_str_imm(src, Reg(31), off));
             }
         }
-        true
+        Ok(())
     }
 
     /// Aggregates passed on the caller's stack (AAPCS64 5.4.2), copied to
     /// [sp + off] before the register marshal overwrites the value register
     /// that holds the source address; x16 / x17 hold no argument here.
-    fn marshal_struct_stack_args(&self, code: &mut Vec<u8>) -> bool {
+    fn marshal_struct_stack_args(&self, code: &mut Vec<u8>) -> Emit {
         for (i, &placement) in self.plan.placements.iter().enumerate() {
             let super::ArgPlacement::StructStack { off, size, align } = placement else {
                 continue;
             };
             let Some(src) = self.arg_int(code, i, self.scratch.primary) else {
-                return false;
+                return Err(Unsupported::unspecified());
             };
             if src.0 != self.scratch.primary.0 {
                 emit_mov_reg(code, self.scratch.primary, src);
@@ -920,7 +902,7 @@ impl CallArgs<'_> {
                 copied += 1;
             }
         }
-        true
+        Ok(())
     }
 
     /// FP arguments before the integer ones, since an FP value can sit in an
@@ -928,7 +910,7 @@ impl CallArgs<'_> {
     /// d-to-d moves are a parallel copy scheduled first, with the second FP
     /// scratch breaking cycles; spilled and integer sources then
     /// materialise into their targets.
-    fn marshal_fp_args(&self, code: &mut Vec<u8>) -> bool {
+    fn marshal_fp_args(&self, code: &mut Vec<u8>) -> Emit {
         let mut fp_moves: Vec<(u8, u8)> = Vec::new();
         for (i, &placement) in self.plan.placements.iter().enumerate() {
             if let super::ArgPlacement::FpReg(r) = placement
@@ -951,13 +933,13 @@ impl CallArgs<'_> {
             let Some(src) =
                 materialize_fp_shifted(code, ap, r, self.frame, self.plan.scratch_bytes)
             else {
-                return false;
+                return Err(Unsupported::unspecified());
             };
             if src != r {
                 emit(code, super::encode::enc_fmov_d_d(r, src));
             }
         }
-        true
+        Ok(())
     }
 
     /// AAPCS64 6.8.2 HFA arguments: each member loads into its own FP
@@ -965,7 +947,7 @@ impl CallArgs<'_> {
     /// consumed their d-register sources and before the integer marshal
     /// overwrites the base register. Integer-class `StructRegs` take the
     /// eightbyte path.
-    fn marshal_hfa_args(&self, code: &mut Vec<u8>) -> bool {
+    fn marshal_hfa_args(&self, code: &mut Vec<u8>) -> Emit {
         for (i, &placement) in self.plan.placements.iter().enumerate() {
             let super::ArgPlacement::StructRegs { regs, n, align } = placement else {
                 continue;
@@ -977,7 +959,7 @@ impl CallArgs<'_> {
                 super::abi_classify::hfa_member_layout(&self.agg_descs[idx as usize].fields)
             });
             let Some(base) = self.arg_int(code, i, self.scratch.primary) else {
-                return false;
+                return Err(Unsupported::unspecified());
             };
             for (k, cr) in regs.iter().take(n as usize).enumerate() {
                 let (off, msize) = members
@@ -996,7 +978,7 @@ impl CallArgs<'_> {
                 );
             }
         }
-        true
+        Ok(())
     }
 
     /// Integer placements and aggregate base addresses form one parallel
@@ -1005,7 +987,7 @@ impl CallArgs<'_> {
     /// shared scratch, so one aggregate's loads cannot clobber another's
     /// pending base. Non-register sources then materialise into their
     /// targets.
-    fn marshal_int_args(&self, code: &mut Vec<u8>) -> bool {
+    fn marshal_int_args(&self, code: &mut Vec<u8>) -> Emit {
         let mut int_moves: Vec<(u8, u8)> = Vec::new();
         for (i, &placement) in self.plan.placements.iter().enumerate() {
             let dst = match placement {
@@ -1035,7 +1017,7 @@ impl CallArgs<'_> {
                 }
                 Place::Spill(_) | Place::None => {
                     let Some(src) = self.arg_int(code, i, Reg(r)) else {
-                        return false;
+                        return Err(Unsupported::unspecified());
                     };
                     if src.0 != r {
                         emit_mov_reg(code, Reg(r), src);
@@ -1052,20 +1034,20 @@ impl CallArgs<'_> {
             }
             let dst = regs[0].reg;
             let Some(src) = self.arg_int(code, i, Reg(dst)) else {
-                return false;
+                return Err(Unsupported::unspecified());
             };
             if src.0 != dst {
                 emit_mov_reg(code, Reg(dst), src);
             }
         }
-        true
+        Ok(())
     }
 
     /// Load each integer-class aggregate's eightbytes from the base now in
     /// `regs[0]`. The high eightbytes load first; `regs[0]` (the base) is
     /// read last, overwritten by its own eightbyte -- a composed one
     /// accumulates in scratch first.
-    fn load_struct_eightbytes(&self, code: &mut Vec<u8>) -> bool {
+    fn load_struct_eightbytes(&self, code: &mut Vec<u8>) -> Emit {
         let strict = self.abi.strict_align;
         for &placement in self.plan.placements.iter() {
             match placement {
@@ -1103,13 +1085,12 @@ impl CallArgs<'_> {
                 // address-passing convention (untagged scalar pointer).
                 super::ArgPlacement::StructByRefReg(_)
                 | super::ArgPlacement::StructByRefStack(_) => {
-                    bail_msg("aarch64 marshal: by-reference aggregate arg not yet emitted");
-                    return false;
+                    return fail("aarch64 marshal: by-reference aggregate arg not yet emitted");
                 }
                 _ => {}
             }
         }
-        true
+        Ok(())
     }
 }
 
@@ -1129,7 +1110,7 @@ pub(super) fn marshal_args(
     arg_aggs: &[Option<u32>],
     agg_descs: &[super::super::ir::AggDesc],
     abi: super::Abi,
-) -> bool {
+) -> Emit {
     let call = CallArgs {
         plan,
         args,
@@ -1140,10 +1121,10 @@ pub(super) fn marshal_args(
         agg_descs,
         abi,
     };
-    call.marshal_stack_args(code)
-        && call.marshal_struct_stack_args(code)
-        && call.marshal_fp_args(code)
-        && call.marshal_hfa_args(code)
-        && call.marshal_int_args(code)
-        && call.load_struct_eightbytes(code)
+    call.marshal_stack_args(code)?;
+    call.marshal_struct_stack_args(code)?;
+    call.marshal_fp_args(code)?;
+    call.marshal_hfa_args(code)?;
+    call.marshal_int_args(code)?;
+    call.load_struct_eightbytes(code)
 }

@@ -12,19 +12,15 @@ pub(super) fn emit_intrinsic(
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
-) -> bool {
+) -> Emit {
     use crate::c5::op::Intrinsic as I;
     let Some(intrinsic) = I::from_i64(kind) else {
-        bail_msg("intrinsic: unknown discriminant");
-        return false;
+        return fail("intrinsic: unknown discriminant");
     };
     match intrinsic {
         // Resolved to an `Imm` before lowering; reaching here is a
         // pass-ordering bug.
-        I::ConstantP => {
-            bail_msg("Intrinsic::ConstantP must be resolved before lowering");
-            false
-        }
+        I::ConstantP => fail("Intrinsic::ConstantP must be resolved before lowering"),
         I::VaStart if aarch64_host_variadic_callee(func, abi) => {
             emit_va_start_aapcs64(code, func, abi, args, alloc, frame, scratch)
         }
@@ -37,7 +33,7 @@ pub(super) fn emit_intrinsic(
         }
         I::VaArg => emit_va_arg_cursor(code, func, args, dst, alloc, frame, scratch),
         // No teardown for the cursor model. args[0] is unused.
-        I::VaEnd => true,
+        I::VaEnd => Ok(()),
         I::VaCopy if abi.aarch64_host_variadic() => {
             emit_va_copy_aapcs64(code, args, alloc, frame, scratch)
         }
@@ -49,32 +45,28 @@ pub(super) fn emit_intrinsic(
         I::LongjmpAArch64 => emit_longjmp(code, args, alloc, frame),
         // fma / fmaf lower to Inst::Fma at the call site, so they never
         // reach the Inst::Intrinsic dispatch.
-        I::Fma | I::Fmaf => false,
+        I::Fma | I::Fmaf => Err(Unsupported::unspecified()),
         // `brk #0` raises a breakpoint / illegal-state exception.
         I::Trap => {
             emit(code, 0xD420_0000u32);
-            true
+            Ok(())
         }
         // `yield`, the AArch64 spin-loop hint.
         I::CpuRelax => {
             emit(code, 0xD503_203Fu32);
-            true
+            Ok(())
         }
         // `dmb ish`, a full barrier across the inner shareable domain (C11
         // 7.17.4 seq_cst).
         I::AtomicThreadFence => {
             emit(code, 0xD503_3BBFu32);
-            true
+            Ok(())
         }
         // The x86-only forms; the source gates each on the target.
         I::X87StoreControlWord | I::X87LoadControlWord => {
-            bail_msg("x87 control word intrinsic is x86-only");
-            false
+            fail("x87 control word intrinsic is x86-only")
         }
-        I::X86FxSave | I::X86FxRestore => {
-            bail_msg("fxsave / fxrstor intrinsic is x86-only");
-            false
-        }
+        I::X86FxSave | I::X86FxRestore => fail("fxsave / fxrstor intrinsic is x86-only"),
         I::X86Sgdt
         | I::X86Sidt
         | I::X86Sldt
@@ -82,24 +74,18 @@ pub(super) fn emit_intrinsic(
         | I::X86Lgdt
         | I::X86Lidt
         | I::X86Lldt
-        | I::X86Clflush => {
-            bail_msg("descriptor-table intrinsic is x86-only");
-            false
-        }
-        I::Divq128 => {
-            bail_msg("divq intrinsic is x86-64 only");
-            false
-        }
+        | I::X86Clflush => fail("descriptor-table intrinsic is x86-only"),
+        I::Divq128 => fail("divq intrinsic is x86-64 only"),
         // `dsb ish`: data synchronisation barrier over the inner shareable
         // domain.
         I::AArch64DsbIsh => {
             emit(code, 0xD503_3B9Fu32);
-            true
+            Ok(())
         }
         // `isb`: instruction synchronisation barrier.
         I::AArch64Isb => {
             emit(code, 0xD503_3FDFu32);
-            true
+            Ok(())
         }
         I::AArch64DcCvau | I::AArch64IcIvau => {
             emit_cache_op(code, intrinsic, args, alloc, frame, scratch)
@@ -144,10 +130,7 @@ pub(super) fn emit_intrinsic(
         | I::Ffsll
         | I::Bswap16
         | I::Bswap32
-        | I::Bswap64 => {
-            bail_msg("intrinsic: bit builtin reached codegen");
-            false
-        }
+        | I::Bswap64 => fail("intrinsic: bit builtin reached codegen"),
         // C11 atomic operations are lowered to load / store /
         // read-modify-write at the call site; they never reach codegen as
         // an `Inst::Intrinsic`.
@@ -159,10 +142,7 @@ pub(super) fn emit_intrinsic(
         | I::AtomicFetchAnd
         | I::AtomicFetchOr
         | I::AtomicFetchXor
-        | I::AtomicCompareExchangeStrong => {
-            bail_msg("intrinsic: atomic op reached codegen");
-            false
-        }
+        | I::AtomicCompareExchangeStrong => fail("intrinsic: atomic op reached codegen"),
     }
 }
 
@@ -178,21 +158,18 @@ fn emit_alloca(
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
-) -> bool {
+) -> Emit {
     if !frame.dynamic_sp {
-        bail_msg("Alloca: AllocaInit didn't run for this function");
-        return false;
+        return fail("Alloca: AllocaInit didn't run for this function");
     }
     if args.len() != 1 {
-        bail_msg("Alloca: expected 1 arg");
-        return false;
+        return fail("Alloca: expected 1 arg");
     }
     let Some(rd) = int_or_spill_scratch(dst, scratch) else {
-        bail_msg("Alloca: dst not int reg / spill");
-        return false;
+        return fail("Alloca: dst not int reg / spill");
     };
     let Some(n) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame) else {
-        return false;
+        return Err(Unsupported::unspecified());
     };
     // x17 = (n + 15) & ~15 -- the 16-byte-aligned size.
     emit(code, enc_add_imm(scratch.secondary, n, 15));
@@ -221,22 +198,20 @@ fn emit_alloca(
     emit(code, super::encode::enc_b_cond(super::encode::Cond::Ne, -3));
     emit(code, enc_add_imm(Reg(31), rd, 0));
     store_spilled_int(code, frame, dst, rd);
-    true
+    Ok(())
 }
 
 /// Snapshot sp for a VLA block (C99 6.2.4p2).
-fn emit_alloca_save(code: &mut Vec<u8>, dst: Place, frame: Frame, scratch: &ScratchPool) -> bool {
+fn emit_alloca_save(code: &mut Vec<u8>, dst: Place, frame: Frame, scratch: &ScratchPool) -> Emit {
     if !frame.dynamic_sp {
-        bail_msg("AllocaSave: AllocaInit didn't run for this function");
-        return false;
+        return fail("AllocaSave: AllocaInit didn't run for this function");
     }
     let Some(rd) = int_or_spill_scratch(dst, scratch) else {
-        bail_msg("AllocaSave: dst not int reg / spill");
-        return false;
+        return fail("AllocaSave: dst not int reg / spill");
     };
     emit(code, enc_add_imm(rd, Reg(31), 0));
     store_spilled_int(code, frame, dst, rd);
-    true
+    Ok(())
 }
 
 /// Restore the saved sp on VLA block exit, reclaiming the block's VLA
@@ -247,21 +222,18 @@ fn emit_alloca_restore(
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
-) -> bool {
+) -> Emit {
     if !frame.dynamic_sp {
-        bail_msg("AllocaRestore: AllocaInit didn't run for this function");
-        return false;
+        return fail("AllocaRestore: AllocaInit didn't run for this function");
     }
     if args.len() != 1 {
-        bail_msg("AllocaRestore: expected 1 arg");
-        return false;
+        return fail("AllocaRestore: expected 1 arg");
     }
     let Some(v) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame) else {
-        bail_msg("AllocaRestore: arg not int reg / spill / fp");
-        return false;
+        return fail("AllocaRestore: arg not int reg / spill / fp");
     };
     emit(code, enc_add_imm(Reg(31), v, 0));
-    true
+    Ok(())
 }
 
 /// c5 binds <setjmp.h>'s setjmp() to this intrinsic on Windows aarch64,
@@ -275,15 +247,13 @@ fn emit_setjmp(
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
-) -> bool {
+) -> Emit {
     if args.len() != 1 {
-        bail_msg("Setjmp: expected 1 arg");
-        return false;
+        return fail("Setjmp: expected 1 arg");
     }
     let Some(env_r) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame)
     else {
-        bail_msg("Setjmp: env not int reg / spill / fp");
-        return false;
+        return fail("Setjmp: env not int reg / spill / fp");
     };
     // The helper reads env from x19; route it there.
     if env_r.0 != 19 {
@@ -294,36 +264,32 @@ fn emit_setjmp(
     // the helper's saved PC points past its last instruction, so the
     // longjmp `br` lands here.
     let Some(rd) = int_or_spill_scratch(dst, scratch) else {
-        bail_msg("Setjmp: dst not int reg / spill");
-        return false;
+        return fail("Setjmp: dst not int reg / spill");
     };
     if rd.0 != 19 {
         emit_mov_reg(code, rd, Reg(19));
     }
     store_spilled_int(code, frame, dst, rd);
-    true
+    Ok(())
 }
 
 /// c5 binds <setjmp.h>'s longjmp() to this intrinsic on Windows aarch64.
 /// args[0] = env, args[1] = val. The helper restores the saved register
 /// set, materializes x19 = (val != 0) ? val : 1 per C99 7.13.2.1p2, and
 /// branches to the saved PC.
-fn emit_longjmp(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, frame: Frame) -> bool {
+fn emit_longjmp(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, frame: Frame) -> Emit {
     if args.len() != 2 {
-        bail_msg("Longjmp: expected 2 args");
-        return false;
+        return fail("Longjmp: expected 2 args");
     }
     let Some(env_r) = materialize_int(code, place_of(alloc, args[0]), Reg(16), frame) else {
-        bail_msg("Longjmp: env not int reg / spill / fp");
-        return false;
+        return fail("Longjmp: env not int reg / spill / fp");
     };
     if env_r.0 != 16 {
         emit_mov_reg(code, Reg(16), env_r);
     }
     // Stash val in x17 before the upcoming restores clobber x19.
     let Some(val_r) = materialize_int(code, place_of(alloc, args[1]), Reg(17), frame) else {
-        bail_msg("Longjmp: val not int reg / spill / fp");
-        return false;
+        return fail("Longjmp: val not int reg / spill / fp");
     };
     if val_r.0 != 17 {
         emit_mov_reg(code, Reg(17), val_r);
@@ -346,7 +312,7 @@ fn emit_longjmp(code: &mut Vec<u8>, args: &[u32], alloc: &Allocation, frame: Fra
     emit(code, enc_subs_imm(Reg(31), Reg(17), 0));
     emit(code, enc_cinc(Reg(19), Reg(17), Cond::Eq));
     emit(code, enc_br(Reg(10)));
-    true
+    Ok(())
 }
 
 /// `dc cvau, Xt` / `ic ivau, Xt`: clean the data cache / invalidate the
@@ -358,13 +324,12 @@ fn emit_cache_op(
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
-) -> bool {
+) -> Emit {
     if args.len() != 1 {
-        bail_msg("dc/ic cache op: expected 1 arg");
-        return false;
+        return fail("dc/ic cache op: expected 1 arg");
     }
     let Some(rt) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame) else {
-        return false;
+        return Err(Unsupported::unspecified());
     };
     let base = if matches!(intrinsic, crate::c5::op::Intrinsic::AArch64DcCvau) {
         0xD50B_7B20u32
@@ -372,7 +337,7 @@ fn emit_cache_op(
         0xD50B_7520u32
     };
     emit(code, base | (rt.0 as u32));
-    true
+    Ok(())
 }
 
 /// `mrs Xt, ctr_el0` reads the cache type register; store it to the output
@@ -383,13 +348,12 @@ fn emit_read_cache_type(
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
-) -> bool {
+) -> Emit {
     if args.len() != 1 {
-        bail_msg("mrs ctr_el0: expected 1 arg");
-        return false;
+        return fail("mrs ctr_el0: expected 1 arg");
     }
     let Some(addr) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame) else {
-        return false;
+        return Err(Unsupported::unspecified());
     };
     let tmp = if addr.0 == scratch.secondary.0 {
         scratch.primary
@@ -398,7 +362,7 @@ fn emit_read_cache_type(
     };
     emit(code, 0xD53B_0020u32 | (tmp.0 as u32));
     emit(code, enc_str_imm(tmp, addr, 0));
-    true
+    Ok(())
 }
 
 /// The unary floating-point builtins: one instruction in the result's
@@ -411,15 +375,14 @@ fn emit_unary_fp(
     v: super::super::ir::ValueId,
     alloc: &Allocation,
     frame: Frame,
-) -> bool {
+) -> Emit {
     use super::encode::{
         enc_fabs_d, enc_fabs_s, enc_frintm_d, enc_frintm_s, enc_frintp_d, enc_frintp_s,
         enc_frintz_d, enc_frintz_s, enc_fsqrt_d, enc_fsqrt_s,
     };
     use crate::c5::op::Intrinsic as I;
     if args.len() != 1 {
-        bail_msg("unary FP intrinsic: expected 1 arg");
-        return false;
+        return fail("unary FP intrinsic: expected 1 arg");
     }
     let is_f32 = alloc.is_f32(v);
     let Some(dn) = materialize_fp_for(
@@ -430,12 +393,12 @@ fn emit_unary_fp(
         frame,
         alloc,
     ) else {
-        return false;
+        return Err(Unsupported::unspecified());
     };
     let dd = match dst {
         Place::FpReg(r) => r,
         Place::Spill(_) => frame.fp_scratch[1],
-        _ => return false,
+        _ => return Err(Unsupported::unspecified()),
     };
     let inst = match intrinsic {
         I::Sqrt | I::Sqrtf if is_f32 => enc_fsqrt_s(dd, dn),
@@ -451,7 +414,7 @@ fn emit_unary_fp(
     };
     emit(code, inst);
     store_spilled_fp(code, frame, dst, dd);
-    true
+    Ok(())
 }
 
 /// `rd = base` for the frame pointer or the stack pointer, through the
@@ -462,18 +425,17 @@ fn emit_frame_register(
     frame: Frame,
     base: Reg,
     what: &str,
-) -> bool {
+) -> Emit {
     let rd = match dst {
         Place::IntReg(r) => Reg(r),
         Place::Spill(_) => Reg(16),
         _ => {
-            bail_msg(&alloc::format!("{what}: dst not int reg / spill"));
-            return false;
+            return fail(alloc::format!("{what}: dst not int reg / spill"));
         }
     };
     emit(code, enc_add_imm(rd, base, 0));
     store_spilled_int(code, frame, dst, rd);
-    true
+    Ok(())
 }
 
 /// __builtin_return_address: the return address at [fp + 8] of the
@@ -490,13 +452,12 @@ fn emit_return_address(
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
-) -> bool {
+) -> Emit {
     let rd = match dst {
         Place::IntReg(r) => Reg(r),
         Place::Spill(_) => Reg(16),
         _ => {
-            bail_msg("ReturnAddress: dst not int reg / spill");
-            return false;
+            return fail("ReturnAddress: dst not int reg / spill");
         }
     };
     let fp = match args {
@@ -504,20 +465,18 @@ fn emit_return_address(
         [walked] => match materialize_int(code, place_of(alloc, *walked), scratch.primary, frame) {
             Some(r) => r,
             None => {
-                bail_msg("ReturnAddress: frame not int reg / spill");
-                return false;
+                return fail("ReturnAddress: frame not int reg / spill");
             }
         },
         _ => {
-            bail_msg("ReturnAddress: expected at most 1 arg");
-            return false;
+            return fail("ReturnAddress: expected at most 1 arg");
         }
     };
     emit(code, enc_ldr_imm(Reg(30), fp, 8));
     emit(code, super::encode::XPACLRI);
     emit_mov_reg(code, rd, Reg(30));
     store_spilled_int(code, frame, dst, rd);
-    true
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -532,20 +491,19 @@ pub(super) fn emit_mcpy(
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
-) -> bool {
+) -> Emit {
     if size < 0 {
-        bail_msg("Mcpy: negative size");
-        return false;
+        return fail("Mcpy: negative size");
     }
     let dst_place_in = place_of(alloc, dst_val);
     let src_place_in = place_of(alloc, src_val);
     let dst_r = match materialize_int(code, dst_place_in, scratch.primary, frame) {
         Some(r) => r,
-        None => return false,
+        None => return Err(Unsupported::unspecified()),
     };
     let src_r = match materialize_int(code, src_place_in, scratch.secondary, frame) {
         Some(r) => r,
-        None => return false,
+        None => return Err(Unsupported::unspecified()),
     };
     // The data temp is x10, x11 or x12, whichever aliases neither base,
     // saved and restored around the copy since the allocator may hold a
@@ -617,7 +575,7 @@ pub(super) fn emit_mcpy(
     } else {
         store_spilled_int(code, frame, dst_place, dst_r);
     }
-    true
+    Ok(())
 }
 
 /// The save area of the four borrowed working registers x9..x12.
@@ -703,7 +661,7 @@ pub(super) fn emit_atomic_rmw(
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
-) -> bool {
+) -> Emit {
     use super::super::ir::AtomicRmwOp as Op;
     // x9 = addr, x10 = operand (borrowed, saved); x16 = old (result,
     // reserved so it survives the reload); x11 = new, w12 = status.
@@ -716,8 +674,7 @@ pub(super) fn emit_atomic_rmw(
     if !atomic_operand_into(code, addr, a, frame, ATOMIC_SAVE_BYTES, alloc)
         || !atomic_operand_into(code, value, operand, frame, ATOMIC_SAVE_BYTES, alloc)
     {
-        bail_msg("AtomicRmw: operand not int reg / spill");
-        return false;
+        return fail("AtomicRmw: operand not int reg / spill");
     }
     let loop_start = code.len();
     emit(code, enc_ldaxr(old, a, width));
@@ -750,7 +707,7 @@ pub(super) fn emit_atomic_rmw(
     emit(code, enc_cbnz(status, back as i32));
     atomic_restore_working(code);
     write_atomic_result(code, dst, old, frame);
-    true
+    Ok(())
 }
 
 /// C11 7.17.7.4 atomic compare-and-exchange via an LDAXR / STLXR retry
@@ -768,7 +725,7 @@ pub(super) fn emit_atomic_cas(
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
-) -> bool {
+) -> Emit {
     // x9 = addr, x10 = expected_addr, x11 = desired (borrowed, saved);
     // x16 = cur (result, reserved); x12 = expected value; w17 = status.
     let a = Reg(9);
@@ -789,8 +746,7 @@ pub(super) fn emit_atomic_cas(
         )
         || !atomic_operand_into(code, desired, desired_r, frame, ATOMIC_SAVE_BYTES, alloc)
     {
-        bail_msg("AtomicCas: operand not int reg / spill");
-        return false;
+        return fail("AtomicCas: operand not int reg / spill");
     }
     // The comparand is loaded once; sub-width loads zero-extend like the
     // LDAXR result, so the 64-bit compare is exact.
@@ -829,7 +785,7 @@ pub(super) fn emit_atomic_cas(
     code[to_done..to_done + 4].copy_from_slice(&enc_b(delta).to_le_bytes());
     atomic_restore_working(code);
     write_atomic_result(code, dst, cur, frame);
-    true
+    Ok(())
 }
 
 /// The save area of the seven borrowed working registers x9..x15.
@@ -899,7 +855,7 @@ fn emit_atomic128(
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
-) -> bool {
+) -> Emit {
     use super::super::op::Intrinsic as I;
     use super::encode::{Cond, enc_ccmp, enc_ldaxp, enc_orr_reg, enc_stlxp};
     let n_in = if matches!(kind, I::Atomic128CmpXchg) {
@@ -908,8 +864,7 @@ fn emit_atomic128(
         2
     };
     if args.len() != 3 + n_in {
-        bail_msg("atomic128: wrong operand count");
-        return false;
+        return fail("atomic128: wrong operand count");
     }
     let ptr = Reg(9);
     let oldl = Reg(10);
@@ -917,14 +872,12 @@ fn emit_atomic128(
     let status = scratch.secondary; // x17
     atomic128_save_working(code);
     if !atomic128_operand_into(code, args[0], ptr, frame, alloc) {
-        bail_msg("atomic128: ptr operand not int reg / spill");
-        return false;
+        return fail("atomic128: ptr operand not int reg / spill");
     }
     // Inputs land in x12.. in declaration order.
     for (k, &a) in args[3..].iter().enumerate() {
         if !atomic128_operand_into(code, a, Reg(12 + k as u8), frame, alloc) {
-            bail_msg("atomic128: input operand not int reg / spill");
-            return false;
+            return fail("atomic128: input operand not int reg / spill");
         }
     }
     let loop_start = code.len();
@@ -949,8 +902,7 @@ fn emit_atomic128(
             (Reg(14), Reg(15), None)
         }
         _ => {
-            bail_msg("atomic128: unexpected kind");
-            return false;
+            return fail("atomic128: unexpected kind");
         }
     };
     emit(code, enc_stlxp(status, src_l, src_h, ptr));
@@ -962,13 +914,10 @@ fn emit_atomic128(
         code[to_done..to_done + 4].copy_from_slice(&enc_b_cond(Cond::Ne, delta).to_le_bytes());
     }
     // Write the prior value back through &oldl / &oldh.
-    if !atomic128_writeback(code, args[1], oldl, frame, alloc, scratch.primary)
-        || !atomic128_writeback(code, args[2], oldh, frame, alloc, scratch.primary)
-    {
-        return false;
-    }
+    atomic128_writeback(code, args[1], oldl, frame, alloc, scratch.primary)?;
+    atomic128_writeback(code, args[2], oldh, frame, alloc, scratch.primary)?;
     atomic128_restore_working(code);
-    true
+    Ok(())
 }
 
 /// Store `src` (a loaded old half) through the output address operand
@@ -980,13 +929,12 @@ fn atomic128_writeback(
     frame: Frame,
     alloc: &Allocation,
     addr_tmp: Reg,
-) -> bool {
+) -> Emit {
     if !atomic128_operand_into(code, addr_val, addr_tmp, frame, alloc) {
-        bail_msg("atomic128: output address not int reg / spill");
-        return false;
+        return fail("atomic128: output address not int reg / spill");
     }
     emit(code, enc_str_imm(src, addr_tmp, 0));
-    true
+    Ok(())
 }
 
 /// 128-bit atomic load / store without LSE2: `Load` / `Store` are plain
@@ -1001,12 +949,11 @@ fn emit_atomic128_ldst(
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
-) -> bool {
+) -> Emit {
     use super::super::op::Intrinsic as I;
     use super::encode::{enc_ldxp, enc_stxp};
     if args.len() != 3 {
-        bail_msg("atomic128 ldst: wrong operand count");
-        return false;
+        return fail("atomic128 ldst: wrong operand count");
     }
     let ptr = Reg(9);
     let lo = Reg(10);
@@ -1014,8 +961,7 @@ fn emit_atomic128_ldst(
     let status = scratch.secondary; // x17
     atomic128_save_working(code);
     if !atomic128_operand_into(code, args[0], ptr, frame, alloc) {
-        bail_msg("atomic128 ldst: ptr operand not int reg / spill");
-        return false;
+        return fail("atomic128 ldst: ptr operand not int reg / spill");
     }
     let is_load = matches!(kind, I::Atomic128Load | I::Atomic128LoadEx);
     match kind {
@@ -1034,8 +980,7 @@ fn emit_atomic128_ldst(
             if !atomic128_operand_into(code, args[1], Reg(12), frame, alloc)
                 || !atomic128_operand_into(code, args[2], Reg(13), frame, alloc)
             {
-                bail_msg("atomic128 ldst: store value not int reg / spill");
-                return false;
+                return fail("atomic128 ldst: store value not int reg / spill");
             }
             emit(code, enc_stp_off(Reg(12), Reg(13), ptr, 0));
         }
@@ -1044,8 +989,7 @@ fn emit_atomic128_ldst(
             if !atomic128_operand_into(code, args[1], Reg(12), frame, alloc)
                 || !atomic128_operand_into(code, args[2], Reg(13), frame, alloc)
             {
-                bail_msg("atomic128 ldst: store value not int reg / spill");
-                return false;
+                return fail("atomic128 ldst: store value not int reg / spill");
             }
             let loop_start = code.len();
             emit(code, enc_ldxp(lo, hi, ptr));
@@ -1054,19 +998,16 @@ fn emit_atomic128_ldst(
             emit(code, enc_cbnz(status, back as i32));
         }
         _ => {
-            bail_msg("atomic128 ldst: unexpected kind");
-            return false;
+            return fail("atomic128 ldst: unexpected kind");
         }
     }
     // Loads publish the read value through &l / &h.
-    if is_load
-        && (!atomic128_writeback(code, args[1], lo, frame, alloc, scratch.primary)
-            || !atomic128_writeback(code, args[2], hi, frame, alloc, scratch.primary))
-    {
-        return false;
+    if is_load {
+        atomic128_writeback(code, args[1], lo, frame, alloc, scratch.primary)?;
+        atomic128_writeback(code, args[2], hi, frame, alloc, scratch.primary)?;
     }
     atomic128_restore_working(code);
-    true
+    Ok(())
 }
 
 /// 128-bit masked store-insert `*mem = (*mem & ~msk) | val` as an
@@ -1078,11 +1019,10 @@ fn emit_atomic128_store_insert(
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
-) -> bool {
+) -> Emit {
     use super::encode::{enc_bic_reg, enc_ldxp, enc_orr_reg, enc_stxp};
     if args.len() != 5 {
-        bail_msg("atomic128 store-insert: wrong operand count");
-        return false;
+        return fail("atomic128 store-insert: wrong operand count");
     }
     let ptr = Reg(9);
     let lo = Reg(10);
@@ -1091,13 +1031,11 @@ fn emit_atomic128_store_insert(
     let (vl, vh, ml, mh) = (Reg(12), Reg(13), Reg(14), Reg(15));
     atomic128_save_working(code);
     if !atomic128_operand_into(code, args[0], ptr, frame, alloc) {
-        bail_msg("atomic128 store-insert: ptr operand not int reg / spill");
-        return false;
+        return fail("atomic128 store-insert: ptr operand not int reg / spill");
     }
     for (r, &a) in [vl, vh, ml, mh].iter().zip(&args[1..]) {
         if !atomic128_operand_into(code, a, *r, frame, alloc) {
-            bail_msg("atomic128 store-insert: input operand not int reg / spill");
-            return false;
+            return fail("atomic128 store-insert: input operand not int reg / spill");
         }
     }
     let loop_start = code.len();
@@ -1110,5 +1048,5 @@ fn emit_atomic128_store_insert(
     let back = ((loop_start as i64) - (code.len() as i64)) / 4;
     emit(code, enc_cbnz(status, back as i32));
     atomic128_restore_working(code);
-    true
+    Ok(())
 }

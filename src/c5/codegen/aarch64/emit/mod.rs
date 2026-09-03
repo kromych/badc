@@ -1,6 +1,6 @@
-//! AArch64 native emit over the SSA and allocator output. The lowering
-//! returns `false` for any shape it cannot lower and the caller turns
-//! that into a compile error.
+//! AArch64 native emit over the SSA and allocator output. A shape it
+//! cannot lower is an `Unsupported` the caller turns into a compile
+//! error.
 //!
 //! Frame layout, top to bottom, growing down from the caller's sp:
 //!
@@ -38,8 +38,8 @@ use super::encode::{
     enc_sub_reg, enc_subs_imm, enc_ucvtf_d_x, enc_ucvtf_s_x, enc_udiv, load_imm64,
 };
 use super::ssa::emit_common::{
-    MAX_UNPROBED_STACK_STEP, STACK_PROBE_PAGE, STACK_PROBE_UNROLL_MAX, build_arg_aggs,
-    place_same_loc,
+    Emit, MAX_UNPROBED_STACK_STEP, STACK_PROBE_PAGE, STACK_PROBE_UNROLL_MAX, Unsupported,
+    build_arg_aggs, place_same_loc,
 };
 use super::ssa::reg_alloc::{Allocation, Place};
 use super::{AddrPart, DataFixup};
@@ -74,11 +74,21 @@ pub(super) use inline_asm::a64_align_asm_stream;
 pub(crate) use inline_asm::encode_a64_file_asm_section_code;
 pub(super) use mem::{NARROW_BORROW, emit_agg_load_int, enc_store_unit};
 
-fn bail_msg(reason: &str) {
-    super::ssa::emit_common::bail_msg("aarch64", reason);
+/// A form outside the implemented subset, named by `reason`.
+fn unsupported(reason: impl Into<alloc::borrow::Cow<'static, str>>) -> Unsupported {
+    let reason = reason.into();
+    super::ssa::emit_common::trace_bail("aarch64", &reason);
+    Unsupported::new(reason)
 }
 
-fn bail(reason: &str, value: u32, place: Place) {
+/// [`unsupported`] as an emit result.
+fn fail<T>(reason: impl Into<alloc::borrow::Cow<'static, str>>) -> Emit<T> {
+    Err(unsupported(reason))
+}
+
+/// A failure the emit does not name, traced with the value and place that
+/// produced it.
+fn bail(reason: &str, value: u32, place: Place) -> Unsupported {
     #[cfg(feature = "codegen_test")]
     if std::env::var("BADC_DUMP_SSA").is_ok() {
         eprintln!(
@@ -87,6 +97,7 @@ fn bail(reason: &str, value: u32, place: Place) {
         );
     }
     let _ = (reason, value, place);
+    Unsupported::unspecified()
 }
 
 /// The allocator's location for `v`; `Place::None` for a value it never

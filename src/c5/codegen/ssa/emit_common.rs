@@ -467,9 +467,9 @@ pub(crate) fn schedule_fp_place_moves<B: EmitBackend>(
     }
 }
 
-/// Sequentialize parallel integer location-to-location moves. Returns false
-/// (the caller falls back to per-instruction placement) if any endpoint is an
-/// FP register or None. Each move is emitted via [`emit_place_move`]; a
+/// Sequentialize parallel integer location-to-location moves. An endpoint
+/// that is an FP register or None is an `Err` (the caller falls back to
+/// per-instruction placement). Each move is emitted via [`emit_place_move`]; a
 /// residual cycle is broken by the backend's [`EmitBackend::break_place_cycle`].
 /// `hold`/`stage` are scratch registers outside the allocator's bank.
 pub(crate) fn schedule_place_moves<B: EmitBackend>(
@@ -479,13 +479,13 @@ pub(crate) fn schedule_place_moves<B: EmitBackend>(
     frame: B::Frame,
     hold: u8,
     stage: u8,
-) -> bool {
+) -> Emit {
     use super::reg_alloc::Place;
     moves.retain(|(s, t)| !place_same_loc(*s, *t));
     if moves.iter().any(|(s, t)| {
         matches!(s, Place::FpReg(_) | Place::None) || matches!(t, Place::FpReg(_) | Place::None)
     }) {
-        return false;
+        return Err(Unsupported::unspecified());
     }
     while !moves.is_empty() {
         let mut progress = false;
@@ -505,7 +505,7 @@ pub(crate) fn schedule_place_moves<B: EmitBackend>(
             b.break_place_cycle(code, moves, frame, hold, stage);
         }
     }
-    true
+    Ok(())
 }
 
 /// Write an atomic operation's result register `src` to its destination
@@ -527,8 +527,8 @@ pub(crate) fn write_atomic_result<B: EmitBackend>(
 
 /// Emit the predecessor-exit phi moves for `self_block`: for each successor,
 /// collect every phi's incoming value into one integer and one FP parallel copy
-/// (the register files do not alias) and schedule each. Returns false if the
-/// integer copy cannot be scheduled, so the caller bails. `int_*` / `fp_*` are
+/// (the register files do not alias) and schedule each. An integer copy that
+/// cannot be scheduled is an `Err`, so the caller bails. `int_*` / `fp_*` are
 /// the reserved scratch registers each parallel copy may use.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
@@ -542,7 +542,7 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
     int_stage: u8,
     fp_hold: u8,
     fp_stage: u8,
-) -> bool {
+) -> Emit {
     use super::super::ir::{Inst, LoadKind, Terminator};
     use super::reg_alloc::Place;
     let succs: alloc::vec::Vec<super::super::ir::BlockId> =
@@ -572,7 +572,7 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
                                 break;
                             };
                             if incoming.iter().any(|(p, _)| *p == self_block) {
-                                return false;
+                                return Err(Unsupported::unspecified());
                             }
                         }
                     }
@@ -611,7 +611,7 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
                             break;
                         };
                         if incoming.iter().any(|(p, _)| *p == self_block) {
-                            return false;
+                            return Err(Unsupported::unspecified());
                         }
                     }
                 }
@@ -683,9 +683,7 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
                 moves.push((src_place, dst_place));
             }
         }
-        if !schedule_place_moves(b, code, &mut moves, frame, int_hold, int_stage) {
-            return false;
-        }
+        schedule_place_moves(b, code, &mut moves, frame, int_hold, int_stage)?;
         schedule_fp_place_moves(b, code, &mut fp_moves, frame, fp_hold, fp_stage);
         // After both same-file parallel copies: any FP move reading a phi's
         // register as its source has already run, so overwriting the FP
@@ -702,7 +700,7 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
             }
         }
     }
-    true
+    Ok(())
 }
 
 /// Sequentialize a set of parallel register moves `(src, dst)` (raw register
@@ -888,6 +886,17 @@ pub(crate) fn unsupported_error(
             )))
         }
     }
+}
+
+/// Stderr trace for an emit bail, under the `codegen_test` feature with
+/// `BADC_DUMP_SSA` set; a production build never reads the environment.
+/// The backend tag disambiguates a run that emits for both targets.
+pub(crate) fn trace_bail(backend: &str, reason: &str) {
+    #[cfg(feature = "codegen_test")]
+    if std::env::var("BADC_DUMP_SSA").is_ok() {
+        eprintln!("ssa emit {backend}: bailed -- {reason}");
+    }
+    let _ = (backend, reason);
 }
 
 /// [`Emit`] for a per-function emit that still signals failure with a

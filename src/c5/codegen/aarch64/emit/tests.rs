@@ -1397,7 +1397,7 @@ fn emit_return_42() {
         )
     };
     assert!(
-        ok,
+        ok.is_ok(),
         "expected SSA emit to handle a single-return function; got fallback"
     );
     assert!(!code.is_empty(), "emit produced no bytes");
@@ -1485,7 +1485,7 @@ fn store_indexed_spilled_operands_precompute_address() {
         frame,
         &scratch,
     );
-    assert!(ok, "emit_store_indexed bailed");
+    assert!(ok.is_ok(), "emit_store_indexed bailed");
     let words: Vec<u32> = code
         .as_chunks::<4>()
         .0
@@ -1560,7 +1560,7 @@ fn emit_spilled_mul_add(dst: Place) -> Vec<u32> {
     };
     let mut code = Vec::new();
     let ok = emit_mul_add(&mut code, dst, a, b, c, true, &alloc, frame, &scratch);
-    assert!(ok, "emit_mul_add bailed");
+    assert!(ok.is_ok(), "emit_mul_add bailed");
     code.as_chunks::<4>()
         .0
         .iter()
@@ -1693,7 +1693,7 @@ fn emit_return_one_plus_two() {
             super::super::FixedRegs::NONE,
         )
     };
-    assert!(ok, "binop handler should cover Add + Shl + Shr");
+    assert!(ok.is_ok(), "binop handler should cover Add + Shl + Shr");
     assert_eq!(code.len() % 4, 0);
 }
 
@@ -1786,7 +1786,7 @@ fn emit_if_else_returns() {
         )
     };
     assert!(
-        ok,
+        ok.is_ok(),
         "`test` should emit via the thin slice (cmp + cset + cbz + ldr params)"
     );
 }

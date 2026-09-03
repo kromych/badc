@@ -25,8 +25,8 @@ pub(super) struct FnCtx<'a> {
     pub(super) data_sym_offsets: &'a alloc::collections::BTreeMap<alloc::string::String, i64>,
 }
 
-/// Emit one SSA instruction. Returns `false` for an op with no lowering, so
-/// the caller can roll the function back.
+/// Emit one SSA instruction. An op with no lowering is an `Err`, so the
+/// caller can roll the function back.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_inst(
     cx: &mut super::ssa::emit_common::EmitCtx,
@@ -41,7 +41,7 @@ pub(super) fn emit_inst(
     text_map_state: &mut Option<super::super::map_syms::MapClass>,
     asm_text_labels: &mut Vec<super::AsmTextLabel>,
     asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
-) -> bool {
+) -> Emit {
     let FnCtx {
         func,
         alloc,
@@ -60,21 +60,21 @@ pub(super) fn emit_inst(
     let code = &mut *cx.code;
     match inst {
         // `Frame::dynamic_sp` carries the alloca fact; no code.
-        Inst::AllocaInit(_) => true,
+        Inst::AllocaInit(_) => Ok(()),
         Inst::ParamRef { idx, kind } => {
             emit_param_ref(code, *idx, *kind, v, dst, param_plan, alloc, frame, scratch)
         }
         Inst::Imm(value) => {
             let Some(rd) = int_or_spill_scratch(dst, scratch) else {
-                return false;
+                return Err(Unsupported::unspecified());
             };
             load_imm64(code, rd, *value as u64);
             store_spilled_int(code, frame, dst, rd);
-            true
+            Ok(())
         }
         Inst::ImmData(offset) => {
             let Some(rd) = int_or_spill_scratch(dst, scratch) else {
-                return false;
+                return Err(Unsupported::unspecified());
             };
             // The writer's `patch_adrp_add` reads rd back from the placeholder.
             let instr_offset = code.len();
@@ -85,27 +85,26 @@ pub(super) fn emit_inst(
                 part: AddrPart::Whole,
             });
             store_spilled_int(code, frame, dst, rd);
-            true
+            Ok(())
         }
         Inst::ImmCode(target_ent_pc) => {
             let Some(rd) = int_or_spill_scratch(dst, scratch) else {
-                return false;
+                return Err(Unsupported::unspecified());
             };
             let instr_offset = code.len();
             emit_adrp_add(code, rd);
             cx.pending_func_fixups.push((instr_offset, *target_ent_pc));
             store_spilled_int(code, frame, dst, rd);
-            true
+            Ok(())
         }
         // The address of an import resolves to its stub through an `is_addr`
         // PLT-call fixup.
         Inst::ImmExtCode(binding_idx) => {
             let Some(rd) = int_or_spill_scratch(dst, scratch) else {
-                return false;
+                return Err(Unsupported::unspecified());
             };
             let Some(import_index) = imports.index_of_binding(*binding_idx) else {
-                bail_msg("ImmExtCode: binding index has no resolved import");
-                return false;
+                return fail("ImmExtCode: binding index has no resolved import");
             };
             cx.plt_call_fixups.push(super::encode::PltCallFixup {
                 instr_offset: code.len(),
@@ -115,7 +114,7 @@ pub(super) fn emit_inst(
             });
             emit_adrp_add(code, rd);
             store_spilled_int(code, frame, dst, rd);
-            true
+            Ok(())
         }
         Inst::LocalAddr(off) => emit_local_addr(code, dst, *off, func, frame),
         Inst::Load {
@@ -356,7 +355,7 @@ pub(super) fn emit_inst(
         ),
         // The predecessor-exit moves placed the value; nothing at the phi
         // position.
-        Inst::Phi { .. } => true,
+        Inst::Phi { .. } => Ok(()),
         Inst::InlineAsm { asm, args } => emit_inline_asm_aarch64(
             code,
             asm,
@@ -381,13 +380,10 @@ pub(super) fn emit_inst(
         ),
         // `BlockAddr` is lowered in the block walk and `TailExt` is a
         // terminator; the segment accesses are x86-only.
-        other => {
-            bail_msg(&alloc::format!(
-                "inst variant not yet covered: {}",
-                other.variant_name()
-            ));
-            false
-        }
+        other => fail(alloc::format!(
+            "inst variant not yet covered: {}",
+            other.variant_name()
+        )),
     }
 }
 
@@ -415,12 +411,11 @@ fn emit_param_ref(
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
-) -> bool {
+) -> Emit {
     let i = idx as usize;
     if matches!(kind, LoadKind::F32 | LoadKind::F64) {
         let Some(super::ArgPlacement::FpReg(d)) = param_plan.get(i).copied() else {
-            bail_msg("ParamRef: FP param not in an FP argument register");
-            return false;
+            return fail("ParamRef: FP param not in an FP argument register");
         };
         match dst {
             Place::FpReg(r) => {
@@ -433,15 +428,13 @@ fn emit_param_ref(
                 emit_spill_str_d_auto(code, frame, d, sp_off);
             }
             _ => {
-                bail_msg("ParamRef: FP param dst not fp reg / spill");
-                return false;
+                return fail("ParamRef: FP param dst not fp reg / spill");
             }
         }
-        return true;
+        return Ok(());
     }
     let Some(super::ArgPlacement::IntReg(arg_reg)) = param_plan.get(i).copied() else {
-        bail_msg("ParamRef: int param not in an integer argument register");
-        return false;
+        return fail("ParamRef: int param not in an integer argument register");
     };
     let high_dead = !alloc.high_observed.get(v as usize).copied().unwrap_or(true);
     let sign_extend = |code: &mut Vec<u8>, rd: Reg| {
@@ -461,11 +454,10 @@ fn emit_param_ref(
             emit_spill_str_x(code, frame, scratch.primary, sp_off, scratch.secondary);
         }
         _ => {
-            bail_msg("ParamRef: dst not int reg / spill");
-            return false;
+            return fail("ParamRef: dst not int reg / spill");
         }
     }
-    true
+    Ok(())
 }
 
 /// `Inst::Fneg`. C99 6.3.1.8: negation of a `float` is single-precision;
@@ -478,7 +470,7 @@ fn emit_fneg(
     dst: Place,
     alloc: &Allocation,
     frame: Frame,
-) -> bool {
+) -> Emit {
     let is_f32 = alloc.is_f32(v);
     let Some(dn) = materialize_fp_for(
         code,
@@ -488,12 +480,12 @@ fn emit_fneg(
         frame,
         alloc,
     ) else {
-        return false;
+        return Err(Unsupported::unspecified());
     };
     let dd = match dst {
         Place::FpReg(r) => r,
         Place::Spill(_) => frame.fp_scratch[1],
-        _ => return false,
+        _ => return Err(Unsupported::unspecified()),
     };
     if is_f32 {
         emit(code, super::encode::enc_fneg_s(dd, dn));
@@ -501,7 +493,7 @@ fn emit_fneg(
         emit(code, enc_fneg_d(dd, dn));
     }
     store_spilled_fp(code, frame, dst, dd);
-    true
+    Ok(())
 }
 
 /// `Inst::Fma`: C99 6.5p8 / FP_CONTRACT, one rounding. A spilled result
@@ -518,7 +510,7 @@ fn emit_fma(
     dst: Place,
     alloc: &Allocation,
     frame: Frame,
-) -> bool {
+) -> Emit {
     let is_f32 = alloc.is_f32(v);
     let mut regs = [0u8; 3];
     for (k, &src) in [a, b, c].iter().enumerate() {
@@ -530,7 +522,7 @@ fn emit_fma(
             frame,
             alloc,
         ) else {
-            return false;
+            return Err(Unsupported::unspecified());
         };
         regs[k] = d;
     }
@@ -538,14 +530,14 @@ fn emit_fma(
     let dd = match dst {
         Place::FpReg(r) => r,
         Place::Spill(_) => frame.fp_scratch[2],
-        _ => return false,
+        _ => return Err(Unsupported::unspecified()),
     };
     emit(
         code,
         super::encode::enc_fma(dd, da, dm, dc, is_f32, neg_product, neg_addend),
     );
     store_spilled_fp(code, frame, dst, dd);
-    true
+    Ok(())
 }
 
 /// `Inst::FpCast`. C99 6.3.1.4: an integer converts directly to the
@@ -562,16 +554,16 @@ fn emit_fp_cast(
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
-) -> bool {
+) -> Emit {
     use super::super::ir::FpCastKind;
     let src_place = place_of(alloc, value);
     match kind {
         FpCastKind::IntToFp | FpCastKind::UIntToFp => {
             let Some(rn) = materialize_int(code, src_place, scratch.primary, frame) else {
-                return false;
+                return Err(Unsupported::unspecified());
             };
             let Some(dd) = fp_or_spill_dst(dst, frame) else {
-                return false;
+                return Err(Unsupported::unspecified());
             };
             let res_f32 = alloc.is_f32(v);
             let enc = match (matches!(kind, FpCastKind::UIntToFp), res_f32) {
@@ -582,7 +574,7 @@ fn emit_fp_cast(
             };
             emit(code, enc);
             store_spilled_fp(code, frame, dst, dd);
-            true
+            Ok(())
         }
         FpCastKind::FpToInt | FpCastKind::UFpToInt => {
             let src_f32 = alloc.is_f32(value);
@@ -592,10 +584,10 @@ fn emit_fp_cast(
                 materialize_fp(code, src_place, frame.fp_scratch[0], frame)
             };
             let Some(dn) = dn else {
-                return false;
+                return Err(Unsupported::unspecified());
             };
             let Some(rd) = int_or_spill_scratch(dst, scratch) else {
-                return false;
+                return Err(Unsupported::unspecified());
             };
             let enc = match (matches!(kind, FpCastKind::UFpToInt), src_f32) {
                 (true, true) => enc_fcvtzu_x_s(rd, dn),
@@ -605,7 +597,7 @@ fn emit_fp_cast(
             };
             emit(code, enc);
             store_spilled_int(code, frame, dst, rd);
-            true
+            Ok(())
         }
         FpCastKind::F32ToF64 | FpCastKind::F64ToF32 => {
             let widen = matches!(kind, FpCastKind::F32ToF64);
@@ -615,10 +607,10 @@ fn emit_fp_cast(
                 materialize_fp(code, src_place, frame.fp_scratch[0], frame)
             };
             let Some(dn) = dn else {
-                return false;
+                return Err(Unsupported::unspecified());
             };
             let Some(dd) = fp_or_spill_dst(dst, frame) else {
-                return false;
+                return Err(Unsupported::unspecified());
             };
             emit(
                 code,
@@ -629,7 +621,7 @@ fn emit_fp_cast(
                 },
             );
             store_spilled_fp(code, frame, dst, dd);
-            true
+            Ok(())
         }
     }
 }
@@ -670,7 +662,7 @@ pub(super) fn emit_phi_predecessor_moves(
     alloc: &Allocation,
     scratch: &ScratchPool,
     frame: Frame,
-) -> bool {
+) -> Emit {
     super::ssa::emit_common::emit_phi_predecessor_moves(
         &super::ssa::emit_common::Aarch64Backend,
         code,
@@ -689,14 +681,14 @@ pub(super) fn emit_phi_predecessor_moves(
 /// slots: leaves first; when only cycles remain one cycle source is
 /// saved into `hold` and every move reading it redirected, exposing a
 /// new leaf. `hold` and `stage` lie outside the allocator's bank.
-/// `false` for an FP or `None` location.
+/// `Err` for an FP or `None` location.
 pub(super) fn schedule_place_moves(
     code: &mut Vec<u8>,
     moves: &mut Vec<(Place, Place)>,
     frame: Frame,
     hold: Reg,
     stage: Reg,
-) -> bool {
+) -> Emit {
     super::ssa::emit_common::schedule_place_moves(
         &super::ssa::emit_common::Aarch64Backend,
         code,

@@ -978,9 +978,9 @@ impl AsmRegion {
     }
 
     /// Store the register outputs back through their captured addresses
-    /// (x16 holds the address; the operand pool is untouched). `false` for
-    /// an output width with no store form.
-    fn emit_outputs(&self, code: &mut Vec<u8>, ops: &AsmOperands) -> bool {
+    /// (x16 holds the address; the operand pool is untouched). `Err` for an
+    /// output width with no store form.
+    fn emit_outputs(&self, code: &mut Vec<u8>, ops: &AsmOperands) -> Emit {
         use super::super::ir::AsmConstraint;
         for (i, op) in ops.asm.operands.iter().enumerate() {
             if !op.is_output || matches!(op.constraint, AsmConstraint::Mem | AsmConstraint::MemBase)
@@ -1002,10 +1002,10 @@ impl AsmRegion {
                 4 => emit(code, enc_str32_imm(Reg(r), Reg(16), 0)),
                 2 => emit(code, enc_strh_imm(Reg(r), Reg(16), 0)),
                 1 => emit(code, enc_strb_imm(Reg(r), Reg(16), 0)),
-                _ => return false,
+                _ => return Err(Unsupported::unspecified()),
             }
         }
-        true
+        Ok(())
     }
 
     /// Restore the saved registers; only the naked carve moves sp back.
@@ -1028,7 +1028,7 @@ impl AsmRegion {
         code: &mut Vec<u8>,
         ops: &AsmOperands,
     ) -> Result<(), alloc::string::String> {
-        if !self.emit_outputs(code, ops) {
+        if self.emit_outputs(code, ops).is_err() {
             return Err(alloc::string::String::from(
                 "aarch64 inline asm: unsupported output width",
             ));
@@ -1845,11 +1845,11 @@ pub(super) fn emit_inline_asm_aarch64(
     asm_text_labels: &mut Vec<super::AsmTextLabel>,
     asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
     goto_ctx: Option<AsmGotoCtxA64<'_>>,
-) -> bool {
+) -> Emit {
     // A statement that lowers to nothing needs no staging;
     // `asm_scratch_bytes` reserved none.
     if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::A64) {
-        return true;
+        return Ok(());
     }
     let mut out = AsmSink {
         code,
@@ -1881,12 +1881,9 @@ pub(super) fn emit_inline_asm_aarch64(
     ) {
         Ok(map_state) => {
             *text_map_state = map_state;
-            true
+            Ok(())
         }
-        Err(m) => {
-            bail_msg(&m);
-            false
-        }
+        Err(m) => fail(m),
     }
 }
 

@@ -12,7 +12,7 @@ fn emit_phi_predecessor_moves(
     func: &super::super::ir::FunctionSsa,
     alloc: &Allocation,
     frame: Frame,
-) -> bool {
+) -> super::ssa::emit_common::Emit {
     // r10 / r11 (int) and the FP scratch pair are reserved scratch outside the
     // allocator's banks, so they hold no value live across the terminator.
     super::ssa::emit_common::emit_phi_predecessor_moves(
@@ -40,7 +40,7 @@ fn schedule_place_moves(
     frame: Frame,
     hold: Reg,
     stage: Reg,
-) -> bool {
+) -> super::ssa::emit_common::Emit {
     super::ssa::emit_common::schedule_place_moves(
         &super::ssa::emit_common::X64Backend,
         code,
@@ -501,7 +501,7 @@ impl FnEmit<'_, '_> {
         }
         // r10 / r11 are never argument registers nor in the allocator's
         // bank, so they cannot collide with a pending source or target.
-        if !schedule_place_moves(code, &mut moves, frame, SCRATCH_R10, SCRATCH_R11) {
+        if schedule_place_moves(code, &mut moves, frame, SCRATCH_R10, SCRATCH_R11).is_err() {
             return false;
         }
         for (dst, kind) in exts {
@@ -610,13 +610,15 @@ impl FnEmit<'_, '_> {
             }
         }
         // Predecessor-exit moves for the phis at every successor's head.
-        if !emit_phi_predecessor_moves(
+        if emit_phi_predecessor_moves(
             self.out.cx.code,
             block_idx as super::super::ir::BlockId,
             func,
             alloc,
             frame,
-        ) {
+        )
+        .is_err()
+        {
             return false;
         }
         self.emit_terminator(block_idx, block, tail_call)

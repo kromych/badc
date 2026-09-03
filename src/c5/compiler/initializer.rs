@@ -277,6 +277,9 @@ impl Compiler {
         align: usize,
         bytes: usize,
     ) -> i64 {
+        if align > 8 {
+            self.data_align = self.data_align.max(align);
+        }
         match store {
             DataStore::Static => {
                 if align > 1 {
@@ -2275,7 +2278,10 @@ impl Compiler {
         let mut full_dims = alloc::vec::Vec::with_capacity(dims.len());
         full_dims.push(rows);
         full_dims.extend_from_slice(&dims[1..]);
-        let off = self.reserve_data_bytes(DataStore::Static, 8, count * elem_size);
+        // C99 6.2.8: the literal is an unnamed object of the array type,
+        // whose alignment is its element type's.
+        let align = self.align_of_type(elem_ty).max(8);
+        let off = self.reserve_data_bytes(DataStore::Static, align, count * elem_size);
         if elem_is_struct {
             self.collect_struct_array_data(elem_ty, off, &full_dims)?;
         } else {
@@ -2376,7 +2382,8 @@ impl Compiler {
         // unnamed object (C99 6.5.2.5p3) and the data-object model
         // identifies an object by its start offset.
         let size = self.size_of_type(cl_ty).max(1);
-        let off = self.reserve_data_bytes(DataStore::Static, 8, size.div_ceil(8) * 8);
+        let align = self.align_of_type(cl_ty).max(8);
+        let off = self.reserve_data_bytes(DataStore::Static, align, size.div_ceil(8) * 8);
         let sym_idx = self.intern_compound_literal_symbol(off, cl_ty, size as i64);
         self.collect_struct_initializer(struct_id_of(cl_ty), off)?;
         Ok((off, sym_idx))
@@ -2395,7 +2402,8 @@ impl Compiler {
     ) -> Result<(i64, usize), C5Error> {
         let size = self.size_of_type(cl_ty).max(1);
         // The scalar initializer writes whole 8-byte slots.
-        let off = self.reserve_data_bytes(DataStore::Static, 8, size.div_ceil(8) * 8);
+        let align = self.align_of_type(cl_ty).max(8);
+        let off = self.reserve_data_bytes(DataStore::Static, align, size.div_ceil(8) * 8);
         let sym_idx = self.intern_compound_literal_symbol(off, cl_ty, size as i64);
         self.parse_global_initializer(cl_ty, off, false)?;
         Ok((off, sym_idx))

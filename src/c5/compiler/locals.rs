@@ -322,6 +322,26 @@ impl Compiler {
         Ok(())
     }
 
+    /// Reserve a block-scope compound literal's frame slot. C99 6.5.2.5p5
+    /// makes the literal an unnamed object of the named type, so a type
+    /// alignment above the 8-byte slot places it in the over-aligned frame
+    /// region as a named declarator's does.
+    fn reserve_compound_literal_slot(&mut self, ty: i64, slots: i64) -> Result<i64, C5Error> {
+        let slot = self.reserve_slots(slots);
+        let align = self.align_of_type(ty) as i64;
+        if align > 8 {
+            if align > super::MAX_FRAME_ALIGN {
+                return Err(self.compile_err(format!(
+                    "requested alignment {align} exceeds the maximum for an \
+                     automatic object ({}); use static storage",
+                    super::MAX_FRAME_ALIGN
+                )));
+            }
+            self.func_over_aligned.push((slot, align, slots * 8));
+        }
+        Ok(slot)
+    }
+
     /// Parse one declaration inside a function body: the declaration
     /// specifiers, then a comma-separated declarator list each with an
     /// optional initializer. The innermost open scope -- `block_scopes`
@@ -2263,7 +2283,10 @@ impl Compiler {
                     needs_runtime = scan_runtime;
                 }
                 count = rows * inner_span;
-                slot = self.reserve_slots(self.local_storage_slots(elem_ty, count));
+                slot = self.reserve_compound_literal_slot(
+                    elem_ty,
+                    self.local_storage_slots(elem_ty, count),
+                )?;
                 let full = elem_size * count as usize;
                 if needs_runtime {
                     let zero_off = self.stage_template_bytes(full);
@@ -2298,7 +2321,10 @@ impl Compiler {
                 rows = array_dims[0];
                 count = rows * inner_span;
                 let full = elem_size * count as usize;
-                slot = self.reserve_slots(self.local_storage_slots(elem_ty, count));
+                slot = self.reserve_compound_literal_slot(
+                    elem_ty,
+                    self.local_storage_slots(elem_ty, count),
+                )?;
                 let needs_runtime = self.lex.tk == '{'
                     && if elem_is_aggregate {
                         self.struct_init_needs_runtime()?
@@ -2363,7 +2389,7 @@ impl Compiler {
             let sid = struct_id_of(t);
             let elem_size = self.size_of_type(t);
             let cl_slots = self.slots_of_type(t);
-            slot = self.reserve_slots(cl_slots);
+            slot = self.reserve_compound_literal_slot(t, cl_slots)?;
             if cl_slots >= 1 {
                 self.multi_cell_temps.push((slot, cl_slots));
             }
@@ -2380,7 +2406,7 @@ impl Compiler {
             value_ty = t;
         } else {
             // Scalar compound literal `(T){ expr }`.
-            slot = self.reserve_slots(self.slots_of_type(t));
+            slot = self.reserve_compound_literal_slot(t, self.slots_of_type(t))?;
             if self.lex.tk != '{' {
                 return Err(self.compile_err("`{` expected in compound literal"));
             }

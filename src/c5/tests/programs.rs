@@ -891,6 +891,14 @@ fn overaligned_bss_placement() {
 }
 
 #[test]
+fn compound_literal_alignment() {
+    // C99 6.5.2.5p5: a compound literal is an unnamed object of its named
+    // type, so it is placed on that type's boundary rather than on the
+    // 8-byte data granularity. Runtime address checks; clang returns 0.
+    assert_eq!(run_fixture("compound_literal_alignment.c"), 0);
+}
+
+#[test]
 fn attributed_aggregate_align_floor() {
     // A variable-level `aligned(N)` lower than the type's alignment still
     // places at the members' attribute-free alignment, including where the

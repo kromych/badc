@@ -1115,101 +1115,38 @@ fn emit_prologue(
     abi: super::Abi,
     extern_data_refs: &mut Vec<super::UserExternDataRef>,
 ) {
-    // Windows-on-ARM64 variadic gr-save area (Microsoft ARM64 calling
-    // convention). The caller passes the first eight arguments (named
-    // and variadic) in x0..x7 by position and the rest on the incoming
-    // stack just above the call-site sp, with no shadow / home area
-    // reserved. The callee allocates its own 64-byte gr-save area
-    // directly above the saved fp/lr and spills all eight argument
-    // registers into it, so the named parameters and the
-    // register-resident variadic arguments form one contiguous
-    // 8-byte-stride region whose top edge meets the incoming stack
-    // overflow: `va_arg` walks the gr-save slots then crosses into the
-    // stack arguments with no gap. The body reads its named parameters
-    // through the same cells (`Frame::param_cell_stride` == 8).
-    //
-    // Spill ALL eight argument registers, not just the named ones: a
-    // variadic argument that landed in a register (x{fixed}..x7) must
-    // reach the gr-save area for `va_arg` to read it. The caller passes
-    // every argument through the integer registers as a raw 8-byte
-    // value (the walker widens variadic floating-point arguments to
-    // double and passes `fp_arg_mask = 0` under `variadic_int_only`),
-    // so the spill is uniformly integer; the body reads only the named
-    // slots and the surplus stores feed `va_arg`.
+    // A host-ABI variadic callee spills every argument register -- not
+    // just the named ones, since a variadic argument that landed in a
+    // register must reach the save area for `va_arg` to read it -- into a
+    // register save area directly above the saved fp/lr. Windows on ARM64
+    // (Microsoft ARM64 calling convention) passes every argument through
+    // x0..x7 as a raw 8-byte value and takes a 64-byte integer area whose
+    // top edge meets the incoming stack overflow; AAPCS64 (Appendix B)
+    // takes the general area (x0..x7) at `[fp + 16 .. fp + 80)` and the
+    // vector area (q0..q7, low eightbyte used) at `[fp + 80 .. fp + 208)`,
+    // with the incoming stack overflow at `[fp + 208 ..)`. Neither is ever
+    // a full leaf (`param_spill_bytes != 0`), so the frame record follows.
     if win_arm64_variadic_callee(func, abi) {
         debug_assert_eq!(
             frame.param_spill_bytes, WIN_ARM64_GR_SAVE_BYTES,
             "win-arm64 variadic prologue must reserve the full gr-save area"
         );
-        emit_sub_sp_imm(code, WIN_ARM64_GR_SAVE_BYTES);
-        for (i, &r) in abi.int_arg_regs.iter().enumerate() {
-            let off = (i as u32) * 8;
-            emit(code, enc_str_imm(Reg(r), Reg(31), off));
-        }
-        // Standard frame below the gr-save area. A variadic callee is
-        // never a full leaf (`param_spill_bytes != 0`), so the frame
-        // record always follows.
-        emit_frame_and_saves(code, alloc, frame);
-        emit_canary_store(code, frame, abi, extern_data_refs);
+        emit_register_save_area(code, alloc, frame, abi, extern_data_refs, false);
         return;
     }
-    // AAPCS64 variadic register save area (AAPCS64 Appendix B). Reserve
-    // 192 bytes above the saved fp/lr: the general register save area
-    // (x0..x7) at `[fp + 16 .. fp + 80)` and the vector register save
-    // area (q0..q7, low eightbyte used) at `[fp + 80 .. fp + 208)`. The
-    // named parameters read their values from this area (`local_slot_off`
-    // redirects positive c5 cdecl slots here) and `va_start` / `va_arg`
-    // walk it for the variadic tail. The incoming stack overflow begins
-    // immediately above the area at `[fp + 208 .. )` -- the value
-    // `va_start` records as `__stack`.
-    //
-    // Spill ALL eight integer and eight vector argument registers, not
-    // just the named ones: a variadic argument that landed in a register
-    // (x{named_int}..x7 / d{named_fp}..d7) must reach the save area for
-    // `va_arg` to read it. AAPCS64 has no caller-passed vector-count
-    // (unlike System V's `al`), so the vector spill is unconditional.
     if aarch64_host_variadic_callee(func, abi) {
         debug_assert_eq!(
             frame.param_spill_bytes, AARCH64_VA_SAVE_BYTES,
             "aapcs64 variadic prologue must reserve the full register save area"
         );
-        emit_sub_sp_imm(code, AARCH64_VA_SAVE_BYTES);
-        for (i, &r) in abi.int_arg_regs.iter().enumerate() {
-            emit(code, enc_str_imm(Reg(r), Reg(31), (i as u32) * 8));
-        }
-        // The vector half is skipped when the FP/SIMD file is off limits
-        // (`no_fp_varargs`): the store itself would fault. The area stays
-        // reserved so every offset above it is unchanged, and `va_start`
-        // marks it exhausted.
-        if !abi.no_fp_varargs {
-            for i in 0..8u32 {
-                // `str dN, [sp, #gr_save + i*16]` -- the d-register view
-                // stores the low eightbyte of vN into the slot start; a
-                // `va_arg(double)` reads it back from the same offset.
-                emit(
-                    code,
-                    enc_str_d_imm(i as u8, Reg(31), AARCH64_GR_SAVE_BYTES + i * 16),
-                );
-            }
-        }
-        emit_frame_and_saves(code, alloc, frame);
-        emit_canary_store(code, frame, abi, extern_data_refs);
+        emit_register_save_area(code, alloc, frame, abi, extern_data_refs, true);
         return;
     }
-    // Host-arg-reg spill for non-variadic functions: spill each
-    // declared int param into a 16-byte c5 cdecl slot above fp,
-    // restripe any host-stack overflow into 16-byte slots.
-    //
-    // The total bytes this block allocates is computed once by
-    // `prologue_param_spill_bytes` and stored on `frame`; the
-    // epilogue reads it directly. Per-slot store-elision when
-    // `Inst::ParamRef` seeded the slot saves the explicit store
-    // but still allocates the 16-byte cell (replaced by a coalesced
-    // `sub sp`) so the surrounding `LocalAddr` offsets stay stable.
-    // When every register-passed parameter is ParamRef-seeded, has
-    // no address taken, and has no surviving slot access, the
-    // entire register stripe drops out (`frame.param_spill_bytes`
-    // already reflects 0) and no instructions are emitted here.
+    // Spill each declared parameter into a 16-byte c5 cdecl cell above fp
+    // and restripe any host-stack overflow into 16-byte cells. The total is
+    // `frame.param_spill_bytes`, which the epilogue reads back; a cell whose
+    // `Inst::ParamRef` seeded it keeps its bytes (so the `LocalAddr` offsets
+    // stay stable) but takes no store.
     let entry_spill = if spills_named_params_on_entry(func, abi) {
         func.n_params
     } else {
@@ -1219,113 +1156,126 @@ fn emit_prologue(
         if params_interleaved(func, abi) {
             emit_interleaved_param_cells(code, func, abi);
         } else {
-            let (n_reg, n_stack) = param_reg_stack_split(func, abi);
-            let placements = param_placements(func, abi);
-            if n_stack > 0 {
-                let overflow_bytes = (n_stack as u32) * 16;
-                emit_stack_alloc(code, overflow_bytes, None);
-                // Each scalar stack parameter's incoming offset is the
-                // planner's placement offset, which accounts for any by-value
-                // aggregate stack parameter (StructStack) that precedes it. A
-                // plain index assumes an 8-byte stride and would read an
-                // aggregate's bytes instead of the scalar.
-                let mut slot_i = 0u32;
-                for p in &placements {
-                    if let super::ArgPlacement::Stack(off) = p {
-                        let host_off = *off + overflow_bytes;
-                        let c5_off = slot_i * 16;
-                        emit(code, enc_ldr_imm(Reg(16), Reg(31), host_off));
-                        emit(code, enc_str_imm(Reg(16), Reg(31), c5_off));
-                        slot_i += 1;
-                    }
-                }
-            }
-            let (seeded_params, addr_taken_slots, needed_slots) =
-                super::ssa::emit_common::scan_param_slot_usage(func, alloc);
-            let mut pending_sub: u32 = 0;
-            for i in (0..n_reg).rev() {
-                let slot = (i as i64) + 2;
-                let skip = seeded_params.contains(&(i as u32))
-                    && !addr_taken_slots.contains(&slot)
-                    && !needed_slots.contains(&slot);
-                if skip {
-                    pending_sub += 16;
-                } else {
-                    if pending_sub > 0 {
-                        emit_stack_alloc(code, pending_sub, None);
-                        pending_sub = 0;
-                    }
-                    // Source the incoming value from the parameter's
-                    // argument register per the plan. An integer parameter's
-                    // register is `plan.IntReg`, not `int_arg_regs[i]`: a
-                    // floating-point parameter earlier in the list consumes
-                    // a d-register and does not shift the integer bank. A
-                    // floating-point parameter (always a `double` here -- a
-                    // `float` parameter's positive cell is unobserved and
-                    // elided) arrives in a d-register; move its bits into
-                    // x16 and store them through the same 16-byte pre-
-                    // decrement cell push the integer path uses.
-                    match placements.get(i).copied() {
-                        Some(super::ArgPlacement::FpReg(d)) => {
-                            emit(code, enc_fmov_d_to_x(Reg(16), d));
-                            emit(code, enc_str_pre(Reg(16), Reg(31), -16));
-                        }
-                        Some(super::ArgPlacement::IntReg(r)) => {
-                            emit(code, enc_str_pre(Reg(r), Reg(31), -16))
-                        }
-                        // Aggregate parameter passed in registers: reserve
-                        // its 16-byte cell here but leave the incoming
-                        // argument registers untouched. The body reads the
-                        // aggregate from a parser-reserved body local, not
-                        // from this cell; `emit_struct_param_scatter` (run
-                        // after the frame is established) stores the
-                        // argument registers straight into that local. The
-                        // cell is reserved only so the surrounding
-                        // `LocalAddr` slot offsets stay stable.
-                        Some(super::ArgPlacement::StructRegs { .. }) => {
-                            emit_sub_sp_imm(code, 16);
-                        }
-                        // No register source (stack-passed or out of range):
-                        // the overflow restripe above already filled the
-                        // cell; reserve its 16 bytes without a store.
-                        _ => emit_sub_sp_imm(code, 16),
-                    }
-                }
-            }
-            if pending_sub > 0 {
-                emit_stack_alloc(code, pending_sub, None);
-            }
+            emit_param_cells(code, func, alloc, abi);
         }
     }
-    // Leaf-function elision: a function that makes no calls
-    // (lr stays preserved), allocates no frame, spills no params,
-    // saves no callee-regs, and never sets x19 has no work in the
-    // standard prologue. AAPCS64 lets it skip the stp / mov-fp
-    // pair entirely and ret directly off the caller's lr.
+    // A full leaf makes no calls, allocates no frame, spills no params and
+    // saves no registers, so it skips the frame record and returns off the
+    // caller's lr.
     if is_full_leaf(func, frame, alloc) {
         return;
     }
-    // Standard frame: frame record, fp, frame allocation, callee
-    // saves (folded into one pre-indexed group when the frame fits).
     emit_frame_and_saves(code, alloc, frame);
     emit_struct_param_scatter(code, func, abi, frame);
     if func.indirect_result_slot != 0 {
-        // AAPCS64 6.9: save the caller-supplied x8 indirect-result
-        // pointer into its body local; `return s;` writes the
-        // aggregate result through it.
+        // AAPCS64 6.9: save the caller-supplied x8 indirect-result pointer
+        // into its body local; `return s;` writes the aggregate through it.
         emit_local_addr_fp(code, Place::IntReg(16), func.indirect_result_slot, frame);
         emit(code, enc_str_imm(Reg(8), Reg(16), 0));
     }
-    // C11 6.7.5: reserve the over-aligned objects' region below the static
-    // frame and align sp down into it. Done last, after all fp-relative setup;
-    // the objects live at [sp + region_off]. Reserving before aligning keeps
-    // the AND's descent inside bytes the reservation already claimed, so the
-    // region cannot overlap the frame.
-    // Before the realign: the slot is fp-relative, so the sp move that
-    // follows does not reach it.
+    // The canary slot is fp-relative, so it is stored before any sp
+    // realignment; the over-aligned region (C11 6.7.5) is reserved and
+    // aligned last, after every fp-relative setup.
     emit_canary_store(code, frame, abi, extern_data_refs);
     if frame.realign_align > 0 {
         emit_realign_sp(code, frame);
+    }
+}
+
+/// The host-ABI variadic register save area above the saved fp/lr: the
+/// integer argument registers at 8-byte stride and, for AAPCS64, the vector
+/// registers at 16-byte stride after them. The vector half is skipped when
+/// the FP/SIMD file is off limits (`no_fp_varargs`): the store itself would
+/// fault. The area stays reserved so every offset above it is unchanged,
+/// and `va_start` marks it exhausted.
+fn emit_register_save_area(
+    code: &mut Vec<u8>,
+    alloc: &Allocation,
+    frame: Frame,
+    abi: super::Abi,
+    extern_data_refs: &mut Vec<super::UserExternDataRef>,
+    vector: bool,
+) {
+    emit_sub_sp_imm(code, frame.param_spill_bytes);
+    for (i, &r) in abi.int_arg_regs.iter().enumerate() {
+        emit(code, enc_str_imm(Reg(r), Reg(31), (i as u32) * 8));
+    }
+    if vector && !abi.no_fp_varargs {
+        for i in 0..8u32 {
+            // The d-register view stores the low eightbyte of vN into the
+            // slot start; a `va_arg(double)` reads it back from the same
+            // offset.
+            emit(
+                code,
+                enc_str_d_imm(i as u8, Reg(31), AARCH64_GR_SAVE_BYTES + i * 16),
+            );
+        }
+    }
+    emit_frame_and_saves(code, alloc, frame);
+    emit_canary_store(code, frame, abi, extern_data_refs);
+}
+
+/// The contiguous-prefix cell layout: the host-stack overflow restriped
+/// into cells first, then one 16-byte pre-decrement push per
+/// register-passed parameter from the last to the first, with the stores
+/// of ParamRef-seeded, unaddressed cells elided into one coalesced
+/// `sub sp`.
+fn emit_param_cells(code: &mut Vec<u8>, func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) {
+    let (n_reg, n_stack) = param_reg_stack_split(func, abi);
+    let placements = param_placements(func, abi);
+    if n_stack > 0 {
+        let overflow_bytes = (n_stack as u32) * 16;
+        emit_stack_alloc(code, overflow_bytes, None);
+        // Each scalar stack parameter's incoming offset is the planner's
+        // placement offset, which accounts for any by-value aggregate stack
+        // parameter (StructStack) that precedes it.
+        let mut slot_i = 0u32;
+        for p in &placements {
+            if let super::ArgPlacement::Stack(off) = p {
+                let host_off = *off + overflow_bytes;
+                let c5_off = slot_i * 16;
+                emit(code, enc_ldr_imm(Reg(16), Reg(31), host_off));
+                emit(code, enc_str_imm(Reg(16), Reg(31), c5_off));
+                slot_i += 1;
+            }
+        }
+    }
+    let (seeded_params, addr_taken_slots, needed_slots) =
+        super::ssa::emit_common::scan_param_slot_usage(func, alloc);
+    let mut pending_sub: u32 = 0;
+    for i in (0..n_reg).rev() {
+        let slot = (i as i64) + 2;
+        let skip = seeded_params.contains(&(i as u32))
+            && !addr_taken_slots.contains(&slot)
+            && !needed_slots.contains(&slot);
+        if skip {
+            pending_sub += 16;
+            continue;
+        }
+        if pending_sub > 0 {
+            emit_stack_alloc(code, pending_sub, None);
+            pending_sub = 0;
+        }
+        // The source is the parameter's own argument register per the plan
+        // (an FP parameter earlier in the list does not shift the integer
+        // bank). A floating-point parameter arrives in a d-register; its
+        // bits move through x16 into the same cell push.
+        match placements.get(i).copied() {
+            Some(super::ArgPlacement::FpReg(d)) => {
+                emit(code, enc_fmov_d_to_x(Reg(16), d));
+                emit(code, enc_str_pre(Reg(16), Reg(31), -16));
+            }
+            Some(super::ArgPlacement::IntReg(r)) => emit(code, enc_str_pre(Reg(r), Reg(31), -16)),
+            // An aggregate passed in registers reserves its cell and keeps
+            // its argument registers for `emit_struct_param_scatter`, which
+            // stores them into the body local the aggregate is read from. A
+            // stack-passed or out-of-range parameter's cell was filled by
+            // the overflow restripe above.
+            _ => emit_sub_sp_imm(code, 16),
+        }
+    }
+    if pending_sub > 0 {
+        emit_stack_alloc(code, pending_sub, None);
     }
 }
 
@@ -1869,7 +1819,7 @@ fn fused_branch_cond(
 
 /// Emit the function epilogue + `ret` for a Return terminator.
 #[allow(clippy::too_many_arguments)]
-fn emit_return(
+pub(super) fn emit_return(
     code: &mut Vec<u8>,
     value: u32,
     alloc: &Allocation,
@@ -1880,162 +1830,28 @@ fn emit_return(
     extern_sites: &mut Vec<super::UserExternCallSite>,
     extern_data_refs: &mut Vec<super::UserExternDataRef>,
 ) {
-    // Host-ABI aggregate return (AAPCS64 6.9). `value` is the
-    // struct's address. An aggregate of at most 16 bytes returns its
-    // eightbytes in x0/x1; a larger one is copied through the caller-
-    // supplied x8 pointer (saved to `indirect_result_slot` by the
-    // prologue) and that pointer is returned in x0.
     if let Some(ai) = func.ret_agg {
-        let desc = &func.agg_descs[ai as usize];
-        let size = desc.size;
-        let place = place_of(alloc, value);
-        let saddr = materialize_int(code, place, scratch.primary, frame).unwrap_or(scratch.primary);
-        if saddr.0 != scratch.primary.0 {
-            emit_mov_reg(code, scratch.primary, saddr);
-        }
-        let base = scratch.primary;
-        if let Some(members) = super::abi_classify::hfa_member_layout(&desc.fields) {
-            // AAPCS64 6.9: a homogeneous floating-point aggregate returns
-            // member k in v[k] (d-register for an F64 member, s-register
-            // for an F32). Load each from its byte offset in the source.
-            for (k, (off, msize)) in members.iter().enumerate() {
-                emit_agg_load_fp(
-                    code,
-                    k as u8,
-                    base,
-                    *off,
-                    *msize,
-                    desc.align,
-                    abi.strict_align,
-                    scratch.secondary,
-                );
-            }
-        } else if size <= 16 {
-            if size > 8 {
-                emit_agg_load_int(
-                    code,
-                    Reg(1),
-                    base,
-                    8,
-                    8,
-                    desc.align,
-                    abi.strict_align,
-                    scratch.secondary,
-                );
-            }
-            emit_agg_load_int(
-                code,
-                Reg(0),
-                base,
-                0,
-                8,
-                desc.align,
-                abi.strict_align,
-                scratch.secondary,
-            );
-        } else {
-            let dst = scratch.secondary;
-            emit_local_addr_fp(code, Place::IntReg(dst.0), func.indirect_result_slot, frame);
-            emit(code, enc_ldr_imm(dst, dst, 0));
-            // Both endpoints are the caller's object, so its alignment
-            // bounds the transfer unit.
-            let unit = super::super::access_chunk(desc.align, abi.strict_align, 8);
-            // The byte form's scaled immediate reaches 4095, so a copy
-            // past that advances both bases; `WINDOW` is 8-aligned and
-            // below 4096, keeping every unit and tail offset in range.
-            const WINDOW: u32 = 4088;
-            let mut pos = 0u32;
-            while pos < size {
-                let run = (size - pos).min(WINDOW);
-                let mut copied = 0u32;
-                while copied + unit <= run {
-                    emit_copy_unit(code, unit, Reg(0), base, copied, dst, copied);
-                    copied += unit;
-                }
-                while copied < run {
-                    emit(code, enc_ldrb_imm(Reg(0), base, copied));
-                    emit(code, enc_strb_imm(Reg(0), dst, copied));
-                    copied += 1;
-                }
-                pos += run;
-                if pos < size {
-                    emit(code, super::encode::enc_add_imm(base, base, run));
-                    emit(code, super::encode::enc_add_imm(dst, dst, run));
-                }
-            }
-            if size > WINDOW {
-                // The advanced `dst` no longer names the caller's buffer;
-                // re-read the saved indirect-result pointer to return it.
-                emit_local_addr_fp(code, Place::IntReg(dst.0), func.indirect_result_slot, frame);
-                emit(code, enc_ldr_imm(dst, dst, 0));
-            }
-            emit_mov_reg(code, Reg(0), dst);
-        }
+        emit_aggregate_return(code, value, ai, alloc, frame, scratch, func, abi);
     } else if value != super::super::ir::NO_VALUE {
-        // Move the return value into x0. c5's calling convention
-        // ferries every return value (including f64 bit patterns)
-        // through the int return register, matching the pool path's
-        // `mov x0, x19` epilogue. FpReg-placed values reach x0 via
-        // `fmov x, d`; int values flow through the standard
-        // materialise + mov. NO_VALUE marks an implicit return with
-        // no live accumulator -- harmless because c5 calls never
-        // read the result of a void-returning function.
-        let place = place_of(alloc, value);
-        // A floating-point scalar result is returned in d0 (C99
-        // 6.2.5p10 / AAPCS64 6.4.2). A `float` result occupies s0, the
-        // low 32 bits of d0, which a d-register copy / 8-byte FP load
-        // preserves. The value's producing instruction determines the
-        // register file even when the allocator spilled it.
-        let returns_fp = func.ret_is_fp
-            || ((value as usize) < func.insts.len()
-                && super::ssa::reg_alloc::produces_fp_result(&func.insts[value as usize]));
-        if let Place::FpReg(r) = place {
-            if r != 0 {
-                emit(code, super::encode::enc_fmov_d_d(0, r));
-            }
-        } else if returns_fp {
-            // The function returns a floating-point scalar in d0 but the
-            // value is GPR / spill resident -- a bare FP constant
-            // materializes as an integer immediate, and any value whose
-            // producing instruction is integer-classed lands in a GPR.
-            // The 8 bytes hold the f64 bit pattern (the low 32 are an
-            // f32's s0); reinterpret them into d0.
-            match place {
-                Place::Spill(slot) => {
-                    let sp_off = spill_off(frame, slot);
-                    emit_spill_ldr_d_auto(code, frame, 0, sp_off);
-                }
-                _ => {
-                    let src = materialize_int(code, place, scratch.primary, frame)
-                        .unwrap_or(scratch.primary);
-                    emit(code, enc_fmov_x_to_d(0, src));
-                }
-            }
-        } else if let Some(src) = materialize_int(code, place, scratch.primary, frame)
-            && src.0 != 0
-        {
-            emit_mov_reg(code, Reg(0), src);
-        }
+        emit_scalar_return(code, value, alloc, frame, scratch, func);
     }
-    // Leaf-function elision: prologue emitted no save, so the
-    // epilogue emits no matching restore -- the function body is
-    // bracketed only by the return-value materialization and the
-    // ret. Keep the symmetry tight so any reader can pair the
-    // two halves at a glance.
+    // A full leaf's prologue emitted no save, so its epilogue emits no
+    // restore: the body is bracketed only by the return-value
+    // materialization and the `ret`.
     if is_full_leaf(func, frame, alloc) {
         emit(code, enc_ret(Reg(30)));
         return;
     }
     emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
-    // A dynamic-sp frame re-establishes `sp = fp - frame_bytes` first,
-    // so the sp-relative restores below read the prologue-time
-    // addresses regardless of the body's alloca moves.
+    // A dynamic-sp frame re-establishes `sp = fp - frame_bytes` first, so
+    // the sp-relative restores read the prologue-time addresses regardless
+    // of the body's alloca moves.
     restore_dynamic_sp(code, frame);
-    // Restore fp/lr first in the folded shape (the lr load feeds `ret`,
-    // so it issues off sp before the writeback chain), then x19 and the
-    // callee-saved GPRs / FP regs in mirror order of the prologue's
-    // saves; the final restore's post-index tears the frame down. The
-    // unfolded shape keeps the restore / `add sp` / fp-lr `ldp` order.
+    // The folded shape restores fp/lr first (the lr load feeds `ret`, so it
+    // issues off sp before the writeback chain), then x19 and the
+    // callee-saved registers in mirror order of the prologue's saves; the
+    // final restore's post-index tears the frame down. The unfolded shape
+    // keeps the restore / `add sp` / fp-lr `ldp` order.
     let fold = frame_fold_bytes(alloc, frame);
     if fold != 0 {
         emit(code, enc_ldp_off(Reg(29), Reg(30), Reg(31), fold as i32));
@@ -2043,26 +1859,163 @@ fn emit_return(
     } else {
         emit_epilogue_restore_regs(code, alloc, frame, 0);
         if frame.frame_bytes > 0 {
-            // x16 is call-clobbered and carries no result, so it is free
-            // to hold a frame size past the immediate reach.
+            // x16 is call-clobbered and carries no result, so it is free to
+            // hold a frame size past the immediate reach.
             super::encode::emit_add_sp_imm_scratch(code, frame.frame_bytes, Reg(16));
         }
         emit(code, enc_ldp_post(Reg(29), Reg(30), Reg(31), 16));
     }
-    // Drop whatever bytes the prologue allocated above the saved
-    // fp/lr for c5 cdecl parameter slots. The single source of
-    // truth is `prologue_param_spill_bytes`, recorded on
-    // `frame.param_spill_bytes`; both prologue and epilogue read
-    // from there so the two sides agree across every branch the
-    // prologue takes (variadic, host-stack overflow,
-    // ParamRef-elided, per-slot pending_sub flush).
+    // The bytes the prologue allocated above the saved fp/lr for the c5
+    // cdecl parameter cells; both sides read `frame.param_spill_bytes`.
     if frame.param_spill_bytes > 0 {
         emit_add_sp_imm(code, frame.param_spill_bytes);
     }
-    // Every teardown above has completed, so sp holds the value
-    // `paciasp` signed against.
+    // Every teardown above has completed, so sp holds the value `paciasp`
+    // signed against.
     if signs_return_address(func, frame, alloc, abi) {
         emit(code, super::encode::AUTIASP);
     }
     emit(code, enc_ret(Reg(30)));
+}
+
+/// Host-ABI aggregate return (AAPCS64 6.9). `value` is the struct's
+/// address. An HFA returns member k in v[k]; an aggregate of at most 16
+/// bytes returns its eightbytes in x0/x1; a larger one is copied through
+/// the caller-supplied x8 pointer (saved to `indirect_result_slot` by the
+/// prologue) and that pointer is returned in x0.
+#[allow(clippy::too_many_arguments)]
+fn emit_aggregate_return(
+    code: &mut Vec<u8>,
+    value: u32,
+    ai: u32,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+    func: &FunctionSsa,
+    abi: super::Abi,
+) {
+    let desc = &func.agg_descs[ai as usize];
+    let size = desc.size;
+    let saddr = materialize_int(code, place_of(alloc, value), scratch.primary, frame)
+        .unwrap_or(scratch.primary);
+    if saddr.0 != scratch.primary.0 {
+        emit_mov_reg(code, scratch.primary, saddr);
+    }
+    let base = scratch.primary;
+    if let Some(members) = super::abi_classify::hfa_member_layout(&desc.fields) {
+        for (k, (off, msize)) in members.iter().enumerate() {
+            emit_agg_load_fp(
+                code,
+                k as u8,
+                base,
+                *off,
+                *msize,
+                desc.align,
+                abi.strict_align,
+                scratch.secondary,
+            );
+        }
+        return;
+    }
+    if size <= 16 {
+        if size > 8 {
+            emit_agg_load_int(
+                code,
+                Reg(1),
+                base,
+                8,
+                8,
+                desc.align,
+                abi.strict_align,
+                scratch.secondary,
+            );
+        }
+        emit_agg_load_int(
+            code,
+            Reg(0),
+            base,
+            0,
+            8,
+            desc.align,
+            abi.strict_align,
+            scratch.secondary,
+        );
+        return;
+    }
+    let dst = scratch.secondary;
+    emit_local_addr_fp(code, Place::IntReg(dst.0), func.indirect_result_slot, frame);
+    emit(code, enc_ldr_imm(dst, dst, 0));
+    // Both endpoints are the caller's object, so its alignment bounds the
+    // transfer unit. The byte form's scaled immediate reaches 4095, so a
+    // copy past that advances both bases; `WINDOW` is 8-aligned and below
+    // 4096, keeping every unit and tail offset in range.
+    let unit = super::super::access_chunk(desc.align, abi.strict_align, 8);
+    const WINDOW: u32 = 4088;
+    let mut pos = 0u32;
+    while pos < size {
+        let run = (size - pos).min(WINDOW);
+        let mut copied = 0u32;
+        while copied + unit <= run {
+            emit_copy_unit(code, unit, Reg(0), base, copied, dst, copied);
+            copied += unit;
+        }
+        while copied < run {
+            emit(code, enc_ldrb_imm(Reg(0), base, copied));
+            emit(code, enc_strb_imm(Reg(0), dst, copied));
+            copied += 1;
+        }
+        pos += run;
+        if pos < size {
+            emit(code, super::encode::enc_add_imm(base, base, run));
+            emit(code, super::encode::enc_add_imm(dst, dst, run));
+        }
+    }
+    if size > WINDOW {
+        // The advanced `dst` no longer names the caller's buffer; re-read
+        // the saved indirect-result pointer to return it.
+        emit_local_addr_fp(code, Place::IntReg(dst.0), func.indirect_result_slot, frame);
+        emit(code, enc_ldr_imm(dst, dst, 0));
+    }
+    emit_mov_reg(code, Reg(0), dst);
+}
+
+/// Move a scalar return value into its register. A floating-point scalar
+/// result is returned in d0 (C99 6.2.5p10 / AAPCS64 6.4.2); a `float`
+/// occupies s0, the low 32 bits of d0, which a d-register copy / 8-byte FP
+/// load preserves. The producing instruction determines the register file
+/// even when the allocator spilled the value or materialized it as an
+/// integer immediate. Everything else rides x0.
+fn emit_scalar_return(
+    code: &mut Vec<u8>,
+    value: u32,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+    func: &FunctionSsa,
+) {
+    let place = place_of(alloc, value);
+    let returns_fp = func.ret_is_fp
+        || ((value as usize) < func.insts.len()
+            && super::ssa::reg_alloc::produces_fp_result(&func.insts[value as usize]));
+    if let Place::FpReg(r) = place {
+        if r != 0 {
+            emit(code, super::encode::enc_fmov_d_d(0, r));
+        }
+    } else if returns_fp {
+        match place {
+            Place::Spill(slot) => {
+                let sp_off = spill_off(frame, slot);
+                emit_spill_ldr_d_auto(code, frame, 0, sp_off);
+            }
+            _ => {
+                let src =
+                    materialize_int(code, place, scratch.primary, frame).unwrap_or(scratch.primary);
+                emit(code, enc_fmov_x_to_d(0, src));
+            }
+        }
+    } else if let Some(src) = materialize_int(code, place, scratch.primary, frame)
+        && src.0 != 0
+    {
+        emit_mov_reg(code, Reg(0), src);
+    }
 }

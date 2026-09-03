@@ -252,21 +252,17 @@ pub(super) fn emit_inst(
         abi,
         target,
         imports,
-        variadic_targets,
-        conv_targets,
         extern_tls_names,
         tls_total_size,
         ..
     } = *fcx;
     let cx = &mut *out.cx;
-    let fixups = &mut *out.fixups;
     let code = &mut *cx.code;
     let plt_call_fixups = &mut *cx.plt_call_fixups;
     let data_fixups = &mut *cx.data_fixups;
     let pending_func_fixups = &mut *cx.pending_func_fixups;
     let tls_index_fixups = &mut *cx.tls_index_fixups;
     let elf_tpoff_fixups = &mut *cx.elf_tpoff_fixups;
-    let asm_extern_call_sites = &mut *cx.asm_extern_call_sites;
     match inst {
         Inst::AllocaInit(slot) => {
             // Slot 0: this function doesn't use alloca. Non-zero:
@@ -303,6 +299,149 @@ pub(super) fn emit_inst(
             spill_dst_to_slot(code, dst, rd, frame);
             true
         }
+        Inst::Load { .. }
+        | Inst::Store { .. }
+        | Inst::SegLoad { .. }
+        | Inst::SegStore { .. }
+        | Inst::LoadLocal { .. }
+        | Inst::StoreLocal { .. }
+        | Inst::LoadIndexed { .. }
+        | Inst::StoreIndexed { .. } => emit_mem_inst(code, inst, v, dst, fcx),
+        Inst::Binop { op, lhs, rhs } => emit_binop(code, *op, v, dst, *lhs, *rhs, alloc, frame),
+        Inst::BinopI { op, lhs, rhs_imm } => {
+            emit_binop_imm(code, *op, v, dst, *lhs, *rhs_imm, alloc, frame)
+        }
+        Inst::Call { .. } | Inst::CallExt { .. } | Inst::CallIndirect { .. } => {
+            emit_call_inst(out, inst, dst, fcx)
+        }
+        Inst::ImmData(offset) => emit_imm_data(code, dst, *offset, data_fixups, frame),
+        Inst::ImmCode(target_ent_pc) => {
+            emit_imm_code(code, dst, *target_ent_pc, pending_func_fixups, frame)
+        }
+        Inst::ImmExtCode(binding_idx) => {
+            emit_imm_ext_code(code, dst, *binding_idx, plt_call_fixups, imports, frame)
+        }
+        // Inst::BlockAddr is handled in emit_function's block loop
+        // (it needs the local block_offsets table for its PC-relative
+        // lea fixup), so it never reaches emit_inst.
+        Inst::Mcpy {
+            dst: d,
+            src: s,
+            size,
+            align,
+        } => emit_mcpy(
+            code,
+            dst,
+            *d,
+            *s,
+            *size,
+            *align,
+            abi.strict_align,
+            alloc,
+            frame,
+        ),
+        Inst::AtomicRmw {
+            op,
+            addr,
+            value,
+            width,
+        } => emit_atomic_rmw(code, dst, *op, *addr, *value, *width, alloc, frame),
+        Inst::AtomicCas {
+            addr,
+            expected_addr,
+            desired,
+            width,
+        } => emit_atomic_cas(
+            code,
+            dst,
+            *addr,
+            *expected_addr,
+            *desired,
+            *width,
+            alloc,
+            frame,
+        ),
+        Inst::Intrinsic { kind, args } => {
+            emit_intrinsic(code, *kind, args, dst, v, func, alloc, frame, abi)
+        }
+        Inst::X86Simd { op, imm, args } => emit_x86_simd(code, *op, *imm, args, alloc, frame),
+        Inst::InlineAsm { asm, args } => emit_inline_asm(out, asm, args, fcx, None),
+        Inst::Fneg(value) => emit_fneg(code, dst, v, *value, alloc, frame),
+        Inst::Fma {
+            a,
+            b,
+            c,
+            neg_product,
+            neg_addend,
+        } => emit_fma(
+            code,
+            dst,
+            v,
+            *a,
+            *b,
+            *c,
+            *neg_product,
+            *neg_addend,
+            alloc,
+            frame,
+        ),
+        Inst::MulAdd {
+            a,
+            b,
+            c,
+            neg_product,
+        } => emit_mul_add(code, dst, v, *a, *b, *c, *neg_product, alloc, frame),
+        Inst::Extend { value, kind } => emit_extend(code, dst, *value, *kind, alloc, frame),
+        Inst::Bswap { value, width } => emit_bswap(code, dst, *value, *width, alloc, frame),
+        Inst::Copy { value, is_fp } => emit_copy(code, dst, *value, *is_fp, alloc, frame),
+        Inst::FpCast { kind, value } => emit_fp_cast(code, dst, v, *kind, *value, alloc, frame),
+        Inst::TlsAddr(offset) => emit_tls_addr(
+            code,
+            dst,
+            *offset,
+            v,
+            target,
+            tls_index_fixups,
+            elf_tpoff_fixups,
+            extern_tls_names,
+            tls_total_size,
+            frame,
+        ),
+        Inst::Phi { .. } => {
+            // The value is materialised by the predecessor-exit
+            // moves emitted just before each branch terminator
+            // that targets this block; at the IR position the
+            // phi's allocated Place already holds the merged
+            // value.
+            true
+        }
+        other => {
+            bail_msg(&alloc::format!(
+                "inst variant not yet covered: {}",
+                other.variant_name()
+            ));
+            let _ = frame;
+            false
+        }
+    }
+}
+
+/// The load / store instructions.
+fn emit_mem_inst(
+    code: &mut Vec<u8>,
+    inst: &Inst,
+    v: super::super::ir::ValueId,
+    dst: Place,
+    fcx: &FnCtx,
+) -> bool {
+    let FnCtx {
+        func,
+        alloc,
+        frame,
+        abi,
+        ..
+    } = *fcx;
+    match inst {
         Inst::Load {
             addr,
             disp,
@@ -395,10 +534,29 @@ pub(super) fn emit_inst(
         } => emit_store_indexed(
             code, dst, *base, *index, *scale, *value, *kind, alloc, frame,
         ),
-        Inst::Binop { op, lhs, rhs } => emit_binop(code, *op, v, dst, *lhs, *rhs, alloc, frame),
-        Inst::BinopI { op, lhs, rhs_imm } => {
-            emit_binop_imm(code, *op, v, dst, *lhs, *rhs_imm, alloc, frame)
-        }
+        _ => unreachable!(),
+    }
+}
+
+/// The call instructions.
+fn emit_call_inst(out: &mut Out, inst: &Inst, dst: Place, fcx: &FnCtx) -> bool {
+    let FnCtx {
+        func,
+        alloc,
+        frame,
+        abi,
+        target,
+        imports,
+        variadic_targets,
+        conv_targets,
+        ..
+    } = *fcx;
+    let cx = &mut *out.cx;
+    let fixups = &mut *out.fixups;
+    let code = &mut *cx.code;
+    let plt_call_fixups = &mut *cx.plt_call_fixups;
+    let asm_extern_call_sites = &mut *cx.asm_extern_call_sites;
+    match inst {
         Inst::Call {
             target_pc,
             args,
@@ -460,53 +618,6 @@ pub(super) fn emit_inst(
             *ret_slot_local,
             func,
         ),
-        Inst::ImmData(offset) => emit_imm_data(code, dst, *offset, data_fixups, frame),
-        Inst::ImmCode(target_ent_pc) => {
-            emit_imm_code(code, dst, *target_ent_pc, pending_func_fixups, frame)
-        }
-        Inst::ImmExtCode(binding_idx) => {
-            emit_imm_ext_code(code, dst, *binding_idx, plt_call_fixups, imports, frame)
-        }
-        // Inst::BlockAddr is handled in emit_function's block loop
-        // (it needs the local block_offsets table for its PC-relative
-        // lea fixup), so it never reaches emit_inst.
-        Inst::Mcpy {
-            dst: d,
-            src: s,
-            size,
-            align,
-        } => emit_mcpy(
-            code,
-            dst,
-            *d,
-            *s,
-            *size,
-            *align,
-            abi.strict_align,
-            alloc,
-            frame,
-        ),
-        Inst::AtomicRmw {
-            op,
-            addr,
-            value,
-            width,
-        } => emit_atomic_rmw(code, dst, *op, *addr, *value, *width, alloc, frame),
-        Inst::AtomicCas {
-            addr,
-            expected_addr,
-            desired,
-            width,
-        } => emit_atomic_cas(
-            code,
-            dst,
-            *addr,
-            *expected_addr,
-            *desired,
-            *width,
-            alloc,
-            frame,
-        ),
         Inst::CallIndirect {
             target: callee,
             args,
@@ -538,68 +649,7 @@ pub(super) fn emit_inst(
             func,
             asm_extern_call_sites,
         ),
-        Inst::Intrinsic { kind, args } => {
-            emit_intrinsic(code, *kind, args, dst, v, func, alloc, frame, abi)
-        }
-        Inst::X86Simd { op, imm, args } => emit_x86_simd(code, *op, *imm, args, alloc, frame),
-        Inst::InlineAsm { asm, args } => emit_inline_asm(out, asm, args, fcx, None),
-        Inst::Fneg(value) => emit_fneg(code, dst, v, *value, alloc, frame),
-        Inst::Fma {
-            a,
-            b,
-            c,
-            neg_product,
-            neg_addend,
-        } => emit_fma(
-            code,
-            dst,
-            v,
-            *a,
-            *b,
-            *c,
-            *neg_product,
-            *neg_addend,
-            alloc,
-            frame,
-        ),
-        Inst::MulAdd {
-            a,
-            b,
-            c,
-            neg_product,
-        } => emit_mul_add(code, dst, v, *a, *b, *c, *neg_product, alloc, frame),
-        Inst::Extend { value, kind } => emit_extend(code, dst, *value, *kind, alloc, frame),
-        Inst::Bswap { value, width } => emit_bswap(code, dst, *value, *width, alloc, frame),
-        Inst::Copy { value, is_fp } => emit_copy(code, dst, *value, *is_fp, alloc, frame),
-        Inst::FpCast { kind, value } => emit_fp_cast(code, dst, v, *kind, *value, alloc, frame),
-        Inst::TlsAddr(offset) => emit_tls_addr(
-            code,
-            dst,
-            *offset,
-            v,
-            target,
-            tls_index_fixups,
-            elf_tpoff_fixups,
-            extern_tls_names,
-            tls_total_size,
-            frame,
-        ),
-        Inst::Phi { .. } => {
-            // The value is materialised by the predecessor-exit
-            // moves emitted just before each branch terminator
-            // that targets this block; at the IR position the
-            // phi's allocated Place already holds the merged
-            // value.
-            true
-        }
-        other => {
-            bail_msg(&alloc::format!(
-                "inst variant not yet covered: {}",
-                other.variant_name()
-            ));
-            let _ = frame;
-            false
-        }
+        _ => unreachable!(),
     }
 }
 

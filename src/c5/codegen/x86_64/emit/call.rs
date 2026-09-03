@@ -446,42 +446,18 @@ fn xmm_arg_count(plan: &super::CallPlan) -> u8 {
         .count() as u8
 }
 
-/// Post-call tail shared by the host variadic `Call` branches: drop
-/// the arg scratch window, then store an aggregate return or route
-/// the scalar result into `dst`.
-#[allow(clippy::too_many_arguments)]
-fn finish_variadic_call(
-    code: &mut Vec<u8>,
-    scratch_bytes: u32,
-    dst: Place,
-    fp_return: bool,
-    ret_agg: Option<u32>,
-    agg_descs: &[super::super::ir::AggDesc],
-    ret_slot_local: i64,
-    func: &FunctionSsa,
-    frame: Frame,
-    abi: super::Abi,
-) -> bool {
-    if scratch_bytes > 0 {
-        emit_add_rsp_imm32(code, scratch_bytes);
-    }
-    // A variadic callee returns a <=16-byte aggregate exactly like a
-    // non-variadic one; classify the eightbytes (SSE ones arrive in
-    // xmm0/xmm1, not rax:rdx).
-    if store_ret_agg(code, ret_agg, agg_descs, ret_slot_local, func, frame, abi) {
-        return true;
-    }
-    // c5 internal call return convention: an integer / pointer
-    // result lives in rax, a floating-point result in xmm0 (C99
-    // 6.2.5p10).
-    if fp_return {
-        xmm0_result_to_dst(code, dst, frame);
-    } else {
-        mirror_int_dst(code, dst, Reg::RAX, frame);
-    }
-    true
+/// A direct call to `target_pc`: opcode E8 with a rel32 the fixup pass
+/// patches once the callee's native offset is known.
+fn emit_call_to(code: &mut Vec<u8>, fixups: &mut Vec<Fixup>, target_pc: usize) {
+    fixups.push(Fixup {
+        native_offset: code.len(),
+        target_ent_pc: target_pc,
+        kind: super::encode::BranchKind::Call,
+    });
+    super::encode::emit_call_rel32(code, 0);
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn emit_call(
     code: &mut Vec<u8>,
     dst: Place,
@@ -501,156 +477,69 @@ pub(super) fn emit_call(
     ret_slot_local: i64,
     func: &FunctionSsa,
 ) -> bool {
-    // Resolve the call's struct arguments once. With no tagged
-    // aggregate this is empty and `plan_call_args_aggs` reduces to the
-    // scalar `plan_call_args` placement, so every branch can run the
-    // aggregate planner uniformly.
+    // With no tagged aggregate `aggs` is empty and `plan_call_args_aggs`
+    // reduces to the scalar placement, so every branch runs the aggregate
+    // planner.
     let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
-    if callee_is_variadic && abi.position_indexed_args {
-        // Win64 host variadic ABI (Microsoft x64 calling convention):
-        // the first four arguments (named and variadic) ride
-        // rcx/rdx/r8/r9 by position, the rest the incoming stack at
-        // 8-byte stride above the 32-byte home area. The c5-internal
-        // variadic convention carries every argument as a raw 8-byte
-        // integer value, so the walker widened the variadic
-        // floating-point arguments to double and passed `fp_arg_mask`
-        // 0; `plan_call_args` then routes every argument through the
-        // integer side (position-indexed int registers, then stack).
-        // This is the same marshal `emit_call_ext` performs for a
-        // libc variadic call; Win64 sets `variadic_zero_xmm_count`
-        // false, so no `al` is emitted. A by-value aggregate argument
-        // the classifier tagged rides through `plan_call_args_aggs`.
+    // A variadic callee follows the host ABI. Win64 (`position_indexed_args`)
+    // passes the first four arguments by position in rcx/rdx/r8/r9 and the
+    // rest on the stack at 8-byte stride above the home area; the walker
+    // widened the variadic FP arguments to double with `fp_arg_mask` 0, so
+    // every argument rides the integer side. System V AMD64 places the
+    // arguments in the standard register banks (3.2.3) and reports the
+    // number of XMM argument registers in `al`, so the callee prologue's
+    // guarded XMM save runs only when needed. The c5-internal convention
+    // passes integer / pointer arguments in the integer bank and FP scalars
+    // in the FP bank; the callee prologue spills each incoming register into
+    // its c5 cdecl cell using the same placement. `fp_arg_mask` comes from
+    // the argument types, since an FP constant rides an integer register as
+    // its `Imm` bit pattern.
+    let (plan, site, xmm_count) = if callee_is_variadic && abi.position_indexed_args {
         let plan =
             super::plan_call_args_aggs(args.len(), fixed_args, fp_arg_mask, abi, &aggs, false);
-        if plan.scratch_bytes > 0 {
-            emit_stack_alloc(code, plan.scratch_bytes, None);
-        }
-        if !marshal_args(
-            code,
-            &plan,
-            args,
-            alloc,
-            frame,
-            abi,
-            "Call (Win64 variadic)",
-        ) {
-            return false;
-        }
-        let call_site = code.len();
-        fixups.push(Fixup {
-            native_offset: call_site,
-            target_ent_pc: target_pc,
-            kind: super::encode::BranchKind::Call,
-        });
-        super::encode::emit_call_rel32(code, 0);
-        return finish_variadic_call(
-            code,
-            plan.scratch_bytes,
-            dst,
-            fp_return,
-            ret_agg,
-            agg_descs,
-            ret_slot_local,
-            func,
-            frame,
-            abi,
-        );
-    }
-    if callee_is_variadic && abi.variadic_zero_xmm_count && !abi.position_indexed_args {
-        // System V AMD64 host variadic ABI (Linux x86_64). The named
-        // and variadic arguments ride the standard argument-register
-        // banks (integer rdi.. + FP xmm0..) then overflow to the stack,
-        // exactly like a libc variadic call (System V AMD64 3.2.3). The
-        // walker passes the real `fp_arg_mask` (FP varargs ride
-        // xmm0..xmm7), so `plan_call_args` places floating-point
-        // arguments in the FP bank. `al` carries the number of XMM
-        // argument registers used so the callee prologue's guarded XMM
-        // save runs only when needed. A by-value aggregate argument the
-        // classifier tagged (a 9-16 byte variadic struct spans two
-        // eightbytes, all-or-nothing) rides through `plan_call_args_aggs`.
+        (plan, "Call (Win64 variadic)", None)
+    } else if callee_is_variadic && abi.variadic_zero_xmm_count && !abi.position_indexed_args {
         let plan =
             super::plan_call_args_aggs(args.len(), fixed_args, fp_arg_mask, abi, &aggs, false);
         let xmm_used = xmm_arg_count(&plan);
-        if plan.scratch_bytes > 0 {
-            emit_stack_alloc(code, plan.scratch_bytes, None);
-        }
-        if !marshal_args(code, &plan, args, alloc, frame, abi, "Call (SysV variadic)") {
-            return false;
-        }
-        super::encode::emit_mov_al_imm8(code, xmm_used);
-        let call_site = code.len();
-        fixups.push(Fixup {
-            native_offset: call_site,
-            target_ent_pc: target_pc,
-            kind: super::encode::BranchKind::Call,
-        });
-        super::encode::emit_call_rel32(code, 0);
-        return finish_variadic_call(
-            code,
-            plan.scratch_bytes,
-            dst,
-            fp_return,
-            ret_agg,
-            agg_descs,
-            ret_slot_local,
-            func,
-            frame,
-            abi,
-        );
-    }
-    // Every x86_64 variadic callee is marshaled by a host-ABI branch
-    // above: Win64 (`position_indexed_args`) or System V AMD64
-    // (`variadic_zero_xmm_count`, no `position_indexed_args`). A variadic
-    // callee reaching this point would fall through to the non-variadic
-    // path and be marshaled without the host variadic register protocol,
-    // a silent miscompile; fail the emit instead.
-    if callee_is_variadic {
+        (plan, "Call (SysV variadic)", Some(xmm_used))
+    } else if callee_is_variadic {
+        // Outside both host branches a variadic callee would be marshaled
+        // without the host variadic register protocol.
         return fail("Call: variadic callee not matched by a host-ABI branch");
-    }
-    // c5-internal call convention: integer / pointer arguments ride
-    // the integer argument-register bank, floating-point scalars ride
-    // the FP bank (System V AMD64 3.2.3). The callee's prologue spills
-    // each incoming register into its 16-byte c5 cdecl cell using the
-    // same `plan_call_args` placement, so the int and FP banks stay
-    // independent on both ends. `fp_arg_mask` comes from the
-    // argument types (set by the walker) rather than register
-    // placement, since a floating-point constant rides an integer
-    // register as its `Imm` bit pattern.
-    let plan = super::plan_call_args_aggs(args.len(), args.len(), fp_arg_mask, abi, &aggs, false);
+    } else {
+        let plan =
+            super::plan_call_args_aggs(args.len(), args.len(), fp_arg_mask, abi, &aggs, false);
+        (plan, "Call", None)
+    };
     if plan.scratch_bytes > 0 {
         emit_stack_alloc(code, plan.scratch_bytes, None);
     }
-    if !marshal_args(code, &plan, args, alloc, frame, abi, "Call") {
+    if !marshal_args(code, &plan, args, alloc, frame, abi, site) {
         return false;
     }
-    // Record a fixup for the call's rel32 field. `emit_call_rel32`
-    // emits opcode 0xE8 then 4 bytes of rel32; `target_ent_pc`
-    // resolves to the function's native offset in the post-pass.
-    let call_site = code.len();
-    fixups.push(Fixup {
-        native_offset: call_site,
-        target_ent_pc: target_pc,
-        kind: super::encode::BranchKind::Call,
-    });
-    super::encode::emit_call_rel32(code, 0);
+    if let Some(n) = xmm_count {
+        super::encode::emit_mov_al_imm8(code, n);
+    }
+    emit_call_to(code, fixups, target_pc);
     if plan.scratch_bytes > 0 {
         emit_add_rsp_imm32(code, plan.scratch_bytes);
     }
-    // Host-ABI aggregate return (System V AMD64 3.2.3): a <= 16-byte
-    // aggregate arrives in rax:rdx; store it into the caller's result
-    // temp. (> 16-byte returns keep the out-pointer convention and
-    // never set `ret_agg`.)
+    // A <= 16-byte aggregate return arrives classified (System V AMD64
+    // 3.2.3: INTEGER eightbytes in rax:rdx, SSE in xmm0:xmm1), for a
+    // variadic callee as for any other; larger returns keep the out-pointer
+    // convention and never set `ret_agg`.
     if store_ret_agg(code, ret_agg, agg_descs, ret_slot_local, func, frame, abi) {
         return true;
     }
-    // c5 internal call return convention: an integer / pointer
-    // result lives in rax; a floating-point result lives in xmm0
-    // (the callee's `Return` places it there per C99 6.2.5p10 and
-    // the SysV / Win64 scalar-FP-return rule). `fp_return` selects
-    // which register the result is read from for every dst kind,
-    // including a spill slot.
+    // An integer / pointer result lives in rax, an FP result in xmm0 (C99
+    // 6.2.5p10). The host variadic branches mirror the integer result
+    // through the working-register pick; the internal convention routes it
+    // into any destination kind.
     if fp_return {
         xmm0_result_to_dst(code, dst, frame);
+    } else if callee_is_variadic {
+        mirror_int_dst(code, dst, Reg::RAX, frame);
     } else {
         int_result_to_dst(code, dst, Reg::RAX, frame);
     }

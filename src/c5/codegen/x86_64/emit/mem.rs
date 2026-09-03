@@ -480,10 +480,7 @@ pub(super) fn emit_load_local(
     let Ok(disp) = i32::try_from(bytes) else {
         return fail("LoadLocal: offset doesn't fit in disp32");
     };
-    if matches!(
-        kind,
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128
-    ) {
+    if is_fp_load(kind) {
         return emit_load_fp_mem(
             code,
             dst,
@@ -503,6 +500,22 @@ pub(super) fn emit_load_local(
     emit_load_kind_mem(code, kind, rd, base, disp, None);
     spill_dst_to_slot(code, dst, rd, frame);
     true
+}
+
+/// The kinds that load through an xmm register.
+pub(super) fn is_fp_load(kind: LoadKind) -> bool {
+    matches!(
+        kind,
+        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128
+    )
+}
+
+/// The kinds that store from an xmm register.
+pub(super) fn is_fp_store(kind: StoreKind) -> bool {
+    matches!(
+        kind,
+        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128
+    )
 }
 
 /// Single-instruction rbp-relative store for `Inst::StoreLocal`.
@@ -526,10 +539,7 @@ pub(super) fn emit_store_local(
         return fail("StoreLocal: offset doesn't fit in disp32");
     };
     let value_place = place_of(alloc, value);
-    if matches!(
-        kind,
-        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128
-    ) {
+    if is_fp_store(kind) {
         // Mirrors the `Store` FP path so a mem2reg-promoted slot
         // round-trips identically to the prior address-taken
         // `LocalAddr + Store` form.
@@ -592,10 +602,7 @@ pub(super) fn emit_load_indexed(
     alloc: &Allocation,
     frame: Frame,
 ) -> bool {
-    if matches!(
-        kind,
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128
-    ) {
+    if is_fp_load(kind) {
         return fail("LoadIndexed: FP not implemented");
     }
     let expected_scale: u8 = match kind {
@@ -645,10 +652,7 @@ pub(super) fn emit_store_indexed(
     alloc: &Allocation,
     frame: Frame,
 ) -> bool {
-    if matches!(
-        kind,
-        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128
-    ) {
+    if is_fp_store(kind) {
         return fail("StoreIndexed: FP not implemented");
     }
     let expected_scale: u8 = match kind {
@@ -752,10 +756,7 @@ pub(super) fn emit_load(
     let Some(base) = materialize_int(code, addr_place, SCRATCH_R10, frame) else {
         return fail("Load: addr Place not int reg / spill");
     };
-    if matches!(
-        kind,
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128
-    ) {
+    if is_fp_load(kind) {
         return emit_load_fp_mem(
             code, dst, kind, keep_f32, base, disp, seg, frame, bound, "Load",
         );
@@ -798,10 +799,7 @@ pub(super) fn emit_store(
     let Some(base) = materialize_int(code, addr_place, addr_scratch, frame) else {
         return fail("Store: addr Place not int reg / spill");
     };
-    if matches!(
-        kind,
-        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128
-    ) {
+    if is_fp_store(kind) {
         return emit_store_fp_mem(
             code,
             dst,

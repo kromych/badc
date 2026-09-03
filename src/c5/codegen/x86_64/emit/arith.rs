@@ -640,6 +640,37 @@ pub(super) fn emit_fp_cast(
     }
 }
 
+/// The two-operand ALU mnemonic of `op`; `None` for a compare, a shift or
+/// an rdx:rax op.
+fn alu_mnem(op: BinOp) -> Option<Mnem> {
+    Some(match op {
+        BinOp::Add => Mnem::Add,
+        BinOp::Sub => Mnem::Sub,
+        BinOp::Mul => Mnem::Imul,
+        BinOp::And => Mnem::And,
+        BinOp::Or => Mnem::Or,
+        BinOp::Xor => Mnem::Xor,
+        _ => return None,
+    })
+}
+
+fn shift_mnem(op: BinOp) -> Mnem {
+    match op {
+        BinOp::Shl => Mnem::Shl,
+        BinOp::Shr => Mnem::Sar,
+        BinOp::Shru => Mnem::Shr,
+        BinOp::Ror => Mnem::Ror,
+        _ => unreachable!("shift_mnem: non-shift op {op:?}"),
+    }
+}
+
+/// Stage the lhs into the destination of a two-operand op.
+fn stage_lhs(code: &mut Vec<u8>, rd: Reg, rn: Reg) {
+    if rd.0 != rn.0 {
+        emit_mov_rr(code, rd, rn);
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_binop(
     code: &mut Vec<u8>,
@@ -967,14 +998,7 @@ fn emit_int_binop(
         } else {
             rn
         };
-        match op {
-            BinOp::Add => emit_rr(code, Mnem::Add, 8, rd, other),
-            BinOp::Mul => emit_rr(code, Mnem::Imul, 8, rd, other),
-            BinOp::And => emit_rr(code, Mnem::And, 8, rd, other),
-            BinOp::Or => emit_rr(code, Mnem::Or, 8, rd, other),
-            BinOp::Xor => emit_rr(code, Mnem::Xor, 8, rd, other),
-            _ => unreachable!(),
-        }
+        emit_rr(code, alu_mnem(op).unwrap(), 8, rd, other);
         return true;
     }
     // Comparison ops read both operands, set flags, then setcc+
@@ -1014,56 +1038,23 @@ fn emit_int_binop(
     if !is_cmp && rd.0 != rn.0 {
         emit_mov_rr(code, rd, rn);
     }
-    match op {
-        BinOp::Add => emit_rr(code, Mnem::Add, 8, rd, rm),
-        BinOp::Sub => emit_rr(code, Mnem::Sub, 8, rd, rm),
-        BinOp::Mul => emit_rr(code, Mnem::Imul, 8, rd, rm),
-        BinOp::And => emit_rr(code, Mnem::And, 8, rd, rm),
-        BinOp::Or => emit_rr(code, Mnem::Or, 8, rd, rm),
-        BinOp::Xor => emit_rr(code, Mnem::Xor, 8, rd, rm),
-        BinOp::Eq
-        | BinOp::Ne
-        | BinOp::Lt
-        | BinOp::Gt
-        | BinOp::Le
-        | BinOp::Ge
-        | BinOp::Ult
-        | BinOp::Ugt
-        | BinOp::Ule
-        | BinOp::Uge => {
-            // cmp lhs, rhs ; setcc rd_low ; movzx rd, rd_low unless a
-            // fused branch reads the flags. Write setcc into rd's own
-            // low byte (rather than cl) so a live SSA value parked in
-            // rcx is not destroyed.
-            emit_rr(code, Mnem::Cmp, cmp_width(alloc, v), rn, rm);
-            if finish_int_cmp(code, v, int_cmp_cc(op).unwrap(), rd, alloc) {
-                return true;
-            }
+    if let Some(m) = alu_mnem(op) {
+        emit_rr(code, m, 8, rd, rm);
+    } else if let Some(cc) = int_cmp_cc(op) {
+        // Write setcc into rd's own low byte rather than cl, so a live SSA
+        // value parked in rcx survives.
+        emit_rr(code, Mnem::Cmp, cmp_width(alloc, v), rn, rm);
+        if finish_int_cmp(code, v, cc, rd, alloc) {
+            return true;
         }
-        BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror => {
-            // x86 shifts read the count from cl. The shared helper moves
-            // the count (here a register, `rm`) into rcx and shifts rd,
-            // preserving any live rcx, and stages through a reserved
-            // scratch when rd is rcx. The `mov rd, rn` above left rd
-            // holding the lhs to be shifted.
-            return emit_shift_by_count_reg(
-                code,
-                op,
-                v,
-                dst,
-                rd,
-                ShiftCount::Reg(rm),
-                alloc,
-                frame,
-            );
-        }
-        _ => {
-            // Every representable integer binop is handled above. A new
-            // op variant here is an IR producer/consumer mismatch, not a
-            // register-pressure shape -- fail loudly rather than emit a
-            // subset-bail that surfaces as an ICE downstream.
-            panic!("Binop: unhandled integer op variant {op:?}");
-        }
+    } else if is_shift {
+        // The count is a register here; `mov rd, rn` above left the lhs
+        // in rd.
+        return emit_shift_by_count_reg(code, op, v, dst, rd, ShiftCount::Reg(rm), alloc, frame);
+    } else {
+        // A new op variant reaching here is an IR producer / consumer
+        // mismatch, not a register-pressure shape.
+        panic!("Binop: unhandled integer op variant {op:?}");
     }
     spill_dst_to_slot(code, dst, rd, frame);
     true
@@ -1227,13 +1218,7 @@ fn emit_shift_by_count_reg(
         ShiftCount::Reg(r) => Some(r),
         ShiftCount::Imm(_) => None,
     };
-    let do_shift = |code: &mut Vec<u8>, target: Reg| match op {
-        BinOp::Shl => emit_shift_cl(code, Mnem::Shl, 8, target),
-        BinOp::Shr => emit_shift_cl(code, Mnem::Sar, 8, target),
-        BinOp::Shru => emit_shift_cl(code, Mnem::Shr, 8, target),
-        BinOp::Ror => emit_shift_cl(code, Mnem::Ror, 8, target),
-        _ => unreachable!("emit_shift_by_count_reg: non-shift op {op:?}"),
-    };
+    let do_shift = |code: &mut Vec<u8>, target: Reg| emit_shift_cl(code, shift_mnem(op), 8, target);
     if rd.0 == Reg::RCX.0 {
         // Stage the value in a scratch disjoint from rcx and the count
         // register; r11 is reserved outside both allocator banks and
@@ -1320,7 +1305,7 @@ pub(super) fn emit_binop_imm(
     let Some(rn) = int_operand_into_rd(code, lhs_place, rd, frame) else {
         return fail("BinopI: lhs not int reg / spill");
     };
-    // sxtw fold via movsxd / movsx -- mirrors the aarch64 path.
+    // The sign-narrow pair folds to one movsxd / movsx, as in `emit_binop`.
     let sxtw_source = alloc
         .sxtw_source
         .get(v as usize)
@@ -1340,15 +1325,14 @@ pub(super) fn emit_binop_imm(
         spill_dst_to_slot(code, dst, rd, frame);
         return true;
     }
-    // Per-op peepholes for immediate-form binops. These avoid
-    // the 10-byte `mov rcx, imm64` materialisation when the
-    // immediate fits a shorter form. Fall back to the rcx-scratch
-    // path below for anything that doesn't.
-    //
-    //   * Mul by power of two -> shl rd, log2(imm).
-    //   * Shl / Shr / Shru by 0..63 -> shl / sar / shr by imm8.
-    //   * Add / Sub / And / Or / Xor with i32-fitting imm -> the
-    //     existing immediate-form encoders (`emit_*_r_imm32`).
+    // Forms that avoid the 10-byte `mov r11, imm64` of the scratch path
+    // below: a multiply by a power of two is a shift, by 3 / 5 / 9 one
+    // `lea`, by any other i32 `imul rd, rn, imm32`; a shift by 0..63 takes
+    // the imm8 form; an add / sub of an i32 into another register is one
+    // `lea`, a step of one `inc` / `dec` (the flags differ only in the
+    // carry, which no consumer of a `BinopI` reads); `x & 0xffffffff` is a
+    // 32-bit `mov`, since `and r64, imm32` sign-extends the immediate; the
+    // other ALU ops take their imm32 form.
     let imm_fits_i32 = i32::try_from(rhs_imm).is_ok();
     let imm_is_pow2 = rhs_imm > 0 && (rhs_imm as u64).is_power_of_two();
     let shift_amount = if (0..64).contains(&rhs_imm) {
@@ -1358,9 +1342,7 @@ pub(super) fn emit_binop_imm(
     };
     let used_peephole = match op {
         BinOp::Mul if imm_is_pow2 => {
-            if rd.0 != rn.0 {
-                emit_mov_rr(code, rd, rn);
-            }
+            stage_lhs(code, rd, rn);
             emit_shift_ri(
                 code,
                 Mnem::Shl,
@@ -1370,58 +1352,20 @@ pub(super) fn emit_binop_imm(
             );
             true
         }
-        // Multiply by 3 / 5 / 9 is one `lea rd, [rn + rn*2/4/8]`: a
-        // single-cycle address-unit operation instead of the multi-cycle
-        // `imul`. The base and index are both `rn`, so the result may
-        // reuse `rn` (the effective address is read before the write).
+        // The base and index are both `rn`, so the result may reuse `rn`.
         BinOp::Mul if matches!(rhs_imm, 3 | 5 | 9) => {
             super::encode::emit_lea_r_sib(code, rd, rn, rn, (rhs_imm - 1) as u8);
             true
         }
-        // `imul rd, rn, imm32` reads `rn` and writes `rd` in one
-        // instruction, so it needs neither a staging mov nor an
-        // immediate-scratch register. This covers the multiply by a
-        // non-power-of-two constant that the scratch path below cannot
-        // lower when no caller-saved register is free.
         BinOp::Mul if imm_fits_i32 => {
             super::encode::emit_imul_r_r_imm32(code, rd, rn, rhs_imm as i32);
             true
         }
-        BinOp::Shl if shift_amount.is_some() => {
-            if rd.0 != rn.0 {
-                emit_mov_rr(code, rd, rn);
-            }
-            emit_shift_ri(code, Mnem::Shl, 8, rd, shift_amount.unwrap());
+        BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror if shift_amount.is_some() => {
+            stage_lhs(code, rd, rn);
+            emit_shift_ri(code, shift_mnem(op), 8, rd, shift_amount.unwrap());
             true
         }
-        BinOp::Shr if shift_amount.is_some() => {
-            if rd.0 != rn.0 {
-                emit_mov_rr(code, rd, rn);
-            }
-            emit_shift_ri(code, Mnem::Sar, 8, rd, shift_amount.unwrap());
-            true
-        }
-        BinOp::Shru if shift_amount.is_some() => {
-            if rd.0 != rn.0 {
-                emit_mov_rr(code, rd, rn);
-            }
-            emit_shift_ri(code, Mnem::Shr, 8, rd, shift_amount.unwrap());
-            true
-        }
-        BinOp::Ror if shift_amount.is_some() => {
-            if rd.0 != rn.0 {
-                emit_mov_rr(code, rd, rn);
-            }
-            emit_shift_ri(code, Mnem::Ror, 8, rd, shift_amount.unwrap());
-            true
-        }
-        // `lea rd, [rn +/- imm]` computes the sum into a different
-        // register in one instruction, folding away the `mov rd, rn`
-        // copy the destructive `add` / `sub` forms below would need. lea
-        // writes no flags, which is fine: no consumer reads the carry of
-        // a `BinopI` result (see the inc/dec note). Restricted to rd !=
-        // rn (the in-place forms below are already one instruction) and
-        // to a displacement that fits the signed 32-bit `lea` field.
         BinOp::Add if rd.0 != rn.0 && imm_fits_i32 => {
             super::encode::emit_lea_r_mem(code, rd, rn, rhs_imm as i32);
             true
@@ -1430,76 +1374,20 @@ pub(super) fn emit_binop_imm(
             super::encode::emit_lea_r_mem(code, rd, rn, -(rhs_imm as i32));
             true
         }
-        // A step of one encodes as `inc` / `dec` (three bytes) rather
-        // than `add` / `sub` with an immediate (seven). The flags differ
-        // -- `inc` / `dec` leave the carry flag unchanged -- but the
-        // result register is identical and no consumer reads the carry
-        // of a `BinopI` result.
-        BinOp::Add if rhs_imm == 1 || rhs_imm == -1 => {
-            if rd.0 != rn.0 {
-                emit_mov_rr(code, rd, rn);
-            }
-            if rhs_imm == 1 {
-                super::encode::emit_unary_r(code, Mnem::Inc, 8, rd);
-            } else {
-                super::encode::emit_unary_r(code, Mnem::Dec, 8, rd);
-            }
+        BinOp::Add | BinOp::Sub if rhs_imm == 1 || rhs_imm == -1 => {
+            stage_lhs(code, rd, rn);
+            let up = (rhs_imm == 1) == matches!(op, BinOp::Add);
+            let mnem = if up { Mnem::Inc } else { Mnem::Dec };
+            super::encode::emit_unary_r(code, mnem, 8, rd);
             true
         }
-        BinOp::Sub if rhs_imm == 1 || rhs_imm == -1 => {
-            if rd.0 != rn.0 {
-                emit_mov_rr(code, rd, rn);
-            }
-            if rhs_imm == 1 {
-                super::encode::emit_unary_r(code, Mnem::Dec, 8, rd);
-            } else {
-                super::encode::emit_unary_r(code, Mnem::Inc, 8, rd);
-            }
-            true
-        }
-        BinOp::Add if imm_fits_i32 => {
-            if rd.0 != rn.0 {
-                emit_mov_rr(code, rd, rn);
-            }
-            super::encode::emit_ri(code, Mnem::Add, 8, rd, rhs_imm as i32);
-            true
-        }
-        BinOp::Sub if imm_fits_i32 => {
-            if rd.0 != rn.0 {
-                emit_mov_rr(code, rd, rn);
-            }
-            super::encode::emit_ri(code, Mnem::Sub, 8, rd, rhs_imm as i32);
-            true
-        }
-        // `x & 0xffffffff` is a zero-extension of the low 32 bits. A
-        // 32-bit `mov rd, rn` clears the upper half, materialising the
-        // mask in one instruction with no immediate-scratch register.
-        // The imm32 AND form cannot encode this value: `and r64, imm32`
-        // sign-extends the immediate, so 0xffffffff would become
-        // 0xffffffffffffffff and mask nothing.
         BinOp::And if rhs_imm == 0xffff_ffff => {
             super::encode::emit_mov_r32_r32(code, rd, rn);
             true
         }
-        BinOp::And if imm_fits_i32 => {
-            if rd.0 != rn.0 {
-                emit_mov_rr(code, rd, rn);
-            }
-            super::encode::emit_ri(code, Mnem::And, 8, rd, rhs_imm as i32);
-            true
-        }
-        BinOp::Or if imm_fits_i32 => {
-            if rd.0 != rn.0 {
-                emit_mov_rr(code, rd, rn);
-            }
-            super::encode::emit_ri(code, Mnem::Or, 8, rd, rhs_imm as i32);
-            true
-        }
-        BinOp::Xor if imm_fits_i32 => {
-            if rd.0 != rn.0 {
-                emit_mov_rr(code, rd, rn);
-            }
-            super::encode::emit_ri(code, Mnem::Xor, 8, rd, rhs_imm as i32);
+        BinOp::Add | BinOp::Sub | BinOp::And | BinOp::Or | BinOp::Xor if imm_fits_i32 => {
+            stage_lhs(code, rd, rn);
+            super::encode::emit_ri(code, alu_mnem(op).unwrap(), 8, rd, rhs_imm as i32);
             true
         }
         _ => false,
@@ -1508,17 +1396,11 @@ pub(super) fn emit_binop_imm(
         spill_dst_to_slot(code, dst, rd, frame);
         return true;
     }
-    // Compare-with-i32-immediate peephole: emit `cmp rn, imm32`
-    // and skip the `mov rcx, imm64` materialisation. The shorter
-    // imm32 form covers the operand range typical for `BinopI`
-    // comparisons against small constants; outside that range we
-    // fall through to the rcx-scratch path below.
+    // A compare against an i32: `cmp rn, imm32`, or against 0 the shorter
+    // `test rn, rn`, whose ZF / SF / CF / OF match.
     if let Some(cc) = int_cmp_cc(op)
         && imm_fits_i32
     {
-        // A compare against 0 is the shorter `test rn, rn`; ZF / SF /
-        // CF / OF match `cmp rn, 0`, so the dependent setcc / jcc is
-        // unchanged.
         let w = cmp_width(alloc, v);
         if rhs_imm == 0 {
             super::encode::emit_rr(code, Mnem::Test, w, rn, rn);
@@ -1531,39 +1413,23 @@ pub(super) fn emit_binop_imm(
         spill_dst_to_slot(code, dst, rd, frame);
         return true;
     }
-    // Commutative ops with `rd != rn` can fold the staging mov
-    // into the immediate materialisation: `mov rd, imm; OP rd,
-    // rn` is two instructions and produces `imm OP rn == lhs OP
-    // imm` by commutativity. The non-commutative path below uses
-    // r11 as a scratch (r11 sits outside both
-    // `caller_gprs` and `callee_gprs` in `RegBanks::for_target`,
-    // so the allocator never picks r11 for an SSA value).
+    // A commutative op with `rd != rn` folds the staging mov into the
+    // materialisation: `mov rd, imm; OP rd, rn`.
     let commutative = matches!(
         op,
         BinOp::Add | BinOp::Mul | BinOp::And | BinOp::Or | BinOp::Xor
     );
     if commutative && rd.0 != rn.0 {
         super::encode::emit_mov_r_imm64(code, rd, rhs_imm);
-        match op {
-            BinOp::Add => emit_rr(code, Mnem::Add, 8, rd, rn),
-            BinOp::Mul => emit_rr(code, Mnem::Imul, 8, rd, rn),
-            BinOp::And => emit_rr(code, Mnem::And, 8, rd, rn),
-            BinOp::Or => emit_rr(code, Mnem::Or, 8, rd, rn),
-            BinOp::Xor => emit_rr(code, Mnem::Xor, 8, rd, rn),
-            _ => unreachable!(),
-        }
+        emit_rr(code, alu_mnem(op).unwrap(), 8, rd, rn);
         spill_dst_to_slot(code, dst, rd, frame);
         return true;
     }
-    // A shift by a count outside 0..63 is the only `BinopI` shift
-    // shape that reaches here (the in-range case took the imm8
-    // peephole above). C99 6.5.7p3 makes a count >= the operand
-    // width undefined; route it through cl like the register-shift
-    // path so the emit stays well-formed rather than bailing.
+    // A shift by a count outside 0..63 (C99 6.5.7p3 leaves it undefined)
+    // routes through cl like the register-shift path, so the emit stays
+    // well-formed.
     if matches!(op, BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror) {
-        if rd.0 != rn.0 {
-            emit_mov_rr(code, rd, rn);
-        }
+        stage_lhs(code, rd, rn);
         return emit_shift_by_count_reg(
             code,
             op,
@@ -1575,45 +1441,23 @@ pub(super) fn emit_binop_imm(
             frame,
         );
     }
-    // Materialise the immediate into the reserved r11 scratch, then
-    // stage `rd = lhs` (when rd != rn) before the two-operand op. r11
-    // sits outside both allocator banks (`RegBanks::for_target`), so
-    // it never aliases `rd` or `rn` and is always free under any
-    // register pressure -- unlike a caller-saved pick, which a
-    // saturated allocation can leave with no candidate.
+    // The immediate materialises into r11, which sits outside both
+    // allocator banks (`RegBanks::for_target`) and so never aliases `rd` or
+    // `rn` and is free under any register pressure.
     let scratch = SCRATCH_R11;
     super::encode::emit_mov_r_imm64(code, scratch, rhs_imm);
-    if rd.0 != rn.0 {
-        emit_mov_rr(code, rd, rn);
-    }
-    match op {
-        BinOp::Add => emit_rr(code, Mnem::Add, 8, rd, scratch),
-        BinOp::Sub => emit_rr(code, Mnem::Sub, 8, rd, scratch),
-        BinOp::Mul => emit_rr(code, Mnem::Imul, 8, rd, scratch),
-        BinOp::And => emit_rr(code, Mnem::And, 8, rd, scratch),
-        BinOp::Or => emit_rr(code, Mnem::Or, 8, rd, scratch),
-        BinOp::Xor => emit_rr(code, Mnem::Xor, 8, rd, scratch),
-        BinOp::Eq
-        | BinOp::Ne
-        | BinOp::Lt
-        | BinOp::Gt
-        | BinOp::Le
-        | BinOp::Ge
-        | BinOp::Ult
-        | BinOp::Ugt
-        | BinOp::Ule
-        | BinOp::Uge => {
-            emit_rr(code, Mnem::Cmp, cmp_width(alloc, v), rn, scratch);
-            if finish_int_cmp(code, v, int_cmp_cc(op).unwrap(), rd, alloc) {
-                return true;
-            }
+    stage_lhs(code, rd, rn);
+    if let Some(m) = alu_mnem(op) {
+        emit_rr(code, m, 8, rd, scratch);
+    } else if let Some(cc) = int_cmp_cc(op) {
+        emit_rr(code, Mnem::Cmp, cmp_width(alloc, v), rn, scratch);
+        if finish_int_cmp(code, v, cc, rd, alloc) {
+            return true;
         }
-        _ => {
-            // Every representable integer `BinopI` op is covered above.
-            // A new op variant reaching here is a producer/consumer
-            // mismatch, not a register-pressure shape -- fail loudly.
-            panic!("BinopI: unhandled integer op variant {op:?}");
-        }
+    } else {
+        // A new op variant reaching here is an IR producer / consumer
+        // mismatch, not a register-pressure shape.
+        panic!("BinopI: unhandled integer op variant {op:?}");
     }
     spill_dst_to_slot(code, dst, rd, frame);
     true

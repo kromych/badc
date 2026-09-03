@@ -2992,3 +2992,28 @@ fn previous_after_a_push_pop_pair_and_the_section_attributes_match_gas() {
     let hot = header(".text.hot");
     assert_eq!((hot.2, hot.3), (SHF_ALLOC_EXEC | SHF_LINK_ORDER, text));
 }
+
+/// A link-order section names its ordering section by header index.
+/// The writer drops the fixed sections that stay empty and compacts
+/// the indices of the rest, so in a unit whose only content is
+/// assembly data `.bss` sits at index 1, not at its nominal 4. The `o`
+/// link named the nominal index, which is another section here.
+#[test]
+fn link_order_to_a_default_data_section_follows_the_compacted_index() {
+    const SHF_LINK_ORDER: u64 = 0x80;
+    let src = "\t.data\n\t.globl d\nd:\n\t.long 1\n\
+               \t.section .data.hot,\"awo\",@progbits,.data\n\t.long 2\n\
+               \t.section .bss.hot,\"awo\",@nobits,.bss\n\t.zero 4\n";
+    let bytes = object_of("link-order-data", src);
+    let headers = section_headers64(&bytes);
+    let index = |name: &str| headers.iter().position(|h| h.0 == name).expect(name) as u32;
+    let header = |name: &str| headers.iter().find(|h| h.0 == name).expect(name);
+    assert_ne!(
+        index(".bss"),
+        4,
+        "the empty fixed sections before .bss are dropped"
+    );
+    assert_eq!(header(".data.hot").2 & SHF_LINK_ORDER, SHF_LINK_ORDER);
+    assert_eq!(header(".data.hot").3, index(".data"));
+    assert_eq!(header(".bss.hot").3, index(".bss"));
+}

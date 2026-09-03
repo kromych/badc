@@ -4642,15 +4642,17 @@ impl<'a> RelocWriter<'a> {
             e.bytes = bytes;
         }
         let carve = &self.layout.carve;
+        let [text, data, bss] =
+            [SHIDX_TEXT, SHIDX_DATA, SHIDX_BSS].map(|n| self.out.shndx.map(n) as u32);
         let out = &mut self.out;
         let section_index_by_name = |name: &str| -> Option<u32> {
             if let Some(k) = carve.table.entries.iter().position(|e| e.name == name) {
                 return Some(carve.shndx[k] as u32);
             }
             match name {
-                ".text" => Some(SHIDX_TEXT as u32),
-                ".data" => Some(SHIDX_DATA as u32),
-                ".bss" => Some(SHIDX_BSS as u32),
+                ".text" => Some(text),
+                ".data" => Some(data),
+                ".bss" => Some(bss),
                 _ => None,
             }
         };

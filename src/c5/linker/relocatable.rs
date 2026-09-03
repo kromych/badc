@@ -995,7 +995,70 @@ fn link_relocatable_inner(
             )));
         }
     }
+    let comdat::Dedup {
+        kept: kept_groups,
+        mut dropped,
+    } = dedup_comdat_groups(objs);
+    let empty = LdScript::default();
+    let script = opts.script.as_ref().unwrap_or(&empty);
+    let side = collect_side_inputs(objs, opts, script, &mut dropped);
+    let exec_fill = match machine {
+        EM_X86_64 => ExecFill::X86,
+        EM_AARCH64 => ExecFill::Aarch64,
+        _ => ExecFill::Zero,
+    };
+    let (mut outsecs, group_outsec) =
+        build_output_sections(objs, script, &dropped, opts, exec_fill);
+    push_side_sections(&mut outsecs, objs, machine, opts, &side, exec_fill)?;
+    let placed = placement_lookup(&outsecs);
+    let globals = resolve_globals(objs, &dropped, &outsecs)?;
+    let symtab = build_symtab(objs, opts, &outsecs, &placed, &globals)?;
+    let out_relocs = rewrite_relocs(objs, &outsecs, &placed, &symtab)?;
+    let out_groups = kept_output_groups(objs, &kept_groups, &group_outsec);
+    let raw_syms: Vec<RawSym> = symtab
+        .syms
+        .iter()
+        .map(|s| RawSym {
+            name: s.name.clone(),
+            info: s.info,
+            other: s.other,
+            sec: s.sec,
+            value: s.value,
+            size: s.size,
+        })
+        .collect();
+    let sig_index: Vec<u32> = out_groups
+        .iter()
+        .map(|g| {
+            symtab
+                .global_index
+                .get(g.signature.as_str())
+                .copied()
+                // A local signature falls back to the first member's
+                // section symbol (null + outsec order => 1 + index).
+                .unwrap_or_else(|| g.members.first().map(|&m| 1 + m as u32).unwrap_or(0))
+        })
+        .collect();
+    let rows = if want_map {
+        map_rows(objs, &outsecs)
+    } else {
+        Vec::new()
+    };
+    let file = write_et_rel(
+        machine,
+        objs,
+        &outsecs,
+        &out_relocs,
+        &out_groups,
+        &sig_index,
+        raw_syms,
+        symtab.first_global,
+        opts.build_id_sha1,
+    )?;
+    Ok((file, rows))
+}
 
+fn dedup_comdat_groups(objs: &[EtRel]) -> comdat::Dedup {
     let views: Vec<comdat::ObjView<'_>> = objs
         .iter()
         .map(|o| comdat::ObjView {
@@ -1011,32 +1074,44 @@ fn link_relocatable_inner(
             section_names: o.sections.iter().map(|s| s.name.as_str()).collect(),
         })
         .collect();
-    let comdat::Dedup {
-        kept: kept_groups,
-        mut dropped,
-    } = comdat::dedup(&views);
+    comdat::dedup(&views)
+}
 
-    // Property notes leave the generic name-merge; script discards and
-    // --strip-debug drop sections outright.
-    let empty = LdScript::default();
-    let script = opts.script.as_ref().unwrap_or(&empty);
-    let mut prop_notes: Vec<Vec<&[u8]>> = alloc::vec![Vec::new(); objs.len()];
-    let mut prop_align = 4u64;
-    // Attribute sections hold one attribute set each, so they leave the
-    // generic name-merge too: `attrs[name][obj]` is the input's body.
-    let mut attrs: BTreeMap<&str, AttrInputs> = BTreeMap::new();
+/// Inputs that leave the generic name-merge: property notes merge into
+/// one note, and attribute sections hold one attribute set each --
+/// `attrs[name].bodies[obj]` is the input's body.
+struct SideInputs<'o> {
+    prop_notes: Vec<Vec<&'o [u8]>>,
+    prop_align: u64,
+    attrs: BTreeMap<&'o str, AttrInputs<'o>>,
+}
+
+/// Property notes and attribute sections leave the generic name-merge;
+/// script discards and --strip-debug drop sections outright. Every
+/// section so taken joins `dropped`.
+fn collect_side_inputs<'o>(
+    objs: &'o [EtRel],
+    opts: &RelinkOptions,
+    script: &LdScript,
+    dropped: &mut HashSet<SecId>,
+) -> SideInputs<'o> {
+    let mut side = SideInputs {
+        prop_notes: alloc::vec![Vec::new(); objs.len()],
+        prop_align: 4u64,
+        attrs: BTreeMap::new(),
+    };
     for (oi, o) in objs.iter().enumerate() {
         for (si, s) in o.sections.iter().enumerate() {
             if s.name == ".note.gnu.property" && s.sh_type == SHT_NOTE {
-                prop_notes[oi].push(&s.bytes);
-                prop_align = prop_align.max(s.addralign);
+                side.prop_notes[oi].push(&s.bytes);
+                side.prop_align = side.prop_align.max(s.addralign);
                 dropped.insert((oi, si));
             } else if (opts.strip_debug && s.name.starts_with(".debug"))
                 || script.discard.iter().any(|p| glob_match(p, &s.name))
             {
                 dropped.insert((oi, si));
             } else if attributes::is_attributes_section(s.sh_type) {
-                let e = attrs.entry(&s.name).or_insert_with(|| AttrInputs {
+                let e = side.attrs.entry(&s.name).or_insert_with(|| AttrInputs {
                     sh_type: s.sh_type,
                     addralign: s.addralign,
                     bodies: alloc::vec![None; objs.len()],
@@ -1047,16 +1122,20 @@ fn link_relocatable_inner(
             }
         }
     }
+    side
+}
 
-    let exec_fill = match machine {
-        EM_X86_64 => ExecFill::X86,
-        EM_AARCH64 => ExecFill::Aarch64,
-        _ => ExecFill::Zero,
-    };
-
-    // Output sections. Script rules first (in script order), orphans
-    // by first-seen name; kept-group members keep their own identity
-    // and never merge across groups.
+/// Output sections: script rules first (in script order), orphans by
+/// first-seen name; kept-group members keep their own identity and
+/// never merge across groups. Returns the sections and each kept group
+/// member's output section.
+fn build_output_sections(
+    objs: &[EtRel],
+    script: &LdScript,
+    dropped: &HashSet<SecId>,
+    opts: &RelinkOptions,
+    exec_fill: ExecFill,
+) -> (Vec<OutSec>, HashMap<SecId, usize>) {
     let mut outsecs: Vec<OutSec> = Vec::new();
     let mut group_outsec: HashMap<SecId, usize> = HashMap::new();
     let mut claimed: HashSet<SecId> = HashSet::new();
@@ -1150,7 +1229,20 @@ fn link_relocatable_inner(
             }
         }
     }
-    for (name, a) in &attrs {
+    (outsecs, group_outsec)
+}
+
+/// The merged attribute sections, the merged property note, and the
+/// build-id note the writer patches over the final file bytes.
+fn push_side_sections(
+    outsecs: &mut Vec<OutSec>,
+    objs: &[EtRel],
+    machine: u16,
+    opts: &RelinkOptions,
+    side: &SideInputs<'_>,
+    exec_fill: ExecFill,
+) -> Result<(), C5Error> {
+    for (name, a) in &side.attrs {
         let inputs: Vec<attributes::Input> = objs
             .iter()
             .zip(&a.bodies)
@@ -1166,7 +1258,7 @@ fn link_relocatable_inner(
         out.bytes = bytes;
         outsecs.push(out);
     }
-    if let Some(p) = merge_property_notes(&prop_notes, prop_align) {
+    if let Some(p) = merge_property_notes(&side.prop_notes, side.prop_align) {
         let mut out = OutSec::new(&p.name, exec_fill);
         out.sh_type = p.sh_type;
         out.flags = p.flags;
@@ -1175,8 +1267,7 @@ fn link_relocatable_inner(
         outsecs.push(out);
     }
     if opts.build_id_sha1 {
-        // Note body: nhdr + "GNU\0" + 20-byte digest, patched over
-        // the final file bytes at write time.
+        // Note body: nhdr + "GNU\0" + 20-byte digest.
         let mut out = OutSec::new(".note.gnu.build-id", exec_fill);
         out.sh_type = SHT_NOTE;
         out.flags = SHF_ALLOC;
@@ -1188,28 +1279,50 @@ fn link_relocatable_inner(
         out.bytes.extend_from_slice(&[0u8; 20]);
         outsecs.push(out);
     }
-    // Placement lookup: input section -> (outsec, offset).
+    Ok(())
+}
+
+/// Input section -> (output section, offset).
+fn placement_lookup(outsecs: &[OutSec]) -> HashMap<SecId, (usize, u64)> {
     let mut placed: HashMap<SecId, (usize, u64)> = HashMap::new();
     for (idx, out) in outsecs.iter().enumerate() {
         for c in &out.contribs {
             placed.insert((c.obj, c.sec), (idx, c.offset));
         }
     }
+    placed
+}
 
-    // Global resolution. States keyed by name in first-appearance
-    // order; definitions in comdat-dropped sections defer to the kept
-    // copy and never conflict.
-    #[derive(Clone)]
-    enum GState {
-        Undef { binding: u8, kind: u8, other: u8 },
-        Common { size: u64, align: u64, other: u8 },
-        Def { obj: usize, sym: usize, weak: bool },
-    }
+/// A global's resolution state.
+#[derive(Clone)]
+enum GState {
+    Undef { binding: u8, kind: u8, other: u8 },
+    Common { size: u64, align: u64, other: u8 },
+    Def { obj: usize, sym: usize, weak: bool },
+}
+
+/// Global resolution: states keyed by name in first-appearance order.
+struct Globals {
+    order: Vec<String>,
+    states: HashMap<String, GState>,
+    /// A definite symbol type from any occurrence, adopted when the
+    /// winning entry is STT_NOTYPE (an assembler definition typed by an
+    /// explicit `.type` on a reference in another unit), as GNU ld
+    /// does.
+    kind_hint: HashMap<String, u8>,
+    /// Script-defined symbols: (name, outsec, offset).
+    script_syms: Vec<(String, usize, u64)>,
+}
+
+/// Resolve the globals across units. Definitions in comdat-dropped
+/// sections defer to the kept copy and never conflict.
+fn resolve_globals(
+    objs: &[EtRel],
+    dropped: &HashSet<SecId>,
+    outsecs: &[OutSec],
+) -> Result<Globals, C5Error> {
     let mut order: Vec<String> = Vec::new();
     let mut globals: HashMap<String, GState> = HashMap::new();
-    // GNU ld adopts a definite symbol type from any occurrence when
-    // the winning entry is STT_NOTYPE (an assembler definition typed
-    // by an explicit `.type` on a reference in another unit).
     let mut kind_hint: HashMap<String, u8> = HashMap::new();
     let vis_rank = |v: u8| -> u8 { [0u8, 3, 2, 1][(v & 3) as usize] };
     let merge_other = |a: u8, b: u8| -> u8 {
@@ -1316,7 +1429,7 @@ fn link_relocatable_inner(
         }
     }
     // Script-defined symbols are global definitions in their section.
-    let mut script_syms: Vec<(String, usize, u64)> = Vec::new(); // (name, outsec, offset)
+    let mut script_syms: Vec<(String, usize, u64)> = Vec::new();
     for (idx, out) in outsecs.iter().enumerate() {
         for (name, off) in &out.defined_syms {
             if let Some(GState::Def { obj, .. }) = globals.get(name) {
@@ -1332,16 +1445,41 @@ fn link_relocatable_inner(
             script_syms.push((name.clone(), idx, *off));
         }
     }
+    Ok(Globals {
+        order,
+        states: globals,
+        kind_hint,
+        script_syms,
+    })
+}
 
-    // ---- Output symbol table ----
-    struct OutSym {
-        name: String,
-        info: u8,
-        other: u8,
-        sec: OutRef,
-        value: u64,
-        size: u64,
-    }
+struct OutSym {
+    name: String,
+    info: u8,
+    other: u8,
+    sec: OutRef,
+    value: u64,
+    size: u64,
+}
+
+/// The output symbol table: null, one STT_SECTION per output section,
+/// each object's locals, then the globals in resolution order.
+struct OutSymtab<'g> {
+    syms: Vec<OutSym>,
+    secsym_of_outsec: Vec<u32>,
+    /// (object, input symbol index) -> output index of a kept local.
+    local_map: HashMap<(usize, u32), u32>,
+    first_global: u32,
+    global_index: HashMap<&'g str, u32>,
+}
+
+fn build_symtab<'g>(
+    objs: &[EtRel],
+    opts: &RelinkOptions,
+    outsecs: &[OutSec],
+    placed: &HashMap<SecId, (usize, u64)>,
+    globals: &'g Globals,
+) -> Result<OutSymtab<'g>, C5Error> {
     let mut syms: Vec<OutSym> = Vec::new();
     syms.push(OutSym {
         name: String::new(),
@@ -1351,7 +1489,6 @@ fn link_relocatable_inner(
         value: 0,
         size: 0,
     });
-    // One STT_SECTION per output section, in section order.
     let mut secsym_of_outsec: Vec<u32> = Vec::with_capacity(outsecs.len());
     for i in 0..outsecs.len() {
         secsym_of_outsec.push(syms.len() as u32);
@@ -1364,9 +1501,9 @@ fn link_relocatable_inner(
             size: 0,
         });
     }
-    // Per-object locals. An object that keeps locals but carries no
-    // STT_FILE symbol gets one synthesized from its basename, as GNU
-    // ld does for assembler objects without a `.file` directive.
+    // An object that keeps locals but carries no STT_FILE symbol gets
+    // one synthesized from its basename, as GNU ld does for assembler
+    // objects without a `.file` directive.
     let mut local_map: HashMap<(usize, u32), u32> = HashMap::new();
     for (oi, o) in objs.iter().enumerate() {
         let has_file = o.symbols.iter().any(|s| s.kind == STT_FILE);
@@ -1437,17 +1574,17 @@ fn link_relocatable_inner(
         }
     }
     let first_global = syms.len() as u32;
-    let mut global_index: HashMap<&str, u32> = HashMap::new();
-    for name in &order {
+    let mut global_index: HashMap<&'g str, u32> = HashMap::new();
+    for name in &globals.order {
         let idx = syms.len() as u32;
         let hinted = |kind: u8| -> u8 {
             if kind == 0 {
-                kind_hint.get(name.as_str()).copied().unwrap_or(0)
+                globals.kind_hint.get(name.as_str()).copied().unwrap_or(0)
             } else {
                 kind
             }
         };
-        if let Some(state) = globals.get(name.as_str()) {
+        if let Some(state) = globals.states.get(name.as_str()) {
             let out = match state {
                 GState::Undef {
                     binding,
@@ -1495,7 +1632,9 @@ fn link_relocatable_inner(
                 }
             };
             syms.push(out);
-        } else if let Some((_, outsec, off)) = script_syms.iter().find(|(n, _, _)| n == name) {
+        } else if let Some((_, outsec, off)) =
+            globals.script_syms.iter().find(|(n, _, _)| n == name)
+        {
             syms.push(OutSym {
                 name: name.clone(),
                 info: STB_GLOBAL << 4, // STT_NOTYPE
@@ -1509,89 +1648,119 @@ fn link_relocatable_inner(
         }
         global_index.insert(name.as_str(), idx);
     }
+    Ok(OutSymtab {
+        syms,
+        secsym_of_outsec,
+        local_map,
+        first_global,
+        global_index,
+    })
+}
 
-    // Per-object symbol-index mapping for relocation rewrite. A
-    // non-allocated section -- `.debug_*` above all -- may reference a
-    // symbol the script discarded; GNU ld resolves such a slot to null
-    // rather than failing the link, because the section describes the
-    // image instead of taking part in it.
-    let map_sym = |oi: usize, r: &EtReloc, allocated: bool| -> Result<(u32, i64), C5Error> {
-        let o = &objs[oi];
-        let sym = o.symbols.get(r.sym as usize).ok_or_else(|| {
-            err(&format!(
-                "{}: relocation references symbol {} past the symbol table",
+/// The output symbol index and addend for one input relocation. A
+/// non-allocated section -- `.debug_*` above all -- may reference a
+/// symbol the script discarded; GNU ld resolves such a slot to null
+/// rather than failing the link, because the section describes the
+/// image instead of taking part in it.
+fn map_reloc_symbol(
+    objs: &[EtRel],
+    placed: &HashMap<SecId, (usize, u64)>,
+    symtab: &OutSymtab<'_>,
+    oi: usize,
+    r: &EtReloc,
+    allocated: bool,
+) -> Result<(u32, i64), C5Error> {
+    let o = &objs[oi];
+    let sym = o.symbols.get(r.sym as usize).ok_or_else(|| {
+        err(&format!(
+            "{}: relocation references symbol {} past the symbol table",
+            o.source, r.sym
+        ))
+    })?;
+    if r.sym == 0 {
+        return Ok((0, r.addend));
+    }
+    if sym.kind == STT_SECTION {
+        let EtSymRef::Section(si) = sym.sec else {
+            return Err(err(&format!(
+                "{}: section symbol {} has no section",
                 o.source, r.sym
-            ))
-        })?;
-        if r.sym == 0 {
-            return Ok((0, r.addend));
-        }
-        if sym.kind == STT_SECTION {
-            let EtSymRef::Section(si) = sym.sec else {
-                return Err(err(&format!(
-                    "{}: section symbol {} has no section",
-                    o.source, r.sym
-                )));
-            };
-            let Some(&(outsec, off)) = placed.get(&(oi, si)) else {
-                if !allocated {
-                    return Ok((0, 0));
-                }
-                return Err(err(&format!(
-                    "{}: relocation against discarded section `{}'",
-                    o.source, o.sections[si].name
-                )));
-            };
-            return Ok((secsym_of_outsec[outsec], r.addend + off as i64));
-        }
-        if sym.binding == STB_LOCAL {
-            if let Some(idx) = local_map.get(&(oi, r.sym)) {
-                return Ok((*idx, r.addend));
-            }
-            // Discarded local: convert to the containing section's
-            // symbol with the local's value folded into the addend.
-            if let EtSymRef::Section(si) = sym.sec
-                && let Some(&(outsec, off)) = placed.get(&(oi, si))
-            {
-                return Ok((
-                    secsym_of_outsec[outsec],
-                    r.addend + off as i64 + sym.value as i64,
-                ));
-            }
-            if !allocated {
-                return Ok((0, 0));
-            }
-            return Err(err(&format!(
-                "{}: relocation against discarded local `{}'",
-                o.source, sym.name
-            )));
-        }
-        let Some(idx) = global_index.get(sym.name.as_str()) else {
-            if !allocated {
-                return Ok((0, 0));
-            }
-            return Err(err(&format!(
-                "{}: relocation against unmapped global `{}'",
-                o.source, sym.name
             )));
         };
-        Ok((*idx, r.addend))
+        let Some(&(outsec, off)) = placed.get(&(oi, si)) else {
+            if !allocated {
+                return Ok((0, 0));
+            }
+            return Err(err(&format!(
+                "{}: relocation against discarded section `{}'",
+                o.source, o.sections[si].name
+            )));
+        };
+        return Ok((symtab.secsym_of_outsec[outsec], r.addend + off as i64));
+    }
+    if sym.binding == STB_LOCAL {
+        if let Some(idx) = symtab.local_map.get(&(oi, r.sym)) {
+            return Ok((*idx, r.addend));
+        }
+        // Discarded local: convert to the containing section's symbol
+        // with the local's value folded into the addend.
+        if let EtSymRef::Section(si) = sym.sec
+            && let Some(&(outsec, off)) = placed.get(&(oi, si))
+        {
+            return Ok((
+                symtab.secsym_of_outsec[outsec],
+                r.addend + off as i64 + sym.value as i64,
+            ));
+        }
+        if !allocated {
+            return Ok((0, 0));
+        }
+        return Err(err(&format!(
+            "{}: relocation against discarded local `{}'",
+            o.source, sym.name
+        )));
+    }
+    let Some(idx) = symtab.global_index.get(sym.name.as_str()) else {
+        if !allocated {
+            return Ok((0, 0));
+        }
+        return Err(err(&format!(
+            "{}: relocation against unmapped global `{}'",
+            o.source, sym.name
+        )));
     };
+    Ok((*idx, r.addend))
+}
 
-    // Rewrite relocations per output section.
+/// Relocations per output section: (offset, symbol, type, addend).
+#[allow(clippy::type_complexity)]
+fn rewrite_relocs(
+    objs: &[EtRel],
+    outsecs: &[OutSec],
+    placed: &HashMap<SecId, (usize, u64)>,
+    symtab: &OutSymtab<'_>,
+) -> Result<Vec<Vec<(u64, u32, u32, i64)>>, C5Error> {
     let mut out_relocs: Vec<Vec<(u64, u32, u32, i64)>> = alloc::vec![Vec::new(); outsecs.len()];
     for (idx, out) in outsecs.iter().enumerate() {
         for c in &out.contribs {
             for r in &objs[c.obj].sections[c.sec].relocs {
-                let (sym, addend) = map_sym(c.obj, r, out.flags & SHF_ALLOC != 0)?;
+                let (sym, addend) =
+                    map_reloc_symbol(objs, placed, symtab, c.obj, r, out.flags & SHF_ALLOC != 0)?;
                 out_relocs[idx].push((c.offset + r.offset, sym, r.rtype, addend));
             }
         }
     }
+    Ok(out_relocs)
+}
 
-    // Kept groups that still have placed members.
+/// Kept groups that still have placed members.
+fn kept_output_groups(
+    objs: &[EtRel],
+    kept_groups: &[(usize, usize)],
+    group_outsec: &HashMap<SecId, usize>,
+) -> Vec<OutGroup> {
     let mut out_groups: Vec<OutGroup> = Vec::new();
-    for &(oi, gi) in &kept_groups {
+    for &(oi, gi) in kept_groups {
         let g = &objs[oi].groups[gi];
         let members: Vec<usize> = g
             .members
@@ -1606,71 +1775,35 @@ fn link_relocatable_inner(
             });
         }
     }
+    out_groups
+}
 
-    let raw_syms: Vec<RawSym> = syms
+/// Section contributions for the map: a row is an input section's
+/// offset and size within the output section it landed in.
+fn map_rows(objs: &[EtRel], outsecs: &[OutSec]) -> Vec<(String, Vec<super::map::RelocRow>)> {
+    outsecs
         .iter()
-        .map(|s| RawSym {
-            name: s.name.clone(),
-            info: s.info,
-            other: s.other,
-            sec: s.sec,
-            value: s.value,
-            size: s.size,
+        .map(|out| {
+            let rows = out
+                .contribs
+                .iter()
+                .map(|c| {
+                    let s = &objs[c.obj].sections[c.sec];
+                    super::map::RelocRow {
+                        name: s.name.clone(),
+                        offset: c.offset,
+                        size: if s.sh_type == SHT_NOBITS {
+                            s.nobits_size
+                        } else {
+                            s.bytes.len() as u64
+                        },
+                        source: objs[c.obj].source.clone(),
+                    }
+                })
+                .collect();
+            (out.name.clone(), rows)
         })
-        .collect();
-    let sig_index: Vec<u32> = out_groups
-        .iter()
-        .map(|g| {
-            global_index
-                .get(g.signature.as_str())
-                .copied()
-                // A local signature falls back to the first member's
-                // section symbol (null + outsec order => 1 + index).
-                .unwrap_or_else(|| g.members.first().map(|&m| 1 + m as u32).unwrap_or(0))
-        })
-        .collect();
-    // Section contributions for the map, taken before `outsecs` is
-    // consumed: a row is an input section's offset and size within the
-    // output section it landed in.
-    let rows: Vec<(String, Vec<super::map::RelocRow>)> = if want_map {
-        outsecs
-            .iter()
-            .map(|out| {
-                let rows = out
-                    .contribs
-                    .iter()
-                    .map(|c| {
-                        let s = &objs[c.obj].sections[c.sec];
-                        super::map::RelocRow {
-                            name: s.name.clone(),
-                            offset: c.offset,
-                            size: if s.sh_type == SHT_NOBITS {
-                                s.nobits_size
-                            } else {
-                                s.bytes.len() as u64
-                            },
-                            source: objs[c.obj].source.clone(),
-                        }
-                    })
-                    .collect();
-                (out.name.clone(), rows)
-            })
-            .collect()
-    } else {
-        Vec::new()
-    };
-    let file = write_et_rel(
-        machine,
-        objs,
-        &outsecs,
-        &out_relocs,
-        &out_groups,
-        &sig_index,
-        raw_syms,
-        first_global,
-        opts.build_id_sha1,
-    )?;
-    Ok((file, rows))
+        .collect()
 }
 
 struct OutGroup {

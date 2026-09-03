@@ -12,7 +12,7 @@ use super::paths::{
     badc_home, default_system_include_paths, install_embedded, source_tree_include,
 };
 use super::preprocess::{dump_dependencies, preprocess};
-use super::script_link::{ScriptLinkCli, run_script_link};
+use super::script_link::run_script_link;
 use super::vm::run_in_process;
 
 pub(crate) fn run() {
@@ -162,27 +162,7 @@ fn dispatch(cli: Cli) {
             );
             std::process::exit(1);
         }
-        let opts = ScriptLinkCli {
-            script_path: spath.clone(),
-            inputs: inputs.link_inputs,
-            output_path: cli.output_path,
-            map_path: cli.link.map_path,
-            print_map: cli.link.print_map,
-            entry_override: cli.link.entry,
-            shared: cli.mode == Mode::SharedLibrary,
-            orphan_handling: cli.link.orphan_handling,
-            build_id_sha1: cli.link.build_id_sha1,
-            max_page_size: cli.link.max_page_size,
-            pack_relative_relocs: cli.link.pack_relative_relocs,
-            apply_dynamic_relocs: cli.link.apply_dynamic_relocs,
-            strip_debug: cli.link.strip_debug,
-            discard_locals: cli.link.discard_locals,
-            discard_none: cli.link.discard_none,
-            emit_relocs: cli.link.emit_relocs,
-            quiet: cli.quiet,
-            fix_cortex_a53_843419: cli.link.fix_cortex_a53_843419,
-        };
-        run_script_link(opts);
+        run_script_link(&cli, spath, inputs.link_inputs);
         return;
     }
     if cli.link.fix_cortex_a53_843419 {

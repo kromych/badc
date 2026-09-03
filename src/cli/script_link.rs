@@ -1,4 +1,6 @@
+use super::args::Cli;
 use super::diag::eprint_diagnostic;
+use super::options::Mode;
 use super::output::set_executable;
 
 /// One link input in command-line position: placement follows the
@@ -8,41 +10,20 @@ pub(crate) enum LinkInputCli {
     Archive { path: String, whole: bool },
 }
 
-/// Inputs and options for a `-T/--script` link, gathered by the CLI.
-pub(crate) struct ScriptLinkCli {
-    pub(crate) script_path: std::path::PathBuf,
-    pub(crate) inputs: Vec<LinkInputCli>,
-    pub(crate) output_path: Option<std::path::PathBuf>,
-    pub(crate) map_path: Option<std::path::PathBuf>,
-    pub(crate) print_map: bool,
-    pub(crate) entry_override: Option<String>,
-    pub(crate) shared: bool,
-    pub(crate) orphan_handling: badc::OrphanHandling,
-    pub(crate) build_id_sha1: bool,
-    pub(crate) max_page_size: Option<u64>,
-    pub(crate) pack_relative_relocs: bool,
-    pub(crate) apply_dynamic_relocs: bool,
-    pub(crate) strip_debug: bool,
-    pub(crate) discard_locals: bool,
-    pub(crate) discard_none: bool,
-    pub(crate) emit_relocs: bool,
-    pub(crate) quiet: bool,
-    pub(crate) fix_cortex_a53_843419: bool,
-}
-
 /// Script-driven link: parse the script, read every object (pulling
 /// archive members on demand, or wholly under `--whole-archive`), and
 /// hand the set to the `lds_link` engine.
-pub(crate) fn run_script_link(cli: ScriptLinkCli) {
+pub(crate) fn run_script_link(cli: &Cli, script: &std::path::Path, inputs: Vec<LinkInputCli>) {
+    let shared = cli.mode == Mode::SharedLibrary;
     let fail = |msg: String| -> ! {
         eprint_diagnostic(format!("badc: {msg}"));
         std::process::exit(1);
     };
-    let script_text = match std::fs::read_to_string(&cli.script_path) {
+    let script_text = match std::fs::read_to_string(script) {
         Ok(t) => t,
         Err(e) => fail(format!(
             "error: cannot read script {}: {e}",
-            cli.script_path.display()
+            script.display()
         )),
     };
     let script = match badc::parse_linker_script(&script_text) {
@@ -64,7 +45,7 @@ pub(crate) fn run_script_link(cli: ScriptLinkCli) {
     }
     let mut slots: Vec<Slot> = Vec::new();
     let mut have_lazy = false;
-    for input in &cli.inputs {
+    for input in &inputs {
         match input {
             LinkInputCli::Object(path) => {
                 let bytes = match std::fs::read(path) {
@@ -177,30 +158,30 @@ pub(crate) fn run_script_link(cli: ScriptLinkCli) {
     }
     let machine = inputs[0].machine;
     let opts = badc::LdsOptions {
-        emit: if cli.shared {
+        emit: if shared {
             badc::LdsEmit::Dyn
         } else {
             badc::LdsEmit::Exec
         },
-        shared: cli.shared,
-        entry_override: cli.entry_override,
+        shared,
+        entry_override: cli.link.entry.clone(),
         // GNU ld defaults: 2 MiB on x86-64, 64 KiB on aarch64, 4 KiB
         // on i386.
-        max_page_size: cli.max_page_size.unwrap_or(match machine {
+        max_page_size: cli.link.max_page_size.unwrap_or(match machine {
             183 => 0x10000,
             3 => 0x1000,
             _ => 0x200000,
         }),
-        orphan_handling: cli.orphan_handling,
-        build_id_sha1: cli.build_id_sha1,
-        strip_debug: cli.strip_debug,
-        discard_locals: cli.discard_locals,
-        discard_none: cli.discard_none,
-        pack_relative_relocs: cli.pack_relative_relocs,
-        apply_dynamic_relocs: cli.apply_dynamic_relocs,
-        emit_relocs: cli.emit_relocs,
+        orphan_handling: cli.link.orphan_handling,
+        build_id_sha1: cli.link.build_id_sha1,
+        strip_debug: cli.link.strip_debug,
+        discard_locals: cli.link.discard_locals,
+        discard_none: cli.link.discard_none,
+        pack_relative_relocs: cli.link.pack_relative_relocs,
+        apply_dynamic_relocs: cli.link.apply_dynamic_relocs,
+        emit_relocs: cli.link.emit_relocs,
         emit_warnings: !cli.quiet,
-        fix_cortex_a53_843419: cli.fix_cortex_a53_843419,
+        fix_cortex_a53_843419: cli.link.fix_cortex_a53_843419,
         ..Default::default()
     };
     let res = match badc::link_with_script(&script, inputs, &opts) {
@@ -212,6 +193,7 @@ pub(crate) fn run_script_link(cli: ScriptLinkCli) {
     }
     let out = cli
         .output_path
+        .clone()
         .unwrap_or_else(|| std::path::PathBuf::from("a.out"));
     if let Err(e) = std::fs::write(&out, &res.image) {
         fail(format!("error: failed to write {}: {e}", out.display()));
@@ -220,12 +202,12 @@ pub(crate) fn run_script_link(cli: ScriptLinkCli) {
     if !cli.quiet {
         eprint_diagnostic(format!("info: wrote file {}", out.display()));
     }
-    if let Some(p) = &cli.map_path
+    if let Some(p) = &cli.link.map_path
         && let Err(e) = std::fs::write(p, &res.map)
     {
         fail(format!("error: cannot write map file {}: {e}", p.display()));
     }
-    if cli.print_map {
+    if cli.link.print_map {
         print!("{}", res.map);
     }
 }

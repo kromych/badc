@@ -1,6 +1,7 @@
 //! The `badc` command-line driver: argument parsing, the output
 //! modes, and the diagnostics they print.
 
+mod args;
 mod compile;
 mod deps;
 mod diag;

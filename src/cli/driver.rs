@@ -1,12 +1,13 @@
 use std::io::{IsTerminal, Read};
 use std::path::PathBuf;
 
-use badc::{Compiler, NativeOptions, Target, Vm, jit_run_with_options};
+use badc::{Compiler, NativeOptions, Vm, jit_run_with_options};
 
+use super::args::{Cli, Parsed, parse_args};
 use super::compile::{
     CompileCfg, compile_native_tu, compile_object_tu, compile_units, tu_defines, worker_count,
 };
-use super::deps::{DepKind, DepOptions, emit_deps};
+use super::deps::{DepKind, emit_deps};
 use super::diag::{TuLog, colorize_diagnostic, eprint_diagnostic};
 use super::dump::{dump_bundled_headers, dump_native_link, print_predefined_symbols};
 use super::inputs::{
@@ -14,9 +15,7 @@ use super::inputs::{
     macos_sdk_lib_dir, native_defined_globals, native_defined_globals_logged, target_machine,
     unreadable_object_reason,
 };
-use super::options::{
-    AssemblerOption, Mode, SourceKind, accept_assembler_option, parse_c_integer, parse_jobs,
-};
+use super::options::{Mode, SourceKind};
 use super::output::{post_write_native, set_executable, write_output};
 use super::paths::{
     badc_home, default_output_path, default_system_include_paths, install_embedded,
@@ -24,7 +23,6 @@ use super::paths::{
 };
 use super::script_link::{LinkInputCli, ScriptLinkCli, run_script_link};
 use super::stats::LinkStats;
-use super::usage::USAGE;
 
 pub(crate) fn run() {
     let raw: Vec<String> = std::env::args().collect();
@@ -45,1524 +43,113 @@ pub(crate) fn run() {
         std::process::exit(badc::run_ld(&raw[skip..]));
     }
 
-    // Mode selection: at most one of the mode-picking flags
-    // may appear. We track the *first* seen so an error
-    // message can name both flags.
-    let mut mode: Option<(Mode, &'static str)> = None;
-    let mut track_pointers = false;
-    let mut trace = false;
-    let mut optimize_flag = false;
-    let mut dump_ssa = false;
-    let mut inline_cap: u32 = 64;
-    let mut emit_debug_info = false;
-    // Produce a freestanding image: do not link the embedded startup
-    // runtime, and make the program's own entry the image entry
-    // (`__c5_entry` by default, or `#pragma entrypoint`), which the
-    // program must define. Requested only by this flag.
-    let mut freestanding = false;
-    // `--entry=<sym>` / `--subsystem=<kind>` set the image entry symbol
-    // and PE subsystem from the command line, so a link of precompiled
-    // `.o` inputs (which carry no source-level `#pragma entrypoint` /
-    // `#pragma subsystem`) can still name its entry and subsystem. When
-    // set they take precedence over any per-TU pragma.
-    let mut cli_entry: Option<String> = None;
-    let mut cli_subsystem: Option<badc::Subsystem> = None;
-    let mut output_path: Option<PathBuf> = None;
-    // `-Map=FILE` / `-Map FILE` write a GNU-ld-style link map;
-    // `-M` / `--print-map` print it to stdout. Both may be given.
-    let mut map_path: Option<PathBuf> = None;
-    let mut print_map = false;
-    let mut target_spec: Option<String> = None;
-    let mut mcpu: Option<String> = None;
-    let mut defines: Vec<(String, String)> = Vec::new();
-    let mut undefines: Vec<String> = Vec::new();
-    let mut include_paths: Vec<String> = Vec::new();
-    let mut quote_include_paths: Vec<String> = Vec::new();
-    let mut force_includes: Vec<String> = Vec::new();
-    // gcc `-H`-shape include tracing. When on, the preprocessor
-    // records one line per `#include` resolve (with leading-dot
-    // depth) and the CLI flushes the list to stderr after
-    // compilation. Useful for diagnosing "why did this header land
-    // here" or "why didn't this header resolve" without poking the
-    // amalgamated `__BADC_DUMP_PP` output.
-    let mut show_includes = false;
-    // gcc `-M` flag family: make-syntax dependency output. See
-    // `DepOptions`; assembled after parsing.
-    let mut dep_kind: Option<DepKind> = None;
-    let mut dep_system = true;
-    let mut dep_file: Option<String> = None;
-    let mut dep_targets: Vec<String> = Vec::new();
-    let mut dep_phony = false;
-    let mut dep_target_from_output = false;
-    // `-Wdead-store` opts into the per-store dead-store
-    // diagnostic. Off by default; the per-symbol
-    // `unused variable` / `set but never used` warnings still
-    // fire regardless.
-    let mut warn_dead_store = false;
-    // `-q` / `--quiet` suppresses `info:` chatter on stderr. The
-    // per-source `info: compiling <path>` progress line in
-    // multi-TU mode and the `info: wrote file <path>` lines that
-    // follow each output write are both gated on this flag.
-    // Errors and warnings still print; only informational lines
-    // are quieted.
-    let mut quiet = false;
-    // `-m16` / `-m32` as the user spelled it. Its presence selects
-    // ELFCLASS32 for a `-c` object; the spelling is what the
-    // diagnostic for a `.c` source under it names.
-    let mut code_model_flag: Option<String> = None;
-    let mut mno_fp_regs = false;
-    // `-ffixed-REG` operands, resolved against the target once it is known.
-    let mut fixed_reg_names: Vec<String> = Vec::new();
-    let mut mstrict_align = false;
-    let mut fpic = false;
-    // `-fno-pic` / `-fno-pie`, tracked apart from `fpic` because the
-    // absence of any PIC flag and an explicit opt-out choose different
-    // `const` placements in a `-c` object; see `NativeOptions::pic_link`.
-    let mut fno_pic = false;
-    let mut jump_tables = true;
-    // `-Wa,-L` / `-Wa,--keep-locals`.
-    let mut keep_local_labels = false;
-    let mut min_function_alignment: u32 = 1;
-    let mut patchable_function_entry = badc::PatchableEntry::NONE;
-    let mut profiling = badc::Profiling::OFF;
-    // The `-pg` modifiers seen, x86-64 options gcc's aarch64 rejects.
-    let mut mcount_modifiers: Vec<String> = Vec::new();
-    let mut code_model = badc::CodeModel::Small;
-    let mut code_model_tiny = false;
-    let mut hardening = badc::Hardening::NONE;
-    let mut stack_protect = badc::StackProtect::OFF;
-    // `-mstack-protector-guard-reg=` on aarch64 names a system register the
-    // guard offset applies to; the `sysreg` form needs both, so the operands
-    // are collected as they arrive and combined once the loop ends.
-    let mut ssp_guard_kind: Option<&'static str> = None;
-    let mut ssp_guard_reg: Option<String> = None;
-    let mut ssp_guard_offset: Option<i32> = None;
-    // `--export-all` exports every non-static function in the dynamic
-    // symbol table / export trie of native output, so a runtime
-    // `dlopen` consumer can `dlsym` it without a source-level `#pragma
-    // export`. Applies to shared-library and executable output on every
-    // native target (Mach-O / ELF / PE); a host executable that loads
-    // plugin modules sets it so the modules resolve the host's symbols.
-    let mut export_all = false;
-    // `--export-data` -- add every defined non-static global (function
-    // and data) to the dynamic symbol table of a native executable, so a
-    // `dlopen`'d module resolves the host's symbols (a Python C extension
-    // binding the interpreter's `Py*` API, including the `PyTypeObject`
-    // data globals). ELF only; macOS already exports executable globals,
-    // Windows has no analogue.
-    let mut export_data = false;
-    // `--emit-relocs` -- keep the resolved relocations in the final
-    // ELF image as `.rela.*` sections (GNU ld -q), for consumers that
-    // relocate the image wholesale (the x86 KASLR relocs tool).
-    let mut emit_relocs = false;
-    // `--gnu` -- define the GCC identity macros (`__GNUC__` etc.).
-    let mut gnu = false;
-    // `-std=` -- a `gnu` dialect suppresses `__STRICT_ANSI__`, an `iso` /
-    // `c` dialect defines it, as in gcc and clang. Without the flag the
-    // conservative default stands: `--gnu` reports strict conformance so a
-    // header takes its standard-C path for the GNU features badc lacks.
-    let mut gnu_dialect = false;
-    let mut gnu89_inline = false;
-    let mut strict_flex_arrays: u8 = 0;
-    // `-fshort-wchar` -- narrow `wchar_t` to an unsigned 16-bit type.
-    let mut short_wchar = false;
-    // `-ftrivial-auto-var-init=` -- what an automatic object declared
-    // without an initializer holds; see `AutoVarInit`.
-    let mut auto_var_init = badc::AutoVarInit::Uninitialized;
-    // `-fsigned-char` / `-funsigned-char`; `None` keeps the target ABI's
-    // own plain-`char` signedness.
-    let mut char_signed: Option<bool> = None;
-    let mut nostdinc = false;
-    let mut no_builtin = false;
-    let mut no_builtin_fns: Vec<String> = Vec::new();
-    // Multi-translation-unit linker plumbing. Bytecode `.o`
-    // inputs accumulate alongside C sources; `.a` archives
-    // arrive either positionally or through `-l<name>` after a
-    // search through `-L<dir>` paths. `compile_only` switches
-    // off the link step entirely and writes one `.o` per
-    // source so the bytes can be fed back through another
-    // badc invocation.
-    let mut compile_only = false;
-    let mut lib_names: Vec<String> = Vec::new();
-    let mut library_paths: Vec<String> = Vec::new();
-    // Linker-script link (`-T` / `--script`) and the GNU ld options
-    // that shape it. A script switches the link to the per-input-
-    // section engine in `lds_link`; without one the default family
-    // layout stays byte-identical.
-    let mut script_path: Option<PathBuf> = None;
-    let mut orphan_handling = badc::OrphanHandling::Place;
-    let mut build_id_sha1 = false;
-    let mut max_page_size: Option<u64> = None;
-    let mut pack_relative_relocs = false;
-    let mut apply_dynamic_relocs = true;
-    let mut ld_strip_debug = false;
-    let mut discard_locals = false;
-    let mut discard_none = false;
-    let mut fix_cortex_a53_843419 = false;
-    // `--whole-archive` spans, as half-open ranges over the positional
-    // input indexes (`args` grows one entry per positional).
-    let mut wa_ranges: Vec<(usize, usize)> = Vec::new();
-    let mut wa_open: Option<usize> = None;
-    // `--jobs N` / `-jN` sets the compile-parallelism factor N: the
-    // driver compiles independent `.c` sources in up to 2*N worker
-    // threads (capped at the source count). `None` leaves N at the host
-    // parallelism default, resolved once the source count is known.
-    let mut jobs: Option<usize> = None;
+    let mut cli = match parse_args(raw) {
+        Ok(Parsed::Run(cli)) => cli,
+        Ok(Parsed::Print(text)) => {
+            println!("{text}");
+            return;
+        }
+        Ok(Parsed::Install { dir, quiet }) => return install(dir, quiet),
+        Err(e) => e.report(),
+    };
+    // The allocator reads the pressure caps from the environment, so
+    // they are published before any compile worker starts.
+    #[cfg(feature = "codegen_test")]
+    for (var, value) in &cli.pressure_caps {
+        unsafe { std::env::set_var(var, value) };
+    }
+    resolve_search_paths(&mut cli);
+    dispatch(*cli);
+}
 
-    let mut iter = raw.into_iter();
-    let prog0 = iter.next().unwrap_or_default();
-    let mut args: Vec<String> = vec![prog0];
-    while let Some(arg) = iter.next() {
-        let claim = |slot: &mut Option<(Mode, &'static str)>, picked: Mode| {
-            let flag = picked.flag_name();
-            if let Some((existing, existing_flag)) = *slot {
-                eprintln!(
-                    "badc: {flag} can't be combined with {existing_flag} -- both pick an \
-                     output mode (Mode::{:?} vs Mode::{:?}). See --help.",
-                    picked, existing
-                );
-                std::process::exit(1);
-            }
-            *slot = Some((picked, flag));
-        };
-        match arg.as_str() {
-            "--interp" => claim(&mut mode, Mode::Interp),
-            "--track-pointers" => track_pointers = true,
-            "--trace" => trace = true,
-            "--list-symbols" => claim(&mut mode, Mode::ListSymbols),
-            "--dump-headers" => claim(&mut mode, Mode::DumpHeaders),
-            // `--install [<dir>]`: the optional destination is the first
-            // positional token (it falls through to `args`); a bare
-            // `--install` defaults to ~/.badc. Dispatched after parsing.
-            "--install" => claim(&mut mode, Mode::Install),
-            "--dump-pp" | "-E" => claim(&mut mode, Mode::DumpPp),
-            // The optimizer has a single level; every `-O<n>` form maps
-            // onto it, matching gcc/clang where a build system may pass
-            // any of them. `-O0` explicitly disables it (and overrides an
-            // earlier `-O` on the same command line).
-            "--optimize" | "-O" | "-O1" | "-O2" | "-O3" | "-Os" | "-Oz" | "-Ofast" | "-Og" => {
-                optimize_flag = true
-            }
-            "-O0" => optimize_flag = false,
-            "--dump-ssa" => dump_ssa = true,
-            s if s.starts_with("--inline-cap=") => {
-                let body = &s["--inline-cap=".len()..];
-                match body.parse::<u32>() {
-                    Ok(n) => inline_cap = n,
-                    Err(_) => {
-                        eprint_diagnostic(
-                            "badc: error: --inline-cap=N requires a non-negative integer",
-                        );
-                        std::process::exit(1);
-                    }
-                }
-            }
-            // Register-allocator pressure caps, gated behind the
-            // `codegen_test` feature. Each truncates one allocator
-            // bank to N entries so the allocator spills as if the
-            // target had fewer registers. The value is published
-            // through the same `BADC_MAX_GPR` / `BADC_MAX_FPR`
-            // environment variables the allocator reads. Setting an
-            // environment variable is sound here: it runs during
-            // argument parsing before any worker thread starts.
-            #[cfg(feature = "codegen_test")]
-            s if s.starts_with("--max-gpr=") || s.starts_with("--max-fpr=") => {
-                let (flag, var) = if s.starts_with("--max-gpr=") {
-                    ("--max-gpr=", "BADC_MAX_GPR")
-                } else {
-                    ("--max-fpr=", "BADC_MAX_FPR")
-                };
-                let body = &s[flag.len()..];
-                match body.parse::<usize>() {
-                    Ok(n) if n >= 1 => unsafe { std::env::set_var(var, n.to_string()) },
-                    _ => {
-                        eprint_diagnostic(format!("badc: error: {flag}N requires an integer >= 1"));
-                        std::process::exit(1);
-                    }
-                }
-            }
-            "--debug" | "-g" => emit_debug_info = true,
-            "--no-debug" | "-g0" => emit_debug_info = false,
-            "--freestanding" => freestanding = true,
-            "--jit" => claim(&mut mode, Mode::Jit),
-            "--shared" => claim(&mut mode, Mode::SharedLibrary),
-            "--ar" | "--archive" => claim(&mut mode, Mode::BuildArchive),
-            "--dump-native-link" => claim(&mut mode, Mode::DumpNativeLink),
-            "-h" | "--help" => {
-                println!("{USAGE}");
-                return;
-            }
-            "-v" | "--version" => {
-                println!("{}", badc::BUILD_INFO);
-                return;
-            }
-            "-o" => match iter.next() {
-                Some(p) => output_path = Some(PathBuf::from(p)),
-                None => {
-                    eprint_diagnostic("badc: error: -o requires a path argument");
-                    std::process::exit(1);
-                }
-            },
-            "-Map" => match iter.next() {
-                Some(p) => map_path = Some(PathBuf::from(p)),
-                None => {
-                    eprint_diagnostic("badc: error: -Map requires a file argument");
-                    std::process::exit(1);
-                }
-            },
-            s if s.starts_with("-Map=") => {
-                map_path = Some(PathBuf::from(&s["-Map=".len()..]));
-            }
-            // `-M` is gcc's dependency-output flag, handled below. The
-            // link map keeps the long spelling; GNU ld's `-M` belongs
-            // to the linker persona, which parses separately.
-            "--print-map" => print_map = true,
-            "-D" => match iter.next() {
-                Some(s) => match s.split_once('=') {
-                    Some((name, body)) => defines.push((name.to_string(), body.to_string())),
-                    None => defines.push((s, String::from("1"))),
-                },
-                None => {
-                    eprint_diagnostic("badc: error: -D requires NAME[=VALUE]");
-                    std::process::exit(1);
-                }
-            },
-            s if s.starts_with("-D") && s.len() > 2 => {
-                let body = &s[2..];
-                match body.split_once('=') {
-                    Some((name, body)) => defines.push((name.to_string(), body.to_string())),
-                    None => defines.push((body.to_string(), String::from("1"))),
-                }
-            }
-            "-U" => match iter.next() {
-                Some(s) => undefines.push(s),
-                None => {
-                    eprint_diagnostic("badc: error: -U requires a NAME");
-                    std::process::exit(1);
-                }
-            },
-            s if s.starts_with("-U") && s.len() > 2 => {
-                undefines.push(s[2..].to_string());
-            }
-            "-I" => match iter.next() {
-                Some(p) => include_paths.push(p),
-                None => {
-                    eprint_diagnostic("badc: error: -I requires a path argument");
-                    std::process::exit(1);
-                }
-            },
-            s if s.starts_with("-I") && s.len() > 2 => {
-                include_paths.push(s[2..].to_string());
-            }
-            // gcc / clang -iquote DIR: a search path for `#include "..."`
-            // only, probed after the including file's directory and
-            // before the -I paths.
-            "-iquote" => match iter.next() {
-                Some(p) => quote_include_paths.push(p),
-                None => {
-                    eprint_diagnostic("badc: error: -iquote requires a path argument");
-                    std::process::exit(1);
-                }
-            },
-            s if s.starts_with("-iquote") && s.len() > 7 => {
-                quote_include_paths.push(s[7..].to_string());
-            }
-            // gcc / clang -include FILE: splice the named header
-            // in front of the source as if `#include "FILE"` had
-            // been written at the top of the translation unit.
-            // Repeatable; later flags expand top-to-bottom in the
-            // order given. The header is resolved through the
-            // same -I / embedded-registry chain as a normal
-            // `#include`, so a build driver can drop a checked-in
-            // copy into `./include/` to override the bundled one.
-            "-include" => match iter.next() {
-                Some(name) => force_includes.push(name),
-                None => {
-                    eprint_diagnostic("badc: error: -include requires a header name");
-                    std::process::exit(1);
-                }
-            },
-            // gcc / clang `-H` -- print the resolved include path
-            // for every `#include` directive, with leading dots
-            // marking nesting depth. `--show-includes` is the
-            // descriptive long form (also matches MSVC's spelling).
-            "-H" | "--show-includes" => show_includes = true,
-            // gcc `-M` family -- make-syntax dependency output. `-M` /
-            // `-MM` write the rule and compile nothing; `-MD` / `-MMD`
-            // write it beside the normal output. The `MM` spellings
-            // drop system headers. Later flags win, as with gcc.
-            "-M" | "-MM" | "-MD" | "-MMD" => {
-                dep_kind = Some(if arg == "-M" || arg == "-MM" {
-                    DepKind::Only
-                } else {
-                    DepKind::WithOutput
-                });
-                dep_system = arg == "-M" || arg == "-MD";
-                // gcc's driver names the rule after `-o` for the
-                // compile-too spellings by injecting `-MQ <object>`.
-                dep_target_from_output = matches!(arg.as_str(), "-MD" | "-MMD");
-            }
-            "-MP" => dep_phony = true,
-            "-MF" | "-MT" | "-MQ" => match iter.next() {
-                Some(v) => match arg.as_str() {
-                    "-MF" => dep_file = Some(v),
-                    // `-MT` takes the target verbatim; `-MQ` quotes it
-                    // for make.
-                    "-MT" => dep_targets.push(v),
-                    _ => dep_targets.push(badc::dep_escape(&v)),
-                },
-                None => {
-                    eprint_diagnostic(format!("badc: error: {arg} requires an argument"));
-                    std::process::exit(1);
-                }
-            },
-            // gcc hands a `-Wp,` payload's comma-separated pieces to the
-            // preprocessor. There `-MD` / `-MMD` take the output path as
-            // an operand, which is how kbuild requests dependency files
-            // (`-Wp,-MMD,<path>`). Reaching the preprocessor directly
-            // means no `-o`-derived rule name applies, so the rule keeps
-            // the source-derived default -- gcc behaves the same, and
-            // the kernel's `fixdep` discards the rule name regardless.
-            s if s.starts_with("-Wp,") => {
-                let mut parts = s["-Wp,".len()..].split(',');
-                while let Some(p) = parts.next() {
-                    match p {
-                        "-MD" | "-MMD" => match parts.next() {
-                            Some(path) => {
-                                dep_kind = Some(DepKind::WithOutput);
-                                dep_system = p == "-MD";
-                                dep_file = Some(path.to_string());
-                                dep_target_from_output = false;
-                            }
-                            None => {
-                                eprint_diagnostic(format!(
-                                    "badc: error: `-Wp,{p}` requires a file operand"
-                                ));
-                                std::process::exit(1);
-                            }
-                        },
-                        "-MP" => dep_phony = true,
-                        _ => {
-                            eprint_diagnostic(format!(
-                                "badc: error: unsupported preprocessor option `{p}` in `{s}`"
-                            ));
-                            std::process::exit(1);
-                        }
-                    }
-                }
-            }
-            // `-Wa,<opt>[,<opt>...]` and `-Xassembler <opt>`: gcc's two
-            // spellings for handing an option to the assembler. badc's
-            // assembler is built in, so each option is checked against what
-            // it implements rather than passed on.
-            s if s.starts_with("-Wa,") => {
-                for opt in s["-Wa,".len()..].split(',') {
-                    match accept_assembler_option(opt) {
-                        Ok(o) => keep_local_labels |= o == AssemblerOption::KeepLocals,
-                        Err(e) => {
-                            eprint_diagnostic(e);
-                            std::process::exit(1);
-                        }
-                    }
-                }
-            }
-            "-Xassembler" => match iter.next() {
-                Some(opt) => match accept_assembler_option(&opt) {
-                    Ok(o) => keep_local_labels |= o == AssemblerOption::KeepLocals,
-                    Err(e) => {
-                        eprint_diagnostic(e);
-                        std::process::exit(1);
-                    }
-                },
-                None => {
-                    eprint_diagnostic("badc: error: -Xassembler requires an option");
-                    std::process::exit(1);
-                }
-            },
-            // gcc's x86 code-mode selectors. `-m16` and `-m32` both put
-            // the object out as ELFCLASS32 / EM_386, matching the
-            // `as --32` gcc hands its assembler for either; the encoding
-            // mode itself comes from `.code16` / `.code32` in the source.
-            // `-m31` (s390) and `-mx32` name ABIs badc has no encoder or
-            // container for.
-            "-m64" => {}
-            s @ ("-m16" | "-m32") => code_model_flag = Some(s.to_string()),
-            s @ ("-m31" | "-mx32") => {
+/// `--install [<dir>]` copies the embedded headers and runtime sources
+/// to disk. The destination is the first positional token, else ~/.badc.
+fn install(dir: Option<PathBuf>, quiet: bool) {
+    let Some(dir) = dir.or_else(badc_home) else {
+        eprint_diagnostic(
+            "badc: error: --install: no home directory -- set HOME / USERPROFILE / \
+             BADC_HOME or pass an explicit <dir>",
+        );
+        std::process::exit(1);
+    };
+    match install_embedded(&dir) {
+        Ok((headers, runtime)) => {
+            if !quiet {
                 eprint_diagnostic(format!(
-                    "badc: error: `{s}` selects an ABI badc does not emit"
+                    "info: installed {headers} header(s) + {runtime} runtime source(s) under {}",
+                    dir.display()
                 ));
-                std::process::exit(1);
             }
-            // gcc-shape `-Wdead-store` -- enable the per-store
-            // dead-store diagnostic. `-Wno-dead-store` is the
-            // opt-out spelling.
-            "-Wdead-store" => warn_dead_store = true,
-            "-Wno-dead-store" => warn_dead_store = false,
-            // Quiet mode -- silence informational output (per-source
-            // progress, `info: wrote file <path>` lines). Errors
-            // and warnings remain on stderr unchanged.
-            "-q" | "--quiet" => quiet = true,
-            // Keep compiler-generated code off the floating-point /
-            // SIMD register file: gcc spells it `-mno-sse` on x86_64 and
-            // `-mgeneral-regs-only` on aarch64. Freestanding environments
-            // (OS kernels) run with that register file trapped, so any
-            // access faults; see `NativeOptions::no_fp_regs`.
-            "-mno-sse" | "-mgeneral-regs-only" => mno_fp_regs = true,
-            // Keep a register out of the allocator; see `NativeOptions::fixed_regs`.
-            s if s.starts_with("-ffixed-") => {
-                let name = &s["-ffixed-".len()..];
-                if name.is_empty() {
-                    eprint_diagnostic("badc: error: `-ffixed-` requires a register name");
-                    std::process::exit(1);
-                }
-                fixed_reg_names.push(name.to_string());
-            }
-            // Keep every compiler-generated memory access naturally
-            // aligned for its width. Code that runs with the MMU off
-            // sees Device-typed memory, where an unaligned access
-            // raises an alignment fault instead of being fixed up;
-            // see `NativeOptions::strict_align`.
-            // AArch64 CPU selection. The base name picks a scheduling
-            // model badc does not differentiate; the extensions decide
-            // the feature macros, resolved once the target is known.
-            s if s.starts_with("-mcpu=") => mcpu = Some(s["-mcpu=".len()..].to_string()),
-            "-mstrict-align" => mstrict_align = true,
-            "-mno-strict-align" => mstrict_align = false,
-            // Speculative-execution mitigations, in gcc's spellings. An
-            // argument that is not implemented is rejected rather than
-            // ignored: a hardening flag that compiles but does nothing
-            // leaves the caller believing the output is mitigated.
-            // The `thunk` kind wants a comdat thunk body in the object,
-            // which badc does not produce.
-            s if s.starts_with("-mindirect-branch=") => match &s["-mindirect-branch=".len()..] {
-                "keep" => hardening.indirect_branch = badc::IndirectBranch::Keep,
-                "thunk-extern" => hardening.indirect_branch = badc::IndirectBranch::ThunkExtern,
-                "thunk-inline" => hardening.indirect_branch = badc::IndirectBranch::ThunkInline,
-                other => {
-                    eprint_diagnostic(format!(
-                        "badc: error: unsupported argument `{other}` to `-mindirect-branch=` \
-                             (supported: keep, thunk-extern, thunk-inline)"
-                    ));
-                    std::process::exit(1);
-                }
-            },
-            s if s.starts_with("-mfunction-return=") => match &s["-mfunction-return=".len()..] {
-                "keep" => hardening.function_return_thunk = false,
-                "thunk-extern" => hardening.function_return_thunk = true,
-                other => {
-                    eprint_diagnostic(format!(
-                        "badc: error: unsupported argument `{other}` to `-mfunction-return=` \
-                             (supported: keep, thunk-extern)"
-                    ));
-                    std::process::exit(1);
-                }
-            },
-            // Already unconditional: every compiler-generated indirect
-            // branch takes its target from a register. The CS prefix is
-            // gcc's for the generated-thunk kinds only, none for
-            // `thunk-extern`.
-            "-mindirect-branch-register" | "-mindirect-branch-cs-prefix" => {}
-            s if s.starts_with("-mharden-sls=") => {
-                for kind in s["-mharden-sls=".len()..].split(',') {
-                    match kind {
-                        "none" => {
-                            hardening.sls_return = false;
-                            hardening.sls_indirect_jmp = false;
-                        }
-                        "return" => hardening.sls_return = true,
-                        "indirect-jmp" => hardening.sls_indirect_jmp = true,
-                        "all" => {
-                            hardening.sls_return = true;
-                            hardening.sls_indirect_jmp = true;
-                        }
-                        other => {
-                            eprint_diagnostic(format!(
-                                "badc: error: unsupported argument `{other}` to `-mharden-sls=` \
-                                 (supported: none, return, indirect-jmp, all)"
-                            ));
-                            std::process::exit(1);
-                        }
-                    }
-                }
-            }
-            // `-fcf-protection=<kind>`: x86 control-flow enforcement.
-            // `branch` is indirect-branch tracking, the `endbr64` landing
-            // pads. `return` and `full` add the shadow stack, which needs
-            // a return path badc does not emit.
-            s if s.starts_with("-fcf-protection=") => match &s["-fcf-protection=".len()..] {
-                "none" => hardening.cf_protection_branch = false,
-                "branch" => hardening.cf_protection_branch = true,
-                other => {
-                    eprint_diagnostic(format!(
-                        "badc: error: unsupported argument `{other}` to `-fcf-protection=` \
-                             (supported: none, branch)"
-                    ));
-                    std::process::exit(1);
-                }
-            },
-            // A `+`-joined AArch64 feature list. `standard` is gcc's
-            // alias for `bti+pac-ret`. The `leaf` and `b-key` modifiers
-            // of `pac-ret`, and `gcs`, are rejected: an accepted-but-
-            // ignored spelling would build an object that claims a
-            // protection it does not carry.
-            s if s.starts_with("-mbranch-protection=") => {
-                for feature in s["-mbranch-protection=".len()..].split('+') {
-                    match feature {
-                        "none" => {
-                            hardening.bti = false;
-                            hardening.pac_ret = false;
-                        }
-                        "bti" => hardening.bti = true,
-                        "pac-ret" => hardening.pac_ret = true,
-                        "standard" => {
-                            hardening.bti = true;
-                            hardening.pac_ret = true;
-                        }
-                        other => {
-                            eprint_diagnostic(format!(
-                                "badc: error: unsupported feature `{other}` in \
-                                 `-mbranch-protection=` (supported: none, bti, \
-                                 pac-ret, standard)"
-                            ));
-                            std::process::exit(1);
-                        }
-                    }
-                }
-            }
-            // Position-independent relocatable output: no absolute
-            // relocation reaches the object, so a consumer that
-            // relocates it wholesale at load (or forbids absolute
-            // references outright) can take it; see
-            // `NativeOptions::pic`. badc's final images are always
-            // position-independent, so the flag only chooses the
-            // `-c` object's relocation shapes.
-            "-fPIC" | "-fpic" | "-fPIE" | "-fpie" => {
-                fpic = true;
-                fno_pic = false;
-            }
-            "-fno-pic" | "-fno-PIC" | "-fno-pie" | "-fno-PIE" => {
-                fpic = false;
-                fno_pic = true;
-            }
-            // gcc / clang `-fno-jump-tables`: a switch never dispatches
-            // through a table, only through the compare tree. Kernels
-            // built with retpoline or indirect-branch tracking pass it
-            // because a table dispatch is an indirect branch those
-            // configurations must not take.
-            "-fjump-tables" => jump_tables = true,
-            "-fno-jump-tables" => jump_tables = false,
-            // gcc `-fstack-protector*`: which functions carry a stack
-            // canary. The per-function rule is gcc's, applied to the
-            // declared automatic objects; see `StackProtector`.
-            "-fno-stack-protector" => stack_protect.mode = badc::StackProtector::Off,
-            "-fstack-protector" => stack_protect.mode = badc::StackProtector::Basic,
-            "-fstack-protector-strong" => stack_protect.mode = badc::StackProtector::Strong,
-            "-fstack-protector-all" => stack_protect.mode = badc::StackProtector::All,
-            // gcc `--param <name>=<value>`, in both the separate-argument
-            // and joined spellings. `ssp-buffer-size` is the only name with
-            // an effect here; an unrecognized one is rejected rather than
-            // dropped, so a tuning request cannot pass silently.
-            s if s == "--param" || s.starts_with("--param=") => {
-                let spec = if s == "--param" {
-                    match iter.next() {
-                        Some(v) => v,
-                        None => {
-                            eprint_diagnostic("badc: error: `--param` takes an argument");
-                            std::process::exit(1);
-                        }
-                    }
-                } else {
-                    s["--param=".len()..].to_string()
-                };
-                let (name, value) = match spec.split_once('=') {
-                    Some(p) => p,
-                    None => {
-                        eprint_diagnostic(format!(
-                            "badc: error: `--param` takes `<name>=<value>`, got `{spec}`"
-                        ));
-                        std::process::exit(1);
-                    }
-                };
-                if name != "ssp-buffer-size" {
-                    eprint_diagnostic(format!(
-                        "badc: error: unsupported `--param` name `{name}` \
-                         (supported: ssp-buffer-size)"
-                    ));
-                    std::process::exit(1);
-                }
-                match value.parse::<u32>() {
-                    Ok(n) if n > 0 => stack_protect.buffer_size = n,
-                    _ => {
-                        eprint_diagnostic(format!(
-                            "badc: error: `ssp-buffer-size` takes a positive \
-                             integer, got `{value}`"
-                        ));
-                        std::process::exit(1);
-                    }
-                }
-            }
-            // gcc `-mstack-protector-guard=`: where the guard value lives.
-            // `tls` is the x86-64 segment-relative form, `sysreg` the
-            // aarch64 system-register form, `global` the `__stack_chk_guard`
-            // object. Validated against the target once the loop ends.
-            s if s.starts_with("-mstack-protector-guard=") => {
-                ssp_guard_kind = match &s["-mstack-protector-guard=".len()..] {
-                    "global" => Some("global"),
-                    "tls" => Some("tls"),
-                    "sysreg" => Some("sysreg"),
-                    other => {
-                        eprint_diagnostic(format!(
-                            "badc: error: unsupported argument `{other}` to \
-                             `-mstack-protector-guard=` (supported: global, tls, sysreg)"
-                        ));
-                        std::process::exit(1);
-                    }
-                };
-            }
-            s if s.starts_with("-mstack-protector-guard-reg=") => {
-                ssp_guard_reg = Some(s["-mstack-protector-guard-reg=".len()..].to_string());
-            }
-            s if s.starts_with("-mstack-protector-guard-offset=") => {
-                let spec = &s["-mstack-protector-guard-offset=".len()..];
-                match parse_c_integer(spec) {
-                    Some(n) => ssp_guard_offset = Some(n),
-                    None => {
-                        eprint_diagnostic(format!(
-                            "badc: error: `-mstack-protector-guard-offset=` takes \
-                             an integer, got `{spec}`"
-                        ));
-                        std::process::exit(1);
-                    }
-                }
-            }
-            s if s.starts_with("-mstack-protector-guard-symbol=") => {
-                let spec = &s["-mstack-protector-guard-symbol=".len()..];
-                match badc::GuardSymbol::new(spec) {
-                    Some(g) => stack_protect.guard_symbol = g,
-                    None => {
-                        eprint_diagnostic(format!(
-                            "badc: error: `-mstack-protector-guard-symbol=` takes \
-                             a symbol name of 1 to {} bytes, got `{spec}`",
-                            badc::GuardSymbol::CAP
-                        ));
-                        std::process::exit(1);
-                    }
-                }
-            }
-            // gcc `-fmin-function-alignment=N`: every function entry lands
-            // on a multiple of N, which is how a kernel states
-            // CONFIG_FUNCTION_ALIGNMENT. Unlike `-falign-functions` gcc
-            // never skips a large gap under it, and badc never does either.
-            s if s.starts_with("-fmin-function-alignment=") => {
-                let spec = &s["-fmin-function-alignment=".len()..];
-                match spec.parse::<u32>() {
-                    Ok(n) if n.is_power_of_two() => min_function_alignment = n,
-                    _ => {
-                        eprint_diagnostic(format!(
-                            "badc: error: `-fmin-function-alignment=` takes a \
-                             power of two, got `{spec}`"
-                        ));
-                        std::process::exit(1);
-                    }
-                }
-            }
-            // gcc `-fpatchable-function-entry=N[,M]`: N NOPs at every
-            // function entry, M of them ahead of the symbol, recorded per
-            // function in `__patchable_function_entries`.
-            s if s.starts_with("-fpatchable-function-entry=") => {
-                let spec = &s["-fpatchable-function-entry=".len()..];
-                let (n, m) = spec.split_once(',').unwrap_or((spec, "0"));
-                match (n.parse::<u32>(), m.parse::<u32>()) {
-                    (Ok(nops), Ok(before)) if before <= nops => {
-                        patchable_function_entry = badc::PatchableEntry { nops, before };
-                    }
-                    _ => {
-                        eprint_diagnostic(format!(
-                            "badc: error: `-fpatchable-function-entry=` takes `N[,M]` \
-                             with M <= N, got `{spec}`"
-                        ));
-                        std::process::exit(1);
-                    }
-                }
-            }
-            "-pg" => profiling.enabled = true,
-            "-mfentry" | "-mno-fentry" => {
-                profiling.fentry = arg == "-mfentry";
-                mcount_modifiers.push(arg.clone());
-            }
-            "-mrecord-mcount" | "-mno-record-mcount" => {
-                profiling.record_mcount = arg == "-mrecord-mcount";
-                mcount_modifiers.push(arg.clone());
-            }
-            "-mnop-mcount" | "-mno-nop-mcount" => {
-                profiling.nop_mcount = arg == "-mnop-mcount";
-                mcount_modifiers.push(arg.clone());
-            }
-            // Code model for `-c` objects; see `CodeModel`. `small` is
-            // the default; `kernel` switches external-address
-            // materialization to the sign-extended 32-bit absolute form
-            // and is validated against the target below. The remaining
-            // psABI models are not implemented.
-            s if s.starts_with("-mcmodel=") => {
-                code_model = match &s["-mcmodel=".len()..] {
-                    "small" => badc::CodeModel::Small,
-                    "kernel" => badc::CodeModel::Kernel,
-                    // aarch64 `tiny` narrows the layout contract to
-                    // +/-1MiB; the small-model form stays valid under it,
-                    // so it lowers as small. Validated against the
-                    // target below.
-                    "tiny" => {
-                        code_model_tiny = true;
-                        badc::CodeModel::Small
-                    }
-                    other => {
-                        eprint_diagnostic(format!(
-                            "badc: error: unsupported code model `{other}` in \
-                             `-mcmodel=` (supported: small, kernel; \
-                             aarch64 also: tiny)"
-                        ));
-                        std::process::exit(1);
-                    }
-                };
-            }
-            // Keep resolved relocations in the final ELF image (ld -q).
-            "--emit-relocs" => emit_relocs = true,
-            // Export every non-static function (dlopen/dlsym visibility).
-            "--export-all" => export_all = true,
-            // Export every defined non-static global (function and data)
-            // into the executable's dynamic symbol table for `dlopen`
-            // resolution.
-            "--export-data" => export_data = true,
-            // Define the GCC identity macros (`__GNUC__`, `__VERSION__`,
-            // `__extension__`, ...). Off by default: badc implements
-            // most but not all of the GNU C surface, so code that gates
-            // a feature badc lacks (`__int128`) on `__GNUC__` keeps
-            // compiling unless this is requested.
-            "--gnu" => gnu = true,
-            // gcc / clang `-fgnu89-inline`: make the GNU89 inline
-            // linkage model the unit default in place of C99's.
-            "-fgnu89-inline" => gnu89_inline = true,
-            "-fno-gnu89-inline" => gnu89_inline = false,
-            // gcc `-fstrict-flex-arrays[=N]`: which trailing array members
-            // `__builtin_object_size` treats as unbounded. The bare form
-            // is level 3, as in gcc.
-            "-fstrict-flex-arrays" => strict_flex_arrays = 3,
-            s if s.starts_with("-fstrict-flex-arrays=") => {
-                let spec = &s["-fstrict-flex-arrays=".len()..];
-                match spec.parse::<u8>() {
-                    Ok(n) if n <= 3 => strict_flex_arrays = n,
-                    _ => {
-                        eprint_diagnostic(format!(
-                            "badc: error: `-fstrict-flex-arrays=` takes a level \
-                             0..=3, got `{spec}`"
-                        ));
-                        std::process::exit(1);
-                    }
-                }
-            }
-            // gcc / clang `-fshort-wchar`: `wchar_t` becomes an unsigned
-            // 16-bit type on every target. It changes the layout of every
-            // object holding a `wchar_t` or a wide literal, so it has to
-            // reach the front end rather than be dropped as a no-op.
-            "-fshort-wchar" => short_wchar = true,
-            "-fno-short-wchar" => short_wchar = false,
-            // gcc `-ftrivial-auto-var-init=`: the front end supplies the
-            // initializer, so every output mode carries it.
-            s if s.starts_with("-ftrivial-auto-var-init=") => {
-                let spec = &s["-ftrivial-auto-var-init=".len()..];
-                auto_var_init = match spec {
-                    "uninitialized" => badc::AutoVarInit::Uninitialized,
-                    "zero" => badc::AutoVarInit::Zero,
-                    "pattern" => badc::AutoVarInit::Pattern,
-                    _ => {
-                        eprint_diagnostic(format!(
-                            "badc: error: unsupported argument `{spec}` to \
-                             `-ftrivial-auto-var-init=` (supported: uninitialized, \
-                             zero, pattern)"
-                        ));
-                        std::process::exit(1);
-                    }
-                };
-            }
-            // gcc `-fzero-init-padding-bits=`: measured on all three
-            // targets at both optimization levels, a partially initialized
-            // automatic struct or union has zero padding whichever value is
-            // named, since the whole object is zero-filled before its
-            // members are stored. The argument is checked and nothing
-            // changes.
-            s if s.starts_with("-fzero-init-padding-bits=") => {
-                let spec = &s["-fzero-init-padding-bits=".len()..];
-                if !matches!(spec, "standard" | "unions" | "all") {
-                    eprint_diagnostic(format!(
-                        "badc: error: unsupported argument `{spec}` to \
-                         `-fzero-init-padding-bits=` (supported: standard, unions, all)"
-                    ));
-                    std::process::exit(1);
-                }
-            }
-            // gcc / clang `-fsigned-char` / `-funsigned-char`: C99
-            // 6.2.5p15 leaves plain `char`'s signedness to the
-            // implementation, and each selects one over the target
-            // default. It changes every `char`-to-`int` conversion, so
-            // it reaches the front end rather than being dropped.
-            "-fsigned-char" | "-fno-unsigned-char" => char_signed = Some(true),
-            "-funsigned-char" | "-fno-signed-char" => char_signed = Some(false),
-            // gcc / clang `-fno-builtin` and `-ffreestanding`: a call
-            // spelled with a library function's own name is an ordinary
-            // call the compiler may not fold. `-ffreestanding` also drops
-            // the hosted assumption that such a name is declarable, which
-            // is the auto-include retry. The `__builtin_` spellings are
-            // unaffected, as under gcc.
-            "-fno-builtin" | "-ffreestanding" => no_builtin = true,
-            "-fbuiltin" | "-fhosted" => no_builtin = false,
-            s if s.starts_with("-fno-builtin-") => {
-                no_builtin_fns.push(s["-fno-builtin-".len()..].to_string());
-            }
-            // gcc / clang `-nostdinc`: the standard headers leave the
-            // `#include` search, so a name no `-I` / `-iquote` path carries
-            // is an error rather than a bind to badc's bundled libc. A
-            // freestanding tree that supplies its own headers passes it.
-            "-nostdinc" => nostdinc = true,
-            // gcc / clang `-std=<dialect>`: the language the unit is
-            // written in. badc compiles C99 with the GNU extensions
-            // always available, so the dialect selects only whether
-            // `__STRICT_ANSI__` is defined -- the macro headers read as
-            // "the user asked for ISO C".
-            _ if arg.starts_with("-std=") => {
-                // The C dialect families gcc names: `cNN` / `gnuNN` and the
-                // `iso9899:` spellings, which are strict ISO. A name outside
-                // them is rejected rather than read as strict ISO, since a
-                // caller that misspells the dialect gets the other one.
-                let dialect = &arg["-std=".len()..];
-                let known = dialect.starts_with("gnu")
-                    || dialect.starts_with("iso9899:")
-                    || (dialect.starts_with('c')
-                        && dialect[1..].chars().all(|c| c.is_ascii_digit())
-                        && dialect.len() > 1);
-                if !known {
-                    eprintln!("badc: error: unknown C dialect `{dialect}` (-std=)");
-                    std::process::exit(1);
-                }
-                gnu_dialect = dialect.starts_with("gnu");
-            }
-            // `-c` / `--compile-only` -- emit a c5 object file
-            // (`.o`) per source instead of linking through to a
-            // native binary. The output goes to either the
-            // explicit -o path (when one source is named) or
-            // `<stem>.o` next to each input.
-            "-c" | "--compile-only" => compile_only = true,
-            // Build parallelism. `--jobs N` / `--jobs=N` / `-j N` /
-            // `-jN` set N; the driver runs up to 2*N compile workers.
-            // The attached `-jN` form only matches an all-digit suffix
-            // so an unknown `-jXXX` flag still reports as unknown below.
-            "--jobs" | "-j" => match iter.next() {
-                Some(n) => jobs = Some(parse_jobs(&n)),
-                None => {
-                    eprint_diagnostic("badc: error: --jobs (-j) requires a positive integer N");
-                    std::process::exit(1);
-                }
-            },
-            s if s.starts_with("--jobs=") => jobs = Some(parse_jobs(&s["--jobs=".len()..])),
-            s if s.starts_with("-j")
-                && s.len() > 2
-                && s[2..].bytes().all(|b| b.is_ascii_digit()) =>
-            {
-                jobs = Some(parse_jobs(&s[2..]));
-            }
-            "-l" => match iter.next() {
-                Some(name) => lib_names.push(name),
-                None => {
-                    eprint_diagnostic("badc: error: -l requires a library name");
-                    std::process::exit(1);
-                }
-            },
-            s if s.starts_with("-l") && s.len() > 2 => {
-                lib_names.push(s[2..].to_string());
-            }
-            "-L" => match iter.next() {
-                Some(path) => library_paths.push(path),
-                None => {
-                    eprint_diagnostic("badc: error: -L requires a directory");
-                    std::process::exit(1);
-                }
-            },
-            s if s.starts_with("-L") && s.len() > 2 => {
-                library_paths.push(s[2..].to_string());
-            }
-            s if s.starts_with("--target=") => {
-                target_spec = Some(s["--target=".len()..].to_string());
-            }
-            // `--entry=<sym>` fixes the image entry symbol at the link
-            // step, so precompiled `.o` inputs need no `#pragma entrypoint`
-            // stub. Mirrors the pragma but wins over it.
-            s if s.starts_with("--entry=") => {
-                cli_entry = Some(s["--entry=".len()..].to_string());
-            }
-            // `--subsystem=<kind>` selects the PE subsystem; kinds match
-            // `#pragma subsystem(<kind>)`. Needed to stamp EFI application
-            // / boot-service-driver / runtime-driver images built from
-            // precompiled objects.
-            s if s.starts_with("--subsystem=") => {
-                let kind = &s["--subsystem=".len()..];
-                cli_subsystem = Some(match kind {
-                    "console" | "cui" => badc::Subsystem::Console,
-                    "windows" | "gui" => badc::Subsystem::Windows,
-                    "native" | "nt" | "driver" => badc::Subsystem::Native,
-                    "efi_application" | "efi-application" => badc::Subsystem::EfiApplication,
-                    "efi_boot_service_driver" | "efi-boot-service-driver" => {
-                        badc::Subsystem::EfiBootServiceDriver
-                    }
-                    "efi_runtime_driver" | "efi-runtime-driver" => {
-                        badc::Subsystem::EfiRuntimeDriver
-                    }
-                    "efi_rom" | "efi-rom" => badc::Subsystem::EfiRom,
-                    _ => {
-                        eprint_diagnostic(format!(
-                            "badc: error: --subsystem=<kind>: unknown kind `{kind}`; expected \
-                             one of console, windows, native, efi_application, \
-                             efi_boot_service_driver, efi_runtime_driver, efi_rom"
-                        ));
-                        std::process::exit(1);
-                    }
-                });
-            }
-            // GNU ld surface for script-driven links. `-T FILE` /
-            // `--script=FILE` select the script; the rest mirror the
-            // options the Linux kernel build passes to `ld`.
-            "-T" | "--script" => match iter.next() {
-                Some(p) => script_path = Some(PathBuf::from(p)),
-                None => {
-                    eprint_diagnostic("badc: error: -T/--script requires a file argument");
-                    std::process::exit(1);
-                }
-            },
-            s if s.starts_with("--script=") => {
-                script_path = Some(PathBuf::from(&s["--script=".len()..]));
-            }
-            s if s.starts_with("-T") && s.len() > 2 => {
-                script_path = Some(PathBuf::from(&s[2..]));
-            }
-            s if s.starts_with("--orphan-handling=") => {
-                orphan_handling = match &s["--orphan-handling=".len()..] {
-                    "place" => badc::OrphanHandling::Place,
-                    "warn" => badc::OrphanHandling::Warn,
-                    "error" => badc::OrphanHandling::Error,
-                    "discard" => badc::OrphanHandling::Discard,
-                    other => {
-                        eprint_diagnostic(format!(
-                            "badc: error: --orphan-handling=`{other}`: expected \
-                             place, warn, error, or discard"
-                        ));
-                        std::process::exit(1);
-                    }
-                };
-            }
-            "--build-id" => build_id_sha1 = true,
-            s if s.starts_with("--build-id=") => match &s["--build-id=".len()..] {
-                "sha1" => build_id_sha1 = true,
-                "none" => build_id_sha1 = false,
-                other => {
-                    eprint_diagnostic(format!(
-                        "badc: error: --build-id=`{other}` is not supported (sha1, none)"
-                    ));
-                    std::process::exit(1);
-                }
-            },
-            // `-z keyword`: page-size and packing keywords take
-            // effect; the hardening keywords the kernel passes
-            // describe states this linker already emits.
-            "-z" => match iter.next() {
-                Some(kw) => match kw.as_str() {
-                    s if s.starts_with("max-page-size=") => {
-                        let body = &s["max-page-size=".len()..];
-                        let parsed = if let Some(hex) = body.strip_prefix("0x") {
-                            u64::from_str_radix(hex, 16).ok()
-                        } else {
-                            body.parse::<u64>().ok()
-                        };
-                        match parsed {
-                            Some(n) if n.is_power_of_two() => max_page_size = Some(n),
-                            _ => {
-                                eprint_diagnostic(
-                                    "badc: error: -z max-page-size requires a power of two",
-                                );
-                                std::process::exit(1);
-                            }
-                        }
-                    }
-                    "pack-relative-relocs" => pack_relative_relocs = true,
-                    "nopack-relative-relocs" => pack_relative_relocs = false,
-                    "noexecstack" | "execstack" | "norelro" | "relro" | "notext" | "text"
-                    | "now" | "lazy" | "defs" | "nodefault" | "muldefs" => {}
-                    other => {
-                        eprint_diagnostic(format!("badc: error: unknown -z keyword `{other}`"));
-                        std::process::exit(1);
-                    }
-                },
-                None => {
-                    eprint_diagnostic("badc: error: -z requires a keyword");
-                    std::process::exit(1);
-                }
-            },
-            "--strip-debug" | "-S" => ld_strip_debug = true,
-            "-X" | "--discard-locals" => discard_locals = true,
-            "--discard-none" => discard_none = true,
-            "--no-apply-dynamic-relocs" => apply_dynamic_relocs = false,
-            // Accepted with no effect on output: diagnostics-shaping
-            // and emulation flags from ld command lines.
-            "--fatal-warnings"
-            | "--no-warn-rwx-segments"
-            | "--no-undefined"
-            | "-EL"
-            | "--pic-veneer"
-            | "-Bsymbolic"
-            | "--no-ld-generated-unwind-info" => {}
-            "--fix-cortex-a53-843419" => fix_cortex_a53_843419 = true,
-            // ld accepts the emulation joined (`-maarch64linux`) or
-            // separate (`-m aarch64linux`).
-            s @ ("-melf_x86_64" | "-maarch64linux" | "-maarch64elf") => {
-                let spec = if s == "-melf_x86_64" {
-                    "linux-x64"
-                } else {
-                    "linux-aarch64"
-                };
-                if target_spec.is_none() {
-                    target_spec = Some(spec.to_string());
-                }
-            }
-            "-m" => match iter.next() {
-                Some(emu) => {
-                    let spec = match emu.as_str() {
-                        "elf_x86_64" => Some("linux-x64"),
-                        "aarch64linux" | "aarch64elf" => Some("linux-aarch64"),
-                        _ => None,
-                    };
-                    match spec {
-                        Some(t) if target_spec.is_none() => target_spec = Some(t.to_string()),
-                        Some(_) => {}
-                        None => {
-                            eprint_diagnostic(format!("badc: error: unknown emulation `{emu}`"));
-                            std::process::exit(1);
-                        }
-                    }
-                }
-                None => {
-                    eprint_diagnostic("badc: error: -m requires an emulation name");
-                    std::process::exit(1);
-                }
-            },
-            "-shared" => claim(&mut mode, Mode::SharedLibrary),
-            "--whole-archive" => wa_open = Some(args.len()),
-            "--no-whole-archive" => {
-                if let Some(start) = wa_open.take() {
-                    wa_ranges.push((start, args.len()));
-                }
-            }
-            // Group markers: the script-link archive loop already
-            // rescans every archive to a fixed point.
-            "--start-group" | "--end-group" => {}
-            // An unrecognised dash-prefixed token is an unknown option, not
-            // a source file. Without this guard it falls through to `args`
-            // and is classified by extension, becoming a phantom input path
-            // (a misleading `cannot read` error, or -- worse -- silently
-            // compiled if its text names an existing file). `-` alone is
-            // the stdin source and is handled above.
-            s if s.starts_with('-') && s != "-" => {
-                eprint_diagnostic(format!("badc: error: unknown option `{s}`"));
-                std::process::exit(1);
-            }
-            _ => args.push(arg),
+        }
+        Err(e) => {
+            eprint_diagnostic(format!("badc: error: --install to {}: {e}", dir.display()));
+            std::process::exit(1);
         }
     }
+}
 
-    // On-disk copies of the bundled headers, consulted by name in place
-    // of the in-binary body: the source tree this badc was built from,
-    // then the `badc --install` overlay under ~/.badc (or $BADC_HOME).
-    // Editing either takes effect without rebuilding badc. Anchored on
-    // the executable and on $HOME, never on the working directory: the
-    // include search path must not depend on where badc is invoked from.
-    // An explicit -I still shadows a bundled name, as in every other
-    // compiler; only a bundled header's own includes stay inside the set.
-    // An explicitly set $BADC_HOME is a deliberate choice and outranks the
-    // source tree; the implicit ~/.badc does not, so a stale `--install`
-    // there cannot shadow the tree a developer is editing.
+/// Fill the search paths the command line does not name: the on-disk
+/// copies of the bundled headers, the `-l` fallback under
+/// `$BADC_HOME/lib`, and the host's implicit system include path.
+///
+/// A bundled header found on disk replaces the in-binary body: first the
+/// source tree this badc was built from, then the `badc --install`
+/// overlay under ~/.badc (or $BADC_HOME). Editing either takes effect
+/// without rebuilding badc. Anchored on the executable and on $HOME,
+/// never on the working directory: the include search path must not
+/// depend on where badc is invoked from. An explicit -I still shadows a
+/// bundled name, as in every other compiler; only a bundled header's own
+/// includes stay inside the set. An explicitly set $BADC_HOME is a
+/// deliberate choice and outranks the source tree; the implicit ~/.badc
+/// does not, so a stale `--install` there cannot shadow the tree a
+/// developer is editing.
+fn resolve_search_paths(cli: &mut Cli) {
     let home_include = badc_home()
         .map(|h| h.join("include"))
         .filter(|d| d.is_dir());
-    let mut own_header_roots: Vec<String> = Vec::new();
-    let mut add = |d: Option<PathBuf>| {
+    let add = |roots: &mut Vec<String>, d: Option<PathBuf>| {
         if let Some(d) = d {
             let s = d.to_string_lossy().into_owned();
-            if !own_header_roots.contains(&s) {
-                own_header_roots.push(s);
+            if !roots.contains(&s) {
+                roots.push(s);
             }
         }
     };
+    let roots = &mut cli.front.own_header_roots;
     if std::env::var_os("BADC_HOME").is_some() {
-        add(home_include);
-        add(source_tree_include());
+        add(roots, home_include);
+        add(roots, source_tree_include());
     } else {
-        add(source_tree_include());
-        add(home_include);
+        add(roots, source_tree_include());
+        add(roots, home_include);
     }
     // `~/.badc/lib` joins the `-l` archive search, after explicit -L.
     if let Some(home) = badc_home() {
         let dir = home.join("lib");
         if dir.is_dir() {
             let s = dir.to_string_lossy().into_owned();
-            if !library_paths.contains(&s) {
-                library_paths.push(s);
+            if !cli.link.library_paths.contains(&s) {
+                cli.link.library_paths.push(s);
             }
         }
     }
+    cli.front.system_include_paths = default_system_include_paths(cli.target, cli.freestanding);
+}
 
-    let mode = mode.map(|(m, _)| m).unwrap_or(Mode::NativeExecutable);
-
-    // `--install [<dir>]` copies the embedded headers + runtime source
-    // to disk and exits. The destination is the first positional token
-    // (`args[1]`), else ~/.badc. Dispatched before the compile paths:
-    // it takes no source input.
-    if mode == Mode::Install {
-        let dir = match args.get(1).map(PathBuf::from).or_else(badc_home) {
-            Some(d) => d,
-            None => {
-                eprint_diagnostic(
-                    "badc: error: --install: no home directory -- set HOME / USERPROFILE / \
-                     BADC_HOME or pass an explicit <dir>",
-                );
-                std::process::exit(1);
-            }
-        };
-        match install_embedded(&dir) {
-            Ok((headers, runtime)) => {
-                if !quiet {
-                    eprint_diagnostic(format!(
-                        "info: installed {headers} header(s) + {runtime} runtime source(s) under {}",
-                        dir.display()
-                    ));
-                }
-            }
-            Err(e) => {
-                eprint_diagnostic(format!("badc: error: --install to {}: {e}", dir.display()));
-                std::process::exit(1);
-            }
-        }
-        return;
-    }
-
-    let target = match Target::parse(target_spec.as_deref()) {
-        Ok(t) => t,
-        Err(e) => {
-            eprint_diagnostic(e);
-            std::process::exit(1);
-        }
-    };
-
-    let mut fixed_regs = badc::FixedRegs::NONE;
-    for name in &fixed_reg_names {
-        match badc::fixed_register(target, name) {
-            Ok(reg) => fixed_regs.insert(reg),
-            Err(e) => {
-                eprint_diagnostic(format!("badc: error: {e}"));
-                std::process::exit(1);
-            }
-        }
-    }
-
-    // The host's implicit system include path, probed after the bundled
-    // headers so a hosted native build resolves third-party headers
-    // (`zlib.h`, `libfdt.h`) without shadowing the embedded standard set.
-    let system_include_paths = default_system_include_paths(target, freestanding);
-
-    // The kernel model rewrites external addresses into sign-extended
-    // 32-bit absolutes, defined by the x86-64 psABI for images linked in
-    // the top 2GB. It shapes relocatable output only: badc's own images
-    // are position-independent and cannot carry an absolute text
-    // reference, and `-fPIC` contradicts it the same way (gcc rejects
-    // the combination).
-    // `tiny` is an aarch64 model (gcc: tiny/small/large there,
-    // small/kernel/medium/large on x86-64).
-    // `--jit` and `--interp` execute in this process: the JIT resolves no
-    // undefined symbol and the interpreter has no machine frame at all, so
-    // neither can carry a canary.
-    if stack_protect.mode != badc::StackProtector::Off && matches!(mode, Mode::Jit | Mode::Interp) {
-        eprint_diagnostic(
-            "badc: error: `-fstack-protector*` needs a compiled output: \
-             `--jit` and `--interp` execute in this process and reach no \
-             `__stack_chk_fail`",
-        );
-        std::process::exit(1);
-    }
-    // The profiling call and the patchable-entry records are ELF object
-    // contracts: the call names `__fentry__` / `mcount` for the link and
-    // the records are sections of the object.
-    // TODO: the aarch64 `-pg` form and the PE / Mach-O records.
-    let is_elf_target = matches!(target, badc::Target::LinuxX64 | badc::Target::LinuxAarch64);
-    if profiling.enabled && matches!(mode, Mode::Jit | Mode::Interp) {
-        eprint_diagnostic(
-            "badc: error: `-pg` needs a compiled output: `--jit` and `--interp` \
-             execute in this process and reach no `__fentry__`",
-        );
-        std::process::exit(1);
-    }
-    if profiling.enabled && (!is_elf_target || target.is_aarch64()) {
-        eprint_diagnostic(format!(
-            "badc: error: `-pg` is not implemented for {}",
-            target.id_str()
-        ));
-        std::process::exit(1);
-    }
-    if let Some(flag) = mcount_modifiers.first()
-        && target.is_aarch64()
-    {
-        eprint_diagnostic(format!(
-            "badc: error: `{flag}` is an x86-64 option; gcc's aarch64 has none"
-        ));
-        std::process::exit(1);
-    }
-    if patchable_function_entry != badc::PatchableEntry::NONE && !is_elf_target {
-        eprint_diagnostic(format!(
-            "badc: error: `-fpatchable-function-entry=` is not implemented for {}",
-            target.id_str()
-        ));
-        std::process::exit(1);
-    }
-    // The canary sequences name the System V handler and guard object.
-    // Windows targets link against msvcrt, which exports neither (the
-    // Microsoft scheme is `__security_cookie` / `__security_check_cookie`,
-    // which badc does not emit), so an object built here would reference
-    // symbols nothing defines.
-    // TODO: emit the Microsoft cookie sequence for the Windows targets.
-    if stack_protect.mode != badc::StackProtector::Off && target.is_windows() {
-        eprint_diagnostic(
-            "badc: error: `-fstack-protector*` is not implemented for the Windows \
-             targets: their C library exports neither `__stack_chk_guard` nor \
-             `__stack_chk_fail`",
-        );
-        std::process::exit(1);
-    }
-    // `-mstack-protector-guard*`: the operands only make sense together and
-    // only on the architecture whose form they name, so the combination is
-    // checked once the target is known. An unusable one is an error rather
-    // than a default, since a guard read from the wrong place would leave
-    // the image claiming a protection it does not have.
-    // gcc's x86 default for `-mstack-protector-guard=` is `tls`, so the
-    // kernel names only the register and the symbol on SMP builds.
-    let ssp_guard_kind = ssp_guard_kind.or_else(|| {
-        let named = ssp_guard_reg.is_some() || ssp_guard_offset.is_some();
-        (named && target.is_x86_64()).then_some("tls")
-    });
-    if let Some(kind) = ssp_guard_kind {
-        stack_protect.guard = match kind {
-            "global" => badc::StackGuard::Global,
-            "tls" => {
-                if !target.is_x86_64() {
-                    eprint_diagnostic(
-                        "badc: error: `-mstack-protector-guard=tls` is an x86-64 form; \
-                         use `global` or `sysreg`",
-                    );
-                    std::process::exit(1);
-                }
-                let seg = match ssp_guard_reg.as_deref() {
-                    None | Some("fs") => badc::GuardSeg::Fs,
-                    Some("gs") => badc::GuardSeg::Gs,
-                    Some(other) => {
-                        eprint_diagnostic(format!(
-                            "badc: error: unsupported argument `{other}` to \
-                             `-mstack-protector-guard-reg=` under `=tls` (supported: fs, gs)"
-                        ));
-                        std::process::exit(1);
-                    }
-                };
-                badc::StackGuard::Tls {
-                    seg,
-                    offset: ssp_guard_offset.unwrap_or(badc::SYSV_TLS_GUARD_OFFSET),
-                }
-            }
-            _ => {
-                if !target.is_aarch64() {
-                    eprint_diagnostic(
-                        "badc: error: `-mstack-protector-guard=sysreg` is an aarch64 form; \
-                         use `global` or `tls`",
-                    );
-                    std::process::exit(1);
-                }
-                let (Some(reg), Some(offset)) = (ssp_guard_reg.as_deref(), ssp_guard_offset) else {
-                    eprint_diagnostic(
-                        "badc: error: `-mstack-protector-guard=sysreg` needs both \
-                         `-mstack-protector-guard-reg=` and `-mstack-protector-guard-offset=`",
-                    );
-                    std::process::exit(1);
-                };
-                let Some(sysreg) = badc::stack_guard_sysreg(reg) else {
-                    eprint_diagnostic(format!(
-                        "badc: error: `-mstack-protector-guard-reg={reg}` names no \
-                         AArch64 system register"
-                    ));
-                    std::process::exit(1);
-                };
-                badc::StackGuard::Sysreg { sysreg, offset }
-            }
-        };
-    } else if ssp_guard_reg.is_some() || ssp_guard_offset.is_some() {
-        eprint_diagnostic(
-            "badc: error: `-mstack-protector-guard-reg=` / \
-             `-mstack-protector-guard-offset=` need `-mstack-protector-guard=`",
-        );
-        std::process::exit(1);
-    }
-    if !stack_protect.guard_symbol.is_empty() && ssp_guard_offset.is_some() {
-        eprint_diagnostic(
-            "badc: error: `-mstack-protector-guard-symbol=` and \
-             `-mstack-protector-guard-offset=` are mutually exclusive",
-        );
-        std::process::exit(1);
-    }
-    if !stack_protect.guard_symbol.is_empty()
-        && !matches!(
-            stack_protect.guard,
-            badc::StackGuard::Global | badc::StackGuard::Tls { .. }
-        )
-    {
-        eprint_diagnostic(
-            "badc: error: `-mstack-protector-guard-symbol=` applies to the \
-             `global` and `tls` guard forms only",
-        );
-        std::process::exit(1);
-    }
-    if let Some(spec) = &mcpu {
-        if !matches!(
-            target,
-            badc::Target::LinuxAarch64 | badc::Target::MacOSAarch64 | badc::Target::WindowsAarch64
-        ) {
-            eprint_diagnostic(
-                "badc: error: `-mcpu=` names an AArch64 CPU; the x86-64 targets take none",
-            );
-            std::process::exit(1);
-        }
-        // gcc's model, measured: `+crypto` is `+aes+sha2`, `no<ext>`
-        // subtracts, and __ARM_FEATURE_CRYPTO holds only while both do.
-        // The AES and SHA-2 encodings are always in badc's tables; any
-        // other modifier is refused rather than accepted inertly.
-        let mut parts = spec.split('+');
-        if parts.next().unwrap_or("").is_empty() {
-            eprint_diagnostic(format!("badc: error: `-mcpu={spec}` names no CPU"));
-            std::process::exit(1);
-        }
-        let (mut aes, mut sha2) = (false, false);
-        for ext in parts {
-            match ext {
-                "crypto" => (aes, sha2) = (true, true),
-                "nocrypto" => (aes, sha2) = (false, false),
-                "aes" => aes = true,
-                "noaes" => aes = false,
-                "sha2" => sha2 = true,
-                "nosha2" => sha2 = false,
-                other => {
-                    eprint_diagnostic(format!(
-                        "badc: error: `-mcpu=` extension `{other}` is not \
-                         implemented; badc implements `crypto`, `aes`, \
-                         `sha2` and their `no` forms"
-                    ));
-                    std::process::exit(1);
-                }
-            }
-        }
-        for (name, on) in [
-            ("__ARM_FEATURE_AES", aes),
-            ("__ARM_FEATURE_SHA2", sha2),
-            ("__ARM_FEATURE_CRYPTO", aes && sha2),
-        ] {
-            if on && !defines.iter().any(|(n, _)| n == name) {
-                defines.push((name.to_string(), String::from("1")));
-            }
-        }
-    }
-    if code_model_tiny && target != badc::Target::LinuxAarch64 {
-        eprint_diagnostic(
-            "badc: error: `-mcmodel=tiny` requires an aarch64 ELF target \
-             (--target=linux-aarch64)",
-        );
-        std::process::exit(1);
-    }
-    if code_model == badc::CodeModel::Kernel {
-        if target != badc::Target::LinuxX64 {
-            eprint_diagnostic(
-                "badc: error: `-mcmodel=kernel` requires an x86-64 ELF target \
-                 (--target=linux-x64)",
-            );
-            std::process::exit(1);
-        }
-        if fpic {
-            eprint_diagnostic(
-                "badc: error: code model `kernel` does not support \
-                 position-independent output (-fPIC/-fPIE)",
-            );
-            std::process::exit(1);
-        }
-        // Modes that emit no native code (`-E`, --list-symbols, ...)
-        // leave the flag inert, as gcc does.
-        let emits_native = matches!(
-            mode,
-            Mode::NativeExecutable | Mode::SharedLibrary | Mode::Jit | Mode::Interp
-        );
-        if emits_native && !compile_only {
-            eprint_diagnostic(
-                "badc: error: `-mcmodel=kernel` shapes relocatable objects; \
-                 it requires `-c` or `--ar`",
-            );
-            std::process::exit(1);
-        }
-    }
-
-    // VM-only flags.
-    if (track_pointers || trace) && mode != Mode::Interp {
-        eprintln!(
-            "badc: --track-pointers / --trace require --interp \
-             (current mode is {})",
-            mode.flag_name()
-        );
-        std::process::exit(1);
-    }
-
-    // -o makes no sense for modes that don't write to disk.
-    if output_path.is_some()
-        && matches!(
-            mode,
-            Mode::Interp | Mode::ListSymbols | Mode::DumpHeaders | Mode::Jit | Mode::DumpNativeLink
-        )
-    {
-        eprintln!(
-            "badc: -o is only meaningful for native compilation \
-             (current mode is {})",
-            mode.flag_name()
-        );
-        std::process::exit(1);
-    }
-
-    // The link map describes a completed link.
-    if (map_path.is_some() || print_map)
-        && (compile_only || !matches!(mode, Mode::NativeExecutable | Mode::SharedLibrary))
-    {
-        eprintln!(
-            "badc: -Map / --print-map require a link (current mode is {})",
-            if compile_only { "-c" } else { mode.flag_name() }
-        );
-        std::process::exit(1);
-    }
-
-    if mode == Mode::ListSymbols {
+/// Run the output mode the command line selected.
+fn dispatch(cli: Cli) {
+    if cli.mode == Mode::ListSymbols {
         print_predefined_symbols();
         return;
     }
 
-    if mode == Mode::DumpHeaders {
+    if cli.mode == Mode::DumpHeaders {
         dump_bundled_headers();
         return;
     }
 
-    if mode == Mode::DumpNativeLink {
-        dump_native_link(&args[1..]);
+    if cli.mode == Mode::DumpNativeLink {
+        dump_native_link(&cli.positional[1..]);
         return;
     }
 
@@ -1578,9 +165,6 @@ pub(crate) fn run() {
     //                  mode used.
     // Unrecognised entries past the first non-input become the
     // program's argv for VM / JIT modes.
-    if let Some(start) = wa_open.take() {
-        wa_ranges.push((start, args.len()));
-    }
     let mut sources: Vec<String> = Vec::new();
     let mut objects: Vec<String> = Vec::new();
     let mut archives: Vec<String> = Vec::new();
@@ -1588,11 +172,11 @@ pub(crate) fn run() {
     let mut archives_whole: Vec<bool> = Vec::new();
     // Objects and archives in command-line order for the script link.
     let mut link_inputs: Vec<LinkInputCli> = Vec::new();
-    let mut prog_args_start: usize = args.len();
+    let mut prog_args_start: usize = cli.positional.len();
     // Program argv is consumed only by --jit / --interp; every other
     // mode links or preprocesses its inputs and has no argv tail.
-    let takes_prog_args = matches!(mode, Mode::Jit | Mode::Interp);
-    for (i, a) in args.iter().enumerate().skip(1) {
+    let takes_prog_args = matches!(cli.mode, Mode::Jit | Mode::Interp);
+    for (i, a) in cli.positional.iter().enumerate().skip(1) {
         if a == "-" {
             sources.push(a.clone());
             continue;
@@ -1608,7 +192,7 @@ pub(crate) fn run() {
                 link_inputs.push(LinkInputCli::Object(a.clone()));
             }
             "a" => {
-                let whole = wa_ranges.iter().any(|&(s, e)| s <= i && i < e);
+                let whole = cli.link.whole_archive.iter().any(|&(s, e)| s <= i && i < e);
                 archives.push(a.clone());
                 archives_whole.push(whole);
                 link_inputs.push(LinkInputCli::Archive {
@@ -1641,11 +225,11 @@ pub(crate) fn run() {
     // A linker script switches to the script-driven link engine:
     // object/archive inputs only, laid out exactly as the script
     // directs. The default (scriptless) path below is untouched.
-    if let Some(spath) = &script_path {
-        if !matches!(mode, Mode::NativeExecutable | Mode::SharedLibrary) {
+    if let Some(spath) = &cli.link.script_path {
+        if !matches!(cli.mode, Mode::NativeExecutable | Mode::SharedLibrary) {
             eprint_diagnostic(format!(
                 "badc: error: -T/--script requires a native link (current mode is {})",
-                mode.flag_name()
+                cli.mode.flag_name()
             ));
             std::process::exit(1);
         }
@@ -1658,27 +242,27 @@ pub(crate) fn run() {
         let opts = ScriptLinkCli {
             script_path: spath.clone(),
             inputs: link_inputs,
-            output_path,
-            map_path,
-            print_map,
-            entry_override: cli_entry,
-            shared: mode == Mode::SharedLibrary,
-            orphan_handling,
-            build_id_sha1,
-            max_page_size,
-            pack_relative_relocs,
-            apply_dynamic_relocs,
-            strip_debug: ld_strip_debug,
-            discard_locals,
-            discard_none,
-            emit_relocs,
-            quiet,
-            fix_cortex_a53_843419,
+            output_path: cli.output_path,
+            map_path: cli.link.map_path,
+            print_map: cli.link.print_map,
+            entry_override: cli.link.entry,
+            shared: cli.mode == Mode::SharedLibrary,
+            orphan_handling: cli.link.orphan_handling,
+            build_id_sha1: cli.link.build_id_sha1,
+            max_page_size: cli.link.max_page_size,
+            pack_relative_relocs: cli.link.pack_relative_relocs,
+            apply_dynamic_relocs: cli.link.apply_dynamic_relocs,
+            strip_debug: cli.link.strip_debug,
+            discard_locals: cli.link.discard_locals,
+            discard_none: cli.link.discard_none,
+            emit_relocs: cli.link.emit_relocs,
+            quiet: cli.quiet,
+            fix_cortex_a53_843419: cli.link.fix_cortex_a53_843419,
         };
         run_script_link(opts);
         return;
     }
-    if fix_cortex_a53_843419 {
+    if cli.link.fix_cortex_a53_843419 {
         // Implemented by the script-driven engine only.
         // TODO: scan for the erratum sequences on the scriptless path.
         eprintln!(
@@ -1695,14 +279,14 @@ pub(crate) fn run() {
     // resolve otherwise-undefined references, the `.a` a positional
     // archive whose members are pulled on demand.
     let mut shared_libs: Vec<badc::SharedLibrary> = Vec::new();
-    let mut search_paths: Vec<String> = library_paths.clone();
+    let mut search_paths: Vec<String> = cli.link.library_paths.clone();
     // The host's library directories hold this platform's libraries, so
     // they are the target's only when linking for the host platform --
     // the rule the system include path already follows. A cross link
     // names its own sysroot through `-L`.
-    let native_link = target == badc::Target::host();
+    let native_link = cli.target == badc::Target::host();
     if native_link {
-        if target.binary_format() == badc::BinaryFormat::MachO {
+        if cli.target.binary_format() == badc::BinaryFormat::MachO {
             // ld64's defaults. The runtime dylibs live in the dyld shared
             // cache, not on disk, so the SDK's stub directory is the one
             // that resolves the system libraries.
@@ -1725,13 +309,13 @@ pub(crate) fn run() {
             }
         }
     }
-    for name in &lib_names {
-        match find_library(name, &search_paths, target) {
+    for name in &cli.link.lib_names {
+        match find_library(name, &search_paths, cli.target) {
             Some(p) => {
                 if let Err(e) = ingest_linker_input(
                     &p,
                     &search_paths,
-                    target,
+                    cli.target,
                     &mut shared_libs,
                     &mut archives,
                     0,
@@ -1741,7 +325,7 @@ pub(crate) fn run() {
                 }
             }
             None => {
-                let [shared, archive] = library_spellings(name, target);
+                let [shared, archive] = library_spellings(name, cli.target);
                 eprintln!(
                     "badc: cannot find `{shared}` or `{archive}` on any search path \
                      ({} probed)",
@@ -1762,8 +346,8 @@ pub(crate) fn run() {
     // is a function of the sources, the flags and the target alone. The
     // set is materialized during symbol selection below, once the
     // undefined names are known.
-    let mut target_libc = (mode == Mode::NativeExecutable && !freestanding)
-        .then(|| badc::TargetCLibrary::new(target))
+    let mut target_libc = (cli.mode == Mode::NativeExecutable && !cli.freestanding)
+        .then(|| badc::TargetCLibrary::new(cli.target))
         .flatten();
 
     // Fall back to stdin when no positional source was given
@@ -1784,13 +368,13 @@ pub(crate) fn run() {
     // The VM has no assembler: it walks SSA and never sees an assembled
     // section, so an asm unit would run as an empty program. Refuse it
     // rather than run nothing.
-    if matches!(mode, Mode::Jit | Mode::Interp)
+    if matches!(cli.mode, Mode::Jit | Mode::Interp)
         && let Some(src) = sources.iter().find(|s| SourceKind::of(s).is_asm())
     {
         eprint_diagnostic(format!(
             "badc: error: {} does not run assembly (`{src}`); assemble it with \
              -c and link the object",
-            mode.flag_name()
+            cli.mode.flag_name()
         ));
         std::process::exit(1);
     }
@@ -1802,18 +386,18 @@ pub(crate) fn run() {
     // preprocess-only modes are exempt from both restrictions, as they
     // are in gcc: they emit no code, and their output is a function of
     // the predefine set the flag selects.
-    if let Some(flag) = &code_model_flag {
+    if let Some(flag) = &cli.codegen.code_mode_flag {
         // The flags name an x86 code model. gcc's AArch64 driver has no
         // `-m32`, and badc has no AArch32 encoder or predefine set.
-        if !target.is_x86_64() {
+        if !cli.target.is_x86_64() {
             eprint_diagnostic(format!(
                 "badc: error: `{flag}` selects an x86 code model; target is `{}`",
-                target.id_str()
+                cli.target.id_str()
             ));
             std::process::exit(1);
         }
-        let preprocess_only =
-            mode == Mode::DumpPp || dep_kind == Some(DepKind::Only) && !compile_only;
+        let preprocess_only = cli.mode == Mode::DumpPp
+            || cli.deps.as_ref().map(|d| d.kind) == Some(DepKind::Only) && !cli.compile_only;
         if !preprocess_only {
             if let Some(src) = sources.iter().find(|s| !SourceKind::of(s).is_asm()) {
                 eprint_diagnostic(format!(
@@ -1824,7 +408,7 @@ pub(crate) fn run() {
             }
             // The class reaches the `-c` object only: badc writes no
             // 32-bit image, and its own linker reads ELFCLASS64 objects.
-            if !compile_only && mode != Mode::BuildArchive {
+            if !cli.compile_only && cli.mode != Mode::BuildArchive {
                 eprint_diagnostic(format!(
                     "badc: error: `{flag}` applies to `-c` output; badc links no 32-bit image"
                 ));
@@ -1832,26 +416,10 @@ pub(crate) fn run() {
             }
         }
     }
-    let object_elf_class = match code_model_flag {
-        Some(_) => badc::ElfClass::Elf32,
-        None => badc::ElfClass::Elf64,
-    };
-
-    let deps = dep_kind.map(|kind| DepOptions {
-        kind,
-        system: dep_system,
-        file: dep_file,
-        targets: dep_targets,
-        phony: dep_phony,
-        // Under `-E` the `-o` operand names the preprocessed text, not an
-        // object, so the rule keeps gcc's default target -- the source stem
-        // with `.o` -- rather than naming a file no rule builds.
-        target_from_output: dep_target_from_output && mode != Mode::DumpPp,
-    });
     // One dependency file cannot describe several translation units.
     // gcc truncates it per unit, leaving only the last; badc compiles
     // units in parallel, where that would race, so it is refused.
-    if let Some(d) = &deps
+    if let Some(d) = &cli.deps
         && d.file.is_some()
         && sources.len() > 1
     {
@@ -1865,11 +433,11 @@ pub(crate) fn run() {
     // `-MD` / `-MMD` describe a translation unit the run processes, which
     // `-c`, the executable / shared-library link and `-E` all do. Refuse the
     // other modes rather than accept the flag and write nothing.
-    if let Some(d) = &deps
+    if let Some(d) = &cli.deps
         && d.kind == DepKind::WithOutput
-        && !compile_only
+        && !cli.compile_only
         && !matches!(
-            mode,
+            cli.mode,
             Mode::NativeExecutable | Mode::SharedLibrary | Mode::DumpPp
         )
     {
@@ -1877,7 +445,7 @@ pub(crate) fn run() {
             "badc: error: {} produces no translation-unit output to describe, \
              so -MD / -MMD would write nothing (use -M / -MM for a rule \
              without compiling)",
-            mode.flag_name()
+            cli.mode.flag_name()
         ));
         std::process::exit(1);
     }
@@ -1906,7 +474,7 @@ pub(crate) fn run() {
 
     // `-M` / `-MM` preprocess only: emit the rule and produce no
     // object, as gcc does.
-    if let Some(d) = &deps
+    if let Some(d) = &cli.deps
         && d.kind == DepKind::Only
     {
         let stderr_is_tty = std::io::stderr().is_terminal();
@@ -1924,31 +492,31 @@ pub(crate) fn run() {
                 }
             };
             let copts = badc::CompileOptions::default()
-                .with_gnu(gnu)
-                .with_gnu89_inline(gnu89_inline)
-                .with_strict_flex_arrays(strict_flex_arrays)
-                .with_short_wchar(short_wchar)
-                .with_char_signed(char_signed)
-                .with_auto_var_init(auto_var_init)
-                .with_nostdinc(nostdinc)
-                .with_no_builtin(no_builtin)
-                .with_no_builtin_fns(no_builtin_fns.clone())
-                .with_gnu_dialect(gnu_dialect)
+                .with_gnu(cli.front.gnu)
+                .with_gnu89_inline(cli.front.gnu89_inline)
+                .with_strict_flex_arrays(cli.front.strict_flex_arrays)
+                .with_short_wchar(cli.front.short_wchar)
+                .with_char_signed(cli.front.char_signed)
+                .with_auto_var_init(cli.front.auto_var_init)
+                .with_nostdinc(cli.front.nostdinc)
+                .with_no_builtin(cli.front.no_builtin)
+                .with_no_builtin_fns(cli.front.no_builtin_fns.clone())
+                .with_gnu_dialect(cli.front.gnu_dialect)
                 .with_asm_source(SourceKind::of(src).is_asm())
-                .with_defines(tu_defines(src, &defines))
-                .with_undefines(undefines.clone())
-                .with_include_paths(include_paths.clone())
-                .with_quote_include_paths(quote_include_paths.clone())
-                .with_system_include_paths(system_include_paths.clone())
-                .with_own_header_roots(own_header_roots.clone())
-                .with_force_includes(force_includes.clone())
+                .with_defines(tu_defines(src, &cli.front.defines))
+                .with_undefines(cli.front.undefines.clone())
+                .with_include_paths(cli.front.include_paths.clone())
+                .with_quote_include_paths(cli.front.quote_include_paths.clone())
+                .with_system_include_paths(cli.front.system_include_paths.clone())
+                .with_own_header_roots(cli.front.own_header_roots.clone())
+                .with_force_includes(cli.front.force_includes.clone())
                 .with_source_label(src.clone())
                 .with_track_includes(true)
-                .with_elf_class(object_elf_class)
-                .with_code_model(code_model);
-            let compiler = badc::Compiler::with_options(contents, target, copts);
+                .with_elf_class(cli.codegen.elf_class)
+                .with_code_model(cli.codegen.code_model);
+            let compiler = badc::Compiler::with_options(contents, cli.target, copts);
             let mut log = TuLog::default();
-            if show_includes {
+            if cli.front.show_includes {
                 for line in compiler.include_trace() {
                     log.raw(line);
                 }
@@ -1967,7 +535,7 @@ pub(crate) fn run() {
                     src,
                     compiler.include_records(),
                     d,
-                    output_path.as_deref(),
+                    cli.output_path.as_deref(),
                     &mut log,
                     stderr_is_tty,
                 ),
@@ -1984,12 +552,12 @@ pub(crate) fn run() {
     // `--jit` / `--interp` run one translation unit in-process. There
     // is no link step: the first `.c` is the unit and must define
     // `main` and resolve every symbol it references on its own.
-    if mode == Mode::Jit || mode == Mode::Interp {
+    if cli.mode == Mode::Jit || cli.mode == Mode::Interp {
         if !objects.is_empty() || !archives.is_empty() {
             eprint_diagnostic(format!(
                 "badc: error: {} runs a single `.c` source and does not link \
                  object / archive inputs",
-                mode.flag_name()
+                cli.mode.flag_name()
             ));
             std::process::exit(1);
         }
@@ -2006,29 +574,29 @@ pub(crate) fn run() {
             }
         };
         let copts = badc::CompileOptions::default()
-            .with_gnu(gnu)
-            .with_gnu89_inline(gnu89_inline)
-            .with_strict_flex_arrays(strict_flex_arrays)
-            .with_short_wchar(short_wchar)
-            .with_char_signed(char_signed)
-            .with_auto_var_init(auto_var_init)
-            .with_nostdinc(nostdinc)
-            .with_no_builtin(no_builtin)
-            .with_no_builtin_fns(no_builtin_fns.clone())
-            .with_gnu_dialect(gnu_dialect)
-            .with_optimize(optimize_flag)
-            .with_defines(defines.clone())
-            .with_undefines(undefines.clone())
-            .with_include_paths(include_paths.clone())
-            .with_quote_include_paths(quote_include_paths.clone())
-            .with_system_include_paths(system_include_paths.clone())
-            .with_own_header_roots(own_header_roots.clone())
-            .with_force_includes(force_includes.clone())
+            .with_gnu(cli.front.gnu)
+            .with_gnu89_inline(cli.front.gnu89_inline)
+            .with_strict_flex_arrays(cli.front.strict_flex_arrays)
+            .with_short_wchar(cli.front.short_wchar)
+            .with_char_signed(cli.front.char_signed)
+            .with_auto_var_init(cli.front.auto_var_init)
+            .with_nostdinc(cli.front.nostdinc)
+            .with_no_builtin(cli.front.no_builtin)
+            .with_no_builtin_fns(cli.front.no_builtin_fns.clone())
+            .with_gnu_dialect(cli.front.gnu_dialect)
+            .with_optimize(cli.front.optimize)
+            .with_defines(cli.front.defines.clone())
+            .with_undefines(cli.front.undefines.clone())
+            .with_include_paths(cli.front.include_paths.clone())
+            .with_quote_include_paths(cli.front.quote_include_paths.clone())
+            .with_system_include_paths(cli.front.system_include_paths.clone())
+            .with_own_header_roots(cli.front.own_header_roots.clone())
+            .with_force_includes(cli.front.force_includes.clone())
             .with_source_label(src_path.clone())
-            .with_track_includes(show_includes)
-            .with_warn_dead_store(warn_dead_store);
-        let compiler = Compiler::with_options(contents, target, copts);
-        if show_includes {
+            .with_track_includes(cli.front.show_includes)
+            .with_warn_dead_store(cli.front.warn_dead_store);
+        let compiler = Compiler::with_options(contents, cli.target, copts);
+        if cli.front.show_includes {
             for line in compiler.include_trace() {
                 eprintln!("{line}");
             }
@@ -2048,14 +616,14 @@ pub(crate) fn run() {
         // input (extra `.c` paths the hosted program opens itself)
         // plus any trailing non-input tokens.
         let mut c_args: Vec<String> = sources.clone();
-        if prog_args_start < args.len() {
-            c_args.extend(args[prog_args_start..].iter().cloned());
+        if prog_args_start < cli.positional.len() {
+            c_args.extend(cli.positional[prog_args_start..].iter().cloned());
         }
-        if mode == Mode::Jit {
+        if cli.mode == Mode::Jit {
             // The JIT lowers for the host; --target plays no part.
-            let mut jit_opts = NativeOptions::new().with_inline_cap(inline_cap);
-            jit_opts.fixed_regs = fixed_regs;
-            if optimize_flag {
+            let mut jit_opts = NativeOptions::new().with_inline_cap(cli.codegen.inline_cap);
+            jit_opts.fixed_regs = cli.codegen.fixed_regs;
+            if cli.front.optimize {
                 jit_opts = jit_opts.with_optimize();
             }
             match jit_run_with_options(&program, &c_args, jit_opts) {
@@ -2067,10 +635,10 @@ pub(crate) fn run() {
             }
         }
         let mut vm = Vm::new(program).with_args(c_args);
-        if track_pointers {
+        if cli.track_pointers {
             vm = vm.with_pointer_tracking();
         }
-        if trace {
+        if cli.trace {
             vm = vm.with_trace();
         }
         match vm.run() {
@@ -2093,9 +661,9 @@ pub(crate) fn run() {
     // stdout stay parseable, and takes no `-o`: one output stream
     // cannot hold several expansions, which is why gcc and clang refuse
     // the combination too.
-    if mode == Mode::DumpPp {
+    if cli.mode == Mode::DumpPp {
         let multi_tu = sources.len() > 1;
-        if output_path.is_some() && multi_tu {
+        if cli.output_path.is_some() && multi_tu {
             eprintln!(
                 "badc: `-o <path>` together with `-E` requires exactly one \
                  source input ({} given)",
@@ -2103,11 +671,11 @@ pub(crate) fn run() {
             );
             std::process::exit(1);
         }
-        let pp_output = output_path.as_deref().filter(|p| p.as_os_str() != "-");
+        let pp_output = cli.output_path.as_deref().filter(|p| p.as_os_str() != "-");
         // `-MD` / `-MMD` alongside `-E`: gcc preprocesses and writes the
         // rule, naming the file from `-MF` / `-Wp,-M[M]D,<path>` / `-o` as
         // it does for a compile.
-        let dump_deps = deps.as_ref().filter(|d| d.kind == DepKind::WithOutput);
+        let dump_deps = cli.deps.as_ref().filter(|d| d.kind == DepKind::WithOutput);
         let stderr_is_tty = std::io::stderr().is_terminal();
         let mut dep_failed = false;
         for src_path in &sources {
@@ -2123,30 +691,30 @@ pub(crate) fn run() {
                 }
             };
             let opts = badc::CompileOptions::default()
-                .with_gnu(gnu)
-                .with_gnu89_inline(gnu89_inline)
-                .with_strict_flex_arrays(strict_flex_arrays)
-                .with_short_wchar(short_wchar)
-                .with_char_signed(char_signed)
-                .with_auto_var_init(auto_var_init)
-                .with_nostdinc(nostdinc)
-                .with_no_builtin(no_builtin)
-                .with_no_builtin_fns(no_builtin_fns.clone())
-                .with_gnu_dialect(gnu_dialect)
-                .with_optimize(optimize_flag)
+                .with_gnu(cli.front.gnu)
+                .with_gnu89_inline(cli.front.gnu89_inline)
+                .with_strict_flex_arrays(cli.front.strict_flex_arrays)
+                .with_short_wchar(cli.front.short_wchar)
+                .with_char_signed(cli.front.char_signed)
+                .with_auto_var_init(cli.front.auto_var_init)
+                .with_nostdinc(cli.front.nostdinc)
+                .with_no_builtin(cli.front.no_builtin)
+                .with_no_builtin_fns(cli.front.no_builtin_fns.clone())
+                .with_gnu_dialect(cli.front.gnu_dialect)
+                .with_optimize(cli.front.optimize)
                 .with_asm_source(SourceKind::of(src_path).is_asm())
-                .with_defines(tu_defines(src_path, &defines))
-                .with_undefines(undefines.clone())
-                .with_include_paths(include_paths.clone())
-                .with_quote_include_paths(quote_include_paths.clone())
-                .with_system_include_paths(system_include_paths.clone())
-                .with_own_header_roots(own_header_roots.clone())
-                .with_force_includes(force_includes.clone())
+                .with_defines(tu_defines(src_path, &cli.front.defines))
+                .with_undefines(cli.front.undefines.clone())
+                .with_include_paths(cli.front.include_paths.clone())
+                .with_quote_include_paths(cli.front.quote_include_paths.clone())
+                .with_system_include_paths(cli.front.system_include_paths.clone())
+                .with_own_header_roots(cli.front.own_header_roots.clone())
+                .with_force_includes(cli.front.force_includes.clone())
                 .with_source_label(label.clone())
                 .with_track_includes(dump_deps.is_some())
-                .with_elf_class(object_elf_class)
-                .with_code_model(code_model);
-            match Compiler::preprocess_tracked(contents, target, opts) {
+                .with_elf_class(cli.codegen.elf_class)
+                .with_code_model(cli.codegen.code_model);
+            match Compiler::preprocess_tracked(contents, cli.target, opts) {
                 Ok((s, records)) => {
                     if multi_tu {
                         eprintln!("--- {label} ---");
@@ -2169,7 +737,7 @@ pub(crate) fn run() {
                             src_path,
                             &records,
                             d,
-                            output_path.as_deref(),
+                            cli.output_path.as_deref(),
                             &mut log,
                             stderr_is_tty,
                         );
@@ -2206,38 +774,39 @@ pub(crate) fn run() {
     // auto-codesigning lives in `post_write_native`. Only `--jit` /
     // `--interp` (handled above) and `-c` / `--ar` (below) stay out
     // of this path.
-    if (mode == Mode::NativeExecutable || mode == Mode::SharedLibrary) && !compile_only {
+    if (cli.mode == Mode::NativeExecutable || cli.mode == Mode::SharedLibrary) && !cli.compile_only
+    {
         use badc::{Compiler, OutputKind};
         let mut stats = LinkStats::new();
         let mut native_objs: Vec<badc::NativeObject> =
             Vec::with_capacity(sources.len() + objects.len() + archives.len());
 
         let mut reloc_opts = badc::NativeOptions::new()
-            .with_debug_info(emit_debug_info)
-            .with_inline_cap(inline_cap);
-        reloc_opts.no_fp_regs = mno_fp_regs;
-        reloc_opts.strict_align = mstrict_align;
-        reloc_opts.jump_tables = jump_tables;
-        reloc_opts.min_function_alignment = min_function_alignment;
-        reloc_opts.patchable_function_entry = patchable_function_entry;
-        reloc_opts.profiling = profiling;
-        reloc_opts.pic = fpic;
+            .with_debug_info(cli.codegen.emit_debug_info)
+            .with_inline_cap(cli.codegen.inline_cap);
+        reloc_opts.no_fp_regs = cli.codegen.no_fp_regs;
+        reloc_opts.strict_align = cli.codegen.strict_align;
+        reloc_opts.jump_tables = cli.codegen.jump_tables;
+        reloc_opts.min_function_alignment = cli.codegen.min_function_alignment;
+        reloc_opts.patchable_function_entry = cli.codegen.patchable_function_entry;
+        reloc_opts.profiling = cli.codegen.profiling;
+        reloc_opts.pic = cli.codegen.fpic;
         // These objects are linked into an image below, and every image
         // this toolchain writes takes its data relocations at load time
         // (ELF ET_DYN, PE base relocations, Mach-O dyld rebases), so a
         // relocated `const` cannot ride the read-only prefix and must
         // not cost the unit's pure `const` objects their place in it.
         reloc_opts.pic_link = true;
-        reloc_opts.code_model = code_model;
-        reloc_opts.hardening = hardening;
-        reloc_opts.stack_protect = stack_protect;
-        reloc_opts.fixed_regs = fixed_regs;
-        reloc_opts.elf_class = object_elf_class;
-        reloc_opts.keep_local_labels = keep_local_labels;
-        if optimize_flag {
+        reloc_opts.code_model = cli.codegen.code_model;
+        reloc_opts.hardening = cli.codegen.hardening;
+        reloc_opts.stack_protect = cli.codegen.stack_protect;
+        reloc_opts.fixed_regs = cli.codegen.fixed_regs;
+        reloc_opts.elf_class = cli.codegen.elf_class;
+        reloc_opts.keep_local_labels = cli.codegen.keep_local_labels;
+        if cli.front.optimize {
             reloc_opts = reloc_opts.with_optimize();
         }
-        if dump_ssa {
+        if cli.codegen.dump_ssa {
             reloc_opts = reloc_opts.with_dump_ssa();
         }
         reloc_opts.output_kind = OutputKind::Relocatable;
@@ -2253,34 +822,34 @@ pub(crate) fn run() {
         // so no intermediate `.o` is written to disk.
         let stdin_src = stdin_src_of(&sources);
         let cfg = CompileCfg {
-            target,
+            target: cli.target,
             reloc_opts,
-            gnu,
-            gnu_dialect,
-            gnu89_inline,
-            strict_flex_arrays,
-            short_wchar,
-            char_signed,
-            auto_var_init,
-            nostdinc,
-            no_builtin,
-            no_builtin_fns: &no_builtin_fns,
-            optimize_flag,
-            export_all,
-            show_includes,
-            warn_dead_store,
+            gnu: cli.front.gnu,
+            gnu_dialect: cli.front.gnu_dialect,
+            gnu89_inline: cli.front.gnu89_inline,
+            strict_flex_arrays: cli.front.strict_flex_arrays,
+            short_wchar: cli.front.short_wchar,
+            char_signed: cli.front.char_signed,
+            auto_var_init: cli.front.auto_var_init,
+            nostdinc: cli.front.nostdinc,
+            no_builtin: cli.front.no_builtin,
+            no_builtin_fns: &cli.front.no_builtin_fns,
+            optimize_flag: cli.front.optimize,
+            export_all: cli.link.export_all,
+            show_includes: cli.front.show_includes,
+            warn_dead_store: cli.front.warn_dead_store,
             multi_tu,
-            quiet,
+            quiet: cli.quiet,
             stderr_is_tty,
-            defines: &defines,
-            undefines: &undefines,
-            include_paths: &include_paths,
-            quote_include_paths: &quote_include_paths,
-            system_include_paths: &system_include_paths,
-            own_header_roots: &own_header_roots,
-            force_includes: &force_includes,
-            deps: deps.as_ref(),
-            dep_output: output_path.as_deref(),
+            defines: &cli.front.defines,
+            undefines: &cli.front.undefines,
+            include_paths: &cli.front.include_paths,
+            quote_include_paths: &cli.front.quote_include_paths,
+            system_include_paths: &cli.front.system_include_paths,
+            own_header_roots: &cli.front.own_header_roots,
+            force_includes: &cli.front.force_includes,
+            deps: cli.deps.as_ref(),
+            dep_output: cli.output_path.as_deref(),
             stdin_src: stdin_src.as_deref(),
         };
         // In-memory variant for the embedded runtime sources
@@ -2293,31 +862,31 @@ pub(crate) fn run() {
             // (an entry stub is emitted), `__BADC_WIN_WINMAIN__`
             // (WinMain-shaped entry), `__BADC_WIN_WIDE__` (wide
             // `wmain` / `wWinMain` entry).
-            let mut copts_defines = defines.clone();
+            let mut copts_defines = cli.front.defines.clone();
             for (k, v) in extra {
                 copts_defines.push((k.to_string(), v.to_string()));
             }
             let copts = badc::CompileOptions::default()
-                .with_gnu(gnu)
-                .with_gnu89_inline(gnu89_inline)
-                .with_strict_flex_arrays(strict_flex_arrays)
-                .with_short_wchar(short_wchar)
-                .with_char_signed(char_signed)
-                .with_auto_var_init(auto_var_init)
-                .with_nostdinc(nostdinc)
-                .with_no_builtin(no_builtin)
-                .with_no_builtin_fns(no_builtin_fns.clone())
-                .with_gnu_dialect(gnu_dialect)
-                .with_optimize(optimize_flag)
+                .with_gnu(cli.front.gnu)
+                .with_gnu89_inline(cli.front.gnu89_inline)
+                .with_strict_flex_arrays(cli.front.strict_flex_arrays)
+                .with_short_wchar(cli.front.short_wchar)
+                .with_char_signed(cli.front.char_signed)
+                .with_auto_var_init(cli.front.auto_var_init)
+                .with_nostdinc(cli.front.nostdinc)
+                .with_no_builtin(cli.front.no_builtin)
+                .with_no_builtin_fns(cli.front.no_builtin_fns.clone())
+                .with_gnu_dialect(cli.front.gnu_dialect)
+                .with_optimize(cli.front.optimize)
                 .with_defines(copts_defines)
-                .with_undefines(undefines.clone())
-                .with_include_paths(include_paths.clone())
-                .with_system_include_paths(system_include_paths.clone())
-                .with_own_header_roots(own_header_roots.clone())
-                .with_force_includes(force_includes.clone())
+                .with_undefines(cli.front.undefines.clone())
+                .with_include_paths(cli.front.include_paths.clone())
+                .with_system_include_paths(cli.front.system_include_paths.clone())
+                .with_own_header_roots(cli.front.own_header_roots.clone())
+                .with_force_includes(cli.front.force_includes.clone())
                 .with_source_label(label.to_string())
                 .with_no_entry_point(true);
-            let program = match Compiler::with_options(src, target, copts).compile() {
+            let program = match Compiler::with_options(src, cli.target, copts).compile() {
                 Ok(p) => p,
                 Err(e) => {
                     eprint_diagnostic(e);
@@ -2335,7 +904,7 @@ pub(crate) fn run() {
             // a toolchain links are built without them.
             opts.profiling = badc::Profiling::OFF;
             opts.patchable_function_entry = badc::PatchableEntry::NONE;
-            match badc::emit_native_with_options_owned(program, target, opts) {
+            match badc::emit_native_with_options_owned(program, cli.target, opts) {
                 Ok(b) => b,
                 Err(e) => {
                     eprint_diagnostic(e);
@@ -2353,19 +922,19 @@ pub(crate) fn run() {
         // over any per-TU pragma (the loop below only fills a `None`).
         // This is also the sole source of an entry / subsystem when the
         // inputs are precompiled `.o` files with no source pragma.
-        let mut entry_override: Option<String> = cli_entry.clone();
+        let mut entry_override: Option<String> = cli.link.entry.clone();
         // `#pragma subsystem(<kind>)` selects the Windows PE subsystem.
         // Like the entry pragma it is per-TU; the first TU that names
         // one wins. Captured here from the compiled `Program` because
         // the ET_REL round-trip the native path takes does not carry
         // it (the source-level pragma rides the in-memory `Program`,
         // not a section), then threaded to the PE writer.
-        let mut subsystem_override: Option<badc::Subsystem> = cli_subsystem;
+        let mut subsystem_override: Option<badc::Subsystem> = cli.link.subsystem;
         let mut source_auto_includes: Vec<Vec<String>> = Vec::with_capacity(sources.len());
         // Compile every source (concurrently under `--jobs`), then fold
         // the per-unit facts in source order so entry / subsystem
         // resolution and object order stay scheduling-independent.
-        let workers = worker_count(jobs, sources.len());
+        let workers = worker_count(cli.jobs, sources.len());
         let tus = compile_units(&sources, workers, |_, src| {
             compile_native_tu(src, &[], &cfg)
         });
@@ -2391,7 +960,7 @@ pub(crate) fn run() {
         //
         // Without an explicit `#pragma entrypoint`, a freestanding image
         // enters at `__c5_entry` (the default `main` need not exist).
-        if freestanding && entry_override.is_none() {
+        if cli.freestanding && entry_override.is_none() {
             entry_override = Some("__c5_entry".to_string());
         }
         // A freestanding image must supply its own entry symbol; the
@@ -2401,7 +970,7 @@ pub(crate) fn run() {
         // check runs below, after objects and archive members are
         // parsed, rather than as a bare undefined-symbol relocation at
         // link time.
-        let freestanding_entry = freestanding.then(|| {
+        let freestanding_entry = cli.freestanding.then(|| {
             entry_override
                 .as_deref()
                 .unwrap_or("__c5_entry")
@@ -2412,7 +981,7 @@ pub(crate) fn run() {
         // import the user-mode C library -- hosted executables and
         // shared libraries, but not passthrough-entry subsystems
         // (native / EFI) or freestanding images.
-        let links_crt = !freestanding
+        let links_crt = !cli.freestanding
             && !matches!(
                 subsystem_override,
                 Some(
@@ -2426,7 +995,7 @@ pub(crate) fn run() {
         // The startup section (`__c5_entry`, `__c5_exit`, `environ`)
         // links only when the writer emits an entry stub -- not into
         // shared libraries.
-        let emits_start_stub = mode != Mode::SharedLibrary && links_crt;
+        let emits_start_stub = cli.mode != Mode::SharedLibrary && links_crt;
         // The single runtime source compiles to nothing unless a gate
         // macro is set; the GUI / wide-entry macros select the
         // matching `__c5_entry` body on Windows.
@@ -2500,11 +1069,11 @@ pub(crate) fn run() {
                     std::process::exit(1);
                 }
             };
-            let bytes = fat_slice_for_target(bytes, target);
+            let bytes = fat_slice_for_target(bytes, cli.target);
             if !badc::is_native_object(&bytes) {
                 eprint_diagnostic(format!(
                     "badc: error: `{obj_path}`: {}",
-                    unreadable_object_reason(&bytes, target)
+                    unreadable_object_reason(&bytes, cli.target)
                 ));
                 std::process::exit(1);
             }
@@ -2539,15 +1108,15 @@ pub(crate) fn run() {
             // A universal (fat) archive wraps one archive per
             // architecture; read the slice matching the target.
             if badc::is_mach_o_fat(&bytes)
-                && badc::mach_o_fat_slice(&bytes, target_machine(target)).is_none()
+                && badc::mach_o_fat_slice(&bytes, target_machine(cli.target)).is_none()
             {
                 eprint_diagnostic(format!(
                     "badc: error: `{a_path}` is a universal (fat) container with no {} slice",
-                    machine_label(target_machine(target)),
+                    machine_label(target_machine(cli.target)),
                 ));
                 std::process::exit(1);
             }
-            let bytes = fat_slice_for_target(bytes, target);
+            let bytes = fat_slice_for_target(bytes, cli.target);
             // A GNU thin archive stores only member paths; resolve them
             // against the archive's own directory.
             let base_dir = std::path::Path::new(a_path).parent();
@@ -2561,12 +1130,12 @@ pub(crate) fn run() {
             for m in members {
                 // A member may itself be a fat object (`lipo` output
                 // archived as-is).
-                let member_bytes = fat_slice_for_target(m.bytes, target);
+                let member_bytes = fat_slice_for_target(m.bytes, cli.target);
                 if !badc::is_native_object(&member_bytes) {
                     eprint_diagnostic(format!(
                         "badc: error: archive `{a_path}` member `{}`: {}",
                         m.name,
-                        unreadable_object_reason(&member_bytes, target)
+                        unreadable_object_reason(&member_bytes, cli.target)
                     ));
                     std::process::exit(1);
                 }
@@ -2653,7 +1222,7 @@ pub(crate) fn run() {
                 if redirect.is_empty() {
                     continue;
                 }
-                if !quiet {
+                if !cli.quiet {
                     for n in &redirect {
                         eprint_diagnostic(format!(
                             "info: the link defines `{n}`; rebinding the call in {} to it",
@@ -2817,7 +1386,7 @@ pub(crate) fn run() {
         // A shared library may reference symbols the host executable
         // supplies at `dlopen` time; let an unresolved global become a
         // load-time import instead of a link error.
-        let allow_undefined = mode == Mode::SharedLibrary;
+        let allow_undefined = cli.mode == Mode::SharedLibrary;
         let mut merged = match badc::link_native_objects_with_shared_libs(
             &native_objs,
             allow_undefined,
@@ -2843,7 +1412,7 @@ pub(crate) fn run() {
         };
         stats.mark("plt");
         let entry_name = entry_override.as_deref().unwrap_or("main");
-        let native_output_kind = if mode == Mode::SharedLibrary {
+        let native_output_kind = if cli.mode == Mode::SharedLibrary {
             OutputKind::SharedLibrary
         } else {
             OutputKind::Executable
@@ -2855,13 +1424,13 @@ pub(crate) fn run() {
         // `-o` is absent.
         let shared_default_path;
         let shared_lib_name: Option<&str> = if native_output_kind == OutputKind::SharedLibrary {
-            let path: &std::path::Path = match output_path.as_deref() {
+            let path: &std::path::Path = match cli.output_path.as_deref() {
                 Some(o) => o,
                 None => {
                     shared_default_path = default_output_path(
                         sources.first().map(|s| s.as_str()).unwrap_or("a"),
-                        target,
-                        mode,
+                        cli.target,
+                        cli.mode,
                     );
                     &shared_default_path
                 }
@@ -2876,11 +1445,11 @@ pub(crate) fn run() {
             entry_name,
             subsystem_override,
             native_output_kind,
-            target,
+            cli.target,
             shared_lib_name,
-            export_all,
-            export_data,
-            emit_relocs,
+            cli.link.export_all,
+            cli.link.export_data,
+            cli.link.emit_relocs,
         );
         let bytes = match write_result {
             Ok(b) => b,
@@ -2891,21 +1460,21 @@ pub(crate) fn run() {
         };
         stats.mark("image");
         let default_path;
-        let out: &std::path::Path = match output_path.as_deref() {
+        let out: &std::path::Path = match cli.output_path.as_deref() {
             Some(o) => o,
             None => {
                 default_path = default_output_path(
                     sources.first().map(|s| s.as_str()).unwrap_or("a"),
-                    target,
-                    mode,
+                    cli.target,
+                    cli.mode,
                 );
                 &default_path
             }
         };
-        write_output(out, &bytes, target, quiet);
+        write_output(out, &bytes, cli.target, cli.quiet);
         set_executable(out);
-        post_write_native(out, target);
-        if map_path.is_some() || print_map {
+        post_write_native(out, cli.target);
+        if cli.link.map_path.is_some() || cli.link.print_map {
             let out_name = out.file_name().and_then(|n| n.to_str()).unwrap_or("a.out");
             let map = match badc::render_link_map(&merged, &bytes, &archive_inclusions, out_name) {
                 Ok(m) => m,
@@ -2914,7 +1483,7 @@ pub(crate) fn run() {
                     std::process::exit(1);
                 }
             };
-            if let Some(p) = &map_path
+            if let Some(p) = &cli.link.map_path
                 && let Err(e) = std::fs::write(p, &map)
             {
                 eprint_diagnostic(format!(
@@ -2923,7 +1492,7 @@ pub(crate) fn run() {
                 ));
                 std::process::exit(1);
             }
-            if print_map {
+            if cli.link.print_map {
                 print!("{map}");
             }
         }
@@ -2936,8 +1505,8 @@ pub(crate) fn run() {
     // ELF64 ET_REL object on disk and exit. Archive / `-l` inputs
     // aren't meaningful here -- the caller is asking for the per-
     // source object emit, not a link.
-    if compile_only {
-        if !archives.is_empty() || !lib_names.is_empty() {
+    if cli.compile_only {
+        if !archives.is_empty() || !cli.link.lib_names.is_empty() {
             eprintln!(
                 "badc: -c is incompatible with archive inputs / -l flags \
                  (object emit doesn't involve linking)"
@@ -2954,63 +1523,63 @@ pub(crate) fn run() {
         // picks the entry once it merges every TU.
         use badc::OutputKind;
         let mut reloc_opts = badc::NativeOptions::new()
-            .with_debug_info(emit_debug_info)
-            .with_inline_cap(inline_cap);
-        reloc_opts.no_fp_regs = mno_fp_regs;
-        reloc_opts.strict_align = mstrict_align;
-        reloc_opts.jump_tables = jump_tables;
-        reloc_opts.min_function_alignment = min_function_alignment;
-        reloc_opts.patchable_function_entry = patchable_function_entry;
-        reloc_opts.profiling = profiling;
-        reloc_opts.pic = fpic;
-        reloc_opts.pic_link = pic_link_default(fno_pic, code_model);
-        reloc_opts.code_model = code_model;
-        reloc_opts.hardening = hardening;
-        reloc_opts.stack_protect = stack_protect;
-        reloc_opts.fixed_regs = fixed_regs;
-        reloc_opts.elf_class = object_elf_class;
-        reloc_opts.keep_local_labels = keep_local_labels;
-        if optimize_flag {
+            .with_debug_info(cli.codegen.emit_debug_info)
+            .with_inline_cap(cli.codegen.inline_cap);
+        reloc_opts.no_fp_regs = cli.codegen.no_fp_regs;
+        reloc_opts.strict_align = cli.codegen.strict_align;
+        reloc_opts.jump_tables = cli.codegen.jump_tables;
+        reloc_opts.min_function_alignment = cli.codegen.min_function_alignment;
+        reloc_opts.patchable_function_entry = cli.codegen.patchable_function_entry;
+        reloc_opts.profiling = cli.codegen.profiling;
+        reloc_opts.pic = cli.codegen.fpic;
+        reloc_opts.pic_link = pic_link_default(cli.codegen.fno_pic, cli.codegen.code_model);
+        reloc_opts.code_model = cli.codegen.code_model;
+        reloc_opts.hardening = cli.codegen.hardening;
+        reloc_opts.stack_protect = cli.codegen.stack_protect;
+        reloc_opts.fixed_regs = cli.codegen.fixed_regs;
+        reloc_opts.elf_class = cli.codegen.elf_class;
+        reloc_opts.keep_local_labels = cli.codegen.keep_local_labels;
+        if cli.front.optimize {
             reloc_opts = reloc_opts.with_optimize();
         }
-        if dump_ssa {
+        if cli.codegen.dump_ssa {
             reloc_opts = reloc_opts.with_dump_ssa();
         }
         reloc_opts.output_kind = OutputKind::Relocatable;
         let stderr_is_tty = std::io::stderr().is_terminal();
         let multi_tu = source_count > 1;
         let cfg = CompileCfg {
-            target,
+            target: cli.target,
             reloc_opts,
-            gnu,
-            gnu_dialect,
-            gnu89_inline,
-            strict_flex_arrays,
-            short_wchar,
-            char_signed,
-            auto_var_init,
-            nostdinc,
-            no_builtin,
-            no_builtin_fns: &no_builtin_fns,
-            optimize_flag,
+            gnu: cli.front.gnu,
+            gnu_dialect: cli.front.gnu_dialect,
+            gnu89_inline: cli.front.gnu89_inline,
+            strict_flex_arrays: cli.front.strict_flex_arrays,
+            short_wchar: cli.front.short_wchar,
+            char_signed: cli.front.char_signed,
+            auto_var_init: cli.front.auto_var_init,
+            nostdinc: cli.front.nostdinc,
+            no_builtin: cli.front.no_builtin,
+            no_builtin_fns: &cli.front.no_builtin_fns,
+            optimize_flag: cli.front.optimize,
             export_all: false,
-            show_includes,
-            warn_dead_store,
+            show_includes: cli.front.show_includes,
+            warn_dead_store: cli.front.warn_dead_store,
             multi_tu,
-            quiet,
+            quiet: cli.quiet,
             stderr_is_tty,
-            defines: &defines,
-            undefines: &undefines,
-            include_paths: &include_paths,
-            quote_include_paths: &quote_include_paths,
-            system_include_paths: &system_include_paths,
-            own_header_roots: &own_header_roots,
-            force_includes: &force_includes,
-            deps: deps.as_ref(),
-            dep_output: output_path.as_deref(),
+            defines: &cli.front.defines,
+            undefines: &cli.front.undefines,
+            include_paths: &cli.front.include_paths,
+            quote_include_paths: &cli.front.quote_include_paths,
+            system_include_paths: &cli.front.system_include_paths,
+            own_header_roots: &cli.front.own_header_roots,
+            force_includes: &cli.front.force_includes,
+            deps: cli.deps.as_ref(),
+            dep_output: cli.output_path.as_deref(),
             stdin_src: stdin_src.as_deref(),
         };
-        if let Some(out) = output_path.as_deref() {
+        if let Some(out) = cli.output_path.as_deref() {
             if source_count != 1 {
                 eprintln!(
                     "badc: `-o <path>` together with `-c` requires exactly one \
@@ -3025,12 +1594,12 @@ pub(crate) fn run() {
                 Ok(b) => b,
                 Err(()) => std::process::exit(1),
             };
-            write_output(out, &bytes, target, quiet);
+            write_output(out, &bytes, cli.target, cli.quiet);
         } else {
             // Each worker writes its own `<stem>.o`, so write I/O runs in
             // the pool and each `info: wrote file` line stays grouped
             // with its source's diagnostics.
-            let workers = worker_count(jobs, source_count);
+            let workers = worker_count(cli.jobs, source_count);
             compile_units(&sources, workers, |_, src| {
                 let (mut log, res) = compile_object_tu(src, &cfg);
                 let bytes = match res {
@@ -3079,15 +1648,15 @@ pub(crate) fn run() {
     // SysV symbol index lists every `STB_GLOBAL`-defined name
     // so the linker's archive pull-in can resolve undefined
     // references without re-parsing each member.
-    if mode == Mode::BuildArchive {
-        if !archives.is_empty() || !lib_names.is_empty() {
+    if cli.mode == Mode::BuildArchive {
+        if !archives.is_empty() || !cli.link.lib_names.is_empty() {
             eprintln!(
                 "badc: --ar can't be combined with archive inputs / -l flags \
                  (the archive is an output, not a link target)"
             );
             std::process::exit(1);
         }
-        let Some(out_path) = output_path.clone() else {
+        let Some(out_path) = cli.output_path.clone() else {
             eprint_diagnostic("badc: error: --ar requires -o <archive>.a");
             std::process::exit(1);
         };
@@ -3098,26 +1667,26 @@ pub(crate) fn run() {
         }
         use badc::OutputKind;
         let mut reloc_opts = badc::NativeOptions::new()
-            .with_debug_info(emit_debug_info)
-            .with_inline_cap(inline_cap);
-        reloc_opts.no_fp_regs = mno_fp_regs;
-        reloc_opts.strict_align = mstrict_align;
-        reloc_opts.jump_tables = jump_tables;
-        reloc_opts.min_function_alignment = min_function_alignment;
-        reloc_opts.patchable_function_entry = patchable_function_entry;
-        reloc_opts.profiling = profiling;
-        reloc_opts.pic = fpic;
-        reloc_opts.pic_link = pic_link_default(fno_pic, code_model);
-        reloc_opts.code_model = code_model;
-        reloc_opts.hardening = hardening;
-        reloc_opts.stack_protect = stack_protect;
-        reloc_opts.fixed_regs = fixed_regs;
-        reloc_opts.elf_class = object_elf_class;
-        reloc_opts.keep_local_labels = keep_local_labels;
-        if optimize_flag {
+            .with_debug_info(cli.codegen.emit_debug_info)
+            .with_inline_cap(cli.codegen.inline_cap);
+        reloc_opts.no_fp_regs = cli.codegen.no_fp_regs;
+        reloc_opts.strict_align = cli.codegen.strict_align;
+        reloc_opts.jump_tables = cli.codegen.jump_tables;
+        reloc_opts.min_function_alignment = cli.codegen.min_function_alignment;
+        reloc_opts.patchable_function_entry = cli.codegen.patchable_function_entry;
+        reloc_opts.profiling = cli.codegen.profiling;
+        reloc_opts.pic = cli.codegen.fpic;
+        reloc_opts.pic_link = pic_link_default(cli.codegen.fno_pic, cli.codegen.code_model);
+        reloc_opts.code_model = cli.codegen.code_model;
+        reloc_opts.hardening = cli.codegen.hardening;
+        reloc_opts.stack_protect = cli.codegen.stack_protect;
+        reloc_opts.fixed_regs = cli.codegen.fixed_regs;
+        reloc_opts.elf_class = cli.codegen.elf_class;
+        reloc_opts.keep_local_labels = cli.codegen.keep_local_labels;
+        if cli.front.optimize {
             reloc_opts = reloc_opts.with_optimize();
         }
-        if dump_ssa {
+        if cli.codegen.dump_ssa {
             reloc_opts = reloc_opts.with_dump_ssa();
         }
         reloc_opts.output_kind = OutputKind::Relocatable;
@@ -3125,32 +1694,32 @@ pub(crate) fn run() {
         let multi_tu = sources.len() > 1;
         let stdin_src = stdin_src_of(&sources);
         let cfg = CompileCfg {
-            target,
+            target: cli.target,
             reloc_opts,
-            gnu,
-            gnu_dialect,
-            gnu89_inline,
-            strict_flex_arrays,
-            short_wchar,
-            char_signed,
-            auto_var_init,
-            nostdinc,
-            no_builtin,
-            no_builtin_fns: &no_builtin_fns,
-            optimize_flag,
+            gnu: cli.front.gnu,
+            gnu_dialect: cli.front.gnu_dialect,
+            gnu89_inline: cli.front.gnu89_inline,
+            strict_flex_arrays: cli.front.strict_flex_arrays,
+            short_wchar: cli.front.short_wchar,
+            char_signed: cli.front.char_signed,
+            auto_var_init: cli.front.auto_var_init,
+            nostdinc: cli.front.nostdinc,
+            no_builtin: cli.front.no_builtin,
+            no_builtin_fns: &cli.front.no_builtin_fns,
+            optimize_flag: cli.front.optimize,
             export_all: false,
-            show_includes,
-            warn_dead_store,
+            show_includes: cli.front.show_includes,
+            warn_dead_store: cli.front.warn_dead_store,
             multi_tu,
-            quiet,
+            quiet: cli.quiet,
             stderr_is_tty,
-            defines: &defines,
-            undefines: &undefines,
-            include_paths: &include_paths,
-            quote_include_paths: &quote_include_paths,
-            system_include_paths: &system_include_paths,
-            own_header_roots: &own_header_roots,
-            force_includes: &force_includes,
+            defines: &cli.front.defines,
+            undefines: &cli.front.undefines,
+            include_paths: &cli.front.include_paths,
+            quote_include_paths: &cli.front.quote_include_paths,
+            system_include_paths: &cli.front.system_include_paths,
+            own_header_roots: &cli.front.own_header_roots,
+            force_includes: &cli.front.force_includes,
             // `--ar` bundles objects; gcc has no dependency-output
             // analogue for archive assembly.
             deps: None,
@@ -3163,7 +1732,7 @@ pub(crate) fn run() {
         // member bytes + defined-symbol index in source order. The member
         // name is the input's file stem with a `.o` suffix, matching a
         // plain `-c` per-source output.
-        let workers = worker_count(jobs, sources.len());
+        let workers = worker_count(cli.jobs, sources.len());
         let compiled = compile_units(&sources, workers, |_, src| {
             let (mut log, res) = compile_object_tu(src, &cfg);
             match res {
@@ -3202,7 +1771,7 @@ pub(crate) fn run() {
             if !badc::is_elf_object(&bytes) {
                 eprint_diagnostic(format!(
                     "badc: error: `{obj_path}`: {}",
-                    unreadable_object_reason(&bytes, target)
+                    unreadable_object_reason(&bytes, cli.target)
                 ));
                 std::process::exit(1);
             }
@@ -3214,7 +1783,7 @@ pub(crate) fn run() {
             });
         }
         let blob = badc::write_archive(&members, &sym_index);
-        write_output(&out_path, &blob, target, quiet);
+        write_output(&out_path, &blob, cli.target, cli.quiet);
         return;
     }
 

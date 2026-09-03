@@ -1,5 +1,3 @@
-use super::diag::eprint_diagnostic;
-
 /// Top-level mode picked from the argv flag set. Mutual
 /// exclusion is enforced once during arg parsing so the rest
 /// of `main` can match on a single `Mode`.
@@ -129,20 +127,6 @@ pub(crate) fn accept_assembler_option(opt: &str) -> Result<AssemblerOption, Stri
         | "--no-warn-rwx-segments"
         | "-march" => Ok(AssemblerOption::NoEffect),
         _ => Err(format!("badc: error: unsupported assembler option `{opt}`")),
-    }
-}
-
-/// Parse a `--jobs` / `-j` value: a positive integer. Exits with a
-/// diagnostic on a non-integer or non-positive value.
-pub(crate) fn parse_jobs(s: &str) -> usize {
-    match s.parse::<usize>() {
-        Ok(n) if n >= 1 => n,
-        _ => {
-            eprint_diagnostic(format!(
-                "badc: error: --jobs (-j) requires a positive integer, got `{s}`"
-            ));
-            std::process::exit(1);
-        }
     }
 }
 

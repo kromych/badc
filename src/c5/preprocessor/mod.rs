@@ -1575,428 +1575,18 @@ impl Preprocessor {
         // A UTF-8 byte-order mark opening the file is accepted and
         // skipped, following gcc and clang.
         let source = source.strip_prefix('\u{feff}').unwrap_or(source);
-        // c99 sec 5.1.1.2 phases 2 and 3, fused into one scan: every
-        // `\\\n` joins lines so the line-by-line preprocessor never
-        // sees a continuation, and comments are removed before macro
-        // substitution so a `#define X 0 /* note */` body doesn't
-        // emit a stray `*/` into a surrounding source comment when
-        // X is referenced from inside that comment. Line counts are
-        // preserved by emitting blank lines for each continuation
-        // consumed, so error messages (and `__LINE__`) stay grounded
-        // in the original source.
+        // C99 5.1.1.2 phases 2 and 3, fused into one scan: every `\\\n`
+        // joins lines so the line-by-line preprocessor never sees a
+        // continuation, and comments are removed before substitution so
+        // a `#define X 0 /* note */` body cannot emit a stray `*/` into
+        // a surrounding comment. A blank line per consumed continuation
+        // preserves the one-for-one line count that `__LINE__` and every
+        // diagnostic depend on.
         let stripped = unfold_and_strip(source);
-        let source = stripped.as_str();
-        out.reserve(source.len());
-
-        // Emit a leading line marker so the lexer attributes
-        // tokens in this buffer to `(filename, 1)`. The
-        // `format!` writes a GNU-style `# 1 "filename"\n` shape;
-        // `parse_line_marker` in the lexer handles both the GNU
-        // form and a C99 `#line N "filename"` -- they share the
-        // same parsing path. Filenames with `"` or `\` get
-        // backslash-escaped so they round-trip; other bytes pass
-        // through verbatim (paths with embedded LF would already
-        // break a thousand other things).
-        out.push_str(&format_line_marker(1, filename));
-
-        // Track the *effective* filename for `#include` restore
-        // markers and `__FILE__`. This starts as `filename` (the
-        // physical name we got handed) but a `#line N "other"`
-        // directive in the user source can rewrite it -- and once
-        // it does, every subsequent `#include` boundary in this
-        // buffer needs to restore to *that* name, not back to the
-        // original `filename`. The amalgamator (scripts/amalgamate.py)
-        // depends on this: it puts a `#line 1 "real_path.c"` at the
-        // top of each glued-in TU, then if that TU does its own
-        // `#include`s the closing marker we emit when the include
-        // returns must put us back inside `real_path.c`, not the
-        // amalgamated container.
-        let mut current_file: alloc::string::String = filename.into();
-
-        // Source-relative line number for the current iteration. We
-        // can't just use `idx_iter + 1` (the buffer's physical line)
-        // because a `#line N "file"` resets the lexer's counter; if
-        // we then close an `#include` with a buffer-line marker the
-        // lexer snaps back to physical-buffer coordinates and every
-        // subsequent attribution shifts. Track it explicitly: the
-        // counter advances by 1 per processed input line, +consumed
-        // for multi-line macro joins, and a `#line N` resets it to
-        // `N` for the next iteration.
-        let mut source_line: usize = 1;
-
-        // `cond_stack` mirrors the nesting of `#if` / `#ifdef`. Each
-        // entry is `(parent_active, this_branch_taken,
-        // saw_else)`. `parent_active` is the enclosing branch's
-        // active state; we AND with it so a true inner branch
-        // inside a false outer branch still produces no output.
-        // `saw_else` blocks a second `#else` for the same `#if`.
-        let mut cond_stack: Vec<CondFrame> = Vec::new();
-        let mut active = true;
-
-        // Manual line iteration so multi-line function-like macro
-        // calls -- `assert(\n  expr\n);` -- can be joined into a
-        // single buffer before substitution. Per-line iteration
-        // would leave the call's `(` unmatched on the first line
-        // and the macro wouldn't expand. Subsequent consumed
-        // lines emit blank `\n`s so error line numbers stay
-        // grounded in the original source.
-        let lines: Vec<&str> = source.lines().collect();
-        let mut idx_iter = 0usize;
-        // Watches for the `#ifndef X` / `#endif` wrapper that lets a
-        // repeat `#include` of this file be dropped; see `include_guards`.
-        let mut guard = IncludeGuardScan::default();
-        while idx_iter < lines.len() {
-            let idx = idx_iter;
-            let line = lines[idx];
-            let line_no = idx + 1;
-            let trimmed = line.trim_start();
-
-            // Assembler-with-cpp: a `#` line naming no directive is text,
-            // not a directive; it falls through to the content path and
-            // passes with its tail macro-expanded, as GNU cpp emits it
-            // for assembler input.
-            let parsed_hash = trimmed
-                .strip_prefix('#')
-                .map(|rest| (rest, parse_directive(rest.trim_start(), self.asm_source)));
-            let asm_text = self.asm_source
-                && matches!(&parsed_hash, Some((r, Directive::Other)) if !r.trim_start().is_empty());
-            if let Some((rest, parsed)) = parsed_hash
-                && !asm_text
-            {
-                let directive = rest.trim_start();
-                guard.line(line, Some(&parsed), cond_stack.len());
-                if let Some(next) = self.apply_cond_or_macro_directive(
-                    &parsed,
-                    active,
-                    &mut cond_stack,
-                    source_line,
-                    line_no,
-                    filename,
-                )? {
-                    active = next;
-                    out.push('\n');
-                    source_line += 1;
-                    idx_iter += 1;
-                    continue;
-                }
-                match parsed {
-                    Directive::Pragma(args) => {
-                        if active {
-                            match parse_pragma_directive(args) {
-                                PragmaDirective::Once => {
-                                    self.pragma_once_files.insert(filename.to_string());
-                                }
-                                PragmaDirective::Other => {
-                                    // `#pragma pack(...)` and `#pragma GCC
-                                    // visibility ...` are source-position-
-                                    // sensitive: a struct definition that
-                                    // follows a `pack(1)` directive packs at
-                                    // 1, but a struct AFTER a subsequent
-                                    // `pack()` reverts. We can't batch those
-                                    // up through the preprocessor's
-                                    // `dylibs` / `bindings` accumulator the
-                                    // way other pragmas are handled --
-                                    // we'd lose ordering. Pass the line
-                                    // through verbatim so the lexer
-                                    // reaches it inline; the lexer's `#`
-                                    // handler folds the directive into
-                                    // its `pack_stack` / `visibility_stack`.
-                                    if pragma_is_pack(args) || pragma_is_visibility(args) {
-                                        out.push('#');
-                                        out.push_str(directive);
-                                        out.push('\n');
-                                        source_line += 1;
-                                        idx_iter += 1;
-                                        continue;
-                                    }
-                                    self.parse_pragma(args, line_no, filename)?;
-                                }
-                            }
-                        }
-                    }
-                    Directive::IncludeMacro(args) => {
-                        if active {
-                            // C99 6.10.2p4: expand the operand and
-                            // reparse the result as a `<...>` /
-                            // `"..."` literal include. Anything
-                            // else is malformed; surface a
-                            // warning and skip, matching how
-                            // other unrecognised directives are
-                            // handled. The spelling-faithful form
-                            // keeps re-lex separators out of the
-                            // header name.
-                            let expanded = self.substitute_spelling(args, filename, line_no);
-                            let trimmed = expanded.trim();
-                            if let Some((n, quoted)) = header_name(trimmed) {
-                                self.process_include(n, line_no, filename, quoted, out)?;
-                                out.push_str(&format_line_marker(source_line + 1, &current_file));
-                                source_line += 1;
-                                idx_iter += 1;
-                                continue;
-                            }
-                            self.warnings.push(super::error::fmt_compile_warn(
-                                filename,
-                                line_no,
-                                &format!(
-                                    "#include `{args}` expands to `{trimmed}`, \
-                                     which is not a `<header>` or `\"header\"` literal"
-                                ),
-                            ));
-                        }
-                    }
-                    Directive::Include { name, quoted } => {
-                        if active {
-                            self.process_include(name, line_no, filename, quoted, out)?;
-                            // Closing marker uses `source_line + 1`
-                            // (NOT `line_no + 1`) and `current_file`
-                            // (NOT the static `filename` param).
-                            // `source_line` tracks the user's
-                            // intended source-line numbering across
-                            // any prior `#line` directives in this
-                            // buffer, which is what the lexer's
-                            // counter actually reflects after the
-                            // last marker we emitted. Using `line_no`
-                            // here would snap the lexer back to
-                            // physical-buffer coordinates and
-                            // misattribute every subsequent emit --
-                            // the bug that appears
-                            // when the amalgamator started gluing
-                            // multiple translation units together
-                            // via `#line` markers.
-                            out.push_str(&format_line_marker(source_line + 1, &current_file));
-                            source_line += 1;
-                            idx_iter += 1;
-                            continue;
-                        }
-                    }
-                    Directive::IncludeNext { name, quoted } => {
-                        if active {
-                            self.process_include_next(name, line_no, filename, quoted, out)?;
-                            out.push_str(&format_line_marker(source_line + 1, &current_file));
-                            source_line += 1;
-                            idx_iter += 1;
-                            continue;
-                        }
-                    }
-                    Directive::Line { line, file } => {
-                        if active {
-                            // C99 6.10.4: `#line N` retargets the next
-                            // source line's number; with `"file"` it
-                            // also retargets the filename. The marker
-                            // we emit replaces the `#line` line (one
-                            // input line in, one marker line out),
-                            // so we skip the bottom `\n` for the
-                            // same reason as `#include`.
-                            // Update the *effective* filename so the
-                            // next `#include` returns here, not to
-                            // the buffer's original `filename`. A
-                            // bare `#line N` (no filename) keeps
-                            // the current file -- C99 6.10.4 -- so
-                            // we only rewrite when `file` is
-                            // present.
-                            if let Some(f) = file {
-                                current_file = f.into();
-                            }
-                            out.push_str(&format_line_marker(line, &current_file));
-                            // Next iteration's source-line counter
-                            // is exactly `line` (the marker says so
-                            // to the lexer, and our preprocessor
-                            // tracker has to mirror that).
-                            source_line = line;
-                            idx_iter += 1;
-                            continue;
-                        }
-                    }
-                    Directive::LineMacro(args) => {
-                        if active {
-                            // C99 6.10.4: macro-expand the operand, then
-                            // reparse as `#line N ["file"]`. A result
-                            // that still doesn't lead with a digit
-                            // sequence is malformed; warn and skip.
-                            let expanded = self.substitute(args, filename, line_no);
-                            let trimmed = expanded.trim();
-                            let mut split = trimmed.splitn(2, char::is_whitespace);
-                            if let Some(num) = split.next()
-                                && let Ok(line) = num.parse::<usize>()
-                            {
-                                if let Some(f) = split.next().and_then(|tail| {
-                                    let t = tail.trim();
-                                    t.strip_prefix('"')
-                                        .and_then(|s| s.strip_suffix('"'))
-                                        .map(|s| s.to_string())
-                                }) {
-                                    current_file = f;
-                                }
-                                out.push_str(&format_line_marker(line, &current_file));
-                                source_line = line;
-                                idx_iter += 1;
-                                continue;
-                            }
-                            self.warnings.push(super::error::fmt_compile_warn(
-                                filename,
-                                line_no,
-                                &format!(
-                                    "#line `{args}` expands to `{trimmed}`, \
-                                     which is not a line number"
-                                ),
-                            ));
-                        }
-                    }
-                    Directive::Other => {
-                        // Unknown directive. C99 6.10.6 reserves
-                        // every non-directive form for the
-                        // implementation; gcc / clang surface
-                        // unrecognised names as a warning and skip
-                        // the line. c5 follows that shape: pull the
-                        // first identifier out of the directive
-                        // body so the warning names what was
-                        // dropped, and let the empty-line emit
-                        // below pad the line counter.
-                        // A bare `#` is the C99 6.10p9 null directive:
-                        // consumed without effect and without diagnostic.
-                        if active && !directive.is_empty() {
-                            let kw = directive
-                                .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
-                                .next()
-                                .unwrap_or("")
-                                .to_string();
-                            let label = if kw.is_empty() {
-                                "(empty)".to_string()
-                            } else {
-                                format!("`#{kw}`")
-                            };
-                            self.warnings.push(format!(
-                                "{filename}:{line_no}: warning: \
-                                 unknown preprocessor directive {label} -- ignoring"
-                            ));
-                        }
-                    }
-                    Directive::Shebang => {
-                        // First-line `#!/usr/bin/env badc` shebangs --
-                        // no preprocessor semantics, just skipped.
-                    }
-                    // Spelled out rather than `_` so a new directive
-                    // variant is a compile error here as well as in
-                    // `apply_cond_or_macro_directive`, which already
-                    // consumed every one of these.
-                    Directive::Define(..)
-                    | Directive::DefineFn(..)
-                    | Directive::Undef(..)
-                    | Directive::Ifdef(..)
-                    | Directive::Ifndef(..)
-                    | Directive::If(..)
-                    | Directive::Elif(..)
-                    | Directive::Else
-                    | Directive::Endif
-                    | Directive::Error(..)
-                    | Directive::Warning(..) => {
-                        unreachable!("consumed by apply_cond_or_macro_directive")
-                    }
-                }
-                out.push('\n');
-                source_line += 1;
-                idx_iter += 1;
-                continue;
-            }
-
-            guard.line(line, None, cond_stack.len());
-            if active {
-                let mut buffer = String::from(line);
-                let mut consumed = 1usize;
-                // A function-like macro call may span lines whose arguments
-                // carry preprocessor directives (C99 6.10.3p11 leaves this
-                // undefined; gcc and clang process such directives as if
-                // the invocation were not present, and real code relies on
-                // it). Directives here work on the same conditional stack
-                // as top-level ones -- an `#if` opened inside the argument
-                // list may close after the call's `)`, and vice versa.
-                // Directive lines never become argument text; content
-                // lines join the buffer only while the current branch is
-                // active.
-                //
-                // The scan state advances over appended bytes only;
-                // re-scanning the grown buffer per joined line is
-                // quadratic in the invocation length.
-                let mut join = JoinScan::new();
-                join.feed(&buffer, self);
-                while idx + consumed < lines.len()
-                    && (join.unclosed()
-                        // A function-like macro name at the end of a line with
-                        // its `(` on the next line is still an invocation (C99
-                        // 6.10.3: white space, including newlines, may separate
-                        // the name from its `(`). Join when the next line opens
-                        // with `(` so the substitution sees the whole call.
-                        || (join.pending_head()
-                            && lines[idx + consumed].trim_start().starts_with('(')))
-                {
-                    let cont = lines[idx + consumed];
-                    consumed += 1;
-                    let dline = source_line + consumed - 1;
-                    let cont_trimmed = cont.trim_start();
-                    if let Some(rest) = cont_trimmed.strip_prefix('#') {
-                        let parsed = parse_directive(rest.trim_start(), self.asm_source);
-                        // TODO: `#include`, `#line` and `#pragma` inside an
-                        // argument list are consumed without effect; their
-                        // output would have to interleave with the joined
-                        // expansion.
-                        if let Some(next) = self.apply_cond_or_macro_directive(
-                            &parsed,
-                            active,
-                            &mut cond_stack,
-                            dline,
-                            dline,
-                            filename,
-                        )? {
-                            active = next;
-                        }
-                    } else if active {
-                        let appended = buffer.len();
-                        buffer.push('\n');
-                        buffer.push_str(cont);
-                        join.feed(&buffer[appended..], self);
-                    }
-                }
-                // `__LINE__` reflects the presumed line (`source_line`),
-                // which a `#line` directive can retarget (C99 6.10.4);
-                // absent any `#line`, it equals the physical line.
-                let substituted = self.substitute(&buffer, filename, source_line);
-                // C99 6.10.9: a `_Pragma` operator in the now
-                // macro-expanded text is destringized and handled as
-                // the matching `#pragma` directive.
-                let processed = self.apply_pragma_operators(&substituted, source_line, filename)?;
-                out.push_str(&processed);
-                out.push('\n');
-                // Preserve source line numbering by emitting a blank
-                // line for each extra source line we joined into the
-                // buffer.
-                for _ in 1..consumed {
-                    out.push('\n');
-                }
-                source_line += consumed;
-                idx_iter += consumed;
-            } else {
-                out.push('\n');
-                source_line += 1;
-                idx_iter += 1;
-            }
-        }
-
-        self.take_pending_error()?;
-
-        if !cond_stack.is_empty() {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                "preprocessor: unterminated `#if` / `#ifdef` block",
-            )));
-        }
-
-        // Only files reached through `#include` can be re-included, and
-        // only they have a resolved path to key on.
-        if !self.include_stack.is_empty()
-            && let Some(name) = guard.finish(cond_stack.len())
-        {
-            self.include_guards.insert(filename.to_string(), name);
-        }
-        Ok(())
+        out.reserve(stripped.len());
+        let mut pass = LinePass::new(self, out, filename, &stripped);
+        pass.run()?;
+        pass.finish()
     }
 
     /// Install an object-like macro definition.
@@ -2166,6 +1756,431 @@ impl Preprocessor {
             Some(e) => Err(e),
             None => Ok(()),
         }
+    }
+}
+
+/// Whether a directive arm produced this line's output itself. When it
+/// did not, the line becomes a blank filler so the output keeps one line
+/// per input line.
+#[derive(PartialEq)]
+enum Emitted {
+    Yes,
+    No,
+}
+
+/// One pass of the line loop over one buffer: the output being built,
+/// the conditional stack, and the presumed-location bookkeeping the
+/// directive handlers share.
+struct LinePass<'p, 's> {
+    pp: &'p mut Preprocessor,
+    out: &'p mut String,
+    /// Physical buffer name: `#pragma once` identity and the file a
+    /// diagnostic from this buffer names.
+    filename: &'s str,
+    /// File reported to the lexer. Starts at `filename`; a `#line N
+    /// "other"` retargets it, and every later `#include` boundary in
+    /// this buffer then restores to that name. The amalgamator depends
+    /// on it: a `#line 1 "real.c"` at the top of a glued-in unit has to
+    /// survive that unit's own includes.
+    current_file: String,
+    /// Presumed line number of the line about to be processed (C99
+    /// 6.10.4). Not `idx + 1`: a `#line N` resets the lexer's counter,
+    /// and a marker written in physical-buffer coordinates after that
+    /// would shift every later attribution.
+    presumed: usize,
+    lines: Vec<&'s str>,
+    idx: usize,
+    /// Open `#if` / `#ifdef` frames, innermost last.
+    cond: Vec<CondFrame>,
+    active: bool,
+    /// Watches for the `#ifndef X` / `#endif` wrapper that lets a repeat
+    /// `#include` of this file be dropped; see `include_guards`.
+    guard: IncludeGuardScan,
+}
+
+impl<'p, 's> LinePass<'p, 's> {
+    fn new(
+        pp: &'p mut Preprocessor,
+        out: &'p mut String,
+        filename: &'s str,
+        source: &'s str,
+    ) -> Self {
+        // A leading marker attributes this buffer's tokens to
+        // `(filename, 1)`. The lexer's `parse_line_marker` reads both
+        // this GNU shape and the C99 `#line N "file"`.
+        out.push_str(&format_line_marker(1, filename));
+        LinePass {
+            pp,
+            out,
+            filename,
+            current_file: filename.into(),
+            presumed: 1,
+            // Manual line indexing so a function-like macro call
+            // spanning several lines can be joined before substitution.
+            lines: source.lines().collect(),
+            idx: 0,
+            cond: Vec::new(),
+            active: true,
+            guard: IncludeGuardScan::default(),
+        }
+    }
+
+    fn run(&mut self) -> Result<(), C5Error> {
+        while self.idx < self.lines.len() {
+            let line = self.lines[self.idx];
+            let line_no = self.idx + 1;
+            let hash = line.trim_start().strip_prefix('#').map(|rest| {
+                let spelling = rest.trim_start();
+                (spelling, parse_directive(spelling, self.pp.asm_source))
+            });
+            // Assembler-with-cpp: a `#` line naming no directive is
+            // text, not a directive; it passes through with its tail
+            // macro-expanded, as GNU cpp emits it for assembler input.
+            let asm_text =
+                self.pp.asm_source && matches!(&hash, Some((s, Directive::Other)) if !s.is_empty());
+            let depth = self.cond.len();
+            match hash {
+                Some((spelling, parsed)) if !asm_text => {
+                    self.guard.line(line, Some(&parsed), depth);
+                    self.directive(&parsed, spelling, line_no)?;
+                }
+                _ => {
+                    self.guard.line(line, None, depth);
+                    self.content(line)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn finish(self) -> Result<(), C5Error> {
+        self.pp.take_pending_error()?;
+        let depth = self.cond.len();
+        if depth > 0 {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                "preprocessor: unterminated `#if` / `#ifdef` block",
+            )));
+        }
+        // Only files reached through `#include` can be re-included, and
+        // only they have a resolved path to key on.
+        if !self.pp.include_stack.is_empty()
+            && let Some(name) = self.guard.finish(depth)
+        {
+            self.pp
+                .include_guards
+                .insert(self.filename.to_string(), name);
+        }
+        Ok(())
+    }
+
+    /// A blank filler for a directive or an inactive line, keeping the
+    /// output's line count equal to the input's.
+    fn blank(&mut self) {
+        self.out.push('\n');
+        self.presumed += 1;
+    }
+
+    /// A line marker for the presumed file at `line`.
+    fn marker(&mut self, line: usize) {
+        let marker = format_line_marker(line, &self.current_file);
+        self.out.push_str(&marker);
+    }
+
+    fn directive(
+        &mut self,
+        parsed: &Directive<'_>,
+        spelling: &str,
+        line_no: usize,
+    ) -> Result<(), C5Error> {
+        let emitted = match self.pp.apply_cond_or_macro_directive(
+            parsed,
+            self.active,
+            &mut self.cond,
+            self.presumed,
+            line_no,
+            self.filename,
+        )? {
+            Some(next) => {
+                self.active = next;
+                Emitted::No
+            }
+            None => match parsed {
+                Directive::Pragma(args) => self.pragma(args, spelling, line_no)?,
+                Directive::IncludeMacro(args) => self.include_macro(args, line_no)?,
+                Directive::Include { name, quoted } => {
+                    self.include(name, *quoted, false, line_no)?
+                }
+                Directive::IncludeNext { name, quoted } => {
+                    self.include(name, *quoted, true, line_no)?
+                }
+                Directive::Line { line, file } => self.line_directive(*line, *file),
+                Directive::LineMacro(args) => self.line_macro(args, line_no),
+                Directive::Other => {
+                    self.unknown(spelling, line_no);
+                    Emitted::No
+                }
+                // A first-line `#!/usr/bin/env badc`: no preprocessor
+                // semantics, just skipped.
+                Directive::Shebang => Emitted::No,
+                // Spelled out rather than `_` so a new variant is a
+                // compile error here as well as in
+                // `apply_cond_or_macro_directive`, which consumed
+                // every one of these.
+                Directive::Define(..)
+                | Directive::DefineFn(..)
+                | Directive::Undef(..)
+                | Directive::Ifdef(..)
+                | Directive::Ifndef(..)
+                | Directive::If(..)
+                | Directive::Elif(..)
+                | Directive::Else
+                | Directive::Endif
+                | Directive::Error(..)
+                | Directive::Warning(..) => {
+                    unreachable!("consumed by apply_cond_or_macro_directive")
+                }
+            },
+        };
+        if emitted == Emitted::No {
+            self.blank();
+        }
+        self.idx += 1;
+        Ok(())
+    }
+
+    fn pragma(&mut self, args: &str, spelling: &str, line_no: usize) -> Result<Emitted, C5Error> {
+        if !self.active {
+            return Ok(Emitted::No);
+        }
+        match parse_pragma_directive(args) {
+            PragmaDirective::Once => {
+                let filename = self.filename.to_string();
+                self.pp.pragma_once_files.insert(filename);
+            }
+            // `#pragma pack(...)` and `#pragma GCC visibility ...` bind
+            // to their source position: a struct after `pack(1)` packs
+            // at 1, one after the next `pack()` does not. Batching them
+            // through the preprocessor's accumulators would lose that
+            // order, so the line passes through and the lexer folds it
+            // into its `pack_stack` / `visibility_stack` in place.
+            PragmaDirective::Other if pragma_is_pack(args) || pragma_is_visibility(args) => {
+                self.out.push('#');
+                self.out.push_str(spelling);
+                self.out.push('\n');
+                self.presumed += 1;
+                return Ok(Emitted::Yes);
+            }
+            PragmaDirective::Other => {
+                self.pp.parse_pragma(args, line_no, self.filename)?;
+            }
+        }
+        Ok(Emitted::No)
+    }
+
+    /// `#include` / `#include_next` with a literal header name. The
+    /// closing marker restores the *presumed* location: `source_line`
+    /// tracks what the lexer's counter reflects after the last marker
+    /// emitted, which a `#line` in this buffer may have retargeted.
+    fn include(
+        &mut self,
+        name: &str,
+        quoted: bool,
+        next: bool,
+        line_no: usize,
+    ) -> Result<Emitted, C5Error> {
+        if !self.active {
+            return Ok(Emitted::No);
+        }
+        if next {
+            self.pp
+                .process_include_next(name, line_no, self.filename, quoted, self.out)?;
+        } else {
+            self.pp
+                .process_include(name, line_no, self.filename, quoted, self.out)?;
+        }
+        self.presumed += 1;
+        self.marker(self.presumed);
+        Ok(Emitted::Yes)
+    }
+
+    /// C99 6.10.2p4: expand the operand and reparse the result as a
+    /// `<...>` / `"..."` header name. Anything else is malformed;
+    /// warn and skip, as for an unrecognised directive. The
+    /// spelling-faithful expansion keeps re-lex separators out of the
+    /// header name.
+    fn include_macro(&mut self, args: &str, line_no: usize) -> Result<Emitted, C5Error> {
+        if !self.active {
+            return Ok(Emitted::No);
+        }
+        let expanded = self.pp.substitute_spelling(args, self.filename, line_no);
+        let trimmed = expanded.trim();
+        let Some((name, quoted)) = header_name(trimmed) else {
+            let warning = super::error::fmt_compile_warn(
+                self.filename,
+                line_no,
+                &format!(
+                    "#include `{args}` expands to `{trimmed}`, \
+                     which is not a `<header>` or `\"header\"` literal"
+                ),
+            );
+            self.pp.warnings.push(warning);
+            return Ok(Emitted::No);
+        };
+        self.include(name, quoted, false, line_no)
+    }
+
+    /// C99 6.10.4: `#line N` retargets the next line's number, and with
+    /// `"file"` the reported file too; a bare `#line N` keeps the file.
+    /// The marker replaces the directive line, one for one.
+    fn line_directive(&mut self, line: usize, file: Option<&str>) -> Emitted {
+        if !self.active {
+            return Emitted::No;
+        }
+        if let Some(f) = file {
+            self.current_file = f.into();
+        }
+        self.marker(line);
+        self.presumed = line;
+        Emitted::Yes
+    }
+
+    /// C99 6.10.4 with an operand that is no digit sequence: expand,
+    /// then reparse as `#line N ["file"]`. A result that still does not
+    /// lead with a digit sequence is malformed; warn and skip.
+    fn line_macro(&mut self, args: &str, line_no: usize) -> Emitted {
+        if !self.active {
+            return Emitted::No;
+        }
+        let expanded = self.pp.substitute(args, self.filename, line_no);
+        let trimmed = expanded.trim();
+        let mut split = trimmed.splitn(2, char::is_whitespace);
+        if let Some(num) = split.next()
+            && let Ok(line) = num.parse::<usize>()
+        {
+            if let Some(f) = split.next().and_then(|tail| {
+                let t = tail.trim();
+                t.strip_prefix('"').and_then(|s| s.strip_suffix('"'))
+            }) {
+                self.current_file = f.into();
+            }
+            self.marker(line);
+            self.presumed = line;
+            return Emitted::Yes;
+        }
+        let warning = super::error::fmt_compile_warn(
+            self.filename,
+            line_no,
+            &format!("#line `{args}` expands to `{trimmed}`, which is not a line number"),
+        );
+        self.pp.warnings.push(warning);
+        Emitted::No
+    }
+
+    /// C99 6.10.6 reserves every non-directive `#` form for the
+    /// implementation; gcc and clang warn and drop the line, and c5
+    /// names the dropped directive in the warning. A bare `#` is the
+    /// 6.10p9 null directive: consumed without effect or diagnostic.
+    fn unknown(&mut self, spelling: &str, line_no: usize) {
+        if !self.active || spelling.is_empty() {
+            return;
+        }
+        let kw = spelling
+            .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+            .next()
+            .unwrap_or("");
+        let label = if kw.is_empty() {
+            "(empty)".to_string()
+        } else {
+            format!("`#{kw}`")
+        };
+        let filename = self.filename;
+        self.pp.warnings.push(format!(
+            "{filename}:{line_no}: warning: \
+             unknown preprocessor directive {label} -- ignoring"
+        ));
+    }
+
+    /// A content line: join what a multi-line macro invocation spans,
+    /// substitute, and resolve any `_Pragma` operator (C99 6.10.9).
+    fn content(&mut self, line: &str) -> Result<(), C5Error> {
+        if !self.active {
+            self.blank();
+            self.idx += 1;
+            return Ok(());
+        }
+        let (buffer, consumed) = self.join_invocation(line)?;
+        // `__LINE__` reflects the presumed line, which a `#line` can
+        // retarget (C99 6.10.4); absent one it is the physical line.
+        let substituted = self.pp.substitute(&buffer, self.filename, self.presumed);
+        let processed =
+            self.pp
+                .apply_pragma_operators(&substituted, self.presumed, self.filename)?;
+        self.out.push_str(&processed);
+        // One newline for the line itself, one per joined continuation,
+        // so source line numbering survives the join.
+        for _ in 0..consumed {
+            self.out.push('\n');
+        }
+        self.presumed += consumed;
+        self.idx += consumed;
+        Ok(())
+    }
+
+    /// Join the lines a function-like macro invocation spans into one
+    /// buffer, returning it and the input lines consumed. Per-line
+    /// substitution would leave the call's `(` unmatched and the macro
+    /// unexpanded.
+    ///
+    /// A directive inside the argument list works on the same
+    /// conditional stack as a top-level one -- an `#if` opened there may
+    /// close after the call's `)`, and the reverse (C99 6.10.3p11 leaves
+    /// the case undefined; gcc and clang process such directives as if
+    /// the invocation were not present, and real code relies on it).
+    /// Directive lines never become argument text; content lines join
+    /// only while the current branch is active.
+    fn join_invocation(&mut self, first: &str) -> Result<(String, usize), C5Error> {
+        let mut buffer = String::from(first);
+        let mut consumed = 1usize;
+        // The scan advances over appended bytes only; re-scanning the
+        // grown buffer per joined line is quadratic in the invocation.
+        let mut join = JoinScan::new();
+        join.feed(&buffer, self.pp);
+        while self.idx + consumed < self.lines.len()
+            && (join.unclosed()
+                // A function-like macro name at the end of a line with
+                // its `(` on the next is still an invocation (C99
+                // 6.10.3: white space, newlines included, may separate
+                // the name from its `(`).
+                || (join.pending_head()
+                    && self.lines[self.idx + consumed].trim_start().starts_with('(')))
+        {
+            let cont = self.lines[self.idx + consumed];
+            consumed += 1;
+            let dline = self.presumed + consumed - 1;
+            if let Some(rest) = cont.trim_start().strip_prefix('#') {
+                let parsed = parse_directive(rest.trim_start(), self.pp.asm_source);
+                // TODO: `#include`, `#line` and `#pragma` inside an
+                // argument list are consumed without effect; their
+                // output would have to interleave with the joined
+                // expansion.
+                if let Some(next) = self.pp.apply_cond_or_macro_directive(
+                    &parsed,
+                    self.active,
+                    &mut self.cond,
+                    dline,
+                    dline,
+                    self.filename,
+                )? {
+                    self.active = next;
+                }
+            } else if self.active {
+                let appended = buffer.len();
+                buffer.push('\n');
+                buffer.push_str(cont);
+                join.feed(&buffer[appended..], self.pp);
+            }
+        }
+        Ok((buffer, consumed))
     }
 }
 

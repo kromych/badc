@@ -1,4 +1,21 @@
 code   name                           default  class         groups             status   description
+B2001  unused-variable                ignore   controllable  all                live     a variable declared and never used
+B2002  unused-parameter               ignore   controllable  extra              live     a parameter never used in the function body
+B2003  unused-but-set-variable        ignore   controllable  all                live     a variable that is only ever assigned to
+B2004  unused-function                ignore   controllable  all                live     a function with internal linkage that is defined and never referenced
+B2005  implicit-function-declaration  warning  controllable  default            live     a function used before a prototype declares it, so its return type is `int`
+B2006  undefined-function             warning  controllable  default            live     an initializer names a function this unit neither defines nor declares `extern`
+B2007  redeclaration-mismatch         warning  controllable  default            live     a redeclaration whose signature differs from the previous one
+B2008  attributes                     warning  controllable  default            live     an attribute the declaration cannot carry, so it is ignored
+B2009  ignored-asm-label              warning  controllable  default            live     an assembler name on a declaration that has no symbol to rename
+B2010  shadowed-binding               warning  controllable  default            live     a `#pragma binding` for a name an earlier binding already claimed
+B3001  int-conversion                 warning  controllable  default            live     an integer and a pointer exchanged with no cast
+B3002  incompatible-struct-types      warning  controllable  default            live     an aggregate used where a different aggregate type is expected
+B3003  return-type                    ignore   controllable  all                live     control reaches the end of a value-returning function
+B3004  too-few-arguments              warning  controllable  default            live     a call passing fewer arguments than the prototype declares
+B3005  too-many-arguments             warning  controllable  default            live     a call passing more arguments than the prototype declares
+B3006  long-double-abi                warning  controllable  default            live     a `long double` argument passed in a format this target's ABI does not use
+B3007  dead-store                     ignore   controllable  -                  live     a value assigned to a local and replaced before any read
 B7001  unknown-argument               error    hard          -                  live     command-line option or operand the driver does not implement
 B7002  unknown-warning-option         warning  controllable  default            live     a diagnostic pragma names a selector that is not in the catalogue
 B7003  unused-command-line-argument   ignore   controllable  all,extra          live     an accepted option that selects nothing in the mode the command line picked

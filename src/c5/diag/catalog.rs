@@ -51,6 +51,57 @@ macro_rules! catalog {
 // turns on defaults to `Ignore`, which is what enabling the group
 // raises.
 catalog! {
+    2001, "unused-variable", [], Ignore, Controllable,
+        [ALL], Live,
+        "a variable declared and never used";
+    2002, "unused-parameter", [], Ignore, Controllable,
+        [EXTRA], Live,
+        "a parameter never used in the function body";
+    2003, "unused-but-set-variable", [], Ignore, Controllable,
+        [ALL], Live,
+        "a variable that is only ever assigned to";
+    2004, "unused-function", [], Ignore, Controllable,
+        [ALL], Live,
+        "a function with internal linkage that is defined and never referenced";
+    2005, "implicit-function-declaration", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a function used before a prototype declares it, so its return type is `int`";
+    2006, "undefined-function", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "an initializer names a function this unit neither defines nor declares `extern`";
+    2007, "redeclaration-mismatch", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a redeclaration whose signature differs from the previous one";
+    2008, "attributes", ["ignored-attributes"], Warning, Controllable,
+        [DEFAULT], Live,
+        "an attribute the declaration cannot carry, so it is ignored";
+    2009, "ignored-asm-label", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "an assembler name on a declaration that has no symbol to rename";
+    2010, "shadowed-binding", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a `#pragma binding` for a name an earlier binding already claimed";
+    3001, "int-conversion", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "an integer and a pointer exchanged with no cast";
+    3002, "incompatible-struct-types", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "an aggregate used where a different aggregate type is expected";
+    3003, "return-type", [], Ignore, Controllable,
+        [ALL], Live,
+        "control reaches the end of a value-returning function";
+    3004, "too-few-arguments", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a call passing fewer arguments than the prototype declares";
+    3005, "too-many-arguments", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a call passing more arguments than the prototype declares";
+    3006, "long-double-abi", ["psabi"], Warning, Controllable,
+        [DEFAULT], Live,
+        "a `long double` argument passed in a format this target's ABI does not use";
+    3007, "dead-store", [], Ignore, Controllable,
+        [], Live,
+        "a value assigned to a local and replaced before any read";
     7001, "unknown-argument", ["D9002"], Error, Hard,
         [], Live,
         "command-line option or operand the driver does not implement";

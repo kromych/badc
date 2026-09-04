@@ -69,6 +69,18 @@ catalog! {
     1006, "pragma-pop-without-push", ["C4193"], Warning, Controllable,
         [DEFAULT], Live,
         "a diagnostic-pragma pop with no matching push";
+    1010, "directive", [], Error, Hard,
+        [], Live,
+        "a directive whose operand the preprocessor cannot process, or a conditional directive with no `#if` to match";
+    1011, "invalid-pragma", [], Error, Hard,
+        [], Live,
+        "a pragma badc implements whose operand cannot be applied";
+    1012, "invalid-token", [], Error, Hard,
+        [], Live,
+        "a character sequence that forms no token: a malformed constant, escape sequence or universal character name";
+    1013, "error-directive", [], Error, Hard,
+        [], Live,
+        "a `#error` directive reached in an active conditional block";
     2001, "unused-variable", ["C4101"], Ignore, Controllable,
         [ALL], Live,
         "a variable declared and never used";
@@ -99,6 +111,18 @@ catalog! {
     2010, "shadowed-binding", [], Warning, Controllable,
         [DEFAULT], Live,
         "a `#pragma binding` for a name an earlier binding already claimed";
+    2020, "syntax", [], Error, Hard,
+        [], Live,
+        "a token the grammar does not admit at its position; the parser has no resynchronisation point";
+    2021, "invalid-declaration", [], Error, Hard,
+        [], Live,
+        "a declaration a C99 constraint rejects: a redefinition, conflicting types, an incomplete object, a bit-field width or an alignment out of range";
+    2022, "undeclared-identifier", [], Error, Hard,
+        [], Live,
+        "a name no declaration in scope introduces";
+    2023, "static-assert", [], Error, Hard,
+        [], Live,
+        "a static assertion whose controlling expression is zero";
     3001, "int-conversion", [], Warning, Controllable,
         [DEFAULT], Live,
         "an integer and a pointer exchanged with no cast";
@@ -120,6 +144,36 @@ catalog! {
     3007, "dead-store", [], Ignore, Controllable,
         [], Live,
         "a value assigned to a local and replaced before any read";
+    3020, "invalid-operands", [], Error, Hard,
+        [], Live,
+        "an operator applied to operands its constraints reject, or a non-lvalue where an lvalue is required";
+    3021, "constant-expression", [], Error, Hard,
+        [], Live,
+        "an expression that must be constant and is not, or one the compiler cannot evaluate at translation time";
+    3022, "invalid-initializer", [], Error, Hard,
+        [], Live,
+        "an initializer C99 6.7.8 rejects: a mismatched brace form, a designator naming nothing, an index out of range";
+    3023, "invalid-arguments", [], Error, Hard,
+        [], Live,
+        "a builtin or intrinsic called with arguments it does not take";
+    3024, "invalid-statement", [], Error, Hard,
+        [], Live,
+        "a statement outside the construct it needs: `break` outside a loop, `case` outside a switch, a `goto` to no label";
+    3025, "incompatible-types", [], Error, Hard,
+        [], Live,
+        "a value of a type no implicit conversion takes to the type required: an aggregate assigned, passed or returned as another";
+    4001, "unsupported", [], Error, Hard,
+        [], Live,
+        "a well-formed construct badc does not implement";
+    4002, "limit", [], Error, Hard,
+        [], Live,
+        "a translation limit badc imposes: nesting depth, include depth, alignment";
+    5001, "asm-syntax", [], Error, Hard,
+        [], Live,
+        "an `asm` statement whose operand list, constraints or template does not parse";
+    5002, "assembler", [], Error, Hard,
+        [], Live,
+        "an instruction or directive the assembler cannot parse or encode for the target";
     6001, "orphan-section", [], Warning, Controllable,
         [DEFAULT], Live,
         "an input section no script rule names, placed by the linker's own rule";
@@ -284,4 +338,22 @@ impl Code {
     pub const LONG_DOUBLE_ABI: Code = Code::new(3006);
     pub const DEAD_STORE: Code = Code::new(3007);
     pub const LINK_PRAGMA_IGNORED: Code = Code::new(7008);
+    pub const DIRECTIVE: Code = Code::new(1010);
+    pub const INVALID_PRAGMA: Code = Code::new(1011);
+    pub const INVALID_TOKEN: Code = Code::new(1012);
+    pub const ERROR_DIRECTIVE: Code = Code::new(1013);
+    pub const SYNTAX: Code = Code::new(2020);
+    pub const INVALID_DECLARATION: Code = Code::new(2021);
+    pub const UNDECLARED_IDENTIFIER: Code = Code::new(2022);
+    pub const STATIC_ASSERT: Code = Code::new(2023);
+    pub const INVALID_OPERANDS: Code = Code::new(3020);
+    pub const CONSTANT_EXPRESSION: Code = Code::new(3021);
+    pub const INVALID_INITIALIZER: Code = Code::new(3022);
+    pub const INVALID_ARGUMENTS: Code = Code::new(3023);
+    pub const INVALID_STATEMENT: Code = Code::new(3024);
+    pub const INCOMPATIBLE_TYPES: Code = Code::new(3025);
+    pub const UNSUPPORTED: Code = Code::new(4001);
+    pub const LIMIT: Code = Code::new(4002);
+    pub const ASM_SYNTAX: Code = Code::new(5001);
+    pub const ASSEMBLER: Code = Code::new(5002);
 }

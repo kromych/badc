@@ -5,6 +5,10 @@ B1003  malformed-directive            warning  controllable  default            
 B1004  unknown-pragmas                warning  controllable  default,all        live     a `#pragma` badc does not implement; the directive is ignored
 B1005  pragma-syntax                  warning  controllable  default            live     a diagnostic pragma badc implements whose operand is malformed
 B1006  pragma-pop-without-push        warning  controllable  default            live     a diagnostic-pragma pop with no matching push
+B1010  directive                      error    hard          -                  live     a directive whose operand the preprocessor cannot process, or a conditional directive with no `#if` to match
+B1011  invalid-pragma                 error    hard          -                  live     a pragma badc implements whose operand cannot be applied
+B1012  invalid-token                  error    hard          -                  live     a character sequence that forms no token: a malformed constant, escape sequence or universal character name
+B1013  error-directive                error    hard          -                  live     a `#error` directive reached in an active conditional block
 B2001  unused-variable                ignore   controllable  all                live     a variable declared and never used
 B2002  unused-parameter               ignore   controllable  extra              live     a parameter never used in the function body
 B2003  unused-but-set-variable        ignore   controllable  all                live     a variable that is only ever assigned to
@@ -15,6 +19,10 @@ B2007  redeclaration-mismatch         warning  controllable  default            
 B2008  attributes                     warning  controllable  default            live     an attribute the declaration cannot carry, so it is ignored
 B2009  ignored-asm-label              warning  controllable  default            live     an assembler name on a declaration that has no symbol to rename
 B2010  shadowed-binding               warning  controllable  default            live     a `#pragma binding` for a name an earlier binding already claimed
+B2020  syntax                         error    hard          -                  live     a token the grammar does not admit at its position; the parser has no resynchronisation point
+B2021  invalid-declaration            error    hard          -                  live     a declaration a C99 constraint rejects: a redefinition, conflicting types, an incomplete object, a bit-field width or an alignment out of range
+B2022  undeclared-identifier          error    hard          -                  live     a name no declaration in scope introduces
+B2023  static-assert                  error    hard          -                  live     a static assertion whose controlling expression is zero
 B3001  int-conversion                 warning  controllable  default            live     an integer and a pointer exchanged with no cast
 B3002  incompatible-struct-types      warning  controllable  default            live     an aggregate used where a different aggregate type is expected
 B3003  return-type                    ignore   controllable  all                live     control reaches the end of a value-returning function
@@ -22,6 +30,16 @@ B3004  too-few-arguments              warning  controllable  default            
 B3005  too-many-arguments             warning  controllable  default            live     a call passing more arguments than the prototype declares
 B3006  long-double-abi                warning  controllable  default            live     a `long double` argument passed in a format this target's ABI does not use
 B3007  dead-store                     ignore   controllable  -                  live     a value assigned to a local and replaced before any read
+B3020  invalid-operands               error    hard          -                  live     an operator applied to operands its constraints reject, or a non-lvalue where an lvalue is required
+B3021  constant-expression            error    hard          -                  live     an expression that must be constant and is not, or one the compiler cannot evaluate at translation time
+B3022  invalid-initializer            error    hard          -                  live     an initializer C99 6.7.8 rejects: a mismatched brace form, a designator naming nothing, an index out of range
+B3023  invalid-arguments              error    hard          -                  live     a builtin or intrinsic called with arguments it does not take
+B3024  invalid-statement              error    hard          -                  live     a statement outside the construct it needs: `break` outside a loop, `case` outside a switch, a `goto` to no label
+B3025  incompatible-types             error    hard          -                  live     a value of a type no implicit conversion takes to the type required: an aggregate assigned, passed or returned as another
+B4001  unsupported                    error    hard          -                  live     a well-formed construct badc does not implement
+B4002  limit                          error    hard          -                  live     a translation limit badc imposes: nesting depth, include depth, alignment
+B5001  asm-syntax                     error    hard          -                  live     an `asm` statement whose operand list, constraints or template does not parse
+B5002  assembler                      error    hard          -                  live     an instruction or directive the assembler cannot parse or encode for the target
 B6001  orphan-section                 warning  controllable  default            live     an input section no script rule names, placed by the linker's own rule
 B6002  missing-entry                  warning  controllable  default            live     no input defines the entry symbol, so the image enters at the first text address
 B6003  merged-section-access          warning  controllable  default            live     a relocation reaches past the end of the merged section it names

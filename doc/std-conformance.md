@@ -190,7 +190,8 @@ diagnostic` and MSVC's `#pragma warning(...)` -- take the same selectors
 and decide a row's level at the source position they precede, for the
 parser's diagnostics as well as the preprocessor's. A pragma covering
 the position wins over the command line; `push` and `pop` bound the
-region it covers.
+region it covers. A link diagnostic has no position in a translation
+unit, so the command line alone governs one.
 
 `-Wa,<opt>` and `-Xassembler <opt>` are checked rather than passed on, since
 the assembler is built in: an option badc's assembler has no equivalent for

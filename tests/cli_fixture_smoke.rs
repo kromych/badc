@@ -2516,3 +2516,72 @@ fn a_header_scopes_its_diagnostic_pragma_with_push_and_pop() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A link diagnostic has no position in a translation unit, so no
+/// pragma governs one; the command line does. This links a script whose
+/// `ENTRY` no input defines and drives the row through `-Wno-` and
+/// `-Werror=`.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn a_command_line_selector_governs_a_link_diagnostic() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-linkdiag-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let src = dir.join("main.c");
+    std::fs::write(&src, "int _start(void) { return 0; }\n").expect("write source");
+    let script = dir.join("t.lds");
+    std::fs::write(
+        &script,
+        "ENTRY(nosuch) SECTIONS { . = 0x400000; .text : { *(.text*) } }\n",
+    )
+    .expect("write script");
+    let obj = dir.join("main.o");
+    let compiled = Command::new(badc)
+        .arg("--target=linux-x64")
+        .arg("-c")
+        .arg(&src)
+        .arg("-o")
+        .arg(&obj)
+        .output()
+        .expect("run badc");
+    assert!(compiled.status.success());
+
+    let link = |extra: &[&str]| {
+        Command::new(badc)
+            .arg("--target=linux-x64")
+            .args(extra)
+            .arg("-T")
+            .arg(&script)
+            .arg(&obj)
+            .arg("-o")
+            .arg(dir.join("out"))
+            .output()
+            .expect("run badc")
+    };
+
+    let plain = link(&[]);
+    assert!(plain.status.success());
+    let stderr = String::from_utf8_lossy(&plain.stderr);
+    assert!(
+        stderr.contains("[B6002] [-Wmissing-entry]"),
+        "expected the link row: {stderr}"
+    );
+
+    let off = link(&["-Wno-missing-entry"]);
+    assert!(off.status.success());
+    assert!(
+        !String::from_utf8_lossy(&off.stderr).contains("B6002"),
+        "-Wno- must silence the link row"
+    );
+
+    let raised = link(&["-Werror=missing-entry"]);
+    assert!(!raised.status.success(), "-Werror= must fail the link");
+    let stderr = String::from_utf8_lossy(&raised.stderr);
+    assert!(
+        stderr.contains("error:") && stderr.contains("B6002"),
+        "expected the raised link row: {stderr}"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

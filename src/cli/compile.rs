@@ -5,7 +5,7 @@ use badc::{NativeOptions, Target};
 use super::args::{Cli, FrontEnd};
 
 use super::deps::{DepOptions, emit_deps};
-use super::diag::{TuLog, report_unit_diagnostics};
+use super::diag::{TuLog, rendered, report_unit_diagnostics};
 use super::options::SourceKind;
 
 /// Native-stack reservation shared by the driver thread and every
@@ -414,7 +414,9 @@ pub(crate) fn compile_object_tu(src_path: &str, cfg: &CompileCfg) -> (TuLog, Res
         Ok(p) => p,
         Err(()) => return (log, Err(())),
     };
-    warn_dropped_link_pragmas(&program, src_path, &mut log, cfg.stderr_is_tty);
+    if warn_dropped_link_pragmas(&program, src_path, cfg, &mut log).is_err() {
+        return (log, Err(()));
+    }
     match badc::emit_native_with_options_owned(program, cfg.target, cfg.reloc_opts) {
         Ok(bytes) => (log, Ok(bytes)),
         Err(e) => {
@@ -429,12 +431,14 @@ pub(crate) fn compile_object_tu(src_path: &str, cfg: &CompileCfg) -> (TuLog, Res
 /// neither. Warn when a relocatable emit drops them so the TU is
 /// recompiled in the link invocation instead of silently producing a
 /// console-subsystem / default-entry image.
+/// The source is named inside the message: the pragma's line does not
+/// reach the driver, so the diagnostic carries no position.
 pub(crate) fn warn_dropped_link_pragmas(
     program: &badc::Program,
     src_path: &str,
+    cfg: &CompileCfg,
     log: &mut TuLog,
-    tty: bool,
-) {
+) -> Result<(), ()> {
     let mut dropped: Vec<&str> = Vec::new();
     if program.entry_pragma.is_some() {
         dropped.push("entrypoint");
@@ -442,13 +446,23 @@ pub(crate) fn warn_dropped_link_pragmas(
     if program.subsystem.is_some() {
         dropped.push("subsystem");
     }
+    let mut sink = badc::diag::Sink::new(cfg.front.diag.clone(), Default::default());
     for p in dropped {
-        log.diag(
-            tty,
+        sink.emit(
+            badc::diag::Code::LINK_PRAGMA_IGNORED,
+            None,
             format!(
-                "{src_path}: warning: `#pragma {p}(...)` is not carried by an object \
+                "`#pragma {p}(...)` in `{src_path}` is not carried by an object \
                  file; compile this source in the link invocation for it to take effect"
             ),
         );
     }
+    for d in sink.diagnostics() {
+        log.raw(rendered(d, cfg.stderr_is_tty));
+    }
+    if sink.has_errors() {
+        log.diag(cfg.stderr_is_tty, "badc: error: warnings treated as errors");
+        return Err(());
+    }
+    Ok(())
 }

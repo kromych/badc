@@ -4,7 +4,7 @@ use badc::Compiler;
 
 use super::args::Cli;
 use super::deps::{DepKind, DepOptions, emit_deps};
-use super::diag::{TuLog, eprint_diagnostic};
+use super::diag::{TuLog, eprint_diagnostic, rendered};
 use super::inputs::{Inputs, StdinSource};
 use super::options::SourceKind;
 
@@ -47,6 +47,9 @@ pub(crate) fn dump_dependencies(
         }
         for w in compiler.preprocess_warnings() {
             log.diag(stderr_is_tty, w);
+        }
+        for d in compiler.diagnostics() {
+            log.raw(rendered(d, stderr_is_tty));
         }
         // An unresolved `#include` leaves the prerequisite list
         // incomplete, so report it and write nothing, as gcc does.

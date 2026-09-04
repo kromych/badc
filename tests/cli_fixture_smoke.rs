@@ -1231,6 +1231,50 @@ fn source_tree_headers_override_the_embedded_set() {
     );
 }
 
+// A `#pragma entrypoint` an object file cannot carry is a catalogue
+// row, so `-Wno-link-pragma-ignored` silences it and `-Werror` fails
+// the unit on it.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn a_dropped_link_pragma_is_a_controllable_diagnostic() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-linkpragma-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let src = dir.join("main.c");
+    std::fs::write(
+        &src,
+        "#pragma entrypoint(custom_entry)\nint custom_entry(void) { return 0; }\n",
+    )
+    .expect("write main");
+    let compile = |extra: &[&str]| {
+        Command::new(badc)
+            .args(extra)
+            .arg("-c")
+            .arg(&src)
+            .arg("-o")
+            .arg(dir.join("main.o"))
+            .output()
+            .expect("run badc")
+    };
+    let plain = compile(&[]);
+    assert!(plain.status.success());
+    let stderr = String::from_utf8_lossy(&plain.stderr);
+    assert!(
+        stderr.contains("[B7008] [-Wlink-pragma-ignored]"),
+        "expected the row's brackets, got: {stderr}"
+    );
+    let off = compile(&["-Wno-link-pragma-ignored"]);
+    assert!(off.status.success());
+    assert!(
+        !String::from_utf8_lossy(&off.stderr).contains("link-pragma-ignored"),
+        "-Wno- must silence the row"
+    );
+    let raised = compile(&["-Werror=link-pragma-ignored"]);
+    assert!(!raised.status.success(), "-Werror= must fail the unit");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 // `-Werror` fails the unit at the phase boundary, not at the first
 // raised warning: the whole source is parsed, so every diagnostic is
 // reported before the driver gives up.

@@ -47,6 +47,39 @@ pub(crate) fn colorize_diagnostic(line: &str, is_tty: bool) -> std::borrow::Cow<
     std::borrow::Cow::Borrowed(line)
 }
 
+/// One diagnostic as this driver prints it: its own colour when stderr
+/// is a terminal, keyed on the level rather than on a scan of the text.
+pub(crate) fn rendered(diagnostic: &badc::diag::Diagnostic, tty: bool) -> String {
+    let mut out = String::new();
+    let _ = diagnostic.render(&mut out, tty);
+    out
+}
+
+/// Print a unit's diagnostics and report whether it may go on. A
+/// warning raised to an error does not unwind at its site: the unit
+/// parses whole and fails here, at the phase boundary, as gcc does.
+pub(crate) fn report_unit_diagnostics(
+    log: &mut TuLog,
+    tty: bool,
+    program: &badc::Program,
+) -> Result<(), ()> {
+    for line in &program.text_diagnostics {
+        log.diag(tty, line);
+    }
+    for d in &program.warnings {
+        log.raw(rendered(d, tty));
+    }
+    if program
+        .warnings
+        .iter()
+        .any(|d| d.level == badc::diag::Level::Error)
+    {
+        log.diag(tty, "badc: error: warnings treated as errors");
+        return Err(());
+    }
+    Ok(())
+}
+
 /// Per-translation-unit diagnostic buffer. Under `--jobs` workers
 /// finish out of order, so each records its `info:` / warning / error
 /// lines here and the driver replays them in source order: stderr stays

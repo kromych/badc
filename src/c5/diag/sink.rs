@@ -57,6 +57,18 @@ impl Sink {
     /// Report a diagnostic. An ignored one is dropped; the rest are
     /// recorded with the level they resolved to.
     pub fn emit(&mut self, code: Code, loc: Option<Loc>, text: impl Into<String>) -> Level {
+        self.emit_with_source(code, loc, text, None)
+    }
+
+    /// [`Self::emit`] for a site that can echo the source line the
+    /// diagnostic points at.
+    pub fn emit_with_source(
+        &mut self,
+        code: Code,
+        loc: Option<Loc>,
+        text: impl Into<String>,
+        source_line: Option<String>,
+    ) -> Level {
         let level = self.level(code, loc.as_ref());
         if level == Level::Ignore || !self.spend_once(code, loc.as_ref()) {
             return Level::Ignore;
@@ -65,7 +77,7 @@ impl Sink {
             self.errors += 1;
         }
         self.emitted
-            .push(Diagnostic::new(code, level, loc, text.into()));
+            .push(Diagnostic::new(code, level, loc, text.into()).with_source_line(source_line));
         level
     }
 

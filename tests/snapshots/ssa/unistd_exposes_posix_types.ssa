@@ -18,18 +18,6 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v12  Imm(0)                                           -> x0
     v13  Imm(0)                                           -> x0
     terminator Return(v13)   (exit_acc=v13)
-unistd_exposes_posix_types.c:14: warning: unused variable `n`
-    ssize_t  n   = -1;
-unistd_exposes_posix_types.c:19: warning: unused variable `gid`
-    gid_t    gid = 5;
-unistd_exposes_posix_types.c:18: warning: unused variable `uid`
-    uid_t    uid = 4;
-unistd_exposes_posix_types.c:17: warning: unused variable `pid`
-    pid_t    pid = 3;
-unistd_exposes_posix_types.c:15: warning: unused variable `sz`
-    size_t   sz  = 1;
-unistd_exposes_posix_types.c:16: warning: unused variable `off`
-    off_t    off = 2;
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

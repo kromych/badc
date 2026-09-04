@@ -3,7 +3,7 @@ use std::io::IsTerminal;
 use badc::{Compiler, NativeOptions, Vm, jit_run_with_options};
 
 use super::args::Cli;
-use super::diag::{colorize_diagnostic, eprint_diagnostic};
+use super::diag::{colorize_diagnostic, eprint_diagnostic, rendered};
 use super::inputs::{Inputs, StdinSource};
 use super::options::Mode;
 
@@ -42,8 +42,7 @@ pub(crate) fn run_in_process(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) ->
         .front
         .compile_options(&src_path)
         .with_optimize(cli.front.optimize)
-        .with_track_includes(cli.front.show_includes)
-        .with_warn_dead_store(cli.front.warn_dead_store);
+        .with_track_includes(cli.front.show_includes);
     let compiler = Compiler::with_options(contents, cli.target, copts);
     if cli.front.show_includes {
         for line in compiler.include_trace() {
@@ -58,8 +57,19 @@ pub(crate) fn run_in_process(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) ->
         }
     };
     let stderr_is_tty = std::io::stderr().is_terminal();
-    for w in &program.warnings {
-        eprintln!("{}", colorize_diagnostic(w, stderr_is_tty));
+    for line in &program.text_diagnostics {
+        eprintln!("{}", colorize_diagnostic(line, stderr_is_tty));
+    }
+    for d in &program.warnings {
+        eprintln!("{}", rendered(d, stderr_is_tty));
+    }
+    if program
+        .warnings
+        .iter()
+        .any(|d| d.level == badc::diag::Level::Error)
+    {
+        eprint_diagnostic("badc: error: warnings treated as errors");
+        std::process::exit(1);
     }
     // argv[0] is the unit path; argv[1..] are every following
     // input (extra `.c` paths the hosted program opens itself)

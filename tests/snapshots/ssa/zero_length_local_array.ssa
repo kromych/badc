@@ -110,14 +110,6 @@ fn ent_pc=3 n_params=0 variadic=false locals=3
   block 18  start_pc=0
     v68  Imm(0)                                           -> x1
     terminator Jmp(b3)   (exit_acc=v68)
-zero_length_local_array.c:34: warning: unused variable `i`
-    int i[0];
-zero_length_local_array.c:35: warning: unused variable `c`
-    char c[0];
-zero_length_local_array.c:36: warning: unused variable `rows`
-    char rows[0][4];
-zero_length_local_array.c:87: warning: unused variable `pad`
-        char pad[2 * (int)sizeof(int) - (int)sizeof p];
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

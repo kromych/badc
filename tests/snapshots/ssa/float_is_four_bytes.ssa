@@ -265,8 +265,6 @@ fn ent_pc=8 n_params=0 variadic=false locals=5
     terminator Jmp(b5)
   block 37  start_pc=0
     terminator Jmp(b3)
-float_is_four_bytes.c:41: warning: unused variable `fv`
-    float fv = 0.0f;
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

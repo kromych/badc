@@ -55,7 +55,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=9
     terminator Return(v19)   (exit_acc=v19)
   block 5  start_pc=0
     terminator Jmp(b2)
-vsnprintf_underscore_alias.c:26: warning: `vsnprintf` is called without a return-type prototype; assuming `int`
+vsnprintf_underscore_alias.c:26: warning: `vsnprintf` is called without a return-type prototype; assuming `int` [B2005] [-Wimplicit-function-declaration]
     n = vsnprintf(buf, size, fmt, ap);
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

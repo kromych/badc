@@ -140,8 +140,6 @@ fn ent_pc=12 n_params=2 variadic=false locals=0
     v2   LoadLocal { off=3, kind=I64 }                    -> x6
     v3   CallExt { binding_idx=87, args=[v1, v2], fp_arg_mask=0x0 } -> x0
     terminator Return(v3)   (exit_acc=v3)
-syscall_ptr_table.c:18: warning: unused variable `stat_fn`
-    int (*stat_fn)(const char *, struct stat *) = (int(*)(const char*, struct stat*))syscall_ptrs[3];
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

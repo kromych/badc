@@ -48,7 +48,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v22  Imm(0)                                           -> x1
     v23  Imm(0)                                           -> x1
     terminator Return(v16)   (exit_acc=v16)
-inline_arg_count_mismatch.c:14: warning: too few arguments to `add` (expected 2, got 1)
+inline_arg_count_mismatch.c:14: warning: too few arguments to `add` (expected 2, got 1) [B3004] [-Wtoo-few-arguments]
     int junk = add(7);
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

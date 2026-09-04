@@ -23,6 +23,7 @@
 use alloc::format;
 use alloc::vec::Vec;
 
+use super::super::diag::Code;
 use super::super::error::C5Error;
 use super::super::lexer;
 use super::super::token::Token;
@@ -90,6 +91,7 @@ impl Compiler {
             let line = self.symbols[sym_idx].decl_line;
             let suggestion = self.include_hint(&name);
             self.warn_at(
+                Code::UNDEFINED_FUNCTION,
                 line,
                 alloc::format!(
                     "`{name}` is used as a function in an initializer but is never declared or defined{suggestion}"

@@ -9,6 +9,7 @@ use alloc::string::String;
 use alloc::string::ToString;
 use alloc::vec::Vec;
 
+use super::super::diag::Code;
 use super::super::error::C5Error;
 use super::super::ir::LoadKind;
 use super::super::token::{Token, Ty};
@@ -1795,6 +1796,7 @@ impl Compiler {
             let name = self.symbols[id_idx].name.clone();
             let line = self.lex.line;
             self.warn_at(
+                Code::IMPLICIT_FUNCTION_DECLARATION,
                 line,
                 alloc::format!(
                     "`{name}` is called without a return-type prototype; assuming `int`"
@@ -1860,6 +1862,7 @@ impl Compiler {
         {
             let line = self.lex.line;
             self.warn_at(
+                Code::TOO_FEW_ARGUMENTS,
                 line,
                 format!(
                     "too few arguments to `{}` (expected {}, got {})",
@@ -1930,6 +1933,7 @@ impl Compiler {
             && let Some(platform_fmt) = self.target.platform_long_double_abi()
         {
             self.warn_at(
+                Code::LONG_DOUBLE_ABI,
                 arg_line,
                 format!(
                     "`long double` argument {} of `{}` is passed as 8-byte \
@@ -1945,6 +1949,7 @@ impl Compiler {
         } else {
             if !callee.params.is_empty() && !callee.is_variadic {
                 self.warn_at(
+                    Code::TOO_MANY_ARGUMENTS,
                     arg_line,
                     format!(
                         "too many arguments to `{}` (expected {}, got at least {})",
@@ -2002,7 +2007,7 @@ impl Compiler {
             if m.no_conversion && !callee.is_sys_call {
                 return Err(self.compile_err_at(arg_line, text));
             }
-            self.warn_at(arg_line, text);
+            self.warn_at(m.code, arg_line, text);
         }
         if let Some(member_ty) = tu_member {
             // The member is materialized in an anonymous union object, so every
@@ -3068,7 +3073,7 @@ impl Compiler {
                 if m.no_conversion {
                     return Err(self.compile_err_at(line, text));
                 }
-                self.warn_at(line, text);
+                self.warn_at(m.code, line, text);
             }
             self.convert_assign_rhs(lhs_ty);
             self.ty = lhs_ty;

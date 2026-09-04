@@ -18,6 +18,7 @@
 
 use alloc::format;
 
+use super::super::diag::Code;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
@@ -786,6 +787,7 @@ impl Compiler {
                 let ident = self.symbols[id_idx].name.clone();
                 let line = self.lex.line;
                 self.warn_at(
+                    Code::IGNORED_ASM_LABEL,
                     line,
                     format!("assembler name ignored for the automatic variable `{ident}`"),
                 );

@@ -1231,6 +1231,71 @@ fn source_tree_headers_override_the_embedded_set() {
     );
 }
 
+// `-Werror` fails the unit at the phase boundary, not at the first
+// raised warning: the whole source is parsed, so every diagnostic is
+// reported before the driver gives up.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn warnings_as_errors_fail_the_unit_after_the_whole_parse() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-werror-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let src = dir.join("main.c");
+    std::fs::write(
+        &src,
+        "int *p; int *q;\nint main(void) { p = 1; q = 2; return 0; }\n",
+    )
+    .expect("write main");
+    let out = Command::new(badc)
+        .arg("-Werror")
+        .arg("-c")
+        .arg(&src)
+        .arg("-o")
+        .arg(dir.join("main.o"))
+        .output()
+        .expect("run badc");
+    assert!(!out.status.success(), "-Werror must fail the unit");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(
+        stderr.matches("error: integer assigned to pointer").count(),
+        2,
+        "both assignments must be reported, got: {stderr}"
+    );
+    assert!(
+        stderr.contains("[B3001] [-Wint-conversion]"),
+        "expected the code and option brackets, got: {stderr}"
+    );
+    assert!(
+        stderr.contains("warnings treated as errors"),
+        "expected the phase-boundary line, got: {stderr}"
+    );
+    // Without the option the same unit compiles, warnings and all.
+    let ok = Command::new(badc)
+        .arg("-c")
+        .arg(&src)
+        .arg("-o")
+        .arg(dir.join("main2.o"))
+        .output()
+        .expect("run badc");
+    assert!(ok.status.success(), "the unit compiles without -Werror");
+    // `-w` drops them entirely.
+    let quiet = Command::new(badc)
+        .arg("-w")
+        .arg("-c")
+        .arg(&src)
+        .arg("-o")
+        .arg(dir.join("main3.o"))
+        .output()
+        .expect("run badc");
+    assert!(quiet.status.success());
+    assert!(
+        !String::from_utf8_lossy(&quiet.stderr).contains("warning:"),
+        "-w must report no warning"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 // An unrecognised dash-prefixed option must be rejected with a clear
 // "unknown option" diagnostic, not silently reinterpreted as a source
 // file (which produces a misleading `cannot read` error or, worse,

@@ -46,10 +46,6 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v7   Imm(1)                                           -> x0
     v8   Imm(0)                                           -> x1
     terminator Jmp(b2)   (exit_acc=v7)
-inline_naked_not_inlined.c:12: warning: control reaches end of non-void function `identity_asm` without returning a value
-}
-inline_naked_not_inlined.c:6: warning: unused parameter `x`
-static __attribute__((naked)) long identity_asm(long x) {
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

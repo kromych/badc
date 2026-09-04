@@ -5,7 +5,7 @@ use badc::{NativeOptions, Target};
 use super::args::{Cli, FrontEnd};
 
 use super::deps::{DepOptions, emit_deps};
-use super::diag::TuLog;
+use super::diag::{TuLog, report_unit_diagnostics};
 use super::options::SourceKind;
 
 /// Native-stack reservation shared by the driver thread and every
@@ -229,7 +229,6 @@ pub(crate) fn tu_compile_options(
         .compile_options(src_path)
         .with_asm_source(SourceKind::of(src_path).is_asm())
         .with_track_includes(cfg.front.show_includes || cfg.deps.is_some())
-        .with_warn_dead_store(cfg.front.warn_dead_store)
         .with_optimize(cfg.front.optimize)
         .with_export_all_functions(cfg.export_all)
         .with_implicit_extern_fns(implicit_externs.to_vec())
@@ -350,9 +349,7 @@ pub(crate) fn translate_tu(
             return Err(());
         }
     };
-    for w in &program.warnings {
-        log.diag(cfg.stderr_is_tty, w);
-    }
+    report_unit_diagnostics(log, cfg.stderr_is_tty, &program)?;
     Ok(program)
 }
 

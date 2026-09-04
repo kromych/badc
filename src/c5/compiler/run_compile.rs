@@ -10,6 +10,7 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
+use super::super::diag::Code;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
@@ -1052,6 +1053,7 @@ impl Compiler {
             );
             let new_sig = format_signature(ty, &params.types, params.is_variadic, &self.structs);
             self.warn_at(
+                Code::REDECLARATION_MISMATCH,
                 line,
                 format!(
                     "redeclaration of `{name}` differs from the previous \
@@ -1804,14 +1806,21 @@ impl Compiler {
             unused.push((sym.decl_line, sym.name.clone(), kind));
         }
         for (line, name, kind) in unused {
-            let msg = match kind {
-                UnusedKind::Variable => alloc::format!("unused variable `{name}`"),
-                UnusedKind::Parameter => alloc::format!("unused parameter `{name}`"),
-                UnusedKind::ValueSet => {
-                    alloc::format!("variable `{name}` set but never used")
-                }
+            let (code, msg) = match kind {
+                UnusedKind::Variable => (
+                    Code::UNUSED_VARIABLE,
+                    alloc::format!("unused variable `{name}`"),
+                ),
+                UnusedKind::Parameter => (
+                    Code::UNUSED_PARAMETER,
+                    alloc::format!("unused parameter `{name}`"),
+                ),
+                UnusedKind::ValueSet => (
+                    Code::UNUSED_BUT_SET_VARIABLE,
+                    alloc::format!("variable `{name}` set but never used"),
+                ),
             };
-            self.warn_at(line, msg);
+            self.warn_at(code, line, msg);
         }
         // Drain dead-store entries for this function's
         // locals via the shared helper -- a store that
@@ -2822,7 +2831,11 @@ impl Compiler {
             unused.push((sym.decl_line, sym.name.clone()));
         }
         for (line, name) in unused {
-            self.warn_at(line, alloc::format!("unused function `{name}`"));
+            self.warn_at(
+                Code::UNUSED_FUNCTION,
+                line,
+                alloc::format!("unused function `{name}`"),
+            );
         }
     }
 

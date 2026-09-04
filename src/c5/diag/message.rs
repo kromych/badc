@@ -50,6 +50,9 @@ pub struct Diagnostic {
     pub level: Level,
     pub loc: Option<Loc>,
     pub text: String,
+    /// The text of the line `loc` points at, echoed beneath the
+    /// message the way gcc prints the offending line.
+    pub source_line: Option<String>,
     pub notes: Vec<(Option<Loc>, String)>,
 }
 
@@ -60,8 +63,14 @@ impl Diagnostic {
             level,
             loc,
             text: text.into(),
+            source_line: None,
             notes: Vec::new(),
         }
+    }
+
+    pub fn with_source_line(mut self, line: Option<String>) -> Self {
+        self.source_line = line;
+        self
     }
 
     pub fn with_note(mut self, loc: Option<Loc>, text: impl Into<String>) -> Self {

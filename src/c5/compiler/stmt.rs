@@ -24,6 +24,7 @@
 use alloc::format;
 use alloc::vec::Vec;
 
+use super::super::diag::Code;
 use super::super::error::C5Error;
 use super::super::token::{Tok, Token, Ty};
 use super::Compiler;
@@ -967,12 +968,18 @@ impl Compiler {
             // declaration initializer, which the dead-store
             // diagnostic should treat as "unused" rather than
             // "set but never used".
-            let msg = if sym.was_referenced && sym.was_written {
-                alloc::format!("variable `{name}` set but never used")
+            let (code, msg) = if sym.was_referenced && sym.was_written {
+                (
+                    Code::UNUSED_BUT_SET_VARIABLE,
+                    alloc::format!("variable `{name}` set but never used"),
+                )
             } else {
-                alloc::format!("unused variable `{name}`")
+                (
+                    Code::UNUSED_VARIABLE,
+                    alloc::format!("unused variable `{name}`"),
+                )
             };
-            self.warn_at(line, msg);
+            self.warn_at(code, line, msg);
         }
 
         self.capture_block_locals(&block_symbols);
@@ -3081,7 +3088,7 @@ impl Compiler {
                         if m.no_conversion {
                             return Err(self.compile_err_at(line, text));
                         }
-                        self.warn_at(line, text);
+                        self.warn_at(m.code, line, text);
                     }
                     self.mark_emit_other();
                     // Mirror the rhs expression into the walker's
@@ -3115,7 +3122,7 @@ impl Compiler {
                         if m.no_conversion {
                             return Err(self.compile_err_at(line, text));
                         }
-                        self.warn_at(line, text);
+                        self.warn_at(m.code, line, text);
                     }
                     // Reuse `convert_assign_rhs` so an `int`-typed
                     // `return` from a `double`-returning function lifts

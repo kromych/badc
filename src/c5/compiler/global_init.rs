@@ -656,6 +656,7 @@ impl Compiler {
             let var_s = super::types::format_type(var_ty, &self.structs);
             let init_s = super::types::format_type(init_ty, &self.structs);
             self.warn_at(
+                m.code,
                 line,
                 format!(
                     "{} in global initializer (var={var_s}, value={init_s})",

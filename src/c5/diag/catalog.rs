@@ -194,3 +194,26 @@ impl Code {
         Code::from_selector(&format!("C{number}"))
     }
 }
+
+/// The codes report sites name. A test checks each against its row, so
+/// a site never looks a name up at run time.
+impl Code {
+    pub const UNUSED_VARIABLE: Code = Code::new(2001);
+    pub const UNUSED_PARAMETER: Code = Code::new(2002);
+    pub const UNUSED_BUT_SET_VARIABLE: Code = Code::new(2003);
+    pub const UNUSED_FUNCTION: Code = Code::new(2004);
+    pub const IMPLICIT_FUNCTION_DECLARATION: Code = Code::new(2005);
+    pub const UNDEFINED_FUNCTION: Code = Code::new(2006);
+    pub const REDECLARATION_MISMATCH: Code = Code::new(2007);
+    pub const ATTRIBUTES: Code = Code::new(2008);
+    pub const IGNORED_ASM_LABEL: Code = Code::new(2009);
+    pub const SHADOWED_BINDING: Code = Code::new(2010);
+    pub const INT_CONVERSION: Code = Code::new(3001);
+    pub const INCOMPATIBLE_STRUCT_TYPES: Code = Code::new(3002);
+    pub const RETURN_TYPE: Code = Code::new(3003);
+    pub const TOO_FEW_ARGUMENTS: Code = Code::new(3004);
+    pub const TOO_MANY_ARGUMENTS: Code = Code::new(3005);
+    pub const LONG_DOUBLE_ABI: Code = Code::new(3006);
+    pub const DEAD_STORE: Code = Code::new(3007);
+    pub const LINK_PRAGMA_IGNORED: Code = Code::new(7008);
+}

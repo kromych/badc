@@ -9,6 +9,7 @@ use alloc::format;
 use alloc::string::ToString;
 use alloc::vec::Vec;
 
+use super::super::diag::Code;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::decl_base;
@@ -1206,6 +1207,7 @@ impl Compiler {
         } else {
             let line = self.lex.line;
             self.warn_at(
+                Code::ATTRIBUTES,
                 line,
                 alloc::string::String::from("`transparent_union` attribute ignored"),
             );

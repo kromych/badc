@@ -277,15 +277,14 @@ fn fall_off_end_of_non_void_function_warns() {
     // indeterminate. This is undefined behavior if the result is used,
     // not a constraint violation, so it is a warning (matching gcc /
     // clang) and the codegen synthesizes a `return 0`.
-    let prog = crate::c5::Compiler::new(
-        "int f(int x) { if (x) return x; } int main(void) { return f(1); }".to_string(),
-    )
-    .compile()
-    .expect("a fall-off-end non-void function compiles with a warning");
+    let prog = super::compile_str_bare_with_diags(
+        "int f(int x) { if (x) return x; } int main(void) { return f(1); }",
+        &["all"],
+    );
     assert!(
-        prog.warnings
-            .iter()
-            .any(|w| w.contains("control reaches end of non-void function")),
+        prog.warnings.iter().any(|w| w
+            .to_string()
+            .contains("control reaches end of non-void function")),
         "expected a fall-off-end warning, got {:?}",
         prog.warnings,
     );
@@ -414,7 +413,7 @@ fn redeclaration_with_different_signature_warns() {
         assert!(
             prog.warnings
                 .iter()
-                .any(|w| w.contains(prev_needle) && w.contains(now_needle)),
+                .any(|w| w.to_string().contains(prev_needle) && w.to_string().contains(now_needle)),
             "no warning containing `{prev_needle}` + `{now_needle}` for {src:?}; got {:?}",
             prog.warnings,
         );
@@ -1415,7 +1414,7 @@ fn constructor_attribute_is_recorded() {
         void plain(void) {}
         int main(void) { return 0; }
     ";
-    let prog = super::compile_str_bare(src);
+    let prog = super::compile_str_bare_with_diags(src, &["all"]);
     let by_name = |n: &str| prog.init_funcs.iter().find(|f| f.name == n);
     let a = by_name("a").expect("a is a constructor");
     assert!(!a.is_destructor && a.priority.is_none());
@@ -1463,7 +1462,12 @@ fn constructor_attribute_on_prototype_reaches_definition() {
         "attribute on both declarations registers once"
     );
     assert!(by_name("e").is_some(), "e is a constructor");
-    let warns = prog.warnings.join("\n");
+    let warns = prog
+        .warnings
+        .iter()
+        .map(|w| w.to_string())
+        .collect::<Vec<_>>()
+        .join("\n");
     assert!(
         !warns.contains("unused function `e`"),
         "prototype-declared constructor must not be flagged unused; got:\n{warns}"
@@ -1475,13 +1479,19 @@ fn constructor_is_not_reported_unused() {
     // A `static` constructor / destructor has no in-source call site but
     // runs at startup / exit, so it must not draw the unused-function
     // diagnostic (gcc / clang never warn on it).
-    let prog = super::compile_str_bare(
+    let prog = super::compile_str_bare_with_diags(
         "__attribute__((constructor)) static void a(void) {}\n\
          __attribute__((destructor)) static void b(void) {}\n\
          static void really_unused(void) {}\n\
          int main(void) { return 0; }\n",
+        &["all"],
     );
-    let warns = prog.warnings.join("\n");
+    let warns = prog
+        .warnings
+        .iter()
+        .map(|w| w.to_string())
+        .collect::<Vec<_>>()
+        .join("\n");
     assert!(
         !warns.contains("unused function `a`") && !warns.contains("unused function `b`"),
         "constructor/destructor must not be flagged unused; got:\n{warns}"
@@ -3250,14 +3260,11 @@ fn a_trailing_noreturn_specifier_is_recorded() {
             "{spec} die(void);\nint f(int x) {{ if (x) return x; die(); }}\n\
              int main(void) {{ return f(1); }}"
         );
-        let prog = Compiler::new(src.clone())
-            .compile()
-            .unwrap_or_else(|e| panic!("compile failed: {e}\nsource: {src}"));
+        let prog = super::compile_str_bare_with_diags(&src, &["all"]);
         assert!(
-            !prog
-                .warnings
-                .iter()
-                .any(|w| w.contains("control reaches end of non-void function")),
+            !prog.warnings.iter().any(|w| w
+                .to_string()
+                .contains("control reaches end of non-void function")),
             "{src}: {:?}",
             prog.warnings,
         );

@@ -8,8 +8,6 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v2   BinopI { op=and, lhs=v1, rhs_imm=255 }           -> x0
     v3   Imm(0)                                           -> x0
     terminator Return(v3)   (exit_acc=v3)
-builtin_offsetof.c:46: warning: unused variable `buf`
-    char buf[__builtin_offsetof(struct S, c)];
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

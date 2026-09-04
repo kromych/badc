@@ -1568,14 +1568,11 @@ impl Lexer {
     /// Advance to the next token. Identifiers are interned into `symbols`
     /// (with `index` kept in sync); string literals are appended to `data`
     /// and `ival` is set to their start address.
-    /// The text of source line `target` in the current file (`self.file`),
-    /// recovered by walking the `#line` markers the preprocessor embedded
-    /// in the buffer so the original (file, line) numbering is honoured.
-    /// Trailing whitespace is trimmed. `None` when no such line is found.
-    /// Used to echo the line a diagnostic points at, even when the parser
-    /// has read ahead of it (an unused-parameter warning fires at the
-    /// closing brace but names the parameter's declaration line).
-    pub(crate) fn line_text_by_number(&self, target: usize) -> Option<&str> {
+    /// The byte span of source line `target` in the current file
+    /// (`self.file`), recovered by walking the `#line` markers the
+    /// preprocessor embedded in the buffer so the original (file, line)
+    /// numbering is honoured. `None` when no such line is found.
+    fn line_span(&self, target: usize) -> Option<(u32, u32)> {
         // Split the buffer into marker-delimited runs on first use. A
         // diagnostic may be constructed speculatively on a trial-parse
         // path that its caller discards, so this lookup must not
@@ -1636,18 +1633,32 @@ impl Lexer {
         let file_id = index.files.iter().position(|f| *f == self.file)? as u32;
         let key = (file_id, target as u32);
         let cached = index.memo.borrow().get(&key).copied();
-        let span = match cached {
+        match cached {
             Some(hit) => hit,
             None => {
                 let span = index.span_of(&self.src, key.0, key.1);
                 index.memo.borrow_mut().insert(key, span);
                 span
             }
-        };
-        let (start, end) = span?;
+        }
+    }
+
+    /// The text of source line `target`, trailing whitespace trimmed.
+    /// Used to echo the line a diagnostic points at, even when the
+    /// parser has read ahead of it (an unused-parameter warning fires
+    /// at the closing brace but names the parameter's declaration line).
+    pub(crate) fn line_text_by_number(&self, target: usize) -> Option<&str> {
+        let (start, end) = self.line_span(target)?;
         core::str::from_utf8(&self.src[start as usize..end as usize])
             .ok()
             .map(|s| s.trim_end())
+    }
+
+    /// The byte offset of source line `target` in the preprocessed
+    /// translation unit, which is the position the diagnostic pragmas
+    /// resolve on.
+    pub(crate) fn line_offset(&self, target: usize) -> Option<u32> {
+        self.line_span(target).map(|(start, _)| start)
     }
 
     /// Entries the line index holds, 0 when no diagnostic built it.
@@ -2553,13 +2564,13 @@ pub fn predefined_symbols() -> Vec<PredefinedSymbol> {
 /// header the user thought was authoritative. `#pragma once` deduplication makes
 /// repeated identical bindings the common case; mismatched bindings
 /// from different dylibs (e.g. `msvcrt::pow` then `ucrtbase::pow`)
-/// instead surface as a `warning:` on stderr -- under `std` only --
-/// so the shadowed binding doesn't disappear silently.
+/// are returned so the caller can report them.
 pub(crate) fn init_symbols(
     symbols: &mut Vec<Symbol>,
     index: &mut SymbolIndex,
     dylibs: &[super::preprocessor::DylibSpec],
-) {
+) -> Vec<ShadowedBinding> {
+    let mut shadowed = Vec::new();
     for (name, tok) in KEYWORDS {
         add_keyword(symbols, index, name, *tok as i64);
     }
@@ -2613,12 +2624,12 @@ pub(crate) fn init_symbols(
                         })
                     });
                     if winner_real != Some(binding.real_symbol.as_str()) {
-                        warn_shadowed_binding(
-                            name,
-                            winner.unwrap_or("<unknown>"),
-                            spec.name.as_str(),
-                            binding.real_symbol.as_str(),
-                        );
+                        shadowed.push(ShadowedBinding {
+                            local_name: name.to_string(),
+                            kept_dylib: winner.unwrap_or("<unknown>").to_string(),
+                            dylib: spec.name.clone(),
+                            real_symbol: binding.real_symbol.clone(),
+                        });
                     }
                 }
             }
@@ -2634,6 +2645,17 @@ pub(crate) fn init_symbols(
         find_symbol(symbols, index, "main").is_some(),
         "init_symbols must register `main`"
     );
+    shadowed
+}
+
+/// A `#pragma binding` an earlier binding already claimed: the local
+/// name, the dylib whose binding the symbol table kept, and the dylib
+/// and symbol the dropped binding named.
+pub(crate) struct ShadowedBinding {
+    pub local_name: String,
+    pub kept_dylib: String,
+    pub dylib: String,
+    pub real_symbol: String,
 }
 
 /// First dylib whose bindings list contains `local_name`, or `None`
@@ -2650,30 +2672,6 @@ fn lookup_binding_dylib<'a>(
         }
     }
     None
-}
-
-#[cfg(feature = "std")]
-fn warn_shadowed_binding(
-    local_name: &str,
-    kept_dylib: &str,
-    shadowed_dylib: &str,
-    shadowed_real_name: &str,
-) {
-    eprintln!(
-        "badc: warning: `#pragma binding({shadowed_dylib}::{local_name}, \
-         \"{shadowed_real_name}\")` is shadowed by an earlier binding \
-         from `{kept_dylib}`; the later binding is ignored. Remove or \
-         reorder one of the two."
-    );
-}
-
-#[cfg(not(feature = "std"))]
-fn warn_shadowed_binding(
-    _local_name: &str,
-    _kept_dylib: &str,
-    _shadowed_dylib: &str,
-    _shadowed_real_name: &str,
-) {
 }
 
 #[cfg(test)]

@@ -1001,6 +1001,7 @@ pub(crate) mod test_support {
             data_align_marks: Vec::new(),
             entry_pc: 0,
             warnings: Vec::new(),
+            text_diagnostics: Vec::new(),
             tls_data: Vec::new(),
             tls_init_size: 0,
             data_relocs: Vec::new(),

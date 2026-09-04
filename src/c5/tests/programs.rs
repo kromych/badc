@@ -5516,7 +5516,12 @@ fn diagnostic_echoes_the_source_line() {
     let prog = Compiler::new(wsrc.to_string())
         .compile()
         .expect("too-few-arguments is a warning, not an error");
-    let warns = prog.warnings.join("\n");
+    let warns = prog
+        .warnings
+        .iter()
+        .map(|w| w.to_string())
+        .collect::<Vec<_>>()
+        .join("\n");
     assert!(warns.contains("too few arguments"), "warnings: {warns:?}");
     assert!(
         warns.contains("return add(1);"),
@@ -5527,10 +5532,13 @@ fn diagnostic_echoes_the_source_line() {
     // line, not the current one: an unused-parameter warning fires at the
     // closing brace but names the signature line.
     let usrc = "int cmd(int f, int n)\n{\n    return n;\n}\nint main(void) { return cmd(1, 2); }\n";
-    let prog2 = Compiler::new(usrc.to_string())
-        .compile()
-        .expect("unused parameter is a warning");
-    let w2 = prog2.warnings.join("\n");
+    let prog2 = super::compile_str_bare_with_diags(usrc, &["extra"]);
+    let w2 = prog2
+        .warnings
+        .iter()
+        .map(|w| w.to_string())
+        .collect::<Vec<_>>()
+        .join("\n");
     assert!(w2.contains("unused parameter `f`"), "warnings: {w2:?}");
     assert!(
         w2.contains("int cmd(int f, int n)"),
@@ -6486,14 +6494,14 @@ fn unused_binding_diagnostics_follow_symbol_table_order() {
         }
         int main(void) { return f(); }
     ";
-    let prog = compile_str(src);
+    let prog = super::compile_str_with_diags(src, &["all"]);
     let unused: Vec<&str> = prog
         .warnings
         .iter()
         .filter_map(|w| {
-            if w.contains("unused variable `zz`") {
+            if w.to_string().contains("unused variable `zz`") {
                 Some("zz")
-            } else if w.contains("unused variable `aa`") {
+            } else if w.to_string().contains("unused variable `aa`") {
                 Some("aa")
             } else {
                 None

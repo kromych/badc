@@ -6878,8 +6878,10 @@ fn auto_include_retry_reuses_the_first_preprocessor_pass() {
     let b = emit_native_with_options(&direct, target, opts).expect("emit direct object");
     assert_eq!(a, b, "the reused pass changed the emitted object");
     // Same diagnostics too, below the retry's own info line.
-    let tail = &retried.warnings[retried.warnings.len() - direct.warnings.len()..];
-    assert_eq!(tail, &direct.warnings[..]);
+    assert_eq!(retried.warnings, direct.warnings);
+    let notes =
+        &retried.text_diagnostics[retried.text_diagnostics.len() - direct.text_diagnostics.len()..];
+    assert_eq!(notes, &direct.text_diagnostics[..]);
 }
 
 #[test]

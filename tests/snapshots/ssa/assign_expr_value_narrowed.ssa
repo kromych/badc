@@ -46,12 +46,6 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
   block 4  start_pc=0
     v37  Imm(0)                                           -> x0
     terminator Return(v37)   (exit_acc=v37)
-assign_expr_value_narrowed.c:10: warning: variable `sc` set but never used
-    signed char sc;
-assign_expr_value_narrowed.c:11: warning: variable `uc` set but never used
-    unsigned char uc;
-assign_expr_value_narrowed.c:12: warning: variable `sh` set but never used
-    short sh;
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

@@ -30,22 +30,6 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v24  Imm(51539607552)                                 -> x0
     v25  Imm(12)                                          -> x0
     terminator Return(v25)   (exit_acc=v25)
-warn_unused_symbols.c:10: warning: unused parameter `unused_arg`
-static int live_static(int x, int unused_arg) {
-warn_unused_symbols.c:11: warning: unused variable `unused_local`
-    int unused_local;
-warn_unused_symbols.c:14: warning: variable `dead_assigned` set but never used
-    int dead_assigned;
-warn_unused_symbols.c:28: warning: unused variable `inner_unused`
-        int inner_unused;
-warn_unused_symbols.c:21: warning: unused variable `main_unused`
-    int main_unused;
-warn_unused_symbols.c:22: warning: unused variable `main_unused_init`
-    int main_unused_init = 7;
-warn_unused_symbols.c:25: warning: variable `touched_then_overwritten` set but never used
-    int touched_then_overwritten = 1;
-warn_unused_symbols.c:8: warning: unused function `dead_static`
-static int dead_static(int x) { return x + 1; }
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

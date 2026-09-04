@@ -12,8 +12,6 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v6   BinopI { op=shl, lhs=v1, rhs_imm=32 }            -> x0
     v7   Extend { value=v1, kind=I32 }                    -> x0
     terminator Return(v7)   (exit_acc=v7)
-argc.c:1: warning: unused parameter `argv`
-int main(int argc, char **argv) {
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

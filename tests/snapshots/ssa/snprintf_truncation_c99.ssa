@@ -112,7 +112,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=2
     terminator Return(v56)   (exit_acc=v56)
   block 15  start_pc=0
     terminator Jmp(b12)
-snprintf_truncation_c99.c:16: warning: `vsnprintf` is called without a return-type prototype; assuming `int`
+snprintf_truncation_c99.c:16: warning: `vsnprintf` is called without a return-type prototype; assuming `int` [B2005] [-Wimplicit-function-declaration]
     n = vsnprintf(buf, size, fmt, ap);
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

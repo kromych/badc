@@ -395,6 +395,50 @@ fn color_keys_on_the_level() {
 }
 
 #[test]
+fn the_named_codes_match_their_rows() {
+    for (code, name) in [
+        (Code::UNUSED_VARIABLE, "unused-variable"),
+        (Code::UNUSED_PARAMETER, "unused-parameter"),
+        (Code::UNUSED_BUT_SET_VARIABLE, "unused-but-set-variable"),
+        (Code::UNUSED_FUNCTION, "unused-function"),
+        (
+            Code::IMPLICIT_FUNCTION_DECLARATION,
+            "implicit-function-declaration",
+        ),
+        (Code::UNDEFINED_FUNCTION, "undefined-function"),
+        (Code::REDECLARATION_MISMATCH, "redeclaration-mismatch"),
+        (Code::ATTRIBUTES, "attributes"),
+        (Code::IGNORED_ASM_LABEL, "ignored-asm-label"),
+        (Code::SHADOWED_BINDING, "shadowed-binding"),
+        (Code::INT_CONVERSION, "int-conversion"),
+        (Code::INCOMPATIBLE_STRUCT_TYPES, "incompatible-struct-types"),
+        (Code::RETURN_TYPE, "return-type"),
+        (Code::TOO_FEW_ARGUMENTS, "too-few-arguments"),
+        (Code::TOO_MANY_ARGUMENTS, "too-many-arguments"),
+        (Code::LONG_DOUBLE_ABI, "long-double-abi"),
+        (Code::DEAD_STORE, "dead-store"),
+        (Code::LINK_PRAGMA_IGNORED, "link-pragma-ignored"),
+    ] {
+        assert_eq!(code.name(), name, "{code}");
+    }
+}
+
+#[test]
+fn the_echoed_source_line_follows_the_brackets() {
+    let diagnostic = Diagnostic::new(
+        code("unused-variable"),
+        Level::Warning,
+        Some(Loc::new("a.c", 3)),
+        "unused variable `x`",
+    )
+    .with_source_line(Some("    int x;".into()));
+    assert_eq!(
+        render(&diagnostic, false),
+        "a.c:3: warning: unused variable `x` [B2001] [-Wunused-variable]\n    int x;"
+    );
+}
+
+#[test]
 fn the_catalogue_matches_its_golden() {
     let mut rendered = String::new();
     list_catalog(&mut rendered).unwrap();

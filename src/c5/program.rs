@@ -262,7 +262,15 @@ pub struct Program {
     /// at scope exit).
     pub data_align_marks: Vec<(i64, i64)>,
     pub entry_pc: usize,
-    pub warnings: Vec<String>,
+    /// Every catalogued diagnostic the front end reported, with the
+    /// level it resolved to. `Diagnostic` prints itself, so a caller
+    /// that only dumps them needs to know nothing more.
+    pub warnings: Vec<super::diag::Diagnostic>,
+    /// Diagnostics still formatted as text at their site: the
+    /// preprocessor's warnings and the auto-include notes. They print
+    /// ahead of `warnings`, which is the order they were produced in.
+    /// TODO: fold into `warnings` when those sites take catalogue rows.
+    pub text_diagnostics: Vec<String>,
     /// Initialised + zero-init thread-local data. Layout matches
     /// the way `data` does for ordinary globals: a flat byte array
     /// indexed by `Inst::TlsAddr`'s operand. The image writers copy
@@ -672,6 +680,7 @@ impl DataOffsets for Program {
             data_align_marks,
             entry_pc: _,
             warnings: _,
+            text_diagnostics: _,
             tls_data: _,      // separate image
             tls_init_size: _, // extent of `tls_data`
             data_relocs,
@@ -806,6 +815,7 @@ mod data_offset_tests {
             data_align_marks: Vec::new(),
             entry_pc: 0,
             warnings: Vec::new(),
+            text_diagnostics: Vec::new(),
             tls_data: Vec::new(),
             tls_init_size: 0,
             data_relocs: Vec::new(),

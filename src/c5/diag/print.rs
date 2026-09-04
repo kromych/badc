@@ -80,6 +80,12 @@ impl Diagnostic {
         if self.code.class() == Class::Controllable {
             write!(out, " [-W{}]", self.code.name())?;
         }
+        // The echoed line follows the brackets, where gcc puts the
+        // source it points at.
+        if let Some(source) = &self.source_line {
+            out.write_char('\n')?;
+            out.write_str(source)?;
+        }
         for (loc, text) in &self.notes {
             out.write_char('\n')?;
             render_line(out, color, loc.as_ref(), Severity::Note, text)?;

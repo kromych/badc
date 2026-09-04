@@ -623,6 +623,48 @@ pub fn compile_fixture(name: &str) -> Program {
     compile_str(&load_fixture(name))
 }
 
+/// The diagnostic levels `selectors` -- group names, diagnostic names,
+/// aliases or `B` codes -- leave behind, as the matching `-W` options
+/// would.
+pub fn diag_config(selectors: &[&str]) -> crate::diag::Config {
+    let mut config = crate::diag::Config::new();
+    for sel in selectors {
+        match crate::diag::Selector::parse(sel).expect("a catalogue selector") {
+            crate::diag::Selector::Group(g) => config.enable_group(g),
+            crate::diag::Selector::Diagnostic(c) => {
+                config.set_level(c, crate::diag::Level::Warning)
+            }
+        }
+    }
+    config
+}
+
+/// Compile inline source with the standard prelude and `selectors`
+/// enabled, for the rows a group turns on rather than the default set.
+pub fn compile_str_with_diags(src: &str, selectors: &[&str]) -> Program {
+    compile_source_with_diags(with_prelude(src), selectors)
+}
+
+/// [`compile_str_with_diags`] without the standard prelude.
+pub fn compile_str_bare_with_diags(src: &str, selectors: &[&str]) -> Program {
+    compile_source_with_diags(src.to_string(), selectors)
+}
+
+/// [`compile_fixture`] with `selectors` enabled.
+pub fn compile_fixture_with_diags(name: &str, selectors: &[&str]) -> Program {
+    compile_str_with_diags(&load_fixture(name), selectors)
+}
+
+fn compile_source_with_diags(source: String, selectors: &[&str]) -> Program {
+    Compiler::with_options(
+        source,
+        crate::Target::default_target(),
+        crate::CompileOptions::default().with_diag(diag_config(selectors)),
+    )
+    .compile()
+    .unwrap()
+}
+
 /// Compile a fixture WITHOUT the standard prelude.
 pub fn compile_fixture_bare(name: &str) -> Program {
     compile_str_bare(&load_fixture(name))

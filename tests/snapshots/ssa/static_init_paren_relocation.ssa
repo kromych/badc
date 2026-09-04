@@ -76,10 +76,6 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     terminator Return(v37)   (exit_acc=v37)
   block 11  start_pc=0
     terminator Jmp(b6)
-static_init_paren_relocation.c:10: warning: unused parameter `a`
-int do_work(void *a, void *b) { return 7; }
-static_init_paren_relocation.c:10: warning: unused parameter `b`
-int do_work(void *a, void *b) { return 7; }
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

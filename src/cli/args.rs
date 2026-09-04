@@ -81,7 +81,6 @@ pub(crate) struct FrontEnd {
     /// `-H` / `--show-includes`: print the resolved path of every
     /// `#include`, with leading dots marking nesting depth.
     pub(crate) show_includes: bool,
-    pub(crate) warn_dead_store: bool,
     /// The `-W` family's outcome: the level each diagnostic reports at
     /// before the pragmas in a translation unit apply.
     pub(crate) diag: badc::diag::Config,
@@ -621,10 +620,6 @@ impl Parser {
                     }
                 }
             }
-            // gcc-shape `-Wdead-store` -- enable the per-store dead-store
-            // diagnostic. `-Wno-dead-store` is the opt-out spelling.
-            "-Wdead-store" => front.warn_dead_store = true,
-            "-Wno-dead-store" => front.warn_dead_store = false,
             // Define the GCC identity macros (`__GNUC__`, `__VERSION__`,
             // `__extension__`, ...). Off by default: badc implements most
             // but not all of the GNU C surface, so code that gates a
@@ -1715,6 +1710,7 @@ impl FrontEnd {
             .with_own_header_roots(self.own_header_roots.clone())
             .with_force_includes(self.force_includes.clone())
             .with_source_label(label.to_string())
+            .with_diag(self.diag.clone())
     }
 }
 
@@ -2055,12 +2051,20 @@ mod tests {
 
     #[test]
     fn dead_store_warning_is_opt_in() {
-        assert!(!parse(&["a.c"]).front.warn_dead_store);
-        assert!(parse(&["-Wdead-store", "a.c"]).front.warn_dead_store);
-        assert!(
-            !parse(&["-Wdead-store", "-Wno-dead-store", "a.c"])
-                .front
-                .warn_dead_store
+        use badc::diag::Level;
+        assert_eq!(level(&["a.c"], "dead-store"), Level::Ignore);
+        assert_eq!(
+            level(&["-Wdead-store", "a.c"], "dead-store"),
+            Level::Warning
+        );
+        assert_eq!(
+            level(&["-Wdead-store", "-Wno-dead-store", "a.c"], "dead-store"),
+            Level::Ignore
+        );
+        // No group turns it on: it stays what the command line says.
+        assert_eq!(
+            level(&["-Wall", "-Wextra", "a.c"], "dead-store"),
+            Level::Ignore
         );
     }
 

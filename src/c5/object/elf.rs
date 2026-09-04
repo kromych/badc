@@ -1040,12 +1040,7 @@ fn patch_adrp_ldr(
         aarch64::patch::SlotWidth::W64,
         part,
     )
-    .map_err(|e| {
-        C5Error::Compile(crate::c5::error::fmt_internal_diag(
-            Code::INTERNAL,
-            &e.describe(&format!("ELF: {label}")),
-        ))
-    })
+    .map_err(|e| C5Error::internal(e.describe(&format!("ELF: {label}"))))
 }
 
 /// Per-machine dispatch for "load an absolute address into the
@@ -1108,9 +1103,8 @@ fn patch_call_qword_rip32(
     let after = instr_vmaddr + call_len;
     let delta = target_vmaddr as i64 - after as i64;
     if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_diag(
-            Code::INTERNAL,
-            &format!("ELF: {label} disp {delta} doesn't fit in 32 bits"),
+        return Err(C5Error::internal(format!(
+            "ELF: {label} disp {delta} doesn't fit in 32 bits"
         )));
     }
     let disp32 = delta as i32;
@@ -1133,9 +1127,8 @@ fn patch_lea_rip32(
     let after = instr_vmaddr + lea_len;
     let delta = target_vmaddr as i64 - after as i64;
     if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_diag(
-            Code::INTERNAL,
-            &format!("ELF: {label} disp {delta} doesn't fit in 32 bits"),
+        return Err(C5Error::internal(format!(
+            "ELF: {label} disp {delta} doesn't fit in 32 bits"
         )));
     }
     let disp32 = delta as i32;
@@ -1155,12 +1148,9 @@ fn patch_got_data_load(
 ) -> Result<(), C5Error> {
     let opcode_off = code.file_at(instr_offset_in_code + 1);
     if out[opcode_off] != 0x8D && out[opcode_off] != 0x8B {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_diag(
-            Code::INTERNAL,
-            &format!(
-                "ELF: {label} expected lea 0x8D or mov 0x8B at file+{opcode_off:#x}, found {:#04x}",
-                out[opcode_off],
-            ),
+        return Err(C5Error::internal(format!(
+            "ELF: {label} expected lea 0x8D or mov 0x8B at file+{opcode_off:#x}, found {:#04x}",
+            out[opcode_off],
         )));
     }
     out[opcode_off] = 0x8B;
@@ -1183,12 +1173,7 @@ fn patch_adrp_add(
         target_vmaddr as i64,
         part,
     )
-    .map_err(|e| {
-        C5Error::Compile(crate::c5::error::fmt_internal_diag(
-            Code::INTERNAL,
-            &e.describe(&format!("ELF: {label}")),
-        ))
-    })
+    .map_err(|e| C5Error::internal(e.describe(&format!("ELF: {label}"))))
 }
 
 /// Resolve each import's default library version from the host libraries,
@@ -1404,11 +1389,11 @@ impl<'a> ElfImageWriter<'a> {
         // executable's static TLS block. TODO: the general-dynamic model
         // for shared-library output.
         if is_shared && !build.tls_data.is_empty() {
-            return Err(C5Error::Compile(crate::c5::error::fmt_link_diag(
+            return Err(C5Error::hard(
                 Code::OBJECT_FORMAT,
                 "_Thread_local data is not supported in ELF shared-library output: \
                  only the executable-model (local-exec) TLS sequence is implemented",
-            )));
+            ));
         }
         // The libc-exit tail is picked when any libc `exit` import is in
         // scope (glibc's `exit` flushes stdio); otherwise the stub exits
@@ -1450,7 +1435,7 @@ impl<'a> ElfImageWriter<'a> {
     }
 
     fn internal(msg: String) -> C5Error {
-        C5Error::Compile(crate::c5::error::fmt_internal_diag(Code::INTERNAL, &msg))
+        C5Error::internal(&msg)
     }
 
     /// Runtime address of a file offset in a loaded segment.

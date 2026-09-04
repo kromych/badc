@@ -1,3 +1,4 @@
+use crate::c5::diag::Code;
 use crate::c5::error::C5Error;
 use alloc::format;
 use alloc::string::String;
@@ -116,18 +117,20 @@ pub(super) fn apply_else(
     line_no: usize,
 ) -> Result<bool, C5Error> {
     let frame = stack.last_mut().ok_or_else(|| {
-        C5Error::Compile(crate::c5::error::fmt_compile_err(
+        C5Error::at(
+            Code::DIRECTIVE,
             filename,
             line_no,
             "`#else` with no matching `#if`",
-        ))
+        )
     })?;
     if frame.saw_else {
-        return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+        return Err(C5Error::at(
+            Code::DIRECTIVE,
             filename,
             line_no,
             "duplicate `#else` for the same `#if`",
-        )));
+        ));
     }
     frame.saw_else = true;
     let taken = frame.parent_active && !frame.any_branch_taken;
@@ -146,11 +149,12 @@ pub(super) fn elif_eligible(
     line_no: usize,
 ) -> Result<bool, C5Error> {
     let frame = stack.last().ok_or_else(|| {
-        C5Error::Compile(crate::c5::error::fmt_compile_err(
+        C5Error::at(
+            Code::DIRECTIVE,
             filename,
             line_no,
             "`#elif` with no matching `#if`",
-        ))
+        )
     })?;
     Ok(frame.parent_active && !frame.any_branch_taken)
 }
@@ -164,18 +168,20 @@ pub(super) fn apply_elif(
     line_no: usize,
 ) -> Result<bool, C5Error> {
     let frame = stack.last_mut().ok_or_else(|| {
-        C5Error::Compile(crate::c5::error::fmt_compile_err(
+        C5Error::at(
+            Code::DIRECTIVE,
             filename,
             line_no,
             "`#elif` with no matching `#if`",
-        ))
+        )
     })?;
     if frame.saw_else {
-        return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+        return Err(C5Error::at(
+            Code::DIRECTIVE,
             filename,
             line_no,
             "`#elif` after `#else` for the same `#if`",
-        )));
+        ));
     }
     frame.this_branch_taken = cond;
     frame.any_branch_taken |= cond;
@@ -189,11 +195,12 @@ pub(super) fn apply_endif(
     line_no: usize,
 ) -> Result<bool, C5Error> {
     let frame = stack.pop().ok_or_else(|| {
-        C5Error::Compile(crate::c5::error::fmt_compile_err(
+        C5Error::at(
+            Code::DIRECTIVE,
             filename,
             line_no,
             "`#endif` with no matching `#if`",
-        ))
+        )
     })?;
     Ok(frame.parent_active)
 }

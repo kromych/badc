@@ -5,6 +5,8 @@
 //! (`x86_64/emit.rs`, `aarch64/emit.rs`) don't carry parallel
 //! copies. The assembler this file used to hold is `c5::asm`.
 
+use crate::c5::diag::Code;
+
 /// Mutable emit output the two backends thread identically through their
 /// per-instruction lowering: the machine-code buffer and the relocation/fixup
 /// vectors whose element types are target-neutral. Bundling them collapses the
@@ -131,11 +133,14 @@ pub(crate) fn check_frame_limits(
 ) -> Result<(), crate::c5::error::C5Error> {
     for f in funcs {
         if let Some(bytes) = locals_bytes_over_limit(f) {
-            return Err(crate::c5::error::C5Error::Compile(alloc::format!(
-                "error: function `{name}`: {body}",
-                name = f.name,
-                body = frame_too_large_msg(bytes),
-            )));
+            return Err(crate::c5::error::C5Error::hard(
+                Code::LIMIT,
+                alloc::format!(
+                    "function `{name}`: {body}",
+                    name = f.name,
+                    body = frame_too_large_msg(bytes),
+                ),
+            ));
         }
     }
     Ok(())
@@ -877,14 +882,13 @@ pub(crate) fn unsupported_error(
     ent_pc: usize,
 ) -> crate::c5::error::C5Error {
     match e.reason() {
-        Some(reason) => crate::c5::error::C5Error::Compile(crate::c5::error::fmt_codegen_err(
-            &alloc::format!("{reason} ({arch}, function `{name}`)"),
+        Some(reason) => crate::c5::error::C5Error::hard(
+            Code::UNSUPPORTED,
+            alloc::format!("{reason} ({arch}, function `{name}`)"),
+        ),
+        None => crate::c5::error::C5Error::internal(alloc::format!(
+            "ssa emit ({arch}): function `{name}` (ent_pc {ent_pc}) contains an op outside the implemented subset"
         )),
-        None => {
-            crate::c5::error::C5Error::Compile(crate::c5::error::fmt_internal_err(&alloc::format!(
-                "ssa emit ({arch}): function `{name}` (ent_pc {ent_pc}) contains an op outside the implemented subset"
-            )))
-        }
     }
 }
 
@@ -1362,7 +1366,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         &|blocks| super::super::encode_file_asm_section_code(blocks, target, native.elf_class),
         &mut st.asm_sections,
     )
-    .map_err(|m| C5Error::Compile(alloc::format!("<file-scope asm>: {m}")))?;
+    .map_err(|m| C5Error::hard(Code::ASSEMBLER, alloc::format!("<file-scope asm>: {m}")))?;
 
     // Lift the program into SSA once and run the linear-scan allocator per
     // function. A per-function emit bail is a hard error so any IR + emit
@@ -1929,20 +1933,16 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             continue;
         }
         if target_ent_pc > pc_extent {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &alloc::format!(
-                    "native codegen{tag}: function pointer target {target_ent_pc} past end of PC space",
-                    tag = B::ERR_TAG,
-                ),
+            return Err(C5Error::internal(alloc::format!(
+                "native codegen{tag}: function pointer target {target_ent_pc} past end of PC space",
+                tag = B::ERR_TAG,
             )));
         }
         let target = st.pc_to_native[target_ent_pc];
         if target == usize::MAX {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &alloc::format!(
-                    "native codegen{tag}: function pointer target {target_ent_pc} did not land on an instruction",
-                    tag = B::ERR_TAG,
-                ),
+            return Err(C5Error::internal(alloc::format!(
+                "native codegen{tag}: function pointer target {target_ent_pc} did not land on an instruction",
+                tag = B::ERR_TAG,
             )));
         }
         func_fixups.push(super::FuncFixup {
@@ -1983,12 +1983,10 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     } else {
         let off = B::entry_native_offset(&st.pc_to_native, program.entry_pc)?;
         if off == usize::MAX {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &alloc::format!(
-                    "native codegen{tag}: entry_pc {pc} did not align with any instruction start",
-                    tag = B::ERR_TAG,
-                    pc = program.entry_pc,
-                ),
+            return Err(C5Error::internal(alloc::format!(
+                "native codegen{tag}: entry_pc {pc} did not align with any instruction start",
+                tag = B::ERR_TAG,
+                pc = program.entry_pc,
             )));
         }
         off
@@ -1996,7 +1994,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
 
     st.asm_sections
         .emit_cfi_sections(B::cfi_target(&native))
-        .map_err(|m| C5Error::Compile(alloc::format!("<file-scope asm>: {m}")))?;
+        .map_err(|m| C5Error::hard(Code::ASSEMBLER, alloc::format!("<file-scope asm>: {m}")))?;
     let (asm_section_list, asm_sym_decls) = st.asm_sections.into_parts();
     let mut build = super::Build {
         emitted_relocs: alloc::vec::Vec::new(),
@@ -2121,7 +2119,7 @@ mod tests {
         let e = Unsupported::new("inline asm: unsupported instruction `Add`");
         assert_eq!(
             alloc::format!("{}", unsupported_error(&e, "x86_64", "main", 0)),
-            "error: inline asm: unsupported instruction `Add` (x86_64, function `main`)"
+            "error: inline asm: unsupported instruction `Add` (x86_64, function `main`) [B4001]"
         );
     }
 
@@ -2131,7 +2129,7 @@ mod tests {
         assert_eq!(
             alloc::format!("{}", unsupported_error(&e, "aarch64", "f", 7)),
             "error: internal compiler error: ssa emit (aarch64): function `f` \
-             (ent_pc 7) contains an op outside the implemented subset"
+             (ent_pc 7) contains an op outside the implemented subset [B9001]"
         );
     }
 }

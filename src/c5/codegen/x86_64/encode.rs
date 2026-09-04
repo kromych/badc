@@ -2071,20 +2071,16 @@ fn apply_fixups(
 ) -> Result<(), C5Error> {
     for f in fixups {
         if f.target_ent_pc > pc_extent {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!(
-                    "native codegen (x86_64): branch target {} past end of PC space",
-                    f.target_ent_pc
-                ),
+            return Err(C5Error::internal(format!(
+                "native codegen (x86_64): branch target {} past end of PC space",
+                f.target_ent_pc
             )));
         }
         let target = pc_to_native[f.target_ent_pc];
         if target == usize::MAX {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!(
-                    "native codegen (x86_64): branch target {} did not land on an instruction",
-                    f.target_ent_pc
-                ),
+            return Err(C5Error::internal(format!(
+                "native codegen (x86_64): branch target {} did not land on an instruction",
+                f.target_ent_pc
             )));
         }
         // The rel32 displacement is computed from the byte *after*
@@ -2149,13 +2145,13 @@ fn apply_plt_call_fixups(
     const REL32_INSTR_LEN: usize = 5;
     for fx in fixups {
         let tramp_off = *trampoline_offsets.get(fx.import_index).ok_or_else(|| {
-            C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
+            C5Error::internal(format!(
                 "PLT call fixup at offset {} references import {} but only \
                  {} trampolines were emitted",
                 fx.instr_offset,
                 fx.import_index,
                 trampoline_offsets.len()
-            )))
+            ))
         })?;
         if fx.is_addr {
             // Address-of sites (`lea` taking the import's address)

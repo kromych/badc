@@ -13,7 +13,6 @@
 //! the Mach-O leading underscore, which the writer re-applies, so the
 //! reader strips one.
 
-use crate::c5::diag::Code;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -206,52 +205,31 @@ fn u64le(bytes: &[u8], off: usize) -> Option<u64> {
 }
 
 fn need_u32(bytes: &[u8], off: usize, what: &str) -> Result<u32, C5Error> {
-    u32le(bytes, off).ok_or_else(|| {
-        internal_err(
-            Code::INTERNAL,
-            MODULE,
-            &format!("{what} runs past end of file"),
-        )
-    })
+    u32le(bytes, off).ok_or_else(|| internal_err(MODULE, &format!("{what} runs past end of file")))
 }
 
 fn need_u64(bytes: &[u8], off: usize, what: &str) -> Result<u64, C5Error> {
-    u64le(bytes, off).ok_or_else(|| {
-        internal_err(
-            Code::INTERNAL,
-            MODULE,
-            &format!("{what} runs past end of file"),
-        )
-    })
+    u64le(bytes, off).ok_or_else(|| internal_err(MODULE, &format!("{what} runs past end of file")))
 }
 
 /// A 16-byte `segname` / `sectname` field, NUL-padded and not
 /// NUL-terminated when it fills the field.
 fn fixed_name(bytes: &[u8], off: usize) -> Result<String, C5Error> {
-    let raw = bytes.get(off..off + 16).ok_or_else(|| {
-        internal_err(
-            Code::INTERNAL,
-            MODULE,
-            "section name field runs past end of file",
-        )
-    })?;
+    let raw = bytes
+        .get(off..off + 16)
+        .ok_or_else(|| internal_err(MODULE, "section name field runs past end of file"))?;
     let end = raw.iter().position(|&b| b == 0).unwrap_or(raw.len());
     core::str::from_utf8(&raw[..end])
         .map(|s| s.to_string())
-        .map_err(|_| internal_err(Code::INTERNAL, MODULE, "section name is not UTF-8"))
+        .map_err(|_| internal_err(MODULE, "section name is not UTF-8"))
 }
 
 fn cstr(strtab: &[u8], off: usize) -> Result<&str, C5Error> {
-    let rest = strtab.get(off..).ok_or_else(|| {
-        internal_err(
-            Code::INTERNAL,
-            MODULE,
-            "string offset past end of string table",
-        )
-    })?;
+    let rest = strtab
+        .get(off..)
+        .ok_or_else(|| internal_err(MODULE, "string offset past end of string table"))?;
     let end = rest.iter().position(|&b| b == 0).unwrap_or(rest.len());
-    core::str::from_utf8(&rest[..end])
-        .map_err(|_| internal_err(Code::INTERNAL, MODULE, "symbol name is not UTF-8"))
+    core::str::from_utf8(&rest[..end]).map_err(|_| internal_err(MODULE, "symbol name is not UTF-8"))
 }
 
 /// One `section_64`, plus the family and merged-blob base the parse
@@ -287,7 +265,6 @@ impl Sect {
         let size = self.size as usize;
         if off.checked_add(size).is_none_or(|end| end > bytes.len()) {
             return Err(internal_err(
-                Code::INTERNAL,
                 MODULE,
                 &format!(
                     "section `{}` content runs past end of file (offset {off:#x} + size {size:#x} > len {})",
@@ -319,7 +296,6 @@ fn classify(sect: &Sect, has_relocs: bool) -> Result<SectionFamily, C5Error> {
     }
     if (S_THREAD_LOCAL_FIRST..=S_THREAD_LOCAL_LAST).contains(&kind) {
         return Err(internal_err(
-            Code::INTERNAL,
             MODULE,
             &format!(
                 "section `{}` holds thread-local storage (section type {kind:#x}); \
@@ -348,7 +324,6 @@ fn classify(sect: &Sect, has_relocs: bool) -> Result<SectionFamily, C5Error> {
         }
     } else {
         return Err(internal_err(
-            Code::INTERNAL,
             MODULE,
             &format!(
                 "section `{}` is in a segment the merge has no stream for",
@@ -383,7 +358,6 @@ fn read_relocs(bytes: &[u8], sect: &Sect) -> Result<Vec<Reloc>, C5Error> {
             .is_none_or(|e| e > bytes.len())
     {
         return Err(internal_err(
-            Code::INTERNAL,
             MODULE,
             &format!(
                 "section `{}` relocation table runs past end of file",
@@ -398,7 +372,6 @@ fn read_relocs(bytes: &[u8], sect: &Sect) -> Result<Vec<Reloc>, C5Error> {
         let info = need_u32(bytes, off + 4, "relocation")?;
         if address & R_SCATTERED != 0 {
             return Err(internal_err(
-                Code::INTERNAL,
                 MODULE,
                 &format!(
                     "section `{}` carries a scattered relocation; the Mach-O reader \
@@ -442,7 +415,6 @@ fn pageoff12_rtype(insn: u32, site: &str) -> Result<u32, C5Error> {
         });
     }
     Err(internal_err(
-        Code::INTERNAL,
         MODULE,
         &format!(
             "{site}: ARM64_RELOC_PAGEOFF12 patches instruction {insn:#010x}, \
@@ -456,7 +428,6 @@ fn pageoff12_rtype(insn: u32, site: &str) -> Result<u32, C5Error> {
 fn stored_addend(content: &[u8], at: usize, length: u8, site: &str) -> Result<i64, C5Error> {
     let short = || {
         internal_err(
-            Code::INTERNAL,
             MODULE,
             &format!("{site}: relocation field runs past section content"),
         )
@@ -466,7 +437,6 @@ fn stored_addend(content: &[u8], at: usize, length: u8, site: &str) -> Result<i6
         2 => u32le(content, at).ok_or_else(short)? as i32 as i64,
         _ => {
             return Err(internal_err(
-                Code::INTERNAL,
                 MODULE,
                 &format!("{site}: relocation length code {length} is not a 4- or 8-byte field",),
             ));
@@ -482,7 +452,6 @@ pub fn parse_native_mach_o(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         s.family = classify(s, has_relocs)?;
         if s.align > 32 {
             return Err(internal_err(
-                Code::INTERNAL,
                 MODULE,
                 &format!("section `{}` requests 2^{} alignment", s.label(), s.align,),
             ));
@@ -550,7 +519,6 @@ type SymtabCommand = (u32, u32, u32, u32);
 fn read_load_commands(bytes: &[u8]) -> Result<(NativeMachine, Vec<Sect>, SymtabCommand), C5Error> {
     if bytes.len() < MACH_HEADER_64_SIZE {
         return Err(internal_err(
-            Code::INTERNAL,
             MODULE,
             &format!(
                 "Mach-O object truncated: have {} bytes, need at least {MACH_HEADER_64_SIZE} \
@@ -561,7 +529,6 @@ fn read_load_commands(bytes: &[u8]) -> Result<(NativeMachine, Vec<Sect>, SymtabC
     }
     if need_u32(bytes, 0, "header")? != MH_MAGIC_64 {
         return Err(internal_err(
-            Code::INTERNAL,
             MODULE,
             "not a 64-bit little-endian Mach-O object (MH_MAGIC_64 expected)",
         ));
@@ -569,7 +536,6 @@ fn read_load_commands(bytes: &[u8]) -> Result<(NativeMachine, Vec<Sect>, SymtabC
     let filetype = need_u32(bytes, 12, "header")?;
     if filetype != MH_OBJECT {
         return Err(internal_err(
-            Code::INTERNAL,
             MODULE,
             &format!(
                 "Mach-O file is not relocatable (filetype {filetype}, expected MH_OBJECT = {MH_OBJECT})",
@@ -581,14 +547,12 @@ fn read_load_commands(bytes: &[u8]) -> Result<(NativeMachine, Vec<Sect>, SymtabC
         Some(NativeMachine::Aarch64) => NativeMachine::Aarch64,
         Some(NativeMachine::X86_64) => {
             return Err(internal_err(
-                Code::INTERNAL,
                 MODULE,
                 "Mach-O object is x86_64; the Mach-O reader translates arm64 relocations only",
             ));
         }
         None => {
             return Err(internal_err(
-                Code::INTERNAL,
                 MODULE,
                 &format!(
                     "Mach-O object has unhandled cputype {}",
@@ -607,7 +571,6 @@ fn read_load_commands(bytes: &[u8]) -> Result<(NativeMachine, Vec<Sect>, SymtabC
         let cmdsize = need_u32(bytes, off + 4, "load command")? as usize;
         if cmdsize < 8 || off.checked_add(cmdsize).is_none_or(|e| e > bytes.len()) {
             return Err(internal_err(
-                Code::INTERNAL,
                 MODULE,
                 &format!("load command {i} has size {cmdsize} and runs past end of file",),
             ));
@@ -619,7 +582,6 @@ fn read_load_commands(bytes: &[u8]) -> Result<(NativeMachine, Vec<Sect>, SymtabC
                     let p = off + 72 + s * SECTION_64_SIZE;
                     if p + SECTION_64_SIZE > off + cmdsize {
                         return Err(internal_err(
-                            Code::INTERNAL,
                             MODULE,
                             "LC_SEGMENT_64 section table overruns the command",
                         ));
@@ -651,8 +613,7 @@ fn read_load_commands(bytes: &[u8]) -> Result<(NativeMachine, Vec<Sect>, SymtabC
         }
         off += cmdsize;
     }
-    let symtab = symtab
-        .ok_or_else(|| internal_err(Code::INTERNAL, MODULE, "Mach-O object has no LC_SYMTAB"))?;
+    let symtab = symtab.ok_or_else(|| internal_err(MODULE, "Mach-O object has no LC_SYMTAB"))?;
     Ok((machine, sects, symtab))
 }
 
@@ -716,7 +677,6 @@ fn concat_families(bytes: &[u8], sects: &mut [Sect]) -> Result<FamilyBlobs, C5Er
                 let content = s.content(bytes)?;
                 if content.len() as u64 != s.size {
                     return Err(internal_err(
-                        Code::INTERNAL,
                         MODULE,
                         &format!(
                             "section `{}` content is {} bytes, header says {}",
@@ -757,7 +717,6 @@ fn place_symbol(
         .filter(|_| idx >= 1)
         .ok_or_else(|| {
             internal_err(
-                Code::INTERNAL,
                 MODULE,
                 &format!("symbol names section {n_sect}, which does not exist"),
             )
@@ -775,7 +734,6 @@ fn place_symbol(
         _ if !ext => return Ok((NativeSymSection::Abs, 0)),
         _ => {
             return Err(internal_err(
-                Code::INTERNAL,
                 MODULE,
                 &format!(
                     "external symbol is defined in section `{}`, which carries no merged payload",
@@ -800,13 +758,7 @@ fn decode_symbols(
 ) -> Result<(Vec<NativeSymbol>, usize), C5Error> {
     let strtab = bytes
         .get(stroff as usize..(stroff as usize).saturating_add(strsize as usize))
-        .ok_or_else(|| {
-            internal_err(
-                Code::INTERNAL,
-                MODULE,
-                "LC_SYMTAB string table runs past end of file",
-            )
-        })?;
+        .ok_or_else(|| internal_err(MODULE, "LC_SYMTAB string table runs past end of file"))?;
     let symbase = symoff as usize;
     if (nsyms as usize)
         .checked_mul(NLIST_64_SIZE)
@@ -814,7 +766,6 @@ fn decode_symbols(
         .is_none_or(|e| e > bytes.len())
     {
         return Err(internal_err(
-            Code::INTERNAL,
             MODULE,
             "LC_SYMTAB symbol table runs past end of file",
         ));
@@ -868,7 +819,6 @@ fn decode_symbols(
                     "of an unhandled type"
                 };
                 return Err(internal_err(
-                    Code::INTERNAL,
                     MODULE,
                     &format!("symbol `{name}` is {what}; the Mach-O reader does not model it",),
                 ));
@@ -973,14 +923,12 @@ fn translate_relocs(
                 let site = format!("section `{}` offset {:#x}", sect.label(), r.address);
                 let target = symbols.get(sym_idx).ok_or_else(|| {
                     internal_err(
-                        Code::INTERNAL,
                         MODULE,
                         &format!("{site}: init entry names a symbol past the symbol table"),
                     )
                 })?;
                 if target.section != NativeSymSection::Text {
                     return Err(internal_err(
-                        Code::INTERNAL,
                         MODULE,
                         &format!(
                             "{site}: init / fini entry must reference a function defined in this object",
@@ -996,7 +944,6 @@ fn translate_relocs(
                 SectionFamily::Data => &mut out.data,
                 _ => {
                     return Err(internal_err(
-                        Code::INTERNAL,
                         MODULE,
                         &format!(
                             "section `{}` offset {:#x}: section carries relocations but joins the \
@@ -1016,7 +963,6 @@ fn translate_relocs(
         }
         if walk.pending_sub.is_some() || walk.pending_addend.is_some() {
             return Err(internal_err(
-                Code::INTERNAL,
                 MODULE,
                 &format!(
                     "section `{}` ends with an ARM64_RELOC_ADDEND / SUBTRACTOR that modifies nothing",
@@ -1068,7 +1014,6 @@ fn translate_reloc(
         .is_none_or(|e| e > content.len())
     {
         return Err(internal_err(
-            Code::INTERNAL,
             MODULE,
             &format!("{site}: relocation lies outside section content"),
         ));
@@ -1081,7 +1026,6 @@ fn translate_reloc(
         let idx = r.symbolnum as usize + 1;
         if idx >= sect_sym_base {
             return Err(internal_err(
-                Code::INTERNAL,
                 MODULE,
                 &format!(
                     "{site}: relocation names symbol {} past the symbol table",
@@ -1096,7 +1040,6 @@ fn translate_reloc(
             .filter(|_| r.symbolnum >= 1)
             .ok_or_else(|| {
                 internal_err(
-                    Code::INTERNAL,
                     MODULE,
                     &format!(
                         "{site}: relocation names section {}, which does not exist",
@@ -1122,7 +1065,6 @@ fn translate_reloc(
                 // which needs B to sit in the section being patched.
                 if !sub.extern_ {
                     return Err(internal_err(
-                        Code::INTERNAL,
                         MODULE,
                         &format!(
                             "{site}: ARM64_RELOC_SUBTRACTOR subtracts a section, not a symbol",
@@ -1131,7 +1073,6 @@ fn translate_reloc(
                 }
                 let b = symbols.get(sub.symbolnum as usize + 1).ok_or_else(|| {
                     internal_err(
-                        Code::INTERNAL,
                         MODULE,
                         &format!(
                             "{site}: SUBTRACTOR names symbol {} past the symbol table",
@@ -1149,7 +1090,6 @@ fn translate_reloc(
                     && b.value < sect.base + sect.size.max(1);
                 if !same_section {
                     return Err(internal_err(
-                        Code::INTERNAL,
                         MODULE,
                         &format!(
                             "{site}: ARM64_RELOC_SUBTRACTOR subtracts `{}`, which is not \
@@ -1171,7 +1111,6 @@ fn translate_reloc(
                 R_AARCH64_ABS32
             } else {
                 return Err(internal_err(
-                    Code::INTERNAL,
                     MODULE,
                     &format!(
                         "{site}: ARM64_RELOC_UNSIGNED has length code {}, which is not a \
@@ -1188,7 +1127,6 @@ fn translate_reloc(
         | ARM64_RELOC_GOT_LOAD_PAGEOFF12 => {
             if !r.extern_ {
                 return Err(internal_err(
-                    Code::INTERNAL,
                     MODULE,
                     &format!(
                         "{site}: instruction relocation type {} is section-relative; the \
@@ -1200,7 +1138,6 @@ fn translate_reloc(
             addend = walk.pending_addend.unwrap_or(0);
             let insn = u32le(content, at).ok_or_else(|| {
                 internal_err(
-                    Code::INTERNAL,
                     MODULE,
                     &format!("{site}: instruction runs past section content"),
                 )
@@ -1215,7 +1152,6 @@ fn translate_reloc(
         }
         other => {
             return Err(internal_err(
-                Code::INTERNAL,
                 MODULE,
                 &format!(
                     "{site}: relocation type {other} (pcrel={}, length={}, extern={}) is not \

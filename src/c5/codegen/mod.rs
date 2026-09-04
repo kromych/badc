@@ -30,6 +30,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use super::diag::Code;
 use super::error::C5Error;
 use super::program::Program;
 // Re-bind the c5-level modules the arch submodules reach through `super::super`;
@@ -66,8 +67,8 @@ pub(crate) fn require_whole_addr(part: AddrPart, label: &str) -> Result<(), erro
     if part == AddrPart::Whole {
         return Ok(());
     }
-    Err(error::C5Error::Compile(error::fmt_internal_err(
-        &alloc::format!("{label}: x86_64 reference recorded as {part:?}"),
+    Err(error::C5Error::internal(alloc::format!(
+        "{label}: x86_64 reference recorded as {part:?}"
     )))
 }
 
@@ -440,12 +441,10 @@ impl Target {
             | Some("windows-aarch64")
             | Some("aarch64-pc-windows-gnullvm")
             | Some("aarch64-pc-windows-msvc") => Ok(Target::WindowsAarch64),
-            Some(other) => Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!(
-                    "unsupported native target: {other:?} \
+            Some(other) => Err(C5Error::internal(format!(
+                "unsupported native target: {other:?} \
                  (try `macos-aarch64`, `linux-aarch64`, `linux-x64`, \
                  `windows-x64`, or `windows-arm64`)"
-                ),
             ))),
         }
     }
@@ -1285,13 +1284,14 @@ impl ResolvedImports {
             }
         }
         let Some((idx, spec, b)) = found else {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!(
+            return Err(C5Error::hard(
+                Code::UNDEFINED_SYMBOL,
+                format!(
                     "no `#pragma binding(<dylib>::{local_name}, ...)` is in scope -- the target's \
                  `_start` stub needs `{local_name}` and the codegen has nowhere to import it from. \
                  Did you forget to `#include <stdlib.h>`?"
                 ),
-            )));
+            ));
         };
         let dylib_index = match self.dylibs.iter().position(|d| d.name == spec.name) {
             Some(i) => i,
@@ -1426,11 +1426,9 @@ impl ResolvedImports {
         let mut imports: Vec<ResolvedImport> = Vec::new();
         for binding_idx in used {
             let Some((spec, b)) = lookup_binding(program, binding_idx) else {
-                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                    &format!(
-                        "Inst::CallExt binding_idx {binding_idx} is out of range for the \
+                return Err(C5Error::internal(format!(
+                    "Inst::CallExt binding_idx {binding_idx} is out of range for the \
                      program's `#pragma binding(...)` table"
-                    ),
                 )));
             };
             let dylib_index = match dylibs.iter().position(|d| d.name == spec.name) {
@@ -3540,25 +3538,34 @@ pub(crate) fn lower_for_with_prebuilt(
     if options.stack_protect.mode != StackProtector::Off
         && options.output_kind != OutputKind::Relocatable
     {
-        return Err(C5Error::Compile(alloc::format!(
-            "error: `-fstack-protector*` needs relocatable output: the canary's              failure branch names `{STACK_CHK_FAIL_SYMBOL}`, which only a              relocatable object can relocate"
-        )));
+        return Err(C5Error::hard(
+            Code::UNSUPPORTED,
+            alloc::format!(
+                "`-fstack-protector*` needs relocatable output: the canary's              failure branch names `{STACK_CHK_FAIL_SYMBOL}`, which only a              relocatable object can relocate"
+            ),
+        ));
     }
     // The profiling call names `__fentry__` / `mcount` the same way.
     // TODO: gcc's aarch64 form (`mov x0, x30; bl _mcount` after the
     // prologue) needs the argument registers kept across the call.
     if options.profiling.enabled {
         if options.output_kind != OutputKind::Relocatable {
-            return Err(C5Error::Compile(alloc::string::String::from(
-                "error: `-pg` needs relocatable output: the profiling call names \
+            return Err(C5Error::hard(
+                Code::UNSUPPORTED,
+                alloc::string::String::from(
+                    "`-pg` needs relocatable output: the profiling call names \
                  `__fentry__` / `mcount`, which only a relocatable object can relocate",
-            )));
+                ),
+            ));
         }
         if target.is_aarch64() {
-            return Err(C5Error::Compile(alloc::string::String::from(
-                "error: `-pg` is not implemented for aarch64; the kernel's \
+            return Err(C5Error::hard(
+                Code::UNSUPPORTED,
+                alloc::string::String::from(
+                    "`-pg` is not implemented for aarch64; the kernel's \
                  `-fpatchable-function-entry=` form is",
-            )));
+                ),
+            ));
         }
     }
     // The patchable-entry records are ELF sections. TODO: the PE and
@@ -3570,10 +3577,13 @@ pub(crate) fn lower_for_with_prebuilt(
                 .iter()
                 .any(|s| s.defined_here && s.patchable_function_entry.is_some_and(|(n, _)| n > 0)))
     {
-        return Err(C5Error::Compile(alloc::format!(
-            "error: patchable function entries are not implemented for {}",
-            target.binary_format().name()
-        )));
+        return Err(C5Error::hard(
+            Code::UNSUPPORTED,
+            alloc::format!(
+                "patchable function entries are not implemented for {}",
+                target.binary_format().name()
+            ),
+        ));
     }
     let is_shared = options.output_kind == OutputKind::SharedLibrary;
     // Only force-include libc `exit` when the user

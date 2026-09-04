@@ -1006,12 +1006,7 @@ fn apply_got_fixups(
             super::aarch64::patch::SlotWidth::W64,
             fx.part,
         )
-        .map_err(|e| {
-            C5Error::Compile(crate::c5::error::fmt_internal_diag(
-                Code::INTERNAL,
-                &e.describe("Mach-O: GOT"),
-            ))
-        })?;
+        .map_err(|e| C5Error::internal(e.describe("Mach-O: GOT")))?;
     }
     Ok(())
 }
@@ -1033,12 +1028,7 @@ fn patch_adrp_add(
         target_vmaddr as i64,
         part,
     )
-    .map_err(|e| {
-        C5Error::Compile(crate::c5::error::fmt_internal_diag(
-            Code::INTERNAL,
-            &e.describe(&format!("Mach-O: {label}")),
-        ))
-    })
+    .map_err(|e| C5Error::internal(e.describe(&format!("Mach-O: {label}"))))
 }
 
 /// Patch each `Inst::ImmData` lowering site.
@@ -1130,11 +1120,10 @@ fn tlv_bootstrap_ordinal(dylibs: &[crate::c5::codegen::ResolvedDylib]) -> Result
         .position(|d| d.path.contains("libSystem"))
         .map(|i| (i + 1) as u64)
         .ok_or_else(|| {
-            C5Error::Compile(crate::c5::error::fmt_internal_diag(
-                Code::INTERNAL,
+            C5Error::internal(
                 "Mach-O: `_Thread_local` requires libSystem for `__tlv_bootstrap`, \
                  but no linked dylib matches libSystem",
-            ))
+            )
         })
 }
 
@@ -1589,7 +1578,7 @@ impl<'a> MachOWriter<'a> {
     }
 
     fn internal(msg: String) -> C5Error {
-        C5Error::Compile(crate::c5::error::fmt_internal_diag(Code::INTERNAL, &msg))
+        C5Error::internal(&msg)
     }
 
     /// Family whose region holds a named section's bytes.
@@ -2328,10 +2317,10 @@ impl<'a> MachOWriter<'a> {
             &build.got_fixups,
         )?;
         if !build.got_base_fixups.is_empty() {
-            return Err(C5Error::Compile(crate::c5::error::fmt_link_diag(
+            return Err(C5Error::hard(
                 Code::OBJECT_FORMAT,
                 "`_GLOBAL_OFFSET_TABLE_` names an ELF construct; a Mach-O image has none",
-            )));
+            ));
         }
         apply_data_fixups(
             out,

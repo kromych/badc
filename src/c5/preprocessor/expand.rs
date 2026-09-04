@@ -1228,8 +1228,11 @@ impl Preprocessor {
                 plural(want)
             )
         };
-        self.record_pp_error(crate::c5::error::C5Error::Compile(
-            crate::c5::error::fmt_compile_err(filename, line_no, &msg),
+        self.record_pp_error(crate::c5::error::C5Error::at(
+            crate::c5::diag::Code::MACRO,
+            filename,
+            line_no,
+            &msg,
         ));
     }
 
@@ -1259,8 +1262,11 @@ impl Preprocessor {
             return;
         }
         let msg = format!("`##` cannot appear at either end of the replacement list of `{name}`");
-        self.record_pp_error(crate::c5::error::C5Error::Compile(
-            crate::c5::error::fmt_compile_err(filename, line_no, &msg),
+        self.record_pp_error(crate::c5::error::C5Error::at(
+            crate::c5::diag::Code::MACRO,
+            filename,
+            line_no,
+            &msg,
         ));
     }
 

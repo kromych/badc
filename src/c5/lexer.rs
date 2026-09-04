@@ -1,3 +1,4 @@
+use crate::c5::diag::Code;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec;
@@ -712,12 +713,12 @@ impl Lexer {
         }
         if self.pos >= self.src.len() || (self.src[self.pos] != b'p' && self.src[self.pos] != b'P')
         {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!(
-                    "{}: hexadecimal floating constant requires a binary exponent (`p`)",
-                    self.line
-                ),
-            )));
+            return Err(C5Error::at(
+                Code::INVALID_TOKEN,
+                &self.file,
+                self.line,
+                "hexadecimal floating constant requires a binary exponent (`p`)",
+            ));
         }
         self.pos += 1;
         let exp_neg = if self.pos < self.src.len()
@@ -738,9 +739,12 @@ impl Lexer {
             self.pos += 1;
         }
         if self.pos == exp_start {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!("{}: binary exponent has no digits", self.line),
-            )));
+            return Err(C5Error::at(
+                Code::INVALID_TOKEN,
+                &self.file,
+                self.line,
+                "binary exponent has no digits",
+            ));
         }
         let mut exp = if exp_neg { -exp } else { exp };
         // C99 6.4.4.2p4: `f`/`F` types the constant `float`, `l`/`L`
@@ -823,11 +827,12 @@ impl Lexer {
             };
             if prefix != StrPrefix::None {
                 if found != StrPrefix::None && found != prefix {
-                    return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+                    return Err(C5Error::at(
+                        Code::INVALID_TOKEN,
                         &self.file,
                         line,
                         "concatenated string literals have different encoding prefixes",
-                    )));
+                    ));
                 }
                 found = prefix;
             }
@@ -866,25 +871,27 @@ impl Lexer {
         self.pos = pos;
         match scanned {
             Ucn::Ok(cp) => Ok(cp),
-            Ucn::Incomplete => Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+            Ucn::Incomplete => Err(C5Error::at(
+                Code::INVALID_TOKEN,
                 &self.file,
                 self.line,
-                &format!(
+                format!(
                     "incomplete universal character name: \\{} takes {} hex digits",
                     esc as char,
                     ucn_digits(esc)
                 ),
-            ))),
-            Ucn::Invalid(acc) => Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+            )),
+            Ucn::Invalid(acc) => Err(C5Error::at(
+                Code::INVALID_TOKEN,
                 &self.file,
                 self.line,
-                &format!(
+                format!(
                     "\\{}{:0width$X} is not a valid universal character name",
                     esc as char,
                     acc,
                     width = ucn_digits(esc)
                 ),
-            ))),
+            )),
         }
     }
 
@@ -946,9 +953,12 @@ impl Lexer {
                 };
                 if val == b'\\' as i64 {
                     if self.pos >= self.src.len() {
-                        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                            &format!("{}: unterminated wide-literal escape", self.line),
-                        )));
+                        return Err(C5Error::at(
+                            Code::INVALID_TOKEN,
+                            &self.file,
+                            self.line,
+                            "unterminated wide-literal escape",
+                        ));
                     }
                     let esc = self.src[self.pos];
                     self.pos += 1;
@@ -980,12 +990,12 @@ impl Lexer {
                                 count += 1;
                             }
                             if count == 0 {
-                                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                                    &format!(
-                                        "{}: \\x in wide literal needs at least one hex digit",
-                                        self.line
-                                    ),
-                                )));
+                                return Err(C5Error::at(
+                                    Code::INVALID_TOKEN,
+                                    &self.file,
+                                    self.line,
+                                    "\\x in wide literal needs at least one hex digit",
+                                ));
                             }
                             val = acc;
                         }
@@ -1031,9 +1041,12 @@ impl Lexer {
                 }
             }
             if self.pos >= self.src.len() {
-                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                    &format!("{}: unterminated wide literal", self.line),
-                )));
+                return Err(C5Error::at(
+                    Code::INVALID_TOKEN,
+                    &self.file,
+                    self.line,
+                    "unterminated wide literal",
+                ));
             }
             self.pos += 1; // consume closing quote
             if quote != b'"' {
@@ -1104,11 +1117,12 @@ impl Lexer {
             self.pos += 1;
             if val == b'\\' as i64 {
                 if self.pos >= self.src.len() {
-                    return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+                    return Err(C5Error::at(
+                        Code::INVALID_TOKEN,
                         &self.file,
                         self.line,
                         "unterminated escape sequence",
-                    )));
+                    ));
                 }
                 let esc = self.src[self.pos];
                 self.pos += 1;
@@ -1156,9 +1170,12 @@ impl Lexer {
                             count += 1;
                         }
                         if count == 0 {
-                            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                                &format!("{}: \\x escape needs at least one hex digit", self.line),
-                            )));
+                            return Err(C5Error::at(
+                                Code::INVALID_TOKEN,
+                                &self.file,
+                                self.line,
+                                "\\x escape needs at least one hex digit",
+                            ));
                         }
                         val = acc;
                     }
@@ -1552,14 +1569,15 @@ impl Lexer {
         if self.pos < self.src.len() {
             let c = self.src[self.pos];
             if c == b'_' || c.is_ascii_alphabetic() {
-                return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+                return Err(C5Error::at(
+                    Code::INVALID_TOKEN,
                     &self.file,
                     self.line,
-                    &format!(
+                    format!(
                         "invalid numeric constant: unexpected `{}` after the number",
                         c as char
                     ),
-                )));
+                ));
             }
         }
         Ok(())
@@ -1821,13 +1839,15 @@ impl Lexer {
                         consumed += 1;
                     }
                     if consumed == 0 {
-                        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                            &format!(
-                                "{}: binary literal `0{}` has no digits",
-                                self.line,
+                        return Err(C5Error::at(
+                            Code::INVALID_TOKEN,
+                            &self.file,
+                            self.line,
+                            format!(
+                                "binary literal `0{}` has no digits",
                                 char::from(self.src[mark])
                             ),
-                        )));
+                        ));
                     }
                     self.lex_int_suffix();
                     self.ival = val;
@@ -1887,9 +1907,12 @@ impl Lexer {
                     // digit-less integer part of a hex float (`0x.5p0`)
                     // stays valid.
                     if self.pos == hex_body_start {
-                        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                            &format!("{}: hex literal `0x` has no digits", self.line),
-                        )));
+                        return Err(C5Error::at(
+                            Code::INVALID_TOKEN,
+                            &self.file,
+                            self.line,
+                            "hex literal `0x` has no digits",
+                        ));
                     }
                     self.lex_int_suffix();
                     self.ival = val;
@@ -1976,16 +1999,20 @@ impl Lexer {
                     }
                     let lit =
                         core::str::from_utf8(&self.src[int_start..body_end]).map_err(|e| {
-                            C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
-                                "{}: float literal not valid utf-8: {e}",
-                                self.line
-                            )))
+                            C5Error::at(
+                                Code::INVALID_TOKEN,
+                                &self.file,
+                                self.line,
+                                format!("float literal not valid utf-8: {e}"),
+                            )
                         })?;
                     let mut f: f64 = lit.parse().map_err(|e| {
-                        C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
-                            "{}: malformed float literal `{lit}`: {e}",
-                            self.line
-                        )))
+                        C5Error::at(
+                            Code::INVALID_TOKEN,
+                            &self.file,
+                            self.line,
+                            format!("malformed float literal `{lit}`: {e}"),
+                        )
                     })?;
                     // An `f`-suffixed constant is a value of type float
                     // (C99 6.4.4.2p5): round to single precision, kept
@@ -2242,16 +2269,20 @@ impl Lexer {
                             }
                             let lit = core::str::from_utf8(&self.src[int_start..body_end])
                                 .map_err(|e| {
-                                    C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
-                                        "{}: float literal not valid utf-8: {e}",
-                                        self.line
-                                    )))
+                                    C5Error::at(
+                                        Code::INVALID_TOKEN,
+                                        &self.file,
+                                        self.line,
+                                        format!("float literal not valid utf-8: {e}"),
+                                    )
                                 })?;
                             let mut f: f64 = lit.parse().map_err(|e| {
-                                C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
-                                    "{}: malformed float literal `{lit}`: {e}",
-                                    self.line
-                                )))
+                                C5Error::at(
+                                    Code::INVALID_TOKEN,
+                                    &self.file,
+                                    self.line,
+                                    format!("malformed float literal `{lit}`: {e}"),
+                                )
                             })?;
                             // An `f`-suffixed constant is a value of
                             // type float (C99 6.4.4.2p5): round to
@@ -2291,11 +2322,12 @@ impl Lexer {
                             } else {
                                 format!("byte 0x{:02X}", c as u32)
                             };
-                            return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+                            return Err(C5Error::at(
+                                Code::INVALID_TOKEN,
                                 &self.file,
                                 self.line,
-                                &format!("unrecognized character {shown} in source"),
-                            )));
+                                format!("unrecognized character {shown} in source"),
+                            ));
                         }
                     }
                 }

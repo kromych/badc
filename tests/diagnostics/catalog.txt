@@ -9,6 +9,7 @@ B1010  directive                      error    hard          -                  
 B1011  invalid-pragma                 error    hard          -                  live     a pragma badc implements whose operand cannot be applied
 B1012  invalid-token                  error    hard          -                  live     a character sequence that forms no token: a malformed constant, escape sequence or universal character name
 B1013  error-directive                error    hard          -                  live     a `#error` directive reached in an active conditional block
+B1014  macro                          error    hard          -                  live     a macro definition or invocation C99 6.10.3 rejects: an argument count the definition does not take, `##` at either end of a replacement list
 B2001  unused-variable                ignore   controllable  all                live     a variable declared and never used
 B2002  unused-parameter               ignore   controllable  extra              live     a parameter never used in the function body
 B2003  unused-but-set-variable        ignore   controllable  all                live     a variable that is only ever assigned to

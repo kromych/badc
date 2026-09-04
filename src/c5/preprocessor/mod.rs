@@ -1575,11 +1575,12 @@ impl Preprocessor {
             Directive::Endif => apply_endif(cond_stack, filename, diag)?,
             Directive::Error(message) => {
                 if active {
-                    return Err(C5Error::Compile(super::error::fmt_compile_err(
+                    return Err(C5Error::at(
+                        Code::ERROR_DIRECTIVE,
                         filename,
                         diag,
-                        &format!("#error {}", message.trim()),
-                    )));
+                        format!("#error {}", message.trim()),
+                    ));
                 }
                 active
             }
@@ -1809,9 +1810,12 @@ impl<'p, 's> LinePass<'p, 's> {
         self.pp.take_pending_error()?;
         let depth = self.cond.len();
         if depth > 0 {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            return Err(C5Error::at(
+                Code::DIRECTIVE,
+                self.filename,
+                self.presumed,
                 "preprocessor: unterminated `#if` / `#ifdef` block",
-            )));
+            ));
         }
         // Only files reached through `#include` can be re-included, and
         // only they have a resolved path to key on.

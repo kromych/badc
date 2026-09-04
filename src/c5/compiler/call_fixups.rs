@@ -43,13 +43,11 @@ impl Compiler {
         // CodeReloc-emitting site that forgot to record its sym
         // idx.
         if self.code_relocs.len() != self.code_reloc_sym_idx.len() {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!(
-                    "code_relocs ({}) and code_reloc_sym_idx ({}) length mismatch \
+            return Err(C5Error::internal(format!(
+                "code_relocs ({}) and code_reloc_sym_idx ({}) length mismatch \
                  -- a CodeReloc emitter forgot to record its symbol idx",
-                    self.code_relocs.len(),
-                    self.code_reloc_sym_idx.len()
-                ),
+                self.code_relocs.len(),
+                self.code_reloc_sym_idx.len()
             )));
         }
         for (reloc, &sym_idx) in self

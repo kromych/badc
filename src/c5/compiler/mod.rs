@@ -2483,7 +2483,7 @@ impl Compiler {
         // from the source string, which would drop the ingested unit.
         let mut this = Self::build("", target, opts);
         this.ingest_file_scope_asm(text, false)
-            .map_err(|m| C5Error::Compile(alloc::format!("{label}: error: {m}")))?;
+            .map_err(|m| C5Error::hard(Code::ASSEMBLER, alloc::format!("{label}: {m}")))?;
         let mut program = this.compile_one_pass()?;
         // The reserved `.data` prefix keeps a c5 global's address away from
         // the null pointer. An assembled unit has no C source and so no c5

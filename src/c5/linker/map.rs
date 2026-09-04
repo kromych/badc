@@ -461,8 +461,5 @@ fn parse_image_sections(image: &[u8]) -> Result<(Vec<OutSec>, &'static str), C5E
 }
 
 fn map_err(msg: &str) -> C5Error {
-    C5Error::Compile(crate::c5::error::fmt_link_diag(
-        Code::LINK,
-        &format!("link map: {msg}"),
-    ))
+    C5Error::hard(Code::LINK, format!("link map: {msg}"))
 }

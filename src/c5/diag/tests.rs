@@ -431,6 +431,7 @@ fn the_named_codes_match_their_rows() {
         (Code::INVALID_PRAGMA, "invalid-pragma"),
         (Code::INVALID_TOKEN, "invalid-token"),
         (Code::ERROR_DIRECTIVE, "error-directive"),
+        (Code::MACRO, "macro"),
         (Code::SYNTAX, "syntax"),
         (Code::INVALID_DECLARATION, "invalid-declaration"),
         (Code::UNDECLARED_IDENTIFIER, "undeclared-identifier"),

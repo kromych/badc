@@ -5,6 +5,7 @@ use super::include::IncludeForm;
 use super::text::{
     is_ident_byte, literal_prefix_len, pp_number_len, skip_literal, strip_c_comments,
 };
+use crate::c5::diag::Code;
 use crate::c5::error::C5Error;
 use crate::c5::lexer::{Ucn, decode_utf8, encode_utf8, scan_ucn};
 use alloc::format;
@@ -117,7 +118,7 @@ impl Preprocessor {
         // substitute would otherwise expand X away.
         let prepared = self.expand_for_if(expr, line_no, filename);
         self.take_pending_error()?;
-        let mut p = IfExprParser::new(&prepared, self, filename);
+        let mut p = IfExprParser::new(&prepared, self, filename, line_no);
         let v = p.parse_ternary()?;
         p.skip_ws();
         if !p.at_end() {
@@ -125,11 +126,12 @@ impl Preprocessor {
             // it operates on a single line of an expanded `#if` /
             // `#elif` expression. Use `<unknown>` here; callers that
             // hit this case usually have a filename one frame up.
-            return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+            return Err(C5Error::at(
+                Code::DIRECTIVE,
                 "<unknown>",
                 line_no,
-                &alloc::format!("trailing junk in `#if` expression: {:?}", p.tail()),
-            )));
+                alloc::format!("trailing junk in `#if` expression: {:?}", p.tail()),
+            ));
         }
         Ok(v.truthy())
     }
@@ -225,6 +227,8 @@ pub(super) struct IfExprParser<'a> {
     /// file's directory, and `__has_include_next` resumes the search
     /// past this file's search-path entry.
     filename: &'a str,
+    /// The directive's line, for its diagnostics.
+    line_no: usize,
     /// Recursion depth, bounded by [`MAX_IF_EXPR_DEPTH`]. Every recursive
     /// cycle in the grammar passes through `parse_unary`, so the bound is
     /// checked there.
@@ -237,12 +241,13 @@ pub(super) struct IfExprParser<'a> {
 }
 
 impl<'a> IfExprParser<'a> {
-    fn new(src: &'a str, pp: &'a Preprocessor, filename: &'a str) -> Self {
+    fn new(src: &'a str, pp: &'a Preprocessor, filename: &'a str, line_no: usize) -> Self {
         Self {
             src,
             pos: 0,
             pp,
             filename,
+            line_no,
             depth: 0,
             live: true,
         }
@@ -328,8 +333,11 @@ impl<'a> IfExprParser<'a> {
         self.live = saved;
         self.skip_ws();
         if !self.eat_byte(b':') {
-            return Err(C5Error::Compile(
-                "preprocessor: missing `:` in `#if` ternary expression".to_string(),
+            return Err(C5Error::at(
+                Code::DIRECTIVE,
+                self.filename,
+                self.line_no,
+                "preprocessor: missing `:` in `#if` ternary expression",
             ));
         }
         self.live = saved && !cond.truthy();
@@ -549,8 +557,11 @@ impl<'a> IfExprParser<'a> {
     fn div_or_diag(&self, lhs: i64, rhs: i64, unsigned: bool, rem: bool) -> Result<i64, C5Error> {
         if rhs == 0 {
             if self.live {
-                return Err(C5Error::Compile(
-                    "preprocessor: division by zero in `#if` expression".to_string(),
+                return Err(C5Error::at(
+                    Code::DIRECTIVE,
+                    self.filename,
+                    self.line_no,
+                    "preprocessor: division by zero in `#if` expression",
                 ));
             }
             return Ok(0);
@@ -572,8 +583,11 @@ impl<'a> IfExprParser<'a> {
         self.depth += 1;
         if self.depth > MAX_IF_EXPR_DEPTH {
             self.depth -= 1;
-            return Err(C5Error::Compile(
-                "preprocessor: `#if` expression nested too deeply".to_string(),
+            return Err(C5Error::at(
+                Code::LIMIT,
+                self.filename,
+                self.line_no,
+                "preprocessor: `#if` expression nested too deeply",
             ));
         }
         let r = self.parse_unary_inner();
@@ -616,8 +630,11 @@ impl<'a> IfExprParser<'a> {
             }
             self.pos += 1;
         }
-        Err(C5Error::Compile(
-            "preprocessor: unterminated string in `#if` expression".to_string(),
+        Err(C5Error::at(
+            Code::DIRECTIVE,
+            self.filename,
+            self.line_no,
+            "preprocessor: unterminated string in `#if` expression",
         ))
     }
 
@@ -661,10 +678,15 @@ impl<'a> IfExprParser<'a> {
                 let esc = bytes[self.pos - 1];
                 if matches!(esc, b'u' | b'U') {
                     let Ucn::Ok(cp) = scan_ucn(bytes, &mut self.pos, esc) else {
-                        return Err(C5Error::Compile(format!(
-                            "preprocessor: invalid universal character name \\{} in `#if`",
-                            esc as char
-                        )));
+                        return Err(C5Error::at(
+                            Code::DIRECTIVE,
+                            self.filename,
+                            self.line_no,
+                            format!(
+                                "preprocessor: invalid universal character name \\{} in `#if`",
+                                esc as char
+                            ),
+                        ));
                     };
                     if wide {
                         last = cp as i64;
@@ -748,8 +770,11 @@ impl<'a> IfExprParser<'a> {
             last = b as i64;
             self.pos += 1;
         }
-        Err(C5Error::Compile(
-            "preprocessor: unterminated char literal in `#if`".to_string(),
+        Err(C5Error::at(
+            Code::DIRECTIVE,
+            self.filename,
+            self.line_no,
+            "preprocessor: unterminated char literal in `#if`",
         ))
     }
 
@@ -759,8 +784,11 @@ impl<'a> IfExprParser<'a> {
             let v = self.parse_ternary()?;
             self.skip_ws();
             if !self.eat_byte(b')') {
-                return Err(C5Error::Compile(
-                    "preprocessor: missing `)` in `#if` expression".to_string(),
+                return Err(C5Error::at(
+                    Code::DIRECTIVE,
+                    self.filename,
+                    self.line_no,
+                    "preprocessor: missing `)` in `#if` expression",
                 ));
             }
             return Ok(v);
@@ -787,10 +815,15 @@ impl<'a> IfExprParser<'a> {
                 return self.parse_ident_or_defined();
             }
         }
-        Err(C5Error::Compile(alloc::format!(
-            "preprocessor: unexpected `{}` in `#if` expression",
-            self.tail().chars().next().unwrap_or(' ')
-        )))
+        Err(C5Error::at(
+            Code::DIRECTIVE,
+            self.filename,
+            self.line_no,
+            alloc::format!(
+                "preprocessor: unexpected `{}` in `#if` expression",
+                self.tail().chars().next().unwrap_or(' ')
+            ),
+        ))
     }
 
     /// C99 6.10.1p4: the controlling expression's operands are integer
@@ -840,9 +873,12 @@ impl<'a> IfExprParser<'a> {
         if self.pos != token_end {
             let token = &self.src[start..token_end];
             self.pos = token_end;
-            return Err(C5Error::Compile(alloc::format!(
-                "preprocessor: `{token}` is not an integer constant in `#if`",
-            )));
+            return Err(C5Error::at(
+                Code::DIRECTIVE,
+                self.filename,
+                self.line_no,
+                alloc::format!("preprocessor: `{token}` is not an integer constant in `#if`",),
+            ));
         }
         let body = self.src[start..self.pos].trim_end_matches(['u', 'U', 'l', 'L']);
         // C99 6.10.1p4: preprocessor expressions evaluate in
@@ -877,9 +913,12 @@ impl<'a> IfExprParser<'a> {
         };
         match v {
             Ok((n, uns)) => Ok(IfValue::with_sign(n, uns)),
-            Err(()) => Err(C5Error::Compile(alloc::format!(
-                "preprocessor: malformed integer literal {body:?} in `#if`",
-            ))),
+            Err(()) => Err(C5Error::at(
+                Code::DIRECTIVE,
+                self.filename,
+                self.line_no,
+                alloc::format!("preprocessor: malformed integer literal {body:?} in `#if`",),
+            )),
         }
     }
 
@@ -892,15 +931,21 @@ impl<'a> IfExprParser<'a> {
             self.skip_ws();
             let id = self.scan_ident().to_string();
             if id.is_empty() {
-                return Err(C5Error::Compile(
-                    "preprocessor: identifier expected after `defined`".to_string(),
+                return Err(C5Error::at(
+                    Code::DIRECTIVE,
+                    self.filename,
+                    self.line_no,
+                    "preprocessor: identifier expected after `defined`",
                 ));
             }
             if with_paren {
                 self.skip_ws();
                 if !self.eat_byte(b')') {
-                    return Err(C5Error::Compile(
-                        "preprocessor: missing `)` after `defined(NAME`".to_string(),
+                    return Err(C5Error::at(
+                        Code::DIRECTIVE,
+                        self.filename,
+                        self.line_no,
+                        "preprocessor: missing `)` after `defined(NAME`",
                     ));
                 }
             }
@@ -914,8 +959,11 @@ impl<'a> IfExprParser<'a> {
         if name == "__has_include" || name == "__has_include_next" {
             self.skip_ws();
             if !self.eat_byte(b'(') {
-                return Err(C5Error::Compile(
-                    "preprocessor: `(` expected after `__has_include`".to_string(),
+                return Err(C5Error::at(
+                    Code::DIRECTIVE,
+                    self.filename,
+                    self.line_no,
+                    "preprocessor: `(` expected after `__has_include`",
                 ));
             }
             self.skip_ws();
@@ -924,9 +972,11 @@ impl<'a> IfExprParser<'a> {
             } else if self.eat_byte(b'"') {
                 b'"'
             } else {
-                return Err(C5Error::Compile(
-                    "preprocessor: `<header>` or \"header\" expected in `__has_include`"
-                        .to_string(),
+                return Err(C5Error::at(
+                    Code::DIRECTIVE,
+                    self.filename,
+                    self.line_no,
+                    "preprocessor: `<header>` or \"header\" expected in `__has_include`",
                 ));
             };
             let h_start = self.pos;
@@ -940,8 +990,11 @@ impl<'a> IfExprParser<'a> {
             self.eat_byte(close);
             self.skip_ws();
             if !self.eat_byte(b')') {
-                return Err(C5Error::Compile(
-                    "preprocessor: missing `)` in `__has_include`".to_string(),
+                return Err(C5Error::at(
+                    Code::DIRECTIVE,
+                    self.filename,
+                    self.line_no,
+                    "preprocessor: missing `)` in `__has_include`",
                 ));
             }
             // Resolve exactly as the matching directive would; only the

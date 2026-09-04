@@ -55,22 +55,16 @@ pub(crate) fn apply_merged_dwarf_text_reloc(
 ) -> Result<(), C5Error> {
     let off = r.byte_offset as usize;
     let end = off.checked_add(r.width as usize).ok_or_else(|| {
-        C5Error::Compile(crate::c5::error::fmt_internal_diag(
-            Code::INTERNAL,
-            &format!(
-                "DWARF text reloc offset 0x{off:x} + width {} overflows",
-                r.width,
-            ),
+        C5Error::internal(format!(
+            "DWARF text reloc offset 0x{off:x} + width {} overflows",
+            r.width,
         ))
     })?;
     if end > section_bytes.len() {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_diag(
-            Code::INTERNAL,
-            &format!(
-                "DWARF text reloc past section end (offset 0x{off:x}, width {}, section length {})",
-                r.width,
-                section_bytes.len(),
-            ),
+        return Err(C5Error::internal(format!(
+            "DWARF text reloc past section end (offset 0x{off:x}, width {}, section length {})",
+            r.width,
+            section_bytes.len(),
         )));
     }
     let resolved = text_vmaddr.wrapping_add(r.merged_text_offset);
@@ -89,22 +83,16 @@ pub(crate) fn apply_merged_dwarf_data_reloc(
 ) -> Result<(), C5Error> {
     let off = r.byte_offset as usize;
     let end = off.checked_add(r.width as usize).ok_or_else(|| {
-        C5Error::Compile(crate::c5::error::fmt_internal_diag(
-            Code::INTERNAL,
-            &format!(
-                "DWARF data reloc offset 0x{off:x} + width {} overflows",
-                r.width,
-            ),
+        C5Error::internal(format!(
+            "DWARF data reloc offset 0x{off:x} + width {} overflows",
+            r.width,
         ))
     })?;
     if end > section_bytes.len() {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_diag(
-            Code::INTERNAL,
-            &format!(
-                "DWARF data reloc past section end (offset 0x{off:x}, width {}, section length {})",
-                r.width,
-                section_bytes.len(),
-            ),
+        return Err(C5Error::internal(format!(
+            "DWARF data reloc past section end (offset 0x{off:x}, width {}, section length {})",
+            r.width,
+            section_bytes.len(),
         )));
     }
     let resolved = data_off_to_vaddr(r.merged_data_offset);
@@ -134,12 +122,9 @@ fn reloc_slot_in_data(
     kind: &str,
 ) -> Result<usize, C5Error> {
     if data_offset < ro_len {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_diag(
-            Code::INTERNAL,
-            &alloc::format!(
-                "{format}: {kind} reloc slot {data_offset:#x} lies in the read-only data prefix \
+        return Err(C5Error::internal(alloc::format!(
+            "{format}: {kind} reloc slot {data_offset:#x} lies in the read-only data prefix \
                  (len {ro_len:#x})"
-            ),
         )));
     }
     Ok((data_offset - ro_len) as usize)
@@ -269,9 +254,7 @@ fn fold_asm_sections(
         .iter()
         .map(|l| (l.name.clone(), AsmLabelPlacement::Text(l.text_offset)))
         .collect();
-    let err = |code: crate::c5::diag::Code, m: alloc::string::String| {
-        C5Error::Compile(crate::c5::error::fmt_link_diag(code, &m))
-    };
+    let err = |code: crate::c5::diag::Code, m: alloc::string::String| C5Error::hard(code, &m);
     // A `$LABEL` address immediate needs the link-time address of a text
     // byte. The image is position-independent, so no emit-time value is
     // correct; refuse rather than leave the encoder's placeholder.
@@ -531,9 +514,7 @@ fn resolve_single_image_asm_sym_fixups(
             .map(|s| (s.link_name(), s.val))
             .collect()
     };
-    let err = |code: crate::c5::diag::Code, m: alloc::string::String| {
-        C5Error::Compile(crate::c5::error::fmt_link_diag(code, &m))
-    };
+    let err = |code: crate::c5::diag::Code, m: alloc::string::String| C5Error::hard(code, &m);
     enum Loc {
         Text(usize),
         Data(u64),
@@ -580,11 +561,8 @@ fn resolve_single_image_asm_sym_fixups(
                     }
                 },
                 other => {
-                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_diag(
-                        Code::INTERNAL,
-                        &alloc::format!(
-                            "asm operand relocation target {other:?} is not a data offset or symbol"
-                        ),
+                    return Err(C5Error::internal(alloc::format!(
+                        "asm operand relocation target {other:?} is not a data offset or symbol"
                     )));
                 }
             };
@@ -719,18 +697,18 @@ fn resolve_single_tu_extern_refs(
         Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => Machine::Aarch64,
     };
     let undefined = |name: &str| -> C5Error {
-        C5Error::Compile(crate::c5::error::fmt_link_diag(
+        C5Error::hard(
             Code::UNDEFINED_SYMBOL,
-            &format!("undefined reference to `{name}`",),
-        ))
+            format!("undefined reference to `{name}`",),
+        )
     };
     let unsupported = |name: &str| -> C5Error {
-        C5Error::Compile(crate::c5::error::fmt_link_diag(
+        C5Error::hard(
             Code::RELOCATION,
-            &format!(
+            format!(
                 "unresolved weak reference to `{name}`: cannot resolve the referencing instruction to address 0",
             ),
-        ))
+        )
     };
 
     let mut kept_data = Vec::new();
@@ -1016,10 +994,9 @@ fn write_for(program: &Program, build: &Build, target: Target) -> Result<Vec<u8>
     // without pulling `elf_reloc` into the no-std build.
     #[cfg(not(feature = "std"))]
     if build.output_kind == OutputKind::Relocatable {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_diag(
-            Code::INTERNAL,
+        return Err(C5Error::internal(
             "Relocatable output requires the `std` feature",
-        )));
+        ));
     }
     match target {
         Target::MacOSAarch64 => mach_o::write(program, build),

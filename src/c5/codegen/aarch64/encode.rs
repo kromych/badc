@@ -1919,9 +1919,9 @@ impl super::ssa::emit_common::LowerTarget for Aarch64Lower {
 
     fn entry_native_offset(pc_to_native: &[usize], entry_pc: usize) -> Result<usize, C5Error> {
         pc_to_native.get(entry_pc).copied().ok_or_else(|| {
-            C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
+            C5Error::internal(format!(
                 "native codegen: entry_pc {entry_pc} is out of PC range"
-            )))
+            ))
         })
     }
 
@@ -1987,20 +1987,16 @@ fn apply_fixups(
 ) -> Result<(), C5Error> {
     for f in fixups {
         if f.target_ent_pc > pc_extent {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!(
-                    "native codegen: branch target {} past end of PC space",
-                    f.target_ent_pc
-                ),
+            return Err(C5Error::internal(format!(
+                "native codegen: branch target {} past end of PC space",
+                f.target_ent_pc
             )));
         }
         let target = pc_to_native[f.target_ent_pc];
         if target == usize::MAX {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!(
-                    "native codegen: branch target {} did not land on an instruction",
-                    f.target_ent_pc
-                ),
+            return Err(C5Error::internal(format!(
+                "native codegen: branch target {} did not land on an instruction",
+                f.target_ent_pc
             )));
         }
         let pc_after = f.native_offset as isize;
@@ -2008,8 +2004,8 @@ fn apply_fixups(
         // All AArch64 branches measure the offset in instructions
         // (4 bytes each).
         if delta_bytes & 3 != 0 {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!("native codegen: branch delta {delta_bytes} not 4-byte aligned"),
+            return Err(C5Error::internal(format!(
+                "native codegen: branch delta {delta_bytes} not 4-byte aligned"
             )));
         }
         let delta_insns = (delta_bytes / 4) as i32;
@@ -2109,18 +2105,18 @@ fn apply_plt_call_fixups(
             continue;
         }
         let tramp_off = *trampoline_offsets.get(fx.import_index).ok_or_else(|| {
-            C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
+            C5Error::internal(format!(
                 "PLT call fixup at offset {} references import {} but only \
                  {} trampolines were emitted",
                 fx.instr_offset,
                 fx.import_index,
                 trampoline_offsets.len()
-            )))
+            ))
         })?;
         let delta_bytes = tramp_off as i64 - fx.instr_offset as i64;
         if delta_bytes % 4 != 0 {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!("PLT call fixup: trampoline byte delta {delta_bytes} not 4-byte aligned"),
+            return Err(C5Error::internal(format!(
+                "PLT call fixup: trampoline byte delta {delta_bytes} not 4-byte aligned"
             )));
         }
         let delta_insns = (delta_bytes / 4) as i32;

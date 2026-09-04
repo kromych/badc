@@ -344,7 +344,7 @@ impl<'a> PeWriter<'a> {
     }
 
     fn internal(msg: String) -> C5Error {
-        C5Error::Compile(crate::c5::error::fmt_internal_diag(Code::INTERNAL, &msg))
+        C5Error::internal(&msg)
     }
 
     /// Family whose region holds a named section's bytes.
@@ -930,10 +930,10 @@ impl<'a> PeWriter<'a> {
             }
         }
         if !build.got_base_fixups.is_empty() {
-            return Err(C5Error::Compile(crate::c5::error::fmt_link_diag(
+            return Err(C5Error::hard(
                 Code::OBJECT_FORMAT,
                 "`_GLOBAL_OFFSET_TABLE_` names an ELF construct; a PE image has no GOT",
-            )));
+            ));
         }
         for f in &build.data_fixups {
             let instr_off = (f.instr_offset as u32) + prologue;
@@ -978,14 +978,14 @@ impl<'a> PeWriter<'a> {
             }
             let value = IMAGE_BASE as i64 + f.target_rva as i64;
             if !f.check.admits(value, f.width) {
-                return Err(C5Error::Compile(crate::c5::error::fmt_link_diag(
+                return Err(C5Error::hard(
                     Code::RELOCATION,
-                    &format!(
+                    format!(
                         "relocation truncated to fit: .text+{:#x} needs the absolute address {value:#x}, \
                      which does not fit a {width}-byte field",
                         f.site_off,
                     ),
-                )));
+                ));
             }
             text[f.site_off..f.site_off + width].copy_from_slice(&value.to_le_bytes()[..width]);
         }
@@ -1603,12 +1603,7 @@ fn patch_aarch64_adrp_ldr32(
         target_rva as i64,
         aarch64::patch::SlotWidth::W32,
     )
-    .map_err(|e| {
-        C5Error::Compile(crate::c5::error::fmt_internal_diag(
-            Code::INTERNAL,
-            &e.describe("PE: aarch64 TLS index"),
-        ))
-    })
+    .map_err(|e| C5Error::internal(e.describe("PE: aarch64 TLS index")))
 }
 
 /// On-disk shape of the DOS header + 64-byte stub.
@@ -2082,12 +2077,12 @@ fn runtime_symbol_offset(build: &Build, name: &str) -> Result<u32, C5Error> {
         .iter()
         .position(|n| n == name)
         .ok_or_else(|| {
-            C5Error::Compile(crate::c5::error::fmt_link_diag(
+            C5Error::hard(
                 Code::UNDEFINED_SYMBOL,
-                &format!(
+                format!(
                     "PE entry stub references `{name}`, which the linked runtime does not define"
                 ),
-            ))
+            )
         })?;
     let ent_pc = build.func_ent_pcs[idx];
     Ok(build.pc_to_native[ent_pc] as u32)
@@ -2408,13 +2403,10 @@ fn patch_iat_data_load(
         Machine::X86_64 => {
             let opcode_off = (instr_offset_in_text + 1) as usize;
             if text[opcode_off] != 0x8D && text[opcode_off] != 0x8B {
-                return Err(C5Error::Compile(crate::c5::error::fmt_internal_diag(
-                    Code::INTERNAL,
-                    &format!(
-                        "PE: data-import load expected lea 0x8D or mov 0x8B at \
+                return Err(C5Error::internal(format!(
+                    "PE: data-import load expected lea 0x8D or mov 0x8B at \
                          text+{opcode_off:#x}, found {:#04x}",
-                        text[opcode_off],
-                    ),
+                    text[opcode_off],
                 )));
             }
             text[opcode_off] = 0x8B;
@@ -2427,10 +2419,9 @@ fn patch_iat_data_load(
                 target_rva,
             )
         }
-        Machine::Aarch64 => Err(C5Error::Compile(crate::c5::error::fmt_internal_diag(
-            Code::INTERNAL,
+        Machine::Aarch64 => Err(C5Error::internal(
             "PE: patch_iat_data_load is x86_64-only; aarch64 uses patch_iat_lookup",
-        ))),
+        )),
     }
 }
 
@@ -2475,9 +2466,8 @@ fn patch_direct_call(
             let after = call_offset_in_text + 5;
             let delta = target_offset_in_text as i64 - after as i64;
             if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
-                return Err(C5Error::Compile(crate::c5::error::fmt_internal_diag(
-                    Code::INTERNAL,
-                    &format!("PE: rel32 displacement {delta} doesn't fit in 32 bits"),
+                return Err(C5Error::internal(format!(
+                    "PE: rel32 displacement {delta} doesn't fit in 32 bits"
                 )));
             }
             let disp32 = delta as i32;
@@ -2488,16 +2478,14 @@ fn patch_direct_call(
         Machine::Aarch64 => {
             let delta_bytes = target_offset_in_text as i64 - call_offset_in_text as i64;
             if delta_bytes & 3 != 0 {
-                return Err(C5Error::Compile(crate::c5::error::fmt_internal_diag(
-                    Code::INTERNAL,
-                    &format!("PE: aarch64 bl delta {delta_bytes} not 4-byte aligned"),
+                return Err(C5Error::internal(format!(
+                    "PE: aarch64 bl delta {delta_bytes} not 4-byte aligned"
                 )));
             }
             let delta_insns = delta_bytes / 4;
             if !(-(1i64 << 25)..(1i64 << 25)).contains(&delta_insns) {
-                return Err(C5Error::Compile(crate::c5::error::fmt_internal_diag(
-                    Code::INTERNAL,
-                    &format!("PE: aarch64 bl delta {delta_insns} insns out of 26-bit range"),
+                return Err(C5Error::internal(format!(
+                    "PE: aarch64 bl delta {delta_insns} insns out of 26-bit range"
                 )));
             }
             let word = aarch64::enc_bl(delta_insns as i32);
@@ -2518,9 +2506,8 @@ fn patch_x86_64_disp32(
 ) -> Result<(), C5Error> {
     let delta = target_rva as i64 - after_rva as i64;
     if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_diag(
-            Code::INTERNAL,
-            &format!("PE: disp32 {delta} doesn't fit in 32 bits"),
+        return Err(C5Error::internal(format!(
+            "PE: disp32 {delta} doesn't fit in 32 bits"
         )));
     }
     let disp32 = delta as i32;
@@ -2545,12 +2532,7 @@ fn patch_aarch64_adrp_ldr(
         aarch64::patch::SlotWidth::W64,
         part,
     )
-    .map_err(|e| {
-        C5Error::Compile(crate::c5::error::fmt_internal_diag(
-            Code::INTERNAL,
-            &e.describe("PE: aarch64"),
-        ))
-    })
+    .map_err(|e| C5Error::internal(e.describe("PE: aarch64")))
 }
 
 /// Patch an aarch64 `adrp xd, _` / `add xd, xd, #_` reference to point at
@@ -2569,23 +2551,15 @@ fn patch_aarch64_adrp_add(
         target_rva as i64,
         part,
     )
-    .map_err(|e| {
-        C5Error::Compile(crate::c5::error::fmt_internal_diag(
-            Code::INTERNAL,
-            &e.describe("PE: aarch64"),
-        ))
-    })
+    .map_err(|e| C5Error::internal(e.describe("PE: aarch64")))
 }
 
 /// Zero-pad `out` to the precomputed file offset of the next section.
 fn pad_to(out: &mut Vec<u8>, target_len: usize) -> Result<(), C5Error> {
     if out.len() > target_len {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_diag(
-            Code::INTERNAL,
-            &format!(
-                "PE layout drift: write cursor {:#x} past computed file offset {target_len:#x}",
-                out.len(),
-            ),
+        return Err(C5Error::internal(format!(
+            "PE layout drift: write cursor {:#x} past computed file offset {target_len:#x}",
+            out.len(),
         )));
     }
     out.resize(target_len, 0);

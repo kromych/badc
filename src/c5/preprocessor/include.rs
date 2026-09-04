@@ -1,5 +1,6 @@
 use super::Preprocessor;
 use crate::c5::codegen::Target;
+use crate::c5::diag::Code;
 use crate::c5::error::C5Error;
 use crate::c5::headers::embedded_header;
 use alloc::format;
@@ -202,14 +203,15 @@ impl Preprocessor {
             // directive cannot perform the replacement C99 6.10.2
             // requires, and continuing with an empty body miscompiles.
             self.record_include(name, None, IncludeOrigin::User, IncludeStatus::Missing);
-            return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+            return Err(C5Error::at(
+                Code::DIRECTIVE,
                 filename,
                 line_no,
-                &format!(
+                format!(
                     "include `{name}` not found \
                      (no header search path or embedded header matched)"
                 ),
-            )));
+            ));
         };
         if let Some(r) = self.reuse.as_deref_mut() {
             r.consulted_includes.insert(found.key.clone());
@@ -250,11 +252,12 @@ impl Preprocessor {
                 .map(|(n, _)| n.as_str())
                 .collect::<Vec<_>>()
                 .join(" -> ");
-            return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+            return Err(C5Error::at(
+                Code::LIMIT,
                 filename,
                 line_no,
-                &format!("`#include {name}` nested too deeply (chain: {chain} -> {name})"),
-            )));
+                format!("`#include {name}` nested too deeply (chain: {chain} -> {name})"),
+            ));
         }
         self.include_stack
             .push((name.to_string(), found.origin == IncludeOrigin::Own));

@@ -84,10 +84,10 @@ pub fn jit_run_with_options(
     )))]
     {
         let _ = (program, args, options);
-        Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+        Err(C5Error::internal(
             "JIT: requires the `std` feature on Linux (any arch), \
              macOS/aarch64, or Windows (x86_64 / aarch64)",
-        )))
+        ))
     }
 }
 
@@ -106,10 +106,10 @@ fn host_target() -> Result<Target, C5Error> {
     } else if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
         Ok(Target::WindowsX64)
     } else {
-        Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+        Err(C5Error::internal(
             "JIT: host OS/arch unsupported (need Linux/aarch64, Linux/x86_64, \
              macOS/aarch64, Windows/aarch64, or Windows/x86_64)",
-        )))
+        ))
     }
 }
 
@@ -122,6 +122,7 @@ fn host_target() -> Result<Target, C5Error> {
     ),
 ))]
 mod jit_impl {
+    use super::super::super::diag::Code;
     use super::super::super::error::C5Error;
     use super::super::super::program::Program;
     use super::super::Target;
@@ -350,11 +351,9 @@ mod jit_impl {
                 let absolute = data_vmaddr + r.target_offset;
                 let off = r.data_offset as usize;
                 if off + 8 > bytes.len() {
-                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                        &format!(
-                            "JIT: data reloc offset {off:#x} past end of data region ({})",
-                            bytes.len()
-                        ),
+                    return Err(C5Error::internal(format!(
+                        "JIT: data reloc offset {off:#x} past end of data region ({})",
+                        bytes.len()
                     )));
                 }
                 bytes[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
@@ -379,11 +378,9 @@ mod jit_impl {
         // dereferences it.
         for fx in &build.got_fixups {
             if fx.is_data_load && got_region.slot_value(fx.import_index) == 0 {
-                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                    &format!(
-                        "JIT: unresolved extern data symbol `{}`",
-                        build.imports.imports[fx.import_index].real_symbol,
-                    ),
+                return Err(C5Error::internal(format!(
+                    "JIT: unresolved extern data symbol `{}`",
+                    build.imports.imports[fx.import_index].real_symbol,
                 )));
             }
         }
@@ -413,9 +410,9 @@ mod jit_impl {
         if !build.rodata.bytes.is_empty() {
             // The absolute-slot form is relocatable-only.
             if !build.rodata.abs64.is_empty() {
-                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                return Err(C5Error::internal(
                     "JIT: absolute table slots reached an in-memory build",
-                )));
+                ));
             }
             let full_len = rodata_blob_off + build.rodata.bytes.len();
             let bytes = unsafe { core::slice::from_raw_parts_mut(region.as_mut_ptr(), full_len) };
@@ -433,11 +430,9 @@ mod jit_impl {
             for r in &build.rodata.rel32 {
                 let value = r.text_offset as i64 - (rodata_blob_off as u64 + r.base_offset) as i64;
                 let Ok(v) = i32::try_from(value) else {
-                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                        &format!(
-                            "JIT: rodata rel32 slot {:#x}: displacement {value:#x} exceeds 32 bits",
-                            r.slot_offset,
-                        ),
+                    return Err(C5Error::internal(format!(
+                        "JIT: rodata rel32 slot {:#x}: displacement {value:#x} exceeds 32 bits",
+                        r.slot_offset,
                     )));
                 };
                 let off = rodata_blob_off + r.slot_offset as usize;
@@ -461,18 +456,16 @@ mod jit_impl {
                     .copied()
                     .unwrap_or(usize::MAX);
                 if native_off == usize::MAX {
-                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                        &format!("JIT: code reloc references missing ent_pc {ent_pc}"),
+                    return Err(C5Error::internal(format!(
+                        "JIT: code reloc references missing ent_pc {ent_pc}"
                     )));
                 }
                 let absolute = code_vmaddr + native_off as u64;
                 let off = r.data_offset as usize;
                 if off + 8 > bytes.len() {
-                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                        &format!(
-                            "JIT: code reloc offset {off:#x} past end of data region ({})",
-                            bytes.len()
-                        ),
+                    return Err(C5Error::internal(format!(
+                        "JIT: code reloc offset {off:#x} past end of data region ({})",
+                        bytes.len()
                     )));
                 }
                 bytes[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
@@ -489,11 +482,9 @@ mod jit_impl {
                 let absolute = code_vmaddr + r.text_offset;
                 let off = r.data_offset as usize;
                 if off + 8 > bytes.len() {
-                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                        &format!(
-                            "JIT: label reloc offset {off:#x} past end of data region ({})",
-                            bytes.len()
-                        ),
+                    return Err(C5Error::internal(format!(
+                        "JIT: label reloc offset {off:#x} past end of data region ({})",
+                        bytes.len()
                     )));
                 }
                 bytes[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
@@ -512,17 +503,16 @@ mod jit_impl {
             for r in &build.extern_data_relocs {
                 let addr = got_region.resolve_symbol(&r.symbol_name);
                 if addr == 0 {
-                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                        &format!("JIT: unresolved extern data symbol `{}`", r.symbol_name),
+                    return Err(C5Error::internal(format!(
+                        "JIT: unresolved extern data symbol `{}`",
+                        r.symbol_name
                     )));
                 }
                 let off = r.data_offset as usize;
                 if off + 8 > bytes.len() {
-                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                        &format!(
-                            "JIT: extern data reloc offset {off:#x} past end of data region ({})",
-                            bytes.len()
-                        ),
+                    return Err(C5Error::internal(format!(
+                        "JIT: extern data reloc offset {off:#x} past end of data region ({})",
+                        bytes.len()
                     )));
                 }
                 let value = (addr as i64 + r.addend) as u64;
@@ -691,15 +681,15 @@ mod jit_impl {
         if rc != 0 {
             // Reclaim the payload box; the worker never ran.
             drop(unsafe { Box::from_raw(raw_payload as *mut Payload) });
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!("JIT: pthread_create failed (rc={rc})"),
+            return Err(C5Error::internal(format!(
+                "JIT: pthread_create failed (rc={rc})"
             )));
         }
         let mut ret: *mut c_void = core::ptr::null_mut();
         let join_rc = unsafe { pthread_join(tid, &mut ret) };
         if join_rc != 0 {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!("JIT: pthread_join failed (rc={join_rc})"),
+            return Err(C5Error::internal(format!(
+                "JIT: pthread_join failed (rc={join_rc})"
             )));
         }
         let exit_code = unsafe { *Box::from_raw(ret as *mut c_int) };
@@ -782,25 +772,21 @@ mod jit_impl {
         };
         if handle.is_null() {
             drop(unsafe { Box::from_raw(raw_payload as *mut Payload) });
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                "JIT: CreateThread returned NULL",
-            )));
+            return Err(C5Error::internal("JIT: CreateThread returned NULL"));
         }
         const INFINITE: u32 = 0xFFFF_FFFF;
         let wait_rc = unsafe { WaitForSingleObject(handle, INFINITE) };
         if wait_rc != 0 {
             unsafe { CloseHandle(handle) };
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!("JIT: WaitForSingleObject failed (rc={wait_rc:#x})"),
+            return Err(C5Error::internal(&format!(
+                "JIT: WaitForSingleObject failed (rc={wait_rc:#x})"
             )));
         }
         let mut exit_code: u32 = 0;
         let ok = unsafe { GetExitCodeThread(handle, &mut exit_code) };
         unsafe { CloseHandle(handle) };
         if ok == 0 {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                "JIT: GetExitCodeThread failed",
-            )));
+            return Err(C5Error::internal("JIT: GetExitCodeThread failed"));
         }
         Ok(exit_code as i32)
     }
@@ -817,18 +803,22 @@ mod jit_impl {
             .find(|s| s.is_thread_local && !s.name.is_empty())
             .map(|s| format!(" (`{}`)", s.name))
             .unwrap_or_default();
-        C5Error::Compile(crate::c5::error::fmt_unsupported_err(&format!(
-            "JIT: thread-local storage{named} is not supported by the \
+        C5Error::hard(
+            Code::UNSUPPORTED,
+            format!(
+                "JIT: thread-local storage{named} is not supported by the \
              in-process JIT: the executing thread's TLS block belongs to \
              the host runtime. Compile to a native image instead."
-        )))
+            ),
+        )
     }
 
     /// Mirror the linker's undefined-symbol diagnostic wording.
     fn undefined_reference(name: &str) -> C5Error {
-        C5Error::Compile(crate::c5::error::fmt_link_err(&format!(
-            "undefined reference to `{name}`"
-        )))
+        C5Error::hard(
+            Code::UNDEFINED_SYMBOL,
+            format!("undefined reference to `{name}`"),
+        )
     }
 
     /// Route `#pragma binding(data ...)` references through the fake
@@ -1009,8 +999,9 @@ mod jit_impl {
 
             let ptr = unsafe { mmap(std::ptr::null_mut(), len, prot, flags, -1, 0) };
             if ptr == map_failed() {
-                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                    &format!("JIT: mmap failed: {}", std::io::Error::last_os_error()),
+                return Err(C5Error::internal(format!(
+                    "JIT: mmap failed: {}",
+                    std::io::Error::last_os_error()
                 )));
             }
 
@@ -1050,11 +1041,9 @@ mod jit_impl {
                 )
             };
             if ptr.is_null() {
-                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                    &format!(
-                        "JIT: VirtualAlloc failed: {}",
-                        std::io::Error::last_os_error()
-                    ),
+                return Err(C5Error::internal(&format!(
+                    "JIT: VirtualAlloc failed: {}",
+                    std::io::Error::last_os_error()
                 )));
             }
             unsafe {
@@ -1075,8 +1064,9 @@ mod jit_impl {
                 let r =
                     unsafe { mprotect(self.ptr as *mut c_void, self.len, PROT_READ | PROT_EXEC) };
                 if r != 0 {
-                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                        &format!("JIT: mprotect failed: {}", std::io::Error::last_os_error()),
+                    return Err(C5Error::internal(&format!(
+                        "JIT: mprotect failed: {}",
+                        std::io::Error::last_os_error()
                     )));
                 }
             }
@@ -1101,11 +1091,9 @@ mod jit_impl {
                     )
                 };
                 if r == 0 {
-                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                        &format!(
-                            "JIT: VirtualProtect failed: {}",
-                            std::io::Error::last_os_error()
-                        ),
+                    return Err(C5Error::internal(&format!(
+                        "JIT: VirtualProtect failed: {}",
+                        std::io::Error::last_os_error()
                     )));
                 }
             }
@@ -1237,8 +1225,9 @@ mod jit_impl {
                 )
             };
             if ptr == map_failed() {
-                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                    &format!("JIT: data mmap failed: {}", std::io::Error::last_os_error()),
+                return Err(C5Error::internal(format!(
+                    "JIT: data mmap failed: {}",
+                    std::io::Error::last_os_error()
                 )));
             }
             let base = ((ptr as usize + align - 1) & !(align - 1)) as *mut u8;
@@ -1267,11 +1256,9 @@ mod jit_impl {
                 )
             };
             if ptr.is_null() {
-                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                    &format!(
-                        "JIT: data VirtualAlloc failed: {}",
-                        std::io::Error::last_os_error()
-                    ),
+                return Err(C5Error::internal(&format!(
+                    "JIT: data VirtualAlloc failed: {}",
+                    std::io::Error::last_os_error()
                 )));
             }
             unsafe {
@@ -1388,8 +1375,9 @@ mod jit_impl {
                 )
             };
             if ptr == map_failed() {
-                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                    &format!("JIT: GOT mmap failed: {}", std::io::Error::last_os_error()),
+                return Err(C5Error::internal(format!(
+                    "JIT: GOT mmap failed: {}",
+                    std::io::Error::last_os_error()
                 )));
             }
             Ok(GotRegion {
@@ -1411,11 +1399,9 @@ mod jit_impl {
                 )
             };
             if ptr.is_null() {
-                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                    &format!(
-                        "JIT: GOT VirtualAlloc failed: {}",
-                        std::io::Error::last_os_error()
-                    ),
+                return Err(C5Error::internal(&format!(
+                    "JIT: GOT VirtualAlloc failed: {}",
+                    std::io::Error::last_os_error()
                 )));
             }
             Ok(GotRegion {
@@ -1441,9 +1427,9 @@ mod jit_impl {
             }
             let handle = unsafe { dlopen(std::ptr::null(), RTLD_NOW) };
             if handle.is_null() {
-                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                return Err(C5Error::internal(
                     "JIT: dlopen(NULL, RTLD_NOW) returned null -- can't resolve libc symbols",
-                )));
+                ));
             }
             self.lib_handles.push((handle, true));
 
@@ -1523,10 +1509,10 @@ mod jit_impl {
             let mut handles: Vec<*mut c_void> = Vec::with_capacity(imports.dylibs.len());
             for dylib in &imports.dylibs {
                 let cs = CString::new(dylib.path.as_str()).map_err(|_| {
-                    C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
+                    C5Error::internal(&format!(
                         "JIT: dylib path `{}` contained an interior NUL",
                         dylib.path
-                    )))
+                    ))
                 })?;
                 // GetModuleHandleA first -- doesn't increment the
                 // refcount on already-loaded modules (kernel32, the
@@ -1537,12 +1523,10 @@ mod jit_impl {
                 if h.is_null() {
                     h = unsafe { LoadLibraryA(cs.as_ptr()) };
                     if h.is_null() {
-                        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                            &format!(
-                                "JIT: LoadLibraryA(\"{}\") failed: {}",
-                                dylib.path,
-                                std::io::Error::last_os_error()
-                            ),
+                        return Err(C5Error::internal(&format!(
+                            "JIT: LoadLibraryA(\"{}\") failed: {}",
+                            dylib.path,
+                            std::io::Error::last_os_error()
                         )));
                     }
                     owned = true;
@@ -1775,7 +1759,7 @@ mod jit_impl {
     ) -> Result<(), C5Error> {
         use super::super::aarch64::patch as a64patch;
         use crate::c5::asm::{AsmRelocKind, AsmSectionTarget, patch_asm_insn_field};
-        let internal = |m: String| C5Error::Compile(crate::c5::error::fmt_internal_err(&m));
+        let internal = |m: String| C5Error::internal(&m);
         for r in &build.asm_sym_fixups {
             let target_vmaddr = match &r.target {
                 AsmSectionTarget::Data(off) => {
@@ -1890,11 +1874,7 @@ mod jit_impl {
             super::super::aarch64::patch::SlotWidth::W64,
             part,
         )
-        .map_err(|e| {
-            C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &e.describe(&format!("JIT: {label}")),
-            ))
-        })
+        .map_err(|e| C5Error::internal(e.describe(&format!("JIT: {label}"))))
     }
 
     /// Patch an extern-data reference so the register receives the
@@ -1920,12 +1900,10 @@ mod jit_impl {
                 super::super::require_whole_addr(part, label)?;
                 let op_off = instr_offset as usize + 1;
                 if code[op_off] != 0x8D {
-                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                        &format!(
-                            "JIT: {label} expected lea opcode 0x8D at text+{op_off:#x}, \
+                    return Err(C5Error::internal(format!(
+                        "JIT: {label} expected lea opcode 0x8D at text+{op_off:#x}, \
                              found {:#04x}",
-                            code[op_off],
-                        ),
+                        code[op_off],
                     )));
                 }
                 code[op_off] = 0x8B;
@@ -1949,8 +1927,8 @@ mod jit_impl {
         let after = instr_vmaddr + CALL_LEN;
         let delta = target_vmaddr as i64 - after as i64;
         if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!("JIT: {label} disp {delta} doesn't fit in 32 bits"),
+            return Err(C5Error::internal(format!(
+                "JIT: {label} disp {delta} doesn't fit in 32 bits"
             )));
         }
         let disp32 = delta as i32;
@@ -1998,11 +1976,7 @@ mod jit_impl {
             target_vmaddr as i64,
             part,
         )
-        .map_err(|e| {
-            C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &e.describe(&format!("JIT: {label}")),
-            ))
-        })
+        .map_err(|e| C5Error::internal(e.describe(&format!("JIT: {label}"))))
     }
 
     fn patch_lea_rip32(
@@ -2017,8 +1991,8 @@ mod jit_impl {
         let after = instr_vmaddr + LEA_LEN;
         let delta = target_vmaddr as i64 - after as i64;
         if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!("JIT: {label} disp {delta} doesn't fit in 32 bits"),
+            return Err(C5Error::internal(format!(
+                "JIT: {label} disp {delta} doesn't fit in 32 bits"
             )));
         }
         let disp32 = delta as i32;

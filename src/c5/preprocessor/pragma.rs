@@ -561,26 +561,28 @@ impl Preprocessor {
     ) -> Result<(), C5Error> {
         let name = inner.trim();
         if !is_ident(name) {
-            return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+            return Err(C5Error::at(
+                Code::INVALID_PRAGMA,
                 filename,
                 line_no,
-                &format!(
+                format!(
                     "`#pragma entrypoint({name})` -- name must be a \
                      plain identifier"
                 ),
-            )));
+            ));
         }
         if let Some(prev) = &self.entrypoint
             && prev != name
         {
-            return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+            return Err(C5Error::at(
+                Code::INVALID_PRAGMA,
                 filename,
                 line_no,
-                &format!(
+                format!(
                     "`#pragma entrypoint({name})` conflicts with prior \
                      `#pragma entrypoint({prev})`; pick one"
                 ),
-            )));
+            ));
         }
         self.entrypoint = Some(name.to_string());
         Ok(())
@@ -618,24 +620,26 @@ impl Preprocessor {
             }
             if let Some(name) = item.strip_prefix('"').and_then(|s| s.strip_suffix('"')) {
                 if !is_ident(name) {
-                    return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+                    return Err(C5Error::at(
+                        Code::INVALID_PRAGMA,
                         filename,
                         line_no,
-                        &format!(
+                        format!(
                             "`#pragma intrinsic(\"{name}\")` -- name must be a \
                              plain identifier"
                         ),
-                    )));
+                    ));
                 }
                 if !builtins::is_builtin(name) {
-                    return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+                    return Err(C5Error::at(
+                        Code::INVALID_PRAGMA,
                         filename,
                         line_no,
-                        &format!(
+                        format!(
                             "`#pragma intrinsic(\"{name}\")` -- `{name}` is not a \
                              builtin badc provides"
                         ),
-                    )));
+                    ));
                 }
                 if let Some(id) = self.registered_intrinsic(name) {
                     self.intrinsics.insert(name.to_string(), id);
@@ -645,11 +649,12 @@ impl Preprocessor {
                     self.intrinsics.insert(item.to_string(), id);
                 }
             } else {
-                return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+                return Err(C5Error::at(
+                    Code::INVALID_PRAGMA,
                     filename,
                     line_no,
-                    &format!("`#pragma intrinsic({item})` -- expected an identifier"),
-                )));
+                    format!("`#pragma intrinsic({item})` -- expected an identifier"),
+                ));
             }
         }
         Ok(())
@@ -696,29 +701,31 @@ impl Preprocessor {
             }
             "efi_rom" | "efi-rom" | "EFI_ROM" => Subsystem::EfiRom,
             _ => {
-                return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+                return Err(C5Error::at(
+                    Code::INVALID_PRAGMA,
                     filename,
                     line_no,
-                    &format!(
+                    format!(
                         "`#pragma subsystem({kind})` -- expected one of \
                          `console`, `windows`, `native` (alias `driver`), \
                          `efi_application`, `efi_boot_service_driver`, \
                          `efi_runtime_driver`, `efi_rom`"
                     ),
-                )));
+                ));
             }
         };
         if let Some(prev) = self.subsystem
             && prev != parsed
         {
-            return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+            return Err(C5Error::at(
+                Code::INVALID_PRAGMA,
                 filename,
                 line_no,
-                &format!(
+                format!(
                     "`#pragma subsystem({kind})` conflicts with prior \
                      `#pragma subsystem({prev:?})`; pick one"
                 ),
-            )));
+            ));
         }
         self.subsystem = Some(parsed);
         Ok(())
@@ -743,14 +750,15 @@ impl Preprocessor {
     ) -> Result<(), C5Error> {
         let name = inner.trim();
         if !is_ident(name) {
-            return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+            return Err(C5Error::at(
+                Code::INVALID_PRAGMA,
                 filename,
                 line_no,
-                &format!(
+                format!(
                     "`#pragma export({name})` -- name must be a \
                  plain identifier"
                 ),
-            )));
+            ));
         }
         if self.export_names.insert(name.to_string()) {
             self.exports.push(name.to_string());
@@ -769,31 +777,34 @@ impl Preprocessor {
         filename: &str,
     ) -> Result<(), C5Error> {
         let Some((name, path)) = inner.split_once(',') else {
-            return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+            return Err(C5Error::at(
+                Code::INVALID_PRAGMA,
                 filename,
                 line_no,
                 "`#pragma dylib(...)` expects two args \
                  (`name, \"path\"`)",
-            )));
+            ));
         };
         let name = name.trim();
         let path = path.trim().trim_matches('"');
         if name.is_empty() || path.is_empty() {
-            return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+            return Err(C5Error::at(
+                Code::INVALID_PRAGMA,
                 filename,
                 line_no,
                 "`#pragma dylib(...)` arg is empty",
-            )));
+            ));
         }
         if !is_ident(name) {
-            return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+            return Err(C5Error::at(
+                Code::INVALID_PRAGMA,
                 filename,
                 line_no,
-                &format!(
+                format!(
                     "`#pragma dylib({name}, ...)` -- name must be a \
                  plain identifier"
                 ),
-            )));
+            ));
         }
         if let Some(&at) = self.dylib_index.get(name) {
             let existing = &self.dylibs[at];
@@ -803,14 +814,15 @@ impl Preprocessor {
             // both will hit this twice. Different paths are still
             // a hard error since they'd silently shadow each other.
             if existing.path != path {
-                return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+                return Err(C5Error::at(
+                    Code::INVALID_PRAGMA,
                     filename,
                     line_no,
-                    &format!(
+                    format!(
                         "`#pragma dylib({name}, {path:?})` -- already declared with different path {:?}",
                         existing.path
                     ),
-                )));
+                ));
             }
             return Ok(());
         }
@@ -835,12 +847,13 @@ impl Preprocessor {
         filename: &str,
     ) -> Result<(), C5Error> {
         let Some((qualified, real_symbol)) = inner.split_once(',') else {
-            return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+            return Err(C5Error::at(
+                Code::INVALID_PRAGMA,
                 filename,
                 line_no,
                 "`#pragma binding(...)` expects two args \
                  (`dylib::local_name, \"real_symbol\"`)",
-            )));
+            ));
         };
         let qualified = qualified.trim();
         // `#pragma binding(data <lib>::<name>, "sym")` marks a data
@@ -852,33 +865,36 @@ impl Preprocessor {
         };
         let real_symbol = real_symbol.trim().trim_matches('"');
         let Some((dylib_name, local_name)) = qualified.split_once("::") else {
-            return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+            return Err(C5Error::at(
+                Code::INVALID_PRAGMA,
                 filename,
                 line_no,
-                &format!(
+                format!(
                     "`#pragma binding({qualified}, ...)` -- LHS must be \
                  `dylib_name::local_name`"
                 ),
-            )));
+            ));
         };
         let dylib_name = dylib_name.trim();
         let local_name = local_name.trim();
         if dylib_name.is_empty() || local_name.is_empty() || real_symbol.is_empty() {
-            return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+            return Err(C5Error::at(
+                Code::INVALID_PRAGMA,
                 filename,
                 line_no,
                 "`#pragma binding(...)` arg is empty",
-            )));
+            ));
         }
         let Some(&at) = self.dylib_index.get(dylib_name) else {
-            return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+            return Err(C5Error::at(
+                Code::INVALID_PRAGMA,
                 filename,
                 line_no,
-                &format!(
+                format!(
                     "`#pragma binding({dylib_name}::...)` -- no `#pragma \
                  dylib({dylib_name}, ...)` declared"
                 ),
-            )));
+            ));
         };
         self.dylibs[at].bindings.push(Binding {
             is_variadic: false,

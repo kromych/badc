@@ -81,6 +81,9 @@ catalog! {
     1013, "error-directive", [], Error, Hard,
         [], Live,
         "a `#error` directive reached in an active conditional block";
+    1014, "macro", [], Error, Hard,
+        [], Live,
+        "a macro definition or invocation C99 6.10.3 rejects: an argument count the definition does not take, `##` at either end of a replacement list";
     2001, "unused-variable", ["C4101"], Ignore, Controllable,
         [ALL], Live,
         "a variable declared and never used";
@@ -342,6 +345,7 @@ impl Code {
     pub const INVALID_PRAGMA: Code = Code::new(1011);
     pub const INVALID_TOKEN: Code = Code::new(1012);
     pub const ERROR_DIRECTIVE: Code = Code::new(1013);
+    pub const MACRO: Code = Code::new(1014);
     pub const SYNTAX: Code = Code::new(2020);
     pub const INVALID_DECLARATION: Code = Code::new(2021);
     pub const UNDECLARED_IDENTIFIER: Code = Code::new(2022);

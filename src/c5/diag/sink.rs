@@ -55,6 +55,13 @@ impl Sink {
         &mut self.control
     }
 
+    /// The recorded pragma events, for the next pass over the same
+    /// translation unit. The offsets are positions in that unit, so
+    /// only a pass reading the same text may take them.
+    pub fn into_control(self) -> Control {
+        self.control
+    }
+
     /// Append a diagnostic whose level is already resolved. Used where
     /// a pass replays what an earlier run of the same text produced.
     pub fn record(&mut self, diagnostic: Diagnostic) {

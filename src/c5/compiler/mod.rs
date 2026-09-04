@@ -2161,9 +2161,10 @@ pub struct Compiler {
     /// lockstep with the per-symbol vectors.
     pending_store_symbols: Vec<usize>,
 
-    /// Whether the `dead-store` row reports at all, resolved once from
-    /// the command line. The parser's per-store bookkeeping is only
-    /// worth its cost when it does.
+    /// Whether the `dead-store` row reports anywhere in this unit,
+    /// resolved once from the command line and the pragmas. The
+    /// parser's per-store bookkeeping is only worth its cost when it
+    /// does.
     warn_dead_store: bool,
     /// Mirror of [`CompileOptions::no_entry_point`]. Drops the
     /// "must define main / wmain / WinMain / wWinMain" check
@@ -2674,12 +2675,16 @@ impl Compiler {
         // they reach the driver through `Program::text_diagnostics`, which
         // keeps their position ahead of the parser's warnings.
         // TODO: carry them as diagnostics once the ordering is settled.
-        let pp_warnings = pp
+        let pp_warnings: Vec<String> = pp
             .sink
             .diagnostics()
             .iter()
             .map(ToString::to_string)
             .collect();
+        // The diagnostic pragmas the preprocessor recorded are keyed on
+        // byte offsets into `preprocessed`, which is what the lexer
+        // reads, so they govern the parser's diagnostics as well.
+        let pp_control = pp.sink.into_control();
         let pp_include_records = pp.include_records;
         let pp_entrypoint = pp.entrypoint;
         let pp_subsystem = pp.subsystem;
@@ -2688,7 +2693,13 @@ impl Compiler {
         let mut symbols = Vec::new();
         let mut symbol_index = lexer::SymbolIndex::new();
         let shadowed = lexer::init_symbols(&mut symbols, &mut symbol_index, &dylibs);
-        let mut sink = crate::c5::diag::Sink::new(opts.diag.clone(), Default::default());
+        // The dead-store bookkeeping is a cost the parser pays only when
+        // the row reports somewhere, which a pragma decides as much as
+        // the command line does.
+        let warn_dead_store = opts.diag.level(crate::c5::diag::Code::DEAD_STORE)
+            != crate::c5::diag::Level::Ignore
+            || pp_control.may_report(crate::c5::diag::Code::DEAD_STORE);
+        let mut sink = crate::c5::diag::Sink::new(opts.diag.clone(), pp_control);
         for b in shadowed {
             sink.emit(
                 crate::c5::diag::Code::SHADOWED_BINDING,
@@ -2820,8 +2831,7 @@ impl Compiler {
             current_func_conv: crate::c5::codegen::CallConv::Target,
             pending: Pending::default(),
             pending_store_symbols: Vec::new(),
-            warn_dead_store: opts.diag.level(crate::c5::diag::Code::DEAD_STORE)
-                != crate::c5::diag::Level::Ignore,
+            warn_dead_store,
             no_entry_point: opts.no_entry_point,
             data_align: 8,
             implicit_extern_fns: opts.implicit_extern_fns.clone(),

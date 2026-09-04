@@ -2347,3 +2347,172 @@ fn a_diagnostic_pragma_decides_the_exit_code() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// The same pragmas decide the level of the parser's diagnostics, not
+/// only the preprocessor's: the events are keyed on offsets into the
+/// preprocessed unit, which is the text the lexer reads.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn a_diagnostic_pragma_governs_a_parser_diagnostic() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-diagprag-parse-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+
+    let compile = |name: &str, body: &str, extra: &[&str]| {
+        let src = dir.join(format!("{name}.c"));
+        std::fs::write(&src, body).expect("write source");
+        Command::new(badc)
+            .arg("--target=linux-x64")
+            .arg("-Wall")
+            .args(extra)
+            .arg("-c")
+            .arg(&src)
+            .arg("-o")
+            .arg(dir.join(format!("{name}.o")))
+            .output()
+            .expect("run badc")
+    };
+
+    let unused = "int main(void) { int n = 5; return 0; }\n";
+    let plain = compile("plain", unused, &[]);
+    assert!(plain.status.success());
+    let stderr = String::from_utf8_lossy(&plain.stderr);
+    assert!(
+        stderr.contains("[B2001] [-Wunused-variable]"),
+        "expected the parser's row: {stderr}"
+    );
+
+    // Each spelling of `ignored` reaches the same row; 4101 is the
+    // catalogue's MSVC alias for it.
+    for silencer in [
+        "#pragma GCC diagnostic ignored \"-Wunused-variable\"\n",
+        "#pragma clang diagnostic ignored \"-Wunused-variable\"\n",
+        "#pragma warning(disable : 4101)\n",
+    ] {
+        let quiet = compile("quiet", &format!("{silencer}{unused}"), &[]);
+        assert!(quiet.status.success(), "{silencer}: must still compile");
+        let stderr = String::from_utf8_lossy(&quiet.stderr);
+        assert!(
+            !stderr.contains("B2001"),
+            "{silencer}: expected silence, got: {stderr}"
+        );
+    }
+
+    for raiser in [
+        "#pragma GCC diagnostic error \"-Wunused-variable\"\n",
+        "#pragma warning(error : 4101)\n",
+    ] {
+        let failed = compile("raised", &format!("{raiser}{unused}"), &[]);
+        assert!(
+            !failed.status.success(),
+            "{raiser}: a raised diagnostic must fail the unit"
+        );
+        let stderr = String::from_utf8_lossy(&failed.stderr);
+        assert!(
+            stderr.contains("error:") && stderr.contains("B2001"),
+            "{raiser}: expected the raised diagnostic: {stderr}"
+        );
+    }
+
+    // `push` / `pop` bound the region: the declarations outside it
+    // report, the one inside does not.
+    let scoped = compile(
+        "scoped",
+        "int a(void) { int x = 1; return 0; }\n\
+         #pragma GCC diagnostic push\n\
+         #pragma GCC diagnostic ignored \"-Wunused-variable\"\n\
+         int b(void) { int y = 1; return 0; }\n\
+         #pragma GCC diagnostic pop\n\
+         int main(void) { int z = 1; return a() + b(); }\n",
+        &[],
+    );
+    assert!(scoped.status.success());
+    let stderr = String::from_utf8_lossy(&scoped.stderr);
+    assert!(
+        stderr.contains("scoped.c:1:") && stderr.contains("scoped.c:6:") && !stderr.contains(":4:"),
+        "push/pop must bound the region: {stderr}"
+    );
+
+    // The pragma decides where it covers the position and the command
+    // line where it does not: `-Werror` fails the first declaration and
+    // leaves the second a warning.
+    let mixed = compile(
+        "mixed",
+        "int a(void) { int x = 1; return 0; }\n\
+         #pragma GCC diagnostic warning \"-Wunused-variable\"\n\
+         int main(void) { int y = 1; return a(); }\n",
+        &["-Werror"],
+    );
+    assert!(!mixed.status.success(), "-Werror must fail the unit");
+    let stderr = String::from_utf8_lossy(&mixed.stderr);
+    assert!(
+        stderr.contains("mixed.c:1: error:") && stderr.contains("mixed.c:3: warning:"),
+        "the pragma must override -Werror at its position only: {stderr}"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A pragma is a position in the translation unit, so one left set in a
+/// header applies to everything the include precedes; a header that
+/// wraps it in `push` / `pop` scopes it to itself. gcc and clang behave
+/// the same way.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn a_header_scopes_its_diagnostic_pragma_with_push_and_pop() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-diagprag-hdr-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+    std::fs::write(
+        dir.join("leak.h"),
+        "#pragma GCC diagnostic ignored \"-Wunused-variable\"\n",
+    )
+    .expect("write header");
+    std::fs::write(
+        dir.join("scoped.h"),
+        "#pragma GCC diagnostic push\n\
+         #pragma GCC diagnostic ignored \"-Wunused-variable\"\n\
+         #pragma GCC diagnostic pop\n",
+    )
+    .expect("write header");
+
+    let compile = |name: &str, header: &str| {
+        let src = dir.join(format!("{name}.c"));
+        std::fs::write(
+            &src,
+            format!("#include \"{header}\"\nint main(void) {{ int n = 5; return 0; }}\n"),
+        )
+        .expect("write source");
+        Command::new(badc)
+            .arg("--target=linux-x64")
+            .arg("-Wall")
+            .arg("-Werror")
+            .arg("-c")
+            .arg(&src)
+            .arg("-o")
+            .arg(dir.join(format!("{name}.o")))
+            .output()
+            .expect("run badc")
+    };
+
+    let leaked = compile("leaked", "leak.h");
+    assert!(
+        leaked.status.success(),
+        "an unpopped pragma covers what follows the include: {}",
+        String::from_utf8_lossy(&leaked.stderr)
+    );
+    let scoped = compile("scoped", "scoped.h");
+    assert!(
+        !scoped.status.success(),
+        "a popped pragma must not reach past the include"
+    );
+    let stderr = String::from_utf8_lossy(&scoped.stderr);
+    assert!(
+        stderr.contains("[B2001] [-Wunused-variable]"),
+        "expected the row back at its command-line level: {stderr}"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

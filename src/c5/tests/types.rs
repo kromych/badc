@@ -315,6 +315,86 @@ fn warnings_as_errors_do_not_stop_the_parse() {
     );
 }
 
+/// A diagnostic pragma governs the parser's diagnostics as well as the
+/// preprocessor's: the events the preprocessor records are keyed on
+/// byte offsets into the text the lexer then reads.
+#[test]
+fn a_pragma_silences_a_parser_diagnostic() {
+    let src = "#pragma GCC diagnostic ignored \"-Wunused-variable\"\n\
+               int main(void) { int n = 5; return 0; }\n";
+    let p = super::compile_str_bare_with_diags(src, &["all"]);
+    assert!(p.warnings.is_empty(), "got: {:?}", p.warnings);
+}
+
+/// The pragma raises as well as it silences. The unit still parses
+/// whole; the caller fails it at the phase boundary.
+#[test]
+fn a_pragma_raises_a_parser_diagnostic_to_an_error() {
+    let src = "#pragma GCC diagnostic error \"-Wunused-variable\"\n\
+               int main(void) { int n = 5; return 0; }\n";
+    let p = super::compile_str_bare_with_diags(src, &["all"]);
+    let levels: alloc::vec::Vec<crate::diag::Level> = p.warnings.iter().map(|d| d.level).collect();
+    assert_eq!(levels, [crate::diag::Level::Error], "got: {:?}", p.warnings);
+}
+
+/// `push` / `pop` scope the level over a region: the declarations
+/// outside the pair report, the one inside does not.
+#[test]
+fn push_and_pop_scope_a_parser_diagnostic() {
+    let src = "int a(void) { int x = 1; return 0; }\n\
+               #pragma GCC diagnostic push\n\
+               #pragma GCC diagnostic ignored \"-Wunused-variable\"\n\
+               int b(void) { int y = 1; return 0; }\n\
+               #pragma GCC diagnostic pop\n\
+               int main(void) { int z = 1; return 0; }\n";
+    let p = super::compile_str_bare_with_diags(src, &["all"]);
+    let lines: alloc::vec::Vec<u32> = p
+        .warnings
+        .iter()
+        .filter_map(|d| d.loc.as_ref().map(|l| l.line))
+        .collect();
+    assert_eq!(lines, [1, 6], "got: {:?}", p.warnings);
+}
+
+/// Precedence at a position: the pragma decides where one covers it,
+/// the command line where none does. `-Werror` raises the first
+/// declaration; the pragma leaves the second a warning.
+#[test]
+fn a_pragma_overrides_werror_where_it_covers_the_position() {
+    use crate::{CompileOptions, Compiler, Target};
+    let mut config = super::diag_config(&["all"]);
+    config.warnings_as_errors(true);
+    let src = "int a(void) { int x = 1; return 0; }\n\
+               #pragma GCC diagnostic warning \"-Wunused-variable\"\n\
+               int b(void) { int y = 1; return 0; }\n\
+               int main(void) { return a() + b(); }\n";
+    let p = Compiler::with_options(
+        src.to_string(),
+        Target::default_target(),
+        CompileOptions::default().with_diag(config),
+    )
+    .compile()
+    .expect("the unit parses whole under -Werror");
+    let levels: alloc::vec::Vec<crate::diag::Level> = p.warnings.iter().map(|d| d.level).collect();
+    assert_eq!(
+        levels,
+        [crate::diag::Level::Error, crate::diag::Level::Warning],
+        "got: {:?}",
+        p.warnings
+    );
+}
+
+/// The MSVC spelling reaches the same rows through the catalogue's
+/// number aliases: 4101 is `unused-variable`, 4505 `unused-function`.
+#[test]
+fn the_msvc_pragma_reaches_a_parser_diagnostic() {
+    let src = "#pragma warning(disable : 4101 4505)\n\
+               static int helper(void) { return 1; }\n\
+               int main(void) { int n = 5; return 0; }\n";
+    let p = super::compile_str_bare_with_diags(src, &["all"]);
+    assert!(p.warnings.is_empty(), "got: {:?}", p.warnings);
+}
+
 #[test]
 fn warn_return_type_mismatch() {
     // `return <expr>;` whose type doesn't match the function return
@@ -629,6 +709,23 @@ fn warn_dead_store_off_by_default() {
         "dead-store warnings should not fire without -Wdead-store: {:?}",
         dead
     );
+}
+
+/// The bookkeeping behind the row is gated on the row reporting, so
+/// the gate reads the pragmas as well as the command line: a pragma
+/// turns the analysis on where no option did.
+#[test]
+fn a_pragma_enables_the_dead_store_analysis() {
+    let src = "#pragma GCC diagnostic warning \"-Wdead-store\"\n\
+               int main(void) { int n = 1; n = 2; return n; }\n";
+    let p = super::compile_str_bare_with_diags(src, &[]);
+    let dead: alloc::vec::Vec<&str> = p
+        .warnings
+        .iter()
+        .filter(|w| w.text.contains("dead store:"))
+        .map(|w| w.text.as_str())
+        .collect();
+    assert_eq!(dead.len(), 1, "got: {:?}", p.warnings);
 }
 
 /// `typedef HANDLE *PHANDLE;` with no prior `HANDLE` typedef

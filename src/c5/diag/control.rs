@@ -270,6 +270,18 @@ impl Control {
         }
     }
 
+    /// Whether any pragma raises `code` above [`Level::Ignore`]. A pass
+    /// whose analysis is gated on the row reporting asks this as well as
+    /// the command line, so a pragma can turn the analysis on where the
+    /// options left it off.
+    pub fn may_report(&self, code: Code) -> bool {
+        self.events.get(&code.value()).is_some_and(|events| {
+            events
+                .iter()
+                .any(|(_, level)| matches!(level, Some(l) if *l != Level::Ignore))
+        })
+    }
+
     fn is_suppressed(&self, code: Code, offset: u32) -> bool {
         let Some(extents) = self.suppressed.get(&code.value()) else {
             return false;

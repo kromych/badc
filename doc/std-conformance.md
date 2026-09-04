@@ -185,6 +185,13 @@ implemented; a selector is a diagnostic's name, one of its aliases, its
 `B` code or a group name, and one no catalogue row answers to is refused
 by name. `--list-diagnostics` prints the catalogue.
 
+The diagnostic pragmas -- `#pragma GCC diagnostic`, `#pragma clang
+diagnostic` and MSVC's `#pragma warning(...)` -- take the same selectors
+and decide a row's level at the source position they precede, for the
+parser's diagnostics as well as the preprocessor's. A pragma covering
+the position wins over the command line; `push` and `pop` bound the
+region it covers.
+
 `-Wa,<opt>` and `-Xassembler <opt>` are checked rather than passed on, since
 the assembler is built in: an option badc's assembler has no equivalent for
 is refused by name (`unsupported assembler option`) instead of reaching a

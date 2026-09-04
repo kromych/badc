@@ -4185,6 +4185,45 @@ fn a_pragma_wins_over_the_command_line_where_it_applies() {
     assert_eq!(codes(&pp), Vec::<Code>::new());
 }
 
+/// The `-W` family reaches this pass through the front end, not only
+/// through a sink a test hands it: the compiler installs
+/// `CompileOptions::diag` before the source is read, so a selector on
+/// the command line silences or raises a preprocessor row.
+#[test]
+fn the_front_end_installs_the_command_line_on_this_passs_sink() {
+    use crate::{CompileOptions, Compiler, Target};
+    let src = alloc::format!("{UNKNOWN_PRAGMA_LINE}int main(void) {{ return 0; }}\n");
+    let compile = |config: Config| {
+        Compiler::with_options(
+            src.clone(),
+            Target::default_target(),
+            CompileOptions::default().with_diag(config),
+        )
+        .compile()
+    };
+
+    let plain = compile(Config::new()).expect("an unknown pragma is not an error");
+    assert_eq!(
+        plain.text_diagnostics.len(),
+        1,
+        "{:?}",
+        plain.text_diagnostics
+    );
+
+    let mut silenced = Config::new();
+    silenced.set_level(UNKNOWN_PRAGMA, Level::Ignore);
+    let quiet = compile(silenced).expect("compiles");
+    assert!(
+        quiet.text_diagnostics.is_empty(),
+        "{:?}",
+        quiet.text_diagnostics
+    );
+
+    let mut raised = Config::new();
+    raised.warnings_as_errors(true);
+    assert!(compile(raised).is_err(), "-Werror must fail the unit");
+}
+
 #[test]
 fn a_msvc_pragma_operator_records_at_its_own_position() {
     // `__pragma(...)` on a content line reaches the same recorder.

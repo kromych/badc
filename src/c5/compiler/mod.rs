@@ -2497,6 +2497,9 @@ impl Compiler {
     /// drive `process()` afterward.
     fn configure_preprocessor(target: Target, opts: &CompileOptions) -> Preprocessor {
         let mut pp = Preprocessor::new(target.id_str(), target, env!("CARGO_PKG_VERSION"));
+        // The `-W` family governs this pass's diagnostics too; the
+        // pragmas it records then refine them per position.
+        pp.sink.set_config(opts.diag.clone());
         // `-m16` / `-m32` reach the front end as an ELFCLASS32 object;
         // gcc preprocesses those units with the i386 predefine set.
         // `-mcmodel` moves the `__code_model_*__` name the same way, and

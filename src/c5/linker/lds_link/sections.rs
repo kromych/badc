@@ -146,6 +146,7 @@ impl<'a> LdsLinker<'a> {
                             weak.entry(s.name.clone()).or_insert((oi, si));
                         } else if let Some(&(poi, _)) = strong.get(&s.name) {
                             return Err(link_err(
+                                Code::DUPLICATE_SYMBOL,
                                 MODULE,
                                 &format!(
                                     "multiple definition of `{}` (in {} and {})",
@@ -219,7 +220,11 @@ impl<'a> LdsLinker<'a> {
 
     pub(super) fn build_statements(&mut self) -> Result<(), C5Error> {
         let Some(items) = self.script.sections() else {
-            return Err(link_err(MODULE, "script has no SECTIONS command"));
+            return Err(link_err(
+                Code::LINKER_SCRIPT,
+                MODULE,
+                "script has no SECTIONS command",
+            ));
         };
         for item in items {
             match item {
@@ -558,7 +563,7 @@ impl<'a> LdsLinker<'a> {
             if orphan_list.len() > 20 {
                 msg.push_str(&format!("\n  ... {} total", orphan_list.len()));
             }
-            return Err(link_err(MODULE, &msg));
+            return Err(link_err(Code::ORPHAN_SECTION, MODULE, &msg));
         }
         if self.opts.orphan_handling == OrphanHandling::Discard {
             for &i in &orphan_list {

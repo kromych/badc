@@ -102,7 +102,7 @@ impl<'a> LdsLinker<'a> {
         }
         if !errors.is_empty() {
             errors.truncate(40);
-            return Err(link_err(MODULE, &errors.join("\n")));
+            return Err(link_err(Code::RELOCATION, MODULE, &errors.join("\n")));
         }
         Ok(())
     }

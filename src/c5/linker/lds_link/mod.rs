@@ -792,12 +792,13 @@ impl<'a> LdsLinker<'a> {
         opts: LdsOptions,
     ) -> Result<Self, C5Error> {
         if objects.is_empty() {
-            return Err(link_err(MODULE, "no input objects"));
+            return Err(link_err(Code::LINK, MODULE, "no input objects"));
         }
         let machine = objects[0].machine;
         for o in &objects[1..] {
             if o.machine != machine {
                 return Err(link_err(
+                    Code::LINK,
                     MODULE,
                     &format!(
                         "{}: machine {} differs from {}'s {}",
@@ -809,6 +810,7 @@ impl<'a> LdsLinker<'a> {
         for o in &objects {
             if o.class != class_for_machine(machine) {
                 return Err(link_err(
+                    Code::LINK,
                     MODULE,
                     &format!(
                         "{}: ELF class does not match machine {}",
@@ -992,11 +994,15 @@ impl<'a> LdsLinker<'a> {
             self.phdrs = n;
         }
         if !converged {
-            return Err(link_err(MODULE, "script layout did not converge"));
+            return Err(link_err(
+                Code::LINKER_SCRIPT,
+                MODULE,
+                "script layout did not converge",
+            ));
         }
         self.layout_pass(true)?;
         if !self.errors.is_empty() {
-            return Err(link_err(MODULE, &self.errors.join("\n")));
+            return Err(link_err(Code::LINK, MODULE, &self.errors.join("\n")));
         }
         if !self.undefined.is_empty() {
             let list: Vec<String> = self
@@ -1010,14 +1016,30 @@ impl<'a> LdsLinker<'a> {
             } else {
                 String::new()
             };
-            return Err(link_err(MODULE, &format!("{}{}", list.join("\n"), extra)));
+            return Err(link_err(
+                Code::UNDEFINED_SYMBOL,
+                MODULE,
+                &format!("{}{}", list.join("\n"), extra),
+            ));
         }
         let res = self.finish()?;
         // Writing the image can fail on its own: an `.eh_frame` the FDE
         // scan cannot read, or a synthesized table that outgrew the
         // section sized for it.
         if !self.errors.is_empty() {
-            return Err(link_err(MODULE, &self.errors.join("\n")));
+            return Err(link_err(Code::LINK, MODULE, &self.errors.join("\n")));
+        }
+        // A diagnostic the command line raised to an error does not
+        // unwind at its site; it fails the link here, carrying every
+        // diagnostic the link produced.
+        if self.sink.has_errors() {
+            return Err(C5Error::Compile(
+                res.warnings
+                    .iter()
+                    .map(|d| d.to_string())
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            ));
         }
         // A diagnostic the command line raised to an error does not
         // unwind at its site; it fails the link here, carrying every

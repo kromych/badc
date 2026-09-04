@@ -71,13 +71,30 @@ pub(crate) mod target_libc;
 
 /// A diagnostic the linker raises: `internal_err` for an inconsistency
 /// in its own bookkeeping, `link_err` for a failure the inputs caused.
-/// A non-empty `module` prefixes the message with the module's name.
-pub(crate) fn internal_err(module: &str, msg: &str) -> crate::c5::error::C5Error {
-    crate::c5::error::C5Error::Compile(crate::c5::error::fmt_internal_err(&tagged(module, msg)))
+/// `code` is the catalogue row it prints, and a non-empty `module`
+/// prefixes the message with the module's name.
+///
+/// TODO: the input readers -- the archive, ELF and Mach-O parsers --
+/// report a malformed input through `internal_err`, so their text
+/// claims badc is at fault. Moving them to
+/// `link_err(Code::MALFORMED_INPUT, ..)` changes what they print.
+pub(crate) fn internal_err(
+    code: crate::c5::diag::Code,
+    module: &str,
+    msg: &str,
+) -> crate::c5::error::C5Error {
+    crate::c5::error::C5Error::Compile(crate::c5::error::fmt_internal_diag(
+        code,
+        &tagged(module, msg),
+    ))
 }
 
-pub(crate) fn link_err(module: &str, msg: &str) -> crate::c5::error::C5Error {
-    crate::c5::error::C5Error::Compile(crate::c5::error::fmt_link_err(&tagged(module, msg)))
+pub(crate) fn link_err(
+    code: crate::c5::diag::Code,
+    module: &str,
+    msg: &str,
+) -> crate::c5::error::C5Error {
+    crate::c5::error::C5Error::Compile(crate::c5::error::fmt_link_diag(code, &tagged(module, msg)))
 }
 
 fn tagged(module: &str, msg: &str) -> alloc::string::String {

@@ -3,6 +3,7 @@
 
 #![cfg(feature = "std")]
 
+use crate::c5::diag::Code;
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::format;
 use alloc::string::String;
@@ -124,9 +125,12 @@ fn relocated_data_offsets(
 /// Diagnostic for an assembler `.section` / `.pushsection` argument the
 /// relocatable writer cannot reproduce faithfully.
 fn asm_section_err(name: &str, what: &str) -> C5Error {
-    C5Error::Compile(crate::c5::error::fmt_link_err(&alloc::format!(
-        "inline asm: section `{name}` requests {what}, which the object writer does not emit"
-    )))
+    C5Error::Compile(crate::c5::error::fmt_link_diag(
+        Code::OBJECT_FORMAT,
+        &alloc::format!(
+            "inline asm: section `{name}` requests {what}, which the object writer does not emit"
+        ),
+    ))
 }
 
 const SHF_WRITE: u64 = 0x1;
@@ -225,7 +229,8 @@ fn fold_rel_addends(class: ElfClass, table: &[u8], body: &mut [u8]) -> Result<()
         let rtype = u64::from_le_bytes(row[8..16].try_into().unwrap()) as u32;
         let addend = i64::from_le_bytes(row[16..24].try_into().unwrap());
         let Some(width) = i386_field_width(rtype) else {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_diag(
+                Code::INTERNAL,
                 &alloc::format!(
                     "elf_reloc: {} carries no field for an implicit addend",
                     i386_reloc_desc(rtype)
@@ -234,7 +239,8 @@ fn fold_rel_addends(class: ElfClass, table: &[u8], body: &mut [u8]) -> Result<()
         };
         let end = off + width as usize;
         if end > body.len() {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_diag(
+                Code::INTERNAL,
                 &alloc::format!(
                     "elf_reloc: {} at 0x{off:x} (width {width}) past section end (length {})",
                     i386_reloc_desc(rtype),
@@ -293,10 +299,13 @@ fn build_init_array_sections(
         alloc::collections::BTreeMap::new();
     for f in init_funcs {
         let sym_idx = *func_symidx_by_name.get(&f.name).ok_or_else(|| {
-            C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
-                "elf_reloc: init/fini function `{}` has no .symtab entry",
-                f.name
-            )))
+            C5Error::Compile(crate::c5::error::fmt_internal_diag(
+                Code::INTERNAL,
+                &format!(
+                    "elf_reloc: init/fini function `{}` has no .symtab entry",
+                    f.name
+                ),
+            ))
         })?;
         let key = (
             f.is_destructor,
@@ -683,7 +692,9 @@ fn carve_anonymous_const_data(
         let e = carve
             .table
             .get_or_insert(RODATA_SECTION, SHT_PROGBITS, SHF_ALLOC, align)
-            .map_err(|m| C5Error::Compile(crate::c5::error::fmt_internal_err(&m)))?;
+            .map_err(|m| {
+                C5Error::Compile(crate::c5::error::fmt_internal_diag(Code::INTERNAL, &m))
+            })?;
         named_objs.push(NamedDataObj {
             val: lo,
             copy: hi - lo,
@@ -1213,7 +1224,7 @@ impl<'a> RelocWriter<'a> {
     }
 
     fn internal(msg: String) -> C5Error {
-        C5Error::Compile(crate::c5::error::fmt_internal_err(&msg))
+        C5Error::Compile(crate::c5::error::fmt_internal_diag(Code::INTERNAL, &msg))
     }
 
     /// Reserve a table entry's `base` for `len` bytes at `align`.
@@ -1380,7 +1391,8 @@ impl<'a> RelocWriter<'a> {
                             .next()
                             .is_some()
                     {
-                        return Err(C5Error::Compile(crate::c5::error::fmt_link_err(
+                        return Err(C5Error::Compile(crate::c5::error::fmt_link_diag(
+                            Code::OBJECT_FORMAT,
                             &alloc::format!(
                                 "only zero initializers are allowed in section `{sec}` (object `{}`)",
                                 sym.name
@@ -3680,7 +3692,8 @@ impl<'a> RelocWriter<'a> {
                 && relocs.data.is_empty()
                 && relocs.tail_sections.is_empty())
         {
-            return Err(C5Error::Compile(crate::c5::error::fmt_link_err(
+            return Err(C5Error::Compile(crate::c5::error::fmt_link_diag(
+                Code::OBJECT_FORMAT,
                 "badc generates no 32-bit machine code; an ELFCLASS32 object carries \
                  assembled sections and debug info only",
             )));
@@ -4253,7 +4266,7 @@ impl<'a> RelocWriter<'a> {
             let sh_link = match e.link.as_deref() {
                 None => 0,
                 Some(l) => section_index_by_name(l).ok_or_else(|| {
-                    C5Error::Compile(crate::c5::error::fmt_link_err(&format!(
+                    C5Error::Compile(crate::c5::error::fmt_link_diag(Code::OBJECT_FORMAT, &format!(
                         "inline asm: section `{}` is ordered after `{l}`, which the object does not define",
                         e.name
                     )))
@@ -4710,16 +4723,19 @@ fn dwarf_reloc_to_elf_rela(
         abi.abs(r.width.bytes() as u32)
     };
     let rtype = rtype.ok_or_else(|| {
-        C5Error::Compile(crate::c5::error::fmt_internal_err(&alloc::format!(
-            "elf_reloc: debug info holds a {}-byte {} slot, which this psABI \
+        C5Error::Compile(crate::c5::error::fmt_internal_diag(
+            Code::INTERNAL,
+            &alloc::format!(
+                "elf_reloc: debug info holds a {}-byte {} slot, which this psABI \
              has no relocation for",
-            r.width.bytes(),
-            if tls {
-                "thread-local offset"
-            } else {
-                "address"
-            }
-        )))
+                r.width.bytes(),
+                if tls {
+                    "thread-local offset"
+                } else {
+                    "address"
+                }
+            ),
+        ))
     })?;
     Ok(Some(Elf64Rela {
         r_offset: r.offset,
@@ -4797,7 +4813,8 @@ fn emit_addr_fixup_relocs(
                 // immediate. The codegen emits only whole references, so no
                 // caller reaches this.
                 AddrPart::InPage => {
-                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_diag(
+                        Code::INTERNAL,
                         &format!(
                             "elf_reloc: in-page-only fixup at text+{instr_offset:#x} has no \
                              relocation type"
@@ -4906,7 +4923,8 @@ fn rewrite_extern_addr_loads_to_got(
                     super::aarch64::patch::SlotWidth::W64,
                 )
                 .map_err(|e| {
-                    C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    C5Error::Compile(crate::c5::error::fmt_internal_diag(
+                        Code::INTERNAL,
                         &e.describe("ELF: GOT reference"),
                     ))
                 })?;

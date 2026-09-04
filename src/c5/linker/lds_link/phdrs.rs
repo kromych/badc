@@ -1,5 +1,6 @@
 //! Program headers.
 
+use crate::c5::diag::Code;
 use crate::c5::error::C5Error;
 use crate::c5::linker::lds::PhdrDef;
 use crate::c5::linker::link_err;
@@ -112,6 +113,7 @@ impl<'a> LdsLinker<'a> {
                         Some(&k) => set.push(k),
                         None => {
                             return Err(link_err(
+                                Code::LINKER_SCRIPT,
                                 MODULE,
                                 &format!(
                                     "output section `{}' names unknown program header `{n}'",

@@ -16,6 +16,7 @@
 #![cfg(feature = "std")]
 #![allow(dead_code)]
 
+use crate::c5::diag::Code;
 use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -346,6 +347,7 @@ impl<'a> Lexer<'a> {
                 loop {
                     if i + 1 >= self.src.len() {
                         return Err(link_err(
+                            Code::LINKER_SCRIPT,
                             MODULE,
                             &format!("line {}: unterminated /* comment", self.line),
                         ));
@@ -402,12 +404,14 @@ impl<'a> Lexer<'a> {
             }
             if i >= self.src.len() {
                 return Err(link_err(
+                    Code::LINKER_SCRIPT,
                     MODULE,
                     &format!("line {}: unterminated string", self.line),
                 ));
             }
-            let s = core::str::from_utf8(&self.src[self.pos + 1..i])
-                .map_err(|_| link_err(MODULE, "string literal is not UTF-8"))?;
+            let s = core::str::from_utf8(&self.src[self.pos + 1..i]).map_err(|_| {
+                link_err(Code::LINKER_SCRIPT, MODULE, "string literal is not UTF-8")
+            })?;
             return Ok((Tok::Str(s.to_string()), i + 1));
         }
         if Self::word_char(c, state) && !(state == LexState::Expr && c == b'.') {
@@ -416,7 +420,7 @@ impl<'a> Lexer<'a> {
                 i += 1;
             }
             let w = core::str::from_utf8(&self.src[self.pos..i])
-                .map_err(|_| link_err(MODULE, "name is not UTF-8"))?;
+                .map_err(|_| link_err(Code::LINKER_SCRIPT, MODULE, "name is not UTF-8"))?;
             return Ok((Tok::Word(w.to_string()), i));
         }
         // In expression state a lone `.` is the location counter; a
@@ -439,6 +443,7 @@ impl<'a> Lexer<'a> {
             }
         }
         Err(link_err(
+            Code::LINKER_SCRIPT,
             MODULE,
             &format!("line {}: unexpected character `{}`", self.line, c as char),
         ))
@@ -457,6 +462,7 @@ impl<'a> Lexer<'a> {
             Ok(())
         } else {
             Err(link_err(
+                Code::LINKER_SCRIPT,
                 MODULE,
                 &format!("line {line}: expected `{p}`, found {tok:?}"),
             ))
@@ -573,9 +579,9 @@ impl<'a> Parser<'a> {
                     "ENTRY" => {
                         self.lex.pos = end;
                         let names = self.parse_name_list()?;
-                        let name = names
-                            .first()
-                            .ok_or_else(|| link_err(MODULE, "ENTRY() requires a symbol"))?;
+                        let name = names.first().ok_or_else(|| {
+                            link_err(Code::LINKER_SCRIPT, MODULE, "ENTRY() requires a symbol")
+                        })?;
                         commands.push(Command::Entry(name.clone()));
                         self.eat_semis()?;
                     }
@@ -602,6 +608,7 @@ impl<'a> Parser<'a> {
                     }
                     "MEMORY" | "INSERT" | "REGION_ALIAS" | "INCLUDE" => {
                         return Err(link_err(
+                            Code::LINKER_SCRIPT,
                             MODULE,
                             &format!("line {}: `{w}` is not supported", self.lex.line),
                         ));
@@ -610,6 +617,7 @@ impl<'a> Parser<'a> {
                 },
                 other => {
                     return Err(link_err(
+                        Code::LINKER_SCRIPT,
                         MODULE,
                         &format!("line {}: unexpected {other:?} at file level", self.lex.line),
                     ));
@@ -637,6 +645,7 @@ impl<'a> Parser<'a> {
                 Tok::Punct(")") => break,
                 other => {
                     return Err(link_err(
+                        Code::LINKER_SCRIPT,
                         MODULE,
                         &format!("line {}: unexpected {other:?} in name list", self.lex.line),
                     ));
@@ -660,7 +669,9 @@ impl<'a> Parser<'a> {
                     depth -= 1;
                     if depth == 0 {
                         let s = core::str::from_utf8(&self.lex.src[start..self.lex.pos])
-                            .map_err(|_| link_err(MODULE, "argument is not UTF-8"))?
+                            .map_err(|_| {
+                                link_err(Code::LINKER_SCRIPT, MODULE, "argument is not UTF-8")
+                            })?
                             .trim()
                             .to_string();
                         self.lex.pos += 1;
@@ -672,7 +683,7 @@ impl<'a> Parser<'a> {
             }
             self.lex.pos += 1;
         }
-        Err(link_err(MODULE, "unterminated `(`"))
+        Err(link_err(Code::LINKER_SCRIPT, MODULE, "unterminated `(`"))
     }
 
     fn parse_assert_args(&mut self) -> Result<(Expr, String), C5Error> {
@@ -683,6 +694,7 @@ impl<'a> Parser<'a> {
             Tok::Str(s) => s,
             other => {
                 return Err(link_err(
+                    Code::LINKER_SCRIPT,
                     MODULE,
                     &format!(
                         "line {}: ASSERT message must be a string, found {other:?}",
@@ -712,6 +724,7 @@ impl<'a> Parser<'a> {
                 Tok::Word(w) => w,
                 other => {
                     return Err(link_err(
+                        Code::LINKER_SCRIPT,
                         MODULE,
                         &format!("line {line}: expected symbol name, found {other:?}"),
                     ));
@@ -734,6 +747,7 @@ impl<'a> Parser<'a> {
             Tok::Punct(".") => ".".to_string(),
             other => {
                 return Err(link_err(
+                    Code::LINKER_SCRIPT,
                     MODULE,
                     &format!("line {line}: expected symbol name, found {other:?}"),
                 ));
@@ -744,7 +758,7 @@ impl<'a> Parser<'a> {
             .iter()
             .find_map(|(p, op)| op_tok.is(p).then_some(*op))
             .ok_or_else(|| {
-                link_err(MODULE, &format!(
+                link_err(Code::LINKER_SCRIPT, MODULE, &format!(
                     "line {line}: expected assignment operator after `{symbol}`, found {op_tok:?}"
                 ))
             })?;
@@ -770,6 +784,7 @@ impl<'a> Parser<'a> {
                 Tok::Word(w) => w,
                 other => {
                     return Err(link_err(
+                        Code::LINKER_SCRIPT,
                         MODULE,
                         &format!(
                             "line {}: expected program header name, found {other:?}",
@@ -781,12 +796,14 @@ impl<'a> Parser<'a> {
             let ty = match self.lex.next(LexState::Pattern)? {
                 Tok::Word(w) => phdr_type(&w).ok_or_else(|| {
                     link_err(
+                        Code::LINKER_SCRIPT,
                         MODULE,
                         &format!("line {}: unknown program header type `{w}`", self.lex.line),
                     )
                 })?,
                 other => {
                     return Err(link_err(
+                        Code::LINKER_SCRIPT,
                         MODULE,
                         &format!(
                             "line {}: expected program header type, found {other:?}",
@@ -850,6 +867,7 @@ impl<'a> Parser<'a> {
                     Tok::Word(w) => node.name = w,
                     other => {
                         return Err(link_err(
+                            Code::LINKER_SCRIPT,
                             MODULE,
                             &format!(
                                 "line {}: expected version name, found {other:?}",
@@ -873,6 +891,7 @@ impl<'a> Parser<'a> {
                     Tok::Str(s) => s,
                     other => {
                         return Err(link_err(
+                            Code::LINKER_SCRIPT,
                             MODULE,
                             &format!(
                                 "line {}: expected symbol pattern, found {other:?}",
@@ -887,6 +906,7 @@ impl<'a> Parser<'a> {
                         "local" => local = true,
                         _ => {
                             return Err(link_err(
+                                Code::LINKER_SCRIPT,
                                 MODULE,
                                 &format!("line {}: `{pat}:` is not a version label", self.lex.line),
                             ));
@@ -920,7 +940,13 @@ impl<'a> Parser<'a> {
             }
             let (tok, end) = self.lex.peek(LexState::Pattern)?;
             match tok {
-                Tok::Eof => return Err(link_err(MODULE, "unterminated SECTIONS block")),
+                Tok::Eof => {
+                    return Err(link_err(
+                        Code::LINKER_SCRIPT,
+                        MODULE,
+                        "unterminated SECTIONS block",
+                    ));
+                }
                 Tok::Punct(";") => {
                     self.lex.pos = end;
                 }
@@ -937,6 +963,7 @@ impl<'a> Parser<'a> {
                     }
                     "ENTRY" => {
                         return Err(link_err(
+                            Code::LINKER_SCRIPT,
                             MODULE,
                             &format!(
                                 "line {}: ENTRY inside SECTIONS is not supported",
@@ -964,6 +991,7 @@ impl<'a> Parser<'a> {
                 },
                 other => {
                     return Err(link_err(
+                        Code::LINKER_SCRIPT,
                         MODULE,
                         &format!("line {}: unexpected {other:?} in SECTIONS", self.lex.line),
                     ));
@@ -1010,6 +1038,7 @@ impl<'a> Parser<'a> {
             }
             if sec.address.is_some() {
                 return Err(link_err(
+                    Code::LINKER_SCRIPT,
                     MODULE,
                     &format!(
                         "line {}: expected `:` after output section address",
@@ -1063,6 +1092,7 @@ impl<'a> Parser<'a> {
                     Tok::Word(w) => sec.phdrs.push(w),
                     other => {
                         return Err(link_err(
+                            Code::LINKER_SCRIPT,
                             MODULE,
                             &format!(
                                 "line {}: expected program header name after `:`, found {other:?}",
@@ -1087,6 +1117,7 @@ impl<'a> Parser<'a> {
                     match ftok {
                         Tok::Word(w) => Expr::Number(parse_number(&w).ok_or_else(|| {
                             link_err(
+                                Code::LINKER_SCRIPT,
                                 MODULE,
                                 &format!(
                                     "line {}: fill value must be a number or (expression)",
@@ -1096,6 +1127,7 @@ impl<'a> Parser<'a> {
                         })?),
                         other => {
                             return Err(link_err(
+                                Code::LINKER_SCRIPT,
                                 MODULE,
                                 &format!(
                                     "line {}: fill value must be a number, found {other:?}",
@@ -1118,7 +1150,13 @@ impl<'a> Parser<'a> {
     fn parse_section_content(&mut self) -> Result<Option<SectionContent>, C5Error> {
         let (tok, end) = self.lex.peek(LexState::Pattern)?;
         let item = match tok {
-            Tok::Eof => return Err(link_err(MODULE, "unterminated output section")),
+            Tok::Eof => {
+                return Err(link_err(
+                    Code::LINKER_SCRIPT,
+                    MODULE,
+                    "unterminated output section",
+                ));
+            }
             Tok::Punct(";") => {
                 self.lex.pos = end;
                 return Ok(None);
@@ -1190,6 +1228,7 @@ impl<'a> Parser<'a> {
             },
             other => {
                 return Err(link_err(
+                    Code::LINKER_SCRIPT,
                     MODULE,
                     &format!(
                         "line {}: unexpected {other:?} in output section",
@@ -1219,6 +1258,7 @@ impl<'a> Parser<'a> {
             Tok::Str(s) => s,
             other => {
                 return Err(link_err(
+                    Code::LINKER_SCRIPT,
                     MODULE,
                     &format!(
                         "line {}: expected file pattern, found {other:?}",
@@ -1250,6 +1290,7 @@ impl<'a> Parser<'a> {
                                 Tok::Punct(")") => break,
                                 other => {
                                     return Err(link_err(
+                                        Code::LINKER_SCRIPT,
                                         MODULE,
                                         &format!(
                                             "line {}: unexpected {other:?} in EXCLUDE_FILE",
@@ -1288,6 +1329,7 @@ impl<'a> Parser<'a> {
                                         }
                                         other => {
                                             return Err(link_err(
+                                                Code::LINKER_SCRIPT,
                                                 MODULE,
                                                 &format!(
                                                     "line {}: unexpected {other:?} in SORT",
@@ -1298,7 +1340,11 @@ impl<'a> Parser<'a> {
                                     }
                                 }
                                 let pattern = inner.ok_or_else(|| {
-                                    link_err(MODULE, "SORT() requires a section pattern")
+                                    link_err(
+                                        Code::LINKER_SCRIPT,
+                                        MODULE,
+                                        "SORT() requires a section pattern",
+                                    )
                                 })?;
                                 spec.patterns.push(SectionPattern {
                                     pattern,
@@ -1317,6 +1363,7 @@ impl<'a> Parser<'a> {
                 },
                 other => {
                     return Err(link_err(
+                        Code::LINKER_SCRIPT,
                         MODULE,
                         &format!(
                             "line {}: unexpected {other:?} in input-section list",
@@ -1414,6 +1461,7 @@ impl<'a> Parser<'a> {
             Tok::Word(w) => w,
             other => {
                 return Err(link_err(
+                    Code::LINKER_SCRIPT,
                     MODULE,
                     &format!(
                         "line {}: expected section name, found {other:?}",
@@ -1470,6 +1518,7 @@ impl<'a> Parser<'a> {
                             Tok::Word(w) => w,
                             other => {
                                 return Err(link_err(
+                                    Code::LINKER_SCRIPT,
                                     MODULE,
                                     &format!(
                                         "line {line}: expected symbol in DEFINED, found {other:?}"
@@ -1502,6 +1551,7 @@ impl<'a> Parser<'a> {
                             "MAXPAGESIZE" => Ok(Expr::Symbol("MAXPAGESIZE".to_string())),
                             "COMMONPAGESIZE" => Ok(Expr::Symbol("COMMONPAGESIZE".to_string())),
                             other => Err(link_err(
+                                Code::LINKER_SCRIPT,
                                 MODULE,
                                 &format!("line {line}: unknown CONSTANT({other})"),
                             )),
@@ -1511,6 +1561,7 @@ impl<'a> Parser<'a> {
                 }
             }
             other => Err(link_err(
+                Code::LINKER_SCRIPT,
                 MODULE,
                 &format!("line {line}: unexpected {other:?} in expression"),
             )),

@@ -26,6 +26,8 @@ pub(crate) mod strtab;
 pub(crate) mod weak_undef;
 
 #[cfg(feature = "native-emit")]
+use crate::c5::diag::Code;
+#[cfg(feature = "native-emit")]
 use crate::c5::error::C5Error;
 #[cfg(feature = "native-emit")]
 use crate::c5::program::Program;
@@ -53,13 +55,17 @@ pub(crate) fn apply_merged_dwarf_text_reloc(
 ) -> Result<(), C5Error> {
     let off = r.byte_offset as usize;
     let end = off.checked_add(r.width as usize).ok_or_else(|| {
-        C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
-            "DWARF text reloc offset 0x{off:x} + width {} overflows",
-            r.width,
-        )))
+        C5Error::Compile(crate::c5::error::fmt_internal_diag(
+            Code::INTERNAL,
+            &format!(
+                "DWARF text reloc offset 0x{off:x} + width {} overflows",
+                r.width,
+            ),
+        ))
     })?;
     if end > section_bytes.len() {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_diag(
+            Code::INTERNAL,
             &format!(
                 "DWARF text reloc past section end (offset 0x{off:x}, width {}, section length {})",
                 r.width,
@@ -83,13 +89,17 @@ pub(crate) fn apply_merged_dwarf_data_reloc(
 ) -> Result<(), C5Error> {
     let off = r.byte_offset as usize;
     let end = off.checked_add(r.width as usize).ok_or_else(|| {
-        C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
-            "DWARF data reloc offset 0x{off:x} + width {} overflows",
-            r.width,
-        )))
+        C5Error::Compile(crate::c5::error::fmt_internal_diag(
+            Code::INTERNAL,
+            &format!(
+                "DWARF data reloc offset 0x{off:x} + width {} overflows",
+                r.width,
+            ),
+        ))
     })?;
     if end > section_bytes.len() {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_diag(
+            Code::INTERNAL,
             &format!(
                 "DWARF data reloc past section end (offset 0x{off:x}, width {}, section length {})",
                 r.width,
@@ -124,7 +134,8 @@ fn reloc_slot_in_data(
     kind: &str,
 ) -> Result<usize, C5Error> {
     if data_offset < ro_len {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_diag(
+            Code::INTERNAL,
             &alloc::format!(
                 "{format}: {kind} reloc slot {data_offset:#x} lies in the read-only data prefix \
                  (len {ro_len:#x})"
@@ -258,16 +269,21 @@ fn fold_asm_sections(
         .iter()
         .map(|l| (l.name.clone(), AsmLabelPlacement::Text(l.text_offset)))
         .collect();
-    let err = |m: alloc::string::String| C5Error::Compile(crate::c5::error::fmt_link_err(&m));
+    let err = |code: crate::c5::diag::Code, m: alloc::string::String| {
+        C5Error::Compile(crate::c5::error::fmt_link_diag(code, &m))
+    };
     // A `$LABEL` address immediate needs the link-time address of a text
     // byte. The image is position-independent, so no emit-time value is
     // correct; refuse rather than leave the encoder's placeholder.
     if let Some(r) = build.asm_text_abs_refs.first() {
-        return Err(err(alloc::format!(
-            "inline asm: a `$label` address immediate (text offset {}) needs a load-time \
+        return Err(err(
+            Code::OBJECT_FORMAT,
+            alloc::format!(
+                "inline asm: a `$label` address immediate (text offset {}) needs a load-time \
              relocation and cannot be resolved in a single-file image; compile with `-c` and link",
-            r.field_offset,
-        )));
+                r.field_offset,
+            ),
+        ));
     }
     if build.asm_sections.is_empty() {
         return Ok(label_at);
@@ -308,12 +324,15 @@ fn fold_asm_sections(
                 // Materialize the zero-fill so appending cannot move a bss
                 // object; the payload needs file backing regardless.
                 if !s.relocs.is_empty() {
-                    return Err(err(alloc::format!(
-                        "inline-asm section `{}`: a writable section's relocations need a \
+                    return Err(err(
+                        Code::OBJECT_FORMAT,
+                        alloc::format!(
+                            "inline-asm section `{}`: a writable section's relocations need a \
                          load-time relocation and cannot be resolved in a single-file image; \
                          compile with `-c` and link",
-                        s.name
-                    )));
+                            s.name
+                        ),
+                    ));
                 }
                 if build.bss_size > 0 {
                     let zeros = build.data.len() + build.bss_size as usize;
@@ -380,18 +399,24 @@ fn fold_asm_sections(
                 {
                     Some(o) => o,
                     None => {
-                        return Err(err(alloc::format!(
-                            "undefined reference to `{name}` (inline-asm section `{}`)",
-                            s.name
-                        )));
+                        return Err(err(
+                            Code::UNDEFINED_SYMBOL,
+                            alloc::format!(
+                                "undefined reference to `{name}` (inline-asm section `{}`)",
+                                s.name
+                            ),
+                        ));
                     }
                 },
                 other => {
-                    return Err(err(alloc::format!(
-                        "inline-asm section `{}`: relocation target {other:?} is not \
+                    return Err(err(
+                        Code::OBJECT_FORMAT,
+                        alloc::format!(
+                            "inline-asm section `{}`: relocation target {other:?} is not \
                          supported in a single-file image; compile with `-c` and link",
-                        s.name
-                    )));
+                            s.name
+                        ),
+                    ));
                 }
             };
             // The folded code and its targets share the text stream, so a
@@ -405,13 +430,21 @@ fn fold_asm_sections(
                 r.width,
                 disp,
             )
-            .map_err(|m| err(alloc::format!("inline-asm section `{}`: {m}", s.name)))?;
+            .map_err(|m| {
+                err(
+                    Code::OBJECT_FORMAT,
+                    alloc::format!("inline-asm section `{}`: {m}", s.name),
+                )
+            })?;
             if !patched {
-                return Err(err(alloc::format!(
-                    "inline-asm section `{}`: this relocation is not supported in a \
+                return Err(err(
+                    Code::OBJECT_FORMAT,
+                    alloc::format!(
+                        "inline-asm section `{}`: this relocation is not supported in a \
                      single-file image; compile with `-c` and link",
-                    s.name
-                )));
+                        s.name
+                    ),
+                ));
             }
         }
     }
@@ -420,12 +453,15 @@ fn fold_asm_sections(
         let text_base = match (r.absolute, bases[r.section_index]) {
             (false, Some(AsmLabelPlacement::Text(b))) => b,
             _ => {
-                return Err(err(alloc::format!(
-                    "inline-asm section `{}`: this reference to a section label needs a \
+                return Err(err(
+                    Code::OBJECT_FORMAT,
+                    alloc::format!(
+                        "inline-asm section `{}`: this reference to a section label needs a \
                      load-time relocation and cannot be resolved in a single-file image; \
                      compile with `-c` and link",
-                    s.name
-                )));
+                        s.name
+                    ),
+                ));
             }
         };
         let at = r.instr_offset;
@@ -435,13 +471,21 @@ fn fold_asm_sections(
         // stream, so the displacement is final.
         let patched =
             crate::c5::asm::patch_asm_insn_field(&mut build.text, at, r.kind, true, 4, val)
-                .map_err(|m| err(alloc::format!("inline-asm section `{}`: {m}", s.name)))?;
+                .map_err(|m| {
+                    err(
+                        Code::OBJECT_FORMAT,
+                        alloc::format!("inline-asm section `{}`: {m}", s.name),
+                    )
+                })?;
         if !patched {
-            return Err(err(alloc::format!(
-                "inline-asm section `{}`: this reference to a section label is not \
+            return Err(err(
+                Code::OBJECT_FORMAT,
+                alloc::format!(
+                    "inline-asm section `{}`: this reference to a section label is not \
                  supported in a single-file image; compile with `-c` and link",
-                s.name
-            )));
+                    s.name
+                ),
+            ));
         }
     }
     // The folded sections are placed; remove them so no writer emits a
@@ -487,7 +531,9 @@ fn resolve_single_image_asm_sym_fixups(
             .map(|s| (s.link_name(), s.val))
             .collect()
     };
-    let err = |m: alloc::string::String| C5Error::Compile(crate::c5::error::fmt_link_err(&m));
+    let err = |code: crate::c5::diag::Code, m: alloc::string::String| {
+        C5Error::Compile(crate::c5::error::fmt_link_diag(code, &m))
+    };
     enum Loc {
         Text(usize),
         Data(u64),
@@ -526,12 +572,16 @@ fn resolve_single_image_asm_sym_fixups(
                         } else if weak_names.contains(name.as_str()) {
                             Loc::WeakUndef
                         } else {
-                            return Err(err(alloc::format!("undefined reference to `{name}`")));
+                            return Err(err(
+                                Code::UNDEFINED_SYMBOL,
+                                alloc::format!("undefined reference to `{name}`"),
+                            ));
                         }
                     }
                 },
                 other => {
-                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_diag(
+                        Code::INTERNAL,
                         &alloc::format!(
                             "asm operand relocation target {other:?} is not a data offset or symbol"
                         ),
@@ -542,10 +592,13 @@ fn resolve_single_image_asm_sym_fixups(
         }
     }
     let refuse = |what: &str| {
-        err(alloc::format!(
-            "inline asm: {what} needs a load-time relocation and cannot be resolved in a \
+        err(
+            Code::OBJECT_FORMAT,
+            alloc::format!(
+                "inline asm: {what} needs a load-time relocation and cannot be resolved in a \
              single-file image; compile with `-c` and link"
-        ))
+            ),
+        )
     };
     for (r, loc) in resolved {
         let part = match r.kind {
@@ -598,7 +651,7 @@ fn resolve_single_image_asm_sym_fixups(
                 let disp = off as i64 - r.instr_offset as i64;
                 let patched =
                     patch_asm_insn_field(&mut build.text, r.instr_offset, r.kind, true, 4, disp)
-                        .map_err(&err)?;
+                        .map_err(|m| err(Code::OBJECT_FORMAT, m))?;
                 if !patched {
                     return Err(refuse("a symbol operand"));
                 }
@@ -666,14 +719,18 @@ fn resolve_single_tu_extern_refs(
         Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => Machine::Aarch64,
     };
     let undefined = |name: &str| -> C5Error {
-        C5Error::Compile(crate::c5::error::fmt_link_err(&format!(
-            "undefined reference to `{name}`",
-        )))
+        C5Error::Compile(crate::c5::error::fmt_link_diag(
+            Code::UNDEFINED_SYMBOL,
+            &format!("undefined reference to `{name}`",),
+        ))
     };
     let unsupported = |name: &str| -> C5Error {
-        C5Error::Compile(crate::c5::error::fmt_link_err(&format!(
-            "unresolved weak reference to `{name}`: cannot resolve the referencing instruction to address 0",
-        )))
+        C5Error::Compile(crate::c5::error::fmt_link_diag(
+            Code::RELOCATION,
+            &format!(
+                "unresolved weak reference to `{name}`: cannot resolve the referencing instruction to address 0",
+            ),
+        ))
     };
 
     let mut kept_data = Vec::new();
@@ -959,7 +1016,8 @@ fn write_for(program: &Program, build: &Build, target: Target) -> Result<Vec<u8>
     // without pulling `elf_reloc` into the no-std build.
     #[cfg(not(feature = "std"))]
     if build.output_kind == OutputKind::Relocatable {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_diag(
+            Code::INTERNAL,
             "Relocatable output requires the `std` feature",
         )));
     }

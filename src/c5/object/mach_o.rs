@@ -3,6 +3,7 @@
 //! segments and the `__LINKEDIT` tables dyld binds from. The CLI shim
 //! signs the result; macOS refuses to exec an unsigned image.
 
+use crate::c5::diag::Code;
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -1006,7 +1007,8 @@ fn apply_got_fixups(
             fx.part,
         )
         .map_err(|e| {
-            C5Error::Compile(crate::c5::error::fmt_internal_err(
+            C5Error::Compile(crate::c5::error::fmt_internal_diag(
+                Code::INTERNAL,
                 &e.describe("Mach-O: GOT"),
             ))
         })?;
@@ -1032,7 +1034,8 @@ fn patch_adrp_add(
         part,
     )
     .map_err(|e| {
-        C5Error::Compile(crate::c5::error::fmt_internal_err(
+        C5Error::Compile(crate::c5::error::fmt_internal_diag(
+            Code::INTERNAL,
             &e.describe(&format!("Mach-O: {label}")),
         ))
     })
@@ -1127,7 +1130,8 @@ fn tlv_bootstrap_ordinal(dylibs: &[crate::c5::codegen::ResolvedDylib]) -> Result
         .position(|d| d.path.contains("libSystem"))
         .map(|i| (i + 1) as u64)
         .ok_or_else(|| {
-            C5Error::Compile(crate::c5::error::fmt_internal_err(
+            C5Error::Compile(crate::c5::error::fmt_internal_diag(
+                Code::INTERNAL,
                 "Mach-O: `_Thread_local` requires libSystem for `__tlv_bootstrap`, \
                  but no linked dylib matches libSystem",
             ))
@@ -1585,7 +1589,7 @@ impl<'a> MachOWriter<'a> {
     }
 
     fn internal(msg: String) -> C5Error {
-        C5Error::Compile(crate::c5::error::fmt_internal_err(&msg))
+        C5Error::Compile(crate::c5::error::fmt_internal_diag(Code::INTERNAL, &msg))
     }
 
     /// Family whose region holds a named section's bytes.
@@ -2324,7 +2328,8 @@ impl<'a> MachOWriter<'a> {
             &build.got_fixups,
         )?;
         if !build.got_base_fixups.is_empty() {
-            return Err(C5Error::Compile(crate::c5::error::fmt_link_err(
+            return Err(C5Error::Compile(crate::c5::error::fmt_link_diag(
+                Code::OBJECT_FORMAT,
                 "`_GLOBAL_OFFSET_TABLE_` names an ELF construct; a Mach-O image has none",
             )));
         }

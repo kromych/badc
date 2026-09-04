@@ -27,6 +27,7 @@
 
 #![cfg(feature = "std")]
 
+use crate::c5::diag::Code;
 use alloc::format;
 use alloc::vec::Vec;
 
@@ -117,12 +118,14 @@ fn write_static_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8>
     // Resolve the entry function's text-segment offset.
     let entry_sym = merged.defined.get(entry_name).ok_or_else(|| {
         link_err(
+            Code::UNDEFINED_SYMBOL,
             MODULE,
             &format!("entry symbol `{entry_name}` not defined in any input object"),
         )
     })?;
     if !matches!(entry_sym.section, NativeSymSection::Text) {
         return Err(link_err(
+            Code::LINK,
             MODULE,
             &format!(
                 "entry symbol `{entry_name}` is not in .text (found {:?})",
@@ -313,6 +316,7 @@ fn patch_data_abs_relocs(
         let slot = r.slot_offset as usize;
         if slot + 8 > data.len() {
             return Err(internal_err(
+                Code::INTERNAL,
                 MODULE,
                 &format!(
                     "data abs reloc at slot 0x{:x} extends past .data (len 0x{:x})",
@@ -348,6 +352,7 @@ fn patch_data_pcrel_relocs(
         let width = r.width as usize;
         if slot + width > data.len() {
             return Err(internal_err(
+                Code::INTERNAL,
                 MODULE,
                 &format!(
                     "data pcrel reloc at slot 0x{:x} extends past .data (len 0x{:x})",
@@ -370,6 +375,7 @@ fn patch_data_pcrel_relocs(
         }
         let Ok(v) = i32::try_from(value) else {
             return Err(internal_err(
+                Code::INTERNAL,
                 MODULE,
                 &format!(
                     "data pcrel reloc at slot 0x{slot:x}: displacement 0x{value:x} exceeds 32 bits",
@@ -661,12 +667,14 @@ fn write_dynamic_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8
 fn dynamic_entry_offset(merged: &MergedNative, entry_name: &str) -> Result<usize, C5Error> {
     let entry_sym = merged.defined.get(entry_name).ok_or_else(|| {
         link_err(
+            Code::UNDEFINED_SYMBOL,
             MODULE,
             &format!("entry symbol `{entry_name}` not defined in any input object"),
         )
     })?;
     if !matches!(entry_sym.section, NativeSymSection::Text) {
         return Err(link_err(
+            Code::LINK,
             MODULE,
             &format!(
                 "entry symbol `{entry_name}` is not in .text (found {:?})",
@@ -1026,6 +1034,7 @@ fn patch_data_refs(
             | NativeSymSection::DebugLine
             | NativeSymSection::DebugStr => {
                 return Err(internal_err(
+                    Code::INTERNAL,
                     MODULE,
                     &format!(
                         "parked reloc at text[{:#x}] has unexpected target section {:?}",
@@ -1058,6 +1067,7 @@ fn patch_data_refs(
             .map_or(4, |(w, _)| w as usize);
         if site.checked_add(width).is_none_or(|end| end > text.len()) {
             return Err(internal_err(
+                Code::INTERNAL,
                 MODULE,
                 &format!(
                     "data-ref reloc patch offset {site:#x} past end of text (len {})",
@@ -1225,6 +1235,7 @@ fn patch_plt_trampoline(
             let disp = (slot_vaddr as i64) - (rip as i64);
             let disp32 = i32::try_from(disp).map_err(|_| {
                 internal_err(
+                    Code::INTERNAL,
                     MODULE,
                     &format!(
                         "PLT trampoline at {tramp_offset:#x}: GOT slot disp32 out of range \
@@ -1255,6 +1266,7 @@ fn patch_plt_trampoline(
             let page_off = (slot_vaddr & 0xfff) as u32;
             if !page_off.is_multiple_of(8) {
                 return Err(internal_err(
+                    Code::INTERNAL,
                     MODULE,
                     &format!(
                         "PLT trampoline at {tramp_offset:#x}: GOT slot offset {page_off} is not \

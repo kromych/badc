@@ -77,6 +77,24 @@ pub(crate) fn fmt_link_err(message: &str) -> String {
     format!("error: {message}")
 }
 
+/// [`fmt_link_err`]'s message carrying the diagnostic's identity: the
+/// printer appends `[B<code>]`, and `[-W<name>]` where the row is
+/// controllable. A link-time diagnostic has no source position -- the
+/// linker and the object writers report from outside a translation
+/// unit. Gated like [`fmt_link_err`], and for the same reason.
+#[cfg(any(feature = "native-emit", feature = "std"))]
+pub(crate) fn fmt_link_diag(code: crate::c5::diag::Code, message: &str) -> String {
+    use alloc::string::ToString;
+    crate::c5::diag::Diagnostic::new(code, crate::c5::diag::Level::Error, None, message).to_string()
+}
+
+/// [`fmt_internal_err`]'s message carrying the diagnostic's identity.
+#[cfg(any(feature = "native-emit", feature = "std"))]
+pub(crate) fn fmt_internal_diag(code: crate::c5::diag::Code, message: &str) -> String {
+    use alloc::format;
+    fmt_link_diag(code, &format!("internal compiler error: {message}"))
+}
+
 /// Helper: produce an `error: <message>` string for a user-level
 /// codegen error recorded by the backend -- an inline-asm form the
 /// encoder cannot encode, for one. The backend runs past the point

@@ -2,6 +2,7 @@
 //! into the data image, the TLS template's address constants, the
 //! switch-table entries, and the DWARF sections of an image.
 
+use crate::c5::diag::Code;
 use alloc::format;
 use alloc::vec::Vec;
 
@@ -10,7 +11,7 @@ use super::super::program::Program;
 use super::{Build, Target, dwarf};
 
 fn internal(msg: alloc::string::String) -> C5Error {
-    C5Error::Compile(crate::c5::error::fmt_internal_err(&msg))
+    C5Error::Compile(crate::c5::error::fmt_internal_diag(Code::INTERNAL, &msg))
 }
 
 /// The data image past the read-only prefix with every pointer initializer
@@ -114,11 +115,14 @@ pub(crate) fn tls_reloc_sites(
     text_vmaddr: u64,
 ) -> Result<Vec<(usize, u64)>, C5Error> {
     if let Some(r) = build.tls_extern_data_relocs.first() {
-        return Err(C5Error::Compile(crate::c5::error::fmt_link_err(&format!(
-            "undefined reference to `{}` in a `_Thread_local` initializer: \
+        return Err(C5Error::Compile(crate::c5::error::fmt_link_diag(
+            Code::UNDEFINED_SYMBOL,
+            &format!(
+                "undefined reference to `{}` in a `_Thread_local` initializer: \
              the template's address constant must resolve within the image",
-            r.symbol_name,
-        ))));
+                r.symbol_name,
+            ),
+        )));
     }
     let mut sites = Vec::with_capacity(build.tls_data_relocs.len() + build.tls_code_relocs.len());
     for r in &build.tls_data_relocs {

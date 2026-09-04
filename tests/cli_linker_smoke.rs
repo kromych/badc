@@ -597,6 +597,43 @@ fn unresolved_extern_function_fails_link() {
     );
 }
 
+/// A hard link error carries its catalogue code and no `-W` tail: the
+/// row is not controllable, so no option moves it. `-Wno-dead-store`
+/// stands for an accepted `-W` spelling here; the selector grammar
+/// itself is the driver's to implement.
+#[test]
+fn a_hard_link_error_carries_its_code_and_no_option_moves_it() {
+    let dir = tempdir("hard_link_error_code");
+    write_source(
+        &dir,
+        "only.c",
+        "extern int missing(int);\nint main() { return missing(7); }\n",
+    );
+    for extra in [&[][..], &["-Wno-dead-store"][..]] {
+        let result = Command::new(badc())
+            .args(extra)
+            .arg("-o")
+            .arg(dir.join("prog"))
+            .arg(dir.join("only.c"))
+            .current_dir(&dir)
+            .output()
+            .expect("invoke badc");
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        assert!(
+            !result.status.success(),
+            "link should have failed: {stderr}"
+        );
+        assert!(
+            stderr.contains("undefined reference to `missing`") && stderr.contains("[B6010]"),
+            "expected the coded undefined-symbol error, got: {stderr}"
+        );
+        assert!(
+            !stderr.contains("[-W"),
+            "a hard row must not print an option tail: {stderr}"
+        );
+    }
+}
+
 #[test]
 fn jit_runs_one_unit_and_passes_extra_inputs_as_argv() {
     // `--jit` / `--interp` compile a single translation unit; any

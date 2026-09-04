@@ -32,6 +32,7 @@
 
 #![cfg(feature = "std")]
 
+use crate::c5::diag::Code;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
@@ -465,6 +466,7 @@ fn synth_copy_relocs(merged: &MergedNative, target: Target) -> Result<Vec<CopyRe
         };
         if !elf_target {
             return Err(internal_err(
+                Code::INTERNAL,
                 MODULE,
                 &alloc::format!(
                     "`{local}` is bound as a data import of `{host}` but the image also \
@@ -694,6 +696,7 @@ fn check_target_machine(target: Target, machine: NativeMachine) -> Result<(), C5
     };
     if expect != machine {
         return Err(internal_err(
+            Code::INTERNAL,
             MODULE,
             &alloc::format!(
                 "synthesizer: target {target:?} expects {expect:?}, merged image is {machine:?}"
@@ -706,12 +709,14 @@ fn check_target_machine(target: Target, machine: NativeMachine) -> Result<(), C5
 fn resolve_entry_offset(merged: &MergedNative, entry_name: &str) -> Result<usize, C5Error> {
     let sym = merged.defined.get(entry_name).ok_or_else(|| {
         internal_err(
+            Code::INTERNAL,
             MODULE,
             &alloc::format!("entry symbol `{entry_name}` not defined in any input object"),
         )
     })?;
     if !matches!(sym.section, NativeSymSection::Text) {
         return Err(internal_err(
+            Code::INTERNAL,
             MODULE,
             &alloc::format!(
                 "entry symbol `{entry_name}` is not in .text (found {:?})",
@@ -767,6 +772,7 @@ fn synth_imports(merged: &MergedNative, target: Target) -> Result<ResolvedImport
             None if flat_lookup || dylibs.len() <= 1 => 0,
             None => {
                 return Err(internal_err(
+                    Code::INTERNAL,
                     MODULE,
                     &alloc::format!(
                         "import `{name}` carries no dylib routing ({} dylibs in the image)",
@@ -974,6 +980,7 @@ fn project_aarch64_pending(
         // falls through to the declined arm.
         R_AARCH64_CALL26 | R_AARCH64_JUMP26 if reloc.target_section == NativeSymSection::Undef => {
             return Err(internal_err(
+                Code::INTERNAL,
                 MODULE,
                 "synthesizer: an aarch64 branch reloc is still pending after the PLT \
                  pass -- emit_aarch64_plt should have drained it",
@@ -1114,7 +1121,7 @@ fn project_x86_64_pending(
     let instr_offset = (reloc.text_offset as usize)
         .checked_sub(instr_back_off)
         .ok_or_else(|| {
-            internal_err(MODULE, &alloc::format!(
+            internal_err(Code::INTERNAL, MODULE, &alloc::format!(
                 "synthesizer: x86_64 reloc text_offset {} underflows instr-start adjustment by {}",
                 reloc.text_offset,
                 instr_back_off
@@ -1167,6 +1174,7 @@ fn project_x86_64_pending(
             Ok(())
         }
         other => Err(internal_err(
+            Code::INTERNAL,
             MODULE,
             &alloc::format!("synthesizer: x86_64 reloc targeting {other:?} not supported"),
         )),
@@ -1320,6 +1328,7 @@ fn synth_plt_offsets(
     for t in plt {
         if t.import_index >= offsets.len() {
             return Err(internal_err(
+                Code::INTERNAL,
                 MODULE,
                 &alloc::format!(
                     "PLT trampoline references import index {} out of range ({} imports)",

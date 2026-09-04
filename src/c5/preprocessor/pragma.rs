@@ -1,6 +1,9 @@
 use super::builtins;
 use super::text::{is_ident, is_ident_byte, skip_literal};
-use super::{Binding, DylibSpec, Preprocessor, Subsystem};
+use super::{
+    Binding, DylibSpec, PRAGMA_POP_WITHOUT_PUSH, PRAGMA_SYNTAX, Preprocessor, Site, Subsystem,
+    UNKNOWN_PRAGMA,
+};
 use crate::c5::error::C5Error;
 use alloc::borrow::Cow;
 use alloc::format;
@@ -30,8 +33,7 @@ impl Preprocessor {
     pub(super) fn apply_pragma_operators<'t>(
         &mut self,
         text: &'t str,
-        line_no: usize,
-        filename: &str,
+        site: Site<'_>,
     ) -> Result<Cow<'t, str>, C5Error> {
         if !text.contains("_Pragma") && !text.contains("__pragma") {
             return Ok(Cow::Borrowed(text));
@@ -55,7 +57,7 @@ impl Preprocessor {
                 .flatten()
             {
                 out.push_str(&text[copied..i]);
-                self.dispatch_pragma_operator(&args, line_no, filename, &mut out)?;
+                self.dispatch_pragma_operator(&args, site, &mut out)?;
                 i = next;
                 copied = next;
                 continue;
@@ -71,7 +73,7 @@ impl Preprocessor {
                 .flatten()
             {
                 out.push_str(&text[copied..i]);
-                self.dispatch_pragma_operator(&args, line_no, filename, &mut out)?;
+                self.dispatch_pragma_operator(&args, site, &mut out)?;
                 i = next;
                 copied = next;
                 continue;
@@ -90,13 +92,12 @@ impl Preprocessor {
     pub(super) fn dispatch_pragma_operator(
         &mut self,
         args: &str,
-        line_no: usize,
-        filename: &str,
+        site: Site<'_>,
         out: &mut String,
     ) -> Result<(), C5Error> {
         match parse_pragma_directive(args) {
             PragmaDirective::Once => {
-                self.pragma_once_files.insert(filename.to_string());
+                self.pragma_once_files.insert(site.file.to_string());
             }
             PragmaDirective::Other => {
                 if pragma_is_pack(args) || pragma_is_visibility(args) {
@@ -104,7 +105,7 @@ impl Preprocessor {
                     out.push_str(args.trim());
                     out.push('\n');
                 } else {
-                    self.parse_pragma(args, line_no, filename)?;
+                    self.parse_pragma(args, site)?;
                 }
             }
         }
@@ -115,12 +116,8 @@ impl Preprocessor {
     /// `export`, `intrinsic`, `entrypoint`, `subsystem`). `pack`
     /// and `once` are handled elsewhere and bypass this function.
     /// Any other directive is accepted with a warning.
-    pub(super) fn parse_pragma(
-        &mut self,
-        args: &str,
-        line_no: usize,
-        filename: &str,
-    ) -> Result<(), C5Error> {
+    pub(super) fn parse_pragma(&mut self, args: &str, site: Site<'_>) -> Result<(), C5Error> {
+        let (line_no, filename) = (site.line, site.file);
         let args = args.trim();
         // MSVC and others allow whitespace between a pragma keyword and
         // its argument list -- `#pragma warning ( disable : N )`. Collapse
@@ -193,16 +190,16 @@ impl Preprocessor {
             .strip_prefix("warning(")
             .and_then(|s| s.strip_suffix(')'))
         {
-            return self.parse_pragma_warning(inner.trim(), line_no, filename);
+            return self.parse_pragma_warning(inner.trim(), site);
         }
         // Borland / Watcom `#pragma warn -<code>` form (`-rch`,
         // `-aus`, ...). Parsed for visibility into `warn_disabled`;
         // see `parse_pragma_warn` for the syntax.
         if let Some(inner) = args.strip_prefix("warn ") {
-            return self.parse_pragma_warn(inner.trim(), line_no, filename);
+            return self.parse_pragma_warn(inner.trim(), site);
         }
         if args.trim() == "warn" {
-            return self.parse_pragma_warn("", line_no, filename);
+            return self.parse_pragma_warn("", site);
         }
         // `pack` and `once` are consumed elsewhere. The `GCC` / `clang`
         // vendor pragmas (diagnostic selection, `optimize`, `target`,
@@ -216,11 +213,11 @@ impl Preprocessor {
         if matches!(head, "pack" | "once" | "STDC" | "GCC" | "clang") {
             return Ok(());
         }
-        self.warnings.push(crate::c5::error::fmt_compile_warn(
-            filename,
-            line_no,
-            &format!("unknown `#pragma {directive}` -- ignored"),
-        ));
+        self.warn(
+            UNKNOWN_PRAGMA,
+            site,
+            format!("unknown `#pragma {directive}` -- ignored"),
+        );
         Ok(())
     }
 
@@ -250,8 +247,7 @@ impl Preprocessor {
     pub(super) fn parse_pragma_warning(
         &mut self,
         inner: &str,
-        line_no: usize,
-        filename: &str,
+        site: Site<'_>,
     ) -> Result<(), C5Error> {
         // `inner` is the text between the outer parens, e.g.
         // `disable : 4267 4100` or `push, 3` or `pop`.
@@ -269,11 +265,14 @@ impl Preprocessor {
         {
             let level = level.trim();
             if !level.chars().all(|c| c.is_ascii_digit()) {
-                self.warnings.push(format!(
-                    "{filename}:{line_no}: warning: \
-                     `#pragma warning(push, <level>)` expects an integer level, \
-                     got `{level}`"
-                ));
+                self.warn(
+                    PRAGMA_SYNTAX,
+                    site,
+                    format!(
+                        "`#pragma warning(push, <level>)` expects an integer level, \
+                         got `{level}`"
+                    ),
+                );
                 return Ok(());
             }
             self.warning_stack.push(self.warning_disabled.clone());
@@ -283,10 +282,11 @@ impl Preprocessor {
             if let Some(prev) = self.warning_stack.pop() {
                 self.warning_disabled = prev;
             } else {
-                self.warnings.push(format!(
-                    "{filename}:{line_no}: warning: \
-                     `#pragma warning(pop)` with no matching push"
-                ));
+                self.warn(
+                    PRAGMA_POP_WITHOUT_PUSH,
+                    site,
+                    "`#pragma warning(pop)` with no matching push".to_string(),
+                );
             }
             return Ok(());
         }
@@ -301,13 +301,16 @@ impl Preprocessor {
                 continue;
             }
             let Some((action, rest)) = clause.split_once(':') else {
-                self.warnings.push(format!(
-                    "{filename}:{line_no}: warning: \
-                     unrecognised `#pragma warning({clause})` \
-                     -- expected `disable : N` / `enable : N` / \
-                     `default : N` / `error : N` / `once : N` / \
-                     `suppress : N` / `push` / `pop`"
-                ));
+                self.warn(
+                    PRAGMA_SYNTAX,
+                    site,
+                    format!(
+                        "unrecognised `#pragma warning({clause})` \
+                         -- expected `disable : N` / `enable : N` / \
+                         `default : N` / `error : N` / `once : N` / \
+                         `suppress : N` / `push` / `pop`"
+                    ),
+                );
                 continue;
             };
             let action = action.trim();
@@ -318,11 +321,14 @@ impl Preprocessor {
                 match tok.parse::<u32>() {
                     Ok(n) => ids_parsed.push(n),
                     Err(_) => {
-                        self.warnings.push(format!(
-                            "{filename}:{line_no}: warning: \
-                             `#pragma warning({action} : {tok})` \
-                             -- expected an integer warning ID"
-                        ));
+                        self.warn(
+                            PRAGMA_SYNTAX,
+                            site,
+                            format!(
+                                "`#pragma warning({action} : {tok})` \
+                                 -- expected an integer warning ID"
+                            ),
+                        );
                         had_bad_token = true;
                     }
                 }
@@ -350,12 +356,15 @@ impl Preprocessor {
                     // syntax silently.
                 }
                 _ => {
-                    self.warnings.push(format!(
-                        "{filename}:{line_no}: warning: \
-                         unrecognised `#pragma warning` action `{action}` \
-                         -- expected `disable` / `enable` / `default` / \
-                         `error` / `once` / `suppress`"
-                    ));
+                    self.warn(
+                        PRAGMA_SYNTAX,
+                        site,
+                        format!(
+                            "unrecognised `#pragma warning` action `{action}` \
+                             -- expected `disable` / `enable` / `default` / \
+                             `error` / `once` / `suppress`"
+                        ),
+                    );
                 }
             }
         }
@@ -379,38 +388,39 @@ impl Preprocessor {
     /// the parse exists so the source's intent is preserved on
     /// the `warn_disabled` set rather than dropped on the floor.
     /// Empty payloads and bad sign prefixes surface as warnings.
-    pub(super) fn parse_pragma_warn(
-        &mut self,
-        inner: &str,
-        line_no: usize,
-        filename: &str,
-    ) -> Result<(), C5Error> {
+    pub(super) fn parse_pragma_warn(&mut self, inner: &str, site: Site<'_>) -> Result<(), C5Error> {
         let inner = inner.trim();
         if inner.is_empty() {
-            self.warnings.push(format!(
-                "{filename}:{line_no}: warning: \
-                 `#pragma warn` with no payload -- expected \
+            self.warn(
+                PRAGMA_SYNTAX,
+                site,
+                "`#pragma warn` with no payload -- expected \
                  `-<code>` / `+<code>` / `.<code>`"
-            ));
+                    .to_string(),
+            );
             return Ok(());
         }
         for tok in inner.split_whitespace() {
             let (sign, code) = match tok.chars().next() {
                 Some(c @ ('-' | '+' | '.')) => (c, &tok[1..]),
                 _ => {
-                    self.warnings.push(format!(
-                        "{filename}:{line_no}: warning: \
-                         `#pragma warn {tok}` -- expected a leading \
-                         `-` / `+` / `.`"
-                    ));
+                    self.warn(
+                        PRAGMA_SYNTAX,
+                        site,
+                        format!(
+                            "`#pragma warn {tok}` -- expected a leading \
+                             `-` / `+` / `.`"
+                        ),
+                    );
                     continue;
                 }
             };
             if code.is_empty() {
-                self.warnings.push(format!(
-                    "{filename}:{line_no}: warning: \
-                     `#pragma warn {tok}` -- code follows the sign"
-                ));
+                self.warn(
+                    PRAGMA_SYNTAX,
+                    site,
+                    format!("`#pragma warn {tok}` -- code follows the sign"),
+                );
                 continue;
             }
             match sign {

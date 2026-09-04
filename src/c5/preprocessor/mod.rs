@@ -53,6 +53,7 @@ use core::cell::{Cell, RefCell};
 use hashbrown::HashMap;
 
 use super::codegen::{CodeModel, ElfClass, Target};
+use super::diag::{Code, Diagnostic, Loc, Sink};
 use super::error::C5Error;
 
 /// One declared dylib plus the bindings that target it. Created
@@ -233,10 +234,12 @@ pub(crate) struct Preprocessor {
     /// the argv path. The DWARF emitter reads `Program::source_path`
     /// instead.
     source_label: String,
-    /// Diagnostics from this pass, drained into `Compiler::warnings` so
-    /// one `Program::warnings` list carries every front-end
-    /// `<file>:<line>: warning: ...` line, in the gcc / clang shape.
-    pub warnings: Vec<String>,
+    /// Diagnostics from this pass and the state that resolves their
+    /// level: what the command line asked for, and the diagnostic
+    /// pragmas as the pass reaches them. Drained into
+    /// `Compiler::warnings`, so one `Program::warnings` list carries
+    /// every front-end diagnostic.
+    pub sink: Sink,
     /// Include resolutions in directive order. Populated only when
     /// [`Self::set_track_includes`] is on. Renders the gcc `-H` trace
     /// (via [`IncludeRecord::trace_line`]) and supplies the `-M`
@@ -422,7 +425,7 @@ pub(crate) struct PpReuse {
     counter_used: bool,
     consulted_includes: BTreeSet<String>,
     pragma_events: Vec<(String, usize, String)>,
-    warnings: Vec<String>,
+    warnings: Vec<Diagnostic>,
     include_records: Vec<IncludeRecord>,
 }
 
@@ -1002,7 +1005,7 @@ impl Preprocessor {
             no_builtin: false,
             force_includes: Vec::new(),
             source_label: "<source>".to_string(),
-            warnings: Vec::new(),
+            sink: Sink::default(),
             include_records: Vec::new(),
             track_includes: false,
             asm_source: false,
@@ -1284,7 +1287,7 @@ impl Preprocessor {
         let mut out = String::with_capacity(source.len());
         self.process_preamble(&mut out)?;
         let source_start = out.len();
-        let n_warnings = self.warnings.len();
+        let n_warnings = self.sink.diagnostics().len();
         let n_records = self.include_records.len();
         let entry_macros = self.macros.clone();
         let entry_fn_macros = self.fn_macros.clone();
@@ -1317,7 +1320,7 @@ impl Preprocessor {
             counter_used: rec.counter_used.get(),
             consulted_includes: rec.consulted_includes,
             pragma_events: rec.pragma_events,
-            warnings: self.warnings[n_warnings..].to_vec(),
+            warnings: self.sink.diagnostics()[n_warnings..].to_vec(),
             include_records: self.include_records[n_records..].to_vec(),
         };
         Ok((out, cache))
@@ -1384,9 +1387,16 @@ impl Preprocessor {
         // rules hold as in a full run; a conflict the full run would
         // diagnose falls back to it.
         for (args, line, file) in &prior.pragma_events {
-            self.parse_pragma(args, *line, file).ok()?;
+            let site = Site {
+                file,
+                line: *line,
+                offset: out.len() as u32,
+            };
+            self.parse_pragma(args, site).ok()?;
         }
-        self.warnings.extend(prior.warnings.iter().cloned());
+        for warning in &prior.warnings {
+            self.sink.record(warning.clone());
+        }
         self.include_records
             .extend(prior.include_records.iter().cloned());
         out.push_str(&prior.source_text);
@@ -1439,6 +1449,14 @@ impl Preprocessor {
         }
     }
 
+    /// Report a diagnostic, resolved against the command line and the
+    /// diagnostic pragmas recorded up to `site`. The pass reads the
+    /// unit in output order, so every pragma that can cover `site` is
+    /// already recorded when this runs.
+    pub(crate) fn warn(&mut self, code: Code, site: Site<'_>, text: String) {
+        self.sink.emit(code, Some(site.loc()), text);
+    }
+
     /// Recursive entry point. `filename` labels the buffer so error
     /// messages and `#pragma once` can name what they're talking
     /// about; the top-level call uses `"<source>"`, `#include`'d
@@ -1486,9 +1504,9 @@ impl Preprocessor {
         active: bool,
         cond_stack: &mut Vec<CondFrame>,
         presumed: usize,
-        diag: usize,
-        filename: &str,
+        site: Site<'_>,
     ) -> Result<Option<bool>, C5Error> {
+        let (diag, filename) = (site.line, site.file);
         let mut push_branch = |taken: bool| {
             cond_stack.push(CondFrame {
                 parent_active: active,
@@ -1550,11 +1568,11 @@ impl Preprocessor {
             // `#error` but compilation continues.
             Directive::Warning(message) => {
                 if active {
-                    self.warnings.push(super::error::fmt_compile_warn(
-                        filename,
-                        diag,
-                        &format!("#warning {}", message.trim()),
-                    ));
+                    self.warn(
+                        WARNING_DIRECTIVE,
+                        site,
+                        format!("#warning {}", message.trim()),
+                    );
                 }
                 active
             }
@@ -1633,6 +1651,32 @@ impl Preprocessor {
             Some(e) => Err(e),
             None => Ok(()),
         }
+    }
+}
+
+/// The catalogue rows this pass reports. `preprocessor_codes_are_live`
+/// checks each against the catalogue.
+pub(crate) const UNKNOWN_DIRECTIVE: Code = Code::new(1001);
+pub(crate) const WARNING_DIRECTIVE: Code = Code::new(1002);
+pub(crate) const MALFORMED_DIRECTIVE: Code = Code::new(1003);
+pub(crate) const UNKNOWN_PRAGMA: Code = Code::new(1004);
+pub(crate) const PRAGMA_SYNTAX: Code = Code::new(1005);
+pub(crate) const PRAGMA_POP_WITHOUT_PUSH: Code = Code::new(1006);
+pub(crate) const UNKNOWN_WARNING_OPTION: Code = Code::new(7002);
+
+/// Where a diagnostic from this pass points: the buffer's name and the
+/// line within it, plus the position in the output that the diagnostic
+/// pragmas resolve on.
+#[derive(Clone, Copy)]
+pub(crate) struct Site<'a> {
+    pub file: &'a str,
+    pub line: usize,
+    pub offset: u32,
+}
+
+impl Site<'_> {
+    fn loc(&self) -> Loc {
+        Loc::in_unit(self.file, self.line as u32, self.offset)
     }
 }
 
@@ -1750,6 +1794,17 @@ impl<'p, 's> LinePass<'p, 's> {
         Ok(())
     }
 
+    /// Where a diagnostic raised while handling the line at `line_no`
+    /// points. The offset is where the output stands, which is where
+    /// this line's text is about to go.
+    fn site(&self, line_no: usize) -> Site<'s> {
+        Site {
+            file: self.filename,
+            line: line_no,
+            offset: self.out.len() as u32,
+        }
+    }
+
     /// A blank filler for a directive or an inactive line, keeping the
     /// output's line count equal to the input's.
     fn blank(&mut self) {
@@ -1769,13 +1824,13 @@ impl<'p, 's> LinePass<'p, 's> {
         spelling: &str,
         line_no: usize,
     ) -> Result<(), C5Error> {
+        let site = self.site(line_no);
         let emitted = match self.pp.apply_cond_or_macro_directive(
             parsed,
             self.active,
             &mut self.cond,
             self.presumed,
-            line_no,
-            self.filename,
+            site,
         )? {
             Some(next) => {
                 self.active = next;
@@ -1848,7 +1903,8 @@ impl<'p, 's> LinePass<'p, 's> {
                 return Ok(Emitted::Yes);
             }
             PragmaDirective::Other => {
-                self.pp.parse_pragma(args, line_no, self.filename)?;
+                let site = self.site(line_no);
+                self.pp.parse_pragma(args, site)?;
             }
         }
         Ok(Emitted::No)
@@ -1892,15 +1948,15 @@ impl<'p, 's> LinePass<'p, 's> {
         let expanded = self.pp.substitute_spelling(args, self.filename, line_no);
         let trimmed = expanded.trim();
         let Some((name, quoted)) = header_name(trimmed) else {
-            let warning = super::error::fmt_compile_warn(
-                self.filename,
-                line_no,
-                &format!(
+            let site = self.site(line_no);
+            self.pp.warn(
+                MALFORMED_DIRECTIVE,
+                site,
+                format!(
                     "#include `{args}` expands to `{trimmed}`, \
                      which is not a `<header>` or `\"header\"` literal"
                 ),
             );
-            self.pp.warnings.push(warning);
             return Ok(Emitted::No);
         };
         self.include(name, quoted, false, line_no)
@@ -1944,12 +2000,12 @@ impl<'p, 's> LinePass<'p, 's> {
             self.presumed = line;
             return Emitted::Yes;
         }
-        let warning = super::error::fmt_compile_warn(
-            self.filename,
-            line_no,
-            &format!("#line `{args}` expands to `{trimmed}`, which is not a line number"),
+        let site = self.site(line_no);
+        self.pp.warn(
+            MALFORMED_DIRECTIVE,
+            site,
+            format!("#line `{args}` expands to `{trimmed}`, which is not a line number"),
         );
-        self.pp.warnings.push(warning);
         Emitted::No
     }
 
@@ -1970,11 +2026,12 @@ impl<'p, 's> LinePass<'p, 's> {
         } else {
             format!("`#{kw}`")
         };
-        let filename = self.filename;
-        self.pp.warnings.push(format!(
-            "{filename}:{line_no}: warning: \
-             unknown preprocessor directive {label} -- ignoring"
-        ));
+        let site = self.site(line_no);
+        self.pp.warn(
+            UNKNOWN_DIRECTIVE,
+            site,
+            format!("unknown preprocessor directive {label} -- ignoring"),
+        );
     }
 
     /// A content line: join what a multi-line macro invocation spans,
@@ -1989,9 +2046,8 @@ impl<'p, 's> LinePass<'p, 's> {
         // `__LINE__` reflects the presumed line, which a `#line` can
         // retarget (C99 6.10.4); absent one it is the physical line.
         let substituted = self.pp.substitute(&buffer, self.filename, self.presumed);
-        let processed =
-            self.pp
-                .apply_pragma_operators(&substituted, self.presumed, self.filename)?;
+        let site = self.site(self.presumed);
+        let processed = self.pp.apply_pragma_operators(&substituted, site)?;
         self.out.push_str(&processed);
         // One newline for the line itself, one per joined continuation,
         // so source line numbering survives the join.
@@ -2039,13 +2095,13 @@ impl<'p, 's> LinePass<'p, 's> {
                 // argument list are consumed without effect; their
                 // output would have to interleave with the joined
                 // expansion.
+                let site = self.site(dline);
                 if let Some(next) = self.pp.apply_cond_or_macro_directive(
                     &parsed,
                     self.active,
                     &mut self.cond,
                     dline,
-                    dline,
-                    self.filename,
+                    site,
                 )? {
                     self.active = next;
                 }

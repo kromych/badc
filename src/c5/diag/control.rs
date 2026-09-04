@@ -46,7 +46,7 @@ impl Config {
     /// `-W<sel>` / `-Wno-<sel>`. A selector naming an uncontrollable or
     /// a retired row changes nothing.
     pub fn set_level(&mut self, code: Code, level: Level) {
-        if Self::is_settable(code) {
+        if is_settable(code) {
             self.levels.insert(code.value(), level);
         }
     }
@@ -55,7 +55,7 @@ impl Config {
     /// is below `Warning` is raised to it.
     pub fn enable_group(&mut self, group: Groups) {
         for row in rows().filter(|r| r.groups.contains(group)) {
-            if Self::is_settable(row.code) && self.stated_level(row.code) < Level::Warning {
+            if is_settable(row.code) && self.stated_level(row.code) < Level::Warning {
                 self.levels.insert(row.code.value(), Level::Warning);
             }
         }
@@ -73,14 +73,14 @@ impl Config {
 
     /// `-Werror=<sel>` / `-Wno-error=<sel>`.
     pub fn error_for(&mut self, code: Code, on: bool) {
-        if Self::is_settable(code) {
+        if is_settable(code) {
             self.per_code_errors.insert(code.value(), on);
         }
     }
 
     /// The level before any pragma applies.
     pub fn level(&self, code: Code) -> Level {
-        if !Self::is_settable(code) {
+        if !is_settable(code) {
             return match code.status() {
                 Status::Retired => Level::Ignore,
                 Status::Live => code.default_level(),
@@ -114,10 +114,12 @@ impl Config {
             .copied()
             .unwrap_or_else(|| code.default_level())
     }
+}
 
-    fn is_settable(code: Code) -> bool {
-        code.class() == Class::Controllable && code.status() == Status::Live
-    }
+/// Whether an option or a pragma may move this row's level. A hard or
+/// a retired row keeps its catalogue level whatever the source asks.
+fn is_settable(code: Code) -> bool {
+    code.class() == Class::Controllable && code.status() == Status::Live
 }
 
 /// The extent a `#pragma warning(suppress: ...)` covers: the byte range
@@ -198,6 +200,9 @@ impl Control {
     /// `#pragma warning(suppress: N)`: the diagnostic is ignored over
     /// `extent`, the byte range of the line the pragma precedes.
     pub fn suppress(&mut self, extent: Extent, code: Code) {
+        if !is_settable(code) {
+            return;
+        }
         let list = self.suppressed.entry(code.value()).or_default();
         debug_assert!(list.last().is_none_or(|(start, _)| *start <= extent.0));
         list.push(extent);
@@ -206,6 +211,9 @@ impl Control {
     /// `#pragma warning(once: N)`: from `offset` on, the diagnostic is
     /// reported at most once. The sink holds the bookkeeping.
     pub fn report_once(&mut self, offset: u32, code: Code) {
+        if !is_settable(code) {
+            return;
+        }
         self.once.entry(code.value()).or_insert(offset);
     }
 
@@ -240,6 +248,9 @@ impl Control {
     }
 
     fn record(&mut self, offset: u32, code: Code, level: Option<Level>) {
+        if !is_settable(code) {
+            return;
+        }
         let events = self.events.entry(code.value()).or_default();
         debug_assert!(events.last().is_none_or(|(at, _)| *at <= offset));
         events.push((offset, level));

@@ -1,4 +1,10 @@
 code   name                           default  class         groups             status   description
+B1001  unknown-directive              warning  controllable  default            live     a `#` line naming no directive badc implements; the line is dropped
+B1002  #warnings                      warning  controllable  default            live     a `#warning` directive reached in an active conditional block
+B1003  malformed-directive            warning  controllable  default            live     a macro-expanded `#include` or `#line` operand that does not reparse
+B1004  unknown-pragmas                warning  controllable  default            live     a `#pragma` badc does not implement; the directive is ignored
+B1005  pragma-syntax                  warning  controllable  default            live     a diagnostic pragma badc implements whose operand is malformed
+B1006  pragma-pop-without-push        warning  controllable  default            live     a diagnostic-pragma pop with no matching push
 B2001  unused-variable                ignore   controllable  all                live     a variable declared and never used
 B2002  unused-parameter               ignore   controllable  extra              live     a parameter never used in the function body
 B2003  unused-but-set-variable        ignore   controllable  all                live     a variable that is only ever assigned to

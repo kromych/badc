@@ -51,6 +51,24 @@ macro_rules! catalog {
 // turns on defaults to `Ignore`, which is what enabling the group
 // raises.
 catalog! {
+    1001, "unknown-directive", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a `#` line naming no directive badc implements; the line is dropped";
+    1002, "#warnings", ["cpp"], Warning, Controllable,
+        [DEFAULT], Live,
+        "a `#warning` directive reached in an active conditional block";
+    1003, "malformed-directive", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a macro-expanded `#include` or `#line` operand that does not reparse";
+    1004, "unknown-pragmas", ["C4068"], Warning, Controllable,
+        [DEFAULT], Live,
+        "a `#pragma` badc does not implement; the directive is ignored";
+    1005, "pragma-syntax", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a diagnostic pragma badc implements whose operand is malformed";
+    1006, "pragma-pop-without-push", ["C4193"], Warning, Controllable,
+        [DEFAULT], Live,
+        "a diagnostic-pragma pop with no matching push";
     2001, "unused-variable", [], Ignore, Controllable,
         [ALL], Live,
         "a variable declared and never used";

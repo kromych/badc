@@ -2670,9 +2670,16 @@ impl Compiler {
         }
         let dylibs = pp.dylibs;
         let pending_exports = pp.exports;
-        // The preprocessor's diagnostics reach the driver through
-        // `Program::text_diagnostics` until its sites take rows.
-        let pp_warnings = pp.warnings;
+        // The preprocessor now records diagnostics rather than strings;
+        // they reach the driver through `Program::text_diagnostics`, which
+        // keeps their position ahead of the parser's warnings.
+        // TODO: carry them as diagnostics once the ordering is settled.
+        let pp_warnings = pp
+            .sink
+            .diagnostics()
+            .iter()
+            .map(ToString::to_string)
+            .collect();
         let pp_include_records = pp.include_records;
         let pp_entrypoint = pp.entrypoint;
         let pp_subsystem = pp.subsystem;

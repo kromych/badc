@@ -39,8 +39,29 @@ impl Sink {
         &self.config
     }
 
+    /// Install what the command line asked for. The pragmas recorded
+    /// so far keep their events; only the base level changes.
+    pub fn set_config(&mut self, config: Config) {
+        self.config = config;
+    }
+
     pub fn control(&self) -> &Control {
         &self.control
+    }
+
+    /// The pragma events, for the pass that records them as it reads
+    /// the translation unit.
+    pub fn control_mut(&mut self) -> &mut Control {
+        &mut self.control
+    }
+
+    /// Append a diagnostic whose level is already resolved. Used where
+    /// a pass replays what an earlier run of the same text produced.
+    pub fn record(&mut self, diagnostic: Diagnostic) {
+        if diagnostic.level == Level::Error {
+            self.errors += 1;
+        }
+        self.emitted.push(diagnostic);
     }
 
     /// The level `code` resolves to at `loc`: the command line, then

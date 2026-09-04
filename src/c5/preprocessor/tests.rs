@@ -18,6 +18,11 @@ fn trace_lines(pp: &Preprocessor) -> Vec<String> {
         .collect()
 }
 
+/// Codes reported by the diagnostics of one pass, in order.
+fn codes(pp: &Preprocessor) -> Vec<Code> {
+    pp.sink.diagnostics().iter().map(|d| d.code).collect()
+}
+
 fn process_err(source: &str) -> String {
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
     match pp.process(source) {
@@ -313,16 +318,19 @@ fn vendor_and_stdc_pragmas_are_silent() {
     )
     .expect("preprocessor failed");
     assert!(
-        pp.warnings.is_empty(),
+        pp.sink.diagnostics().is_empty(),
         "unexpected warnings: {:?}",
-        pp.warnings
+        pp.sink.diagnostics()
     );
 
     // An unrecognised pragma still surfaces a warning.
     let mut pp2 = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
     pp2.process("#pragma frobnicate widgets\nint y;\n")
         .expect("preprocessor failed");
-    assert!(!pp2.warnings.is_empty(), "unknown pragma should warn");
+    assert!(
+        !pp2.sink.diagnostics().is_empty(),
+        "unknown pragma should warn"
+    );
 }
 
 #[test]
@@ -820,9 +828,12 @@ fn pragma_warning_tolerates_space_before_paren() {
     pp.process("#pragma warning ( disable : 4214 )\nint x = 1;\n")
         .expect("preprocessor failed");
     assert!(
-        !pp.warnings.iter().any(|w| w.contains("unknown")),
+        !pp.sink
+            .diagnostics()
+            .iter()
+            .any(|w| w.text.contains("unknown")),
         "spaced warning pragma warned as unknown: {:?}",
-        pp.warnings
+        pp.sink.diagnostics()
     );
 }
 
@@ -1305,9 +1316,12 @@ fn asm_hash_line_tail_is_macro_expanded() {
     let out = pp.process("# hello\nint x;\n").expect("preprocess");
     assert!(!out.contains("# hello"), "{out}");
     assert!(
-        pp.warnings.iter().any(|w| w.contains("`#hello`")),
+        pp.sink
+            .diagnostics()
+            .iter()
+            .any(|w| w.text.contains("`#hello`")),
         "{:?}",
-        pp.warnings
+        pp.sink.diagnostics()
     );
 }
 
@@ -1341,7 +1355,11 @@ fn asm_keeps_line_markers_as_text() {
         "{out}"
     );
     assert!(out.contains("# 99 \"flagged.h\""), "{out}");
-    assert!(pp.warnings.is_empty(), "{:?}", pp.warnings);
+    assert!(
+        pp.sink.diagnostics().is_empty(),
+        "{:?}",
+        pp.sink.diagnostics()
+    );
 }
 
 /// C99 6.10p9: `#` with nothing after it is the null directive,
@@ -1353,7 +1371,11 @@ fn null_directive_is_silent() {
         pp.set_asm_source(asm);
         let out = pp.process("#\nline1\n").expect("preprocess");
         assert!(out.contains("line1"), "{out}");
-        assert!(pp.warnings.is_empty(), "{:?}", pp.warnings);
+        assert!(
+            pp.sink.diagnostics().is_empty(),
+            "{:?}",
+            pp.sink.diagnostics()
+        );
     }
 }
 
@@ -1681,9 +1703,9 @@ fn pragma_warning_disable_records_ids() {
         .process("#pragma warning(disable : 4054 4055 4100)\n")
         .expect("preprocessor failed");
     assert!(
-        pp.warnings.is_empty(),
+        pp.sink.diagnostics().is_empty(),
         "expected no warnings: {:?}",
-        pp.warnings
+        pp.sink.diagnostics()
     );
     assert_eq!(
         pp.warning_disabled.iter().copied().collect::<Vec<_>>(),
@@ -1726,9 +1748,12 @@ fn pragma_warning_pop_without_push_warns() {
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
     let _ = pp.process("#pragma warning(pop)\n").unwrap();
     assert!(
-        pp.warnings.iter().any(|w| w.contains("no matching push")),
+        pp.sink
+            .diagnostics()
+            .iter()
+            .any(|w| w.text.contains("no matching push")),
         "expected unmatched-pop warning: {:?}",
-        pp.warnings
+        pp.sink.diagnostics()
     );
 }
 
@@ -1737,9 +1762,12 @@ fn pragma_warning_bad_action_warns() {
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
     let _ = pp.process("#pragma warning(silence : 4267)\n").unwrap();
     assert!(
-        pp.warnings.iter().any(|w| w.contains("silence")),
+        pp.sink
+            .diagnostics()
+            .iter()
+            .any(|w| w.text.contains("silence")),
         "expected unrecognised-action warning: {:?}",
-        pp.warnings
+        pp.sink.diagnostics()
     );
 }
 
@@ -1748,11 +1776,12 @@ fn pragma_warning_bad_id_warns() {
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
     let _ = pp.process("#pragma warning(disable : abc)\n").unwrap();
     assert!(
-        pp.warnings
+        pp.sink
+            .diagnostics()
             .iter()
-            .any(|w| w.contains("expected an integer")),
+            .any(|w| w.text.contains("expected an integer")),
         "expected bad-ID warning: {:?}",
-        pp.warnings
+        pp.sink.diagnostics()
     );
 }
 
@@ -1766,7 +1795,11 @@ fn pragma_warning_push_with_level_accepted() {
              #pragma warning(pop)\n",
         )
         .unwrap();
-    assert!(pp.warnings.is_empty(), "got warnings: {:?}", pp.warnings);
+    assert!(
+        pp.sink.diagnostics().is_empty(),
+        "got warnings: {:?}",
+        pp.sink.diagnostics()
+    );
     assert!(pp.warning_disabled.is_empty());
 }
 
@@ -1781,7 +1814,11 @@ fn pragma_warn_disable_codes_recorded() {
              #pragma warn -aus -csu\n",
         )
         .unwrap();
-    assert!(pp.warnings.is_empty(), "got warnings: {:?}", pp.warnings);
+    assert!(
+        pp.sink.diagnostics().is_empty(),
+        "got warnings: {:?}",
+        pp.sink.diagnostics()
+    );
     let codes: Vec<&str> = pp.warn_disabled.iter().map(|s| s.as_str()).collect();
     assert_eq!(codes, vec!["aus", "csu", "rch"]);
 }
@@ -1805,9 +1842,12 @@ fn pragma_warn_bad_sign_warns() {
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
     let _ = pp.process("#pragma warn rch\n").unwrap();
     assert!(
-        pp.warnings.iter().any(|w| w.contains("leading")),
+        pp.sink
+            .diagnostics()
+            .iter()
+            .any(|w| w.text.contains("leading")),
         "expected bad-sign warning: {:?}",
-        pp.warnings
+        pp.sink.diagnostics()
     );
 }
 
@@ -1816,9 +1856,12 @@ fn pragma_warn_empty_warns() {
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
     let _ = pp.process("#pragma warn\n").unwrap();
     assert!(
-        pp.warnings.iter().any(|w| w.contains("no payload")),
+        pp.sink
+            .diagnostics()
+            .iter()
+            .any(|w| w.text.contains("no payload")),
         "expected empty-payload warning: {:?}",
-        pp.warnings
+        pp.sink.diagnostics()
     );
 }
 
@@ -1832,9 +1875,12 @@ fn unknown_directive_warns() {
         .process("#frobnicate args\nint main() { return 0; }\n")
         .expect("preprocessor failed");
     assert!(
-        pp.warnings.iter().any(|w| w.contains("`#frobnicate`")),
+        pp.sink
+            .diagnostics()
+            .iter()
+            .any(|w| w.text.contains("`#frobnicate`")),
         "expected a warning naming `#frobnicate`; got {:?}",
-        pp.warnings
+        pp.sink.diagnostics()
     );
 }
 
@@ -2332,9 +2378,9 @@ fn include_next_resumes_after_the_current_files_search_path() {
         "include_next must reach the next foo.h; got: {out}"
     );
     assert!(
-        pp.warnings.is_empty(),
+        pp.sink.diagnostics().is_empty(),
         "unexpected warnings: {:?}",
-        pp.warnings
+        pp.sink.diagnostics()
     );
 }
 
@@ -3508,7 +3554,7 @@ fn retry_reuses_the_source_pass_when_the_extension_is_disjoint() {
     let out_full = full.process(src).expect("full run succeeds");
 
     assert_eq!(out_reused, out_full, "spliced text differs from a full run");
-    assert_eq!(reused.warnings, full.warnings);
+    assert_eq!(reused.sink.diagnostics(), full.sink.diagnostics());
     assert_eq!(format!("{:?}", reused.dylibs), format!("{:?}", full.dylibs));
     assert_eq!(reused.exports, full.exports);
     assert_eq!(reused.intrinsics, full.intrinsics);
@@ -3598,9 +3644,12 @@ fn a_directive_name_is_one_preprocessing_token() {
         .expect("preprocess");
     assert!(out.contains('A') && out.contains('B'), "{out}");
     assert!(
-        pp.warnings.iter().any(|w| w.contains("`#elseelse`")),
+        pp.sink
+            .diagnostics()
+            .iter()
+            .any(|w| w.text.contains("`#elseelse`")),
         "{:?}",
-        pp.warnings
+        pp.sink.diagnostics()
     );
 
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
@@ -3615,7 +3664,11 @@ fn a_directive_name_is_one_preprocessing_token() {
         .process("#if 0\nA\n#else(x)\nB\n#endif(y)\n")
         .expect("preprocess");
     assert!(!out.contains('A') && out.contains('B'), "{out}");
-    assert!(pp.warnings.is_empty(), "{:?}", pp.warnings);
+    assert!(
+        pp.sink.diagnostics().is_empty(),
+        "{:?}",
+        pp.sink.diagnostics()
+    );
 
     let err = process_err("#error(x)\n");
     assert!(err.contains("#error (x)"), "{err}");
@@ -3623,9 +3676,12 @@ fn a_directive_name_is_one_preprocessing_token() {
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
     pp.process("#warning(x)\nint v;\n").expect("preprocess");
     assert!(
-        pp.warnings.iter().any(|w| w.contains("#warning (x)")),
+        pp.sink
+            .diagnostics()
+            .iter()
+            .any(|w| w.text.contains("#warning (x)")),
         "{:?}",
-        pp.warnings
+        pp.sink.diagnostics()
     );
 }
 
@@ -3846,4 +3902,46 @@ fn target_predefines_are_locked() {
             "{spec} __SIZEOF_LONG_DOUBLE__"
         );
     }
+}
+
+#[test]
+fn preprocessor_codes_are_live_catalogue_rows() {
+    for code in [
+        UNKNOWN_DIRECTIVE,
+        WARNING_DIRECTIVE,
+        MALFORMED_DIRECTIVE,
+        UNKNOWN_PRAGMA,
+        PRAGMA_SYNTAX,
+        PRAGMA_POP_WITHOUT_PUSH,
+        UNKNOWN_WARNING_OPTION,
+    ] {
+        let row = code.row().unwrap_or_else(|| panic!("{code} has no row"));
+        assert_eq!(row.status, crate::c5::diag::Status::Live, "{code}");
+        assert_eq!(
+            row.class,
+            crate::c5::diag::Class::Controllable,
+            "{code} must be selectable by a pragma"
+        );
+    }
+}
+
+#[test]
+fn preprocessor_diagnostics_carry_their_code() {
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let _ = pp
+        .process(
+            "#pragma frobnicate\n\
+             #frobnicate\n\
+             #warning hello\n",
+        )
+        .expect("preprocessor failed");
+    assert_eq!(
+        codes(&pp),
+        vec![UNKNOWN_PRAGMA, UNKNOWN_DIRECTIVE, WARNING_DIRECTIVE]
+    );
+    let rendered = pp.sink.diagnostics()[0].to_string();
+    assert!(
+        rendered.ends_with("[B1004] [-Wunknown-pragmas]"),
+        "unexpected rendering: {rendered}"
+    );
 }

@@ -252,7 +252,7 @@ impl Compiler {
             anonymous = true;
             format!("__anon_{kind}_{}", self.structs.len())
         } else {
-            return Err(self.compile_err(format!("{kind} name or `{{` expected")));
+            return Err(self.compile_err(Code::SYNTAX, format!("{kind} name or `{{` expected")));
         };
         let id = if self.lex.tk == '{' {
             let id = self.parse_aggregate_body(&name, is_union, packed)?;
@@ -314,7 +314,7 @@ impl Compiler {
         let inner = self.parse_decl_base_type()?;
         let inner = self.consume_abstract_pointer(inner)?.ty;
         if self.lex.tk != ')' {
-            return Err(self.compile_err("`)` expected after `_Atomic(type-name)`"));
+            return Err(self.compile_err(Code::SYNTAX, "`)` expected after `_Atomic(type-name)`"));
         }
         self.next()?; // )
         Ok(Some(inner))
@@ -333,7 +333,7 @@ impl Compiler {
     pub(super) fn parse_typeof_specifier(&mut self) -> Result<i64, C5Error> {
         self.next()?; // typeof
         if self.lex.tk != '(' {
-            return Err(self.compile_err("`(` expected after `typeof`"));
+            return Err(self.compile_err(Code::SYNTAX, "`(` expected after `typeof`"));
         }
         self.next()?; // (
         // `typeof(f)` where `f` names a function: the specifier is `f`'s
@@ -406,15 +406,17 @@ impl Compiler {
                         let n = self.parse_constant_int()?;
                         if n < 0 {
                             return Err(self.compile_err(
+                                Code::INVALID_DECLARATION,
                                 "array dimension in a type name must not be negative",
                             ));
                         }
                         n
                     };
                     if self.lex.tk != ']' {
-                        return Err(
-                            self.compile_err("close bracket expected in an array type name")
-                        );
+                        return Err(self.compile_err(
+                            Code::SYNTAX,
+                            "close bracket expected in an array type name",
+                        ));
                     }
                     self.next()?;
                     dims.push(n);
@@ -485,7 +487,7 @@ impl Compiler {
             inner
         };
         if self.lex.tk != ')' {
-            return Err(self.compile_err("`)` expected after `typeof` operand"));
+            return Err(self.compile_err(Code::SYNTAX, "`)` expected after `typeof` operand"));
         }
         self.next()?; // )
         Ok(ty)
@@ -706,7 +708,10 @@ impl Compiler {
         self.next()?; // asm
         self.consume(b'(', "`(` expected after `asm`")?;
         if self.lex.tk != '"' {
-            return Err(self.compile_err("register name string expected in `asm(...)`"));
+            return Err(self.compile_err(
+                Code::ASM_SYNTAX,
+                "register name string expected in `asm(...)`",
+            ));
         }
         // The lexer appended the literal's bytes to the data section;
         // read them back and drop them.
@@ -725,7 +730,7 @@ impl Compiler {
         }
         let name = alloc::string::String::from_utf8_lossy(&bytes).into_owned();
         if self.lex.tk != ')' {
-            return Err(self.compile_err("`)` expected after register name"));
+            return Err(self.compile_err(Code::SYNTAX, "`)` expected after register name"));
         }
         self.next()?;
         Ok(name)
@@ -758,7 +763,7 @@ impl Compiler {
                 "conflicting assembler name `{label}` for `{}`, already declared as `{prev}`",
                 self.symbols[id_idx].name
             );
-            return Err(self.compile_err(msg));
+            return Err(self.compile_err(Code::INVALID_DECLARATION, msg));
         }
         self.symbols[id_idx].asm_name = Some(label);
         Ok(())
@@ -795,9 +800,10 @@ impl Compiler {
             return Ok(None);
         }
         if named_static_or_extern {
-            return Err(
-                self.compile_err("an explicit-register variable cannot be `static` or `extern`")
-            );
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "an explicit-register variable cannot be `static` or `extern`",
+            ));
         }
         Ok(Some(self.resolve_asm_register(&name)?))
     }
@@ -824,8 +830,10 @@ impl Compiler {
     ) -> Result<(), C5Error> {
         use crate::c5::symbol::AsmRegister as R;
         if matches!(reg, Some(R::StackPointer | R::FramePointer)) && self.lex.tk == Token::Assign {
-            return Err(self
-                .compile_err("a stack- or frame-pointer register variable cannot be initialized"));
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "a stack- or frame-pointer register variable cannot be initialized",
+            ));
         }
         Ok(())
     }
@@ -846,6 +854,7 @@ impl Compiler {
         use crate::c5::symbol::AsmRegister as R;
         if !matches!(reg, R::StackPointer | R::FramePointer) {
             return Err(self.compile_err(
+                Code::UNSUPPORTED,
                 "file-scope register variables are supported for the stack and frame pointer only",
             ));
         }
@@ -854,10 +863,13 @@ impl Compiler {
             let same =
                 prior_class == Token::Loc as i64 && self.symbols[id_idx].asm_register == Some(reg);
             if !same {
-                return Err(self.compile_err(format!(
-                    "`{}` conflicts with a prior declaration",
-                    self.symbols[id_idx].name
-                )));
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    format!(
+                        "`{}` conflicts with a prior declaration",
+                        self.symbols[id_idx].name
+                    ),
+                ));
             }
         }
         self.check_register_asm_init(Some(reg))?;
@@ -905,69 +917,73 @@ impl Compiler {
                 | crate::Target::LinuxAarch64
                 | crate::Target::WindowsAarch64
         );
-        let resolved = if aarch64 {
-            // GCC accepts `rN` as an alias for `xN` on AArch64; normalize to
-            // the `x` spelling so one path resolves both (`r29`->frame
-            // pointer, `r16`..`r18` reserved, like their `x` forms).
-            let mut norm = alloc::string::String::new();
-            let m = match n.strip_prefix('r') {
-                Some(rest) if !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit()) => {
-                    norm.push('x');
-                    norm.push_str(rest);
-                    norm.as_str()
-                }
-                _ => n,
-            };
-            match m {
-                "sp" | "wsp" => Some(R::StackPointer),
-                "fp" | "x29" | "w29" => Some(R::FramePointer),
-                "lr" => Some(R::Gp(30)),
-                _ => {
-                    let (prefix, rest) = m.split_at(1.min(m.len()));
-                    if (prefix == "x" || prefix == "w")
-                        && let Ok(i) = rest.parse::<u8>()
-                        && i <= 30
-                    {
-                        // x16 / x17 are the emitters' scratch pair; x18
-                        // is the platform register on the supported
-                        // OS ABIs.
-                        if (16..=18).contains(&i) {
-                            return Err(self.compile_err(format!(
+        let resolved =
+            if aarch64 {
+                // GCC accepts `rN` as an alias for `xN` on AArch64; normalize to
+                // the `x` spelling so one path resolves both (`r29`->frame
+                // pointer, `r16`..`r18` reserved, like their `x` forms).
+                let mut norm = alloc::string::String::new();
+                let m = match n.strip_prefix('r') {
+                    Some(rest) if !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit()) => {
+                        norm.push('x');
+                        norm.push_str(rest);
+                        norm.as_str()
+                    }
+                    _ => n,
+                };
+                match m {
+                    "sp" | "wsp" => Some(R::StackPointer),
+                    "fp" | "x29" | "w29" => Some(R::FramePointer),
+                    "lr" => Some(R::Gp(30)),
+                    _ => {
+                        let (prefix, rest) = m.split_at(1.min(m.len()));
+                        if (prefix == "x" || prefix == "w")
+                            && let Ok(i) = rest.parse::<u8>()
+                            && i <= 30
+                        {
+                            // x16 / x17 are the emitters' scratch pair; x18
+                            // is the platform register on the supported
+                            // OS ABIs.
+                            if (16..=18).contains(&i) {
+                                return Err(self.compile_err(Code::INVALID_DECLARATION, format!(
                                 "register `{n}` is reserved and cannot hold a register variable"
                             )));
+                            }
+                            Some(R::Gp(i))
+                        } else {
+                            None
                         }
-                        Some(R::Gp(i))
-                    } else {
-                        None
                     }
                 }
-            }
-        } else {
-            match n {
-                "rsp" | "esp" => Some(R::StackPointer),
-                "rbp" | "ebp" => Some(R::FramePointer),
-                "rax" | "eax" => Some(R::Gp(0)),
-                "rcx" | "ecx" => Some(R::Gp(1)),
-                "rdx" | "edx" => Some(R::Gp(2)),
-                "rbx" | "ebx" => Some(R::Gp(3)),
-                "rsi" | "esi" => Some(R::Gp(6)),
-                "rdi" | "edi" => Some(R::Gp(7)),
-                "r8" | "r8d" => Some(R::Gp(8)),
-                "r9" | "r9d" => Some(R::Gp(9)),
-                "r10" | "r10d" => Some(R::Gp(10)),
-                "r11" | "r11d" => Some(R::Gp(11)),
-                "r12" | "r12d" => Some(R::Gp(12)),
-                "r13" | "r13d" => Some(R::Gp(13)),
-                "r14" | "r14d" => Some(R::Gp(14)),
-                "r15" | "r15d" => Some(R::Gp(15)),
-                _ => None,
-            }
-        };
+            } else {
+                match n {
+                    "rsp" | "esp" => Some(R::StackPointer),
+                    "rbp" | "ebp" => Some(R::FramePointer),
+                    "rax" | "eax" => Some(R::Gp(0)),
+                    "rcx" | "ecx" => Some(R::Gp(1)),
+                    "rdx" | "edx" => Some(R::Gp(2)),
+                    "rbx" | "ebx" => Some(R::Gp(3)),
+                    "rsi" | "esi" => Some(R::Gp(6)),
+                    "rdi" | "edi" => Some(R::Gp(7)),
+                    "r8" | "r8d" => Some(R::Gp(8)),
+                    "r9" | "r9d" => Some(R::Gp(9)),
+                    "r10" | "r10d" => Some(R::Gp(10)),
+                    "r11" | "r11d" => Some(R::Gp(11)),
+                    "r12" | "r12d" => Some(R::Gp(12)),
+                    "r13" | "r13d" => Some(R::Gp(13)),
+                    "r14" | "r14d" => Some(R::Gp(14)),
+                    "r15" | "r15d" => Some(R::Gp(15)),
+                    _ => None,
+                }
+            };
         resolved.ok_or_else(|| {
-            self.compile_err(format!(
-                "`{n}` is not a bindable register for target {}",
-                self.target.id_str()
-            ))
+            self.compile_err(
+                Code::INVALID_DECLARATION,
+                format!(
+                    "`{n}` is not a bindable register for target {}",
+                    self.target.id_str()
+                ),
+            )
         })
     }
 
@@ -981,7 +997,10 @@ impl Compiler {
     pub(super) fn parse_auto_type_specifier(&mut self) -> Result<i64, C5Error> {
         self.next()?; // __auto_type
         if self.lex.tk != Token::Id {
-            return Err(self.compile_err("`__auto_type` requires a plain identifier declarator"));
+            return Err(self.compile_err(
+                Code::SYNTAX,
+                "`__auto_type` requires a plain identifier declarator",
+            ));
         }
         let snap = self.lex.snapshot();
         self.next()?; // identifier
@@ -992,17 +1011,25 @@ impl Compiler {
         while self.lex.tk == Token::Attribute {
             self.next()?;
             if self.lex.tk != '(' {
-                return Err(self.compile_err("`(` expected after attribute specifier"));
+                return Err(
+                    self.compile_err(Code::SYNTAX, "`(` expected after attribute specifier")
+                );
             }
             self.next()?;
             self.skip_balanced_parens_after_open()?;
         }
         if self.lex.tk != Token::Assign {
-            return Err(self.compile_err("`__auto_type` declaration requires an initializer"));
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "`__auto_type` declaration requires an initializer",
+            ));
         }
         self.next()?; // =
         if self.lex.tk == '{' {
-            return Err(self.compile_err("`__auto_type` initializer must be a single expression"));
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "`__auto_type` initializer must be a single expression",
+            ));
         }
         let ty = self.parse_unevaluated_expr_ty(false)?;
         // The initializer decayed any array to a pointer; the declared
@@ -1144,7 +1171,9 @@ impl Compiler {
                 let is_alignas = self.symbols[self.lex.curr_id_idx].name == "_Alignas";
                 self.next()?;
                 if self.lex.tk != '(' {
-                    return Err(self.compile_err("`(` expected after attribute specifier"));
+                    return Err(
+                        self.compile_err(Code::SYNTAX, "`(` expected after attribute specifier")
+                    );
                 }
                 // C11 6.7.5 `_Alignas(constant-expression)` and
                 // `_Alignas(type-name)`, the latter equivalent to
@@ -1157,7 +1186,8 @@ impl Compiler {
                         alignas_align = alignas_align.max(self.align_of_type(ty) as i64);
                         align = align.max(alignas_align);
                         if self.lex.tk != ')' {
-                            return Err(self.compile_err("`)` expected after `_Alignas` type"));
+                            return Err(self
+                                .compile_err(Code::SYNTAX, "`)` expected after `_Alignas` type"));
                         }
                         self.next()?;
                     } else {
@@ -1167,7 +1197,10 @@ impl Compiler {
                         alignas_align = alignas_align.max(n);
                         align = align.max(n);
                         if self.lex.tk != ')' {
-                            return Err(self.compile_err("`)` expected after `_Alignas` operand"));
+                            return Err(self.compile_err(
+                                Code::SYNTAX,
+                                "`)` expected after `_Alignas` operand",
+                            ));
                         }
                         self.next()?;
                     }
@@ -1185,7 +1218,9 @@ impl Compiler {
                             break;
                         }
                     } else if self.lex.tk == 0 {
-                        return Err(self.compile_err("unterminated attribute specifier"));
+                        return Err(
+                            self.compile_err(Code::SYNTAX, "unterminated attribute specifier")
+                        );
                     } else {
                         // Capture whether this is `vector_size` before the
                         // `&mut self` calls below release the symbol borrow.
@@ -1234,9 +1269,10 @@ impl Compiler {
                                 let n = self.parse_constant_int()?;
                                 align = align.max(n);
                                 if self.lex.tk != ')' {
-                                    return Err(
-                                        self.compile_err("`)` expected after `aligned` operand")
-                                    );
+                                    return Err(self.compile_err(
+                                        Code::SYNTAX,
+                                        "`)` expected after `aligned` operand",
+                                    ));
                                 }
                                 self.next()?;
                             } else {
@@ -1256,9 +1292,10 @@ impl Compiler {
                             self.next()?;
                             vector_size = self.parse_constant_int()?;
                             if self.lex.tk != ')' {
-                                return Err(
-                                    self.compile_err("`)` expected after `vector_size` operand")
-                                );
+                                return Err(self.compile_err(
+                                    Code::SYNTAX,
+                                    "`)` expected after `vector_size` operand",
+                                ));
                             }
                             self.next()?;
                         } else if is_mode && self.lex.tk == '(' {
@@ -1267,7 +1304,10 @@ impl Compiler {
                             self.next()?; // `(`
                             self.pending.attr_mode = Some(self.parse_machine_mode()?);
                             if self.lex.tk != ')' {
-                                return Err(self.compile_err("`)` expected after `mode` operand"));
+                                return Err(self.compile_err(
+                                    Code::SYNTAX,
+                                    "`)` expected after `mode` operand",
+                                ));
                             }
                             self.next()?;
                         } else if is_section && self.lex.tk == '(' {
@@ -1277,9 +1317,10 @@ impl Compiler {
                             let name = self.parse_attribute_string_operand("section")?;
                             self.pending.attr_section = Some(name);
                             if self.lex.tk != ')' {
-                                return Err(
-                                    self.compile_err("`)` expected after `section` operand")
-                                );
+                                return Err(self.compile_err(
+                                    Code::SYNTAX,
+                                    "`)` expected after `section` operand",
+                                ));
                             }
                             self.next()?;
                         } else if is_patchable_entry && self.lex.tk == '(' {
@@ -1294,12 +1335,15 @@ impl Compiler {
                                 0
                             };
                             if n < 0 || m < 0 || m > n || n > u32::MAX as i64 {
-                                return Err(self
-                                    .compile_err("`patchable_function_entry` takes N >= M >= 0"));
+                                return Err(self.compile_err(
+                                    Code::INVALID_DECLARATION,
+                                    "`patchable_function_entry` takes N >= M >= 0",
+                                ));
                             }
                             self.pending.attr_patchable_entry = Some((n as u32, m as u32));
                             if self.lex.tk != ')' {
                                 return Err(self.compile_err(
+                                    Code::SYNTAX,
                                     "`)` expected after `patchable_function_entry` operands",
                                 ));
                             }
@@ -1312,7 +1356,10 @@ impl Compiler {
                             let name = self.parse_attribute_string_operand("alias")?;
                             self.pending.attr_alias = Some(name);
                             if self.lex.tk != ')' {
-                                return Err(self.compile_err("`)` expected after `alias` operand"));
+                                return Err(self.compile_err(
+                                    Code::SYNTAX,
+                                    "`)` expected after `alias` operand",
+                                ));
                             }
                             self.next()?;
                         } else if is_visibility && self.lex.tk == '(' {
@@ -1327,9 +1374,10 @@ impl Compiler {
                             self.pending.attr_visibility =
                                 Some(vis == "hidden" || vis == "internal");
                             if self.lex.tk != ')' {
-                                return Err(
-                                    self.compile_err("`)` expected after `visibility` operand")
-                                );
+                                return Err(self.compile_err(
+                                    Code::SYNTAX,
+                                    "`)` expected after `visibility` operand",
+                                ));
                             }
                             self.next()?;
                         } else if is_cleanup && self.lex.tk == '(' {
@@ -1338,16 +1386,18 @@ impl Compiler {
                             // is an identifier already in scope.
                             self.next()?; // `(`
                             if self.lex.tk != Token::Id {
-                                return Err(
-                                    self.compile_err("`cleanup` operand must be a function name")
-                                );
+                                return Err(self.compile_err(
+                                    Code::INVALID_DECLARATION,
+                                    "`cleanup` operand must be a function name",
+                                ));
                             }
                             self.pending.attr_cleanup = Some(self.lex.curr_id_idx);
                             self.next()?; // function name
                             if self.lex.tk != ')' {
-                                return Err(
-                                    self.compile_err("`)` expected after `cleanup` operand")
-                                );
+                                return Err(self.compile_err(
+                                    Code::SYNTAX,
+                                    "`)` expected after `cleanup` operand",
+                                ));
                             }
                             self.next()?;
                         }
@@ -1374,12 +1424,14 @@ impl Compiler {
                     } else if self.lex.tk == ']' && depth == 0 {
                         self.next()?; // first `]`
                         if self.lex.tk != ']' {
-                            return Err(self.compile_err("`]]` expected to close attribute"));
+                            return Err(
+                                self.compile_err(Code::SYNTAX, "`]]` expected to close attribute")
+                            );
                         }
                         self.next()?; // second `]`
                         break;
                     } else if self.lex.tk == 0 {
-                        return Err(self.compile_err("unterminated `[[` attribute"));
+                        return Err(self.compile_err(Code::SYNTAX, "unterminated `[[` attribute"));
                     } else {
                         let mut seen = AttrFlags::default();
                         self.note_attribute_name(&mut seen);
@@ -1390,9 +1442,10 @@ impl Compiler {
                             let n = self.parse_constant_int()?;
                             align = align.max(n);
                             if self.lex.tk != ')' {
-                                return Err(
-                                    self.compile_err("`)` expected after `aligned` operand")
-                                );
+                                return Err(self.compile_err(
+                                    Code::SYNTAX,
+                                    "`)` expected after `aligned` operand",
+                                ));
                             }
                             self.next()?;
                         } else if seen.constructor || seen.destructor {
@@ -1497,7 +1550,10 @@ impl Compiler {
         attr: &str,
     ) -> Result<alloc::string::String, C5Error> {
         if self.lex.tk != '"' {
-            return Err(self.compile_err(format!("`{attr}` operand must be a string literal")));
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                format!("`{attr}` operand must be a string literal"),
+            ));
         }
         let start = self.lex.ival as usize;
         self.next()?;
@@ -1519,7 +1575,10 @@ impl Compiler {
     /// mode would change the layout of every aggregate holding the type.
     fn parse_machine_mode(&mut self) -> Result<(u8, bool), C5Error> {
         if self.lex.tk != Token::Id {
-            return Err(self.compile_err("`mode` operand must be a machine mode name"));
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "`mode` operand must be a machine mode name",
+            ));
         }
         let raw = self.symbols[self.lex.curr_id_idx].name.clone();
         let name = raw.trim_matches('_');
@@ -1537,7 +1596,10 @@ impl Compiler {
             _ => None,
         };
         let Some(spec) = spec else {
-            return Err(self.compile_err(format!("unknown machine mode `{raw}`")));
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                format!("unknown machine mode `{raw}`"),
+            ));
         };
         self.next()?;
         Ok(spec)
@@ -1556,11 +1618,17 @@ impl Compiler {
         self.next()?; // (
         let n = self.parse_constant_int()?;
         if self.lex.tk != ')' {
-            return Err(self.compile_err("`)` expected after constructor/destructor priority"));
+            return Err(self.compile_err(
+                Code::SYNTAX,
+                "`)` expected after constructor/destructor priority",
+            ));
         }
         self.next()?;
         if !(0..=65535).contains(&n) {
-            return Err(self.compile_err("constructor/destructor priority out of range 0..65535"));
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "constructor/destructor priority out of range 0..65535",
+            ));
         }
         Ok(Some(n as u32))
     }
@@ -1809,7 +1877,7 @@ impl Compiler {
         } else if storage.is_some() {
             self.implicit_int_base_type()?
         } else {
-            return Err(self.compile_err("type expected"));
+            return Err(self.compile_err(Code::SYNTAX, "type expected"));
         };
 
         // Trailing specifiers: C99 6.7.2p2 admits the specifier multiset in
@@ -1941,7 +2009,10 @@ impl Compiler {
             && !self.lex.peek_after_whitespace(b'=')
         {
             let name = self.symbols[self.lex.curr_id_idx].name.clone();
-            return Err(self.compile_err(format!("unknown type name `{name}`")));
+            return Err(self.compile_err(
+                Code::UNDECLARED_IDENTIFIER,
+                format!("unknown type name `{name}`"),
+            ));
         }
         Ok(Ty::Int as i64)
     }

@@ -12,6 +12,7 @@
 //! storage and runtime stores for a stack local; [`InitTarget`] selects
 //! the leaf store.
 
+use super::super::diag::Code;
 use alloc::format;
 use alloc::vec::Vec;
 
@@ -597,9 +598,10 @@ impl Compiler {
     ) -> Result<StagedStringLiteral, C5Error> {
         let wide = self.lex.str_is_wide;
         if wide && self.lex.str_elem_bytes != elem_bytes {
-            return Err(
-                self.compile_err("wide string initializer requires a wchar_t-width array element")
-            );
+            return Err(self.compile_err(
+                Code::INVALID_INITIALIZER,
+                "wide string initializer requires a wchar_t-width array element",
+            ));
         }
         let start = self.take_concat_string_literal()?;
         let staged = self.data.len().saturating_sub(start) / elem_bytes;
@@ -642,7 +644,10 @@ impl Compiler {
     fn expect_close_brace_after_wrapped_string(&mut self) -> Result<(), C5Error> {
         self.accept(',')?;
         if self.lex.tk != '}' {
-            return Err(self.compile_err("`}` expected after brace-wrapped string initializer"));
+            return Err(self.compile_err(
+                Code::SYNTAX,
+                "`}` expected after brace-wrapped string initializer",
+            ));
         }
         self.next()?;
         Ok(())
@@ -653,9 +658,10 @@ impl Compiler {
     fn expect_close_parens(&mut self, depth: usize) -> Result<(), C5Error> {
         for _ in 0..depth {
             if self.lex.tk != ')' {
-                return Err(
-                    self.compile_err("`)` expected to close a parenthesized string initializer")
-                );
+                return Err(self.compile_err(
+                    Code::SYNTAX,
+                    "`)` expected to close a parenthesized string initializer",
+                ));
             }
             self.next()?;
         }
@@ -688,9 +694,10 @@ impl Compiler {
         self.next()?; // consume `[`
         let lo = self.parse_constant_int_folding_const_objects()?;
         if matches!(rule, DesignatorRule::Ordered) && lo < 0 {
-            return Err(self.compile_err(format!(
-                "array designator index must be non-negative (got {lo})"
-            )));
+            return Err(self.compile_err(
+                Code::INVALID_INITIALIZER,
+                format!("array designator index must be non-negative (got {lo})"),
+            ));
         }
         let mut hi = lo;
         let ranged = self.lex.tk == Token::Ellipsis && !matches!(rule, DesignatorRule::SingleIndex);
@@ -698,9 +705,10 @@ impl Compiler {
             self.next()?;
             hi = self.parse_constant_int_folding_const_objects()?;
             if matches!(rule, DesignatorRule::Ordered) && hi < lo {
-                return Err(
-                    self.compile_err(format!("array range designator high {hi} below low {lo}"))
-                );
+                return Err(self.compile_err(
+                    Code::INVALID_INITIALIZER,
+                    format!("array range designator high {hi} below low {lo}"),
+                ));
             }
         }
         if let DesignatorRule::Extent(extent) = rule {
@@ -725,9 +733,10 @@ impl Compiler {
             } else {
                 format!("{lo}..{hi}")
             };
-            return Err(self.compile_err(format!(
-                "array designator index {index} out of bounds [0, {extent})"
-            )));
+            return Err(self.compile_err(
+                Code::INVALID_INITIALIZER,
+                format!("array designator index {index} out of bounds [0, {extent})"),
+            ));
         }
         Ok(())
     }
@@ -735,7 +744,7 @@ impl Compiler {
     /// Consume the `]` closing an array designator's subscript.
     pub(super) fn expect_designator_close(&mut self) -> Result<(), C5Error> {
         if self.lex.tk != ']' {
-            return Err(self.compile_err("`]` expected after array designator index"));
+            return Err(self.compile_err(Code::SYNTAX, "`]` expected after array designator index"));
         }
         self.next()?;
         Ok(())
@@ -745,7 +754,7 @@ impl Compiler {
     /// list ends at the subscript (C99 6.7.8p6).
     pub(super) fn expect_designator_assign(&mut self) -> Result<(), C5Error> {
         if self.lex.tk != Token::Assign {
-            return Err(self.compile_err("`=` expected after array designator"));
+            return Err(self.compile_err(Code::SYNTAX, "`=` expected after array designator"));
         }
         self.next()?;
         Ok(())
@@ -780,7 +789,10 @@ impl Compiler {
             depth += 1;
             if self.lex.tk == Token::Brak && depth <= inner_dims.len() {
                 if range_end > 0 {
-                    return Err(self.compile_err("range designator must be the last subscript"));
+                    return Err(self.compile_err(
+                        Code::INVALID_INITIALIZER,
+                        "range designator must be the last subscript",
+                    ));
                 }
                 continue;
             }
@@ -794,7 +806,7 @@ impl Compiler {
         };
         if !desig.element_chain {
             if self.lex.tk != Token::Assign {
-                return Err(self.compile_err("`=` expected after `[N]` designator"));
+                return Err(self.compile_err(Code::SYNTAX, "`=` expected after `[N]` designator"));
             }
             self.next()?;
         }
@@ -914,9 +926,10 @@ impl Compiler {
                 ArrayInitHead::BraceList(depth) => depth,
             };
         if self.lex.tk != '{' {
-            return Err(
-                self.compile_err("array initializer must be a string literal or `{{ ... }}`")
-            );
+            return Err(self.compile_err(
+                Code::INVALID_INITIALIZER,
+                "array initializer must be a string literal or `{{ ... }}`",
+            ));
         }
         self.next()?;
         let mut elements: Vec<(i128, InitElemReloc)> = Vec::new();
@@ -942,7 +955,9 @@ impl Compiler {
             let mut entry_designated = false;
             if let Some(d) = self.take_chained_array_designator(&inner_dims)? {
                 if d.element_chain {
-                    return Err(self.compile_err("`=` expected after `[N]` designator"));
+                    return Err(
+                        self.compile_err(Code::SYNTAX, "`=` expected after `[N]` designator")
+                    );
                 }
                 entry_designated = true;
                 cursor = d.base as usize;
@@ -1548,10 +1563,13 @@ impl Compiler {
                 let v = self.parse_constant_i128()?;
                 return Ok((v, InitElemReloc::None));
             }
-            return Err(self.compile_err(format!(
-                "expected numeric literal after `+` in initializer (got {})",
-                super::super::token::describe(self.lex.tk)
-            )));
+            return Err(self.compile_err(
+                Code::SYNTAX,
+                format!(
+                    "expected numeric literal after `+` in initializer (got {})",
+                    super::super::token::describe(self.lex.tk)
+                ),
+            ));
         }
         if self.lex.tk == Token::SubOp && self.lex.peek_after_whitespace_starts_digit() {
             let snap = self.lex.snapshot();
@@ -1576,10 +1594,13 @@ impl Compiler {
                 let v = self.parse_constant_i128()?;
                 return Ok((v, InitElemReloc::None));
             }
-            return Err(self.compile_err(format!(
-                "expected numeric literal after `-` in initializer (got {})",
-                super::super::token::describe(self.lex.tk)
-            )));
+            return Err(self.compile_err(
+                Code::SYNTAX,
+                format!(
+                    "expected numeric literal after `-` in initializer (got {})",
+                    super::super::token::describe(self.lex.tk)
+                ),
+            ));
         }
         // A sign before a parenthesized float expression (`-(1.0e+308 *
         // 10.0)`, what `-INFINITY` expands to) takes the f64 folder,
@@ -1715,7 +1736,7 @@ impl Compiler {
             let seed = self.parse_const_expr_unary_val()?;
             let v = self.parse_const_expr_add_from(seed)?.as_float();
             if self.lex.tk != ')' {
-                return Err(self.compile_err("close paren expected in initializer"));
+                return Err(self.compile_err(Code::SYNTAX, "close paren expected in initializer"));
             }
             self.next()?;
             // The result of the parens is itself a float
@@ -1754,7 +1775,9 @@ impl Compiler {
             if is_cast_of_string {
                 let (value, reloc) = self.parse_constant_init_value()?;
                 if self.lex.tk != ')' {
-                    return Err(self.compile_err("close paren expected in initializer"));
+                    return Err(
+                        self.compile_err(Code::SYNTAX, "close paren expected in initializer")
+                    );
                 }
                 self.next()?;
                 return Ok((value, reloc));
@@ -1806,7 +1829,10 @@ impl Compiler {
                 let (v, reloc) = self.parse_constant_init_value()?;
                 self.accept(',')?;
                 if self.lex.tk != '}' {
-                    return Err(self.compile_err("scalar compound literal holds a single value"));
+                    return Err(self.compile_err(
+                        Code::INVALID_INITIALIZER,
+                        "scalar compound literal holds a single value",
+                    ));
                 }
                 self.next()?;
                 let target_fp = matches!(
@@ -1901,7 +1927,10 @@ impl Compiler {
             }
         }
         if self.lex.tk != ')' {
-            return Err(self.compile_err("close paren expected after cast in initializer"));
+            return Err(self.compile_err(
+                Code::SYNTAX,
+                "close paren expected after cast in initializer",
+            ));
         }
         self.next()?;
         self.parse_constant_init_value()
@@ -2001,10 +2030,13 @@ impl Compiler {
                 self.next()?;
                 let n = self.parse_constant_int_folding_const_objects()?;
                 if self.lex.tk != ']' {
-                    return Err(self.compile_err(format!(
-                        "close bracket expected in `{}[...]` initializer",
-                        self.symbols[idx].name
-                    )));
+                    return Err(self.compile_err(
+                        Code::SYNTAX,
+                        format!(
+                            "close bracket expected in `{}[...]` initializer",
+                            self.symbols[idx].name
+                        ),
+                    ));
                 }
                 self.next()?;
                 let stride: i64 = if depth == 0 {
@@ -2022,12 +2054,15 @@ impl Compiler {
                 } else {
                     // No recorded stride past the second dimension.
                     if n != 0 {
-                        return Err(self.compile_err(format!(
-                            "static initializer index past 2D for `{}` -- \
+                        return Err(self.compile_err(
+                            Code::UNSUPPORTED,
+                            format!(
+                                "static initializer index past 2D for `{}` -- \
                              c5 only tracks two dimensions, only `[0]` is \
                              accepted beyond that",
-                            self.symbols[idx].name
-                        )));
+                                self.symbols[idx].name
+                            ),
+                        ));
                     }
                     0
                 };
@@ -2036,10 +2071,13 @@ impl Compiler {
             }
             return Ok((off as i128, InitElemReloc::Data(Some(idx))));
         }
-        Err(self.compile_err(format!(
-            "identifier `{}` is not a constant-expression value",
-            self.symbols[idx].name
-        )))
+        Err(self.compile_err(
+            Code::CONSTANT_EXPRESSION,
+            format!(
+                "identifier `{}` is not a constant-expression value",
+                self.symbols[idx].name
+            ),
+        ))
     }
 
     /// A scalar initializer element folded by the shared constant
@@ -2120,7 +2158,10 @@ impl Compiler {
             self.next()?; // consume `[`
             if self.lex.tk == ']' {
                 if !dims.is_empty() {
-                    return Err(self.compile_err("array type has an incomplete inner dimension"));
+                    return Err(self.compile_err(
+                        Code::INVALID_DECLARATION,
+                        "array type has an incomplete inner dimension",
+                    ));
                 }
                 dims.push(-1);
             } else {
@@ -2129,18 +2170,24 @@ impl Compiler {
                 // variably sized literal, as gcc rejects it.
                 dims.push(self.with_const_object_fold_masked(|c| c.parse_constant_int())?);
                 if self.lex.tk != ']' {
-                    return Err(self.compile_err("`]` expected in array compound-literal type"));
+                    return Err(self
+                        .compile_err(Code::SYNTAX, "`]` expected in array compound-literal type"));
                 }
             }
             self.next()?; // consume `]`
         }
         dims.extend_from_slice(base_dims);
         if self.lex.tk != ')' {
-            return Err(self.compile_err("`)` expected to close compound-literal type"));
+            return Err(
+                self.compile_err(Code::SYNTAX, "`)` expected to close compound-literal type")
+            );
         }
         self.next()?; // consume `)`
         if self.lex.tk != '{' {
-            return Err(self.compile_err("`{` expected to start compound-literal initializer"));
+            return Err(self.compile_err(
+                Code::SYNTAX,
+                "`{` expected to start compound-literal initializer",
+            ));
         }
         let elem_size = self.size_of_type(elem_ty);
         let elem_is_struct = is_struct_value_ty(elem_ty);
@@ -2175,7 +2222,10 @@ impl Compiler {
             self.pending.init_inner_dims = dims[1..].to_vec();
             let elements = self.collect_array_initializer(elem_ty)?;
             if elements.len() > count {
-                return Err(self.compile_err("too many initializers for array compound literal"));
+                return Err(self.compile_err(
+                    Code::INVALID_INITIALIZER,
+                    "too many initializers for array compound literal",
+                ));
             }
             self.write_array_init_into_data(off, elem_ty, &elements)?;
         }
@@ -2205,7 +2255,10 @@ impl Compiler {
     ) -> Result<(i64, usize, alloc::vec::Vec<i64>), C5Error> {
         match self.parse_array_compound_literal(elem_ty, base_dims)? {
             (off, InitElemReloc::Data(Some(sym)), dims) => Ok((off as i64, sym, dims)),
-            _ => Err(self.compile_err("array compound literal did not intern a symbol")),
+            _ => Err(self.compile_err(
+                Code::INTERNAL,
+                "array compound literal did not intern a symbol",
+            )),
         }
     }
 
@@ -2317,14 +2370,15 @@ impl Compiler {
         while self.lex.tk == Token::Dot || self.lex.tk == Token::Brak {
             if self.lex.tk == Token::Dot {
                 if !is_struct_ty(cur_ty) || struct_ptr_depth(cur_ty) != 0 {
-                    return Err(
-                        self.compile_err("`.` designator on a non-struct / non-union field")
-                    );
+                    return Err(self.compile_err(
+                        Code::INVALID_INITIALIZER,
+                        "`.` designator on a non-struct / non-union field",
+                    ));
                 }
                 let sid = struct_id_of(cur_ty);
                 self.next()?;
                 if self.lex.tk != Token::Id {
-                    return Err(self.compile_err("field name expected after `.`"));
+                    return Err(self.compile_err(Code::SYNTAX, "field name expected after `.`"));
                 }
                 let sub_name = self.symbols[self.lex.curr_id_idx].name.clone();
                 self.next()?;
@@ -2333,10 +2387,13 @@ impl Compiler {
                     .iter()
                     .position(|f| f.name == sub_name)
                     .ok_or_else(|| {
-                        self.compile_err(format!(
-                            "struct {} has no field {}",
-                            self.structs[sid].name, sub_name
-                        ))
+                        self.compile_err(
+                            Code::UNDECLARED_IDENTIFIER,
+                            format!(
+                                "struct {} has no field {}",
+                                self.structs[sid].name, sub_name
+                            ),
+                        )
                     })?;
                 let sub = self.structs[sid].fields[sub_idx].clone();
                 cur_offset += sub.offset as i64;
@@ -2351,7 +2408,12 @@ impl Compiler {
                 // product of the remaining inner dimensions.
                 let arr = match &last {
                     Some(f) if f.array_size > 0 => f.clone(),
-                    _ => return Err(self.compile_err("`[N]` designator on a non-array field")),
+                    _ => {
+                        return Err(self.compile_err(
+                            Code::INVALID_INITIALIZER,
+                            "`[N]` designator on a non-array field",
+                        ));
+                    }
                 };
                 let dims: Vec<i64> = if arr.array_dims.len() >= 2 {
                     arr.array_dims.clone()
@@ -2366,13 +2428,16 @@ impl Compiler {
                 let DesignatorSubscript { lo: m, hi, ranged } =
                     self.take_designator_subscript(DesignatorRule::Deferred)?;
                 if ranged && extra != 0 {
-                    return Err(
-                        self.compile_err("two `[lo ... hi]` designators in one designator list")
-                    );
+                    return Err(self.compile_err(
+                        Code::INVALID_INITIALIZER,
+                        "two `[lo ... hi]` designators in one designator list",
+                    ));
                 }
                 self.check_designator_extent(m, hi, dims[0])?;
                 if self.lex.tk != ']' {
-                    return Err(self.compile_err("`]` expected after sub-designator index"));
+                    return Err(
+                        self.compile_err(Code::SYNTAX, "`]` expected after sub-designator index")
+                    );
                 }
                 self.next()?;
                 let step = inner * self.size_of_type(cur_ty) as i64;
@@ -2397,10 +2462,17 @@ impl Compiler {
             took_step = true;
         }
         if !took_step {
-            return Err(self.compile_err("empty designator chain after `.field`"));
+            return Err(self.compile_err(
+                Code::INVALID_INITIALIZER,
+                "empty designator chain after `.field`",
+            ));
         }
-        let field =
-            last.ok_or_else(|| self.compile_err("empty designator chain after `.field`"))?;
+        let field = last.ok_or_else(|| {
+            self.compile_err(
+                Code::INVALID_INITIALIZER,
+                "empty designator chain after `.field`",
+            )
+        })?;
         Ok(DesignatedSubobject {
             offset: cur_offset,
             field,
@@ -2426,7 +2498,9 @@ impl Compiler {
         let d =
             self.resolve_nested_designator_chain(entry_base as i64, entry.ty, Some(entry.clone()))?;
         if self.lex.tk != Token::Assign {
-            return Err(self.compile_err("`=` expected after nested-designator chain"));
+            return Err(
+                self.compile_err(Code::SYNTAX, "`=` expected after nested-designator chain")
+            );
         }
         self.next()?;
         let value = self.lex.snapshot();
@@ -2490,7 +2564,7 @@ impl Compiler {
     ) -> Result<(), C5Error> {
         let d = self.resolve_nested_designator_chain(elem_base, elem_ty, None)?;
         if self.lex.tk != Token::Assign {
-            return Err(self.compile_err("`=` expected after `[N].field` designator"));
+            return Err(self.compile_err(Code::SYNTAX, "`=` expected after `[N].field` designator"));
         }
         self.next()?;
         let elem = self.size_of_type(d.field.ty);
@@ -2767,7 +2841,10 @@ impl Compiler {
         target: InitTarget,
     ) -> Result<(), C5Error> {
         if self.lex.tk != '{' {
-            return Err(self.compile_err("struct initializer must start with `{{`"));
+            return Err(self.compile_err(
+                Code::INVALID_INITIALIZER,
+                "struct initializer must start with `{{`",
+            ));
         }
         self.next()?;
         self.fill_struct_fields_t(struct_id, target, true)?;
@@ -2790,7 +2867,10 @@ impl Compiler {
         dims: &[i64],
     ) -> Result<(), C5Error> {
         if self.lex.tk != '{' {
-            return Err(self.compile_err("array initializer must start with `{{`"));
+            return Err(self.compile_err(
+                Code::INVALID_INITIALIZER,
+                "array initializer must start with `{{`",
+            ));
         }
         self.next()?;
         self.with_nesting("initializer", |c| {
@@ -2843,8 +2923,10 @@ impl Compiler {
                     // `[lo ... hi].field = v` replicates the member fill
                     // across the range, re-parsing the value per index.
                     if dims.len() != 1 {
-                        return Err(self
-                            .compile_err("`[lo ... hi].field` requires a single-dimension level"));
+                        return Err(self.compile_err(
+                            Code::INVALID_INITIALIZER,
+                            "`[lo ... hi].field` requires a single-dimension level",
+                        ));
                     }
                     for e in lo..=hi {
                         let snap = self.lex.snapshot();
@@ -2886,7 +2968,9 @@ impl Compiler {
                 continue;
             }
             if cursor >= total {
-                return Err(self.compile_err("too many initializers for array"));
+                return Err(
+                    self.compile_err(Code::INVALID_INITIALIZER, "too many initializers for array")
+                );
             }
             // The rank a positional entry fills: the outermost level whose
             // row boundary the cursor sits on; mid-row it names a deeper
@@ -2933,14 +3017,15 @@ impl Compiler {
         self.expect_designator_close()?;
         if self.lex.tk == Token::Brak || self.lex.tk == Token::Dot {
             if hi > lo && self.lex.tk == Token::Brak {
-                return Err(
-                    self.compile_err("`[lo ... hi]` range cannot combine with a further subscript")
-                );
+                return Err(self.compile_err(
+                    Code::INVALID_INITIALIZER,
+                    "`[lo ... hi]` range cannot combine with a further subscript",
+                ));
             }
             return Ok(Some((lo, hi, true)));
         }
         if self.lex.tk != Token::Assign {
-            return Err(self.compile_err("`=` expected after `[N]` designator"));
+            return Err(self.compile_err(Code::SYNTAX, "`=` expected after `[N]` designator"));
         }
         self.next()?; // `=`
         Ok(Some((lo, hi, false)))
@@ -2965,7 +3050,10 @@ impl Compiler {
                 // Element-level `[k]` continues into an array member
                 // (`[i][j].arr[k] = v` has a leading `.`; a direct `[k]`
                 // on a struct element is invalid).
-                return Err(self.compile_err("`[` designator on a non-array element"));
+                return Err(self.compile_err(
+                    Code::INVALID_INITIALIZER,
+                    "`[` designator on a non-array element",
+                ));
             }
             let n = self
                 .take_designator_subscript(DesignatorRule::SingleIndex)?
@@ -2977,15 +3065,16 @@ impl Compiler {
         }
         if self.lex.tk == Token::Dot {
             if !dims_below.is_empty() {
-                return Err(
-                    self.compile_err("`.field` designator requires indexing down to one element")
-                );
+                return Err(self.compile_err(
+                    Code::INVALID_INITIALIZER,
+                    "`.field` designator requires indexing down to one element",
+                ));
             }
             self.fill_element_field_designator(sid, elem_ty, at)?;
             return Ok(at + elem_size);
         }
         if self.lex.tk != Token::Assign {
-            return Err(self.compile_err("`=` expected after designator chain"));
+            return Err(self.compile_err(Code::SYNTAX, "`=` expected after designator chain"));
         }
         self.next()?; // `=`
         if dims_below.is_empty() {
@@ -3234,6 +3323,7 @@ impl Compiler {
                 if let Some((lo, hi, chain)) = self.take_struct_array_designator(i64::MAX)? {
                     if chain {
                         return Err(self.compile_err(
+                            Code::UNSUPPORTED,
                             "designator chain on a flexible-array row is not supported",
                         ));
                     }
@@ -3289,8 +3379,10 @@ impl Compiler {
             return Ok(());
         }
         if self.lex.tk != '{' {
-            return Err(self
-                .compile_err("flexible array member initializer must be a brace list or string"));
+            return Err(self.compile_err(
+                Code::INVALID_INITIALIZER,
+                "flexible array member initializer must be a brace list or string",
+            ));
         }
         self.next()?;
         let elem_is_struct = is_struct_value_ty(elem_ty);
@@ -3365,7 +3457,7 @@ impl Compiler {
             let field_idx = if self.lex.tk == Token::Dot {
                 self.next()?;
                 if self.lex.tk != Token::Id {
-                    return Err(self.compile_err("field name expected after `.`"));
+                    return Err(self.compile_err(Code::SYNTAX, "field name expected after `.`"));
                 }
                 let field_name = self.symbols[self.lex.curr_id_idx].name.clone();
                 self.next()?;
@@ -3374,10 +3466,13 @@ impl Compiler {
                     .iter()
                     .position(|f| f.name == field_name)
                     .ok_or_else(|| {
-                        self.compile_err(format!(
-                            "struct {} has no field {}",
-                            self.structs[struct_id].name, field_name
-                        ))
+                        self.compile_err(
+                            Code::UNDECLARED_IDENTIFIER,
+                            format!(
+                                "struct {} has no field {}",
+                                self.structs[struct_id].name, field_name
+                            ),
+                        )
                     })?;
                 // C99 6.7.8p7: a designator list may be a chain of
                 // `.member` and `[index]` steps. `.outer.inner = v`
@@ -3397,9 +3492,10 @@ impl Compiler {
                     continue;
                 }
                 if self.lex.tk != Token::Assign {
-                    return Err(
-                        self.compile_err(format!("`=` expected after `.{field_name}` designator"))
-                    );
+                    return Err(self.compile_err(
+                        Code::SYNTAX,
+                        format!("`=` expected after `.{field_name}` designator"),
+                    ));
                 }
                 self.next()?;
                 outer_idx
@@ -3407,10 +3503,13 @@ impl Compiler {
                 pos
             };
             if field_idx >= self.structs[struct_id].fields.len() {
-                return Err(self.compile_err(format!(
-                    "too many initializers for struct {}",
-                    self.structs[struct_id].name
-                )));
+                return Err(self.compile_err(
+                    Code::INVALID_INITIALIZER,
+                    format!(
+                        "too many initializers for struct {}",
+                        self.structs[struct_id].name
+                    ),
+                ));
             }
             let field = self.structs[struct_id].fields[field_idx].clone();
             let field_base = (var_offset as usize) + field.offset;
@@ -3480,6 +3579,7 @@ impl Compiler {
             if field.array_size < 0 {
                 if target.is_runtime() {
                     return Err(self.compile_err(
+                        Code::UNSUPPORTED,
                         "non-constant flexible array member initializer not yet supported",
                     ));
                 }
@@ -3687,8 +3787,10 @@ impl Compiler {
             }
             for _ in 0..char_array_paren_depth {
                 if self.lex.tk != ')' {
-                    return Err(self
-                        .compile_err("`)` expected to close a parenthesized string initializer"));
+                    return Err(self.compile_err(
+                        Code::SYNTAX,
+                        "`)` expected to close a parenthesized string initializer",
+                    ));
                 }
                 self.next()?;
             }
@@ -3739,10 +3841,13 @@ impl Compiler {
                 self.pending.init_target_array_size = field.array_size;
                 let elements = self.collect_array_initializer(field.ty)?;
                 if elements.len() as i64 > field.array_size {
-                    return Err(self.compile_err(format!(
-                        "too many initializers for `{}.{}`",
-                        self.structs[struct_id].name, field.name
-                    )));
+                    return Err(self.compile_err(
+                        Code::INVALID_INITIALIZER,
+                        format!(
+                            "too many initializers for `{}.{}`",
+                            self.structs[struct_id].name, field.name
+                        ),
+                    ));
                 }
                 self.write_array_init_into_data(field_base as i64, field.ty, &elements)?;
             }
@@ -3831,6 +3936,7 @@ impl Compiler {
                 self.accept(',')?;
                 if self.lex.tk != '}' {
                     return Err(self.compile_err(
+                        Code::INVALID_INITIALIZER,
                         "scalar initializer wrapped in `{ ... }` must hold a single value",
                     ));
                 }
@@ -3965,6 +4071,7 @@ impl Compiler {
             self.accept(',')?;
             if self.lex.tk != '}' {
                 return Err(self.compile_err(
+                    Code::INVALID_INITIALIZER,
                     "scalar initializer wrapped in `{ ... }` must hold a single value",
                 ));
             }
@@ -3992,8 +4099,10 @@ impl Compiler {
         // compatible struct expression (copied); a scalar value would be
         // brace elision into its sub-fields, which this path can't model.
         if self.is_traversable_aggregate_ty(field.ty) && !(is_struct_value_ty(self.ty)) {
-            return Err(self
-                .compile_err("brace elision into a non-constant struct member is not supported"));
+            return Err(self.compile_err(
+                Code::UNSUPPORTED,
+                "brace elision into a non-constant struct member is not supported",
+            ));
         }
         self.convert_assign_rhs(field.ty);
         let field_ast = self.ast_acc;
@@ -4049,6 +4158,7 @@ impl Compiler {
             self.accept(',')?;
             if self.lex.tk != '}' {
                 return Err(self.compile_err(
+                    Code::INVALID_INITIALIZER,
                     "scalar initializer wrapped in `{ ... }` must hold a single value",
                 ));
             }
@@ -4277,6 +4387,7 @@ impl Compiler {
             self.accept(',')?;
             if self.lex.tk != '}' {
                 return Err(self.compile_err(
+                    Code::INVALID_INITIALIZER,
                     "scalar initializer wrapped in `{ ... }` must hold a single value",
                 ));
             }
@@ -4297,6 +4408,7 @@ impl Compiler {
             let want = super::types::format_type(ty, &self.structs);
             let got = super::types::format_type(self.ty, &self.structs);
             return Err(self.compile_err_at(
+                Code::INVALID_INITIALIZER,
                 init_line,
                 format!("{} in initializer (declared={want}, init={got})", m.reason),
             ));

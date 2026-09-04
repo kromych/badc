@@ -191,14 +191,18 @@ impl Compiler {
             args.push(a);
         }
         if !is_pointer_ty(ptr_ty) {
-            return Err(self.compile_err(format!(
-                "`{fn_name}` first argument must be a pointer to the atomic object"
-            )));
+            return Err(self.compile_err(
+                Code::INVALID_ARGUMENTS,
+                format!("`{fn_name}` first argument must be a pointer to the atomic object"),
+            ));
         }
         let elem_ty = ptr_ty - Ty::Ptr as i64;
         while args.len() < want {
             if self.lex.tk != ',' {
-                return Err(self.compile_err(format!("`{fn_name}` takes {want} arguments")));
+                return Err(self.compile_err(
+                    Code::INVALID_ARGUMENTS,
+                    format!("`{fn_name}` takes {want} arguments"),
+                ));
             }
             self.next()?;
             self.expr(Token::Assign as i64)?;
@@ -207,7 +211,10 @@ impl Compiler {
             }
         }
         if self.lex.tk != ')' {
-            return Err(self.compile_err(format!("`{fn_name}` takes {want} arguments")));
+            return Err(self.compile_err(
+                Code::INVALID_ARGUMENTS,
+                format!("`{fn_name}` takes {want} arguments"),
+            ));
         }
         self.next()?;
         self.mark_emit_other();
@@ -236,7 +243,12 @@ impl Compiler {
         a: Option<super::super::ast::ExprId>,
         name: &str,
     ) -> Result<super::super::ast::ExprId, C5Error> {
-        a.ok_or_else(|| self.compile_err(format!("`{name}` -- too few arguments")))
+        a.ok_or_else(|| {
+            self.compile_err(
+                Code::INVALID_ARGUMENTS,
+                format!("`{name}` -- too few arguments"),
+            )
+        })
     }
 
     /// A GCC checked-arithmetic builtin
@@ -271,13 +283,17 @@ impl Compiler {
             }
         }
         if self.lex.tk != ')' || args.len() != 3 {
-            return Err(self.compile_err(format!("`{name}` expects (a, b, result pointer)")));
+            return Err(self.compile_err(
+                Code::INVALID_ARGUMENTS,
+                format!("`{name}` expects (a, b, result pointer)"),
+            ));
         }
         self.next()?; // consume ')'
         if !is_pointer_ty(dst_ty) {
-            return Err(
-                self.compile_err(format!("`{name}` third argument must be a result pointer"))
-            );
+            return Err(self.compile_err(
+                Code::INVALID_ARGUMENTS,
+                format!("`{name}` third argument must be a result pointer"),
+            ));
         }
         let elem_ty = dst_ty - Ty::Ptr as i64;
         // A type-specific form names the operand and result type, so the
@@ -285,15 +301,18 @@ impl Compiler {
         if let Some((_, unsigned, rank)) = typed {
             let want = self.overflow_rank_width(rank);
             if self.size_of_type(elem_ty) != want || is_unsigned_ty(elem_ty) != unsigned {
-                return Err(self.compile_err(format!(
-                    "`{name}` result pointer must be `{}{} *`",
-                    if unsigned { "unsigned " } else { "" },
-                    match rank {
-                        b'l' => "long",
-                        b'q' => "long long",
-                        _ => "int",
-                    }
-                )));
+                return Err(self.compile_err(
+                    Code::INVALID_ARGUMENTS,
+                    format!(
+                        "`{name}` result pointer must be `{}{} *`",
+                        if unsigned { "unsigned " } else { "" },
+                        match rank {
+                            b'l' => "long",
+                            b'q' => "long long",
+                            _ => "int",
+                        }
+                    ),
+                ));
             }
         }
         self.mark_emit_other();
@@ -334,7 +353,10 @@ impl Compiler {
         use super::super::x86_simd::{self, Form, Sem};
         let row = x86_simd::get(op);
         if !self.target.is_x86_64() {
-            return Err(self.compile_err(format!("`{name}` requires an x86 target")));
+            return Err(self.compile_err(
+                Code::UNSUPPORTED,
+                format!("`{name}` requires an x86 target"),
+            ));
         }
         let mut args: Vec<ExprId> = Vec::new();
         let mut arg_tys: Vec<i64> = Vec::new();
@@ -353,9 +375,10 @@ impl Compiler {
             }
         }
         if self.lex.tk != ')' || args.len() != row.form.arity() {
-            return Err(
-                self.compile_err(format!("`{name}` expects {} arguments", row.form.arity()))
-            );
+            return Err(self.compile_err(
+                Code::INVALID_ARGUMENTS,
+                format!("`{name}` expects {} arguments", row.form.arity()),
+            ));
         }
         self.next()?; // consume ')'
         let v128 = self.make_vector_type(Ty::LongLong as i64, 16);
@@ -376,15 +399,16 @@ impl Compiler {
             let wants_pointer = matches!(row.form, Form::Load | Form::RdRand)
                 || (row.form == Form::Store && i == 0);
             if wants_vector && !(is_vector_ty(&self.structs, ty) && self.size_of_type(ty) == 16) {
-                return Err(self.compile_err(format!(
-                    "`{name}` argument {} must be a 16-byte vector",
-                    i + 1
-                )));
+                return Err(self.compile_err(
+                    Code::INVALID_ARGUMENTS,
+                    format!("`{name}` argument {} must be a 16-byte vector", i + 1),
+                ));
             }
             if wants_pointer && !is_pointer_ty(ty) {
-                return Err(
-                    self.compile_err(format!("`{name}` argument {} must be a pointer", i + 1))
-                );
+                return Err(self.compile_err(
+                    Code::INVALID_ARGUMENTS,
+                    format!("`{name}` argument {} must be a pointer", i + 1),
+                ));
             }
         }
         // The immediate is the last operand; it leaves the argument list
@@ -395,9 +419,10 @@ impl Compiler {
         if row.form.takes_imm() {
             let last = args.len() - 1;
             let Some(n) = self.expr_const_int(args[last]) else {
-                return Err(self.compile_err(format!(
-                    "`{name}` last argument must be an integer constant expression"
-                )));
+                return Err(self.compile_err(
+                    Code::CONSTANT_EXPRESSION,
+                    format!("`{name}` last argument must be an integer constant expression"),
+                ));
             };
             imm = Some(n as u8);
             args.truncate(last);
@@ -422,9 +447,10 @@ impl Compiler {
                     args.truncate(1);
                 }
                 None if bits_per_unit != 1 => {
-                    return Err(self.compile_err(format!(
-                        "`{name}` count must be an integer constant expression"
-                    )));
+                    return Err(self.compile_err(
+                        Code::CONSTANT_EXPRESSION,
+                        format!("`{name}` count must be an integer constant expression"),
+                    ));
                 }
                 None => {}
             }
@@ -487,7 +513,10 @@ impl Compiler {
             }
         }
         if self.lex.tk != ')' || args.len() != 3 {
-            return Err(self.compile_err(format!("`{name}` expects (dst, src, count)")));
+            return Err(self.compile_err(
+                Code::INVALID_ARGUMENTS,
+                format!("`{name}` expects (dst, src, count)"),
+            ));
         }
         self.next()?;
         // Both forms yield the destination address (C99 7.21.2.1p2).
@@ -614,7 +643,10 @@ impl Compiler {
             None if retry_unavailable => {
                 let i = self.resolve_symbol_named(name);
                 if self.symbols[i].class != 0 {
-                    return Err(self.compile_err(format!("unknown function `{name}`")));
+                    return Err(self.compile_err(
+                        Code::UNDECLARED_IDENTIFIER,
+                        format!("unknown function `{name}`"),
+                    ));
                 }
                 self.symbols[i].class = Token::Fun as i64;
                 self.symbols[i].type_ = ty;
@@ -624,7 +656,10 @@ impl Compiler {
             }
             None => {
                 let suggestion = self.include_hint(name);
-                return Err(self.compile_err(format!("unknown function `{name}`{suggestion}")));
+                return Err(self.compile_err(
+                    Code::UNDECLARED_IDENTIFIER,
+                    format!("unknown function `{name}`{suggestion}"),
+                ));
             }
         };
         let idx = self.builtin_library_symbol(idx);
@@ -666,7 +701,10 @@ impl Compiler {
             }
         }
         if self.lex.tk != ')' {
-            return Err(self.compile_err(format!("`{name}` -- malformed argument list")));
+            return Err(self.compile_err(
+                Code::INVALID_ARGUMENTS,
+                format!("`{name}` -- malformed argument list"),
+            ));
         }
         self.next()?;
         self.mark_emit_other();
@@ -711,9 +749,10 @@ impl Compiler {
         // Every remaining form takes the atomic-object pointer first; its
         // pointee type drives the load / store / RMW width.
         if args.is_empty() || !is_pointer_ty(first_ty) {
-            return Err(self.compile_err(format!(
-                "`{name}` first argument must be a pointer to the atomic object"
-            )));
+            return Err(self.compile_err(
+                Code::INVALID_ARGUMENTS,
+                format!("`{name}` first argument must be a pointer to the atomic object"),
+            ));
         }
         let elem_ty = first_ty - Ty::Ptr as i64;
         let ptr = args[0];
@@ -817,7 +856,10 @@ impl Compiler {
                 (AtomicKind::Store, alloc::vec![ptr, zero], int_ty)
             }
             _ => {
-                return Err(self.compile_err(format!("`{name}` -- unsupported atomic builtin")));
+                return Err(self.compile_err(
+                    Code::UNSUPPORTED,
+                    format!("`{name}` -- unsupported atomic builtin"),
+                ));
             }
         };
 
@@ -858,7 +900,10 @@ impl Compiler {
             return Ok(());
         }
         if is_struct_value_ty(lhs_ty) || is_struct_value_ty(rhs_ty) {
-            return Err(self.compile_err(format!("invalid operands to binary `{op}`")));
+            return Err(self.compile_err(
+                Code::INVALID_OPERANDS,
+                format!("invalid operands to binary `{op}`"),
+            ));
         }
         Ok(())
     }
@@ -1035,7 +1080,11 @@ impl Compiler {
                     B::Shr
                 }
             }
-            _ => return Err(self.compile_err("unknown compound-assign opcode")),
+            _ => {
+                return Err(
+                    self.compile_err(Code::INVALID_OPERANDS, "unknown compound-assign opcode")
+                );
+            }
         })
     }
 
@@ -1092,7 +1141,7 @@ impl Compiler {
     /// takes so it can read the callee's declaration.
     fn parse_unary(&mut self) -> Result<(), C5Error> {
         if self.lex.tk == 0 {
-            Err(self.compile_err("unexpected eof in expression"))
+            Err(self.compile_err(Code::SYNTAX, "unexpected eof in expression"))
         } else if self.lex.tk == Token::Num {
             self.parse_int_literal()
         } else if self.lex.tk == Token::FloatNum {
@@ -1151,10 +1200,13 @@ impl Compiler {
             } else {
                 String::new()
             };
-            Err(self.compile_err(format!(
-                "bad expression: got {}{id_suffix} (in {func})",
-                super::super::token::describe(self.lex.tk),
-            )))
+            Err(self.compile_err(
+                Code::INVALID_OPERANDS,
+                format!(
+                    "bad expression: got {}{id_suffix} (in {func})",
+                    super::super::token::describe(self.lex.tk),
+                ),
+            ))
         }
     }
 
@@ -1416,7 +1468,10 @@ impl Compiler {
         // `__builtin_trap()` is the only nullary intrinsic;
         // every other one needs at least one argument.
         if self.lex.tk == ')' && intrinsic_id != crate::c5::op::Intrinsic::Trap as i64 {
-            return Err(self.compile_err(format!("intrinsic `{fn_name}` requires one argument")));
+            return Err(self.compile_err(
+                Code::INVALID_ARGUMENTS,
+                format!("intrinsic `{fn_name}` requires one argument"),
+            ));
         }
         let IntrinsicOperands {
             args: ast_intrinsic_args,
@@ -1425,9 +1480,10 @@ impl Compiler {
             walked_return_slot,
         } = self.parse_intrinsic_operands(intrinsic_id, &fn_name)?;
         if self.lex.tk != ')' {
-            return Err(self.compile_err(format!(
-                "intrinsic `{fn_name}` arity mismatch at close paren"
-            )));
+            return Err(self.compile_err(
+                Code::INVALID_ARGUMENTS,
+                format!("intrinsic `{fn_name}` arity mismatch at close paren"),
+            ));
         }
         self.next()?;
         self.mark_emit_other();
@@ -1535,7 +1591,10 @@ impl Compiler {
                 break;
             }
             if count != 3 {
-                return Err(self.compile_err(format!("intrinsic `{fn_name}` takes (x, y, z)")));
+                return Err(self.compile_err(
+                    Code::INVALID_ARGUMENTS,
+                    format!("intrinsic `{fn_name}` takes (x, y, z)"),
+                ));
             }
         } else if is_fp_unary {
             // One floating operand in the result precision, lowered to the
@@ -1584,7 +1643,10 @@ impl Compiler {
             }
             self.ast_psh();
             if self.lex.tk != ',' {
-                return Err(self.compile_err(format!("intrinsic `{fn_name}` takes two operands")));
+                return Err(self.compile_err(
+                    Code::INVALID_ARGUMENTS,
+                    format!("intrinsic `{fn_name}` takes two operands"),
+                ));
             }
             self.next()?;
             self.expr(Token::Assign as i64)?;
@@ -1611,7 +1673,10 @@ impl Compiler {
             }
             self.ast_psh();
             if self.lex.tk != ',' {
-                return Err(self.compile_err(format!("intrinsic `{fn_name}` takes (env, val)")));
+                return Err(self.compile_err(
+                    Code::INVALID_ARGUMENTS,
+                    format!("intrinsic `{fn_name}` takes (env, val)"),
+                ));
             }
             self.next()?;
             self.expr(Token::Assign as i64)?;
@@ -1684,13 +1749,17 @@ impl Compiler {
             args.push(a);
         }
         if self.lex.tk != ',' {
-            return Err(self.compile_err(format!("intrinsic `{fn_name}` takes (ap, type)")));
+            return Err(self.compile_err(
+                Code::INVALID_ARGUMENTS,
+                format!("intrinsic `{fn_name}` takes (ap, type)"),
+            ));
         }
         self.next()?;
         if !self.lex_is_type_start() {
-            return Err(self.compile_err(format!(
-                "intrinsic `{fn_name}` second operand must be a type name"
-            )));
+            return Err(self.compile_err(
+                Code::INVALID_ARGUMENTS,
+                format!("intrinsic `{fn_name}` second operand must be a type name"),
+            ));
         }
         let type_name = self.parse_type_name()?;
         let arg_ty = type_name.ty;
@@ -1718,12 +1787,14 @@ impl Compiler {
         self.ast_acc = None;
         match level {
             Some(n) if n >= 0 => Ok(n),
-            Some(n) => Err(self.compile_err(format!(
-                "invalid argument to `{fn_name}`: the level must not be negative, got {n}"
-            ))),
-            None => Err(self.compile_err(format!(
-                "invalid argument to `{fn_name}`: the level must be an integer constant"
-            ))),
+            Some(n) => Err(self.compile_err(
+                Code::INVALID_ARGUMENTS,
+                format!("invalid argument to `{fn_name}`: the level must not be negative, got {n}"),
+            )),
+            None => Err(self.compile_err(
+                Code::CONSTANT_EXPRESSION,
+                format!("invalid argument to `{fn_name}`: the level must be an integer constant"),
+            )),
         }
     }
 
@@ -1899,7 +1970,10 @@ impl Compiler {
         } else {
             let name = self.symbols[id_idx].name.clone();
             let suggestion = self.include_hint(&name);
-            return Err(self.compile_err(format!("unknown function `{name}`{suggestion}")));
+            return Err(self.compile_err(
+                Code::UNDECLARED_IDENTIFIER,
+                format!("unknown function `{name}`{suggestion}"),
+            ));
         }
         self.ast_vstack.truncate(saved_ast_vstack_depth);
         self.emit_direct_call_ast(id_idx, &callee, ast_arg_ids, result_temp_off);
@@ -2005,7 +2079,7 @@ impl Compiler {
             // for `void *`, `int` for `size_t`), so only a declared prototype
             // raises the 6.5.2.2p2 constraint.
             if m.no_conversion && !callee.is_sys_call {
-                return Err(self.compile_err_at(arg_line, text));
+                return Err(self.compile_err_at(Code::INCOMPATIBLE_TYPES, arg_line, text));
             }
             self.warn_at(m.code, arg_line, text);
         }
@@ -2147,10 +2221,13 @@ impl Compiler {
             || self.lex.tk == Token::Inc
             || self.lex.tk == Token::Dec
         {
-            return Err(self.compile_err(format!(
-                "cannot write register variable `{}`",
-                self.symbols[id_idx].name
-            )));
+            return Err(self.compile_err(
+                Code::INVALID_OPERANDS,
+                format!(
+                    "cannot write register variable `{}`",
+                    self.symbols[id_idx].name
+                ),
+            ));
         }
         self.symbols[id_idx].was_referenced = true;
         self.symbols[id_idx].was_read = true;
@@ -2192,9 +2269,10 @@ impl Compiler {
             self.emit_data_imm(self.symbols[id_idx].val);
             self.glo_imm_refs.push(id_idx);
         } else {
-            return Err(
-                self.compile_err(format!("undefined variable {}", self.symbols[id_idx].name))
-            );
+            return Err(self.compile_err(
+                Code::UNDECLARED_IDENTIFIER,
+                format!("undefined variable {}", self.symbols[id_idx].name),
+            ));
         }
         self.ty = self.symbols[id_idx].type_;
         let is_struct_value = is_struct_value_ty(self.ty);
@@ -2359,7 +2437,7 @@ impl Compiler {
             if self.lex.tk == ')' {
                 self.next()?;
             } else {
-                return Err(self.compile_err("close paren expected"));
+                return Err(self.compile_err(Code::SYNTAX, "close paren expected"));
             }
             // The inner expression's unconsumed strides carry on to this
             // expression's postfix operators, as in `(*p)[k]`.
@@ -2376,7 +2454,7 @@ impl Compiler {
         if self.lex.tk == ')' {
             self.next()?;
         } else {
-            return Err(self.compile_err("bad cast"));
+            return Err(self.compile_err(Code::INVALID_OPERANDS, "bad cast"));
         }
         if self.lex.tk == '{' {
             // C99 6.5.2.5 compound literal: `(type){ init }`. An array
@@ -2508,7 +2586,7 @@ impl Compiler {
             if is_pointer_ty(self.ty) {
                 self.ty -= Ty::Ptr as i64;
             } else {
-                return Err(self.compile_err("bad dereference"));
+                return Err(self.compile_err(Code::INVALID_OPERANDS, "bad dereference"));
             }
             // A struct value is its address: no load.
             let result_is_struct_value = is_struct_value_ty(self.ty);
@@ -2626,7 +2704,7 @@ impl Compiler {
             // path yields its slot address.
             self.ast_apply_unary(super::super::ast::UnOp::AddrOf);
         } else {
-            return Err(self.compile_err("bad address-of"));
+            return Err(self.compile_err(Code::INVALID_OPERANDS, "bad address-of"));
         }
         // `&` adds one level toward a tracked function pointer; -1
         // (untracked) stays.
@@ -2642,7 +2720,10 @@ impl Compiler {
         // C99 6.5.3.3p1 requires a scalar operand; the GCC vector
         // extension does not extend `!` to a vector either.
         if is_struct_value_ty(self.ty) && !self.is_int128_ty(self.ty) {
-            return Err(self.compile_err("invalid operand to unary `!` (aggregate type)"));
+            return Err(self.compile_err(
+                Code::INVALID_OPERANDS,
+                "invalid operand to unary `!` (aggregate type)",
+            ));
         }
         self.emit_binop_with_imm(crate::c5::ir::BinOp::Eq, 0);
         self.ty = Ty::Int as i64;
@@ -2657,7 +2738,10 @@ impl Compiler {
         if is_vector_ty(&self.structs, self.ty) {
             let elem_ty = self.structs[struct_id_of(self.ty)].fields[0].ty;
             if is_floating_scalar(elem_ty) {
-                return Err(self.compile_err("invalid operand to unary `~` (vector of float)"));
+                return Err(self.compile_err(
+                    Code::INVALID_OPERANDS,
+                    "invalid operand to unary `~` (vector of float)",
+                ));
             }
             self.ast_apply_unary(super::super::ast::UnOp::BitNot);
         } else {
@@ -2773,8 +2857,9 @@ impl Compiler {
     ) -> Result<(Option<super::super::ast::ExprId>, bool), C5Error> {
         let lvalue = self.ast_acc;
         let fn_ptr_step = self.value_is_function_pointer();
-        self.rewrite_trailing_load_as_psh()
-            .ok_or_else(|| self.compile_err(format!("bad lvalue in {what}")))?;
+        self.rewrite_trailing_load_as_psh().ok_or_else(|| {
+            self.compile_err(Code::INVALID_OPERANDS, format!("bad lvalue in {what}"))
+        })?;
         let line = self.lex.line;
         if let Some(idx) = self.take_last_loaded_local() {
             self.symbols[idx].was_read = true;
@@ -2836,7 +2921,10 @@ impl Compiler {
             // The GCC 128-bit integer is an integer type.
             && !self.is_int128_ty(lhs_ty)
         {
-            return Err(self.compile_err("invalid operands to binary operator (aggregate type)"));
+            return Err(self.compile_err(
+                Code::INVALID_OPERANDS,
+                "invalid operands to binary operator (aggregate type)",
+            ));
         }
         if self.lex.tk == '(' {
             self.parse_indirect_call()
@@ -2855,10 +2943,13 @@ impl Compiler {
         } else if self.lex.tk == Token::Arrow || self.lex.tk == Token::Dot {
             self.parse_member_access(lhs_ty, member_base)
         } else {
-            Err(self.compile_err(format!(
-                "compiler error: unexpected {}",
-                super::super::token::describe(self.lex.tk)
-            )))
+            Err(self.compile_err(
+                Code::INTERNAL,
+                format!(
+                    "compiler error: unexpected {}",
+                    super::super::token::describe(self.lex.tk)
+                ),
+            ))
         }
     }
 
@@ -3071,7 +3162,7 @@ impl Compiler {
                 let rhs_s = format_type(self.ty, &self.structs);
                 let text = format!("{} in assignment (lhs={lhs_s}, rhs={rhs_s})", m.reason);
                 if m.no_conversion {
-                    return Err(self.compile_err_at(line, text));
+                    return Err(self.compile_err_at(Code::INVALID_OPERANDS, line, text));
                 }
                 self.warn_at(m.code, line, text);
             }
@@ -3082,7 +3173,7 @@ impl Compiler {
                 self.record_local_store(idx, line);
             }
         } else {
-            return Err(self.compile_err("bad lvalue in assignment"));
+            return Err(self.compile_err(Code::INVALID_OPERANDS, "bad lvalue in assignment"));
         }
         Ok(())
     }
@@ -3114,7 +3205,10 @@ impl Compiler {
                 }
                 self.ty = lhs_ty;
             } else {
-                return Err(self.compile_err("cannot assign non-struct value to a struct"));
+                return Err(self.compile_err(
+                    Code::INVALID_OPERANDS,
+                    "cannot assign non-struct value to a struct",
+                ));
             }
         }
         // C99 6.5.16.1p1: compatible unqualified struct types; lvalue
@@ -3123,10 +3217,13 @@ impl Compiler {
         if super::types::strip_unsigned(lhs_ty) != super::types::strip_unsigned(self.ty) {
             let lhs_s = format_type(lhs_ty, &self.structs);
             let rhs_s = format_type(self.ty, &self.structs);
-            return Err(self.compile_err(format!(
-                "struct types differ on either side of `=` \
+            return Err(self.compile_err(
+                Code::INCOMPATIBLE_TYPES,
+                format!(
+                    "struct types differ on either side of `=` \
                  (lhs={lhs_s}, rhs={rhs_s})"
-            )));
+                ),
+            ));
         }
         self.mark_emit_other();
         self.ty = lhs_ty;
@@ -3189,18 +3286,20 @@ impl Compiler {
     ) -> Result<(), C5Error> {
         let vec_ty = lhs_ty;
         let op_name = vector_binop_name(binop);
-        let lhs_node = compound_lhs_ast
-            .ok_or_else(|| self.compile_err("bad lvalue in compound assignment"))?;
+        let lhs_node = compound_lhs_ast.ok_or_else(|| {
+            self.compile_err(Code::INVALID_OPERANDS, "bad lvalue in compound assignment")
+        })?;
         let pos = self.ast_src_pos();
         self.next()?; // consume `OP=`
         self.expr(Token::Assign as i64)?; // parse the rhs
-        let rhs_node = self
-            .ast_acc
-            .ok_or_else(|| self.compile_err("bad operand in compound assignment"))?;
+        let rhs_node = self.ast_acc.ok_or_else(|| {
+            self.compile_err(Code::INVALID_OPERANDS, "bad operand in compound assignment")
+        })?;
         if self.vector_binop_ty(vec_ty, self.ty, op_name) != Some(vec_ty) {
-            return Err(
-                self.compile_err(format!("invalid operands to vector compound `{op_name}=`"))
-            );
+            return Err(self.compile_err(
+                Code::INVALID_OPERANDS,
+                format!("invalid operands to vector compound `{op_name}=`"),
+            ));
         }
         // The nominal opcode; the walker picks the signed /
         // unsigned / floating flavour from the element type.
@@ -3233,14 +3332,15 @@ impl Compiler {
         binop: i64,
         compound_lhs_ast: Option<super::super::ast::ExprId>,
     ) -> Result<(), C5Error> {
-        let lhs_node = compound_lhs_ast
-            .ok_or_else(|| self.compile_err("bad lvalue in compound assignment"))?;
+        let lhs_node = compound_lhs_ast.ok_or_else(|| {
+            self.compile_err(Code::INVALID_OPERANDS, "bad lvalue in compound assignment")
+        })?;
         let pos = self.ast_src_pos();
         self.next()?;
         self.expr(Token::Assign as i64)?;
-        let rhs_node = self
-            .ast_acc
-            .ok_or_else(|| self.compile_err("bad rhs in compound assignment"))?;
+        let rhs_node = self.ast_acc.ok_or_else(|| {
+            self.compile_err(Code::INVALID_OPERANDS, "bad rhs in compound assignment")
+        })?;
         let bop = self.compound_assign_binop(binop, lhs_ty, self.ty, false)?;
         let node = self.ast.push_expr(
             super::super::ast::Expr::CompoundAssign {
@@ -3270,9 +3370,9 @@ impl Compiler {
         let pos = self.ast_src_pos();
         self.next()?;
         self.expr(Token::Assign as i64)?;
-        let rhs = self
-            .ast_acc
-            .ok_or_else(|| self.compile_err("bad rhs in compound assignment"))?;
+        let rhs = self.ast_acc.ok_or_else(|| {
+            self.compile_err(Code::INVALID_OPERANDS, "bad rhs in compound assignment")
+        })?;
         let op = self.compound_assign_binop(binop, field_ty, self.ty, false)?;
         let combined = self.ast.push_expr(
             super::super::ast::Expr::Binary {
@@ -3295,8 +3395,9 @@ impl Compiler {
     ) -> Result<(), C5Error> {
         self.next()?;
         let lhs_fn_ptr = self.value_is_function_pointer();
-        self.rewrite_trailing_load_as_psh()
-            .ok_or_else(|| self.compile_err("bad lvalue in compound assignment"))?;
+        self.rewrite_trailing_load_as_psh().ok_or_else(|| {
+            self.compile_err(Code::INVALID_OPERANDS, "bad lvalue in compound assignment")
+        })?;
         // The operand is read and stored; the dead-store record follows
         // the operator so a self-referencing right operand does not cancel
         // the store.
@@ -3389,7 +3490,7 @@ impl Compiler {
         if self.lex.tk == ':' {
             self.next()?;
         } else {
-            return Err(self.compile_err("conditional missing colon"));
+            return Err(self.compile_err(Code::SYNTAX, "conditional missing colon"));
         }
         self.flush_pending_stores();
         self.expr(Token::Cond as i64)?;
@@ -3863,10 +3964,10 @@ impl Compiler {
     ) -> Result<(), C5Error> {
         self.next()?;
         if fp.is_none() && is_floating_scalar(lhs_ty) {
-            return Err(self.compile_err(format!(
-                "`{}` is not defined on floating-point operands",
-                op.name
-            )));
+            return Err(self.compile_err(
+                Code::INVALID_OPERANDS,
+                format!("`{}` is not defined on floating-point operands", op.name),
+            ));
         }
         self.ast_psh();
         self.expr(op.rhs_lev as i64)?;
@@ -3878,10 +3979,10 @@ impl Compiler {
         }
         if is_floating_scalar(lhs_ty) || is_floating_scalar(self.ty) {
             let Some(fp) = fp else {
-                return Err(self.compile_err(format!(
-                    "`{}` is not defined on floating-point operands",
-                    op.name
-                )));
+                return Err(self.compile_err(
+                    Code::INVALID_OPERANDS,
+                    format!("`{}` is not defined on floating-point operands", op.name),
+                ));
             };
             self.require_both_float(lhs_ty, op.name)?;
             self.ast_binop(fp);
@@ -4011,10 +4112,10 @@ impl Compiler {
         if self.lex.tk == ']' {
             self.next()?;
         } else {
-            return Err(self.compile_err("close bracket expected"));
+            return Err(self.compile_err(Code::SYNTAX, "close bracket expected"));
         }
         if !is_pointer_ty(lhs_ty) {
-            return Err(self.compile_err("pointer type expected"));
+            return Err(self.compile_err(Code::INVALID_OPERANDS, "pointer type expected"));
         }
         if let Some(id) = self.ptr_array_id_depth1(lhs_ty) {
             // `p[i]` on a single-level pointer to an array selects row `i` and
@@ -4131,12 +4232,12 @@ impl Compiler {
                 "single-level struct pointer"
             };
             let op = if is_dot { "." } else { "->" };
-            return Err(self.compile_err(format!("{op} requires a {want}")));
+            return Err(self.compile_err(Code::INVALID_OPERANDS, format!("{op} requires a {want}")));
         }
         self.next()?;
         if self.lex.tk != Token::Id {
             let op = if is_dot { "." } else { "->" };
-            return Err(self.compile_err(format!("field name expected after {op}")));
+            return Err(self.compile_err(Code::SYNTAX, format!("field name expected after {op}")));
         }
         let field_name = self.symbols[self.lex.curr_id_idx].name.clone();
         self.next()?;
@@ -4147,10 +4248,13 @@ impl Compiler {
             .iter()
             .position(|f| f.name == field_name)
             .ok_or_else(|| {
-                self.compile_err(format!(
-                    "struct {} has no field {}",
-                    self.structs[sid].name, field_name
-                ))
+                self.compile_err(
+                    Code::UNDECLARED_IDENTIFIER,
+                    format!(
+                        "struct {} has no field {}",
+                        self.structs[sid].name, field_name
+                    ),
+                )
             })?;
         let field = self.structs[sid].fields[field_idx].clone();
         let base = if is_dot { member_base } else { None };
@@ -4200,9 +4304,10 @@ impl Compiler {
         });
         let field_ty = if obj_seg_bits != 0 {
             if segment_of_ty(field.ty).is_some() {
-                return Err(
-                    self.compile_err("segment-qualified member of a segment-qualified object")
-                );
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    "segment-qualified member of a segment-qualified object",
+                ));
             }
             apply_qual_bits(field.ty, obj_seg_bits)
         } else {
@@ -4505,7 +4610,10 @@ impl Compiler {
         let after = self.lex.snapshot();
 
         let Some(chosen) = winner.or(default_assoc) else {
-            return Err(self.compile_err("no `_Generic` association matches the controlling type"));
+            return Err(self.compile_err(
+                Code::INVALID_OPERANDS,
+                "no `_Generic` association matches the controlling type",
+            ));
         };
         // Drop the data the scan appended, then position at the selected
         // association's `:`; the following `next` re-lexes its first
@@ -4605,7 +4713,10 @@ impl Compiler {
         self.consume(b'(', "`(` expected after `__builtin_offsetof`")?;
         let ty = self.parse_type_name()?.ty;
         if !is_struct_ty(ty) || struct_ptr_depth(ty) != 0 {
-            return Err(self.compile_err("`__builtin_offsetof` requires a struct or union type"));
+            return Err(self.compile_err(
+                Code::INVALID_OPERANDS,
+                "`__builtin_offsetof` requires a struct or union type",
+            ));
         }
         self.consume(b',', "`,` expected after the `__builtin_offsetof` type")?;
         // Resolve the leading member and then each `.field` / `[index]` step,
@@ -4634,9 +4745,10 @@ impl Compiler {
             if self.lex.tk == Token::Dot {
                 self.next()?;
                 if !cur_dims.is_empty() || !is_struct_ty(cur_ty) || struct_ptr_depth(cur_ty) != 0 {
-                    return Err(
-                        self.compile_err("`.` in `__builtin_offsetof` on a non-struct member")
-                    );
+                    return Err(self.compile_err(
+                        Code::INVALID_ARGUMENTS,
+                        "`.` in `__builtin_offsetof` on a non-struct member",
+                    ));
                 }
                 sid = struct_id_of(cur_ty);
                 let f = self.offsetof_member(sid)?;
@@ -4661,6 +4773,7 @@ impl Compiler {
                         // `(size_t)i * stride`; multiple runtime subscripts sum.
                         if !allow_runtime {
                             return Err(self.compile_err(
+                                Code::CONSTANT_EXPRESSION,
                                 "constant integer expected in `__builtin_offsetof` subscript",
                             ));
                         }
@@ -4699,7 +4812,9 @@ impl Compiler {
     /// Consume one member name and return its `StructField` in struct `sid`.
     fn offsetof_member(&mut self, sid: usize) -> Result<super::StructField, C5Error> {
         if self.lex.tk != Token::Id {
-            return Err(self.compile_err("member name expected in `__builtin_offsetof`"));
+            return Err(
+                self.compile_err(Code::SYNTAX, "member name expected in `__builtin_offsetof`")
+            );
         }
         let name = self.symbols[self.lex.curr_id_idx].name.clone();
         self.next()?;
@@ -4709,10 +4824,10 @@ impl Compiler {
             .find(|f| f.name == name)
             .cloned()
             .ok_or_else(|| {
-                self.compile_err(format!(
-                    "struct {} has no member {name}",
-                    self.structs[sid].name
-                ))
+                self.compile_err(
+                    Code::UNDECLARED_IDENTIFIER,
+                    format!("struct {} has no member {name}", self.structs[sid].name),
+                )
             })
     }
 
@@ -4827,20 +4942,26 @@ impl Compiler {
             self.next()?;
             let n = if self.lex.tk == ']' {
                 if !outer.is_empty() {
-                    return Err(self.compile_err("array type has an incomplete inner dimension"));
+                    return Err(self.compile_err(
+                        Code::INVALID_DECLARATION,
+                        "array type has an incomplete inner dimension",
+                    ));
                 }
                 -1
             } else {
                 let n = self.with_const_object_fold_masked(|c| c.parse_constant_int())?;
                 if n < 0 {
-                    return Err(
-                        self.compile_err("array dimension in a type name must not be negative")
-                    );
+                    return Err(self.compile_err(
+                        Code::INVALID_DECLARATION,
+                        "array dimension in a type name must not be negative",
+                    ));
                 }
                 n
             };
             if self.lex.tk != ']' {
-                return Err(self.compile_err("close bracket expected in an array type name"));
+                return Err(
+                    self.compile_err(Code::SYNTAX, "close bracket expected in an array type name")
+                );
             }
             self.next()?;
             outer.push(n);

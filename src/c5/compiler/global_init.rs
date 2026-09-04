@@ -8,6 +8,7 @@
 //! split, the slot width, which relocation list a slot's address
 //! constant joins, and the type-mismatch warning.
 
+use super::super::diag::Code;
 use alloc::format;
 
 use super::super::error::C5Error;
@@ -215,6 +216,7 @@ impl Compiler {
             // file-scope `_Thread_local` has no enclosing function.
             InitElemReloc::Label(_) => {
                 return Err(self.compile_err_at(
+                    Code::INVALID_INITIALIZER,
                     line,
                     "`&&label` initializer for `_Thread_local` is not an address constant \
                      at file scope",
@@ -270,6 +272,7 @@ impl Compiler {
             self.accept(',')?;
             if self.lex.tk != '}' {
                 return Err(self.compile_err_at(
+                    Code::INVALID_INITIALIZER,
                     line,
                     "scalar initializer wrapped in `{{ ... }}` must hold a single value",
                 ));

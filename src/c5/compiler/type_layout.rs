@@ -7,6 +7,7 @@
 //! width override live in one place; callers across the parser
 //! family reach for these via `self.size_of_type(...)` etc.
 
+use super::super::diag::Code;
 use alloc::string::ToString;
 use alloc::vec::Vec;
 
@@ -171,7 +172,10 @@ impl Compiler {
         let floating = is_floating_scalar(ty);
         if is_pointer_ty(ty) || (is_struct_ty(ty) && !self.is_int128_ty(ty)) || is_float != floating
         {
-            return Err(self.compile_err("`mode` applied to an inappropriate type"));
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "`mode` applied to an inappropriate type",
+            ));
         }
         if is_float {
             return Ok(match bytes {
@@ -749,9 +753,10 @@ impl Compiler {
         }
         let elem_bytes = self.size_of_type(elem_ty).max(1) as i64 * typedef_dim.max(1);
         if type_align > elem_bytes {
-            return Err(
-                self.compile_err("alignment of array elements is greater than element size")
-            );
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "alignment of array elements is greater than element size",
+            ));
         }
         Ok(())
     }

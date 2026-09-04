@@ -28,6 +28,7 @@
 //! single biggest run of related methods in the parser. Splitting
 //! it makes the parser body easier to read.
 
+use super::super::diag::Code;
 use alloc::format;
 
 use super::super::error::C5Error;
@@ -301,6 +302,7 @@ impl Compiler {
             .any(|a| a.root.is_label())
         {
             return Err(self.compile_err(
+                Code::CONSTANT_EXPRESSION,
                 "a label address is not an operand of a constant arithmetic expression",
             ));
         }
@@ -349,7 +351,10 @@ impl Compiler {
             B::Div | B::Rem => {
                 if rv == 0 {
                     if self.const_unevaluated == 0 {
-                        return Err(self.compile_err("division by zero in a constant expression"));
+                        return Err(self.compile_err(
+                            Code::CONSTANT_EXPRESSION,
+                            "division by zero in a constant expression",
+                        ));
                     }
                     0
                 } else if uns {
@@ -534,6 +539,7 @@ impl Compiler {
     pub(super) fn require_integer_const(&self, v: ConstVal) -> Result<ConstVal, C5Error> {
         if v.is_symbolic_addr() {
             return Err(self.compile_err(
+                Code::CONSTANT_EXPRESSION,
                 "address of an object or function is not an integer constant expression",
             ));
         }
@@ -548,10 +554,13 @@ impl Compiler {
     /// address stays accepted.
     pub(super) fn reject_thread_local_addr_const(&self, target: usize) -> Result<(), C5Error> {
         if self.symbols[target].is_thread_local {
-            return Err(self.compile_err(alloc::format!(
-                "address of thread-local `{}` is not a constant expression",
-                self.symbols[target].name
-            )));
+            return Err(self.compile_err(
+                Code::CONSTANT_EXPRESSION,
+                alloc::format!(
+                    "address of thread-local `{}` is not a constant expression",
+                    self.symbols[target].name
+                ),
+            ));
         }
         Ok(())
     }
@@ -596,7 +605,9 @@ impl Compiler {
                 }
                 depth -= 1;
             } else if self.lex.tk == 0 {
-                return Err(self.compile_err("close bracket expected in array declarator"));
+                return Err(
+                    self.compile_err(Code::SYNTAX, "close bracket expected in array declarator")
+                );
             }
             self.next()?;
         }
@@ -627,7 +638,9 @@ impl Compiler {
                 return Ok(());
             }
             if self.lex.tk == 0 {
-                return Err(self.compile_err("unterminated `__builtin_choose_expr` operand"));
+                return Err(
+                    self.compile_err(Code::SYNTAX, "unterminated `__builtin_choose_expr` operand")
+                );
             }
             depth += self.bracket_depth_delta();
             self.next()?;
@@ -644,7 +657,9 @@ impl Compiler {
                 return Ok(());
             }
             if self.lex.tk == 0 {
-                return Err(self.compile_err("unterminated `__builtin_choose_expr` operand"));
+                return Err(
+                    self.compile_err(Code::SYNTAX, "unterminated `__builtin_choose_expr` operand")
+                );
             }
             depth += self.bracket_depth_delta();
             self.next()?;
@@ -680,7 +695,9 @@ impl Compiler {
         let mut depth: i64 = 0;
         loop {
             if self.lex.tk == 0 {
-                return Err(self.compile_err("unterminated operand in constant expression"));
+                return Err(
+                    self.compile_err(Code::SYNTAX, "unterminated operand in constant expression")
+                );
             }
             depth += self.bracket_depth_delta();
             self.next()?;
@@ -718,7 +735,9 @@ impl Compiler {
         self.restore_lex(snap);
         self.skip_balanced_to_comma()?;
         if self.lex.tk != ')' {
-            return Err(self.compile_err("`)` expected to close `__builtin_constant_p`"));
+            return Err(
+                self.compile_err(Code::SYNTAX, "`)` expected to close `__builtin_constant_p`")
+            );
         }
         self.next()?;
         Ok(if is_const { 1 } else { 0 })
@@ -752,12 +771,12 @@ impl Compiler {
         };
         self.next()?; // builtin name
         if self.lex.tk != '(' {
-            return Err(self.compile_err("`(` expected after bit builtin"));
+            return Err(self.compile_err(Code::SYNTAX, "`(` expected after bit builtin"));
         }
         self.next()?;
         let arg = self.parse_const_expr_cond_val()?.as_i128();
         if self.lex.tk != ')' {
-            return Err(self.compile_err("`)` expected to close bit builtin"));
+            return Err(self.compile_err(Code::SYNTAX, "`)` expected to close bit builtin"));
         }
         self.next()?;
         let out = match kind {
@@ -824,6 +843,7 @@ impl Compiler {
         self.next()?; // consume `static_assert` / `_Static_assert`
         if self.lex.tk != '(' {
             return Err(self.compile_err_at(
+                Code::SYNTAX,
                 line,
                 "`static_assert` requires `(<const-expr>, \"<message>\")`",
             ));
@@ -843,9 +863,11 @@ impl Compiler {
         if self.lex.tk == ',' {
             self.next()?;
             if self.lex.tk != '"' {
-                return Err(
-                    self.compile_err_at(line, "string-literal message expected in `static_assert`")
-                );
+                return Err(self.compile_err_at(
+                    Code::SYNTAX,
+                    line,
+                    "string-literal message expected in `static_assert`",
+                ));
             }
             // The lexer stores the staged string's data-segment
             // offset in `lex.ival`. Read the bytes back so we can
@@ -860,7 +882,11 @@ impl Compiler {
             }
         }
         if self.lex.tk != ')' {
-            return Err(self.compile_err_at(line, "`)` expected after `static_assert(...)`"));
+            return Err(self.compile_err_at(
+                Code::SYNTAX,
+                line,
+                "`)` expected after `static_assert(...)`",
+            ));
         }
         self.next()?;
         // The trailing `;` is mandatory at file / block scope in
@@ -872,7 +898,7 @@ impl Compiler {
             } else {
                 format!("static_assert: {message}")
             };
-            return Err(self.compile_err_at(line, &body));
+            return Err(self.compile_err_at(Code::STATIC_ASSERT, line, &body));
         }
         Ok(())
     }
@@ -921,7 +947,10 @@ impl Compiler {
                 self.parse_const_unevaluated(!taken, Self::parse_const_expr_cond_val)?
             };
             if self.lex.tk != ':' {
-                return Err(self.compile_err("`:` expected in conditional constant expression"));
+                return Err(self.compile_err(
+                    Code::SYNTAX,
+                    "`:` expected in conditional constant expression",
+                ));
             }
             self.next()?;
             let else_val = self.parse_const_unevaluated(taken, Self::parse_const_expr_cond_val)?;
@@ -1325,19 +1354,25 @@ impl Compiler {
             // operand is skipped and need not be constant.
             self.next()?;
             if self.lex.tk != '(' {
-                return Err(self.compile_err("`(` expected after `__builtin_choose_expr`"));
+                return Err(
+                    self.compile_err(Code::SYNTAX, "`(` expected after `__builtin_choose_expr`")
+                );
             }
             self.next()?;
             let c = self.parse_const_expr_cond_val()?.as_int();
             if self.lex.tk != ',' {
-                return Err(self.compile_err("`,` expected in `__builtin_choose_expr`"));
+                return Err(
+                    self.compile_err(Code::SYNTAX, "`,` expected in `__builtin_choose_expr`")
+                );
             }
             self.next()?;
             let v;
             if c != 0 {
                 v = self.parse_const_expr_cond_val()?;
                 if self.lex.tk != ',' {
-                    return Err(self.compile_err("`,` expected in `__builtin_choose_expr`"));
+                    return Err(
+                        self.compile_err(Code::SYNTAX, "`,` expected in `__builtin_choose_expr`")
+                    );
                 }
                 self.next()?;
                 self.skip_balanced_to_close_paren()?;
@@ -1346,7 +1381,10 @@ impl Compiler {
                 self.next()?; // `,`
                 v = self.parse_const_expr_cond_val()?;
                 if self.lex.tk != ')' {
-                    return Err(self.compile_err("`)` expected to close `__builtin_choose_expr`"));
+                    return Err(self.compile_err(
+                        Code::SYNTAX,
+                        "`)` expected to close `__builtin_choose_expr`",
+                    ));
                 }
                 self.next()?;
             }
@@ -1362,7 +1400,9 @@ impl Compiler {
             // __builtin_constant_p(b), ...)` -- selects its constant arm.
             self.next()?;
             if self.lex.tk != '(' {
-                return Err(self.compile_err("`(` expected after `__builtin_constant_p`"));
+                return Err(
+                    self.compile_err(Code::SYNTAX, "`(` expected after `__builtin_constant_p`")
+                );
             }
             self.next()?;
             let v = self.eval_constant_p_operand()?;
@@ -1378,12 +1418,16 @@ impl Compiler {
             // consumed unevaluated.
             self.next()?;
             if self.lex.tk != '(' {
-                return Err(self.compile_err("`(` expected after `__builtin_has_attribute`"));
+                return Err(
+                    self.compile_err(Code::SYNTAX, "`(` expected after `__builtin_has_attribute`")
+                );
             }
             self.next()?;
             self.skip_balanced_to_comma()?;
             if self.lex.tk != ',' {
-                return Err(self.compile_err("`,` expected in `__builtin_has_attribute`"));
+                return Err(
+                    self.compile_err(Code::SYNTAX, "`,` expected in `__builtin_has_attribute`")
+                );
             }
             self.next()?;
             self.skip_balanced_to_close_paren()?;
@@ -1406,12 +1450,16 @@ impl Compiler {
             };
             self.next()?;
             if self.lex.tk != '(' {
-                return Err(self.compile_err("`(` expected after absolute-value builtin"));
+                return Err(
+                    self.compile_err(Code::SYNTAX, "`(` expected after absolute-value builtin")
+                );
             }
             self.next()?;
             let arg = self.parse_const_expr_cond_val()?.as_i128();
             if self.lex.tk != ')' {
-                return Err(self.compile_err("`)` expected to close absolute-value builtin"));
+                return Err(
+                    self.compile_err(Code::SYNTAX, "`)` expected to close absolute-value builtin")
+                );
             }
             self.next()?;
             let val = if self.size_of_type(ty) == 4 {
@@ -1656,6 +1704,7 @@ impl Compiler {
         let d = self.parse_const_designation()?;
         if !d.is_lvalue {
             return Err(self.compile_err_at(
+                Code::CONSTANT_EXPRESSION,
                 line,
                 "`&` in a constant expression requires an object designator \
                  such as `((T*)0)->field`",
@@ -1687,6 +1736,7 @@ impl Compiler {
                 self.next()?;
                 if d.is_lvalue {
                     return Err(self.compile_err_at(
+                        Code::CONSTANT_EXPRESSION,
                         line,
                         "`->` in a constant expression requires a pointer value",
                     ));
@@ -1703,6 +1753,7 @@ impl Compiler {
                 self.next()?;
                 if !d.is_lvalue {
                     return Err(self.compile_err_at(
+                        Code::CONSTANT_EXPRESSION,
                         line,
                         "`.` in a constant expression requires an object of struct type",
                     ));
@@ -1718,9 +1769,11 @@ impl Compiler {
                 self.next()?;
                 let n = self.parse_const_expr_cond_val()?.as_int();
                 if self.lex.tk != ']' {
-                    return Err(
-                        self.compile_err_at(line, "close bracket expected in constant subscript")
-                    );
+                    return Err(self.compile_err_at(
+                        Code::SYNTAX,
+                        line,
+                        "close bracket expected in constant subscript",
+                    ));
                 }
                 self.next()?;
                 if d.is_lvalue {
@@ -1765,6 +1818,7 @@ impl Compiler {
             && self.symbols[sym].is_compound_literal
         {
             return Err(self.compile_err(
+                Code::CONSTANT_EXPRESSION,
                 "address of a compound literal with automatic storage duration \
                  is not a constant expression",
             ));
@@ -1861,9 +1915,11 @@ impl Compiler {
             self.next()?;
             let inner = self.parse_const_designation()?;
             if !inner.is_lvalue {
-                return Err(
-                    self.compile_err_at(line, "`&` requires an lvalue in a constant expression")
-                );
+                return Err(self.compile_err_at(
+                    Code::CONSTANT_EXPRESSION,
+                    line,
+                    "`&` requires an lvalue in a constant expression",
+                ));
             }
             self.reject_automatic_compound_literal_root(inner.root)?;
             return Ok(ConstDesig {
@@ -1882,6 +1938,7 @@ impl Compiler {
             let inner = self.parse_const_designation()?;
             if inner.is_lvalue {
                 return Err(self.compile_err_at(
+                    Code::CONSTANT_EXPRESSION,
                     line,
                     "`*` in a constant expression requires a pointer value",
                 ));
@@ -1923,6 +1980,7 @@ impl Compiler {
                 }
                 if self.lex.tk != ')' {
                     return Err(self.compile_err_at(
+                        Code::SYNTAX,
                         line,
                         "close paren expected after cast type in constant expression",
                     ));
@@ -1958,9 +2016,11 @@ impl Compiler {
             // Parenthesized designation: parentheses are transparent.
             let inner = self.parse_const_designation()?;
             if self.lex.tk != ')' {
-                return Err(
-                    self.compile_err_at(line, "close paren expected in constant expression")
-                );
+                return Err(self.compile_err_at(
+                    Code::SYNTAX,
+                    line,
+                    "close paren expected in constant expression",
+                ));
             }
             self.next()?;
             return Ok(inner);
@@ -2042,7 +2102,10 @@ impl Compiler {
         let size = self.size_of_type(elem_ty);
         let at = off + index * size as i64;
         if at < 0 || at as usize + size > self.data.len() {
-            return Err(self.compile_err("compound-literal subscript out of range"));
+            return Err(self.compile_err(
+                Code::INVALID_INITIALIZER,
+                "compound-literal subscript out of range",
+            ));
         }
         let (lo, hi) = (at as u64, (at as usize + size) as u64);
         let hit = |o: u64| o >= lo && o < hi;
@@ -2051,6 +2114,7 @@ impl Compiler {
             || self.extern_data_relocs.iter().any(|r| hit(r.data_offset))
         {
             return Err(self.compile_err(
+                Code::CONSTANT_EXPRESSION,
                 "relocated compound-literal element is not an integer constant expression",
             ));
         }
@@ -2073,12 +2137,17 @@ impl Compiler {
     fn const_struct_field(&mut self, struct_ty: i64, line: usize) -> Result<(i64, i64), C5Error> {
         if !is_struct_ty(struct_ty) || struct_ptr_depth(struct_ty) != 0 {
             return Err(self.compile_err_at(
+                Code::CONSTANT_EXPRESSION,
                 line,
                 "member access in a constant expression requires a struct value",
             ));
         }
         if self.lex.tk != Token::Id {
-            return Err(self.compile_err_at(line, "field name expected in constant member access"));
+            return Err(self.compile_err_at(
+                Code::SYNTAX,
+                line,
+                "field name expected in constant member access",
+            ));
         }
         let sid = struct_id_of(struct_ty);
         let name = self.symbols[self.lex.curr_id_idx].name.clone();
@@ -2088,6 +2157,7 @@ impl Compiler {
             .position(|f| f.name == name)
             .ok_or_else(|| {
                 self.compile_err_at(
+                    Code::UNDECLARED_IDENTIFIER,
                     line,
                     format!("struct {} has no field {}", self.structs[sid].name, name),
                 )
@@ -2132,9 +2202,10 @@ impl Compiler {
                         self.next()?;
                         let n = self.parse_const_expr_cond_val()?.as_int();
                         if self.lex.tk != ']' {
-                            return Err(
-                                self.compile_err("close bracket expected in constant subscript")
-                            );
+                            return Err(self.compile_err(
+                                Code::SYNTAX,
+                                "close bracket expected in constant subscript",
+                            ));
                         }
                         self.next()?;
                         level += 1;
@@ -2165,7 +2236,7 @@ impl Compiler {
                     }
                 }
                 if self.lex.tk != ')' {
-                    return Err(self.compile_err("close paren expected after cast"));
+                    return Err(self.compile_err(Code::SYNTAX, "close paren expected after cast"));
                 }
                 self.next()?;
                 // C99 6.5.2.5 scalar-typed compound literal `(T){ v }`: the
@@ -2180,9 +2251,10 @@ impl Compiler {
                     let inner = self.parse_const_expr_cond_val()?;
                     self.accept(',')?;
                     if self.lex.tk != '}' {
-                        return Err(
-                            self.compile_err("scalar compound literal holds a single value")
-                        );
+                        return Err(self.compile_err(
+                            Code::INVALID_INITIALIZER,
+                            "scalar compound literal holds a single value",
+                        ));
                     }
                     self.next()?;
                     inner
@@ -2231,7 +2303,9 @@ impl Compiler {
             }
             let v = self.parse_const_expr_cond_val()?;
             if self.lex.tk != ')' {
-                return Err(self.compile_err("close paren expected in constant expression"));
+                return Err(
+                    self.compile_err(Code::SYNTAX, "close paren expected in constant expression")
+                );
             }
             self.next()?;
             // `((T[]){...})[i]`: a subscript on a parenthesized array
@@ -2244,7 +2318,10 @@ impl Compiler {
                 self.next()?;
                 let n = self.parse_const_expr_cond_val()?.as_int();
                 if self.lex.tk != ']' {
-                    return Err(self.compile_err("close bracket expected in constant subscript"));
+                    return Err(self.compile_err(
+                        Code::SYNTAX,
+                        "close bracket expected in constant subscript",
+                    ));
                 }
                 self.next()?;
                 let elem_ty = self.symbols[idx].type_;
@@ -2285,13 +2362,17 @@ impl Compiler {
                 self.next()?;
                 let n = self.parse_const_expr_cond_val()?.as_int();
                 if self.lex.tk != ']' {
-                    return Err(self.compile_err("close bracket expected in constant subscript"));
+                    return Err(self.compile_err(
+                        Code::SYNTAX,
+                        "close bracket expected in constant subscript",
+                    ));
                 }
                 self.next()?;
                 if n < 0 || n >= len {
-                    return Err(
-                        self.compile_err(format!("string subscript {n} out of bounds [0, {len})"))
-                    );
+                    return Err(self.compile_err(
+                        Code::CONSTANT_EXPRESSION,
+                        format!("string subscript {n} out of bounds [0, {len})"),
+                    ));
                 }
                 return Ok(ConstVal::Int {
                     val: self.data[(addr + n) as usize] as i8 as i128,
@@ -2446,10 +2527,13 @@ impl Compiler {
         }
         self.pending.const_expr_nonconst = true;
         if self.lex.tk != Token::Id {
-            return Err(self.compile_err(format!(
-                "constant integer expected (got {})",
-                super::super::token::describe(self.lex.tk),
-            )));
+            return Err(self.compile_err(
+                Code::CONSTANT_EXPRESSION,
+                format!(
+                    "constant integer expected (got {})",
+                    super::super::token::describe(self.lex.tk),
+                ),
+            ));
         }
         // C99 6.5.1: a name with no declaration is an error of its own. A
         // `__builtin_` spelling is declared by the implementation and only
@@ -2461,11 +2545,15 @@ impl Compiler {
             && !self.is_func_name_ident()
         {
             let hint = self.include_hint(&name);
-            return Err(self.compile_err(format!("use of undeclared identifier `{name}`{hint}")));
+            return Err(self.compile_err(
+                Code::UNDECLARED_IDENTIFIER,
+                format!("use of undeclared identifier `{name}`{hint}"),
+            ));
         }
-        Err(self.compile_err(format!(
-            "constant integer expected (got identifier `{name}`)"
-        )))
+        Err(self.compile_err(
+            Code::CONSTANT_EXPRESSION,
+            format!("constant integer expected (got identifier `{name}`)"),
+        ))
     }
 }
 

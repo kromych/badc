@@ -15,6 +15,7 @@
 //! moves together. The constants loop reuses
 //! `parse_constant_int` for explicit values like `B = 1 << 8`.
 
+use super::super::diag::Code;
 use alloc::string::{String, ToString};
 
 use super::super::error::C5Error;
@@ -105,7 +106,10 @@ impl Compiler {
                     bits >= 64 || max < (1i64 << bits)
                 };
                 if !fits {
-                    return Err(self.compile_err("specified mode too small for enumerated values"));
+                    return Err(self.compile_err(
+                        Code::INVALID_DECLARATION,
+                        "specified mode too small for enumerated values",
+                    ));
                 }
                 ty
             } else if packed {
@@ -170,7 +174,7 @@ impl Compiler {
         let mut sym_indexes: alloc::vec::Vec<usize> = alloc::vec::Vec::new();
         while self.lex.tk != '}' {
             if self.lex.tk != Token::Id {
-                return Err(self.compile_err("bad enum identifier"));
+                return Err(self.compile_err(Code::SYNTAX, "bad enum identifier"));
             }
             let idx = self.lex.curr_id_idx;
             let name = self.symbols[idx].name.clone();

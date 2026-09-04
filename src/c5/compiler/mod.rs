@@ -4,6 +4,7 @@ use alloc::vec::Vec;
 
 use super::CODE_BASE;
 use super::codegen::Target;
+use super::diag::Code;
 use super::error::C5Error;
 use super::lexer::{self, Lexer};
 use super::preprocessor::{DylibSpec, IncludeRecord, PpReuse, Preprocessor};
@@ -2938,7 +2939,10 @@ impl Compiler {
                 (0, None)
             }
             None => {
-                return Err(self.compile_err(format!("{default_name}() not defined")));
+                return Err(self.compile_err(
+                    Code::UNDECLARED_IDENTIFIER,
+                    format!("{default_name}() not defined"),
+                ));
             }
         };
         let dllmain_pc =
@@ -2959,18 +2963,24 @@ impl Compiler {
         let mut exports = Vec::with_capacity(self.pending_exports.len());
         for name in core::mem::take(&mut self.pending_exports) {
             let Some(idx) = lexer::find_symbol(&self.symbols, &self.symbol_index, &name) else {
-                return Err(self.compile_err(format!(
-                    "`#pragma export({name})` -- no such symbol; the name must \
+                return Err(self.compile_err(
+                    Code::UNDECLARED_IDENTIFIER,
+                    format!(
+                        "`#pragma export({name})` -- no such symbol; the name must \
                      refer to a function defined in this source"
-                )));
+                    ),
+                ));
             };
             if self.symbols[idx].class != Token::Fun as i64 {
-                return Err(self.compile_err(format!(
-                    "`#pragma export({name})` -- expected a function, but `{name}` \
+                return Err(self.compile_err(
+                    Code::INVALID_PRAGMA,
+                    format!(
+                        "`#pragma export({name})` -- expected a function, but `{name}` \
                      is class {} (only locally-defined functions are exportable today; \
                      globals would need data-export support that isn't wired up yet)",
-                    self.symbols[idx].class
-                )));
+                        self.symbols[idx].class
+                    ),
+                ));
             }
             exports.push(crate::c5::program::ExportedFunction {
                 name,

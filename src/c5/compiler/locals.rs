@@ -9,6 +9,7 @@
 //! runtime stores standing in for constant bytes where an element's
 //! value is not known until the program runs.
 
+use super::super::diag::Code;
 use alloc::format;
 
 use super::super::error::C5Error;
@@ -169,9 +170,10 @@ impl Compiler {
         let req_align = core::mem::take(&mut self.pending.attr_align);
         let alignas_align = core::mem::take(&mut self.pending.attr_alignas);
         if req_align > 8 && !(req_align as usize).is_power_of_two() {
-            return Err(self.compile_err(format!(
-                "requested alignment {req_align} is not a power of two"
-            )));
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                format!("requested alignment {req_align} is not a power of two"),
+            ));
         }
         self.check_alignas_not_weaker(ty, alignas_align)?;
         let gnu_set = req_align > alignas_align;
@@ -215,20 +217,26 @@ impl Compiler {
         // the attribute.
         let region_auto = auto_align > 8;
         if auto_align > super::MAX_FRAME_ALIGN {
-            return Err(self.compile_err(format!(
-                "requested alignment {auto_align} exceeds the maximum for an \
+            return Err(self.compile_err(
+                Code::LIMIT,
+                format!(
+                    "requested alignment {auto_align} exceeds the maximum for an \
                  automatic object ({}); use static storage",
-                super::MAX_FRAME_ALIGN
-            )));
+                    super::MAX_FRAME_ALIGN
+                ),
+            ));
         }
         // A static local, or the pointee alignment a type-position attribute
         // carries, is placed like a file-scope object.
         if req_align.max(type_align) > super::MAX_STATIC_ALIGN as i64 {
-            return Err(self.compile_err(format!(
-                "requested alignment {} exceeds the supported maximum of {}",
-                req_align.max(type_align),
-                super::MAX_STATIC_ALIGN
-            )));
+            return Err(self.compile_err(
+                Code::LIMIT,
+                format!(
+                    "requested alignment {} exceeds the supported maximum of {}",
+                    req_align.max(type_align),
+                    super::MAX_STATIC_ALIGN
+                ),
+            ));
         }
         Ok(DeclAlign {
             req_align,
@@ -250,10 +258,13 @@ impl Compiler {
     ) -> Result<(), C5Error> {
         let natural = self.align_of_type(ty) as i64;
         if alignas_align > 0 && alignas_align < natural {
-            return Err(self.compile_err(format!(
-                "requested alignment {alignas_align} is less than the minimum \
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                format!(
+                    "requested alignment {alignas_align} is less than the minimum \
                  alignment {natural} of the declared type"
-            )));
+                ),
+            ));
         }
         Ok(())
     }
@@ -301,6 +312,7 @@ impl Compiler {
                 return Ok(());
             }
             return Err(self.compile_err(
+                Code::UNSUPPORTED,
                 "an over-aligned variable-length array is not supported; \
                  use static storage or a fixed size",
             ));
@@ -321,11 +333,14 @@ impl Compiler {
         let align = self.align_of_type(ty) as i64;
         if align > 8 {
             if align > super::MAX_FRAME_ALIGN {
-                return Err(self.compile_err(format!(
-                    "requested alignment {align} exceeds the maximum for an \
+                return Err(self.compile_err(
+                    Code::LIMIT,
+                    format!(
+                        "requested alignment {align} exceeds the maximum for an \
                      automatic object ({}); use static storage",
-                    super::MAX_FRAME_ALIGN
-                )));
+                        super::MAX_FRAME_ALIGN
+                    ),
+                ));
             }
             self.func_over_aligned.push((slot, align, slots * 8));
         }
@@ -482,7 +497,9 @@ impl Compiler {
             // C99 6.7p3: an identifier with no linkage is declared once per
             // scope. An `extern` redeclaration has linkage and is exempt.
             if !is_extern && self.binds_in_current_scope(loc_idx) {
-                return Err(self.compile_err("duplicate local definition"));
+                return Err(
+                    self.compile_err(Code::INVALID_DECLARATION, "duplicate local definition")
+                );
             }
             // Save the outer binding of any name this declarator rebinds.
             // The two exempt cases both leave nothing to restore: an extern
@@ -497,7 +514,10 @@ impl Compiler {
             // `extern` has linkage and declares no object, so it is exempt.
             if !is_extern && self.incomplete_aggregate_tag(ty).is_some() {
                 let name = self.symbols[loc_idx].name.clone();
-                return Err(self.compile_err(format!("object `{name}` has incomplete type")));
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    format!("object `{name}` has incomplete type"),
+                ));
             }
 
             // A block-scope `extern` allocates no storage (C11 6.7.5).
@@ -554,7 +574,10 @@ impl Compiler {
             }
 
             if self.pending.auto_type_single_declarator && self.lex.tk == ',' {
-                return Err(self.compile_err("`__auto_type` declaration takes a single declarator"));
+                return Err(self.compile_err(
+                    Code::SYNTAX,
+                    "`__auto_type` declaration takes a single declarator",
+                ));
             }
             self.accept_declarator_separator()?;
         }
@@ -638,7 +661,10 @@ impl Compiler {
             // in `__seg_gs` / `__seg_fs` needs static storage; a
             // frame slot has no segment.
             if super::types::segment_of_object_ty(d.ty).is_some() {
-                return Err(self.compile_err("a named address space requires static storage"));
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    "a named address space requires static storage",
+                ));
             }
             self.symbols[d.loc_idx].class = Token::Loc as i64;
             self.symbols[d.loc_idx].type_ = d.ty;
@@ -947,6 +973,7 @@ impl Compiler {
         // block-scope thread-local is rejected rather than mis-placed.
         if is_tls && self.lex.tk == Token::Assign {
             return Err(self.compile_err(
+                Code::UNSUPPORTED,
                 "an initializer on a block-scope `_Thread_local` object is not yet supported",
             ));
         }
@@ -972,7 +999,10 @@ impl Compiler {
                     // `self.data`.
                     let elem_size = self.size_of_type(ty);
                     if self.lex.tk != '{' {
-                        return Err(self.compile_err("array initializer must start with `{{`"));
+                        return Err(self.compile_err(
+                            Code::INVALID_INITIALIZER,
+                            "array initializer must start with `{{`",
+                        ));
                     }
                     let sid = struct_id_of(ty);
                     // Elements below the outer (deferred) dimension: for a 2D
@@ -1094,7 +1124,10 @@ impl Compiler {
                 let inner_product: i64 = inner_dims.iter().product::<i64>().max(1);
                 let group_count = array_size / inner_product;
                 if self.lex.tk != '{' {
-                    return Err(self.compile_err("array initializer must start with `{{`"));
+                    return Err(self.compile_err(
+                        Code::INVALID_INITIALIZER,
+                        "array initializer must start with `{{`",
+                    ));
                 }
                 self.next()?;
                 let mut full_dims = alloc::vec::Vec::with_capacity(inner_dims.len() + 1);
@@ -1111,12 +1144,15 @@ impl Compiler {
                 // would be written past it (the file-scope, automatic and
                 // compound-literal paths reject it here too).
                 if elements.len() as i64 > array_size {
-                    return Err(self.compile_err(format!(
-                        "too many initializers for array `{}` ({} > {})",
-                        self.symbols[loc_idx].name,
-                        elements.len(),
-                        array_size
-                    )));
+                    return Err(self.compile_err(
+                        Code::INVALID_INITIALIZER,
+                        format!(
+                            "too many initializers for array `{}` ({} > {})",
+                            self.symbols[loc_idx].name,
+                            elements.len(),
+                            array_size
+                        ),
+                    ));
                 }
                 let var_offset = self.symbols[loc_idx].val;
                 self.write_array_init_into_data(var_offset, ty, &elements)?;
@@ -1236,20 +1272,23 @@ impl Compiler {
                 range_end = sub.hi;
             }
             if range_end >= count {
-                return Err(self.compile_err(format!(
-                    "too many initializers for `{}`",
-                    self.symbols[loc_idx].name
-                )));
+                return Err(self.compile_err(
+                    Code::INVALID_INITIALIZER,
+                    format!("too many initializers for `{}`", self.symbols[loc_idx].name),
+                ));
             }
             if self.lex.tk == '{' {
                 // TODO: descend into a brace-enclosed element and store it
                 // field by field. Only a non-constant element reaches here,
                 // so the list is one whose elements need runtime stores.
-                return Err(self.compile_err(format!(
-                    "brace-enclosed element in the runtime-initialized static \
+                return Err(self.compile_err(
+                    Code::UNSUPPORTED,
+                    format!(
+                        "brace-enclosed element in the runtime-initialized static \
                      array `{}` is not yet supported",
-                    self.symbols[loc_idx].name
-                )));
+                        self.symbols[loc_idx].name
+                    ),
+                ));
             }
             self.expr(Token::Assign as i64)?;
             if let Some(rhs) = self.ast_acc.take() {
@@ -1355,11 +1394,19 @@ impl Compiler {
     ) -> Result<(), C5Error> {
         // C99 6.7.8p3: a VLA declaration may not carry an initializer.
         if self.lex.tk == Token::Assign {
-            return Err(self.compile_err("a variable-length array may not have an initializer"));
+            return Err(self.compile_err(
+                Code::INVALID_INITIALIZER,
+                "a variable-length array may not have an initializer",
+            ));
         }
         let dim = match self.pending.vla_dim_expr.take() {
             Some(d) => d,
-            None => return Err(self.compile_err("variable-length array has no dimension")),
+            None => {
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    "variable-length array has no dimension",
+                ));
+            }
         };
         let ptr_slot = self.reserve_slots(1);
         let size_slot = self.reserve_slots(1);
@@ -1519,7 +1566,7 @@ impl Compiler {
             return Ok(Some((idx, hi, true)));
         }
         if self.lex.tk != Token::Assign {
-            return Err(self.compile_err("`=` expected after `[N]` designator"));
+            return Err(self.compile_err(Code::SYNTAX, "`=` expected after `[N]` designator"));
         }
         self.next()?; // `=`
         Ok(Some((idx, hi, false)))
@@ -1718,10 +1765,13 @@ impl Compiler {
                 let init_count = elements.len();
                 let max = declared_array_size as usize;
                 if init_count > max {
-                    return Err(self.compile_err(format!(
-                        "too many initializers for array `{}` ({} > {})",
-                        var_name, init_count, max
-                    )));
+                    return Err(self.compile_err(
+                        Code::INVALID_INITIALIZER,
+                        format!(
+                            "too many initializers for array `{}` ({} > {})",
+                            var_name, init_count, max
+                        ),
+                    ));
                 }
                 let (start_addr, packed_bytes) = self.pack_initializer_into_data(ty, &elements)?;
                 // C99 6.7.9p21: when the brace list specifies
@@ -2015,7 +2065,10 @@ impl Compiler {
                         // element, which takes a `.field` step, not a
                         // subscript; the file-scope walker reports the same.
                         if d >= inner_dims.len() {
-                            return Err(self.compile_err("`[` designator on a non-array element"));
+                            return Err(self.compile_err(
+                                Code::INVALID_INITIALIZER,
+                                "`[` designator on a non-array element",
+                            ));
                         }
                         self.check_designator_extent(n, n, inner_dims[d])?;
                         let scale: i64 = inner_dims.iter().skip(d + 1).product::<i64>().max(1);
@@ -2024,6 +2077,7 @@ impl Compiler {
                     }
                     if d != inner_dims.len() {
                         return Err(self.compile_err(
+                            Code::INVALID_INITIALIZER,
                             "multi-dimensional `[i][j]` designator must index every dimension",
                         ));
                     }
@@ -2037,7 +2091,8 @@ impl Compiler {
                         continue;
                     }
                     if self.lex.tk != Token::Assign {
-                        return Err(self.compile_err("`=` expected after `[i][j]` designator"));
+                        return Err(self
+                            .compile_err(Code::SYNTAX, "`=` expected after `[i][j]` designator"));
                     }
                     self.next()?; // `=`
                     let here = staged_off as i64 + elem * elem_size as i64;
@@ -2064,7 +2119,9 @@ impl Compiler {
                     continue;
                 }
                 if self.lex.tk != Token::Assign {
-                    return Err(self.compile_err("`=` expected after `[N]` designator"));
+                    return Err(
+                        self.compile_err(Code::SYNTAX, "`=` expected after `[N]` designator")
+                    );
                 }
                 self.next()?; // `=`
                 // A range fills each designated element from the
@@ -2085,12 +2142,15 @@ impl Compiler {
                 i = desig;
             }
             if i >= group_count {
-                return Err(self.compile_err(format!(
-                    "too many initializers for array `{}` ({} > {})",
-                    var_name,
-                    i + 1,
-                    group_count
-                )));
+                return Err(self.compile_err(
+                    Code::INVALID_INITIALIZER,
+                    format!(
+                        "too many initializers for array `{}` ({} > {})",
+                        var_name,
+                        i + 1,
+                        group_count
+                    ),
+                ));
             }
             let here = staged_off as i64 + i * group_stride;
             // C99 6.7.8p20: a struct element's braces may be
@@ -2234,7 +2294,7 @@ impl Compiler {
             let rows;
             if array_dims[0] == -1 {
                 if self.lex.tk != '{' {
-                    return Err(self.compile_err("`{` expected in compound literal"));
+                    return Err(self.compile_err(Code::SYNTAX, "`{` expected in compound literal"));
                 }
                 let needs_runtime;
                 if elem_is_aggregate {
@@ -2317,7 +2377,7 @@ impl Compiler {
                             .struct_array_positional_elem_count(struct_id_of(elem_ty))?
                             * inner_span;
                         if supplied > count {
-                            return Err(self.compile_err(format!(
+                            return Err(self.compile_err(Code::INVALID_INITIALIZER, format!(
                                 "too many initializers for compound literal ({supplied} > {count})"
                             )));
                         }
@@ -2328,10 +2388,13 @@ impl Compiler {
                     self.pending.init_inner_dims = inner_dims.to_vec();
                     let elements = self.collect_array_initializer(elem_ty)?;
                     if elements.len() as i64 > count {
-                        return Err(self.compile_err(format!(
-                            "too many initializers for compound literal ({} > {count})",
-                            elements.len()
-                        )));
+                        return Err(self.compile_err(
+                            Code::INVALID_INITIALIZER,
+                            format!(
+                                "too many initializers for compound literal ({} > {count})",
+                                elements.len()
+                            ),
+                        ));
                     }
                     let (start, packed) = self.pack_initializer_into_data(elem_ty, &elements)?;
                     let total = if packed < full {
@@ -2377,7 +2440,7 @@ impl Compiler {
             // Scalar compound literal `(T){ expr }`.
             slot = self.reserve_compound_literal_slot(t, self.slots_of_type(t))?;
             if self.lex.tk != '{' {
-                return Err(self.compile_err("`{` expected in compound literal"));
+                return Err(self.compile_err(Code::SYNTAX, "`{` expected in compound literal"));
             }
             self.next()?;
             self.expr(Token::Assign as i64)?;
@@ -2385,7 +2448,9 @@ impl Compiler {
             self.pending_local_init_ast = self.ast_acc;
             self.accept(',')?;
             if self.lex.tk != '}' {
-                return Err(self.compile_err("`}` expected to close compound literal"));
+                return Err(
+                    self.compile_err(Code::SYNTAX, "`}` expected to close compound literal")
+                );
             }
             self.next()?;
             final_array_size = 0;
@@ -2730,9 +2795,10 @@ impl Compiler {
                 cursor + span
             };
             if end > total {
-                return Err(self.compile_err(format!(
-                    "too many initializers for array `{var_name}` (> {total})"
-                )));
+                return Err(self.compile_err(
+                    Code::INVALID_INITIALIZER,
+                    format!("too many initializers for array `{var_name}` (> {total})"),
+                ));
             }
             // C99 6.7.8p7: the designator list may continue into the
             // element (`[i][j].field... = v`), naming a sub-object of a
@@ -2740,7 +2806,9 @@ impl Compiler {
             // per element.
             if desig.as_ref().is_some_and(|d| d.element_chain) {
                 if level != child.len() || !self.is_traversable_aggregate_ty(ty) {
-                    return Err(self.compile_err("`=` expected after `[N]` designator"));
+                    return Err(
+                        self.compile_err(Code::SYNTAX, "`=` expected after `[N]` designator")
+                    );
                 }
                 let value = self.lex.snapshot();
                 for e in cursor..end {
@@ -2783,7 +2851,10 @@ impl Compiler {
                 self.emit_array_leaf_runtime(local_val, off, ty)?;
                 self.accept(',')?;
                 if self.lex.tk != '}' {
-                    return Err(self.compile_err("`}` expected after braced scalar initializer"));
+                    return Err(self.compile_err(
+                        Code::SYNTAX,
+                        "`}` expected after braced scalar initializer",
+                    ));
                 }
                 self.next()?;
             } else {

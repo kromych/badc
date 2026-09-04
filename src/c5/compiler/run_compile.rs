@@ -204,17 +204,27 @@ impl Compiler {
         let (template, tstart, _is_volatile, is_goto) = self.parse_asm_head()?;
         self.truncate_data(tstart);
         if is_goto {
-            return Err(self.compile_err("`asm goto` is not supported at file scope"));
+            return Err(self.compile_err(
+                Code::UNSUPPORTED,
+                "`asm goto` is not supported at file scope",
+            ));
         }
         if self.lex.tk == ':' {
-            return Err(self.compile_err("inline asm operands are not supported at file scope"));
+            return Err(self.compile_err(
+                Code::UNSUPPORTED,
+                "inline asm operands are not supported at file scope",
+            ));
         }
         self.consume(b')', "`)` expected after inline asm")?;
         self.consume(b';', "`;` expected after file-scope `asm`")?;
-        let text = core::str::from_utf8(&template)
-            .map_err(|_| self.compile_err("file-scope asm template is not valid UTF-8"))?;
+        let text = core::str::from_utf8(&template).map_err(|_| {
+            self.compile_err(
+                Code::ASM_SYNTAX,
+                "file-scope asm template is not valid UTF-8",
+            )
+        })?;
         self.ingest_file_scope_asm(text, true)
-            .map_err(|m| self.compile_err(m))
+            .map_err(|m| self.compile_err(Code::ASSEMBLER, m))
     }
 
     /// Record a `.set` alias of the unit, a later assignment to the same name
@@ -440,7 +450,10 @@ impl Compiler {
         let mut declarator_count = 0usize;
         while self.lex.tk != ';' && self.lex.tk != '}' {
             if self.pending.auto_type_single_declarator && declarator_count > 0 {
-                return Err(self.compile_err("`__auto_type` declaration takes a single declarator"));
+                return Err(self.compile_err(
+                    Code::SYNTAX,
+                    "`__auto_type` declaration takes a single declarator",
+                ));
             }
             declarator_count += 1;
             self.parse_file_scope_declarator(&decl)?;
@@ -720,16 +733,22 @@ impl Compiler {
         let prior_class = self.symbols[id_idx].class;
         let prior_type = self.symbols[id_idx].type_;
         if prior_class != 0 && prior_class != Token::Typedef as i64 {
-            return Err(self.compile_err(format!(
-                "typedef name `{}` clashes with prior non-typedef declaration",
-                self.symbols[id_idx].name
-            )));
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                format!(
+                    "typedef name `{}` clashes with prior non-typedef declaration",
+                    self.symbols[id_idx].name
+                ),
+            ));
         }
         if prior_class == Token::Typedef as i64 && prior_type != typedef_ty {
-            return Err(self.compile_err(format!(
-                "typedef `{}` redefined with a different type",
-                self.symbols[id_idx].name
-            )));
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                format!(
+                    "typedef `{}` redefined with a different type",
+                    self.symbols[id_idx].name
+                ),
+            ));
         }
         self.symbols[id_idx].class = Token::Typedef as i64;
         self.symbols[id_idx].type_ = typedef_ty;
@@ -759,9 +778,10 @@ impl Compiler {
             base_type_align
         };
         if alias_align > 0 && !(alias_align as u64).is_power_of_two() {
-            return Err(self.compile_err(format!(
-                "requested alignment {alias_align} is not a power of two"
-            )));
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                format!("requested alignment {alias_align} is not a power of two"),
+            ));
         }
         self.symbols[id_idx].type_align = alias_align;
         if typedef_fpi > 0 {
@@ -834,7 +854,7 @@ impl Compiler {
             && !was_extern_redecl
             && !new_is_tentative_glo
         {
-            return Err(self.compile_err("duplicate global definition"));
+            return Err(self.compile_err(Code::INVALID_DECLARATION, "duplicate global definition"));
         }
         // Snapshot the prior signature before overwriting `type_`, so the
         // signature check has something to compare against.
@@ -971,6 +991,7 @@ impl Compiler {
         }
         if was_sys {
             return Err(self.compile_err_at(
+                Code::INVALID_DECLARATION,
                 signature_line,
                 format!(
                     "cannot give a body to predefined library function `{}` \
@@ -1175,7 +1196,7 @@ impl Compiler {
         self.symbols[id_idx].params = params.types.clone();
 
         if self.lex.tk != '{' {
-            return Err(self.compile_err("bad function definition"));
+            return Err(self.compile_err(Code::SYNTAX, "bad function definition"));
         }
         self.next()?;
 
@@ -1245,8 +1266,10 @@ impl Compiler {
                         self.symbols[decl_idx].type_ = decl_ty;
                         params.types[pos] = decl_ty;
                     } else {
-                        return Err(self
-                            .compile_err("old-style parameter declaration names a non-parameter"));
+                        return Err(self.compile_err(
+                            Code::INVALID_DECLARATION,
+                            "old-style parameter declaration names a non-parameter",
+                        ));
                     }
                 }
                 self.accept(',')?;
@@ -1431,9 +1454,10 @@ impl Compiler {
         while self.lex.tk != '}' {
             if self.lex.tk == Token::LocalLabel {
                 if !at_block_start {
-                    return Err(
-                        self.compile_err("`__label__` must appear at the start of its block")
-                    );
+                    return Err(self.compile_err(
+                        Code::INVALID_DECLARATION,
+                        "`__label__` must appear at the start of its block",
+                    ));
                 }
                 self.parse_local_label_decl()?;
                 continue;
@@ -1609,10 +1633,13 @@ impl Compiler {
 
         for name in &self.unresolved_gotos {
             if !self.label_is_defined(name) {
-                return Err(self.compile_err(format!(
-                    "unresolved label: {}",
-                    super::emit::label_display_name(name)
-                )));
+                return Err(self.compile_err(
+                    Code::UNDECLARED_IDENTIFIER,
+                    format!(
+                        "unresolved label: {}",
+                        super::emit::label_display_name(name)
+                    ),
+                ));
             }
         }
 
@@ -1744,6 +1771,7 @@ impl Compiler {
         // than reaching the walker's internal error.
         if over_aligned.iter().any(|&(_, align, _)| align > 16) && self.uses_alloca_in_current_fn {
             return Err(self.compile_err(
+                Code::UNSUPPORTED,
                 "an automatic object aligned above 16 cannot share a function \
              with `alloca` or a variable-length array; use static storage",
             ));
@@ -2037,15 +2065,19 @@ impl Compiler {
         let req_align = core::mem::take(&mut self.pending.attr_align);
         let alignas_align = core::mem::take(&mut self.pending.attr_alignas);
         if req_align > 8 && !(req_align as usize).is_power_of_two() {
-            return Err(self.compile_err(format!(
-                "requested alignment {req_align} is not a power of two"
-            )));
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                format!("requested alignment {req_align} is not a power of two"),
+            ));
         }
         if req_align > super::MAX_STATIC_ALIGN as i64 {
-            return Err(self.compile_err(format!(
-                "requested alignment {req_align} exceeds the supported maximum of {}",
-                super::MAX_STATIC_ALIGN
-            )));
+            return Err(self.compile_err(
+                Code::LIMIT,
+                format!(
+                    "requested alignment {req_align} exceeds the supported maximum of {}",
+                    super::MAX_STATIC_ALIGN
+                ),
+            ));
         }
         // The object takes the wider of what the declarator asks for and what its
         // type requires: an `aligned(64)` member raises its whole aggregate, so
@@ -2094,6 +2126,7 @@ impl Compiler {
         let decl_align: usize = if want_align > 8 {
             if thread_local && (req_align > 8 || want_align > 16) {
                 return Err(self.compile_err(
+                    Code::LIMIT,
                     "alignment above 8 is not supported for `_Thread_local` objects",
                 ));
             }
@@ -2134,7 +2167,10 @@ impl Compiler {
             );
         }
         if thread_local {
-            return Err(self.compile_err("deferred-size `_Thread_local` arrays are not supported"));
+            return Err(self.compile_err(
+                Code::UNSUPPORTED,
+                "deferred-size `_Thread_local` arrays are not supported",
+            ));
         }
         self.next()?;
         if self.is_traversable_aggregate_ty(ty) {
@@ -2279,7 +2315,10 @@ impl Compiler {
         // elements to a non-contiguous offset.
         let elem_size = self.size_of_type(ty);
         if self.lex.tk != '{' {
-            return Err(self.compile_err("array initializer must start with `{{`"));
+            return Err(self.compile_err(
+                Code::INVALID_INITIALIZER,
+                "array initializer must start with `{{`",
+            ));
         }
         let sid = struct_id_of(ty);
         // Elements below the outer (deferred) dimension:
@@ -2549,9 +2588,10 @@ impl Compiler {
         };
         if array_size > 0 && self.is_traversable_aggregate_ty(ty) {
             if thread_local {
-                return Err(
-                    self.compile_err("array `_Thread_local` initialisers are not supported")
-                );
+                return Err(self.compile_err(
+                    Code::UNSUPPORTED,
+                    "array `_Thread_local` initialisers are not supported",
+                ));
             }
             // Known-size struct array: the shared
             // struct-array walker fills the brace list
@@ -2563,7 +2603,10 @@ impl Compiler {
             let inner_product: i64 = inner_dims.iter().product::<i64>().max(1);
             let group_count = array_size / inner_product;
             if self.lex.tk != '{' {
-                return Err(self.compile_err("array initializer must start with `{{`"));
+                return Err(self.compile_err(
+                    Code::INVALID_INITIALIZER,
+                    "array initializer must start with `{{`",
+                ));
             }
             self.next()?;
             let mut full_dims = alloc::vec::Vec::with_capacity(inner_dims.len() + 1);
@@ -2575,20 +2618,24 @@ impl Compiler {
             }
         } else if array_size > 0 {
             if thread_local {
-                return Err(
-                    self.compile_err("array `_Thread_local` initialisers are not supported")
-                );
+                return Err(self.compile_err(
+                    Code::UNSUPPORTED,
+                    "array `_Thread_local` initialisers are not supported",
+                ));
             }
             self.pending.init_inner_dims = self.inner_dims_of(id_idx);
             self.pending.init_target_array_size = array_size;
             let elements = self.collect_array_initializer(ty)?;
             if elements.len() > array_size as usize {
-                return Err(self.compile_err(format!(
-                    "too many initializers for array `{}` ({} > {})",
-                    self.symbols[id_idx].name,
-                    elements.len(),
-                    array_size
-                )));
+                return Err(self.compile_err(
+                    Code::INVALID_INITIALIZER,
+                    format!(
+                        "too many initializers for array `{}` ({} > {})",
+                        self.symbols[id_idx].name,
+                        elements.len(),
+                        array_size
+                    ),
+                ));
             }
             self.write_array_init_into_data(var_offset, ty, &elements)?;
             for _ in 0..array_cl_parens {
@@ -2596,9 +2643,10 @@ impl Compiler {
             }
         } else if self.is_traversable_aggregate_ty(ty) {
             if thread_local {
-                return Err(
-                    self.compile_err("struct `_Thread_local` initialisers are not supported")
-                );
+                return Err(self.compile_err(
+                    Code::UNSUPPORTED,
+                    "struct `_Thread_local` initialisers are not supported",
+                ));
             }
             let sid = struct_id_of(ty);
             // A parenthesized compound literal `((T){...})`
@@ -2627,9 +2675,11 @@ impl Compiler {
         for (id_idx, sid, line) in core::mem::take(&mut self.pending_incomplete_objects) {
             if !self.structs[sid].is_complete {
                 let name = self.symbols[id_idx].name.clone();
-                return Err(
-                    self.compile_err_at(line, format!("object `{name}` has incomplete type"))
-                );
+                return Err(self.compile_err_at(
+                    Code::INVALID_DECLARATION,
+                    line,
+                    format!("object `{name}` has incomplete type"),
+                ));
             }
         }
         Ok(())
@@ -2661,9 +2711,10 @@ impl Compiler {
             let tgt = self.resolved_alias_target(&target, want);
             let Some(tgt) = tgt else {
                 let kind = if is_object { "an object" } else { "a function" };
-                return Err(self.compile_err(format!(
-                    "alias target `{target}` is not {kind} defined in this unit"
-                )));
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    format!("alias target `{target}` is not {kind} defined in this unit"),
+                ));
             };
             self.symbols[tgt].was_referenced = true;
             if !is_object && self.symbols[id_idx].is_weak {

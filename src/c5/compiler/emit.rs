@@ -16,6 +16,7 @@
 //! rvalue load into a stack push or address producer.
 
 use super::super::ast::{Expr, ExprId, SrcPos, UnOp};
+use super::super::diag::Code;
 use super::super::error::C5Error;
 use super::super::ir::LoadKind;
 use super::super::symbol::Symbol;
@@ -198,7 +199,7 @@ impl Compiler {
             }
             self.next()?;
         }
-        Err(self.compile_err("unmatched parentheses"))
+        Err(self.compile_err(Code::SYNTAX, "unmatched parentheses"))
     }
 
     // ---- Code emission ----
@@ -702,7 +703,11 @@ impl Compiler {
                 x if x == Token::XorOp as i64 => B::Xor,
                 x if x == Token::ShlOp as i64 => B::Shl,
                 x if x == Token::ShrOp as i64 => B::Shr,
-                _ => return Err(self.compile_err("unsupported compound op on bitfield")),
+                _ => {
+                    return Err(
+                        self.compile_err(Code::UNSUPPORTED, "unsupported compound op on bitfield")
+                    );
+                }
             };
             if let Some(r) = rhs_ast {
                 self.pending.bf_compound_assign = Some((r, ir_op));
@@ -1015,10 +1020,13 @@ impl Compiler {
             return Ok(());
         }
         if self.binds_in_current_scope(idx) {
-            return Err(self.compile_err(alloc::format!(
-                "redeclaration of `{}` in the same scope",
-                self.symbols[idx].name
-            )));
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                alloc::format!(
+                    "redeclaration of `{}` in the same scope",
+                    self.symbols[idx].name
+                ),
+            ));
         }
         self.save_scope_binding(idx);
         if self.block_scopes.is_empty() {
@@ -1804,7 +1812,7 @@ impl Compiler {
     ) -> Result<super::super::ast::LabelId, C5Error> {
         self.next()?; // consume `&&`
         if self.lex.tk != Token::Id {
-            return Err(self.compile_err("label name expected after `&&`"));
+            return Err(self.compile_err(Code::SYNTAX, "label name expected after `&&`"));
         }
         let name = self.resolve_label_name(self.lex.curr_id_idx);
         self.next()?;

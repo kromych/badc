@@ -400,7 +400,9 @@ impl Compiler {
     ) -> Result<T, C5Error> {
         const MAX_NEST_DEPTH: usize = 512;
         if self.nest_depth >= MAX_NEST_DEPTH {
-            return Err(self.compile_err(alloc::format!("{construct} nesting too deep")));
+            return Err(
+                self.compile_err(Code::LIMIT, alloc::format!("{construct} nesting too deep"))
+            );
         }
         self.nest_depth += 1;
         let r = f(self);
@@ -408,14 +410,11 @@ impl Compiler {
         r
     }
 
-    /// Build a `C5Error::Compile` whose message follows the
-    /// gcc / clang-shape convention everything else in this codebase
-    /// uses for diagnostics:
-    ///   `<file>:<line>: error: <message>`
-    /// Pulls `<file>` / `<line>` out of `self.lex` so call sites
-    /// don't have to thread them through every `format!`.
-    pub(super) fn compile_err(&self, message: impl AsRef<str>) -> C5Error {
-        self.compile_err_line(self.lex.line, message.as_ref())
+    /// A hard error at the lexer's current line, rendered as
+    /// `<file>:<line>: error: <message> [B<code>]` with the source line
+    /// echoed beneath it. `code` names the row the failure falls in.
+    pub(super) fn compile_err(&self, code: Code, message: impl AsRef<str>) -> C5Error {
+        self.compile_err_line(code, self.lex.line, message.as_ref())
     }
 
     /// The `-- try #include` suffix for a name a bundled header declares;
@@ -427,27 +426,36 @@ impl Compiler {
         }
     }
 
-    /// Shared builder: a `<file>:<line>: error: <message>` diagnostic with
-    /// the source text of `line` echoed beneath it (the line the number
-    /// points at, recovered even when the parser has read past it).
-    fn compile_err_line(&self, line: usize, message: &str) -> C5Error {
-        let mut s = super::super::error::fmt_compile_err(&self.lex.file, line, message);
-        if let Some(src) = self.lex.line_text_by_number(line)
-            && !src.is_empty()
-        {
-            s.push('\n');
-            s.push_str(src);
-        }
-        C5Error::Compile(s)
+    fn compile_err_line(&self, code: Code, line: usize, message: &str) -> C5Error {
+        let loc = match self.lex.line_offset(line) {
+            Some(offset) => Loc::in_unit(self.lex.file.clone(), line as u32, offset),
+            None => Loc::new(self.lex.file.clone(), line as u32),
+        };
+        let source = self
+            .lex
+            .line_text_by_number(line)
+            .filter(|s| !s.is_empty())
+            .map(alloc::string::ToString::to_string);
+        let diagnostic = super::super::diag::Diagnostic::new(
+            code,
+            super::super::diag::Level::Error,
+            Some(loc),
+            message,
+        )
+        .with_source_line(source);
+        C5Error::Compile(alloc::string::ToString::to_string(&diagnostic))
     }
 
-    /// Same shape as [`Self::compile_err`] but lets the caller pin
-    /// the line to a value that isn't the lexer's current one --
-    /// useful when a diagnostic refers back to where a structure /
-    /// function / argument *started*, not where the parser noticed
-    /// the problem.
-    pub(super) fn compile_err_at(&self, line: usize, message: impl AsRef<str>) -> C5Error {
-        self.compile_err_line(line, message.as_ref())
+    /// [`Self::compile_err`] pinned to `line` rather than the lexer's
+    /// current one: where the diagnostic refers back to where a
+    /// structure, function or argument started.
+    pub(super) fn compile_err_at(
+        &self,
+        code: Code,
+        line: usize,
+        message: impl AsRef<str>,
+    ) -> C5Error {
+        self.compile_err_line(code, line, message.as_ref())
     }
 
     pub(super) fn type_warning(

@@ -459,7 +459,7 @@ impl Compiler {
         while self.lex.tk != ';' {
             let (id_idx, mut ty, mut td_array) = self.parse_declarator(lbt)?;
             if id_idx == usize::MAX {
-                return Err(self.compile_err("typedef requires a name"));
+                return Err(self.compile_err(Code::INVALID_DECLARATION, "typedef requires a name"));
             }
             // `__attribute__((vector_size(N)))` on the typedef rebuilds its type
             // into a GCC vector here, matching the file-scope path. Without it
@@ -504,10 +504,13 @@ impl Compiler {
             // as a typedef; any other prior binding is a redeclaration.
             if self.binds_in_current_scope(id_idx) {
                 if self.symbols[id_idx].class != Token::Typedef as i64 {
-                    return Err(self.compile_err(format!(
-                        "redeclaration of `{}` in the same scope",
-                        self.symbols[id_idx].name
-                    )));
+                    return Err(self.compile_err(
+                        Code::INVALID_DECLARATION,
+                        format!(
+                            "redeclaration of `{}` in the same scope",
+                            self.symbols[id_idx].name
+                        ),
+                    ));
                 }
             } else {
                 self.save_scope_binding(id_idx);
@@ -531,9 +534,10 @@ impl Compiler {
                 self.pending.type_align
             };
             if alias_align > 0 && !(alias_align as u64).is_power_of_two() {
-                return Err(self.compile_err(format!(
-                    "requested alignment {alias_align} is not a power of two"
-                )));
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    format!("requested alignment {alias_align} is not a power of two"),
+                ));
             }
             self.symbols[id_idx].type_align = alias_align;
             // Preserve an array / vector typedef's element count (C99 6.7.7):
@@ -770,13 +774,19 @@ impl Compiler {
         self.next()?; // consume `__label__`
         loop {
             if self.lex.tk != Token::Id {
-                return Err(self.compile_err("label name expected in `__label__` declaration"));
+                return Err(self.compile_err(
+                    Code::SYNTAX,
+                    "label name expected in `__label__` declaration",
+                ));
             }
             let idx = self.lex.curr_id_idx;
             let name = self.symbols[idx].name.clone();
             self.next()?;
             if self.local_label_scopes.declare(idx, &name).is_none() {
-                return Err(self.compile_err(format!("duplicate local label declaration `{name}`")));
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    format!("duplicate local label declaration `{name}`"),
+                ));
             }
             if self.lex.tk == ',' {
                 self.next()?;
@@ -815,9 +825,10 @@ impl Compiler {
         while self.lex.tk != '}' {
             if self.lex.tk == Token::LocalLabel {
                 if !at_block_start {
-                    return Err(
-                        self.compile_err("`__label__` must appear at the start of its block")
-                    );
+                    return Err(self.compile_err(
+                        Code::INVALID_DECLARATION,
+                        "`__label__` must appear at the start of its block",
+                    ));
                 }
                 self.parse_local_label_decl()?;
                 continue;
@@ -1121,7 +1132,7 @@ impl Compiler {
         }
         self.consume(b'(', "`(` expected after `asm`")?;
         if self.lex.tk != '"' {
-            return Err(self.compile_err("inline asm template string expected"));
+            return Err(self.compile_err(Code::ASM_SYNTAX, "inline asm template string expected"));
         }
         // The lexer has appended the template bytes to the data
         // section; read them back, then drop them once parsing is done
@@ -1394,7 +1405,8 @@ impl Compiler {
                 section += 1;
                 if is_goto && section > 4 {
                     self.truncate_data(data_base);
-                    return Err(self.compile_err("inline asm goto: too many `:` sections"));
+                    return Err(self
+                        .compile_err(Code::ASM_SYNTAX, "inline asm goto: too many `:` sections"));
                 }
                 self.next()?;
                 continue;
@@ -1408,7 +1420,10 @@ impl Compiler {
                 // references allowed, as for `goto`).
                 if self.lex.tk != Token::Id {
                     self.truncate_data(data_base);
-                    return Err(self.compile_err("inline asm goto: label identifier expected"));
+                    return Err(self.compile_err(
+                        Code::ASM_SYNTAX,
+                        "inline asm goto: label identifier expected",
+                    ));
                 }
                 let idx = self.lex.curr_id_idx;
                 let name = self.symbols[idx].name.clone();
@@ -1431,7 +1446,10 @@ impl Compiler {
                 self.next()?; // `[`
                 if self.lex.tk != Token::Id {
                     self.truncate_data(data_base);
-                    return Err(self.compile_err("inline asm: operand name expected after `[`"));
+                    return Err(self.compile_err(
+                        Code::ASM_SYNTAX,
+                        "inline asm: operand name expected after `[`",
+                    ));
                 }
                 op_name = Some(self.symbols[self.lex.curr_id_idx].name.clone());
                 self.next()?; // name
@@ -1439,7 +1457,9 @@ impl Compiler {
             }
             if self.lex.tk != '"' {
                 self.truncate_data(data_base);
-                return Err(self.compile_err("inline asm: constraint string expected"));
+                return Err(
+                    self.compile_err(Code::ASM_SYNTAX, "inline asm: constraint string expected")
+                );
             }
             // The lexer appended the constraint bytes to the data
             // section; copy them out and drop them.
@@ -1500,14 +1520,18 @@ impl Compiler {
                     Some(c) => c,
                     None => {
                         self.truncate_data(data_base);
-                        return Err(self.compile_err(alloc::format!(
-                            "inline asm: unsupported constraint `{cstr}`"
-                        )));
+                        return Err(self.compile_err(
+                            Code::UNSUPPORTED,
+                            alloc::format!("inline asm: unsupported constraint `{cstr}`"),
+                        ));
                     }
                 };
             if self.lex.tk != '(' {
                 self.truncate_data(data_base);
-                return Err(self.compile_err("inline asm: `(` expected after constraint"));
+                return Err(self.compile_err(
+                    Code::ASM_SYNTAX,
+                    "inline asm: `(` expected after constraint",
+                ));
             }
             self.next()?; // consume `(`
             // A storage-less register variable (the stack / frame pointer)
@@ -1563,10 +1587,13 @@ impl Compiler {
                 )
             {
                 self.truncate_data(data_base);
-                return Err(self.compile_err(alloc::format!(
-                    "inline asm: {op_size}-byte operand for constraint `{cstr}` exceeds a \
+                return Err(self.compile_err(
+                    Code::ASM_SYNTAX,
+                    alloc::format!(
+                        "inline asm: {op_size}-byte operand for constraint `{cstr}` exceeds a \
                      general register; use a memory operand or split the value"
-                )));
+                    ),
+                ));
             }
             // The x86 `x` operand path moves a full 128-bit value (movups), so
             // it requires a 16-byte operand (a __m128i / vector). A scalar
@@ -1578,8 +1605,10 @@ impl Compiler {
                 && self.size_of_type(self.ty) != 16
             {
                 self.truncate_data(data_base);
-                return Err(self
-                    .compile_err("inline asm: only 16-byte (__m128i) `x` operands are supported"));
+                return Err(self.compile_err(
+                    Code::UNSUPPORTED,
+                    "inline asm: only 16-byte (__m128i) `x` operands are supported",
+                ));
             }
             // A `register T v asm("reg")` variable used as a plain
             // register operand pins the operand to its named register --
@@ -1647,7 +1676,7 @@ impl Compiler {
                     };
                 if !addressable {
                     self.truncate_data(data_base);
-                    return Err(self.compile_err(if stores_back {
+                    return Err(self.compile_err(Code::ASM_SYNTAX, if stores_back {
                         "inline asm: output operand must be an lvalue"
                     } else {
                         "inline asm: memory operand is not directly addressable (must be an lvalue)"
@@ -1664,7 +1693,8 @@ impl Compiler {
                 Some(e) => e,
                 None => {
                     self.truncate_data(data_base);
-                    return Err(self.compile_err("inline asm: operand expression expected"));
+                    return Err(self
+                        .compile_err(Code::ASM_SYNTAX, "inline asm: operand expression expected"));
                 }
             };
             // A range-restricted immediate constraint admits only an integer
@@ -1695,16 +1725,19 @@ impl Compiler {
                         } else {
                             Self::aarch64_imm_constraint_range_text(letter)
                         };
-                        return Err(self.compile_err(match v {
-                            Some(v) => alloc::format!(
-                                "inline asm: value {v} out of range for constraint \
+                        return Err(self.compile_err(
+                            Code::ASM_SYNTAX,
+                            match v {
+                                Some(v) => alloc::format!(
+                                    "inline asm: value {v} out of range for constraint \
                                  `{letter}` (expected {range})"
-                            ),
-                            None => alloc::format!(
-                                "inline asm: constraint `{letter}` requires an \
+                                ),
+                                None => alloc::format!(
+                                    "inline asm: constraint `{letter}` requires an \
                                  integer constant (expected {range})"
-                            ),
-                        }));
+                                ),
+                            },
+                        ));
                     }
                 }
             }
@@ -1722,7 +1755,9 @@ impl Compiler {
             }
             if self.lex.tk != ')' {
                 self.truncate_data(data_base);
-                return Err(self.compile_err("inline asm: `)` expected after operand"));
+                return Err(
+                    self.compile_err(Code::ASM_SYNTAX, "inline asm: `)` expected after operand")
+                );
             }
             self.next()?; // consume the operand's `)`
         }
@@ -1750,7 +1785,10 @@ impl Compiler {
                 .iter()
                 .any(|b| b.is_output && fixed_reg(b) == Some(r))
             {
-                return Err(self.compile_err("inline asm: two outputs bound to one fixed register"));
+                return Err(self.compile_err(
+                    Code::ASM_SYNTAX,
+                    "inline asm: two outputs bound to one fixed register",
+                ));
             }
         }
         // Every register operand is preserved across the statement.
@@ -1770,7 +1808,7 @@ impl Compiler {
         let template = if operand_names.iter().any(Option::is_some) {
             match Self::rewrite_named_operand_refs(&template, &operand_names) {
                 Ok(t) => t,
-                Err(m) => return Err(self.compile_err(m)),
+                Err(m) => return Err(self.compile_err(Code::ASM_SYNTAX, m)),
             }
         } else {
             template
@@ -1780,11 +1818,14 @@ impl Compiler {
         // names and operand count are at hand.
         let template = if is_goto {
             if label_ids.is_empty() {
-                return Err(self.compile_err("inline asm goto: at least one label is required"));
+                return Err(self.compile_err(
+                    Code::ASM_SYNTAX,
+                    "inline asm goto: at least one label is required",
+                ));
             }
             match Self::rewrite_goto_label_refs(&template, &label_names, operands.len()) {
                 Ok(t) => t,
-                Err(m) => return Err(self.compile_err(m)),
+                Err(m) => return Err(self.compile_err(Code::ASM_SYNTAX, m)),
             }
         } else {
             template
@@ -2007,6 +2048,7 @@ impl Compiler {
             // than constraint-based, so a bound operand cannot be
             // resolved there yet. Reject instead of mis-encoding.
             return Err(self.compile_err(
+                Code::UNSUPPORTED,
                 "inline asm: a stack- or frame-pointer register variable \
                  operand is not supported on this target",
             ));
@@ -2307,11 +2349,15 @@ impl Compiler {
             if self.lex.tk == ':' as i64 || self.lex.tk == ',' as i64 || self.lex.tk == '"' as i64 {
                 self.next()?;
             } else {
-                return Err(self.compile_err("unsupported single-operand asm operand"));
+                return Err(
+                    self.compile_err(Code::UNSUPPORTED, "unsupported single-operand asm operand")
+                );
             }
         }
         if self.lex.tk != '(' as i64 {
-            return Err(self.compile_err("single-operand asm expects one operand"));
+            return Err(
+                self.compile_err(Code::ASM_SYNTAX, "single-operand asm expects one operand")
+            );
         }
         self.next()?; // consume '('
         self.ast_psh();
@@ -2329,7 +2375,7 @@ impl Compiler {
         self.next()?; // consume ')'
         self.consume(b';', "`;` expected after `asm(...)`")?;
         let Some(addr) = addr_id else {
-            return Err(self.compile_err("single-operand asm operand missing"));
+            return Err(self.compile_err(Code::ASM_SYNTAX, "single-operand asm operand missing"));
         };
         self.mark_emit_other();
         self.ty = Ty::Int as i64;
@@ -2374,7 +2420,7 @@ impl Compiler {
             }
             if self.lex.tk != '"' {
                 self.truncate_data(data_base);
-                return Err(self.compile_err("unsupported divq asm syntax"));
+                return Err(self.compile_err(Code::UNSUPPORTED, "unsupported divq asm syntax"));
             }
             let cstart = self.lex.ival as usize;
             let (letter, digit) = {
@@ -2401,7 +2447,9 @@ impl Compiler {
             }
             if self.lex.tk != '(' {
                 self.truncate_data(data_base);
-                return Err(self.compile_err("divq: `(` expected after constraint"));
+                return Err(
+                    self.compile_err(Code::ASM_SYNTAX, "divq: `(` expected after constraint")
+                );
             }
             self.next()?; // consume `(`
             self.expr(Token::Assign as i64)?;
@@ -2414,7 +2462,8 @@ impl Compiler {
                     Some(b'd') => rem_addr = self.ast_acc.take(),
                     _ => {
                         self.truncate_data(data_base);
-                        return Err(self.compile_err("divq: outputs must be `=a` and `=d`"));
+                        return Err(self
+                            .compile_err(Code::ASM_SYNTAX, "divq: outputs must be `=a` and `=d`"));
                     }
                 }
             } else {
@@ -2427,7 +2476,9 @@ impl Compiler {
             }
             if self.lex.tk != ')' {
                 self.truncate_data(data_base);
-                return Err(self.compile_err("divq: `)` expected after asm operand"));
+                return Err(
+                    self.compile_err(Code::ASM_SYNTAX, "divq: `)` expected after asm operand")
+                );
             }
             self.next()?; // consume the operand's `)`
         }
@@ -2438,9 +2489,10 @@ impl Compiler {
         let (q, rem, n0, n1, d) = match (q_addr, rem_addr, n0, n1, divisor) {
             (Some(q), Some(rem), Some(n0), Some(n1), Some(d)) => (q, rem, n0, n1, d),
             _ => {
-                return Err(
-                    self.compile_err("divq requires `=a`,`=d` outputs and `0`,`1`,`rm` inputs")
-                );
+                return Err(self.compile_err(
+                    Code::ASM_SYNTAX,
+                    "divq requires `=a`,`=d` outputs and `0`,`1`,`rm` inputs",
+                ));
             }
         };
         self.mark_emit_other();
@@ -2500,7 +2552,10 @@ impl Compiler {
                 self.next()?; // `[`
                 if self.lex.tk != Token::Id {
                     self.truncate_data(data_base);
-                    return Err(self.compile_err("128-bit atomic asm: operand name expected"));
+                    return Err(self.compile_err(
+                        Code::ASM_SYNTAX,
+                        "128-bit atomic asm: operand name expected",
+                    ));
                 }
                 role = match self.symbols[self.lex.curr_id_idx].name.as_str() {
                     "mem" => Role::Mem,
@@ -2512,7 +2567,9 @@ impl Compiler {
             }
             if self.lex.tk != '"' {
                 self.truncate_data(data_base);
-                return Err(self.compile_err("unsupported 128-bit atomic asm operand"));
+                return Err(
+                    self.compile_err(Code::UNSUPPORTED, "unsupported 128-bit atomic asm operand")
+                );
             }
             let cstart = self.lex.ival as usize;
             self.next()?; // consume the constraint string
@@ -2538,7 +2595,10 @@ impl Compiler {
             }
             if self.lex.tk != '(' {
                 self.truncate_data(data_base);
-                return Err(self.compile_err("128-bit atomic asm: `(` expected after constraint"));
+                return Err(self.compile_err(
+                    Code::ASM_SYNTAX,
+                    "128-bit atomic asm: `(` expected after constraint",
+                ));
             }
             self.next()?; // `(`
             self.expr(Token::Assign as i64)?;
@@ -2560,9 +2620,10 @@ impl Compiler {
                         Some(id) => out_addrs.push(id),
                         None => {
                             self.truncate_data(data_base);
-                            return Err(
-                                self.compile_err("128-bit atomic asm: empty output operand")
-                            );
+                            return Err(self.compile_err(
+                                Code::ASM_SYNTAX,
+                                "128-bit atomic asm: empty output operand",
+                            ));
                         }
                     }
                 }
@@ -2571,13 +2632,19 @@ impl Compiler {
                     Some(id) => in_vals.push(id),
                     None => {
                         self.truncate_data(data_base);
-                        return Err(self.compile_err("128-bit atomic asm: empty input operand"));
+                        return Err(self.compile_err(
+                            Code::ASM_SYNTAX,
+                            "128-bit atomic asm: empty input operand",
+                        ));
                     }
                 },
             }
             if self.lex.tk != ')' {
                 self.truncate_data(data_base);
-                return Err(self.compile_err("128-bit atomic asm: `)` expected after operand"));
+                return Err(self.compile_err(
+                    Code::ASM_SYNTAX,
+                    "128-bit atomic asm: `)` expected after operand",
+                ));
             }
             self.next()?; // operand `)`
         }
@@ -2597,10 +2664,17 @@ impl Compiler {
         };
         let ptr = match ptr {
             Some(p) => p,
-            None => return Err(self.compile_err("128-bit atomic asm: missing mem operand")),
+            None => {
+                return Err(
+                    self.compile_err(Code::ASM_SYNTAX, "128-bit atomic asm: missing mem operand")
+                );
+            }
         };
         if out_addrs.len() != want_out || in_vals.len() != want_in {
-            return Err(self.compile_err("128-bit atomic asm: unexpected operand count"));
+            return Err(self.compile_err(
+                Code::ASM_SYNTAX,
+                "128-bit atomic asm: unexpected operand count",
+            ));
         }
         let mut args = alloc::vec::Vec::with_capacity(1 + want_out + want_in);
         args.push(ptr);
@@ -2640,11 +2714,13 @@ impl Compiler {
             if self.lex.tk == ':' as i64 || self.lex.tk == ',' as i64 || self.lex.tk == '"' as i64 {
                 self.next()?;
             } else {
-                return Err(self.compile_err("unsupported aarch64 asm operand"));
+                return Err(self.compile_err(Code::UNSUPPORTED, "unsupported aarch64 asm operand"));
             }
         }
         if self.lex.tk != '(' as i64 {
-            return Err(self.compile_err("aarch64 asm expects one register operand"));
+            return Err(
+                self.compile_err(Code::ASM_SYNTAX, "aarch64 asm expects one register operand")
+            );
         }
         self.next()?; // consume '('
         self.expr(Token::Assign as i64)?;
@@ -2662,7 +2738,7 @@ impl Compiler {
         self.next()?; // consume ')'
         self.consume(b';', "`;` expected after `asm(...)`")?;
         let Some(arg) = arg_id else {
-            return Err(self.compile_err("aarch64 asm operand missing"));
+            return Err(self.compile_err(Code::ASM_SYNTAX, "aarch64 asm operand missing"));
         };
         self.mark_emit_other();
         self.ty = Ty::Int as i64;
@@ -2691,7 +2767,9 @@ impl Compiler {
         // A barrier carries no in/out operand; a `(` would introduce one.
         while self.lex.tk != ')' {
             if self.lex.tk == '(' {
-                return Err(self.compile_err("aarch64 barrier asm takes no operands"));
+                return Err(
+                    self.compile_err(Code::ASM_SYNTAX, "aarch64 barrier asm takes no operands")
+                );
             }
             self.next()?;
         }
@@ -2743,7 +2821,9 @@ impl Compiler {
         while self.lex.tk == Token::Attribute {
             self.next()?; // the attribute keyword
             if self.lex.tk != '(' {
-                return Err(self.compile_err("`(` expected after attribute specifier"));
+                return Err(
+                    self.compile_err(Code::SYNTAX, "`(` expected after attribute specifier")
+                );
             }
             self.next()?; // the opening `(`
             self.skip_balanced_parens_after_open()?;
@@ -2756,10 +2836,13 @@ impl Compiler {
             // same name would intern one SSA block and re-terminate it
             // in the walker.
             if self.label_is_defined(&name) {
-                return Err(self.compile_err(format!(
-                    "redefinition of label `{}`",
-                    super::emit::label_display_name(&name)
-                )));
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    format!(
+                        "redefinition of label `{}`",
+                        super::emit::label_display_name(&name)
+                    ),
+                ));
             }
             let label = self.define_label(&name);
             self.next()?; // consume Id
@@ -2772,7 +2855,9 @@ impl Compiler {
             while self.lex.tk == Token::Attribute {
                 self.next()?; // the attribute keyword
                 if self.lex.tk != '(' {
-                    return Err(self.compile_err("`(` expected after attribute specifier"));
+                    return Err(
+                        self.compile_err(Code::SYNTAX, "`(` expected after attribute specifier")
+                    );
                 }
                 self.next()?; // the opening `(`
                 self.skip_balanced_parens_after_open()?;
@@ -2846,7 +2931,7 @@ impl Compiler {
             if self.lex.tk == Token::While {
                 self.next()?;
             } else {
-                return Err(self.compile_err("while expected after do"));
+                return Err(self.compile_err(Code::SYNTAX, "while expected after do"));
             }
 
             self.close_loop_continues();
@@ -2887,9 +2972,10 @@ impl Compiler {
             };
             self.consume(b':', "expected colon after case")?;
             if hi < lo {
-                return Err(self.compile_err(format!(
-                    "case range `{lo} ... {hi}` is empty (low bound exceeds high)"
-                )));
+                return Err(self.compile_err(
+                    Code::INVALID_STATEMENT,
+                    format!("case range `{lo} ... {hi}` is empty (low bound exceeds high)"),
+                ));
             }
             // C99 6.8.4.2p3: the case constant expressions in one switch
             // must be distinct (constraint). A single label is tracked for
@@ -2901,14 +2987,17 @@ impl Compiler {
                 Some(cases) => {
                     if lo == hi {
                         if cases.contains(&lo) {
-                            return Err(
-                                self.compile_err(format!("duplicate case value {lo} in switch"))
-                            );
+                            return Err(self.compile_err(
+                                Code::INVALID_STATEMENT,
+                                format!("duplicate case value {lo} in switch"),
+                            ));
                         }
                         cases.push(lo);
                     }
                 }
-                None => return Err(self.compile_err("case outside switch")),
+                None => {
+                    return Err(self.compile_err(Code::INVALID_STATEMENT, "case outside switch"));
+                }
             }
             let body_before = self.ast_stmts_snapshot();
             // C23 6.8.1: a label may precede a declaration. badc parses
@@ -2942,10 +3031,15 @@ impl Compiler {
                     *def = true;
                     seen
                 }
-                None => return Err(self.compile_err("default outside switch")),
+                None => {
+                    return Err(self.compile_err(Code::INVALID_STATEMENT, "default outside switch"));
+                }
             };
             if dup_default {
-                return Err(self.compile_err("multiple default labels in one switch"));
+                return Err(self.compile_err(
+                    Code::INVALID_STATEMENT,
+                    "multiple default labels in one switch",
+                ));
             }
             let body_before = self.ast_stmts_snapshot();
             // C23 6.8.1: a declaration may follow the `default` label;
@@ -2977,7 +3071,7 @@ impl Compiler {
                 }
             } else {
                 if self.lex.tk != Token::Id {
-                    return Err(self.compile_err("expected identifier after goto"));
+                    return Err(self.compile_err(Code::SYNTAX, "expected identifier after goto"));
                 }
                 let target_name = self.resolve_label_name(self.lex.curr_id_idx);
                 self.next()?;
@@ -2995,7 +3089,9 @@ impl Compiler {
         } else if self.lex.tk == Token::Break {
             self.next()?;
             if self.loop_break_depth == 0 {
-                return Err(self.compile_err("break outside of loop or switch"));
+                return Err(
+                    self.compile_err(Code::INVALID_STATEMENT, "break outside of loop or switch")
+                );
             }
             self.flush_pending_stores();
             self.consume(b';', "semicolon expected after break")?;
@@ -3009,7 +3105,7 @@ impl Compiler {
         } else if self.lex.tk == Token::Continue {
             self.next()?;
             if self.loop_continue_depth == 0 {
-                return Err(self.compile_err("continue outside of loop"));
+                return Err(self.compile_err(Code::INVALID_STATEMENT, "continue outside of loop"));
             }
             self.flush_pending_stores();
             self.consume(b';', "semicolon expected after continue")?;
@@ -3038,6 +3134,7 @@ impl Compiler {
                     if !is_void_ty(self.ty) {
                         let got = super::types::format_type(self.ty, &self.structs);
                         return Err(self.compile_err_at(
+                            Code::INVALID_STATEMENT,
                             line,
                             format!(
                                 "`return` with a value of type `{got}` in a function \
@@ -3070,6 +3167,7 @@ impl Compiler {
                         && (!is_struct_ty(self.ty) || struct_ptr_depth(self.ty) != 0)
                     {
                         return Err(self.compile_err(
+                            Code::INVALID_OPERANDS,
                             "returning a non-struct value from a \
                              struct-returning function",
                         ));
@@ -3086,7 +3184,7 @@ impl Compiler {
                         let text =
                             format!("{} in return (declared={want}, returned={got})", m.reason);
                         if m.no_conversion {
-                            return Err(self.compile_err_at(line, text));
+                            return Err(self.compile_err_at(Code::INCOMPATIBLE_TYPES, line, text));
                         }
                         self.warn_at(m.code, line, text);
                     }
@@ -3120,7 +3218,7 @@ impl Compiler {
                         let text =
                             format!("{} in return (declared={want}, returned={got})", m.reason);
                         if m.no_conversion {
-                            return Err(self.compile_err_at(line, text));
+                            return Err(self.compile_err_at(Code::INCOMPATIBLE_TYPES, line, text));
                         }
                         self.warn_at(m.code, line, text);
                     }
@@ -3143,9 +3241,10 @@ impl Compiler {
                 // C99 leaves the returned value indeterminate (6.9.1p12
                 // -- undefined behaviour if the caller uses it); C23
                 // 6.8.6.4 and every current toolchain reject it. Error.
-                return Err(
-                    self.compile_err("`return` with no value in a function returning non-void")
-                );
+                return Err(self.compile_err(
+                    Code::INVALID_STATEMENT,
+                    "`return` with no value in a function returning non-void",
+                ));
             }
             self.emit_dead_stores_and_flush();
             // Run every enclosing scope's `__attribute__((cleanup))`
@@ -3211,10 +3310,13 @@ impl Compiler {
         if self.lex.tk == ',' {
             self.next()?;
         } else if self.lex.tk != ';' && self.lex.tk != '}' && self.lex.tk != 0 {
-            return Err(self.compile_err(alloc::format!(
-                "expected `,` or `;` after declarator (got {})",
-                super::super::token::describe(self.lex.tk)
-            )));
+            return Err(self.compile_err(
+                Code::SYNTAX,
+                alloc::format!(
+                    "expected `,` or `;` after declarator (got {})",
+                    super::super::token::describe(self.lex.tk)
+                ),
+            ));
         }
         Ok(())
     }
@@ -3243,10 +3345,13 @@ impl Compiler {
             } else {
                 alloc::string::String::new()
             };
-            Err(self.compile_err(format!(
-                "{msg} (got {}{id_suffix})",
-                super::super::token::describe(self.lex.tk),
-            )))
+            Err(self.compile_err(
+                Code::SYNTAX,
+                format!(
+                    "{msg} (got {}{id_suffix})",
+                    super::super::token::describe(self.lex.tk),
+                ),
+            ))
         }
     }
 }

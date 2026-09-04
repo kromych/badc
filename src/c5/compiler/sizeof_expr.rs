@@ -4,6 +4,7 @@
 //! `__builtin_choose_expr`, `__builtin_has_attribute`,
 //! `__builtin_constant_p`.
 
+use super::super::diag::Code;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::expr::TypeName;
@@ -34,9 +35,10 @@ impl Compiler {
     /// check only where no pointer decoration was parsed.
     fn require_complete_operand(&self, ty: i64, op: &str) -> Result<(), C5Error> {
         match self.incomplete_aggregate_tag(ty) {
-            Some(_) => {
-                Err(self.compile_err(alloc::format!("`{op}` applied to an incomplete type")))
-            }
+            Some(_) => Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                alloc::format!("`{op}` applied to an incomplete type"),
+            )),
             None => Ok(()),
         }
     }
@@ -81,7 +83,10 @@ impl Compiler {
             // is a complete type.
             self.require_complete_operand(var_ty, "sizeof")?;
             if arr < 0 && !self.symbols[idx].is_zero_len_array {
-                return Err(self.compile_err("`sizeof` applied to an incomplete type"));
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    "`sizeof` applied to an incomplete type",
+                ));
             }
             // C99 6.5.3.4p2: `sizeof` of a VLA is loaded from its size slot;
             // the constant returned is unused then.
@@ -147,7 +152,7 @@ impl Compiler {
             if self.lex.tk == ')' {
                 self.next()?;
             } else {
-                return Err(self.compile_err("close paren expected in sizeof"));
+                return Err(self.compile_err(Code::SYNTAX, "close paren expected in sizeof"));
             }
         }
         self.ty = saved_ty;
@@ -190,15 +195,21 @@ impl Compiler {
         self.pending.last_array_decay_bytes = 0;
         self.ty = saved_ty;
         if self.lex.tk != ',' {
-            return Err(self.compile_err("`,` expected in `__builtin_object_size`"));
+            return Err(self.compile_err(Code::SYNTAX, "`,` expected in `__builtin_object_size`"));
         }
         self.next()?;
         let kind = self.parse_constant_int()?;
         if !(0..=3).contains(&kind) {
-            return Err(self.compile_err("`__builtin_object_size` type must be 0..=3"));
+            return Err(self.compile_err(
+                Code::INVALID_ARGUMENTS,
+                "`__builtin_object_size` type must be 0..=3",
+            ));
         }
         if self.lex.tk != ')' {
-            return Err(self.compile_err("`)` expected to close `__builtin_object_size`"));
+            return Err(self.compile_err(
+                Code::SYNTAX,
+                "`)` expected to close `__builtin_object_size`",
+            ));
         }
         self.next()?;
         // `-1` marks an array with no declared bound: a flexible array
@@ -303,7 +314,7 @@ impl Compiler {
         // The call dispatch consumed `__builtin_choose_expr (`.
         let cond = self.parse_constant_int()?;
         if self.lex.tk != ',' {
-            return Err(self.compile_err("`,` expected in `__builtin_choose_expr`"));
+            return Err(self.compile_err(Code::SYNTAX, "`,` expected in `__builtin_choose_expr`"));
         }
         self.next()?;
         let parse_arm = |me: &mut Self, live: bool| -> Result<(), C5Error> {
@@ -328,12 +339,15 @@ impl Compiler {
         };
         parse_arm(self, cond != 0)?;
         if self.lex.tk != ',' {
-            return Err(self.compile_err("`,` expected in `__builtin_choose_expr`"));
+            return Err(self.compile_err(Code::SYNTAX, "`,` expected in `__builtin_choose_expr`"));
         }
         self.next()?;
         parse_arm(self, cond == 0)?;
         if self.lex.tk != ')' {
-            return Err(self.compile_err("`)` expected to close `__builtin_choose_expr`"));
+            return Err(self.compile_err(
+                Code::SYNTAX,
+                "`)` expected to close `__builtin_choose_expr`",
+            ));
         }
         self.next()?;
         Ok(())
@@ -347,7 +361,7 @@ impl Compiler {
         // The call dispatch consumed `__builtin_has_attribute (`.
         self.skip_balanced_to_comma()?;
         if self.lex.tk != ',' {
-            return Err(self.compile_err("`,` expected in `__builtin_has_attribute`"));
+            return Err(self.compile_err(Code::SYNTAX, "`,` expected in `__builtin_has_attribute`"));
         }
         self.next()?;
         self.skip_balanced_to_close_paren()?;
@@ -375,7 +389,9 @@ impl Compiler {
         self.restore_lex(snap);
         self.expr(Token::Assign as i64)?;
         if self.lex.tk != ')' {
-            return Err(self.compile_err("`)` expected to close `__builtin_constant_p`"));
+            return Err(
+                self.compile_err(Code::SYNTAX, "`)` expected to close `__builtin_constant_p`")
+            );
         }
         self.next()?;
         let operand = self.ast_acc.take();
@@ -505,7 +521,7 @@ impl Compiler {
             self.code_reloc_sym_idx.truncate(saved_reloc);
             self.ty = saved_ty;
             if self.lex.tk != ')' {
-                return Err(self.compile_err("`)` expected to close `_Alignof`"));
+                return Err(self.compile_err(Code::SYNTAX, "`)` expected to close `_Alignof`"));
             }
             self.next()?;
             self.require_complete_operand(expr_ty, "_Alignof")?;
@@ -513,7 +529,7 @@ impl Compiler {
         }
         let type_name = self.parse_type_name()?;
         if self.lex.tk != ')' {
-            return Err(self.compile_err("`)` expected to close `_Alignof`"));
+            return Err(self.compile_err(Code::SYNTAX, "`)` expected to close `_Alignof`"));
         }
         self.next()?;
         // A typedef base may carry an explicit type alignment (GNU
@@ -538,7 +554,10 @@ impl Compiler {
         if type_name.ptr_levels == 0 {
             self.require_complete_operand(type_name.ty, "sizeof")?;
             if type_name.dims.iter().any(|&d| d < 0) {
-                return Err(self.compile_err("`sizeof` applied to an incomplete type"));
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    "`sizeof` applied to an incomplete type",
+                ));
             }
         }
         let elem_size = self.size_of_type(type_name.ty) as i64;

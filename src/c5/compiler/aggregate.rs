@@ -124,15 +124,19 @@ impl Compiler {
         let m_align = core::mem::take(&mut self.pending.attr_align);
         self.pending.attr_alignas = 0;
         if m_align > 0 && !(m_align as usize).is_power_of_two() {
-            return Err(
-                self.compile_err(format!("member alignment {m_align} is not a power of two"))
-            );
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                format!("member alignment {m_align} is not a power of two"),
+            ));
         }
         if m_align > super::MAX_STATIC_ALIGN as i64 {
-            return Err(self.compile_err(format!(
-                "member alignment {m_align} is not supported (at most {})",
-                super::MAX_STATIC_ALIGN
-            )));
+            return Err(self.compile_err(
+                Code::LIMIT,
+                format!(
+                    "member alignment {m_align} is not supported (at most {})",
+                    super::MAX_STATIC_ALIGN
+                ),
+            ));
         }
         Ok(m_align)
     }
@@ -184,7 +188,7 @@ impl Compiler {
             self.parse_member_declarators(struct_id, &base, is_union, packed, &mut layout)?;
 
             if self.lex.tk != ';' {
-                return Err(self.compile_err("semicolon expected after struct field"));
+                return Err(self.compile_err(Code::SYNTAX, "semicolon expected after struct field"));
             }
             self.next()?;
         }
@@ -240,9 +244,10 @@ impl Compiler {
                 self.next()?;
                 let n = self.parse_constant_int()?;
                 if n < 0 {
-                    return Err(
-                        self.compile_err(format!("bitfield width must be non-negative (got {n})"))
-                    );
+                    return Err(self.compile_err(
+                        Code::INVALID_DECLARATION,
+                        format!("bitfield width must be non-negative (got {n})"),
+                    ));
                 }
                 Some(n as u32)
             } else {
@@ -367,7 +372,10 @@ impl Compiler {
             // for that, since a complete empty `struct {}` and a struct
             // whose only member is a flexible array both have size 0.
             if is_aggregate_value && !self.structs[struct_id_of(field_ty)].is_complete {
-                return Err(self.compile_err("aggregate-value field of incomplete type"));
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    "aggregate-value field of incomplete type",
+                ));
             }
             let field_name = self.symbols[id_idx].name.clone();
 
@@ -530,26 +538,36 @@ impl Compiler {
         // the field so `__alignof__` on a member lvalue reports it.
         if self.lex.tk == ':' {
             if field_array_size != 0 {
-                return Err(self.compile_err("array fields cannot also be bitfields"));
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    "array fields cannot also be bitfields",
+                ));
             }
             // The 128-bit integer shares the aggregate machinery
             // but is a scalar type, so it takes a bitfield like
             // any other integer type.
             if is_aggregate_value && !self.is_int128_ty(field_ty) {
-                return Err(self.compile_err("aggregate fields cannot also be bitfields"));
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    "aggregate fields cannot also be bitfields",
+                ));
             }
             self.next()?;
             let n = self.parse_constant_int()?;
             if n <= 0 {
-                return Err(self.compile_err(format!("bitfield width must be positive (got {n})")));
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    format!("bitfield width must be positive (got {n})"),
+                ));
             }
             // C99 6.7.2.1p3: the width shall not exceed the width
             // of an object of the declared type.
             let type_bits = (self.size_of_type(field_ty).max(1) * 8) as i64;
             if n > type_bits {
-                return Err(self.compile_err(format!(
-                    "bitfield width {n} exceeds the {type_bits}-bit declared type"
-                )));
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    format!("bitfield width {n} exceeds the {type_bits}-bit declared type"),
+                ));
             }
             bit_width = n as u32;
             // C99 6.7.2.1: an enum bitfield reads as unsigned (a
@@ -703,11 +721,14 @@ impl Compiler {
                 id
             }
             Some(_) => {
-                return Err(self.compile_err(format!(
-                    "{} `{}` already defined",
-                    if is_union { "union" } else { "struct" },
-                    name
-                )));
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    format!(
+                        "{} `{}` already defined",
+                        if is_union { "union" } else { "struct" },
+                        name
+                    ),
+                ));
             }
             None => {
                 self.structs.push(StructDef {
@@ -856,7 +877,7 @@ impl Compiler {
         } else if mods.saw_int_mod {
             mods.int_base()
         } else {
-            return Err(self.compile_err("type expected in struct field"));
+            return Err(self.compile_err(Code::SYNTAX, "type expected in struct field"));
         };
 
         // Trailing specifiers: C99 6.7.2p2 admits any order, so
@@ -921,7 +942,10 @@ impl Compiler {
             inner_anonymous = true;
             format!("__{kind}_{}_in_{}", self.structs.len(), name)
         } else {
-            return Err(self.compile_err("aggregate name or `{{` expected in field type"));
+            return Err(self.compile_err(
+                Code::SYNTAX,
+                "aggregate name or `{{` expected in field type",
+            ));
         };
         let inner_id = if self.lex.tk == '{' {
             let id = self.parse_aggregate_body(&inner_name, nested_is_union, nested_packed)?;
@@ -1013,7 +1037,10 @@ impl Compiler {
         layout: &mut AggregateLayout,
     ) -> Result<(), C5Error> {
         if !self.structs[inner_id].is_complete {
-            return Err(self.compile_err("unnamed field has incomplete type"));
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "unnamed field has incomplete type",
+            ));
         }
         // Seal any pending bitfield run -- the
         // anonymous aggregate is a regular field

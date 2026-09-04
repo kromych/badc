@@ -3211,9 +3211,14 @@ fn a_trailing_int_modifier_folds_into_the_base_type() {
         run_main("int main(void) { int unsigned x = 4294967295u; return x > 0; }"),
         1
     );
+    // `long` is 4 bytes on LLP64 and 8 on LP64, so compare the folded
+    // declaration with `long` itself rather than with a width.
     assert_eq!(
-        run_main("int long x = 4;\nint main(void) { return (int)sizeof x; }"),
-        8
+        run_main(
+            "int long x = 4;\n\
+             int main(void) { return (int)(sizeof x == sizeof(long)); }"
+        ),
+        1
     );
     assert_eq!(
         run_main("char unsigned c = 200;\nint main(void) { return c > 100; }"),

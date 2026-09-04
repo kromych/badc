@@ -71,8 +71,10 @@ fn unknown_selectors_resolve_to_nothing() {
     assert_eq!(Code::from_selector("B9999"), None);
     assert_eq!(Code::from_selector("B71"), None);
     assert_eq!(Code::from_selector("7001"), None);
-    // An MSVC number no row claims stays unknown, as it does today.
-    assert_eq!(Code::from_msvc_number(4101), None);
+    // An MSVC number no row claims stays unknown.
+    assert_eq!(Code::from_msvc_number(4267), None);
+    // One a row lists resolves to it.
+    assert_eq!(Code::from_msvc_number(4101), Code::from_selector("B2001"));
 }
 
 #[test]

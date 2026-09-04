@@ -1704,7 +1704,7 @@ fn pragma_warning_disable_silences_the_ids_it_names() {
     // The IDs badc has no row for are ignored, as MSVC-only numbers.
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
     let _ = pp
-        .process("#pragma warning(disable : 4054 4055 4100)\n")
+        .process("#pragma warning(disable : 4054 4055 4090)\n")
         .expect("preprocessor failed");
     assert!(
         pp.sink.diagnostics().is_empty(),

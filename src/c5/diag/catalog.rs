@@ -69,19 +69,19 @@ catalog! {
     1006, "pragma-pop-without-push", ["C4193"], Warning, Controllable,
         [DEFAULT], Live,
         "a diagnostic-pragma pop with no matching push";
-    2001, "unused-variable", [], Ignore, Controllable,
+    2001, "unused-variable", ["C4101"], Ignore, Controllable,
         [ALL], Live,
         "a variable declared and never used";
-    2002, "unused-parameter", [], Ignore, Controllable,
+    2002, "unused-parameter", ["C4100"], Ignore, Controllable,
         [EXTRA], Live,
         "a parameter never used in the function body";
-    2003, "unused-but-set-variable", [], Ignore, Controllable,
+    2003, "unused-but-set-variable", ["C4189"], Ignore, Controllable,
         [ALL], Live,
         "a variable that is only ever assigned to";
-    2004, "unused-function", [], Ignore, Controllable,
+    2004, "unused-function", ["C4505"], Ignore, Controllable,
         [ALL], Live,
         "a function with internal linkage that is defined and never referenced";
-    2005, "implicit-function-declaration", [], Warning, Controllable,
+    2005, "implicit-function-declaration", ["C4013"], Warning, Controllable,
         [DEFAULT], Live,
         "a function used before a prototype declares it, so its return type is `int`";
     2006, "undefined-function", [], Warning, Controllable,
@@ -105,7 +105,7 @@ catalog! {
     3002, "incompatible-struct-types", [], Warning, Controllable,
         [DEFAULT], Live,
         "an aggregate used where a different aggregate type is expected";
-    3003, "return-type", [], Ignore, Controllable,
+    3003, "return-type", ["C4715"], Ignore, Controllable,
         [ALL], Live,
         "control reaches the end of a value-returning function";
     3004, "too-few-arguments", [], Warning, Controllable,

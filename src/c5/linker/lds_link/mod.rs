@@ -1045,18 +1045,6 @@ impl<'a> LdsLinker<'a> {
                     .join("\n"),
             ));
         }
-        // A diagnostic the command line raised to an error does not
-        // unwind at its site; it fails the link here, carrying every
-        // diagnostic the link produced.
-        if self.sink.has_errors() {
-            return Err(C5Error::Compile(
-                res.warnings
-                    .iter()
-                    .map(|d| d.to_string())
-                    .collect::<Vec<_>>()
-                    .join("\n"),
-            ));
-        }
         Ok(res)
     }
 

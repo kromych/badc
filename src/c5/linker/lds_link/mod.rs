@@ -292,6 +292,8 @@ pub struct LdsOptions {
     /// `--emit-relocs`: carry every applied input relocation into the
     /// output as `.rela.<outsec>` entries against the output symtab.
     pub emit_relocs: bool,
+    /// Cleared to report no warning at all, as `-w` does. A row a
+    /// selector raised to an error keeps its level.
     pub emit_warnings: bool,
     /// The levels the command line asked for. A link diagnostic has no
     /// source position, so the pragmas never apply to one.
@@ -885,7 +887,9 @@ impl<'a> LdsLinker<'a> {
         });
 
         let class = class_for_machine(machine);
-        let sink = Sink::new(opts.diag.clone(), Control::default());
+        let mut config = opts.diag.clone();
+        config.inhibit_warnings(!opts.emit_warnings);
+        let sink = Sink::new(config, Control::default());
         let mut linker = LdsLinker {
             script,
             objects,

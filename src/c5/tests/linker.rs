@@ -16005,3 +16005,30 @@ fn no_option_moves_a_hard_link_error() {
         );
     }
 }
+
+/// `emit_warnings` reaches the sink: cleared, the link reports nothing
+/// and writes the same image. The field had no reader, so `--quiet`
+/// left the script linker's warnings on stderr.
+#[test]
+fn a_link_with_warnings_off_reports_none() {
+    use crate::c5::Target;
+    use crate::c5::linker::lds::parse_linker_script;
+    use crate::c5::linker::lds_link::{LdsOptions, link_with_script, parse_lds_object};
+    let script =
+        parse_linker_script("ENTRY(nosuch) SECTIONS { . = 0x400000; .text : { *(.text*) } }")
+            .expect("parses");
+    let obj = asm_reloc_tu(".text\n.globl f\nf:\n\tret\n", Target::LinuxX64);
+    let build = |emit_warnings: bool| {
+        let opts = LdsOptions {
+            emit_warnings,
+            ..Default::default()
+        };
+        let objs = alloc::vec![parse_lds_object("a.o", obj.clone()).expect("parses")];
+        link_with_script(&script, objs, &opts).expect("links")
+    };
+    let loud = build(true);
+    assert_eq!(loud.warnings.len(), 1, "{:?}", loud.warnings);
+    let quiet = build(false);
+    assert!(quiet.warnings.is_empty(), "{:?}", quiet.warnings);
+    assert_eq!(quiet.image, loud.image, "silencing changed the image");
+}

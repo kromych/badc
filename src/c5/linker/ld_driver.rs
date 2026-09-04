@@ -1088,6 +1088,7 @@ fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
         apply_dynamic_relocs: a.apply_dynamic_relocs,
         emit_relocs: a.emit_relocs,
         emit_warnings: true,
+        diag: crate::c5::diag::Config::new(),
         soname: a.soname.clone(),
         output_name: a
             .output
@@ -1110,10 +1111,7 @@ fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
         Err(e) => return ld_err(format!("{e}")),
     };
     for w in &res.warnings {
-        eprintln!(
-            "badc-ld: warning: {}",
-            w.strip_prefix("warning: ").unwrap_or(w)
-        );
+        eprintln!("badc-ld: {w}");
     }
     if a.fatal_warnings && !res.warnings.is_empty() {
         return ld_err(format!(

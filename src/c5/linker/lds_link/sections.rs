@@ -2,6 +2,7 @@
 //! the assignment of input sections to output sections: claims, garbage
 //! collection and orphan placement.
 
+use crate::c5::diag::Code;
 use crate::c5::error::C5Error;
 use crate::c5::linker::comdat::{self};
 use crate::c5::linker::lds::{
@@ -568,12 +569,13 @@ impl<'a> LdsLinker<'a> {
         for &i in &orphan_list {
             if self.opts.orphan_handling == OrphanHandling::Warn {
                 let id = self.insecs[i];
-                self.warnings.push(format!(
-                    "warning: orphan section `{}' from `{}' being placed in section `{}'",
+                let text = format!(
+                    "orphan section `{}' from `{}' being placed in section `{}'",
                     self.insec(i).name,
                     self.objects[id.obj].source,
                     self.insec(i).name
-                ));
+                );
+                self.sink.emit(Code::ORPHAN_SECTION, None, text);
             }
             self.place_orphan(i);
         }

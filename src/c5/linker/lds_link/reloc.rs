@@ -1,5 +1,6 @@
 //! Relocation application on the final pass; the x86 arms.
 
+use crate::c5::diag::Code;
 use crate::c5::error::C5Error;
 use crate::c5::linker::object::elf_reloc_desc;
 use crate::c5::object::elf_reloc_types as rt;
@@ -58,9 +59,11 @@ impl<'a> LdsLinker<'a> {
                 let p = sec_addr + off;
                 if let Some(bad) = self.merge_offset_out_of_range(id.obj, r) {
                     let source = self.objects[id.obj].source.clone();
-                    self.warnings.push(format!(
-                        "warning: {source}: access beyond end of merged section ({bad})"
-                    ));
+                    self.sink.emit(
+                        Code::MERGED_SECTION_ACCESS,
+                        None,
+                        format!("{source}: access beyond end of merged section ({bad})"),
+                    );
                 }
                 let target = self.resolve_reloc_target(id.obj, r, tolerant, &mut errors);
                 let Some(s_plus_a) = target else { continue };

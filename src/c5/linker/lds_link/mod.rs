@@ -55,6 +55,7 @@ use super::dynamic::{DynTables, HashStyle, VerDef};
 use super::gnu_property;
 use super::lds::{Assignment, DataWidth, Expr, LinkerScript, OutputSectionType};
 use super::object::{ElfClass, SharedLibrary};
+use crate::c5::diag::{Code, Config, Control, Diagnostic, Sink};
 use crate::c5::error::C5Error;
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::format;
@@ -292,6 +293,9 @@ pub struct LdsOptions {
     /// output as `.rela.<outsec>` entries against the output symtab.
     pub emit_relocs: bool,
     pub emit_warnings: bool,
+    /// The levels the command line asked for. A link diagnostic has no
+    /// source position, so the pragmas never apply to one.
+    pub diag: Config,
     /// `-soname`: recorded as `DT_SONAME`.
     pub soname: Option<String>,
     /// Output file base name. Names the base version definition where
@@ -342,6 +346,7 @@ impl Default for LdsOptions {
             apply_dynamic_relocs: true,
             emit_relocs: false,
             emit_warnings: true,
+            diag: Config::new(),
             soname: None,
             output_name: String::new(),
             hash_style: HashStyle::default(),
@@ -640,7 +645,7 @@ pub struct LdsLinker<'a> {
     lma_delta: u64,
     final_pass: bool,
     errors: Vec<String>,
-    warnings: Vec<String>,
+    sink: Sink,
     undefined: BTreeSet<String>,
     referenced: HashSet<String>,
 
@@ -756,7 +761,7 @@ const OUT_EH_FRAME: &str = ".eh_frame";
 pub struct LdsResult {
     pub image: Vec<u8>,
     pub map: String,
-    pub warnings: Vec<String>,
+    pub warnings: Vec<Diagnostic>,
 }
 
 pub fn link_with_script(
@@ -878,6 +883,7 @@ impl<'a> LdsLinker<'a> {
         });
 
         let class = class_for_machine(machine);
+        let sink = Sink::new(opts.diag.clone(), Control::default());
         let mut linker = LdsLinker {
             script,
             objects,
@@ -916,7 +922,7 @@ impl<'a> LdsLinker<'a> {
             lma_delta: 0,
             final_pass: false,
             errors: Vec::new(),
-            warnings: Vec::new(),
+            sink,
             undefined: BTreeSet::new(),
             referenced: HashSet::new(),
             synth_obj,
@@ -1012,6 +1018,18 @@ impl<'a> LdsLinker<'a> {
         // section sized for it.
         if !self.errors.is_empty() {
             return Err(link_err(MODULE, &self.errors.join("\n")));
+        }
+        // A diagnostic the command line raised to an error does not
+        // unwind at its site; it fails the link here, carrying every
+        // diagnostic the link produced.
+        if self.sink.has_errors() {
+            return Err(C5Error::Compile(
+                res.warnings
+                    .iter()
+                    .map(|d| d.to_string())
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            ));
         }
         Ok(res)
     }
@@ -1122,9 +1140,13 @@ impl<'a> LdsLinker<'a> {
             Some(name) => match self.final_sym_value(name) {
                 Some(v) => v,
                 None => {
-                    self.warnings.push(format!(
-                        "warning: cannot find entry symbol {name}; defaulting to first text address"
-                    ));
+                    self.sink.emit(
+                        Code::MISSING_ENTRY,
+                        None,
+                        format!(
+                            "cannot find entry symbol {name}; defaulting to first text address"
+                        ),
+                    );
                     self.default_entry(&emit_order)
                 }
             },
@@ -1152,7 +1174,7 @@ impl<'a> LdsLinker<'a> {
         Ok(LdsResult {
             image,
             map,
-            warnings: core::mem::take(&mut self.warnings),
+            warnings: self.sink.take(),
         })
     }
 }

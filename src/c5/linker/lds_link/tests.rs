@@ -1575,7 +1575,7 @@ fn merge_section_symbol_addend_out_of_range_is_reported() {
     assert!(
         res.warnings
             .iter()
-            .any(|w| w.contains("access beyond end of merged section (-4)")),
+            .any(|w| w.text.contains("access beyond end of merged section (-4)")),
         "no diagnostic, got {:?}",
         res.warnings
     );

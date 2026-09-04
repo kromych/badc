@@ -15906,3 +15906,102 @@ fn aarch64_compiled_objects_mark_their_code_and_data() {
         );
     }
 }
+
+/// A recoverable link diagnostic that `-Werror=<sel>` raises: the
+/// linker places the image and then fails on the raised level.
+#[test]
+fn a_selector_raises_a_link_warning_to_an_error() {
+    use crate::c5::Target;
+    use crate::c5::diag::{Code, Config};
+    use crate::c5::linker::lds::parse_linker_script;
+    use crate::c5::linker::lds_link::{LdsOptions, link_with_script, parse_lds_object};
+    let script =
+        parse_linker_script("ENTRY(nosuch) SECTIONS { . = 0x400000; .text : { *(.text*) } }")
+            .expect("parses");
+    let obj = asm_reloc_tu(".text\n.globl f\nf:\n\tret\n", Target::LinuxX64);
+    let mut diag = Config::new();
+    diag.error_for(Code::MISSING_ENTRY, true);
+    let opts = LdsOptions {
+        diag,
+        ..Default::default()
+    };
+    let objs = alloc::vec![parse_lds_object("a.o", obj).expect("parses")];
+    let err = link_with_script(&script, objs, &opts).expect_err("the raised level fails the link");
+    let text = alloc::format!("{err}");
+    assert!(text.contains("cannot find entry symbol nosuch"), "{text}");
+    assert!(text.contains("error: "), "{text}");
+    assert!(text.contains("[B6002] [-Wmissing-entry]"), "{text}");
+}
+
+/// The same selector silencing the same diagnostic: the link succeeds
+/// and reports nothing.
+#[test]
+fn a_selector_silences_a_link_warning() {
+    use crate::c5::Target;
+    use crate::c5::diag::{Code, Config, Level};
+    use crate::c5::linker::lds::parse_linker_script;
+    use crate::c5::linker::lds_link::{LdsOptions, link_with_script, parse_lds_object};
+    let script =
+        parse_linker_script("ENTRY(nosuch) SECTIONS { . = 0x400000; .text : { *(.text*) } }")
+            .expect("parses");
+    let obj = asm_reloc_tu(".text\n.globl f\nf:\n\tret\n", Target::LinuxX64);
+    let build = |diag: Config| {
+        let opts = LdsOptions {
+            diag,
+            ..Default::default()
+        };
+        let objs = alloc::vec![parse_lds_object("a.o", obj.clone()).expect("parses")];
+        link_with_script(&script, objs, &opts).expect("links")
+    };
+    let reported = build(Config::new());
+    assert_eq!(reported.warnings.len(), 1, "{:?}", reported.warnings);
+    assert_eq!(reported.warnings[0].code, Code::MISSING_ENTRY);
+    let mut diag = Config::new();
+    diag.set_level(Code::MISSING_ENTRY, Level::Ignore);
+    let silenced = build(diag);
+    assert!(silenced.warnings.is_empty(), "{:?}", silenced.warnings);
+    assert_eq!(
+        silenced.image, reported.image,
+        "silencing changed the image"
+    );
+}
+
+/// A hard link error is not a level any option resolves: neither
+/// silencing its row nor `-w` moves it.
+#[test]
+fn no_option_moves_a_hard_link_error() {
+    use crate::c5::Target;
+    use crate::c5::diag::{Code, Config, Level};
+    use crate::c5::linker::lds::parse_linker_script;
+    use crate::c5::linker::lds_link::{LdsOptions, link_with_script, parse_lds_object};
+    let script =
+        parse_linker_script("SECTIONS { . = 0x400000; .text : { *(.text*) } }").expect("parses");
+    let src = ".text\n.globl f\nf:\n\tcall absent\n\tret\n";
+    for diag in [
+        Config::new(),
+        {
+            let mut c = Config::new();
+            c.set_level(Code::UNDEFINED_SYMBOL, Level::Ignore);
+            c
+        },
+        {
+            let mut c = Config::new();
+            c.inhibit_warnings(true);
+            c
+        },
+    ] {
+        let opts = LdsOptions {
+            diag,
+            ..Default::default()
+        };
+        let objs = alloc::vec![
+            parse_lds_object("a.o", asm_reloc_tu(src, Target::LinuxX64)).expect("parses"),
+        ];
+        let err =
+            link_with_script(&script, objs, &opts).expect_err("an undefined symbol fails the link");
+        assert!(
+            alloc::format!("{err}").contains("undefined reference to `absent'"),
+            "{err}"
+        );
+    }
+}

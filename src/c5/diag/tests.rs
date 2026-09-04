@@ -453,7 +453,9 @@ fn the_echoed_source_line_follows_the_brackets() {
 fn the_catalogue_matches_its_golden() {
     let mut rendered = String::new();
     list_catalog(&mut rendered).unwrap();
-    let golden = include_str!("../../../tests/diagnostics/catalog.txt");
+    // A Windows checkout may carry the golden with CRLF endings, which says
+    // nothing about the catalogue; compare the lines, not the bytes.
+    let golden = include_str!("../../../tests/diagnostics/catalog.txt").replace("\r\n", "\n");
     assert_eq!(
         rendered, golden,
         "tests/diagnostics/catalog.txt is stale -- regenerate it with \

@@ -22,6 +22,16 @@ B3004  too-few-arguments              warning  controllable  default            
 B3005  too-many-arguments             warning  controllable  default            live     a call passing more arguments than the prototype declares
 B3006  long-double-abi                warning  controllable  default            live     a `long double` argument passed in a format this target's ABI does not use
 B3007  dead-store                     ignore   controllable  -                  live     a value assigned to a local and replaced before any read
+B6001  orphan-section                 warning  controllable  default            live     an input section no script rule names, placed by the linker's own rule
+B6002  missing-entry                  warning  controllable  default            live     no input defines the entry symbol, so the image enters at the first text address
+B6003  merged-section-access          warning  controllable  default            live     a relocation reaches past the end of the merged section it names
+B6010  undefined-symbol               error    hard          -                  live     a reference no input object, archive or shared library defines
+B6011  duplicate-symbol               error    hard          -                  live     more than one input defines the same symbol
+B6012  relocation                     error    hard          -                  live     a relocation the linker cannot apply, or a value its field cannot hold
+B6013  linker-script                  error    hard          -                  live     a linker script badc cannot parse, or a construct it does not implement
+B6014  malformed-input                error    hard          -                  live     an input object, archive or shared library the reader cannot make sense of
+B6015  object-format                  error    hard          -                  live     a construct the selected object format cannot express
+B6016  link                           error    hard          -                  live     a link-time failure with no more specific row
 B7001  unknown-argument               error    hard          -                  live     command-line option or operand the driver does not implement
 B7002  unknown-warning-option         warning  controllable  default            live     a diagnostic pragma names a selector that is not in the catalogue
 B7003  unused-command-line-argument   ignore   controllable  all,extra          live     an accepted option that selects nothing in the mode the command line picked
@@ -31,3 +41,4 @@ B7006  output-unwritable              error    hard          -                  
 B7007  unsupported-option             error    controllable  default            live     an option badc parses but declines in the mode the command line picked
 B7008  link-pragma-ignored            warning  controllable  default            live     a link request from a source pragma that an object file does not carry
 B7009  cross-target-output            warning  note          -                  live     the image is for another host and will not run where it was built
+B9001  internal-error                 error    hard          -                  live     an invariant inside badc did not hold

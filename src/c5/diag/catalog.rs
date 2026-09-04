@@ -120,6 +120,36 @@ catalog! {
     3007, "dead-store", [], Ignore, Controllable,
         [], Live,
         "a value assigned to a local and replaced before any read";
+    6001, "orphan-section", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "an input section no script rule names, placed by the linker's own rule";
+    6002, "missing-entry", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "no input defines the entry symbol, so the image enters at the first text address";
+    6003, "merged-section-access", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a relocation reaches past the end of the merged section it names";
+    6010, "undefined-symbol", [], Error, Hard,
+        [], Live,
+        "a reference no input object, archive or shared library defines";
+    6011, "duplicate-symbol", [], Error, Hard,
+        [], Live,
+        "more than one input defines the same symbol";
+    6012, "relocation", [], Error, Hard,
+        [], Live,
+        "a relocation the linker cannot apply, or a value its field cannot hold";
+    6013, "linker-script", [], Error, Hard,
+        [], Live,
+        "a linker script badc cannot parse, or a construct it does not implement";
+    6014, "malformed-input", [], Error, Hard,
+        [], Live,
+        "an input object, archive or shared library the reader cannot make sense of";
+    6015, "object-format", [], Error, Hard,
+        [], Live,
+        "a construct the selected object format cannot express";
+    6016, "link", [], Error, Hard,
+        [], Live,
+        "a link-time failure with no more specific row";
     7001, "unknown-argument", ["D9002"], Error, Hard,
         [], Live,
         "command-line option or operand the driver does not implement";
@@ -147,6 +177,26 @@ catalog! {
     7009, "cross-target-output", [], Warning, Note,
         [], Live,
         "the image is for another host and will not run where it was built";
+    9001, "internal-error", [], Error, Hard,
+        [], Live,
+        "an invariant inside badc did not hold";
+}
+
+/// The rows a site names. `catalog!` cannot build an identifier from a
+/// row's name, so the constants are written out; `constants_match_their_rows`
+/// checks each against the row it names.
+impl Code {
+    pub const ORPHAN_SECTION: Code = Code::new(6001);
+    pub const MISSING_ENTRY: Code = Code::new(6002);
+    pub const MERGED_SECTION_ACCESS: Code = Code::new(6003);
+    pub const UNDEFINED_SYMBOL: Code = Code::new(6010);
+    pub const DUPLICATE_SYMBOL: Code = Code::new(6011);
+    pub const RELOCATION: Code = Code::new(6012);
+    pub const LINKER_SCRIPT: Code = Code::new(6013);
+    pub const MALFORMED_INPUT: Code = Code::new(6014);
+    pub const OBJECT_FORMAT: Code = Code::new(6015);
+    pub const LINK: Code = Code::new(6016);
+    pub const INTERNAL: Code = Code::new(9001);
 }
 
 /// Every row, in catalogue order.

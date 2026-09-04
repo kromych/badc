@@ -401,10 +401,6 @@ fn the_named_codes_match_their_rows() {
         (Code::UNUSED_PARAMETER, "unused-parameter"),
         (Code::UNUSED_BUT_SET_VARIABLE, "unused-but-set-variable"),
         (Code::UNUSED_FUNCTION, "unused-function"),
-        (
-            Code::IMPLICIT_FUNCTION_DECLARATION,
-            "implicit-function-declaration",
-        ),
         (Code::UNDEFINED_FUNCTION, "undefined-function"),
         (Code::REDECLARATION_MISMATCH, "redeclaration-mismatch"),
         (Code::ATTRIBUTES, "attributes"),
@@ -418,6 +414,21 @@ fn the_named_codes_match_their_rows() {
         (Code::LONG_DOUBLE_ABI, "long-double-abi"),
         (Code::DEAD_STORE, "dead-store"),
         (Code::LINK_PRAGMA_IGNORED, "link-pragma-ignored"),
+        (Code::ORPHAN_SECTION, "orphan-section"),
+        (Code::MISSING_ENTRY, "missing-entry"),
+        (Code::MERGED_SECTION_ACCESS, "merged-section-access"),
+        (Code::UNDEFINED_SYMBOL, "undefined-symbol"),
+        (Code::DUPLICATE_SYMBOL, "duplicate-symbol"),
+        (Code::RELOCATION, "relocation"),
+        (Code::LINKER_SCRIPT, "linker-script"),
+        (Code::MALFORMED_INPUT, "malformed-input"),
+        (Code::OBJECT_FORMAT, "object-format"),
+        (Code::LINK, "link"),
+        (Code::INTERNAL, "internal-error"),
+        (
+            Code::IMPLICIT_FUNCTION_DECLARATION,
+            "implicit-function-declaration",
+        ),
     ] {
         assert_eq!(code.name(), name, "{code}");
     }

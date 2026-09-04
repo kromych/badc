@@ -2,8 +2,9 @@ use super::builtins;
 use super::text::{is_ident, is_ident_byte, skip_literal};
 use super::{
     Binding, DylibSpec, PRAGMA_POP_WITHOUT_PUSH, PRAGMA_SYNTAX, Preprocessor, Site, Subsystem,
-    UNKNOWN_PRAGMA,
+    UNKNOWN_PRAGMA, UNKNOWN_WARNING_OPTION,
 };
+use crate::c5::diag::{Code, Control, Level, Selector, rows};
 use crate::c5::error::C5Error;
 use alloc::borrow::Cow;
 use alloc::format;
@@ -210,6 +211,9 @@ impl Preprocessor {
         // through to the unknown-pragma warning.
         let directive = args.split('(').next().unwrap_or(args).trim();
         let head = directive.split_whitespace().next().unwrap_or("");
+        if matches!(head, "GCC" | "clang") && self.parse_pragma_diagnostic(args, site) {
+            return Ok(());
+        }
         if matches!(head, "pack" | "once" | "STDC" | "GCC" | "clang") {
             return Ok(());
         }
@@ -221,29 +225,139 @@ impl Preprocessor {
         Ok(())
     }
 
-    /// MSVC `#pragma warning(...)` -- the most common forms seen
-    /// in code that builds under both MSVC and other compilers:
+    /// `#pragma GCC diagnostic <action> ["-W<selector>"]` and the
+    /// identical `clang` spelling. `false` when the pragma is a
+    /// `GCC` / `clang` one this does not implement, which the caller
+    /// accepts without a diagnostic.
     ///
-    /// * `#pragma warning(disable : N1 N2 ...)` -- silence those IDs
-    /// * `#pragma warning(default : N1 ...)` -- restore default
-    /// * `#pragma warning(enable : N1 ...)` -- explicitly re-enable
-    /// * `#pragma warning(error : N1 ...)` -- escalate to error
-    /// * `#pragma warning(once : N1 ...)` -- report only once
-    /// * `#pragma warning(suppress : N1 ...)` -- suppress next stmt
+    /// Actions: `push`, `pop`, and `ignored` / `warning` / `error`
+    /// with a quoted `-W` selector naming a catalogue row or a group.
+    fn parse_pragma_diagnostic(&mut self, args: &str, site: Site<'_>) -> bool {
+        let mut tokens = args.split_whitespace();
+        let Some(vendor) = tokens.next().filter(|t| matches!(*t, "GCC" | "clang")) else {
+            return false;
+        };
+        if tokens.next() != Some("diagnostic") {
+            return false;
+        }
+        let Some(action) = tokens.next() else {
+            return false;
+        };
+        let level = match action {
+            "push" => {
+                self.push_diag_state();
+                return true;
+            }
+            "pop" => {
+                if !self.pop_diag_state(site.offset) {
+                    self.warn(
+                        PRAGMA_POP_WITHOUT_PUSH,
+                        site,
+                        format!("`#pragma {vendor} diagnostic pop` with no matching push"),
+                    );
+                }
+                return true;
+            }
+            "ignored" => Level::Ignore,
+            "warning" => Level::Warning,
+            "error" => Level::Error,
+            _ => return false,
+        };
+        let operand = tokens.next().unwrap_or("");
+        if let Some(selector) = self.diag_selector(operand, vendor, action, site) {
+            self.apply_diag_selector(selector, site.offset, Some(level));
+        }
+        true
+    }
+
+    /// The `"-W<selector>"` operand a diagnostic pragma takes. `None`
+    /// when the operand is malformed or names nothing in the
+    /// catalogue; both are reported and the pragma covers nothing.
+    fn diag_selector(
+        &mut self,
+        operand: &str,
+        vendor: &str,
+        action: &str,
+        site: Site<'_>,
+    ) -> Option<Selector> {
+        let name = operand
+            .strip_prefix('"')
+            .and_then(|s| s.strip_suffix('"'))
+            .and_then(|s| s.strip_prefix("-W"));
+        let Some(name) = name else {
+            self.warn(
+                PRAGMA_SYNTAX,
+                site,
+                format!(
+                    "`#pragma {vendor} diagnostic {action}` expects a quoted option name, \
+                     got `{operand}`"
+                ),
+            );
+            return None;
+        };
+        let selector = Selector::parse(name);
+        if selector.is_none() {
+            self.warn(
+                UNKNOWN_WARNING_OPTION,
+                site,
+                format!("unknown option `-W{name}` in `#pragma {vendor} diagnostic {action}`"),
+            );
+        }
+        selector
+    }
+
+    /// Record what a selector asks for at `offset`. `None` restores
+    /// the level the command line left. A group covers every row in
+    /// it, so a group named by a pragma reaches the rows the option
+    /// of the same name does.
+    fn apply_diag_selector(&mut self, selector: Selector, offset: u32, level: Option<Level>) {
+        self.diag_pragmas += 1;
+        let control = self.sink.control_mut();
+        let mut apply = |code: Code| match level {
+            Some(level) => control.set_level(offset, code, level),
+            None => control.reset(offset, code),
+        };
+        match selector {
+            Selector::Diagnostic(code) => apply(code),
+            Selector::Group(group) => {
+                for row in rows().filter(|r| r.groups.contains(group)) {
+                    apply(row.code);
+                }
+            }
+        }
+    }
+
+    /// `#pragma GCC diagnostic push` / `#pragma warning(push)`.
+    fn push_diag_state(&mut self) {
+        self.diag_pragmas += 1;
+        self.sink.control_mut().push();
+    }
+
+    /// `#pragma GCC diagnostic pop` / `#pragma warning(pop)`. `false`
+    /// when no push was open.
+    fn pop_diag_state(&mut self, offset: u32) -> bool {
+        self.diag_pragmas += 1;
+        self.sink.control_mut().pop(offset)
+    }
+
+    /// MSVC `#pragma warning(...)`:
+    ///
+    /// * `#pragma warning(disable : N1 N2 ...)` -- ignore those IDs
+    /// * `#pragma warning(default : N1 ...)` -- back to the level the
+    ///   command line left
+    /// * `#pragma warning(enable : N1 ...)` -- report as a warning
+    /// * `#pragma warning(error : N1 ...)` -- report as an error
+    /// * `#pragma warning(once : N1 ...)` -- report the first one only
+    /// * `#pragma warning(suppress : N1 ...)` -- ignore over the next
+    ///   line
     /// * `#pragma warning(push)` / `#pragma warning(push, level)`
     /// * `#pragma warning(pop)`
     ///
-    /// c5's diagnostics aren't numbered the way MSVC's are, so
-    /// `disable : 4267` doesn't *actually* silence anything c5
-    /// emits. What this parser buys is:
-    ///   1. The source's intent is recognised rather than dropped
-    ///      on the floor, so future-c5 can hook up real filtering
-    ///      against the recorded ID set.
-    ///   2. Syntax typos surface as warnings instead of silently
-    ///      no-opping.
-    ///   3. `push` / `pop` track a stack of disabled-ID snapshots
-    ///      so source that brackets a region of disables works
-    ///      the way it does in MSVC.
+    /// Each ID resolves through the catalogue's MSVC aliases; the
+    /// overall level a `push, <level>` names has no badc counterpart
+    /// and is accepted without effect. An ID no row lists is ignored:
+    /// badc numbers its own diagnostics, and a source silencing an
+    /// MSVC-only warning is asking for nothing badc reports.
     pub(super) fn parse_pragma_warning(
         &mut self,
         inner: &str,
@@ -254,11 +368,11 @@ impl Preprocessor {
         let inner = inner.trim();
 
         if inner == "push" {
-            self.warning_stack.push(self.warning_disabled.clone());
+            self.push_diag_state();
             return Ok(());
         }
-        // `push, <level>` -- accepted; the level is ignored
-        // because c5 has no notion of overall warning levels.
+        // `push, <level>`: the level names MSVC's overall verbosity,
+        // which badc has no counterpart for.
         if let Some(level) = inner
             .strip_prefix("push")
             .and_then(|s| s.trim().strip_prefix(','))
@@ -275,13 +389,11 @@ impl Preprocessor {
                 );
                 return Ok(());
             }
-            self.warning_stack.push(self.warning_disabled.clone());
+            self.push_diag_state();
             return Ok(());
         }
         if inner == "pop" {
-            if let Some(prev) = self.warning_stack.pop() {
-                self.warning_disabled = prev;
-            } else {
+            if !self.pop_diag_state(site.offset) {
                 self.warn(
                     PRAGMA_POP_WITHOUT_PUSH,
                     site,
@@ -336,36 +448,25 @@ impl Preprocessor {
             if had_bad_token {
                 continue;
             }
-            match action {
-                "disable" => {
-                    for id in ids_parsed {
-                        self.warning_disabled.insert(id);
-                    }
-                }
-                "enable" | "default" => {
-                    for id in ids_parsed {
-                        self.warning_disabled.remove(&id);
-                    }
-                }
-                "error" | "once" | "suppress" => {
-                    // Recognised but currently no-op in c5: c5
-                    // doesn't escalate by ID, can't "report only
-                    // once" without a per-ID counter, and
-                    // `suppress` is a per-statement modifier
-                    // that needs lexer cooperation. Accept the
-                    // syntax silently.
-                }
-                _ => {
-                    self.warn(
-                        PRAGMA_SYNTAX,
-                        site,
-                        format!(
-                            "unrecognised `#pragma warning` action `{action}` \
-                             -- expected `disable` / `enable` / `default` / \
-                             `error` / `once` / `suppress`"
-                        ),
-                    );
-                }
+            let Some(action) = WarningAction::parse(action) else {
+                self.warn(
+                    PRAGMA_SYNTAX,
+                    site,
+                    format!(
+                        "unrecognised `#pragma warning` action `{action}` \
+                         -- expected `disable` / `enable` / `default` / \
+                         `error` / `once` / `suppress`"
+                    ),
+                );
+                continue;
+            };
+            for id in ids_parsed {
+                let Some(code) = Code::from_msvc_number(id) else {
+                    continue;
+                };
+                self.diag_pragmas += 1;
+                let offset = site.offset;
+                action.record(self.sink.control_mut(), offset, code);
             }
         }
         Ok(())
@@ -904,6 +1005,43 @@ pub(super) fn parse_pragma_directive(args: &str) -> PragmaDirective {
         PragmaDirective::Once
     } else {
         PragmaDirective::Other
+    }
+}
+
+/// The actions MSVC's `#pragma warning(<action> : N ...)` takes, and
+/// the level each records for the rows the numbers resolve to.
+#[derive(Clone, Copy)]
+enum WarningAction {
+    Disable,
+    Enable,
+    Default,
+    Error,
+    Once,
+    Suppress,
+}
+
+impl WarningAction {
+    fn parse(name: &str) -> Option<WarningAction> {
+        Some(match name {
+            "disable" => WarningAction::Disable,
+            "enable" => WarningAction::Enable,
+            "default" => WarningAction::Default,
+            "error" => WarningAction::Error,
+            "once" => WarningAction::Once,
+            "suppress" => WarningAction::Suppress,
+            _ => return None,
+        })
+    }
+
+    fn record(self, control: &mut Control, offset: u32, code: Code) {
+        match self {
+            WarningAction::Disable => control.set_level(offset, code, Level::Ignore),
+            WarningAction::Enable => control.set_level(offset, code, Level::Warning),
+            WarningAction::Default => control.reset(offset, code),
+            WarningAction::Error => control.set_level(offset, code, Level::Error),
+            WarningAction::Once => control.report_once(offset, code),
+            WarningAction::Suppress => control.open_suppress(offset, code),
+        }
     }
 }
 

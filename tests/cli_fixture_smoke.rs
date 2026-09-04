@@ -2282,3 +2282,68 @@ fn profiling_options_are_refused_by_name_where_gcc_has_none() {
     }
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// The diagnostic pragmas decide whether a unit compiles: the same
+/// source reports, is silent, or fails depending on the pragma in
+/// force at the reporting position.
+#[test]
+fn a_diagnostic_pragma_decides_the_exit_code() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-diagprag-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+
+    let compile = |name: &str, body: &str| {
+        let src = dir.join(format!("{name}.c"));
+        std::fs::write(&src, format!("{body}int main(void) {{ return 0; }}\n"))
+            .expect("write source");
+        Command::new(badc)
+            .arg("--target=linux-x64")
+            .arg("-c")
+            .arg(&src)
+            .arg("-o")
+            .arg(dir.join(format!("{name}.o")))
+            .output()
+            .expect("run badc")
+    };
+
+    let plain = compile("plain", "#pragma frobnicate\n");
+    assert!(plain.status.success(), "an unknown pragma is not an error");
+    let stderr = String::from_utf8_lossy(&plain.stderr);
+    assert!(
+        stderr.contains("[B1004] [-Wunknown-pragmas]"),
+        "expected the unknown-pragma diagnostic: {stderr}"
+    );
+
+    for silencer in [
+        "#pragma warning(disable : 4068)\n",
+        "#pragma GCC diagnostic ignored \"-Wunknown-pragmas\"\n",
+        "#pragma clang diagnostic ignored \"-Wunknown-pragmas\"\n",
+    ] {
+        let quiet = compile("quiet", &format!("{silencer}#pragma frobnicate\n"));
+        assert!(quiet.status.success(), "{silencer}: must still compile");
+        let stderr = String::from_utf8_lossy(&quiet.stderr);
+        assert!(
+            !stderr.contains("B1004"),
+            "{silencer}: expected silence, got: {stderr}"
+        );
+    }
+
+    for raiser in [
+        "#pragma warning(error : 4068)\n",
+        "#pragma GCC diagnostic error \"-Wunknown-pragmas\"\n",
+    ] {
+        let failed = compile("raised", &format!("{raiser}#pragma frobnicate\n"));
+        assert!(
+            !failed.status.success(),
+            "{raiser}: a raised diagnostic must fail the unit"
+        );
+        let stderr = String::from_utf8_lossy(&failed.stderr);
+        assert!(
+            stderr.contains("error:") && stderr.contains("B1004"),
+            "{raiser}: expected the raised diagnostic: {stderr}"
+        );
+    }
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

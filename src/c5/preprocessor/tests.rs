@@ -4,6 +4,7 @@ use super::text::{
     unfold_and_strip, unfold_line_continuations, unfold_ref,
 };
 use super::*;
+use crate::c5::diag::{Config, Level};
 
 fn process(source: &str) -> String {
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
@@ -304,12 +305,13 @@ fn gnu_identity_version_derives_from_the_shared_claim() {
 
 #[test]
 fn vendor_and_stdc_pragmas_are_silent() {
-    // GCC/clang vendor pragmas and the C99 6.10.6 STDC pragmas carry
-    // no directive c5 acts on, so they must not warn.
+    // The GCC / clang vendor pragmas c5 does not act on and the C99
+    // 6.10.6 STDC pragmas must not warn. A `diagnostic` pragma naming
+    // a catalogue row is acted on, and is equally silent.
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
     pp.process(
         "#pragma GCC diagnostic push\n\
-         #pragma GCC diagnostic ignored \"-Wunused\"\n\
+         #pragma GCC diagnostic ignored \"-Wunknown-pragmas\"\n\
          #pragma GCC diagnostic pop\n\
          #pragma GCC optimize(\"O2\")\n\
          #pragma clang loop unroll(disable)\n\
@@ -1694,10 +1696,12 @@ fn counter_resets_per_preprocessor_instance() {
     assert!(out2.contains("int a = 0"));
 }
 
+/// `#pragma frobnicate` reports B1004; MSVC calls the same thing 4068.
+const UNKNOWN_PRAGMA_LINE: &str = "#pragma frobnicate\n";
+
 #[test]
-fn pragma_warning_disable_records_ids() {
-    // `#pragma warning(disable : N N N)`. Each ID lands in
-    // `warning_disabled`.
+fn pragma_warning_disable_silences_the_ids_it_names() {
+    // The IDs badc has no row for are ignored, as MSVC-only numbers.
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
     let _ = pp
         .process("#pragma warning(disable : 4054 4055 4100)\n")
@@ -1707,40 +1711,89 @@ fn pragma_warning_disable_records_ids() {
         "expected no warnings: {:?}",
         pp.sink.diagnostics()
     );
+
+    // 4068 is `unknown-pragmas`, so the following pragma is silent.
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let src = format!("#pragma warning(disable : 4068)\n{UNKNOWN_PRAGMA_LINE}");
+    let _ = pp.process(&src).expect("preprocessor failed");
+    assert_eq!(codes(&pp), Vec::<Code>::new());
+}
+
+#[test]
+fn an_msvc_number_with_no_row_silences_nothing() {
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let src = format!("#pragma warning(disable : 4267)\n{UNKNOWN_PRAGMA_LINE}");
+    let _ = pp.process(&src).expect("preprocessor failed");
+    assert_eq!(codes(&pp), vec![UNKNOWN_PRAGMA]);
+}
+
+#[test]
+fn pragma_warning_enable_and_default_restore_reporting() {
+    for action in ["enable", "default"] {
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        let src = format!(
+            "#pragma warning(disable : 4068)\n\
+             {UNKNOWN_PRAGMA_LINE}\
+             #pragma warning({action} : 4068)\n\
+             {UNKNOWN_PRAGMA_LINE}"
+        );
+        let _ = pp.process(&src).expect("preprocessor failed");
+        assert_eq!(codes(&pp), vec![UNKNOWN_PRAGMA], "{action}");
+    }
+}
+
+#[test]
+fn pragma_warning_error_raises_the_level_and_fails_the_pass() {
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let src = format!("#pragma warning(error : 4068)\n{UNKNOWN_PRAGMA_LINE}");
+    let err = pp
+        .process(&src)
+        .expect_err("a raised warning fails the pass");
+    assert!(
+        format!("{err}").contains("error: unknown `#pragma frobnicate`"),
+        "unexpected error: {err}"
+    );
     assert_eq!(
-        pp.warning_disabled.iter().copied().collect::<Vec<_>>(),
-        vec![4054_u32, 4055, 4100]
+        pp.sink
+            .diagnostics()
+            .iter()
+            .map(|d| d.level)
+            .collect::<Vec<_>>(),
+        vec![Level::Error]
     );
 }
 
 #[test]
-fn pragma_warning_enable_clears_ids() {
+fn pragma_warning_once_reports_the_first_occurrence_only() {
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
-    let _ = pp
-        .process(
-            "#pragma warning(disable : 100 200 300)\n\
-             #pragma warning(enable : 200)\n",
-        )
-        .unwrap();
-    assert_eq!(
-        pp.warning_disabled.iter().copied().collect::<Vec<_>>(),
-        vec![100_u32, 300]
-    );
+    let src = format!("#pragma warning(once : 4068)\n{UNKNOWN_PRAGMA_LINE}{UNKNOWN_PRAGMA_LINE}");
+    let _ = pp.process(&src).expect("preprocessor failed");
+    assert_eq!(codes(&pp), vec![UNKNOWN_PRAGMA]);
+}
+
+#[test]
+fn pragma_warning_suppress_covers_exactly_one_line() {
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let src =
+        format!("#pragma warning(suppress : 4068)\n{UNKNOWN_PRAGMA_LINE}{UNKNOWN_PRAGMA_LINE}");
+    let _ = pp.process(&src).expect("preprocessor failed");
+    assert_eq!(codes(&pp), vec![UNKNOWN_PRAGMA]);
+    assert_eq!(pp.sink.diagnostics()[0].loc.as_ref().unwrap().line, 3);
 }
 
 #[test]
 fn pragma_warning_push_pop_restores_state() {
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
-    let _ = pp
-        .process(
-            "#pragma warning(disable : 100)\n\
-             #pragma warning(push)\n\
-             #pragma warning(disable : 200)\n\
-             #pragma warning(pop)\n",
-        )
-        .unwrap();
-    assert!(pp.warning_disabled.contains(&100));
-    assert!(!pp.warning_disabled.contains(&200));
+    let src = format!(
+        "#pragma warning(push)\n\
+         #pragma warning(disable : 4068)\n\
+         {UNKNOWN_PRAGMA_LINE}\
+         #pragma warning(pop)\n\
+         {UNKNOWN_PRAGMA_LINE}"
+    );
+    let _ = pp.process(&src).expect("preprocessor failed");
+    assert_eq!(codes(&pp), vec![UNKNOWN_PRAGMA]);
+    assert_eq!(pp.sink.diagnostics()[0].loc.as_ref().unwrap().line, 5);
 }
 
 #[test]
@@ -1800,7 +1853,6 @@ fn pragma_warning_push_with_level_accepted() {
         "got warnings: {:?}",
         pp.sink.diagnostics()
     );
-    assert!(pp.warning_disabled.is_empty());
 }
 
 #[test]
@@ -3944,4 +3996,225 @@ fn preprocessor_diagnostics_carry_their_code() {
         rendered.ends_with("[B1004] [-Wunknown-pragmas]"),
         "unexpected rendering: {rendered}"
     );
+}
+
+#[test]
+fn gcc_and_clang_diagnostic_pragmas_take_each_action() {
+    for vendor in ["GCC", "clang"] {
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        let src = format!(
+            "#pragma {vendor} diagnostic ignored \"-Wunknown-pragmas\"\n\
+             {UNKNOWN_PRAGMA_LINE}\
+             #pragma {vendor} diagnostic warning \"-Wunknown-pragmas\"\n\
+             {UNKNOWN_PRAGMA_LINE}\
+             #pragma {vendor} diagnostic error \"-Wunknown-pragmas\"\n\
+             {UNKNOWN_PRAGMA_LINE}"
+        );
+        let _ = pp.process(&src);
+        let levels: Vec<Level> = pp.sink.diagnostics().iter().map(|d| d.level).collect();
+        assert_eq!(levels, vec![Level::Warning, Level::Error], "{vendor}");
+        assert_eq!(codes(&pp), vec![UNKNOWN_PRAGMA, UNKNOWN_PRAGMA], "{vendor}");
+    }
+}
+
+#[test]
+fn a_gcc_diagnostic_selector_takes_a_code_or_an_alias() {
+    for selector in ["unknown-pragmas", "B1004", "C4068"] {
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        let src = format!("#pragma GCC diagnostic ignored \"-W{selector}\"\n{UNKNOWN_PRAGMA_LINE}");
+        let _ = pp.process(&src).expect("preprocessor failed");
+        assert_eq!(codes(&pp), Vec::<Code>::new(), "{selector}");
+    }
+}
+
+#[test]
+fn a_group_selector_in_a_pragma_covers_its_rows_only() {
+    // `unknown-pragmas` is in `-Wall` and not in `-Wextra`.
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let src = format!("#pragma GCC diagnostic ignored \"-Wall\"\n{UNKNOWN_PRAGMA_LINE}");
+    let _ = pp.process(&src).expect("preprocessor failed");
+    assert_eq!(codes(&pp), Vec::<Code>::new());
+
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let src = format!("#pragma GCC diagnostic ignored \"-Wextra\"\n{UNKNOWN_PRAGMA_LINE}");
+    let _ = pp.process(&src).expect("preprocessor failed");
+    assert_eq!(codes(&pp), vec![UNKNOWN_PRAGMA]);
+}
+
+#[test]
+fn gcc_diagnostic_push_and_pop_nest() {
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let src = format!(
+        "#pragma GCC diagnostic push\n\
+         #pragma GCC diagnostic ignored \"-Wunknown-pragmas\"\n\
+         #pragma GCC diagnostic push\n\
+         #pragma GCC diagnostic error \"-Wunknown-pragmas\"\n\
+         {UNKNOWN_PRAGMA_LINE}\
+         #pragma GCC diagnostic pop\n\
+         {UNKNOWN_PRAGMA_LINE}\
+         #pragma GCC diagnostic pop\n\
+         {UNKNOWN_PRAGMA_LINE}"
+    );
+    let _ = pp.process(&src);
+    let reported: Vec<(u32, Level)> = pp
+        .sink
+        .diagnostics()
+        .iter()
+        .map(|d| (d.loc.as_ref().unwrap().line, d.level))
+        .collect();
+    assert_eq!(reported, vec![(5, Level::Error), (9, Level::Warning)]);
+}
+
+#[test]
+fn a_diagnostic_pragma_pop_with_no_push_is_reported() {
+    for pragma in [
+        "#pragma GCC diagnostic pop\n",
+        "#pragma clang diagnostic pop\n",
+        "#pragma warning(pop)\n",
+    ] {
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        let _ = pp.process(pragma).expect("preprocessor failed");
+        assert_eq!(codes(&pp), vec![PRAGMA_POP_WITHOUT_PUSH], "{pragma}");
+    }
+}
+
+#[test]
+fn an_unknown_pragma_selector_is_reported_and_covers_nothing() {
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let src = format!("#pragma GCC diagnostic ignored \"-Wno-such-option\"\n{UNKNOWN_PRAGMA_LINE}");
+    let _ = pp.process(&src).expect("preprocessor failed");
+    assert_eq!(codes(&pp), vec![UNKNOWN_WARNING_OPTION, UNKNOWN_PRAGMA]);
+}
+
+#[test]
+fn a_diagnostic_pragma_operand_must_be_a_quoted_option() {
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let _ = pp
+        .process("#pragma GCC diagnostic ignored unknown-pragmas\n")
+        .expect("preprocessor failed");
+    assert_eq!(codes(&pp), vec![PRAGMA_SYNTAX]);
+}
+
+#[test]
+fn other_gcc_pragmas_stay_silent() {
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let _ = pp
+        .process(
+            "#pragma GCC optimize(\"O2\")\n\
+             #pragma GCC diagnostic ignored_attributes \"x\"\n\
+             #pragma clang loop unroll(disable)\n",
+        )
+        .expect("preprocessor failed");
+    assert_eq!(codes(&pp), Vec::<Code>::new());
+}
+
+#[test]
+fn a_push_inside_a_header_does_not_leak_past_it() {
+    use std::io::Write;
+    let dir = std::env::temp_dir().join(format!("badc-diag-scope-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::File::create(dir.join("balanced.h"))
+        .unwrap()
+        .write_all(
+            b"#pragma GCC diagnostic push\n\
+              #pragma GCC diagnostic ignored \"-Wunknown-pragmas\"\n\
+              #pragma frobnicate\n\
+              #pragma GCC diagnostic pop\n",
+        )
+        .unwrap();
+    std::fs::File::create(dir.join("leaky.h"))
+        .unwrap()
+        .write_all(
+            b"#pragma GCC diagnostic ignored \"-Wunknown-pragmas\"\n\
+              #pragma frobnicate\n",
+        )
+        .unwrap();
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    pp.add_search_path(dir.to_str().unwrap());
+    let _ = pp
+        .process("#include \"balanced.h\"\n#pragma frobnicate\n")
+        .expect("preprocessor failed");
+    assert_eq!(codes(&pp), vec![UNKNOWN_PRAGMA], "a balanced header scopes");
+
+    // Without the pop the header says the state outlives it, and it does.
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    pp.add_search_path(dir.to_str().unwrap());
+    let _ = pp
+        .process("#include \"leaky.h\"\n#pragma frobnicate\n")
+        .expect("preprocessor failed");
+    std::fs::remove_dir_all(&dir).ok();
+    assert_eq!(codes(&pp), Vec::<Code>::new(), "an unbalanced header leaks");
+}
+
+#[test]
+fn a_pragma_wins_over_the_command_line_where_it_applies() {
+    let werror = || {
+        let mut config = Config::new();
+        config.warnings_as_errors(true);
+        config
+    };
+
+    // No pragma: `-Werror` decides, and the raised level fails the pass.
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    pp.sink.set_config(werror());
+    assert!(pp.process(UNKNOWN_PRAGMA_LINE).is_err());
+    assert_eq!(pp.sink.diagnostics()[0].level, Level::Error);
+
+    // A pragma covering the position wins over it.
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    pp.sink.set_config(werror());
+    let src = format!(
+        "#pragma GCC diagnostic warning \"-Wunknown-pragmas\"\n\
+         {UNKNOWN_PRAGMA_LINE}\
+         #pragma GCC diagnostic ignored \"-Wunknown-pragmas\"\n\
+         {UNKNOWN_PRAGMA_LINE}"
+    );
+    pp.process(&src)
+        .expect("a pragma-lowered level does not fail the pass");
+    let levels: Vec<Level> = pp.sink.diagnostics().iter().map(|d| d.level).collect();
+    assert_eq!(levels, vec![Level::Warning]);
+
+    // `-w` where no pragma applies.
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let mut config = Config::new();
+    config.inhibit_warnings(true);
+    pp.sink.set_config(config);
+    let _ = pp
+        .process(UNKNOWN_PRAGMA_LINE)
+        .expect("preprocessor failed");
+    assert_eq!(codes(&pp), Vec::<Code>::new());
+}
+
+#[test]
+fn a_msvc_pragma_operator_records_at_its_own_position() {
+    // `__pragma(...)` on a content line reaches the same recorder.
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let src = format!("__pragma(warning(disable : 4068)) int x;\n{UNKNOWN_PRAGMA_LINE}");
+    let _ = pp.process(&src).expect("preprocessor failed");
+    assert_eq!(codes(&pp), Vec::<Code>::new());
+}
+
+#[test]
+fn a_source_pass_with_a_diagnostic_pragma_is_not_reused() {
+    // The pragma's events are keyed on output offsets, which the
+    // extension's longer preamble shifts, so the retry runs a full
+    // pass and reaches the same state a first run would.
+    let src = "#pragma GCC diagnostic ignored \"-Wunknown-pragmas\"\n\
+               #pragma frobnicate\n\
+               int x;\n";
+    let (_, cache) = reuse_pp()
+        .process_recording(src)
+        .expect("recording run succeeds");
+
+    let mut reused = reuse_pp();
+    reused.add_force_include("string.h");
+    assert!(
+        reused.process_reusing(&cache).is_none(),
+        "a recorded diagnostic pragma blocks reuse"
+    );
+
+    let mut full = reuse_pp();
+    full.add_force_include("string.h");
+    full.process(src).expect("full run succeeds");
+    assert_eq!(codes(&full), Vec::<Code>::new());
 }

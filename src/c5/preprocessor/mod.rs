@@ -53,7 +53,7 @@ use core::cell::{Cell, RefCell};
 use hashbrown::HashMap;
 
 use super::codegen::{CodeModel, ElfClass, Target};
-use super::diag::{Code, Diagnostic, Loc, Sink};
+use super::diag::{Code, Diagnostic, Level, Loc, Sink};
 use super::error::C5Error;
 
 /// One declared dylib plus the bindings that target it. Created
@@ -282,18 +282,14 @@ pub(crate) struct Preprocessor {
     hs_singletons: RefCell<hashbrown::HashMap<String, alloc::rc::Rc<expand::Hideset>>>,
     /// Expansion-arena storage reused across lines.
     exp_scratch: RefCell<expand::ExpScratch>,
-    /// MSVC `#pragma warning(disable : N)` IDs in force, nesting through
-    /// `warning_stack`. c5 numbers no warnings of its own, so the set
-    /// filters nothing today; the parse is real and the set is
-    /// readable, so what the source asked to silence is visible.
-    pub(crate) warning_disabled: BTreeSet<u32>,
-    /// Stack of `warning_disabled` snapshots taken at each
-    /// `#pragma warning(push)`; popped by `#pragma warning(pop)`.
-    pub(crate) warning_stack: Vec<BTreeSet<u32>>,
     /// Borland / Watcom `#pragma warn -<code>` codes the source asked to
-    /// disable. Recorded, not yet filtered against, like
-    /// `warning_disabled`.
+    /// disable. No catalogue row carries these identifiers, so the set
+    /// records what the source asked for and filters nothing.
     pub(crate) warn_disabled: BTreeSet<alloc::string::String>,
+    /// Diagnostic-pragma events this pass has recorded on the sink's
+    /// `Control`. Read by [`Self::process_recording`] to tell whether
+    /// the source pass left any.
+    pub(crate) diag_pragmas: usize,
     /// `#pragma intrinsic("name")`: callable identifier to the
     /// `Intrinsic` discriminant the frontend stamps on the matching
     /// `Symbol::intrinsic`. A new one needs an `Intrinsic` variant in
@@ -418,9 +414,9 @@ pub(crate) struct PpReuse {
     once_files: BTreeSet<String>,
     include_guards: HashMap<String, String>,
     counter: i64,
-    warning_disabled: BTreeSet<u32>,
-    warning_stack: Vec<BTreeSet<u32>>,
     warn_disabled: BTreeSet<String>,
+    /// Whether the recorded source pass left diagnostic-pragma events.
+    diag_pragmas: bool,
     filter: ObsFilter,
     counter_used: bool,
     consulted_includes: BTreeSet<String>,
@@ -1016,9 +1012,8 @@ impl Preprocessor {
             body_toks: RefCell::new(hashbrown::HashMap::new()),
             hs_singletons: RefCell::new(hashbrown::HashMap::new()),
             exp_scratch: RefCell::new(expand::ExpScratch::default()),
-            warning_disabled: BTreeSet::new(),
-            warning_stack: Vec::new(),
             warn_disabled: BTreeSet::new(),
+            diag_pragmas: 0,
             intrinsics,
             reuse: None,
         }
@@ -1252,7 +1247,27 @@ impl Preprocessor {
         let mut out = String::with_capacity(source.len());
         self.process_preamble(&mut out)?;
         self.process_source(source, &mut out)?;
+        self.fail_on_errors()?;
         Ok(out)
+    }
+
+    /// Fail the pass when a diagnostic resolved to `Error`, which is
+    /// what a `#pragma`-raised level asks for. Reported at the end of
+    /// the pass rather than at the site, so the unit is read whole
+    /// first.
+    fn fail_on_errors(&self) -> Result<(), C5Error> {
+        if !self.sink.has_errors() {
+            return Ok(());
+        }
+        match self
+            .sink
+            .diagnostics()
+            .iter()
+            .find(|d| d.level == Level::Error)
+        {
+            Some(first) => Err(C5Error::Compile(first.to_string())),
+            None => Ok(()),
+        }
     }
 
     /// Process one synthesized `#include "name"` per `-include FILE`
@@ -1294,9 +1309,8 @@ impl Preprocessor {
         let entry_once = self.pragma_once_files.clone();
         let entry_guards = self.include_guards.clone();
         let entry_counter = self.counter.get();
-        let entry_warning_disabled = self.warning_disabled.clone();
-        let entry_warning_stack = self.warning_stack.clone();
         let entry_warn_disabled = self.warn_disabled.clone();
+        let entry_diag_pragmas = self.diag_pragmas;
         self.reuse = Some(Box::new(ReuseRecorder {
             filter: ObsFilter::sized_for(source.len()),
             counter_used: Cell::new(false),
@@ -1313,9 +1327,8 @@ impl Preprocessor {
             once_files: entry_once,
             include_guards: entry_guards,
             counter: entry_counter,
-            warning_disabled: entry_warning_disabled,
-            warning_stack: entry_warning_stack,
             warn_disabled: entry_warn_disabled,
+            diag_pragmas: self.diag_pragmas != entry_diag_pragmas,
             filter: rec.filter,
             counter_used: rec.counter_used.get(),
             consulted_includes: rec.consulted_includes,
@@ -1323,6 +1336,7 @@ impl Preprocessor {
             warnings: self.sink.diagnostics()[n_warnings..].to_vec(),
             include_records: self.include_records[n_records..].to_vec(),
         };
+        self.fail_on_errors()?;
         Ok((out, cache))
     }
 
@@ -1343,10 +1357,12 @@ impl Preprocessor {
         if self.counter.get() != prior.counter && prior.counter_used {
             return None;
         }
-        if self.warning_disabled != prior.warning_disabled
-            || self.warning_stack != prior.warning_stack
-            || self.warn_disabled != prior.warn_disabled
-        {
+        if self.warn_disabled != prior.warn_disabled {
+            return None;
+        }
+        // The recorded pass's diagnostic pragmas are keyed on output
+        // offsets, which this run's longer preamble shifts.
+        if prior.diag_pragmas {
             return None;
         }
         // Names the extension defines, redefines or undefines must be
@@ -1400,6 +1416,9 @@ impl Preprocessor {
         self.include_records
             .extend(prior.include_records.iter().cloned());
         out.push_str(&prior.source_text);
+        // A replayed diagnostic that resolved to an error has to fail
+        // the unit; the caller's full pass reports it.
+        self.fail_on_errors().ok()?;
         Some(out)
     }
 
@@ -1750,6 +1769,10 @@ impl<'p, 's> LinePass<'p, 's> {
         while self.idx < self.lines.len() {
             let line = self.lines[self.idx];
             let line_no = self.idx + 1;
+            // A `#pragma warning(suppress: N)` on an earlier line
+            // covers this one; its extent ends where this line's
+            // output does.
+            let closing = self.pp.sink.control().has_open_suppress();
             let hash = line.trim_start().strip_prefix('#').map(|rest| {
                 let spelling = rest.trim_start();
                 (spelling, parse_directive(spelling, self.pp.asm_source))
@@ -1770,11 +1793,19 @@ impl<'p, 's> LinePass<'p, 's> {
                     self.content(line)?;
                 }
             }
+            if closing {
+                let end = self.out.len() as u32;
+                self.pp.sink.control_mut().close_suppress(end);
+            }
         }
         Ok(())
     }
 
     fn finish(self) -> Result<(), C5Error> {
+        // A `suppress` on the buffer's last line has nothing left to
+        // cover once the buffer ends.
+        let end = self.out.len() as u32;
+        self.pp.sink.control_mut().close_suppress(end);
         self.pp.take_pending_error()?;
         let depth = self.cond.len();
         if depth > 0 {
@@ -1837,7 +1868,7 @@ impl<'p, 's> LinePass<'p, 's> {
                 Emitted::No
             }
             None => match parsed {
-                Directive::Pragma(args) => self.pragma(args, spelling, line_no)?,
+                Directive::Pragma(args) => self.pragma(args, spelling, site)?,
                 Directive::IncludeMacro(args) => self.include_macro(args, line_no)?,
                 Directive::Include { name, quoted } => {
                     self.include(name, *quoted, false, line_no)?
@@ -1880,7 +1911,7 @@ impl<'p, 's> LinePass<'p, 's> {
         Ok(())
     }
 
-    fn pragma(&mut self, args: &str, spelling: &str, line_no: usize) -> Result<Emitted, C5Error> {
+    fn pragma(&mut self, args: &str, spelling: &str, site: Site<'_>) -> Result<Emitted, C5Error> {
         if !self.active {
             return Ok(Emitted::No);
         }
@@ -1903,7 +1934,6 @@ impl<'p, 's> LinePass<'p, 's> {
                 return Ok(Emitted::Yes);
             }
             PragmaDirective::Other => {
-                let site = self.site(line_no);
                 self.pp.parse_pragma(args, site)?;
             }
         }

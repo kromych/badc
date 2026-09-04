@@ -61,7 +61,7 @@ catalog! {
         [DEFAULT], Live,
         "a macro-expanded `#include` or `#line` operand that does not reparse";
     1004, "unknown-pragmas", ["C4068"], Warning, Controllable,
-        [DEFAULT], Live,
+        [DEFAULT, ALL], Live,
         "a `#pragma` badc does not implement; the directive is ignored";
     1005, "pragma-syntax", [], Warning, Controllable,
         [DEFAULT], Live,

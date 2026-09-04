@@ -142,6 +142,8 @@ pub struct Control {
     /// Per code, the offset from which the diagnostic reports once.
     once: BTreeMap<u16, u32>,
     stack: Vec<Vec<(u16, Option<Level>)>>,
+    /// Codes whose last extent is still open; see [`Self::open_suppress`].
+    open: Vec<u16>,
 }
 
 impl Control {
@@ -203,6 +205,35 @@ impl Control {
         if !is_settable(code) {
             return;
         }
+        self.push_extent(code, extent);
+    }
+
+    /// The same, for a pass that has not reached the end of the covered
+    /// line yet: the extent stays open until [`Self::close_suppress`],
+    /// so a lookup made while the pass is still inside that line is
+    /// covered.
+    pub fn open_suppress(&mut self, start: u32, code: Code) {
+        if !is_settable(code) {
+            return;
+        }
+        self.push_extent(code, (start, u32::MAX));
+        self.open.push(code.value());
+    }
+
+    pub fn has_open_suppress(&self) -> bool {
+        !self.open.is_empty()
+    }
+
+    /// End every extent [`Self::open_suppress`] left open at `end`.
+    pub fn close_suppress(&mut self, end: u32) {
+        for code in core::mem::take(&mut self.open) {
+            if let Some(extent) = self.suppressed.get_mut(&code).and_then(|v| v.last_mut()) {
+                extent.1 = end;
+            }
+        }
+    }
+
+    fn push_extent(&mut self, code: Code, extent: Extent) {
         let list = self.suppressed.entry(code.value()).or_default();
         debug_assert!(list.last().is_none_or(|(start, _)| *start <= extent.0));
         list.push(extent);

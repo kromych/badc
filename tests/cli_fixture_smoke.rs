@@ -1245,7 +1245,7 @@ fn unknown_option_is_rejected() {
     let src = dir.join("main.c");
     std::fs::write(&src, "int main(void) { return 0; }\n").expect("write main");
     let out = Command::new(badc)
-        .arg("-Wall")
+        .arg("--no-such-option")
         .arg(&src)
         .arg("-o")
         .arg(dir.join("prog"))

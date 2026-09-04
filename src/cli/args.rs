@@ -82,6 +82,9 @@ pub(crate) struct FrontEnd {
     /// `#include`, with leading dots marking nesting depth.
     pub(crate) show_includes: bool,
     pub(crate) warn_dead_store: bool,
+    /// The `-W` family's outcome: the level each diagnostic reports at
+    /// before the pragmas in a translation unit apply.
+    pub(crate) diag: badc::diag::Config,
     pub(crate) optimize: bool,
     /// The host's implicit system header directories, resolved against
     /// the target after parsing.
@@ -292,6 +295,13 @@ fn operand(iter: &mut Args, missing: &str) -> Result<String, ParseError> {
     iter.next().ok_or_else(|| ParseError::diag(missing))
 }
 
+/// What a `-W` option's selector names. `arg` is the option as written,
+/// so the rejection quotes what the user typed.
+fn selector(sel: &str, arg: &str) -> Result<badc::diag::Selector, ParseError> {
+    badc::diag::Selector::parse(sel)
+        .ok_or_else(|| ParseError::diag(format!("badc: error: unknown warning option `{arg}`")))
+}
+
 /// Read the argument vector, which is the whole input. Every
 /// diagnostic is returned rather than printed, so the caller decides
 /// what to write and what to exit with.
@@ -331,7 +341,70 @@ impl Parser {
             || self.assembler_option(arg, iter)?
             || self.codegen_option(arg)?
             || self.hardening_option(arg, iter)?
-            || self.link_option(arg, iter)?)
+            || self.link_option(arg, iter)?
+            || self.diagnostic_option(arg)?)
+    }
+
+    /// The `-W` family: `-w`, `-Werror` / `-Wno-error` with or without a
+    /// selector, and `-W<sel>` / `-Wno-<sel>`. A selector is a
+    /// diagnostic's name, one of its aliases, its `B` code, or a group
+    /// (`all`, `extra`, `pedantic`). An unknown selector is refused by
+    /// name, as every other option the driver does not implement is.
+    /// Consulted last, so a family that takes an exact `-W` spelling
+    /// (`-Wa,`, `-Wp,`) keeps it.
+    fn diagnostic_option(&mut self, arg: &str) -> Result<bool, ParseError> {
+        match arg {
+            "-w" => self.front.diag.inhibit_warnings(true),
+            "-Werror" => self.front.diag.warnings_as_errors(true),
+            "-Wno-error" => self.front.diag.warnings_as_errors(false),
+            s if s.starts_with("-Werror=") => self.diag_error(&s["-Werror=".len()..], s, true)?,
+            s if s.starts_with("-Wno-error=") => {
+                self.diag_error(&s["-Wno-error=".len()..], s, false)?
+            }
+            s if s.starts_with("-Wno-") => {
+                self.diag_level(&s["-Wno-".len()..], s, badc::diag::Level::Ignore)?
+            }
+            s if s.starts_with("-W") => {
+                self.diag_level(&s["-W".len()..], s, badc::diag::Level::Warning)?
+            }
+            _ => return Ok(false),
+        }
+        Ok(true)
+    }
+
+    /// `-W<sel>` / `-Wno-<sel>`: set the level of one row, or of every
+    /// row a group holds.
+    fn diag_level(
+        &mut self,
+        sel: &str,
+        arg: &str,
+        level: badc::diag::Level,
+    ) -> Result<(), ParseError> {
+        match selector(sel, arg)? {
+            badc::diag::Selector::Group(g) if level >= badc::diag::Level::Warning => {
+                self.front.diag.enable_group(g);
+            }
+            badc::diag::Selector::Group(g) => {
+                for row in badc::diag::rows().filter(|r| r.groups.contains(g)) {
+                    self.front.diag.set_level(row.code, level);
+                }
+            }
+            badc::diag::Selector::Diagnostic(code) => self.front.diag.set_level(code, level),
+        }
+        Ok(())
+    }
+
+    /// `-Werror=<sel>` / `-Wno-error=<sel>`.
+    fn diag_error(&mut self, sel: &str, arg: &str, on: bool) -> Result<(), ParseError> {
+        match selector(sel, arg)? {
+            badc::diag::Selector::Group(g) => {
+                for row in badc::diag::rows().filter(|r| r.groups.contains(g)) {
+                    self.front.diag.error_for(row.code, on);
+                }
+            }
+            badc::diag::Selector::Diagnostic(code) => self.front.diag.error_for(code, on),
+        }
+        Ok(())
     }
 
     /// Claim the output mode. At most one mode-picking flag may appear;
@@ -1890,6 +1963,91 @@ mod tests {
             reject(&["--explain"]),
             (
                 "badc: error: --explain requires a diagnostic name, alias or `B` code".to_string(),
+                1
+            )
+        );
+    }
+
+    /// The level `sel` reports at after `args`.
+    fn level(args: &[&str], sel: &str) -> badc::diag::Level {
+        let code = badc::diag::Code::from_selector(sel).expect("a catalogue row");
+        parse(args).front.diag.level(code)
+    }
+
+    #[test]
+    fn a_selector_names_one_row_by_name_alias_or_code() {
+        use badc::diag::Level;
+        // `long-double-abi` carries the gcc alias `psabi` and the code
+        // B3006; all three spellings reach the same row.
+        for sel in ["long-double-abi", "psabi", "B3006"] {
+            assert_eq!(
+                level(&[&format!("-Wno-{sel}"), "a.c"], "long-double-abi"),
+                Level::Ignore,
+                "-Wno-{sel}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_warning_options_set_the_level_they_name() {
+        use badc::diag::Level;
+        // A row a group turns on is off until the group is asked for.
+        assert_eq!(level(&["a.c"], "unused-variable"), Level::Ignore);
+        assert_eq!(level(&["-Wall", "a.c"], "unused-variable"), Level::Warning);
+        assert_eq!(level(&["-Wextra", "a.c"], "unused-variable"), Level::Ignore);
+        assert_eq!(
+            level(&["-Wextra", "a.c"], "unused-parameter"),
+            Level::Warning
+        );
+        assert_eq!(
+            level(&["-Wunused-variable", "a.c"], "unused-variable"),
+            Level::Warning
+        );
+        // Options apply in the order written, so a later one wins.
+        assert_eq!(
+            level(&["-Wall", "-Wno-unused-variable", "a.c"], "unused-variable"),
+            Level::Ignore
+        );
+        assert_eq!(
+            level(&["-Wno-all", "-Wall", "a.c"], "return-type"),
+            Level::Warning
+        );
+        // `-w` silences what is on; `-Werror` raises it.
+        assert_eq!(level(&["a.c"], "int-conversion"), Level::Warning);
+        assert_eq!(level(&["-w", "a.c"], "int-conversion"), Level::Ignore);
+        assert_eq!(level(&["-Werror", "a.c"], "int-conversion"), Level::Error);
+        assert_eq!(
+            level(&["-Werror", "-Wno-error", "a.c"], "int-conversion"),
+            Level::Warning
+        );
+        // `-Werror=<sel>` enables the row as well as raising it; the
+        // `-Wno-error=` form puts one row back while `-Werror` stands.
+        assert_eq!(
+            level(&["-Werror=unused-variable", "a.c"], "unused-variable"),
+            Level::Error
+        );
+        assert_eq!(
+            level(
+                &["-Werror", "-Wno-error=int-conversion", "a.c"],
+                "int-conversion"
+            ),
+            Level::Warning
+        );
+    }
+
+    #[test]
+    fn an_unknown_warning_selector_is_refused() {
+        assert_eq!(
+            reject(&["-Wno-such-warning", "a.c"]),
+            (
+                "badc: error: unknown warning option `-Wno-such-warning`".to_string(),
+                1
+            )
+        );
+        assert_eq!(
+            reject(&["-Werror=no-such-warning", "a.c"]),
+            (
+                "badc: error: unknown warning option `-Werror=no-such-warning`".to_string(),
                 1
             )
         );

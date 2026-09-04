@@ -173,11 +173,17 @@ anonymous members, `<stdatomic.h>`).
 
 badc's driver has no accept-and-ignore bucket: any dash-prefixed argument
 no option arm matches is an error, not a warning. Common gcc spellings
-badc does not implement -- `-Wall` and the rest of the `-W` family bar
-`-W[no-]dead-store`, `-x`, `-isystem`, `-static`, and `-gdwarf-<n>` --
-therefore fail the invocation rather than being dropped. A build system that
-passes a compiler's whole flag set through has to filter it; the kernel
-harness under `demos/linux/` does exactly that.
+badc does not implement -- `-x`, `-isystem`, `-static`, and `-gdwarf-<n>`
+-- therefore fail the invocation rather than being dropped. A build system
+that passes a compiler's whole flag set through has to filter it; the
+kernel harness under `demos/linux/` does exactly that.
+
+The `-W` family follows the same rule against the diagnostic catalogue.
+`-w`, `-Werror`, `-Wno-error`, `-Werror=<sel>`, `-Wno-error=<sel>`,
+`-W<sel>`, `-Wno-<sel>`, `-Wall`, `-Wextra` and `-Wpedantic` are
+implemented; a selector is a diagnostic's name, one of its aliases, its
+`B` code or a group name, and one no catalogue row answers to is refused
+by name. `--list-diagnostics` prints the catalogue.
 
 `-Wa,<opt>` and `-Xassembler <opt>` are checked rather than passed on, since
 the assembler is built in: an option badc's assembler has no equivalent for

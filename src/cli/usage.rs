@@ -156,6 +156,18 @@ Compile knobs:
   -MQ target               As -MT, but quote the name for make.
   -MP                      Add an empty rule for each prerequisite
                            so a deleted header does not stop make.
+  -w                       Report no warning at all.
+  -Wall / -Wextra          Enable a group of diagnostics, following
+  -Wpedantic               gcc's split. --list-diagnostics prints the
+                           group each row belongs to.
+  -W<sel> / -Wno-<sel>     Report or ignore one diagnostic. A selector
+                           is its name, an alias, its `B` code, or a
+                           group name; an unknown one is refused.
+  -Werror / -Wno-error     Report every warning as an error, or undo
+                           that. The unit still parses whole and fails
+                           at the end of the phase, as gcc does.
+  -Werror=<sel>            Report one diagnostic as an error, or put it
+  -Wno-error=<sel>         back to a warning.
   -Wa,<opt>[,<opt>]        Hand an option to the assembler. badc's
   -Xassembler <opt>        assembler is built in, so each option is
                            checked against what it implements rather

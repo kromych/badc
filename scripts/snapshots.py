@@ -423,18 +423,27 @@ def check_clean(root: Path) -> int:
     return 0
 
 
-# The static SP decrements a prologue or a call-site adjustment emits.
-# The aarch64 immediate is 12 bits with an optional `lsl #12`, so a
-# reservation over 4095 bytes is a shifted instruction plus a remainder
-# and a reader that drops the shift undercounts it 4096-fold. A
-# variable adjustment (alloca, over-alignment) has no static size and
-# matches neither form.
+# The static SP decrements a function emits: the explicit subtraction of
+# a prologue or a call-site adjustment, and the stores that reserve as
+# they save -- the aarch64 pre-indexed `[sp, #-N]!` writeback, the
+# x86-64 push. The aarch64 immediate is 12 bits with an optional
+# `lsl #12`, so a reservation over 4095 bytes is a shifted instruction
+# plus a remainder and a reader that drops the shift undercounts it
+# 4096-fold. A variable adjustment (alloca, over-alignment) has no
+# static size and matches no form; a release (`add sp`, the
+# post-indexed `[sp], #N` load, pop) returns bytes and is not read.
 FRAME_DECREMENTS: dict[str, re.Pattern[str]] = {
     "aarch64": re.compile(
-        r"\bsub\s+sp,\s*sp,\s*#(0x[0-9a-fA-F]+|\d+)(?:\s*,\s*lsl\s*#(\d+))?"
+        r"\bsub\s+sp,\s*sp,\s*#(?P<imm>0x[0-9a-fA-F]+|\d+)"
+        r"(?:\s*,\s*lsl\s*#(?P<shift>\d+))?"
+        r"|\[sp,\s*#-(?P<pre>0x[0-9a-fA-F]+|\d+)\]!"
     ),
-    "x64": re.compile(r"\bsubq?\s+\$(0x[0-9a-fA-F]+|\d+),\s*%rsp\b"),
+    "x64": re.compile(
+        r"\bsubq?\s+\$(?P<imm>0x[0-9a-fA-F]+|\d+),\s*%rsp\b|\b(?P<push>pushq?)\s"
+    ),
 }
+
+PUSH_BYTES = 8
 
 
 def snapshot_arch(name: str) -> str:
@@ -448,10 +457,14 @@ def frame_bytes(text: str, arch: str) -> int:
     """Total static stack bytes reserved across a snapshot's functions."""
     total = 0
     for m in FRAME_DECREMENTS[arch].finditer(text):
-        imm = m.group(1)
+        form = m.groupdict()
+        if form.get("push"):
+            total += PUSH_BYTES
+            continue
+        imm = form.get("imm") or form.get("pre")
         value = int(imm, 16) if imm.startswith("0x") else int(imm)
-        if arch == "aarch64" and m.group(2):
-            value <<= int(m.group(2))
+        if form.get("shift"):
+            value <<= int(form["shift"])
         total += value
     return total
 
@@ -687,14 +700,27 @@ def self_test() -> int:
 
     # A frame past the aarch64 12-bit immediate is a shifted instruction
     # plus a remainder, and the page-wise probe splits it further; the
-    # shift carries the bulk of the size.
+    # shift carries the bulk of the size. A save that reserves as it
+    # stores counts its bytes in either disassembler's spelling of the
+    # immediate; the release that undoes it, a store with no writeback
+    # and a writeback on another base count nothing.
     cases = [
         ("aarch64", "\tsub\tsp, sp, #0x1, lsl #12\n\tstr\txzr, [sp]\n"
                     "\tsub\tsp, sp, #0x700\n", 5888),
         ("aarch64", "\tsub\tsp, sp, #0xf10\n", 3856),
         ("aarch64", "\tsub\tx0, x29, #0x1, lsl #12\n", 0),
+        ("aarch64", "\tstp\tx20, x21, [sp, #-0x30]!\n\tstr\tx19, [sp, #0x10]\n"
+                    "\tstp\tx29, x30, [sp, #0x20]\n\tadd\tx29, sp, #0x20\n"
+                    "\tsub\tsp, sp, #0x40\n\tadd\tsp, sp, #0x40\n"
+                    "\tldp\tx29, x30, [sp, #0x20]\n\tldr\tx19, [sp, #0x10]\n"
+                    "\tldp\tx20, x21, [sp], #0x30\n\tret\n", 112),
+        ("aarch64", "\tstr\tx19, [sp, #-32]!\n\tldr\tx19, [sp], #32\n", 32),
+        ("aarch64", "\tstur\tx0, [sp, #-0x10]\n\tstrb\tw1, [x0, #-0x1]!\n", 0),
         ("x64", "\tsubq\t$0x1000, %rsp\n\tsubq\t$0x750, %rsp\n", 5968),
         ("x64", "\tsubq\t0x38(%rsp), %rdx\n", 0),
+        ("x64", "\tpushq\t%rbp\n\tpushq\t%rbx\n\tsubq\t$0x20, %rsp\n"
+                "\taddq\t$0x20, %rsp\n\tpopq\t%rbx\n\tpopq\t%rbp\n", 48),
+        ("x64", "\tpush\t%rbx\n\tpop\t%rbx\n", 8),
     ]
     for arch, text, want in cases:
         got = frame_bytes(text, arch)

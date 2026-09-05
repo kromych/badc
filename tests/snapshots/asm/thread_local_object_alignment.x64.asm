@@ -163,8 +163,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movq	%fs:0x0, %rcx
                	addq	$-0xc0, %rcx
@@ -177,8 +176,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movq	%fs:0x0, %rcx
                	addq	$-0x68, %rcx
@@ -191,8 +189,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x3, %eax
                	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movq	%fs:0x0, %rcx
                	addq	$-0x50, %rcx
@@ -205,8 +202,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x4, %eax
                	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movabsq	$0x3ff8000000000000, %rdx # imm = 0x3FF8000000000000
                	movq	%rdx, %xmm14
@@ -256,8 +252,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x5, %eax
                	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movq	%fs:0x0, %rax
                	addq	$-0xc0, %rax
@@ -274,8 +269,7 @@ Disassembly of section .text:
                	je	<addr>
                	movq	(%rsp), %rbx
                	movq	%r8, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movq	%fs:0x0, %rax
                	addq	$-0x100, %rax
@@ -296,13 +290,11 @@ Disassembly of section .text:
                	je	<addr>
                	movq	(%rsp), %rbx
                	movq	%r9, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
                	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <wide_array_boundary>:

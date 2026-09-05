@@ -26,9 +26,6 @@ Disassembly of section .text:
                	int3
 
 <identity>:
-               	popq	%r10
-               	subq	$0x10, %rsp
-               	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
@@ -38,11 +35,7 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	movq	(%rcx), %rax
                	movq	0x8(%rcx), %rdx
-               	addq	$0x20, %rsp
-               	popq	%rbp
-               	popq	%r11
-               	addq	$0x10, %rsp
-               	pushq	%r11
+               	leave
                	retq
 
 <main>:
@@ -96,8 +89,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x6, %eax
-               	addq	$0xb0, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	leaq	-0xa0(%rbp), %rax
                	leaq	(%rax), %rcx
@@ -105,8 +97,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x7, %eax
-               	addq	$0xb0, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movzbq	0x1(%rax), %rcx
                	testq	%rcx, %rcx
@@ -172,13 +163,11 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x8, %eax
-               	addq	$0xb0, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rax, %rax
                	movq	%rax, %rcx
                	movq	%rax, %rcx
                	movq	%rax, %rcx
-               	addq	$0xb0, %rsp
-               	popq	%rbp
+               	leave
                	retq

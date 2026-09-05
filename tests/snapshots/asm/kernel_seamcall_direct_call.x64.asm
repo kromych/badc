@@ -70,8 +70,7 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
                	movq	%rcx, %rax
-               	addq	$0x60, %rsp
-               	popq	%rbp
+               	leave
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
 
@@ -91,7 +90,6 @@ Disassembly of section .text:
                	movq	-0x10(%rbp), %rax
                	callq	<addr>
 		R_X86_64_PLT32	__seamcall_saved_ret-0x4
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4

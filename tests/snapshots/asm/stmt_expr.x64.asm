@@ -45,12 +45,11 @@ Disassembly of section .text:
                	movslq	(%rcx), %rdx
                	incq	%rdx
                	movl	%edx, (%rcx)
-               	movslq	%edx, %rdx
                	leaq	<rip>, %rcx
                	movslq	(%rcx), %rsi
                	incq	%rsi
                	movl	%esi, (%rcx)
-               	movslq	%esi, %rcx
+               	movq	%rsi, %rcx
                	shlq	%rcx
                	addq	%rdx, %rcx
                	cmpl	$0x8, %ecx
@@ -70,13 +69,13 @@ Disassembly of section .text:
                	movslq	(%rcx), %rdx
                	incq	%rdx
                	movl	%edx, (%rcx)
-               	movslq	%edx, %rcx
+               	movq	%rdx, %rcx
                	imulq	$0xa, %rcx, %rcx
                	leaq	<rip>, %rdx
                	movslq	(%rdx), %rsi
                	incq	%rsi
                	movl	%esi, (%rdx)
-               	movslq	%esi, %rdx
+               	movq	%rsi, %rdx
                	imulq	$0x64, %rdx, %rdx
                	cmpl	$0xa, %ecx
                	jne	<addr>
@@ -104,12 +103,12 @@ Disassembly of section .text:
                	movslq	(%rcx), %rdx
                	incq	%rdx
                	movl	%edx, (%rcx)
-               	movslq	%edx, %rcx
+               	movq	%rdx, %rcx
                	leaq	<rip>, %rdx
                	movslq	(%rdx), %rsi
                	incq	%rsi
                	movl	%esi, (%rdx)
-               	movslq	%esi, %rdx
+               	movq	%rsi, %rdx
                	addq	%rdx, %rcx
                	cmpl	$0x5, %ecx
                	jne	<addr>

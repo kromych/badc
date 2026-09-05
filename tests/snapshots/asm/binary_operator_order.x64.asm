@@ -51,7 +51,7 @@ Disassembly of section .text:
                	movslq	(%rcx), %rdx
                	incq	%rdx
                	movl	%edx, (%rcx)
-               	movslq	%edx, %rcx
+               	movq	%rdx, %rcx
                	testl	%ecx, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx
@@ -70,7 +70,7 @@ Disassembly of section .text:
                	movslq	(%rcx), %rdx
                	incq	%rdx
                	movl	%edx, (%rcx)
-               	movslq	%edx, %rcx
+               	movq	%rdx, %rcx
                	testl	%ecx, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx

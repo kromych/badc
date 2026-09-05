@@ -27,8 +27,7 @@ Disassembly of section .text:
                	ud2
                	movl	$0xa, %eax
                	movslq	%eax, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
                	jmp	<addr>
@@ -61,15 +60,13 @@ Disassembly of section .text:
                	ud2
                	ud2
                	movl	$0x6, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
                	cmpl	$0x1, %edi
                	jne	<addr>
                	movl	$0x5, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
 

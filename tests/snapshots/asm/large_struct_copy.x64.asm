@@ -238,8 +238,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0x430, %rsp            # imm = 0x430
-               	popq	%rbp
+               	leave
                	retq
                	movslq	0x1fc(%rax), %rcx
                	cmpl	$0x1f4, %ecx            # imm = 0x1F4
@@ -264,29 +263,25 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	addq	$0x430, %rsp            # imm = 0x430
-               	popq	%rbp
+               	leave
                	retq
                	movslq	0xb0(%rdx), %rax
                	cmpl	$-0x1, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	addq	$0x430, %rsp            # imm = 0x430
-               	popq	%rbp
+               	leave
                	retq
                	movslq	0x154(%rdx), %rax
                	cmpl	$-0x2, %eax
                	je	<addr>
                	movl	$0x4, %eax
-               	addq	$0x430, %rsp            # imm = 0x430
-               	popq	%rbp
+               	leave
                	retq
                	movslq	0x1f8(%rdx), %rax
                	cmpl	$-0x3, %eax
                	je	<addr>
                	movl	$0x5, %eax
-               	addq	$0x430, %rsp            # imm = 0x430
-               	popq	%rbp
+               	leave
                	retq
                	xorq	%rcx, %rcx
                	jmp	<addr>
@@ -312,23 +307,18 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	%eax, %rax
                	xorq	%rax, %rax
-               	addq	$0x430, %rsp            # imm = 0x430
-               	popq	%rbp
+               	leave
                	retq
                	leaq	0x6e(%rcx), %rax
                	movslq	%eax, %rax
-               	addq	$0x430, %rsp            # imm = 0x430
-               	popq	%rbp
+               	leave
                	retq
                	leaq	0x3c(%rcx), %rax
                	movslq	%eax, %rax
-               	addq	$0x430, %rsp            # imm = 0x430
-               	popq	%rbp
+               	leave
                	retq
                	leaq	0xa(%rcx), %rax
                	movslq	%eax, %rax
-               	addq	$0x430, %rsp            # imm = 0x430
-               	popq	%rbp
+               	leave
                	retq

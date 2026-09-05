@@ -13,8 +13,7 @@ Disassembly of section .text:
                	cmpq	%r11, %rax
                	jbe	<addr>
                	movabsq	$-0xe, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
                	stac
@@ -29,8 +28,7 @@ Disassembly of section .text:
                	movq	-0x18(%rbp), %rbx
                	clac
                	xorq	%rax, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
 
@@ -44,8 +42,7 @@ Disassembly of section .text:
                	cmpq	%r11, %rax
                	jbe	<addr>
                	movabsq	$-0xe, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
                	stac
@@ -70,13 +67,11 @@ Disassembly of section .text:
                	movq	-0x18(%rbp), %rbx
                	clac
                	xorq	%rax, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
                	clac
                	movabsq	$-0xe, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	leave
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4

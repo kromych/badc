@@ -49,8 +49,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	leaq	-0xa0(%rbp), %rsp
-               	addq	$0xa0, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0xb, %edi
                	movb	%dil, (%rcx)
@@ -84,15 +83,12 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x3, %eax
                	leaq	-0xa0(%rbp), %rsp
-               	addq	$0xa0, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	leaq	-0xa0(%rbp), %rsp
-               	addq	$0xa0, %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0x2, %eax
                	leaq	-0xa0(%rbp), %rsp
-               	addq	$0xa0, %rsp
-               	popq	%rbp
+               	leave
                	retq

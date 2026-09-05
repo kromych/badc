@@ -56,8 +56,7 @@ Disassembly of section .text:
                	movq	-0x48(%rbp), %r10
                	movq	-0x40(%rbp), %r11
                	xorq	%rax, %rax
-               	addq	$0x80, %rsp
-               	popq	%rbp
+               	leave
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
 
@@ -107,8 +106,7 @@ Disassembly of section .text:
                	movq	-0x48(%rbp), %r10
                	movq	-0x40(%rbp), %r11
                	xorq	%rax, %rax
-               	addq	$0x80, %rsp
-               	popq	%rbp
+               	leave
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
 
@@ -123,7 +121,6 @@ Disassembly of section .text:
                	jmp	<addr>
 		R_X86_64_PLT32	external_target-0x4
                	xorq	%rax, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	leave
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4

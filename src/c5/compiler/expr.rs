@@ -1201,7 +1201,7 @@ impl Compiler {
                 String::new()
             };
             Err(self.compile_err(
-                Code::INVALID_OPERANDS,
+                Code::SYNTAX,
                 format!(
                     "bad expression: got {}{id_suffix} (in {func})",
                     super::super::token::describe(self.lex.tk),

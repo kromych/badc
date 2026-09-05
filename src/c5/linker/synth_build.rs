@@ -250,6 +250,7 @@ fn synth_program_and_build(
         abi: target.abi(),
         tls_data: merged.tls_data.clone(),
         tls_init_size: merged.tls_init_size,
+        tls_align: merged.tls_align,
         tls_index_fixups: merged
             .tls_index_fixups
             .iter()
@@ -341,6 +342,7 @@ fn synth_program(
         notes: Vec::new(),
         tls_data: merged.tls_data.clone(),
         tls_init_size: merged.tls_init_size,
+        tls_align: merged.tls_align,
         data_relocs: data_relocs.to_vec(),
         extern_data_relocs: Vec::new(),
         code_relocs: code_relocs.to_vec(),
@@ -1425,6 +1427,7 @@ mod tests {
             local_funcs: alloc::vec::Vec::new(),
             tls_data: alloc::vec![],
             tls_init_size: 0,
+            tls_align: 8,
             tls_abs_relocs: Vec::new(),
             init_fini_arrays: Default::default(),
             section_map: Default::default(),

@@ -678,6 +678,86 @@ fn char_limits_match_unsigned_char() {
     );
 }
 
+/// Two units with over-aligned thread-locals on Linux/aarch64: the images
+/// are 24 and 80 bytes with 16- and 32-byte objects, so the second block
+/// has to start on its alignment and the thread pointer offsets have to
+/// take the block size rounded up to `p_align`. Both threads check the
+/// addresses; `main` returns a bitmask of failures.
+#[test]
+fn over_aligned_thread_locals_across_units() {
+    use crate::{CompileOptions, Program};
+
+    const UNIT_MAIN: &str = "\
+#include <dlfcn.h>\n\
+typedef struct __attribute__((aligned(16))) { long a, b; } S16;\n\
+_Thread_local S16 wa;\n\
+_Thread_local char a;\n\
+int check_other(void);\n\
+static int check(void) {\n\
+    int f = check_other();\n\
+    if ((unsigned long)&wa & 15) f |= 1;\n\
+    wa.a = 1; a = 2;\n\
+    if (wa.a + a != 3) f |= 2;\n\
+    return f;\n\
+}\n\
+static int *thread_main(int *arg) { return (int *)(long)check(); }\n\
+int main(void) {\n\
+    int *handle; int *create; int *join; long tid; int *retval;\n\
+    int f = check();\n\
+    handle = dlopen(0, 2);\n\
+    create = dlsym(handle, \"pthread_create\");\n\
+    join = dlsym(handle, \"pthread_join\");\n\
+    create(&tid, 0, thread_main, 0);\n\
+    join(tid, &retval);\n\
+    return f | ((int)(long)retval << 4);\n\
+}\n";
+
+    const UNIT_OTHER: &str = "\
+typedef struct __attribute__((aligned(32))) { long a, b, c, d; } S32;\n\
+_Thread_local char b;\n\
+_Thread_local S32 wb;\n\
+_Thread_local char c;\n\
+_Thread_local char d;\n\
+int check_other(void) {\n\
+    int f = 0;\n\
+    if ((unsigned long)&wb & 31) f |= 4;\n\
+    wb.a = 3; b = 1; c = 1; d = 1;\n\
+    if (wb.a + b + c + d != 6) f |= 8;\n\
+    return f;\n\
+}\n";
+
+    let compile = |src: &str| -> Program {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::LinuxAarch64, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile: {e}"))
+    };
+    let prog_main = compile(UNIT_MAIN);
+    let prog_other = compile(UNIT_OTHER);
+    let bytes = super::link_executable_with_runtime_multi(
+        &[&prog_main, &prog_other],
+        Target::LinuxAarch64,
+        NativeOptions::default(),
+    )
+    .unwrap_or_else(|e| panic!("link: {e}"));
+
+    let path = super::unique_temp_path("badc-elf-aarch64-tls-align", "over_aligned_tls", ".bin");
+    {
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+        f.sync_all().expect("sync temp file");
+    }
+    set_executable(&path);
+    let output = exec_with_retry(&path).expect("exec produced binary");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "over-aligned thread-locals across units: failure mask {:?}",
+        output.status.code()
+    );
+}
+
 /// Cross-unit `extern _Thread_local` on Linux/aarch64. Two translation
 /// units each define TLS storage; `main` reads its own and the other
 /// unit's thread-locals both directly (extern) and through the defining

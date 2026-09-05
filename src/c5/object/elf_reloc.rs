@@ -4203,7 +4203,7 @@ impl<'a> RelocWriter<'a> {
                 sh_name,
                 sh_type,
                 sh_flags: SHF_ALLOC | SHF_WRITE | SHF_TLS,
-                sh_addralign: 16,
+                sh_addralign: crate::c5::layout::tls_image_align(program.tls_align) as u64,
                 ..Default::default()
             };
             out.place(

@@ -516,6 +516,7 @@ pub fn parse_native_mach_o(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         // The Mach-O reader rejects any TLS section.
         tls_relocs: Vec::new(),
         tls_bss_size: 0,
+        tls_align: 1,
         symbols,
         text_relocs: relocs.text,
         relro_relocs: relocs.relro,

@@ -283,6 +283,9 @@ pub struct Program {
     /// (`tls_data.len() - tls_init_size` bytes) is zero-init and
     /// goes into `.tbss`. Invariant: `tls_init_size <= tls_data.len()`.
     pub tls_init_size: usize,
+    /// Alignment of `tls_data`: the largest alignment among its objects,
+    /// at least 8. The image writers place each thread's copy on it.
+    pub tls_align: usize,
     /// Address-of-global initializers. Each entry says "byte
     /// `data_offset` of the data segment must hold the runtime
     /// address of byte `target_offset` of the data segment".
@@ -681,6 +684,7 @@ impl DataOffsets for Program {
             notes: _,
             tls_data: _,      // separate image
             tls_init_size: _, // extent of `tls_data`
+            tls_align: _,     // an alignment, not an offset
             data_relocs,
             extern_data_relocs,
             code_relocs,
@@ -816,6 +820,7 @@ mod data_offset_tests {
             notes: Vec::new(),
             tls_data: Vec::new(),
             tls_init_size: 0,
+            tls_align: 8,
             data_relocs: Vec::new(),
             extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),

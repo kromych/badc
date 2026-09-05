@@ -13,6 +13,9 @@ pub(super) struct FnCtx<'a> {
     pub(super) imports: &'a super::ResolvedImports,
     pub(super) variadic_targets: &'a alloc::collections::BTreeSet<usize>,
     pub(super) extern_tls_names: &'a alloc::collections::BTreeMap<u32, alloc::string::String>,
+    /// Alignment of the unit's thread-local image; variant I places the
+    /// block past the TCB rounded up to it.
+    pub(super) tls_align: usize,
     /// `Inst::ImmData` value-id -> cross-TU data symbol name, for an `i`-class
     /// inline-asm operand that names an external address in a section field.
     pub(super) extern_data_names: &'a alloc::collections::BTreeMap<u32, alloc::string::String>,
@@ -52,6 +55,7 @@ pub(super) fn emit_inst(
         imports,
         variadic_targets,
         extern_tls_names,
+        tls_align,
         extern_data_names,
         param_plan,
         name2entpc,
@@ -352,6 +356,7 @@ pub(super) fn emit_inst(
             macho_tlv_descriptors,
             cx.elf_tpoff_fixups,
             extern_tls_names.get(&v).map(|s| s.as_str()),
+            tls_align,
         ),
         // The predecessor-exit moves placed the value; nothing at the phi
         // position.

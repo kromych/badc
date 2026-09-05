@@ -271,6 +271,9 @@ pub struct MergedNative {
     /// `_Thread_local` storage.
     pub tls_data: Vec<u8>,
     pub tls_init_size: usize,
+    /// Alignment of [`Self::tls_data`]: the largest input alignment, at
+    /// least 8. Each unit's block starts on its own alignment inside it.
+    pub tls_align: usize,
     /// Address-constant initializers inside [`Self::tls_data`]. Same
     /// resolution as [`Self::data_abs_relocs`], with `slot_offset`
     /// indexing the TLS template instead of `data`.
@@ -810,6 +813,7 @@ struct Link<'a> {
     tls_bases: Vec<usize>,
     tls_data: Vec<u8>,
     tls_init_size: usize,
+    tls_align: usize,
     /// Each defined `_Thread_local` at its unit base plus its offset
     /// within that unit's block.
     tls_symbol_offsets: HashMap<&'a str, u64>,
@@ -926,6 +930,7 @@ impl<'a> Link<'a> {
             tls_bases: Vec::new(),
             tls_data: Vec::new(),
             tls_init_size: 0,
+            tls_align: crate::c5::layout::TLS_ALIGN_MIN,
             tls_symbol_offsets: HashMap::new(),
             text: Vec::new(),
             text_bases: Vec::with_capacity(objs.len()),
@@ -989,12 +994,13 @@ impl<'a> Link<'a> {
     /// access by a `__thread_vars` descriptor whose per-thread offset
     /// the linker fills, so multiple units' TLS blocks concatenate
     /// freely: each unit contributes [init bytes ++ zero-fill] to one
-    /// merged block, and a descriptor's offset is rebased by the unit's
-    /// base (a unit-local access) or set from the merged TLS symbol
-    /// table (a cross-unit `extern _Thread_local`). The ELF and
-    /// Windows/aarch64 paths achieve the same through
+    /// merged block at its own alignment, and a descriptor's offset is
+    /// rebased by the unit's base (a unit-local access) or set from the
+    /// merged TLS symbol table (a cross-unit `extern _Thread_local`).
+    /// The ELF and Windows/aarch64 paths achieve the same through
     /// `NT_BADC_ELF_TPOFF` fixups resolved in `resolve_tls_fixups`, so a
     /// multi-unit link rebases each access against the merged layout.
+    /// The merged block's alignment is the largest unit alignment.
     fn lay_out_tls(&mut self) -> Result<(), C5Error> {
         let objs = self.objs;
         let uses_tlv = objs.iter().any(|o| {
@@ -1022,7 +1028,13 @@ impl<'a> Link<'a> {
         self.tls_bases = alloc::vec![0; objs.len()];
         let mut any_tls_init = false;
         for (i, obj) in objs.iter().enumerate() {
-            self.tls_bases[i] = self.tls_data.len();
+            if obj.tls_data.is_empty() && obj.tls_bss_size == 0 {
+                continue;
+            }
+            let base = align_usize(self.tls_data.len(), obj.tls_align.max(1));
+            self.tls_data.resize(base, 0);
+            self.tls_bases[i] = base;
+            self.tls_align = self.tls_align.max(obj.tls_align);
             if !obj.tls_data.is_empty() {
                 any_tls_init = true;
             }
@@ -1948,13 +1960,13 @@ impl<'a> Link<'a> {
     /// so each is re-resolved against the merged layout. The
     /// immediate's bias depends on the access model:
     ///   * x86_64 (Linux variant-2) places the block below the thread
-    ///     pointer, so `imm32 = merged_size - merged_offset` and the
-    ///     access computes `TP - imm32` (glibc puts the block at `tp -
-    ///     roundup(memsz, align)`, matching the writer's PT_TLS
-    ///     `p_align`).
+    ///     pointer at `tp - roundup(memsz, align)`, `align` being the
+    ///     writer's PT_TLS `p_align`, so the access computes `TP +
+    ///     (merged_offset - roundup(merged_size, align))`.
     ///   * aarch64 Linux (variant-1) places the block above the thread
-    ///     pointer after a 16-byte TCB reserve, so `imm12 = 16 +
-    ///     merged_offset` baked into an `add`.
+    ///     pointer after the 16-byte TCB, rounded up to `align`, so
+    ///     `imm = roundup(16, align) + merged_offset` baked into an
+    ///     `add` pair.
     ///   * Windows (both arches) reaches the block through the TEB's
     ///     TLS array (`r10`/`x16 = tls_array[_tls_index]`), so the
     ///     register already holds the module's block base and the
@@ -1965,7 +1977,8 @@ impl<'a> Link<'a> {
     /// object carrying any such fixup uses the Windows no-bias offset.
     fn resolve_tls_fixups(&mut self) -> Result<(), C5Error> {
         let objs = self.objs;
-        let merged_tls_total = align_usize(self.tls_data.len(), 8) as u64;
+        let merged_tls_total = align_usize(self.tls_data.len(), self.tls_align) as u64;
+        let tcb_reserve = align_usize(16, self.tls_align) as u64;
         for (i, obj) in objs.iter().enumerate() {
             let win_teb = !obj.tls_index_fixups.is_empty();
             for (text_off, target) in &obj.elf_tpoff_fixups {
@@ -2022,7 +2035,7 @@ impl<'a> Link<'a> {
                         let tpoff = if win_teb {
                             merged_offset
                         } else {
-                            merged_offset + 16
+                            merged_offset + tcb_reserve
                         };
                         if tpoff >= (1 << 24) {
                             return Err(internal_err(
@@ -2923,6 +2936,7 @@ impl<'a> Link<'a> {
             local_funcs: self.local_funcs,
             tls_data: self.tls_data,
             tls_init_size: self.tls_init_size,
+            tls_align: self.tls_align,
             tls_abs_relocs: self.tls_abs_relocs,
             init_fini_arrays: crate::c5::codegen::InitFiniArrays {
                 init: (self.init_array.1 > self.init_array.0)
@@ -3764,6 +3778,7 @@ mod tests {
             tls_data: Vec::new(),
             tls_relocs: Vec::new(),
             tls_bss_size: 0,
+            tls_align: 1,
             symbols: Vec::new(),
             text_relocs: Vec::new(),
             data_relocs: Vec::new(),
@@ -4808,6 +4823,7 @@ mod tests {
                 tls_data: alloc::vec::Vec::new(),
                 tls_relocs: alloc::vec::Vec::new(),
                 tls_bss_size: 0,
+                tls_align: 1,
                 symbols,
                 text_relocs,
                 data_relocs: alloc::vec::Vec::new(),

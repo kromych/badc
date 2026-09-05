@@ -6,11 +6,6 @@
 // at block scope alike. The single-byte objects between the wide ones keep
 // the running offset off every 16-byte boundary. Returns 0, distinct
 // non-zero per failure.
-//
-// TODO: the ELF writer emits PT_TLS with p_align 8 whatever the block
-// holds. On x86_64 the block sits at tp - memsz, so the 16-byte boundaries
-// here hold only while the image's length is a multiple of 16; the objects
-// below total 256 bytes.
 
 struct s16 {
     long a, b;

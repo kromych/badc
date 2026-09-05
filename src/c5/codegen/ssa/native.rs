@@ -114,6 +114,7 @@ pub(crate) fn compile_function_to_bytes(
                     &mut fixups,
                     &extern_data_names,
                     &extern_tls_names,
+                    crate::c5::layout::TLS_ALIGN_MIN,
                     &imports,
                     &variadic_targets,
                     &mut macho_tlv_fixups,

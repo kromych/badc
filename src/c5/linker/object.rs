@@ -798,6 +798,10 @@ pub struct NativeObject {
     pub tls_data: Vec<u8>,
     /// Sum of every `.tbss*` section's size (zero-init TLS).
     pub tls_bss_size: usize,
+    /// Largest sh_addralign among the tdata- and tbss-family sections.
+    /// The linker aligns this object's base in the merged TLS block to
+    /// it and raises the block's own alignment to it.
+    pub tls_align: usize,
     pub symbols: Vec<NativeSymbol>,
     pub text_relocs: Vec<NativeReloc>,
     /// Relocations whose slot lives in this unit's relro blob;
@@ -1005,6 +1009,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         tls_data: blobs.tls_data,
         tls_relocs: relocs.tls,
         tls_bss_size: blobs.tls_bss_size,
+        tls_align: blobs.tls_align,
         symbols,
         text_relocs: relocs.text,
         relro_relocs: relocs.relro,
@@ -1289,6 +1294,7 @@ struct FamilyBlobs {
     /// against the start of the TLS image.
     tls_data: Vec<u8>,
     tls_bss_size: usize,
+    tls_align: usize,
     /// `.tdata*` entries first, then `.tbss*`.
     tls_bases: Vec<(usize, u64)>,
 }
@@ -1397,6 +1403,20 @@ fn concat_families(
     }
     let mut tls_data: Vec<u8> = Vec::new();
     let mut tls_bases: Vec<(usize, u64)> = Vec::with_capacity(roles.tdata.len() + roles.tbss.len());
+    let mut tls_align: usize = 1;
+    for &sh_i in roles.tdata.iter().chain(&roles.tbss) {
+        let align = shdrs[sh_i].sh_addralign.max(1) as usize;
+        if !align.is_power_of_two() {
+            return Err(link_err(
+                Code::MALFORMED_INPUT,
+                MODULE,
+                &format!(
+                    "tls-family section at index {sh_i} has non-power-of-two sh_addralign {align}"
+                ),
+            ));
+        }
+        tls_align = tls_align.max(align);
+    }
     for &sh_i in &roles.tdata {
         let sh = &shdrs[sh_i];
         if sh.sh_type == SHT_NOBITS {
@@ -1435,6 +1455,7 @@ fn concat_families(
         bss_bases,
         tls_data,
         tls_bss_size,
+        tls_align,
         tls_bases,
     })
 }
@@ -2962,7 +2983,8 @@ mod tests {
     /// sums `.tbss*` sizes into `tls_bss_size`, and surfaces
     /// symbols as `Tls` with the value rebased by the section's
     /// base in the merged TLS image (`.tdata` first, `.tbss`
-    /// past it).
+    /// past it), and carries the widest section alignment out as
+    /// the unit's TLS alignment.
     #[test]
     fn tdata_and_tbss_sections_surface_as_tls() {
         let mut strtab: Vec<u8> = vec![0];
@@ -2982,13 +3004,14 @@ mod tests {
             SecPlan::strtab(".strtab", strtab),
             SecPlan::symtab(".symtab", symtab, 2, 1),
             SecPlan::progbits(".text", Vec::new()),
-            SecPlan::progbits(".tdata", vec![0x42, 0, 0, 0]),
-            SecPlan::nobits(".tbss", 8),
+            SecPlan::progbits(".tdata", vec![0x42, 0, 0, 0]).aligned(4),
+            SecPlan::nobits(".tbss", 8).aligned(16),
         ];
         let bytes = build_test_elf(EM_X86_64, &plans);
         let obj = parse_native_elf(&bytes).expect("parse TLS fixture");
         assert_eq!(obj.tls_data.len(), 4);
         assert_eq!(obj.tls_bss_size, 8);
+        assert_eq!(obj.tls_align, 16, "widest TLS sh_addralign is carried out");
         assert!(matches!(obj.symbols[1].section, NativeSymSection::Tls));
         assert_eq!(obj.symbols[1].value, 0, ".tdata symbol lands at TLS start");
         assert!(matches!(obj.symbols[2].section, NativeSymSection::Tls));

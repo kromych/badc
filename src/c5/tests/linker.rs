@@ -3795,6 +3795,129 @@ fn thread_local_storage_links_into_pt_tls_executable() {
     );
 }
 
+/// Two units with over-aligned thread-locals whose images are not
+/// multiples of their alignment: the second unit's block starts on its
+/// own alignment in the merged image, the image takes the widest
+/// alignment, and the executable's `PT_TLS` carries it on an aligned
+/// address, on both ELF machines.
+#[test]
+fn thread_local_blocks_merge_on_their_alignment() {
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::{
+        emit_aarch64_plt, emit_x86_64_plt, link_native_objects, parse_native_elf,
+        write_native_image_from_merged,
+    };
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    const UNIT_MAIN: &str = "typedef struct __attribute__((aligned(16))) { long a, b; } S16;\n\
+         _Thread_local S16 wa;\n\
+         _Thread_local char a;\n\
+         int check_other(void);\n\
+         int main(void) { wa.a = 1; a = 2; return check_other() + wa.a + a; }\n";
+    const UNIT_OTHER: &str = "typedef struct __attribute__((aligned(32))) { long a, b, c, d; } S32;\n\
+         _Thread_local char b;\n\
+         _Thread_local S32 wb;\n\
+         _Thread_local char c;\n\
+         _Thread_local char d;\n\
+         int check_other(void) { wb.a = 3; b = 1; c = 1; d = 1; return wb.a + b + c + d; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let unit = |src: &str| {
+            let prog = Compiler::with_options(
+                alloc::format!("{TEST_PRELUDE}{src}"),
+                target,
+                CompileOptions::default().with_no_entry_point(true),
+            )
+            .compile()
+            .expect("compile");
+            let opts = NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..Default::default()
+            };
+            let bytes = emit_native_with_options(&prog, target, opts).expect("emit");
+            parse_native_elf(&bytes).expect("parse")
+        };
+        let main_obj = unit(UNIT_MAIN);
+        let other_obj = unit(UNIT_OTHER);
+        assert_eq!(
+            (
+                main_obj.tls_data.len() + main_obj.tls_bss_size,
+                main_obj.tls_align
+            ),
+            (24, 16)
+        );
+        assert_eq!(
+            (
+                other_obj.tls_data.len() + other_obj.tls_bss_size,
+                other_obj.tls_align
+            ),
+            (80, 32)
+        );
+        let mut merged = link_native_objects(&[main_obj, other_obj]).expect("link");
+        assert_eq!(
+            merged.tls_align, 32,
+            "{target:?}: the merged block takes the widest alignment"
+        );
+        assert_eq!(
+            merged.tls_data.len(),
+            112,
+            "{target:?}: the second block starts at 32, not 24"
+        );
+        let other_base = merged
+            .section_map
+            .tls
+            .iter()
+            .find(|c| c.input == Some(1) && c.name == ".tbss")
+            .map(|c| c.offset)
+            .expect("the second unit's .tbss is in the TLS map");
+        assert_eq!(
+            other_base, 32,
+            "{target:?}: the second unit's block sits on its alignment"
+        );
+        let plt = match target {
+            Target::LinuxX64 => emit_x86_64_plt(&mut merged),
+            _ => emit_aarch64_plt(&mut merged),
+        }
+        .expect("plt");
+        let exe = write_native_image_from_merged(
+            &merged,
+            &plt,
+            "main",
+            None,
+            OutputKind::Executable,
+            target,
+            None,
+        )
+        .expect("write executable");
+        let phoff = u64::from_le_bytes(exe[0x20..0x28].try_into().unwrap()) as usize;
+        let phentsize = u16::from_le_bytes(exe[0x36..0x38].try_into().unwrap()) as usize;
+        let phnum = u16::from_le_bytes(exe[0x38..0x3a].try_into().unwrap()) as usize;
+        let field = |base: usize, at: usize| {
+            u64::from_le_bytes(exe[base + at..base + at + 8].try_into().unwrap())
+        };
+        let pt_tls = (0..phnum)
+            .map(|i| phoff + i * phentsize)
+            .find(|&base| u32::from_le_bytes(exe[base..base + 4].try_into().unwrap()) == 7)
+            .expect("executable must carry a PT_TLS segment");
+        let (p_vaddr, p_memsz, p_align) = (
+            field(pt_tls, 0x10),
+            field(pt_tls, 0x28),
+            field(pt_tls, 0x30),
+        );
+        assert_eq!(
+            p_align, 32,
+            "{target:?}: PT_TLS p_align is the widest object alignment"
+        );
+        assert_eq!(
+            p_memsz, 112,
+            "{target:?}: PT_TLS p_memsz covers both blocks"
+        );
+        assert_eq!(
+            p_vaddr % 32,
+            0,
+            "{target:?}: the PT_TLS template starts on p_align"
+        );
+    }
+}
+
 #[test]
 fn macho_tlv_descriptors_round_trip_through_et_rel() {
     // A macOS `_Thread_local` access lowers to a TLV-descriptor call
@@ -5437,6 +5560,7 @@ fn minimal_native_object(
         tls_data: alloc::vec::Vec::new(),
         tls_relocs: alloc::vec::Vec::new(),
         tls_bss_size: 0,
+        tls_align: 1,
         symbols,
         text_relocs,
         data_relocs,
@@ -5741,6 +5865,7 @@ fn aarch64_data_ref_object_ex(
         tls_data: alloc::vec::Vec::new(),
         tls_relocs: alloc::vec::Vec::new(),
         tls_bss_size: 0,
+        tls_align: 1,
         prologue_ends: alloc::vec::Vec::new(),
         extern_data_names: alloc::vec::Vec::new(),
         symbols: alloc::vec![NativeSymbol {
@@ -5995,6 +6120,7 @@ fn blank_aarch64_object() -> crate::c5::linker::NativeObject {
         tls_data: alloc::vec::Vec::new(),
         tls_relocs: alloc::vec::Vec::new(),
         tls_bss_size: 0,
+        tls_align: 1,
         prologue_ends: alloc::vec::Vec::new(),
         extern_data_names: alloc::vec::Vec::new(),
         symbols: alloc::vec::Vec::new(),

@@ -2125,13 +2125,11 @@ impl Compiler {
         };
         self.symbols[id_idx].type_align = self.symbols[id_idx].type_align.max(obj_align);
         let decl_align: usize = if want_align > 8 {
-            if thread_local && (req_align > 8 || want_align > 16) {
-                return Err(self.compile_err(
-                    Code::LIMIT,
-                    "alignment above 8 is not supported for `_Thread_local` objects",
-                ));
+            if thread_local {
+                self.check_thread_local_align(want_align)?;
+            } else {
+                self.data_align = self.data_align.max(want_align);
             }
-            self.data_align = self.data_align.max(want_align);
             want_align
         } else {
             8
@@ -2139,10 +2137,29 @@ impl Compiler {
         // Align the data cursor before any of the branches
         // below reserve storage, so a tentative or zero-init
         // definition starts on the object's boundary.
-        if decl_align > 8 {
+        if decl_align > 8 && !thread_local {
             self.align_data_to(decl_align);
         }
         Ok(decl_align)
+    }
+
+    /// An ELF loader places each thread's block on the `PT_TLS` alignment,
+    /// which the image carries from the objects; dyld and the Windows
+    /// loader allocate the block from the heap, which places it on a
+    /// 16-byte boundary and nothing wider.
+    fn check_thread_local_align(&self, want_align: usize) -> Result<(), C5Error> {
+        use super::super::codegen::Target;
+        let heap_block = matches!(self.target, Target::MacOSAarch64) || self.target.is_windows();
+        if heap_block && want_align > 16 {
+            return Err(self.compile_err(
+                Code::LIMIT,
+                format!(
+                    "alignment {want_align} exceeds the 16-byte boundary the target's loader \
+                     places a thread's `_Thread_local` block on"
+                ),
+            ));
+        }
+        Ok(())
     }
 
     /// A deferred-size array (`T xs[]`): the initializer supplies the

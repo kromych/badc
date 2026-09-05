@@ -1826,14 +1826,16 @@ pub(crate) struct Build {
     /// Thread-local data segment, byte-for-byte copy of
     /// `Program::tls_data`. The writer routes the first
     /// `tls_init_size` bytes to `.tdata` (initialised TLS image)
-    /// and the remainder to `.tbss` (zero-fill TLS bss). The
-    /// per-target codegen lowering for `Inst::TlsAddr` reads
-    /// `tls_data.len()` to compute variant-2 (x86_64) negative
-    /// offsets at emit time.
+    /// and the remainder to `.tbss` (zero-fill TLS bss).
     pub tls_data: Vec<u8>,
     /// Number of `tls_data` bytes that are statically initialised.
     /// `tls_data.len() - tls_init_size` bytes are zero-fill.
     pub tls_init_size: usize,
+    /// Alignment of `tls_data`, at least 8: the ELF writer's `PT_TLS`
+    /// `p_align`, and the rounding the thread-pointer-relative offsets
+    /// take (variant II rounds the block size up to it, variant I the
+    /// TCB reserve).
+    pub tls_align: usize,
     /// Win64 TLS-index fixups -- one entry per `Inst::TlsAddr`
     /// lowering site on a Win64 target. The writer reserves a
     /// 4-byte `_tls_index` slot in `.data`, builds the

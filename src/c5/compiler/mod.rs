@@ -2187,6 +2187,9 @@ pub struct Compiler {
     /// Base alignment the `.data` image requires, at least 8. Raised
     /// to 16 when a file-scope object requests `_Alignas(16)`.
     data_align: usize,
+    /// Alignment of the thread-local image, at least 8: the largest
+    /// alignment among the objects reserved in it.
+    tls_align: usize,
 
     /// Mirror of [`CompileOptions::implicit_extern_fns`]. An
     /// undeclared call to a listed name binds as a C89 6.3.2.2
@@ -2842,6 +2845,7 @@ impl Compiler {
             warn_dead_store,
             no_entry_point: opts.no_entry_point,
             data_align: 8,
+            tls_align: crate::c5::layout::TLS_ALIGN_MIN,
             implicit_extern_fns: opts.implicit_extern_fns.clone(),
             export_all_functions: opts.export_all_functions,
             no_builtin: opts.no_builtin,
@@ -3426,6 +3430,7 @@ impl Compiler {
             notes: self.notes,
             tls_data: self.tls_data,
             tls_init_size: self.tls_init_size,
+            tls_align: self.tls_align,
             exports,
             data_relocs: self.data_relocs,
             extern_data_relocs: self.extern_data_relocs,

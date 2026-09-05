@@ -528,6 +528,8 @@ struct SectionPlacement {
 struct TlvSections {
     vars: SectionPlacement,
     storage: SectionPlacement,
+    /// log2 of the storage's alignment, the section header's `align`.
+    storage_align: u32,
     initialised: bool,
 }
 
@@ -715,7 +717,7 @@ fn segment_data(
             t.storage.addr,
             t.storage.size,
             offset,
-            3,
+            t.storage_align,
             flags,
         ));
     }
@@ -1390,6 +1392,7 @@ struct Layout {
     thread_vars_offset_in_segment: u64,
     thread_storage_size: u64,
     thread_storage_offset_in_segment: u64,
+    thread_storage_align: u64,
     thread_storage_initialised: bool,
     data_filesize: u64,
     data_vmsize: u64,
@@ -1758,8 +1761,16 @@ impl<'a> MachOWriter<'a> {
             0
         };
         l.thread_storage_size = build.tls_data.len() as u64;
+        // dyld copies the template into a per-thread `malloc` block, so
+        // the objects' alignment holds up to 16 by the allocation; the
+        // section is placed and marked at the image's alignment, as ld64
+        // does.
+        l.thread_storage_align = crate::c5::layout::tls_image_align(build.tls_align) as u64;
         l.thread_storage_offset_in_segment = if self.tls_present {
-            l.thread_vars_offset_in_segment + l.thread_vars_size
+            round_up(
+                l.thread_vars_offset_in_segment + l.thread_vars_size,
+                l.thread_storage_align,
+            )
         } else {
             0
         };
@@ -2150,6 +2161,7 @@ impl<'a> MachOWriter<'a> {
                 l.thread_storage_size,
                 l.thread_storage_fileoff(),
             ),
+            storage_align: l.thread_storage_align.trailing_zeros(),
             initialised: l.thread_storage_initialised,
         });
         let data_segment = segment_data(

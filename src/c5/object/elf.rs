@@ -40,7 +40,6 @@ const PT_PHDR: u32 = 6;
 const PT_TLS: u32 = 7;
 const PT_GNU_STACK: u32 = 0x6474_E551;
 const PT_GNU_RELRO: u32 = 0x6474_E552;
-const TLS_SEGMENT_ALIGN: u64 = 8;
 
 const PF_X: u32 = 1;
 const PF_W: u32 = 2;
@@ -1224,6 +1223,7 @@ struct Segments {
     data_off: u64,
     data_size: u64,
     rw_seg_align: u64,
+    tls_align: u64,
     tdata_off: u64,
     tdata_size: u64,
     tbss_size: u64,
@@ -1750,9 +1750,17 @@ impl<'a> ElfImageWriter<'a> {
         // raised to it: the loader aligns the load bias down to the maximum
         // PT_LOAD p_align. TEXT_VMADDR_BASE is a multiple of every
         // alignment up to itself, so the congruence holds.
-        seg.rw_seg_align = seg.align.max(seg.data_align.next_power_of_two());
+        seg.tls_align = crate::c5::layout::tls_image_align(build.tls_align) as u64;
+        seg.rw_seg_align = seg
+            .align
+            .max(seg.data_align.next_power_of_two())
+            .max(seg.tls_align);
+        // The TLS template starts on the image's alignment, so the loader
+        // places each thread's copy at the offset the code computed:
+        // `tp - roundup(memsz, p_align)` below the thread pointer on
+        // x86_64, `roundup(16, p_align)` above it on aarch64.
         seg.tdata_off = if seg.has_tls {
-            round_up(seg.data_off + seg.data_size, TLS_SEGMENT_ALIGN)
+            round_up(seg.data_off + seg.data_size, seg.tls_align)
         } else {
             seg.data_off + seg.data_size
         };
@@ -2335,7 +2343,7 @@ impl<'a> ElfImageWriter<'a> {
                 self.va(seg.tdata_off),
                 seg.tdata_size,
                 seg.tdata_size + seg.tbss_size,
-                TLS_SEGMENT_ALIGN,
+                seg.tls_align,
             );
         }
         write_phdr(&mut out, PT_GNU_STACK, PF_R | PF_W, 0, 0, 0, 0, 16);
@@ -2880,7 +2888,7 @@ impl<'a> ElfImageWriter<'a> {
                     SHF_ALLOC | SHF_WRITE | SHF_TLS,
                     seg.tdata_off,
                     seg.tdata_size,
-                    8,
+                    seg.tls_align,
                 ),
             ));
         }
@@ -2950,7 +2958,7 @@ impl<'a> ElfImageWriter<'a> {
                     SHF_ALLOC | SHF_WRITE | SHF_TLS,
                     seg.tdata_off + seg.tdata_size,
                     seg.tbss_size,
-                    8,
+                    seg.tls_align,
                 ),
             ));
         }
@@ -3855,8 +3863,7 @@ mod tests {
             "PT_TLS p_memsz must equal .tdata + .tbss size"
         );
         assert_eq!(p_memsz, 16, "two int TLS vars => 16 bytes per thread");
-        // Alignment 8 matches glibc's TLS image alignment for word-sized
-        // variables.
+        // Two ints: the image's alignment is the 8-byte placement boundary.
         assert_eq!(p_align, 8);
         // The TLS image must lie inside an rw PT_LOAD so the loader can
         // read .tdata as the per-thread initial image.
@@ -3914,6 +3921,63 @@ mod tests {
             "PT_TLS p_memsz must equal .tdata + .tbss size"
         );
         assert_eq!(p_memsz, 8, "single int TLS var => 8 bytes per thread");
+    }
+
+    /// `PT_TLS` takes the widest alignment among the thread-locals and
+    /// starts on it, and the offsets the code bakes take the image size
+    /// rounded up to it (x86_64) or the TCB reserve rounded up to it
+    /// (aarch64), where the loader places the block.
+    #[test]
+    fn pt_tls_alignment_follows_the_widest_thread_local() {
+        use super::super::ElfTpoffTarget;
+        use crate::Compiler;
+        let src = "typedef struct __attribute__((aligned(32))) { long a, b, c, d; } S32; \
+             _Thread_local char c; _Thread_local S32 w; _Thread_local char d; \
+             int main() { w.a = 1; c = 2; d = 3; return w.a + c + d; }";
+        for (target, machine) in [
+            (super::super::Target::LinuxX64, Machine::X86_64),
+            (super::super::Target::LinuxAarch64, Machine::Aarch64),
+        ] {
+            let program =
+                Compiler::with_target(super::super::super::tests::with_prelude(src), target)
+                    .compile()
+                    .expect("compile");
+            let build =
+                super::super::lower_for(&program, target, super::super::NativeOptions::default())
+                    .expect("lower");
+            assert_eq!((build.tls_data.len(), build.tls_align), (72, 32));
+            let bytes = write(&tiny_program(), &build, machine).expect("write ELF");
+            let phdr_off = find_phdr(&bytes, PT_TLS).expect("expected PT_TLS phdr");
+            let p_vaddr = read_u64(&bytes, phdr_off + 16);
+            let p_memsz = read_u64(&bytes, phdr_off + 40);
+            let p_align = read_u64(&bytes, phdr_off + 48);
+            assert_eq!((p_memsz, p_align), (72, 32), "{machine:?}");
+            assert_eq!(
+                p_vaddr % 32,
+                0,
+                "{machine:?}: the template starts on p_align"
+            );
+            assert!(!build.elf_tpoff_fixups.is_empty());
+            for f in &build.elf_tpoff_fixups {
+                let ElfTpoffTarget::Local(off) = &f.target else {
+                    panic!("every access is unit-local");
+                };
+                let at = f.imm_offset;
+                let word = |o: usize| u32::from_le_bytes(build.text[o..o + 4].try_into().unwrap());
+                match machine {
+                    Machine::X86_64 => assert_eq!(
+                        word(at) as i32 as i64,
+                        *off as i64 - 96,
+                        "x86_64: tp - roundup(72, 32) + offset"
+                    ),
+                    Machine::Aarch64 => assert_eq!(
+                        (((word(at) >> 10) & 0xFFF) << 12) + ((word(at + 4) >> 10) & 0xFFF),
+                        32 + *off as u32,
+                        "aarch64: tp + roundup(16, 32) + offset"
+                    ),
+                }
+            }
+        }
     }
 
     /// The R+E and RW `PT_LOAD` segments must fall on separate

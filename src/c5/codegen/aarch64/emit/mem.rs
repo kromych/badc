@@ -289,6 +289,7 @@ pub(super) fn emit_tls_addr(
     // name; its descriptor is keyed by symbol, not by the placeholder
     // offset.
     tls_extern_sym: Option<&str>,
+    tls_align: usize,
 ) -> Emit {
     use super::encode::{enc_add_imm_lsl12, enc_blr, enc_ldr_reg_lsl3, enc_mrs_tpidr_el0};
     // A spilled destination materialises in x16; the sequences read `rd`
@@ -302,16 +303,18 @@ pub(super) fn emit_tls_addr(
     };
     let emitted = match target {
         Target::LinuxAarch64 => {
-            // Variant 1: the static TLS block sits 16 bytes (the TCB) above the
-            // thread pointer, so the local-exec form is
-            // `tp + tprel_hi12 + tprel_lo12` (24-bit TPOFF, two linker-patchable
-            // immediates). A unit-local access bakes its TPOFF, a cross-unit one
-            // the 16-byte reserve; both record an `elf_tpoff_fixups` entry at the
-            // first add for the linker to rebase against the merged TLS layout.
+            // Variant 1: the static TLS block sits above the thread pointer past
+            // the 16-byte TCB rounded up to the block's alignment, so the
+            // local-exec form is `tp + tprel_hi12 + tprel_lo12` (24-bit TPOFF,
+            // two linker-patchable immediates). A unit-local access bakes its
+            // TPOFF, a cross-unit one the reserve alone; both record an
+            // `elf_tpoff_fixups` entry at the first add for the linker to rebase
+            // against the merged TLS layout.
+            let tcb_reserve = 16usize.next_multiple_of(tls_align.max(1)) as i64;
             let tpoff = if tls_extern_sym.is_some() {
-                16u32
+                tcb_reserve as u32
             } else {
-                (offset + 16) as u32
+                (offset + tcb_reserve) as u32
             };
             if tpoff >= (1 << 24) {
                 return fail("TlsAddr: tpoff exceeds the hi12/lo12 range");

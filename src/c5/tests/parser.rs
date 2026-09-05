@@ -76,6 +76,42 @@ fn overaligned_automatic_above_cap_is_rejected() {
 }
 
 #[test]
+fn thread_local_alignment_follows_the_loader() {
+    // The ELF image carries the objects' alignment in `PT_TLS`, so any
+    // power of two is placed; dyld and the Windows loader allocate the
+    // block from the heap, a 16-byte boundary.
+    use crate::c5::Target;
+    let src = "typedef struct __attribute__((aligned(32))) { long a, b, c, d; } S32;\n\
+               _Thread_local S32 w; _Thread_local _Alignas(16) int x;\n\
+               int main(void) { w.a = 1; x = 2; return w.a + x; }";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_target(src.to_string(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        assert_eq!(program.tls_align, 32, "{target:?}");
+    }
+    for target in [
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let err = Compiler::with_target(src.to_string(), target)
+            .compile()
+            .err()
+            .unwrap_or_else(|| panic!("{target:?}: a 32-byte thread-local must be rejected"));
+        assert!(
+            err.to_string().contains("16-byte boundary"),
+            "{target:?}: {err}"
+        );
+        let ok = "_Thread_local _Alignas(16) int x; int main(void) { x = 2; return x; }";
+        let program = Compiler::with_target(ok.to_string(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        assert_eq!(program.tls_align, 16, "{target:?}");
+    }
+}
+
+#[test]
 fn overaligned_automatic_is_realigned() {
     use crate::c5::Target;
     // An over-aligned automatic object -- an explicit declarator request or

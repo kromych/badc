@@ -1849,6 +1849,7 @@ impl super::ssa::emit_common::LowerTarget for Aarch64Lower {
             &mut self.fixups,
             inputs.extern_data_names,
             inputs.extern_tls_names,
+            crate::c5::layout::tls_image_align(inputs.program.tls_align),
             imports,
             inputs.variadic_targets,
             &mut self.macho_tlv_fixups,

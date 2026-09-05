@@ -253,11 +253,11 @@ impl Compiler {
         align: usize,
         bytes: usize,
     ) -> i64 {
-        if align > 8 {
-            self.data_align = self.data_align.max(align);
-        }
         match store {
             DataStore::Static => {
+                if align > 8 {
+                    self.data_align = self.data_align.max(align);
+                }
                 if align > 1 {
                     self.align_data_to(align);
                 }
@@ -266,6 +266,7 @@ impl Compiler {
                 off as i64
             }
             DataStore::ThreadLocal => {
+                self.tls_align = self.tls_align.max(align);
                 let off = self.tls_data.len().next_multiple_of(align.max(1));
                 self.tls_data.resize(off + bytes, 0);
                 off as i64

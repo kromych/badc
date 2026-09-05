@@ -1379,6 +1379,7 @@ mod tests {
             tls_data: alloc::vec![],
             tls_abs_relocs: alloc::vec![],
             tls_init_size: 0,
+            tls_align: 8,
             init_fini_arrays: Default::default(),
             section_map: Default::default(),
         }

@@ -2048,6 +2048,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         abi: super::Abi::default(),
         tls_data: program.tls_data.clone(),
         tls_init_size: program.tls_init_size,
+        tls_align: program.tls_align,
         tls_index_fixups: st.tls_index_fixups,
         data_relocs: alloc::vec::Vec::new(),
         extern_data_relocs: alloc::vec::Vec::new(),

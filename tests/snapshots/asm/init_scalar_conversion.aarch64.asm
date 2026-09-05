@@ -14,7 +14,6 @@ Disassembly of section .text:
                	brk	#0x1
 
 <rect_ok>:
-               	sub	sp, sp, #0x10
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30
@@ -50,7 +49,6 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x10
                	ret
                	b	<addr>
                	mov	x2, x0

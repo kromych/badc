@@ -645,41 +645,14 @@ fn emit_narrow_store(code: &mut Vec<u8>, rs: Reg, rn: Reg, disp: u32, width: u32
 
 use super::ssa::emit_common::c5_slot_to_fp_offset;
 
-/// fp-relative byte offset of c5 slot `off`. Locals and ordinary
-/// parameter cells go through `c5_slot_to_fp_offset` at the frame's cell
-/// stride. An AAPCS64 host variadic callee's named parameter (`off >= 2`)
-/// is redirected to its slot in the register save area:
-/// `[fp + 16 + int_rank*8]` in the general area, `[fp + 80 + fp_rank*16]`
-/// in the vector area, the rank being its position within its
-/// argument-register bank.
-pub(super) fn local_slot_off(off: i64, frame: Frame) -> i64 {
-    if off >= 2 && frame.va_named_redirect {
-        let p = (off - 2) as usize;
-        // The shared planner puts the redirect on the placement the caller
-        // produced; a parameter past the registers is on the incoming stack at
-        // [fp + 208 + soff].
-        let plan = super::plan_param_regs(frame.va_n_params, frame.va_param_fp_mask, frame.va_abi);
-        match plan.placements.get(p) {
-            Some(super::ArgPlacement::Stack(soff)) => {
-                16 + AARCH64_VA_SAVE_BYTES as i64 + *soff as i64
-            }
-            Some(super::ArgPlacement::FpReg(_)) => {
-                let fp_rank = plan.placements[..p]
-                    .iter()
-                    .filter(|q| matches!(q, super::ArgPlacement::FpReg(_)))
-                    .count() as i64;
-                16 + AARCH64_GR_SAVE_BYTES as i64 + fp_rank * 16
-            }
-            _ => {
-                let int_rank = plan.placements[..p]
-                    .iter()
-                    .filter(|q| matches!(q, super::ArgPlacement::IntReg(_)))
-                    .count() as i64;
-                16 + int_rank * 8
-            }
-        }
+/// fp-relative byte offset of c5 slot `off`: parameter `off - 2`'s home
+/// ([`param_home_off`]) for `off >= 2`, the local at `[fp + off*8]` below
+/// the canary region otherwise.
+pub(super) fn local_slot_off(off: i64, func: &FunctionSsa, frame: Frame) -> i64 {
+    if off >= 2 {
+        param_home_off((off - 2) as usize, func, frame)
     } else {
-        c5_slot_to_fp_offset(off, frame.param_cell_stride, frame.canary_bytes)
+        c5_slot_to_fp_offset(off, 16, frame.canary_bytes)
     }
 }
 
@@ -708,7 +681,7 @@ pub(super) fn emit_local_addr(
     frame: Frame,
 ) -> Emit {
     let Some(region_off) = over_aligned_region_off(off, func, frame) else {
-        return emit_local_addr_fp(code, dst, off, frame);
+        return emit_local_addr_fp(code, dst, off, func, frame);
     };
     if frame.align_region_off != 0 {
         return emit_fp_addr_bytes(code, dst, frame.align_region_off + region_off, frame);
@@ -725,8 +698,14 @@ pub(super) fn emit_local_addr(
     Ok(())
 }
 
-pub(super) fn emit_local_addr_fp(code: &mut Vec<u8>, dst: Place, off: i64, frame: Frame) -> Emit {
-    emit_fp_addr_bytes(code, dst, local_slot_off(off, frame), frame)
+pub(super) fn emit_local_addr_fp(
+    code: &mut Vec<u8>,
+    dst: Place,
+    off: i64,
+    func: &FunctionSsa,
+    frame: Frame,
+) -> Emit {
+    emit_fp_addr_bytes(code, dst, local_slot_off(off, func, frame), frame)
 }
 
 /// Materialise `fp + bytes` into `dst` for any signed byte displacement.
@@ -911,8 +890,15 @@ pub(super) fn emit_load(
 /// `size` bytes to local slot `off`, when the slot is an ordinary one and
 /// the displacement is non-negative, a multiple of `size` and at most
 /// `max`.
-fn fp_scaled_disp(off: i64, frame: Frame, is_over: bool, size: u32, max: u32) -> Option<u32> {
-    let disp = i32::try_from(local_slot_off(off, frame)).ok()?;
+fn fp_scaled_disp(
+    off: i64,
+    func: &FunctionSsa,
+    frame: Frame,
+    is_over: bool,
+    size: u32,
+    max: u32,
+) -> Option<u32> {
+    let disp = i32::try_from(local_slot_off(off, func, frame)).ok()?;
     if is_over || disp < 0 {
         return None;
     }
@@ -950,7 +936,7 @@ pub(super) fn emit_load_local(
         } else {
             (8, 32752)
         };
-        let (base, disp) = match fp_scaled_disp(off, frame, is_over, size, max) {
+        let (base, disp) = match fp_scaled_disp(off, func, frame, is_over, size, max) {
             Some(disp) => (Reg(29), disp),
             None => {
                 emit_local_addr(code, Place::IntReg(scratch.primary.0), off, func, frame)?;
@@ -982,7 +968,7 @@ pub(super) fn emit_load_local(
         Place::Spill(_) => scratch.secondary,
         Place::FpReg(_) | Place::None => return fail("LoadLocal: dst not int reg / spill"),
     };
-    let bytes = local_slot_off(off, frame);
+    let bytes = local_slot_off(off, func, frame);
     let word = if let Ok(disp) = i32::try_from(bytes)
         && !is_over
         && (-256..256).contains(&disp)
@@ -1058,7 +1044,7 @@ pub(super) fn emit_store_local(
         let Some(dn) = materialize_fp(code, value_place, frame.fp_scratch[0], frame) else {
             return fail("StoreLocal F64: value not fp reg / spill / int reg");
         };
-        let (base, disp) = match fp_scaled_disp(off, frame, is_over, 8, 32752) {
+        let (base, disp) = match fp_scaled_disp(off, func, frame, is_over, 8, 32752) {
             Some(disp) => (Reg(29), disp),
             None => {
                 emit_local_addr(code, Place::IntReg(scratch.secondary.0), off, func, frame)?;
@@ -1080,7 +1066,7 @@ pub(super) fn emit_store_local(
             None => return fail("StoreLocal: value not int reg / spill"),
         }
     };
-    let bytes = local_slot_off(off, frame);
+    let bytes = local_slot_off(off, func, frame);
     if let Ok(disp) = i32::try_from(bytes)
         && (-256..256).contains(&disp)
         && !is_over
@@ -1122,7 +1108,7 @@ fn emit_store_local_f32(
 ) -> Emit {
     let is_over = over_aligned_region_off(off, func, frame).is_some();
     let store_to_slot = |code: &mut Vec<u8>, sn: u8| -> Emit {
-        match fp_scaled_disp(off, frame, is_over, 4, 16376) {
+        match fp_scaled_disp(off, func, frame, is_over, 4, 16376) {
             Some(disp) => emit(code, super::encode::enc_str_s_imm(sn, Reg(29), disp)),
             None => {
                 emit_local_addr(code, Place::IntReg(scratch.secondary.0), off, func, frame)?;

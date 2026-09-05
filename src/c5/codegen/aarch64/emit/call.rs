@@ -80,8 +80,8 @@ pub(super) fn emit_va_start_aapcs64(
 /// address of the first variadic argument, computed from the frame.
 /// Windows on ARM64: slot `n_params` of the gr-save area at `[fp + 16 ..)`,
 /// whose top edge meets the incoming stack. macOS arm64: the incoming
-/// stack above the c5 cells at `fp + param_spill_bytes + 16`, past the
-/// named arguments that overflowed the registers (`n_stack * 8`).
+/// stack at `[fp + 16 ..)`, past the named arguments that overflowed the
+/// registers (`n_stack * 8`).
 pub(super) fn emit_va_start_cursor(
     code: &mut Vec<u8>,
     func: &FunctionSsa,
@@ -110,13 +110,7 @@ pub(super) fn emit_va_start_cursor(
     if func.is_variadic && abi.variadic_on_stack {
         let (_, n_stack) = param_reg_stack_split(func, abi);
         let named_overflow_bytes = (n_stack as u32) * 8;
-        let off = frame.param_spill_bytes + 16 + named_overflow_bytes;
-        debug_assert_eq!(
-            (frame.param_spill_bytes + 16) % 16,
-            0,
-            "va_start: c5 cdecl cell region must keep fp 16-aligned"
-        );
-        emit_fp_plus_off(code, scratch.secondary, off);
+        emit_fp_plus_off(code, scratch.secondary, 16 + named_overflow_bytes);
         emit(code, enc_str_imm(scratch.secondary, ap_r, 0));
         return Ok(());
     }
@@ -421,7 +415,7 @@ pub(super) fn emit_call_ext(
     marshal_args(
         code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs, abi,
     )?;
-    setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, frame);
+    setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, func, frame);
     plt_call_fixups.push(PltCallFixup {
         instr_offset: code.len(),
         import_index,
@@ -460,6 +454,7 @@ pub(super) fn emit_call_ext(
             ret_slot_off,
             agg_descs,
             dst,
+            func,
             frame,
             scratch,
             false,
@@ -568,7 +563,7 @@ pub(super) fn emit_call(
     marshal_args(
         code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs, abi,
     )?;
-    setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, frame);
+    setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, func, frame);
     fixups.push(Fixup {
         native_offset: code.len(),
         target_ent_pc: target_pc,
@@ -582,6 +577,7 @@ pub(super) fn emit_call(
         ret_slot_off,
         agg_descs,
         dst,
+        func,
         frame,
         scratch,
         fp_return,
@@ -597,6 +593,7 @@ fn setup_indirect_result(
     ret_agg: Option<u32>,
     ret_slot_off: i64,
     agg_descs: &[super::super::ir::AggDesc],
+    func: &FunctionSsa,
     frame: Frame,
 ) {
     if let Some(ai) = ret_agg
@@ -605,7 +602,7 @@ fn setup_indirect_result(
     {
         // An HFA larger than 16 bytes (three or four members) still returns
         // in v-registers, not through x8.
-        let _ = emit_local_addr_fp(code, Place::IntReg(8), ret_slot_off, frame);
+        let _ = emit_local_addr_fp(code, Place::IntReg(8), ret_slot_off, func, frame);
     }
 }
 
@@ -620,6 +617,7 @@ fn finish_call_result(
     ret_slot_off: i64,
     agg_descs: &[super::super::ir::AggDesc],
     dst: Place,
+    func: &FunctionSsa,
     frame: Frame,
     scratch: &ScratchPool,
     fp_return: bool,
@@ -629,7 +627,13 @@ fn finish_call_result(
         let size = desc.size;
         if let Some(members) = super::abi_classify::hfa_member_layout(&desc.fields) {
             // AAPCS64 6.9: an HFA result arrives with member k in v[k].
-            let _ = emit_local_addr_fp(code, Place::IntReg(scratch.primary.0), ret_slot_off, frame);
+            let _ = emit_local_addr_fp(
+                code,
+                Place::IntReg(scratch.primary.0),
+                ret_slot_off,
+                func,
+                frame,
+            );
             for (k, (off, msize)) in members.iter().enumerate() {
                 if *msize == 8 {
                     emit(
@@ -644,7 +648,13 @@ fn finish_call_result(
                 }
             }
         } else if size <= 16 {
-            let _ = emit_local_addr_fp(code, Place::IntReg(scratch.primary.0), ret_slot_off, frame);
+            let _ = emit_local_addr_fp(
+                code,
+                Place::IntReg(scratch.primary.0),
+                ret_slot_off,
+                func,
+                frame,
+            );
             emit(code, enc_str_imm(Reg(0), scratch.primary, 0));
             if size > 8 {
                 emit(code, enc_str_imm(Reg(1), scratch.primary, 8));
@@ -785,7 +795,7 @@ pub(super) fn emit_call_indirect(
     marshal_args(
         code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs, abi,
     )?;
-    setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, frame);
+    setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, func, frame);
     // The marshal consumed every argument source, so x9 is free
     // to carry the staged pointer to the blr.
     let call_reg = match staged_off {
@@ -803,6 +813,7 @@ pub(super) fn emit_call_indirect(
         ret_slot_off,
         agg_descs,
         dst,
+        func,
         frame,
         scratch,
         fp_return,

@@ -14,8 +14,6 @@ Disassembly of section .text:
                	brk	#0x1
 
 <take_vec>:
-               	sub	sp, sp, #0x10
-               	sub	sp, sp, #0x10
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
@@ -37,13 +35,9 @@ Disassembly of section .text:
                	fadd	d0, d0, d1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x20
                	ret
 
 <vec_via_ptr>:
-               	sub	sp, sp, #0x10
-               	sub	sp, sp, #0x10
-               	sub	sp, sp, #0x10
                	str	x19, [sp, #-0x30]!
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
@@ -59,7 +53,6 @@ Disassembly of section .text:
                	blr	x9
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp], #0x30
-               	add	sp, sp, #0x30
                	ret
 
 <main>:

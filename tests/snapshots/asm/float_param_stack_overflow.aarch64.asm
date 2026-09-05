@@ -14,18 +14,12 @@ Disassembly of section .text:
                	brk	#0x1
 
 <wsum>:
-               	sub	sp, sp, #0x20
-               	ldr	x16, [sp, #0x20]
-               	str	x16, [sp]
-               	ldr	x16, [sp, #0x28]
-               	str	x16, [sp, #0x10]
-               	sub	sp, sp, #0x80
                	stp	d8, d9, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
                	fmov	d9, d1
-               	ldr	s1, [x29, #0x90]
-               	ldr	s8, [x29, #0xa0]
+               	ldr	s1, [x29, #0x10]
+               	ldr	s8, [x29, #0x18]
                	mov	x0, #0x3f800000         // =1065353216
                	mov	x1, #0x40000000         // =1073741824
                	fmov	s17, w1
@@ -60,7 +54,6 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x10]
                	ldp	d8, d9, [sp], #0x20
-               	add	sp, sp, #0xa0
                	ret
 
 <main>:

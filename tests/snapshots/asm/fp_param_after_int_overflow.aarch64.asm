@@ -14,12 +14,6 @@ Disassembly of section .text:
                	brk	#0x1
 
 <tail_double>:
-               	sub	sp, sp, #0x20
-               	ldr	x16, [sp, #0x20]
-               	str	x16, [sp]
-               	ldr	x16, [sp, #0x28]
-               	str	x16, [sp, #0x10]
-               	sub	sp, sp, #0x80
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	add	x0, x0, x1
@@ -29,14 +23,13 @@ Disassembly of section .text:
                	add	x0, x0, x5
                	add	x0, x0, x6
                	add	x0, x0, x7
-               	ldursw	x1, [x29, #0x90]
+               	ldursw	x1, [x29, #0x10]
                	add	x0, x0, x1
                	sxtw	x0, w0
                	scvtf	d0, x0
-               	ldr	d1, [x29, #0xa0]
+               	ldr	d1, [x29, #0x18]
                	fadd	d0, d0, d1
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0xa0
                	ret
 
 <main>:

@@ -14,55 +14,51 @@ Disassembly of section .text:
                	brk	#0x1
 
 <only_indirect>:
-               	str	x0, [sp, #-0x10]!
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	stur	w0, [x29, #0x10]
+               	sub	sp, sp, #0x20
+               	stur	x0, [x29, #-0x20]
+               	stur	w0, [x29, #-0x20]
                	adr	x1, <addr>
                	stur	x1, [x29, #-0x8]
                	add	x0, x0, #0x1
                	sxtw	x0, w0
-               	add	sp, sp, #0x10
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x10
                	ret
-               	ldursw	x0, [x29, #0x10]
+               	ldursw	x0, [x29, #-0x20]
                	add	x0, x0, #0x2
                	sxtw	x0, w0
-               	add	sp, sp, #0x10
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x10
                	ret
 
 <selected>:
-               	str	x1, [sp, #-0x10]!
-               	str	x0, [sp, #-0x10]!
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	stur	w0, [x29, #0x10]
-               	stur	w1, [x29, #0x20]
+               	sub	sp, sp, #0x30
+               	stur	x0, [x29, #-0x30]
+               	stur	x1, [x29, #-0x20]
+               	stur	w0, [x29, #-0x30]
+               	stur	w1, [x29, #-0x20]
                	adr	x0, <addr>
                	stur	x0, [x29, #-0x8]
                	sxtw	x0, w1
                	cbz	x0, <addr>
                	b	<addr>
-               	ldursw	x0, [x29, #0x10]
+               	ldursw	x0, [x29, #-0x30]
                	add	x0, x0, #0x14
                	sxtw	x0, w0
-               	add	sp, sp, #0x10
+               	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x20
                	ret
                	ldur	x0, [x29, #-0x8]
                	br	x0
-               	ldursw	x0, [x29, #0x10]
+               	ldursw	x0, [x29, #-0x30]
                	add	x0, x0, #0xa
                	sxtw	x0, w0
-               	add	sp, sp, #0x10
+               	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x20
                	ret
 
 <main>:

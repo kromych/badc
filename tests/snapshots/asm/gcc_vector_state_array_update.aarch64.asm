@@ -61,8 +61,6 @@ Disassembly of section .text:
                	ret
 
 <store16>:
-               	sub	sp, sp, #0x10
-               	sub	sp, sp, #0x10
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
@@ -107,11 +105,9 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x20
                	ret
 
 <mix>:
-               	sub	sp, sp, #0x10
                	stp	x20, x21, [sp, #-0xa0]!
                	stp	x22, x23, [sp, #0x10]
                	stp	x29, x30, [sp, #0x90]
@@ -335,23 +331,21 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x90]
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0xa0
-               	add	sp, sp, #0x10
                	ret
 
 <update>:
-               	sub	sp, sp, #0x10
-               	str	x0, [sp, #-0x10]!
-               	stp	x20, x21, [sp, #-0x120]!
+               	stp	x20, x21, [sp, #-0x140]!
                	stp	x22, x23, [sp, #0x10]
-               	stp	x29, x30, [sp, #0x110]
-               	add	x29, sp, #0x110
+               	stp	x29, x30, [sp, #0x130]
+               	add	x29, sp, #0x130
                	sub	x16, x29, #0x68
                	str	x8, [x16]
-               	sub	x16, x29, #0xa0
+               	stur	x0, [x29, #-0xb0]
+               	sub	x16, x29, #0xc0
                	str	x1, [x16]
                	str	x2, [x16, #0x8]
-               	sub	x0, x29, #0xf0
-               	ldur	x1, [x29, #0x10]
+               	sub	x0, x29, #0x110
+               	ldur	x1, [x29, #-0xb0]
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x1]
                	str	x10, [x0]
@@ -375,7 +369,7 @@ Disassembly of section .text:
                	str	x10, [x0, #0x48]
                	ldr	x10, [sp], #0x10
                	mov	x1, x0
-               	sub	x20, x29, #0xa0
+               	sub	x20, x29, #0xc0
                	add	x0, x0, #0x40
                	ldr	x1, [x0, #0x8]
                	ldr	x0, [x0]
@@ -400,7 +394,7 @@ Disassembly of section .text:
                	str	x10, [x20, #0x8]
                	ldr	x10, [sp], #0x10
                	mov	x0, x20
-               	sub	x20, x29, #0xf0
+               	sub	x20, x29, #0x110
                	add	x23, x20, #0x40
                	add	x0, x20, #0x30
                	ldr	x1, [x0, #0x8]
@@ -426,7 +420,7 @@ Disassembly of section .text:
                	str	x10, [x23, #0x8]
                	ldr	x10, [sp], #0x10
                	mov	x0, x23
-               	sub	x20, x29, #0xf0
+               	sub	x20, x29, #0x110
                	add	x23, x20, #0x30
                	add	x0, x20, #0x20
                	ldr	x1, [x0, #0x8]
@@ -452,7 +446,7 @@ Disassembly of section .text:
                	str	x10, [x23, #0x8]
                	ldr	x10, [sp], #0x10
                	mov	x0, x23
-               	sub	x20, x29, #0xf0
+               	sub	x20, x29, #0x110
                	add	x23, x20, #0x20
                	add	x0, x20, #0x10
                	ldr	x1, [x0, #0x8]
@@ -478,7 +472,7 @@ Disassembly of section .text:
                	str	x10, [x23, #0x8]
                	ldr	x10, [sp], #0x10
                	mov	x0, x23
-               	sub	x20, x29, #0xf0
+               	sub	x20, x29, #0x110
                	add	x23, x20, #0x10
                	mov	x0, x20
                	ldr	x1, [x0, #0x8]
@@ -504,7 +498,7 @@ Disassembly of section .text:
                	str	x10, [x23, #0x8]
                	ldr	x10, [sp], #0x10
                	mov	x1, x23
-               	sub	x1, x29, #0xf0
+               	sub	x1, x29, #0x110
                	ldr	x3, [x1]
                	eor	x3, x3, x21
                	str	x3, [x0]
@@ -542,10 +536,9 @@ Disassembly of section .text:
                	ldr	x0, [x16, #0x48]
                	str	x0, [x17, #0x48]
                	mov	x0, x17
-               	ldp	x29, x30, [sp, #0x110]
+               	ldp	x29, x30, [sp, #0x130]
                	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x120
-               	add	sp, sp, #0x20
+               	ldp	x20, x21, [sp], #0x140
                	ret
 
 <update_scalar>:

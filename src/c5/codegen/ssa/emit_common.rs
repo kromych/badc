@@ -905,11 +905,10 @@ pub(crate) fn trace_bail(backend: &str, reason: &str) {
 /// Translate a c5-stack slot index (the operand of an address-of-local
 /// emit) into a byte offset relative to fp / rbp. A local (`off < 0`) sits
 /// at `off * 8` below the stack-protector region of `canary_bytes`, which
-/// the frame reserves directly under the frame base; a parameter cell
-/// (`off >= 2`) sits at `16 + (off - 2) * param_stride` above the saved
-/// frame record, the aarch64 layout, where `param_stride` is the cell
-/// stride the prologue allocated. The x86_64 backend homes its parameters
-/// below the frame base and maps `off >= 2` on its own.
+/// the frame reserves directly under the frame base. Both backends home
+/// their parameters below the frame base and map `off >= 2` on their own,
+/// so the `16 + (off - 2) * param_stride` cell above the frame record is
+/// the layout of a caller with no record.
 pub(crate) fn c5_slot_to_fp_offset(off: i64, param_stride: i64, canary_bytes: u32) -> i64 {
     if off >= 2 {
         16 + (off - 2) * param_stride

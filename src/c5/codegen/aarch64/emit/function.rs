@@ -155,7 +155,7 @@ pub(crate) fn emit_function(
         cx.param_frame_offsets.insert(
             func.ent_pc,
             (0..func.n_params)
-                .map(|i| local_slot_off(i as i64 + 2, frame))
+                .map(|i| local_slot_off(i as i64 + 2, func, frame))
                 .collect(),
         );
     }
@@ -1104,7 +1104,7 @@ fn emit_prologue(
     // follows.
     if win_arm64_variadic_callee(func, abi) {
         debug_assert_eq!(
-            frame.param_spill_bytes, WIN_ARM64_GR_SAVE_BYTES,
+            frame.va_save_bytes, WIN_ARM64_GR_SAVE_BYTES,
             "win-arm64 variadic prologue must reserve the full gr-save area"
         );
         emit_register_save_area(code, alloc, frame, abi, extern_data_refs, false);
@@ -1112,26 +1112,11 @@ fn emit_prologue(
     }
     if aarch64_host_variadic_callee(func, abi) {
         debug_assert_eq!(
-            frame.param_spill_bytes, AARCH64_VA_SAVE_BYTES,
+            frame.va_save_bytes, AARCH64_VA_SAVE_BYTES,
             "aapcs64 variadic prologue must reserve the full register save area"
         );
         emit_register_save_area(code, alloc, frame, abi, extern_data_refs, true);
         return;
-    }
-    // One 16-byte c5 cdecl cell per declared parameter above fp, with the
-    // host-stack overflow restriped into cells; the epilogue drops
-    // `frame.param_spill_bytes`.
-    let entry_spill = if spills_named_params_on_entry(func, abi) {
-        func.n_params
-    } else {
-        0
-    };
-    if entry_spill > 0 && frame.param_spill_bytes > 0 {
-        if params_interleaved(func, abi) {
-            emit_interleaved_param_cells(code, func, abi);
-        } else {
-            emit_param_cells(code, func, alloc, abi);
-        }
     }
     if is_full_leaf(func, frame, alloc) {
         return;
@@ -1140,17 +1125,25 @@ fn emit_prologue(
     if func.indirect_result_slot != 0 {
         // AAPCS64 6.9: save the caller-supplied x8 indirect-result pointer
         // into its body local; `return s;` writes the aggregate through it.
-        let _ = emit_local_addr_fp(code, Place::IntReg(16), func.indirect_result_slot, frame);
+        let _ = emit_local_addr_fp(
+            code,
+            Place::IntReg(16),
+            func.indirect_result_slot,
+            func,
+            frame,
+        );
         emit(code, enc_str_imm(Reg(8), Reg(16), 0));
     }
     // The canary slot is fp-relative, so it is stored before the sp
     // realignment (C11 6.7.5), which uses x16 alone and so leaves the
-    // argument registers for the scatter that follows it: a parameter copy
-    // aligned above the slot lives in the realigned region.
+    // argument registers for the parameter homes and the scatter that
+    // follow it: a parameter copy aligned above the slot lives in the
+    // realigned region.
     emit_canary_store(code, frame, abi, extern_data_refs);
     if frame.realign_align > 0 {
         emit_realign_sp(code, frame);
     }
+    emit_param_homes(code, func, alloc, frame);
     emit_struct_param_scatter(code, func, abi, frame);
 }
 
@@ -1167,7 +1160,7 @@ fn emit_register_save_area(
     extern_data_refs: &mut Vec<super::UserExternDataRef>,
     vector: bool,
 ) {
-    emit_sub_sp_imm(code, frame.param_spill_bytes);
+    emit_sub_sp_imm(code, frame.va_save_bytes);
     for (i, &r) in abi.int_arg_regs.iter().enumerate() {
         emit(code, enc_str_imm(Reg(r), Reg(31), (i as u32) * 8));
     }
@@ -1184,92 +1177,46 @@ fn emit_register_save_area(
     emit_canary_store(code, frame, abi, extern_data_refs);
 }
 
-/// The contiguous-prefix cell layout: the host-stack overflow restriped
-/// into cells, then one 16-byte pre-decrement push per register-passed
-/// parameter from the last to the first; the stores of ParamRef-seeded,
-/// unaddressed cells are elided into one coalesced `sub sp`.
-fn emit_param_cells(code: &mut Vec<u8>, func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) {
-    let (n_reg, n_stack) = param_reg_stack_split(func, abi);
-    let placements = param_placements(func, abi);
-    if n_stack > 0 {
-        let overflow_bytes = (n_stack as u32) * 16;
-        emit_stack_alloc(code, overflow_bytes, None);
-        // The planner's offset accounts for any by-value aggregate stack
-        // parameter (StructStack) that precedes the scalar.
-        let mut slot_i = 0u32;
-        for p in &placements {
-            if let super::ArgPlacement::Stack(off) = p {
-                let host_off = *off + overflow_bytes;
-                let c5_off = slot_i * 16;
-                emit(code, enc_ldr_imm(Reg(16), Reg(31), host_off));
-                emit(code, enc_str_imm(Reg(16), Reg(31), c5_off));
-                slot_i += 1;
-            }
-        }
-    }
-    let (seeded_params, addr_taken_slots, needed_slots) =
-        super::ssa::emit_common::scan_param_slot_usage(func, alloc);
-    let mut pending_sub: u32 = 0;
-    for i in (0..n_reg).rev() {
-        let slot = (i as i64) + 2;
-        let skip = seeded_params.contains(&(i as u32))
-            && !addr_taken_slots.contains(&slot)
-            && !needed_slots.contains(&slot);
-        if skip {
-            pending_sub += 16;
+/// Store each register-passed scalar parameter into its home
+/// (`param_home_off`) unless the store is dead (`param_elidable_mask`).
+/// The argument registers are intact here: the frame setup uses sp, fp and
+/// x16. A stack-passed parameter is read where the caller left it and a
+/// register-passed aggregate keeps its registers for
+/// `emit_struct_param_scatter`, so neither is stored.
+fn emit_param_homes(code: &mut Vec<u8>, func: &FunctionSsa, alloc: &Allocation, frame: Frame) {
+    let abi = frame.abi;
+    let elidable = param_elidable_mask(func, alloc, abi);
+    for (i, placement) in param_placements(func, abi).iter().enumerate() {
+        if elidable[i] {
             continue;
         }
-        if pending_sub > 0 {
-            emit_stack_alloc(code, pending_sub, None);
-            pending_sub = 0;
-        }
-        // An FP parameter's bits move through x16 into the same cell push.
-        match placements.get(i).copied() {
-            Some(super::ArgPlacement::FpReg(d)) => {
-                emit(code, enc_fmov_d_to_x(Reg(16), d));
-                emit(code, enc_str_pre(Reg(16), Reg(31), -16));
-            }
-            Some(super::ArgPlacement::IntReg(r)) => emit(code, enc_str_pre(Reg(r), Reg(31), -16)),
-            // An aggregate passed in registers keeps them for
-            // `emit_struct_param_scatter`; a stack-passed parameter's cell was
-            // filled by the restripe above. Either reserves its cell.
-            _ => emit_sub_sp_imm(code, 16),
-        }
-    }
-    if pending_sub > 0 {
-        emit_stack_alloc(code, pending_sub, None);
-    }
-}
-
-/// Position-indexed cells for an interleaved register / stack placement:
-/// one block of `n_params` cells, each parameter written into its own
-/// position's cell at `[fp + 16 + position*16]` (`local_slot_off`), a
-/// stack-passed scalar copied from the overflow slot above the block.
-/// Aggregates keep their argument registers for
-/// `emit_struct_param_scatter`; x16 is the only scratch.
-fn emit_interleaved_param_cells(code: &mut Vec<u8>, func: &FunctionSsa, abi: super::Abi) {
-    let placements = param_placements(func, abi);
-    let cells = func.n_params as u32 * 16;
-    emit_stack_alloc(code, cells, None);
-    for (i, p) in placements.iter().enumerate() {
-        let c5_off = (i as u32) * 16;
-        match p {
-            super::ArgPlacement::IntReg(r) => {
-                emit(code, enc_str_imm(Reg(*r), Reg(31), c5_off));
-            }
+        let home = param_home_off(i, func, frame);
+        match *placement {
+            super::ArgPlacement::IntReg(r) => emit_fp_store_x(code, Reg(r), home),
             super::ArgPlacement::FpReg(d) => {
-                emit(code, enc_fmov_d_to_x(Reg(16), *d));
-                emit(code, enc_str_imm(Reg(16), Reg(31), c5_off));
+                emit(code, enc_fmov_d_to_x(Reg(16), d));
+                emit_fp_store_x(code, Reg(16), home);
             }
-            super::ArgPlacement::Stack(off) => {
-                let host_off = cells + *off;
-                emit(code, enc_ldr_imm(Reg(16), Reg(31), host_off));
-                emit(code, enc_str_imm(Reg(16), Reg(31), c5_off));
-            }
-            // By-reference aggregates are rejected upstream on AAPCS64.
             _ => {}
         }
     }
+}
+
+/// Store `rt` at `[fp + off]`: the unscaled 9-bit form in reach, else
+/// through the address materialised in x17.
+fn emit_fp_store_x(code: &mut Vec<u8>, rt: Reg, off: i64) {
+    if let Ok(disp) = i32::try_from(off)
+        && (-256..256).contains(&disp)
+    {
+        emit(code, super::encode::enc_stur(rt, Reg(29), disp));
+        return;
+    }
+    if off >= 0 {
+        emit_fp_plus_off(code, Reg(17), off as u32);
+    } else {
+        emit_fp_minus_off(code, Reg(17), (-off) as u32);
+    }
+    emit(code, enc_str_imm(rt, Reg(17), 0));
 }
 
 /// Store each register-passed aggregate parameter's argument registers
@@ -1319,12 +1266,12 @@ fn emit_struct_param_scatter(
                     }
                 }
             }
-            Some(super::ArgPlacement::StructStack { off, size, .. }) => {
+            Some(super::ArgPlacement::StructStack { size, .. }) => {
                 // The aggregate sits in the caller's stack argument area, above the
-                // saved fp/lr and the c5 parameter cells; its own reserved cell stays
-                // unused. AAPCS64 5.4.2 rounds the slot up to 8 bytes: whole eightbytes
-                // through x17, then the sub-eightbyte tail.
-                let src = 16 + frame.param_spill_bytes + *off;
+                // saved fp/lr, where `param_home_off` places it. AAPCS64 5.4.2 rounds
+                // the slot up to 8 bytes: whole eightbytes through x17, then the
+                // sub-eightbyte tail.
+                let src = param_home_off(i, func, frame) as u32;
                 let size = *size;
                 debug_assert!(
                     src + size <= 4096 * 8,
@@ -1749,8 +1696,8 @@ pub(super) fn emit_return(
         }
         emit(code, enc_ldp_post(Reg(29), Reg(30), Reg(31), 16));
     }
-    if frame.param_spill_bytes > 0 {
-        emit_add_sp_imm(code, frame.param_spill_bytes);
+    if frame.va_save_bytes > 0 {
+        emit_add_sp_imm(code, frame.va_save_bytes);
     }
     // sp holds the value `paciasp` signed against.
     if signs_return_address(func, frame, alloc, abi) {
@@ -1824,7 +1771,13 @@ fn emit_aggregate_return(
         return;
     }
     let dst = scratch.secondary;
-    let _ = emit_local_addr_fp(code, Place::IntReg(dst.0), func.indirect_result_slot, frame);
+    let _ = emit_local_addr_fp(
+        code,
+        Place::IntReg(dst.0),
+        func.indirect_result_slot,
+        func,
+        frame,
+    );
     emit(code, enc_ldr_imm(dst, dst, 0));
     // The caller's object bounds the transfer unit. `WINDOW` keeps every
     // byte-form offset under 4096; a longer copy advances both bases.
@@ -1852,7 +1805,13 @@ fn emit_aggregate_return(
     if size > WINDOW {
         // The advanced `dst` no longer names the caller's buffer; re-read
         // the saved indirect-result pointer to return it.
-        let _ = emit_local_addr_fp(code, Place::IntReg(dst.0), func.indirect_result_slot, frame);
+        let _ = emit_local_addr_fp(
+            code,
+            Place::IntReg(dst.0),
+            func.indirect_result_slot,
+            func,
+            frame,
+        );
         emit(code, enc_ldr_imm(dst, dst, 0));
     }
     emit_mov_reg(code, Reg(0), dst);

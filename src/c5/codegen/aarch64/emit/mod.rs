@@ -5,10 +5,14 @@
 //! Frame layout, top to bottom, growing down from the caller's sp:
 //!
 //! ```text
-//!   c5 cdecl param slots          [fp + 16*i]
+//!   incoming stack arguments      [fp + 16 + off]
+//!   register save area            (host variadic callee, above the record)
 //!   saved fp, saved lr            [fp +  0]
-//!   locals area                   [fp - locals_bytes .. fp]
+//!   canary                        [fp -  8]                   (protected frames)
+//!   locals area                   [fp - locals_bytes .. fp - canary]
+//!   parameter cells               [fp + param_cells_off ..]
 //!   allocator spill slots         ...
+//!   inline-asm scratch            [fp + asm_scratch_off ..]
 //!   over-aligned region           [fp + align_region_off ..]  (16-mode only)
 //!   saved callee-saved GPRs
 //!   saved callee-saved FP regs    sp

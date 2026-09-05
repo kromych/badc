@@ -14,72 +14,75 @@ Disassembly of section .text:
                	brk	#0x1
 
 <dispatch>:
-               	str	x0, [sp, #-0x10]!
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	stur	w0, [x29, #0x10]
+               	sub	sp, sp, #0x10
+               	stur	x0, [x29, #-0x10]
+               	stur	w0, [x29, #-0x10]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	sxtw	x0, w0
                	ldr	x0, [x1, x0, lsl #3]
                	br	x0
                	mov	x0, #0xb                // =11
-               	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0xc                // =12
-               	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <sectioned>:
-               	str	x0, [sp, #-0x10]!
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	stur	w0, [x29, #0x10]
+               	sub	sp, sp, #0x10
+               	stur	x0, [x29, #-0x10]
+               	stur	w0, [x29, #-0x10]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	sxtw	x0, w0
                	ldr	x0, [x1, x0, lsl #3]
                	br	x0
                	mov	x0, #0x14               // =20
-               	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x15               // =21
-               	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x16               // =22
-               	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x17               // =23
-               	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <ranged>:
-               	str	x0, [sp, #-0x10]!
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	stur	w0, [x29, #0x10]
+               	sub	sp, sp, #0x10
+               	stur	x0, [x29, #-0x10]
+               	stur	w0, [x29, #-0x10]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	sxtw	x0, w0
                	ldr	x0, [x1, x0, lsl #3]
                	br	x0
                	mov	x0, #0x3                // =3
-               	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x5                // =5
-               	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x63               // =99
-               	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:

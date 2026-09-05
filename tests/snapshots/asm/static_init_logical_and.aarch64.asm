@@ -14,11 +14,11 @@ Disassembly of section .text:
                	brk	#0x1
 
 <dispatch>:
-               	str	x0, [sp, #-0x10]!
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	stur	w0, [x29, #0x10]
+               	sub	sp, sp, #0x20
+               	stur	x0, [x29, #-0x20]
+               	stur	w0, [x29, #-0x20]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	sxtw	x0, w0
@@ -37,11 +37,10 @@ Disassembly of section .text:
                	movk	x0, #0xffff, lsl #16
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
-               	add	sp, sp, #0x10
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x10
                	ret
-               	ldursw	x1, [x29, #0x10]
+               	ldursw	x1, [x29, #-0x20]
                	mov	x17, #0x1               // =1
                	and	x1, x1, x17
                	ldr	x0, [x0, x1, lsl #3]
@@ -54,9 +53,8 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	add	x0, x1, #0x1
                	sxtw	x0, w0
-               	add	sp, sp, #0x10
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x10
                	ret
                	mov	x0, #0x14               // =20
                	stur	w0, [x29, #-0x8]

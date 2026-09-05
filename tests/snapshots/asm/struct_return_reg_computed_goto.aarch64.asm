@@ -29,12 +29,12 @@ Disassembly of section .text:
                	ret
 
 <ternary>:
-               	str	x0, [sp, #-0x10]!
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x20
+               	sub	sp, sp, #0x30
+               	stur	x0, [x29, #-0x30]
                	mov	x1, x0
-               	stur	w1, [x29, #0x10]
+               	stur	w1, [x29, #-0x30]
                	mov	x0, #0x0                // =0
                	stur	w0, [x29, #-0x18]
                	sxtw	x1, w1
@@ -48,16 +48,14 @@ Disassembly of section .text:
                	br	x1
                	mov	x0, #0x1                // =1
                	stur	w0, [x29, #-0x18]
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x10
                	ret
                	mov	x1, #0x2                // =2
                	stur	w1, [x29, #-0x18]
                	stur	x0, [x29, #-0x18]
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x10
                	ret
 
 <main>:

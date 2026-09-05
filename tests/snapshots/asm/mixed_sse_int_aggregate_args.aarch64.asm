@@ -14,11 +14,6 @@ Disassembly of section .text:
                	brk	#0x1
 
 <take3>:
-               	sub	sp, sp, #0x10
-               	sub	sp, sp, #0x10
-               	sub	sp, sp, #0x10
-               	sub	sp, sp, #0x10
-               	sub	sp, sp, #0x10
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x40
@@ -45,14 +40,12 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x50
                	ret
                	cmp	x1, #0x4
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x50
                	ret
                	sub	x0, x29, #0x20
                	ldr	x1, [x0]
@@ -67,7 +60,6 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x50
                	ret
                	mov	x0, #0x3ff4000000000000 // =4608308318706860032
                	fmov	d17, x0
@@ -76,7 +68,6 @@ Disassembly of section .text:
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x50
                	ret
                	sub	x0, x29, #0x10
                	ldr	d0, [x0]
@@ -93,12 +84,10 @@ Disassembly of section .text:
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x50
                	ret
                	mov	x0, #0x0                // =0
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x50
                	ret
 
 <docall>:

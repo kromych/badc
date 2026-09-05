@@ -88,7 +88,6 @@ Disassembly of section .text:
                	ret
 
 <sumd2>:
-               	sub	sp, sp, #0x10
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
@@ -101,11 +100,9 @@ Disassembly of section .text:
                	fadd	d0, d0, d1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x10
                	ret
 
 <sumd4>:
-               	sub	sp, sp, #0x10
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
@@ -124,11 +121,9 @@ Disassembly of section .text:
                	fadd	d0, d0, d1
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x10
                	ret
 
 <sumf4>:
-               	sub	sp, sp, #0x10
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
@@ -147,7 +142,6 @@ Disassembly of section .text:
                	fadd	s0, s0, s1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x10
                	ret
 
 <main>:

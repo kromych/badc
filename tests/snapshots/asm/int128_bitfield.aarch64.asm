@@ -14,8 +14,6 @@ Disassembly of section .text:
                	brk	#0x1
 
 <chk>:
-               	sub	sp, sp, #0x30
-               	sub	sp, sp, #0x10
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30
@@ -32,7 +30,6 @@ Disassembly of section .text:
                	sxtw	x0, w3
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x40
                	ret
                	ldr	x2, [x0, #0x8]
                	cmp	x2, x1
@@ -41,12 +38,10 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x40
                	ret
                	mov	x0, #0x0                // =0
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x40
                	ret
 
 <main>:

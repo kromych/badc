@@ -14,11 +14,11 @@ Disassembly of section .text:
                	brk	#0x1
 
 <forwards>:
-               	str	x0, [sp, #-0x10]!
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	stur	w0, [x29, #0x10]
+               	sub	sp, sp, #0x20
+               	stur	x0, [x29, #-0x20]
+               	stur	w0, [x29, #-0x20]
                	adr	x1, <addr>
                	stur	x1, [x29, #-0x10]
                	mov	x17, #0x3               // =3
@@ -28,17 +28,16 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x8]
                	br	x1
                	ldursw	x0, [x29, #-0x8]
-               	add	sp, sp, #0x10
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x10
                	ret
 
 <volatile_kept>:
-               	str	x0, [sp, #-0x10]!
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	stur	w0, [x29, #0x10]
+               	sub	sp, sp, #0x30
+               	stur	x0, [x29, #-0x30]
+               	stur	w0, [x29, #-0x30]
                	adr	x1, <addr>
                	stur	x1, [x29, #-0x8]
                	stur	w0, [x29, #-0x10]
@@ -46,17 +45,16 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x18]
                	br	x1
                	ldursw	x0, [x29, #-0x18]
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x10
                	ret
 
 <aliased_kept>:
-               	str	x0, [sp, #-0x10]!
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	stur	w0, [x29, #0x10]
+               	sub	sp, sp, #0x30
+               	stur	x0, [x29, #-0x30]
+               	stur	w0, [x29, #-0x30]
                	adr	x1, <addr>
                	stur	x1, [x29, #-0x18]
                	sub	x2, x29, #0x8
@@ -68,26 +66,24 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x10]
                	br	x1
                	ldursw	x0, [x29, #-0x10]
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x10
                	ret
 
 <cross_block>:
-               	str	x0, [sp, #-0x10]!
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	stur	w0, [x29, #0x10]
+               	sub	sp, sp, #0x20
+               	stur	x0, [x29, #-0x20]
+               	stur	w0, [x29, #-0x20]
                	adr	x1, <addr>
                	stur	x1, [x29, #-0x8]
                	lsl	x0, x0, #1
                	stur	w0, [x29, #-0x10]
                	br	x1
                	ldursw	x0, [x29, #-0x10]
-               	add	sp, sp, #0x10
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x10
                	ret
 
 <main>:

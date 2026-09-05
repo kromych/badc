@@ -14,11 +14,11 @@ Disassembly of section .text:
                	brk	#0x1
 
 <patched>:
-               	str	x0, [sp, #-0x10]!
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	stur	w0, [x29, #0x10]
+               	sub	sp, sp, #0x40
+               	stur	x0, [x29, #-0x20]
+               	stur	w0, [x29, #-0x20]
                	adr	x1, <addr>
                	stur	x1, [x29, #-0x8]
                	sxtw	x0, w0
@@ -33,14 +33,12 @@ Disassembly of section .text:
                	ldr	x1, [sp, #0x18]
                	b	<addr>
                	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x30
+               	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	add	sp, sp, #0x30
+               	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x10
                	ret
 
 <vla_goto>:

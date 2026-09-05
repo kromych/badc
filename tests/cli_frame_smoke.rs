@@ -1,10 +1,17 @@
-//! x86_64 frame-shape checks over the badc binary's output: the return
-//! address stays where the caller pushed it, so every instruction of a
-//! function has it at a fixed offset from the CFA. The prologue is
-//! `push rbp; mov rbp, rsp; sub rsp, N` behind the entry instructions,
-//! the epilogue `leave` / `pop rbp` directly ahead of the `ret` or the
-//! tail jump, and a frameless leaf touches rsp only through balanced
-//! pushes. The DWARF check reads the rules the linked image carries.
+//! Frame-shape checks over the badc binary's output: the return address
+//! stays where the caller left it, so every instruction of a function has
+//! it at a fixed offset from the CFA, and the parameters are homed inside
+//! the frame rather than above it.
+//!
+//! x86_64: the prologue is `push rbp; mov rbp, rsp; sub rsp, N` behind the
+//! entry instructions, the epilogue `leave` / `pop rbp` directly ahead of
+//! the `ret` or the tail jump, and a frameless leaf touches rsp only
+//! through balanced pushes. The DWARF check reads the rules the linked
+//! image carries.
+//!
+//! aarch64: nothing ahead of the `stp x29, x30` frame record names an
+//! argument register or moves sp by a `sub`, and the epilogue drops the
+//! frame before restoring the record.
 //!
 //! The disassembler is `llvm-objdump`, then `objdump`, on PATH; the CFI
 //! dumper `dwarfdump`, then `llvm-dwarfdump`. A missing tool skips the
@@ -75,10 +82,48 @@ int main(void) {
 }
 "#;
 
+/// Every parameter shape the aarch64 prologue homes: register scalars in
+/// both banks, parameters past the eight argument registers, an
+/// address-taken parameter, aggregates in registers and on the stack, an
+/// out-pointer return, a variadic callee, an alloca frame, a leaf.
+const A64_SHAPES: &str = r#"
+#include <stdarg.h>
+struct Small { long a, b; };
+struct Big { long a, b, c, d; };
+int leaf(int a, int b) { return a + b; }
+long regs(long a, long b, double d, float f, char c) { return a + b + (long)d + (long)f + c; }
+long stack10(long a, long b, long c, long d, long e, long f, long g, long h, long i, long j) {
+    return a + b + c + d + e + f + g + h + i + j;
+}
+long *addr(long a) { static long *p; p = &a; return p; }
+long small(struct Small s, long x) { return s.a + s.b + x; }
+long big(long x, struct Big s, long y) { return x + s.a + s.b + s.c + s.d + y; }
+struct Big ret_big(long x, long y) { struct Big s; s.a = x; s.b = y; s.c = x + y; s.d = 0; return s; }
+long vsum(int n, ...) {
+    va_list ap; long t = 0;
+    va_start(ap, n);
+    for (int i = 0; i < n; i++) t += va_arg(ap, long);
+    va_end(ap);
+    return t;
+}
+long dyn(long n, long v) { long *p = __builtin_alloca(n * 8); p[0] = v; return p[0] + n; }
+long modify(long a, long b) { a += b; b = a * 2; return a + b; }
+int main(void) {
+    struct Small s = {1, 2};
+    struct Big g = {1, 2, 3, 4};
+    long r = leaf(1, 2) + regs(1, 2, 3.0, 4.0f, 5)
+        + stack10(1, 2, 3, 4, 5, 6, 7, 8, 9, 10) + *addr(9)
+        + small(s, 3) + big(1, g, 2) + ret_big(3, 4).c + vsum(3, 1L, 2L, 3L) + dyn(2, 5)
+        + modify(1, 2);
+    return r == 1 + 2 + 15 + 55 + 9 + 6 + 13 + 7 + 6 + 7 + 9 ? 0 : 1;
+}
+"#;
+
 /// Disassemble `obj` with the first of `llvm-objdump` / `objdump` on PATH
-/// that decodes it. `None` when neither is installed or neither decodes
-/// the object's format.
-fn disassemble(obj: &Path) -> Option<String> {
+/// that decodes it. `anchor` is a function the output must name, so a tool
+/// that cannot decode the object's format is passed over. `None` when
+/// neither is installed or neither decodes it.
+fn disassemble_named(obj: &Path, anchor: &str) -> Option<String> {
     for tool in ["llvm-objdump", "objdump"] {
         let Ok(out) = Command::new(tool)
             .args(["-d", "--no-show-raw-insn"])
@@ -88,11 +133,15 @@ fn disassemble(obj: &Path) -> Option<String> {
             continue;
         };
         let text = String::from_utf8_lossy(&out.stdout).into_owned();
-        if out.status.success() && text.contains("<stack7>:") {
+        if out.status.success() && text.contains(anchor) {
             return Some(text);
         }
     }
     None
+}
+
+fn disassemble(obj: &Path) -> Option<String> {
+    disassemble_named(obj, "<stack7>:")
 }
 
 /// `(name, [(mnemonic, operands)])` per function of a disassembly.
@@ -210,6 +259,132 @@ fn x86_64_prologue_and_epilogue_keep_the_return_address_in_place() {
     }
     assert_eq!(checked, 4);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Whether `operands` names an argument register. The parameter homes are
+/// the only reason an aarch64 prologue would name one, and they belong
+/// inside the frame; `x8` carries the indirect-result pointer, which is
+/// stored into a body local.
+fn names_arg_reg(operands: &str) -> bool {
+    operands
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .any(|t| {
+            let Some(n) = t
+                .strip_prefix(['x', 'w', 'd', 's', 'q', 'v'])
+                .and_then(|r| r.parse::<u32>().ok())
+            else {
+                return false;
+            };
+            n < 8 && t.len() == 2
+        })
+}
+
+#[test]
+fn aarch64_homes_the_parameters_inside_the_frame() {
+    let dir = tempdir("a64shape");
+    let src = dir.join("shapes.c");
+    std::fs::write(&src, A64_SHAPES).expect("write source");
+    let mut checked = 0;
+    for target in ["linux-aarch64", "macos-aarch64", "windows-arm64"] {
+        for opt in [&[][..], &["-O"][..]] {
+            let obj = dir.join(format!("shapes-{target}{}.o", opt.join("")));
+            run(
+                Command::new(badc())
+                    .arg(format!("--target={target}"))
+                    .args(opt)
+                    .arg("-c")
+                    .arg("-o")
+                    .arg(&obj)
+                    .arg(&src),
+                "compile shapes",
+            );
+            let Some(dis) = disassemble_named(&obj, "stack10>:") else {
+                eprintln!("no disassembler for {target} on PATH -- skipping");
+                return;
+            };
+            let what = format!("{target} {}", opt.join(" "));
+            let funcs = functions(&dis);
+            assert!(funcs.len() >= 11, "{what}: {} functions found", funcs.len());
+            for (name, insts) in &funcs {
+                // A variadic callee reserves its register save area above
+                // the frame record, where the cursor `va_list` walks it and
+                // the caller's stack arguments as one region.
+                if name.trim_start_matches('_') == "vsum" {
+                    continue;
+                }
+                check_a64_function(name, insts, &what);
+            }
+            // The parameters past the argument registers are read where the
+            // caller left them, above the frame record.
+            let stack10 = &funcs
+                .iter()
+                .find(|(n, _)| n.trim_start_matches('_') == "stack10")
+                .unwrap()
+                .1;
+            for incoming in ["x29, #0x10", "x29, #0x18"] {
+                assert!(
+                    stack10.iter().any(|(_, o)| o.contains(incoming)),
+                    "{what}: stack10 does not read a parameter at [{incoming}]"
+                );
+            }
+            checked += 1;
+        }
+    }
+    assert_eq!(checked, 6);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The aarch64 frame rules over one function's instructions: the frame
+/// record is the first thing the prologue writes bar the callee-saved
+/// registers it folds into the same allocation, and the epilogue drops the
+/// frame before restoring the record.
+fn check_a64_function(name: &str, insts: &[(String, String)], what: &str) {
+    let record_at = insts
+        .iter()
+        .position(|(m, o)| m.starts_with("stp") && o.starts_with("x29, x30"));
+    // A function with no record is a full leaf: it never touches sp.
+    let Some(k) = record_at else {
+        for (m, o) in insts {
+            assert!(
+                !o.starts_with("sp,") && !o.contains("[sp"),
+                "{what}: {name}: `{m} {o}` moves sp with no frame record"
+            );
+        }
+        return;
+    };
+    for (m, o) in &insts[..k] {
+        assert!(
+            !names_arg_reg(o),
+            "{what}: {name}: `{m} {o}` homes a parameter ahead of the frame record"
+        );
+        assert!(
+            !m.starts_with("sub") || !o.starts_with("sp"),
+            "{what}: {name}: `{m} {o}` reserves stack ahead of the frame record"
+        );
+    }
+    let (m, o) = insts
+        .get(k + 1)
+        .expect("an instruction after the frame record");
+    assert!(
+        (m == "mov" || m == "add") && o.starts_with("x29, sp"),
+        "{what}: {name}: `{m} {o}` follows the frame record instead of setting fp"
+    );
+    // Between restoring the record and leaving the function nothing may
+    // drop stack: the frame is already gone.
+    for (j, (m, o)) in insts.iter().enumerate() {
+        if !m.starts_with("ldp") || !o.starts_with("x29, x30") {
+            continue;
+        }
+        for (m2, o2) in &insts[j + 1..] {
+            if m2.starts_with("ret") || m2 == "b" || m2.starts_with("br") {
+                break;
+            }
+            assert!(
+                !m2.starts_with("add") || !o2.starts_with("sp,"),
+                "{what}: {name}: `{m2} {o2}` drops stack after the frame record is restored"
+            );
+        }
+    }
 }
 
 /// `--debug-frame` text of `path` from `dwarfdump` or `llvm-dwarfdump`.

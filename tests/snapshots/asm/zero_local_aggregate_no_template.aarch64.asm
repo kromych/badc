@@ -18,12 +18,12 @@ Disassembly of section .text:
                	ret
 
 <label_template>:
-               	str	x0, [sp, #-0x10]!
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x10
+               	sub	sp, sp, #0x20
+               	stur	x0, [x29, #-0x20]
                	mov	x1, x0
-               	stur	w1, [x29, #0x10]
+               	stur	w1, [x29, #-0x20]
                	sub	x0, x29, #0x10
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
@@ -38,14 +38,12 @@ Disassembly of section .text:
                	ldr	x0, [x0, x1, lsl #3]
                	br	x0
                	mov	x0, #0xa                // =10
-               	add	sp, sp, #0x10
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x10
                	ret
                	mov	x0, #0x14               // =20
-               	add	sp, sp, #0x10
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x10
                	ret
 
 <main>:

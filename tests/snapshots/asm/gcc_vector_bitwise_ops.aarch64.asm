@@ -14,8 +14,6 @@ Disassembly of section .text:
                	brk	#0x1
 
 <same16>:
-               	sub	sp, sp, #0x10
-               	sub	sp, sp, #0x10
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30
@@ -33,7 +31,6 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x20
                	ret
                	ldrb	w2, [x0, #0x1]
                	ldrb	w3, [x1, #0x1]
@@ -98,7 +95,6 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x20
                	ret
 
 <main>:

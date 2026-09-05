@@ -14,12 +14,6 @@ Disassembly of section .text:
                	brk	#0x1
 
 <sum10>:
-               	sub	sp, sp, #0x20
-               	ldr	x16, [sp, #0x20]
-               	str	x16, [sp]
-               	ldr	x16, [sp, #0x28]
-               	str	x16, [sp, #0x10]
-               	sub	sp, sp, #0x80
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	fadd	d0, d0, d1
@@ -29,12 +23,11 @@ Disassembly of section .text:
                	fadd	d0, d0, d5
                	fadd	d0, d0, d6
                	fadd	d0, d0, d7
-               	ldr	d1, [x29, #0x90]
+               	ldr	d1, [x29, #0x10]
                	fadd	d0, d0, d1
-               	ldr	d1, [x29, #0xa0]
+               	ldr	d1, [x29, #0x18]
                	fadd	d0, d0, d1
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0xa0
                	ret
 
 <main>:

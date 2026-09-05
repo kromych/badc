@@ -63,8 +63,14 @@ decompressor regression to show in its boot. `--max-unpack-seconds` sets the
 bound (default: the architecture's entry in UNPACK_BOUNDS; 0 reports only)
 and `--no-payload` skips the boot.
 
-`--self-test` checks the banner reading, the architecture selection and the
-reading of the unpack phase, and takes no tree.
+The build's `System.map` is measured as well: the largest text symbol and
+the count of functions over 4 KiB, against the architecture's budgets in
+TEXT_BUDGETS. An inliner that duplicates a callee's body at every site moves
+aggregate text by a few per cent while single functions move twentyfold, so
+the budget is on the distribution rather than on the total.
+
+`--self-test` checks the banner reading, the architecture selection, the
+reading of the unpack phase and the text sizing, and takes no tree.
 """
 
 from __future__ import annotations
@@ -142,6 +148,20 @@ SMP_TOTAL_RE = re.compile(r"Total of (\d+) processors activated")
 # TODO: re-measure with unpack.py's payload on both boxes; x86_64 has no
 # figure and is reported only.
 UNPACK_BOUNDS = {"aarch64": 7.5}
+# Linker labels System.map lists as text symbols: the section bounds of
+# asm-generic/sections.h and the linker scripts, and arm64's `__pi_` alias.
+TEXT_LABEL = re.compile(
+    r"^(__pi_)?(_[se]?(init|exit)?text|__\w*text_(start|end|begin))$")
+# A gap this large is a section boundary, not a function.
+MAX_FUNCTION_BYTES = 1 << 20
+# Budgets over the linked image's text symbols, per architecture: the
+# largest function and the count over 4 KiB. aarch64: the box's badc-built
+# 7.1.6 defconfig map measures 84530 functions, largest 101612
+# (hidinput_configure_usage; 21192 in the gcc-built distribution kernel on
+# the same box) and 451 over 4 KiB; the budgets clear those by 29% and 15%.
+# TODO: lower `largest` once hidinput_configure_usage shrinks; measure the
+# 7.1.10 map, and x86_64, which has no budget and is reported only.
+TEXT_BUDGETS = {"aarch64": {"largest": 131072, "over_4k": 520}}
 
 
 def log(m: str) -> None:
@@ -515,6 +535,49 @@ def payload_boot(args, arch: dict, tree: Path, image: Path, seed: int | None,
     return record, failures
 
 
+def text_sizes(map_text: str) -> list[tuple[int, str]]:
+    """(bytes, name) per text symbol of a System.map. The map records no
+    sizes, so a symbol's is the gap to the next address any symbol holds,
+    one name per address; weak symbols are functions too."""
+    rows = sorted((int(f[0], 16), f[1], f[2])
+                  for f in (l.split() for l in map_text.splitlines())
+                  if len(f) >= 3 and re.fullmatch(r"[0-9a-fA-F]+", f[0]))
+    out: list[tuple[int, str]] = []
+    i = 0
+    while i < len(rows):
+        addr, j, names = rows[i][0], i, []
+        while j < len(rows) and rows[j][0] == addr:
+            if rows[j][1] in "tTW" and not TEXT_LABEL.match(rows[j][2]):
+                names.append(rows[j][2])
+            j += 1
+        if names and j < len(rows) and rows[j][0] - addr < MAX_FUNCTION_BYTES:
+            out.append((rows[j][0] - addr, names[-1]))
+        i = j
+    return out
+
+
+def text_summary(sizes: list[tuple[int, str]]) -> dict:
+    """The two budgeted figures and the population they come from."""
+    big = max(sizes) if sizes else (0, "")
+    return {"functions": len(sizes), "largest": list(big),
+            "over_4k": sum(1 for s, _ in sizes if s > 4096)}
+
+
+def text_budget_failures(summary: dict, budget: dict | None) -> list[str]:
+    """What the text sizes exceed, or nothing."""
+    if budget is None or not summary["functions"]:
+        return []
+    out = []
+    size, name = summary["largest"]
+    if size > budget["largest"]:
+        out.append(f"largest function {name} is {size} bytes, over the "
+                   f"{budget['largest']} budget")
+    if summary["over_4k"] > budget["over_4k"]:
+        out.append(f"{summary['over_4k']} functions over 4 KiB, over the "
+                   f"{budget['over_4k']} budget")
+    return out
+
+
 def _self_test() -> int:
     """Check the banner reading against both lanes' real console text.
 
@@ -623,6 +686,44 @@ def _self_test() -> int:
     assert unpack_failure(1.6, "reported `Initramfs unpacking failed: x`",
                           None).startswith("reported")
     unpack.self_test()
+
+    # Text sizes from a System.map: the gap to the next address any symbol
+    # holds, one name per address, without the linker labels; a weak symbol
+    # counts, a gap of a megabyte does not.
+    smap = ("ffff800080000000 T _text\n"
+            "ffff800080000000 t __pi__text\n"
+            "ffff800080010000 T __irqentry_text_start\n"
+            "ffff800080010000 T _stext\n"
+            "ffff800080010000 t gic_handle_irq\n"
+            "ffff800080010200 T __irqentry_text_end\n"
+            "ffff800080010200 T small_fn\n"
+            "ffff800080010300 W weak_fn\n"
+            "ffff800080011400 T big_fn\n"
+            "ffff800080013400 D some_table\n"
+            "ffff800080020000 T _etext\n"
+            "ffff800080020000 R __start_rodata\n"
+            "ffff800080100000 T _sinittext\n"
+            "ffff800080100000 t init_fn\n"
+            "ffff800080100100 T _einittext\n"
+            "ffff800080100100 T __exittext_begin\n"
+            "ffff800080100100 t exit_fn\n"
+            "ffff800080100140 T __exittext_end\n"
+            "ffff800080100140 t lonely_fn\n"
+            "ffff800081200000 D far_data\n")
+    sizes = {n: s for s, n in text_sizes(smap)}
+    assert sizes == {"gic_handle_irq": 512, "small_fn": 256, "weak_fn": 4352,
+                     "big_fn": 8192, "init_fn": 256, "exit_fn": 64}, sizes
+    summary = text_summary(text_sizes(smap))
+    assert summary == {"functions": 6, "largest": [8192, "big_fn"],
+                       "over_4k": 2}, summary
+    assert text_budget_failures(summary, {"largest": 8192, "over_4k": 2}) == []
+    assert text_budget_failures(summary, None) == []
+    over = text_budget_failures(summary, {"largest": 8191, "over_4k": 1})
+    assert over == ["largest function big_fn is 8192 bytes, over the 8191 "
+                    "budget", "2 functions over 4 KiB, over the 1 budget"], over
+    assert text_summary([]) == {"functions": 0, "largest": [0, ""],
+                                "over_4k": 0}
+    assert text_budget_failures(text_summary([]), TEXT_BUDGETS["aarch64"]) == []
 
     diags.self_test()
     ktree.self_test()
@@ -766,6 +867,7 @@ def main() -> int:
              "badc-asm": [], "gas": []}
     links = {"badc": [], "ld": [], "fallback": [], "fail": []}
     diagnostics: collections.Counter = collections.Counter()
+    text_report: dict = {}
     rc, secs, undef = 0, 0.0, 0
     if args.build:
         # Named before anything is built: a console log has to say which
@@ -816,6 +918,21 @@ def main() -> int:
         diagnostics, lines = diags.summary(warn_log)
         for line in lines:
             log(line)
+
+        smap = tree / "System.map"
+        if rc == 0 and not smap.exists():
+            failures.append(f"no System.map at {smap}")
+        elif rc == 0:
+            text_report = text_summary(
+                text_sizes(smap.read_text(errors="replace")))
+            budget = TEXT_BUDGETS.get(args.arch)
+            text_report["budget"] = budget
+            size, name = text_report["largest"]
+            log(f"text sizes: {text_report['functions']} functions, largest "
+                f"{size} ({name}), {text_report['over_4k']} over 4 KiB; "
+                + (f"budget {budget['largest']} and {budget['over_4k']}"
+                   if budget else "no committed budget"))
+            failures.extend(text_budget_failures(text_report, budget))
 
         if rc != 0:
             failures.append(f"make exited {rc} (see {build_log})")
@@ -915,7 +1032,10 @@ def main() -> int:
             # (shim, severity, cause) and ranked by incidence.
             "diagnostics": [[list(k), n]
                             for k, n in diagnostics.most_common()],
-            "undefined_refs": undef, "boots": boots,
+            "undefined_refs": undef,
+            # The linked image's text sizes against their budget.
+            "text": text_report,
+            "boots": boots,
             # The payload boot: the marker boots' verdicts plus the
             # unpack time and its bound.
             "unpack": unpacked,

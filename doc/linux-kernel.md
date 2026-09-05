@@ -274,8 +274,10 @@ signature, producing a ranked work list. It gates nothing.
 `verify.py` is the gate: it builds with no fallback list, links, and boots,
 and fails on any unit badc could not compile, any unit that fell back, any
 undefined reference, any boot that misses either marker, any banner that does
-not name badc, an unpack boot slower than its bound, and on a build that
-compiled fewer units than `--expect-units`
+not name badc, an unpack boot slower than its bound, a linked image whose
+largest function or count of functions over 4 KiB exceeds the
+architecture's budget, and on a build that compiled fewer units than
+`--expect-units`
 (make skips current objects, so without a floor a tree that rebuilt nothing
 would pass while testing nothing).
 

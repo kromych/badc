@@ -666,6 +666,24 @@ decompressor regression the bound is there to catch, both measured on the
 box); `0` reports only, and an architecture without a measured figure is
 reported only. `--no-payload` skips the boot.
 
+### Text sizes
+
+The build's `System.map` is measured after the link: the largest text
+symbol and the count of functions over 4 KiB, against the architecture's
+budgets in `TEXT_BUDGETS` in `verify.py`. An inliner that duplicated a
+callee's body at every site moved aggregate text by 8% while single
+functions moved 18-34x, so a budget on the total cannot separate the two
+and the budget is on the distribution. The map records no sizes, so a
+symbol's size is the gap to the next address any symbol holds, one name per
+address, with the linker labels of `asm-generic/sections.h` left out and a
+gap of a megabyte or more read as a section boundary; weak symbols are
+functions and count. `scripts/function_sizes.py` sizes a map the same way
+and reports two ratios over an object set; this is the linked image's own
+count. aarch64's badc-built defconfig map measures 84530 functions, largest
+101612 bytes (`hidinput_configure_usage`, 21192 in the gcc-built
+distribution kernel on the same box) and 451 over 4 KiB; the budgets are
+131072 and 520. An architecture without a budget is reported only.
+
 ### KASLR displacements
 
 A kernel configured with `CONFIG_RANDOMIZE_BASE` applies its relocations

@@ -1687,9 +1687,10 @@ fn parse_jobs(s: &str) -> Result<usize, ParseError> {
 
 impl FrontEnd {
     /// The language and search-path options one unit preprocesses and
-    /// compiles under. Each phase adds what it decides on top:
-    /// optimization, include tracking, the assembler flag, and the ELF
-    /// class and code model a relocatable emit carries.
+    /// compiles under, the `-O` predefines included so every phase
+    /// resolves conditional inclusion the same way. Each phase adds
+    /// what it decides on top: include tracking, the assembler flag,
+    /// and the ELF class and code model a relocatable emit carries.
     pub(crate) fn compile_options(&self, label: &str) -> badc::CompileOptions {
         badc::CompileOptions::default()
             .with_gnu(self.gnu)
@@ -1702,6 +1703,7 @@ impl FrontEnd {
             .with_no_builtin(self.no_builtin)
             .with_no_builtin_fns(self.no_builtin_fns.clone())
             .with_gnu_dialect(self.gnu_dialect)
+            .with_optimize(self.optimize)
             .with_defines(tu_defines(label, &self.defines))
             .with_undefines(self.undefines.clone())
             .with_include_paths(self.include_paths.clone())

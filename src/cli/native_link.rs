@@ -218,7 +218,6 @@ impl EmbeddedSources<'_> {
             .front
             .compile_options(label)
             .with_defines(copts_defines)
-            .with_optimize(cli.front.optimize)
             .with_no_entry_point(true);
         // A bundled source resolves `#include "..."` inside the bundled
         // set, not through the user's `-iquote` paths.

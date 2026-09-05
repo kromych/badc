@@ -41,7 +41,6 @@ pub(crate) fn run_in_process(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) ->
     let copts = cli
         .front
         .compile_options(&src_path)
-        .with_optimize(cli.front.optimize)
         .with_track_includes(cli.front.show_includes);
     let compiler = Compiler::with_options(contents, cli.target, copts);
     if cli.front.show_includes {

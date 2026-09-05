@@ -116,7 +116,6 @@ pub(crate) fn preprocess(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
         let opts = cli
             .front
             .compile_options(&label)
-            .with_optimize(cli.front.optimize)
             .with_asm_source(SourceKind::of(src_path).is_asm())
             .with_track_includes(dump_deps.is_some())
             .with_elf_class(cli.codegen.elf_class)

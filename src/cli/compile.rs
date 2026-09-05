@@ -229,7 +229,6 @@ pub(crate) fn tu_compile_options(
         .compile_options(src_path)
         .with_asm_source(SourceKind::of(src_path).is_asm())
         .with_track_includes(cfg.front.show_includes || cfg.deps.is_some())
-        .with_optimize(cfg.front.optimize)
         .with_export_all_functions(cfg.export_all)
         .with_implicit_extern_fns(implicit_externs.to_vec())
         .with_no_entry_point(true)

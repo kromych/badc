@@ -1292,8 +1292,10 @@ class Target:
         return None
 
     def console_stop(self) -> str | None:
-        """A console marker meaning this boot will not reach ssh."""
-        return None
+        """A console marker meaning this boot will not reach ssh: a panic,
+        an emergency shell, a firmware that found nothing to boot."""
+        _, verdict, at = console_stop(self.console_since(self.console_mark))
+        return f"{verdict}: {at}" if verdict else None
 
     def silence_reason(self) -> str:
         """What console silence means on this kind of machine."""
@@ -1336,6 +1338,9 @@ class Target:
 
     def reboot(self, timeout: int, boot_id: str) -> str:
         self.ssh("reboot", sudo=True)
+        # The markers and the silence check read the console from here on,
+        # so nothing the previous boot wrote is attributed to this one.
+        self.console_mark = self.console_bytes()
         time.sleep(self.reset_grace)
         return self.wait_ssh(timeout, expect_boot_id=boot_id)
 
@@ -1617,10 +1622,6 @@ class HwTarget(Target):
                  serial: SerialConsole | None = None):
         super().__init__(args.hw_host, args.hw_port, args.hw_key, console)
         self.args, self.serial = args, serial
-
-    def console_stop(self) -> str | None:
-        _, verdict, at = console_stop(self.console_since(self.console_mark))
-        return f"{verdict}: {at}" if verdict else None
 
     def silence_reason(self) -> str:
         if self.serial is None:
@@ -2850,6 +2851,8 @@ BOOT_STOPS = (
      re.compile(r"Kernel panic - not syncing[^\r\n]*")),
     ("dracut-shell", "the boot stopped in the dracut shell",
      re.compile(r"dracut:/#")),
+    ("no-boot-device", "the firmware found no boot device",
+     re.compile(r"BdsDxe: No bootable option or device was found[^\r\n]*")),
 )
 
 
@@ -3395,6 +3398,16 @@ def _self_test() -> int:
     assert data_disk_dev("vda: virtio_blk\nvdb: virtio_blk\n",
                          "virtio_blk", "vda") == "vdb"
     assert data_disk_dev("", "nvme", "vda") is None
+
+    # A firmware that found nothing to boot ends the wait as an outcome of
+    # its own rather than as an ssh timeout.
+    assert console_stop(">>Start PXE over IPv4.\n[Bds] Unable to boot!\n"
+                        "BdsDxe: No bootable option or device was found.\n"
+                        )[:2] == ("no-boot-device",
+                                  "the firmware found no boot device")
+    assert console_stop("Kernel panic - not syncing: x\n"
+                        "BdsDxe: No bootable option or device was found.\n"
+                        )[0] == "panic"
 
     # A controller model's own answers are excluded on its host only.
     boot = ("scsi host6: Avago SAS based MegaRAID driver\n"

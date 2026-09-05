@@ -860,7 +860,11 @@ split that firmware writes nothing to the console at all -- so a run asking
 for both is refused up front instead of timing out on a silent machine.
 A boot image that faults leaves EDK2's exception dump on the console and the
 machine stops there; the run reports the dump when it appears rather than
-waiting out the ssh timeout.
+waiting out the ssh timeout. A firmware that finds nothing to boot ends the
+same way, at `BdsDxe: No bootable option or device was found`: that is what
+`megasas` and `lsi53c895a` produce as the root bus under EFI on either
+architecture, and `ahci` on aarch64, so those controllers are covered as the
+data bus.
 
 TODO: the badc-built x86_64 bzImage faults in its own EFI stub when the boot
 loader starts it. EDK2's dump identifies the faulting image as that bzImage,

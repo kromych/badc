@@ -17,8 +17,12 @@
 typedef unsigned char u8;
 typedef unsigned short u16;
 
-/* Integer register scalars at four declared widths. */
-static long widths(char a, short b, int c, long d, u8 e, u16 f) {
+/* Integer register scalars at four declared widths. `signed char`, not
+   plain `char`: the psABI picks that one's signedness, unsigned on
+   AArch64 Linux and signed on x86_64 and on Apple's arm64, so a
+   negative argument in a plain `char` reads back differently per
+   target. */
+static long widths(signed char a, short b, int c, long d, u8 e, u16 f) {
     return (long)a + b + c + d + e + f;
 }
 

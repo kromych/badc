@@ -1259,6 +1259,58 @@ fn long_double_layout_follows_the_target_abi() {
     }
 }
 
+/// A `vector_size` type is aligned to its width up to the target's
+/// ceiling: the x86-64 psABI gives a 32-byte vector 32, AAPCS64 keeps a
+/// wider vector on the 16-byte boundary. The member offset, the struct
+/// size and alignment, the array stride and the padded width of a
+/// non-power-of-two vector follow, as gcc and clang lay them out.
+#[test]
+fn vector_type_alignment_follows_the_target_abi() {
+    use super::Vm;
+    use crate::Compiler;
+    use crate::Target;
+    let run = |src: &str, t: Target| -> i64 {
+        Vm::new(Compiler::with_target(src.to_string(), t).compile().unwrap())
+            .run()
+            .unwrap()
+    };
+    let decls = "typedef int v4si __attribute__((vector_size(16)));\n\
+                 typedef int v8si __attribute__((vector_size(32)));\n\
+                 typedef int v3si __attribute__((vector_size(12)));\n\
+                 struct S16 { char c; v4si v; };\n\
+                 struct S32 { char c; v8si v; };\n\
+                 struct N { char c; struct S32 s; };\n";
+    // (expression, x86-64 value, AArch64 value)
+    let cases: &[(&str, i64, i64)] = &[
+        ("_Alignof(v4si)", 16, 16),
+        ("sizeof(struct S16)", 32, 32),
+        ("__builtin_offsetof(struct S16, v)", 16, 16),
+        ("_Alignof(struct S16)", 16, 16),
+        ("_Alignof(v8si)", 32, 16),
+        ("sizeof(v8si)", 32, 32),
+        ("__builtin_offsetof(struct S32, v)", 32, 16),
+        ("sizeof(struct S32)", 64, 48),
+        ("_Alignof(struct N)", 32, 16),
+        ("__builtin_offsetof(struct N, s)", 32, 16),
+        ("sizeof(v8si[3]) / 3", 32, 32),
+        ("_Alignof(v3si)", 16, 16),
+        ("sizeof(v3si)", 16, 16),
+    ];
+    for t in [
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsAarch64,
+    ] {
+        for &(expr, x64, aarch64) in cases {
+            let src = alloc::format!("{decls}int main(void) {{ return (int)({expr}); }}");
+            let want = if t.is_x86_64() { x64 } else { aarch64 };
+            assert_eq!(run(&src, t), want, "{t:?}: {expr}");
+        }
+    }
+}
+
 /// The wide storage format round-trips through memory: a value stored
 /// into a `long double` object and read back is unchanged, and the
 /// object's bytes carry the platform's encoding rather than a binary64

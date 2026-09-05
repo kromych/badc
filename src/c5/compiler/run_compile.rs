@@ -1202,7 +1202,7 @@ impl Compiler {
         self.next()?;
 
         let ent_pc = self.open_function_body(id_idx, &params);
-        self.copy_by_value_parameters(&params);
+        self.copy_by_value_parameters(&params)?;
         self.parse_function_body_items()?;
         self.finish_function_body(ent_pc, &params)?;
         // The capture runs before the scope unwind restores the outer bindings.
@@ -1371,7 +1371,10 @@ impl Compiler {
         ent_pc
     }
 
-    fn copy_by_value_parameters(&mut self, params: &super::function::ParsedParams) {
+    fn copy_by_value_parameters(
+        &mut self,
+        params: &super::function::ParsedParams,
+    ) -> Result<(), C5Error> {
         // C99 6.5.2.2: a struct parameter is passed by value, but the caller pushed
         // its address. Copy it into a fresh local through the struct-copy intrinsic
         // and repoint the symbol, so a body-side `p.field = v` writes the copy.
@@ -1382,7 +1385,7 @@ impl Compiler {
             }
             let slots = self.slots_of_type(pty);
             let param_val = self.symbols[idx].val;
-            let local_val = self.reserve_slots(slots);
+            let local_val = self.reserve_object_slots(pty, slots)?;
             if slots >= 1 {
                 self.multi_cell_temps.push((local_val, slots));
             }
@@ -1426,6 +1429,7 @@ impl Compiler {
             // Symbol now points at the f32-storage local.
             self.symbols[idx].val = local_val;
         }
+        Ok(())
     }
 
     fn parse_function_body_items(&mut self) -> Result<(), C5Error> {

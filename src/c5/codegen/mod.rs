@@ -292,6 +292,15 @@ impl Target {
         matches!(self, Target::LinuxX64 | Target::WindowsX64)
     }
 
+    /// The ceiling on a vector type's alignment, `None` where the ABI gives
+    /// a vector its width. AAPCS64 5.1 defines the 8- and 16-byte short
+    /// vectors and a wider vector keeps the 16-byte boundary in gcc's and
+    /// clang's layout; the x86-64 psABI aligns `__m256` at 32 and `__m512`
+    /// at 64.
+    pub fn vector_align_cap(self) -> Option<usize> {
+        self.is_aarch64().then_some(16)
+    }
+
     /// Whether an unnamed bit-field's declared type raises the
     /// alignment of the aggregate containing it. C99 6.7.2.1 leaves
     /// this to the implementation; AArch64 (AAPCS64) inherits the

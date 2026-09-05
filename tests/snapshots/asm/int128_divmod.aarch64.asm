@@ -894,27 +894,27 @@ Disassembly of section .text:
                	cset	x11, lo
                	sub	x4, x5, #0x0
                	sub	x5, x6, #0x0
-               	sub	x6, x5, x11
+               	sub	x5, x5, x11
                	mul	x13, x4, x8
-               	mov	w5, w4
+               	mov	w6, w4
                	lsr	x9, x4, #32
-               	mul	x10, x5, x7
+               	mul	x10, x6, x7
                	lsr	x12, x10, #32
                	mul	x11, x9, x7
                	add	x12, x11, x12
                	mov	w14, w12
                	lsr	x12, x12, #32
-               	add	x5, x10, x14
-               	lsr	x5, x5, #32
+               	add	x6, x10, x14
+               	lsr	x6, x6, #32
                	add	x9, x11, x12
-               	add	x5, x9, x5
+               	add	x6, x9, x6
                	mov	x17, #0xffc0            // =65472
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	mul	x4, x4, x17
-               	add	x4, x5, x4
-               	madd	x14, x6, x8, x4
+               	add	x4, x6, x4
+               	madd	x14, x5, x8, x4
                	mov	x5, #0x3039             // =12345
                	mov	x4, #0x3000000000       // =206158430208
                	mov	x6, #0x80               // =128

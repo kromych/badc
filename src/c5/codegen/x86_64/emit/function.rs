@@ -1254,19 +1254,19 @@ fn emit_prologue(
     // `fp_used` lists the fixed FP scratch of a Win64 function doing FP work,
     // saved at the frame bottom with the full 128-bit `movups`.
     save_callee_saved(code, alloc, frame);
-    emit_struct_param_scatter(code, func, frame, abi);
-    emit_struct_stack_param_copy(code, func, frame, abi);
-    // After the parameter marshalling, which uses the same scratch, and
-    // before the realign: the slot is rbp-relative, so the rsp move that
-    // follows does not reach it.
+    // The canary slot is rbp-relative, so it is stored before the realign.
     emit_canary_store(code, frame, abi, extern_data_refs);
     // C11 6.7.5: the over-aligned region below the static frame, after the
     // callee-saved stores (which stay at rbp - frame_bytes, where
     // `restore_dynamic_sp` puts rsp back); reserving before aligning keeps
-    // the AND inside the reserved bytes.
+    // the AND inside the reserved bytes. The realign uses r11 alone, so the
+    // argument registers reach the parameter marshalling after it, which
+    // places a copy aligned above the slot in the realigned region.
     if frame.realign_align > 0 {
         emit_realign_rsp(code, frame);
     }
+    emit_struct_param_scatter(code, func, frame, abi);
+    emit_struct_stack_param_copy(code, func, frame, abi);
     uw
 }
 
@@ -1301,16 +1301,16 @@ fn emit_struct_stack_param_copy(
             continue;
         }
         let src_off = base + off as i64;
-        let dst_off = local_slot_off(slot, func, frame, abi);
+        let (dst_base, dst_off) = local_slot_base_disp(slot, func, frame, abi);
         let words = (size / 8) as i64;
         for w in 0..words {
             let o = w * 8;
             emit_mov_r_mem(code, SCRATCH_R10, Reg::RBP, (src_off + o) as i32);
-            emit_mov_mem_r(code, Reg::RBP, (dst_off + o) as i32, SCRATCH_R10);
+            emit_mov_mem_r(code, dst_base, (dst_off + o) as i32, SCRATCH_R10);
         }
         for b in (words * 8)..(size as i64) {
             super::encode::emit_movzx_r_mem8(code, SCRATCH_R10, Reg::RBP, (src_off + b) as i32);
-            super::encode::emit_mov_mem8_r(code, Reg::RBP, (dst_off + b) as i32, SCRATCH_R10);
+            super::encode::emit_mov_mem8_r(code, dst_base, (dst_off + b) as i32, SCRATCH_R10);
         }
     }
 }
@@ -1339,13 +1339,13 @@ fn emit_struct_param_scatter(
         if slot >= 0 {
             continue;
         }
-        let base = local_slot_off(slot, func, frame, abi);
+        let (base_reg, base) = local_slot_base_disp(slot, func, frame, abi);
         for (k, cr) in regs.iter().take(*n as usize).enumerate() {
             let off = (base + (k as i64) * 8) as i32;
             if cr.is_fp {
-                super::encode::emit_movsd_mem_xmm(code, Reg::RBP, off, Reg(cr.reg));
+                super::encode::emit_movsd_mem_xmm(code, base_reg, off, Reg(cr.reg));
             } else {
-                super::encode::emit_mov_mem_r(code, Reg::RBP, off, Reg(cr.reg));
+                super::encode::emit_mov_mem_r(code, base_reg, off, Reg(cr.reg));
             }
         }
     }

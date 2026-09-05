@@ -1127,7 +1127,6 @@ fn emit_prologue(
         return;
     }
     emit_frame_and_saves(code, alloc, frame);
-    emit_struct_param_scatter(code, func, abi, frame);
     if func.indirect_result_slot != 0 {
         // AAPCS64 6.9: save the caller-supplied x8 indirect-result pointer
         // into its body local; `return s;` writes the aggregate through it.
@@ -1135,11 +1134,14 @@ fn emit_prologue(
         emit(code, enc_str_imm(Reg(8), Reg(16), 0));
     }
     // The canary slot is fp-relative, so it is stored before the sp
-    // realignment, which comes last (C11 6.7.5).
+    // realignment (C11 6.7.5), which uses x16 alone and so leaves the
+    // argument registers for the scatter that follows it: a parameter copy
+    // aligned above the slot lives in the realigned region.
     emit_canary_store(code, frame, abi, extern_data_refs);
     if frame.realign_align > 0 {
         emit_realign_sp(code, frame);
     }
+    emit_struct_param_scatter(code, func, abi, frame);
 }
 
 /// The host-ABI variadic register save area above the saved fp/lr: the
@@ -1290,7 +1292,7 @@ fn emit_struct_param_scatter(
                 let hfa = super::abi_classify::hfa_member_layout(
                     &func.agg_descs[*agg_idx as usize].fields,
                 );
-                let _ = emit_local_addr_fp(code, Place::IntReg(16), slot, frame);
+                let _ = emit_local_addr(code, Place::IntReg(16), slot, func, frame);
                 for (k, cr) in regs.iter().take(*n as usize).enumerate() {
                     if cr.is_fp {
                         let (off, msize) = hfa
@@ -1318,7 +1320,7 @@ fn emit_struct_param_scatter(
                     src + size <= 4096 * 8,
                     "stack-arg offset beyond ldr imm12 reach"
                 );
-                let _ = emit_local_addr_fp(code, Place::IntReg(16), slot, frame);
+                let _ = emit_local_addr(code, Place::IntReg(16), slot, func, frame);
                 let mut o = 0u32;
                 while o + 8 <= size {
                     emit(code, enc_ldr_imm(Reg(17), Reg(29), src + o));

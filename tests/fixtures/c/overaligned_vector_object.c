@@ -5,10 +5,6 @@
 // object and a named `_Alignas` on each. The odd-sized fillers keep the
 // running data offset and the frame cursor off every 16-byte boundary.
 // Returns 0, distinct non-zero per failure.
-//
-// TODO: `_Alignof` of the vector type itself reports 8 rather than its
-// 16-byte width, so an object of the type with no `_Alignas` -- a compound
-// literal included, which takes no declarator -- is placed on 8.
 
 typedef int v4si __attribute__((vector_size(16)));
 

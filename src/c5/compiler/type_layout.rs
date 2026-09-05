@@ -403,6 +403,8 @@ impl Compiler {
     /// of `elem_ty`: a single array field of `n_bytes / sizeof(elem)` lanes,
     /// flagged `is_vector`. sizeof / initialization / by-value pass reuse the
     /// struct machinery; the cast and binary-operator paths read the flag.
+    /// The object is the width rounded up to a power of two and aligned to
+    /// that width up to the target's ceiling, as gcc and clang lay it out.
     pub(super) fn make_vector_type(&mut self, elem_ty: i64, n_bytes: i64) -> i64 {
         let elem_size = (self.size_of_type(elem_ty) as i64).max(1);
         let lanes = (n_bytes / elem_size).max(1);
@@ -410,6 +412,12 @@ impl Compiler {
         if let Some(id) = self.structs.iter().position(|s| s.name == name) {
             return struct_ty_for(id);
         }
+        let size = (n_bytes as usize).next_power_of_two();
+        let align = size.min(
+            self.target
+                .vector_align_cap()
+                .unwrap_or(super::MAX_STATIC_ALIGN),
+        );
         let field = StructField {
             name: alloc::string::String::new(),
             offset: 0,
@@ -434,10 +442,10 @@ impl Compiler {
         };
         self.structs.push(StructDef {
             name,
-            size: n_bytes as usize,
-            align: (n_bytes as usize).min(8),
+            size,
+            align,
             explicit_align: 0,
-            natural_align: (n_bytes as usize).min(8),
+            natural_align: align,
             fields: alloc::vec![field],
             anon_bitfields: Vec::new(),
             anon_members: Vec::new(),

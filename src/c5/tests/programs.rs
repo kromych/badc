@@ -4370,6 +4370,15 @@ fn overaligned_vector_object() {
 }
 
 #[test]
+fn vector_object_alignment() {
+    // A `vector_size` type is aligned to its width up to the target's
+    // ceiling, which pads a member that follows a `char` and places every
+    // object of the type -- file-scope, static local, automatic, compound
+    // literal, by-value parameter copy -- on that boundary.
+    assert_eq!(run_fixture("vector_object_alignment.c"), 0);
+}
+
+#[test]
 fn block_scope_object_alignment() {
     // C11 6.7.5: `_Alignas` on a block-scope declarator places the object on
     // the requested boundary -- a static local in the data image, an automatic

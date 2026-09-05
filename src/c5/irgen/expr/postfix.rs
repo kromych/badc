@@ -51,7 +51,7 @@ impl<'a> Walker<'a> {
             && let Expr::Ident {
                 sym, class, val, ..
             } = self.ast.expr(callee)
-            && *class == Token::Fun as i64
+            && (*class == Token::Fun as i64 || self.binding_defined_here(*sym, *class))
         {
             return self.call_direct_out_ptr(b, *sym, *val, args, ty);
         }
@@ -91,7 +91,7 @@ impl<'a> Walker<'a> {
             sym, class, val, ..
         } = self.ast.expr(callee)
         {
-            if *class == Token::Fun as i64 {
+            if *class == Token::Fun as i64 || self.binding_defined_here(*sym, *class) {
                 return self.call_direct(b, *sym, *val, call_args);
             }
             if *class == Token::Sys as i64 {

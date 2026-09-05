@@ -46,7 +46,7 @@ impl<'a> Walker<'a> {
                     GloAddr::Resolved(off) => Ok(b.imm_data(off)),
                 }
             }
-        } else if *class == Token::Fun as i64 {
+        } else if *class == Token::Fun as i64 || self.binding_defined_here(*sym, *class) {
             // A sys trampoline's `val` is filled in after the Ident
             // node snapshotted 0, so the live value comes off the
             // symbol table. A scoped function declaration's entity
@@ -165,6 +165,13 @@ impl<'a> Walker<'a> {
                 Ok(b.imm_code_extern(_sym))
             } else {
                 Ok(b.imm_code(val as usize))
+            }
+        } else if self.binding_defined_here(_sym, class) {
+            let live_val = self.live_fun_addr_val(_sym, 0);
+            if live_val == 0 {
+                Ok(b.imm_code_extern(_sym))
+            } else {
+                Ok(b.imm_code(live_val as usize))
             }
         } else if class == Token::Sys as i64 {
             // A bare imported-function rvalue (`fp = strcmp`) resolves

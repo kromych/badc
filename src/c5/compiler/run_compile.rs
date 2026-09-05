@@ -897,7 +897,6 @@ impl Compiler {
         let &DeclaratorBinding {
             id_idx,
             ty,
-            signature_line,
             declarator_is_bare_void,
             ..
         } = b;
@@ -991,16 +990,13 @@ impl Compiler {
             return self.finish_function_prototype(id_idx);
         }
         if was_sys {
-            return Err(self.compile_err_at(
-                Code::INVALID_DECLARATION,
-                signature_line,
-                format!(
-                    "cannot give a body to predefined library function `{}` \
-                     (the per-target header's `#pragma binding` provides the \
-                     implementation -- use a prototype only)",
-                    self.symbols[id_idx].name
-                ),
-            ));
+            // A body for a name a bundled header binds to the C library:
+            // the program's function replaces the import for this unit, as
+            // under gcc / clang. The walker lowers every call by the
+            // symbol's class once the unit is parsed, so the calls before
+            // this definition reach it too. TODO: a definition in another
+            // unit still links against the import.
+            self.record_function_declaration(id_idx, static_seen, extern_seen);
         }
         self.parse_function_definition(id_idx, params)
     }

@@ -177,6 +177,15 @@ impl Compiler {
             .map(|(&sys_idx, &tr_idx)| (sys_idx, tr_idx))
             .collect();
         for (sys_idx, tr_idx) in entries {
+            // The unit defined the binding's name after the trampoline
+            // was requested: the name is the unit's own function, so the
+            // trampoline resolves to its entry instead of a body of its
+            // own.
+            if self.symbols[sys_idx].class == Token::Fun as i64 {
+                self.symbols[tr_idx].val = self.symbols[sys_idx].val;
+                self.symbols[tr_idx].defined_here = self.symbols[sys_idx].defined_here;
+                continue;
+            }
             let ent_pc = self.next_ent_pc;
             self.symbols[tr_idx].val = ent_pc as i64;
             // C99 6.9 has no notion of synthetic helpers, but

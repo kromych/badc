@@ -1944,11 +1944,11 @@ impl Compiler {
             );
         }
         self.next()?;
-        if self.symbols[id_idx].class == Token::Sys as i64 {
-            self.flush_pending_stores();
-            self.pending.last_emit_was_indirect_call = false;
-            self.ast_acc = None;
-        } else if self.symbols[id_idx].class == Token::Fun as i64 {
+        if self.symbols[id_idx].class == Token::Sys as i64
+            || self.symbols[id_idx].class == Token::Fun as i64
+        {
+            // A binding the unit defines later becomes one of its
+            // functions, so a call made while it was bound counts too.
             self.symbols[id_idx].was_referenced = true;
             self.flush_pending_stores();
             self.pending.last_emit_was_indirect_call = false;

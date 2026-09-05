@@ -223,6 +223,18 @@ impl<'a> Walker<'a> {
         self.live_fun_sym(sym).map_or(fallback_val, |s| s.val)
     }
 
+    /// Whether an `Ident` snapshotted as a `Token::Sys` binding names a
+    /// function the unit defined after the snapshot was taken. The
+    /// binding is the unit's own function now, and the reference
+    /// follows the definition, as the ones parsed after it do.
+    fn binding_defined_here(&self, sym: u32, class: i64) -> bool {
+        class == Token::Sys as i64
+            && self
+                .symbols
+                .get(sym as usize)
+                .is_some_and(|s| s.class == Token::Fun as i64)
+    }
+
     /// Live `ent_pc` for a function symbol whose address is taken. An
     /// inline definition provides no external definition, so its
     /// identifier resolves through the import placeholder and the
@@ -289,7 +301,7 @@ impl<'a> Walker<'a> {
     /// asks is asked of this, not of the target's own convention.
     fn callee_conv(&self, callee: ExprId) -> crate::c5::codegen::CallConv {
         if let Expr::Ident { sym, class, .. } = self.ast.expr(callee)
-            && *class == Token::Fun as i64
+            && (*class == Token::Fun as i64 || self.binding_defined_here(*sym, *class))
             && let Some(s) = self.symbols.get(*sym as usize)
             && s.conv != crate::c5::codegen::CallConv::Target
         {

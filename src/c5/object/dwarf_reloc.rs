@@ -222,6 +222,7 @@ const ABBREV_VOLATILE_TYPE: u64 = 42;
 const ABBREV_VOLATILE_TYPE_VOID: u64 = 43;
 const ABBREV_RESTRICT_TYPE: u64 = 44;
 const ABBREV_RESTRICT_TYPE_VOID: u64 = 45;
+const ABBREV_ENUMERATION_TYPE_ANON: u64 = 46;
 
 /// Compilation-unit header for `.debug_info` (DWARF 4, 32-bit form).
 #[repr(C, packed)]
@@ -486,6 +487,12 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         tag: DW_TAG_ENUMERATION_TYPE,
         has_children: true,
         attrs: &[(DW_AT_NAME, DW_FORM_STRP), (DW_AT_BYTE_SIZE, DW_FORM_DATA1)],
+    },
+    AbbrevDecl {
+        code: ABBREV_ENUMERATION_TYPE_ANON,
+        tag: DW_TAG_ENUMERATION_TYPE,
+        has_children: true,
+        attrs: &[(DW_AT_BYTE_SIZE, DW_FORM_DATA1)],
     },
     // enumerator -- one (name, value) pair. DW_AT_const_value is signed
     // since C99 enum constants can be negative.
@@ -950,16 +957,21 @@ impl RelocInfoUnit<'_> {
         }
     }
 
-    /// One `DW_TAG_enumeration_type` per tagged enum, so `ptype enum Tag`
+    /// One `DW_TAG_enumeration_type` per enum definition, so `ptype enum Tag`
     /// resolves the named constants although c5 collapses enums to `int`.
+    /// An untagged enum has no DW_AT_name (DWARF 4 5.7).
     fn emit_enum_dies(&mut self) {
         let program = self.program;
         for ed in &program.enums {
-            if ed.name.is_empty() || ed.constants.is_empty() {
+            if ed.constants.is_empty() {
                 continue;
             }
-            write_uleb128(&mut self.body, ABBREV_ENUMERATION_TYPE);
-            self.strp(&ed.name);
+            if ed.name.is_empty() {
+                write_uleb128(&mut self.body, ABBREV_ENUMERATION_TYPE_ANON);
+            } else {
+                write_uleb128(&mut self.body, ABBREV_ENUMERATION_TYPE);
+                self.strp(&ed.name);
+            }
             self.body.push(ed.byte_size());
             for (cname, cval) in &ed.constants {
                 write_uleb128(&mut self.body, ABBREV_ENUMERATOR);
@@ -2103,15 +2115,15 @@ mod abbrev_golden {
              49133a0f3b0f0000053400030e021849133a0f3b0f0000062400030e0b0b3e0b0000\
              070f000b0b49130000081301030e0b0f0000091701030e0b0f00000a0d00030e4913\
              380f00001d0d004913380f00000b0d00030e49136b0f0d0f00000c180000000d0101\
-             491300000e21002f0f00000f0401030e0b0b0000102800030e1c0d00001113010b0f\
-             00001217010b0f0000131300030e3c190000141700030e3c19000015150127194913\
-             000016150127190000170500491300001821000000190f000b0b00001a3b0000001b\
-             3400030e49133f1902183a0f3b0f00001c3400030e491302183a0f3b0f0000203400\
-             030e49133f193a0f3b0f0000213400030e49133a0f3b0f0000222e00030e11011207\
-             3f192719360b0000232e01030e110112073f192719360b40180000242e00030e1101\
-             12072719360b0000252e01030e110112072719360b40180000261600030e49130000\
-             271600030e00002826004913000029260000002a3500491300002b350000002c3700\
-             491300002d3700000000"
+             491300000e21002f0f00000f0401030e0b0b00002e04010b0b0000102800030e1c0d\
+             00001113010b0f00001217010b0f0000131300030e3c190000141700030e3c190000\
+             15150127194913000016150127190000170500491300001821000000190f000b0b00\
+             001a3b0000001b3400030e49133f1902183a0f3b0f00001c3400030e491302183a0f\
+             3b0f0000203400030e49133f193a0f3b0f0000213400030e49133a0f3b0f0000222e\
+             00030e110112073f192719360b0000232e01030e110112073f192719360b40180000\
+             242e00030e110112072719360b0000252e01030e110112072719360b401800002616\
+             00030e49130000271600030e00002826004913000029260000002a3500491300002b\
+             350000002c3700491300002d3700000000"
         );
     }
 }

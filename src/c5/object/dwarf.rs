@@ -974,6 +974,7 @@ const ABBREV_SUBRANGE_TYPE: u64 = 16;
 const ABBREV_ENUMERATION_TYPE: u64 = 17;
 const ABBREV_ENUMERATOR: u64 = 18;
 const ABBREV_SUBPROGRAM_INTERNAL: u64 = 19;
+const ABBREV_ENUMERATION_TYPE_ANON: u64 = 20;
 
 /// One `.debug_abbrev` declaration: the abbreviation code, its DWARF tag,
 /// whether the DIE has children, and the ordered (attribute, form) pairs.
@@ -1149,9 +1150,10 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         has_children: false,
         attrs: &[(DW_AT_UPPER_BOUND, DW_FORM_UDATA)],
     },
-    // enumeration_type -- tagged C99 6.7.2.2 enums; the enum is `int` in c5
-    // so DW_AT_byte_size is 4. DW_FORM_string keeps the name inline rather
-    // than threading the sealed string table.
+    // enumeration_type -- C99 6.7.2.2 enums, DW_AT_byte_size from the
+    // underlying type. DW_FORM_string keeps the name inline rather than
+    // threading the sealed string table; an untagged enum takes the
+    // variant without DW_AT_name.
     AbbrevDecl {
         code: ABBREV_ENUMERATION_TYPE,
         tag: DW_TAG_ENUMERATION_TYPE,
@@ -1160,6 +1162,12 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_NAME, DW_FORM_STRING),
             (DW_AT_BYTE_SIZE, DW_FORM_DATA1),
         ],
+    },
+    AbbrevDecl {
+        code: ABBREV_ENUMERATION_TYPE_ANON,
+        tag: DW_TAG_ENUMERATION_TYPE,
+        has_children: true,
+        attrs: &[(DW_AT_BYTE_SIZE, DW_FORM_DATA1)],
     },
     // enumerator -- one (name, value) pair. DW_AT_const_value is signed
     // since C99 enum constants can be negative.
@@ -1408,16 +1416,21 @@ impl InfoUnit<'_> {
         }
     }
 
-    /// One `DW_TAG_enumeration_type` per tagged enum.
+    /// One `DW_TAG_enumeration_type` per enum definition; an untagged
+    /// enum has no DW_AT_name (DWARF 4 5.7).
     fn emit_enum_dies(&mut self, enums: &[super::super::compiler::EnumDef]) {
         let body = &mut self.body;
         for ed in enums {
-            if ed.name.is_empty() || ed.constants.is_empty() {
+            if ed.constants.is_empty() {
                 continue;
             }
-            write_uleb128(body, ABBREV_ENUMERATION_TYPE);
-            body.extend_from_slice(ed.name.as_bytes());
-            body.push(0);
+            if ed.name.is_empty() {
+                write_uleb128(body, ABBREV_ENUMERATION_TYPE_ANON);
+            } else {
+                write_uleb128(body, ABBREV_ENUMERATION_TYPE);
+                body.extend_from_slice(ed.name.as_bytes());
+                body.push(0);
+            }
             body.push(ed.byte_size());
             for (cname, cval) in &ed.constants {
                 write_uleb128(body, ABBREV_ENUMERATOR);
@@ -2242,7 +2255,7 @@ mod tests {
              130000071301030e0b060000081701030e0b060000090d00030e4913380600000a0d\
              00030e49136b0f0d0f00000b2e01030e110112073f19491300000c0500030e491300\
              000d180000000e0500030e4913021800000f0101491300001021002f0f0000110401\
-             03080b0b000012280003081c0d000000"
+             03080b0b00001404010b0b000012280003081c0d000000"
         );
     }
 
@@ -2740,5 +2753,41 @@ mod info_golden {
             hex_a64.ends_with("028d000000"),
             "aarch64 frame_base should be breg29: {hex_a64}"
         );
+    }
+
+    /// An untagged enum takes the abbreviation without DW_AT_name; its
+    /// enumerators follow as for a tagged one.
+    #[test]
+    fn build_debug_info_describes_an_untagged_enum() {
+        let mut strs = StrTable::new();
+        let producer_off = strs.intern("badc test");
+        let comp_dir_off = strs.intern("");
+        let cu_name_off = strs.intern("t.c");
+        let subs: alloc::vec::Vec<Subprog> = alloc::vec![];
+        let plt_subs: alloc::vec::Vec<PltSub> = alloc::vec![];
+        let structs: alloc::vec::Vec<StructDef> = alloc::vec![];
+        let enums = alloc::vec![crate::c5::compiler::EnumDef {
+            name: alloc::string::String::new(),
+            constants: alloc::vec![(alloc::string::String::from("ANON_A"), 5)],
+            underlying_ty: crate::c5::token::Ty::Int as i64,
+        }];
+        let catalog = TypeCatalog::collect(&subs, &plt_subs, &mut strs, Target::LinuxX64, &structs);
+        let info = build_debug_info(
+            cu_name_off,
+            comp_dir_off,
+            producer_off,
+            0,
+            0x1000,
+            0x10,
+            &catalog,
+            &subs,
+            &plt_subs,
+            Target::LinuxX64,
+            &structs,
+            &enums,
+        );
+        let die: &[u8] = &[0x14, 4, 0x12, b'A', b'N', b'O', b'N', b'_', b'A', 0, 5, 0];
+        let hex: alloc::string::String = info.iter().map(|b| alloc::format!("{b:02x}")).collect();
+        assert!(info.windows(die.len()).any(|w| w == die), "{hex}");
     }
 }

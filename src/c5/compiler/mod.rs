@@ -66,9 +66,8 @@ pub(crate) const MAX_FRAME_ALIGN: i64 = 4096;
 /// weight at the type level -- but preserving the (name, value)
 /// pairs lets the DWARF emitter produce DW_TAG_enumeration_type
 /// + DW_TAG_enumerator children so `(gdb) ptype enum Tag` works.
-/// Anonymous enums (no tag) skip emission; their constants stay
-/// reachable through plain integer DW_AT_const_value lookups in
-/// the symbol table.
+/// An untagged enum has an empty `name` and gets a DIE without
+/// DW_AT_name.
 #[derive(Debug, Clone)]
 pub struct EnumDef {
     pub name: String,

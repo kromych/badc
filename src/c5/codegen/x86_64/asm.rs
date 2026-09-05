@@ -7996,6 +7996,18 @@ mod string_and_prefix_tests {
         assert_eq!(asm_bytes(b"str %eax"), [0x0F, 0x00, 0xC8]);
     }
 
+    /// The accumulator self-exchanges: the 64-bit one is the one-byte `nop`
+    /// both assemblers emit, the 16-bit one keeps its operand-size prefix,
+    /// and the 32-bit one takes the 87 form, which zero-extends.
+    #[test]
+    fn accumulator_self_exchange_forms() {
+        assert_eq!(asm_bytes(b"xchg %rax, %rax"), [0x90]);
+        assert_eq!(asm_bytes(b"xchg %ax, %ax"), [0x66, 0x90]);
+        assert_eq!(asm_bytes(b"xchg %eax, %eax"), [0x87, 0xC0]);
+        assert_eq!(asm_bytes(b"xchg %rax, %r8"), [0x49, 0x90]);
+        assert_eq!(asm_bytes(b"xchg %rbx, %rax"), [0x48, 0x93]);
+    }
+
     /// System / SSE-control / invalidation memory forms on the 0F and 0F38
     /// maps. Byte-verified against clang.
     #[test]

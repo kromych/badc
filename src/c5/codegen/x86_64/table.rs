@@ -1411,12 +1411,11 @@ fn encode_form(
     // `xchg eax, eax` must not take the 90+r accumulator short form: 0x90
     // decodes as NOP and skips the 32-bit zero-extension a real exchange
     // performs. The 16/64-bit self-exchanges are architectural no-ops
-    // either way and keep the short form.
-    if f.plus_r
-        && *f.opcode == [0x90]
-        && opw == 4
-        && matches!(rm_op, Some(Opnd::Reg { num: 0, .. }))
-    {
+    // either way and keep the short form; the 64-bit one is the bare `90`,
+    // since REX.W selects nothing there and both assemblers omit it.
+    let self_xchg =
+        f.plus_r && *f.opcode == [0x90] && matches!(rm_op, Some(Opnd::Reg { num: 0, .. }));
+    if self_xchg && opw == 4 {
         return Err(String::from(
             "inline asm: xchg eax, eax is not the 90+r form",
         ));
@@ -1425,7 +1424,7 @@ fn encode_form(
     // REX computation.
     let w = match f.rexw {
         RexW::W0 | RexW::Default64 => false,
-        RexW::W1 => true,
+        RexW::W1 => !self_xchg,
         RexW::ByWidth => opw == 8,
     };
     let reg_hi = reg_op.map(|o| reg_num(o) >= 8).unwrap_or(false);

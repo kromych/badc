@@ -3469,6 +3469,62 @@ fn host_linux_target() -> &'static str {
     }
 }
 
+// A freestanding image that binds a shared-library symbol keeps the
+// loader tables, still at its link address, and the driver says so:
+// the warning names the symbol and the library, `-Werror=` raises it and
+// `-Wno-` silences it.
+#[test]
+fn freestanding_import_is_reported() {
+    const PT_INTERP: u32 = 3;
+    let dir = tempdir("freestanding-import");
+    let src = write_source(
+        &dir,
+        "bound.c",
+        "#include <unistd.h>\n\
+         __asm__(\".text\\n.globl _start\\n_start:\\n  call start_c\\n  hlt\\n\");\n\
+         void start_c(void) { write(1, \"bound\\n\", 6); for (;;) {} }\n",
+    );
+    let out = dir.join("bound");
+    let link = |flag: Option<&str>| {
+        let mut c = Command::new(badc());
+        c.args([
+            "-q",
+            "--freestanding",
+            "--entry=_start",
+            "--target=linux-x64",
+        ]);
+        if let Some(flag) = flag {
+            c.arg(flag);
+        }
+        c.arg(&src).arg("-o").arg(&out).current_dir(&dir);
+        c.output().expect("run badc")
+    };
+    let warned = link(None);
+    let stderr = String::from_utf8_lossy(&warned.stderr);
+    assert!(warned.status.success(), "the link must succeed: {stderr:?}");
+    assert!(
+        stderr.contains("warning:")
+            && stderr.contains("`write`")
+            && stderr.contains("libc.so.6")
+            && stderr.contains("[B7010] [-Wfreestanding-import]"),
+        "the warning names the symbol and the library; got: {stderr:?}"
+    );
+    let bytes = std::fs::read(&out).expect("read the image");
+    assert_eq!(u16::from_le_bytes([bytes[16], bytes[17]]), 2, "ET_EXEC");
+    assert!(
+        elf_segments(&bytes).iter().any(|&(t, _)| t == PT_INTERP),
+        "a bound import keeps the interpreter"
+    );
+    let raised = link(Some("-Werror=freestanding-import"));
+    assert!(!raised.status.success(), "-Werror= makes the warning fatal");
+    let silenced = link(Some("-Wno-freestanding-import"));
+    let stderr = String::from_utf8_lossy(&silenced.stderr);
+    assert!(
+        silenced.status.success() && !stderr.contains("freestanding-import"),
+        "-Wno- silences the warning; got: {stderr:?}"
+    );
+}
+
 // A program that defines `__c5_entry` WITHOUT `--freestanding` keeps
 // the startup runtime, so its definition collides with the runtime's
 // `__c5_entry`. This must be a duplicate-symbol error, not a silent

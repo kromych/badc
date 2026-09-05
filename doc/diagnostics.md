@@ -97,4 +97,5 @@ regenerates.
 | B7007 | `unsupported-option` | error | controllable | default | an option badc parses but declines in the mode the command line picked |
 | B7008 | `link-pragma-ignored` | warning | controllable | default | a link request from a source pragma that an object file does not carry |
 | B7009 | `cross-target-output` | warning | note | - | the image is for another host and will not run where it was built |
+| B7010 | `freestanding-import` | warning | controllable | default | a freestanding image binds a shared-library symbol, so it runs through the dynamic loader |
 | B9001 | `internal-error` | error | hard | - | an invariant inside badc did not hold |

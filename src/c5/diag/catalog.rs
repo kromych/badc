@@ -237,6 +237,10 @@ catalog! {
     7009, "cross-target-output", [], Warning, Note,
         [], Live,
         "the image is for another host and will not run where it was built";
+    7010, "freestanding-import", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a freestanding image binds a shared-library symbol, so it runs through the dynamic loader";
+
     9001, "internal-error", [], Error, Hard,
         [], Live,
         "an invariant inside badc did not hold";
@@ -344,6 +348,8 @@ impl Code {
     pub const LONG_DOUBLE_ABI: Code = Code::new(3006);
     pub const DEAD_STORE: Code = Code::new(3007);
     pub const LINK_PRAGMA_IGNORED: Code = Code::new(7008);
+    pub const FREESTANDING_IMPORT: Code = Code::new(7010);
+
     pub const DIRECTIVE: Code = Code::new(1010);
     pub const INVALID_PRAGMA: Code = Code::new(1011);
     pub const INVALID_TOKEN: Code = Code::new(1012);

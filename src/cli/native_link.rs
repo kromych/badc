@@ -1,8 +1,11 @@
+use std::io::IsTerminal;
+
 use badc::{Compiler, OutputKind};
 
 use super::args::Cli;
 use super::compile::{CompileCfg, compile_native_tu, compile_units, worker_count};
-use super::diag::{eprint_diagnostic, eprint_error};
+use super::diag::{eprint_diagnostic, eprint_error, rendered};
+
 use super::inputs::{
     Inputs, StdinSource, fat_slice_for_target, machine_label, target_machine,
     unreadable_object_reason,
@@ -685,6 +688,55 @@ struct ImageInputs<'a> {
     first_source: &'a str,
 }
 
+/// A freestanding Linux image runs without the dynamic loader unless it
+/// binds a shared-library symbol; report what it binds, since the image
+/// then needs the loader the program was built to do without.
+fn warn_freestanding_imports(cli: &Cli, merged: &badc::MergedNative) {
+    if !cli.freestanding
+        || cli.mode == Mode::SharedLibrary
+        || merged.imports.is_empty()
+        || !matches!(
+            cli.target,
+            badc::Target::LinuxAarch64 | badc::Target::LinuxX64
+        )
+    {
+        return;
+    }
+    let mut by_library: Vec<(String, Vec<String>)> = Vec::new();
+    for name in &merged.imports {
+        let library = merged
+            .import_dylib_map
+            .get(name)
+            .and_then(|&i| merged.dylibs.get(i as usize))
+            .map_or_else(|| "a shared library".to_string(), |lib| format!("`{lib}`"));
+        match by_library.iter_mut().find(|(l, _)| *l == library) {
+            Some((_, names)) => names.push(format!("`{name}`")),
+            None => by_library.push((library, vec![format!("`{name}`")])),
+        }
+    }
+    let mut sink = badc::diag::Sink::new(cli.front.diag.clone(), Default::default());
+    for (library, names) in by_library {
+        let verb = if names.len() == 1 { "binds" } else { "bind" };
+        sink.emit(
+            badc::diag::Code::FREESTANDING_IMPORT,
+            None,
+            format!(
+                "--freestanding: {} {verb} to {library}, so the image runs through the \
+                 dynamic loader",
+                names.join(", ")
+            ),
+        );
+    }
+    let tty = std::io::stderr().is_terminal();
+    for d in sink.diagnostics() {
+        eprintln!("{}", rendered(d, tty));
+    }
+    if sink.has_errors() {
+        eprint_diagnostic("badc: error: warnings treated as errors");
+        std::process::exit(1);
+    }
+}
+
 /// Merge the selected objects, lower the PLT, and write the image.
 fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
     // A shared library may reference symbols the host executable
@@ -703,6 +755,7 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
         }
     };
     stats.mark("merge");
+    warn_freestanding_imports(cli, &merged);
     let plt = match merged.machine {
         badc::NativeMachine::X86_64 => badc::emit_x86_64_plt(&mut merged),
         badc::NativeMachine::Aarch64 => badc::emit_aarch64_plt(&mut merged),
@@ -752,6 +805,7 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
         cli.link.emit_relocs,
         cli.freestanding,
     );
+
     let bytes = match write_result {
         Ok(b) => b,
         Err(e) => {

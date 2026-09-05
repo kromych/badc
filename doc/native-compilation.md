@@ -11,8 +11,14 @@ Five targets, cross-compiled from any host to any of them:
 | `windows-arm64` | PE32+         |
 
 Executables are position-independent (ELF `ET_DYN` / PIE, matching Mach-O).
-`--freestanding` drops the embedded startup runtime; EFI images are supported
-through the PE subsystem selector.
+`--freestanding` drops the embedded startup runtime; the program supplies the
+entry (`__c5_entry`, `#pragma entrypoint` or `--entry`). On Linux such an
+image is placed at its link address (`ET_EXEC`), since nothing in it applies
+load-time relocations, and carries no interpreter and no dynamic section
+unless it binds a shared-library symbol, which the driver reports
+(`-Wfreestanding-import`). EFI images are supported through the PE subsystem
+selector.
+
 
 ## Multiple translation units
 

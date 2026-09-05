@@ -40,6 +40,13 @@ RENAME = {
     ('popf', '66 9D'): 'popfw',
     ('iret', '66 CF'): 'iretw',
 }
+# Operand spelling fixes: (mnemonic, prefix+opcode byte string) -> {database
+# spelling: corrected spelling}. `6A ib` sign-extends its byte to the operand
+# size, so its field is the `imms8` the `83 /n` and `6B` groups carry, not the
+# `imm8` whose value the operation reads at the field's own width.
+OPERAND_FIX = {
+    ('push', '6A'): {'imm8': 'imms8'},
+}
 
 # Rows absent from the database, written in its schema so they take the same
 # parse. The SGX leaf-dispatch instructions are not catalogued by it at all;
@@ -313,6 +320,8 @@ def main():
             continue
         opbytes = ' '.join(f'{b:02X}' for b in enc['pp'] + enc['opbytes'])
         mnem = RENAME.get((mnem, opbytes), mnem)
+        if fix := OPERAND_FIX.get((mnem, opbytes)):
+            ops = [dict(o, raw=fix.get(o['raw'], o['raw'])) for o in ops]
         # Emit the canonical mnemonic and every alias spelling of it (the
         # condition-code aliases: sete == setz, and so on).
         alias_names = aliases.get(mnem, {}).get('aliases', []) + att_aliases.get(mnem, [])

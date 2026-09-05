@@ -5392,7 +5392,10 @@ mod tests {
     }
 
     /// As [`asm_bytes`], encoded in `mode`, returning the encode error.
-    fn mode_asm_bytes(mode: super::super::table::Mode, tmpl: &[u8]) -> Result<Vec<u8>, String> {
+    pub(super) fn mode_asm_bytes(
+        mode: super::super::table::Mode,
+        tmpl: &[u8],
+    ) -> Result<Vec<u8>, String> {
         let mut out = Vec::new();
         for insn in parse_template(tmpl).unwrap() {
             let mem_size = insn.suffix.or_else(|| {
@@ -7792,7 +7795,7 @@ mod tests {
 
 #[cfg(test)]
 mod string_and_prefix_tests {
-    use super::tests::asm_bytes;
+    use super::tests::{asm_bytes, mode_asm_bytes};
     use super::*;
 
     /// The string primitives over every AT&T size suffix. The byte form is
@@ -7976,6 +7979,40 @@ mod string_and_prefix_tests {
             asm_bytes(b"andq $0x7fffffff, %rbx"),
             [0x48, 0x81, 0xE3, 0xFF, 0xFF, 0xFF, 0x7F]
         );
+    }
+
+    /// `push $imm`: the `6A` byte is sign-extended to the operand size, so it
+    /// carries only a value that fits a signed byte; the rest take the `68`
+    /// operand-width form. Bytes measured with GNU as 2.46.1.
+    #[test]
+    fn push_immediate_forms_match_gnu_as() {
+        use super::super::table::Mode::{Bits16, Bits32, Bits64};
+        #[rustfmt::skip]
+        let cases: &[(super::super::table::Mode, &[u8], &[u8])] = &[
+            (Bits32, b"pushl $128",  &[0x68, 0x80, 0x00, 0x00, 0x00]),
+            (Bits32, b"pushl $255",  &[0x68, 0xFF, 0x00, 0x00, 0x00]),
+            (Bits32, b"pushl $127",  &[0x6A, 0x7F]),
+            (Bits32, b"pushl $-128", &[0x6A, 0x80]),
+            (Bits32, b"pushl $-129", &[0x68, 0x7F, 0xFF, 0xFF, 0xFF]),
+            (Bits32, b"pushl $256",  &[0x68, 0x00, 0x01, 0x00, 0x00]),
+            (Bits16, b"pushw $128",  &[0x68, 0x80, 0x00]),
+            (Bits16, b"pushw $127",  &[0x6A, 0x7F]),
+            (Bits16, b"pushw $-128", &[0x6A, 0x80]),
+            (Bits64, b"pushw $128",  &[0x66, 0x68, 0x80, 0x00]),
+            (Bits64, b"pushq $128",  &[0x68, 0x80, 0x00, 0x00, 0x00]),
+            (Bits64, b"pushq $255",  &[0x68, 0xFF, 0x00, 0x00, 0x00]),
+            (Bits64, b"pushq $127",  &[0x6A, 0x7F]),
+            (Bits64, b"pushq $-128", &[0x6A, 0x80]),
+            (Bits64, b"pushq $-129", &[0x68, 0x7F, 0xFF, 0xFF, 0xFF]),
+        ];
+        for (mode, tmpl, want) in cases {
+            assert_eq!(
+                mode_asm_bytes(*mode, tmpl).unwrap().as_slice(),
+                *want,
+                "{mode:?} {}",
+                core::str::from_utf8(tmpl).unwrap()
+            );
+        }
     }
 
     /// A 16-bit selector operand is fixed at that width and takes no

@@ -690,7 +690,7 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnem: Push, mnemonic: "push", ops: &[Rm(W::Q)], pp: &[], map: Map::Legacy, opcode: &[0xFF], plus_r: false, rexw: Default64, reg: Ext(6), rm: 0, imm: None, imm_op: 255 },  // push r64/m64
     Form { mnem: Push, mnemonic: "push", ops: &[Reg(W::Wd)], pp: &[0x66], map: Map::Legacy, opcode: &[0x50], plus_r: true, rexw: Default64, reg: NoReg, rm: 0, imm: None, imm_op: 255 },  // push r16
     Form { mnem: Push, mnemonic: "push", ops: &[Reg(W::Q)], pp: &[], map: Map::Legacy, opcode: &[0x50], plus_r: true, rexw: Default64, reg: NoReg, rm: 0, imm: None, imm_op: 255 },  // push r64
-    Form { mnem: Push, mnemonic: "push", ops: &[Imm(ImmC::Ib)], pp: &[], map: Map::Legacy, opcode: &[0x6A], plus_r: false, rexw: Default64, reg: NoReg, rm: 255, imm: Some(ImmC::Ib), imm_op: 0 },  // push imm8
+    Form { mnem: Push, mnemonic: "push", ops: &[Imm(ImmC::Imms8)], pp: &[], map: Map::Legacy, opcode: &[0x6A], plus_r: false, rexw: Default64, reg: NoReg, rm: 255, imm: Some(ImmC::Imms8), imm_op: 0 },  // push imms8
     Form { mnem: Push, mnemonic: "push", ops: &[Imm(ImmC::Id)], pp: &[], map: Map::Legacy, opcode: &[0x68], plus_r: false, rexw: Default64, reg: NoReg, rm: 255, imm: Some(ImmC::Id), imm_op: 0 },  // push imms32
     Form { mnem: Pushfq, mnemonic: "pushfq", ops: &[], pp: &[], map: Map::Legacy, opcode: &[0x9C], plus_r: false, rexw: Default64, reg: NoReg, rm: 255, imm: None, imm_op: 255 },  // pushfq
     Form { mnem: Pushfw, mnemonic: "pushfw", ops: &[], pp: &[0x66], map: Map::Legacy, opcode: &[0x9C], plus_r: false, rexw: W0, reg: NoReg, rm: 255, imm: None, imm_op: 255 },  // pushfw

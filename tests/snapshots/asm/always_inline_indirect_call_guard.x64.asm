@@ -87,9 +87,6 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp
-               	movq	%rdi, -0x40(%rbp)
-               	movq	%rsi, -0x30(%rbp)
-               	movq	%rdx, -0x20(%rbp)
                	movl	%edi, -0x40(%rbp)
                	movq	%rsi, -0x30(%rbp)
                	movq	%rdx, -0x20(%rbp)

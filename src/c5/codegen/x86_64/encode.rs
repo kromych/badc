@@ -2421,7 +2421,7 @@ mod tests {
     /// `#pragma entrypoint(WinMain)` on Windows x64 must home all four
     /// int-arg-register parameters (rcx/rdx/r8/r9) in the caller's home
     /// area. Probes the prologue bytes for each `mov [rbp + 16 + 8*i],
-    /// <reg>` form.
+    /// <reg>` form, each at its parameter's declared width.
     #[test]
     fn winmain_4arg_prologue_spills_all_four_host_arg_regs() {
         use crate::Compiler;
@@ -2451,16 +2451,22 @@ mod tests {
         let prologue_end = (entry + 128).min(build.text.len());
         let prologue = &build.text[entry..prologue_end];
 
-        // Each parameter is homed in the slot the caller reserved for its
-        // register, `[rbp + 16 + 8*i]`. Encodings:
-        //   rcx -> [rbp+0x10]: 48 89 4D 10
-        //   rdx -> [rbp+0x18]: 48 89 55 18
-        //   r8  -> [rbp+0x20]: 4C 89 45 20
-        //   r9  -> [rbp+0x28]: 4C 89 4D 28
+        // Each parameter is homed once in the slot the caller reserved for
+        // its register, `[rbp + 16 + 8*i]`, at the declared width.
+        // Encodings:
+        //   rcx  -> [rbp+0x10]: 48 89 4D 10
+        //   rdx  -> [rbp+0x18]: 48 89 55 18
+        //   r8   -> [rbp+0x20]: 4C 89 45 20
+        //   r9d  -> [rbp+0x28]: 44 89 4D 28  (nShowCmd is an int)
         let contains = |needle: &[u8]| prologue.windows(needle.len()).any(|w| w == needle);
         assert!(
-            contains(&[0x4C, 0x89, 0x4D, 0x28]),
-            "WinMain prologue must home r9 (= nShowCmd); got {:02X?}",
+            contains(&[0x44, 0x89, 0x4D, 0x28]),
+            "WinMain prologue must home r9d (= nShowCmd); got {:02X?}",
+            prologue
+        );
+        assert!(
+            !contains(&[0x4C, 0x89, 0x4D, 0x28]),
+            "WinMain prologue must not also home r9 full width; got {:02X?}",
             prologue
         );
         assert!(
@@ -2501,17 +2507,23 @@ mod tests {
         let entry = build.entry_offset;
         let prologue_end = (entry + 128).min(build.text.len());
         let prologue = &build.text[entry..prologue_end];
-        // Home slots: argc (rcx) at [rbp+0x10], argv (rdx) at [rbp+0x18].
-        // r8 / r9 are not parameters, so no store into their slots
-        // appears.
-        //   rcx -> [rbp+0x10]: 48 89 4D 10
+        // Home slots: argc (rcx) at [rbp+0x10] at its `int` width, argv
+        // (rdx) at [rbp+0x18] at pointer width. r8 / r9 are not
+        // parameters, so no store into their slots appears at either
+        // width.
+        //   ecx -> [rbp+0x10]: 89 4D 10
         //   rdx -> [rbp+0x18]: 48 89 55 18
-        //   r8  -> [rbp+0x20]: 4C 89 45 20  (absent)
-        //   r9  -> [rbp+0x28]: 4C 89 4D 28  (absent)
+        //   r8  -> [rbp+0x20]: 4C 89 45 20 / 44 89 45 20  (absent)
+        //   r9  -> [rbp+0x28]: 4C 89 4D 28 / 44 89 4D 28  (absent)
         let contains = |needle: &[u8]| prologue.windows(needle.len()).any(|w| w == needle);
         assert!(
-            contains(&[0x48, 0x89, 0x4D, 0x10]),
-            "console main must home rcx (= argc); got {:02X?}",
+            contains(&[0x89, 0x4D, 0x10]),
+            "console main must home ecx (= argc); got {:02X?}",
+            prologue
+        );
+        assert!(
+            !contains(&[0x48, 0x89, 0x4D, 0x10]),
+            "console main must not also home rcx full width; got {:02X?}",
             prologue
         );
         assert!(
@@ -2519,16 +2531,18 @@ mod tests {
             "console main must home rdx (= argv); got {:02X?}",
             prologue
         );
-        assert!(
-            !contains(&[0x4C, 0x89, 0x45, 0x20]),
-            "console main must NOT home r8 (function has only 2 params); got {:02X?}",
-            prologue
-        );
-        assert!(
-            !contains(&[0x4C, 0x89, 0x4D, 0x28]),
-            "console main must NOT home r9 (function has only 2 params); got {:02X?}",
-            prologue
-        );
+        for absent in [
+            [0x4C, 0x89, 0x45, 0x20],
+            [0x44, 0x89, 0x45, 0x20],
+            [0x4C, 0x89, 0x4D, 0x28],
+            [0x44, 0x89, 0x4D, 0x28],
+        ] {
+            assert!(
+                !contains(&absent),
+                "console main must NOT home r8 / r9 (function has only 2 params); got {:02X?}",
+                prologue
+            );
+        }
     }
 
     // The atomic encodings below were cross-checked against

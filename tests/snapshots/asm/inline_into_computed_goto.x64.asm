@@ -31,8 +31,6 @@ Disassembly of section .text:
                	subq	$0x50, %rsp
                	movq	%rdi, -0x50(%rbp)
                	movq	%rsi, -0x40(%rbp)
-               	movq	%rdi, -0x50(%rbp)
-               	movq	%rsi, -0x40(%rbp)
                	leaq	-0x18(%rbp), %rax
                	xorq	%rcx, %rcx
                	leaq	<rip>, %rdx        # <addr>

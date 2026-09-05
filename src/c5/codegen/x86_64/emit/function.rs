@@ -1229,7 +1229,7 @@ fn emit_prologue(
 }
 
 /// Store each register-passed scalar parameter into its home
-/// (`param_home_off`) unless the store is dead (`param_elidable_mask`).
+/// (`param_home_off`) unless the store is dead (`param_home_store_dead`).
 /// The argument registers are intact here: the frame setup uses rsp, rbp
 /// and r11 alone. A variadic callee's register save area covers its
 /// named parameters.
@@ -1240,9 +1240,9 @@ fn emit_param_homes(
     frame: Frame,
     abi: super::Abi,
 ) {
-    let elidable = param_elidable_mask(func, alloc, abi);
+    let dead = param_home_store_dead(func, alloc, abi);
     for (i, placement) in param_placements(func, abi).iter().enumerate() {
-        if elidable.get(i).copied().unwrap_or(false) {
+        if dead.get(i).copied().unwrap_or(false) {
             continue;
         }
         let home = param_home_off(i, func, frame, abi) as i32;

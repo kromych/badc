@@ -129,7 +129,6 @@ Disassembly of section .text:
                	str	x19, [sp, #0x20]
                	stp	x29, x30, [sp, #0x60]
                	add	x29, sp, #0x60
-               	stur	x2, [x29, #-0x10]
                	mov	x20, x0
                	mov	x21, x1
                	stur	x2, [x29, #-0x10]
@@ -207,7 +206,6 @@ Disassembly of section .text:
                	str	x19, [sp, #0x10]
                	stp	x29, x30, [sp, #0x50]
                	add	x29, sp, #0x50
-               	stur	x2, [x29, #-0x10]
                	mov	x20, x0
                	mov	x21, x1
                	stur	x2, [x29, #-0x10]
@@ -248,7 +246,6 @@ Disassembly of section .text:
                	str	x19, [sp, #0x10]
                	stp	x29, x30, [sp, #0x50]
                	add	x29, sp, #0x50
-               	stur	x2, [x29, #-0x10]
                	mov	x20, x0
                	mov	x21, x1
                	stur	x2, [x29, #-0x10]

@@ -19,8 +19,6 @@ Disassembly of section .text:
                	sub	sp, sp, #0x50
                	stur	x0, [x29, #-0x50]
                	stur	x1, [x29, #-0x40]
-               	stur	x0, [x29, #-0x50]
-               	stur	x1, [x29, #-0x40]
                	sub	x0, x29, #0x18
                	mov	x1, #0x0                // =0
                	adr	x2, <addr>

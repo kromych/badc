@@ -1178,16 +1178,16 @@ fn emit_register_save_area(
 }
 
 /// Store each register-passed scalar parameter into its home
-/// (`param_home_off`) unless the store is dead (`param_elidable_mask`).
+/// (`param_home_off`) unless the store is dead (`param_home_store_dead`).
 /// The argument registers are intact here: the frame setup uses sp, fp and
 /// x16. A stack-passed parameter is read where the caller left it and a
 /// register-passed aggregate keeps its registers for
 /// `emit_struct_param_scatter`, so neither is stored.
 fn emit_param_homes(code: &mut Vec<u8>, func: &FunctionSsa, alloc: &Allocation, frame: Frame) {
     let abi = frame.abi;
-    let elidable = param_elidable_mask(func, alloc, abi);
+    let dead = param_home_store_dead(func, alloc, abi);
     for (i, placement) in param_placements(func, abi).iter().enumerate() {
-        if elidable[i] {
+        if dead[i] {
             continue;
         }
         let home = param_home_off(i, func, frame);

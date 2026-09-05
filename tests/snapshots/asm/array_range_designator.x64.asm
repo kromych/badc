@@ -130,7 +130,6 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movq	%rdi, -0x10(%rbp)
                	movl	%edi, -0x10(%rbp)
                	leaq	<rip>, %rax
                	movslq	%edi, %rcx

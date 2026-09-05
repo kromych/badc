@@ -352,31 +352,58 @@ fn va_named_home_off(i: usize, func: &FunctionSsa, abi: super::Abi) -> Option<i6
 
 /// `mask[i]`: parameter `i` is a register-passed scalar read only through
 /// a surviving `Inst::ParamRef`, so the memory home the prologue would
-/// fill is unobserved and the store is dead (C99 6.2.4p2). Empty for a
-/// callee that reads its named parameters from a register save area.
+/// fill is unobserved and no cell is reserved for it (C99 6.2.4p2). Empty
+/// for a callee that reads its named parameters from a register save area.
 pub(super) fn param_elidable_mask(
     func: &FunctionSsa,
     alloc: &Allocation,
     abi: super::Abi,
 ) -> alloc::vec::Vec<bool> {
+    param_home_masks(func, alloc, abi).0
+}
+
+/// `mask[i]`: the prologue's store of parameter `i` into its home has no
+/// reader -- the home is unobserved, or the body writes the same cell at
+/// the declared width before any read of it. The second case leaves the
+/// cell observed, so `param_cells_bytes` and `param_home_needed` keep
+/// reading [`param_elidable_mask`].
+pub(super) fn param_home_store_dead(
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    abi: super::Abi,
+) -> alloc::vec::Vec<bool> {
+    param_home_masks(func, alloc, abi).1
+}
+
+/// [`param_elidable_mask`] and [`param_home_store_dead`] from one scan of
+/// the body.
+fn param_home_masks(
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    abi: super::Abi,
+) -> (alloc::vec::Vec<bool>, alloc::vec::Vec<bool>) {
     let placements = param_placements(func, abi);
     if placements.is_empty() {
-        return alloc::vec::Vec::new();
+        return (alloc::vec::Vec::new(), alloc::vec::Vec::new());
     }
     let (seeded, addr_taken, needed) = super::ssa::emit_common::scan_param_slot_usage(func, alloc);
-    placements
-        .iter()
-        .enumerate()
-        .map(|(i, p)| {
-            let slot = (i as i64) + 2;
-            matches!(
-                p,
-                super::ArgPlacement::IntReg(_) | super::ArgPlacement::FpReg(_)
-            ) && seeded.contains(&(i as u32))
-                && !addr_taken.contains(&slot)
-                && !needed.contains(&slot)
-        })
-        .collect()
+    let written_first =
+        super::ssa::emit_common::param_cell_written_first(func, alloc, placements.len());
+    let mut elidable = alloc::vec![false; placements.len()];
+    let mut store_dead = alloc::vec![false; placements.len()];
+    for (i, p) in placements.iter().enumerate() {
+        if !matches!(
+            p,
+            super::ArgPlacement::IntReg(_) | super::ArgPlacement::FpReg(_)
+        ) {
+            continue;
+        }
+        let slot = (i as i64) + 2;
+        elidable[i] =
+            seeded.contains(&(i as u32)) && !addr_taken.contains(&slot) && !needed.contains(&slot);
+        store_dead[i] = elidable[i] || written_first[i];
+    }
+    (elidable, store_dead)
 }
 
 /// Bytes of the parameter cell region: one cell per register-carried

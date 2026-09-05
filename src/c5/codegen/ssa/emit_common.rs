@@ -258,6 +258,89 @@ pub(crate) fn scan_param_slot_usage(
     (seeded, addr_taken, needed)
 }
 
+/// Byte width a load kind reads. The x87 and binary128 forms read the
+/// whole 16-byte object.
+fn load_kind_width(kind: super::super::ir::LoadKind) -> u32 {
+    use super::super::ir::LoadKind;
+    match kind {
+        LoadKind::I8 | LoadKind::U8 => 1,
+        LoadKind::I16 | LoadKind::U16 => 2,
+        LoadKind::I32 | LoadKind::U32 | LoadKind::F32 => 4,
+        LoadKind::I64 | LoadKind::F64 => 8,
+        LoadKind::F80 | LoadKind::F128 => 16,
+    }
+}
+
+/// Byte width a store kind writes. `F80` writes 10 of the object's 16
+/// bytes and leaves the padding, so it covers only that much.
+fn store_kind_width(kind: super::super::ir::StoreKind) -> u32 {
+    use super::super::ir::StoreKind;
+    match kind {
+        StoreKind::I8 => 1,
+        StoreKind::I16 => 2,
+        StoreKind::I32 | StoreKind::F32 => 4,
+        StoreKind::I64 | StoreKind::F64 => 8,
+        StoreKind::F80 => 10,
+        StoreKind::F128 => 16,
+    }
+}
+
+/// `mask[i]`: the body's first access to parameter `i`'s frame cell is a
+/// store in the entry block, wide enough for every surviving load of the
+/// cell, and nothing takes the cell's address. The entry block dominates
+/// the function, so that store precedes every read and the incoming value
+/// the prologue would put there has no reader (C99 6.2.4p2). It is the
+/// `-O0` shape: the walker seeds each parameter's cell from its `ParamRef`
+/// and the body reads it back at the declared width. The cell stays
+/// observed, so a caller sizing the cell region reads
+/// [`scan_param_slot_usage`] instead.
+pub(crate) fn param_cell_written_first(
+    func: &super::super::ir::FunctionSsa,
+    alloc: &super::reg_alloc::Allocation,
+    n_params: usize,
+) -> alloc::vec::Vec<bool> {
+    use super::super::ir::Inst;
+    let Some(entry) = func.blocks.first().map(|b| b.inst_range.clone()) else {
+        return alloc::vec![false; n_params];
+    };
+    let mut written = alloc::vec![0u32; n_params];
+    let mut widest_load = alloc::vec![0u32; n_params];
+    let mut escapes = alloc::vec![false; n_params];
+    let mut seen = alloc::vec![false; n_params];
+    for (idx, inst) in func.insts.iter().enumerate() {
+        let off = match inst {
+            Inst::LocalAddr(off) | Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } => {
+                *off
+            }
+            _ => continue,
+        };
+        if off < 2 {
+            continue;
+        }
+        let cell = (off - 2) as usize;
+        if cell >= n_params {
+            continue;
+        }
+        let first_in_entry = !seen[cell] && entry.contains(&(idx as u32));
+        seen[cell] = true;
+        match inst {
+            Inst::LocalAddr(_) => escapes[cell] = true,
+            Inst::LoadLocal { kind, .. } => {
+                if !is_dead_pure(inst, idx as super::super::ir::ValueId, alloc) {
+                    widest_load[cell] = widest_load[cell].max(load_kind_width(*kind));
+                }
+            }
+            Inst::StoreLocal { kind, .. } if first_in_entry => {
+                written[cell] = store_kind_width(*kind);
+            }
+            _ => {}
+        }
+    }
+    (0..n_params)
+        .map(|c| !escapes[c] && written[c] > 0 && written[c] >= widest_load[c])
+        .collect()
+}
+
 /// Whether the function issues no call and needs no scratch-clobbering
 /// intrinsic or TLS access, so a leaf prologue/epilogue may be elided. The
 /// frame and register-file conditions a leaf also requires are target-specific

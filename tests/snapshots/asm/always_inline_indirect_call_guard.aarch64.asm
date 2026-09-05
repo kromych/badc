@@ -80,9 +80,6 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x40
-               	stur	x0, [x29, #-0x40]
-               	stur	x1, [x29, #-0x30]
-               	stur	x2, [x29, #-0x20]
                	mov	x3, x0
                	stur	w3, [x29, #-0x40]
                	stur	x1, [x29, #-0x30]

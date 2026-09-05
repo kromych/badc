@@ -387,6 +387,123 @@ fn check_a64_function(name: &str, insts: &[(String, String)], what: &str) {
     }
 }
 
+/// Parameters every ABI carries in registers, read once each and neither
+/// assigned to nor address-taken: the body's own entry store fills each
+/// home at the declared width, so the prologue writes none of them a
+/// second time at the full register width. `many` overflows the Win64
+/// integer bank, which leaves two parameters read where the caller left
+/// them.
+const HOME_SHAPES: &str = r#"
+long widths(char a, short b, int c, long d) { return (long)a + b + c + d; }
+double banks(int a, double b, float c, long d) { return a + b + (double)c + d; }
+long many(long a, long b, long c, long d, long e, long f) {
+    return a + b + c + d + e + f;
+}
+"#;
+
+/// The frame addresses `insts` stores to, in order. An aarch64 store
+/// whose address the emit materialised in x16 / x17 names that register;
+/// the `sub` / `add` that built it from x29 is the instruction before it,
+/// so `staged` resolves the store to the key a direct `stur` produces. A
+/// store relative to sp -- the frame record, the callee-saved area -- is
+/// no parameter home and is left out.
+fn frame_stores(insts: &[(String, String)]) -> Vec<String> {
+    let mut staged: Option<(&str, String)> = None;
+    let mut out: Vec<String> = Vec::new();
+    for (m, o) in insts {
+        let address = staged.take();
+        if (m == "sub" || m == "add")
+            && let Some((rd, rest)) = o.split_once(", ")
+            && let Some(off) = rest.strip_prefix("x29, #")
+        {
+            let sign = if m == "sub" { "-" } else { "" };
+            staged = Some((rd, format!("x29, #{sign}{off}")));
+            continue;
+        }
+        if m.starts_with("mov") {
+            // AT&T order puts the destination last, so a load's trailing
+            // operand is a register and only a store's names memory.
+            if let Some((_, dst)) = o.split_once(", ")
+                && dst.contains("(%rbp")
+            {
+                out.push(dst.replace(",%riz", ""));
+            }
+            continue;
+        }
+        if m.starts_with("st")
+            && let Some(open) = o.rfind('[')
+            && let Some(close) = o[open..].find(']')
+        {
+            let inner = &o[open + 1..open + close];
+            if inner.starts_with("x29") {
+                out.push(inner.to_string());
+            } else if let Some((reg, addr)) = address
+                && reg == inner
+            {
+                out.push(addr);
+            }
+        }
+    }
+    out
+}
+
+#[test]
+fn each_parameter_home_is_written_once() {
+    let dir = tempdir("homes");
+    let src = dir.join("homes.c");
+    std::fs::write(&src, HOME_SHAPES).expect("write source");
+    let mut checked = 0;
+    for target in [
+        "linux-x64",
+        "linux-aarch64",
+        "macos-aarch64",
+        "windows-x64",
+        "windows-arm64",
+    ] {
+        for opt in [&[][..], &["-O"][..]] {
+            let obj = dir.join(format!("homes-{target}{}.o", opt.join("")));
+            run(
+                Command::new(badc())
+                    .arg(format!("--target={target}"))
+                    .args(opt)
+                    .arg("-c")
+                    .arg("-o")
+                    .arg(&obj)
+                    .arg(&src),
+                "compile homes",
+            );
+            let Some(dis) = disassemble_named(&obj, "many>:") else {
+                eprintln!("no disassembler for {target} on PATH -- skipping");
+                return;
+            };
+            let what = format!("{target} {}", opt.join(" "));
+            let funcs = functions(&dis);
+            assert_eq!(funcs.len(), 3, "{what}: {} functions found", funcs.len());
+            for (name, insts) in &funcs {
+                let stores = frame_stores(insts);
+                for (i, addr) in stores.iter().enumerate() {
+                    assert!(
+                        !stores[..i].contains(addr),
+                        "{what}: {name}: writes {addr} twice: {stores:?}"
+                    );
+                }
+                // Every register-carried parameter is homed at -O0, and
+                // four of `many`'s six reach a register under every ABI.
+                if opt.is_empty() && name.trim_start_matches('_') == "many" {
+                    assert!(
+                        stores.len() >= 4,
+                        "{what}: many homes {} parameters",
+                        stores.len()
+                    );
+                }
+            }
+            checked += 1;
+        }
+    }
+    assert_eq!(checked, 10);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// `--debug-frame` text of `path` from `dwarfdump` or `llvm-dwarfdump`.
 fn debug_frame(path: &Path) -> Option<String> {
     for tool in ["dwarfdump", "llvm-dwarfdump"] {

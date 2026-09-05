@@ -126,7 +126,6 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	movq	%r13, 0x10(%rsp)
-               	movq	%rdx, -0x10(%rbp)
                	movq	%rdi, %rbx
                	movq	%rsi, %r12
                	movq	%rdx, -0x10(%rbp)
@@ -217,7 +216,6 @@ Disassembly of section .text:
                	subq	$0x40, %rsp
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
-               	movq	%rdx, -0x10(%rbp)
                	movq	%rdi, %rbx
                	movq	%rsi, %r12
                	movq	%rdx, -0x10(%rbp)
@@ -262,7 +260,6 @@ Disassembly of section .text:
                	subq	$0x40, %rsp
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
-               	movq	%rdx, -0x10(%rbp)
                	movq	%rdi, %rbx
                	movq	%rsi, %r12
                	movq	%rdx, -0x10(%rbp)
